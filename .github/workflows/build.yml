@@ -1,0 +1,80 @@
+name: Build TS-Pico Firmware
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git build-essential cmake \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi \
+            python3
+
+      - name: Clone MicroPython v1.20.0
+        run: |
+          git clone --depth 1 --branch v1.20.0 \
+            https://github.com/micropython/micropython.git ${{ github.workspace }}/micropython
+
+      - name: Stage frozen modules
+        run: |
+          # tspico.py uses `from TS.sdcard import *` and `from TS.tspico_io import ...`
+          # so we keep the TS/ package layout when freezing.
+          mkdir -p ${{ github.workspace }}/micropython/ports/rp2/modules/TS
+          cp src/main.py             ${{ github.workspace }}/micropython/ports/rp2/modules/main.py
+          cp src/TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
+          cp src/TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
+          cp src/TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
+          cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
+          cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
+          cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
+          ls -la ${{ github.workspace }}/micropython/ports/rp2/modules/
+          ls -la ${{ github.workspace }}/micropython/ports/rp2/modules/TS/
+
+      - name: Build mpy-cross
+        working-directory: ${{ github.workspace }}/micropython
+        run: make -C mpy-cross
+
+      - name: Fetch rp2 submodules
+        working-directory: ${{ github.workspace }}/micropython/ports/rp2
+        run: make submodules
+
+      - name: Build rp2 firmware
+        working-directory: ${{ github.workspace }}/micropython/ports/rp2
+        run: |
+          make clean
+          make -j$(nproc)
+
+      - name: Show build output
+        working-directory: ${{ github.workspace }}/micropython/ports/rp2
+        run: |
+          ls -la build-RPI_PICO/
+          echo "---"
+          ls -la build-RPI_PICO/firmware.uf2
+
+      - name: Upload firmware.uf2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-firmware-uf2
+          path: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
+          retention-days: 30
+
+      - name: Upload build logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeOutput.log
+            ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeError.log
+          retention-days: 7

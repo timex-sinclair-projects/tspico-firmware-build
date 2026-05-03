@@ -1,0 +1,15 @@
+# Build outputs
+*.uf2
+*.elf
+*.bin
+*.hex
+
+# MicroPython compiled
+*.mpy
+__pycache__/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
