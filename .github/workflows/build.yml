@@ -58,15 +58,20 @@ jobs:
       - name: Show build output
         working-directory: ${{ github.workspace }}/micropython/ports/rp2
         run: |
-          ls -la build-RPI_PICO/
-          echo "---"
-          ls -la build-RPI_PICO/firmware.uf2
+          echo "=== build-PICO directory ==="
+          ls -la build-PICO/ 2>/dev/null || echo "(no build-PICO dir)"
+          echo ""
+          echo "=== firmware.uf2 location(s) ==="
+          find . -name "firmware.uf2" -ls 2>/dev/null
+          echo ""
+          echo "=== all .uf2 files ==="
+          find . -name "*.uf2" -ls 2>/dev/null
 
       - name: Upload firmware.uf2 artifact
         uses: actions/upload-artifact@v4
         with:
           name: tspico-firmware-uf2
-          path: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
+          path: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
           retention-days: 30
 
       - name: Upload build logs (on failure)
@@ -75,6 +80,6 @@ jobs:
         with:
           name: build-logs
           path: |
-            ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeOutput.log
-            ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeError.log
+            ${{ github.workspace }}/micropython/ports/rp2/build-PICO/CMakeFiles/CMakeOutput.log
+            ${{ github.workspace }}/micropython/ports/rp2/build-PICO/CMakeFiles/CMakeError.log
           retention-days: 7
