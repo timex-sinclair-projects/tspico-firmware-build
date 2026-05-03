@@ -1,19 +1,25 @@
 # MicroPython freeze manifest for the TS-Pico firmware build.
 #
 # This replaces ports/rp2/boards/manifest.py in v1.20.0. The default
-# rp2 manifest only includes uasyncio + a few sensor libraries; it does
-# NOT auto-freeze ports/rp2/modules/. We add explicit freeze() calls
-# for the TS/ package.
+# rp2 manifest does `freeze("$(PORT_DIR)/modules")` which freezes
+# rp2.py, _boot.py, and _boot_fat.py. We need to keep those AND add
+# our TS/ package on top.
 
-# Default rp2 dependencies (matches stock v1.20.0 manifest content)
+# Default rp2 dependencies
 include("$(MPY_DIR)/extmod/uasyncio")
-require("dht")
-require("ds18x20")
 require("onewire")
+require("ds18x20")
+require("dht")
+require("neopixel")
 
-# Freeze the TS package. The base path is the directory holding this
-# manifest (ports/rp2/boards/), so we walk up to ports/rp2/modules/
-# where we staged the .py files.
+# Default rp2 port Python modules that the firmware needs at runtime.
+# rp2.py wraps the C-level _rp2 module and adds asm_pio + PIOASMEmit.
+# _boot.py runs at startup to mount the LittleFS filesystem.
+freeze("$(PORT_DIR)/modules", "_boot.py")
+freeze("$(PORT_DIR)/modules", "_boot_fat.py")
+freeze("$(PORT_DIR)/modules", "rp2.py")
+
+# Our TS package
 freeze("$(PORT_DIR)/modules", "TS/__init__.py")
 freeze("$(PORT_DIR)/modules", "TS/tspico.py")
 freeze("$(PORT_DIR)/modules", "TS/tspico_io.py")
