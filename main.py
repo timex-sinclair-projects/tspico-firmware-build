@@ -3,8 +3,17 @@ import time, utime, sys
 from gc import mem_free, collect
 from machine import freq, Pin
 
-from TS.tspico import TS2068_IO
-#from tspico import TS2068_IO
+# Dev override: if /dev_tspico.py is present on flash, use that instead
+# of the frozen TS.tspico. Lets you iterate on a single file without
+# rebuilding the UF2. To revert, just delete /dev_tspico.py from flash.
+# /dev_tspico.py is just a renamed copy of src/TS/tspico.py. It still
+# imports `from TS.tspico_io import ...` etc — those resolve to the
+# frozen modules because no /TS/ folder shadows them.
+try:
+    from dev_tspico import TS2068_IO
+    print("[DEV] Using /dev_tspico.py override")
+except ImportError:
+    from TS.tspico import TS2068_IO
 
 U6_EN = Pin(12, Pin.OUT, Pin.PULL_UP)
 WAIT = Pin(14, Pin.OUT, Pin.PULL_DOWN)

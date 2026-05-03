@@ -65,21 +65,42 @@ Putting the .tap files in a different folder (`/assets/`) sidesteps
 the conflict cleanly. The Python code references them by absolute
 path, so the rename has no other implications.
 
-## Iterating on Python without rebuilding the UF2
+## Iterating on `tspico.py` without rebuilding the UF2
 
-MicroPython checks the flash filesystem first and falls back to frozen
-modules. So you can override any frozen file by putting your edited
-version on flash at the same path:
+MicroPython resolves a package once based on where it finds
+`__init__.py`. If `/TS/` exists on the Pico's flash, MicroPython uses
+*that* folder for the entire `TS` package and never falls back to
+the frozen submodules. So you can't simply drop a new `/TS/tspico.py`
+on flash — the other frozen TS modules (`tspico_io`, `sdcard`, etc.)
+become unreachable.
 
-- Override `TS.tspico` → put your edited `tspico.py` at `/TS/tspico.py`
-  on flash. **But** then you lose access to ALL frozen TS submodules
-  (see above) — so you'd need to put the entire TS package on flash.
+`main.py` includes a **dev override** for `tspico.py` specifically:
 
-A more practical pattern: only override one file at a time by placing
-it directly on the flash filesystem, but understand that overriding
-**any** file inside the `TS` package shadows the entire frozen
-package. For single-module debugging it's often easier to flash the
-new UF2 from CI.
+```python
+try:
+    from dev_tspico import TS2068_IO
+    print("[DEV] Using /dev_tspico.py override")
+except ImportError:
+    from TS.tspico import TS2068_IO
+```
+
+**To override `tspico.py` for a debug session:**
+
+1. Edit `src/TS/tspico.py` locally
+2. Copy the edited file to the Pico's flash as `/dev_tspico.py`
+   (note the rename — root path, with `dev_` prefix)
+3. Reboot — REPL prints `[DEV] Using /dev_tspico.py override`
+4. Test on the TS-2068
+5. To revert: delete `/dev_tspico.py` from flash and reboot — main.py
+   falls back to the frozen `TS.tspico` automatically
+
+The override file does not need to be inside a `/TS/` folder. It still
+imports `from TS.tspico_io import ...` etc. which resolves to the
+frozen modules (because nothing on flash shadows the `TS` package).
+
+**For overriding other files** (`tspico_io.py`, etc.): the override
+trick only works for `tspico.py`. For other files, push to GitHub and
+let CI rebuild the UF2.
 
 ## What's frozen
 
