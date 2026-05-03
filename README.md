@@ -12,12 +12,13 @@ during import.
 
 ## Deploy to the Pico
 
-After flashing the UF2, you need three things on the Pico's flash
+After flashing the UF2, you need these things on the Pico's flash
 filesystem (use Thonny):
 
 | Pico path | What it is | Source |
 |---|---|---|
 | `/main.py` | Boot entry point | `main.py` in this repo |
+| `/config.ini` | TS-Pico runtime config (log level, ROM/DCK slots, etc.) | `config.ini` in this repo |
 | `/assets/*.tap` | Internal protocol .TAP files | `assets/` in this repo |
 | `/SD/...` | (existing) — your SD card | unchanged |
 
@@ -36,7 +37,7 @@ filesystem (use Thonny):
    ```
    Both should succeed silently.
 
-4. **Copy `main.py` to `/main.py`** on the Pico via Thonny.
+4. **Copy `main.py` and `config.ini` to the Pico's root** via Thonny.
 
 5. **Create `/assets/` folder** on the Pico, then copy the four .tap
    files from `assets/` into it:
