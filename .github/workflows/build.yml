@@ -28,10 +28,13 @@ jobs:
 
       - name: Stage frozen modules
         run: |
+          # NOTE: main.py is NOT frozen — it must live on the Pico's flash
+          # filesystem. This way you can disconnect it (or hit Ctrl-C in Thonny)
+          # to stop auto-execution for debugging.
+          #
           # tspico.py uses `from TS.sdcard import *` and `from TS.tspico_io import ...`
           # so we keep the TS/ package layout when freezing.
           mkdir -p ${{ github.workspace }}/micropython/ports/rp2/modules/TS
-          cp src/main.py             ${{ github.workspace }}/micropython/ports/rp2/modules/main.py
           cp src/TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
           cp src/TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
           cp src/TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
