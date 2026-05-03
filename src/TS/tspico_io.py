@@ -312,7 +312,7 @@ def LOAD_TS(pre, MQ, TSP):                                                      
     el = bytearray(1)
 
     if (not TSP.f_name or TSP.totlen == 0):
-        local_fname = "/TS/nofile.tap"
+        local_fname = "/assets/nofile.tap"
         LOG_ADD("WARNING: no file mounted in LOAD_TS", 1, TSP.LOG_LEVEL)
     else:
         local_fname = "/TMP/temp.tap"
@@ -399,7 +399,7 @@ def LOAD_TS(pre, MQ, TSP):                                                      
                 TSP.offset = 0
                 LOG_ADD("WARNING: reached end of offset table, rewinding...", 1, TSP.LOG_LEVEL)
     else:
-        if TSP.offset >= os.stat("/TS/nofile.tap")[6]:
+        if TSP.offset >= os.stat("/assets/nofile.tap")[6]:
             TSP.tap_idx = 0
             TSP.offset = 0
             
@@ -430,7 +430,7 @@ def LOAD_ZX(MQ, TSP):                                                           
     el = bytearray(1)
 
     if (not TSP.f_name or TSP.totlen == 0):
-        local_fname = "/TS/nofile.tap"
+        local_fname = "/assets/nofile.tap"
         LOG_ADD("WARNING: no file mounted in LOAD_ZX", 1, TSP.LOG_LEVEL)
     else:    
         local_fname = "/TMP/temp.tap"
@@ -494,7 +494,7 @@ def LOAD_ZX_C(MQ, TSP, buf_size):                                               
     rd_bytes = bytearray(size_rd)
     
     if (not TSP.f_name or TSP.totlen == 0):
-        local_fname = "/TS/nofile.tap"
+        local_fname = "/assets/nofile.tap"
         LOG_ADD("WARNING: no file mounted in LOAD_ZX_C", 1, TSP.LOG_LEVEL)
     else:    
         local_fname = "/TMP/temp.tap"

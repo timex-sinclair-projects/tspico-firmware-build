@@ -821,7 +821,7 @@ def MOUNT_FILE(f_name, remounting=False):                                       
         if f_name[-4:].upper() == ".DCK":
 
             if DCK_IMAGE():
-                COPY_FILE("/TS/dckupdate.tap", "/TMP/temp.tap")              # Special 'seudo' TAP that contains Flash/SRAM DCK update program
+                COPY_FILE("/assets/dckupdate.tap", "/TMP/temp.tap")              # Special 'seudo' TAP that contains Flash/SRAM DCK update program
             else:
                 err_level = 2
                 remount = True
@@ -833,7 +833,7 @@ def MOUNT_FILE(f_name, remounting=False):                                       
             len_lo = totlen - (len_hi * 256)
 
             try:
-                with open("/TS/romupdate.tap", "rb") as f_in:                 # Same for updating ROM images. We open the seudo TAP, as we need to update it
+                with open("/assets/romupdate.tap", "rb") as f_in:                 # Same for updating ROM images. We open the seudo TAP, as we need to update it
                     buf = bytearray(f_in.read())
 
                 # Parse the romupdate.tap file blocks to get the offset of block 3
@@ -2791,7 +2791,7 @@ def ROMPATCH(pre, cmd):                                                         
     
     led.value(1)
 
-    MOUNT_FILE("/TS/rompatch.tap")                                       # handles SD/MQ transition internally
+    MOUNT_FILE("/assets/rompatch.tap")                                       # handles SD/MQ transition internally
 
     SEND_MSG("System prepared to patch ROM.", 'Use LOAD "" to start.', _1_OK)
 
