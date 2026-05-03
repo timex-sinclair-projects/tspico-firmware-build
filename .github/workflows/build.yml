@@ -41,8 +41,17 @@ jobs:
           cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
           cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
           cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
+
+          # Install our custom frozen-modules manifest in place of the
+          # default rp2 manifest. Our manifest explicitly freezes the
+          # TS/ package so `import TS.tspico` works at runtime.
+          cp manifest.py ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
+
+          echo "=== modules/ contents ==="
           ls -la ${{ github.workspace }}/micropython/ports/rp2/modules/
           ls -la ${{ github.workspace }}/micropython/ports/rp2/modules/TS/
+          echo "=== manifest.py contents ==="
+          cat ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
 
       - name: Build mpy-cross
         working-directory: ${{ github.workspace }}/micropython
