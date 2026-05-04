@@ -226,6 +226,47 @@ _8_A_Invalid_arg  = const(8)    # Report A - Invalid argument
 _9_9_STOP         = const(9)    # Report 9 - STOP
 _10_D_Break       = const(10)   # Report D - Break/CONT (any value >= 10)
 
+
+# ---------------- TELEMETRY ----------------
+# Comprehensive event logging. Each TLM() call prints an event with
+# timestamp (microseconds since boot), delta from previous TLM call,
+# and TX/RX FIFO occupancy. Frozen-module overhead is negligible.
+
+_tlm_last = 0   # last TLM timestamp
+
+
+def TLM(action, detail=""):
+    """Log one event to the REPL with timing and FIFO state."""
+    global _tlm_last
+    try:
+        now = time.ticks_us()
+    except:
+        now = 0
+    dt = (now - _tlm_last) if _tlm_last else 0
+    _tlm_last = now
+
+    try:
+        tx = MQ.tx_fifo()
+        rx = MQ.rx_fifo()
+        fifo = "tx=%d rx=%d" % (tx, rx)
+    except:
+        fifo = "tx=? rx=?"
+
+    if detail:
+        print("[TLM %d dt=%d %s] %s: %s" % (now, dt, fifo, action, detail))
+    else:
+        print("[TLM %d dt=%d %s] %s" % (now, dt, fifo, action))
+
+
+def TLM_RESET(tag=""):
+    """Reset TLM timer at the start of a new operation."""
+    global _tlm_last
+    try:
+        _tlm_last = time.ticks_us()
+    except:
+        _tlm_last = 0
+    print("[TLM ===== %s =====]" % tag)
+
 class PICO_STATUS():                                                            # Class for the object that holds TS-Pico's current status
     
     def __init__(self, init_values):                                            # init_values is a dictionary read at startup; read below
@@ -283,19 +324,13 @@ class PICO_STATUS():                                                            
     
 
 def DEACTIVATE_SD():
-    """Tear down SD card access and safe the shared bus lines.
-
-    Must be called BEFORE ACTIVATE_MQ() whenever the SD card was active.
-    Unmounts the SD filesystem, deselects the SD chip select, and clamps
-    GPIO 2-4 (shared between PIO data bus and SPI) LOW. This keeps bit 6
-    of the data bus low (combined with the D6 pulldown resistor) during
-    the SPI→PIO transition, preventing the Z80 from reading a spurious
-    'ready' signal.
-    """
+    """Tear down SD card access and safe the shared bus lines."""
+    TLM("DEACTIVATE_SD enter")
     try:
         os.umount("/sd")
+        TLM("  /sd unmounted")
     except:
-        pass                                          # already unmounted or never mounted
+        TLM("  /sd already unmounted")
 
     U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
     U3_CS.value(1)
@@ -304,7 +339,7 @@ def DEACTIVATE_SD():
     # the PIO state machine reclaims them.
     for p in (2, 3, 4):
         Pin(p, Pin.OUT).value(0)
-
+    TLM("DEACTIVATE_SD exit", "GPIO 2-4 clamped LOW, U3_CS=HIGH")
     return
 
 
@@ -331,12 +366,16 @@ def ACTIVATE_MQ(ready=True):
     """
     global MQ
 
+    TLM("ACTIVATE_MQ enter", "ready=%s" % ready)
     MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
 
     if ready:
         MQ.active(1)
+        TLM("ACTIVATE_MQ exit", "SM active, Y=0 (busy until MQ_READY called)")
+    else:
+        TLM("ACTIVATE_MQ exit", "SM created but NOT active")
 
     return
 
@@ -357,6 +396,7 @@ def MQ_READY():
     # v1.20.0 — confirmed by REPL test. Without this, Y stays at 0,
     # port $0F always reads 0, Z80 sees "never ready" and reports J.
     MQ.exec("mov(y, invert(null))")
+    TLM("MQ_READY", "Y=0xFFFFFFFF, port $0F=0xFF")
 
 
 def MQ_BUSY():
@@ -371,33 +411,36 @@ def MQ_BUSY():
     cycle).
     """
     MQ.exec("set(y, 0)")
+    TLM("MQ_BUSY", "Y=0, port $0F=0x00")
 
 
 def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
-    
+
+    TLM("ACTIVATE_SD enter")
     MQ = StateMachine(0, NULL_SM, freq=15_000_000)
     MQ.active(1)
     MQ.active(0)
-    
+
     U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
     D0          = Pin(2,  Pin.IN)
     D1          = Pin(3,  Pin.IN)
     D2          = Pin(4,  Pin.IN)
-    
+
     try:
         spi = SPI(0, sck=D0, mosi=D1, miso=D2)
         sd = SDCard(spi, U3_CS)
         os.mount(sd, "/sd")
+        TLM("ACTIVATE_SD exit", "SD mounted at /sd")
 
     except:
         LOG("ERROR: Mounting SD Card failed in ACTIVATE_SD!", 2)
         SAVE_LOG()
         spi = -99
-        
+        TLM("ACTIVATE_SD FAILED — entering BLINK_ERROR loop")
         while True:
             BLINK_ERROR()
         pass
-    
+
     return spi
 
 
@@ -1125,11 +1168,14 @@ def CLEAR_LOG():                                                                
     return ok
 
 
-def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s) 
+def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s)
                                                                                                 # back to the TS, once a command is finished
     global MQ
     global TSP
-    
+
+    TLM("SEND_MSG enter", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
+        msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
+
     wrt = MQ.put
 
     # Dual-port: continue flag (was wrt(0x40)) is now signaled via
@@ -1146,16 +1192,24 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
             for m in msg1:
                 wrt(m)
         wrt(0x00)               # End of string
+        TLM("SEND_MSG verbose loaded into FIFO")
 
     else:
 
         wrt(st)                 # Return code (< 0x80)
+        TLM("SEND_MSG short loaded into FIFO", "just status=%d" % st)
 
     MQ_READY()                  # Z80 sees "ready" on port $0F → reads bytes from $0E
 
+    TLM("SEND_MSG waiting for Z80 to drain FIFO")
+    drain_loops = 0
     while(MQ.tx_fifo() != 0):   # Wait until Z80 has drained the FIFO
-        pass
+        drain_loops += 1
+        if drain_loops > 1000000:
+            TLM("SEND_MSG STUCK", "tx still has %d bytes after 1M loops" % MQ.tx_fifo())
+            break
 
+    TLM("SEND_MSG exit", "drain_loops=%d" % drain_loops)
     # NOTE: do NOT call MQ_BUSY() here. The Pico is ready for the next
     # command — staying ready is correct. MQ_BUSY() is reserved for
     # genuine slow operations (SD card access in MOUNT_FILE).
@@ -1169,14 +1223,17 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
 
     global MQ
     global TSP
-    
+
     global kill
     global dead
+
+    TLM("SEND_MSG2 enter", "msg_len=%d st=%d expand=%s rom_ver=%s" % (
+        len(msg), st, expandKeywords, TSP.ROM_VERSION))
 
     if TSP.ROM_VERSION == "1.0":
         new_rom = False
         end_char = 0x00
-    else:    
+    else:
         new_rom = True
         end_char = 0x03
 
@@ -1192,10 +1249,12 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     wrt(0x86)   # PRINT STRING WITH LOOP
     wrt(st)     # BASIC return code
     wrt(0x0D)   # Start with a newline
+    TLM("SEND_MSG2 header loaded", "0x86 + st + 0x0D in FIFO")
     MQ_READY()  # Z80 sees "ready" on port $0F → can read header bytes
 
     while (MQ.rx_fifo() > 0):   # Flush receive buffer?
         MQ.get()
+    TLM("SEND_MSG2 about to send msg loop", "n=%d chars" % n)
     
     # We handle each character. If a scroll answer is N, we will just break
 
@@ -1332,14 +1391,23 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
             c = 0 # reset column count
         
     wrt(end_char)               # Write end_char (done with loops)
+    TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
 
+    drain_loops = 0
     while(MQ.tx_fifo() != 0):   # Write out message
-        pass
+        drain_loops += 1
+        if drain_loops > 1000000:
+            TLM("SEND_MSG2 STUCK", "tx still has %d after 1M loops" % MQ.tx_fifo())
+            break
 
+    rx_drained = 0
     while(MQ.rx_fifo() != 0):   # Flush input buffer to console
-        print(MQ.get())
-    
-    print(MQ.tx_fifo(), MQ.rx_fifo()) # Report FIFO queue sizes
+        b = MQ.get()
+        rx_drained += 1
+        print(b)
+
+    TLM("SEND_MSG2 exit", "drain_loops=%d rx_drained=%d tx=%d rx=%d" % (
+        drain_loops, rx_drained, MQ.tx_fifo(), MQ.rx_fifo()))
 
 
 ##########################
@@ -1375,10 +1443,16 @@ def DIR(pre, cmd):                                                              
     par1, par2 = PARAMS(pre)
     nl = chr(13)
 
+    TLM("DIR enter", "par1=%d par2=%d files=%d lista_len=%d" % (
+        par1, par2, len(files) if files else 0,
+        len(lista) if lista else 0))
+
     if par1 == 0: # CODE 0,0 or CODE 0,1 passed from CD, MD, etc.
         # Regular listing
+        TLM("DIR par1=0 — regular listing via SEND_MSG2")
         led.value(1)
         SEND_MSG2(nl + lista, 1, False)
+        TLM("DIR SEND_MSG2 returned")
         led.value(1)
         utime.sleep(2)
         led.value(0)
@@ -3415,41 +3489,48 @@ def PROCESS_ASM(pre):                                                           
 
 
 def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                           # Processes 'B' (BASIC) commands sent by the TS
-    
+
     global TSP
     global MQ
     global ROM
     global BANK
-    
+
     global files
     global files_upper
-    
+
     TSP.zx48 = False
     cur_fname = TSP.f_name
-    
+
     wrt = MQ.put
     cmd = bytearray(100)
-    
+
     load_cmd = pre[1]
 
     long = pre[7] + 256*pre[8] + 3
     rl = range(long)
 
+    TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d" % (load_cmd, long))
+
     # Dual-port: ack into FIFO, signal ready on port $0F
     wrt(0x01)
     MQ_READY()
-    
+
+    TLM("PROCESS_CMD reading cmd block", "expecting %d bytes" % long)
     for l in rl:
         cmd[l] = MQ.get()
-    
+    TLM("PROCESS_CMD cmd block read")
+
     try:
         cmd = cmd[:long].decode()
     except:
         LOG("ERROR: Unrecognized string in PROCESS_CMD: FIFO Status:" + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 2)
+        TLM("PROCESS_CMD decode FAILED — returning early")
         return
 
     cmd_exec = cmd[3:].upper() # Command starting with "TPI:" in uppercase
     rest_cmd = cmd[7:] # Command after "tpi:"
+
+    TLM("PROCESS_CMD parsed", "cmd_exec=%r rest_cmd=%r" % (cmd_exec, rest_cmd))
 
     gc.collect()
 
@@ -3500,10 +3581,15 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
             cmd_word = cmd_exec
             cmd_args = ""
 
+        TLM("PROCESS_CMD SAVE branch", "cmd_word=%r in_SA_funct=%s in_EXT=%s" % (
+            cmd_word, cmd_word in SA_funct, cmd_word in EXT_SA_FUNCT))
+
         if cmd_word in SA_funct:
             EXEC = SA_funct[cmd_word]
+            TLM("PROCESS_CMD dispatching SA_funct", "cmd_word=%r" % cmd_word)
             EXEC(pre, cmd)
-            
+            TLM("PROCESS_CMD SA_funct returned", "cmd_word=%r" % cmd_word)
+
         elif cmd_exec == "TPI:TEST":                                                                               # Remove in production!!!
 
             # Dual-port: ack into FIFO, signal ready on port $0F
@@ -3535,11 +3621,20 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
             SEND_MSG("Unrecognized command: " + cmd_exec,'SAVE "tpi:gethelp" for info', _5_C_Nonsense)    # If none of the above, raise error
             LOG("ERROR: Unrecognized command: " + cmd_exec, 2)
     
+    TLM("PROCESS_CMD draining tx_fifo at exit")
+    drain_tx = 0
     while(MQ.tx_fifo() != 0):
-        pass
+        drain_tx += 1
+        if drain_tx > 1000000:
+            TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
+            break
 
+    drain_rx = 0
     while MQ.rx_fifo() != 0:
         fff = MQ.get()
+        drain_rx += 1
+
+    TLM("PROCESS_CMD exit", "drain_tx=%d drain_rx=%d cmd=%r" % (drain_tx, drain_rx, cmd_exec))
 
     # NOTE: stay ready. The Pico IS ready for the next command. Setting
     # busy here would cause Z80 to time out (Report J) when it polls
@@ -3719,14 +3814,19 @@ def TS2068_IO():                                                         # Main 
 
         if (MQ.rx_fifo()) != 0:
 
+            TLM_RESET("MAIN_LOOP RX TRIGGER")
+            TLM("main loop: rx_fifo > 0", "rx=%d tx=%d" % (MQ.rx_fifo(), MQ.tx_fifo()))
+
             ts = time.ticks_us()                                                                   # reset timestamp
 
             # Dual-port: ack into FIFO + signal ready on port $0F so the Z80
             # WF_NPH poll exits cleanly before reading the rest of the header.
             wrt(0x01)
+            TLM("main loop: pre-header ACK loaded", "0x01 in FIFO")
             MQ_READY()
             for i in r1:
                 pre[i] = MQ.get()
+            TLM("main loop: pre[] read complete", "pre=%s" % list(pre))
             # NOTE: do NOT MQ_BUSY here! The Z80 polls port $0F AFTER
             # reading the $01 status byte, AFTER it has finished sending
             # the pre-header. If we go busy here, Z80 sees "not ready"
@@ -3828,14 +3928,19 @@ def TS2068_IO():                                                         # Main 
                 
             elif pre[0] == 66:
 
+                TLM("main loop: 'B' command — calling PROCESS_CMD")
                 LOG("INFO: Starting TS COMMAND " + str(pre), 0)
-                
+
                 try:
                     PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)
-                except:
+                    TLM("main loop: PROCESS_CMD returned cleanly")
+                except Exception as _e:
                     LOG("ERROR: Invalid data received from PROCESS_CMD: " + str(pre), 2)
+                    TLM("main loop: PROCESS_CMD raised exception", str(_e))
+                    import sys
+                    sys.print_exception(_e)
                     continue
-                
+
                 if TSP.zx48:
                     ZX48_IO(pre)
                     
