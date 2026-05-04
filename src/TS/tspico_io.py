@@ -375,23 +375,28 @@ def LOAD_TS(pre, MQ, TSP):                                                      
 
     wrt = MQ.put
 
-    print("[LOADTS] starting wrt loop. tx=%d rx=%d. About to put 0x%02X (block_type, NO 0x40)" % (
+    print("[LOADTS] starting wrt loop. tx=%d rx=%d. block_type=0x%02X" % (
         MQ.tx_fifo(), MQ.rx_fifo(), blk_info[2]))
 
     # Dual-port: 0x40 continue flag is on port $0F (Y register).
-    # Diagnostic showed Z80 read 0x40 as the second byte and stopped —
-    # treating it as an invalid block_type. Removing 0x40 lets Z80 see
-    # the actual block_type next (0x00 for header, 0xFF for data).
     wrt(blk_info[2])
+
+    # Track Z80 incoming bytes during the wrt loop — capture whatever
+    # the Z80 sends back during the data transfer.
+    z80_sent = []
 
     bytes_sent = 0
     if (blk_info[2] == 0x00):
         for el in hdr:
             wrt(el)
             bytes_sent += 1
+            # Capture any bytes Z80 sent
+            while MQ.rx_fifo() > 0 and len(z80_sent) < 8:
+                z80_sent.append(MQ.get())
             if kill:
-                print("[LOADTS] KILLED in hdr loop after %d bytes. tx=%d rx=%d" % (
-                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo()))
+                print("[LOADTS] KILLED in hdr loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
+                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
+                    [hex(b) for b in z80_sent]))
                 ABORT_TX(TSP.LOG_LEVEL)
                 return MQ, TSP, log_entries
     else:
@@ -400,16 +405,20 @@ def LOAD_TS(pre, MQ, TSP):                                                      
             arch.readinto(el)
             wrt(el)
             bytes_sent += 1
+            while MQ.rx_fifo() > 0 and len(z80_sent) < 8:
+                z80_sent.append(MQ.get())
 
             if kill:
-                print("[LOADTS] KILLED in data loop after %d bytes. tx=%d rx=%d" % (
-                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo()))
+                print("[LOADTS] KILLED in data loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
+                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
+                    [hex(b) for b in z80_sent]))
                 ABORT_TX(TSP.LOG_LEVEL)
                 arch.close()
                 return MQ, TSP, log_entries
 
-    print("[LOADTS] wrt loop complete, %d bytes sent. tx=%d rx=%d" % (
-        bytes_sent, MQ.tx_fifo(), MQ.rx_fifo()))
+    print("[LOADTS] wrt loop complete, %d bytes sent. tx=%d rx=%d z80_sent=%s" % (
+        bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
+        [hex(b) for b in z80_sent]))
 
     arch.close()
 
