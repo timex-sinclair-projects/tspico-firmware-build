@@ -244,14 +244,19 @@ def ENA_SD():                                                                   
     return spi
 
 
-def END_MSG(MQ, verbose, msg, msg1, st: bytes):                                                             # Sends one-line status message(s) 
+def END_MSG(MQ, verbose, msg, msg1, st: bytes):                                                             # Sends one-line status message(s)
                                                                                                 # back to the TS, once a command is finished
+    # Dual-port: continue flag (was wrt(0x40)) is on port $0F via scratch
+    # Y, not in the data stream. Y was set to 0xFFFFFFFF by main loop's
+    # MQ_READY() before dispatching, and stays ready throughout the LVM
+    # transfer. We just stream the status bytes through port $0E's FIFO.
+    # For verbose: 0x81 IS the status byte (PRINT_STRING directive).
+    # For non-verbose: just the status code.
     wrt = MQ.put
-    
+
     if verbose:
-    
-        wrt(0x40)
-        wrt(0x81)
+
+        wrt(0x81)               # PRINT_STRING directive — IS the byte-N status
         wrt(st)
         wrt(0x0D)
         for m in msg:
@@ -261,15 +266,14 @@ def END_MSG(MQ, verbose, msg, msg1, st: bytes):                                 
             for m in msg1:
                 wrt(m)
         wrt(0x00)
-        
+
     else:
-        
-        wrt(0x40)
-        wrt(st)
-        
+
+        wrt(st)                 # status (0x01 = OK)
+
     while(MQ.tx_fifo() !=0):
         pass
-    
+
     return
 
 
@@ -363,10 +367,14 @@ def LOAD_TS(pre, MQ, TSP):                                                      
             hdr[17] = hdr[17] ^ 0x80 ^ hdr[14]
         
     wrt = MQ.put
-    
-    wrt(0x40)
+
+    # Dual-port: continue flag (was wrt(0x40)) is on port $0F, served
+    # from scratch Y. Y was set to 0xFFFFFFFF by the main loop's
+    # MQ_READY() before dispatching to LVM, so port $0F continuously
+    # reads as 'ready'. We just stream data bytes through port $0E's
+    # FIFO. NO 0x40 in the FIFO — Z80 reads block type directly.
     wrt(blk_info[2])
-    
+
     if (blk_info[2] == 0x00):
         for el in hdr:
             wrt(el)
@@ -445,10 +453,9 @@ def LOAD_ZX(MQ, TSP):                                                           
     r = range(totbytes)
     
     _thread.start_new_thread(WATCHDOG, (3, MQ, TSP))
-   
+
     wrt = MQ.put
-    wrt(0x40)
-   
+    # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
     wrt(blk_info[2])
     
     for i in r:
@@ -534,13 +541,14 @@ def LOAD_ZX_C(MQ, TSP, buf_size):                                               
     led = Pin(25, Pin.OUT)
     
     for ar in cur_buf:
-        
+
         led.value(1)
-        MQ.put(64)
-        
+        # Dual-port: 0x40 (= 64) continue flag is on port $0F (scratch Y).
+        # MQ.put(64) removed — just stream data bytes.
+
         for el in ar:
             MQ.put(el)
-            
+
         led.value(0)
         
     while(MQ.tx_fifo() != 0):
@@ -571,8 +579,9 @@ def SAVE_TS(MQ, TSP):                                                           
     gc.collect()
     
     hdr = bytearray(21)
-    
-    wrt(0x40)
+
+    # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
+    # No 0x40 in FIFO — just read incoming header bytes.
     for i in r1:
         hdr[i] = MQ.get()
         
@@ -590,8 +599,9 @@ def SAVE_TS(MQ, TSP):                                                           
     long = (256*hdr[15]) + hdr[14] + 4
     r2 = range(long)
     blk = bytearray(long)
-    
-    wrt(0x40)
+
+    # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
+    # Just send the status byte.
     wrt(0x01)
             
     _thread.start_new_thread(WATCHDOG, (5, MQ, TSP))

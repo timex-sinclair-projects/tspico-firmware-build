@@ -3929,21 +3929,27 @@ def TS2068_IO():                                                         # Main 
                 
                 led.value(0)
                 
-            elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine 
+            elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine
+                TLM("LVM LOAD enter", "pre=%s f_name=%s tap_idx=%d offset=%d" % (
+                    _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
                 LOG("INFO: Starting TS LVM", 0)
-                
+
                 while busy:
                     pass
                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
                 log_entries += new_logs
-                
+                TLM("LVM LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
+
             elif (pre[0] == 0 or pre[0] == 255):                                                      # Headerless LOAD
+                TLM("LVM Headerless LOAD enter", "pre=%s tap_idx=%d offset=%d" % (
+                    _pre_snapshot, TSP.tap_idx, TSP.offset))
                 LOG("INFO: Starting TS LVM - Headerless LOAD", 0)
-                
+
                 while busy:
                     pass
                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
                 log_entries += new_logs
+                TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
                 
             elif pre[0] == 66 and pre[1] == 5:                                                        # commands are pre[0] == 66. PRINT commands are pre[1] == 5
                 LOG("INFO: Starting PRINT", 0)
