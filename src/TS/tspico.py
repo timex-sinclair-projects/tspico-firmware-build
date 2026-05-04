@@ -396,7 +396,10 @@ def MQ_READY():
     # v1.20.0 — confirmed by REPL test. Without this, Y stays at 0,
     # port $0F always reads 0, Z80 sees "never ready" and reports J.
     MQ.exec("mov(y, invert(null))")
-    TLM("MQ_READY", "Y=0xFFFFFFFF, port $0F=0xFF")
+    # NOTE: no TLM here. MQ_READY is called in time-critical receive
+    # paths where a print() takes ~1-10ms — long enough for the 4-deep
+    # RX FIFO to overflow and lose bytes from the Z80. Caller can TLM
+    # at a safer point if needed.
 
 
 def MQ_BUSY():
@@ -3509,16 +3512,18 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     long = pre[7] + 256*pre[8] + 3
     rl = range(long)
 
-    TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d" % (load_cmd, long))
-
-    # Dual-port: ack into FIFO, signal ready on port $0F
-    wrt(0x01)
-    MQ_READY()
-
-    TLM("PROCESS_CMD reading cmd block", "expecting %d bytes" % long)
+    # CRITICAL: drain incoming command block FIRST, before any TLM/wrt/exec.
+    # Same reason as main loop — RX FIFO is only 4 entries deep, Z80 sends
+    # the whole block back-to-back, any Python overhead drops bytes.
     for l in rl:
         cmd[l] = MQ.get()
-    TLM("PROCESS_CMD cmd block read")
+
+    TLM("PROCESS_CMD enter+cmd_block_read", "load_cmd=%d cmd_len=%d" % (load_cmd, long))
+
+    # Now safe to do other work.
+    wrt(0x01)
+    MQ_READY()
+    TLM("PROCESS_CMD ACK $01 sent + MQ_READY")
 
     try:
         cmd = cmd[:long].decode()
@@ -3814,19 +3819,26 @@ def TS2068_IO():                                                         # Main 
 
         if (MQ.rx_fifo()) != 0:
 
-            TLM_RESET("MAIN_LOOP RX TRIGGER")
-            TLM("main loop: rx_fifo > 0", "rx=%d tx=%d" % (MQ.rx_fifo(), MQ.tx_fifo()))
-
             ts = time.ticks_us()                                                                   # reset timestamp
 
-            # Dual-port: ack into FIFO + signal ready on port $0F so the Z80
-            # WF_NPH poll exits cleanly before reading the rest of the header.
-            wrt(0x01)
-            TLM("main loop: pre-header ACK loaded", "0x01 in FIFO")
-            MQ_READY()
+            # CRITICAL: drain RX FIFO IMMEDIATELY. The PIO's RX FIFO is only
+            # 4 entries deep. The Z80 sends all 10 pre-header bytes in ~50us
+            # back-to-back. ANY Python work (print/TLM/wrt/MQ_READY) between
+            # noticing rx_fifo>0 and starting the drain causes byte 5+ to
+            # be dropped (PIO push(noblock) silently fails on full FIFO).
+            # Read first, ACK and TLM only after all 10 bytes are in pre[].
             for i in r1:
                 pre[i] = MQ.get()
-            TLM("main loop: pre[] read complete", "pre=%s" % list(pre))
+
+            # Now safe to do other work — pre[] is captured.
+            TLM_RESET("MAIN_LOOP RX")
+            TLM("pre[] received", "pre=%s" % list(pre))
+
+            # Send pre-header ACK and signal ready for the Z80's $01 read
+            # and subsequent port $0F poll.
+            wrt(0x01)
+            MQ_READY()
+            TLM("ACK $01 sent + MQ_READY")
             # NOTE: do NOT MQ_BUSY here! The Z80 polls port $0F AFTER
             # reading the $01 status byte, AFTER it has finished sending
             # the pre-header. If we go busy here, Z80 sees "not ready"
