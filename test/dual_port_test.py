@@ -141,11 +141,13 @@ sm.exec("mov(y, invert(null))")
 TLM("Y set")
 
 # Pre-load TX FIFO with sentinel values. Z80 IN $0E reads consume these.
-seed = (0xAA, 0x55, 0x42, 0xC3, 0x3C)
+# IMPORTANT: PIO TX FIFO is only 4 entries deep. Putting more than 4
+# while the SM is inactive blocks forever (no consumer).
+seed = (0xAA, 0x55, 0x42, 0xC3)
 TLM("pre-loading TX FIFO", "values=%s" % [hex(v) for v in seed])
 for v in seed:
     sm.put(v)
-TLM("TX FIFO loaded")
+TLM("TX FIFO loaded", "tx=%d / 4" % sm.tx_fifo())
 
 # Activate the state machine — GPIO 12 will go HIGH (sideset_init),
 # but PIO is waiting on /PICOSEL so no bus activity yet.
@@ -205,13 +207,12 @@ try:
         if time.ticks_diff(now, last_heartbeat) > 5000:
             TLM("heartbeat",
                 "rx_total=%d tx_drained=%d" % (seen_rx, seen_tx_drained))
-            # Refill if empty so future IN $0E reads see known data
-            if sm.tx_fifo() == 0:
-                TLM("refilling TX FIFO", "values=%s" % [hex(v) for v in seed])
-                for v in seed:
-                    sm.put(v)
+            # Refill TX FIFO with as many values as fit (max 4 entries)
+            while sm.tx_fifo() < 4:
+                sm.put(seed[sm.tx_fifo() % len(seed)])
+            if sm.tx_fifo() != last_tx_seen:
+                TLM("TX FIFO refilled", "tx=%d" % sm.tx_fifo())
                 last_tx_seen = sm.tx_fifo()
-                TLM("TX FIFO refilled")
             last_heartbeat = now
 
 except KeyboardInterrupt:
