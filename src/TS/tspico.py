@@ -1156,7 +1156,9 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     while(MQ.tx_fifo() != 0):   # Wait until Z80 has drained the FIFO
         pass
 
-    MQ_BUSY()                   # Clear ready flag for next exchange
+    # NOTE: do NOT call MQ_BUSY() here. The Pico is ready for the next
+    # command — staying ready is correct. MQ_BUSY() is reserved for
+    # genuine slow operations (SD card access in MOUNT_FILE).
     return
 
 
@@ -3366,7 +3368,7 @@ def PRINT_IO(pre):                                                              
             pre[i] = MQ.get()
         if pre[1] != 5:
             break
-        MQ_BUSY()                                  # clear ready flag for next iteration
+        # NOTE: do not MQ_BUSY here — Pico stays ready for next iteration
 
     wrt(0x01)
     MQ_READY()
@@ -3539,7 +3541,9 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     while MQ.rx_fifo() != 0:
         fff = MQ.get()
 
-    MQ_BUSY()                                          # clear "ready" flag for next command
+    # NOTE: stay ready. The Pico IS ready for the next command. Setting
+    # busy here would cause Z80 to time out (Report J) when it polls
+    # port $0F immediately after this command's last response byte.
 
     LOG("INFO: Exiting CMD processing: " + cmd_exec + " " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0)
 
@@ -3691,10 +3695,10 @@ def TS2068_IO():                                                         # Main 
         while True:
             BLINK_ERROR()
             
-    # Boot sequence: SD was active, switch to PIO. ready=True is safe at boot
-    # because the Z80 isn't polling for ready yet.
+    # Boot sequence: SD was active, switch to PIO.
     DEACTIVATE_SD()
     ACTIVATE_MQ()
+    MQ_READY()                                                                                   # Default to ready so Z80 isn't blocked. Pico is alive!
 
     LOG("INFO: SD Card initialized and mounted OK", 0)
     SAVE_LOG()
@@ -3723,7 +3727,11 @@ def TS2068_IO():                                                         # Main 
             MQ_READY()
             for i in r1:
                 pre[i] = MQ.get()
-            MQ_BUSY()                                                                              # clear ready flag while we process
+            # NOTE: do NOT MQ_BUSY here! The Z80 polls port $0F AFTER
+            # reading the $01 status byte, AFTER it has finished sending
+            # the pre-header. If we go busy here, Z80 sees "not ready"
+            # and times out → Report J. Stay ready until we hit a real
+            # slow operation (LOAD branch handles its own MQ_BUSY).
                                                                                                       # pre(header)[0] is a command
             if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
                 LOG("INFO: Starting SAVE TS", 0)
