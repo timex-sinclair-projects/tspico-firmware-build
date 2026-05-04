@@ -4007,8 +4007,15 @@ def TS2068_IO():                                                         # Main 
             else:
                 if log_entries:
                     if not busy:
-                        _thread.start_new_thread(SAVE_LOG, ())
-    
+                        # WATCHDOG sets busy=False before its thread function
+                        # actually returns, so core1 may still be in use here.
+                        # Try the thread start; on OSError, just skip — we'll
+                        # save the log on the next idle pass.
+                        try:
+                            _thread.start_new_thread(SAVE_LOG, ())
+                        except OSError:
+                            pass
+
                 led.value(0)
                 ts = time.ticks_us()
                 
