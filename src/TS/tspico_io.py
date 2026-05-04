@@ -368,11 +368,12 @@ def LOAD_TS(pre, MQ, TSP):                                                      
         
     wrt = MQ.put
 
-    # Dual-port: continue flag (was wrt(0x40)) is on port $0F, served
-    # from scratch Y. Y was set to 0xFFFFFFFF by the main loop's
-    # MQ_READY() before dispatching to LVM, so port $0F continuously
-    # reads as 'ready'. We just stream data bytes through port $0E's
-    # FIFO. NO 0x40 in the FIFO — Z80 reads block type directly.
+    # EXPERIMENT: putting 0x40 back in the data stream for LVM. The TPI
+    # 'B' command phase works without 0x40 (proves dual-port works for
+    # that protocol), but LVM may use the original single-port protocol
+    # where the EXROM reads 0x40 from port $0E as part of the data
+    # stream. If this experiment makes LOAD "" work, we keep 0x40 here.
+    wrt(0x40)
     wrt(blk_info[2])
 
     if (blk_info[2] == 0x00):
