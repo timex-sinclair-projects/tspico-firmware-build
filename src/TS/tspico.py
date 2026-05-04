@@ -414,7 +414,7 @@ def MQ_BUSY():
     cycle).
     """
     MQ.exec("set(y, 0)")
-    TLM("MQ_BUSY", "Y=0, port $0F=0x00")
+    # NOTE: no TLM here — same critical-path concern as MQ_READY.
 
 
 def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
@@ -1176,16 +1176,14 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     global MQ
     global TSP
 
-    TLM("SEND_MSG enter", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
-        msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
-
+    # NO TLM HERE — Z80 polling $0F. Get to FIFO load + MQ_READY ASAP.
     wrt = MQ.put
 
     # Dual-port: continue flag (was wrt(0x40)) is now signaled via
     # MQ_READY() on port $0F. Only the data bytes go into the TX FIFO.
     if TSP.VERBOSE or forceDisplay:
 
-        wrt(0x81)               # PRINT STRING
+        wrt(0x81)               # PRINT STRING — this IS the D-block status
         wrt(st)                 # Return code
         wrt(0x0D)               # Start with a newline
         for m in msg:           # Write message
@@ -1195,16 +1193,17 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
             for m in msg1:
                 wrt(m)
         wrt(0x00)               # End of string
-        TLM("SEND_MSG verbose loaded into FIFO")
 
     else:
 
-        wrt(st)                 # Return code (< 0x80)
-        TLM("SEND_MSG short loaded into FIFO", "just status=%d" % st)
+        wrt(st)                 # Return code — IS the D-block status
 
     MQ_READY()                  # Z80 sees "ready" on port $0F → reads bytes from $0E
 
-    TLM("SEND_MSG waiting for Z80 to drain FIFO")
+    # Now safe to TLM
+    TLM("SEND_MSG enter+loaded", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
+        msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
+
     drain_loops = 0
     while(MQ.tx_fifo() != 0):   # Wait until Z80 has drained the FIFO
         drain_loops += 1
@@ -1247,17 +1246,17 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     n = len(msg)
 
     wrt = MQ.put
-    # Dual-port: continue flag now signaled on port $0F via MQ_READY().
-    # Pre-load the loop header bytes into the FIFO before signaling ready.
-    wrt(0x86)   # PRINT STRING WITH LOOP
+    # CRITICAL: load FIFO + signal ready WITHOUT any TLM/print between.
+    # Z80 has been polling $0F since the end of PROCESS_CMD's cmd-block
+    # drain. Only ~2.8ms before WF_NPH timeout. NO prints here.
+    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
     wrt(st)     # BASIC return code
     wrt(0x0D)   # Start with a newline
-    TLM("SEND_MSG2 header loaded", "0x86 + st + 0x0D in FIFO")
     MQ_READY()  # Z80 sees "ready" on port $0F → can read header bytes
 
+    # Now safe to TLM and do non-time-critical work.
     while (MQ.rx_fifo() > 0):   # Flush receive buffer?
         MQ.get()
-    TLM("SEND_MSG2 about to send msg loop", "n=%d chars" % n)
     
     # We handle each character. If a scroll answer is N, we will just break
 
@@ -3512,18 +3511,22 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     long = pre[7] + 256*pre[8] + 3
     rl = range(long)
 
-    # CRITICAL: drain incoming command block FIRST, before any TLM/wrt/exec.
-    # Same reason as main loop — RX FIFO is only 4 entries deep, Z80 sends
-    # the whole block back-to-back, any Python overhead drops bytes.
+    # CRITICAL TIGHT RECEIVE — drain cmd block. Do NOT put $01 in the FIFO
+    # here! The byte-24 response in the protocol is provided by SEND_MSG /
+    # SEND_MSG2 (called by EXEC below). For commands that need a directive
+    # (0x86 = PRINT_STRING_LOOP for DIR, 0x81 = PRINT_STRING for verbose),
+    # putting a $01 here makes Z80 see "OK done" and never enter the loop.
+    # MQ_READY is also deferred — SEND_MSG/SEND_MSG2 sets it after loading
+    # the response into the FIFO. Z80 polls $0F (~2.8ms budget) until then.
     for l in rl:
         cmd[l] = MQ.get()
 
-    TLM("PROCESS_CMD enter+cmd_block_read", "load_cmd=%d cmd_len=%d" % (load_cmd, long))
+    # Stay BUSY until SEND_MSG fills the FIFO and signals ready.
+    MQ_BUSY()
 
-    # Now safe to do other work.
-    wrt(0x01)
-    MQ_READY()
-    TLM("PROCESS_CMD ACK $01 sent + MQ_READY")
+    # Now safe to TLM
+    TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d cmd=%r" % (
+        load_cmd, long, bytes(cmd[:long])))
 
     try:
         cmd = cmd[:long].decode()
@@ -3821,24 +3824,26 @@ def TS2068_IO():                                                         # Main 
 
             ts = time.ticks_us()                                                                   # reset timestamp
 
-            # CRITICAL: drain RX FIFO IMMEDIATELY. The PIO's RX FIFO is only
-            # 4 entries deep. The Z80 sends all 10 pre-header bytes in ~50us
-            # back-to-back. ANY Python work (print/TLM/wrt/MQ_READY) between
-            # noticing rx_fifo>0 and starting the drain causes byte 5+ to
-            # be dropped (PIO push(noblock) silently fails on full FIFO).
-            # Read first, ACK and TLM only after all 10 bytes are in pre[].
+            # CRITICAL TIGHT RECEIVE PATH — NO PYTHON OVERHEAD ALLOWED
+            #
+            # The PIO's RX FIFO is only 4 entries deep. The Z80 sends bytes
+            # in bursts that finish in ~50us. Any Python work (print/TLM) in
+            # this region takes ms-scale time, during which the FIFO fills
+            # and bytes are dropped by PIO push(noblock).
+            #
+            # Also: between MQ_READY and PROCESS_CMD's drain loop, the Z80's
+            # WF_NPH polls $0F for only ~4.3ms before timeout. TLM prints
+            # eat that budget too.
+            #
+            # Sequence: drain pre-header, queue ACK, signal ready, then call
+            # PROCESS_CMD which IMMEDIATELY does its own drain. NO TLM in
+            # this path. PROCESS_CMD will TLM after its drain completes.
             for i in r1:
                 pre[i] = MQ.get()
-
-            # Now safe to do other work — pre[] is captured.
-            TLM_RESET("MAIN_LOOP RX")
-            TLM("pre[] received", "pre=%s" % list(pre))
-
-            # Send pre-header ACK and signal ready for the Z80's $01 read
-            # and subsequent port $0F poll.
             wrt(0x01)
             MQ_READY()
-            TLM("ACK $01 sent + MQ_READY")
+            # (deferred) snapshot pre[] for later TLM
+            _pre_snapshot = list(pre)
             # NOTE: do NOT MQ_BUSY here! The Z80 polls port $0F AFTER
             # reading the $01 status byte, AFTER it has finished sending
             # the pre-header. If we go busy here, Z80 sees "not ready"
@@ -3940,12 +3945,12 @@ def TS2068_IO():                                                         # Main 
                 
             elif pre[0] == 66:
 
-                TLM("main loop: 'B' command — calling PROCESS_CMD")
-                LOG("INFO: Starting TS COMMAND " + str(pre), 0)
-
+                # NO TLM HERE — PROCESS_CMD must reach its for loop within
+                # ~4.3ms of the MQ_READY above (Z80 WF_NPH timeout). A print
+                # statement takes 5-10ms and would cause byte drops.
                 try:
                     PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)
-                    TLM("main loop: PROCESS_CMD returned cleanly")
+                    TLM("main loop: PROCESS_CMD returned", "pre=%s" % _pre_snapshot)
                 except Exception as _e:
                     LOG("ERROR: Invalid data received from PROCESS_CMD: " + str(pre), 2)
                     TLM("main loop: PROCESS_CMD raised exception", str(_e))
