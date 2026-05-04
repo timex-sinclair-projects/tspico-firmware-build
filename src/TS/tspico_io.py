@@ -295,23 +295,27 @@ def LOAD_TS(pre, MQ, TSP):                                                      
     global dead
     global kill
     global busy
-    
+
     global log_entries
-    log_entries = ""    
-    
+    log_entries = ""
+
+    print("[LOADTS] enter pre=%s f_name=%s totlen=%d offset=%d tap_idx=%d tx=%d rx=%d" % (
+        list(pre), TSP.f_name, TSP.totlen, TSP.offset, TSP.tap_idx,
+        MQ.tx_fifo(), MQ.rx_fifo()))
+
     Ryan = True
-   
+
     led = Pin(25, Pin.OUT)
     led.value(1)
-   
+
     totbytes = 0
     blq_t = 0
     crc = 0
     length = 0
-    
+
     hdr = bytearray()
     msg = ""
-    
+
     blk_info = bytearray(3)
     el = bytearray(1)
 
@@ -320,13 +324,16 @@ def LOAD_TS(pre, MQ, TSP):                                                      
         LOG_ADD("WARNING: no file mounted in LOAD_TS", 1, TSP.LOG_LEVEL)
     else:
         local_fname = "/TMP/temp.tap"
-    
+
+    print("[LOADTS] opening %s" % local_fname)
     arch = open(local_fname, "rb")
     arch.seek(TSP.offset)
 
     arch.readinto(blk_info)
-    
+
     totbytes = blk_info[0] + 256 * blk_info[1]
+    print("[LOADTS] blk_info: len=%d type=0x%02X (totbytes=%d)" % (
+        blk_info[0] + 256*blk_info[1], blk_info[2], totbytes))
     
     if (pre[0] != blk_info[2]):
         LOG_ADD("WARNING: Wrong block type in LOAD_TS. Moving ahead 1 block.", 1, TSP.LOG_LEVEL)
@@ -352,51 +359,63 @@ def LOAD_TS(pre, MQ, TSP):                                                      
         LOG_ADD("WARNING: Mismatch block length in LOAD_TS; ignoring", 1, TSP.LOG_LEVEL)
         
     dead = False
-    
+
     r = range(totbytes - 1)
-    
+
     _thread.start_new_thread(WATCHDOG, (3, MQ, TSP))
-    
+
     if (blk_info[2] == 0x00):                                                                                           # This is to overcome autorun error when LOADing a non-autorun program
         hdr = bytearray(totbytes - 1)
         arch.readinto(hdr)
-        
+
         if (Ryan) and (hdr[0] == 0x00) and (hdr[14] >= 0x80):
-        
+
             hdr[14] = 0x28
             hdr[17] = hdr[17] ^ 0x80 ^ hdr[14]
-        
+
     wrt = MQ.put
 
-    # EXPERIMENT: putting 0x40 back in the data stream for LVM. The TPI
-    # 'B' command phase works without 0x40 (proves dual-port works for
-    # that protocol), but LVM may use the original single-port protocol
-    # where the EXROM reads 0x40 from port $0E as part of the data
-    # stream. If this experiment makes LOAD "" work, we keep 0x40 here.
+    print("[LOADTS] starting wrt loop. tx=%d rx=%d. About to put 0x40 + 0x%02X" % (
+        MQ.tx_fifo(), MQ.rx_fifo(), blk_info[2]))
+
+    # EXPERIMENT: keeping 0x40 in stream — testing whether removing makes a difference
     wrt(0x40)
     wrt(blk_info[2])
 
+    bytes_sent = 0
     if (blk_info[2] == 0x00):
         for el in hdr:
             wrt(el)
+            bytes_sent += 1
             if kill:
+                print("[LOADTS] KILLED in hdr loop after %d bytes. tx=%d rx=%d" % (
+                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo()))
                 ABORT_TX(TSP.LOG_LEVEL)
                 return MQ, TSP, log_entries
     else:
-        
+
         for i in r:
             arch.readinto(el)
             wrt(el)
-            
+            bytes_sent += 1
+
             if kill:
+                print("[LOADTS] KILLED in data loop after %d bytes. tx=%d rx=%d" % (
+                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo()))
                 ABORT_TX(TSP.LOG_LEVEL)
                 arch.close()
                 return MQ, TSP, log_entries
-       
+
+    print("[LOADTS] wrt loop complete, %d bytes sent. tx=%d rx=%d" % (
+        bytes_sent, MQ.tx_fifo(), MQ.rx_fifo()))
+
     arch.close()
-    
+
+    print("[LOADTS] waiting for blq_t echo from Z80...")
     blq_t = MQ.get()
+    print("[LOADTS] got blq_t=0x%02X. waiting for crc..." % blq_t)
     crc = MQ.get()
+    print("[LOADTS] got crc=0x%02X" % crc)
  
     TSP.tap_idx += 1
     TSP.offset += totbytes + 2
