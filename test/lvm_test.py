@@ -37,6 +37,7 @@ from rp2 import StateMachine, asm_pio, PIO
 
 from TS.sdcard import SDCard
 from TS.tspico_io import TS_IO_DUAL, LOAD_TS, END_MSG, WATCHDOG
+from TS.tspico_io import set_ctrl, sel_bank   # PIO programs that map the EXROM in
 
 
 # ============================================================================
@@ -80,7 +81,43 @@ class TSP_Simple:
     VERBOSE     = False
     LOG_LEVEL   = 0     # 0 = INFO and above; LOG_ADD prints if level >= LOG_LEVEL
 
+    # Bank/ROM mapping config — controls which Flash/SRAM slots the
+    # set_ctrl and sel_bank state machines route Z80 ROM/DCK accesses to.
+    ROM_SM      = 0x0A  # 1010: both DCK and ROM mapped to Flash
+    DCK_SLOT    = 0
+    ROM_SLOT    = 1     # slot 1 = TS-Pico modified EXROM (with TPI support)
+    bank_sm     = 0     # set below to (DCK_SLOT << 4) | ROM_SLOT
+
 TSP = TSP_Simple()
+TSP.bank_sm = (TSP.DCK_SLOT << 4) | TSP.ROM_SLOT
+
+
+# ============================================================================
+# ROM / BANK state machines — map TS-Pico flash in for the original ROM
+# ============================================================================
+# Without these, Z80 sees the original (unmodified) TS-2068 ROM, which has
+# no TPI protocol intercepts. LOAD "" then runs the original tape routine
+# instead of dispatching to the Pico via TPI.
+
+print("[SETUP] starting ROM control state machine (set_ctrl @ 150MHz, drives /BE on GPIO 21)")
+ROM_SM_HW = StateMachine(4, set_ctrl, freq=150_000_000,
+                         in_base=Pin(0, Pin.IN), jmp_pin=Pin(26),
+                         set_base=Pin(21, Pin.OUT),
+                         out_base=Pin(19, Pin.OUT))
+ROM_SM_HW.active(1)
+
+print("[SETUP] starting BANK selection state machine (sel_bank @ 150MHz)")
+BANK_SM_HW = StateMachine(5, sel_bank, freq=150_000_000,
+                          jmp_pin=Pin(26),
+                          out_base=Pin(15, Pin.OUT))
+BANK_SM_HW.active(1)
+
+# Feed config to the SMs — tells them which Flash/SRAM slots to route
+# DCK and ROM accesses to.
+ROM_SM_HW.put(TSP.ROM_SM)
+BANK_SM_HW.put(TSP.bank_sm)
+print("[SETUP] ROM_SM=0x%02X, bank_sm=0x%02X (EXROM should now be mapped)" % (
+    TSP.ROM_SM, TSP.bank_sm))
 
 
 # ============================================================================
