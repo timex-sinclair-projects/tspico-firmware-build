@@ -307,6 +307,10 @@ try:
                 pre[i] = MQ.get()
 
             # --- ACK + READY ---
+            # Some EXROM polling loops may want to see a busy→ready edge.
+            # Explicitly clear Y first, then set ready, so the next time
+            # the Z80 reads $0F it sees the transition.
+            mq_busy()
             MQ.put(0x01)
             mq_ready()
 
