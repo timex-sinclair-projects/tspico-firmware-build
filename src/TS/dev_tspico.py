@@ -352,11 +352,7 @@ def MQ_READY():
     The Z80 will see 'ready' on its next IN A,($0F), then read the
     actual data via IN A,($0E).
     """
-    # invert(null) is the documented MicroPython PIO syntax. The tilde
-    # form `~null` does NOT parse correctly via runtime sm.exec() in
-    # v1.20.0 — confirmed by REPL test. Without this, Y stays at 0,
-    # port $0F always reads 0, Z80 sees "never ready" and reports J.
-    MQ.exec("mov(y, invert(null))")
+    MQ.exec("mov(y, ~null)")
 
 
 def MQ_BUSY():
