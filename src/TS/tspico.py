@@ -932,10 +932,17 @@ def MOUNT_FILE(f_name, remounting=False):                                       
         err_level = 2
 
     # Single SD→MQ transition for ALL paths.
-    # ready=False keeps GPIO 12 LOW (Z80 sees "not ready") until the
-    # response is loaded into the FIFO and MQ_READY() is called by SEND_MSG.
+    # Use ready=True (default): SM activates immediately, but scratch Y
+    # defaults to 0 after a fresh SM creation, so port $0F still reads
+    # 0 (busy). The PIO is RUNNING and serving port $0E/$0F correctly,
+    # just signaling busy. SEND_MSG will set Y=0xFFFFFFFF (ready) once
+    # the response is in the FIFO.
+    #
+    # The earlier ready=False approach was broken — it created the SM
+    # but never activated it, so the PIO program wasn't running at all,
+    # and Z80 reads got bus floats instead of the dual-port logic.
     DEACTIVATE_SD()
-    ACTIVATE_MQ(ready=False)
+    ACTIVATE_MQ()
 
     LOG(msg, err_level)
 
