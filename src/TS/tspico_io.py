@@ -375,11 +375,13 @@ def LOAD_TS(pre, MQ, TSP):                                                      
 
     wrt = MQ.put
 
-    print("[LOADTS] starting wrt loop. tx=%d rx=%d. About to put 0x40 + 0x%02X" % (
+    print("[LOADTS] starting wrt loop. tx=%d rx=%d. About to put 0x%02X (block_type, NO 0x40)" % (
         MQ.tx_fifo(), MQ.rx_fifo(), blk_info[2]))
 
-    # EXPERIMENT: keeping 0x40 in stream — testing whether removing makes a difference
-    wrt(0x40)
+    # Dual-port: 0x40 continue flag is on port $0F (Y register).
+    # Diagnostic showed Z80 read 0x40 as the second byte and stopped —
+    # treating it as an invalid block_type. Removing 0x40 lets Z80 see
+    # the actual block_type next (0x00 for header, 0xFF for data).
     wrt(blk_info[2])
 
     bytes_sent = 0
