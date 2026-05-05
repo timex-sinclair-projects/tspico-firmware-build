@@ -3731,22 +3731,51 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
 ######################
 
 
-def TS2068_IO():                                                         # Main IO loop, for SAVE, LOAD and commands processing
-    
-    global busy                                                        # whether 2nd core is busy
-    global dead                                                        # boolean to indicate whether an IO routine is "alive" or not. Used for watchdog CHK_STATUS
-    global files                                                       # array of only the files of current directory; used for index mounting of files ( LOAD "TPI:*nn") 
-    global kill                                                        # boolean set to True when watchdog wants to end a misbehaving IO routine 
-    global lista                                                       # all contents of current dir, in string format to be displayed by "TPI:DIR"
-    global log_entries                                                 # log entries to be saved during next loop
-    global log_to_serial                                               # If TRUE, all logging messages will be displayed on screen instead of the logfile
-    
-    global ROM
-    global BANK
-    global MQ
+def TS2068_IO():
+    """Main I/O dispatch loop — the heart of the firmware.
 
-    global led
-    global TSP
+    Called once from main.py and runs forever (until reset). At a high
+    level, this function:
+
+      1. Configures the PICO_STATUS state object from /config.ini.
+      2. Initializes the activity log (rotates if too big).
+      3. Starts the ROM_SM and BANK_SM PIO state machines that route
+         the TS-Pico's external flash onto the TS-2068 ROM bus. Without
+         these running, the TS-2068 cannot boot.
+      4. Mounts the SD card briefly to enumerate the /TAP directory.
+      5. Switches the bus from SD-card mode to PIO mode (DEACTIVATE_SD,
+         ACTIVATE_MQ, MQ_READY).
+      6. Pre-loads 0x01 into TX FIFO so the very first Z80 command finds
+         a valid status byte waiting.
+      7. Enters the infinite dispatch loop:
+           - if RX FIFO has bytes, drain pre[] (10 bytes), look at pre[0]
+             to identify the command type, dispatch to the appropriate
+             handler (LOAD_TS / SAVE_TS / PROCESS_CMD / PROCESS_ASM).
+           - handlers respond with their byte-stream output and end with
+             MQ.put(0x01) to maintain the pre-load chain.
+
+    See docs/PROTOCOL.md for the byte-level protocol details and
+    docs/GUSTAVO_PROTOCOL.md for the high-level design rationale.
+    """
+    # Cross-thread / cross-handler globals. See tspico_io.py for the
+    # semantics of busy / dead / kill (the watchdog protocol).
+    global busy             # core1 watchdog activity flag
+    global dead             # True = no transaction in progress
+    global files            # list of files in current directory (for
+                            #   indexed mounting like LOAD "TPI:*5")
+    global kill             # True = watchdog wants the handler to abort
+    global lista            # cached "ls" output for the DIR command
+    global log_entries      # buffered log lines waiting to be flushed
+    global log_to_serial    # if True, log to USB serial instead of file
+
+    # Hardware state machines (created by this function).
+    global ROM              # set_ctrl PIO — drives /BE for EXROM mapping
+    global BANK             # sel_bank PIO — selects flash slot (DCK/ROM)
+    global MQ               # TS_IO_DUAL PIO — Z80 ↔ Pico data bus
+
+    # Misc shared state.
+    global led              # onboard LED Pin (GPIO 25)
+    global TSP              # PICO_STATUS instance — config + runtime state
     
     busy = False
     dead = True
@@ -3781,17 +3810,55 @@ def TS2068_IO():                                                         # Main 
     SAVE_LOG()
         
 
-#     Uncomment the following two lines, for DCK *AND* ROM mapping
-    ROM = StateMachine(4, set_ctrl, freq=150_000_000, in_base=Pin(0, Pin.IN), jmp_pin=Pin(26), set_base=Pin(21, Pin.OUT), out_base=Pin(19, Pin.OUT))
+    # ============================================================
+    # Start the ROM/BANK PIO state machines.
+    #
+    # The TS-2068 reads its boot ROM from address $0000-$3FFF on each
+    # power-on reset. With a stock TS-2068 the ROM lives on a chip on
+    # the motherboard, but on a TS-Pico-equipped machine we map the
+    # ROM in from the TS-Pico's external flash chip instead — that's
+    # what holds the modified Gustavo HOME ROM and EXROM.
+    #
+    # `set_ctrl` is the PIO program (in tspico_io.py) that drives /BE
+    # (GPIO 21 = bus enable for the TS-Pico flash chip). It watches the
+    # Z80 address bus and asserts /BE LOW whenever the Z80 is reading a
+    # ROM address, then HIGH otherwise. Without this SM running, /BE
+    # floats and the TS-2068 sees no ROM bytes — it can't boot.
+    #
+    # `sel_bank` (started below) drives the flash chip's bank-select
+    # lines so we can swap between HOME/EXROM banks and DCK cartridge
+    # banks during TS-2068 operation.
+    #
+    # PIO clock = 150MHz: fast enough to react within Z80's bus cycle
+    # window. (RP2040 PIO can run up to half the system clock = 135MHz
+    # at 270MHz CPU, but 150MHz is OK on most silicon — production has
+    # been running it for years.)
+    # ============================================================
+    # For DCK *AND* ROM mapping (the standard configuration):
+    ROM = StateMachine(4, set_ctrl, freq=150_000_000,
+                       in_base=Pin(0, Pin.IN),
+                       jmp_pin=Pin(26),
+                       set_base=Pin(21, Pin.OUT),
+                       out_base=Pin(19, Pin.OUT))
     ROM.active(1)
 
-#     Uncomment the following two lines, for DCK access and no ROM mapping
-#     ROM = StateMachine(4, set_dck, freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(19, Pin.OUT))
-#     ROM.active(1)
+    # Alternative configuration (commented out): DCK access only, no
+    # ROM mapping. Uncomment if you want the TS-2068 to use its built-
+    # in ROMs and only have the TS-Pico for cartridge / SD operations.
+    #     ROM = StateMachine(4, set_dck, freq=150_000_000,
+    #                        jmp_pin=Pin(26), out_base=Pin(19, Pin.OUT))
+    #     ROM.active(1)
 
-    BANK = StateMachine(5, sel_bank, freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(15, Pin.OUT))
+    BANK = StateMachine(5, sel_bank, freq=150_000_000,
+                        jmp_pin=Pin(26),
+                        out_base=Pin(15, Pin.OUT))
     BANK.active(1)
 
+    # Configure each SM with the active slot/mapping pattern from config.
+    # ROM_SM = 0x0A (binary 1010): both DCK and ROM mapped to flash.
+    # bank_sm = (DCK_SLOT * 16) + ROM_SLOT — selects which flash slot
+    # holds each image. Defaults to slot 0 for DCK, slot 1 for the
+    # TS-Pico ROM image (HOME + EXROM combined).
     ROM.put(TSP.ROM_SM)
     BANK.put(TSP.bank_sm)
     

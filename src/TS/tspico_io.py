@@ -196,85 +196,171 @@ def TS_IO_DUAL():
     system clock (135MHz at 270MHz CPU), so 30MHz is conservative.
 
     Total: 19 instructions of 32 available.
+
+    ABOUT PIO INSTRUCTIONS (helpful background for newcomers):
+      - Every instruction also sets GPIO 12 via the `.side(0|1)` clause.
+        sideset(1) = U6 buffer DISABLED (Pico off the bus, idle).
+        sideset(0) = U6 buffer ENABLED  (Pico drives or reads the bus).
+      - ISR = Input Shift Register, OSR = Output Shift Register.
+        `in_(pins, N)` shifts N pins INTO ISR's low N bits (SHIFT_LEFT).
+        `out(dst, N)` shifts N bits OUT of OSR's low N bits (SHIFT_RIGHT).
+      - X and Y are scratch registers (32-bit).
+      - `jmp(pin, "lbl")` jumps if jmp_pin (= GPIO 11) is HIGH.
+      - `pull(noblock)` moves TX FIFO → OSR; if FIFO empty, copies X into OSR.
+      - `push(noblock)` moves ISR → RX FIFO; if FIFO full, drops the value.
     """
-    # ---- Wait for bus cycle ----
-    wait(0, gpio, 14)       .side(1)      # /PICOSEL low = bus cycle starts
-    jmp(pin, "z80_out")     .side(1)      # GPIO 11: 1=Z80 OUT, 0=Z80 IN
+    # ============================================================
+    # IDLE STATE — wait for the Z80 to start a bus cycle on $0E or $0F
+    # ============================================================
+    # /PICOSEL is the chip-select line driven by the TS-Pico's address
+    # decoder hardware. It goes LOW when the Z80 reads or writes either
+    # of our two ports. While idle (waiting), sideset(1) keeps U6 OFF
+    # so we don't fight the Z80 bus.
+    wait(0, gpio, 14)       .side(1)      # block until /PICOSEL goes LOW
 
-    # ---- Z80 IN (Pico → bus): decode A0 to choose port ----
-    in_(pins, 9)            .side(0)      # capture D0-D7 + A0 (bit 8)
-    mov(osr, isr)           .side(0)      # ISR → OSR for shifting
-    mov(isr, null)          .side(0)      # clear ISR for reuse
-    out(null, 8)            .side(0)      # discard D0-D7 (low 8 bits)
-    out(x, 1)               .side(0)      # X = remaining bit 0 = A0
-    jmp(not_x, "rd_data")   .side(0)      # A0=0 → port $0E (data)
+    # GPIO 11 is the R/W signal (high = Z80 is OUTting, low = Z80 INing).
+    # Branch to the appropriate handler. The `.side(1)` here keeps U6
+    # disabled for one more cycle while we decide which path to take.
+    jmp(pin, "z80_out")     .side(1)      # GPIO 11 HIGH → Z80 OUT branch
 
-    # Port $0F read: output status from scratch Y
-    mov(osr, y)             .side(0)      # Y = status byte
-    out(pins, 8)            .side(0)      # drive status onto bus
-    jmp("fin")              .side(0)
+    # ============================================================
+    # Z80 IN — Pico drives data ONTO the bus
+    # ============================================================
+    # First we need to know which port: $0E (data) or $0F (status).
+    # That's encoded in address bit 0 (A0), which the hardware routes to
+    # GPIO 10. We sample 9 pins (GPIO 2..10 = D0..D7 + A0) into ISR.
+    # From now on sideset(0) → U6 ENABLED → we own the bus.
+    in_(pins, 9)            .side(0)      # ISR low 9 bits = D0..D7, A0
 
-    # Port $0E read: output data from TX FIFO.
-    # pull(noblock) — if FIFO empty, OSR gets the X register (= A0 = 0
-    # for a $0E read), so Z80 reads 0x00. See architecture comment above
-    # for why pull(block) is NOT used here.
+    # Now we want to extract just A0 (bit 8 of ISR). The trick: copy ISR
+    # to OSR, then `out(null, 8)` discards the bottom 8 bits (D0-D7),
+    # leaving A0 at OSR bit 0. Finally `out(x, 1)` moves that 1 bit into
+    # the X scratch register.
+    mov(osr, isr)           .side(0)      # OSR = ISR (so we can shift OSR out)
+    mov(isr, null)          .side(0)      # clear ISR (good hygiene; it
+                                          # gets re-used by Z80 OUT path)
+    out(null, 8)            .side(0)      # discard D0-D7 from OSR (LSB end)
+    out(x, 1)               .side(0)      # X = next bit out of OSR = A0
+
+    # X = 0 means port $0E (data). X = 1 means port $0F (status).
+    # `jmp(not_x, ...)` jumps if X is zero, so X=0 → take the FIFO path.
+    jmp(not_x, "rd_data")   .side(0)      # X==0 → "rd_data" (FIFO read)
+
+    # --- Port $0F (status) read: drive the Y register's value ---
+    # Y is a 32-bit scratch register controlled from MicroPython via
+    # sm.exec("mov(y, ...)"). We typically keep Y = 0xFFFFFFFF so port
+    # $0F always reads 0xFF (which has bit 6 set = "ready").
+    mov(osr, y)             .side(0)      # OSR = Y (shift source)
+    out(pins, 8)            .side(0)      # drive low 8 bits of OSR onto D0-D7
+    jmp("fin")              .side(0)      # done; jump to cycle-end
+
+    # --- Port $0E (data) read: drive next byte from TX FIFO ---
+    # pull(noblock): if TX has a byte, OSR = that byte. If TX is empty,
+    # OSR = X register (= 0 for a $0E read, since X was just set to A0=0).
+    # So an empty FIFO produces 0x00 on the bus, which the Z80 ROM
+    # interprets as "Report J — Invalid I/O Device". That's the *correct*
+    # behavior — it's the firmware's job to keep the FIFO populated.
     label("rd_data")
-    pull(noblock)           .side(0)      # FIFO byte (or 0x00 if empty)
-    out(pins, 8)            .side(0)      # drive data onto bus
-    jmp("fin")              .side(0)
+    pull(noblock)           .side(0)      # OSR = FIFO byte (or X=0 if empty)
+    out(pins, 8)            .side(0)      # drive low 8 bits onto D0-D7
+    jmp("fin")              .side(0)      # done
 
-    # ---- Z80 OUT (bus → Pico): capture data + A0 ----
+    # ============================================================
+    # Z80 OUT — Pico captures the byte FROM the bus
+    # ============================================================
+    # Same sample-and-record pattern, but we just push to RX FIFO instead
+    # of decoding A0 separately. The A0 bit ends up in bit 8 of the 9-bit
+    # value that lands in RX, so MicroPython can check `(raw >> 8) & 1`
+    # to know which port the Z80 wrote to (the BASIC command path uses
+    # this to validate writes go to $0E rather than $0F).
     label("z80_out")
-    nop()                   .side(0)
-    in_(pins, 9)            .side(0) [2]  # sample D0-D7 + A0 (extra cycles for setup)
-    push(noblock)           .side(0)      # bit 8 of pushed value = A0
+    nop()                   .side(0)      # padding cycle for bus settle
+    in_(pins, 9)            .side(0) [2]  # sample D0-D7 + A0; [2] adds 2
+                                          # extra cycles to ensure the
+                                          # Z80's data is stable before
+                                          # we latch it (bus setup time)
+    push(noblock)           .side(0)      # ISR → RX FIFO (drops if full)
 
-    # ---- Cycle complete ----
+    # ============================================================
+    # END OF CYCLE — wait for /PICOSEL to release, return to idle
+    # ============================================================
     label("fin")
-    wait(1, gpio, 14)       .side(0)      # wait /PICOSEL deasserted
-    mov(null, osr)          .side(1)      # clear OSR, return to idle
+    wait(1, gpio, 14)       .side(0)      # block until /PICOSEL goes HIGH
+    mov(null, osr)          .side(1)      # consume OSR (cleanup); sideset(1)
+                                          # disables U6 again so we're off
+                                          # the bus until the next cycle
 
 
 def ABORT_TX(log_level):
-    
+    """Abort an in-flight LVM transaction.
+
+    Called from LOAD_TS / SAVE_TS when the watchdog has flagged the
+    transaction as hung (kill = True). Logs the error, sets `dead = True`
+    so the watchdog knows we're aborting, then waits for the watchdog to
+    finish its FIFO-clear cleanup (busy goes False).
+
+    The watchdog itself does the actual TX/RX FIFO drain; this function
+    just signals it and waits.
+    """
     global dead
     global busy
-    
+
     LOG_ADD("ERROR: LOAD_TS failed!", 2, log_level)
     dead = True
-    
+
+    # Spin until the watchdog thread on core1 finishes its cleanup.
+    # The watchdog drains FIFOs, deactivates/reactivates the SM, then
+    # sets busy = False. We can't proceed to send a response until then
+    # because the bus state is unsafe during cleanup.
     while busy:
         pass
-    
+
     return
 
 
-def BLINK():                                                                                        # An onboard LED-blinking routine. This for an error condition. Interval is fixed
+def BLINK():
+    """Blink the onboard LED 10 times for a fixed interval.
 
+    Used as a visual signal during boot or when an error condition is
+    detected. Blocking — caller is paused for ~1 second.
+    """
     led = Pin(25, Pin.OUT)
     led.value(1)
 
     for i in range(10):
         utime.sleep(.1)
         led.toggle()
-    
+
     led.value(0)
-        
+
     return
 
 
-def ENA_MQ(MQ):                                                                                # Re-enable TX/RX SM, after a SDCard access
+def ENA_MQ(MQ):
+    """Re-create and activate the (legacy single-port) TS_IO state machine.
 
+    NOTE: This is the OLD single-port version using `TS_IO` at 15MHz.
+    It's kept for backwards compatibility with code paths that haven't
+    been migrated to dual-port. New code should use ACTIVATE_MQ() in
+    tspico.py instead, which uses TS_IO_DUAL at 30MHz.
+    """
     MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
-    
-    MQ.active(1)
-    
-    return MQ
-    
 
-def ENA_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
+    MQ.active(1)
+
+    return MQ
+
+
+def ENA_SD():
+    """Mount the SD card on /sd. Used by SAVE_TS to write the captured TAP.
+
+    Note: this leaves the GPIO pins claimed by SPI; the caller is
+    responsible for unmounting (or letting MOUNT_FILE / DEACTIVATE_SD
+    handle it later in the dispatcher). New code should prefer the
+    explicit ACTIVATE_SD / DEACTIVATE_SD pair in tspico.py.
+    """
     
     U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
     D0          = Pin(2,  Pin.IN)
@@ -294,49 +380,99 @@ def ENA_SD():                                                                   
     return spi
 
 
-def END_MSG(MQ, verbose, msg, msg1, st: bytes):                                                             # Sends one-line status message(s)
-                                                                                                # back to the TS, once a command is finished
-    # Dual-port: continue flag (was wrt(0x40)) is on port $0F via scratch
-    # Y, not in the data stream. Y was set to 0xFFFFFFFF by main loop's
-    # MQ_READY() before dispatching, and stays ready throughout the LVM
-    # transfer. We just stream the status bytes through port $0E's FIFO.
-    # For verbose: 0x81 IS the status byte (PRINT_STRING directive).
-    # For non-verbose: just the status code.
+def END_MSG(MQ, verbose, msg, msg1, st: bytes):
+    """Send a single status response (optionally with a verbose string)
+    back to the Z80, then wait for the FIFO to drain.
+
+    !!!  WARNING — DO NOT call this from LOAD_TS or SAVE_TS  !!!
+    Those handlers already write their own MQ.put(0x01) × 2 (final
+    status + next-iter pre-load) per the V6 pattern. END_MSG would
+    inject a THIRD status byte that gets orphaned in TX, then consumed
+    by the next iteration's data-loop reads → CRC mismatch → "Report R
+    Tape Loading Error". See docs/PROTOCOL.md §7 pitfalls.
+
+    This function is appropriate for simpler "result" responses (e.g.,
+    verbose feedback strings printed to the TS-2068 screen via the
+    PRINT_STRING directive 0x81) where the protocol doesn't already
+    chain a pre-load.
+
+    Layout depending on `verbose`:
+        VERBOSE = True (TS-2068 will display the message on screen):
+            byte 0 = 0x81 (PRINT_STRING function code; this byte
+                            simultaneously serves as the "final status"
+                            from Z80's POV — values >= 0x80 are
+                            interpreted as function codes, not errors)
+            byte 1 = `st`  (return code: 1 = OK, else error code)
+            byte 2 = 0x0D  (newline)
+            bytes 3.. = `msg` ASCII characters
+            optional 0x0D + `msg1` ASCII characters
+            terminator = 0x00
+
+        VERBOSE = False (silent OK):
+            byte 0 = `st`  (just the status code)
+
+    Args:
+        MQ:      TS_IO_DUAL state machine.
+        verbose: TSP.VERBOSE — whether to send the message text.
+        msg:     primary message string (ignored if verbose=False).
+        msg1:    optional secondary message string (e.g., a filename).
+        st:      status byte (1 = OK, 2-9 = various Z80 BASIC reports).
+
+    Blocks until the Z80 has drained every byte from TX FIFO.
+    """
     wrt = MQ.put
 
     if verbose:
-
-        wrt(0x81)               # PRINT_STRING directive — IS the byte-N status
-        wrt(st)
-        wrt(0x0D)
+        # Verbose response: tells Z80 BASIC ROM "print the following
+        # string on screen, then handle the trailing return code".
+        wrt(0x81)               # PRINT_STRING function code (>=0x80 means
+                                # "extended response — read more bytes")
+        wrt(st)                 # actual return code (used after string is shown)
+        wrt(0x0D)               # leading newline so message starts on its own line
         for m in msg:
-            wrt(m)
+            wrt(m)              # primary message text
         if msg1:
-            wrt(0x0D)
+            wrt(0x0D)           # second-line separator
             for m in msg1:
                 wrt(m)
-        wrt(0x00)
-
+        wrt(0x00)               # NULL terminator — tells Z80 ROM "string done"
     else:
+        # Silent response: just one status byte.
+        wrt(st)
 
-        wrt(st)                 # status (0x01 = OK)
-
-    while(MQ.tx_fifo() !=0):
+    # Block until Z80 has drained every byte we put. This guarantees
+    # the response has been fully consumed before our caller returns
+    # (and possibly disturbs the FIFO state).
+    while(MQ.tx_fifo() != 0):
         pass
 
     return
 
 
-def LOG_ADD(msg, level, log_level):                                                                    # Adds a timestamped new entry to log_entries
-    
+def LOG_ADD(msg, level, log_level):
+    """Buffer a timestamped log entry for later writing to /activity.log.
+
+    Critical-path safe: we don't actually write to flash here (which
+    would block for tens of ms), we just append to a string. The
+    dispatcher writes log_entries to disk between Z80 transactions.
+
+    Args:
+        msg:       message text (no trailing newline needed).
+        level:     this entry's severity (0=INFO, 1=WARN, 2=ERROR, 3=CRIT).
+        log_level: TSP.LOG_LEVEL configured threshold. Entries below this
+                   threshold are dropped (not buffered).
+    """
     global log_entries
-    
+
     if level < log_level:
         return
-    
-    log_entries += "[" + str(time.ticks_us()) + "] "                                    # on Pico W, timestamp can be replaced by local time provided by ntp
+
+    # ticks_us() rolls over after ~71 minutes; that's fine for relative
+    # timing within a session. (On Pico W this could be replaced with
+    # an NTP-synced timestamp.)
+    log_entries += "[" + str(time.ticks_us()) + "] "
     log_entries += msg + "\n"
-    
+
     return
 
 
@@ -1000,52 +1136,106 @@ def SAVE_ZX(MQ, TSP):                                                           
     return MQ, TSP, log_entries
 
 
-def WATCHDOG(secs, MQ, TSP):                                                                                 # Watchdog that executes on the second thread, 
-                                                                                                      
-    global kill
-    global dead
-    global busy
-    
+def WATCHDOG(secs, MQ, TSP):
+    """Background timeout watcher for LVM transactions. Runs on core1.
+
+    Spawned by LOAD_TS / SAVE_TS via _thread.start_new_thread() right
+    before the bulk transfer begins. Its job is to detect when a
+    transaction has hung (e.g., user pressed BREAK, Z80 crashed, bus
+    glitch) and force-clean the FIFOs so the system can continue.
+
+    PROTOCOL between this thread (core1) and the main handler (core0):
+
+        Main handler                          WATCHDOG thread
+        ─────────────                          ───────────────
+        sets dead = False
+        spawns WATCHDOG(secs, MQ, TSP)
+                                               sets kill = False
+                                               sets busy = True
+                                               loops checking:
+                                                 - secs elapsed?  → cleanup
+                                                 - dead == True?   → exit cleanly
+        ... does work ...
+        sets dead = True (= "I'm done")
+                                               notices dead, breaks loop
+                                               sets busy = False
+                                               returns
+        observes busy == False
+        proceeds to next transaction
+
+    If the main handler doesn't set dead = True within `secs` seconds:
+      1. Log the abort.
+      2. Drain the PIO state machine's TX FIFO (pull noblock; clear OSR).
+      3. Drain the RX FIFO.
+      4. Bounce the SM (active off → BLINK warning → active on).
+      5. Set kill = True so the main handler's `if kill:` checks fire.
+      6. Wait for main handler to acknowledge (sets dead = True).
+      7. Set busy = False to release the dispatcher.
+
+    Args:
+        secs: timeout in seconds (typically 3 for LOAD, 5 for SAVE).
+        MQ:   TS_IO_DUAL state machine.
+        TSP:  PICO_STATUS for log level access.
+    """
+    global kill, dead, busy
+
     led = Pin(25, Pin.OUT)
-    
+
+    # Initialize the cross-thread flags. Doing this here (rather than
+    # at module level) ensures every transaction starts with a clean
+    # state. Note: there's a small race window where the main handler
+    # could reference `kill` BEFORE this line executes — that's why we
+    # also initialize them at module level (see top of file).
     kill = False
     busy = True
-    
+
     LOG_ADD("INFO: Starting watchdog...", 0, TSP.LOG_LEVEL)
-    secs = secs * 1_000_000
-    
+    secs = secs * 1_000_000     # convert to microseconds for ticks_us
     led.value(1)
-    
     t_init = time.ticks_us()
-    
+
+    # Polling loop: tight check, no sleep. We need to react quickly
+    # when `dead` flips True so the dispatcher can resume promptly.
     while (time.ticks_us() - t_init) < secs:
         if dead:
             break
+
+    # Two exit paths from the loop above:
+    #   (a) `dead` went True before timeout → normal completion, skip cleanup.
+    #   (b) `secs` elapsed with dead still False → transaction hung; clean up.
     if not dead:
-        LOG_ADD("ERROR: Abnormal termination. Clearing TX/RX FIFO....", 2, TSP.LOG_LEVEL)
+        LOG_ADD("ERROR: Abnormal termination. Clearing TX/RX FIFO....",
+                2, TSP.LOG_LEVEL)
+
+        # Pump PIO instructions to drain whatever's stuck in the SM
+        # internals (OSR, ISR, FIFOs). The kill = True flag tells the
+        # main handler to abort its current loop iteration.
         while not dead:
-            MQ.exec("pull (noblock)")
-            MQ.exec("mov (osr, null)")
-            MQ.exec("mov (isr, null)")
-            MQ.exec("push (noblock)")
-            kill = True
-             
+            MQ.exec("pull (noblock)")     # drain TX FIFO into OSR
+            MQ.exec("mov (osr, null)")    # discard OSR contents
+            MQ.exec("mov (isr, null)")    # clear ISR
+            MQ.exec("push (noblock)")     # push (nothing) to RX
+            kill = True                   # signal main handler
+
+        # Drain Python-side FIFOs.
         while MQ.rx_fifo() != 0:
             MQ.get()
         while MQ.tx_fifo() != 0:
             MQ.exec("pull (noblock)")
             MQ.exec("set (osr, null)")
+
+        # Bounce the SM to flush any latched state, then BLINK to give
+        # the user a visual indication something went wrong.
         MQ.active(0)
-        
-        LOG_ADD("INFO: TX/RX FIFO successfully cleared. Operation finished", 0, TSP.LOG_LEVEL)
-        
+        LOG_ADD("INFO: TX/RX FIFO successfully cleared. Operation finished",
+                0, TSP.LOG_LEVEL)
         BLINK()
-        
         MQ.active(1)
-        
-        LOG_ADD("INFO: Ending watchdog. Operation ended normally", 0, TSP.LOG_LEVEL)
-        
+        LOG_ADD("INFO: Ending watchdog. Operation ended normally",
+                0, TSP.LOG_LEVEL)
+
+    # Always reset flags before exiting so the next transaction starts clean.
     kill = False
     busy = False
-    
+
     led.value(0)
