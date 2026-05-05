@@ -66,7 +66,7 @@ events in nanoseconds. We use one PIO state machine to handle every
 Z80 bus cycle on ports `$0E` and `$0F`.
 
 ```
-src/TS/tspico_io.py:
+TS/tspico_io.py:
   @asm_pio(...)
   def TS_IO_DUAL():
       ...
@@ -346,18 +346,18 @@ match what the Z80 expects.
 
 | File                       | What's in it                            |
 |----------------------------|-----------------------------------------|
-| `src/TS/tspico_io.py`      | PIO programs (`TS_IO_DUAL`, `set_ctrl`, |
+| `TS/tspico_io.py`      | PIO programs (`TS_IO_DUAL`, `set_ctrl`, |
 |                            | `sel_bank`, etc.); LVM handlers (LOAD_TS, |
 |                            | SAVE_TS); helper utilities (LOG_ADD,    |
 |                            | END_MSG, ABORT_TX).                     |
-| `src/TS/tspico.py`         | Main I/O dispatch loop (`TS2068_IO`),   |
+| `TS/tspico.py`         | Main I/O dispatch loop (`TS2068_IO`),   |
 |                            | high-level commands (DIR, CD, etc.),    |
 |                            | configuration (`PICO_STATUS`).          |
-| `src/TS/sdcard.py`         | SD card driver (SPI).                   |
-| `src/TS/extcmd.py`         | User-extensible command dictionary.     |
+| `TS/sdcard.py`         | SD card driver (SPI).                   |
+| `TS/extcmd.py`         | User-extensible command dictionary.     |
 | `test/protocol_observer_*` | Bus-level test harnesses — see §6.      |
 | `manifest.py`              | MicroPython freeze manifest. Adding new |
-|                            | files to `src/TS/` requires updating    |
+|                            | files to `TS/` requires updating    |
 |                            | this so they get baked into the UF2.    |
 
 ---

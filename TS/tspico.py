@@ -1434,9 +1434,11 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 for m in scroll:    # Write scroll prompt (empty if last screen)
                     wrt(m)
 
-                wrt(0x00)       # End of this page
-                wrt(0x40)       # Read continue flag
-                
+                wrt(0x00)       # End of this page (Z80 displays + waits for key)
+                # Dual-port: NO wrt(0x40) here — the continue flag is
+                # signaled via Y register on port $0F, which is at READY
+                # for the entire session. A 0x40 in TX FIFO would orphan
+                # and get consumed as the next page's first character.
                 ch = MQ.get()   # Get keypress from user
                 if (ch == 78):  # If 'N' then done (ROM loops stops on old rom)
                     return
@@ -1585,8 +1587,8 @@ def DIR(pre, cmd):                                                              
                 # Write screen
                 for m in msg:
                     wrt(m)
-                wrt(0x00)       # End of this string
-                wrt(0x40)       # Start new string
+                wrt(0x00)       # End of this string (Z80 prints + waits for key)
+                # Dual-port: no wrt(0x40); $0F continue is via Y register.
                 ch = MQ.get()   # Get a key
                 if ch == 78:    # 'N' then done (ROM ended the loops)
                     return # OK
@@ -2175,8 +2177,8 @@ def ChangeDirMenu():
         # Write screen
         for m in msg:
             wrt(m)
-        wrt(0x00)       # End of this string
-        wrt(0x40)       # Start new string
+        wrt(0x00)       # End of this string (Z80 prints + waits for key)
+        # Dual-port: no wrt(0x40); $0F continue is via Y register.
         ch = MQ.get()   # Get a key
         if ch == 78:    # 'N' then done (ROM ended the loops)
             return
@@ -2982,8 +2984,8 @@ def SEND_MSG_PROMPT_YN(prompt, echoY = True):
         MQ.get()
     for ch in prompt:
         wrt(ch)
-    wrt(0x00)   # End string and wait for char
-    wrt(0x40)   # Read continue flag
+    wrt(0x00)   # End string (Z80 prints + waits for key)
+    # Dual-port: no wrt(0x40); $0F continue is signaled via Y register.
     ch = MQ.get()
     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
         if ch < 33 or echoY:
@@ -4197,9 +4199,23 @@ def TS2068_IO():
                 ts = time.ticks_us()
                 
 
-def ZX48_IO(pre):                                                                   # Main IO loop, for SAVE, LOAD and commands processing
-                                                                                    # ZX Spectrum mode
-    global MQ                                                                                    
+def ZX48_IO(pre):
+    """Inner I/O loop active during ZX Spectrum 48K compatibility mode.
+
+    Entered via the TPI:ZX48 BASIC command; exits when the user issues
+    the EXIT key. Inside this loop the protocol is different from the
+    standard TPI flow — it mimics the ZX Spectrum tape protocol so
+    Spectrum software can run unmodified.
+
+    !!! PARTIALLY MIGRATED — the ZX dispatch loop (this function) uses  !!!
+    !!! TS_IO_DUAL, but the LOAD_ZX / LOAD_ZX_C / SAVE_ZX handlers it   !!!
+    !!! calls are still single-port code and have NOT been ported to   !!!
+    !!! the V6 dual-port pattern. Most users won't hit these paths     !!!
+    !!! (ZX48 mode is opt-in via TPI:ZX48), but if you do hit them     !!!
+    !!! and they fail, see TS/tspico_io.py LOAD_ZX docstring for the   !!!
+    !!! migration TODO list.                                           !!!
+    """
+    global MQ
     global TSP
     global log_entries
     global led

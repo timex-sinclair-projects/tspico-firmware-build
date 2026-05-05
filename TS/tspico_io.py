@@ -699,8 +699,29 @@ def LOAD_TS(pre, MQ, TSP):
     return MQ, TSP, log_entries
 
 
-def LOAD_ZX(MQ, TSP):                                                                                          # Performs LOAD command on the TS side; ZX Spectrum-compatible mode
-    
+def LOAD_ZX(MQ, TSP):
+    """LOAD routine for ZX Spectrum compatibility mode.
+
+    !!! NOT DUAL-PORT COMPLIANT — needs migration. !!!
+
+    This function (and its siblings LOAD_ZX_C and SAVE_ZX) was written
+    against the original single-port TS_IO PIO program. It uses patterns
+    that don't work correctly under the dual-port architecture:
+      - assumes wrt(0x40) populates port $0F via the FIFO (in dual-port
+        $0F is decoupled and reads the Y register)
+      - calls the legacy ENA_MQ() which spins up the OLD single-port
+        TS_IO state machine (in dual-port we use TS_IO_DUAL via
+        ACTIVATE_MQ in tspico.py)
+      - missing the V6 pre-load chain (final + next-iter 0x01 writes)
+
+    Reached only when the user explicitly invokes ZX48 mode AND has
+    ZX_TAPE_COMPAT enabled in /config.ini. Both default to off, so this
+    path is dormant in standard installs.
+
+    To migrate: model this on the (working) LOAD_TS pattern above — drop
+    any wrt(0x40), keep TS_IO_DUAL as MQ, end with two MQ.put(0x01)
+    writes. See docs/PROTOCOL.md "Writing a new command handler" §5.
+    """
     global dead
     global kill
     global busy
@@ -763,8 +784,17 @@ def LOAD_ZX(MQ, TSP):                                                           
     return MQ, TSP, log_entries
 
 
-def LOAD_ZX_C(MQ, TSP, buf_size):                                                                  # ZX Spectrum LOAD routine in compatibility mode
-                                                                                                   # *VERY* non-optimized routine, bad memory management. Can hang the Pico, but gets some .TAPs working
+def LOAD_ZX_C(MQ, TSP, buf_size):
+    """ZX Spectrum LOAD routine in 'compatible' mode (heavily buffered).
+
+    !!! NOT DUAL-PORT COMPLIANT — see LOAD_ZX docstring above. !!!
+
+    Used for some hard-to-load TAPs that need the entire data block in
+    memory before streaming to the Z80. Inefficient and can OOM the
+    Pico — kept around because some legacy TAPs need it.
+
+    Inherits all the dual-port migration TODOs from LOAD_ZX.
+    """
     global log_entries
     log_entries = " "
     
@@ -1053,8 +1083,16 @@ def SAVE_TS(MQ, TSP):
     return MQ, TSP, log_entries
 
 
-def SAVE_ZX(MQ, TSP):                                                                                             # ZX Spectrum-compatible SAVE routine
-    
+def SAVE_ZX(MQ, TSP):
+    """SAVE routine for ZX Spectrum compatibility mode.
+
+    !!! NOT DUAL-PORT COMPLIANT — see LOAD_ZX docstring for details. !!!
+
+    Calls the legacy ENA_MQ() helper which spins up the OLD single-port
+    TS_IO state machine, and uses single-port byte sequences (wrt(0x40)
+    etc.). Migration would parallel SAVE_TS — see that function's V6-
+    pattern implementation as a template.
+    """
     global kill
     global dead
     global busy

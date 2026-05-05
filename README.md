@@ -96,7 +96,7 @@ except ImportError:
 
 **To override `tspico.py` for a debug session:**
 
-1. Edit `src/TS/tspico.py` locally
+1. Edit `TS/tspico.py` locally
 2. Copy the edited file to the Pico's flash as `/dev_tspico.py`
    (note the rename — root path, with `dev_` prefix)
 3. Reboot — REPL prints `[DEV] Using /dev_tspico.py override`
@@ -114,13 +114,18 @@ let CI rebuild the UF2.
 
 ## What's frozen
 
-All files under `src/TS/` plus the rp2 port's own essentials:
+All files under `TS/` plus only the rp2-port stdlib bits we actually use:
 
-- `_boot.py`, `_boot_fat.py`, `rp2.py` (rp2 port stdlib)
-- `uasyncio`, `onewire`, `ds18x20`, `dht`, `neopixel` (default deps)
+- `_boot.py` — runs at startup, mounts LittleFS
+- `_boot_fat.py` — FAT support (used by SD card driver)
+- `rp2.py` — wraps the C `_rp2` module; provides `asm_pio`, `StateMachine`, etc.
 - `TS/__init__.py` (package marker)
 - `TS/tspico.py`, `TS/tspico_io.py`, `TS/sdcard.py`, `TS/extcmd.py`,
   `TS/help.py` (TS-Pico modules)
+
+The default rp2 manifest also freezes `uasyncio`, `onewire`, `ds18x20`,
+`dht`, and `neopixel` — drivers for peripherals the TS-Pico doesn't have.
+We strip those to save ~6KB of flash and ~20KB of RAM.
 
 `main.py` is intentionally **not** frozen so the user can interrupt
 boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
@@ -136,7 +141,7 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 
 ## Iteration workflow
 
-1. Edit `src/TS/...` files
+1. Edit `TS/...` files
 2. Commit, push to `main`
 3. GitHub Actions rebuilds the UF2
 4. Download from the run's artifacts

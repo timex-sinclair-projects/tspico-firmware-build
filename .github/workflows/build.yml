@@ -35,12 +35,12 @@ jobs:
           # tspico.py uses `from TS.sdcard import *` and `from TS.tspico_io import ...`
           # so we keep the TS/ package layout when freezing.
           mkdir -p ${{ github.workspace }}/micropython/ports/rp2/modules/TS
-          cp src/TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
-          cp src/TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
-          cp src/TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
-          cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
-          cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
-          cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
+          cp TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
+          cp TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
+          cp TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
+          cp TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
+          cp TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
+          cp TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
 
           # Install our custom frozen-modules manifest in place of the
           # default rp2 manifest. Our manifest explicitly freezes the
