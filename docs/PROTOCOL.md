@@ -326,6 +326,19 @@ match what the Z80 expects.
   done, and `SEND_MSG`'s drain-wait loops forever. Pre-loading
   belongs **at boot** (one explicit `MQ.put(0x01)` in `TS2068_IO()`)
   and at the **tail of each command handler** (the V6 chain).
+- **Don't call `END_MSG()` after the final status + pre-load writes
+  in LVM handlers.** `END_MSG` writes its own `0x01` status byte to TX
+  for the non-verbose case (and a verbose directive header for verbose
+  mode). If your handler already wrote `MQ.put(0x01)` × 2 (final +
+  pre-load), `END_MSG` adds a THIRD `0x01`. The first two are consumed
+  correctly (final status + next-iter status) but the third sits in TX
+  and gets read as the FIRST byte of the next iteration's data-loop
+  reads, where the Z80 expects the block_type byte. The Z80's running
+  CRC accumulator drifts by one byte from the start, the final CRC
+  check fails, and you get "Report R — Tape Loading Error" on the data
+  block. If you want a verbose status message, write the directive
+  bytes BEFORE the pre-load `0x01` so the directive IS the final
+  response, not an addition.
 
 ---
 

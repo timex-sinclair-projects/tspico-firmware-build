@@ -546,7 +546,18 @@ def LOAD_TS(pre, MQ, TSP):
             TSP.tap_idx = 0
             TSP.offset  = 0
 
-    END_MSG(MQ, TSP.VERBOSE, "%d bytes loaded OK" % totbytes, "", 1)
+    # NOTE: do NOT call END_MSG() here. The two wrt(0x01) writes above
+    # already provided the final status and the next-iter pre-load.
+    # END_MSG would inject an EXTRA 0x01 status into TX, which the Z80
+    # consumes as the first byte of the NEXT iteration's data-loop read
+    # (where it expects the block_type 0xFF). The CRC accumulator gets
+    # offset by one byte from the start, every subsequent byte XORs into
+    # the wrong slot, and the final CRC check fails → "Report R - Tape
+    # Loading Error" on the data block.
+    # If verbose status messages are wanted later, they need a different
+    # protocol layout (e.g., write 0x81 + msg BEFORE the pre-load 0x01,
+    # making the verbose directive the final response instead of an
+    # additional 0x01).
 
     dead = True
     return MQ, TSP, log_entries
@@ -881,8 +892,10 @@ def SAVE_TS(MQ, TSP):
         mode = "wb"
         TSP.f_name = filename
 
-    # Send "saved OK" verbose message back to Z80 (if VERBOSE enabled).
-    END_MSG(MQ, TSP.VERBOSE, "80 - %d bytes saved OK" % totbytes, [], 1)
+    # NOTE: do NOT call END_MSG() here either, for the same reason as in
+    # LOAD_TS. The two wrt(0x01) writes earlier already handled the final
+    # status + next-iter pre-load chain. An extra END_MSG would orphan a
+    # status byte in TX that corrupts the next transaction.
 
     # ============================================================
     # Write the TAP to SD card. ENA_SD() switches GPIO 2-4 from PIO
