@@ -9,6 +9,13 @@ It's written for new developers who want to read or extend the firmware.
 You don't need to know PIO assembly or Z80 internals — we'll cover the
 parts you need as we go.
 
+> **Looking for the design context first?** Read
+> [`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) — it explains the
+> protocol from the design side: what Gustavo built, why he modified
+> the Z80 ROM, what the high-level command flow looks like.
+> This document picks up where that one ends, focusing on the
+> Pico/firmware side.
+
 > The authoritative protocol spec is `TS-PICO-TPI-PROTOCOL-SPECS_2.3.pdf`
 > in the TS2068 reference library. This guide is the *engineering*
 > companion: how the protocol actually maps onto the RP2040's hardware
