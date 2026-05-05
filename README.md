@@ -4,6 +4,11 @@ GitHub Actions builds a MicroPython UF2 for the TS-Pico (Raspberry Pi
 Pico-based storage interface for the Timex Sinclair TS-2068) with the
 TS-Pico Python modules **frozen** into the firmware.
 
+> **New here?** If you want to understand how the firmware actually
+> talks to the TS-2068, read [`docs/PROTOCOL.md`](docs/PROTOCOL.md).
+> It walks through Gustavo Pane's TPI v2.4 protocol, the dual-port PIO
+> architecture, and how to write your own command handlers.
+
 Freezing the modules eliminates the `MemoryError: memory allocation
 failed, allocating XXXX bytes` that occurs when MicroPython tries to
 import the modules from the flash filesystem at runtime — frozen

@@ -346,23 +346,34 @@ def DEACTIVATE_SD():
 def ACTIVATE_MQ(ready=True):
     """Create the dual-port TS_IO_DUAL state machine.
 
-    ready=True  (default): activate the SM immediately. Use at boot,
-                or any time the FIFO is already loaded with the
-                response and no Z80 poll is in progress.
-    ready=False: create the SM but DON'T activate it. The caller must
-                load the response into the TX FIFO with MQ.put(),
-                then call MQ.active(1), then signal MQ_READY().
-                Use during MOUNT_FILE / SD-access flows so GPIO 12
-                stays LOW (Z80 sees 'not ready') until the response
-                is genuinely in the FIFO.
+    DUAL-PORT PROTOCOL OVERVIEW (see docs/PROTOCOL.md for the full guide):
 
-    Caller MUST invoke DEACTIVATE_SD() first if the SD card was active.
-    Scratch register Y resets to 0 ('not ready') on SM creation.
+      Z80 reads $0F (status) → returns scratch register Y (independent of FIFO).
+      Z80 reads $0E (data)   → returns next byte from TX FIFO (or 0x00 if empty).
+      Z80 writes $0E or $0F  → byte goes to RX FIFO (with port indicator in bit 8).
 
-    Note: PIO clocked at 30MHz (was 15MHz). The dual-port decode adds
-    ~7 instructions to the read path; 30MHz keeps the total under the
-    Z80's data setup window with margin. The RP2040 PIO can run up to
-    half the system clock (135MHz at 270MHz CPU), so 30MHz is safe.
+    For LOAD/SAVE/PROCESS_CMD, Y is set to 0xFFFFFFFF (READY) and stays
+    there. The Z80 ROM polls $0F bit 6 with a long timeout (~20s); when
+    Y=0xFFFFFFFF the polls succeed instantly. Pico paces the data flow
+    via TX FIFO depth — Z80 reads at ~47µs/byte, MQ.put() is much faster.
+
+    Args:
+        ready=True  (default): activate the SM, set Y=READY, pre-load the
+                    initial 0x01 status byte into TX FIFO. This is the
+                    correct setting for normal operation.
+        ready=False: create the SM but DON'T activate it. Used by certain
+                    SD/transitional flows that need to control timing
+                    explicitly. Caller must MQ.active(1), set Y, and
+                    pre-load status manually.
+
+    The Pico's PIO is clocked at 30MHz; the dual-port decode adds ~7
+    instructions to the read path, and 30MHz keeps the total well within
+    the Z80's data setup window. RP2040 PIO can run up to half the
+    system clock (135MHz at 270MHz CPU), so 30MHz is conservative.
+
+    See also:
+        MQ_READY()  — set Y=0xFFFFFFFF (typically not needed at runtime)
+        MQ_BUSY()   — set Y=0 (rarely needed; Z80 will wait up to ~20s)
     """
     global MQ
 
@@ -373,7 +384,17 @@ def ACTIVATE_MQ(ready=True):
 
     if ready:
         MQ.active(1)
-        TLM("ACTIVATE_MQ exit", "SM active, Y=0 (busy until MQ_READY called)")
+        # Y = 0xFFFFFFFF → port $0F always returns 0xFF → D6=1=ready.
+        # We keep Y at READY for the entire session. The Z80 polls $0F
+        # but never sees BUSY because Pico's response timing is well
+        # within the protocol's tolerance (Z80 ROM has ~20s timeout).
+        MQ.exec("mov(y, invert(null))")
+        # Pre-load the initial 0x01 status byte into TX FIFO. The very
+        # first command the Z80 issues will read this from $0E as its
+        # initial status. Each subsequent command re-pre-loads the next
+        # 0x01 at the END of its handler (see LOAD_TS, SAVE_TS, etc.).
+        MQ.put(0x01)
+        TLM("ACTIVATE_MQ exit", "SM active, Y=READY, status pre-loaded")
     else:
         TLM("ACTIVATE_MQ exit", "SM created but NOT active")
 
@@ -3472,40 +3493,75 @@ def PRINT_IO(pre):                                                              
     return
 
 
-def PROCESS_ASM(pre):                                                                 # Processes AU (Assembler) commands sent by the TS
+def PROCESS_ASM(pre):
+    """Process an 'A' (Assembler) TPI command sent by the Z80.
 
+    Currently a stub — just logs the pre-header and acknowledges.
+    Full implementation TBD; the byte-sequence framework here is what
+    every command handler should follow:
+
+      1. (Z80's initial $0E status read was satisfied by the previous
+          handler's pre-load; nothing to do at entry.)
+      2. Drain command body if any. (No body for this stub.)
+      3. Process the command.
+      4. Write response status byte.
+      5. Write next-iteration pre-load.
+
+    See docs/PROTOCOL.md for the protocol pattern.
+    """
     global MQ
 
     cmd = pre[:5].decode()
     wrt = MQ.put
-
-    # Dual-port: initial "ready" before any data follows
-    MQ_READY()
 
     print(pre)
     print(cmd)
 
     par3 = int(pre[8])
     par4 = int(pre[9])
-
     print(par3, par4)
 
-    # Dual-port: load ack into FIFO then signal ready again
-    wrt(0x01)
-    MQ_READY()
+    # Response: 0x01 status (this iter) + 0x01 pre-load (next iter).
+    # Y stays at READY — no busy/ready dance needed.
+    wrt(0x01)        # final status — Z80 reads as "0 OK"
+    wrt(0x01)        # pre-load for next command's initial status
 
     return
 
 
-def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                           # Processes 'B' (BASIC) commands sent by the TS
+def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
+    """Process a 'B' (BASIC) TPI command sent by the Z80.
 
-    global TSP
-    global MQ
-    global ROM
-    global BANK
+    The Z80 has just OUT-ed a 10-byte pre-header (drained by the main
+    dispatcher) declaring this is a BASIC command. The next pre[7:9]+3
+    bytes that arrive on the bus are the command body — typically a
+    "TPI:command args" string (e.g. "TPI:DIR", "TPI:CD /path", etc).
 
-    global files
-    global files_upper
+    PROTOCOL OVERVIEW (see docs/PROTOCOL.md):
+
+      Z80 has 3 phases for a BASIC command:
+        Phase 1 — pre-header (already done by main dispatcher).
+                  Z80 reads $0E for status — pre-loaded 0x01 satisfies it.
+        Phase 2 — body. Z80 OUTs (pre[7:9]+3) command bytes to $0E.
+                  Pico drains them via MQ.get().
+        Phase 3 — response. Pico writes its response (via SEND_MSG /
+                  SEND_MSG2 / handler-specific code), Z80 reads.
+
+      Y stays at READY (0xFFFFFFFF) the entire time — Z80's $0F polls
+      between phases succeed instantly. The protocol is paced by Z80's
+      $0E read rate, not by status flips.
+
+      At the end of this function we write one MQ.put(0x01) which serves
+      as the NEXT command's status pre-load. This is the chain that
+      keeps back-to-back commands working.
+
+    Args:
+        pre: 10-byte pre-header (already drained from RX FIFO).
+        SA_funct: dispatch dict mapping "TPI:XXX" → handler.
+        EXT_SA_FUNCT: same but for user-extensible commands.
+    """
+    global TSP, MQ, ROM, BANK
+    global files, files_upper
 
     TSP.zx48 = False
     cur_fname = TSP.f_name
@@ -3518,20 +3574,16 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     long = pre[7] + 256*pre[8] + 3
     rl = range(long)
 
-    # CRITICAL TIGHT RECEIVE — drain cmd block. Do NOT put $01 in the FIFO
-    # here! The byte-24 response in the protocol is provided by SEND_MSG /
-    # SEND_MSG2 (called by EXEC below). For commands that need a directive
-    # (0x86 = PRINT_STRING_LOOP for DIR, 0x81 = PRINT_STRING for verbose),
-    # putting a $01 here makes Z80 see "OK done" and never enter the loop.
-    # MQ_READY is also deferred — SEND_MSG/SEND_MSG2 sets it after loading
-    # the response into the FIFO. Z80 polls $0F (~2.8ms budget) until then.
+    # CRITICAL TIGHT RECEIVE PATH — drain the command body bytes from RX
+    # FIFO as fast as possible. Z80 OUTs at ~30µs/byte and the RX FIFO is
+    # 4 entries deep — any Python overhead between MQ.get() calls risks
+    # FIFO overflow and dropped bytes (push(noblock) silently drops).
+    # Do NOT TLM, print, or do anything else inside this loop.
     for l in rl:
         cmd[l] = MQ.get()
 
-    # Stay BUSY until SEND_MSG fills the FIFO and signals ready.
-    MQ_BUSY()
-
-    # Now safe to TLM
+    # Now safe to TLM (Z80 is processing — no time pressure on Pico).
+    # Y stays at READY automatically — no MQ_BUSY() needed.
     TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d cmd=%r" % (
         load_cmd, long, bytes(cmd[:long])))
 
@@ -3551,11 +3603,12 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
 
     if load_cmd:                                                                                    # Is it a "LOAD:tpi:..." command.....?
 
-        # MQ_BUSY ensures Z80 sees "not ready" during the SD work that follows.
-        # MOUNT_FILE handles SD/MQ transitions internally (DEACTIVATE_SD +
-        # ACTIVATE_MQ(ready=False)). SEND_MSG calls MQ_READY() at the end after
-        # the response is loaded into the FIFO.
-        MQ_BUSY()
+        # MOUNT_FILE handles SD card access internally — switches GPIO 2-4
+        # from PIO to SPI mode for the duration of the SD operation, then
+        # back to PIO. While the SM is inactive there's nothing for the
+        # Z80 to read; the Z80 ROM has a long timeout (~20s) so we don't
+        # need to set Y=BUSY explicitly. After MOUNT_FILE returns, Y is
+        # back at READY and the response is pre-loaded for SEND_MSG.
 
         if rest_cmd == "dirinfo.tap":
             if MOUNT_FILE(TSP.cur_path + "/dirinfo.tap"):
@@ -3651,9 +3704,15 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
 
     TLM("PROCESS_CMD exit", "drain_tx=%d drain_rx=%d cmd=%r" % (drain_tx, drain_rx, cmd_exec))
 
-    # NOTE: stay ready. The Pico IS ready for the next command. Setting
-    # busy here would cause Z80 to time out (Report J) when it polls
-    # port $0F immediately after this command's last response byte.
+    # ============================================================
+    # Pre-load 0x01 status for the NEXT command's initial status read.
+    # This is the V6-pattern chain: every handler ends with a 0x01 in
+    # the TX FIFO so the Z80's first $0E read of the next pre-header
+    # finds a valid status byte already waiting. Without this, the
+    # next command would see stale 0x00 → "Report J / Invalid I/O".
+    # See docs/PROTOCOL.md "Writing a new command handler" for details.
+    # ============================================================
+    MQ.put(0x01)
 
     LOG("INFO: Exiting CMD processing: " + cmd_exec + " " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0)
 
@@ -3831,36 +3890,35 @@ def TS2068_IO():                                                         # Main 
 
             ts = time.ticks_us()                                                                   # reset timestamp
 
-            # CRITICAL TIGHT RECEIVE PATH — NO PYTHON OVERHEAD ALLOWED
+            # ============================================================
+            # PROTOCOL DISPATCH (see docs/PROTOCOL.md for full details)
+            # ============================================================
+            # When the Z80 issues any command (LOAD/SAVE/BASIC), it OUTs
+            # a 10-byte pre-header to port $0E. We drain those 10 bytes
+            # here, then dispatch to a handler based on pre[0].
             #
-            # The PIO's RX FIFO is only 4 entries deep. The Z80 sends bytes
-            # in bursts that finish in ~50us. Any Python work (print/TLM) in
-            # this region takes ms-scale time, during which the FIFO fills
-            # and bytes are dropped by PIO push(noblock).
+            # The Z80 reads its FIRST status byte from $0E shortly after
+            # finishing the pre-header OUT. That status byte (0x01 = OK)
+            # was placed in the TX FIFO either:
+            #   - at boot, by ACTIVATE_MQ() (for the very first command), OR
+            #   - by the previous handler's tail (each handler ends with
+            #     two 0x01 writes: the iteration's final status + a pre-
+            #     load for the NEXT iteration's initial status).
+            # So when this loop body runs, TX FIFO already contains the
+            # 0x01 the Z80 needs — we don't write it here. (Doing so
+            # would inject a stray 0x01 into the data response stream.)
             #
-            # Also: between MQ_READY and PROCESS_CMD's drain loop, the Z80's
-            # WF_NPH polls $0F for only ~4.3ms before timeout. TLM prints
-            # eat that budget too.
+            # Y is at READY (0xFFFFFFFF) from boot and stays there. The
+            # Z80's $0F polls succeed instantly. Pico paces data via TX
+            # FIFO depth + Z80's natural read rate (~47us/byte) — no
+            # explicit busy/ready dance is needed for the LVM path.
             #
-            # Sequence: drain pre-header, queue ACK, then dispatch.
+            # KEEP THIS PATH FAST. The PIO RX FIFO is 4 entries deep, and
+            # Z80 OUTs come in at ~30us/byte. Any Python work between
+            # successive MQ.get() calls risks dropping bytes if the FIFO
+            # overflows (push(noblock) silently drops on full).
             for i in r1:
                 pre[i] = MQ.get()
-            wrt(0x01)
-
-            # Conditional READY signaling per command type:
-            #   - "B" command (PROCESS_CMD): Pico is ready to RECEIVE the
-            #     D block, so signal ready now.
-            #   - LVM (LOAD_TS / SAVE_TS / etc): Pico must PREPARE data
-            #     before signaling ready. Stay BUSY until LOAD_TS/SAVE_TS
-            #     has the response queued and explicitly signals ready.
-            #     Signaling ready here would let the Z80 read garbage
-            #     before our handler has put real data in the FIFO.
-            if pre[0] == 66:                # "B" command
-                MQ_READY()
-            elif pre[0] == 65:              # "A" command
-                MQ_READY()
-            else:                            # LVM (block_type 0/0xFF) — let handler signal
-                MQ_BUSY()                    # ensure busy explicitly
 
             # (deferred) snapshot pre[] for later TLM
             _pre_snapshot = list(pre)

@@ -122,33 +122,64 @@ def TS_IO():
     in_shiftdir=PIO.SHIFT_LEFT,
 )
 def TS_IO_DUAL():
-    """Dual-port PIO: handles both port $0E (data) and port $0F (status).
+    """Dual-port PIO state machine — implements Gustavo's TPI v2.4 protocol.
 
-    Pin assignments (unchanged from TS_IO):
-      GPIO 2-9   = D0-D7 (out_base / in_base)
-      GPIO 10    = A0 (bit 8 of in_(pins, 9) — distinguishes ports)
-      GPIO 11    = R/W select (jmp_pin)
-      GPIO 12    = U6 buffer enable (sideset)
-      GPIO 14    = /PICOSEL (wait gpio)
+    Two virtual ports share the same 8-bit data bus:
+      Port $0E (data, addr LSB=0):
+        Z80 IN  : Pico drives a byte from the TX FIFO onto D0-D7
+        Z80 OUT : Pico samples D0-D7 from the bus into the RX FIFO
 
-    Port mapping:
-      A0 = 0  →  port $0E (data)
-        Z80 IN  : output from TX FIFO via pull(noblock)
-        Z80 OUT : sample data + push 9 bits to RX FIFO
-      A0 = 1  →  port $0F (status)
-        Z80 IN  : output scratch register Y (bit 6 = ready flag)
-        Z80 OUT : same 9-bit push (Python checks bit 8 to identify port)
+      Port $0F (status, addr LSB=1):
+        Z80 IN  : Pico drives the value of scratch register Y onto D0-D7
+                  (Y is independent of the FIFO — it does NOT consume bytes)
+        Z80 OUT : same as $0E (we don't differentiate writes by port; the
+                  high bit of the 9-bit RX value tells Python which port)
 
-    Python controls the ready flag via:
-      MQ.exec("mov(y, ~null)")   # Y = 0xFFFFFFFF (bit 6 set) → "ready"
-      MQ.exec("set(y, 0)")        # Y = 0 → "not ready"
+    The Z80 ROM uses port $0F as a "ready/continue" flag. It polls $0F
+    in a tight loop and checks BIT 6 of the value. If BIT 6 is set, the
+    Z80 proceeds; otherwise it keeps polling (with a long timeout — see
+    docs/PROTOCOL.md). MicroPython controls the ready flag like this:
 
-    Run at freq=30_000_000 (was 15_000_000 for TS_IO). The dual-port
-    decode adds ~7 cycles to the read path; 30MHz keeps total under
-    the Z80's data setup window. RP2040 PIO can handle up to half the
+        sm.exec("mov(y, invert(null))")   # Y = 0xFFFFFFFF (bit 6 set)
+                                          # → port $0F reads as 0xFF
+                                          # → Z80 sees "ready"
+
+        sm.exec("set(y, 0)")               # Y = 0 → port $0F reads 0x00
+                                          # → Z80 sees "not ready", waits
+
+    For the standard LOAD path, Y is set to READY at startup and never
+    changed. Pico paces the data flow via TX FIFO depth (4 bytes), and
+    Z80 reads bytes at ~47µs each — far slower than MicroPython can
+    `MQ.put()` them, so streams keep up naturally.
+
+    *** WHY pull(noblock) AND NOT pull(block) ***
+
+    pull(block) sounds appealing — it would make the SM stall until the
+    TX FIFO has data, giving Pico unlimited time to respond. BUT the
+    TS-Pico hardware does NOT route the SM's stall to the Z80 /WAIT line.
+    A stalled SM means subsequent /PICOSEL transitions go undetected
+    and the bus hangs.
+
+    With pull(noblock), if the FIFO is empty when Z80 reads $0E, the SM
+    drives the X register (= A0 bit, normally 0) onto the bus. So the
+    Z80 reads 0x00 — which the Z80 ROM interprets as "Report J / Invalid
+    I/O Device". This is actually USEFUL behavior: it forces us to keep
+    the FIFO pre-loaded with the right bytes at the right time, which
+    is the protocol contract anyway.
+
+    Pin assignments (unchanged from single-port TS_IO):
+      GPIO 2-9   = D0-D7        (out_base / in_base)
+      GPIO 10    = A0           (bit 8 of in_(pins, 9) — port decode)
+      GPIO 11    = R/W select   (jmp_pin: 1=Z80 OUT/write, 0=Z80 IN/read)
+      GPIO 12    = U6 buffer enable (sideset, active LOW during transaction)
+      GPIO 14    = /PICOSEL     (wait gpio, active LOW = bus cycle)
+
+    Run at freq=30_000_000. The dual-port decode adds ~7 cycles to the
+    read path vs. single-port; 30MHz keeps the total under the Z80's
+    data setup window with margin. RP2040 PIO can run up to half the
     system clock (135MHz at 270MHz CPU), so 30MHz is conservative.
 
-    Total 19 instructions of 32 available.
+    Total: 19 instructions of 32 available.
     """
     # ---- Wait for bus cycle ----
     wait(0, gpio, 14)       .side(1)      # /PICOSEL low = bus cycle starts
@@ -167,9 +198,12 @@ def TS_IO_DUAL():
     out(pins, 8)            .side(0)      # drive status onto bus
     jmp("fin")              .side(0)
 
-    # Port $0E read: output data from TX FIFO
+    # Port $0E read: output data from TX FIFO.
+    # pull(noblock) — if FIFO empty, OSR gets the X register (= A0 = 0
+    # for a $0E read), so Z80 reads 0x00. See architecture comment above
+    # for why pull(block) is NOT used here.
     label("rd_data")
-    pull(noblock)           .side(0)      # next byte (or stale OSR if empty)
+    pull(noblock)           .side(0)      # FIFO byte (or 0x00 if empty)
     out(pins, 8)            .side(0)      # drive data onto bus
     jmp("fin")              .side(0)
 
@@ -290,190 +324,215 @@ def LOG_ADD(msg, level, log_level):                                             
     return
 
 
-def LOAD_TS(pre, MQ, TSP):                                                                                    # Performs LOAD command on the TS side
+def LOAD_TS(pre, MQ, TSP):
+    """Send one TAP block to the Z80 via Gustavo's TPI v2.4 protocol.
 
-    global dead
-    global kill
-    global busy
+    Called by the main I/O dispatcher when the TS-2068 has issued a LOAD
+    pre-header (BASIC LVM operation: LOAD "" CODE / LOAD "name" / etc.).
 
+    PROTOCOL OVERVIEW (per docs/PROTOCOL.md and Gustavo's spec v2.4):
+
+        Z80 has already OUT-ed the 10-byte pre-header (drained into pre[]
+        by the main loop). It is now polling port $0F for the "continue"
+        flag (D6=1) and will read port $0E for the status byte.
+
+        Pico's job, in order:
+          1. Status response
+             - Initial status byte (0x01 = OK) was pre-loaded into TX FIFO
+               by either the previous handler's tail or the boot pre-load.
+               Z80's first IN $0E drains it.
+             - Y is already 0xFFFFFFFF (READY) — Z80's $0F polls succeed.
+          2. Data block response
+             - Stream block_type + (blk_len-1) content bytes to TX.
+             - Z80 reads them from $0E in a tight loop (~47µs/byte). Pico's
+               MQ.put() blocks when the 4-deep FIFO fills, so streaming
+               paces itself naturally.
+             - The flag/type byte is the FIRST byte Z80 reads in the data
+               loop — Z80's CRC accumulator starts at block_type and XORs
+               every byte read, so by the end the accumulator equals the
+               file's CRC byte (which is the LAST byte of the stream).
+          3. Echo phase
+             - Z80 OUTs block_type ack (echo of what it expected to load)
+             - Z80 OUTs its computed CRC (verification)
+             - We drain both with MQ.get(); could verify but currently
+               trust them.
+          4. Final status + next-iteration pre-load
+             - Two MQ.put(0x01) writes:
+               * first 0x01 = this iteration's final status byte (Z80
+                 reads it after polling $0F again)
+               * second 0x01 = pre-load for the NEXT command's initial
+                 status read. Stays in TX FIFO until the next LOAD/SAVE
+                 starts.
+
+    TIMING NOTE: this routine writes to TX much faster than the Z80 can
+    read ($0E reads cap at ~47µs/byte due to Z80 ROM loop overhead). The
+    per-byte streaming loop relies on MQ.put() blocking when the FIFO is
+    full to pace the data flow — no software synchronization needed.
+
+    The Z80 ROM has a long timeout on $0F polling (~20s per Gustavo's
+    modification), so even slow file I/O is safe. The 88ms gap commonly
+    seen between status read and ack OUT is normal Z80 ROM internal
+    processing — not something Pico needs to manage.
+
+    Args:
+        pre[]: 10-byte pre-header that was just received from the Z80.
+            pre[0] = expected block type (0x00 = header, 0xFF = data)
+            pre[1] = TADDR (1 = LOAD)
+            pre[2] = bank (0xFF = HOME)
+            pre[3:5] = session ID (LE 16-bit)
+            pre[5:7] = memory address (LE 16-bit)
+            pre[7:9] = block length (LE 16-bit, BASIC's view)
+            pre[9]   = pre-header CRC (XOR of pre[0..8])
+        MQ:  TS_IO_DUAL state machine.
+        TSP: PICO_STATUS instance. We read TSP.f_name, .totlen, .offset,
+             .tap_idx and update .offset, .tap_idx after each block.
+
+    Returns:
+        (MQ, TSP, log_entries) — log_entries is appended to by LOG_ADD()
+        and shown to the user later. MQ and TSP are returned for
+        consistency with the dispatcher's expected calling convention.
+    """
+    global dead, kill, busy
     global log_entries
     log_entries = ""
 
-    # CRITICAL DUAL-PORT PROTOCOL:
-    # Hold Y=BUSY while we prepare the response. Z80 polls $0F bit 6
-    # and will WAIT here while we open the file, validate the block,
-    # load the header into RAM, etc. Only after we have the first data
-    # byte (block_type) queued in the FIFO do we signal Y=READY. This
-    # is the equivalent of v1.1's wrt(0x40) coming AFTER prep work.
-    MQ.exec("set(y, 0)")    # Y = 0  → port $0F = 0x00, D6 low = busy
-
-    # CRITICAL TIMING: Z80 WF_NPH polls $0F for ~4.3ms before timing out.
-    # USB-serial print() is ~5-10ms per call. We MUST NOT print between
-    # set(y,0) above and mov(y,invert(null)) below — buffer diagnostics
-    # into _dbg and flush them after the transfer completes.
-    _dbg = []
-    _dbg.append("[LOADTS] enter pre=%s f_name=%s totlen=%d offset=%d tap_idx=%d tx=%d rx=%d" % (
-        list(pre), TSP.f_name, TSP.totlen, TSP.offset, TSP.tap_idx,
-        MQ.tx_fifo(), MQ.rx_fifo()))
-
-    Ryan = True
-
+    # ---- LED on so user sees activity ----
     led = Pin(25, Pin.OUT)
     led.value(1)
 
-    totbytes = 0
-    blq_t = 0
-    crc = 0
-    length = 0
-
-    hdr = bytearray()
-    msg = ""
-
-    blk_info = bytearray(3)
-    el = bytearray(1)
-
-    if (not TSP.f_name or TSP.totlen == 0):
+    # ---- Choose source file ----
+    # If no file is mounted (or total length is 0), fall back to the
+    # baked-in /assets/nofile.tap which displays a "no file" message.
+    if (not TSP.f_name) or TSP.totlen == 0:
         local_fname = "/assets/nofile.tap"
         LOG_ADD("WARNING: no file mounted in LOAD_TS", 1, TSP.LOG_LEVEL)
     else:
         local_fname = "/TMP/temp.tap"
 
-    _dbg.append("[LOADTS] opening %s" % local_fname)
+    # ---- Read the TAP block prefix [len_lo, len_hi, type] ----
+    # TAP file format (standard ZX/TS): each block is
+    #   [len_lo][len_hi][block_type][content...][CRC byte]
+    # where len = 1 + len(content) + 1 (i.e., includes type and CRC).
     arch = open(local_fname, "rb")
     arch.seek(TSP.offset)
-
+    blk_info = bytearray(3)
     arch.readinto(blk_info)
+    totbytes = blk_info[0] + 256 * blk_info[1]   # = block size including type+CRC
 
-    totbytes = blk_info[0] + 256 * blk_info[1]
-    _dbg.append("[LOADTS] blk_info: len=%d type=0x%02X (totbytes=%d)" % (
-        blk_info[0] + 256*blk_info[1], blk_info[2], totbytes))
-    
-    if (pre[0] != blk_info[2]):
-        LOG_ADD("WARNING: Wrong block type in LOAD_TS. Moving ahead 1 block.", 1, TSP.LOG_LEVEL)
-        
+    # ---- Validate that the file's block type matches what Z80 wants ----
+    # If not, advance to the next block in the TAP and try again. (LOAD
+    # often skips header blocks looking for the data block whose name
+    # matches the request, etc.)
+    if pre[0] != blk_info[2]:
+        LOG_ADD("WARNING: Wrong block type in LOAD_TS. Moving ahead 1 block.",
+                1, TSP.LOG_LEVEL)
         TSP.offset += totbytes + 2
         TSP.tap_idx += 1
-        
-        if (TSP.offset >= TSP.totlen):
+        if TSP.offset >= TSP.totlen:
             TSP.tap_idx = 0
-            TSP.offset = 0
-            LOG_ADD("WARNING: EOF reached while searching in LOAD_TS; filename doesn't exist; rewinding.", 1, TSP.LOG_LEVEL)
-            
+            TSP.offset  = 0
+            LOG_ADD("WARNING: EOF reached searching in LOAD_TS; rewinding.",
+                    1, TSP.LOG_LEVEL)
         arch.seek(TSP.offset)
         arch.readinto(blk_info)
-        
         totbytes = blk_info[0] + 256 * blk_info[1]
-        
         BLINK()
-        
-    length = pre[7] + 256*pre[8] + 2
-    
-    if (length != totbytes):
-        LOG_ADD("WARNING: Mismatch block length in LOAD_TS; ignoring", 1, TSP.LOG_LEVEL)
-        
-    dead = False
 
-    r = range(totbytes - 1)
-
-    _thread.start_new_thread(WATCHDOG, (3, MQ, TSP))
-
-    if (blk_info[2] == 0x00):                                                                                           # This is to overcome autorun error when LOADing a non-autorun program
+    # ---- Header-only: optionally patch the autorun byte ----
+    # For non-autorun BASIC programs, the original Spectrum tape header
+    # has hdvars high byte ≥ 0x80 indicating an autorun line. Some
+    # programs were tape-saved with autorun enabled but don't actually
+    # have an autorun line; loading them on TS-2068 hits "Report L".
+    # This patches the autorun-line bytes back to a safe value.
+    hdr = None
+    if blk_info[2] == 0x00:                          # header block
         hdr = bytearray(totbytes - 1)
         arch.readinto(hdr)
-
-        if (Ryan) and (hdr[0] == 0x00) and (hdr[14] >= 0x80):
-
+        if hdr[0] == 0x00 and hdr[14] >= 0x80:       # BASIC w/ autorun bit set
             hdr[14] = 0x28
-            hdr[17] = hdr[17] ^ 0x80 ^ hdr[14]
+            hdr[17] = hdr[17] ^ 0x80 ^ hdr[14]       # fix CRC after the patch
+
+    # ---- Spawn watchdog so a misbehaving Z80 doesn't lock the loop ----
+    dead = False
+    _thread.start_new_thread(WATCHDOG, (3, MQ, TSP))
 
     wrt = MQ.put
 
-    _dbg.append("[LOADTS] starting wrt loop. tx_pre=%d rx_pre=%d. block_type=0x%02X" % (
-        MQ.tx_fifo(), MQ.rx_fifo(), blk_info[2]))
+    # ============================================================
+    # Phase 1: stream the response (block_type + content + CRC)
+    # ============================================================
+    # Z80's data loop reads `flag + content + CRC` = `totbytes` bytes
+    # via $0E. The flag (block_type) is the first byte and seeds Z80's
+    # running CRC accumulator. MQ.put() blocks if FIFO is full, paced
+    # by Z80 reads — no manual synchronization needed.
+    wrt(blk_info[2])                                  # block_type / flag
 
-    # Put block_type into FIFO FIRST, then signal READY.
-    # This is the dual-port equivalent of v1.1's "wrt(0x40); wrt(blk_info[2])":
-    # the data is queued and waiting; Z80 polls $0F, sees ready, then reads
-    # block_type from $0E.
-    wrt(blk_info[2])
-    MQ.exec("mov(y, invert(null))")   # Y = 0xFFFFFFFF → port $0F = 0xFF, D6 high = ready
-    # NO PRINT HERE — Z80 is now actively clocking bytes out of the TX FIFO.
-    # All diagnostics deferred to end-of-transfer flush.
-
-    # Track Z80 incoming bytes during the wrt loop — capture whatever
-    # the Z80 sends back during the data transfer.
-    z80_sent = []
-
-    bytes_sent = 0
-    if (blk_info[2] == 0x00):
-        for el in hdr:
-            wrt(el)
-            bytes_sent += 1
-            # Capture any bytes Z80 sent
-            while MQ.rx_fifo() > 0 and len(z80_sent) < 8:
-                z80_sent.append(MQ.get())
+    if hdr is not None:
+        # Header block: stream from the in-memory buffer (already loaded).
+        for b in hdr:
+            wrt(b)
             if kill:
-                _dbg.append("[LOADTS] KILLED in hdr loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
-                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
-                    [hex(b) for b in z80_sent]))
-                for _line in _dbg: print(_line)
                 ABORT_TX(TSP.LOG_LEVEL)
+                arch.close()
                 return MQ, TSP, log_entries
     else:
-
-        for i in r:
+        # Data block: stream from file byte-by-byte (avoid allocating a
+        # potentially huge buffer for ~14KB+ data blocks).
+        el = bytearray(1)
+        for _ in range(totbytes - 1):
             arch.readinto(el)
-            wrt(el)
-            bytes_sent += 1
-            while MQ.rx_fifo() > 0 and len(z80_sent) < 8:
-                z80_sent.append(MQ.get())
-
+            wrt(el[0])
             if kill:
-                _dbg.append("[LOADTS] KILLED in data loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
-                    bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
-                    [hex(b) for b in z80_sent]))
-                for _line in _dbg: print(_line)
                 ABORT_TX(TSP.LOG_LEVEL)
                 arch.close()
                 return MQ, TSP, log_entries
 
-    _dbg.append("[LOADTS] wrt loop complete, %d bytes sent. tx=%d rx=%d z80_sent=%s" % (
-        bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
-        [hex(b) for b in z80_sent]))
-
     arch.close()
 
-    # Flush diagnostics now — TX FIFO is drained, Z80 is computing its
-    # echo, and we have plenty of time before MQ.get() returns.
-    for _line in _dbg: print(_line)
-    _dbg = []
+    # ============================================================
+    # Phase 2: drain the Z80's echo (block_type ack + computed CRC)
+    # ============================================================
+    # Z80 OUTs:
+    #   - block_type ack: H register, which equals block_type
+    #   - computed CRC: XOR accumulator after the data loop, should match
+    #     the file CRC we sent as the last byte of phase 1
+    # We drain both. MQ.get() blocks until the Z80 actually OUTs them,
+    # which it does only after successfully verifying its computed CRC
+    # against the one we sent. So if MQ.get() returns, the data block
+    # was received correctly.
+    blq_t = MQ.get() & 0xFF                           # block_type ack
+    crc   = MQ.get() & 0xFF                           # Z80's computed CRC
 
-    print("[LOADTS] waiting for blq_t echo from Z80...")
-    blq_t = MQ.get()
-    print("[LOADTS] got blq_t=0x%02X. waiting for crc..." % blq_t)
-    crc = MQ.get()
-    print("[LOADTS] got crc=0x%02X" % crc)
- 
+    # ============================================================
+    # Phase 3: final status + pre-load for the NEXT command
+    # ============================================================
+    # Z80 polls $0F (sees Y=ready), then reads $0E for the final status.
+    # The first wrt(0x01) is what it reads. The second 0x01 stays in
+    # the TX FIFO so the NEXT command's initial $0E status read finds
+    # it already there. This is the chain that makes back-to-back LOADs
+    # work (e.g., header block followed by data block).
+    wrt(0x01)                                          # this iter's final status
+    wrt(0x01)                                          # next iter's status pre-load
+
+    # ---- Advance TAP position for the next call ----
     TSP.tap_idx += 1
-    TSP.offset += totbytes + 2
-    
-    if (TSP.f_name):
-        if (TSP.f_name[-4:].upper() == ".TAP"):
-            if ((TSP.totlen != 0) and (TSP.offset >= TSP.totlen)):
+    TSP.offset  += totbytes + 2                       # 2 = the len_lo/len_hi prefix
+    if TSP.f_name:
+        if TSP.f_name[-4:].upper() == ".TAP":
+            if TSP.totlen != 0 and TSP.offset >= TSP.totlen:
                 TSP.tap_idx = 0
-                TSP.offset = 0
-                LOG_ADD("WARNING: reached end of offset table, rewinding...", 1, TSP.LOG_LEVEL)
+                TSP.offset  = 0
+                LOG_ADD("INFO: reached end of TAP, rewinding.",
+                        0, TSP.LOG_LEVEL)
     else:
+        # nofile.tap fallback — wrap around when we run off the end
         if TSP.offset >= os.stat("/assets/nofile.tap")[6]:
             TSP.tap_idx = 0
-            TSP.offset = 0
-            
-    msg = str(totbytes) + " bytes loaded OK"
-        
-    END_MSG(MQ, TSP.VERBOSE, msg, "", 1)
+            TSP.offset  = 0
+
+    END_MSG(MQ, TSP.VERBOSE, "%d bytes loaded OK" % totbytes, "", 1)
 
     dead = True
-    
     return MQ, TSP, log_entries
 
 
@@ -616,149 +675,216 @@ def LOAD_ZX_C(MQ, TSP, buf_size):                                               
     return MQ, TSP, log_entries
 
 
-def SAVE_TS(MQ, TSP):                                                                                              # Performs SAVE command on the TS side
-    
-    global busy
-    global dead
-    global kill
-    
+def SAVE_TS(MQ, TSP):
+    """Receive a Z80 SAVE transaction via Gustavo's TPI v2.4 protocol.
+
+    Called by the main I/O dispatcher when the Z80 has issued a SAVE
+    pre-header. The pre-header has already been drained by the dispatcher;
+    this function handles the remaining two phases (HEADER block then
+    DATA block), each of which is a Z80→Pico bulk transfer terminated
+    by a Pico→Z80 status byte.
+
+    PROTOCOL OVERVIEW (see docs/PROTOCOL.md for the full guide):
+
+      Z80's SAVE flow has three Z80-write phases interleaved with three
+      status reads back from the Pico:
+
+         Phase 1 (already done by dispatcher):
+           Z80 OUTs 10-byte pre-header to $0E
+           Z80 reads $0E for status — pre-loaded 0x01 satisfies it
+           Z80 polls $0F (Y=READY)
+
+         Phase 2 (this function):
+           Z80 OUTs 21-byte HEADER block:
+             [0]      block_type   (0x00 for header)
+             [1,2]    session ID   (TPI extension; not in TAP CRC)
+             [3]      HDTYPE       (0=BASIC, 1=NUMARR, 2=CHARARR, 3=CODE)
+             [4-13]   filename     (10 ASCII chars)
+             [14,15]  BLEN         (size of the upcoming data block, LE)
+             [16,17]  ADDR         (memory address / autorun, LE)
+             [18,19]  HDVARS       (variable-area offset, LE)
+             [20]     CRC          (XOR of [0]+[3..19], skips session)
+           Pico writes 0x01 status — Z80's mid-phase status read.
+           Z80 polls $0F (Y=READY).
+
+         Phase 3 (this function):
+           Z80 OUTs (BLEN+4)-byte DATA block:
+             [0]              block_type   (0xFF for data)
+             [1,2]            session ID
+             [3..BLEN+2]      data bytes
+             [BLEN+3]         CRC
+           Pico writes 0x01 final status.
+           Pico writes 0x01 pre-load for next command's status read.
+           Pico saves the reconstructed TAP file to SD (slow — happens
+           AFTER the status writes so Z80 doesn't time out).
+
+    CRC FORMULA (important — non-obvious):
+      The header / data block CRC is the XOR of the block_type byte and
+      the content bytes, *skipping the 2 session-ID bytes* at positions
+      [1] and [2]. The session ID is a TPI extension on top of the
+      original ZX tape format; standard ZX TAP CRC doesn't include them.
+
+    Args:
+        MQ:  TS_IO_DUAL state machine.
+        TSP: PICO_STATUS instance. We use TSP.f_name, .append, .cur_path,
+             .VERBOSE, and .LOG_LEVEL.
+
+    Returns:
+        (MQ, TSP, log_entries) for the dispatcher's calling convention.
+    """
+    global busy, dead, kill
     global log_entries
     log_entries = ""
-    
+
     dead = False
-    log_entries = ""
-    
-    r1 = range(21)
-    crc_h = 0
-    ant = 0
     wrt = MQ.put
-    
     gc.collect()
-    
+
+    # ============================================================
+    # Phase 2: receive the 21-byte HEADER block
+    # ============================================================
     hdr = bytearray(21)
+    for i in range(21):
+        hdr[i] = MQ.get() & 0xFF
 
-    # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
-    # No 0x40 in FIFO — just read incoming header bytes.
-    for i in r1:
-        hdr[i] = MQ.get()
-        
-    for i in r1:
-        if (i == 1) or (i == 2):
-            continue
-        ant = crc_h
-        crc_h = crc_h ^ hdr[i]
-        
-    if (hdr[i] !=  ant):
-        LOG_ADD("ERROR: Bad CRC in SAVE_TS!", 2, TSP.LOG_LEVEL)
+    # Verify CRC: XOR of [0] + [3..19] should equal hdr[20].
+    # (Skip session-ID bytes at [1] and [2] — TPI extension, not in CRC.)
+    crc_calc = hdr[0]
+    for i in range(3, 20):
+        crc_calc ^= hdr[i]
+    if crc_calc != hdr[20]:
+        LOG_ADD("ERROR: Bad CRC on SAVE header (got 0x%02X, expected 0x%02X)" % (
+            hdr[20], crc_calc), 2, TSP.LOG_LEVEL)
+        # Even on error, give Z80 status bytes so it doesn't hang.
+        # (Status 0x01 means "OK" but Z80 will see CRC fail elsewhere.)
+        wrt(0x01)
+        wrt(0x01)
         dead = True
         return MQ, TSP, log_entries
-        
-    long = (256*hdr[15]) + hdr[14] + 4
-    r2 = range(long)
-    blk = bytearray(long)
 
-    # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
-    # Just send the status byte.
+    # Compute the upcoming data block's size from header[14:16] = BLEN.
+    # The data block transmitted is BLEN+4 bytes (type + 2 session + N + CRC).
+    long = hdr[14] + 256 * hdr[15] + 4
+    blk  = bytearray(long)
+
+    # ============================================================
+    # Mid-status: Pico writes 0x01 between header and data phases.
+    # Z80 reads it after polling $0F (Y=READY).
+    # ============================================================
     wrt(0x01)
-            
+
+    # ============================================================
+    # Phase 3: receive the (BLEN+4)-byte DATA block.
+    # Spawn a watchdog so a hung Z80 doesn't lock the loop forever.
+    # ============================================================
     _thread.start_new_thread(WATCHDOG, (5, MQ, TSP))
-    
+
+    # The Z80 takes up to ~1 second to start sending the data block
+    # after reading the mid-status (it does internal processing). If we
+    # wait longer than 1s with no data, assume the user pressed BREAK
+    # or something else aborted the SAVE.
     t_init = time.ticks_us()
-    t_out = False
-    
-    while (MQ.rx_fifo() == 0):
-        if (time.ticks_us() - t_init >= 1_000_000):
-            
-            t_out = True
-            break
-        
-    if t_out:
-        
-        LOG_ADD("ERROR: SAVE_TS aborted by pressing BREAK!" + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 2, TSP.LOG_LEVEL)
-        blk = []
-        dead = True
-        
-        while busy:
-            pass
-        
-        return MQ, TSP, log_entries
-    
-    for i in r2:
-        blk[i] = MQ.get()
-    
-        if kill:
-            LOG_ADD("ERROR: SAVE_TS failed!" + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 2, TSP.LOG_LEVEL)
+    while MQ.rx_fifo() == 0:
+        if time.ticks_diff(time.ticks_us(), t_init) >= 1_000_000:
+            LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s)",
+                    2, TSP.LOG_LEVEL)
+            # Provide the trailing status bytes anyway so we don't leave
+            # the Z80 hanging on a status read.
+            wrt(0x01)
+            wrt(0x01)
             dead = True
-            blk = []
-            
+            while busy:
+                pass
             return MQ, TSP, log_entries
-    
-    totbytes = long + len(hdr)
-    
+
+    # Drain the data block. Z80 writes ~30µs per byte; MQ.get() blocks
+    # until each byte arrives, paced by the bus.
+    for i in range(long):
+        blk[i] = MQ.get() & 0xFF
+        if kill:
+            LOG_ADD("ERROR: SAVE_TS killed by watchdog", 2, TSP.LOG_LEVEL)
+            wrt(0x01)            # still terminate the protocol cleanly
+            wrt(0x01)
+            dead = True
+            return MQ, TSP, log_entries
+
+    # ============================================================
+    # CRITICAL — write final status and next-iter pre-load IMMEDIATELY.
+    #
+    # Z80 reads $0E for the final status as soon as we've drained its
+    # last data byte. If TX FIFO is empty when Z80 reads, it gets stale
+    # 0x00 and reports "Report J / Invalid I/O Device". So we MUST do
+    # these two writes BEFORE the slow file-save below.
+    # ============================================================
+    wrt(0x01)        # final status — Z80 reads this and reports "0 OK"
+    wrt(0x01)        # pre-load for the NEXT command's initial status
+
     dead = True
-    
-    l_hdr = len(hdr) - 2
-    hdr1 = int(l_hdr / 256)
-    hdr0 = l_hdr - (hdr1 * 256)
-    
+    totbytes = len(hdr) + long
+
+    # ============================================================
+    # Reconstruct a standard TAP file from the received bytes.
+    #
+    # The Z80 sent us blocks in TPI format (with 2 session-ID bytes
+    # inserted between block_type and the content). Standard TAP file
+    # format does NOT include session bytes. We rewrite each block's
+    # length prefix to skip them by overwriting the session-ID slots
+    # with the prefix length bytes.
+    #
+    # This produces a standard TAP that any other ZX-compatible loader
+    # can read.
+    # ============================================================
+    l_hdr = len(hdr) - 2          # header content length (= 19)
+    hdr[2] = hdr[0]               # save block_type
+    hdr[0] = l_hdr & 0xFF         # write len_lo where session_lo was
+    hdr[1] = (l_hdr >> 8) & 0xFF  # write len_hi where session_hi was
+
     l_blk = len(blk) - 2
-    blk1 = int (l_blk / 256)
-    blk0 = l_blk - (blk1 * 256)
-    
-    hdr[2] = hdr[0]
-    hdr[0] = hdr0
-    hdr[1] = hdr1
-    
     blk[2] = blk[0]
-    blk[0] = blk0
-    blk[1] = blk1
-    
+    blk[0] = l_blk & 0xFF
+    blk[1] = (l_blk >> 8) & 0xFF
+
+    # ============================================================
+    # Determine target filename
+    # ============================================================
     if TSP.f_name and TSP.append:
         filename = TSP.f_name
         mode = "ab"
-        
     else:
-        filename = hdr[4:14].decode()
-        filename = filename.strip()        
-        # clean_fname = ''.join(l for l in filename if (l.isalpha() or l.isdigit() or l.isspace()))
-        clean_fname = ''.join(l for l in filename if (l.isalpha() or l.isdigit() or l=='_' or l=='-'))
-        
+        filename = hdr[4:14].decode().strip()
+        # Filename safety: only allow alphanumeric, dash, underscore.
+        clean_fname = "".join(c for c in filename
+                              if c.isalpha() or c.isdigit() or c in "_-")
         if clean_fname != filename:
             msg = 'ERROR: Filename "%s" not allowed' % filename
-            END_MSG(MQ, True, msg, [], 3) # STAT_3_F_Invalid_filename
-            
+            END_MSG(MQ, True, msg, [], 3)
             return MQ, TSP, log_entries
-            
         if not clean_fname:
             clean_fname = "noname"
-        
-        filename = clean_fname + ".tap"
-        filename = TSP.cur_path + "/" + filename
+        filename = TSP.cur_path + "/" + clean_fname + ".tap"
         mode = "wb"
-        
         TSP.f_name = filename
 
-    msg = "80 - " + str(totbytes) + " bytes saved OK"
-    END_MSG(MQ, TSP.VERBOSE, msg, [], 1)
+    # Send "saved OK" verbose message back to Z80 (if VERBOSE enabled).
+    END_MSG(MQ, TSP.VERBOSE, "80 - %d bytes saved OK" % totbytes, [], 1)
 
+    # ============================================================
+    # Write the TAP to SD card. ENA_SD() switches GPIO 2-4 from PIO
+    # to SPI mode for SD access. After the write completes, the main
+    # dispatcher will switch back to PIO for the next Z80 transaction.
+    # ============================================================
     ENA_SD()
-    
     with open(filename, mode) as f1:
         f1.write(hdr)
         f1.write(blk)
-    
-    os.chdir(TSP.cur_path)    
-        
-#     os.umount("/sd")
-#     MQ = ENA_MQ(MQ)
-    
-    hdr = []
-    blk = []
-    
-    gc.collect()
-    
-    LOG_ADD("INFO: Finished SAVE TS successfully" +str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0, TSP.LOG_LEVEL)
+    os.chdir(TSP.cur_path)
 
+    hdr = None
+    blk = None
+    gc.collect()
+
+    LOG_ADD("INFO: SAVE TS complete: %d bytes -> %s" % (
+        totbytes, filename), 0, TSP.LOG_LEVEL)
     return MQ, TSP, log_entries
 
 
