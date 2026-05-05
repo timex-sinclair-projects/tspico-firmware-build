@@ -231,12 +231,36 @@ _10_D_Break       = const(10)   # Report D - Break/CONT (any value >= 10)
 # Comprehensive event logging. Each TLM() call prints an event with
 # timestamp (microseconds since boot), delta from previous TLM call,
 # and TX/RX FIFO occupancy. Frozen-module overhead is negligible.
+#
+# TO DISABLE TELEMETRY GLOBALLY:
+#   Set TLM_ENABLED = False below. TLM() and TLM_RESET() become no-ops:
+#   no string formatting, no FIFO state read, no USB-serial print, no
+#   timestamp tracking. This is the right setting for production /
+#   end-user installs where the diagnostic noise isn't wanted and any
+#   USB-serial print can blow tight protocol timing.
+#
+# TO RE-ENABLE LATER:
+#   Either edit this line to True and reflash, or at the REPL:
+#       import TS.tspico
+#       TS.tspico.TLM_ENABLED = True
+#   The toggle takes effect immediately for any new TLM calls.
+#
+# Default = True (telemetry on) so existing debug workflows keep working.
+TLM_ENABLED = True
 
 _tlm_last = 0   # last TLM timestamp
 
 
 def TLM(action, detail=""):
-    """Log one event to the REPL with timing and FIFO state."""
+    """Log one event to the REPL with timing and FIFO state.
+
+    When TLM_ENABLED = False this returns immediately with zero work
+    (no formatting, no FIFO read, no print) so it's safe to leave
+    TLM() calls scattered through hot paths in production builds.
+    """
+    if not TLM_ENABLED:
+        return
+
     global _tlm_last
     try:
         now = time.ticks_us()
@@ -259,7 +283,13 @@ def TLM(action, detail=""):
 
 
 def TLM_RESET(tag=""):
-    """Reset TLM timer at the start of a new operation."""
+    """Reset TLM timer at the start of a new operation.
+
+    Also a no-op when TLM_ENABLED = False.
+    """
+    if not TLM_ENABLED:
+        return
+
     global _tlm_last
     try:
         _tlm_last = time.ticks_us()
