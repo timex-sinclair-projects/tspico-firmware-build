@@ -307,7 +307,12 @@ def LOAD_TS(pre, MQ, TSP):                                                      
     # is the equivalent of v1.1's wrt(0x40) coming AFTER prep work.
     MQ.exec("set(y, 0)")    # Y = 0  → port $0F = 0x00, D6 low = busy
 
-    print("[LOADTS] enter pre=%s f_name=%s totlen=%d offset=%d tap_idx=%d tx=%d rx=%d" % (
+    # CRITICAL TIMING: Z80 WF_NPH polls $0F for ~4.3ms before timing out.
+    # USB-serial print() is ~5-10ms per call. We MUST NOT print between
+    # set(y,0) above and mov(y,invert(null)) below — buffer diagnostics
+    # into _dbg and flush them after the transfer completes.
+    _dbg = []
+    _dbg.append("[LOADTS] enter pre=%s f_name=%s totlen=%d offset=%d tap_idx=%d tx=%d rx=%d" % (
         list(pre), TSP.f_name, TSP.totlen, TSP.offset, TSP.tap_idx,
         MQ.tx_fifo(), MQ.rx_fifo()))
 
@@ -333,14 +338,14 @@ def LOAD_TS(pre, MQ, TSP):                                                      
     else:
         local_fname = "/TMP/temp.tap"
 
-    print("[LOADTS] opening %s" % local_fname)
+    _dbg.append("[LOADTS] opening %s" % local_fname)
     arch = open(local_fname, "rb")
     arch.seek(TSP.offset)
 
     arch.readinto(blk_info)
 
     totbytes = blk_info[0] + 256 * blk_info[1]
-    print("[LOADTS] blk_info: len=%d type=0x%02X (totbytes=%d)" % (
+    _dbg.append("[LOADTS] blk_info: len=%d type=0x%02X (totbytes=%d)" % (
         blk_info[0] + 256*blk_info[1], blk_info[2], totbytes))
     
     if (pre[0] != blk_info[2]):
@@ -383,7 +388,7 @@ def LOAD_TS(pre, MQ, TSP):                                                      
 
     wrt = MQ.put
 
-    print("[LOADTS] starting wrt loop. tx=%d rx=%d. block_type=0x%02X" % (
+    _dbg.append("[LOADTS] starting wrt loop. tx_pre=%d rx_pre=%d. block_type=0x%02X" % (
         MQ.tx_fifo(), MQ.rx_fifo(), blk_info[2]))
 
     # Put block_type into FIFO FIRST, then signal READY.
@@ -392,7 +397,8 @@ def LOAD_TS(pre, MQ, TSP):                                                      
     # block_type from $0E.
     wrt(blk_info[2])
     MQ.exec("mov(y, invert(null))")   # Y = 0xFFFFFFFF → port $0F = 0xFF, D6 high = ready
-    print("[LOADTS] block_type queued + Y=READY signaled")
+    # NO PRINT HERE — Z80 is now actively clocking bytes out of the TX FIFO.
+    # All diagnostics deferred to end-of-transfer flush.
 
     # Track Z80 incoming bytes during the wrt loop — capture whatever
     # the Z80 sends back during the data transfer.
@@ -407,9 +413,10 @@ def LOAD_TS(pre, MQ, TSP):                                                      
             while MQ.rx_fifo() > 0 and len(z80_sent) < 8:
                 z80_sent.append(MQ.get())
             if kill:
-                print("[LOADTS] KILLED in hdr loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
+                _dbg.append("[LOADTS] KILLED in hdr loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
                     bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
                     [hex(b) for b in z80_sent]))
+                for _line in _dbg: print(_line)
                 ABORT_TX(TSP.LOG_LEVEL)
                 return MQ, TSP, log_entries
     else:
@@ -422,18 +429,24 @@ def LOAD_TS(pre, MQ, TSP):                                                      
                 z80_sent.append(MQ.get())
 
             if kill:
-                print("[LOADTS] KILLED in data loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
+                _dbg.append("[LOADTS] KILLED in data loop after %d bytes. tx=%d rx=%d z80_sent=%s" % (
                     bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
                     [hex(b) for b in z80_sent]))
+                for _line in _dbg: print(_line)
                 ABORT_TX(TSP.LOG_LEVEL)
                 arch.close()
                 return MQ, TSP, log_entries
 
-    print("[LOADTS] wrt loop complete, %d bytes sent. tx=%d rx=%d z80_sent=%s" % (
+    _dbg.append("[LOADTS] wrt loop complete, %d bytes sent. tx=%d rx=%d z80_sent=%s" % (
         bytes_sent, MQ.tx_fifo(), MQ.rx_fifo(),
         [hex(b) for b in z80_sent]))
 
     arch.close()
+
+    # Flush diagnostics now — TX FIFO is drained, Z80 is computing its
+    # echo, and we have plenty of time before MQ.get() returns.
+    for _line in _dbg: print(_line)
+    _dbg = []
 
     print("[LOADTS] waiting for blq_t echo from Z80...")
     blq_t = MQ.get()
