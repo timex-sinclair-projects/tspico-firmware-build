@@ -389,14 +389,21 @@ def ACTIVATE_MQ(ready=True):
         # but never sees BUSY because Pico's response timing is well
         # within the protocol's tolerance (Z80 ROM has ~20s timeout).
         MQ.exec("mov(y, invert(null))")
-        # Pre-load the initial 0x01 status byte into TX FIFO. The very
-        # first command the Z80 issues will read this from $0E as its
-        # initial status. Each subsequent command re-pre-loads the next
-        # 0x01 at the END of its handler (see LOAD_TS, SAVE_TS, etc.).
-        MQ.put(0x01)
-        TLM("ACTIVATE_MQ exit", "SM active, Y=READY, status pre-loaded")
+        TLM("ACTIVATE_MQ exit", "SM active, Y=READY (TX FIFO empty)")
     else:
         TLM("ACTIVATE_MQ exit", "SM created but NOT active")
+
+    # NOTE: do NOT pre-load 0x01 here. ACTIVATE_MQ is called both at
+    # boot AND mid-command (after SD operations in MOUNT_FILE etc.).
+    # At boot we need a pre-load so the Z80's first status read finds
+    # 0x01. But mid-command, the next thing in the call chain (SEND_MSG)
+    # writes its own status byte — adding a pre-load here would put
+    # TWO 0x01s in TX, and Z80 only reads one, causing SEND_MSG to
+    # stall forever waiting for the FIFO to drain.
+    #
+    # Boot-time pre-load happens in TS2068_IO() instead (one wrt(0x01)
+    # right after the initial ACTIVATE_MQ call). Each command's own
+    # tail re-loads 0x01 for the NEXT command.
 
     return
 
@@ -3868,6 +3875,13 @@ def TS2068_IO():                                                         # Main 
     DEACTIVATE_SD()
     ACTIVATE_MQ()
     MQ_READY()                                                                                   # Default to ready so Z80 isn't blocked. Pico is alive!
+
+    # Pre-load 0x01 status byte into TX FIFO ONCE at boot. The very first
+    # command the Z80 issues will read this from $0E as its initial status.
+    # Every command handler ends with its own MQ.put(0x01), so this chain
+    # continues automatically across subsequent commands.
+    # (Don't move this into ACTIVATE_MQ — see comment there for why.)
+    MQ.put(0x01)
 
     LOG("INFO: SD Card initialized and mounted OK", 0)
     SAVE_LOG()

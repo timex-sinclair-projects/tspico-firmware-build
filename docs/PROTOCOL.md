@@ -316,6 +316,16 @@ match what the Z80 expects.
 - **If `LOAD_TS` returns without writing the trailing two `0x01`s, the
   next LOAD will hang or fail with Report J.** The pre-load chain is
   load-bearing; honor it in any new handler.
+- **Don't pre-load `0x01` inside `ACTIVATE_MQ()`.** It's tempting (the
+  pre-load chain expects a status byte ready in TX after the SM is
+  re-activated), but `ACTIVATE_MQ` is called both at boot AND mid-
+  command (e.g., after SD card access in `MOUNT_FILE`). Mid-command,
+  the next call in the chain is usually `SEND_MSG` which writes its
+  own status byte — pre-loading inside `ACTIVATE_MQ` would put TWO
+  status bytes in TX, the Z80 reads ONE and considers the response
+  done, and `SEND_MSG`'s drain-wait loops forever. Pre-loading
+  belongs **at boot** (one explicit `MQ.put(0x01)` in `TS2068_IO()`)
+  and at the **tail of each command handler** (the V6 chain).
 
 ---
 
