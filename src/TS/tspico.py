@@ -3842,20 +3842,28 @@ def TS2068_IO():                                                         # Main 
             # WF_NPH polls $0F for only ~4.3ms before timeout. TLM prints
             # eat that budget too.
             #
-            # Sequence: drain pre-header, queue ACK, signal ready, then call
-            # PROCESS_CMD which IMMEDIATELY does its own drain. NO TLM in
-            # this path. PROCESS_CMD will TLM after its drain completes.
+            # Sequence: drain pre-header, queue ACK, then dispatch.
             for i in r1:
                 pre[i] = MQ.get()
             wrt(0x01)
-            MQ_READY()
+
+            # Conditional READY signaling per command type:
+            #   - "B" command (PROCESS_CMD): Pico is ready to RECEIVE the
+            #     D block, so signal ready now.
+            #   - LVM (LOAD_TS / SAVE_TS / etc): Pico must PREPARE data
+            #     before signaling ready. Stay BUSY until LOAD_TS/SAVE_TS
+            #     has the response queued and explicitly signals ready.
+            #     Signaling ready here would let the Z80 read garbage
+            #     before our handler has put real data in the FIFO.
+            if pre[0] == 66:                # "B" command
+                MQ_READY()
+            elif pre[0] == 65:              # "A" command
+                MQ_READY()
+            else:                            # LVM (block_type 0/0xFF) — let handler signal
+                MQ_BUSY()                    # ensure busy explicitly
+
             # (deferred) snapshot pre[] for later TLM
             _pre_snapshot = list(pre)
-            # NOTE: do NOT MQ_BUSY here! The Z80 polls port $0F AFTER
-            # reading the $01 status byte, AFTER it has finished sending
-            # the pre-header. If we go busy here, Z80 sees "not ready"
-            # and times out → Report J. Stay ready until we hit a real
-            # slow operation (LOAD branch handles its own MQ_BUSY).
                                                                                                       # pre(header)[0] is a command
             if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
                 LOG("INFO: Starting SAVE TS", 0)

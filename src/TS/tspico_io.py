@@ -299,6 +299,14 @@ def LOAD_TS(pre, MQ, TSP):                                                      
     global log_entries
     log_entries = ""
 
+    # CRITICAL DUAL-PORT PROTOCOL:
+    # Hold Y=BUSY while we prepare the response. Z80 polls $0F bit 6
+    # and will WAIT here while we open the file, validate the block,
+    # load the header into RAM, etc. Only after we have the first data
+    # byte (block_type) queued in the FIFO do we signal Y=READY. This
+    # is the equivalent of v1.1's wrt(0x40) coming AFTER prep work.
+    MQ.exec("set(y, 0)")    # Y = 0  → port $0F = 0x00, D6 low = busy
+
     print("[LOADTS] enter pre=%s f_name=%s totlen=%d offset=%d tap_idx=%d tx=%d rx=%d" % (
         list(pre), TSP.f_name, TSP.totlen, TSP.offset, TSP.tap_idx,
         MQ.tx_fifo(), MQ.rx_fifo()))
@@ -378,8 +386,13 @@ def LOAD_TS(pre, MQ, TSP):                                                      
     print("[LOADTS] starting wrt loop. tx=%d rx=%d. block_type=0x%02X" % (
         MQ.tx_fifo(), MQ.rx_fifo(), blk_info[2]))
 
-    # Dual-port: 0x40 continue flag is on port $0F (Y register).
+    # Put block_type into FIFO FIRST, then signal READY.
+    # This is the dual-port equivalent of v1.1's "wrt(0x40); wrt(blk_info[2])":
+    # the data is queued and waiting; Z80 polls $0F, sees ready, then reads
+    # block_type from $0E.
     wrt(blk_info[2])
+    MQ.exec("mov(y, invert(null))")   # Y = 0xFFFFFFFF → port $0F = 0xFF, D6 high = ready
+    print("[LOADTS] block_type queued + Y=READY signaled")
 
     # Track Z80 incoming bytes during the wrt loop — capture whatever
     # the Z80 sends back during the data transfer.

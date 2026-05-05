@@ -306,13 +306,14 @@ try:
             for i in r1:
                 pre[i] = MQ.get()
 
-            # --- ACK + READY ---
-            # Some EXROM polling loops may want to see a busy→ready edge.
-            # Explicitly clear Y first, then set ready, so the next time
-            # the Z80 reads $0F it sees the transition.
-            mq_busy()
-            MQ.put(0x01)
-            mq_ready()
+            # --- Status byte into FIFO ---
+            # NOTE: do NOT call mq_ready() here. For LVM commands, Pico must
+            # stay BUSY (D6 low on port $0F) until LOAD_TS has prepared the
+            # data. LOAD_TS will explicitly set Y=ready after block_type is
+            # in the FIFO. Calling mq_ready() here would let the Z80 exit
+            # its WF_NPH poll prematurely and read stale OSR.
+            mq_busy()        # ensure busy
+            MQ.put(0x01)     # status byte into $0E FIFO
 
             iteration += 1
             print("\n[LOOP %d] @ %dus  RX trigger" % (iteration, t_start))
