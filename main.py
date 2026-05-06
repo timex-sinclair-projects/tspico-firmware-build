@@ -3,12 +3,28 @@ import time, utime, sys
 from gc import mem_free, collect
 from machine import freq, Pin
 
+# ---------------- TELEMETRY SWITCH ----------------
+# Edit this single line to control firmware-wide diagnostic prints.
+# True  = full TLM event logging on USB serial (useful for development)
+# False = silent (recommended for production / end-user installs)
+#
+# We import the TS.tspico module here (BEFORE pulling TS2068_IO out of
+# it) so we can poke the flag onto the module object directly. Setting
+# it before any TLM() call ensures the very first events of boot are
+# subject to the chosen setting.
+#
+# At runtime you can also toggle this from the REPL:
+#       import TS.tspico
+#       TS.tspico.TLM_ENABLED = True
+import TS.tspico
+TS.tspico.TLM_ENABLED = True
+
 # Dev override: if /dev_tspico.py is present on flash, use that instead
 # of the frozen TS.tspico. Lets you iterate on a single file without
 # rebuilding the UF2. To revert, just delete /dev_tspico.py from flash.
-# /dev_tspico.py is just a renamed copy of src/TS/tspico.py. It still
-# imports `from TS.tspico_io import ...` etc — those resolve to the
-# frozen modules because no /TS/ folder shadows them.
+# /dev_tspico.py is a renamed copy of TS/tspico.py. It still imports
+# `from TS.tspico_io import ...` etc — those resolve to the frozen
+# modules because no /TS/ folder shadows them.
 try:
     from dev_tspico import TS2068_IO
     print("[DEV] Using /dev_tspico.py override")

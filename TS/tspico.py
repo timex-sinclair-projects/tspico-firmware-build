@@ -232,18 +232,24 @@ _10_D_Break       = const(10)   # Report D - Break/CONT (any value >= 10)
 # timestamp (microseconds since boot), delta from previous TLM call,
 # and TX/RX FIFO occupancy. Frozen-module overhead is negligible.
 #
-# TO DISABLE TELEMETRY GLOBALLY:
-#   Set TLM_ENABLED = False below. TLM() and TLM_RESET() become no-ops:
-#   no string formatting, no FIFO state read, no USB-serial print, no
-#   timestamp tracking. This is the right setting for production /
-#   end-user installs where the diagnostic noise isn't wanted and any
-#   USB-serial print can blow tight protocol timing.
+# TO DISABLE TELEMETRY GLOBALLY (three options, pick one):
 #
-# TO RE-ENABLE LATER:
-#   Either edit this line to True and reflash, or at the REPL:
-#       import TS.tspico
-#       TS.tspico.TLM_ENABLED = True
-#   The toggle takes effect immediately for any new TLM calls.
+#   1. EASIEST — edit /main.py on the Pico's flash. Find the line:
+#         TS.tspico.TLM_ENABLED = True
+#      and change True → False. Reboot. No UF2 rebuild needed because
+#      main.py lives on the filesystem, not in the frozen image.
+#
+#   2. AT THE REPL (transient — gone on reboot):
+#         import TS.tspico
+#         TS.tspico.TLM_ENABLED = False
+#
+#   3. EDIT-AND-REBUILD — change the default below to False, commit,
+#      let CI rebuild the UF2, reflash. Permanent for that build.
+#
+# When False, both TLM() and TLM_RESET() return immediately with zero
+# work — no string format, no FIFO read, no print, no timestamp track.
+# This is the right setting for production / end-user installs where
+# the diagnostic noise isn't wanted.
 #
 # Default = True (telemetry on) so existing debug workflows keep working.
 TLM_ENABLED = True
