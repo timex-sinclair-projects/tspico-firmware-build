@@ -60,8 +60,7 @@ Gustavo modified **both**:
   TS2068 reference library.
 - `gus-exrom.rom` — modified EXROM. Source: `gus-exrom.asm`.
 
-Both modified ROMs live in the **TS-Pico's external flash chip** (a
-W25Q-series SPI flash on the TS-Pico board, separate from the Pico's
+Both modified ROMs live in the **TS-Pico's external flash chip** (the SST 39SF040 flash on the TS-Pico board, separate from the Pico's
 own internal flash). When the TS-2068 reads a ROM address, the TS-Pico
 hardware routes that read to its flash chip, which serves the modified
 byte.
