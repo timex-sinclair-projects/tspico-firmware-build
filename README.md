@@ -4,15 +4,22 @@ GitHub Actions builds a MicroPython UF2 for the TS-Pico (Raspberry Pi
 Pico-based storage interface for the Timex Sinclair TS-2068) with the
 TS-Pico Python modules **frozen** into the firmware.
 
-> **New here?** Two documents to start with:
+> **New here?** Three documents, in reading order:
 >
-> - [`docs/GUSTAVO_PROTOCOL.md`](docs/GUSTAVO_PROTOCOL.md) — the
->   high-level design view. What is the TPI protocol? Why are there
->   two ROMs? What does Gustavo's modified Z80 ROM actually do? Read
->   this first if you've never worked on the project before.
-> - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the firmware-implementation
->   view. What does the Pico do, instruction by instruction, to honor
->   the protocol? Read this when you're ready to write or modify code.
+> 1. [`docs/GUSTAVO_PROTOCOL.md`](docs/GUSTAVO_PROTOCOL.md) — the
+>    high-level design view. What is the TPI protocol? Why are there
+>    two ROMs? What does Gustavo's modified Z80 ROM actually do?
+>    Read this first if you've never worked on the project before.
+> 2. [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the firmware-implementation
+>    view. What does the Pico do, instruction by instruction, to honor
+>    the protocol? Read this when you're ready to write or modify code.
+> 3. [`docs/DUAL_PORT_DEVELOPMENT.md`](docs/DUAL_PORT_DEVELOPMENT.md) —
+>    development narrative. Walks through how the dual-port
+>    architecture was developed and tested, the test harnesses in
+>    `/test`, wrong turns we took, three latent bugs we found and
+>    fixed, and patterns that proved out. Read this if you're going
+>    to extend or modify the protocol code — it explains *why* the
+>    patterns are the way they are.
 
 Freezing the modules eliminates the `MemoryError: memory allocation
 failed, allocating XXXX bytes` that occurs when MicroPython tries to
