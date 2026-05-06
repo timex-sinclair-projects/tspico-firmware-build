@@ -615,12 +615,24 @@ def LOAD_TS(pre, MQ, TSP):
         if _nofile_arch is None:
             OPEN_NOFILE_TAP()
         if _nofile_arch is None:
-            # /assets/nofile.tap genuinely isn't installed. Log the
-            # error, abort the transaction. The Z80 will see a J error
-            # but at least we won't leave the bus in a hung state.
-            LOG_ADD("ERROR: /assets/nofile.tap missing — copy from "
-                    "repo to /assets/ on Pico flash via Thonny",
+            # /assets/nofile.tap genuinely isn't installed.
+            #
+            # Send Z80 a meaningful error response — TAPE LOADING ERROR
+            # (status 2 → "Report R") rather than letting Z80 read stale
+            # 0x00s and report Report J (which is more confusing because
+            # it suggests an I/O hardware fault rather than a missing
+            # file).
+            #
+            # We still emit the V6 pre-load chain so the next command
+            # doesn't inherit an empty FIFO.
+            LOG_ADD("ERROR: /assets/nofile.tap missing on Pico flash. "
+                    "Copy assets/*.tap from the repo to /assets/ via Thonny.",
                     2, TSP.LOG_LEVEL)
+            print("[LOAD_TS] ERROR: /assets/nofile.tap missing. "
+                  "Copy assets/*.tap from repo to /assets/ via Thonny.")
+            wrt = MQ.put
+            wrt(0x02)        # tape error — Z80 will display "R Tape loading error"
+            wrt(0x01)        # next-iter pre-load (so subsequent commands work)
             return MQ, TSP, log_entries
         arch = _nofile_arch
         local_fname = "/assets/nofile.tap"

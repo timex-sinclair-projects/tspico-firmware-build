@@ -3994,12 +3994,20 @@ def TS2068_IO():
     # race ahead reading stale 0x00s and report Report J before we've
     # written a single content byte. See docs/DUAL_PORT_DEVELOPMENT.md
     # §8 for the failure-mode analysis.
+    #
+    # We print() unconditionally (not via LOG) because this is a setup
+    # check that determines whether LOAD "" works at all — it needs to
+    # be visible in the boot trace, not just buried in /activity.log.
     if OPEN_NOFILE_TAP():
+        print("[BOOT] /assets/nofile.tap pre-opened OK")
         LOG("INFO: pre-opened /assets/nofile.tap (cached handle)", 0)
     else:
+        print("[BOOT] WARNING: /assets/nofile.tap MISSING from Pico flash.")
+        print("[BOOT] LOAD \"\" without a prior mount will return Report R.")
+        print("[BOOT] Copy assets/*.tap from the repo to /assets/ via Thonny.")
         LOG("WARNING: /assets/nofile.tap missing — copy from repo's "
             "assets/ folder onto Pico flash via Thonny. LOAD \"\" "
-            "without a prior mount will fail until you do.", 1)
+            "without a prior mount will return Report R until you do.", 1)
 
     LOG("INFO: SD Card initialized and mounted OK", 0)
     SAVE_LOG()
