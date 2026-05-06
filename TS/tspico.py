@@ -192,7 +192,7 @@ from machine import Pin, freq, SPI
 
 from TS.sdcard import *
 
-from TS.tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO_DUAL, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
+from TS.tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO_DUAL, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX, OPEN_NOFILE_TAP
 #from TS.tspico_io import sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
 
 #####################
@@ -3987,6 +3987,19 @@ def TS2068_IO():
     # continues automatically across subsequent commands.
     # (Don't move this into ACTIVATE_MQ — see comment there for why.)
     MQ.put(0x01)
+
+    # Pre-open /assets/nofile.tap so LOAD "" without a prior mount
+    # doesn't pay file-open latency in the time-critical response path.
+    # Without this, the open takes ~5ms — long enough for the Z80 to
+    # race ahead reading stale 0x00s and report Report J before we've
+    # written a single content byte. See docs/DUAL_PORT_DEVELOPMENT.md
+    # §8 for the failure-mode analysis.
+    if OPEN_NOFILE_TAP():
+        LOG("INFO: pre-opened /assets/nofile.tap (cached handle)", 0)
+    else:
+        LOG("WARNING: /assets/nofile.tap missing — copy from repo's "
+            "assets/ folder onto Pico flash via Thonny. LOAD \"\" "
+            "without a prior mount will fail until you do.", 1)
 
     LOG("INFO: SD Card initialized and mounted OK", 0)
     SAVE_LOG()
