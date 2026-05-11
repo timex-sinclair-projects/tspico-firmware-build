@@ -489,24 +489,59 @@ def DEACTIVATE_SD():
     return
 
 
-def ACTIVATE_MQ():                                                                                # Re-enable TX/RX SM, after a SDCard access
+# ─── DUAL-PORT MIGRATION: ACTIVATE_MQ rewritten ────────────────────────
+# Five changes from Ryan's single-port version:
+#
+#   1. PIO program:  TS_IO       -> TS_IO_DUAL
+#      Routes Z80 reads of $0E vs $0F into separate handling so the
+#      Y register can answer status independently of the TX FIFO.
+#
+#   2. PIO clock:    15 MHz       -> 30 MHz
+#      The dual-port decode adds ~7 instructions to the read path.
+#      30 MHz keeps the total well within Z80's data setup window.
+#      RP2040 PIO can run up to half the CPU clock (135 MHz at our
+#      270 MHz setting) so 30 MHz is conservative.
+#
+#   3. Y = READY after activation
+#      The new line `MQ.exec("mov(y, invert(null))")` sets Y to
+#      0xFFFFFFFF so $0F reads always have bit 6 set (= ready).
+#      We keep Y at READY for the entire session; the protocol's
+#      natural pacing via TX FIFO depth handles flow control.
+#
+#   4. SD teardown REMOVED
+#      The old `while True: try: os.umount; except: break` loop and
+#      the U3_CS write are gone — DEACTIVATE_SD() handles that now.
+#      Callers must call DEACTIVATE_SD() FIRST, then ACTIVATE_MQ().
+#      (Stage 4 updates TS2068_IO to do this in the right order.)
+#
+#   5. NO pre-load of 0x01 here  ← CRITICAL, easy mistake
+#      ACTIVATE_MQ is called both at boot AND mid-command (after
+#      SD operations in MOUNT_FILE etc.). At boot we need a pre-load
+#      so the Z80's first status read finds 0x01. But mid-command,
+#      the next thing in the call chain (SEND_MSG, etc.) writes its
+#      own status — adding a pre-load HERE would put TWO 0x01s in
+#      TX, the Z80 only reads one, and the second sits in TX and
+#      gets misread later in the protocol (the orphan-byte family).
+#      Boot-time pre-load goes in TS2068_IO() instead, ONCE.
+#      (This was "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.)
+#
+# The `ready=True` parameter is for the rare path that needs to
+# create the SM but defer activation (currently unused but kept for
+# parity with our reference implementation).
+# ───────────────────────────────────────────────────────────────────────
+def ACTIVATE_MQ(ready=True):                                                                      # Re-enable TX/RX SM, after a SDCard access (DUAL-PORT)
 
     global MQ
 
-    while True:
-        try:
-            os.umount("/sd")
-        except:
-            break
-
-    U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
-    U3_CS.value(1)
-
-    MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT),
+    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
 
-    MQ.active(1)
+    if ready:
+        MQ.active(1)
+        # Y = 0xFFFFFFFF → $0F always returns 0xFF → D6=1=ready.
+        # Stays at READY for the entire session.
+        MQ.exec("mov(y, invert(null))")
 
     return
 
