@@ -60,9 +60,36 @@ in three TODOs:
 
 1. `PRE_RESPONSE` — bytes to put in TX FIFO at startup before any Z80
    activity (commonly just `(0x01,)` for the status pre-load chain)
-2. `on_rx(idx, val, port, t)` — called for each Z80 OUT byte; this is
-   where your response logic goes
-3. `decode_and_dump()` — how to format the captured log on Ctrl-C
+2. `BURST_LEN` — bytes per Z80 burst (10 for the standard pre-header)
+3. `decide_and_respond(buf, start, length, burst_num)` — runs ONCE PER
+   BURST, AFTER the burst completes. CRC math, response logic, etc.
+4. `decode_and_dump()` — how to format the captured log on Ctrl-C
+
+### THE TWO-PHASE CAPTURE RULE — non-negotiable
+
+**Never do per-byte Python work inside the capture loop.** The PIO RX
+FIFO is 4 entries deep, the Z80 OUTs at ~30µs/byte, and any per-iteration
+work (conditionals, math, callbacks, attribute lookups) risks letting
+the FIFO overflow. PIO `push noblock` then silently drops bytes. The
+Z80 doesn't notice. Your trace looks truncated and you chase ghosts.
+
+This bit us in `test/protocol_observer_crc.py` — see
+`docs/DUAL_PORT_DEVELOPMENT.md` §5k.ii for the full post-mortem.
+
+The harness template enforces a two-phase pattern:
+
+- **PHASE 1 (CAPTURE)** — tight blocking burst-read, NO Python work:
+  ```python
+  for i in range(BURST_LEN):
+      buf[start + i] = MQ.get()    # blocking; matches production
+  ```
+- **PHASE 2 (DECISION)** — runs after the burst, in
+  `decide_and_respond()`. This is where CRC math, response `MQ.put()`s,
+  and analysis go. You have a 2.8ms `WAIT EXECUTION` budget here per
+  spec — ample for any reasonable Python work.
+
+Production's `TS2068_IO()` (lines 4060-4061 of `TS/tspico.py`) is the
+canonical example: `for i in r1: pre[i] = MQ.get()`. Match it.
 
 ### Examples to study before writing your own
 
@@ -77,6 +104,16 @@ The `test/protocol_observer_v*.py` series in increasing capability:
 - `protocol_observer_v7.py` — V6 + LOAD/VERIFY rewind support
 - `protocol_observer_v8.py` — V7 + embedded test TAP, no SD card
 
+Plus the 2026 follow-up series (documented in
+`docs/DUAL_PORT_DEVELOPMENT.md` §5k):
+
+- `protocol_observer_nomount.py` — bare-LOAD investigation
+- `protocol_observer_crc.py` — the harness whose buffer-read mistake
+  taught us the two-phase rule above. Read its post-mortem before
+  writing any new harness.
+- `protocol_observer_crc_named.py` — comparison harness for named LOAD
+- `protocol_observer_multicmd.py` — multi-command auto-refill pattern
+
 Each one tested ONE new hypothesis vs the previous. That cadence is
 exactly what made progress possible.
 
@@ -90,21 +127,101 @@ exactly what made progress possible.
 
 ## After the harness teaches you something
 
-Once a harness reveals the actual behavior:
+Once a harness reveals the actual behavior, follow this sequence
+**strictly** — each step has a real reason and skipping ahead has
+historically caused regressions:
 
 1. **Make the harness pass cleanly** — establish the bug-free behavior
    in isolation first.
-2. **Fold the proven pattern into production** — copy the byte sequence,
-   the Y register treatment, the FIFO ordering, etc.
-3. **Re-test the same scenario through production firmware** — there
+2. **Get explicit user confirmation that the harness result is what
+   they expected.** Use `AskUserQuestion` liberally here. "Does this
+   trace match what you'd expect?" is a real question with real
+   consequences — the user often has context the harness can't show
+   (state of the 2068, contents of a mounted TAP, expected error
+   reports). Do not propose moving anything to production until they
+   say the harness is satisfying.
+3. **Propose folding the proven pattern into production** — copy the
+   byte sequence, the Y register treatment, the FIFO ordering, etc.
+   Wait for user approval before editing production code.
+4. **It's OK to put production-side changes on a branch for the user
+   to test on real hardware.** Do this on a branch, not on main —
+   see "GitHub workflow" below for the rules.
+5. **Re-test the same scenario through production firmware** — there
    are always production-only concerns the harness doesn't see (the
-   dispatcher, MOUNT_FILE, watchdog, etc.).
-4. **Document the gotcha** — `docs/PROTOCOL.md` §7 has a "pitfalls"
+   dispatcher, MOUNT_FILE, watchdog, etc.). Iterate on the branch
+   until the user confirms it's working.
+6. **Get explicit user confirmation again** — same as step 2, but for
+   the production version. `AskUserQuestion`: "Does this fully
+   resolve the issue?" Don't open a PR until they say yes.
+7. **Open the PR.** GitHub's diff view automatically shows only the
+   changes — no need to do anything special; that's the default.
+8. **Document the gotcha** — `docs/PROTOCOL.md` §7 has a "pitfalls"
    list. If your debugging found a non-obvious trap, add it. Future
    contributors will thank you.
-5. **Keep the harness in `/test/`** — even if it's purpose-built for
+9. **Keep the harness in `/test/`** — even if it's purpose-built for
    one bug, leave it. It's documentation of how to think about that
    class of problem.
+
+## GitHub workflow — required for AI agents
+
+All non-trivial code changes go through this flow. AI agents working
+on this repo MUST follow these rules.
+
+### Branches
+
+- **Always work on a branch off `main`, never on main directly.** Even
+  for "small" changes — a small change can still break something on
+  the user's hardware, and main needs to stay shippable.
+- **Branch names are descriptive, no convention prefix required.** Use
+  short kebab-case names that say what the branch does:
+  `crc-verification`, `nofile-tap-preopen`, `fix-bare-load-report-j`.
+- Create the branch BEFORE making any production code edits:
+  `git checkout -b crc-verification`.
+
+### CI / UF2 builds
+
+- **CI builds a UF2 for every pushed branch.** That's how the user
+  tests your changes on real hardware without affecting anyone using
+  the production UF2 from main.
+- This means: push your branch early. Even before you're "done." The
+  user can test as soon as CI builds. Iterate on the same branch.
+- **Never push directly to main**, even for "trivial" doc-only
+  changes. Main is what the production UF2 builds from.
+
+### Pull requests
+
+- **Open a PR only after the user confirms the change works.** Use
+  `AskUserQuestion`: "Are you satisfied this is ready to merge?"
+- The PR's diff view automatically shows only the changes. Don't
+  worry about "submitting just the changes" — that's how PRs work.
+- **PR description should explain WHY, not WHAT.** The diff says
+  what; the description says why this is the right change and what
+  alternatives were considered.
+- **Link to the GitHub issue if there is one** ("fixes #N") so the
+  issue auto-closes when the PR merges.
+
+### Merging
+
+- **Squash and merge** is the chosen strategy for this repo. Each PR
+  becomes one clean commit on main, regardless of how messy the
+  branch history was during iteration. Use this in `gh pr merge`:
+  `gh pr merge --squash`.
+- Do not use "Merge commit" or "Rebase and merge" without the user's
+  explicit say-so.
+- After merge, delete the branch: `gh pr merge --squash --delete-branch`.
+
+### Quick reference
+
+```bash
+git checkout -b descriptive-branch-name      # 1. branch
+# ... make changes, harness-test, etc.
+git push -u origin descriptive-branch-name   # 2. push (triggers CI)
+# ... user tests UF2 on hardware, iterate ...
+gh issue create ...                          # 3. (if needed) open issue
+gh pr create ...                             # 4. open PR after user OK
+# ... review, fix, push more commits ...
+gh pr merge --squash --delete-branch         # 5. merge after user OK
+```
 
 ## Common gotchas (the orphan-byte family)
 

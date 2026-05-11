@@ -10,8 +10,52 @@ Why this exists:
   Copy this file, rename it to `protocol_observer_<your-purpose>.py`,
   fill in the TODO sections, and you've got a working harness in minutes.
 
+============================================================================
+CRITICAL: TWO-PHASE CAPTURE PATTERN — read this before changing the loop.
+============================================================================
+
+The PIO RX FIFO is only 4 entries deep. The Z80 OUTs bytes at ~30us each.
+Any Python work between successive `MQ.get()` calls — conditionals, math,
+callbacks, even attribute lookups — risks letting the FIFO overflow.
+PIO `push noblock` then silently drops the overflowing byte. The Z80 is
+unaware and keeps going. You see a truncated capture and chase a ghost.
+
+This bit us in `protocol_observer_crc.py` when we did per-byte CRC math
+inside a callback. The harness saw 9 of 10 pre-header bytes; the
+"missing" 10th byte wasn't missing on the wire — it was a FIFO overflow
+caused by per-byte Python work. Production's `TS2068_IO()` (lines
+4060-4061 in `TS/tspico.py`) does NO per-byte work — it's just:
+
+    for i in r1:
+        pre[i] = MQ.get()      # tight blocking read of N bytes
+
+That's the pattern. Match it.
+
+The fix is to split every harness into two phases:
+
+  PHASE 1 (CAPTURE) — tight, no per-byte work:
+      for i in range(N):
+          buf[i] = MQ.get()    # blocking; matches production exactly
+      # That's it. No conditionals, no math, no callbacks.
+
+  PHASE 2 (DECISION) — runs AFTER the burst is over:
+      Compute CRC, format response, MQ.put() bytes, log analysis, etc.
+      You have a 2.8ms WAIT EXECUTION budget per spec — ample time
+      for any reasonable Python work. Don't steal from the capture
+      budget to do work that belongs in the response budget.
+
+If the protocol exchange is multi-phase (request → response → request
+→ response), wrap PHASE 1 + PHASE 2 in an outer loop so each iteration
+handles exactly one burst.
+
+If you're writing a pure observer (no responses), just drain RX FIFO
+into the buffer with NOTHING else in the loop body. Decision work
+(decoding, dumping) happens after Ctrl-C.
+
+============================================================================
+
 Usage:
-  1. Copy:   cp test/_harness_template.py test/my_test.py
+  1. Copy:   cp test/_harness_template.py test/protocol_observer_<purpose>.py
   2. Edit:   replace the TODO sections with your test logic
   3. Run:    copy your file to the Pico via Thonny, exec it
   4. Test:   power on TS-2068, do whatever triggers the protocol exchange
@@ -24,18 +68,21 @@ Boilerplate this template handles:
   - MQ (TS_IO_DUAL) started, Y = 0xFFFFFFFF (READY)
   - Boot-noise flush from RX FIFO (~300ms)
   - Pre-allocated capture buffers (no GC pauses in hot path)
-  - Tight RX-drain loop with microsecond timestamps
+  - Two-phase capture: tight burst-read + separate decision step
   - Ctrl-C handler that prints a clean dump
 
 What you customize (the TODO sections):
   - PRE_RESPONSE: bytes to put in TX FIFO at startup before any Z80 activity
-  - on_rx(): what to do when each Z80 OUT byte arrives (write back? log only?)
+  - BURST_LEN: how many bytes per Z80 burst (10 for the standard pre-header)
+  - decide_and_respond(): runs ONCE PER BURST, AFTER the burst completes
   - decode_and_dump(): how to format the captured log on Ctrl-C
 
 Don't customize:
   - The hardware setup (unless your test specifically needs different pins)
   - The Y register initialization (V6 pattern requires READY at idle)
   - The boot-noise flush (Z80 emits stray bytes during its own boot)
+  - The shape of the capture loop (the two-phase pattern is non-negotiable —
+    if you put work inside it, you will lose bytes)
 
 See docs/DUAL_PORT_DEVELOPMENT.md §5 for examples of harnesses built on
 top of this pattern, and what each one taught us.
@@ -140,52 +187,71 @@ print("[SETUP] TX FIFO pre-loaded with %d byte(s): %s" % (
 
 
 # ============================================================================
+# TODO: burst length
+# ============================================================================
+# How many bytes the Z80 sends in one burst before pausing for our
+# response. The standard TS-Pico pre-header is 10 bytes (per Gustavo's
+# spec; see docs/PROTOCOL.md). For most harnesses you want 10 here.
+#
+# If the protocol you're observing has multiple burst sizes, see the
+# "multi-phase" comment under the capture loop below.
+BURST_LEN = 10
+
+
+# ============================================================================
 # Capture buffers — pre-allocated to avoid GC pauses in the hot loop
 # ============================================================================
 
-CAP = 64                     # max events to capture (resize if needed)
+CAP = 256                    # max bytes captured (resize if needed)
 rx_buf = bytearray(CAP)      # captured byte values
-rx_a0  = bytearray(CAP)      # port indicator (0=$0E, 1=$0F)
-rx_t   = [0] * CAP           # microsecond timestamps from session start
+rx_t   = [0] * CAP           # microsecond timestamp at end of each burst
 
-events = []                  # extra notes (TX-fill, phase transitions, etc.)
+events = []                  # extra notes (phase boundaries, errors, etc.)
 
 
 # ============================================================================
-# TODO: define your protocol logic
+# TODO: define your decision logic
 # ============================================================================
-# This is where the test-specific behavior goes. The simplest pattern is
-# "log every Z80 OUT, do nothing else" — but you can build up to whole
-# command exchanges from here.
+# This runs ONCE PER BURST, after BURST_LEN bytes have been captured. Put
+# all CRC math, response logic, and analysis HERE — never inside the
+# capture loop.
 #
-# The capture loop below calls on_rx(idx, val, port, t) for every Z80 OUT.
-# Use that to drive whatever response logic your test needs.
+# Args:
+#   buf:        the full capture buffer (bytearray, length CAP)
+#   start:      index of the first byte of the just-captured burst
+#   length:     number of bytes captured in this burst (== BURST_LEN)
+#   burst_num:  zero-based burst index (0 = first burst, etc.)
+#
+# Common patterns:
+#   - Compute CRC over buf[start:start+length-1] and compare to
+#     buf[start+length-1]; respond with status via MQ.put(...).
+#   - Inspect buf[start] (block_type) to decide which response to send.
+#   - Append a label to `events` recording what this burst was.
+#
+# Remember: you have a 2.8ms WAIT EXECUTION budget here per spec. That's
+# ample for normal Python work, but DON'T do file I/O or sleep() inside
+# this function — those can take longer than the budget.
 
-def on_rx(idx, val, port, t):
-    """Called once for each Z80 OUT byte received in RX FIFO.
-
-    Args:
-        idx:  zero-based index of this byte (0 = first byte received)
-        val:  the byte value (0..255)
-        port: 0 if Z80 wrote to $0E, 1 if $0F
-        t:    microseconds since the test started
-
-    Add your response logic here. To send bytes back to the Z80,
-    call MQ.put(byte). The PIO state machine handles the actual
-    bus driving — you just write to TX FIFO.
-
-    Common patterns:
-      - rx_count == 9 → just captured the 10th byte of a pre-header,
-        time to send response status: MQ.put(0x01)
-      - rx_count == 11 → captured Z80's echo (block_type ack +
-        computed CRC), time to send final status: MQ.put(0x01)
-    """
+def decide_and_respond(buf, start, length, burst_num):
+    """Process one captured burst. Default: do nothing (pure observer)."""
     pass
 
 
 # ============================================================================
-# Tight capture loop — DON'T MODIFY (this is what made V6 work)
+# Two-phase capture loop — DON'T MODIFY this structure.
 # ============================================================================
+#
+# The structure here is non-negotiable: PHASE 1 is a tight blocking read,
+# PHASE 2 is everything else. If you find yourself wanting to do work
+# inside PHASE 1, you almost certainly want to do it in decide_and_respond
+# instead. See the docstring at the top of this file for why.
+#
+# Multi-phase note: if your protocol has DIFFERENT burst sizes for
+# successive bursts (e.g., 10-byte pre-header → 26-byte header block →
+# variable-length data), you'll need to make BURST_LEN dynamic. The
+# simplest way is to set it inside decide_and_respond based on what you
+# just received, and read it back here as `current_burst_len`. Keep the
+# tight-read invariant intact: nothing in the for-loop body but the get.
 
 print("=" * 60)
 print('READY. Power on TS-2068 (or trigger your test condition).')
@@ -193,7 +259,8 @@ print('Ctrl-C in Thonny when done — events will be dumped.')
 print("=" * 60)
 
 T0 = time.ticks_us()
-rx_count = 0
+total_bytes = 0
+burst_num = 0
 
 # Local-name the hot-path methods to skip attribute lookups.
 mq_rx_fifo = MQ.rx_fifo
@@ -205,18 +272,33 @@ gc.collect()                 # prime GC before entering the hot loop
 
 try:
     while True:
-        if mq_rx_fifo() > 0:
-            raw = mq_get()
-            t = ticks_diff(ticks_us(), T0)
-            if rx_count < CAP:
-                val = raw & 0xFF
-                a0 = (raw >> 8) & 1
-                rx_buf[rx_count] = val
-                rx_a0[rx_count]  = a0
-                rx_t[rx_count]   = t
-                # Hand off to the user's logic (TODO above).
-                on_rx(rx_count, val, a0, t)
-                rx_count += 1
+        # Outer poll: wait for the Z80 to start a burst.
+        if mq_rx_fifo() == 0:
+            continue
+
+        # ====================================================================
+        # PHASE 1 — tight blocking burst read. NOTHING ELSE IN HERE.
+        # Matches production TS2068_IO() lines 4060-4061 verbatim.
+        # ====================================================================
+        if total_bytes + BURST_LEN > CAP:
+            # Buffer would overflow — stop capturing.
+            events.append(("CAP_HIT", "buffer full at burst %d" % burst_num))
+            break
+        start = total_bytes
+        for i in range(BURST_LEN):
+            rx_buf[start + i] = mq_get()        # blocking
+        # ONE timestamp at end of burst (cheap; not per-byte).
+        t = ticks_diff(ticks_us(), T0)
+        for i in range(BURST_LEN):
+            rx_t[start + i] = t                 # same timestamp per burst
+        total_bytes += BURST_LEN
+
+        # ====================================================================
+        # PHASE 2 — decision & response. Do all your work here.
+        # ====================================================================
+        decide_and_respond(rx_buf, start, BURST_LEN, burst_num)
+        burst_num += 1
+
 except KeyboardInterrupt:
     pass
 
@@ -225,32 +307,29 @@ except KeyboardInterrupt:
 # TODO: dump format
 # ============================================================================
 # Customize this to format the captured log however your test needs.
-# Default: one line per RX byte with timestamp, delta, hex value, ASCII
-# hint, port, and (if you defined it) a label.
+# Default: one line per RX byte with timestamp, hex value, ASCII hint,
+# and the burst it belongs to.
 
 def decode_and_dump():
     print("")
     print("=" * 60)
-    print("RX captured: %d byte(s)" % rx_count)
+    print("RX captured: %d byte(s) across %d burst(s)" % (
+        total_bytes, burst_num))
     print("=" * 60)
-    if rx_count == 0:
+    if total_bytes == 0:
         print("(no RX activity — Z80 didn't OUT anything)")
         return
-    print("%4s  %8s  %8s  %5s  %3s  %4s  %s" % (
-        "idx", "us", "delta", "val", "asc", "port", "note"))
+    print("%4s  %5s  %8s  %5s  %3s  %s" % (
+        "idx", "burst", "us", "val", "asc", "note"))
     print("-" * 60)
-    prev_t = 0
-    for i in range(rx_count):
-        t     = rx_t[i]
-        delta = t - prev_t
-        prev_t = t
-        val   = rx_buf[i]
-        port  = rx_a0[i]
+    for i in range(total_bytes):
+        t   = rx_t[i]
+        val = rx_buf[i]
         asc = "'%s'" % chr(val) if 0x20 <= val < 0x7F else "   "
-        port_s = "$0F" if port else "$0E"
+        b   = i // BURST_LEN
         note = ""    # ← add labels for known offsets if you like
-        print("%4d  %8d  %8d  0x%02X  %3s  %4s  %s" % (
-            i, t, delta, val, asc, port_s, note))
+        print("%4d  %5d  %8d  0x%02X  %3s  %s" % (
+            i, b, t, val, asc, note))
     print("=" * 60)
     if events:
         print("EVENTS:")
