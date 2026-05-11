@@ -327,10 +327,38 @@ from machine import Pin, freq, SPI
 
 from TS.sdcard import *
 
-from tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
-# from TS.tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
-# from tspico_io import sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
-# from TS.tspico_io import sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
+# ─── DUAL-PORT MIGRATION (Ryan's tspico.py -> dual-port) ───────────────
+# Three things changed from Ryan's original single-port import:
+#
+#   1. Module path:  `tspico_io` -> `TS.tspico_io`
+#      Always pull from the frozen module (baked into the UF2 by
+#      manifest.py). A root-level /tspico_io.py (Ricardo's older one)
+#      would shadow the frozen one and silently pull in stale single-
+#      port code; using the explicit TS. prefix defeats that risk.
+#
+#   2. PIO program:  `TS_IO` -> `TS_IO_DUAL`
+#      The single-port PIO is gone in the dual-port architecture.
+#      TS_IO_DUAL decodes the A0 address bit (GPIO 10) to route Z80
+#      reads of $0E (data) vs $0F (status) into separate handling.
+#      The Z80's $0F polls are answered by the Y register (set to
+#      0xFFFFFFFF = always ready) instead of by interleaving 0x40
+#      bytes into the TX FIFO.
+#
+#   3. Added import: `OPEN_NOFILE_TAP`
+#      Pre-opens /assets/nofile.tap at boot so LOAD "" (no prior
+#      mount) doesn't pay file-open latency in the hot path. Without
+#      this, opening the file takes 1-5ms during which the Z80 reads
+#      stale TX bytes and reports Report J.
+#
+# See docs/DUAL_PORT_DEVELOPMENT.md §7 for the full migration narrative.
+# ───────────────────────────────────────────────────────────────────────
+from TS.tspico_io import (
+    patch, sel_bank, set_ctrl, set_dck,
+    TS_IO_DUAL,                          # was: TS_IO (single-port)
+    LOAD_TS, LOAD_ZX, LOAD_ZX_C,
+    SAVE_TS, SAVE_ZX,
+    OPEN_NOFILE_TAP,                     # added: cached nofile handle
+)
 
 #####################
 # SERVICE FUNCTIONS #
