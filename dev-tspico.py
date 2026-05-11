@@ -456,26 +456,101 @@ class PICO_STATUS():                                                            
         self.dck_prev_mem  = 2
 
 
+# ─── DUAL-PORT MIGRATION: new helper DEACTIVATE_SD ─────────────────────
+# In Ryan's single-port version, the SD-teardown logic lived inline at
+# the top of ACTIVATE_MQ. The dual-port refactor splits it out:
+#
+#   1. Some boot paths (and the SAVE branch in TS2068_IO) need to call
+#      ACTIVATE_MQ without first having mounted /sd; Ryan's old loop
+#      `while True: try: umount; except: break` wasted ~10ms on every
+#      such call retrying the unmount.
+#   2. The dual-port protocol is sensitive to bus-handover timing.
+#      Splitting teardown lets us do it deterministically: unmount
+#      once, then clamp the SPI data lines LOW before the PIO reclaims
+#      them. This eliminates the tri-state window where Z80 D6 could
+#      float high — the original Report D root cause (see
+#      docs/DUAL_PORT_DEVELOPMENT.md §1).
+# ───────────────────────────────────────────────────────────────────────
+def DEACTIVATE_SD():
+    """Tear down SD card access and safe the shared bus lines."""
+    try:
+        os.umount("/sd")
+    except:
+        pass                                # already unmounted is fine
+
+    U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
+    U3_CS.value(1)
+
+    # GPIO 2-4 are shared with SPI (SCK/MOSI/MISO). Drive them LOW
+    # before the PIO state machine reclaims them. This is the Report D
+    # fix from the dual-port migration.
+    for p in (2, 3, 4):
+        Pin(p, Pin.OUT).value(0)
+    return
+
+
 def ACTIVATE_MQ():                                                                                # Re-enable TX/RX SM, after a SDCard access
 
     global MQ
-    
+
     while True:
         try:
             os.umount("/sd")
         except:
             break
-    
+
     U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
     U3_CS.value(1)
 
     MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
-    
+
     MQ.active(1)
-    
-    return 
+
+    return
+
+
+# ─── DUAL-PORT MIGRATION: new helpers MQ_READY / MQ_BUSY ───────────────
+# In Ryan's single-port code, "ready" was signalled by writing 0x40 to
+# the TX FIFO — the byte had bit 6 set, and the Z80's WF_NPH polling
+# loop tests bit 6 of $0F. Every handler interleaved `wrt(0x40)` and
+# `wrt(0x01)` (data) bytes in TX with careful ordering.
+#
+# In dual-port, $0F is decoded SEPARATELY by the PIO and answered by
+# the Y scratch register — NOT by the TX FIFO at all. So:
+#
+#   - "ready" means  set Y = 0xFFFFFFFF  (MQ_READY)
+#   - "busy"  means  set Y = 0           (MQ_BUSY)
+#
+# Every `wrt(0x40)` or `MQ.put(0x40)` in Ryan's handlers becomes a
+# `MQ_READY()` call (typically placed AFTER the data bytes are in TX,
+# so Z80 sees "ready" on its next $0F poll and then reads the data via
+# $0E). Stages 5-7 of this migration walk through each callsite.
+#
+# These functions deliberately have NO logging or TLM. They run in
+# time-critical receive paths where a print() takes ~1-10ms — long
+# enough for the 4-deep RX FIFO to overflow and lose Z80 bytes.
+# ───────────────────────────────────────────────────────────────────────
+def MQ_READY():
+    """Signal 'ready' to Z80 — bit 6 set on $0F reads (Y = 0xFFFFFFFF)."""
+    # invert(null) is the documented MicroPython PIO syntax for ~0.
+    # The tilde form `~null` does NOT parse correctly via runtime
+    # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
+    # Without this, Y stays at 0, $0F always reads 0, Z80 sees
+    # "never ready" and reports J.
+    MQ.exec("mov(y, invert(null))")
+
+
+def MQ_BUSY():
+    """Signal 'not ready' to Z80 — bit 6 clear on $0F reads (Y = 0).
+
+    In normal operation we keep Y=READY constantly; the protocol's
+    natural pacing via TX FIFO depth handles flow control. MQ_BUSY
+    is here for completeness and any future code that needs an
+    explicit busy signal.
+    """
+    MQ.exec("set(y, 0)")
 
 
 def WAIT_TX_RECEIVED():
