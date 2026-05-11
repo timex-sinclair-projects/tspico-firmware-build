@@ -1310,17 +1310,29 @@ def CLEAR_LOG():                                                                
     return ok
 
 
-def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s) 
+def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s)
                                                                                                 # back to the TS, once a command is finished
     global MQ
     global TSP
-    
+
     wrt = MQ.put
-    
+
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # The two `wrt(0x40)` "Read continue flag" writes in the single-port
+    # version have been removed. The continue flag now lives on $0F via
+    # the Y register (kept at READY for the entire session). A 0x40 in
+    # the TX FIFO would have been consumed by the Z80's $0E read as if
+    # it were data — orphaning the rest of the response by one byte.
+    #
+    # `MQ_READY()` is called after the data is loaded as belt-and-
+    # suspenders: in case any prior code path left Y at BUSY, this
+    # guarantees $0F answers ready by the time the Z80 polls. With
+    # current dual-port handlers Y stays at READY always, so MQ_READY()
+    # here is functionally redundant but kept for self-documentation.
+    # ─────────────────────────────────────────────────────────────────────
     if TSP.VERBOSE or forceDisplay:
-    
-        wrt(0x40)               # Read continue flag
-        wrt(0x81)               # PRINT STRING
+
+        wrt(0x81)               # PRINT STRING — this IS the D-block status
         wrt(st)                 # Return code
         wrt(0x0D)               # Start with a newline
         for m in msg:           # Write message
@@ -1330,14 +1342,17 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
             for m in msg1:
                 wrt(m)
         wrt(0x00)               # End of string
-        
+
     else:
-        
-        wrt(0x40)               # Read continue flag
-        wrt(st)                 # Return code (< 0x80)
-        
-    WAIT_TX_RECEIVED()
-    
+
+        wrt(st)                 # Return code (< 0x80) — IS the D-block status
+
+    MQ_READY()                  # Z80 sees "ready" on $0F → reads bytes from $0E
+
+    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
+    while MQ.tx_fifo() != 0:
+        pass
+
     return
 
 
@@ -1364,14 +1379,28 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     s = len(scroll) + 6
     n = len(msg)
 
-    EMPTY_RX_FIFO()
-
+    # ─── DUAL-PORT MIGRATION: prep + ready signaling ──────────────────────
+    # Was:  EMPTY_RX_FIFO(); wrt(0x40); wrt(0x86); wrt(st); wrt(0x0D); wrt(0x0D)
+    # Now:  load header bytes first, then MQ_READY(), then drain RX.
+    #
+    # The wrt(0x40) "Read continue" byte is gone — $0F continue is now
+    # signalled via Y register, and the 0x40 in TX would have been read
+    # by the Z80 as data, orphaning the rest of the response.
+    #
+    # The EMPTY_RX_FIFO call was moved AFTER MQ_READY: at the original
+    # position, the Z80 hadn't yet been told to read, so RX was empty
+    # anyway (the call was a no-op). After MQ_READY the Z80 might dump
+    # leftover keystrokes; we drain those now.
+    # ─────────────────────────────────────────────────────────────────────
     wrt = MQ.put
-    wrt(0x40)   # Read continue
-    wrt(0x86)   # PRINT STRING WITH LOOP
+    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
     wrt(st)     # BASIC return code
     wrt(0x0D)   # Start on a new line
     wrt(0x0D)   # Start with a blank line we don't count
+    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
+
+    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
+        MQ.get()
             
     # We handle each character. If a scroll answer is N, we will just break
 
@@ -1501,9 +1530,13 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 if not new_rom:
                     wrt(13)
 
-                wrt(0x00)       # End of this page
-                wrt(0x40)       # Read continue flag
-                
+                wrt(0x00)       # End of this page (Z80 displays + waits for key)
+                # ─── DUAL-PORT MIGRATION ───────────────────────────────
+                # No wrt(0x40) "Read continue flag" — $0F continue is
+                # signalled via Y register (kept at READY all session).
+                # A 0x40 here would orphan and be consumed as the
+                # FIRST character of the next page.
+                # ──────────────────────────────────────────────────────
                 ch = MQ.get()   # Get keypress from user
                 if (ch == 78):  # If 'N' then done (ROM loops stops on old rom)
                     return
@@ -1514,8 +1547,11 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 else:
                     ll = 21
 
-                wrt(0x40)       # Start new string
-                
+                # ─── DUAL-PORT MIGRATION ───────────────────────────────
+                # No wrt(0x40) "Start new string" here either — same
+                # rationale as the wrt(0x40) "Read continue flag" above.
+                # ──────────────────────────────────────────────────────
+
                 if new_rom:
                     for b in range(s):      # Erase scroll prompt
                         wrt(0x08)
@@ -1526,11 +1562,13 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
 
     wrt(end_char)               # Write end_char (done with loops)
 
-    WAIT_TX_RECEIVED()
+    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
+    while MQ.tx_fifo() != 0:
+        pass
 
     while(MQ.rx_fifo() != 0):   # Flush input buffer to console
         print(MQ.get())
-    
+
     print(MQ.tx_fifo(), MQ.rx_fifo()) # Report FIFO queue sizes
 
 
@@ -3127,19 +3165,36 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
 
     global MQ
 
-    EMPTY_RX_FIFO()
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # Removed: leading EMPTY_RX_FIFO(); three wrt(0x40) calls ("Read
+    # continue", "Read continue to get char", "Start a new string");
+    # and replaced WAIT_TX_RECEIVED() / EMPTY_RX_FIFO() at the tail
+    # with inline drains.
+    #
+    # All three wrt(0x40)s were single-port "continue flag in TX" writes
+    # that have no place in dual-port — the continue flag lives on $0F
+    # via the Y register. A 0x40 left in TX would be consumed as data
+    # by Z80's $0E read, orphaning the rest of the response.
+    #
+    # The EMPTY_RX_FIFO moved BELOW MQ_READY: at the original position
+    # the Z80 hadn't been told to read yet, so RX had nothing to drain.
+    # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
+    # ─────────────────────────────────────────────────────────────────────
     wrt = MQ.put
-    wrt(0x40)   # Read continue
-    wrt(0x86)   # PRINT STRING WITH LOOP
+    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
     wrt(0x01)   # BASIC return code
     wrt(0x0D)   # Start a new line
+    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
+
+    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
+        MQ.get()
+
     for ch in prompt:
         wrt(ch)
-    wrt(0x00)   # End string
-    wrt(0x40)   # Read continue to get char
+    wrt(0x00)   # End string (Z80 prints + waits for key)
+
     ch = MQ.get()
     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
-        wrt(0x40) # Start a new string
         if echo:
             if ch < 32 or ch > 127:
                 wrt(89) # Y
@@ -3148,8 +3203,12 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
         wrt(0x03) # End the string loop
         # Could add an option to not wrt(0x03) and let the caller do that after
         # writing some more text to indicate the result of the action.
-        WAIT_TX_RECEIVED()
-        EMPTY_RX_FIFO()
+
+        # ─── DUAL-PORT MIGRATION: inline drains ───────────────────────
+        while MQ.tx_fifo() != 0:
+            pass
+        while MQ.rx_fifo() != 0:
+            MQ.get()
 
     return ch
 
