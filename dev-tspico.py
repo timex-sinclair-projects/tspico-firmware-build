@@ -3429,12 +3429,20 @@ def ZX48(pre, cmd):                                                           # 
 
 def NOP(pre, cmd):
     """A 'no operation' command"""
-    
+
     global MQ
-    
-    MQ.put(0x40)
+
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # Was:  MQ.put(0x40); MQ.put(0x01)
+    #       (single-port: 0x40 = continue flag in TX, 0x01 = OK status)
+    # Now:  MQ.put(0x01); MQ_READY()
+    #       The continue flag now lives on $0F via the Y register. The
+    #       0x40 in TX would have been read as data by the Z80's $0E
+    #       read and misinterpreted later (orphan-byte family bug).
+    # ─────────────────────────────────────────────────────────────────────
     MQ.put(0x01)
-    
+    MQ_READY()
+
     return
 
 
@@ -3444,10 +3452,10 @@ def NOP(pre, cmd):
 
 
 def PRINT_IO(pre):                                                                                                           # LPRINT and LLIST processing
-    
+
     global MQ
     global TSP
-    
+
     prn = bytearray(10000)
     end_msg = "File 0001.txt closed OK"
     r1 = range(10)
@@ -3457,25 +3465,39 @@ def PRINT_IO(pre):                                                              
     while True:
         prn[pos] = pre[3]
         pos += 1
-        
-        wrt(0x40)
+
+        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
+        # Was:  wrt(0x40); wrt(0x01)
+        # Now:  wrt(0x01); MQ_READY()
+        # The 0x40 (continue) is no longer a FIFO byte — it's the Y
+        # register signalled via MQ_READY(). The 0x01 is the status
+        # the Z80 reads from $0E after seeing ready on $0F.
+        # ──────────────────────────────────────────────────────────────
         wrt(0x01)
-        
+        MQ_READY()
+
         pre = [0] * 10
         for i in r1:
             pre[i] = MQ.get()
         if pre[1] != 5:
             break
-    
-    wrt(0x40)
+
+    # ─── DUAL-PORT MIGRATION (loop exit, same pattern as in-loop) ─────
     wrt(0x01)
-    
+    MQ_READY()
+
     SEND_MSG(end_msg, "", _1_OK)
-    
-    WAIT_TX_RECEIVED()
-  
-    EMPTY_RX_FIFO()
-        
+
+    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
+    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
+    # helpers being retired in stage 7). Behavior is identical.
+    # ──────────────────────────────────────────────────────────────────
+    while MQ.tx_fifo() != 0:
+        pass
+
+    while MQ.rx_fifo() != 0:
+        MQ.get()
+
     prn = prn[:pos]
 
     with open("/PRN/0001.txt", "w") as sal:                                           # PRINT output filename is fixed on this version; can be set up
@@ -3485,25 +3507,42 @@ def PRINT_IO(pre):                                                              
 
 
 def PROCESS_ASM(pre):                                                                 # Processes AU (Assembler) commands sent by the TS
-    
+
     global MQ
-    
+
     cmd = pre[:5].decode()
     wrt = MQ.put
-    
-    wrt(0x40)
-    
+
+    # ─── DUAL-PORT MIGRATION: leading wrt(0x40) REMOVED ───────────────
+    # Was the single-port "continue flag" byte indicating Pico is ready
+    # to receive the command body. In dual-port the Z80 polls $0F (Y
+    # register, kept at READY all session) for ready and reads $0E for
+    # data — so the 0x40 in TX served no purpose and would have been
+    # read by the Z80 as an unexpected data byte.
+    # ──────────────────────────────────────────────────────────────────
+
     print(pre)
     print(cmd)
-    
+
     par3 = int(pre[8])
     par4 = int(pre[9])
-    
+
     print(par3, par4)
-    
-    wrt(0x40)
-    wrt(0x01)
-    
+
+    # ─── DUAL-PORT MIGRATION: V6 tail (final status + pre-load) ───────
+    # Was:  wrt(0x40); wrt(0x01)   (0x40 = continue flag, 0x01 = status)
+    # Now:  wrt(0x01); wrt(0x01)
+    #   - First 0x01: final status response for THIS command (Z80 reads
+    #     as "0 OK" via $0E).
+    #   - Second 0x01: pre-load for the NEXT command's initial status.
+    #     This is the V6 chain that keeps back-to-back commands working
+    #     without re-arming status in the main dispatcher.
+    # The continue flag has moved off the FIFO entirely — Y register
+    # stays at READY so $0F always answers ready.
+    # ──────────────────────────────────────────────────────────────────
+    wrt(0x01)        # final status — Z80 reads as "0 OK"
+    wrt(0x01)        # pre-load for next command's initial status
+
     return
 
 
@@ -3524,13 +3563,26 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     cmd = bytearray(100)
     
     load_cmd = pre[1]
-    
+
     long = pre[7] + 256*pre[8] + 3
     rl = range(long)
-    
-    wrt(0x40)
-    wrt(0x01)
-    
+
+    # ─── DUAL-PORT MIGRATION: leading wrt(0x40); wrt(0x01) REMOVED ────
+    # In single-port Ricardo's code, these two bytes served as:
+    #   - wrt(0x40): "continue flag" — signal Pico is ready for body
+    #   - wrt(0x01): pre-load of initial status for command body phase
+    # Both are obsolete in dual-port:
+    #   - The continue flag lives on $0F via the Y register (kept at
+    #     READY for the entire session).
+    #   - The initial status byte the Z80 just read at pre-header time
+    #     was supplied by the PREVIOUS handler's V6 tail pre-load (or
+    #     by the boot pre-load for the very first command).
+    # Leaving them here would inject two orphan bytes that get misread
+    # by subsequent Z80 reads — the classic orphan-byte family of bugs.
+    #
+    # The blocking-read loop below is the production-tight body drain;
+    # same two-phase capture rule as the dispatcher's pre-header read.
+    # ──────────────────────────────────────────────────────────────────
     for l in rl:
         cmd[l] = MQ.get()
     
@@ -3605,12 +3657,28 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
             SEND_MSG(msg, 'SAVE "tpi:help" for info', _5_C_Nonsense)    # If none of the above, raise error
             LOG(msg, 2)
     
-    WAIT_TX_RECEIVED()
-    
-    EMPTY_RX_FIFO()
-        
+    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
+    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
+    # helpers being retired in stage 7). Behavior is identical.
+    # ──────────────────────────────────────────────────────────────────
+    while MQ.tx_fifo() != 0:
+        pass
+
+    while MQ.rx_fifo() != 0:
+        MQ.get()
+
+    # ─── DUAL-PORT MIGRATION: V6 tail pre-load ────────────────────────
+    # Pre-load 0x01 status for the NEXT command's initial $0E read.
+    # This is the V6 chain — every command handler ends with a 0x01
+    # in TX so the next command's pre-header phase finds a valid
+    # status byte already waiting. Without this, the next command
+    # would read stale 0x00 -> Report J - Invalid I/O Device.
+    # See docs/PROTOCOL.md "Writing a new command handler" for details.
+    # ──────────────────────────────────────────────────────────────────
+    MQ.put(0x01)
+
     LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
-    
+
     return
 
 
