@@ -2,6 +2,15 @@ name: Build TS-Pico Firmware
 
 on:
   push:
+    # Build a UF2 for every pushed branch, not just main. This lets
+  # contributors test changes on real hardware by flashing the UF2
+    # from their feature branch before opening a PR. See CLAUDE.md
+    # "GitHub workflow" for the rules around branch-based testing.
+    branches: ['**']
+  pull_request:
+    # Also build on PR open/update so the UF2 is rebuilt against the
+    # merge result — catches conflicts that pass on the branch but
+    # break when combined with main.
     branches: [main]
   workflow_dispatch:
 
