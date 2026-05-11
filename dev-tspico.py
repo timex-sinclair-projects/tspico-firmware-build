@@ -3796,14 +3796,57 @@ def TS2068_IO():                                                         # Main 
     LOG("After DIR_FILES, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
     LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
-    
+
+    # ─── DUAL-PORT MIGRATION: explicit SD-teardown before MQ activation ───
+    # ACTIVATE_MQ no longer unmounts /sd itself; we must do it explicitly
+    # via DEACTIVATE_SD first (see stage-3 comments above ACTIVATE_MQ).
+    # This also clamps GPIO 2-4 LOW before the PIO reclaims them, which
+    # closes the tri-state window that was the original Report D root
+    # cause (docs/DUAL_PORT_DEVELOPMENT.md §1).
+    # ─────────────────────────────────────────────────────────────────────
+    DEACTIVATE_SD()
     ACTIVATE_MQ()
-    
+
+    # ─── DUAL-PORT MIGRATION: boot-time status pre-load (V6 chain start) ──
+    # Pre-load a single 0x01 status byte into TX FIFO. The very first Z80
+    # command will read this from $0E as its initial OK status. Every
+    # command handler ends with its own MQ.put(0x01), so this chain
+    # continues automatically across subsequent commands without needing
+    # any further pre-loads from the dispatcher.
+    #
+    # CRITICAL: this MQ.put(0x01) must happen ONCE, here, and not inside
+    # ACTIVATE_MQ. Doing it inside ACTIVATE_MQ would also fire it on
+    # every mid-command SD round-trip (MOUNT_FILE etc.), producing a
+    # stray 0x01 that gets misread later in the protocol. This was
+    # "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.
+    # ─────────────────────────────────────────────────────────────────────
+    MQ.put(0x01)
+
+    # ─── DUAL-PORT MIGRATION: pre-open /assets/nofile.tap ─────────────────
+    # OPEN_NOFILE_TAP caches a read handle to /assets/nofile.tap so that
+    # LOAD "" (no prior mount) doesn't pay file-open latency in the
+    # time-critical response path. Without this, the open takes 1-5 ms
+    # during which the Z80 reads stale 0x00 bytes and reports Report J.
+    # See docs/DUAL_PORT_DEVELOPMENT.md §8 (Bug 3 area / nofile pre-open).
+    # ─────────────────────────────────────────────────────────────────────
+    if OPEN_NOFILE_TAP():
+        LOG("/assets/nofile.tap pre-opened OK", 0)
+    else:
+        LOG('WARNING: /assets/nofile.tap MISSING from Pico flash. '
+            'LOAD "" without a prior mount will return Report R until '
+            'you copy assets/*.tap from the repo onto Pico flash.', 1)
+
     LOG("SD Card initialized and mounted OK", 0)
     SAVE_LOG()
-    
+
     wrt = MQ.put
-    
+
+    # ─── Boot-noise flush (Ryan's diagnostic loop, kept) ──────────────────
+    # The Z80 may emit stray bytes during its own power-on reset / boot
+    # window. We drain anything sitting in RX FIFO so the first "real"
+    # protocol byte isn't preceded by garbage. Per-byte LOG kept for
+    # diagnostic value — useful when chasing power-sequence weirdness.
+    # ─────────────────────────────────────────────────────────────────────
     LOG("Boot noise flush: starting", 0)
     boot_garbage = []
     empty_start = time.ticks_ms()
@@ -3838,25 +3881,32 @@ def TS2068_IO():                                                         # Main 
     while True:                                                                                    # main execution loop
 
         if (MQ.rx_fifo()) != 0:
-            
+
             ts = time.ticks_us()                                                                   # reset timestamp
-            # reset timestamp
-            count = 0
-            idx = 0
-            
-            wrt(0x01)
-            while (count <= 30_000) and (idx <= 9):
-                if (MQ.rx_fifo()) != 0:
-                    pre[idx] = MQ.get()
-                    idx += 1
-                    
-                else:
-                    count += 1
-                    
-            if (count >= 30_000):
-                LOG("Incomplete command received", 2)
-                BLINK_ERROR()
-                continue
+
+            # ─── DUAL-PORT MIGRATION: tight blocking pre-header read ─────
+            # Replaces Ryan's earlier "count up to 30,000 polls" read loop
+            # with a production-tight blocking burst: ten back-to-back
+            # MQ.get() calls and NOTHING in between.
+            #
+            # Why so strict: the PIO RX FIFO is only 4 entries deep, and
+            # the Z80 OUTs bytes at ~30 us each. Any Python work between
+            # successive gets (conditionals, counters, polling-fifo) risks
+            # letting the FIFO overflow, at which point PIO push(noblock)
+            # silently drops bytes. The Z80 doesn't know; the dispatcher
+            # sees a truncated pre-header and dispatches to the wrong
+            # branch (or no branch at all -> Report J).
+            #
+            # Also removed: the per-iteration `wrt(0x01)` that used to
+            # live right above this read. In the dual-port V6 chain, the
+            # status byte for THIS command was already pre-loaded into
+            # TX by the PREVIOUS command's tail (or by the boot pre-load
+            # for the very first command). Adding another wrt(0x01) here
+            # would inject a stray byte that gets misread later in the
+            # protocol (orphan-byte family of bugs).
+            # ────────────────────────────────────────────────────────────
+            for i in r1:
+                pre[i] = MQ.get()                                          # blocking
                                                                                                       # pre(header)[0] is a command
             # gc.collect()
             fr1 = gc.mem_free()
@@ -3882,7 +3932,12 @@ def TS2068_IO():                                                         # Main 
                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
                 save_aborted = "sd" not in os.listdir("/")
 
-                # Make sure MQ is active (SAVE_TS normally leaves SD active)
+                # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
+                # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
+                # unmounts it, so we do it here. See stage-3 comments
+                # on ACTIVATE_MQ for the rationale.
+                # ──────────────────────────────────────────────────────────
+                DEACTIVATE_SD()
                 ACTIVATE_MQ() # Also fixes ENA_SD leaving MQ active with SD active as well
 
                 if not save_aborted:
@@ -3942,9 +3997,14 @@ def TS2068_IO():                                                         # Main 
                             LOG("DIR_FILES failed after save", 2)
                     except:
                         LOG("os.chdir failed after save", 2)
-                    
+
+                    # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────
+                    # /sd was just mounted via ACTIVATE_SD above for the
+                    # DIR refresh; tear it down before reactivating MQ.
+                    # ──────────────────────────────────────────────────────
+                    DEACTIVATE_SD()
                     ACTIVATE_MQ()
-                
+
                 led.value(0)
                 
             elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine 
@@ -3996,32 +4056,39 @@ def TS2068_IO():                                                         # Main 
                     LOG("Unrecognized command! " + str(list(pre)), 1)
                 except:
                     LOG("Unrecognized command! Cannot get pre[] data", 1)
-                
-                EMPTY_RX_FIFO()
-                EMPTY_TX_FIFO()
+
+                # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
+                # Replaces EMPTY_RX_FIFO() / EMPTY_TX_FIFO() (single-port
+                # helpers being retired). The behavior is identical; just
+                # inlined so the handler is self-contained.
+                # ──────────────────────────────────────────────────────────
+                while MQ.rx_fifo() != 0:
+                    MQ.get()
+                while MQ.tx_fifo() != 0:
+                    MQ.exec("pull (noblock)")
+                    MQ.exec("mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
-                
+
                 BLINK_ERROR()
-                
+
                 LOG("Cleared TX/RX FIFO after unrecognized cmd: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
-                
-            # fr2 = gc.mem_free()
-            # LOG("End of main loop, free=%.1f" % (fr2 >> 10), 0)
-            # gc.collect()
-            # LOG("After gc.collect, free=%.1f" % (gc.mem_free() >> 10), 0)
-            n = MQ.tx_fifo()
-            if n > 0:
-                EMPTY_TX_FIFO()
-                LOG("Bottom of main loop: TX FIFO was cleared, it had %d bytes in it." % n, 0)
-            n = MQ.rx_fifo()
-            if n > 0:
-                b = bytearray(n)
-                for i in range(n):
-                    b[i] = MQ.get()
-                LOG("Bottom of main loop: RX FIFO was cleared, it had %d bytes in it: %s" % str(b), 0)
-                
+
+            # ─── DUAL-PORT MIGRATION: bottom-of-loop drains REMOVED ───────
+            # Ryan's original code had defensive drains here ("clean up
+            # whatever the handler left behind"). In dual-port V6 those
+            # drains MASK bugs rather than fix them: each handler's V6
+            # tail must leave TX with exactly one 0x01 (the pre-load for
+            # the next command) and RX empty. If those invariants are
+            # ever violated, we want to see the resulting Report J/R
+            # immediately, not paper over it.
+            #
+            # If a bug ever causes orphan bytes here, you'll see the
+            # next command misbehave — which is the correct signal to
+            # go find the handler that didn't clean up after itself.
+            # ──────────────────────────────────────────────────────────────
+
         else:
             # Nothing to do, so check if time to save the log
             if time.ticks_us() - ts < 2_000_000:
