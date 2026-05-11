@@ -588,32 +588,28 @@ def MQ_BUSY():
     MQ.exec("set(y, 0)")
 
 
-def WAIT_TX_RECEIVED():
-
-    global MQ
-
-    while MQ.tx_fifo() != 0:
-        pass
-
-
-def EMPTY_TX_FIFO():
- 
-    global MQ
- 
-    while MQ.tx_fifo() != 0:
-        MQ.exec("pull (noblock)")
-        MQ.exec("mov (osr, null)")
-        
-    return
-
-def EMPTY_RX_FIFO():
-    
-    global MQ
-    
-    while MQ.rx_fifo() != 0:
-        MQ.get()
-
-    return
+# ─── DUAL-PORT MIGRATION: retired single-port helpers ────────────────────
+# Three helper functions are gone from the file at this point:
+#
+#   WAIT_TX_RECEIVED()  was:  while MQ.tx_fifo() != 0: pass
+#   EMPTY_TX_FIFO()     was:  while MQ.tx_fifo() != 0: pull(noblock); mov(osr,null)
+#   EMPTY_RX_FIFO()     was:  while MQ.rx_fifo() != 0: MQ.get()
+#
+# They were idiomatic single-port plumbing for the per-command "wait
+# until Z80 has read everything, then drain RX of any echoes" cycle.
+# In dual-port we either don't need them (Y register pacing handles
+# most cases) or we inline them at the small number of remaining
+# callsites — both for clarity and to avoid encouraging copy-paste of
+# the old pattern.
+#
+# Every callsite has been migrated:
+#   - SEND_MSG / SEND_MSG2 / SEND_MSG_PROMPT_YN tails  (stage 6)
+#   - PRINT_IO / PROCESS_CMD tails  (stage 5)
+#   - ListMenu tail  (stage 7)
+#   - TS2068_IO unrecognized-cmd branch + bottom-of-loop  (stage 4)
+#   - CHK_STATUS watchdog cleanup  (stage 7)
+#   - ZX48_IO unrecognized-cmd + post-mode cleanup  (stage 7)
+# ─────────────────────────────────────────────────────────────────────────
 
 
 def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
@@ -711,10 +707,14 @@ def CHK_STATUS(secs):                                                           
             MQ.exec("push (noblock)")
             kill = True
              
-        EMPTY_RX_FIFO()
-        EMPTY_TX_FIFO()
+        # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
+        while MQ.rx_fifo() != 0:
+            MQ.get()
+        while MQ.tx_fifo() != 0:
+            MQ.exec("pull (noblock)")
+            MQ.exec("mov (osr, null)")
         MQ.active(0)
-        
+
         LOG("TX/RX FIFO successfully cleared. Operation finished", 0)
         
         BLINK_ERROR()
@@ -1107,7 +1107,9 @@ def MOUNT_FILE(f_name, remounting=False):                                       
     else:
         msg = "Wrong filename while mounting: %s" % f_name
         err_level = 2
-        
+
+    # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────────
+    DEACTIVATE_SD()
     ACTIVATE_MQ()
     LOG(msg, err_level)
     
@@ -1709,19 +1711,31 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     prompt2 = "), (B)ack" + nl + "or (F)orward a page, (N)=quit?"
     letters = "0123456789QWERTY"
 
-    EMPTY_RX_FIFO()
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # Removed leading EMPTY_RX_FIFO() — at this point the Z80 hasn't been
+    # told to read yet, so RX has nothing in it. We drain RX AFTER setting
+    # ready (Z80 may then dump stale keystrokes from prior input).
+    #
+    # Removed wrt(0x40) "Read continue" from start of every loop iteration
+    # — the continue flag now lives on $0F via Y register (kept at READY
+    # for the entire session by MQ_READY() below).
+    # ─────────────────────────────────────────────────────────────────────
     wrt = MQ.put
     Init = True
     sel = -1
     pgs = (n - 1) // nmax + 1
 
+    MQ_READY()                          # Y = READY → $0F polls succeed
+
+    while MQ.rx_fifo() != 0:            # Drain any pre-existing keystrokes
+        MQ.get()
+
     while idx < n:
         i = 0
         # Write screen
-        
-        wrt(0x40)   # Read continue
+
         if Init:
-            wrt(0x86)   # PRINT STRING WITH LOOP
+            wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
             wrt(1)      # BASIC return code
             Init = False
         else:
@@ -1764,8 +1778,11 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         for m in prompt2:
             wrt(m)
             
-        wrt(0x00)       # End of this string
-        wrt(0x40)       # First 0x40; wait for keypress
+        wrt(0x00)       # End of this string (Z80 displays + waits for key)
+        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
+        # No wrt(0x40) "wait for keypress" — $0F continue is signalled
+        # via Y register (still at READY from MQ_READY() above).
+        # ──────────────────────────────────────────────────────────────
         ch = MQ.get()   # Get a key
         if ch == 78:    # 'N' then done (ROM ended the loops)
             return -1
@@ -1777,7 +1794,10 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         elif ch in LISTMENU_CHOICES:
             j = idx + LISTMENU_CHOICES[ch]
             if j < n:
-                wrt(0x40)   # Start last string
+                # ─── DUAL-PORT MIGRATION ──────────────────────────────
+                # No wrt(0x40) "Start last string" — same rationale as
+                # the other removed wrt(0x40)s in this function.
+                # ──────────────────────────────────────────────────────
                 wrt(ch)
                 # Erase bottom two lines
                 for b in range(32):
@@ -1805,8 +1825,11 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             wrt(m)
             
     wrt(0x03) # End string loop
-    WAIT_TX_RECEIVED()
-    EMPTY_RX_FIFO()
+    # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
+    while MQ.tx_fifo() != 0:
+        pass
+    while MQ.rx_fifo() != 0:
+        MQ.get()
 
     return sel
 
@@ -1982,8 +2005,12 @@ def NEW_TAP(pre, cmd):
         LOG("New empty file:%s" % filename, 0)
         os.chdir(TSP.cur_path)
         DIR_FILES()
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
         ACTIVATE_MQ()
     except:
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
         ACTIVATE_MQ()
         msg = "Can't create new file: "
         LOG(msg + filename, 2)
@@ -2161,10 +2188,11 @@ def BLKRCV(pre, cmd):                                                           
     led.value(1)
     
     if TSP.f_name[-4:].upper() == ".DCK":
-        
-        wrt(0x40)
+
+        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
         wrt(status)
-        
+        MQ_READY()
+
         try:
             
             with open("/TMP/temp.bin", "rb") as file:
@@ -2190,9 +2218,10 @@ def BLKRCV(pre, cmd):                                                           
             status = _3_F_Invalid_file
             BLINK_ERROR()
         
-        wrt(0x40)
+        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
         wrt(status)
-        
+        MQ_READY()
+
         if (status == _1_OK):
             
             rd_offset = par2
@@ -2279,6 +2308,8 @@ def ChangeDir(potential_new_path, SDactive = False):
         LOG(message, 2)
             
     if not SDactive:
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
         ACTIVATE_MQ()
 
     return status, message
@@ -2505,6 +2536,8 @@ def GETHELP(pre, cmd):                                                 # Shows T
                     st = _3_F_Invalid_file
                     lv = 1 # warning
 
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
         ACTIVATE_MQ()
 
     else:
@@ -2874,13 +2907,15 @@ def MDIR(pre, cmd):                                                             
                     pass
 
             except OSError:
-                
+
                 message = "MD: OS error creating: "
                 LOG(message + name, 2)
                 status = _4_Q_Parameter
-        
+
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
         ACTIVATE_MQ()
-    
+
     if (status == _1_OK or status == _7_8_EOF) and par1 == 1 and par2 == 0:
         # Change to new DIR with show path option
         pre = [0] * 10
@@ -3303,13 +3338,15 @@ def RM(pre, cmd):
             LOG(message + name, 0)
 
         except OSError:
-            
+
             message = "OS error removing: "
             status = _4_Q_Parameter
             LOG(message + name, 2)
 
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
         ACTIVATE_MQ()
-    
+
     if not sent:
         SEND_MSG(message, name, status)
     
@@ -4245,12 +4282,20 @@ def ZX48_IO(pre):                                                               
     
     par1, par2 = PARAMS(pre)
 
-    MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT), in_base=Pin(2, Pin.IN), jmp_pin=Pin(11), sideset_base=Pin(12, Pin.OUT))
+    # ─── DUAL-PORT MIGRATION: ZX48_IO SM creation ─────────────────────────
+    # Same change as ACTIVATE_MQ: TS_IO -> TS_IO_DUAL, 15 MHz -> 30 MHz,
+    # add Y=READY initialization after activation. Without this, ZX
+    # Spectrum mode would NameError on TS_IO (we removed that import in
+    # stage 1) and even if imported wouldn't work because of the bus
+    # protocol mismatch.
+    # ─────────────────────────────────────────────────────────────────────
+    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT), in_base=Pin(2, Pin.IN), jmp_pin=Pin(11), sideset_base=Pin(12, Pin.OUT))
     MQ.active(0)
-    
+
     utime.sleep(0.01)
     MQ.active(1)
-    
+    MQ.exec("mov(y, invert(null))")    # Y = READY for the entire ZX session
+
     LOG("Starting ZX Mode...", 0)
 
     ts = time.ticks_us()
@@ -4296,12 +4341,16 @@ def ZX48_IO(pre):                                                               
             
             else:
                 LOG("Unrecognized ZX command", 1)
-                EMPTY_RX_FIFO()
-                EMPTY_TX_FIFO()
+                # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
+                while MQ.rx_fifo() != 0:
+                    MQ.get()
+                while MQ.tx_fifo() != 0:
+                    MQ.exec("pull (noblock)")
+                    MQ.exec("mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
-                
+
                 LOG("Cleared TX/RX FIFO after unrecognized ZX command: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
         else:
@@ -4322,13 +4371,16 @@ def ZX48_IO(pre):                                                               
     if MQ.tx_fifo() != 0:
         print("MQ FIFO: ", MQ.tx_fifo())
         LOG("TX FIFO not empty after ZX mode. Trying to force cleanup", 1)
-        
-        EMPTY_TX_FIFO()
-            
+
+        # ─── DUAL-PORT MIGRATION: inline TX drain ─────────────────────────
+        while MQ.tx_fifo() != 0:
+            MQ.exec("pull (noblock)")
+            MQ.exec("mov (osr, null)")
+
         MQ.active(0)
         utime.sleep(.01)
         MQ.active(1)
-        
+
         LOG("TX FIFO succesfully cleared before returning from ZX mode", 0)
         
     else:
