@@ -3649,9 +3649,11 @@ def ZX48(pre, cmd):                                                           # 
     M.append(nl)
     M.append('Use "OUT 244,3" to switch to the')
     M.append('Spectrum ROM. To return to Timex')
-    M.append('mode, use OUT 10,100 followed by')
-    M.append('OUT 244,0 and then press the TS ')
-    M.append('Reset button on the TS-Pico.')
+    M.append('mode, do OUT 244,0 then press the')
+    M.append('TS-Pico Reset button. (OUT 10,100')
+    M.append('does not currently reach the Pico')
+    M.append('via the bus protocol; reset is')
+    M.append('required to exit ZX48 mode.)')
     M.append(nl)
     msg = "".join(M)
 
@@ -4543,19 +4545,27 @@ def ZX48_IO(pre):                                                               
                 log_entries.append(new_logs) # for now
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                       
-            elif a == 100:                                                  # OUT 10,100 from 2068 exits ZX mode (NOT 'X'=88; comment was misleading)
+            elif a == 100:                                                  # OUT 10,100 from 2068 — DEAD CODE on current hardware (see note below)
+                # ─── DUAL-PORT MIGRATION: ZX48 exit-via-byte is unreachable ─
+                # Confirmed empirically: `OUT 10,100` on the 2068 executes
+                # cleanly but the byte never reaches the Pico's PIO. Port
+                # $0A (decimal 10) is not routed through /PICOSEL on the
+                # TS-Pico hardware — only ports $0E and $0F are. So this
+                # `elif a == 100` branch is unreachable in practice, and
+                # the only way out of ZX48 mode is the TS-Pico reset button.
+                #
+                # The branch is kept as defensive code in case a future
+                # hardware revision routes more ports through PIO, or in
+                # case some other code path forces a byte 100 into the
+                # RX FIFO. The TSP.zx48 = False clears the re-entry guard
+                # in TS2068_IO so this would work correctly IF reached.
+                #
+                # Help text in the ZX48() handler tells users to use the
+                # reset button as the canonical exit. See also
+                # docs/OPEN_QUESTIONS.md if we want to revisit routing.
+                # ──────────────────────────────────────────────────────────
                 LOG("Ending ZX mode. Free mem: %d. Returning to TS processing." % gc.mem_free(), 0)
                 gc.collect()
-
-                # ─── DUAL-PORT MIGRATION: clear TSP.zx48 on exit ──────────
-                # Without this, ZX48_IO returns to TS2068_IO but the
-                # `if TSP.zx48: ZX48_IO(pre)` re-entry guard stays True
-                # forever, so the next BASIC command's PROCESS_CMD path
-                # immediately drops back into ZX48_IO after returning.
-                # From the user's perspective: "Pico stalled, doesn't
-                # respond to TPI commands" — but actually each command
-                # runs, it just gets ignored on the next iteration.
-                # ──────────────────────────────────────────────────────────
                 TSP.zx48 = False
 
                 break

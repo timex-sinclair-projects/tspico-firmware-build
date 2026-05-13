@@ -16,6 +16,36 @@ remove it from here and link the issue.
 
 ## Open
 
+### `OUT 10,100` doesn't reach the Pico — ZX48 exit-by-byte unreachable
+
+**Confirmed empirically** during ryan-dual-port-merge testing. After
+`SAVE "tpi:zx48"`, the Pico enters ZX48_IO and listens for byte 76
+(`'L'`), 83 (`'S'`), or 100 (decimal). The 2068 documentation says to
+do `OUT 10,100` (send byte 100 to port `$0A`) to exit. User ran it
+successfully on the 2068 side, but TLM trace showed nothing reached
+the Pico's RX FIFO.
+
+Root cause is hardware-side: port `$0A` (decimal 10) is NOT routed
+through the /PICOSEL line on the TS-Pico board. Only `$0E` (data) and
+`$0F` (status) trigger the PIO. So bytes sent to other ports go
+nowhere from the Pico's perspective.
+
+This means **the TS-Pico reset button is currently the only reliable
+way to exit ZX48 mode.** The help text printed by the `ZX48` handler
+has been updated to reflect this. The `elif a == 100: break` branch
+in `ZX48_IO` is kept as defensive code (with `TSP.zx48 = False`
+cleanup if ever reached), but is dead in practice.
+
+**Questions worth asking Ryan:**
+- Was `OUT 10,100` intended to work, or was it speculative code for
+  a future hardware revision?
+- Is there a small PIO/hardware change that could route additional
+  ports (like `$0A`) through the Pico's bus handler so the by-byte
+  exit could actually work?
+- Should we add a UART-style "magic word on $0E" exit (e.g., a
+  specific 4-byte sequence) as a software-only alternative to the
+  reset button?
+
 ### SEND_MSG2 produces a blank-screen-then-keypress-wait for short messages
 
 **Symptom.** When `SEND_MSG2` is invoked with a relatively short message
