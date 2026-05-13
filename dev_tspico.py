@@ -4508,18 +4508,23 @@ def ZX48_IO(pre):                                                               
     MQ.active(1)
     MQ.exec("mov(y, invert(null))")    # Y = READY for the entire ZX session
 
+    TLM("ZX48_IO enter", "par1=%d par2=%d ZX_TAPE_COMPAT=%s" % (
+        par1, par2, TSP.ZX_TAPE_COMPAT))
     LOG("Starting ZX Mode...", 0)
 
     ts = time.ticks_us()
-    
+
     while True:
-        
+
         if (MQ.rx_fifo()) != 0:
-            
+
             ts = time.ticks_us()
             a = MQ.get()
-            
+            TLM("ZX48_IO byte received", "a=%d (0x%02X)" % (a, a))
+
             if a == 76:                                                    # ASCII 'L' - for LOAD
+
+                TLM("ZX48_IO dispatching LOAD")
 
                 if TSP.ZX_TAPE_COMPAT:                                      # compatible-mode ZX Spectrum LOAD
 
@@ -4536,15 +4541,19 @@ def ZX48_IO(pre):                                                               
                     # 'regular' ZX Spectrum LOAD
                     LOG("Starting ZX LOAD", 0)
                     MQ, TSP, new_logs = LOAD_ZX(MQ, TSP)
-                
+
+                TLM("ZX48_IO LOAD returned")
+
             elif a == 83:                                                  # ASCII 'S' - for SAVE
-                
+
+                TLM("ZX48_IO dispatching SAVE")
                 LOG("Starting ZX SAVE", 0)
                 MQ, TSP, new_logs = SAVE_ZX(MQ, TSP)
                 # log_entries += new_logs
                 log_entries.append(new_logs) # for now
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
-                      
+                TLM("ZX48_IO SAVE returned")
+
             elif a == 100:                                                  # OUT 10,100 from 2068 — DEAD CODE on current hardware (see note below)
                 # ─── DUAL-PORT MIGRATION: ZX48 exit-via-byte is unreachable ─
                 # Confirmed empirically: `OUT 10,100` on the 2068 executes
@@ -4564,13 +4573,15 @@ def ZX48_IO(pre):                                                               
                 # reset button as the canonical exit. See also
                 # docs/OPEN_QUESTIONS.md if we want to revisit routing.
                 # ──────────────────────────────────────────────────────────
+                TLM("ZX48_IO byte 100 received — exiting (rare; usually unreachable)")
                 LOG("Ending ZX mode. Free mem: %d. Returning to TS processing." % gc.mem_free(), 0)
                 gc.collect()
                 TSP.zx48 = False
 
                 break
-            
+
             else:
+                TLM("ZX48_IO unrecognized byte — draining FIFOs and continuing", "a=%d" % a)
                 LOG("Unrecognized ZX command", 1)
                 # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
                 while MQ.rx_fifo() != 0:
@@ -4613,6 +4624,8 @@ def ZX48_IO(pre):                                                               
         MQ.active(1)
 
         LOG("TX FIFO succesfully cleared before returning from ZX mode", 0)
-        
+
     else:
         LOG("Returning from ZX mode; TX FIFO is empty: ", 0)
+
+    TLM("ZX48_IO exit", "TSP.zx48=%s" % TSP.zx48)
