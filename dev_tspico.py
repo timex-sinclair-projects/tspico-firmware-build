@@ -4100,11 +4100,25 @@ def TS2068_IO():                                                         # Main 
     # gc.collect()
     # LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
+    # ─── DUAL-PORT MIGRATION: prefer dev_extcmd override if present ──────
+    # The frozen TS/extcmd.py has a `from tspico import ...` line that
+    # fails on the current module layout (helpers live in TS.tspico or
+    # dev_tspico, not bare `tspico`). The fix lives in TS/extcmd.py on
+    # this branch but needs a UF2 rebuild to take effect, since
+    # TS/extcmd.py is frozen. The parallel /dev_extcmd.py on flash root
+    # provides a dev-mode override (same pattern as dev_tspico.py
+    # shadowing TS.tspico). Try the override first.
+    # ─────────────────────────────────────────────────────────────────────
     try:
-        from TS.extcmd import EXT_SA_FUNCT
-    except Exception as e:
-        LOG(f"Unable to import external commands; using emtpy SA_EXT_CMD dictionary: {e}", 0)
-        EXT_SA_FUNCT = {}
+        from dev_extcmd import EXT_SA_FUNCT
+        LOG("Loaded EXT_SA_FUNCT from /dev_extcmd.py override", 0)
+    except ImportError:
+        try:
+            from TS.extcmd import EXT_SA_FUNCT
+            LOG("Loaded EXT_SA_FUNCT from frozen TS.extcmd", 0)
+        except Exception as e:
+            LOG("Unable to import external commands; using empty SA_EXT_CMD dictionary: " + str(e), 0)
+            EXT_SA_FUNCT = {}
 
     LOG("After Ext cmd load, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
