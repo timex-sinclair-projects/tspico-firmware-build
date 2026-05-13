@@ -3922,7 +3922,9 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
 
         elif cmd_word in EXT_SA_FUNCT:                                                                                # Is an external cmd?
             EXEC = EXT_SA_FUNCT[cmd_word]
+            TLM("PROCESS_CMD dispatching EXT_SA_FUNCT", "cmd_word=%r" % cmd_word)
             EXEC(MQ, TSP, pre, cmd)
+            TLM("PROCESS_CMD EXT_SA_FUNCT returned", "cmd_word=%r" % cmd_word)
 
         else:
             msg = "Unrecognized command: %s" % cmd_exec
