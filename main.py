@@ -14,22 +14,32 @@ from machine import freq, Pin
 # subject to the chosen setting.
 #
 # At runtime you can also toggle this from the REPL:
-#       import TS.tspico
+#       import TS.tspico                  # if using the frozen module
 #       TS.tspico.TLM_ENABLED = True
+#   or
+#       import dev_tspico                 # if using the dev override
+#       dev_tspico.TLM_ENABLED = True
 import TS.tspico
 TS.tspico.TLM_ENABLED = True
 
-# Dev override: if /dev_tspico.py is present on flash, use that instead
-# of the frozen TS.tspico. Lets you iterate on a single file without
-# rebuilding the UF2. To revert, just delete /dev_tspico.py from flash.
-# /dev_tspico.py is a renamed copy of TS/tspico.py. It still imports
-# `from TS.tspico_io import ...` etc — those resolve to the frozen
-# modules because no /TS/ folder shadows them.
+# Dev override: if /dev_tspico.{py,mpy} is present on flash, use that
+# instead of the frozen TS.tspico. Lets you iterate on a single file
+# without rebuilding the UF2. To revert, just delete /dev_tspico.* from
+# flash. The .mpy variant is preferred (skips the parser, saves ~80%
+# RAM at import) — produced by ./build-dev-mpy.sh locally or by CI.
+#
+# CRITICAL: when the dev override loads, the TLM_ENABLED flag we set
+# above is on TS.tspico, NOT dev_tspico. We must mirror it onto the
+# module that's actually running, otherwise diagnostic prints are
+# silently dropped. (Easy mistake — caught during stage-9 testing.)
 try:
     from dev_tspico import TS2068_IO
-    print("[DEV] Using /dev_tspico.py override")
+    import dev_tspico
+    dev_tspico.TLM_ENABLED = TS.tspico.TLM_ENABLED
+    print("[DEV] Using /dev_tspico override (TLM=%s)" % dev_tspico.TLM_ENABLED)
 except ImportError:
     from TS.tspico import TS2068_IO
+    print("[DEV] Using frozen TS.tspico (TLM=%s)" % TS.tspico.TLM_ENABLED)
 
 U6_EN = Pin(12, Pin.OUT, Pin.PULL_UP)
 WAIT = Pin(14, Pin.OUT, Pin.PULL_DOWN)
