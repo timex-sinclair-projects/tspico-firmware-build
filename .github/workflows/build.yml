@@ -95,6 +95,35 @@ jobs:
           path: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
           retention-days: 30
 
+      # The Pico's MicroPython parser is RAM-hungry. Once dev_tspico.py
+      # grew past ~4500 lines (post stage-9 telemetry additions), parsing
+      # it at boot started to OOM. Pre-compiled .mpy bytecode skips the
+      # parser entirely and is ~80% smaller besides. We re-use the
+      # mpy-cross binary built earlier in this job (line ~65) so the
+      # bytecode version matches the UF2's MicroPython exactly.
+      #
+      # Step is conditional: only branches with dev_tspico.py present
+      # produce the artifact. On main (which uses the frozen TS.tspico
+      # via the manifest) the file is absent and this step is skipped.
+      - name: Compile dev_tspico.mpy (if dev_tspico.py present)
+        if: hashFiles('dev_tspico.py') != ''
+        run: |
+          MPYC="${{ github.workspace }}/micropython/mpy-cross/build/mpy-cross"
+          "$MPYC" --version
+          "$MPYC" dev_tspico.py
+          ls -la dev_tspico.mpy
+          echo ""
+          echo "size comparison:"
+          du -h dev_tspico.py dev_tspico.mpy
+
+      - name: Upload dev_tspico.mpy artifact
+        if: hashFiles('dev_tspico.py') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev_tspico-mpy
+          path: dev_tspico.mpy
+          retention-days: 30
+
       - name: Upload build logs (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
