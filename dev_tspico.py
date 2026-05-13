@@ -4543,10 +4543,21 @@ def ZX48_IO(pre):                                                               
                 log_entries.append(new_logs) # for now
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                       
-            elif a == 100:                                                  # ASCII 'X' - for EXIT. David, change this to whatever you thing suits better
+            elif a == 100:                                                  # OUT 10,100 from 2068 exits ZX mode (NOT 'X'=88; comment was misleading)
                 LOG("Ending ZX mode. Free mem: %d. Returning to TS processing." % gc.mem_free(), 0)
                 gc.collect()
-                
+
+                # ─── DUAL-PORT MIGRATION: clear TSP.zx48 on exit ──────────
+                # Without this, ZX48_IO returns to TS2068_IO but the
+                # `if TSP.zx48: ZX48_IO(pre)` re-entry guard stays True
+                # forever, so the next BASIC command's PROCESS_CMD path
+                # immediately drops back into ZX48_IO after returning.
+                # From the user's perspective: "Pico stalled, doesn't
+                # respond to TPI commands" — but actually each command
+                # runs, it just gets ignored on the next iteration.
+                # ──────────────────────────────────────────────────────────
+                TSP.zx48 = False
+
                 break
             
             else:
