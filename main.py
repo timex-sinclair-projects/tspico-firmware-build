@@ -63,28 +63,46 @@ log_msg = ""
 
 # utime.sleep(.5)
 
+# ---------------- BELT-AND-SUSPENDERS TOP-LEVEL HANDLER ----------------
+# Wrap TS2068_IO() so any unhandled exception gets logged to
+# /activity.log instead of dropping the Pico to a REPL with no
+# diagnostic trace persisted to flash.
+#
+# Without this wrapper, an OSError out of _thread.start_new_thread (or
+# any other unhandled exception in TS2068_IO) would propagate to here,
+# Python prints a traceback to USB serial and exits. From the user's
+# perspective the Pico "locks up" — LED stops blinking, 2068 gets J on
+# the next command, and the only diagnostic is whatever was already on
+# the USB serial console (often nothing if telemetry was off).
+#
+# With this wrapper, the exception is captured to /activity.log along
+# with a timestamp, then we BREAK the outer while loop so we don't
+# infinite-loop on the same exception. The Pico will be quiescent but
+# the post-mortem will be on flash, retrievable via Thonny.
+# ───────────────────────────────────────────────────────────────────────
+
 while True:
-    
+
     collect()
-    TS2068_IO()
-    
-#     try:
-#         TS2068_IO()
-#         
-#     except Exception as err:
-#         
-#         try:
-#             close("activity.log")
-#         except:
-#             pass
-#         
-#         with open("/activity.log", "a") as log:
-#             
-#             log_msg += "[" + str(time.ticks_us()) + "] "
-#             log_msg += "FATAL ERROR!!!:"
-#             
-#             log.write(log_msg)
-#             sys.print_exception(err, log)
-#             
-#         break        
+
+    try:
+        TS2068_IO()
+
+    except Exception as err:
+
+        try:
+            with open("/activity.log", "a") as log:
+                log_msg = "[%d] FATAL ERROR in TS2068_IO:\n" % time.ticks_us()
+                log.write(log_msg)
+                sys.print_exception(err, log)
+        except:
+            # If we can't even write to flash, dump to USB serial as
+            # last resort and break the loop.
+            pass
+
+        # Also print to USB serial for live debugging when attached.
+        print("\n[FATAL] TS2068_IO raised %r — see /activity.log" % err)
+        sys.print_exception(err)
+
+        break
         
