@@ -1,5 +1,5 @@
---- tspico-ryan.py	2026-05-07 01:57:53
-+++ dev-tspico.py	2026-05-11 16:14:16
+--- tspico-ryan.py	2026-05-13 12:39:08
++++ dev_tspico.py	2026-05-13 12:39:08
 @@ -327,10 +327,38 @@
  
  from TS.sdcard import *
