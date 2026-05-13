@@ -622,10 +622,33 @@ def ACTIVATE_MQ(ready=True):                                                    
 
     if ready:
         MQ.active(1)
-        # Y = 0xFFFFFFFF → $0F always returns 0xFF → D6=1=ready.
-        # Stays at READY for the entire session.
-        MQ.exec("mov(y, invert(null))")
-        TLM("ACTIVATE_MQ exit", "SM active, Y=READY (TX FIFO empty)")
+        # ─── DUAL-PORT MIGRATION: Y stays at BUSY here ──────────────────
+        # We INTENTIONALLY do NOT set Y=READY in this function. Caller
+        # MUST load any response bytes into TX and then call MQ_READY()
+        # to signal ready, in that order.
+        #
+        # The old behavior was:
+        #     MQ.exec("mov(y, invert(null))")    # Y=READY immediately
+        # which created a race: between this exec and the caller's
+        # response-byte load, the Z80 (which has been polling $0F
+        # throughout any preceding SD operation) sees ready, immediately
+        # reads $0E, finds TX empty, gets 0x00 → Report J.
+        #
+        # The race was theoretical for handlers that respond instantly
+        # (TPI:DIR, etc.) but became reliably reproducible for handlers
+        # that do SD round-trips before responding (TPI:MD, TPI:RM,
+        # MOUNT_FILE, NEW_TAP, GETHELP, ...). The 575ms SD window is
+        # plenty of time for the Z80 to win the race against our
+        # Python code path to SEND_MSG.
+        #
+        # Now: SM is active, Y=0 (BUSY), TX is empty. Caller does:
+        #     ACTIVATE_MQ()
+        #     # load response bytes via SEND_MSG() or MQ.put(...)
+        #     MQ_READY()   # (or SEND_MSG calls this internally)
+        # Z80 sees BUSY on $0F until we're ready; protocol races
+        # eliminated.
+        # ────────────────────────────────────────────────────────────────
+        TLM("ACTIVATE_MQ exit", "SM active, Y=BUSY (TX FIFO empty)")
     else:
         TLM("ACTIVATE_MQ exit", "SM created but NOT active")
 
@@ -4106,20 +4129,27 @@ def TS2068_IO():                                                         # Main 
     DEACTIVATE_SD()
     ACTIVATE_MQ()
 
-    # ─── DUAL-PORT MIGRATION: boot-time status pre-load (V6 chain start) ──
+    # ─── DUAL-PORT MIGRATION: boot-time status pre-load + explicit ready ──
     # Pre-load a single 0x01 status byte into TX FIFO. The very first Z80
     # command will read this from $0E as its initial OK status. Every
     # command handler ends with its own MQ.put(0x01), so this chain
     # continues automatically across subsequent commands without needing
     # any further pre-loads from the dispatcher.
     #
-    # CRITICAL: this MQ.put(0x01) must happen ONCE, here, and not inside
+    # CRITICAL #1: this MQ.put(0x01) must happen ONCE, here, and not inside
     # ACTIVATE_MQ. Doing it inside ACTIVATE_MQ would also fire it on
     # every mid-command SD round-trip (MOUNT_FILE etc.), producing a
     # stray 0x01 that gets misread later in the protocol. This was
     # "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.
+    #
+    # CRITICAL #2: ACTIVATE_MQ no longer sets Y=READY (see its function
+    # body for the race-fix rationale). We MUST explicitly call MQ_READY()
+    # here AFTER loading the pre-load byte, so the Z80's $0F polls
+    # succeed and it can read the pre-loaded 0x01 from $0E. The order is
+    # non-negotiable: put-then-ready, never ready-then-put.
     # ─────────────────────────────────────────────────────────────────────
     MQ.put(0x01)
+    MQ_READY()
 
     # ─── DUAL-PORT MIGRATION: pre-open /assets/nofile.tap ─────────────────
     # OPEN_NOFILE_TAP caches a read handle to /assets/nofile.tap so that
@@ -4244,6 +4274,16 @@ def TS2068_IO():                                                         # Main 
                 # ──────────────────────────────────────────────────────────
                 DEACTIVATE_SD()
                 ACTIVATE_MQ() # Also fixes ENA_SD leaving MQ active with SD active as well
+                # ─── DUAL-PORT MIGRATION: V6 pre-load + ready for next cmd ─
+                # ACTIVATE_MQ now leaves Y=BUSY by default. We need to
+                # explicitly arm TX (status pre-load for the next command's
+                # pre-header phase) and then signal ready. The actual
+                # response for the just-completed SAVE was sent inside
+                # SAVE_TS via its own V6 chain; this pre-load is for the
+                # NEXT iteration of the main loop.
+                # ──────────────────────────────────────────────────────────
+                MQ.put(0x01)
+                MQ_READY()
 
                 if not save_aborted:
 
@@ -4309,6 +4349,10 @@ def TS2068_IO():                                                         # Main 
                     # ──────────────────────────────────────────────────────
                     DEACTIVATE_SD()
                     ACTIVATE_MQ()
+                    # V6 pre-load + ready for next cmd (see twin block
+                    # above; ACTIVATE_MQ leaves Y=BUSY now).
+                    MQ.put(0x01)
+                    MQ_READY()
 
                 led.value(0)
                 
