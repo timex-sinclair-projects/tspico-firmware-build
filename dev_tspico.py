@@ -1104,6 +1104,7 @@ def LOG(msg, level):                                                            
 
 def MOUNT_FILE(f_name, remounting=False):                                                    # Mount file from a LOAD "tpi:..." command 
                                                                                              # and performs actions according to file type
+    TLM("MOUNT_FILE enter", "f_name=%r remounting=%s" % (f_name, remounting))
     """
     Mount the given file f_name, and remounting the current file if the new
     mount fails. The remounting input is mainly for internal use when
@@ -1806,6 +1807,7 @@ def IDIR(pre, cmd):
     global files
     global TSP
 
+    TLM("IDIR enter")
     if len(files) == 0:
         SEND_MSG("Directory is empty:", public_path(), _1_OK, True)
         return
@@ -1978,6 +1980,7 @@ def PATH(pre, cmd):                                                             
 
     global TSP
     
+    TLM("PATH enter")
     par1, par2 = PARAMS(pre)
 
     if par1 == 0 and par2 == 0:
@@ -2016,6 +2019,7 @@ def TAPDIR(pre, cmd):                                                        # D
 
     global TSP
     
+    TLM("TAPDIR enter")
     par1, par2 = PARAMS(pre)
 
     if not isTapMounted():
@@ -2111,6 +2115,7 @@ def NEW_TAP(pre, cmd):
 
     global TSP
     
+    TLM("NEW_TAP enter")
     arg = getArgs(cmd)
     if arg == "":
         msg = "Name required for new .tap file"
@@ -2255,6 +2260,7 @@ def APPEND(pre, cmd):                                                           
 
     global TSP
     
+    TLM("APPEND enter")
     par1, par2 = PARAMS(pre)
     arg = getArgs(cmd)
     arg = arg.lower()
@@ -2314,6 +2320,7 @@ def BLKRCV(pre, cmd):                                                           
     global TSP
     global led
 
+    TLM("BLKRCV enter")
     _BUFSZ = 256
     buf = bytearray(_BUFSZ)
     mv = memoryview(buf)  # Faster indexing than bytearray
@@ -2399,6 +2406,7 @@ def ChangeDir(potential_new_path, SDactive = False):
     global TSP
     global MQ
 
+    TLM("ChangeDir enter", "path=%r SDactive=%s" % (potential_new_path, SDactive))
     status = _1_OK
     if not SDactive:
         ACTIVATE_SD()
@@ -2468,6 +2476,7 @@ def CDIR(pre, cmd):                                                             
     global alldirs
     global led
     
+    TLM("CDIR enter")
     status = _1_OK
     par1, par2 = PARAMS(pre)
  
@@ -2521,6 +2530,7 @@ def FWD(pre, cmd):                                                              
 
     global TSP
     
+    TLM("FWD enter")
     par1, par2 = PARAMS(pre)
     st = _1_OK
     forth = max(par2,1)
@@ -2883,6 +2893,7 @@ def GETLOG(pre, cmd):                                                 # Shows th
 
 def LOAD_CONFIG():
         
+    TLM("LOAD_CONFIG enter")
     init_values = {}
     defaulted = False
     
@@ -2944,6 +2955,7 @@ def LOAD_CONFIG():
 
 def LOGLEVEL(pre, cmd):
 
+    TLM("LOGLEVEL enter")
     """Display or set the log level"""
     # SAVE "tpi:loglevel"           - Report log level (CODE 0,0)
     # SAVE "tpi:loglevel"CODE 1,n   - Set log level to n (n>=0)
@@ -3009,6 +3021,7 @@ def MDIR(pre, cmd):                                                             
     global TSP
     global alldirs
     
+    TLM("MDIR enter")
     name = cmd[10:]
     message = "Created dir: "
     status = _1_OK
@@ -3074,6 +3087,7 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
     global BANK
     global ROM
     
+    TLM("MEMBOOT enter")
     par1, par2 = PARAMS(pre)
     new = "MEM=%d, PAGE=%d" % (par1, par2)
     
@@ -3149,6 +3163,7 @@ def MEMDOCK(pre, cmd):                                                   # Chang
     global BANK
     global ROM
     
+    TLM("MEMDOCK enter")
     par1, par2 = PARAMS(pre)
     mem,  page = getDock()
     old = "MEM=%d, PAGE=%d" % (mem, page)
@@ -3228,6 +3243,7 @@ def REW(pre, cmd):                                                              
 
     global TSP
     
+    TLM("REW enter")
     par1, par2 = PARAMS(pre)
     back = max(par2,1)
     st = _1_OK
@@ -3303,6 +3319,7 @@ def ROMPATCH(pre, cmd):                                                         
     
     # was /TS/rompatch.tap; moved to /assets/ during dual-port migration
     # to avoid being shadowed by the frozen TS/ package.
+    TLM("ROMPATCH enter")
     if MOUNT_FILE("/assets/rompatch.tap"):
         # ACTIVATE_MQ()
         SEND_MSG("System prepared to patch ROM.", 'Use LOAD "" to start.', _1_OK)
@@ -3408,6 +3425,7 @@ def RM(pre, cmd):
     global files_upper
     global alldirs
     
+    TLM("RM enter")
     name = cmd[10:]
     status = _1_OK
     message = ""
@@ -3497,6 +3515,7 @@ def SYS_CMD(pre, cmd):                                                          
     global led
     global patch
     
+    TLM("SYS_CMD enter")
     par1, par2 = PARAMS(pre)
     
     if par1 == 1 and par2 == 0:                                                                           # CODE 1,0 -> Retrieve ROM patch from firmware
@@ -3536,6 +3555,7 @@ def UNMOUNT(pre, cmd):                                                          
     
     global TSP
     
+    TLM("UNMOUNT enter")
     SEND_MSG("Unmounting file. ", "", _1_OK)
     
     TSP.f_name = ""
@@ -3571,6 +3591,7 @@ def VERB_TOGGLE(pre, cmd):                                                      
 
     global TSP
     
+    TLM("VERB_TOGGLE enter")
     par1, par2 = PARAMS(pre)
     arg = getArgs(cmd)
     arg = arg.lower()
@@ -3626,6 +3647,7 @@ def ZX48(pre, cmd):                                                           # 
 
     global TSP
     
+    TLM("ZX48 enter")
     par1, par2 = PARAMS(pre)
     nl = chr(13)
 
@@ -3665,6 +3687,7 @@ def ZX48(pre, cmd):                                                           # 
 
 
 def NOP(pre, cmd):
+    TLM("NOP enter")
     """A 'no operation' command"""
 
     global MQ
