@@ -1150,7 +1150,7 @@ def MOUNT_FILE(f_name, remounting=False):                                       
             if f_name[-4:].upper() == ".DCK":
             
                 if DCK_IMAGE():
-                    if not COPY_FILE("/TS/dckupdate.tap", "/TMP/temp.tap"):       # Special 'seudo' TAP that contains Flash/SRAM DCK update program
+                    if not COPY_FILE("/assets/dckupdate.tap", "/TMP/temp.tap"):       # was /TS/dckupdate.tap; moved to /assets/ during dual-port migration to avoid frozen-package shadow
                         # The trick here and with romupdate.tap is that we copy this to 
                         # temp.tap but don't change the TSP.f_name, and the next non-tpi
                         # LOAD"" will pull from temp.tap.
@@ -1168,7 +1168,7 @@ def MOUNT_FILE(f_name, remounting=False):                                       
                 len_lo = totlen - (len_hi * 256)
 
                 try:
-                    with open("/TS/romupdate.tap", "rb") as f_in:                 # Same for updating ROM images. We open the seudo TAP, as we need to update it
+                    with open("/assets/romupdate.tap", "rb") as f_in:                 # was /TS/romupdate.tap; same move as dckupdate.tap above
                         buf = bytearray(f_in.read())
                     
                     # Parse the romupdate.tap file blocks to get the offset of block 3
@@ -3301,7 +3301,9 @@ def ROMPATCH(pre, cmd):                                                         
     global TSP
     global led
     
-    if MOUNT_FILE("/TS/rompatch.tap"):
+    # was /TS/rompatch.tap; moved to /assets/ during dual-port migration
+    # to avoid being shadowed by the frozen TS/ package.
+    if MOUNT_FILE("/assets/rompatch.tap"):
         # ACTIVATE_MQ()
         SEND_MSG("System prepared to patch ROM.", 'Use LOAD "" to start.', _1_OK)
     else:
