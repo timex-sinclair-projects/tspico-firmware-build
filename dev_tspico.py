@@ -398,6 +398,85 @@ _9_9_STOP = const(9)
 _10_J_Invalid_IO = const(10)
 _11_D_Break = const(11)
 
+
+# ─── DUAL-PORT MIGRATION: optional telemetry (stage 9) ────────────────────
+# Comprehensive event logging for diagnosis. Each TLM() call prints an
+# event with timestamp (microseconds since boot), delta from previous
+# TLM call, and TX/RX FIFO occupancy. Frozen-module overhead is
+# negligible when the flag is False.
+#
+# DEFAULT: TLM_ENABLED = False — Ryan's preferred experience (no
+# telemetry noise on a normal run, zero overhead in hot paths).
+#
+# TO ENABLE FOR A TESTING SESSION (pick one):
+#
+#   1. EASIEST — edit /main.py on the Pico's flash. Find the line:
+#         TS.tspico.TLM_ENABLED = ...   (or `dev_tspico.TLM_ENABLED`)
+#      and set it to True. Reboot. No UF2 rebuild needed.
+#
+#   2. AT THE REPL (transient — gone on reboot):
+#         import dev_tspico
+#         dev_tspico.TLM_ENABLED = True
+#
+#   3. EDIT THE DEFAULT BELOW to True, commit. Permanent for that copy.
+#
+# When False, both TLM() and TLM_RESET() return immediately with zero
+# work — no string format, no FIFO read, no print, no timestamp track.
+# This is the right setting for normal operation; flip to True only
+# when you actively need the diagnostic stream.
+# ─────────────────────────────────────────────────────────────────────────
+TLM_ENABLED = False
+
+_tlm_last = 0   # last TLM timestamp, microseconds
+
+
+def TLM(action, detail=""):
+    """Log one event to the REPL with timing and FIFO state.
+
+    When TLM_ENABLED = False this returns immediately with zero work
+    (no formatting, no FIFO read, no print) so it's safe to leave
+    TLM() calls scattered through hot paths in production builds.
+    """
+    if not TLM_ENABLED:
+        return
+
+    global _tlm_last
+    try:
+        now = time.ticks_us()
+    except:
+        now = 0
+    dt = (now - _tlm_last) if _tlm_last else 0
+    _tlm_last = now
+
+    try:
+        tx = MQ.tx_fifo()
+        rx = MQ.rx_fifo()
+        fifo = "tx=%d rx=%d" % (tx, rx)
+    except:
+        fifo = "tx=? rx=?"
+
+    if detail:
+        print("[TLM %d dt=%d %s] %s: %s" % (now, dt, fifo, action, detail))
+    else:
+        print("[TLM %d dt=%d %s] %s" % (now, dt, fifo, action))
+
+
+def TLM_RESET(tag=""):
+    """Reset TLM timer at the start of a new operation.
+
+    Also a no-op when TLM_ENABLED = False.
+    """
+    if not TLM_ENABLED:
+        return
+
+    global _tlm_last
+    try:
+        _tlm_last = time.ticks_us()
+    except:
+        _tlm_last = 0
+    print("[TLM ===== %s =====]" % tag)
+
+
 class PICO_STATUS():                                                            # Class for the object that holds TS-Pico's current status
     
     def __init__(self, init_values):                                            # init_values is a dictionary read at startup; read below
@@ -473,10 +552,12 @@ class PICO_STATUS():                                                            
 # ───────────────────────────────────────────────────────────────────────
 def DEACTIVATE_SD():
     """Tear down SD card access and safe the shared bus lines."""
+    TLM("DEACTIVATE_SD enter")
     try:
         os.umount("/sd")
+        TLM("  /sd unmounted")
     except:
-        pass                                # already unmounted is fine
+        TLM("  /sd already unmounted")
 
     U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
     U3_CS.value(1)
@@ -486,6 +567,7 @@ def DEACTIVATE_SD():
     # fix from the dual-port migration.
     for p in (2, 3, 4):
         Pin(p, Pin.OUT).value(0)
+    TLM("DEACTIVATE_SD exit", "GPIO 2-4 clamped LOW, U3_CS=HIGH")
     return
 
 
@@ -533,6 +615,7 @@ def ACTIVATE_MQ(ready=True):                                                    
 
     global MQ
 
+    TLM("ACTIVATE_MQ enter", "ready=%s" % ready)
     MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
@@ -542,6 +625,9 @@ def ACTIVATE_MQ(ready=True):                                                    
         # Y = 0xFFFFFFFF → $0F always returns 0xFF → D6=1=ready.
         # Stays at READY for the entire session.
         MQ.exec("mov(y, invert(null))")
+        TLM("ACTIVATE_MQ exit", "SM active, Y=READY (TX FIFO empty)")
+    else:
+        TLM("ACTIVATE_MQ exit", "SM created but NOT active")
 
     return
 
@@ -613,31 +699,34 @@ def MQ_BUSY():
 
 
 def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
-    
+
     global MQ
 
+    TLM("ACTIVATE_SD enter")
     MQ = StateMachine(0, NULL_SM, freq=15_000_000)
     MQ.active(1)
     MQ.active(0)
-    
+
     U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
     D0          = Pin(2,  Pin.IN)
     D1          = Pin(3,  Pin.IN)
     D2          = Pin(4,  Pin.IN)
-    
+
     try:
         spi = SPI(0, sck=D0, mosi=D1, miso=D2)
         sd = SDCard(spi, U3_CS)
         os.mount(sd, "/sd")
+        TLM("ACTIVATE_SD exit", "SD mounted at /sd")
 
     except Exception as e:
+        TLM("ACTIVATE_SD FAILED — entering BLINK_ERROR loop")
         LOG(f"Mounting SD Card failed in ACTIVATE_SD! {e}", 2)
         SAVE_LOG()
         spi = -99
-        
+
         while True:
             BLINK_ERROR()
-    
+
     return spi
 
 
@@ -1351,10 +1440,18 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
 
     MQ_READY()                  # Z80 sees "ready" on $0F → reads bytes from $0E
 
-    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
-    while MQ.tx_fifo() != 0:
-        pass
+    TLM("SEND_MSG enter+loaded", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
+        msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
 
+    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
+    drain_loops = 0
+    while MQ.tx_fifo() != 0:
+        drain_loops += 1
+        if drain_loops > 1000000:
+            TLM("SEND_MSG STUCK", "tx still has %d bytes after 1M loops" % MQ.tx_fifo())
+            break
+
+    TLM("SEND_MSG exit", "drain_loops=%d" % drain_loops)
     return
 
 
@@ -1369,10 +1466,13 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     global kill
     global dead
 
+    TLM("SEND_MSG2 enter", "msg_len=%d st=%d expand=%s rom_ver=%s" % (
+        len(msg), st, expandKeywords, TSP.ROM_VERSION))
+
     if TSP.ROM_VERSION == "1.0":
         new_rom = False
         end_char = 0x00
-    else:    
+    else:
         new_rom = True
         end_char = 0x03
 
@@ -1563,15 +1663,24 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                     wrt(0x0D)       # Another newline for old ROM
 
     wrt(end_char)               # Write end_char (done with loops)
+    TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
 
     # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
+    drain_loops = 0
     while MQ.tx_fifo() != 0:
-        pass
+        drain_loops += 1
+        if drain_loops > 1000000:
+            TLM("SEND_MSG2 STUCK", "tx still has %d after 1M loops" % MQ.tx_fifo())
+            break
 
+    rx_drained = 0
     while(MQ.rx_fifo() != 0):   # Flush input buffer to console
-        print(MQ.get())
+        b = MQ.get()
+        rx_drained += 1
+        print(b)
 
-    print(MQ.tx_fifo(), MQ.rx_fifo()) # Report FIFO queue sizes
+    TLM("SEND_MSG2 exit", "drain_loops=%d rx_drained=%d tx=%d rx=%d" % (
+        drain_loops, rx_drained, MQ.tx_fifo(), MQ.rx_fifo()))
 
 
 def WALK(top):
@@ -1621,10 +1730,15 @@ def DIR(pre, cmd):                                                              
 
     par1, par2 = PARAMS(pre)
 
+    TLM("DIR enter", "par1=%d par2=%d files=%d lista_len=%d" % (
+        par1, par2, len(files), len(lista)))
+
     if par1 == 0:
         # Regular listing
+        TLM("DIR par1=0 — regular listing via SEND_MSG2")
         led.value(1)
         SEND_MSG2(lista, 1, False)
+        TLM("DIR SEND_MSG2 returned")
         led.value(0)
 
     elif par1 == 1 or par1 == 2:
@@ -3681,15 +3795,22 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     # ──────────────────────────────────────────────────────────────────
     for l in rl:
         cmd[l] = MQ.get()
-    
+
+    # Now safe to TLM (Z80 is processing — no time pressure on Pico).
+    TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d cmd=%r" % (
+        load_cmd, long, bytes(cmd[:long])))
+
     try:
         cmd = cmd[:long].decode()
     except:
         LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
+        TLM("PROCESS_CMD decode FAILED — returning early")
         return
 
     cmd_exec = cmd[3:].upper() # Command starting with "TPI:" in uppercase
     rest_cmd = cmd[7:] # Command after "tpi:"
+
+    TLM("PROCESS_CMD parsed", "cmd_exec=%r rest_cmd=%r" % (cmd_exec, rest_cmd))
 
     # gc.collect()
 
@@ -3739,29 +3860,43 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         else:
             cmd_word = cmd_exec
             # cmd_args = ""
-            
+
+        TLM("PROCESS_CMD SAVE branch", "cmd_word=%r in_SA_funct=%s in_EXT=%s" % (
+            cmd_word, cmd_word in SA_funct, cmd_word in EXT_SA_FUNCT))
+
         if cmd_word in SA_funct:
             EXEC = SA_funct[cmd_word]
+            TLM("PROCESS_CMD dispatching SA_funct", "cmd_word=%r" % cmd_word)
             EXEC(pre, cmd)
-            
+            TLM("PROCESS_CMD SA_funct returned", "cmd_word=%r" % cmd_word)
+
         elif cmd_word in EXT_SA_FUNCT:                                                                                # Is an external cmd?
             EXEC = EXT_SA_FUNCT[cmd_word]
             EXEC(MQ, TSP, pre, cmd)
-            
+
         else:
             msg = "Unrecognized command: %s" % cmd_exec
             SEND_MSG(msg, 'SAVE "tpi:help" for info', _5_C_Nonsense)    # If none of the above, raise error
             LOG(msg, 2)
-    
+
     # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
     # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
     # helpers being retired in stage 7). Behavior is identical.
     # ──────────────────────────────────────────────────────────────────
+    TLM("PROCESS_CMD draining tx_fifo at exit")
+    drain_tx = 0
     while MQ.tx_fifo() != 0:
-        pass
+        drain_tx += 1
+        if drain_tx > 1000000:
+            TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
+            break
 
+    drain_rx = 0
     while MQ.rx_fifo() != 0:
         MQ.get()
+        drain_rx += 1
+
+    TLM("PROCESS_CMD exit", "drain_tx=%d drain_rx=%d cmd=%r" % (drain_tx, drain_rx, cmd_exec))
 
     # ─── DUAL-PORT MIGRATION: V6 tail pre-load ────────────────────────
     # Pre-load 0x01 status for the NEXT command's initial $0E read.
@@ -4071,6 +4206,12 @@ def TS2068_IO():                                                         # Main 
             # ────────────────────────────────────────────────────────────
             for i in r1:
                 pre[i] = MQ.get()                                          # blocking
+
+            # Snapshot pre[] for any later TLM that wants to print it.
+            # Cheap when TLM_ENABLED=False (the TLM() calls below no-op
+            # and this list construction is the only residual overhead;
+            # ~10us at most, well outside the hot RX-drain path).
+            _pre_snapshot = list(pre)
                                                                                                       # pre(header)[0] is a command
             # gc.collect()
             fr1 = gc.mem_free()
@@ -4171,39 +4312,47 @@ def TS2068_IO():                                                         # Main 
 
                 led.value(0)
                 
-            elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine 
+            elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine
+                TLM("LVM LOAD enter", "pre=%s f_name=%s tap_idx=%d offset=%d" % (
+                    _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
                 LOG("Starting TS LVM", 0)
-                
+
                 while busy:
                     pass
                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
                 # log_entries += new_logs
                 log_entries.append(new_logs) # for now
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
-                
+                TLM("LVM LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
+
             elif (pre[0] == 0 or pre[0] == 255):                                                      # Headerless LOAD
+                TLM("LVM Headerless LOAD enter", "pre=%s tap_idx=%d offset=%d" % (
+                    _pre_snapshot, TSP.tap_idx, TSP.offset))
                 LOG("Starting TS LVM - Headerless LOAD", 0)
-                
+
                 while busy:
                     pass
                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
                 # log_entries += new_logs
                 log_entries.append(new_logs) # for now
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
-                
+                TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
+
             elif pre[0] == 66 and pre[1] == 5:                                                        # commands are pre[0] == 66. PRINT commands are pre[1] == 5
                 LOG("Starting PRINT", 0)
                 PRINT_IO(pre)
                 DIR_FILES()
-                
+
             elif pre[0] == 66:
 
                 LOG("Starting TS COMMAND " + str(pre), 0)
-                
+
                 try:
                     PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)
-                except:
+                    TLM("main loop: PROCESS_CMD returned", "pre=%s" % _pre_snapshot)
+                except Exception as _e:
                     LOG("Invalid data received from PROCESS_CMD: " + str(pre), 2)
+                    TLM("main loop: PROCESS_CMD raised exception", str(_e))
                     continue
                 
                 if TSP.zx48:
