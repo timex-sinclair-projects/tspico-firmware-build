@@ -4455,11 +4455,28 @@ def TS2068_IO():                                                         # Main 
             else:
                 if log_entries:
                     if not busy:
+                        # ─── DUAL-PORT MIGRATION: protect start_new_thread ─
+                        # SAVE_LOG sets `busy = False` BEFORE the thread
+                        # function actually returns, so core1 may still be
+                        # mid-cleanup here. A second start_new_thread call
+                        # in that window raises OSError "core1 in use".
+                        # Catch it and skip — we'll save the log on the
+                        # next idle pass once core1 is free.
+                        #
+                        # Without this guard, the OSError propagates up
+                        # through TS2068_IO to main.py (which has no
+                        # try/except) and drops the Pico to a REPL —
+                        # manifests as "Pico locked up, LED stops
+                        # blinking." Painful to diagnose.
+                        # ──────────────────────────────────────────────────
                         LOG("Before SAVE_LOG, free=%.1f" % (gc.mem_free() >> 10), 0)
                         gc.collect()
                         LOG("After gc.collect, free=%.1f" % (gc.mem_free() >> 10), 0)
-                        _thread.start_new_thread(SAVE_LOG, ())
-    
+                        try:
+                            _thread.start_new_thread(SAVE_LOG, ())
+                        except OSError:
+                            pass
+
                 led.value(0)
                 ts = time.ticks_us()
                 
