@@ -16,6 +16,36 @@ remove it from here and link the issue.
 
 ## Open
 
+### Extension command (extcmd) protocol — postponed beyond this release
+
+The `TPI:.XXX` user-extensible command mechanism has a structural
+mismatch with the dual-port V6 pre-load chain. Symptoms during
+picotest's `TPI:.RNDW` test:
+
+  - `.RNDW` displays the word correctly (the response itself works).
+  - The picotest BASIC's `IN 14` read-until-0 loop consumes the V6
+    pre-load `0x01` that PROCESS_CMD writes for the next command.
+  - Next `SAVE "tpi:..."` reads `0x00` from empty TX at its
+    pre-header phase → Report J on the 2068.
+  - Z80 aborts the command, never sends the body bytes.
+  - PROCESS_CMD blocks forever in `MQ.get()` body-read.
+  - Pico effectively halts (LED stops blinking, no commands
+    processed).
+
+Root cause is structural: the original extcmd design predates the
+V6 pre-load chain, and "read until 0" patterns inherently consume
+the pre-load byte.
+
+**Decision: ship the dual-port release with extcmd marked as
+under-development, then issue a new UF2 once the team ratifies a
+new protocol contract.** Full design analysis, recommended response
+shapes, and open questions for the team are in
+[`docs/EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md).
+
+End users wanting to write extcmd handlers in the interim should
+stick to status-only responses (`MQ.put(0x01)` and return) — those
+work cleanly.
+
 ### `OUT 10,100` doesn't reach the Pico — ZX48 exit-by-byte unreachable
 
 **Confirmed empirically** during ryan-dual-port-merge testing. After
