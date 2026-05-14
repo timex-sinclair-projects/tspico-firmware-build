@@ -807,7 +807,12 @@ def CHK_STATUS(secs):                                                           
     secs = secs * 1_000_000
     
     t_init = time.ticks_us()
-    while (time.ticks_us() - t_init) < secs:
+    # ─── DUAL-PORT MIGRATION: use ticks_diff to handle 30-bit wrap ───────
+    # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min). Plain
+    # subtraction goes negative after wrap (negative < secs → True → spin
+    # forever). ticks_diff() handles wrap correctly.
+    # ─────────────────────────────────────────────────────────────────────
+    while time.ticks_diff(time.ticks_us(), t_init) < secs:
         if dead:
             break
     if not dead:
@@ -4491,9 +4496,18 @@ def TS2068_IO():                                                         # Main 
 
         else:
             # Nothing to do, so check if time to save the log
-            if time.ticks_us() - ts < 2_000_000:
+            # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap ──
+            # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min).
+            # Plain subtraction goes negative after wrap, satisfying
+            # both <2_000_000 and <2_100_000 conditions forever, so
+            # the loop spins in `continue` and the heartbeat never
+            # fires. User's reported "Pico halt with LED stopped
+            # blinking" was this — caught via Ctrl-C in Thonny
+            # showing the stuck line at the continue below.
+            # ────────────────────────────────────────────────────────
+            if time.ticks_diff(time.ticks_us(), ts) < 2_000_000:
                 continue
-            elif time.ticks_us() - ts < 2_100_000:
+            elif time.ticks_diff(time.ticks_us(), ts) < 2_100_000:
                 led.value(1)
             else:
                 if log_entries:
@@ -4637,12 +4651,14 @@ def ZX48_IO(pre):                                                               
                 LOG("Cleared TX/RX FIFO after unrecognized ZX command: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
         else:
-            if time.ticks_us() - ts < 2_000_000:
+            # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap (same
+            # fix as TS2068_IO's main idle loop) ─────────────────────────
+            if time.ticks_diff(time.ticks_us(), ts) < 2_000_000:
                 continue
-            elif time.ticks_us() - ts < 2_100_000:
+            elif time.ticks_diff(time.ticks_us(), ts) < 2_100_000:
                 led.value(1)
             else:
-                
+
                 if log_entries:
                     SAVE_LOG()
                     # log_entries = [] # SAVE does this
