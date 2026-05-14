@@ -153,6 +153,8 @@ correct. If only some, there's a specific message-content trigger.
 
 - **Should we implement true CRC verification on incoming messages?** —
   [#2](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/2)
+- **Write developer onboarding guide (env setup, mpy generation, etc.)** —
+  [#6](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/6)
 
 ---
 
