@@ -60,11 +60,35 @@ def FACTORIAL(MQ: StateMachine, TSP, pre, cmd):
 
 
 def RND_WORD(MQ: StateMachine, TSP, pre, cmd):
-    """Pick a random word from /words.txt and send it back."""
-    MQ.put(0x01)
+    """Pick a random word from /words.txt and send it back.
 
-    buf = bytearray(10)
+    DUAL-PORT MIGRATION FIX:
 
+      Previous implementation wrote `MQ.put(0x01)` then the word chars
+      raw — i.e., it sent the "OK, no further output" status byte but
+      then sent more bytes anyway. That violates the spec contract,
+      where the Z80 reads ONE status byte and then either stops (for
+      0x01-0x09 codes) or follows a function-code protocol (for
+      0x80-0xFF codes).
+
+      In practice the 2068's ROM kept reading past 0x01 and consumed
+      the word chars — which "worked" for displaying the word but
+      also drained the V6 pre-load byte placed by PROCESS_CMD's tail.
+      So the NEXT command's pre-header phase found TX empty, read
+      0x00, and reported J. Then BASIC's recovery sent stray bytes
+      that kept the main loop's idle `ts` updating, preventing the
+      heartbeat from firing — Pico appeared "halted."
+
+      Fix: use the documented 0x81 (PRINT_STRING) protocol per spec
+      p.5:
+          27: 0x81  function code (PRINT_STRING)
+          28: 0x01  status code (no error)
+          29+: characters (printable ASCII)
+          34:  0x00 end of string
+
+      Z80 reads exactly that sequence, stops at 0x00, V6 pre-load is
+      preserved, next command works normally.
+    """
     # Pick a random byte offset into the word list. 85878 is the
     # position of the last word in /words.txt.
     offset = randint(1, 85878)
@@ -75,8 +99,12 @@ def RND_WORD(MQ: StateMachine, TSP, pre, cmd):
         buf = f_in.readline()     # next whole word
         buf = buf[:-2]            # strip trailing \r\n
 
+    # Standard PRINT_STRING protocol (spec p.5).
+    MQ.put(0x81)                  # function code: PRINT_STRING
+    MQ.put(0x01)                  # status: no error
     for el in buf:
-        MQ.put(el)
+        MQ.put(el)                # word characters
+    MQ.put(0x00)                  # end-of-string terminator
 
     return
 
