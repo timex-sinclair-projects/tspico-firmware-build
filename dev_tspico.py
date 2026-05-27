@@ -3914,7 +3914,56 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     # The blocking-read loop below is the production-tight body drain;
     # same two-phase capture rule as the dispatcher's pre-header read.
     # ──────────────────────────────────────────────────────────────────
+    #
+    # ─── DUAL-PORT MIGRATION: body-read timeout (defensive) ───────────
+    # Hard guard against a documented cascade where Z80 aborts mid-
+    # command without sending the body bytes:
+    #
+    #   1. Some prior command consumed the V6 pre-load 0x01 (e.g., a
+    #      stray IN 14 in BASIC, or an unknown source we haven't yet
+    #      tracked down).
+    #   2. Next SAVE "tpi:..." pre-header phase: Z80 reads $0E for
+    #      status, gets 0x00 from empty TX → Report J.
+    #   3. BASIC's ON ERR catches the J, aborts the SAVE statement.
+    #   4. Z80 never sends the command body bytes that would normally
+    #      follow the pre-header.
+    #   5. But we already read all 10 pre-header bytes (that's why
+    #      we're in PROCESS_CMD), so the dispatcher saw pre[0]=66 and
+    #      called us. Now we're blocked in MQ.get() forever waiting
+    #      for body bytes that aren't coming. Pico effectively hangs.
+    #
+    # Without this timeout, the only recovery is the TS-Pico reset
+    # button. Symptom: LED stops blinking, Thonny REPL traceback at
+    # this exact line.
+    #
+    # With this timeout: after 1 second of no byte arriving, we log
+    # the timeout via TLM, drain any partial state, write a fresh V6
+    # pre-load, and return. Main loop continues, ready for the next
+    # command. picotest's BASIC ON ERR has already handled the J on
+    # the 2068 side, so the user-visible behavior is just "that one
+    # test failed" rather than "the Pico locked up."
+    #
+    # Same pattern would benefit the main-loop pre-header read (if
+    # Z80 sends 1-9 bytes and stops, that read also hangs). Filed
+    # in OPEN_QUESTIONS.md as belt-and-suspenders follow-up.
+    # ──────────────────────────────────────────────────────────────────
+    BODY_READ_TIMEOUT_MS = 1000   # tunable; 1 second is generous
+
     for l in rl:
+        start = time.ticks_ms()
+        while MQ.rx_fifo() == 0:
+            if time.ticks_diff(time.ticks_ms(), start) > BODY_READ_TIMEOUT_MS:
+                TLM("PROCESS_CMD body-read timeout — aborting",
+                    "byte=%d/%d (Z80 likely aborted after J at pre-header)" % (l, long))
+                LOG("PROCESS_CMD body-read timeout at byte %d/%d" % (l, long), 2)
+                # Drain any partial state so the next command starts clean
+                while MQ.rx_fifo() != 0:
+                    MQ.get()
+                while MQ.tx_fifo() != 0:
+                    pass
+                # V6 pre-load so the next command's pre-header phase works
+                MQ.put(0x01)
+                return
         cmd[l] = MQ.get()
 
     # Now safe to TLM (Z80 is processing — no time pressure on Pico).
