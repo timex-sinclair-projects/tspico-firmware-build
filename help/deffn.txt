@@ -1,0 +1,37 @@
+BASIC Statement           DEF FN
+--------------------------------
+DEF FN x(...)=...
+DEF FN x$(...)=...
+
+Define user numeric function x
+or string function x$ with any
+required arguments. Must be in
+a program.
+
+  10 DEF FN y(x)=4x^2+x-3
+  20 DEF FN l$(a$,l)=a$( TO l)
+  30 DEF FN c()=299792458
+
+When calling a FN, the values
+passed in are stored in the DEF
+program line hidden after each
+arg variable. So, a recursive
+call to the FN will not normally
+work since the recursive call
+will overwrite the FN args of
+the previous call.
+
+Using VAL and VAL$ with AND can
+allow for recursive calls by 
+conditionally constructing a
+string to be evaluated as the 
+final step. Factorial example:
+  DEF FN f(n)=VAL(("1" AND n<2)+
+        ("n*FN F(n-1)" AND n>1))
+The "FN " in the string must be
+the FN keyword character as does
+any keyword inside the quotes.
+DEF FN cannot be used in an AROS
+program.
+
+See also: FN, aros

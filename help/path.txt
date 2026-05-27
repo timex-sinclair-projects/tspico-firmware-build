@@ -1,0 +1,8 @@
+TS-Pico Command             PATH
+--------------------------------
+SAVE "tpi:path"[CODE 1,0]
+
+No CODE:  Show working dir. path
+CODE 1,0: Show mounted file path
+
+See also: cd, md, dir

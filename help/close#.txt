@@ -1,0 +1,7 @@
+BASIC Command             CLOSE#
+--------------------------------
+CLOSE# s
+
+Close stream number s.
+
+See also: OPEN#, streams

@@ -1,0 +1,17 @@
+BASIC Command           CONTINUE
+--------------------------------
+CONTINUE
+
+Continue the program, where it
+left off with a report code
+other than 0. If this was after
+BREAK was pressed or a STOP
+command, it resumes with the
+next statement, otherwise it
+repeats the statement with the
+error. It is labeled as CONT on
+the keyboard. Intervening
+commands can cause error N
+(statement lost) when using.
+
+See also: NEW, CLEAR, STOP

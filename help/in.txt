@@ -1,0 +1,20 @@
+BASIC Function                IN
+--------------------------------
+IN port_number
+
+Read a byte from the specified
+Z80 port number and return the
+value. The port must be in the
+range 0..65535:
+  LET x=IN 14
+
+At a machine code level, it
+loads the BC register with
+the port number and executes an
+IN A,(C) instruction. Note that
+the instruction only mentions 
+the C register, but the whole 
+16-bit port number is put on the
+address bus for the read.
+
+See also: OUT, ports

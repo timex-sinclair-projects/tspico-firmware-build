@@ -1,0 +1,55 @@
+BASIC Key                 DELETE
+--------------------------------
+Pressing shift+0 will remove
+characters or keywords to the
+left of the cursor. Unlike the
+ZX Spectrum, the TS2068 has a 
+DELETE keyword (see below) on
+the same key.
+
+BASIC Command             DELETE
+--------------------------------
+DELETE x[,y]
+DELETE x,[y]
+DELETE [x],y
+
+Delete lines from the BASIC
+program. You can delete lines
+one at a time by typing the
+number at the command line, but
+you can put DELETE in a program.
+
+  DELETE x
+Delete one line. Same as typing
+the line number and pressing 
+enter without typing a command.
+
+  DELETE x,y
+Delete lines x through line y.
+
+  DELETE x,
+Delete lines x though the last.
+
+  DELETE ,y
+Delete lines from the start
+through line y.
+
+DELETE is a K mode keyword when
+pressing shift+0 in K cursor
+mode. This means when you are
+using shift+0 to delete 
+characters, you can end up 
+inserting a DELETE keyword when
+you delete up to a line number,
+a THEN keyword, or a colon that
+isn't inside quotes. You can 
+press shift+0 again to delete 
+the keyword, but pressing again
+will just make it reappear. You
+can use the key repeat function
+to deal with this. Let the 
+DELETE keyword appear, then hold
+down shift+0 to delete it and
+keep going.
+
+See also: edit

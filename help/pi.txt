@@ -1,0 +1,22 @@
+BASIC Function                PI
+--------------------------------
+PI
+
+Return the value of the
+mathematical constant pi.
+
+On the ZX81 and TS1000, with
+very little program memory
+without an expansion, it was
+common to use PI with other
+functions to specify useful
+values in just a few bytes vs
+literal values which take up 6
+bytes more than the characters
+used to type them. For example,
+PI for pi of course, but INT PI
+for 3, SGN PI for 1, and NOT PI
+for 0. Even VAL "69" saves 3
+bytes versus the literal number.
+
+See also: SIN, COS, CIRCLE

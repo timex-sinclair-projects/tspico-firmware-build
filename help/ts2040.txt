@@ -1,0 +1,8 @@
+TS-Pico Command           TS2040
+--------------------------------
+SAVE "tpi:ts2040"
+
+Switch printing to the hardware
+printer (the default).
+
+See also: picopt

@@ -1,0 +1,7 @@
+TS-Pico Command            CLOSE
+--------------------------------
+SAVE "tpi:close"
+
+Un-mount the mounted file.
+
+See also: load

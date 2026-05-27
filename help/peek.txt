@@ -1,0 +1,9 @@
+BASIC Function              PEEK
+--------------------------------
+PEEK address
+
+Return the value stored at the
+memory address (rounded). Error
+B if address is outside 0..65535
+
+See also: POKE, IN, pokes

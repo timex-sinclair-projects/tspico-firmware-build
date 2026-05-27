@@ -1,0 +1,20 @@
+TS-Pico Command               CD
+--------------------------------
+SAVE "tpi:cd <name>"[CODE 1/2,0]
+
+Changes to the directory <name>
+No CODE:  cd only
+CODE 1,0: Do a tpi:dir after
+CODE 1,1: Do a tpi:idir after
+CODE 2,0: Show new path after
+
+SAVE "tpi:cd"
+SAVE "tpi:cd"CODE 0,1
+
+With no name, it presents an
+interactive list of directories
+to change to. Adding CODE 0,1
+will present choices of all
+directories on the SD card.
+
+See also: md, rm, path, idir

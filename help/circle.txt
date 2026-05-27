@@ -1,0 +1,15 @@
+BASIC Command             CIRCLE
+--------------------------------
+CIRCLE [attr;...;]x,y,r
+
+Draw a circle at center x,y with
+radius r. Just like PLOT and 
+DRAW, it draws with the current
+INK and PAPER colors as well as
+the current OVER, BRIGHT, and
+INVERSE settings. Optionally,
+you can include attributes like
+with PRINT to override permanent
+attributes.
+
+See also: PLOT, DRAW, attributes

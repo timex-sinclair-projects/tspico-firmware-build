@@ -1,0 +1,12 @@
+BASIC Function              FREE
+--------------------------------
+FREE
+
+Return the amount of free memory
+available to BASIC. This keyword
+replaced the tilde character
+that was in Spectrum BASIC. The
+tilde character bit pattern
+bytes are still in the ROM.
+
+See also: CLEAR

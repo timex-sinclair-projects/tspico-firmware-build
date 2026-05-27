@@ -1,0 +1,62 @@
+BASIC Command              PRINT
+--------------------------------
+PRINT [prItem[<sep>prItem ...]]
+
+Display numbers, text, and 
+display control characters on
+the screen.
+
+Multiple items are separated by
+a <sep> character which is a
+semicolon, comma, or apostrophe.
+The semicolon prints no space
+between items, the comma prints
+the next item at column 16 or
+the start of the next line, and
+the apostrophe (') prints the
+next item at the start of the
+next line. If the print
+statement doen't end with a
+comma or semicolon, the next
+printing will be at the start of
+the next line.
+
+The prItems are numbers, string 
+literals, variables, numeric
+expressions, string expressions,
+cursor control expressions, 
+color attributes, or stream
+number specifications.
+
+The keywords AT and TAB are 
+cursor control expressions used
+for cursor positioning. 'TAB c'
+moves the print position to 
+column c, printing spaces to get
+there. 'AT r,c' moved the print
+position to row r and column c.
+  PRINT a;TAB 12;b
+  PRINT AT 3,4;"Hello"
+
+The color attribute keywords
+INK, PAPER, BRIGHT, FLASH, OVER,
+and INVERSE set temporary 
+attributes to be used. These (as
+well as AT and TAB) actually
+generate a sequence of control
+characters which can also be
+contained within a string
+literal, string variable, or
+string expression. An example:
+  PRINT INK 3;"Hi";CHR$ 8;"ey"
+
+By default, print characters are
+sent to stream 2, but that can
+be altered by simply specifying
+a stream number with #n and a 
+<sep> character if needed:
+  PRINT #3;"Hello"
+Stream 3 output will go to the
+printer by default.
+
+See also: PRINT, LPRINT, picopt,ts2040, streams, attributes

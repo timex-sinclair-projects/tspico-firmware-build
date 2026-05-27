@@ -1,0 +1,9 @@
+BASIC Function                LN
+--------------------------------
+LN x
+
+Natural log of x. For common
+log (base 10), use: LN x/LN 10
+Error A if x<=0.
+
+See also: EXP

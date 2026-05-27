@@ -1,0 +1,11 @@
+BASIC Command                NEW
+--------------------------------
+NEW
+
+Erases the BASIC program and 
+variables, clearing memory up to
+RAMTOP but preserving the system
+variables: UDG, P_RAMT, RASP,
+and PIP.
+
+See also: CLEAR, sysvars

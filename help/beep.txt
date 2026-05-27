@@ -1,0 +1,26 @@
+BASIC Command               BEEP
+--------------------------------
+BEEP duration,pitch
+
+Play a note through the internal
+speaker of a given pitch value
+of semitones above or below
+middle C for the specified
+duration in seconds. The tones
+can be heard from the speaker
+and through the MIC socket. 10
+seconds is the longest duration,
+and the pitch ranges from -60 to
+69. Ex.: BEEP 0.2,9
+
+Some Pitches and Their Notes
+--------------------------------
+-13 B   -1 B  11 B   23 B  35 B
+-15 A   -3 A   9 A   21 A  33 A
+-17 G   -5 G   7 G   19 G  31 G
+-19 F   -7 F   5 F   17 F  29 F
+-20 E   -8 E   4 E   16 E  28 E
+-22 D  -10 D   2 D   14 D  26 D
+-24 C2 -12 C3  0 C4  12 C5 24 C6
+
+See also: SOUND

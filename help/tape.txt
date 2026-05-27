@@ -1,0 +1,9 @@
+TS-Pico Command             TAPE
+--------------------------------
+SAVE "tpi:tape"
+
+Switch saving (names without
+"tpi:" prefix) to cassette tape
+(the default).
+
+See also: sdcard

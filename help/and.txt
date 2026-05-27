@@ -1,0 +1,18 @@
+BASIC Operator               AND
+--------------------------------
+a AND b               Priority 3
+
+Logical AND with a twist:
+
+a AND b   a if b<>0
+          0 if b=0
+a$ AND b  a$ if b<>0
+          "" if b=0
+
+This is powerful with strings:
+PRINT g;" goat";"s" AND g<>0
+A useful logic transform:
+ NOT (A AND B) => NOT A OR NOT B
+If A is x<y, NOT A is x>=y, etc.
+
+See also: OR, NOT

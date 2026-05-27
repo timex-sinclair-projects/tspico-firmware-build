@@ -1,0 +1,8 @@
+BASIC Function               COS
+--------------------------------
+COS x
+
+Cosine of radian angle x
+  PRINT COS PI
+
+See also: ACS, COS, SIN

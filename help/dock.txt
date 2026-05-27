@@ -1,0 +1,15 @@
+TS-Pico Command             DOCK
+--------------------------------
+SAVE "tpi:dock"[CODE m,n]
+
+Shows or sets the SRAM or flash
+slot mapped to the DOCK bank.
+No CODE: Shows the setting
+CODE 0,1: Shows previous setting
+CODE 0,2: Swaps with previous
+CODE 1,n: Set as slot n of SRAM
+CODE 2,n: Set as slot n of flash
+The config.ini setting is
+DCK_SLOT, with the default of 0.
+
+See also: boot, config, dck

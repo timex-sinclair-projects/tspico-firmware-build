@@ -1,0 +1,18 @@
+TS-Pico Command           APPEND
+--------------------------------
+Show or set append mode for
+the currently mounted .tap file.
+
+SAVE "tpi:append"
+SAVE "tpi:append"CODE 1,0/1
+SAVE "tpi:append on"
+SAVE "tpi:append off"
+
+No option: display the state
+CODE 1,0 or off: Set append off
+CODE 1,1 or on : Set append on
+
+An error results if no .tap file
+is currently mounted.
+
+See also: load, save

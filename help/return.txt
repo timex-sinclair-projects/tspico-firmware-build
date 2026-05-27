@@ -1,0 +1,12 @@
+BASIC Command             RETURN
+--------------------------------
+RETURN
+
+Returns from a GO SUB call with
+execution continuing with the
+statement following the last GO
+SUB executed. The return points
+are on the GOSUB stack, and if
+there are none, error 7 results.
+
+See also: GOSUB, GOTO

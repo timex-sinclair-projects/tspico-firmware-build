@@ -1,0 +1,10 @@
+BASIC Function               INT
+--------------------------------
+INT x
+
+Return the integer part of x by
+rounding down. Negative values
+round down to next lowest int.
+INT PI is 3 and INT -PI is -4.
+
+See also: RND

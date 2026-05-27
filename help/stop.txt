@@ -1,0 +1,15 @@
+BASIC Command               STOP
+--------------------------------
+STOP
+
+Stops the program execution,
+forcing error code 9. A CONTINUE
+command will resume execution
+with the statement following it,
+however, if some commands are
+given first that clear the
+system variables OLDPPC and
+OSPCC, error N - Statement lost
+will result.
+
+See also: CONTINUE, GOTO, break

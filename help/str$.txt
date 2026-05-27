@@ -1,0 +1,9 @@
+BASIC Function              STR$
+--------------------------------
+STR$ number
+
+Return the string as if the
+number were printed.
+  LET x$=STR$ (x)
+
+See also: VAL, VAL$

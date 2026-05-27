@@ -1,0 +1,17 @@
+BASIC Function              CODE
+--------------------------------
+CODE string
+
+Returns the character code of
+the first character in the
+string or 0 if it is an empty
+string.
+
+See also: CHR$
+
+TS-Pico option              CODE
+--------------------------------
+SAVE "tpi:command"CODE a,b
+
+Used to pass optional parameter
+values to a TS-Pico command.

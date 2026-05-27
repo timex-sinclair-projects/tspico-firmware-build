@@ -1,0 +1,35 @@
+BASIC Command              INPUT
+--------------------------------
+INPUT [prItem<sep>]
+      [LINE]var[<sep>...]
+
+The syntax is like PRINT, but
+output appears in the lower part
+of the screen, stream #0. Unlike
+PRINT, any variables cause the
+printing to stop and the user to
+be prompted to input a value
+unless it is enclosed in
+parentheses.
+
+A numeric variable input shows
+an L mode cursor. You can enter
+a value or numeric expression
+here. If you enter the keyword
+STOP, the program will stop. A
+string variable input shows the
+L mode cursor surrounded by
+double quotes. You can delete
+these (shift+1 also removes
+them) to be able to enter STOP
+or you can type a string
+expression for the value.
+
+Adding LINE before a string
+variable will not display quotes
+forcing you to enter a string
+literal only. You can't enter
+STOP here, so to break out, you
+can press shift+6.
+
+See also: PRINT, expressions

@@ -1,0 +1,8 @@
+BASIC Function               ABS
+--------------------------------
+ABS num
+
+Absolute magnitude of x.
+  LET y=ABS x
+
+See also: SGN

@@ -1,0 +1,11 @@
+BASIC Command                RUN
+--------------------------------
+RUN [n]
+
+Executes a CLEAR, then a GOTO
+line number n, with the default
+line number being 0. This is to
+run your program from the start
+with no existing variables.
+
+See also: GOTO, CLEAR

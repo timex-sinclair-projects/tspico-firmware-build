@@ -1,0 +1,7 @@
+BASIC Function               SIN
+--------------------------------
+SIN x
+
+Sine of radian angle x
+
+See also: ASN, COS, TAN

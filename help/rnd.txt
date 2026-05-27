@@ -1,0 +1,12 @@
+BASIC Function               RND
+--------------------------------
+RND
+
+Return the next pseudo-random
+number in the generator sequence
+given by the SEED value. The 
+value is between 0 (inclusive)
+and 1 (exclusive).
+  LET d6=INT(6*RND)+1
+
+See also: RANDOMIZE

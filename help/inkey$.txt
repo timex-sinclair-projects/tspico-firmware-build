@@ -1,0 +1,14 @@
+BASIC Function            INKEY$
+--------------------------------
+INKEY$
+
+Reads the keyboard and returns a
+string with the key pressed as
+if in L or C mode. An empty
+string is returned if no key or
+more than one key is being
+pressed.
+  10 LET k$=INKEY$
+  20 IF k$="" THEN GO TO 10
+
+See also: CHR$, CODE, INPUT

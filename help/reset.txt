@@ -1,0 +1,23 @@
+BASIC Command              RESET
+--------------------------------
+ON ERR RESET
+
+The plain RESET command was to
+be used to reset peripherals, 
+but that functionality did not
+ship with the TS2068 or arrive
+in the unreleased 2060 expansion
+unit. So, the only way it is
+used is as one of the options
+for ON ERR. It turns off the 
+error trapping function.
+
+This keyword has the code of the
+copyright symbol (127) and
+appears in its place on the
+ZX Spectrum keyboard. When you
+type it in L mode, you get the
+copyright symbol but the keyword
+when in K mode.
+
+See also: ONERR

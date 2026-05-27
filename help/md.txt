@@ -1,0 +1,10 @@
+TS-Pico Command               MD
+--------------------------------
+SAVE "tpi:md <name>"[CODE 1,0]
+
+Creates a new directory in the
+current folder (see tpi:path)
+CODE 1,0: Also change to the new
+directory.
+
+See also: cd, rm, path

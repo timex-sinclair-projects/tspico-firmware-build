@@ -1,0 +1,9 @@
+BASIC Operator               NOT
+--------------------------------
+NOT x                 Priority 4
+
+Logical NOT
+ 1 if x=0
+ 0 if x<>0
+
+See also: AND, OR

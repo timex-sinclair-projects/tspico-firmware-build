@@ -1,0 +1,25 @@
+BASIC Command            INVERSE
+--------------------------------
+INVERSE b
+
+Set the permanent inverse 
+attribute setting to on (b=1) or
+off (b=0) to be used by
+subsequent printing or plotting.
+Error K if the value is not 0 or
+1. Inverse on causes normally
+ink pixels to be printed or
+drawn as paper (binary 0) and
+paper pixels as ink (binary 1).
+Does affect printed output.
+
+BASIC Attribute          INVERSE
+--------------------------------
+Sets a temporary inverse
+attribute for the command. Can
+appear anywhere in PRINT or
+INPUT and at the beginning of
+PLOT, DRAW, or CIRCLE commands.
+  PRINT "O";INVERSE 1;"O"
+
+See also: ATTR, PRINT, DRAW,    CIRCLE, INK, PAPER, BRIGHT,     FLASH, OVER, attributes

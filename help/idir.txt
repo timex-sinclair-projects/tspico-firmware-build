@@ -1,0 +1,8 @@
+TS-Pico Command             IDIR
+--------------------------------
+  SAVE "tpi:idir"
+
+Displays an interactive list of
+the files to pick one to mount.
+
+See also: dir, cd, load, tapdir

@@ -1,0 +1,19 @@
+BASIC Command              CLEAR
+--------------------------------
+CLEAR [address]
+
+Delete all of the variables, and
+frees the space they used. It
+also performs a RESTORE and CLS,
+resets the PLOT position to 0,0
+as well as clear pending GOSUBs.
+
+If an address is given, it is
+used to set the system variable
+RAMTOP. This is usually to lower
+it to reserve space above BASIC
+and below the UDGs to store data
+or machine code programs.
+  CLEAR 64600
+
+See also: NEW, RESTORE, CLS,    sysvars

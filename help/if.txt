@@ -1,0 +1,19 @@
+BASIC Command                 IF
+--------------------------------
+IF condition THEN statements
+
+If the condition evaluates to
+true (non-zero), the statements
+following THEN are executed.
+Multiple statements separated by
+colons. A GOTO or another IF in
+the statements can cause 
+statements following that to be
+skipped. A notable equivalence:
+  IF a AND b THEN c
+  IF a THEN IF b THEN c
+The first one evaluates both a
+and b, but the second one does
+not evaluate b unless a is true.
+
+See also: GOTO, expressions

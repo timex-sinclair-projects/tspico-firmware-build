@@ -1,0 +1,23 @@
+TS-Pico config.ini in Pico flash
+--------------------------------
+A file in the root folder of the
+TS-Pico's internal flash memory.
+This can be accessed with the 
+Thonny Python development 
+application. It is a JSON format
+file of key/value pairs:
+
+  {"ROM_VERSION": "1.4", 
+   "LOG_LEVEL": 2, 
+   "FW_VERSION": "1.4", 
+   "ZX_TAPE_COMPAT": false, 
+   "DCK_SLOT": 0, 
+   "ROM_SM": 10, 
+   "ROM_SLOT": 1, 
+   "VERBOSE": false}
+
+LOG_LEVEL: See help for loglevel
+ZX_TAPE_COMPAT: See ZX48
+DCK_SLOT: See dock
+ROM_SLOT: See boot
+VERBOSE: See verbose

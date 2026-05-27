@@ -1,0 +1,9 @@
+The TS-Pico Team
+----------------
+Ricardo Calcagno
+Gustavo Pane
+Jeff Burrell
+Tim Horner
+David Anderson
+Ryan Gray
+David Green

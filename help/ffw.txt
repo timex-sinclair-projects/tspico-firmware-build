@@ -1,0 +1,13 @@
+TS-Pico Command              FFW
+--------------------------------
+SAVE "tpi:ffw"[CODE 0/1/2/3,n]
+
+Moves current tap file pointer
+forward by n blocks or headers.
+No CODE: 1 block.
+CODE 0,n: Move n blocks
+CODE 1,n: n blocks, then tapdir
+CODE 2,n: Move n headers/files
+CODE 3,n: n headers, then tapdir
+
+See also: rew, tapdir

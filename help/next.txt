@@ -1,0 +1,16 @@
+BASIC Statement             NEXT
+--------------------------------
+NEXT var
+
+Executes the next iteration of a
+FOR loop or ends the loop if the
+terminal contition has been
+reached. If the control variable
+is not found or hasn't been 
+initialized, an error results.
+
+  10 FOR x=1 TO 10
+  20 PRINT "x=";x
+  30 NEXT x
+
+See also: FOR

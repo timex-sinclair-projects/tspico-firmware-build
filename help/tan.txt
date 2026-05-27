@@ -1,0 +1,7 @@
+BASIC Function               TAN
+--------------------------------
+TAN x
+
+Tangent of radian angle x
+
+See also: ATN, COS, SIN

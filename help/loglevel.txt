@@ -1,0 +1,18 @@
+TS-Pico Command         LOGLEVEL
+--------------------------------
+Display or set the log level.
+Only messages of the level or
+higher appear in the log.
+
+  SAVE "tpi:loglevel"
+Show the log level.
+
+  SAVE "tpi:loglevel"CODE 1,n
+  SAVE "tpi:loglevel n"
+Set the level to n:
+  0 = Info
+  1 = Warnings
+  2 = Errors (the default)
+  3 = Critical
+
+See also: config, getlog

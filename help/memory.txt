@@ -1,0 +1,39 @@
+TS2068 Memory Map
+================================
+    0:16383 Home ROM  
+16384:22527 Display 1 
+22528:23295 Attribs 1 
+23296:23551 Print buffer
+23552:24575 System variables  
+----- Single Display File ------
+24576:25087  Machine Stack
+25088:25364  Function Dispatcher
+25365:26687  Bank switching code
+26688:ARSBUF Machine code vars.
+------ Dual Display File -------
+24576:30719  Display 2 
+30720:31487  Attribs 2 
+31488:ARSBUF Machine code vars.
+--------------------------------
+CHANS:PROG   Channel info
+PROG-1       $80 byte
+PROG:VARS    BASIC program
+VARS-1       $80 byte
+VARS:ELINE   BASIC variables
+ELINE-1      $80 byte
+ELINE:WORKSP Edit buffer
+WORKSP-2     $0D byte
+WORKSP-1     $80 byte
+WORKSP:$0D   INPUT data
+$0D:STKBOT   Temp. workspace
+STKBOT:STKEND Calculator stack
+STKEND:RAMTOP Spare space
+----- Single Display File ------
+UDG:P_RAMT   UDGs
+------ Dual Display File -------
+UDG:63423    UDGs
+63424:63935  Machine stack
+63936:P_RAMT Function Dispatcher
+             Bank switching code
+--------------------------------
+See also: sysvars, pokes

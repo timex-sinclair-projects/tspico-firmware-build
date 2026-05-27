@@ -1,0 +1,45 @@
+BASIC Function              CHR$
+--------------------------------
+CHR$ x
+
+Character whose CODE is x
+rounded to the nearest integer.
+
+See also: CODE, strings
+
+Special Timex 2068 Characters
+================================
+Dec Hx Char      INKEY$
+--------------------------------
+000 00 Not used
+001 01 Not used
+002 02 Not used
+003 03 Not used
+004 04           Shift+3 TRU VID
+005 05           Shift+4 INV VID
+006 06 Print ,   Shift+2 CAPS
+007 07           Shift+1 EDIT
+008 08 Cursor <  Shift+5 Left
+009 09 Cursor >  Shift+8 Right
+010 0A           Shift+6 Up
+011 0B           Shift+7 Down
+012 0C DELETE    Shift+0
+013 0D           ENTER
+014 0E Number    Shift+SymbolSh.
+015 0F           Shift+9 GRAPH
+016 10 Ink ctl.
+017 11 Paper ctl.
+018 12 Flash ctl.
+019 13 Bright ctl.
+020 14 Inverse ctl.
+021 15 Over ctl.
+022 16 At ctl.
+023 17 Tab ctl.
+================================
+Dec Hx Char     Keyword
+--------------------------------
+123 7B {        ON ERR
+124 7C STICK    STICK (no v.bar)
+125 7D }        SOUND
+126 7E FREE     FREE  (no tilde)
+127 7F \*        RESET

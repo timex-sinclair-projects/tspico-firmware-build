@@ -1,0 +1,33 @@
+User Defined Font
+--------------------------------
+The 96 printable characters of
+the system font from 32 to 127
+can have their bit patterns
+customized by setting the system
+variable CHARS to point to 768
+bytes that store their bit
+patterns. Unlike the UDG 
+characters, there is no specific
+area of RAM set aside for an 
+alternate font (although the
+OS-64 cartridge does do this).
+
+The default patterns are in ROM
+at address 15616. The value that
+CHARS must be set to is the
+address minus 256 bytes. This
+is so that the ROM routines can
+use a simpler calculation to get
+a character's pattern address
+from its character code. 
+
+Each character's pattern is 8
+bytes just as with the UDG
+characters. The tilde and
+vertical bar character patterns
+are there in the ROM, but they
+aren't used as the keywords FREE
+and STICK take their place when
+printing.
+
+See also: PEEK, POKE, USR, udg

@@ -1,0 +1,21 @@
+BASIC Function           SCREEN$
+--------------------------------
+SCREEN$ (row,col)
+
+Return the character printed at
+the given row and column on the
+screen if it can be recognized
+from the current font, else the
+empty string is returned.
+
+BASIC Option             SCREEN$
+--------------------------------
+LOAD "..."SCREEN$
+SAVE "..."SCREEN$
+
+With SAVE and LOAD, it is a 
+shorthand for "CODE 16384,6912"
+to save and load the bytes of 
+the display pixels and colors.
+
+See also: LOAD, SAVE, fonts

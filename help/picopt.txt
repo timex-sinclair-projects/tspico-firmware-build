@@ -1,0 +1,9 @@
+TS-Pico Command           PICOPT
+--------------------------------
+SAVE "tpi:picopt"
+
+Switch printing to go to the
+TS-Pico. This functionality does
+nothing currently.
+
+See also: ts2040

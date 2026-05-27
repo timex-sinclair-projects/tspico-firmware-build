@@ -1,0 +1,17 @@
+BASIC Command              MERGE
+--------------------------------
+MERGE "name"
+
+Merge the named program from the
+tape or mounted .tap file with 
+the current program. The merged
+program does not autorun. Lines
+and variables in the merged 
+program will overwrite lines and
+variable in the current program
+with the same line number or
+variable name. If the name is
+empty (""), the next program on
+the tape is used.
+
+See also: LOAD, SAVE, VERIFY

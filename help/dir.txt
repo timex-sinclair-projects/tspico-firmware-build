@@ -1,0 +1,16 @@
+TS-Pico Command              DIR
+--------------------------------
+  SAVE "tpi:dir"
+List the contents of the current
+directory on the SD card.
+
+  SAVE "tpi:dir"CODE 1,idx
+Lists the full name of file with
+index number idx.
+
+  SAVE "tpi:dir"CODE 2,idx
+Displays a listing of files with
+index number and full name,
+starting with index number idx.
+
+See also: idir, cd, load, tapdir

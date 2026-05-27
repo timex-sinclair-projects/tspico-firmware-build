@@ -1,0 +1,20 @@
+BASIC Function              ATTR
+--------------------------------
+ATTR (row,col)
+
+Return attribute byte of the
+row,col position. Error B if
+row or col is invalid.
+Bits 0-2: INK color
+Bits 3-5: PAPER color
+Bit    6: BRIGHT 0 or 1
+Bit    7: FLASH  0 or 1
+
+Bits Color      Bits Color   
+---- -------    ---- -------    
+ 000 Black       100 Green
+ 001 Blue        101 Cyan  
+ 010 Red         110 Yellow
+ 011 Magenta     111 White
+
+See also: INK, PAPER, BRIGHT,   FLASH, attributes

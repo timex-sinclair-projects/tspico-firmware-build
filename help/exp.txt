@@ -1,0 +1,8 @@
+BASIC Function               EXP
+--------------------------------
+EXP x
+
+Inverse natural log of x,
+or e^x:  LET e=EXP 1
+
+See also: LN

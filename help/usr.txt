@@ -1,0 +1,21 @@
+BASIC Function               USR
+--------------------------------
+USR address
+USR string
+
+  USR address
+Execute machine code starting at
+the given address. When the code
+returns to BASIC, the function
+returns the value of the BC 
+register.
+  RAND USR 0
+
+  USR string
+Return the memory address for
+the UDG character corresponding
+to the first character of string
+which must be A-Z or a-z.
+  LET udg=USR "a"
+
+See also: LOAD, udg

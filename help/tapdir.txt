@@ -1,0 +1,15 @@
+TS-Pico Command           TAPDIR
+--------------------------------
+SAVE"tpi:tapdir"[CODE 0/1,n]
+
+List blocks or headers in the
+tap file, all or some around the
+current block read pointer.
+No CODE:  Show all blocks
+CODE 0,n: Show n blks of context
+CODE 1,0: Show all headers
+CODE 1,n: Show n hdrs of context
+For n=255, show a screenful 
+around the current point.
+
+See also: ffw, rew, load, newtap

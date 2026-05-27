@@ -1,0 +1,17 @@
+TS-Pico Command             BOOT
+--------------------------------
+SAVE "tpi:boot"[CODE 1/2,n]
+
+Shows or sets the SRAM or flash
+slot mapped to be the boot ROM
+location (default is 2,1).
+No CODE: Shows the setting
+CODE 1,n: Set to slot n of SRAM
+CODE 2,n: Set to slot n of flash
+The config.ini setting is
+ROM_SLOT, with the default of 1.
+If you set this to another value
+it will take effect once and is
+reset in the ini file back to 1.
+
+See also: config, dock

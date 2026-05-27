@@ -1,0 +1,23 @@
+BASIC Command             LPRINT
+--------------------------------
+LPRINT [prItem[<sep>prItem ...]]
+
+Print the prItems to the printer
+via stream #3. Multiple items
+are separated by <sep> character
+which is a semicolon, comma, or
+an apostrophe. The prItems are
+most of the possibilities that
+PRINT supports, except that ink
+pixels are printed black and 
+paper pixels left as white even
+if the printing ink color is 
+white and paper color is black.
+
+If the TS-Pico is in "ts2040" 
+(hardware print) mode, print to
+the printer, otherwise, in 
+"picopt" (software print) mode,
+printing is sent to the TS-Pico.
+
+See also: PRINT, picopt, ts2040, streams

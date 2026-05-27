@@ -1,0 +1,56 @@
+TS-Pico Command Form
+--------------------------------
+SAVE "tpi:command [arg]"
+SAVE "tpi:command [arg]"CODE a,b
+Issue the named TS-Pico command
+which may accept a string
+argument and optionally CODE
+parameters. See individual help
+for each command.
+
+TS-Pico SDCARD mode SAVE
+--------------------------------
+SAVE "name"[LINE n]
+SAVE "name"CODE a,b
+SAVE "name"DATA a()
+SAVE "name"DATA a$()
+SAVE "name"SCREEN$
+
+A normal SAVE (without tpi:
+prefix) with the TS-Pico in
+sdcard mode will save to a .tap
+file on the SD card. Other than
+the data going to a file rather
+than actual tape, the save is
+like a normal BASIC SAVE command
+(see below).
+
+See also: load, merge, verify
+
+BASIC Command               SAVE
+--------------------------------
+SAVE "name"[LINE n]
+
+Save a program to tape with the
+given name. If the LINE option 
+is given, the program will auto-
+run starting at line n when
+loaded (but not when MERGEd).
+
+  SAVE "..."[CODE addr,len]
+Save the specified length of
+memory starting and the given
+address.
+
+  SAVE "..."DATA a()
+Save the numeric array a.
+
+  SAVE "..."DATA a$()
+Save the character array a$.
+
+  SAVE "..."SCREEN$
+Save the screen pixel and
+color data. Equivalent to: 
+  SAVE "..."CODE 16384,6912.
+
+See also: LOAD, MERGE, VERIFY
