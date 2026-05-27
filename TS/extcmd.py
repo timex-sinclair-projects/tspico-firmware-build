@@ -23,7 +23,24 @@ import math
 
 from TS.sdcard import *
 
-from tspico import ACTIVATE_MQ, ACTIVATE_SD, SEND_MSG, SEND_MSG2
+# ─── DUAL-PORT MIGRATION: portable import for tspico helpers ──────────────
+# The previous line was `from tspico import ACTIVATE_MQ, ACTIVATE_SD, ...`
+# which imported from a bare `tspico` module that doesn't exist in either
+# current layout:
+#   - Production: helpers live in TS.tspico (frozen).
+#   - Dev override: helpers live in dev_tspico (root-level .mpy/.py).
+# So `from tspico import ...` raised ImportError silently, the importing
+# dev_tspico.py / TS.tspico fell into its `except` branch, EXT_SA_FUNCT
+# came back empty, and every TPI:.SOMECMD got "Unrecognized command".
+#
+# The try/except chain below makes this module portable: it picks up
+# the dev override if it's loaded, otherwise falls back to the frozen
+# module. Same handler code works in both modes.
+# ──────────────────────────────────────────────────────────────────────────
+try:
+    from dev_tspico import ACTIVATE_MQ, ACTIVATE_SD, SEND_MSG, SEND_MSG2
+except ImportError:
+    from TS.tspico import ACTIVATE_MQ, ACTIVATE_SD, SEND_MSG, SEND_MSG2
 
 
 def FACTORIAL(MQ: StateMachine, TSP, pre, cmd):
