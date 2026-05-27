@@ -1874,6 +1874,37 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     while MQ.rx_fifo() != 0:            # Drain any pre-existing keystrokes
         MQ.get()
 
+    # ─── DUAL-PORT MIGRATION: empty-list guard ──────────────────────────
+    # Without this, an empty List skips the `while idx < n` loop entirely
+    # and the function falls through to `wrt(0x03)` at the bottom — making
+    # 0x03 the only byte the Z80 ever reads. Z80 interprets 0x03 as the
+    # SAVE statement's final status → Report F (Invalid filename).
+    #
+    # Reproducer: `SAVE "tpi:cd"` (interactive CD) when current path has
+    # no subdirectories. dirs = [] → List = [] → 0x03 only → F.
+    #
+    # Fix: write a proper PRINT_STRING_WITH_LOOP response saying "no
+    # items available" and return -1 cleanly. The caller (CDIR/IDIR)
+    # treats -1 as "user cancelled" and does nothing further. V6 chain
+    # intact.
+    # ────────────────────────────────────────────────────────────────────
+    if n == 0:
+        wrt(0x86)                       # PRINT_STRING_WITH_LOOP function code
+        wrt(1)                          # status: no error
+        wrt(0x0D)
+        wrt(0x0D)
+        for m in hdr1:
+            wrt(m)
+        wrt(0x0D)
+        for m in "(no items available)":
+            wrt(m)
+        wrt(0x03)                       # end of loop (no scroll, no keypress)
+        while MQ.tx_fifo() != 0:
+            pass
+        while MQ.rx_fifo() != 0:
+            MQ.get()
+        return -1
+
     while idx < n:
         i = 0
         # Write screen
