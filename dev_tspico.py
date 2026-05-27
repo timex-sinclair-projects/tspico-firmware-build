@@ -1549,6 +1549,23 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     c = 0 # char count
     l = 0 # line count
     ll = 21 # Initial line limit
+
+    # ─── DUAL-PORT MIGRATION: single-screen messages skip scroll prompt ───
+    # If the whole message fits in one screen (≤ ~600 chars, leaving room
+    # for picotest's header and scroll), suppress the scroll-prompt block
+    # entirely. Without this, even short help files (like "BORDER", 350
+    # chars but with many short lines) hit l==ll partway through and the
+    # Pico stalls on MQ.get() waiting for the user's keypress — which
+    # they may not realize is the scroll prompt because the screen
+    # scrolled the content out of view first. Bad UX.
+    #
+    # 600-char threshold: a 2068 screen is 24×32 = 768 chars, minus
+    # picotest's 6-line header (~192 chars) leaves ~576 chars. Round to
+    # 600. Anything longer needs paging; shorter fits on one screen.
+    # ────────────────────────────────────────────────────────────────────
+    SCROLL_THRESHOLD = 600
+    suppress_scroll = (n < SCROLL_THRESHOLD)
+
     if not new_rom:
         wrt(0x0D)       # Another newline for old ROM
     i = -1
@@ -1659,7 +1676,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                         i += 1 # Skip EOL char
                 wrt(0x0D)
 
-            if l == ll and (not new_rom or n > i + 34):
+            if not suppress_scroll and l == ll and (not new_rom or n > i + 34):
 
                 l = 0 # reset line count
                 if not new_rom and i == n - 1:
