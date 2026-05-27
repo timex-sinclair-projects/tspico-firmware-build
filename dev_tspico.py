@@ -427,6 +427,13 @@ _11_D_Break = const(11)
 # ─────────────────────────────────────────────────────────────────────────
 TLM_ENABLED = False
 
+# Build version stamp — bumped on each mpy rebuild so we can confirm
+# at a glance which build is actually loaded on the Pico. Logged at
+# LOAD_CONFIG entry and via __init__-time print so it appears even
+# before TLM is enabled.
+BUILD_VERSION = "2026-05-27-J (inline-wrt SEND_MSG2 + suppress_scroll<500)"
+print("[dev_tspico] BUILD_VERSION =", BUILD_VERSION)
+
 _tlm_last = 0   # last TLM timestamp, microseconds
 
 
@@ -1517,89 +1524,68 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
         end_char = 0x03
 
     scroll = "Scroll? (Y/n)"
-    
+
     s = len(scroll) + 6
     n = len(msg)
 
-    # ─── DUAL-PORT MIGRATION: prep + ready signaling ──────────────────────
-    # Was:  EMPTY_RX_FIFO(); wrt(0x40); wrt(0x86); wrt(st); wrt(0x0D); wrt(0x0D)
-    # Now:  load header bytes first, then MQ_READY(), then drain RX.
+    # ─── Inline-wrt SEND_MSG2 + suppress_scroll for short messages ────────
+    # Confirmed by regression test: the buffer-prebuild + preload-then-
+    # MQ_READY refactor caused `tpi:help border` to consistently fail,
+    # even though both patterns place the same 4 header bytes in TX at
+    # the moment Y=READY fires. The original inline-wrt pattern (bytes
+    # go directly to TX as the per-char loop produces them) handles
+    # border correctly, so we're back to that.
     #
-    # The wrt(0x40) "Read continue" byte is gone — $0F continue is now
-    # signalled via Y register, and the 0x40 in TX would have been read
-    # by the Z80 as data, orphaning the rest of the response.
-    #
-    # The EMPTY_RX_FIFO call was moved AFTER MQ_READY: at the original
-    # position, the Z80 hadn't yet been told to read, so RX was empty
-    # anyway (the call was a no-op). After MQ_READY the Z80 might dump
-    # leftover keystrokes; we drain those now.
+    # We keep suppress_scroll for short messages (<500 chars) so that
+    # picotest's auto-runner doesn't hang on the "Scroll? (Y/n)" prompt
+    # — there's no user to press a key, and the 2068 ROM's $86 handler
+    # doesn't reliably auto-N for short outputs. For long outputs that
+    # would overflow the screen, the prompt still fires.
     # ─────────────────────────────────────────────────────────────────────
-    wrt = MQ.put
-    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
-    wrt(st)     # BASIC return code
-    wrt(0x0D)   # Start on a new line
-    wrt(0x0D)   # Start with a blank line we don't count
-    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
-
-    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
-        MQ.get()
-            
-    # We handle each character. If a scroll answer is N, we will just break
-
-    c = 0 # char count
-    l = 0 # line count
-    ll = 21 # Initial line limit
-
-    # ─── DUAL-PORT MIGRATION: single-screen messages skip scroll prompt ───
-    # If the whole message fits in one screen (≤ ~500 chars), suppress
-    # the scroll-prompt block entirely. Without this, even short help
-    # files (like "BORDER", 350 chars but with many short lines) hit
-    # l==ll partway through and the Pico stalls on MQ.get() waiting for
-    # the user's keypress — which they may not realize is the scroll
-    # prompt because the screen scrolled the content out of view first.
-    # Bad UX.
-    #
-    # Threshold rationale:
-    #   - 2068 screen: 22 lines × 32 cols PRINT area = 704 chars max.
-    #     (Bottom 2 of 24 rows are reserved for command-entry input.)
-    #   - Scroll triggers at l==ll (21 lines), so 21 × 32 = 672 chars
-    #     is the absolute one-page ceiling.
-    #   - Realistic content with mixed line lengths averages ~17-20
-    #     bytes per display line (printable chars + \r). For 21 lines
-    #     that's 357-420 bytes typically.
-    #   - 500-char threshold catches typical single-screen messages
-    #     conservatively without over-suppressing.
-    # ────────────────────────────────────────────────────────────────────
     SCROLL_THRESHOLD = 500
     suppress_scroll = (n < SCROLL_THRESHOLD)
 
+    wrt = MQ.put
+
+    # Write the 4 header bytes directly to TX, then set Y=READY.
+    # FIFO is 4-deep so this fills it; MQ_READY immediately after means
+    # Z80's first $0E read finds a real byte.
+    wrt(0x86)   # PRINT_STRING_WITH_LOOP (this IS the D-block status)
+    wrt(st)     # BASIC return code
+    wrt(0x0D)   # Start on a new line
+    wrt(0x0D)   # Start with a blank line we don't count
+
+    MQ_READY()
+    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
+        MQ.get()
+
+    TLM("SEND_MSG2 inline-wrt start", "header+MQ_READY done")
+
     if not new_rom:
-        wrt(0x0D)       # Another newline for old ROM
+        wrt(0x0D)   # Another newline for old ROM
+
+    c = 0       # char count
+    l = 0       # line count
+    ll = 21     # initial line limit
     i = -1
 
     while i < n - 1:
-        
-        i += 1
-        ch = ord(msg[i]) # needed to be able to test ch == int
 
-        # Handle special character cases
+        i += 1
+        ch = ord(msg[i])
 
         if ch < 32:
-            
+
             if ch == 0x0D:
-                # Timex or PC line ending
                 if i+1 < n and msg[i+1] == '\n':
-                    # PC line ending
-                    i += 1 # Skip extra char
-                c = 32 # End of line
-                
+                    i += 1
+                c = 32
+
             elif ch == 0x0A:
-                # Unix line ending
-                ch = 0x0D # Change to Timex
-                c = 32 # End of line
+                ch = 0x0D
+                c = 32
 
             elif ch == 0x08:
-                # Handle a backspace character
                 if l > 0 or c > 0:
                     if c == 0:
                         c = 31
@@ -1607,104 +1593,77 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                     else:
                         c -= 1
                 else:
-                    continue # ignore
-                
+                    continue
+
             elif ch >= 0x10 and ch <= 0x15:
-                # Attribute control: first of two chars that don't move the column
-                # For now, just eat these since they don't advance the column and 
-                # many have the second byte as 0 which will end the current print string.
                 i += 1
                 continue
-            
+
             else:
-                # 00 and 03 not allowed since they mark the end of the strings 
-                # to send and others < 32 print as ?
-                ch = 0x3F # '?'
+                ch = 0x3F   # '?'
                 c += 1
-            
+
         elif ch >= 124:
-            
+
             if ch > 127:
-                # Currently printing high-bit chars crashes, so protect this.
-                ch = 63 # Change to '?'
+                ch = 63
                 c += 1
             elif expandKeywords:
-                if ch == 124: # Tilde ~
-                    c += 6 # Let expand to " FREE "
-                elif ch == 126: # vbar |
-                    c += 7 # Let expand to " STICK "
-                else: # 125
+                if ch == 124:
+                    c += 6
+                elif ch == 126:
+                    c += 7
+                else:
                     c += 1
             else:
                 c += 1
-            # DELETE, ON ERR, SOUND, and RESET don't expand to keywords in L
-            # mode but will in K mode. If in a program, and no printing or INPUT
-            # has been done yet, the BASIC is still in K mode. So, for now you
-            # should issue a `PRINT ;` or other PRINT or INPUT statement in your
-            # program before executing TS-Pico commands that print text.
-            
+
         elif msg[i] == '\\':
-            # Possible zmakebas escape
-            # cc, ln = zmakebas2Timex(msg, i)
-            # ch = ord(cc)
-            # if ln > 1:
-                # i += ln - 1
-            # Only handle copyright until we can print codes > 127
             if i+1 < n and msg[i+1] == '*':
                 ch = 127
                 i += 1
             c += 1
 
-        else: # Regular character
+        else:
             c += 1
 
         wrt(ch)
 
-        if c == 32: # We've written one line
+        if c == 32:
 
-            l += 1 # Inc line count
-            c = 0  # Reset column count
-        
-            if ch == 0x0D: # A short line (we already printed the 0x0D)
+            l += 1
+            c = 0
+
+            if ch == 0x0D:
                 if i == 0 or (i == 1 and msg[1] == '\n'):
-                    # Newline at start we don't count.
-                    # This allows you to put a blank line at the start to 
-                    # separate the message from the prior text but not count
-                    # toward the first screen scroll lines.
                     l -= 1
-            else: # ch != 0x0D:
-                # Check for newline at end of 32
+            else:
                 if i + 1 < n:
-                    if msg[i+1] == '\r': # Timex or PC
+                    if msg[i+1] == '\r':
                         if i + 2 < n and msg[i+2] == '\n':
-                            i += 1 # Skip extra PC EOL char
-                        i += 1 # Skip EOL char
-                    elif msg[i+1] == '\n': # Unix
-                        i += 1 # Skip EOL char
+                            i += 1
+                        i += 1
+                    elif msg[i+1] == '\n':
+                        i += 1
                 wrt(0x0D)
 
             if not suppress_scroll and l == ll and (not new_rom or n > i + 34):
-
-                l = 0 # reset line count
+                # Scroll-prompt path (inline-wrt style).
+                l = 0
                 if not new_rom and i == n - 1:
-                    scroll = "--- End of list (N to exit) ---"
+                    scroll_str = "--- End of list (N to exit) ---"
                 else:
+                    scroll_str = scroll
                     for m in "(%2d%%) " % ((i * 100) // n):
-                        wrt(m)
-                for m in scroll:    # Write scroll prompt (empty if last screen)
-                    wrt(m)
+                        wrt(ord(m))
+                for m in scroll_str:
+                    wrt(ord(m))
                 if not new_rom:
                     wrt(13)
+                wrt(0x00)       # end of this page
 
-                wrt(0x00)       # End of this page (Z80 displays + waits for key)
-                # ─── DUAL-PORT MIGRATION ───────────────────────────────
-                # No wrt(0x40) "Read continue flag" — $0F continue is
-                # signalled via Y register (kept at READY all session).
-                # A 0x40 here would orphan and be consumed as the
-                # FIRST character of the next page.
-                # ──────────────────────────────────────────────────────
-                ch = MQ.get()   # Get keypress from user
-                if (ch == 78):  # If 'N' then done (ROM loops stops on old rom)
+                ch = MQ.get()   # wait for keypress
+                if ch == 78:    # 'N' → done
                     return
                 if ch == 48:
                     ll = 10
@@ -1713,20 +1672,15 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 else:
                     ll = 21
 
-                # ─── DUAL-PORT MIGRATION ───────────────────────────────
-                # No wrt(0x40) "Start new string" here either — same
-                # rationale as the wrt(0x40) "Read continue flag" above.
-                # ──────────────────────────────────────────────────────
-
                 if new_rom:
-                    for b in range(s):      # Erase scroll prompt
+                    for _eb in range(s):
                         wrt(0x08)
                         wrt(0x20)
                         wrt(0x08)
                 else:
-                    wrt(0x0D)       # Another newline for old ROM
+                    wrt(0x0D)
 
-    wrt(end_char)               # Write end_char (done with loops)
+    wrt(end_char)
     TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
 
     # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
@@ -2963,8 +2917,8 @@ def GETLOG(pre, cmd):                                                 # Shows th
 
 
 def LOAD_CONFIG():
-        
-    TLM("LOAD_CONFIG enter")
+
+    TLM("LOAD_CONFIG enter", "build=" + BUILD_VERSION)
     init_values = {}
     defaulted = False
     
