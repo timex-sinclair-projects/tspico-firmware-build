@@ -37,6 +37,8 @@ filesystem (use Thonny):
 | `/main.py` | Boot entry point | `main.py` in this repo |
 | `/config.ini` | TS-Pico runtime config (log level, ROM/DCK slots, etc.) | `config.ini` in this repo |
 | `/assets/*.tap` | Internal protocol .TAP files | `assets/` in this repo |
+| `/help/*.txt` | Help text shown by `tpi:help <topic>` | `help/` in this repo |
+| `/words.txt` | Word list read by `tpi:.rndw` external command | `words.txt` in this repo |
 | `/SD/...` | (existing) — your SD card | unchanged |
 
 ### Step-by-step
@@ -63,7 +65,16 @@ filesystem (use Thonny):
    - `rompatch.tap`
    - `romupdate.tap`
 
-6. **Reboot.** You should see:
+6. **Create `/help/` folder** on the Pico, then copy all `.txt` files
+   from this repo's `help/` directory into it. The `tpi:help <topic>`
+   command reads these from `/help/<topic>.txt`.
+
+7. **Copy `words.txt`** to the Pico's root (`/words.txt`). Required by
+   the `tpi:.rndw` external-command example. If you don't plan to use
+   `.rndw` you can skip this — but other extcmd handlers may also use
+   it in the future.
+
+8. **Reboot.** You should see:
    ```
    270000000
    INFO: SD Card initialized and mounted OK
@@ -119,6 +130,12 @@ frozen modules (because nothing on flash shadows the `TS` package).
 trick only works for `tspico.py`. For other files, push to GitHub and
 let CI rebuild the UF2.
 
+**`dev_extcmd.py` works the same way** for the `TS.extcmd` module:
+copy a modified `extcmd.py` to the Pico as `/dev_extcmd.py` and the
+dev override picks it up. Useful for iterating on user-extensible
+`TPI:.XXX` command handlers without rebuilding the UF2. See the
+header comment in `dev_extcmd.py` for details.
+
 ## What's frozen
 
 All files under `TS/` plus only the rp2-port stdlib bits we actually use:
@@ -148,10 +165,19 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 
 ## Iteration workflow
 
-1. Edit `TS/...` files
-2. Commit, push to `main`
-3. GitHub Actions rebuilds the UF2
-4. Download from the run's artifacts
-5. Flash to Pico (BOOTSEL + drag-and-drop)
-6. The `/main.py` and `/assets/*.tap` already on the Pico are
-   preserved — only the firmware itself is replaced.
+1. Edit `TS/...` files on a feature branch (`git checkout -b my-fix`).
+2. Commit and push the branch.
+3. Open a pull request against `main`.
+4. GitHub Actions builds a UF2 **for the branch / PR** as well as for
+   `main` — you can download the artifact from any PR's checks before
+   it merges. (See `.github/workflows/build.yml`.)
+5. Flash to Pico (BOOTSEL + drag-and-drop).
+6. The `/main.py`, `/config.ini`, `/assets/*.tap`, `/help/*.txt`, and
+   `/words.txt` already on the Pico are preserved — only the firmware
+   itself is replaced.
+7. When the change looks good, get a review and squash-merge the PR
+   into `main`. CI builds one more UF2 from the merge commit.
+
+**For quick `tspico.py` / `extcmd.py` tweaks** that don't need a UF2
+rebuild, use the `/dev_tspico.py` / `/dev_extcmd.py` override pattern
+described above — far faster iteration loop.
