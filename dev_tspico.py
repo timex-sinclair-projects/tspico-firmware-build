@@ -4641,9 +4641,27 @@ def TS2068_IO():                                                         # Main 
                         # manifests as "Pico locked up, LED stops
                         # blinking." Painful to diagnose.
                         # ──────────────────────────────────────────────────
-                        LOG("Before SAVE_LOG, free=%.1f" % (gc.mem_free() >> 10), 0)
-                        gc.collect()
-                        LOG("After gc.collect, free=%.1f" % (gc.mem_free() >> 10), 0)
+                        # ─── DUAL-PORT MIGRATION: gc.collect REMOVED here ─
+                        # Previous code did LOG + gc.collect + LOG before
+                        # starting the SAVE_LOG thread. MicroPython's
+                        # gc.collect() is a stop-the-world operation that
+                        # routinely takes 10-100ms. During that pause, the
+                        # 2068 can send the entire next-command pre-header
+                        # (10 bytes in ~300us) — the 4-deep PIO RX FIFO
+                        # fills, and `push noblock` silently drops bytes
+                        # 4-9. When the main loop resumes, it reads 4 stale
+                        # pre-header bytes + 6 body bytes, producing a
+                        # malformed pre-header (decoded body-length of
+                        # 28791 etc.) and a J error on the 2068. Diagnosed
+                        # via trace showing pre=[66, 0, 255, 2, 'D', 7, 0,
+                        # 't', 'p', 'i'] for a SAVE "tpi:dir" — body bytes
+                        # leaked into the pre-header read.
+                        #
+                        # MicroPython's automatic GC runs when allocations
+                        # require it; no need to force it here. SAVE_LOG
+                        # on core1 can do its own gc.collect if memory
+                        # pressure becomes an issue inside the thread.
+                        # ──────────────────────────────────────────────────
                         try:
                             _thread.start_new_thread(SAVE_LOG, ())
                         except OSError:
