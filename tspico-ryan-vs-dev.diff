@@ -1,0 +1,1414 @@
+--- tspico-ryan.py	2026-05-13 12:39:08
++++ dev_tspico.py	2026-05-13 13:27:45
+@@ -327,10 +327,38 @@
+ 
+ from TS.sdcard import *
+ 
+-from tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
+-# from TS.tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
+-# from tspico_io import sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
+-# from TS.tspico_io import sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
++# ─── DUAL-PORT MIGRATION (Ryan's tspico.py -> dual-port) ───────────────
++# Three things changed from Ryan's original single-port import:
++#
++#   1. Module path:  `tspico_io` -> `TS.tspico_io`
++#      Always pull from the frozen module (baked into the UF2 by
++#      manifest.py). A root-level /tspico_io.py (Ricardo's older one)
++#      would shadow the frozen one and silently pull in stale single-
++#      port code; using the explicit TS. prefix defeats that risk.
++#
++#   2. PIO program:  `TS_IO` -> `TS_IO_DUAL`
++#      The single-port PIO is gone in the dual-port architecture.
++#      TS_IO_DUAL decodes the A0 address bit (GPIO 10) to route Z80
++#      reads of $0E (data) vs $0F (status) into separate handling.
++#      The Z80's $0F polls are answered by the Y register (set to
++#      0xFFFFFFFF = always ready) instead of by interleaving 0x40
++#      bytes into the TX FIFO.
++#
++#   3. Added import: `OPEN_NOFILE_TAP`
++#      Pre-opens /assets/nofile.tap at boot so LOAD "" (no prior
++#      mount) doesn't pay file-open latency in the hot path. Without
++#      this, opening the file takes 1-5ms during which the Z80 reads
++#      stale TX bytes and reports Report J.
++#
++# See docs/DUAL_PORT_DEVELOPMENT.md §7 for the full migration narrative.
++# ───────────────────────────────────────────────────────────────────────
++from TS.tspico_io import (
++    patch, sel_bank, set_ctrl, set_dck,
++    TS_IO_DUAL,                          # was: TS_IO (single-port)
++    LOAD_TS, LOAD_ZX, LOAD_ZX_C,
++    SAVE_TS, SAVE_ZX,
++    OPEN_NOFILE_TAP,                     # added: cached nofile handle
++)
+ 
+ #####################
+ # SERVICE FUNCTIONS #
+@@ -369,7 +397,86 @@
+ _9_9_STOP = const(9)
+ _10_J_Invalid_IO = const(10)
+ _11_D_Break = const(11)
++
++
++# ─── DUAL-PORT MIGRATION: optional telemetry (stage 9) ────────────────────
++# Comprehensive event logging for diagnosis. Each TLM() call prints an
++# event with timestamp (microseconds since boot), delta from previous
++# TLM call, and TX/RX FIFO occupancy. Frozen-module overhead is
++# negligible when the flag is False.
++#
++# DEFAULT: TLM_ENABLED = False — Ryan's preferred experience (no
++# telemetry noise on a normal run, zero overhead in hot paths).
++#
++# TO ENABLE FOR A TESTING SESSION (pick one):
++#
++#   1. EASIEST — edit /main.py on the Pico's flash. Find the line:
++#         TS.tspico.TLM_ENABLED = ...   (or `dev_tspico.TLM_ENABLED`)
++#      and set it to True. Reboot. No UF2 rebuild needed.
++#
++#   2. AT THE REPL (transient — gone on reboot):
++#         import dev_tspico
++#         dev_tspico.TLM_ENABLED = True
++#
++#   3. EDIT THE DEFAULT BELOW to True, commit. Permanent for that copy.
++#
++# When False, both TLM() and TLM_RESET() return immediately with zero
++# work — no string format, no FIFO read, no print, no timestamp track.
++# This is the right setting for normal operation; flip to True only
++# when you actively need the diagnostic stream.
++# ─────────────────────────────────────────────────────────────────────────
++TLM_ENABLED = False
++
++_tlm_last = 0   # last TLM timestamp, microseconds
+ 
++
++def TLM(action, detail=""):
++    """Log one event to the REPL with timing and FIFO state.
++
++    When TLM_ENABLED = False this returns immediately with zero work
++    (no formatting, no FIFO read, no print) so it's safe to leave
++    TLM() calls scattered through hot paths in production builds.
++    """
++    if not TLM_ENABLED:
++        return
++
++    global _tlm_last
++    try:
++        now = time.ticks_us()
++    except:
++        now = 0
++    dt = (now - _tlm_last) if _tlm_last else 0
++    _tlm_last = now
++
++    try:
++        tx = MQ.tx_fifo()
++        rx = MQ.rx_fifo()
++        fifo = "tx=%d rx=%d" % (tx, rx)
++    except:
++        fifo = "tx=? rx=?"
++
++    if detail:
++        print("[TLM %d dt=%d %s] %s: %s" % (now, dt, fifo, action, detail))
++    else:
++        print("[TLM %d dt=%d %s] %s" % (now, dt, fifo, action))
++
++
++def TLM_RESET(tag=""):
++    """Reset TLM timer at the start of a new operation.
++
++    Also a no-op when TLM_ENABLED = False.
++    """
++    if not TLM_ENABLED:
++        return
++
++    global _tlm_last
++    try:
++        _tlm_last = time.ticks_us()
++    except:
++        _tlm_last = 0
++    print("[TLM ===== %s =====]" % tag)
++
++
+ class PICO_STATUS():                                                            # Class for the object that holds TS-Pico's current status
+     
+     def __init__(self, init_values):                                            # init_values is a dictionary read at startup; read below
+@@ -428,82 +535,198 @@
+         self.dck_prev_mem  = 2
+ 
+ 
+-def ACTIVATE_MQ():                                                                                # Re-enable TX/RX SM, after a SDCard access
++# ─── DUAL-PORT MIGRATION: new helper DEACTIVATE_SD ─────────────────────
++# In Ryan's single-port version, the SD-teardown logic lived inline at
++# the top of ACTIVATE_MQ. The dual-port refactor splits it out:
++#
++#   1. Some boot paths (and the SAVE branch in TS2068_IO) need to call
++#      ACTIVATE_MQ without first having mounted /sd; Ryan's old loop
++#      `while True: try: umount; except: break` wasted ~10ms on every
++#      such call retrying the unmount.
++#   2. The dual-port protocol is sensitive to bus-handover timing.
++#      Splitting teardown lets us do it deterministically: unmount
++#      once, then clamp the SPI data lines LOW before the PIO reclaims
++#      them. This eliminates the tri-state window where Z80 D6 could
++#      float high — the original Report D root cause (see
++#      docs/DUAL_PORT_DEVELOPMENT.md §1).
++# ───────────────────────────────────────────────────────────────────────
++def DEACTIVATE_SD():
++    """Tear down SD card access and safe the shared bus lines."""
++    TLM("DEACTIVATE_SD enter")
++    try:
++        os.umount("/sd")
++        TLM("  /sd unmounted")
++    except:
++        TLM("  /sd already unmounted")
+ 
+-    global MQ
+-    
+-    while True:
+-        try:
+-            os.umount("/sd")
+-        except:
+-            break
+-    
+     U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
+     U3_CS.value(1)
+ 
+-    MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT),
+-                      in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
+-                      sideset_base=Pin(12, Pin.OUT))
+-    
+-    MQ.active(1)
+-    
+-    return 
++    # GPIO 2-4 are shared with SPI (SCK/MOSI/MISO). Drive them LOW
++    # before the PIO state machine reclaims them. This is the Report D
++    # fix from the dual-port migration.
++    for p in (2, 3, 4):
++        Pin(p, Pin.OUT).value(0)
++    TLM("DEACTIVATE_SD exit", "GPIO 2-4 clamped LOW, U3_CS=HIGH")
++    return
+ 
+ 
+-def WAIT_TX_RECEIVED():
++# ─── DUAL-PORT MIGRATION: ACTIVATE_MQ rewritten ────────────────────────
++# Five changes from Ryan's single-port version:
++#
++#   1. PIO program:  TS_IO       -> TS_IO_DUAL
++#      Routes Z80 reads of $0E vs $0F into separate handling so the
++#      Y register can answer status independently of the TX FIFO.
++#
++#   2. PIO clock:    15 MHz       -> 30 MHz
++#      The dual-port decode adds ~7 instructions to the read path.
++#      30 MHz keeps the total well within Z80's data setup window.
++#      RP2040 PIO can run up to half the CPU clock (135 MHz at our
++#      270 MHz setting) so 30 MHz is conservative.
++#
++#   3. Y = READY after activation
++#      The new line `MQ.exec("mov(y, invert(null))")` sets Y to
++#      0xFFFFFFFF so $0F reads always have bit 6 set (= ready).
++#      We keep Y at READY for the entire session; the protocol's
++#      natural pacing via TX FIFO depth handles flow control.
++#
++#   4. SD teardown REMOVED
++#      The old `while True: try: os.umount; except: break` loop and
++#      the U3_CS write are gone — DEACTIVATE_SD() handles that now.
++#      Callers must call DEACTIVATE_SD() FIRST, then ACTIVATE_MQ().
++#      (Stage 4 updates TS2068_IO to do this in the right order.)
++#
++#   5. NO pre-load of 0x01 here  ← CRITICAL, easy mistake
++#      ACTIVATE_MQ is called both at boot AND mid-command (after
++#      SD operations in MOUNT_FILE etc.). At boot we need a pre-load
++#      so the Z80's first status read finds 0x01. But mid-command,
++#      the next thing in the call chain (SEND_MSG, etc.) writes its
++#      own status — adding a pre-load HERE would put TWO 0x01s in
++#      TX, the Z80 only reads one, and the second sits in TX and
++#      gets misread later in the protocol (the orphan-byte family).
++#      Boot-time pre-load goes in TS2068_IO() instead, ONCE.
++#      (This was "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.)
++#
++# The `ready=True` parameter is for the rare path that needs to
++# create the SM but defer activation (currently unused but kept for
++# parity with our reference implementation).
++# ───────────────────────────────────────────────────────────────────────
++def ACTIVATE_MQ(ready=True):                                                                      # Re-enable TX/RX SM, after a SDCard access (DUAL-PORT)
+ 
+     global MQ
+ 
+-    while MQ.tx_fifo() != 0:
+-        pass
++    TLM("ACTIVATE_MQ enter", "ready=%s" % ready)
++    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
++                      in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
++                      sideset_base=Pin(12, Pin.OUT))
+ 
++    if ready:
++        MQ.active(1)
++        # Y = 0xFFFFFFFF → $0F always returns 0xFF → D6=1=ready.
++        # Stays at READY for the entire session.
++        MQ.exec("mov(y, invert(null))")
++        TLM("ACTIVATE_MQ exit", "SM active, Y=READY (TX FIFO empty)")
++    else:
++        TLM("ACTIVATE_MQ exit", "SM created but NOT active")
+ 
+-def EMPTY_TX_FIFO():
+- 
+-    global MQ
+- 
+-    while MQ.tx_fifo() != 0:
+-        MQ.exec("pull (noblock)")
+-        MQ.exec("mov (osr, null)")
+-        
+     return
+ 
+-def EMPTY_RX_FIFO():
+-    
+-    global MQ
+-    
+-    while MQ.rx_fifo() != 0:
+-        MQ.get()
+ 
+-    return
++# ─── DUAL-PORT MIGRATION: new helpers MQ_READY / MQ_BUSY ───────────────
++# In Ryan's single-port code, "ready" was signalled by writing 0x40 to
++# the TX FIFO — the byte had bit 6 set, and the Z80's WF_NPH polling
++# loop tests bit 6 of $0F. Every handler interleaved `wrt(0x40)` and
++# `wrt(0x01)` (data) bytes in TX with careful ordering.
++#
++# In dual-port, $0F is decoded SEPARATELY by the PIO and answered by
++# the Y scratch register — NOT by the TX FIFO at all. So:
++#
++#   - "ready" means  set Y = 0xFFFFFFFF  (MQ_READY)
++#   - "busy"  means  set Y = 0           (MQ_BUSY)
++#
++# Every `wrt(0x40)` or `MQ.put(0x40)` in Ryan's handlers becomes a
++# `MQ_READY()` call (typically placed AFTER the data bytes are in TX,
++# so Z80 sees "ready" on its next $0F poll and then reads the data via
++# $0E). Stages 5-7 of this migration walk through each callsite.
++#
++# These functions deliberately have NO logging or TLM. They run in
++# time-critical receive paths where a print() takes ~1-10ms — long
++# enough for the 4-deep RX FIFO to overflow and lose Z80 bytes.
++# ───────────────────────────────────────────────────────────────────────
++def MQ_READY():
++    """Signal 'ready' to Z80 — bit 6 set on $0F reads (Y = 0xFFFFFFFF)."""
++    # invert(null) is the documented MicroPython PIO syntax for ~0.
++    # The tilde form `~null` does NOT parse correctly via runtime
++    # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
++    # Without this, Y stays at 0, $0F always reads 0, Z80 sees
++    # "never ready" and reports J.
++    MQ.exec("mov(y, invert(null))")
++
++
++def MQ_BUSY():
++    """Signal 'not ready' to Z80 — bit 6 clear on $0F reads (Y = 0).
++
++    In normal operation we keep Y=READY constantly; the protocol's
++    natural pacing via TX FIFO depth handles flow control. MQ_BUSY
++    is here for completeness and any future code that needs an
++    explicit busy signal.
++    """
++    MQ.exec("set(y, 0)")
++
++
++# ─── DUAL-PORT MIGRATION: retired single-port helpers ────────────────────
++# Three helper functions are gone from the file at this point:
++#
++#   WAIT_TX_RECEIVED()  was:  while MQ.tx_fifo() != 0: pass
++#   EMPTY_TX_FIFO()     was:  while MQ.tx_fifo() != 0: pull(noblock); mov(osr,null)
++#   EMPTY_RX_FIFO()     was:  while MQ.rx_fifo() != 0: MQ.get()
++#
++# They were idiomatic single-port plumbing for the per-command "wait
++# until Z80 has read everything, then drain RX of any echoes" cycle.
++# In dual-port we either don't need them (Y register pacing handles
++# most cases) or we inline them at the small number of remaining
++# callsites — both for clarity and to avoid encouraging copy-paste of
++# the old pattern.
++#
++# Every callsite has been migrated:
++#   - SEND_MSG / SEND_MSG2 / SEND_MSG_PROMPT_YN tails  (stage 6)
++#   - PRINT_IO / PROCESS_CMD tails  (stage 5)
++#   - ListMenu tail  (stage 7)
++#   - TS2068_IO unrecognized-cmd branch + bottom-of-loop  (stage 4)
++#   - CHK_STATUS watchdog cleanup  (stage 7)
++#   - ZX48_IO unrecognized-cmd + post-mode cleanup  (stage 7)
++# ─────────────────────────────────────────────────────────────────────────
+ 
+ 
+ def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
+-    
++
+     global MQ
+ 
++    TLM("ACTIVATE_SD enter")
+     MQ = StateMachine(0, NULL_SM, freq=15_000_000)
+     MQ.active(1)
+     MQ.active(0)
+-    
++
+     U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
+     D0          = Pin(2,  Pin.IN)
+     D1          = Pin(3,  Pin.IN)
+     D2          = Pin(4,  Pin.IN)
+-    
++
+     try:
+         spi = SPI(0, sck=D0, mosi=D1, miso=D2)
+         sd = SDCard(spi, U3_CS)
+         os.mount(sd, "/sd")
++        TLM("ACTIVATE_SD exit", "SD mounted at /sd")
+ 
+     except Exception as e:
++        TLM("ACTIVATE_SD FAILED — entering BLINK_ERROR loop")
+         LOG(f"Mounting SD Card failed in ACTIVATE_SD! {e}", 2)
+         SAVE_LOG()
+         spi = -99
+-        
++
+         while True:
+             BLINK_ERROR()
+-    
++
+     return spi
+ 
+ 
+@@ -573,10 +796,14 @@
+             MQ.exec("push (noblock)")
+             kill = True
+              
+-        EMPTY_RX_FIFO()
+-        EMPTY_TX_FIFO()
++        # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
++        while MQ.rx_fifo() != 0:
++            MQ.get()
++        while MQ.tx_fifo() != 0:
++            MQ.exec("pull (noblock)")
++            MQ.exec("mov (osr, null)")
+         MQ.active(0)
+-        
++
+         LOG("TX/RX FIFO successfully cleared. Operation finished", 0)
+         
+         BLINK_ERROR()
+@@ -969,7 +1196,9 @@
+     else:
+         msg = "Wrong filename while mounting: %s" % f_name
+         err_level = 2
+-        
++
++    # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────────
++    DEACTIVATE_SD()
+     ACTIVATE_MQ()
+     LOG(msg, err_level)
+     
+@@ -1172,17 +1401,29 @@
+     return ok
+ 
+ 
+-def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s) 
++def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s)
+                                                                                                 # back to the TS, once a command is finished
+     global MQ
+     global TSP
+-    
++
+     wrt = MQ.put
+-    
++
++    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
++    # The two `wrt(0x40)` "Read continue flag" writes in the single-port
++    # version have been removed. The continue flag now lives on $0F via
++    # the Y register (kept at READY for the entire session). A 0x40 in
++    # the TX FIFO would have been consumed by the Z80's $0E read as if
++    # it were data — orphaning the rest of the response by one byte.
++    #
++    # `MQ_READY()` is called after the data is loaded as belt-and-
++    # suspenders: in case any prior code path left Y at BUSY, this
++    # guarantees $0F answers ready by the time the Z80 polls. With
++    # current dual-port handlers Y stays at READY always, so MQ_READY()
++    # here is functionally redundant but kept for self-documentation.
++    # ─────────────────────────────────────────────────────────────────────
+     if TSP.VERBOSE or forceDisplay:
+-    
+-        wrt(0x40)               # Read continue flag
+-        wrt(0x81)               # PRINT STRING
++
++        wrt(0x81)               # PRINT STRING — this IS the D-block status
+         wrt(st)                 # Return code
+         wrt(0x0D)               # Start with a newline
+         for m in msg:           # Write message
+@@ -1192,14 +1433,25 @@
+             for m in msg1:
+                 wrt(m)
+         wrt(0x00)               # End of string
+-        
++
+     else:
+-        
+-        wrt(0x40)               # Read continue flag
+-        wrt(st)                 # Return code (< 0x80)
+-        
+-    WAIT_TX_RECEIVED()
+-    
++
++        wrt(st)                 # Return code (< 0x80) — IS the D-block status
++
++    MQ_READY()                  # Z80 sees "ready" on $0F → reads bytes from $0E
++
++    TLM("SEND_MSG enter+loaded", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
++        msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
++
++    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
++    drain_loops = 0
++    while MQ.tx_fifo() != 0:
++        drain_loops += 1
++        if drain_loops > 1000000:
++            TLM("SEND_MSG STUCK", "tx still has %d bytes after 1M loops" % MQ.tx_fifo())
++            break
++
++    TLM("SEND_MSG exit", "drain_loops=%d" % drain_loops)
+     return
+ 
+ 
+@@ -1214,10 +1466,13 @@
+     global kill
+     global dead
+ 
++    TLM("SEND_MSG2 enter", "msg_len=%d st=%d expand=%s rom_ver=%s" % (
++        len(msg), st, expandKeywords, TSP.ROM_VERSION))
++
+     if TSP.ROM_VERSION == "1.0":
+         new_rom = False
+         end_char = 0x00
+-    else:    
++    else:
+         new_rom = True
+         end_char = 0x03
+ 
+@@ -1225,15 +1480,29 @@
+     
+     s = len(scroll) + 6
+     n = len(msg)
+-
+-    EMPTY_RX_FIFO()
+ 
++    # ─── DUAL-PORT MIGRATION: prep + ready signaling ──────────────────────
++    # Was:  EMPTY_RX_FIFO(); wrt(0x40); wrt(0x86); wrt(st); wrt(0x0D); wrt(0x0D)
++    # Now:  load header bytes first, then MQ_READY(), then drain RX.
++    #
++    # The wrt(0x40) "Read continue" byte is gone — $0F continue is now
++    # signalled via Y register, and the 0x40 in TX would have been read
++    # by the Z80 as data, orphaning the rest of the response.
++    #
++    # The EMPTY_RX_FIFO call was moved AFTER MQ_READY: at the original
++    # position, the Z80 hadn't yet been told to read, so RX was empty
++    # anyway (the call was a no-op). After MQ_READY the Z80 might dump
++    # leftover keystrokes; we drain those now.
++    # ─────────────────────────────────────────────────────────────────────
+     wrt = MQ.put
+-    wrt(0x40)   # Read continue
+-    wrt(0x86)   # PRINT STRING WITH LOOP
++    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+     wrt(st)     # BASIC return code
+     wrt(0x0D)   # Start on a new line
+     wrt(0x0D)   # Start with a blank line we don't count
++    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
++
++    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
++        MQ.get()
+             
+     # We handle each character. If a scroll answer is N, we will just break
+ 
+@@ -1363,9 +1632,13 @@
+                 if not new_rom:
+                     wrt(13)
+ 
+-                wrt(0x00)       # End of this page
+-                wrt(0x40)       # Read continue flag
+-                
++                wrt(0x00)       # End of this page (Z80 displays + waits for key)
++                # ─── DUAL-PORT MIGRATION ───────────────────────────────
++                # No wrt(0x40) "Read continue flag" — $0F continue is
++                # signalled via Y register (kept at READY all session).
++                # A 0x40 here would orphan and be consumed as the
++                # FIRST character of the next page.
++                # ──────────────────────────────────────────────────────
+                 ch = MQ.get()   # Get keypress from user
+                 if (ch == 78):  # If 'N' then done (ROM loops stops on old rom)
+                     return
+@@ -1376,8 +1649,11 @@
+                 else:
+                     ll = 21
+ 
+-                wrt(0x40)       # Start new string
+-                
++                # ─── DUAL-PORT MIGRATION ───────────────────────────────
++                # No wrt(0x40) "Start new string" here either — same
++                # rationale as the wrt(0x40) "Read continue flag" above.
++                # ──────────────────────────────────────────────────────
++
+                 if new_rom:
+                     for b in range(s):      # Erase scroll prompt
+                         wrt(0x08)
+@@ -1387,15 +1663,26 @@
+                     wrt(0x0D)       # Another newline for old ROM
+ 
+     wrt(end_char)               # Write end_char (done with loops)
++    TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
+ 
+-    WAIT_TX_RECEIVED()
++    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
++    drain_loops = 0
++    while MQ.tx_fifo() != 0:
++        drain_loops += 1
++        if drain_loops > 1000000:
++            TLM("SEND_MSG2 STUCK", "tx still has %d after 1M loops" % MQ.tx_fifo())
++            break
+ 
++    rx_drained = 0
+     while(MQ.rx_fifo() != 0):   # Flush input buffer to console
+-        print(MQ.get())
+-    
+-    print(MQ.tx_fifo(), MQ.rx_fifo()) # Report FIFO queue sizes
++        b = MQ.get()
++        rx_drained += 1
++        print(b)
+ 
++    TLM("SEND_MSG2 exit", "drain_loops=%d rx_drained=%d tx=%d rx=%d" % (
++        drain_loops, rx_drained, MQ.tx_fifo(), MQ.rx_fifo()))
+ 
++
+ def WALK(top):
+     """ Walk directory tree yielding (path, [subdirs]) """
+     
+@@ -1442,11 +1729,16 @@
+     global files
+ 
+     par1, par2 = PARAMS(pre)
++
++    TLM("DIR enter", "par1=%d par2=%d files=%d lista_len=%d" % (
++        par1, par2, len(files), len(lista)))
+ 
+     if par1 == 0:
+         # Regular listing
++        TLM("DIR par1=0 — regular listing via SEND_MSG2")
+         led.value(1)
+         SEND_MSG2(lista, 1, False)
++        TLM("DIR SEND_MSG2 returned")
+         led.value(0)
+ 
+     elif par1 == 1 or par1 == 2:
+@@ -1533,19 +1825,31 @@
+     prompt2 = "), (B)ack" + nl + "or (F)orward a page, (N)=quit?"
+     letters = "0123456789QWERTY"
+ 
+-    EMPTY_RX_FIFO()
++    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
++    # Removed leading EMPTY_RX_FIFO() — at this point the Z80 hasn't been
++    # told to read yet, so RX has nothing in it. We drain RX AFTER setting
++    # ready (Z80 may then dump stale keystrokes from prior input).
++    #
++    # Removed wrt(0x40) "Read continue" from start of every loop iteration
++    # — the continue flag now lives on $0F via Y register (kept at READY
++    # for the entire session by MQ_READY() below).
++    # ─────────────────────────────────────────────────────────────────────
+     wrt = MQ.put
+     Init = True
+     sel = -1
+     pgs = (n - 1) // nmax + 1
+ 
++    MQ_READY()                          # Y = READY → $0F polls succeed
++
++    while MQ.rx_fifo() != 0:            # Drain any pre-existing keystrokes
++        MQ.get()
++
+     while idx < n:
+         i = 0
+         # Write screen
+-        
+-        wrt(0x40)   # Read continue
++
+         if Init:
+-            wrt(0x86)   # PRINT STRING WITH LOOP
++            wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+             wrt(1)      # BASIC return code
+             Init = False
+         else:
+@@ -1588,8 +1892,11 @@
+         for m in prompt2:
+             wrt(m)
+             
+-        wrt(0x00)       # End of this string
+-        wrt(0x40)       # First 0x40; wait for keypress
++        wrt(0x00)       # End of this string (Z80 displays + waits for key)
++        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
++        # No wrt(0x40) "wait for keypress" — $0F continue is signalled
++        # via Y register (still at READY from MQ_READY() above).
++        # ──────────────────────────────────────────────────────────────
+         ch = MQ.get()   # Get a key
+         if ch == 78:    # 'N' then done (ROM ended the loops)
+             return -1
+@@ -1601,7 +1908,10 @@
+         elif ch in LISTMENU_CHOICES:
+             j = idx + LISTMENU_CHOICES[ch]
+             if j < n:
+-                wrt(0x40)   # Start last string
++                # ─── DUAL-PORT MIGRATION ──────────────────────────────
++                # No wrt(0x40) "Start last string" — same rationale as
++                # the other removed wrt(0x40)s in this function.
++                # ──────────────────────────────────────────────────────
+                 wrt(ch)
+                 # Erase bottom two lines
+                 for b in range(32):
+@@ -1629,8 +1939,11 @@
+             wrt(m)
+             
+     wrt(0x03) # End string loop
+-    WAIT_TX_RECEIVED()
+-    EMPTY_RX_FIFO()
++    # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
++    while MQ.tx_fifo() != 0:
++        pass
++    while MQ.rx_fifo() != 0:
++        MQ.get()
+ 
+     return sel
+ 
+@@ -1806,8 +2119,12 @@
+         LOG("New empty file:%s" % filename, 0)
+         os.chdir(TSP.cur_path)
+         DIR_FILES()
++        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
++        DEACTIVATE_SD()
+         ACTIVATE_MQ()
+     except:
++        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
++        DEACTIVATE_SD()
+         ACTIVATE_MQ()
+         msg = "Can't create new file: "
+         LOG(msg + filename, 2)
+@@ -1985,10 +2302,11 @@
+     led.value(1)
+     
+     if TSP.f_name[-4:].upper() == ".DCK":
+-        
+-        wrt(0x40)
++
++        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
+         wrt(status)
+-        
++        MQ_READY()
++
+         try:
+             
+             with open("/TMP/temp.bin", "rb") as file:
+@@ -2014,9 +2332,10 @@
+             status = _3_F_Invalid_file
+             BLINK_ERROR()
+         
+-        wrt(0x40)
++        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
+         wrt(status)
+-        
++        MQ_READY()
++
+         if (status == _1_OK):
+             
+             rd_offset = par2
+@@ -2103,6 +2422,8 @@
+         LOG(message, 2)
+             
+     if not SDactive:
++        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
++        DEACTIVATE_SD()
+         ACTIVATE_MQ()
+ 
+     return status, message
+@@ -2329,6 +2650,8 @@
+                     st = _3_F_Invalid_file
+                     lv = 1 # warning
+ 
++        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
++        DEACTIVATE_SD()
+         ACTIVATE_MQ()
+ 
+     else:
+@@ -2698,13 +3021,15 @@
+                     pass
+ 
+             except OSError:
+-                
++
+                 message = "MD: OS error creating: "
+                 LOG(message + name, 2)
+                 status = _4_Q_Parameter
+-        
++
++        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
++        DEACTIVATE_SD()
+         ACTIVATE_MQ()
+-    
++
+     if (status == _1_OK or status == _7_8_EOF) and par1 == 1 and par2 == 0:
+         # Change to new DIR with show path option
+         pre = [0] * 10
+@@ -2989,19 +3314,36 @@
+ 
+     global MQ
+ 
+-    EMPTY_RX_FIFO()
++    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
++    # Removed: leading EMPTY_RX_FIFO(); three wrt(0x40) calls ("Read
++    # continue", "Read continue to get char", "Start a new string");
++    # and replaced WAIT_TX_RECEIVED() / EMPTY_RX_FIFO() at the tail
++    # with inline drains.
++    #
++    # All three wrt(0x40)s were single-port "continue flag in TX" writes
++    # that have no place in dual-port — the continue flag lives on $0F
++    # via the Y register. A 0x40 left in TX would be consumed as data
++    # by Z80's $0E read, orphaning the rest of the response.
++    #
++    # The EMPTY_RX_FIFO moved BELOW MQ_READY: at the original position
++    # the Z80 hadn't been told to read yet, so RX had nothing to drain.
++    # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
++    # ─────────────────────────────────────────────────────────────────────
+     wrt = MQ.put
+-    wrt(0x40)   # Read continue
+-    wrt(0x86)   # PRINT STRING WITH LOOP
++    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+     wrt(0x01)   # BASIC return code
+     wrt(0x0D)   # Start a new line
++    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
++
++    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
++        MQ.get()
++
+     for ch in prompt:
+         wrt(ch)
+-    wrt(0x00)   # End string
+-    wrt(0x40)   # Read continue to get char
++    wrt(0x00)   # End string (Z80 prints + waits for key)
++
+     ch = MQ.get()
+     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
+-        wrt(0x40) # Start a new string
+         if echo:
+             if ch < 32 or ch > 127:
+                 wrt(89) # Y
+@@ -3010,8 +3352,12 @@
+         wrt(0x03) # End the string loop
+         # Could add an option to not wrt(0x03) and let the caller do that after
+         # writing some more text to indicate the result of the action.
+-        WAIT_TX_RECEIVED()
+-        EMPTY_RX_FIFO()
++
++        # ─── DUAL-PORT MIGRATION: inline drains ───────────────────────
++        while MQ.tx_fifo() != 0:
++            pass
++        while MQ.rx_fifo() != 0:
++            MQ.get()
+ 
+     return ch
+ 
+@@ -3106,13 +3452,15 @@
+             LOG(message + name, 0)
+ 
+         except OSError:
+-            
++
+             message = "OS error removing: "
+             status = _4_Q_Parameter
+             LOG(message + name, 2)
+ 
++        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
++        DEACTIVATE_SD()
+         ACTIVATE_MQ()
+-    
++
+     if not sent:
+         SEND_MSG(message, name, status)
+     
+@@ -3291,12 +3639,20 @@
+ 
+ def NOP(pre, cmd):
+     """A 'no operation' command"""
+-    
++
+     global MQ
+-    
+-    MQ.put(0x40)
++
++    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
++    # Was:  MQ.put(0x40); MQ.put(0x01)
++    #       (single-port: 0x40 = continue flag in TX, 0x01 = OK status)
++    # Now:  MQ.put(0x01); MQ_READY()
++    #       The continue flag now lives on $0F via the Y register. The
++    #       0x40 in TX would have been read as data by the Z80's $0E
++    #       read and misinterpreted later (orphan-byte family bug).
++    # ─────────────────────────────────────────────────────────────────────
+     MQ.put(0x01)
+-    
++    MQ_READY()
++
+     return
+ 
+ 
+@@ -3306,10 +3662,10 @@
+ 
+ 
+ def PRINT_IO(pre):                                                                                                           # LPRINT and LLIST processing
+-    
++
+     global MQ
+     global TSP
+-    
++
+     prn = bytearray(10000)
+     end_msg = "File 0001.txt closed OK"
+     r1 = range(10)
+@@ -3319,25 +3675,39 @@
+     while True:
+         prn[pos] = pre[3]
+         pos += 1
+-        
+-        wrt(0x40)
++
++        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
++        # Was:  wrt(0x40); wrt(0x01)
++        # Now:  wrt(0x01); MQ_READY()
++        # The 0x40 (continue) is no longer a FIFO byte — it's the Y
++        # register signalled via MQ_READY(). The 0x01 is the status
++        # the Z80 reads from $0E after seeing ready on $0F.
++        # ──────────────────────────────────────────────────────────────
+         wrt(0x01)
+-        
++        MQ_READY()
++
+         pre = [0] * 10
+         for i in r1:
+             pre[i] = MQ.get()
+         if pre[1] != 5:
+             break
+-    
+-    wrt(0x40)
++
++    # ─── DUAL-PORT MIGRATION (loop exit, same pattern as in-loop) ─────
+     wrt(0x01)
+-    
++    MQ_READY()
++
+     SEND_MSG(end_msg, "", _1_OK)
+-    
+-    WAIT_TX_RECEIVED()
+-  
+-    EMPTY_RX_FIFO()
+-        
++
++    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
++    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
++    # helpers being retired in stage 7). Behavior is identical.
++    # ──────────────────────────────────────────────────────────────────
++    while MQ.tx_fifo() != 0:
++        pass
++
++    while MQ.rx_fifo() != 0:
++        MQ.get()
++
+     prn = prn[:pos]
+ 
+     with open("/PRN/0001.txt", "w") as sal:                                           # PRINT output filename is fixed on this version; can be set up
+@@ -3347,25 +3717,42 @@
+ 
+ 
+ def PROCESS_ASM(pre):                                                                 # Processes AU (Assembler) commands sent by the TS
+-    
++
+     global MQ
+-    
++
+     cmd = pre[:5].decode()
+     wrt = MQ.put
+-    
+-    wrt(0x40)
+-    
++
++    # ─── DUAL-PORT MIGRATION: leading wrt(0x40) REMOVED ───────────────
++    # Was the single-port "continue flag" byte indicating Pico is ready
++    # to receive the command body. In dual-port the Z80 polls $0F (Y
++    # register, kept at READY all session) for ready and reads $0E for
++    # data — so the 0x40 in TX served no purpose and would have been
++    # read by the Z80 as an unexpected data byte.
++    # ──────────────────────────────────────────────────────────────────
++
+     print(pre)
+     print(cmd)
+-    
++
+     par3 = int(pre[8])
+     par4 = int(pre[9])
+-    
++
+     print(par3, par4)
+-    
+-    wrt(0x40)
+-    wrt(0x01)
+-    
++
++    # ─── DUAL-PORT MIGRATION: V6 tail (final status + pre-load) ───────
++    # Was:  wrt(0x40); wrt(0x01)   (0x40 = continue flag, 0x01 = status)
++    # Now:  wrt(0x01); wrt(0x01)
++    #   - First 0x01: final status response for THIS command (Z80 reads
++    #     as "0 OK" via $0E).
++    #   - Second 0x01: pre-load for the NEXT command's initial status.
++    #     This is the V6 chain that keeps back-to-back commands working
++    #     without re-arming status in the main dispatcher.
++    # The continue flag has moved off the FIFO entirely — Y register
++    # stays at READY so $0F always answers ready.
++    # ──────────────────────────────────────────────────────────────────
++    wrt(0x01)        # final status — Z80 reads as "0 OK"
++    wrt(0x01)        # pre-load for next command's initial status
++
+     return
+ 
+ 
+@@ -3386,25 +3773,45 @@
+     cmd = bytearray(100)
+     
+     load_cmd = pre[1]
+-    
++
+     long = pre[7] + 256*pre[8] + 3
+     rl = range(long)
+-    
+-    wrt(0x40)
+-    wrt(0x01)
+-    
++
++    # ─── DUAL-PORT MIGRATION: leading wrt(0x40); wrt(0x01) REMOVED ────
++    # In single-port Ricardo's code, these two bytes served as:
++    #   - wrt(0x40): "continue flag" — signal Pico is ready for body
++    #   - wrt(0x01): pre-load of initial status for command body phase
++    # Both are obsolete in dual-port:
++    #   - The continue flag lives on $0F via the Y register (kept at
++    #     READY for the entire session).
++    #   - The initial status byte the Z80 just read at pre-header time
++    #     was supplied by the PREVIOUS handler's V6 tail pre-load (or
++    #     by the boot pre-load for the very first command).
++    # Leaving them here would inject two orphan bytes that get misread
++    # by subsequent Z80 reads — the classic orphan-byte family of bugs.
++    #
++    # The blocking-read loop below is the production-tight body drain;
++    # same two-phase capture rule as the dispatcher's pre-header read.
++    # ──────────────────────────────────────────────────────────────────
+     for l in rl:
+         cmd[l] = MQ.get()
+-    
++
++    # Now safe to TLM (Z80 is processing — no time pressure on Pico).
++    TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d cmd=%r" % (
++        load_cmd, long, bytes(cmd[:long])))
++
+     try:
+         cmd = cmd[:long].decode()
+     except:
+         LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
++        TLM("PROCESS_CMD decode FAILED — returning early")
+         return
+ 
+     cmd_exec = cmd[3:].upper() # Command starting with "TPI:" in uppercase
+     rest_cmd = cmd[7:] # Command after "tpi:"
+ 
++    TLM("PROCESS_CMD parsed", "cmd_exec=%r rest_cmd=%r" % (cmd_exec, rest_cmd))
++
+     # gc.collect()
+ 
+     if load_cmd:                                                                                    # Is it a "LOAD:tpi:..." command.....?
+@@ -3453,26 +3860,56 @@
+         else:
+             cmd_word = cmd_exec
+             # cmd_args = ""
+-            
++
++        TLM("PROCESS_CMD SAVE branch", "cmd_word=%r in_SA_funct=%s in_EXT=%s" % (
++            cmd_word, cmd_word in SA_funct, cmd_word in EXT_SA_FUNCT))
++
+         if cmd_word in SA_funct:
+             EXEC = SA_funct[cmd_word]
++            TLM("PROCESS_CMD dispatching SA_funct", "cmd_word=%r" % cmd_word)
+             EXEC(pre, cmd)
+-            
++            TLM("PROCESS_CMD SA_funct returned", "cmd_word=%r" % cmd_word)
++
+         elif cmd_word in EXT_SA_FUNCT:                                                                                # Is an external cmd?
+             EXEC = EXT_SA_FUNCT[cmd_word]
+             EXEC(MQ, TSP, pre, cmd)
+-            
++
+         else:
+             msg = "Unrecognized command: %s" % cmd_exec
+             SEND_MSG(msg, 'SAVE "tpi:help" for info', _5_C_Nonsense)    # If none of the above, raise error
+             LOG(msg, 2)
+-    
+-    WAIT_TX_RECEIVED()
+-    
+-    EMPTY_RX_FIFO()
+-        
++
++    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
++    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
++    # helpers being retired in stage 7). Behavior is identical.
++    # ──────────────────────────────────────────────────────────────────
++    TLM("PROCESS_CMD draining tx_fifo at exit")
++    drain_tx = 0
++    while MQ.tx_fifo() != 0:
++        drain_tx += 1
++        if drain_tx > 1000000:
++            TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
++            break
++
++    drain_rx = 0
++    while MQ.rx_fifo() != 0:
++        MQ.get()
++        drain_rx += 1
++
++    TLM("PROCESS_CMD exit", "drain_tx=%d drain_rx=%d cmd=%r" % (drain_tx, drain_rx, cmd_exec))
++
++    # ─── DUAL-PORT MIGRATION: V6 tail pre-load ────────────────────────
++    # Pre-load 0x01 status for the NEXT command's initial $0E read.
++    # This is the V6 chain — every command handler ends with a 0x01
++    # in TX so the next command's pre-header phase finds a valid
++    # status byte already waiting. Without this, the next command
++    # would read stale 0x00 -> Report J - Invalid I/O Device.
++    # See docs/PROTOCOL.md "Writing a new command handler" for details.
++    # ──────────────────────────────────────────────────────────────────
++    MQ.put(0x01)
++
+     LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
+-    
++
+     return
+ 
+ 
+@@ -3658,14 +4095,57 @@
+     LOG("After DIR_FILES, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+     gc.collect()
+     LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+-    
++
++    # ─── DUAL-PORT MIGRATION: explicit SD-teardown before MQ activation ───
++    # ACTIVATE_MQ no longer unmounts /sd itself; we must do it explicitly
++    # via DEACTIVATE_SD first (see stage-3 comments above ACTIVATE_MQ).
++    # This also clamps GPIO 2-4 LOW before the PIO reclaims them, which
++    # closes the tri-state window that was the original Report D root
++    # cause (docs/DUAL_PORT_DEVELOPMENT.md §1).
++    # ─────────────────────────────────────────────────────────────────────
++    DEACTIVATE_SD()
+     ACTIVATE_MQ()
+-    
++
++    # ─── DUAL-PORT MIGRATION: boot-time status pre-load (V6 chain start) ──
++    # Pre-load a single 0x01 status byte into TX FIFO. The very first Z80
++    # command will read this from $0E as its initial OK status. Every
++    # command handler ends with its own MQ.put(0x01), so this chain
++    # continues automatically across subsequent commands without needing
++    # any further pre-loads from the dispatcher.
++    #
++    # CRITICAL: this MQ.put(0x01) must happen ONCE, here, and not inside
++    # ACTIVATE_MQ. Doing it inside ACTIVATE_MQ would also fire it on
++    # every mid-command SD round-trip (MOUNT_FILE etc.), producing a
++    # stray 0x01 that gets misread later in the protocol. This was
++    # "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.
++    # ─────────────────────────────────────────────────────────────────────
++    MQ.put(0x01)
++
++    # ─── DUAL-PORT MIGRATION: pre-open /assets/nofile.tap ─────────────────
++    # OPEN_NOFILE_TAP caches a read handle to /assets/nofile.tap so that
++    # LOAD "" (no prior mount) doesn't pay file-open latency in the
++    # time-critical response path. Without this, the open takes 1-5 ms
++    # during which the Z80 reads stale 0x00 bytes and reports Report J.
++    # See docs/DUAL_PORT_DEVELOPMENT.md §8 (Bug 3 area / nofile pre-open).
++    # ─────────────────────────────────────────────────────────────────────
++    if OPEN_NOFILE_TAP():
++        LOG("/assets/nofile.tap pre-opened OK", 0)
++    else:
++        LOG('WARNING: /assets/nofile.tap MISSING from Pico flash. '
++            'LOAD "" without a prior mount will return Report R until '
++            'you copy assets/*.tap from the repo onto Pico flash.', 1)
++
+     LOG("SD Card initialized and mounted OK", 0)
+     SAVE_LOG()
+-    
++
+     wrt = MQ.put
+-    
++
++    # ─── Boot-noise flush (Ryan's diagnostic loop, kept) ──────────────────
++    # The Z80 may emit stray bytes during its own power-on reset / boot
++    # window. We drain anything sitting in RX FIFO so the first "real"
++    # protocol byte isn't preceded by garbage. Per-byte LOG kept for
++    # diagnostic value — useful when chasing power-sequence weirdness.
++    # ─────────────────────────────────────────────────────────────────────
+     LOG("Boot noise flush: starting", 0)
+     boot_garbage = []
+     empty_start = time.ticks_ms()
+@@ -3700,25 +4180,38 @@
+     while True:                                                                                    # main execution loop
+ 
+         if (MQ.rx_fifo()) != 0:
+-            
++
+             ts = time.ticks_us()                                                                   # reset timestamp
+-            # reset timestamp
+-            count = 0
+-            idx = 0
+-            
+-            wrt(0x01)
+-            while (count <= 30_000) and (idx <= 9):
+-                if (MQ.rx_fifo()) != 0:
+-                    pre[idx] = MQ.get()
+-                    idx += 1
+-                    
+-                else:
+-                    count += 1
+-                    
+-            if (count >= 30_000):
+-                LOG("Incomplete command received", 2)
+-                BLINK_ERROR()
+-                continue
++
++            # ─── DUAL-PORT MIGRATION: tight blocking pre-header read ─────
++            # Replaces Ryan's earlier "count up to 30,000 polls" read loop
++            # with a production-tight blocking burst: ten back-to-back
++            # MQ.get() calls and NOTHING in between.
++            #
++            # Why so strict: the PIO RX FIFO is only 4 entries deep, and
++            # the Z80 OUTs bytes at ~30 us each. Any Python work between
++            # successive gets (conditionals, counters, polling-fifo) risks
++            # letting the FIFO overflow, at which point PIO push(noblock)
++            # silently drops bytes. The Z80 doesn't know; the dispatcher
++            # sees a truncated pre-header and dispatches to the wrong
++            # branch (or no branch at all -> Report J).
++            #
++            # Also removed: the per-iteration `wrt(0x01)` that used to
++            # live right above this read. In the dual-port V6 chain, the
++            # status byte for THIS command was already pre-loaded into
++            # TX by the PREVIOUS command's tail (or by the boot pre-load
++            # for the very first command). Adding another wrt(0x01) here
++            # would inject a stray byte that gets misread later in the
++            # protocol (orphan-byte family of bugs).
++            # ────────────────────────────────────────────────────────────
++            for i in r1:
++                pre[i] = MQ.get()                                          # blocking
++
++            # Snapshot pre[] for any later TLM that wants to print it.
++            # Cheap when TLM_ENABLED=False (the TLM() calls below no-op
++            # and this list construction is the only residual overhead;
++            # ~10us at most, well outside the hot RX-drain path).
++            _pre_snapshot = list(pre)
+                                                                                                       # pre(header)[0] is a command
+             # gc.collect()
+             fr1 = gc.mem_free()
+@@ -3744,7 +4237,12 @@
+                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
+                 save_aborted = "sd" not in os.listdir("/")
+ 
+-                # Make sure MQ is active (SAVE_TS normally leaves SD active)
++                # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
++                # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
++                # unmounts it, so we do it here. See stage-3 comments
++                # on ACTIVATE_MQ for the rationale.
++                # ──────────────────────────────────────────────────────────
++                DEACTIVATE_SD()
+                 ACTIVATE_MQ() # Also fixes ENA_SD leaving MQ active with SD active as well
+ 
+                 if not save_aborted:
+@@ -3804,44 +4302,57 @@
+                             LOG("DIR_FILES failed after save", 2)
+                     except:
+                         LOG("os.chdir failed after save", 2)
+-                    
++
++                    # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────
++                    # /sd was just mounted via ACTIVATE_SD above for the
++                    # DIR refresh; tear it down before reactivating MQ.
++                    # ──────────────────────────────────────────────────────
++                    DEACTIVATE_SD()
+                     ACTIVATE_MQ()
+-                
++
+                 led.value(0)
+                 
+-            elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine 
++            elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine
++                TLM("LVM LOAD enter", "pre=%s f_name=%s tap_idx=%d offset=%d" % (
++                    _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
+                 LOG("Starting TS LVM", 0)
+-                
++
+                 while busy:
+                     pass
+                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
+                 # log_entries += new_logs
+                 log_entries.append(new_logs) # for now
+                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
+-                
++                TLM("LVM LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
++
+             elif (pre[0] == 0 or pre[0] == 255):                                                      # Headerless LOAD
++                TLM("LVM Headerless LOAD enter", "pre=%s tap_idx=%d offset=%d" % (
++                    _pre_snapshot, TSP.tap_idx, TSP.offset))
+                 LOG("Starting TS LVM - Headerless LOAD", 0)
+-                
++
+                 while busy:
+                     pass
+                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
+                 # log_entries += new_logs
+                 log_entries.append(new_logs) # for now
+                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
+-                
++                TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
++
+             elif pre[0] == 66 and pre[1] == 5:                                                        # commands are pre[0] == 66. PRINT commands are pre[1] == 5
+                 LOG("Starting PRINT", 0)
+                 PRINT_IO(pre)
+                 DIR_FILES()
+-                
++
+             elif pre[0] == 66:
+ 
+                 LOG("Starting TS COMMAND " + str(pre), 0)
+-                
++
+                 try:
+                     PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)
+-                except:
++                    TLM("main loop: PROCESS_CMD returned", "pre=%s" % _pre_snapshot)
++                except Exception as _e:
+                     LOG("Invalid data received from PROCESS_CMD: " + str(pre), 2)
++                    TLM("main loop: PROCESS_CMD raised exception", str(_e))
+                     continue
+                 
+                 if TSP.zx48:
+@@ -3858,32 +4369,39 @@
+                     LOG("Unrecognized command! " + str(list(pre)), 1)
+                 except:
+                     LOG("Unrecognized command! Cannot get pre[] data", 1)
+-                
+-                EMPTY_RX_FIFO()
+-                EMPTY_TX_FIFO()
++
++                # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
++                # Replaces EMPTY_RX_FIFO() / EMPTY_TX_FIFO() (single-port
++                # helpers being retired). The behavior is identical; just
++                # inlined so the handler is self-contained.
++                # ──────────────────────────────────────────────────────────
++                while MQ.rx_fifo() != 0:
++                    MQ.get()
++                while MQ.tx_fifo() != 0:
++                    MQ.exec("pull (noblock)")
++                    MQ.exec("mov (osr, null)")
+                 MQ.active(0)
+                 utime.sleep(.01)
+                 MQ.active(1)
+-                
++
+                 BLINK_ERROR()
+-                
++
+                 LOG("Cleared TX/RX FIFO after unrecognized cmd: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
+-                
+-            # fr2 = gc.mem_free()
+-            # LOG("End of main loop, free=%.1f" % (fr2 >> 10), 0)
+-            # gc.collect()
+-            # LOG("After gc.collect, free=%.1f" % (gc.mem_free() >> 10), 0)
+-            n = MQ.tx_fifo()
+-            if n > 0:
+-                EMPTY_TX_FIFO()
+-                LOG("Bottom of main loop: TX FIFO was cleared, it had %d bytes in it." % n, 0)
+-            n = MQ.rx_fifo()
+-            if n > 0:
+-                b = bytearray(n)
+-                for i in range(n):
+-                    b[i] = MQ.get()
+-                LOG("Bottom of main loop: RX FIFO was cleared, it had %d bytes in it: %s" % str(b), 0)
+-                
++
++            # ─── DUAL-PORT MIGRATION: bottom-of-loop drains REMOVED ───────
++            # Ryan's original code had defensive drains here ("clean up
++            # whatever the handler left behind"). In dual-port V6 those
++            # drains MASK bugs rather than fix them: each handler's V6
++            # tail must leave TX with exactly one 0x01 (the pre-load for
++            # the next command) and RX empty. If those invariants are
++            # ever violated, we want to see the resulting Report J/R
++            # immediately, not paper over it.
++            #
++            # If a bug ever causes orphan bytes here, you'll see the
++            # next command misbehave — which is the correct signal to
++            # go find the handler that didn't clean up after itself.
++            # ──────────────────────────────────────────────────────────────
++
+         else:
+             # Nothing to do, so check if time to save the log
+             if time.ticks_us() - ts < 2_000_000:
+@@ -3913,12 +4431,20 @@
+     
+     par1, par2 = PARAMS(pre)
+ 
+-    MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT), in_base=Pin(2, Pin.IN), jmp_pin=Pin(11), sideset_base=Pin(12, Pin.OUT))
++    # ─── DUAL-PORT MIGRATION: ZX48_IO SM creation ─────────────────────────
++    # Same change as ACTIVATE_MQ: TS_IO -> TS_IO_DUAL, 15 MHz -> 30 MHz,
++    # add Y=READY initialization after activation. Without this, ZX
++    # Spectrum mode would NameError on TS_IO (we removed that import in
++    # stage 1) and even if imported wouldn't work because of the bus
++    # protocol mismatch.
++    # ─────────────────────────────────────────────────────────────────────
++    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT), in_base=Pin(2, Pin.IN), jmp_pin=Pin(11), sideset_base=Pin(12, Pin.OUT))
+     MQ.active(0)
+-    
++
+     utime.sleep(0.01)
+     MQ.active(1)
+-    
++    MQ.exec("mov(y, invert(null))")    # Y = READY for the entire ZX session
++
+     LOG("Starting ZX Mode...", 0)
+ 
+     ts = time.ticks_us()
+@@ -3964,12 +4490,16 @@
+             
+             else:
+                 LOG("Unrecognized ZX command", 1)
+-                EMPTY_RX_FIFO()
+-                EMPTY_TX_FIFO()
++                # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
++                while MQ.rx_fifo() != 0:
++                    MQ.get()
++                while MQ.tx_fifo() != 0:
++                    MQ.exec("pull (noblock)")
++                    MQ.exec("mov (osr, null)")
+                 MQ.active(0)
+                 utime.sleep(.01)
+                 MQ.active(1)
+-                
++
+                 LOG("Cleared TX/RX FIFO after unrecognized ZX command: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
+ 
+         else:
+@@ -3990,13 +4520,16 @@
+     if MQ.tx_fifo() != 0:
+         print("MQ FIFO: ", MQ.tx_fifo())
+         LOG("TX FIFO not empty after ZX mode. Trying to force cleanup", 1)
+-        
+-        EMPTY_TX_FIFO()
+-            
++
++        # ─── DUAL-PORT MIGRATION: inline TX drain ─────────────────────────
++        while MQ.tx_fifo() != 0:
++            MQ.exec("pull (noblock)")
++            MQ.exec("mov (osr, null)")
++
+         MQ.active(0)
+         utime.sleep(.01)
+         MQ.active(1)
+-        
++
+         LOG("TX FIFO succesfully cleared before returning from ZX mode", 0)
+         
+     else:

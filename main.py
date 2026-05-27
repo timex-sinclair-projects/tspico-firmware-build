@@ -14,22 +14,32 @@ from machine import freq, Pin
 # subject to the chosen setting.
 #
 # At runtime you can also toggle this from the REPL:
-#       import TS.tspico
+#       import TS.tspico                  # if using the frozen module
 #       TS.tspico.TLM_ENABLED = True
+#   or
+#       import dev_tspico                 # if using the dev override
+#       dev_tspico.TLM_ENABLED = True
 import TS.tspico
 TS.tspico.TLM_ENABLED = True
 
-# Dev override: if /dev_tspico.py is present on flash, use that instead
-# of the frozen TS.tspico. Lets you iterate on a single file without
-# rebuilding the UF2. To revert, just delete /dev_tspico.py from flash.
-# /dev_tspico.py is a renamed copy of TS/tspico.py. It still imports
-# `from TS.tspico_io import ...` etc — those resolve to the frozen
-# modules because no /TS/ folder shadows them.
+# Dev override: if /dev_tspico.{py,mpy} is present on flash, use that
+# instead of the frozen TS.tspico. Lets you iterate on a single file
+# without rebuilding the UF2. To revert, just delete /dev_tspico.* from
+# flash. The .mpy variant is preferred (skips the parser, saves ~80%
+# RAM at import) — produced by ./build-dev-mpy.sh locally or by CI.
+#
+# CRITICAL: when the dev override loads, the TLM_ENABLED flag we set
+# above is on TS.tspico, NOT dev_tspico. We must mirror it onto the
+# module that's actually running, otherwise diagnostic prints are
+# silently dropped. (Easy mistake — caught during stage-9 testing.)
 try:
     from dev_tspico import TS2068_IO
-    print("[DEV] Using /dev_tspico.py override")
+    import dev_tspico
+    dev_tspico.TLM_ENABLED = TS.tspico.TLM_ENABLED
+    print("[DEV] Using /dev_tspico override (TLM=%s)" % dev_tspico.TLM_ENABLED)
 except ImportError:
     from TS.tspico import TS2068_IO
+    print("[DEV] Using frozen TS.tspico (TLM=%s)" % TS.tspico.TLM_ENABLED)
 
 U6_EN = Pin(12, Pin.OUT, Pin.PULL_UP)
 WAIT = Pin(14, Pin.OUT, Pin.PULL_DOWN)
@@ -53,28 +63,46 @@ log_msg = ""
 
 # utime.sleep(.5)
 
+# ---------------- BELT-AND-SUSPENDERS TOP-LEVEL HANDLER ----------------
+# Wrap TS2068_IO() so any unhandled exception gets logged to
+# /activity.log instead of dropping the Pico to a REPL with no
+# diagnostic trace persisted to flash.
+#
+# Without this wrapper, an OSError out of _thread.start_new_thread (or
+# any other unhandled exception in TS2068_IO) would propagate to here,
+# Python prints a traceback to USB serial and exits. From the user's
+# perspective the Pico "locks up" — LED stops blinking, 2068 gets J on
+# the next command, and the only diagnostic is whatever was already on
+# the USB serial console (often nothing if telemetry was off).
+#
+# With this wrapper, the exception is captured to /activity.log along
+# with a timestamp, then we BREAK the outer while loop so we don't
+# infinite-loop on the same exception. The Pico will be quiescent but
+# the post-mortem will be on flash, retrievable via Thonny.
+# ───────────────────────────────────────────────────────────────────────
+
 while True:
-    
+
     collect()
-    TS2068_IO()
-    
-#     try:
-#         TS2068_IO()
-#         
-#     except Exception as err:
-#         
-#         try:
-#             close("activity.log")
-#         except:
-#             pass
-#         
-#         with open("/activity.log", "a") as log:
-#             
-#             log_msg += "[" + str(time.ticks_us()) + "] "
-#             log_msg += "FATAL ERROR!!!:"
-#             
-#             log.write(log_msg)
-#             sys.print_exception(err, log)
-#             
-#         break        
+
+    try:
+        TS2068_IO()
+
+    except Exception as err:
+
+        try:
+            with open("/activity.log", "a") as log:
+                log_msg = "[%d] FATAL ERROR in TS2068_IO:\n" % time.ticks_us()
+                log.write(log_msg)
+                sys.print_exception(err, log)
+        except:
+            # If we can't even write to flash, dump to USB serial as
+            # last resort and break the loop.
+            pass
+
+        # Also print to USB serial for live debugging when attached.
+        print("\n[FATAL] TS2068_IO raised %r — see /activity.log" % err)
+        sys.print_exception(err)
+
+        break
         

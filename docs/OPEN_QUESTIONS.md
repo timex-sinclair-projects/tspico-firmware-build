@@ -24,6 +24,20 @@ remove it from here and link the issue.
 
 - **Should we implement true CRC verification on incoming messages?** —
   [#2](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/2)
+- **Write developer onboarding guide (env setup, mpy generation, etc.)** —
+  [#6](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/6)
+- **SEND_MSG2 intermittent failure / TX FIFO underflow / blank-screen
+  keypress wait** (originally filed here as "blank-screen-then-keypress-wait
+  for short messages"; investigation showed it's the same race that makes
+  `tpi:help border` hang under the buffer-prebuild refactor) —
+  [#7](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/7)
+- **Extension command (extcmd) protocol incompatible with dual-port V6
+  pre-load chain** — design analysis in
+  [`docs/EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md), tracker at
+  [#8](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/8)
+- **ZX48 exit-by-byte unreachable: `OUT 10,100` doesn't reach the Pico
+  (port `$0A` not routed through PICOSEL)** —
+  [#9](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/9)
 
 ---
 
