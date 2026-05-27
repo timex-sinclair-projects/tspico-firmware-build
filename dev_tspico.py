@@ -1005,12 +1005,23 @@ def DIR_FILES():                                                                
     starts = ['.']                                                                            # first characters of files to be excluded
     
     ordered = True                                                                            # In the future, this could be controlled by an option
-    
-    # try:
-    #     os.remove("dirinfo.tap")
-    # except:
-    #     pass
-    
+
+    # ─── DUAL-PORT MIGRATION: remove stale dirinfo.tap before listing ─────
+    # dirinfo.tap is a synthetic TAP file DIR_FILES writes at the end of
+    # this function (containing the directory listing in a format the 2068
+    # can LOAD). Without removing the PREVIOUS one before listing the
+    # directory, os.ilistdir() picks it up and adds it to the files[] and
+    # lista listings sent to the 2068. End-user sees dirinfo.tap as if it
+    # were a real file they put there. (Was uncommented in production
+    # TS/tspico.py line 758-761; was commented out in Ryan's version,
+    # causing the visibility bug reported during picotest's directory
+    # listing tests.)
+    # ─────────────────────────────────────────────────────────────────────
+    try:
+        os.remove("dirinfo.tap")
+    except:
+        pass
+
     if ordered:
         listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
     else:
