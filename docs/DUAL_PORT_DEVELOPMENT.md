@@ -316,6 +316,101 @@ that generates `test/test.tap` — a 51-byte TAP file containing the
 **What it taught us:** Useful as a template for anyone needing to
 hand-craft test TAP files for new test scenarios.
 
+### 5k. The 2026 follow-up series — bare LOAD investigation
+
+After the dual-port migration shipped, a separate puzzle remained:
+`LOAD ""` (without a prior MOUNT) was returning Report J on the 2068.
+We built four more harnesses to dig into it, and **one of them taught
+us a new lesson about how NOT to write a harness.**
+
+#### 5k.i. `test/protocol_observer_nomount.py` — bare-LOAD observer
+
+**What it does:** Same V8-style setup, but specifically targeted at the
+`LOAD ""` (no prior mount) case. Tracks RX events AND TX-drain events
+(when `MQ.tx_fifo()` decreases, i.e. when the Z80 reads our pre-loaded
+status). Periodic FIFO snapshots every 100ms.
+
+**What it taught us:** the bare-LOAD pre-header on the wire is a
+properly-formed 10-byte pre-header with valid CRC — not a malformed
+sentinel as we initially suspected. The Report J was caused by missing
+`/assets/nofile.tap` on the Pico flash, not by anything wire-level.
+(See the Open Questions doc for the resulting work; production now
+pre-opens the no-file fallback at boot to avoid an open() race in the
+hot path.)
+
+#### 5k.ii. `test/protocol_observer_crc.py` — first CRC-checking harness ⚠️
+
+**What it does:** After capturing each pre-header byte, computes a
+running XOR. At byte 9 (the spec-defined CRC byte), checks the XOR
+against the received CRC and responds with `(XOR_total + 1) & 0xFF`
+per Gustavo's spec p.2 rule (`status = XOR(all received bytes) + 1`).
+
+**What it taught us — the buffer-read mistake we want to make sure
+nobody repeats:**
+
+This harness produced a confusing result: the bare-LOAD trace showed
+only **9 bytes** captured, with no CRC byte at index 9. We chased
+several wrong theories from that data:
+
+  - "Maybe the pre-header is actually 9 bytes for bare LOAD."
+  - "Maybe the Z80 short-circuits the protocol after reading our
+    boot-pre-loaded `0x01`."
+  - "Maybe Gustavo's spec disagrees with the actual ROM."
+
+When we finally compared against production telemetry, production was
+seeing the full 10-byte pre-header with a valid CRC. **The bytes were
+on the wire. Our harness was dropping one of them.**
+
+The cause: the harness called an `on_rx(idx, val, port, t)` callback
+once per byte, inside the capture loop. The callback did Python-level
+work (XOR, conditional, `MQ.put` at byte 9). Combined with attribute
+lookups, timestamp calls, and bounds checks, the per-iteration time
+crept up enough that — combined with normal interpreter jitter — the
+4-deep PIO RX FIFO occasionally overflowed. PIO `push noblock` then
+silently dropped the overflowing byte. The Z80 kept going (it doesn't
+know about the FIFO state), our trace just looked truncated.
+
+The fix is the **two-phase capture pattern** now baked into the
+template: PHASE 1 is a tight blocking burst-read with NO Python work
+between gets (matching production's `for i in r1: pre[i] = MQ.get()`);
+PHASE 2 runs after the burst completes and does all the math/response
+work. The Z80's `WAIT EXECUTION` budget (2.8ms) is more than enough
+time for PHASE 2 work.
+
+**Lesson:** capture and decision are two different jobs. Don't
+interleave them. If a harness sees fewer bytes than production, the
+first thing to check is "am I doing per-byte Python work?" before
+inventing protocol theories.
+
+This is documented in `test/_harness_template.py`'s top docstring as
+the "TWO-PHASE CAPTURE PATTERN" rule.
+
+#### 5k.iii. `test/protocol_observer_crc_named.py` — comparison harness
+
+**What it does:** Identical to 5k.ii but prompts you to type
+`LOAD "TEST"` instead of bare `LOAD ""`. The intent was to compare a
+named LOAD against the bare LOAD to see whether the difference
+explained the observed truncation.
+
+**What it taught us:** both produced the same 9-byte truncated
+capture, in the same shape. That ruled out "bare LOAD is special" and
+focused suspicion on the harness itself — which led us to 5k.ii's
+diagnosis. The harness is kept as a record of the diff that pointed
+us in the right direction.
+
+#### 5k.iv. `test/protocol_observer_multicmd.py` — multi-command observer
+
+**What it does:** Stays alive across multiple commands by auto-
+refilling `0x01` whenever TX FIFO drains to empty (mimicking V6
+production handler-tail behavior). Captures three event types: RX
+bytes, TX-drains, auto-refills. Phase-grouped dump.
+
+**What it taught us:** designed to capture a `LOAD "tpi:pt.tap"` →
+`LOAD ""` sequence end-to-end, but never produced clean data because
+it inherits the same per-byte hot-loop pattern as 5k.ii. A revised
+version using the new template's two-phase capture pattern is on the
+TODO list. Kept as a reference for the auto-refill technique.
+
 ### 5j. Earlier exploratory harnesses
 
 Two earlier files in `/test` predate the observer series and are kept
@@ -354,6 +449,12 @@ In rough order of "size of impact":
    needed. (5f)
 8. **MicroPython is much faster than Z80's ~47µs/byte read rate.**
    `MQ.put` blocking when FIFO is full provides natural pacing. (5e)
+9. **The PIO RX FIFO is 4 deep, and per-byte Python work in the capture
+   loop will overflow it.** `push noblock` then silently drops bytes.
+   Production's `for i in r1: pre[i] = MQ.get()` (lines 4060-4061 of
+   `TS/tspico.py`) is non-negotiable: NO conditionals, math, or
+   callbacks between successive gets. Decision work belongs in a
+   separate phase that runs after the burst is complete. (5k.ii)
 9. **Stray bytes in TX FIFO get consumed at the wrong protocol moment.**
    This pattern caused all three latent bugs in §8. (5a, 5b)
 
