@@ -1,0 +1,16 @@
+TS-Pico Command          VERBOSE
+--------------------------------
+Display or set command verbosity
+
+  SAVE "tpi:verbose"
+Show the current setting.
+
+  SAVE "tpi:verbose"CODE 1,0
+  SAVE "tpi:verbose off"
+Set verbose to off.
+
+  SAVE "tpi:verbose"CODE 1,1
+  SAVE "tpi:verbose on"
+Set verbose to on.
+
+See also: loglevel

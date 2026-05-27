@@ -1,0 +1,8 @@
+TS-Pico Command             INFO
+--------------------------------
+SAVE "tpi:info"
+
+Display various info about the
+system versions and state.
+
+See also: config

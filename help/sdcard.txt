@@ -1,0 +1,10 @@
+TS-Pico Command           SDCARD
+--------------------------------
+SAVE "tpi:sdcard"
+
+Switch saves without a "tpi:"
+prefix in the name to save to a
+.tap file on the SD card rather
+than the tape port.
+
+See also: tape

@@ -1,0 +1,17 @@
+BASIC Command                OUT
+--------------------------------
+OUT port,byte
+
+Outputs the byte on the given
+Z80 bus port. At a machine code
+level, the BC register is loaded
+with the port number (0..65535),
+the A register with the byte,
+and then the Z80 instruction
+OUT (C),A is executed. Note that
+the mnemonic only mentions the C
+register, but the whole 16-bit
+BC value is put on the address
+bus in the OUT operation.
+
+See also: IN, ports

@@ -1,0 +1,74 @@
+BASIC Color Attribute Keywords
+--------------------------------
+INK     Foreground color
+PAPER   Background color
+BORDER  Screen edge color
+INVERSE Ink/paper pixels swapped
+FLASH   Alternate normal/inverse
+BRIGHT  Ink&paper in cell bright
+OVER    XOR print or draw
+
+The commands INK, PAPER, and 
+BORDER take a color value from 0
+to 7. The others take a value of
+0 or 1 to turn them off or on.
+INK, PAPER, BRIGHT, and FLASH
+determine the value of the 
+attribute byte in display memory
+(see ATTR function). OVER and
+INVERSE control how pixels are
+set to ink or paper color.
+
+INK and PAPER can also use the
+pseudo-colors of 8 and 9. Color
+8 "transparent" means to use the
+existing color (INK or PAPER)
+where plotting or printing
+happens. Color 9 "contrasting"
+means to use either black or 
+white to contrast with the INK
+or PAPER color being used.
+
+With the exception of BORDER,
+the color attribute commands
+that set the permanent
+attributes can also be used with
+some commands to set temporary
+attributes that last for the
+command or until another
+attribute overrides it. In
+PRINT and INPUT, these can be
+used like AT and TAB mixed in
+with other items separated by
+semicolons:
+  PRINT INK 1; PAPER 4;"Hello"
+
+They can also be used before the
+normal arguments of PLOT, DRAW,
+and CIRCLE:
+  CIRCLE INK 3;x,y,r
+
+The attribute values can only be
+set per character cell of 8x8
+pixels. Only one ink, paper, 
+bright, and flash value can be
+in effect within the call at a
+time. When other commands plot
+within the same cell with a 
+different attribute, the new
+value applies. This is often
+refered to as "attribute clash".
+Also, drawing a line with a
+different paper color will leave
+a trail of 8x8 cells with that
+color set.
+
+With PRINT and INPUT, these
+actually produce a short control
+character sequence like AT and
+TAB do: character codes 16..21
+followed by a character code 0
+to 9 for INK and PAPER, and 0 or
+1 for the others. See CHR$.
+
+See also: ATTR, BRIGHT, FLASH,  INK, PAPER, OVER, INVERSE, CHR$

@@ -1,0 +1,30 @@
+TS-Pico Command             ZX48
+--------------------------------
+Switch TS-Pico to Spectrum mode.
+Shows more help when invoked.
+Mount a tap file to use in
+Spectrum mode before giving this
+command since TS-Pico commands
+are not available in that mode.
+
+  SAVE "tpi:zx48"
+  SAVE "tpi:zx48"CODE *,0
+Use the default tape loader set
+by the ZX_TAPE_COMPAT setting.
+
+  SAVE "tpi:zx48"CODE *,1
+Use regular tape LOAD routine.
+
+  SAVE "tpi:zx48"CODE *,2
+Use compatible LOAD with the
+default buffer size.
+
+  SAVE "tpi:zx48"CODE *,n
+Where n>=16384, use compatible
+LOAD with the given buffer size. 
+See ZX_TAPE_COMPAT in config.ini
+
+  SAVE "tpi:zx48"CODE 1,*
+Don't display the help message.
+
+See also: OUT, config

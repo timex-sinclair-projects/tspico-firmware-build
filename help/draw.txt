@@ -1,0 +1,22 @@
+BASIC Command               DRAW
+--------------------------------
+DRAW [attr;...;]dx,dy[,angle]
+
+Draw a straight or curved line
+starting at the current plot
+position and moving by dx pixels
+horizontally and dy pixels
+vertically to the end point. The
+current permanent color 
+attributes apply unless some
+attr are given with the command.
+
+If an angle is given, the line
+will turn through an arc of the
+given number of radians between
+the start and end points. Some
+interesting patterns can come
+from giving large angle values,
+especially with OVER 1 added. 
+
+See also: PLOT, attributes

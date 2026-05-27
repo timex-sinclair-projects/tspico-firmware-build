@@ -1,0 +1,13 @@
+BASIC Operator                OR
+--------------------------------
+a OR b                Priority 2
+
+Logical OR with a twist
+ a OR b   1 if b<>0
+          a if b=0
+
+A useful logic transform:
+ NOT (A OR B) => NOT A AND NOT B
+If A is x<y, NOT A is x>=y, etc.
+
+See also: AND, NOT

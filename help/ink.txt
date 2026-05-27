@@ -1,0 +1,36 @@
+BASIC Command                INK
+--------------------------------
+INK color
+
+Set the ink color to be used by
+subsequent printing. Error K if
+the value is not 0..9. The
+transparent color (8) uses the
+existing color at the location
+of the printing. The contrasting
+color (9) uses white or black
+ink to contrast with the 
+existing paper color at the
+printing location. The ink color
+does not affect printed output
+other than pixels in ink color
+appear in the printed output
+regardless of their actual color
+value.
+  INK 2
+
+Colors:
+0 Black    3 Magenta    6 Yellow
+1 Blue     4 Green      7 White
+2 Red      5 Cyan
+
+8 Transparent (existing ink)
+9 Contrasting (black or white)
+
+BASIC Attribute              INK
+--------------------------------
+This sets a temporary ink color
+for a command.
+  PRINT INK 2;"Red"
+
+See also: PAPER, attributes,    ATTR

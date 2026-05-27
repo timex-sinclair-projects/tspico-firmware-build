@@ -1,0 +1,11 @@
+BASIC Function             POINT
+--------------------------------
+POINT (x,y)
+
+For the pixel screen coordinate
+(x,y), return 1 if it is INK 
+color or 0 if it is PAPER color.
+Error B unless 0 <= x <= 255 and
+0 <= y <= 175.
+
+See also: SCREEN$, PLOT, PAPER, INK, ATTRIB

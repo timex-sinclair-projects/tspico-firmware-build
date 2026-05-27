@@ -1,0 +1,10 @@
+BASIC Command              GO TO
+--------------------------------
+GO TO n
+
+Jump to line n to continue
+running the program. If there is
+no line n, the program continues
+at the next line after n.
+
+See also: GOSUB, CONTINUE, STOP,ONERR

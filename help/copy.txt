@@ -1,0 +1,29 @@
+BASIC Command               COPY
+--------------------------------
+COPY
+
+Prints the top 22 lines of the
+diplay on the printer. You can't
+COPY a screen of an automatic
+listing. Since it is monochrome,
+pixels that are INK color
+(binary 1 in memory) appear
+black with PAPER pixels (binary
+0 in memory) as the white paper.
+Things printed with INVERSE will
+appear so, even if the colors
+make it look normal as INVERSE
+causes the PAPER pixels to be
+set to binary 1 in memory and
+INK pixels as binary 0. Pressing
+BREAK will stop the printing.
+
+With a TS-Pico in "ts2040"
+(hardware print) mode, the 
+output goes to the printer. In
+"picopt" (software print) mode,
+the output goes to the TS-Pico,
+but this currently is not
+implemented.
+
+See also: LPRINT, ts2040, picopt

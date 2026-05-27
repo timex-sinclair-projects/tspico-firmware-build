@@ -1,0 +1,31 @@
+BASIC Command             BRIGHT
+--------------------------------
+BRIGHT b
+
+Set the current bright color
+attribute setting to on (b=1),
+off (b=0), or transparent (b=8)
+to be used by subsequent
+printing. Error K if the value
+is not 0, 1, or 8. Transparent
+bright (8) uses the existing
+bright attribute at the location
+of the printing. The bright
+attribute affects all of the
+pixels within an 8x8 character
+cell as any attribute does. So,
+this means that both the ink and
+paper color will be bright
+within each 8x8 cell drawn in.
+Does not affect printed output.
+
+BASIC Attribute           BRIGHT
+--------------------------------
+Sets a temporary bright color
+attribute for the command. 
+Can appear anywhere in PRINT or
+INPUT and at the beginning of 
+PLOT, DRAW, or CIRCLE commands.
+  PRINT INK 1; BRIGHT 1;"Bright"
+
+See also: ATTR, PRINT, CIRCLE,  DRAW, INK, PAPER, FLASH, OVER,  INVERSE, attributes

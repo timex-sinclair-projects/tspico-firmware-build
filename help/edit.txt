@@ -1,0 +1,21 @@
+BASIC Key                   EDIT
+--------------------------------
+The EDIT key (shift+1)
+
+This causes the current program
+line (indicated by the > symbol)
+to be brought into the lower
+screen for editing. If a line is
+currently being edited, that
+will be canceled and the current
+line brought in. A handy way to
+cancel your edits, but also an
+easy way to lose them.
+
+When typing in INPUT of a string
+value, pressing shift+1 will 
+remove both quotes, allowing you
+to enter the STOP keyword or
+enter a string expression.
+
+See also: caps, cursor, delete, graphics, enter, INPUT

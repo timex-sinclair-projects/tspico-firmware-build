@@ -1,0 +1,10 @@
+TS-Pico Command           NEWTAP
+--------------------------------
+SAVE"tpi:newtap <name>[.tap]"
+
+Create and mount a new .tap file
+with the given name and turn on
+append mode. The .tap extension
+is added if not given.
+
+See also: ffw, rew, load, tapdir

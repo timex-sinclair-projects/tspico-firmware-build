@@ -1,0 +1,14 @@
+BASIC Function                FN
+--------------------------------
+FN x(...)
+FN x$(...)
+
+Evaluate user-defined numeric
+function x or string function x$
+defined by DEF FN with any
+required arguments. A function
+defined with one or no arguments
+still requires () to be given.
+  LET y=FN x(2)
+
+See also: DEFFN

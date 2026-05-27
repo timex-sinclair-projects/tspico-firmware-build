@@ -1,0 +1,21 @@
+TS-Pico Command              LOG
+--------------------------------
+Show or clear the the log file.
+
+  SAVE "tpi:log"
+Show the whole log. An error may
+result if the log file is very
+large.
+
+  SAVE "tpi:log"CODE 0,n
+Show the last n characters of
+the log file.
+
+  SAVE "tpi:log clear"
+  SAVE "tpi:log clear"CODE 255,0
+Clear the log file contents. You
+will be prompted to confirm. You
+can add CODE 255,0 to skip the
+prompt.
+
+See also: loglevel

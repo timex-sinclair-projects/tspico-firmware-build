@@ -1,0 +1,35 @@
+BASIC Command              PAPER
+--------------------------------
+PAPER color
+
+Set the paper color to be used
+by subsequent printing. Error K
+if the value is not 0..9.
+The transparent color (8) uses
+the existing color at the 
+location of the printing. The
+contrasting color (9) uses white
+or black paper to contrast with
+the existing ink color at the
+printing location. The paper
+color of the lower lines is set
+by the border color. The paper
+color does not affect printed
+output.
+  PAPER 1
+
+Colors:
+0 Black    3 Magenta    6 Yellow
+1 Blue     4 Green      7 White
+2 Red      5 Cyan
+
+8 Transparent (existing paper)
+9 Contrasting (black or white)
+
+BASIC Attribute            PAPER
+--------------------------------
+This sets the temporary paper
+color within a PRINT statement.
+  PRINT PAPER 1;"Blue"
+
+See also: INK, BORDER,          attributes

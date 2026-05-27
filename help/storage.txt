@@ -1,0 +1,73 @@
+BASIC Data Storage Formats
+--------------------------------
+BASIC code line:
+- MSB of line number
+- LSB of line number
+- LSB of line length
+- MSB of line length
+- Text of line
+- ENTER character
+
+Variables:
+
+The first byte is 3 type bits
+and the 1st letter of the name
+minus $60:
+  ---Bits----
+  7 6 5 4...0 Variable Type
+  - - - ----- ------------------
+  0 1 1 c-$60 Numeric 1-letter
+  1 0 1 c-$60 Numeric 1st letter
+  1 0 0 c-$60 Numeric array
+  1 1 1 c-$60 For/Next varaible
+  0 1 0 c-$60 String
+  1 1 0 c-$60 Character array
+
+Where c is the ASCII code of the
+first (or only) letter of the
+name in lower case.
+
+Numeric one-letter name:
+The 5-byte value follows the 1st
+byte.
+
+Numeric multi-letter name:
+The 1st byte is followed by
+bytes for the remaining letters
+(minus $60) with bits 5-7 set to
+000 except for the last letter
+with bits 5-7 set to 100.
+This is then followed by the 5
+byte value.
+
+Numeric array (only 1 letter):
+- The 1st byte
+- 2 bytes for all elements
+  and dimension bytes + 1.
+- 1 byte for number of dims.
+- 2 bytes for each dim size.
+- Bytes of values (5 bytes each)
+
+For/Next variable:
+- The 1st byte
+- Start/current value (5 bytes)
+- Limit value (5 bytes)
+- Step value (5 bytes)
+- LSB of line number
+- MSB of line number
+- Statement number (1 byte)
+
+String:
+- The 1st byte
+- 2 bytes for length
+- N bytes of the text
+
+Character array:
+- The 1st byte
+- 2 bytes for all elements and
+  and dimension bytes + 1.
+- 1 byte for number of dims.
+- 2 bytes for each dim size.
+- Bytes of chars. (1 byte each)
+
+See also: arrays,numbers,memory

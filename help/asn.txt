@@ -1,0 +1,9 @@
+BASIC Function               ASN
+--------------------------------
+ASN x
+
+Arcsine of x in radians.
+Error A if x<-1 or x>1.
+  LET pid2=ASN 1
+
+See also: ACS, ATN, SIN

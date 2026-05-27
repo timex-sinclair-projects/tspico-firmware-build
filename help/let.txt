@@ -1,0 +1,17 @@
+BASIC Command                LET
+--------------------------------
+LET var=expression
+
+Assign a value to a variable. If
+the variable is a subscripted
+string, the string expression is
+truncated or padded with spaces
+to fit the subscript length.
+
+For string arrays, a multi-char 
+assignment can only be in the
+last dimension of the array.
+Numeric arrays can only assign a
+single value at a time.
+
+See also: expressions, arrays,  subscripts, strings

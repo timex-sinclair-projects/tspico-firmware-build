@@ -1,0 +1,26 @@
+BASIC Command             GO SUB
+--------------------------------
+GO SUB n
+
+Jump to running a subroutine at
+line n. The current line and
+statement number are pushed onto
+the GOSUB stack, then execution
+jumps to line n. When a RETURN
+command is encountered, the most
+recently pushed line and
+statement number are popped off
+the stack, and program execution
+continues with the statement
+after it.
+
+If a RETURN is encountered
+without a value on the GOSUB
+stack, error 7 restults. Error 4
+can occur if the GOSUB stack
+fills available memory, usually
+because of a RETURN being missed
+or a GO TO used instead of a
+GO SUB.
+
+See also: RETURN, GOTO

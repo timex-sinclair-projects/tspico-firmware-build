@@ -1,0 +1,14 @@
+BASIC Command              LLIST
+--------------------------------
+LLIST [line]
+
+If the TS-Pico is in "ts2040" 
+(hardware print) mode, list the
+BASIC program to the printer via
+stream 3, otherwise, in "picopt"
+(software) mode, the listing is
+sent to the TS-Pico. The listing
+starts at the line given or 0 by
+default. 
+
+See also: LIST, picopt, ts2040

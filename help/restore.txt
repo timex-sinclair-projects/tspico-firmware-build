@@ -1,0 +1,12 @@
+BASIC Command            RESTORE
+--------------------------------
+RESTORE [n]
+
+Sets the the DATA pointer (sys
+var DATADD) for the next READ
+by specifying the program line
+number. The default line number
+is 0. CLEAR also resets the 
+pointer to line 0.
+
+See also: READ, DATA, CLEAR,    sysvars

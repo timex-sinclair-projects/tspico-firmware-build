@@ -1,0 +1,10 @@
+BASIC Command               POKE
+--------------------------------
+POKE address,byte
+
+Set the value at the address to
+the byte given.
+
+  POKE 23658,8
+
+See also: PEEK, pokes, USR, udg

@@ -1,0 +1,30 @@
+BASIC Command               OVER
+--------------------------------
+OVER b
+
+Set the current permanent over-
+print attribute setting to on
+(b=1) or off (b=0) to be used by
+subsequent printing or plotting.
+Error K if the value is not 0 or
+1. Overprinting uses an XOR
+(eXclusive OR) operation where
+ink pixels will be set if they
+draw over paper pixels but will
+unset pixels that draw over
+existing ink pixels. If you do
+the same overprint again, the
+pixels will return to their 
+original state.
+Does affect printed output.
+
+BASIC Attribute             OVER
+--------------------------------
+Sets a temporary overprinting
+attribute for the command. Can
+appear anywhere in PRINT or
+INPUT and at the beginning of
+PLOT, DRAW, or CIRCLE commands.
+  PRINT "O";CHR$ 8;OVER 1;"-"
+
+See also: ATTR, PRINT, DRAW,    CIRCLE, INK, PAPER, BRIGHT,     FLASH, INVERSE, attributes

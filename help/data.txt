@@ -1,0 +1,16 @@
+BASIC Statement             DATA
+--------------------------------
+DATA d1,d2,d3,...
+
+Specify part of the data list in
+a program. Each datum can be a
+numeric or string expression to
+be read with the READ command.
+As each datum is read, a data 
+pointer in sysvar DATADD moves
+to keep track of the current
+READ point. RUN, CLEAR and
+RESTORE moves it back to the
+first line or a specific line.
+
+See also: READ, RESTORE, CLEAR

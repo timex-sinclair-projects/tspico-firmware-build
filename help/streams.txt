@@ -1,0 +1,59 @@
+Topic: Streams and Channels
+--------------------------------
+In TS2068 BASIC, the input and 
+output is done through streams
+(which have a number) that are
+open to a channel (which have a
+letter). For example, PRINT 
+sends the characters to print to
+stream #2, which the system has
+opened by default to channel "s"
+for the screen device. 
+Similarly, LPRINT sends its
+characters to stream #3 which is
+opened to channel "p" for the 
+printer. Device "k" is for the
+keyboard. The default stream and
+channel setup is:
+
+# Ch Dir Purpose
+- -- --- ---------- 
+0  k Out Print to lower screen
+1  k In  Input (lower screen)
+2  s Out Print to the screen
+3  p Out Print to the printer
+
+The Sinclair ZX Interface 1 for
+the ZX Spectrum defined some 
+additional channels for its
+serial port, network port, and
+the Microdrives. The Timex 2060
+Bus Expansion Unit was to do the
+same, but it never shipped. Some
+software added channels for 
+special purposes.
+
+You can use OPEN# to open a 
+stream s on channel c as:
+  OPEN#s,"c"
+The PRINT command can be given a
+stream number like any other
+print item to send the following
+characters to the given stream:
+  PRINT #4;"Hello"
+You could have your PRINT state-
+ments print to stream 4, and 
+conditionally open #4 to the 
+screen or printer based on user
+choice.
+
+A common practical use is to use
+stream 0 to print to the lower 
+screen lines:
+  PRINT #0;"Please wait ..."
+  ...
+  INPUT ""
+The empty INPUT statement will 
+clear the text you printed.
+
+See also: PRINT, OPEN#, CLOSE#

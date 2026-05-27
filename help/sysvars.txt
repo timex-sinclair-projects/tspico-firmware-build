@@ -1,0 +1,118 @@
+BASIC System Variables @=address
+================================
+23552 8 KSTATE:KB reading state
+23552 1  Character key pressed 1
+23553 1  Time till released
+23554 1  Time till repeat
+23555 1  Code when repeats
+23556 1  Character key pressed 2
+23557 1  Time till released 2
+23558 1  Time till repeat 2
+23559 1  Code when repeats 2
+23560 1 LAST K:Newly pressed key
+23561 1 REPDEL:Key repeat delay
+23562 1 REPPER:    repeat period
+23563 2 DEFADD:DEFFN arg address
+23565 1 K DATA:Color code typed
+23566 2 TVDATA:Attribs to TV
+23566 1  TV controls key byte
+23567 1  1st byte of AT or TAB
+23568 38 STRMS:Stream chan addrs
+23568 2  Offs.to sys strm.-3 K 
+23570 2  Offs.to sys strm.-3 S 
+23572 2  Offs.to sys strm.-1 R
+23574 2  Offs.to sys strm. 0 Cmd
+23576 2  Offs.to strm. in  1 K
+23578 2  Offs.to strm. out 2 S
+23580 2  Offs.to strm. out 3 P
+23582 2  Offs.to strm.  4 ...
+23604 2  Offs.to strm. 15
+23606 2 CHARS :Font address-256
+23608 1 RASP  :Warn buzz length
+23609 1 PIP   :Key click length
+23610 1 ERR NR:Error code - 1
+23611 1 FLAGS :BASIC flags
+23612 1 TVFLAG:Flags for video
+23613 2 ERR SP:Err rtn item ptr
+23615 2 LISTSP:Auto lst rtn ptr
+23617 1 MODE  :Cursor K,L,C,E,G
+23618 2 NEWPPC:Line to jump to
+23620 1 NSPPC :Stmnt. to jump to
+23621 2 PPC   :Line executing
+23623 1 SUBPPC:Stmnt. executing
+23624 1 BORDCR:Border color*8
+23625 2 E PPC :Line with >cursor
+23627 2 VARS  :Addr of variables
+23629 2 DEST  :Var in assignment
+23631 2 CHANS :Channel data addr
+23633 2 CURCHL:IO chan in use @
+23635 2 PROG  :Addr of program
+23637 2 NXTLIN:Next prog line @
+23639 2 DATADD:Last DATA end @
+23641 2 E LINE:Edit line addr
+23643 2 K CUR :Address of cursor
+23645 2 CH ADD:Next interp char@
+23647 2 X PTR :char addr after ?
+23649 2 WORKSP:Temp workspace @
+23651 2 STKBOT:Calc stack btm. @
+23653 2 STKEND:Spare space addr
+23655 1 BREG  :Calc B register
+23656 2 MEM   :Calc memory area@
+23658 1 FLAGS2:More flags
+23658    Bit 3:CAPS lock mode
+23659 1 DF SZ :Lower lines count
+23660 2 S TOP :Top line in list
+23662 2 OLDPPC:CONT line number
+23664 1 OSPCC :CONT statement #
+23665 1 FLAGX :Various flags
+23666 2 STRLEN:String assign len
+23668 2 T ADDR:Nxt syntax item @
+23670 2 SEED  :RND seed by RAND
+23672 3 FRAMES:Video frame count
+23675 2 UDG   :Address of UDGs
+23677 2 COORDS:Last PLOT x,y loc
+23679 1 P POSN:33-col print pos
+23680 1 PR CC :LPRINT @ low byte
+23681 1 -Not used-
+23682 1 ECHO E:33-col  Of end of
+23683 1        24-lin  input buf
+23684 2 DF CC :Addr of PRINT pos
+23686 2 DFCCL :Lower lines DFCC
+23688 1 S POSN:33-col   Of PRINT
+23689 1       :24-line  position
+23690 2 SPOSNL:Lower lines SPOSN
+23692 1 SCR CT:Lines+1 to scroll
+23693 1 ATTR P:Permanent attrib
+23694 1 MASK P:Transp. attr mask
+23695 1 ATTR T:Temp. PRINT attr
+23696 1 MASK T:Temp transp. mask
+23697 1 P FLAG:BASIC print flags
+23698 30 MEMBOT: Calc mem. area
+23698 5  Calc memory 0
+23703 5  Calc memory 1
+23708 5  Calc memory 2
+23713 5  Calc memory 3
+23718 5  Calc memory 4
+23723 5  Calc memory 5
+23728 2 -Not used-
+23730 2 RAMTOP:BASIC area end @
+23732 2 P-RAMT:Physical RAM top
+================================
+Timex 2068 specific variables:
+23734 2 ERRLN :Goto line ON ERR
+23736 2 ERRC  :Line of error
+23738 1 ERRS  :Statement of err
+23739 1 ERRT  :Error number
+23740 2 SYSCON:Sys conf. table @
+23742 1 MAXBNK:Expand bank count
+23743 1 CURCBN:Cur. chan. bank #
+23744 2 MSTBOT:@ after m. stack
+23746 1 VIDMOD:Timex video mode
+23747 1 -Not used-
+23748 2 ARSBUF: AROS buffer addr
+23750 1 ARSFLG: AROS flags
+23751 2 ADATLN: AROS data line
+23753 2 DTLNLN: AROS line length
+22755 1 STRMNM: Current stream #
+
+See also: pokes, memory

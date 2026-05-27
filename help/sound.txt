@@ -1,0 +1,43 @@
+BASIC Command              SOUND
+--------------------------------
+SOUND reg,val[;reg,val ...]
+
+This controls the sound chip
+output by setting the values of
+the chip's control registers.
+This is separate from the BEEP
+output, although they share the
+one speaker.
+
+  1 REM Freq. to coarse and fine
+ 10 LET freq=440
+ 20 LET x=1750000/(16*freq)
+ 30 LET coarse=INT (x/256)
+ 40 LET fine=INT x-coarse*256
+ 50 SOUND 0,fine;1,coarse;7,62;
+          8,15
+ 60 PAUSE 20: SOUND 8,0
+
+Reg Function               Value
+--- ---------------------- -----
+ 0  Ch. A fine tune        0-255
+ 1  Ch. A coarse tune      0- 15
+ 2  Ch. B fine tune        0-255
+ 3  Ch. B coarse tune      0- 15
+ 4  Ch. C fine tune        0-255
+ 5  Ch. C coarse tune      0- 15
+ 6  Noise freq. high->low  0- 31
+ 7  Enable ch. or noise:   0- 63
+  Tone  A=1, B= 2, C= 4 (subtr.
+  Noise A=8, B=16, C=32 from 63)
+ 8  A volume, 16=envelope  0- 16
+ 9  B volume, 16=envelope  0- 16
+10  C volume, 16=envelope  0- 16
+11  Envelope period fine   0-255
+12  Envelope period coarse 0- 15
+13  Envelope shape:        0- 15
+  Hold      1  Attack   4 (add
+  Alternate 2  Continue 8  to 0)
+ 0\__  8\\\  10\/\  12///  14/\/
+ 4/__  9\__  11\""  13/""  15/__
+See also: BEEP

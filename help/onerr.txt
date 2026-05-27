@@ -1,0 +1,41 @@
+BASIC Command             ON ERR
+--------------------------------
+ON ERR GO TO n
+ON ERR CONT
+ON ERR RESET
+
+This controls the error trapping
+feature. This does not exist in
+ZX Spectrum BASIC.
+
+  ON ERR GO TO n
+Enable error trapping and jump
+to the line n when an error
+occurs. The routine can examine
+the system variables ERRLN
+(error line), ERRC (error code),
+and ERRS (error statement) if it
+needs to handle the error, then
+branch elsewhere, possibly to 
+the ERRLN line or the one after
+it.
+
+  ON ERR CONT
+This will simply ignore the
+error and continue if possible.
+The ERR system variables will
+be set.
+
+  ON ERR RESET
+Turns off the error trapping
+function, and errors will stop
+the program and report as usual.
+
+This keyword has the code of '{'
+(123) and appears in its place
+on the ZX Spectrum keyboard.
+When you type it in L mode, you
+get the symbol but the keyword
+when in K mode.
+
+See also: RESET, CONTINUE, GOTO,sysvars

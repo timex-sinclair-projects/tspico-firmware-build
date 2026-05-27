@@ -1,0 +1,24 @@
+User Defined Graphics (UDG)
+--------------------------------
+The 21 characters from 144 to 
+164 can have their bit patterns
+customized by setting the 168
+byte values starting at address
+65368 (or the value of the
+system variable UDG). The 
+characters can be printed by
+CHR$ with their code or typed
+in G cursor mode (shift+9) with
+the letters A through U.
+
+Each character's pattern is 8
+bytes just as the regular
+characters in the system font.
+the starting address for each
+character's bytes can be easily
+had by giving the character's 
+key letter (A through U) as a 
+string argument to the USR
+function. e.g., USR "a".
+
+See also: PEEK, POKE, USR, font

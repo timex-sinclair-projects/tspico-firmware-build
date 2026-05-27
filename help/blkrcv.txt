@@ -1,0 +1,6 @@
+TS-Pico Command           BLKRCV
+--------------------------------
+SAVE "tpi:blkrcv"CODE len,offset
+
+Sends len bytes (0=all) from
+mounted file starting at offset.

@@ -1,0 +1,14 @@
+BASIC Command              PAUSE
+--------------------------------
+PAUSE n
+
+Stops computing for n frames (60
+frames=1 second) until a key is
+pressed. 0<=n<=65535 or error B.
+If n=0, pause until a key press.
+
+Note that on most ZX Spectrums,
+the frame rate is 50Hz, so PAUSE
+50 is one second on those.
+
+See also: STOP

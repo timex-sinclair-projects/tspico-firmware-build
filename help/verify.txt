@@ -1,0 +1,12 @@
+BASIC Command             VERIFY
+--------------------------------
+VERIFY "name"
+
+Verify that the named program
+from the tape or mounted .tap
+file has the same content as the
+current program. If the name is
+empty (""), the next program on
+the tape is used.
+
+See also: LOAD, SAVE, MERGE

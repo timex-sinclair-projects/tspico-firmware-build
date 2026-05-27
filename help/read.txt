@@ -1,0 +1,16 @@
+BASIC Command               READ
+--------------------------------
+READ var[,var ...]
+
+Reads the next DATA value(s) and
+assigns them to the variable(s)
+specified. Error C if the data
+is the wrong type. Error E if 
+there are not enough DATA values
+for the variable reads.
+
+  10 READ x,y$
+  20 PRINT x,y$
+  30 DATA 10,"Hello"
+
+See also: DATA, RESTORE

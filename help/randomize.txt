@@ -1,0 +1,19 @@
+BASIC Command          RANDOMIZE
+--------------------------------
+RANDOMIZE [n]
+
+Set the random number generator
+seed value (SEED system variable
+at 23670) to n which must be in
+the range 0..65535. If n is 0
+(the default), the seed value is
+taken from the lower two bytes
+of the FRAMES system variable to
+try to not always have the same
+random sequence. It appears as
+RAND on the keyboard. The
+sequence of values that RND
+returns depends on the value of
+SEED.
+
+See also: RND, USR, sysvars

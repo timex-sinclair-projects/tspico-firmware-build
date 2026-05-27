@@ -1,0 +1,47 @@
+Timex BASIC Operators
+
+Math
+--------------------------------
+a+b  Addition
+a-b  Subtraction
+a*b  Multiplication
+a/b  Division
+a^b  Raise a to power b
+-a   Negate a
+
+Logical
+--------------------------------
+a=b  If a=b, return 1 else 0
+a>b  If a>b, return 1 else 0
+a<b  If a<b, return 1 else 0
+a>=b If a>=b, return 1 else 0
+a<=b If a<=b, return 1 else 0
+a<>b If a not equal b, 1 else 0
+a AND b : a if b<>0, else a
+a$ AND b: a$ if b<>0, else ""
+a OR b  : b if a=0, else 0
+NOT a   : 1 if a=0, else 1
+
+There are no bitwise operators.
+
+Operator Precedence
+--------------------------------
+  #   Operator
+----  --------------------------
+ 13   Parentheses ( )
+ 12   Subscripting and slicing
+ 11   All functions except NOT 
+      and unary minus.
+ 10   ^ (raise to power)
+  9   Unary minus (- to negate)
+  8   Multiply *, divide /
+  6   Add +, subtract -
+  5   =, >, <, <=, >=, <>
+  4   NOT
+  3   AND
+  2   OR
+
+For example, A AND B OR C is the
+same as (A AND B) OR C.
+
+See also: AND, OR, NOT

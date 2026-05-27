@@ -1,0 +1,37 @@
+BASIC Statement              FOR
+--------------------------------
+FOR x=a TO b [STEP c]
+
+Define a bounded execution loop.
+Sets up the control variable x,
+overwriting an existing variable
+of that name. Must be in a
+program.
+
+The loop starts the control
+variable at the first value, a,
+and executes the code after the
+statement until it encounters a
+NEXT statement for the same
+control variable. The value is
+incremented by 1 or by the STEP
+value. If this exceeds the
+ending value, b, the loop ends
+and the program continues with
+the statement after the NEXT
+statement, otherwise execution
+continues with the statement
+after the matching FOR. If the
+start value is greater than the
+end value, the loop doesn't
+execute at all and the program
+continues after the matching
+NEXT statement. In an AROS
+program, however, this condition
+causes an error and should be
+avoided.
+  10 FOR x=1 TO 10
+  20 PRINT "x=";x
+  30 NEXT x
+
+See also: NEXT, GOTO, numbers,  storage, aros

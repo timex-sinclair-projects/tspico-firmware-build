@@ -1,0 +1,10 @@
+TS-Pico Command               RM
+--------------------------------
+SAVE "tpi:rm <name>"[CODE 255,0]
+
+Removes a directory or file in
+the current folder (see path).
+CODE 255,0 bypasses confirmation
+  SAVE "tpi:rm foo"
+
+See also: md

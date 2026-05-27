@@ -1,0 +1,42 @@
+AROS BASIC Program
+--------------------------------
+AROS = 
+  Application Read-Only Software
+
+This is a BASIC program that has
+been put in a Command Cartridge
+to be inserted into the cart.
+dock which will usually autorun
+when the computer is switched
+on. There is a counterpart
+cartridge type of LROS for non-
+BASIC programs.
+
+In emulators, the cartridges 
+are virtualized in a .dck file.
+The TS-Pico can also mount these
+to be loaded into one of its
+SRAM or flash RAM slots for use.
+
+There exist utilities that can
+turn a BASIC program into a .dck
+file to be used in this way.
+
+AROS Header (Block 3 of DOCK)
+Addr. Label  Description
+----- ------ --------------
+32768 AROS language type
+      1 = BASIC and machine code
+      2 = Machine code only
+32769 Cartridge type. 2=AROS
+32770 Starting address
+      For AROS=addr of 1st line
+32772 Memory chunk specification
+      Bits 0-7 are DOCK chunks
+      0 = active, 1 = inactive
+      Bits 0-3 must be 1.
+32773 Autostart: 0 = No, 1 = Yes
+32774 RAM byte count reserved
+- 775 for machine code vars.
+    
+See also: lros, DEFFN, dck

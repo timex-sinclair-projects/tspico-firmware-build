@@ -1,0 +1,22 @@
+BASIC Command                REM
+--------------------------------
+REM ...
+
+Any characters following are not
+executed and are used as a 
+"remark" in the program, mainly
+to comment your code. A colon 
+character causes the cursor to
+go to K mode, so a keyword must
+follow, but syntax checking 
+stops after that. Any statements
+following are not executed.
+
+Some programs store bytes of 
+machine code in the body of a
+REM statement, usually at the 
+first line of the program.
+
+  IF x=2 THEN LET a=0: REM Reset
+
+See also: USR

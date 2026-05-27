@@ -1,0 +1,28 @@
+BASIC Command                DIM
+--------------------------------
+Create a dimensioned numeric or
+character array with the 
+dimension sizes given. Names
+must be 1 letter. Deletes an
+existing var or array with that
+name.
+
+Numeric
+  DIM a(n1,...,nk)
+Create an array of numbers with
+k dimensions of sizes n1 through
+nk with all values initialized
+to 0.
+
+Character
+  DIM a$(n1,...,nk)
+Similar to a numeric array, but
+each element is one character
+initialized to a space. It can
+also be treated as an array of
+strings of fixed length nk with
+k-1 dimensions. You can use 
+string slicing on the last
+dimension.
+
+See also: numbers, strings

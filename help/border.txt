@@ -1,0 +1,16 @@
+BASIC Command             BORDER
+--------------------------------
+BORDER color
+
+Set the border color and paper
+color for the lower lines of the
+screen. Error K if not 0..7. It
+doesn't support the pseudo-
+colors 8 and 9.
+
+Colors:
+0 Black    3 Magenta    6 Yellow
+1 Blue     4 Green      7 White
+2 Red      5 Cyan
+
+See also: PAPER, INK

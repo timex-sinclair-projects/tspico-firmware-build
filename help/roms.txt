@@ -1,0 +1,27 @@
+ROM Data Files
+--------------------------------
+The TS-Pico can load binary data
+(usually machine code) from .rom
+or .bin files into the TS-Pico
+SRAM or flash RAM slots to
+be used by mapping the slot to
+the DOCK bank or for boot.
+
+You first mount the .rom or .bin
+file with: 
+  LOAD "tpi:filename.rom"
+then you enter: LOAD ""
+to invoke the TS-Pico ROM loader
+program which asks where to load
+the data: SRAM or flash and 
+which slot.
+
+To use the data, you use either
+tpi:boot or tpi:dock to
+map the slot it resides in to 
+the DOCK bank like a cartridge
+with tpi:dock, or to the HOME
+bank for booting with
+tpi:boot.
+
+See also: dock, boot, dck,load

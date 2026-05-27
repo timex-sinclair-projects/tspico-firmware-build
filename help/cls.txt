@@ -1,0 +1,28 @@
+BASIC Command                CLS
+--------------------------------
+CLS
+
+Clear the display screen. This
+sets all pixels to binary 0 
+(paper color) and all of the 
+cell attributes to the current
+permanent values.
+
+This only clears the "upper" 
+main part. The "lower" part 
+where INPUT happens, is cleared
+after an INPUT statement ends.
+So, you can use
+  INPUT ""
+to do this without asking for
+any input. Why would you need to
+do this? The BORDER color
+controls the default paper color
+of the lower part but doesn't 
+change it immediately after you
+change th border color. You have
+to either CLS or INPUT. You can
+print things down there with:
+  PRINT #0;...
+
+See also: NEW, CLEAR, BORDER,   PRINT

@@ -1,0 +1,9 @@
+BASIC Function               ACS
+--------------------------------
+ACS x
+
+Arccos of x in radians.
+Error A if x<-1 or x>1.
+  LET pi=ACS -1
+
+See also: ASN, ATN, COS

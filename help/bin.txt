@@ -1,0 +1,9 @@
+BASIC Function               BIN
+--------------------------------
+BIN binary_digits
+
+Specify a value in binary with
+up to 16 digits of 1 and 0.
+  LET a=BIN 01101010
+
+See also: numbers

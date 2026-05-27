@@ -1,0 +1,24 @@
+BASIC Command              FLASH
+--------------------------------
+FLASH b
+
+Set the current flash attribute
+setting to on (b=1), off (b=0),
+or transparent (b=8) to be used
+by subsequent printing. Error K
+if the value is not 0, 1, or 8.
+Transparent flash uses the
+existing flash attribute at the
+location of the printing.
+
+BASIC Attribute            FLASH
+--------------------------------
+Sets a temporary flash attribute
+for the command. Can appear
+anywhere in PRINT or INPUT and
+at the beginning of PLOT, DRAW,
+or CIRCLE commands. Does not
+affect printed output.
+  PRINT INK 1; FLASH 1;"Flash"
+
+See also: ATTR, PRINT, DRAW,    CIRCLE, INK, PAPER, BRIGHT,     OVER, INVERSE, attributes

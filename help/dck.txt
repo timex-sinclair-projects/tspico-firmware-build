@@ -1,0 +1,35 @@
+DCK File Virtual DOCK Cartridge
+--------------------------------
+This is a file format that 
+contains a small header with
+zero or more 8K chunks of data
+to be used to emulate a Timex
+Command Cartridge. The header
+tells the emulation what chunks
+of memory the 8k chunks are to
+be mapped to and in what bank,
+which is what circuitry did on
+physical cartridges.
+
+These files originated with the
+emulators, but the TS-Pico can 
+also mount most of these so the
+data can be loaded into one of
+its SRAM or flash RAM slots to
+be used by mapping the slot to
+the DOCK bank or for boot.
+
+You first mount the .dck file
+with: LOAD "tpi:filename.dck"
+then you enter: LOAD ""
+to invoke the TS-Pico DCK loader
+program which asks where to load
+the data: SRAM or flash and 
+which slot.
+
+The TS-Pico does not handle 
+the bank specification in the
+header, nor does it handle
+multipart .dck files.
+
+See also: dock, boot, load,     aros, lros, roms

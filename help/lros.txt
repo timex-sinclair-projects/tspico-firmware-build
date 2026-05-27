@@ -1,0 +1,34 @@
+LROS Cartridge Program
+--------------------------------
+LROS=Language Read-Only Software
+
+This is a machine code program
+that has been put in a Command
+Cartridge to be inserted into
+the  cartridge dock which will 
+run instead of the BASIC
+interpreter, potentially taking
+the place of the BASIC ROM when
+the computer is switched on.
+There is a counterpart cartridge
+type of AROS for BASIC programs.
+
+In emulators, the cartridges 
+have a file counterpart of the
+.dck file. The TS-Pico can 
+also mount these to be loaded
+into one of its SRAM or flash
+RAM slots to be used.
+
+LROS Header (chunk 0 of DOCK):
+Addr Description
+---- ---------------------------
+   0 Not used
+   1 Cart. type: 1 = LROS
+   2 Starting    LSB
+   3  address    MSB
+   4 Memory chunk specification:
+      Bits 0-7 are DOCK chunks
+      0 = active, 1 = inactive
+
+See also: aros, dck

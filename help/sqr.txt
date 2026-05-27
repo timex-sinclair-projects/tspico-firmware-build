@@ -1,0 +1,8 @@
+BASIC Function               SQR
+--------------------------------
+SQR x
+
+Return the positive square root
+of x, for x >= 0, else error A.
+
+See also: EXP, operators

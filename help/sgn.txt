@@ -1,0 +1,8 @@
+BASIC Function               SGN
+--------------------------------
+SGN x
+
+The "signum" function returns
+the sign of x as -1, 0, or 1.
+
+See also: INT, ABS

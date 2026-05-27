@@ -1,0 +1,12 @@
+TS-Pico Command          UPGRADE
+--------------------------------
+SAVE "tpi:upgrade"
+
+Start the TS-Pico upgrade
+process. After applying any .uf2
+file firmware update and copying
+the upgrade files to an UPGRADE
+folder on the SD card, start the
+TS-Pico and run this command.
+
+See also: rompatch

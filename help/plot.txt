@@ -1,0 +1,22 @@
+BASIC Command               PLOT
+--------------------------------
+PLOT [attr;...;]x,y
+
+Plot a pixel in INK color at 
+graphic coordinates x,y. The
+current color atributes (INK,
+PAPER, OVER, BRIGHT, INVERSE)
+unless some are specified in the
+command to be used temporarily.
+
+The pixel is set to binary 1 in 
+memory, indicating INK color, 
+unless INVERSE is on, which then
+sets the pixel to binary 0, and
+is similar to an "unplot" 
+function. When COPY prints the
+screen to the printer, only the
+"ink" bits appear as black on
+the paper.
+
+See also: DRAW, CIRCLE, COPY,   attributes

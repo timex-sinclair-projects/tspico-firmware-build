@@ -1,0 +1,8 @@
+BASIC Command              OPEN#
+--------------------------------
+OPEN# s,"c"
+
+Open channel "c" as stream
+number s.
+
+See also: CLOSE#, streams

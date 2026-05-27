@@ -1,0 +1,8 @@
+BASIC Function               ATN
+--------------------------------
+ATN x
+
+Arctangent of x in radians.
+  LET a=ATN x
+
+See also: ACS, ASN, TAN

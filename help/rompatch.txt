@@ -1,0 +1,9 @@
+TS-Pico Command         ROMPATCH
+--------------------------------
+SAVE "tpi:rompatch"
+
+Mount the ROM patch utility 
+after an upgrade. Use LOAD ""
+to start patching the ROM.
+
+See also: upgrade

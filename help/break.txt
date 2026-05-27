@@ -1,0 +1,14 @@
+BASIC Key                  BREAK
+--------------------------------
+The BASIC break function is 
+signaled by pressing shift+space
+or shift+BREAK as BREAK and the
+space bar are functionally the
+same. This causes error D "BREAK
+- CONT repeats". 
+
+As with STOP, giving commands
+before CONTINUE can cause error
+N - Statement lost.
+
+See also: CONTINUE, STOP, GOTO

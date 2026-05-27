@@ -1,0 +1,46 @@
+TS-Pico Command             LOAD
+--------------------------------
+  LOAD "tpi:filename.ext"
+Mount the named file.
+
+  LOAD "tpi:nnn"
+Mount a file by its index number
+nnn. The file index numbers
+appear to the left of the name
+in a tpi:dir listing.
+
+See also: close, dir, tapdir,   newtap
+
+BASIC Command               LOAD
+--------------------------------
+  LOAD "" or LOAD "name"
+Load a program from tape (or tpi
+mounted .tap file) of the given
+name or the next one if an empty
+name is given.
+
+  LOAD "..."CODE [addr[,len]]
+Load the next or specified CODE
+file. It is loaded into the
+memory address it was stored 
+from, or into the optional 
+specified address. If len is 
+given, a maximum of that many 
+bytes of the file are loaded.
+
+  LOAD "..."DATA a()
+Load the next or specified 
+numeric array file into array a.
+
+  LOAD "..."DATA a$()
+Load the next or specified 
+character array file into 
+character array a$.
+
+  LOAD "..."SCREEN$
+Load the next or specified 
+screen data saved with SAVE 
+"..."SCREEN$. Equivalent to 
+  LOAD "..."CODE 16384,6912.
+
+See also: SAVE, MERGE, VERIFY

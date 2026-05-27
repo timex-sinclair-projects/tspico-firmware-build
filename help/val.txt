@@ -1,0 +1,15 @@
+BASIC Function               VAL
+--------------------------------
+VAL string
+
+Evaluate string as a numeric
+expression and return the value.
+Error C if the expression is not
+valid or results in a string,
+but other errors are possible
+depending on the expression.
+Functions can be called, and 
+variables referenced. 
+  LET x=VAL(a$)
+
+See also: VAL$, STR$

@@ -1,0 +1,33 @@
+Numbers in Timex BASIC
+--------------------------------
+All numeric constants and
+variables are stored in a 5-byte
+(40 bit) floating point format.
+It can store floating point
+values to 9 or 10 digits of
+accuracy between 4E-39 and 1E38.
+
+Small integers from -65535 to
+65536 are stored with a special
+format within the 5 bytes. The
+largest integer that can be
+stored precisely is 2^32-1.
+
+In a program, a numeric value is
+stored as the characters of the
+value followed by the number
+token byte (14 or 0x0E) then the
+5 bytes of the binary value.
+This helps the BASIC to not have
+to interpret the number each
+time it encounters it.
+
+This format is similar to but
+not the same as IEEE-754. That
+standard was made in 1985 with
+systems using it starting in
+1984. The Timex format is the
+Sinclair ZX Spectrum format
+from 1982.
+
+See also: strings, arrays,      storage

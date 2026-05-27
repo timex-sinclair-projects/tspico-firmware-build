@@ -1,0 +1,11 @@
+BASIC Command               LIST
+--------------------------------
+LIST [line]
+
+Start listing the BASIC program
+starting at the given line or 0
+by default. The listing uses
+scroll prompts between multiple
+screens.
+
+See also: LLIST
