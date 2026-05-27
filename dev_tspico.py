@@ -1551,19 +1551,26 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     ll = 21 # Initial line limit
 
     # ─── DUAL-PORT MIGRATION: single-screen messages skip scroll prompt ───
-    # If the whole message fits in one screen (≤ ~600 chars, leaving room
-    # for picotest's header and scroll), suppress the scroll-prompt block
-    # entirely. Without this, even short help files (like "BORDER", 350
-    # chars but with many short lines) hit l==ll partway through and the
-    # Pico stalls on MQ.get() waiting for the user's keypress — which
-    # they may not realize is the scroll prompt because the screen
-    # scrolled the content out of view first. Bad UX.
+    # If the whole message fits in one screen (≤ ~500 chars), suppress
+    # the scroll-prompt block entirely. Without this, even short help
+    # files (like "BORDER", 350 chars but with many short lines) hit
+    # l==ll partway through and the Pico stalls on MQ.get() waiting for
+    # the user's keypress — which they may not realize is the scroll
+    # prompt because the screen scrolled the content out of view first.
+    # Bad UX.
     #
-    # 600-char threshold: a 2068 screen is 24×32 = 768 chars, minus
-    # picotest's 6-line header (~192 chars) leaves ~576 chars. Round to
-    # 600. Anything longer needs paging; shorter fits on one screen.
+    # Threshold rationale:
+    #   - 2068 screen: 22 lines × 32 cols PRINT area = 704 chars max.
+    #     (Bottom 2 of 24 rows are reserved for command-entry input.)
+    #   - Scroll triggers at l==ll (21 lines), so 21 × 32 = 672 chars
+    #     is the absolute one-page ceiling.
+    #   - Realistic content with mixed line lengths averages ~17-20
+    #     bytes per display line (printable chars + \r). For 21 lines
+    #     that's 357-420 bytes typically.
+    #   - 500-char threshold catches typical single-screen messages
+    #     conservatively without over-suppressing.
     # ────────────────────────────────────────────────────────────────────
-    SCROLL_THRESHOLD = 600
+    SCROLL_THRESHOLD = 500
     suppress_scroll = (n < SCROLL_THRESHOLD)
 
     if not new_rom:
