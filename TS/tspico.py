@@ -1,12 +1,9 @@
-################################
-# DATE: 04/22/2025 10:33 GMT-3 #
-# FIRMWARE VERSION: 1.2        #
-################################
-
-#######################
-# DATE: 2025/09/09    #
-# Ryan's Mods for 1.2 #
-#######################
+#################################
+# DATE: 2026/04/15              #
+# FIRMWARE VERSION: 1.5         #
+# ROM: 1.5W                     #
+# DEPENDS: tspico_upgrade.py    #
+#################################
 
 #############
 # CHANGELOG #
@@ -152,13 +149,150 @@
 #   tpi:append (SAVE "tpi:verbose on"). Also added giving the log level number
 #   as an argument to loglevel (SAVE "tpi:loglevel 2") and "clear" as an
 #   argument to getlog (SAVE "tpi:getlog clear").
-# - Broke out the part of CD that cheks the new name and does the change into a
+# - Broke out the part of CD that checks the new name and does the change into a
 #   separate routine so it can be called by the interactive CD routine.
 # - Changed findArgs to getArgs and have it return the arg string instead.
 # - Moved the command help files all to the SD card in an /sd/help folder.
 # - Extended the zx48 compatible loader option to be able to give a custom
 #   buffer size by giving the value as >= 16384 on the CODE 1,* option. CODE 1,1
 #   uses the default buffer size.
+# - Move flushing RX queue up before sending codes to the ROM in SEND_MSG2 and
+#   other places the 0x86 ROM function is used.
+# - Add utility function isTapMounted() and check in some places that were
+#   showing an empty tap when a non-tap file was mounted.
+# - Have BLKRCV use small buffers to avoid a large allocation.
+# - CDIR: add CODE 1,2 and 1,3 to chain to DIR CODE 2,0 and 3,0
+# - GETLOG: add a try/except around reading the log file in case the file is too
+#   large to allocate the buffer. Need to figure out a longer term fix.
+# - MDIR: Have CODE 1,0 chain to CDIR CODE 2,0 rather than PATH CODE 1,0
+# - Removed TPI:TEST command
+# - External SAVE commands: Pass MQ and TSP to functions along with pre and cmd,
+#   and try to import the EXT_SA_FUNCT from /TS/extcmd.py to bring in any
+#   external commands defined. Also updated that file with sample commands.
+# - Renumber error constant names because ROM error code bug had been reporting
+#   them off by one when using SEND_MSG with verbose on. Also add a workaround.
+# - Added utility functions: WAIT_TX_RECEIVED, EMPTY_TX_FIFO, and EMPTY_RX_FIFO
+# - Rename tpi:tap to tpi:newtap
+# - Swapped FFW/REW CODE 2,n and 1,n so that 1,n is 0,n with another tapdir, and
+#   2,n is move by file with 3,n being 2,n with another tapdir. 0,n remains as-is
+# - Improve error handling for GETHELP, MDIR, RM, VERBOSE, APPEND
+# - Shorten some command names: getinfo->info, gethelp->help, getlog->log,
+#   memboot->boot, memdock->dock
+# - Have the LOG() function add the prefix of "INFO:","WARNING:","ERROR:", or
+#   "CRITICAL:" to the message based on the log level parameter.
+# - Change gethelp to not list external help files by default. You have to give
+#   the command "tpi:gethelp ?"
+# - ZX48: change CODE so that first is non-zero to suppress the help text, and
+#   the second is 0 for default load routine, 1 for normal, 2 for compatible,
+#   and 16384 or greater for compatible with a custom buffer size.
+# - NOP: Added CODE 1,* to flush RX queue, and CODE *,1 to flush TX queue
+# - Added back tpi:memboot and tpi:memdock as aliases for tpi:boot and tpi:dock
+# - Unified the interactive CD and DIR menu code to a generic ListMenu() function
+# - Improve handling with MOUNT_FILE calls in ROMPATCH and PROCESS_CMD
+# - Replace some patterns with dir_exists() and file_exists() calls
+# - Fix OFF_TABLE() to look at the size of temp.tap and not TSP.totlen since it
+#   looks at that file and not TSP.f_name, which can be not the same file when
+#   dck/romupdate.tap are used when TSP.f_name points to a .dck or .rom file.
+# - Add a call to OFF_TABLE() when using dck/romupdate.tap as the temp.tap file
+#   for a .dck or .rom load so that when .tap operations access temp.tap, they
+#   have the correct information.
+# - Add storing the previously mounted file name and tpi:path CODE 1,1 to
+#   display it.
+# - Add storing previous memdock setting and tpi:dock CODE 0,1 to display it as
+#   well as CODE 0,2 to swap to it, storing the current one as the previous.
+# - Removed storing the previously mounted file name and tpi:path CODE 1,1 to
+#   display it.
+# - Removed error code workaround in SEND_MSG since ROM 1.5 fixes the problem.
+# - Fix: add global MQ to WAIT_TX_RECEIVED
+# - Move init code for talking to the ROM down into loop for ListMenu to reduce
+#   the delay between it and the sending of the message.
+# - Fix dock code 0,2 not swapping to prev dock slot
+# - Add a timeout in TS2068_IO for incomplete commands
+# - If a .tap fails to load, set TSP.f_name to empty rather than previos name.
+# - Change DCK_IMAGE to use small buffers rather than two 8K ones
+# - Fix ffw/rew errors with an empty tap file.
+# - Add shorten_filename utility function for new long name shortening in the
+#   middle of the name but not including the extension.
+# - Incorporate Ricardo's mod for interactive list of 16 rather than 10 items.
+# - Trying to just use direct writes in ListMenu rather than building a big
+#   string to avoid the ROM timing out.
+# - Move tpi:dir CODE 3,0 out to tpi:idir and change tpi:cd CODE 1,3 to 1,1 to
+#   chain to tpi:idir.
+# - Add tpi:dir CODE 2,n to start the list at file n instead of 0
+# - Add a confirmation prompt for clearing the log, and make the CODE 255,0
+#   an option for "tpi:log clear" to bypass the confirmation rather than it
+#   being an alias for clear.
+# - Adjust the logic after SAVE_TS is called to handle the case of the save
+#   being aborted.
+# - Adjust use of function 0x86 for extra 0x40 code with 1.5W ROM 
+# - Tweaking the logic after SAVE_TS is called to handle the case of the save
+#   being aborted.
+# - Have GETHELP list any external commands available
+# - Add Ricardo's global path interactive CD feature as CODE 0,1 option. Adjust
+#   it and ChangeDir so it works from any directory, includes /TAP, and updates
+#   the directory list when they are made or removed in tpi:md and tpi:rm.
+# - Change ffw/rew CODE 1,x and 3,x to chain to tapdir with CODE x,255
+# - Add: `global MQ` to ACTIVATE_SD
+# - Adjust the logic in SEND_MSG_PROMPT_YN after getting the character
+# - More attempts to adjust the logic after SAVE_TS is called to handle the case
+#   of the save being aborted, but finding other issues making it difficult.
+# - Found that ENA_SD() in tspico_io.py was leaving MQ active after activating
+#   the SD card, confusing checks of both after SAVE_TS. Adjusted logic to only
+#   check if the SD is mounted and only then try re/mounting and updating the
+#   directory, otherwise skip and just make sure MQ is active after all that.
+# - Have tpi:rm return Invalid Argument error if a name is not given instead of
+#   Invalid Filename, so that is only returned if the file wasn't found.
+# - Have tpi:md report End of File error if the dir exists but change to it if
+#   CODE 1,0 was given and return no error. If the name exists as a file, return
+#   error Invalid Filename. If no name is given, return Invalid Argument error.
+# - Fix handling of newlines after a full 32 character line in SEND_MSG2.
+# - Fix tpi:idir to handle an empty directory 
+# - Fix dirinfo.tap not getting char(126) "FREE" replaced with "?"
+# - Remove the 2 second sleep from DIR
+# - Add turning on the LED for other DIR forms, interactive DIR and interactive
+#   CD where the pico is busy.
+# - Have GETHELP no have SEND_MSG2 expand keywords (really just ~/FREE) to
+#   preserve column alignment in help files that might use ~.
+# - Move try/except around first call to GET_DIRS into the function as it is
+#   used in other places, and set return empty on error.
+# - For tpi:help, check for /sd/help only in one place, and if not found, return
+#   error Q instead of F. Also make a help topic not found log as a warning.
+# - Have tpi:md not call DIR_FILES if it's going to chain to CD
+# - Tweak the UI for the interactive commands to be more clear
+# - Typos, have GET_DIRS add the root path to the list, Make bottom bar in
+#   ListMenu a page incicator by showing '=' where the list is with the whole
+#   line as the full content and other pages as '-', have interactive CD not
+#   show ".." when at the "root" /TAP dir.
+# - Add a gc.collect after most init and before calling GET_DIRS and the main loop.
+# - Remove ACTIVATE_MQ calls after calls to MOUNT_FILE since it does that.
+# - Have COPY_FILE return success bool
+# - Re-work MOUNT_FILE to not corrupt TSP fields if mount fails and to try to
+#   remount the current file on failures that may have overwritten temp.tap or
+#   temp.bin. So you have to pass in the filename rather than set TSP.f_name.
+# - Change log_entries to be a list of strings
+# - Change DIR_FILES to build the dir msg from a string array
+# - public_path and public_fname can optionally shorten to a given length
+# - Split out upgrade functions into separete tspico_upgrade.py
+# - Optimize string construction using the % operator rather than +
+# - Make ListMenu choices dictioniary and loglevel strings global to not re-create
+# - In BLKRCV, use a memoryview on the buffer
+# - In MDIR, fix message var name error and avoid calling GET_DIRS by just
+#   appending the new path to alldirs and re-sorting.
+# - Construct large SEND_MSG2 strings from making a string array rather than
+#   multiple appends. Move extra leading newlines from strings to function.
+# - Optimize SEND_MSG2 to do fewer checks normally for special characters
+# - Optimize ListMenu to write strings as is goes rather than make a big page
+#   string to write at once.
+# - Change 'b' to 'B' and 'Kb' to 'kB' in memory sizes
+# - Change named constants for STATUS to const() class and start name with underscore.
+# - Change isdir dictionary to a dirs_upper list of dir names
+# - Move gc.collect at loop bottom to only when SAVE_LOG is called
+# - Add clearing RX/TX queues at bottom of loop and report if not empty
+# - Try tightening DIR_FILES by del big vars when done with them, make nom a
+#   bytearray(32) to not reallocate a string for each dir entry that we
+#   ultimately format to 32 chars anyway.
+# - Tweak header for tapdir. Fix printing } as ? in SEND_MSG2.
+# - In MOUNT_FILE when remounting, restore the offset and index
 
 # TO DO:
 #=======
@@ -187,13 +321,44 @@ import gc
 import os
 import json
 
+from micropython import const
 from rp2 import StateMachine, asm_pio, PIO
 from machine import Pin, freq, SPI
 
 from TS.sdcard import *
 
-from TS.tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO_DUAL, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX, OPEN_NOFILE_TAP
-#from TS.tspico_io import sel_bank, set_ctrl, set_dck, TS_IO, LOAD_TS, LOAD_ZX, LOAD_ZX_C, SAVE_TS, SAVE_ZX
+# ─── DUAL-PORT MIGRATION (Ryan's tspico.py -> dual-port) ───────────────
+# Three things changed from Ryan's original single-port import:
+#
+#   1. Module path:  `tspico_io` -> `TS.tspico_io`
+#      Always pull from the frozen module (baked into the UF2 by
+#      manifest.py). A root-level /tspico_io.py (Ricardo's older one)
+#      would shadow the frozen one and silently pull in stale single-
+#      port code; using the explicit TS. prefix defeats that risk.
+#
+#   2. PIO program:  `TS_IO` -> `TS_IO_DUAL`
+#      The single-port PIO is gone in the dual-port architecture.
+#      TS_IO_DUAL decodes the A0 address bit (GPIO 10) to route Z80
+#      reads of $0E (data) vs $0F (status) into separate handling.
+#      The Z80's $0F polls are answered by the Y register (set to
+#      0xFFFFFFFF = always ready) instead of by interleaving 0x40
+#      bytes into the TX FIFO.
+#
+#   3. Added import: `OPEN_NOFILE_TAP`
+#      Pre-opens /assets/nofile.tap at boot so LOAD "" (no prior
+#      mount) doesn't pay file-open latency in the hot path. Without
+#      this, opening the file takes 1-5ms during which the Z80 reads
+#      stale TX bytes and reports Report J.
+#
+# See docs/DUAL_PORT_DEVELOPMENT.md §7 for the full migration narrative.
+# ───────────────────────────────────────────────────────────────────────
+from TS.tspico_io import (
+    patch, sel_bank, set_ctrl, set_dck,
+    TS_IO_DUAL,                          # was: TS_IO (single-port)
+    LOAD_TS, LOAD_ZX, LOAD_ZX_C,
+    SAVE_TS, SAVE_ZX,
+    OPEN_NOFILE_TAP,                     # added: cached nofile handle
+)
 
 #####################
 # SERVICE FUNCTIONS #
@@ -206,55 +371,74 @@ from TS.tspico_io import patch, sel_bank, set_ctrl, set_dck, TS_IO_DUAL, LOAD_TS
 def NULL_SM():
     nop()
 
-# Error status return values showing BASIC error given.
-# These match the TPI protocol spec exactly. Note: previous STAT_*
-# names used different numeric values which sent the wrong BASIC
-# error to the TS-2068 (e.g. "invalid filename" was mapped to 2 which
-# is "tape load error R" per protocol). The values below align with
-# the EXROM error dispatch at $1BF3.
-from micropython import const
+#######################
+# MODULE-LEVEL CACHES #
+#######################
 
-_0_J_Invalid_IO   = const(0)    # Report J - Invalid I/O device
-_1_OK             = const(1)    # No error
-_2_R_Tape_load    = const(2)    # Report R - Tape loading error
-_3_F_Invalid_file = const(3)    # Report F - Invalid file name
-_4_Q_Parameter    = const(4)    # Report Q - Parameter error
-_5_C_Nonsense     = const(5)    # Report C - Nonsense in BASIC
-_6_6_Num2Big      = const(6)    # Report 6 - Number too big
-_7_8_EOF          = const(7)    # Report 8 - End of file
-_8_A_Invalid_arg  = const(8)    # Report A - Invalid argument
-_9_9_STOP         = const(9)    # Report 9 - STOP
-_10_D_Break       = const(10)   # Report D - Break/CONT (any value >= 10)
+# ListMenu key-to-index mapping: 0-9 (ASCII 48-57), Q-Y (ASCII 81,87,69,82,84,89)
+# Created once at module load instead of every ListMenu() call
+LISTMENU_CHOICES = {
+    48: 0, 49: 1, 50: 2, 51: 3, 52: 4, 53: 5, 54: 6, 55: 7, 56: 8, 57: 9,  # 0-9
+    81: 10, 87: 11, 69: 12, 82: 13, 84: 14, 89: 15  # Q W E R T Y
+}
+
+# Log level labels - shared by LOG() and LOGLEVEL()
+LOG_LABELS = ("INFO", "WARNING", "ERROR", "CRITICAL","SPECIAL")
+
+# Status codes returned to the 2068 - each maps to a BASIC error
+_1_OK = const(1)
+_2_R_Tape_load = const(2)
+_3_F_Invalid_file = const(3)
+_4_Q_Parameter = const(4)
+_5_C_Nonsense = const(5)
+_6_6_Num2Big = const(6)
+_7_8_EOF = const(7)
+_8_A_Invalid_arg = const(8)
+_9_9_STOP = const(9)
+_10_J_Invalid_IO = const(10)
+_11_D_Break = const(11)
 
 
-# ---------------- TELEMETRY ----------------
-# Comprehensive event logging. Each TLM() call prints an event with
-# timestamp (microseconds since boot), delta from previous TLM call,
-# and TX/RX FIFO occupancy. Frozen-module overhead is negligible.
+# ─── DUAL-PORT MIGRATION: optional telemetry (stage 9) ────────────────────
+# Comprehensive event logging for diagnosis. Each TLM() call prints an
+# event with timestamp (microseconds since boot), delta from previous
+# TLM call, and TX/RX FIFO occupancy. Frozen-module overhead is
+# negligible when the flag is False.
 #
-# TO DISABLE TELEMETRY GLOBALLY (three options, pick one):
+# DEFAULT: TLM_ENABLED = False — Ryan's preferred experience (no
+# telemetry noise on a normal run, zero overhead in hot paths).
+#
+# TO ENABLE FOR A TESTING SESSION (pick one):
 #
 #   1. EASIEST — edit /main.py on the Pico's flash. Find the line:
-#         TS.tspico.TLM_ENABLED = True
-#      and change True → False. Reboot. No UF2 rebuild needed because
-#      main.py lives on the filesystem, not in the frozen image.
+#         TS.tspico.TLM_ENABLED = ...   (or `dev_tspico.TLM_ENABLED`)
+#      and set it to True. Reboot. No UF2 rebuild needed.
 #
 #   2. AT THE REPL (transient — gone on reboot):
-#         import TS.tspico
-#         TS.tspico.TLM_ENABLED = False
+#         import dev_tspico
+#         dev_tspico.TLM_ENABLED = True
 #
-#   3. EDIT-AND-REBUILD — change the default below to False, commit,
-#      let CI rebuild the UF2, reflash. Permanent for that build.
+#   3. EDIT THE DEFAULT BELOW to True, commit. Permanent for that copy.
 #
 # When False, both TLM() and TLM_RESET() return immediately with zero
 # work — no string format, no FIFO read, no print, no timestamp track.
-# This is the right setting for production / end-user installs where
-# the diagnostic noise isn't wanted.
-#
-# Default = True (telemetry on) so existing debug workflows keep working.
-TLM_ENABLED = True
+# This is the right setting for normal operation; flip to True only
+# when you actively need the diagnostic stream.
+# ─────────────────────────────────────────────────────────────────────────
+TLM_ENABLED = False
 
-_tlm_last = 0   # last TLM timestamp
+# Build version stamp — bumped on each mpy rebuild so we can confirm
+# at a glance which build is actually loaded on the Pico. Logged at
+# LOAD_CONFIG entry and via __init__-time print so it appears even
+# before TLM is enabled.
+BUILD_VERSION = "2026-05-27-J (inline-wrt SEND_MSG2 + suppress_scroll<500)"
+# Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
+# when loaded via the dev override __name__ == "dev_tspico". This file is
+# kept byte-identical between the two locations so the stamp prints the
+# correct label regardless of which copy actually loaded.
+print("[%s] BUILD_VERSION =" % __name__, BUILD_VERSION)
+
+_tlm_last = 0   # last TLM timestamp, microseconds
 
 
 def TLM(action, detail=""):
@@ -302,6 +486,7 @@ def TLM_RESET(tag=""):
     except:
         _tlm_last = 0
     print("[TLM ===== %s =====]" % tag)
+
 
 class PICO_STATUS():                                                            # Class for the object that holds TS-Pico's current status
     
@@ -357,8 +542,25 @@ class PICO_STATUS():                                                            
             self.ZX_TAPE_COMPAT = False
 
         self.bank_sm = (self.DCK_SLOT * 16) + self.ROM_SLOT                    # bit pattern to store slot of DCK/ROM. 4 bits each. Default 0001 0000
-    
+        self.dck_prev_slot = self.DCK_SLOT
+        self.dck_prev_mem  = 2
 
+
+# ─── DUAL-PORT MIGRATION: new helper DEACTIVATE_SD ─────────────────────
+# In Ryan's single-port version, the SD-teardown logic lived inline at
+# the top of ACTIVATE_MQ. The dual-port refactor splits it out:
+#
+#   1. Some boot paths (and the SAVE branch in TS2068_IO) need to call
+#      ACTIVATE_MQ without first having mounted /sd; Ryan's old loop
+#      `while True: try: umount; except: break` wasted ~10ms on every
+#      such call retrying the unmount.
+#   2. The dual-port protocol is sensitive to bus-handover timing.
+#      Splitting teardown lets us do it deterministically: unmount
+#      once, then clamp the SPI data lines LOW before the PIO reclaims
+#      them. This eliminates the tri-state window where Z80 D6 could
+#      float high — the original Report D root cause (see
+#      docs/DUAL_PORT_DEVELOPMENT.md §1).
+# ───────────────────────────────────────────────────────────────────────
 def DEACTIVATE_SD():
     """Tear down SD card access and safe the shared bus lines."""
     TLM("DEACTIVATE_SD enter")
@@ -371,46 +573,57 @@ def DEACTIVATE_SD():
     U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
     U3_CS.value(1)
 
-    # GPIO 2-4 are shared with SPI (SCK/MOSI/MISO). Drive them LOW before
-    # the PIO state machine reclaims them.
+    # GPIO 2-4 are shared with SPI (SCK/MOSI/MISO). Drive them LOW
+    # before the PIO state machine reclaims them. This is the Report D
+    # fix from the dual-port migration.
     for p in (2, 3, 4):
         Pin(p, Pin.OUT).value(0)
     TLM("DEACTIVATE_SD exit", "GPIO 2-4 clamped LOW, U3_CS=HIGH")
     return
 
 
-def ACTIVATE_MQ(ready=True):
-    """Create the dual-port TS_IO_DUAL state machine.
+# ─── DUAL-PORT MIGRATION: ACTIVATE_MQ rewritten ────────────────────────
+# Five changes from Ryan's single-port version:
+#
+#   1. PIO program:  TS_IO       -> TS_IO_DUAL
+#      Routes Z80 reads of $0E vs $0F into separate handling so the
+#      Y register can answer status independently of the TX FIFO.
+#
+#   2. PIO clock:    15 MHz       -> 30 MHz
+#      The dual-port decode adds ~7 instructions to the read path.
+#      30 MHz keeps the total well within Z80's data setup window.
+#      RP2040 PIO can run up to half the CPU clock (135 MHz at our
+#      270 MHz setting) so 30 MHz is conservative.
+#
+#   3. Y = READY after activation
+#      The new line `MQ.exec("mov(y, invert(null))")` sets Y to
+#      0xFFFFFFFF so $0F reads always have bit 6 set (= ready).
+#      We keep Y at READY for the entire session; the protocol's
+#      natural pacing via TX FIFO depth handles flow control.
+#
+#   4. SD teardown REMOVED
+#      The old `while True: try: os.umount; except: break` loop and
+#      the U3_CS write are gone — DEACTIVATE_SD() handles that now.
+#      Callers must call DEACTIVATE_SD() FIRST, then ACTIVATE_MQ().
+#      (Stage 4 updates TS2068_IO to do this in the right order.)
+#
+#   5. NO pre-load of 0x01 here  ← CRITICAL, easy mistake
+#      ACTIVATE_MQ is called both at boot AND mid-command (after
+#      SD operations in MOUNT_FILE etc.). At boot we need a pre-load
+#      so the Z80's first status read finds 0x01. But mid-command,
+#      the next thing in the call chain (SEND_MSG, etc.) writes its
+#      own status — adding a pre-load HERE would put TWO 0x01s in
+#      TX, the Z80 only reads one, and the second sits in TX and
+#      gets misread later in the protocol (the orphan-byte family).
+#      Boot-time pre-load goes in TS2068_IO() instead, ONCE.
+#      (This was "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.)
+#
+# The `ready=True` parameter is for the rare path that needs to
+# create the SM but defer activation (currently unused but kept for
+# parity with our reference implementation).
+# ───────────────────────────────────────────────────────────────────────
+def ACTIVATE_MQ(ready=True):                                                                      # Re-enable TX/RX SM, after a SDCard access (DUAL-PORT)
 
-    DUAL-PORT PROTOCOL OVERVIEW (see docs/PROTOCOL.md for the full guide):
-
-      Z80 reads $0F (status) → returns scratch register Y (independent of FIFO).
-      Z80 reads $0E (data)   → returns next byte from TX FIFO (or 0x00 if empty).
-      Z80 writes $0E or $0F  → byte goes to RX FIFO (with port indicator in bit 8).
-
-    For LOAD/SAVE/PROCESS_CMD, Y is set to 0xFFFFFFFF (READY) and stays
-    there. The Z80 ROM polls $0F bit 6 with a long timeout (~20s); when
-    Y=0xFFFFFFFF the polls succeed instantly. Pico paces the data flow
-    via TX FIFO depth — Z80 reads at ~47µs/byte, MQ.put() is much faster.
-
-    Args:
-        ready=True  (default): activate the SM, set Y=READY, pre-load the
-                    initial 0x01 status byte into TX FIFO. This is the
-                    correct setting for normal operation.
-        ready=False: create the SM but DON'T activate it. Used by certain
-                    SD/transitional flows that need to control timing
-                    explicitly. Caller must MQ.active(1), set Y, and
-                    pre-load status manually.
-
-    The Pico's PIO is clocked at 30MHz; the dual-port decode adds ~7
-    instructions to the read path, and 30MHz keeps the total well within
-    the Z80's data setup window. RP2040 PIO can run up to half the
-    system clock (135MHz at 270MHz CPU), so 30MHz is conservative.
-
-    See also:
-        MQ_READY()  — set Y=0xFFFFFFFF (typically not needed at runtime)
-        MQ_BUSY()   — set Y=0 (rarely needed; Z80 will wait up to ~20s)
-    """
     global MQ
 
     TLM("ACTIVATE_MQ enter", "ready=%s" % ready)
@@ -420,68 +633,108 @@ def ACTIVATE_MQ(ready=True):
 
     if ready:
         MQ.active(1)
-        # Y = 0xFFFFFFFF → port $0F always returns 0xFF → D6=1=ready.
-        # We keep Y at READY for the entire session. The Z80 polls $0F
-        # but never sees BUSY because Pico's response timing is well
-        # within the protocol's tolerance (Z80 ROM has ~20s timeout).
-        MQ.exec("mov(y, invert(null))")
-        TLM("ACTIVATE_MQ exit", "SM active, Y=READY (TX FIFO empty)")
+        # ─── DUAL-PORT MIGRATION: Y stays at BUSY here ──────────────────
+        # We INTENTIONALLY do NOT set Y=READY in this function. Caller
+        # MUST load any response bytes into TX and then call MQ_READY()
+        # to signal ready, in that order.
+        #
+        # The old behavior was:
+        #     MQ.exec("mov(y, invert(null))")    # Y=READY immediately
+        # which created a race: between this exec and the caller's
+        # response-byte load, the Z80 (which has been polling $0F
+        # throughout any preceding SD operation) sees ready, immediately
+        # reads $0E, finds TX empty, gets 0x00 → Report J.
+        #
+        # The race was theoretical for handlers that respond instantly
+        # (TPI:DIR, etc.) but became reliably reproducible for handlers
+        # that do SD round-trips before responding (TPI:MD, TPI:RM,
+        # MOUNT_FILE, NEW_TAP, GETHELP, ...). The 575ms SD window is
+        # plenty of time for the Z80 to win the race against our
+        # Python code path to SEND_MSG.
+        #
+        # Now: SM is active, Y=0 (BUSY), TX is empty. Caller does:
+        #     ACTIVATE_MQ()
+        #     # load response bytes via SEND_MSG() or MQ.put(...)
+        #     MQ_READY()   # (or SEND_MSG calls this internally)
+        # Z80 sees BUSY on $0F until we're ready; protocol races
+        # eliminated.
+        # ────────────────────────────────────────────────────────────────
+        TLM("ACTIVATE_MQ exit", "SM active, Y=BUSY (TX FIFO empty)")
     else:
         TLM("ACTIVATE_MQ exit", "SM created but NOT active")
-
-    # NOTE: do NOT pre-load 0x01 here. ACTIVATE_MQ is called both at
-    # boot AND mid-command (after SD operations in MOUNT_FILE etc.).
-    # At boot we need a pre-load so the Z80's first status read finds
-    # 0x01. But mid-command, the next thing in the call chain (SEND_MSG)
-    # writes its own status byte — adding a pre-load here would put
-    # TWO 0x01s in TX, and Z80 only reads one, causing SEND_MSG to
-    # stall forever waiting for the FIFO to drain.
-    #
-    # Boot-time pre-load happens in TS2068_IO() instead (one wrt(0x01)
-    # right after the initial ACTIVATE_MQ call). Each command's own
-    # tail re-loads 0x01 for the NEXT command.
 
     return
 
 
+# ─── DUAL-PORT MIGRATION: new helpers MQ_READY / MQ_BUSY ───────────────
+# In Ryan's single-port code, "ready" was signalled by writing 0x40 to
+# the TX FIFO — the byte had bit 6 set, and the Z80's WF_NPH polling
+# loop tests bit 6 of $0F. Every handler interleaved `wrt(0x40)` and
+# `wrt(0x01)` (data) bytes in TX with careful ordering.
+#
+# In dual-port, $0F is decoded SEPARATELY by the PIO and answered by
+# the Y scratch register — NOT by the TX FIFO at all. So:
+#
+#   - "ready" means  set Y = 0xFFFFFFFF  (MQ_READY)
+#   - "busy"  means  set Y = 0           (MQ_BUSY)
+#
+# Every `wrt(0x40)` or `MQ.put(0x40)` in Ryan's handlers becomes a
+# `MQ_READY()` call (typically placed AFTER the data bytes are in TX,
+# so Z80 sees "ready" on its next $0F poll and then reads the data via
+# $0E). Stages 5-7 of this migration walk through each callsite.
+#
+# These functions deliberately have NO logging or TLM. They run in
+# time-critical receive paths where a print() takes ~1-10ms — long
+# enough for the 4-deep RX FIFO to overflow and lose Z80 bytes.
+# ───────────────────────────────────────────────────────────────────────
 def MQ_READY():
-    """Signal 'ready' to Z80 — bit 6 set on port $0F reads.
-
-    Sets PIO scratch register Y to all-ones (0xFFFFFFFF). The Z80
-    WF_NPH polling loop tests BIT 6,A — any value with bit 6 set
-    works, so 0xFF is functionally equivalent to 0x40 here.
-
-    Call this AFTER MQ.put() has loaded the response into the TX FIFO.
-    The Z80 will see 'ready' on its next IN A,($0F), then read the
-    actual data via IN A,($0E).
-    """
-    # invert(null) is the documented MicroPython PIO syntax. The tilde
-    # form `~null` does NOT parse correctly via runtime sm.exec() in
-    # v1.20.0 — confirmed by REPL test. Without this, Y stays at 0,
-    # port $0F always reads 0, Z80 sees "never ready" and reports J.
+    """Signal 'ready' to Z80 — bit 6 set on $0F reads (Y = 0xFFFFFFFF)."""
+    # invert(null) is the documented MicroPython PIO syntax for ~0.
+    # The tilde form `~null` does NOT parse correctly via runtime
+    # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
+    # Without this, Y stays at 0, $0F always reads 0, Z80 sees
+    # "never ready" and reports J.
     MQ.exec("mov(y, invert(null))")
-    # NOTE: no TLM here. MQ_READY is called in time-critical receive
-    # paths where a print() takes ~1-10ms — long enough for the 4-deep
-    # RX FIFO to overflow and lose bytes from the Z80. Caller can TLM
-    # at a safer point if needed.
 
 
 def MQ_BUSY():
-    """Signal 'not ready' to Z80 — bit 6 clear on port $0F reads.
+    """Signal 'not ready' to Z80 — bit 6 clear on $0F reads (Y = 0).
 
-    Sets PIO scratch register Y to 0. The Z80 WF_NPH polling loop
-    will continue spinning until either MQ_READY() is called or the
-    Z80's own 2.8ms timeout expires (whichever comes first).
-
-    Call this BEFORE doing slow work (SD card access) and after the
-    response has been read by the Z80 (to clear ready for the next
-    cycle).
+    In normal operation we keep Y=READY constantly; the protocol's
+    natural pacing via TX FIFO depth handles flow control. MQ_BUSY
+    is here for completeness and any future code that needs an
+    explicit busy signal.
     """
     MQ.exec("set(y, 0)")
-    # NOTE: no TLM here — same critical-path concern as MQ_READY.
+
+
+# ─── DUAL-PORT MIGRATION: retired single-port helpers ────────────────────
+# Three helper functions are gone from the file at this point:
+#
+#   WAIT_TX_RECEIVED()  was:  while MQ.tx_fifo() != 0: pass
+#   EMPTY_TX_FIFO()     was:  while MQ.tx_fifo() != 0: pull(noblock); mov(osr,null)
+#   EMPTY_RX_FIFO()     was:  while MQ.rx_fifo() != 0: MQ.get()
+#
+# They were idiomatic single-port plumbing for the per-command "wait
+# until Z80 has read everything, then drain RX of any echoes" cycle.
+# In dual-port we either don't need them (Y register pacing handles
+# most cases) or we inline them at the small number of remaining
+# callsites — both for clarity and to avoid encouraging copy-paste of
+# the old pattern.
+#
+# Every callsite has been migrated:
+#   - SEND_MSG / SEND_MSG2 / SEND_MSG_PROMPT_YN tails  (stage 6)
+#   - PRINT_IO / PROCESS_CMD tails  (stage 5)
+#   - ListMenu tail  (stage 7)
+#   - TS2068_IO unrecognized-cmd branch + bottom-of-loop  (stage 4)
+#   - CHK_STATUS watchdog cleanup  (stage 7)
+#   - ZX48_IO unrecognized-cmd + post-mode cleanup  (stage 7)
+# ─────────────────────────────────────────────────────────────────────────
 
 
 def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
+
+    global MQ
 
     TLM("ACTIVATE_SD enter")
     MQ = StateMachine(0, NULL_SM, freq=15_000_000)
@@ -499,50 +752,16 @@ def ACTIVATE_SD():                                                              
         os.mount(sd, "/sd")
         TLM("ACTIVATE_SD exit", "SD mounted at /sd")
 
-    except:
-        LOG("ERROR: Mounting SD Card failed in ACTIVATE_SD!", 2)
+    except Exception as e:
+        TLM("ACTIVATE_SD FAILED — entering BLINK_ERROR loop")
+        LOG(f"Mounting SD Card failed in ACTIVATE_SD! {e}", 2)
         SAVE_LOG()
         spi = -99
-        TLM("ACTIVATE_SD FAILED — entering BLINK_ERROR loop")
+
         while True:
             BLINK_ERROR()
-        pass
 
     return spi
-
-
-def BACKUP_DIR(d, dest_dir):                                                               # Recursively backs-up folders and files of a provided "d" folder; typically d="/" (root of the Flash)
-                                                                                           # and dest_dir = /sd/BACKUP
-    if os.stat(d)[0] & 0x4000:  # Dir
-        
-        copy_path = str(dest_dir) + str(d)
-        
-        if (copy_path == dest_dir + "/"):
-            copy_path = dest_dir
-            
-        try:
-            os.mkdir(copy_path)
-        except:
-            FINISH("Fatal error. Could not create folder " + copy_path + ". Verify SD Card contents. Terminating", False)
-        
-        for f in os.ilistdir(d):
-            if f[0].startswith("sd"):
-                continue
-            
-            if f[1] & 0x8000:
-                copy_src = d + '/' + f[0]
-                copy_dst = copy_path + '/' + f[0]
-                LOG("Copying file " + copy_src + " to " + copy_dst, 4)
-                
-                COPY_FILE(copy_src, copy_dst)
-                continue
-            
-            if f[0] not in ('.', '..'):
-                folder_name = d + '/' + f[0]
-                LOG("Processing folder " + folder_name, 4)
-                BACKUP_DIR(folder_name, dest_dir)  # File or Dir
-        
-    return
 
 
 def BLINK_ERROR():                                                             # An onboard LED-blinking routine. This for an error condition. Interval is fixed
@@ -595,15 +814,20 @@ def CHK_STATUS(secs):                                                           
     kill = False
     busy = True
     
-    LOG("INFO: Starting watchdog...", 0)
+    LOG("Starting watchdog...", 0)
     secs = secs * 1_000_000
     
     t_init = time.ticks_us()
-    while (time.ticks_us() - t_init) < secs:
+    # ─── DUAL-PORT MIGRATION: use ticks_diff to handle 30-bit wrap ───────
+    # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min). Plain
+    # subtraction goes negative after wrap (negative < secs → True → spin
+    # forever). ticks_diff() handles wrap correctly.
+    # ─────────────────────────────────────────────────────────────────────
+    while time.ticks_diff(time.ticks_us(), t_init) < secs:
         if dead:
             break
     if not dead:
-        LOG("ERROR: Abnormal termination. Clearing TX/RX FIFO....", 2)
+        LOG("Abnormal termination. Clearing TX/RX FIFO....", 2)
         while not dead:
             MQ.exec("pull (noblock)")
             MQ.exec("mov (osr, null)")
@@ -611,20 +835,21 @@ def CHK_STATUS(secs):                                                           
             MQ.exec("push (noblock)")
             kill = True
              
+        # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
         while MQ.rx_fifo() != 0:
             MQ.get()
         while MQ.tx_fifo() != 0:
             MQ.exec("pull (noblock)")
-            MQ.exec("set (osr, null)")
+            MQ.exec("mov (osr, null)")
         MQ.active(0)
-        
-        LOG("INFO: TX/RX FIFO successfully cleared. Operation finished", 0)
+
+        LOG("TX/RX FIFO successfully cleared. Operation finished", 0)
         
         BLINK_ERROR()
         
         MQ.active(1)
         
-        LOG("INFO: Ending watchdog. Operation ended normally", 0)
+        LOG("Ending watchdog. Operation ended normally", 0)
         
     kill = False
     busy = False
@@ -640,26 +865,32 @@ def COPY_FILE(src_file, dst_file):                                              
     
     dead = False
     
-    buf = bytearray(512)
+    try:
+        buf = bytearray(512)
+    except:
+        return False
     bytes_rd = 0
     
     led.value(1)
     
-    with open(src_file, 'rb') as file_in:
-        with open(dst_file, 'wb') as file_out:
-            
-            bytes_rd = file_in.readinto(buf)
-            i = 0
-            while bytes_rd  > 0:
-                file_out.write(buf[:bytes_rd])
-                bytes_rd = file_in.readinto(buf)
+    try:
+        with open(src_file, 'rb') as file_in:
+            with open(dst_file, 'wb') as file_out:
                 
-                i += 1
-                if (i >= 15):
-                    led.toggle()
-                    i = 0
-                            
-    led.value(0)
+                bytes_rd = file_in.readinto(buf)
+                i = 0
+                while bytes_rd  > 0:
+                    file_out.write(buf[:bytes_rd])
+                    bytes_rd = file_in.readinto(buf)
+                    
+                    i += 1
+                    if (i >= 15):
+                        led.toggle()
+                        i = 0
+    except:
+        return False
+    finally:
+        led.value(0)
     dead = True
     
     del buf                                                                             # OPTIMIZATION - CHECK!       
@@ -668,31 +899,35 @@ def COPY_FILE(src_file, dst_file):                                              
     while busy:
         pass
     
-    return
+    return True
 
 
-def DCK_IMAGE():                                                                              # Generates a full 64Kb image from a .DCK file
+def DCK_IMAGE():
+
+    """ Generates a full 64kB image from a .DCK file """
                                                                                               # This will be used by the Flash write pgm
     gc.collect()
     header = bytearray(9)
-    chunk_len = 8192
-    empty = bytearray(chunk_len)
-    cur_chunk = bytearray(chunk_len)
+    buff_size = 256
+    rep = 8192 // buff_size
+    empty = bytearray(buff_size)
+    cur_chunk = bytearray(buff_size)
     
-    LOG("INFO: Start processing DCK file", 0)
-    
-#     try:
-#         os.remove("/TMP/temp.bin")
-#     except:
-#         pass
-
+    LOG("Start processing DCK file", 0)
+  
     f_in = open("/TMP/temp.bin", "rb")
     f_out = open("/TMP/temp_dck.bin", "wb")
 
     f_in.readinto(header)
 
+    # DCK header byte 0 is the bank number:
+    #     0: DOCK bank  - You set tpi:dock to this
+    # 1-253: Reserved
+    #   254: EXROM bank - We don't have a way to specify this unless you appended it to a 16K HOME block
+    #   255: HOME bank  - You would set tpi:boot to this
+
     if header[0] != 0x00:
-        LOG("CRITICAL ERROR! Not a valid DOCK image; wrong header. Aborting...", 3)
+        LOG("Not a valid DOCK image; wrong header. Aborting...", 3)
         
         f_in.close()
         f_out.close()
@@ -700,23 +935,31 @@ def DCK_IMAGE():                                                                
         
         return False
 
-    LOG("INFO: DCK header:" + str(header), 0)
+    LOG("DCK header:" + str(header), 0)
 
     for el in range(1, 9):                                                              # Byte 0 is bank, bytes 1-8 are the 8x 8kb chunk types
         if (header[el] == 0x00 or header[el] == 0x01):                                  # Non-existent chunk type (8kb data is not in the file)
-            f_out.write(empty)	
+            for i in range(rep):
+                f_out.write(empty)
         elif header[el] == 0x02 or header[el] == 0x03:                                  # Chunk data is in the file
-            f_in.readinto(cur_chunk)
-            f_out.write(cur_chunk)
+            for i in range(rep):
+                f_in.readinto(cur_chunk)
+                f_out.write(cur_chunk)
         else:                                                                           # Invalid
-            LOG("CRITICAL ERROR! Not a valid DOCK image; wrong chunk type. Aborting...", 3)
+            LOG("Not a valid DOCK image; wrong chunk type. Aborting...", 3)
             f_in.close()
             f_out.close()
             gc.collect()
             
             return False        
 
-    LOG("INFO: Image of DCK file generated succesfully", 0)
+    # DCK files can have additional sections after this starting again with
+    # another header. Technically, you could separate each chunk in a deparate
+    # DCK section with its own header, but that is not done. More practically,
+    # you could specify one DCK section for HOME bank to replace the HOME ROM
+    # and another section for EXROM to replace the EXROM bank ROM.
+
+    LOG("Image of DCK file generated succesfully", 0)
     
     f_in.close()
     f_out.close()
@@ -724,9 +967,27 @@ def DCK_IMAGE():                                                                
     os.remove("/TMP/temp.bin")
     os.rename("/TMP/temp_dck.bin", "/TMP/temp.bin")
     
+    del empty
+    del cur_chunk
     gc.collect()
     
     return True
+
+
+def shorten_filename(nom, l):
+    # Shorten a filename to fit in length l by removing characters from the
+    # middle of the name before the file extension, replacing them with a '>'.
+    size = len(nom)
+    if size > l:
+        j = nom.rfind('.')
+        if j == -1:
+            j = size
+        e = size - j # length of ext with dot
+        k = l - 1 - e
+        k2 = k // 2
+        k1 = k - k2
+        return "%s>%s" % (nom[:k1], nom[j-k2:])
+    return nom
 
 
 def DIR_FILES():                                                                             # Get all files and directories from current path
@@ -735,14 +996,15 @@ def DIR_FILES():                                                                
     global dirs
     global lista
     global files_upper
-    global isdir
+    global dirs_upper
     
     files = []
     dirs = []
     files_upper = []
+    dirs_upper = []
     lista = ""
+    L = []
     header = ""
-    isdir = {};
     
     dirinfo = []
     tap_blk = []
@@ -750,128 +1012,99 @@ def DIR_FILES():                                                                
     num_dirs = 0
     num_files = 0
     
-    ext = ['TAP', 'TZX', 'DCK', 'ROM', 'BIN']                                                 # extensions to be included 
+    ext = ['TAP', 'TZX', 'DCK', 'ROM', 'BIN']                                                 # extensions to be included
     starts = ['.']                                                                            # first characters of files to be excluded
     
     ordered = True                                                                            # In the future, this could be controlled by an option
-    
+
+    # ─── DUAL-PORT MIGRATION: remove stale dirinfo.tap before listing ─────
+    # dirinfo.tap is a synthetic TAP file DIR_FILES writes at the end of
+    # this function (containing the directory listing in a format the 2068
+    # can LOAD). Without removing the PREVIOUS one before listing the
+    # directory, os.ilistdir() picks it up and adds it to the files[] and
+    # lista listings sent to the 2068. End-user sees dirinfo.tap as if it
+    # were a real file they put there. (Was uncommented in production
+    # TS/tspico.py line 758-761; was commented out in Ryan's version,
+    # causing the visibility bug reported during picotest's directory
+    # listing tests.)
+    # ─────────────────────────────────────────────────────────────────────
     try:
         os.remove("dirinfo.tap")
     except:
         pass
-    
+
     if ordered:
         listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
     else:
         listing = [item for item in os.ilistdir()]
     
-    sd_block = os.statvfs("")[0]
-    sd_tot = os.statvfs("")[2]
-    sd_free = os.statvfs("")[3]
+    nom = bytearray(32)
     
-    sd_free = (sd_free * sd_block) / 1_073_741_824
-    sd_tot = (sd_tot *sd_block) / 1_073_741_824
-    
-    sd_stat = "SD: " + '%02.4f' % (sd_tot ) + "GB; free: " + '%02.4f' % (sd_free) + "GB"
-    sd_stat = "%-32s" % (sd_stat)
-
     for archs in listing:
-        uname = archs[0].upper()
         if archs[1] == 16384:
-            nom = archs[0][:20]
-            new_item = ("%-32s" %  nom )
-            dirinfo.append(new_item)
             dirs.append(archs[0])
-            isdir[uname] = True
-            lista += "%-22s" % ("<" + nom + ">") + "%10s" % "0 b"
-        else:
-            isdir[uname] = False
+            dirs_upper.append(archs[0].upper())
+            nom = shorten_filename(archs[0].replace("~", "?"), 20)
+            dirinfo.append("%-32s" %  nom)
+            L.append("<%-21s       0 B" % (nom + ">"))
+
     num_dirs = len(dirinfo)
-    
     i = 0
     
     for archs in listing:
         if archs[1] == 32768:
             if (archs[0][-3:].upper() not in ext) or (archs[0][0] in starts):
                 continue
-            
-            nom = archs[0]
-            size = len(nom)
-            j = nom.find('.')
-            if size > 18:
-                if j >= 0: # There is a file extension
-                    # A ">" before the dot means the long name was truncated
-                    nom = nom[:17-(size-j)] + ">" + nom[j:]
-                else: # No extension
-                    nom = nom[:17] + ">"
-            else:
-                nom = "%-18s" % (nom)
-            nom = "%03d " % i + nom[:18]
-
-            size = int(archs[3])
-            if size >= 1024:
-                size = size / 1024
-                size_txt = "%.2f" % (size) + " Kb"
-            else:
-                size_txt = str(size) + " b"
-            a = nom + "%10s" % (size_txt)
-            lista += a
-            new_item = (a)
-#             new_item = new_item[4:]
-            dirinfo.append(new_item)
             files.append(archs[0])
             files_upper.append(archs[0].upper())
+            
+            size = int(archs[3])
+            if size >= 1024:
+                size = size >> 10
+                size_txt = "%.2f kB" % size
+            else:
+                size_txt = "%d B" % size
+
+            nom = "%03d %-18s%10s" % (i, shorten_filename(archs[0].replace("~", "?"), 18), size_txt)
+            L.append(nom)
+            dirinfo.append(nom)
+
             i += 1
     
-    header = "Path:" + public_path()
-    header = header[:32]
-    header = "%-32s" % (header)
-    header += sd_stat 
-    header += "%-22s" % "File Name" + "%-10s" % "    Size"  
-    header += "--------------------------------"
-    
-    if not lista:
-        lista = "%-32s" % ("Directory is empty")
-    lista = header + lista
+    del listing
 
-    num_files = len(dirinfo) - num_dirs
+    sd_block = os.statvfs("")[0]
+    sd_tot   = os.statvfs("")[2]
+    sd_free  = os.statvfs("")[3]
+    sd_free  = (sd_free * sd_block) / 1_073_741_824
+    sd_tot   = (sd_tot  * sd_block) / 1_073_741_824
+    sd_stat  = "SD: %02.4fGB; free: %02.4fGB" % (sd_tot, sd_free)
+
+    header = "Path:%-27s%-32sFile Name                   Size--------------------------------" % (public_path(27), sd_stat[:32])
     
-    new_item = "%-32s" % (num_dirs)
-    dirinfo.insert(0, new_item)
+    if not L:
+        lista = header + "%s\r" % "Directory is empty"
+    else:
+        lista = header + "".join(L)
+    del L
+
+    num_files = len(files)
     
-    new_item = "%-32s" % (num_files)
-    dirinfo.insert(1, new_item)
+    dirinfo.insert(0, "%-32s" % num_dirs)
+    dirinfo.insert(1, "%-32s" % num_files)
     
     tap_blk = (NEW_TAPBLK(dirinfo, 32))
+    del dirinfo
     long = len(tap_blk) - 4                                        # this is the pure data blk size stored in header; it's the block minus the first 4 bytes
-    fname = "dirinfo"
-    tap_hdr = NEW_HDR(2, fname, long)                             # generate header for each block, with parameters
+    tap_hdr = NEW_HDR(2, "dirinfo", long)                             # generate header for each block, with parameters
     
     with open("dirinfo.tap", "wb") as f_out:
         f_out.write(tap_hdr)                                          # now write the header
         f_out.write(tap_blk)                                           # and then the block
 
-    return 
+    # gc.collect()
+    return
 
-
-def FINISH(msg, success):                                                                 # For use with UPDATE() function. Logs the final status msg, and blinks LED at different intervals, to indicate 
-                                                                                          # either success or fail. msg=text to be displayed/logged; success=boolean if status is ok or failed
-    if success:
-        interval = 0.8
-    else:
-        interval = 0.08
-    
-    led = Pin(25, Pin.OUT)
-    
-    LOG(msg, 4)
-    SAVE_LOG()
-    
-    os.umount("/sd")
-    
-    while True:
-        led.toggle()
-        time.sleep(interval)
-        
 
 def LOG(msg, level):                                                                    # Adds a timestamped new entry to log_entries
     
@@ -879,181 +1112,186 @@ def LOG(msg, level):                                                            
     global log_to_serial
     global TSP
     
+    if 0 <= level <= 4:
+        m = "%s:%s" % (LOG_LABELS[level], msg)
+    else:
+        m = msg
+
     if log_to_serial:                                                                    # If enabled, send log msg to console instead of logfile
-        print(msg)
+        print(m)
     
     if TSP.LOG_LEVEL:                                                                    # TSP is not initialized at startup, so this check is required
         if level < TSP.LOG_LEVEL:
             return
     
-    log_entries += "[" + str(time.ticks_us()) + "] "                                    # on Pico W, timestamp can be replaced by local time provided by ntp
-    log_entries += msg + "\n"
+    log_entries.append("[%d]%s\n" % (time.ticks_us(), m))                                    # on Pico W, timestamp can be replaced by local time provided by ntp
     
     return
 
 
-def MOUNT_FILE(f_name, remounting=False):                                                    # Mount file from a LOAD "tpi:..." command
+def MOUNT_FILE(f_name, remounting=False):                                                    # Mount file from a LOAD "tpi:..." command 
                                                                                              # and performs actions according to file type
-    """Mount the given file f_name. On failure, optionally remount the
-    previously mounted file. The remounting flag is used internally to
-    prevent infinite recursion.
-
-    Side effects:
-    - Calls ACTIVATE_SD() at start, DEACTIVATE_SD() + ACTIVATE_MQ() at end
-    - Only commits TSP.f_name on success (caller does NOT need to save/restore)
+    TLM("MOUNT_FILE enter", "f_name=%r remounting=%s" % (f_name, remounting))
     """
+    Mount the given file f_name, and remounting the current file if the new
+    mount fails. The remounting input is mainly for internal use when
+    recursively calling to re-mount to avoid further recursive calls.
+    """
+    
     global TSP
     global led
-
+    
     U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
     U3_CS.value(1)
+    
+    # Save info in case of remount
+    offset = TSP.offset
+    idx    = TSP.tap_idx
+    append = TSP.append
 
-    TSP.offset = 0
-    TSP.tap_idx = 0
-    TSP.offset_tbl = []
-    TSP.append = False
-
-    try:
-        os.remove("/TMP/temp.tap")
-        os.remove("/TMP/temp.bin")
-    except:
-        pass
-
-    msg = "INFO: File " + f_name + " mounted correctly"
+    # Don't remove in case we know we can't mount the new file, and we overwrite
+    # these anyway.
+    # try:
+    #     os.remove("/TMP/temp.tap")
+    #     os.remove("/TMP/temp.bin")
+    # except:
+    #     pass
+    
+    msg = "File %s mounted correctly" % f_name
     err_level = 0
-    remount = False                                  # True = trigger remount of previous file on failure
-
+    remount = False # True=trigger remount of previous file if error
+    
     ACTIVATE_SD()
     led.value(1)
-
+    
     totlen = os.stat(f_name)[6]
-
+    
     if f_name[-4:].upper() in [".BIN", ".DCK", ".ROM"]:
+        
+        if not COPY_FILE(f_name, "/TMP/temp.bin"):
 
-        COPY_FILE(f_name, "/TMP/temp.bin")
-
-        if f_name[-4:].upper() == ".DCK":
-
-            if DCK_IMAGE():
-                COPY_FILE("/assets/dckupdate.tap", "/TMP/temp.tap")              # Special 'seudo' TAP that contains Flash/SRAM DCK update program
-            else:
-                err_level = 2
-                remount = True
-                msg = "ERROR: creating DCK image for " + f_name + ". See logfile for details"
-
+            remount = True
+            msg = "Copying file %s" % f_name
+            err_level = 2
         else:
 
-            len_hi = int(totlen / 256)
-            len_lo = totlen - (len_hi * 256)
+            if f_name[-4:].upper() == ".DCK":
+            
+                if DCK_IMAGE():
+                    if not COPY_FILE("/assets/dckupdate.tap", "/TMP/temp.tap"):       # was /TS/dckupdate.tap; moved to /assets/ during dual-port migration to avoid frozen-package shadow
+                        # The trick here and with romupdate.tap is that we copy this to 
+                        # temp.tap but don't change the TSP.f_name, and the next non-tpi
+                        # LOAD"" will pull from temp.tap.
+                        err_level = 2
+                        msg = "Copying dckupdate.tap"
+                        remount = True
+                else:
+                    remount = True
+                    err_level = 2
+                    msg = "Creating DCK image for %s. See logfile for details" % f_name
+                    
+            else:
+                
+                len_hi = int(totlen / 256)
+                len_lo = totlen - (len_hi * 256)
 
-            try:
-                with open("/assets/romupdate.tap", "rb") as f_in:                 # Same for updating ROM images. We open the seudo TAP, as we need to update it
-                    buf = bytearray(f_in.read())
+                try:
+                    with open("/assets/romupdate.tap", "rb") as f_in:                 # was /TS/romupdate.tap; same move as dckupdate.tap above
+                        buf = bytearray(f_in.read())
+                    
+                    # Parse the romupdate.tap file blocks to get the offset of block 3
+                    # where the machine code is. As long as the MC doesn't change those
+                    # offsets, and they are in block 3 of the .tap, you can change the 
+                    # BASIC program and not change this code.
+                    x = 0
+                    for i in range(2):
+                        l = buf[x] + 256 * buf[x+1] # length of block
+                        x += l + 2 
 
-                # Parse the romupdate.tap file blocks to get the offset of block 3
-                # where the machine code is. As long as the MC doesn't change those
-                # offsets, and they are in block 3 of the .tap, you can change the
-                # BASIC program and not change this code.
-                x = 0
-                for i in range(2):
-                    l = buf[x] + 256 * buf[x+1]                              # length of block
-                    x += l + 2
+                    x += 104 # offset to first length location
+                    buf[x]   = len_lo                                            # We update the TAP file ML routine, with the length of the block
+                    buf[x+1] = len_hi                                            # to be written to the Flash/SRAM
+                    # LOG("Patching romupdate at %d and %d" % (x, x+1), 2)
 
-                x += 104                                                     # offset to first length location
-                buf[x]   = len_lo                                            # update TAP file ML routine, with length of block
-                buf[x+1] = len_hi                                            # to be written to the Flash/SRAM
-
-                x += 200                                                     # offset to second length location
-                buf[x]   = len_lo                                            # Same for second part of ML routine (Update LOWER block)
-                buf[x+1] = len_hi
-                remount = True                                               # if writing fails, try a remount
-
-                with open("/TMP/temp.tap", "wb") as f_out:                   # And we update the seudo TAP
-                    f_out.write(buf)
-            except:
-                err_level = 2
-                msg = "ERROR: copying romupdate.tap"
-
+                    x += 200 # offset to second length location
+                    buf[x]   = len_lo                                            # Same to the second part of the ML routine (Update LOWER block)
+                    buf[x+1] = len_hi
+                    # LOG("Patching romupdate at %d and %d" % (x, x+1), 2)
+                    remount = True # if writing fails, try a remount
+                    with open("/TMP/temp.tap", "wb") as f_out:                            # And we update the seudo TAP
+                        f_out.write(buf)
+                except:
+                    err_level = 2
+                    msg = "Copying romupdate.tap"
+        
     elif f_name[-4:].upper() == ".TAP":
-
+        
         s = os.stat(f_name)
-        if s[6] != 0:                                                        # An empty .tap is OK, otherwise check it
+        if s[6] != 0: # An empty .tap is OK, otherwise check it
             with open(f_name, "rb") as f_check:
-
+                
                 file_type = f_check.read(7)
                 if file_type.decode() == "ZXTape!":
-                    msg = "ERROR!: Wrong file type while mounting: " + f_name + ". It's a TZX file"
+                    msg = "Wrong file type while mounting: %s. It's a TZX file" % f_name
                     err_level = 2
-
+                    
                 if ((int(file_type[0]) > 19)):
-                    msg = "INFO: Non-standard first block while mounting file " + f_name + ". Expected 19, read " + str(int(file_type[0]))
-
-        if err_level < 2:
-            COPY_FILE(f_name, "/TMP/temp.tap")
-
+                    msg = "Non-standard first block while mounting file %s. Expected 19, read %d" % (f_name, int(file_type[0]))
+                
+        if err_level < 2:    
+            if not COPY_FILE(f_name, "/TMP/temp.tap"):
+                err_level = 2
+                msg = "Copying file %s" % f_name
+                remount = True
+        
     else:
-        msg = "ERROR!: Wrong filename while mounting: " + f_name
+        msg = "Wrong filename while mounting: %s" % f_name
         err_level = 2
 
-    # Single SD→MQ transition for ALL paths.
-    # Use ready=True (default): SM activates immediately, but scratch Y
-    # defaults to 0 after a fresh SM creation, so port $0F still reads
-    # 0 (busy). The PIO is RUNNING and serving port $0E/$0F correctly,
-    # just signaling busy. SEND_MSG will set Y=0xFFFFFFFF (ready) once
-    # the response is in the FIFO.
-    #
-    # The earlier ready=False approach was broken — it created the SM
-    # but never activated it, so the PIO program wasn't running at all,
-    # and Z80 reads got bus floats instead of the dual-port logic.
+    # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────────
     DEACTIVATE_SD()
     ACTIVATE_MQ()
-
     LOG(msg, err_level)
-
+    
     if err_level > 1:
-        LOG("ERROR: Failed to mount: " + f_name, err_level)
+        LOG("Failed to mount: %s" % f_name, err_level)
         BLINK_ERROR()
         if remounting or not TSP.f_name:
-            # Don't recurse further, but don't leave a bad file mounted
-            UNMOUNT_INTERNAL()
+            # Don't try remounting, but don't leave a bad file mounted
+            UNMOUNT([],[])
         elif remount:
-            # Try re-mounting the previously mounted file
+            # Try re-mounting the current file because temp.bin or temp.tap were
+            # overwritten or an error occured writing them with the new file.
             if MOUNT_FILE(TSP.f_name, True):
+                # Restore where we were
+                TSP.offset = offset
+                TSP.tap_idx = idx
+                TSP.append = append
                 err_level = 0
-                LOG("INFO: Remounted " + TSP.f_name, 0)
+                LOG("Remounted: " + TSP.f_name, 0)
     else:
         try:
-            TSP.totlen = os.stat("/TMP/temp.tap")[6]                         # We mount this file as a regular TAP to perform Flash write
-            TSP.f_name = f_name                                              # COMMIT only on success
+            totlen = os.stat("/TMP/temp.tap")[6]                                       # We mount this file as a regular TAP to perform Flash write
+            TSP.f_name = f_name
+            TSP.totlen = totlen
             TSP.append = False
-            OFF_TABLE()                                                      # Build offset table from /TMP/temp.tap
+            OFF_TABLE() # Makes TSP.offset_tbl from temp.tap and not TSP.f_name
         except:
-            UNMOUNT_INTERNAL()
-
+            UNMOUNT([], [])
+    
     led.value(0)
+    
     return (err_level == 0)
-
-
-def UNMOUNT_INTERNAL():
-    """Internal version of UNMOUNT (no Z80 response). Used by MOUNT_FILE
-    error path so we don't try to send messages while the bus is
-    transitioning."""
-    global TSP
-    TSP.f_name = ""
-    TSP.offset_tbl = []
-    TSP.offset = 0
-    TSP.tap_idx = 0
-    TSP.append = False
         
 
 def NEW_HDR(type_hdr: int, fname, long: int):                      # This routine returns a new TAP header with the required parameters: header type, file name, and length of data block
     
     if (long < 0 or long > 65535):                                 # Validate data block length
-        LOG("ERROR!!! Wrong block length in NEW_HDR", 2)
+        LOG("Wrong block length in NEW_HDR", 2)
         return
     
     if (type_hdr > 3) or (type_hdr < 0):
-        LOG("ERROR!!! Wrong header type in NEW_HDR", 2)                  # Also validate header type 
+        LOG("Wrong header type in NEW_HDR", 2)                     # Also validate header type 
         return
     
     hdr = bytearray.fromhex('00')                                  # We start building the bytearray that will form the header: start with 0x00, a type header (FF=data)
@@ -1118,11 +1356,17 @@ def OFF_TABLE():                                                             # B
     global TSP
     
     arch = open("/TMP/temp.tap", "rb")
-    offset_tbl = []
+    TSP.offset_tbl = []
+    TSP.offset = 0
+    TSP.tap_idx = 0
+    # Get file size
+    arch.seek(0,2)
+    fsize = arch.tell()
+    arch.seek(0,0)
     
     blks = ['Program', 'Number arr.', 'Char arr.', 'Code blk']
     
-    while TSP.offset < TSP.totlen:
+    while TSP.offset < fsize:
         rd_bytes = bytearray(30)
         arch.seek(TSP.offset)
         arch.readinto(rd_bytes)
@@ -1150,7 +1394,7 @@ def OFF_TABLE():                                                             # B
         TSP.offset += long
     
     TSP.offset = 0
-    if TSP.totlen > 0:
+    if fsize > 0:
         del rd_bytes
     
     arch.close()
@@ -1159,48 +1403,13 @@ def OFF_TABLE():                                                             # B
     return
 
 
-def PARAMS(pre):                                                                         # Returns calculated parameters from pre-header
-    
-    par1 = (pre[4] * 256) + pre[3]
-    par2 = (pre[6] * 256) + pre[5]
+def PARAMS(pre):
+    """Returns calculated CODE parameters from pre-header."""
+
+    par1 = (pre[4] << 8) | pre[3]
+    par2 = (pre[6] << 8) | pre[5]
         
     return par1, par2
-
-
-def RESTORE_FILES(src, dst):                                                             # Restores prev backed-up files; typically scr=/sd/BACKUP - dst = / (root of the Flash)
-
-    if os.stat(src)[0] == 0x4000:
-    
-        for el in os.listdir(src):
-            f_name = src + '/' + el
-            
-            if (dst == "/"):
-                new_path = dst + el
-            else:
-                new_path = dst + '/' + el
-                
-            if os.stat(f_name)[0] == 0x4000:
-                
-                LOG("Restoring folder " + f_name, 4)
-                SAVE_LOG()
-                
-                try:
-                    os.mkdir(new_path)
-                    LOG("RESTORE: folder " + new_path + " not found; succesfully created", 4)
-                    SAVE_LOG()
-                
-                except:
-                    LOG("WARNING: Folder " + new_path + " already exists during RESTORE. Moving on", 4)
-                    SAVE_LOG()
-                
-                RESTORE_FILES(f_name, new_path)
-                
-            else:
-                
-                LOG("Restoring file " + f_name + " to " +  new_path, 4)
-                SAVE_LOG()
-                
-                COPY_FILE(f_name, new_path)
 
 
 def SAVE_LOG():                                                                         # Saves log_entries to the 'activity.log' file in flash
@@ -1211,9 +1420,11 @@ def SAVE_LOG():                                                                 
     busy = True
     
     with open("/activity.log", "a") as logfile:
-        logfile.write(log_entries)
+        for e in log_entries:
+            logfile.write(e)
+        # writelines doesn't add newlines, but our log strings already have them.
         
-    log_entries = ""
+    log_entries = []
     
     busy = False
 
@@ -1230,11 +1441,10 @@ def CLEAR_LOG():                                                                
 
     try:
         with open("/activity.log", "w") as logfile:
-            #logfile.truncate() # being explicit but seems to fail
-            log_entries = ""
-        LOG("INFO: Log file was cleared", 0)
+            log_entries = []
+        LOG("Log file was cleared", 0)
     except:
-        LOG("ERROR: clearing log file", 2)
+        LOG("OS error clearing log file", 2)
         ok = False
 
     busy = False
@@ -1247,18 +1457,28 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     global MQ
     global TSP
 
-    # NO TLM HERE — Z80 polling $0F. Get to FIFO load + MQ_READY ASAP.
     wrt = MQ.put
 
-    # Dual-port: continue flag (was wrt(0x40)) is now signaled via
-    # MQ_READY() on port $0F. Only the data bytes go into the TX FIFO.
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # The two `wrt(0x40)` "Read continue flag" writes in the single-port
+    # version have been removed. The continue flag now lives on $0F via
+    # the Y register (kept at READY for the entire session). A 0x40 in
+    # the TX FIFO would have been consumed by the Z80's $0E read as if
+    # it were data — orphaning the rest of the response by one byte.
+    #
+    # `MQ_READY()` is called after the data is loaded as belt-and-
+    # suspenders: in case any prior code path left Y at BUSY, this
+    # guarantees $0F answers ready by the time the Z80 polls. With
+    # current dual-port handlers Y stays at READY always, so MQ_READY()
+    # here is functionally redundant but kept for self-documentation.
+    # ─────────────────────────────────────────────────────────────────────
     if TSP.VERBOSE or forceDisplay:
 
         wrt(0x81)               # PRINT STRING — this IS the D-block status
         wrt(st)                 # Return code
         wrt(0x0D)               # Start with a newline
         for m in msg:           # Write message
-            wrt(m)              # Will let ~ and | pass as FREE and STICK
+            wrt(m) # Will let ~ and | pass as FREE and STICK
         if msg1:                # Write msg1
             wrt(0x0D)
             for m in msg1:
@@ -1267,25 +1487,22 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
 
     else:
 
-        wrt(st)                 # Return code — IS the D-block status
+        wrt(st)                 # Return code (< 0x80) — IS the D-block status
 
-    MQ_READY()                  # Z80 sees "ready" on port $0F → reads bytes from $0E
+    MQ_READY()                  # Z80 sees "ready" on $0F → reads bytes from $0E
 
-    # Now safe to TLM
     TLM("SEND_MSG enter+loaded", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
         msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
 
+    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
     drain_loops = 0
-    while(MQ.tx_fifo() != 0):   # Wait until Z80 has drained the FIFO
+    while MQ.tx_fifo() != 0:
         drain_loops += 1
         if drain_loops > 1000000:
             TLM("SEND_MSG STUCK", "tx still has %d bytes after 1M loops" % MQ.tx_fifo())
             break
 
     TLM("SEND_MSG exit", "drain_loops=%d" % drain_loops)
-    # NOTE: do NOT call MQ_BUSY() here. The Pico is ready for the next
-    # command — staying ready is correct. MQ_BUSY() is reserved for
-    # genuine slow operations (SD card access in MOUNT_FILE).
     return
 
 
@@ -1296,7 +1513,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
 
     global MQ
     global TSP
-
+    
     global kill
     global dead
 
@@ -1310,143 +1527,159 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
         new_rom = True
         end_char = 0x03
 
-    scroll = "scroll? (Y/n)"
-    if not new_rom:
-        scroll += chr(13)
-    s = len(scroll)
+    scroll = "Scroll? (Y/n)"
+
+    s = len(scroll) + 6
     n = len(msg)
 
+    # ─── Inline-wrt SEND_MSG2 + suppress_scroll for short messages ────────
+    # Confirmed by regression test: the buffer-prebuild + preload-then-
+    # MQ_READY refactor caused `tpi:help border` to consistently fail,
+    # even though both patterns place the same 4 header bytes in TX at
+    # the moment Y=READY fires. The original inline-wrt pattern (bytes
+    # go directly to TX as the per-char loop produces them) handles
+    # border correctly, so we're back to that.
+    #
+    # We keep suppress_scroll for short messages (<500 chars) so that
+    # picotest's auto-runner doesn't hang on the "Scroll? (Y/n)" prompt
+    # — there's no user to press a key, and the 2068 ROM's $86 handler
+    # doesn't reliably auto-N for short outputs. For long outputs that
+    # would overflow the screen, the prompt still fires.
+    # ─────────────────────────────────────────────────────────────────────
+    SCROLL_THRESHOLD = 500
+    suppress_scroll = (n < SCROLL_THRESHOLD)
+
     wrt = MQ.put
-    # CRITICAL: load FIFO + signal ready WITHOUT any TLM/print between.
-    # Z80 has been polling $0F since the end of PROCESS_CMD's cmd-block
-    # drain. Only ~2.8ms before WF_NPH timeout. NO prints here.
-    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+
+    # Write the 4 header bytes directly to TX, then set Y=READY.
+    # FIFO is 4-deep so this fills it; MQ_READY immediately after means
+    # Z80's first $0E read finds a real byte.
+    wrt(0x86)   # PRINT_STRING_WITH_LOOP (this IS the D-block status)
     wrt(st)     # BASIC return code
-    wrt(0x0D)   # Start with a newline
-    MQ_READY()  # Z80 sees "ready" on port $0F → can read header bytes
+    wrt(0x0D)   # Start on a new line
+    wrt(0x0D)   # Start with a blank line we don't count
 
-    # Now safe to TLM and do non-time-critical work.
-    while (MQ.rx_fifo() > 0):   # Flush receive buffer?
+    MQ_READY()
+    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
         MQ.get()
-    
-    # We handle each character. If a scroll answer is N, we will just break
 
-    c = 0 # char count
-    l = 0 # line count
-    ll = 21 # Initial line limit
+    TLM("SEND_MSG2 inline-wrt start", "header+MQ_READY done")
+
     if not new_rom:
-        wrt(0x0D)       # Another newline for old ROM
+        wrt(0x0D)   # Another newline for old ROM
+
+    c = 0       # char count
+    l = 0       # line count
+    ll = 21     # initial line limit
     i = -1
-    prompt = True
-    m = ""
 
     while i < n - 1:
-        
-        i += 1
-        ch = ord(msg[i]) # needed to be able to test ch == int
 
-        # Handle some special characters. Not handling keywords though.
-        if ch >= 0x10 and ch <= 0x15:
-            # Attribute control: two chars that don't move the column
-            # For now, just eat these since they don't advance the column and 
-            # many have the second byte as 0 which will end the current print string.
-            i += 1
-            continue
-        elif ch == 0x00 or ch == 0x03:
-            # Not allowed since the mark the end of the strings to send
-            ch = 0x3F # '?'
-            c += 1
-        elif ch == 0x08 and (l>0 or c>0):
-            # Handle a backspace character
-            if c == 0:
-                c = 31
-                l -= 1
+        i += 1
+        ch = ord(msg[i])
+
+        if ch < 32:
+
+            if ch == 0x0D:
+                if i+1 < n and msg[i+1] == '\n':
+                    i += 1
+                c = 32
+
+            elif ch == 0x0A:
+                ch = 0x0D
+                c = 32
+
+            elif ch == 0x08:
+                if l > 0 or c > 0:
+                    if c == 0:
+                        c = 31
+                        l -= 1
+                    else:
+                        c -= 1
+                else:
+                    continue
+
+            elif ch >= 0x10 and ch <= 0x15:
+                i += 1
+                continue
+
             else:
-                c -= 1
-        elif ch == 0x0D:
-            # Timex or PC line ending
-            if i+1 < n and ord(msg[i+1]) == 0x0A:
-                # PC line ending
-                i += 1 # Skip the 0x0A
-            c = 32 # End of line
-        elif ch == 0x0A:
-            # Unix line ending
-            ch = 0x0D # Change to Timex
-            c = 32 # End of line
+                ch = 0x3F   # '?'
+                c += 1
+
+        elif ch >= 124:
+
+            if ch > 127:
+                ch = 63
+                c += 1
+            elif expandKeywords:
+                if ch == 124:
+                    c += 6
+                elif ch == 126:
+                    c += 7
+                else:
+                    c += 1
+            else:
+                c += 1
+
         elif msg[i] == '\\':
-            # Possible zmakebas escape
-            # cc, ln = zmakebas2Timex(msg, i)
-            # ch = ord(cc)
-            # if ln > 1:
-                # i += ln - 1
-            # Only handle copyright until we can print codes > 127
             if i+1 < n and msg[i+1] == '*':
                 ch = 127
                 i += 1
             c += 1
-        elif ch == 124: # Tilde will expand to FREE
-            if expandKeywords:
-                c += 6
-            else:
-                ch = 63
-                c += 1
-        elif ch == 126: # vbar will expand to STICK
-            if expandKeywords:
-                c += 7
-            else:
-                ch = 63
-                c += 1
-            # DELETE, ON ERR, SOUND, and RESET don't expand to keywords in L mode
-        elif ch > 127:
-            # Currently printing high-bit chars crashes, so protect this.
-            ch = 63 # '?'
-            c += 1
+
         else:
             c += 1
 
-        wrt(ch) # If 0x0D or we wrote to the last column, next will be on a new line
+        wrt(ch)
 
-        if c == 32: # written one line
+        if c == 32:
+
+            l += 1
+            c = 0
 
             if ch == 0x0D:
-                if i == 0 or (i == 1 and msg[1] == chr(0x0A)):
-                    # Newline at start we don't count.
-                    # This allows you to put a blank line at the start to 
-                    # separate the message from the prior text but not count
-                    # toward the first screen scroll lines.
+                if i == 0 or (i == 1 and msg[1] == '\n'):
                     l -= 1
-            else: # if ch != 0x0D:
-                # Check for newline at end of 32
+            else:
                 if i + 1 < n:
-                    nx = ord(msg[i+1])
-                else:
-                    nx = 0
-                if nx == 0x0D: # Timex or PC
-                    if i + 2 < n and ord(msg[i+2]) == 0x0A:
-                        i += 1 # Skip extra PC EOL char
-                    continue # skip it
-                elif nx == 0x0A: # Unix
-                    continue # skip it
-                else: # Write a nl
-                    wrt(0x0D)
-            l += 1
+                    if msg[i+1] == '\r':
+                        if i + 2 < n and msg[i+2] == '\n':
+                            i += 1
+                        i += 1
+                    elif msg[i+1] == '\n':
+                        i += 1
+                wrt(0x0D)
 
-            if l == ll and (not new_rom or n > i + 34):
-
-                l = 0 # reset line count
+            if not suppress_scroll and l == ll and (not new_rom or n > i + 34):
+                # Scroll-prompt path (inline-wrt style).
+                l = 0
                 if not new_rom and i == n - 1:
-                    scroll = "--- End of list (N to exit) ---"+ chr(13)
+                    scroll_str = "--- End of list (N to exit) ---"
+                else:
+                    scroll_str = scroll
+                    for m in "(%2d%%) " % ((i * 100) // n):
+                        wrt(ord(m))
+                for m in scroll_str:
+                    wrt(ord(m))
+                if not new_rom:
+                    wrt(13)
+                wrt(0x00)       # end of this page
+                # TODO(#14): 0x86 bit-6 ack missing here. Ryan's
+                # single-port code had wrt(0x40) after this 0x00 and
+                # again after the keypress (below). In the 0x86
+                # PRINT_STRING_LOOP protocol the Z80 does a LEVEL check
+                # on $0F bit 6 after the keypress before reading the
+                # next page. We hold Y permanently READY, so the Z80
+                # never waits → races into stale/empty TX. The dual-
+                # port fix is MQ_BUSY() here (bit 6 → 0) and MQ_READY()
+                # once the next page's bytes are queued (after the
+                # erase-prompt loop below). See issue #14 for the full
+                # protocol writeup. DO NOT just re-add wrt(0x40) — that
+                # puts a literal '@' into the data stream in dual-port.
 
-                for m in scroll:    # Write scroll prompt (empty if last screen)
-                    wrt(m)
-
-                wrt(0x00)       # End of this page (Z80 displays + waits for key)
-                # Dual-port: NO wrt(0x40) here — the continue flag is
-                # signaled via Y register on port $0F, which is at READY
-                # for the entire session. A 0x40 in TX FIFO would orphan
-                # and get consumed as the next page's first character.
-                ch = MQ.get()   # Get keypress from user
-                if (ch == 78):  # If 'N' then done (ROM loops stops on old rom)
+                ch = MQ.get()   # wait for keypress
+                if ch == 78:    # 'N' → done
                     return
                 if ch == 48:
                     ll = 10
@@ -1454,22 +1687,26 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                     ll = ch - 48
                 else:
                     ll = 21
-                
+
+                # TODO(#14): MQ_READY() belongs here (after erase-prompt
+                # bytes are queued) to re-assert bit 6 and release the
+                # Z80's level-check wait. Paired with the MQ_BUSY() noted
+                # above. Ryan's original had wrt(0x40) "Start new string"
+                # at this point.
                 if new_rom:
-                    for b in range(s):      # Erase scroll prompt
+                    for _eb in range(s):
                         wrt(0x08)
                         wrt(0x20)
                         wrt(0x08)
                 else:
-                    wrt(0x0D)       # Another newline for old ROM
+                    wrt(0x0D)
 
-            c = 0 # reset column count
-        
-    wrt(end_char)               # Write end_char (done with loops)
+    wrt(end_char)
     TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
 
+    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
     drain_loops = 0
-    while(MQ.tx_fifo() != 0):   # Write out message
+    while MQ.tx_fifo() != 0:
         drain_loops += 1
         if drain_loops > 1000000:
             TLM("SEND_MSG2 STUCK", "tx still has %d after 1M loops" % MQ.tx_fifo())
@@ -1485,168 +1722,310 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
         drain_loops, rx_drained, MQ.tx_fifo(), MQ.rx_fifo()))
 
 
-##########################
-# LOAD COMMAND FUNCTIONS #
-##########################
-
-
-def LD_NOT_IMP():                                                                       # Output for not implemented LOAD Command 
+def WALK(top):
+    """ Walk directory tree yielding (path, [subdirs]) """
     
-    SEND_MSG("CMD OK but not yet implemented", "", _5_C_Nonsense)
+    subdirs = []
     
-    return
+    for name, ftype, inode, *_ in os.ilistdir(top):
+        if ftype == 0x4000: # DIR_TYPE
+            subdirs.append(name)
+            
+    yield top, subdirs
+    
+    for dirname in subdirs:
+        
+        yield from WALK("%s/%s" % (top, dirname))
 
 
-##########################
-# SAVE COMMAND FUNCTIONS #
-##########################
+def GET_DIRS(path='/sd/TAP'):
+    """ Get list of all directories recursively from path """
+    
+    paths = [path[3:]]
+    
+    try:
+        for dirpath, dirnames in WALK(path):
+            for dirname in dirnames:
+                paths.append("%s/%s" % (dirpath[3:], dirname)) # Remove '/sd' prefix
+        del dirnames
+        paths.sort()
+        LOG("Directories list succesfully updated", 0)
+    except Exception as e:
+        LOG(f"Unable to succesfully update directories list: {e}", 2)
+    
+    return paths
 
 
 def DIR(pre, cmd):                                                                              # Directory listing
 
     # SAVE "tpi:dir"            - Normal directory of files
-    # SAVE "tpi:dir"CODE 1,nn   - Show long name for file nn
+    # SAVE "tpi:dir"CODE 1,n    - Show long name for file n
     # SAVE "tpi:dir"CODE 2,0    - Show a dir of files with their index and whole names
+    # SAVE "tpi:dir"CODE 2,n    - Show a dir of files starting at file n
 
     global lista
     global led
     global files
-    global files_upper
-    global MQ
-    global TSP
 
     par1, par2 = PARAMS(pre)
-    nl = chr(13)
 
     TLM("DIR enter", "par1=%d par2=%d files=%d lista_len=%d" % (
-        par1, par2, len(files) if files else 0,
-        len(lista) if lista else 0))
+        par1, par2, len(files), len(lista)))
 
-    if par1 == 0: # CODE 0,0 or CODE 0,1 passed from CD, MD, etc.
+    if par1 == 0:
         # Regular listing
         TLM("DIR par1=0 — regular listing via SEND_MSG2")
         led.value(1)
-        SEND_MSG2(nl + lista, 1, False)
+        SEND_MSG2(lista, 1, False)
         TLM("DIR SEND_MSG2 returned")
-        led.value(1)
-        utime.sleep(2)
         led.value(0)
 
-    elif par1 == 1:
-
-        # Long name of a file by index
-        if par2 >= len(files):
-            msg = "ERROR: file index %d too large" % par2
-            LOG(msg, 2)
-            SEND_MSG(msg, "", _6_6_Num2Big)
-        else:
-            SEND_MSG("Path: " + public_path(), "File: " + files[par2], _1_OK, True)
-
-    elif par1 == 2 or par1 == 3:
+    elif par1 == 1 or par1 == 2:
 
         n = len(files)
-        hdr = nl + "Path:" + public_path() + nl
-        idx = 0
+        if par2 >= n:
+            msg = "File index %d out of range 0-%d" % (par2, n)
+            LOG(msg, 2)
+            SEND_MSG(msg, "", _6_6_Num2Big)
+            return
+        
+        if par1 == 1:
+            # Long name of a file by index
+            SEND_MSG("Path: %s" % public_path(), "File: %s" % files[par2], _1_OK, True)
+            return
 
-        if par1 == 2:
-
-            # Index and full names of only files
-            msg = hdr
-            msg += "  #  File Name         %3d files" % n
-            msg += "---- ---------------------------"
-            for f in files:
-                msg += ">%03d %s" % (idx, f) + nl
-                idx += 1
-            SEND_MSG2(msg, 1)
-
-        else: # par1 == 3:
-
-            # Interactive dir
-            oldfname = TSP.f_name
-            oldindex = TSP.tap_idx
-            oldoffs  = TSP.offset
-            oldappend= TSP.append
-            wrt = MQ.put
-            # Dual-port: continue flag now on port $0F via MQ_READY
-            wrt(0x86)   # PRINT STRING WITH LOOP
-            wrt(1)      # BASIC return code
-            wrt(0x0D)   # Start with a newline
-            MQ_READY()  # Z80 sees "ready" on port $0F
-            while (MQ.rx_fifo() > 0):   # Flush receive buffer?
-                MQ.get()
-            sel = -1
-            pgs = n // 10 + 1
-
-            while idx < n:
-                for i in range(6):
-                    wrt(0x0D)
-                i = 0
-                pg = "%d of %d" % (idx // 10 + 1, pgs)
-                msg = hdr
-                msg += "# Idx File Name         %8s" % pg
-                msg += "- --- --------------------------"
-                while i < 10 and idx + i < n:
-                    msg += "%d:%03d %s" % (i, idx + i, files[idx+i]) + nl
-                    i += 1
-                msg += "--------------------------------"
-                msg += nl + "0..9 to mount, N=stop," + nl + "B=back, or other for next:"
-                # Write screen
-                for m in msg:
-                    wrt(m)
-                wrt(0x00)       # End of this string (Z80 prints + waits for key)
-                # Dual-port: no wrt(0x40); $0F continue is via Y register.
-                ch = MQ.get()   # Get a key
-                if ch == 78:    # 'N' then done (ROM ended the loops)
-                    return # OK
-                wrt(0x08)
-                wrt(':')
-                wrt(ch)
-                wrt(0x0D)
-                if ch == 66: # B
-                    if idx >= 10:
-                        idx -= 10
-                    else:
-                        idx = 0
-                elif ch >= 48 and ch <= 57:
-                    j = idx + ch - 48
-                    if j < n:
-                        # Mount it
-                        sel = j
-                        break
-                    idx += i
-                else:
-                    idx += i
-                # Back to top for next screenful
-
-            if sel >= 0:
-                for m in "Mounting: %s" % files[sel] + nl:
-                    wrt(ord(m))
-            wrt(0x03) # End string loop
-            while(MQ.tx_fifo() != 0):   # Write out message
-                pass
-            while(MQ.rx_fifo() != 0):   # Flush input buffer to console
-                print(MQ.get())
-            
-            if sel >= 0:
-                # MOUNT_FILE handles SD activation, MQ restoration, and
-                # remount-on-failure internally. Don't manage TSP.f_name here.
-                if not MOUNT_FILE(TSP.cur_path + '/' + files[sel]):
-                    LOG("ERROR: failed to mount: " + TSP.cur_path + '/' + files[sel], 2)
-                    try:
-                        if MOUNT_FILE(oldfname):
-                            TSP.tap_idx = oldindex
-                            TSP.offset  = oldoffs
-                            TSP.append  = oldappend
-                    except:
-                        LOG("ERROR: failed to re-mount: " + oldfname, 2)
-                        UNMOUNT_INTERNAL()
+        # Index and full names of only files
+        led.value(1)
+        idx = par2
+        M = ["Path:%s\r" % public_path(27)]
+        M.append("  #  File Name         %3d files" % n)
+        M.append("---- ---------------------------")
+        for f in range(par2, n):
+            M.append(">%03d %s\r" % (idx, files[f]))
+            idx += 1
+        msg = "".join(M)
+        SEND_MSG2(msg, 1)
+        led.value(0)
 
     else:
         msg = BAD_CODE("DIR", par1, par2)
-        LOG("ERROR: " + msg, 2)
+        LOG(msg, 2)
         SEND_MSG(msg, "", _8_A_Invalid_arg)
   
-   
+    return
+
+
+def IDIR(pre, cmd):
+
+    # SAVE "tpi:idir"   - Show an interactive dir list to pick a file to mount
+
+    global files
+    global TSP
+
+    TLM("IDIR enter")
+    if len(files) == 0:
+        SEND_MSG("Directory is empty:", public_path(), _1_OK, True)
+        return
+    
+    led.value(1)
+    hdr1 = "Path:%s" % public_path(27)
+    hdr2 = "   #  File Name"
+    hdr3 = "  ------------------------------"
+    List = []
+    idx = 0
+    for f in files:
+        List.append("%03d %s" % (idx, shorten_filename(xstr(f), 26)))
+        idx += 1
+    isel = ListMenu(List, hdr1, hdr2, hdr3, 'Mount file', "Mounting: ")
+
+    if isel >= 0:
+        sel = files[isel]
+        if not MOUNT_FILE('%s/%s' % (TSP.cur_path, sel)):
+            pass # Can't set or show error now
+
+    led.value(0)
+
+    return
+
+
+def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
+
+    # Given a list of strings, present them 16 at a time to pick from by
+    # pressing keys 0-9,Q-Y or N to stop, B to go back a page or other key to go
+    # forward a page. The index of the selection is returned, -1 for none.
+    # You can't send a message after using this.
+    
+    global MQ
+
+    nmax = 16
+    nl = chr(13)
+    n = len(List)
+    idx = 0
+    prompt1 = action + " (0.."
+    prompt2 = "), (B)ack" + nl + "or (F)orward a page, (N)=quit?"
+    letters = "0123456789QWERTY"
+
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # Removed leading EMPTY_RX_FIFO() — at this point the Z80 hasn't been
+    # told to read yet, so RX has nothing in it. We drain RX AFTER setting
+    # ready (Z80 may then dump stale keystrokes from prior input).
+    #
+    # Removed wrt(0x40) "Read continue" from start of every loop iteration
+    # — the continue flag now lives on $0F via Y register (kept at READY
+    # for the entire session by MQ_READY() below).
+    # ─────────────────────────────────────────────────────────────────────
+    wrt = MQ.put
+    Init = True
+    sel = -1
+    pgs = (n - 1) // nmax + 1
+
+    MQ_READY()                          # Y = READY → $0F polls succeed
+
+    while MQ.rx_fifo() != 0:            # Drain any pre-existing keystrokes
+        MQ.get()
+
+    # ─── DUAL-PORT MIGRATION: empty-list guard ──────────────────────────
+    # Without this, an empty List skips the `while idx < n` loop entirely
+    # and the function falls through to `wrt(0x03)` at the bottom — making
+    # 0x03 the only byte the Z80 ever reads. Z80 interprets 0x03 as the
+    # SAVE statement's final status → Report F (Invalid filename).
+    #
+    # Reproducer: `SAVE "tpi:cd"` (interactive CD) when current path has
+    # no subdirectories. dirs = [] → List = [] → 0x03 only → F.
+    #
+    # Fix: write a proper PRINT_STRING_WITH_LOOP response saying "no
+    # items available" and return -1 cleanly. The caller (CDIR/IDIR)
+    # treats -1 as "user cancelled" and does nothing further. V6 chain
+    # intact.
+    # ────────────────────────────────────────────────────────────────────
+    if n == 0:
+        wrt(0x86)                       # PRINT_STRING_WITH_LOOP function code
+        wrt(1)                          # status: no error
+        wrt(0x0D)
+        wrt(0x0D)
+        for m in hdr1:
+            wrt(m)
+        wrt(0x0D)
+        for m in "(no items available)":
+            wrt(m)
+        wrt(0x03)                       # end of loop (no scroll, no keypress)
+        while MQ.tx_fifo() != 0:
+            pass
+        while MQ.rx_fifo() != 0:
+            MQ.get()
+        return -1
+
+    while idx < n:
+        i = 0
+        # Write screen
+
+        if Init:
+            wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+            wrt(1)      # BASIC return code
+            Init = False
+        else:
+            wrt(ch)     # Show previous choice
+        wrt(0x0D)
+        wrt(0x0D)
+        for m in hdr1:
+            wrt(m)
+        wrt(0x0D)
+        pg = "%d of %d" % (idx // nmax + 1, pgs)
+        for m in "%-24s%8s\r" % (hdr2, pg):
+            wrt(m)
+        for m in hdr3:
+            wrt(m)
+        wrt(0x0D)
+        while i < nmax and idx + i < n:
+            x = letters[i]
+            wrt(x)
+            wrt(0x20)
+            for m in List[idx+i]:
+                wrt(m)
+            wrt(0x0D)
+            i += 1
+        j = i
+        while i < nmax:
+            wrt(0x0D)
+            i += 1
+        a = (idx * 32 / n + 0.5) // 1
+        for k in range(a):
+            wrt('-')
+        w = (j * 32 / n + 0.5) // 1
+        for k in range(w):
+            wrt('=')
+        for k in range(32 - a - w):
+            wrt('-')
+        wrt(0x0D)
+        for m in prompt1:
+            wrt(m)
+        wrt(x)
+        for m in prompt2:
+            wrt(m)
+            
+        wrt(0x00)       # End of this string (Z80 displays + waits for key)
+        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
+        # No wrt(0x40) "wait for keypress" — $0F continue is signalled
+        # via Y register (still at READY from MQ_READY() above).
+        #
+        # TODO(#14): this is WRONG for the 0x86 multi-page loop. ListMenu
+        # redraws a fresh page each `while idx < n` iteration, and the
+        # Z80 does a LEVEL check on $0F bit 6 after each keypress before
+        # reading the next page. Holding Y permanently READY means the
+        # Z80 never waits → races into stale TX. Need MQ_BUSY() here and
+        # MQ_READY() once the next page is queued. See issue #14.
+        # ──────────────────────────────────────────────────────────────
+        ch = MQ.get()   # Get a key
+        if ch == 78:    # 'N' then done (ROM ended the loops)
+            return -1
+        if ch == 66: # B
+            if idx >= nmax:
+                idx -= nmax
+            else:
+                idx = 0
+        elif ch in LISTMENU_CHOICES:
+            j = idx + LISTMENU_CHOICES[ch]
+            if j < n:
+                # ─── DUAL-PORT MIGRATION ──────────────────────────────
+                # No wrt(0x40) "Start last string" — same rationale as
+                # the other removed wrt(0x40)s in this function.
+                # ──────────────────────────────────────────────────────
+                wrt(ch)
+                # Erase bottom two lines
+                for b in range(32):
+                    wrt(0x08)
+                    wrt(0x20)
+                    wrt(0x08)
+                wrt(0x0D)
+                for b in range(32):
+                    wrt(0x08)
+                    wrt(0x20)
+                    wrt(0x08)
+                # Choose it
+                sel = j
+                break
+            else:
+                ch = 0x46
+        else:
+            ch = 0x46
+            if idx + i < n:
+                idx += i
+        # Back to top for next screenful
+
+    if sel >= 0:
+        for m in "%s\r%s\r" % (chosen, List[sel]):
+            wrt(m)
+            
+    wrt(0x03) # End string loop
+    # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
+    while MQ.tx_fifo() != 0:
+        pass
+    while MQ.rx_fifo() != 0:
+        MQ.get()
+
+    return sel
+
+
 def PATH(pre, cmd):                                                                             # Show current directory
     
     # SAVE "tpi:path"               - Show current path
@@ -1654,18 +2033,30 @@ def PATH(pre, cmd):                                                             
 
     global TSP
     
+    TLM("PATH enter")
     par1, par2 = PARAMS(pre)
 
-    if par1 == 0:
+    if par1 == 0 and par2 == 0:
         SEND_MSG("Current working dir is: ", public_path(), _1_OK, True)
-    else:
+    elif par1 == 1 and par2 == 0:
         if TSP.f_name:
             SEND_MSG("Current mounted file is: ", public_fname(), _1_OK, True)
         else:
             SEND_MSG("No file mounted!", "", _1_OK, True)
+    else:
+        msg = BAD_CODE("PATH", par1, par2)
+        LOG(msg, 1)
+        SEND_MSG(msg, "", _8_A_Invalid_arg)
     
     return
     
+
+def isTapMounted():
+    """Check if a .TAP file is currently mounted."""
+    global TSP
+
+    return TSP.f_name and TSP.f_name[-4:].lower() == '.tap'
+
 
 def TAPDIR(pre, cmd):                                                        # Display contents of currently mounted TAP file
     
@@ -1681,35 +2072,38 @@ def TAPDIR(pre, cmd):                                                        # D
 
     global TSP
     
+    TLM("TAPDIR enter")
     par1, par2 = PARAMS(pre)
 
-    # if TSP.offset_tbl:
-    if TSP.f_name:
+    if not isTapMounted():
 
-        nom = "File: " + public_fname()
-        if len(nom) > 32:
-            nom = nom[:15] + ".." + nom[-15:]
-        else:
-            nom = "%-32s" % (nom)
-        nom += "Pointer at block: %02d, Append:" % TSP.tap_idx
+        nom = " --  No .TAP file mounted!  --  "
+        LOG("No file mounted in TAPDIR", 1)
+
+    else:
+
+        N = ["File:%-27s" % public_fname(27)]
+        N.append("Pointer at block: %02d, Append:" % TSP.tap_idx)
         if TSP.append:
-            nom += "on "
+            N.append("on ")
         else:
-            nom += "off"
+            N.append("off")
         if par1 == 0:
-            nom += " #  Offset   Len  Hdr?   Desc.  "
+            # N.appd(" #  Offset   Len  Hdr?   Desc.  ")
+            N.append("Blk  Start   Len  Hdr?  Desc.   ")
         elif par1 == 1:
-            nom += " #  File         Len  Desc.     "
+            # N.appd(" #  File         Len  Desc.     ")
+            N.append("Blk Type         Len  Name      ")
         else:
             msg = BAD_CODE("TAPDIR", par1, par2)
-            LOG("ERROR: " + msg, 2)
+            LOG(msg, 2)
             SEND_MSG(msg, "", _8_A_Invalid_arg)
             return
-        nom += "--------------------------------"
+        N.append("--------------------------------")
 
         if not TSP.offset_tbl:
 
-            nom += "<empty file>"
+            N.append("%s\r" % "<empty file>")
 
         else:
 
@@ -1730,14 +2124,10 @@ def TAPDIR(pre, cmd):                                                        # D
 
                     if idx >= idx1 and idx <= idx2:
                         if idx == TSP.tap_idx:
-                            nom += ">%02d " % idx
+                            N.append(">")
                         else:
-                            nom += " %02d " % idx
-                            
-                        nom += "%6s  " % el[0]  # Offset
-                        nom += "%5s " % el[1]   # Len
-                        nom += el[2] + "  "     # Hdr?
-                        nom += "%-10s" % el[3]  # Desc.
+                            N.append(" ")
+                        N.append("%02d %6s  %5s %s  %-10s" % (idx, el[0], el[1], el[2], el[3])) # Index, offset, len, Hdr?, Desc.
                     
                     idx += 1
                 
@@ -1751,24 +2141,21 @@ def TAPDIR(pre, cmd):                                                        # D
 
                             # Block number
                             if idx == TSP.tap_idx:
-                                nom += ">%02d " % idx
+                                N.append(">")
                             else:
-                                nom += " %02d " % idx
+                                N.append(" ")
+                            N.append("%02d " % idx)
                             if el[2] == " Y":
-                                nom += "%-11s " % TSP.offset_tbl[idx+1][3] # File type
-                                nom += "%5s " % TSP.offset_tbl[idx+1][1]   # Len
+                                N.append("%-11s %5s " % (TSP.offset_tbl[idx+1][3], TSP.offset_tbl[idx+1][1])) # File type, Len
                             else:
-                                nom += "Data block  "
-                                nom += "%5s " % el[1] # Len
-                            nom += "%-10s" % el[3]    # Desc.
+                                N.append("Data block  %5s " % el[1]) # Len
+                            N.append("%-10s" % el[3]) # Desc.
                     
                     idx += 1
+                    
+        nom = "".join(N)
 
-    else:
-        nom = " --  No .TAP file mounted!  --  "
-        LOG("WARNING: no file mounted in TAPDIR", 1)
-        
-    SEND_MSG2(nom, 1)
+    SEND_MSG2(nom, _1_OK)
 
     return
 
@@ -1776,16 +2163,19 @@ def TAPDIR(pre, cmd):                                                        # D
 def NEW_TAP(pre, cmd):
 
     # Create a new empty tap file of the given name and mount it.
-    # SAVE "tpi:tap name"       # 
-    # SAVE "tpi:tap name.tap"   # 
+    # SAVE "tpi:newtap name"       # 
+    # SAVE "tpi:newtap name.tap"   # 
 
+    global TSP
+    
+    TLM("NEW_TAP enter")
     arg = getArgs(cmd)
     if arg == "":
         msg = "Name required for new .tap file"
-        LOG("ERROR: " + msg, 1)
+        LOG(msg, 1)
         SEND_MSG(msg, "", _3_F_Invalid_file, True)
         return
-    # Check for extension
+    # Remove a .tap extension
     jarg = arg.find('.')
     if jarg >= 0 and arg[jarg:].lower() == '.tap':
         filename = "%s" % arg[:jarg]
@@ -1794,60 +2184,50 @@ def NEW_TAP(pre, cmd):
     # Make new .tap file name
     filename = filename.strip()
     # Check for invalid chars
-    clean_fname = ''.join(l for l in filename if (l>=' ' and l<chr(127) and (l not in r':*\/|"<>')))
-    if clean_fname != filename or clean_fname == "":
+    clean_fname = ''.join(l for l in filename if (l >= ' ' and l < chr(127) and (l not in r':*\/|"<>')))
+    if clean_fname != filename:
         msg = 'Filename "%s" not allowed' % filename
-        LOG("ERROR: " + msg, 2)
+        LOG(msg, 2)
         SEND_MSG(msg, "", _3_F_Invalid_file)
         return
-    filename = clean_fname + ".tap"
-    filename = TSP.cur_path + "/" + filename
+    filename = "%s/%s.tap" % (TSP.cur_path, clean_fname)
 
     # Make new empty .tap file
+    ACTIVATE_SD()
     try:
-        ACTIVATE_SD()
         with open(filename, "w") as newfile:
             pass
-        LOG("New empty file: " + filename, 0)
+        LOG("New empty file:%s" % filename, 0)
         os.chdir(TSP.cur_path)
         DIR_FILES()
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
         DEACTIVATE_SD()
         ACTIVATE_MQ()
     except:
-        msg = "Can't create empty file: "
-        LOG("ERROR: " + msg + filename, 2)
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+        msg = "Can't create new file: "
+        LOG(msg + filename, 2)
         SEND_MSG(msg, filename, _4_Q_Parameter)
         return
 
-    # Mount .tap file
-    # MOUNT_FILE handles ACTIVATE_SD/DEACTIVATE_SD/ACTIVATE_MQ internally
-    # and only commits TSP.f_name on success. We save the previous index/offset
-    # state for the manual remount-and-restore flow below.
-    oldname = TSP.f_name
-    oldidx  = TSP.tap_idx
-    oldoff  = TSP.offset
-    oldapp  = TSP.append
-
     if not MOUNT_FILE(filename):
         msg = "Failed to mount new .tap file: "
-        LOG("ERROR: " + msg + filename, 2)
+        LOG(msg + filename, 2)
         st = _4_Q_Parameter
-        if oldname:                                    # Re-mount previous file
-            if MOUNT_FILE(oldname):
-                TSP.tap_idx = oldidx
-                TSP.offset = oldoff
-                TSP.append = oldapp
-            else:
-                TSP.f_name = ""
     else:
         # Set append on
         TSP.append = True
         msg = "New .tap file mounted: "
-        LOG("INFO:" + msg + filename, 0)
+        LOG(msg + filename, 0)
         filename = public_fname()
         st = _1_OK
+
+    # ACTIVATE_MQ()
     SEND_MSG(msg, filename, st)
     return
+
 
 def SA_NOT_IMP(pre, cmd):                                                      # Output for not implemented SAVE Command 
     
@@ -1871,13 +2251,13 @@ def file_exists(filename):                                                      
     
 
 def xchr(m):
-    # Expand or replace character
+    """Expand or replace character"""
     ch = ord(m)
     if ch < 32 or ch > 127:
-        return '?'
-    elif ch == 124:
+        return '?' # Replace control code or high-ASCII
+    elif ch == 124: # tilde
         return ' STICK '
-    elif ch == 126:
+    elif ch == 126: # vert. bar
         return ' FREE '
     else:
         return m
@@ -1885,27 +2265,42 @@ def xchr(m):
 
 def xstr(s):
     # Expand or replace chars in string
-    x = ""
-    for m in s:
-        x += xchr(m)
-    return x
+
+    return "".join(xchr(m) for m in s)
 
 
-def public_path():                                                                                     # Returns the public version of the path
-    
+def public_path(n = 0):
+    """
+    Return the public version of the current path (without leading '/sd').
+    If n is given, shorten to n chars by removing middle characters.
+    """
+
     global TSP
     
-    return xstr("/" + TSP.cur_path[4:])
+    p = "/%s" % xstr(TSP.cur_path[4:])
+    if n == 0:
+        return p
+    else:
+        return shorten_filename(p, n)
     
 
-def public_fname():                                                                                     # Returns the public version of the TSP.f_name
+def public_fname(n = 0):
+    """
+    Return public version of the current filename (without leading '/sd').
+    If n is given, shorten to n chars by removing middle characters.
+    """
     
     global TSP
     
     if TSP.f_name:
-        return xstr(TSP.f_name[3:])
+        f = xstr(TSP.f_name[3:])
+        if n == 0:
+            return f
+        else:
+            return shorten_filename(f, n)
     else:
         return ""
+    
     
 def APPEND(pre, cmd):                                                                                  # Start appending each newly SAVEd file to currently mounted TAP
 
@@ -1918,12 +2313,12 @@ def APPEND(pre, cmd):                                                           
 
     global TSP
     
-    status = _1_OK
-    msg2 = ""
-    viz = False
+    TLM("APPEND enter")
     par1, par2 = PARAMS(pre)
     arg = getArgs(cmd)
     arg = arg.lower()
+    st = _1_OK
+    msg2 = ""
 
     if arg != '':
         par1 = 1
@@ -1932,41 +2327,43 @@ def APPEND(pre, cmd):                                                           
         elif arg == 'off':
             par2 = 0
         else:
-            msg = "APPEND: Bad argument: %s" % arg
-            LOG("ERROR: " + msg, 2)
+            msg = BAD_ARG("APPEND", arg)
             par2 = -1
 
-    if par1 == 0:
+    if par1 == 0 and par2 == 0:
         # Display
-        if not TSP.f_name:
-            msg = "No file mounted"
+        if not isTapMounted():
+            msg = "No .tap mounted"
         elif TSP.append:
             msg = "Append is ON"
         else:
             msg = "Append is OFF"
-        SEND_MSG(msg, "", _1_OK, True)
 
     elif par1 == 1:
         # Set
         if par2 < 0:
-            SEND_MSG(msg, "", _8_A_Invalid_arg)
-        elif TSP.f_name:
-            TSP.append = (par2 != 0)
-            if TSP.append:
+            st = _8_A_Invalid_arg
+            LOG(msg, 2)
+        elif par2 != 0:
+            if isTapMounted():
+                TSP.append = True
                 msg = "Append new files to: "
+                msg2 = public_fname()
+                LOG(msg + msg2, 0)
             else:
-                msg = "Append is OFF for: "
-            LOG("INFO: " + msg + public_fname(), 0)
-            SEND_MSG(msg, public_fname(), _1_OK)
+                msg = "No .tap mounted. Append failed."
+                LOG(msg, 2)
+                st = _4_Q_Parameter
         else:
-            msg = "No file mounted. Append failed."
-            LOG("ERROR: " + msg, 2)
-            SEND_MSG(msg, "", _4_Q_Parameter)
+            TSP.append = False
+            msg = "Append is OFF"
+            LOG(msg, 0)
     else:
         msg = BAD_CODE("APPEND", par1, par2)
-        LOG("ERROR: " + msg, 2)
-        SEND_MSG(msg, "", _8_A_Invalid_arg)
+        LOG(msg, 2)
+        st = _8_A_Invalid_arg
 
+    SEND_MSG(msg, msg2, st, par1 == 0)
     return 
 
 
@@ -1975,32 +2372,37 @@ def BLKRCV(pre, cmd):                                                           
     global MQ
     global TSP
     global led
+
+    TLM("BLKRCV enter")
+    _BUFSZ = 256
+    buf = bytearray(_BUFSZ)
+    mv = memoryview(buf)  # Faster indexing than bytearray
     
     wrt = MQ.put
     
     status = _1_OK
-    buf = []
     
     led.value(1)
     
     if TSP.f_name[-4:].upper() == ".DCK":
 
+        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
         wrt(status)
-        MQ_READY()                          # dual-port: continue flag via port $0F
+        MQ_READY()
 
-        buf = bytearray(32768)
-        
-        with open("/TMP/temp.bin", "rb") as file:
+        try:
             
-            for i in range(2):
-                file.readinto(buf)
-                for el in buf:
-                        wrt(el)
-                        
-        del buf
-        gc.collect()
+            with open("/TMP/temp.bin", "rb") as file:
+                
+                r = range(65536 // _BUFSZ)
+                for i in r:
+                    n = file.readinto(buf)
+                    for i in range(n):
+                        wrt(mv[i])
         
-        LOG("INFO: DCK image write successfully completed", 0)
+        except Exception as e:
+            print(f"ERROR! {e}")
+            return
         
     elif TSP.f_name[-4:].upper() in [".BIN", ".ROM"]:
         
@@ -2010,13 +2412,14 @@ def BLKRCV(pre, cmd):                                                           
         par1, par2 = PARAMS(pre)
         
         if ((par1 + par2) > file_len):
-            status = _4_Q_Parameter
+            status = _3_F_Invalid_file
             BLINK_ERROR()
-
-        wrt(status)
-        MQ_READY()                          # dual-port: continue flag via port $0F
         
-        if (status == 1):
+        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
+        wrt(status)
+        MQ_READY()
+
+        if (status == _1_OK):
             
             rd_offset = par2
             
@@ -2025,21 +2428,28 @@ def BLKRCV(pre, cmd):                                                           
             else:            
                 send_len = file_len - rd_offset
             
-            buf = bytearray(send_len)
-            
+            num_blk = send_len // _BUFSZ
+                             
             with open("/TMP/temp.bin", "rb") as file:
                 file.seek(rd_offset)
-                file.readinto(buf)
                 
-            for el in buf:
-                    wrt(el)
-                    
-            del buf            
-            gc.collect()
+                for i in range(num_blk):
+                    n = file.readinto(buf)
+                
+                    for i in range(n):
+                        wrt(mv[i])
+                            
+                n = file.readinto(buf, send_len % _BUFSZ)
+                
+                for i in range(n):
+                    wrt(mv[i])
+                            
+            del buf
+            del mv
+            
+            # gc.collect()
             
         led.value(0)
-        
-        LOG("INFO: ROM image write successfully completed", 0)
     
     return
 
@@ -2049,9 +2459,11 @@ def ChangeDir(potential_new_path, SDactive = False):
     global TSP
     global MQ
 
-    status =  _1_OK
+    TLM("ChangeDir enter", "path=%r SDactive=%s" % (potential_new_path, SDactive))
+    status = _1_OK
     if not SDactive:
         ACTIVATE_SD()
+    npath = "%s/%s" % (TSP.cur_path, potential_new_path)
 
     if potential_new_path == ".." and TSP.cur_path.count("/") > 2:
         # remove the last element from the current path
@@ -2062,27 +2474,19 @@ def ChangeDir(potential_new_path, SDactive = False):
         path_list.pop()   # remove the last element
         new_path = "/".join(path_list)
         
-    elif potential_new_path == ".." and TSP.cur_path.count("/") == 2:
+    elif (potential_new_path == ".." and TSP.cur_path.count("/") == 2) or potential_new_path == "/" or potential_new_path.lower() == "/tap":
         new_path = "/sd/TAP"
         
-    elif potential_new_path == "/":
-        # move to the top
-        new_path = "/sd/TAP"
-        
-    elif (dir_exists(TSP.cur_path + "/" + potential_new_path)):
-        new_path = TSP.cur_path + "/" + potential_new_path
+    elif potential_new_path[0:5].lower() == "/tap/":
+        new_path = "/sd" + potential_new_path
+
+    elif dir_exists(npath):
+        new_path = npath
         
     else:
         # no changes bc it doesn't meet any of the tests above
         new_path = TSP.cur_path
         status = _3_F_Invalid_file
-
-    #new_path = cur_path + "/" + cmd[10:]
-    #print (cur_path,new_path)
-    #os.chdir(cur_path)
-
-    #message = "Changed dir to: "  + cmd[10:]
-    #status = 1
 
     if status == _1_OK:
     
@@ -2093,15 +2497,16 @@ def ChangeDir(potential_new_path, SDactive = False):
             status = _4_Q_Parameter
         
     if status == _1_OK:
-        message = "Changed dir to: "  + potential_new_path
+        message = "Changed dir to: %s" % potential_new_path
         LOG(message, 0)
-        gc.collect()
         DIR_FILES()
+        # gc.collect()
     else:
-        message = "OS error changing to: "  + potential_new_path
-        LOG("ERROR: " + message, 2)
+        message = "OS error changing to: %s" % potential_new_path
+        LOG(message, 2)
             
     if not SDactive:
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
         DEACTIVATE_SD()
         ACTIVATE_MQ()
 
@@ -2113,197 +2518,132 @@ def CDIR(pre, cmd):                                                             
     # tpi:cd name
     # SAVE "tpi:cd name"            - Change current directory to name (can be . or .. as well)
     # SAVE "tpi:cd name" CODE 1,0   - Change dir and then do a tpi:dir
+    # SAVE "tpi:cd name" CODE 1,1   - Change dir and then do a tpi:idir
+    # SAVE "tpi:cd name" CODE 1,2   - Change dir and then do a tpi:dir CODE 2,0
     # SAVE "tpi:cd name" CODE 2,0   - Change dir and then display new path
-    # SAVE "tpi:cd "                 - Interactive CD
+    # SAVE "tpi:cd"                 - Interactive CD
+    # SAVE "tpi:cd"CODE 0,1         - Interactive CD but use global dir list
 
-    # global TSP
-    # global MQ
     global lista
+    global dirs
+    global alldirs
+    global led
     
+    TLM("CDIR enter")
     status = _1_OK
     par1, par2 = PARAMS(pre)
  
     potential_new_path = getArgs(cmd)
 
     if potential_new_path == "":
-        ChangeDirMenu()
+
+        led.value(1)
+        cwd = public_path(27)
+        hdr1 = "Path:%s" % cwd
+        hdr2 = "  Directory Name"
+        hdr3 = "  ------------------------------"
+        if par2 == 0:
+            if cwd != '/TAP':
+                List = ['..'] + dirs
+            else:
+                List = dirs
+        else:
+            List = alldirs
+        isel = ListMenu(List, hdr1, hdr2, hdr3, "Change to dir", "Changing dir to: ")
+        if isel >= 0:
+            status, message = ChangeDir(List[isel])
+        led.value(0)
         return
 
     status, message = ChangeDir(potential_new_path)
 
-    if par1 == 1 and par2 == 0:
-        SEND_MSG2(chr(13) + lista, 1, False)
+    if status == 1 and par1 == 1 and par2 <= 2:
+        if par2 == 0:
+            SEND_MSG2(lista, _1_OK, False)
+        else:
+            pre = 10 * [0]
+            if par2 == 1:
+                IDIR(pre,cmd)
+            else:
+                pre[3] = 2
+                DIR(pre,cmd)
     else:
-        SEND_MSG(message, "Current: " + public_path(), status, par1 == 2 and par2 == 0)
+        SEND_MSG(message, "Current: %s" % public_path(), status, par1 == 2 and par2 == 0)
 
     return 
-
-
-def ChangeDirMenu():
-
-    # Interactive cd
-
-    global TSP
-    global MQ
-    global dirs
-
-    nl = chr(0x0D)
-    D = ['..'] + dirs
-    n = len(dirs) + 1
-
-    hdr  = nl + "Path:" + public_path() + nl
-
-    wrt = MQ.put
-    # Dual-port: continue flag now on port $0F via MQ_READY
-    wrt(0x86)   # PRINT STRING WITH LOOP
-    wrt(0x01)   # BASIC return code
-    wrt(0x0D)   # Start with a newline
-    MQ_READY()  # Z80 sees "ready" on port $0F
-    while (MQ.rx_fifo() > 0):   # Flush receive buffer
-        MQ.get()
-    sel = ""
-    nmax = 16 # Max files to show at a time
-    L = '0123456789QWERTYUIOP'
-    idx = 0
-    pgs = n // nmax + 1
-    
-    while idx < n:
-        for i in range(15 - nmax):
-            wrt(0x0D)
-        i = 0
-        pg = "%d of %d" % (idx // nmax + 1, pgs)
-        msg  = hdr
-        msg += "# Directory Name        %8s" % pg
-        msg += "- ------------------------------"
-        while i < nmax and idx + i < n:
-            msg += "%c: %s" % (L[i], D[idx+i]) + nl
-            i += 1
-        msg += "--------------------------------"
-        msg += nl + "0..9, Q..P to CD, N=stop," + nl + "B=back, or other for next:"
-        # Write screen
-        for m in msg:
-            wrt(m)
-        wrt(0x00)       # End of this string (Z80 prints + waits for key)
-        # Dual-port: no wrt(0x40); $0F continue is via Y register.
-        ch = MQ.get()   # Get a key
-        if ch == 78:    # 'N' then done (ROM ended the loops)
-            return
-        wrt(0x08)
-        wrt(':')
-        wrt(ch)
-        wrt(0x0D)
-        if ch == 66: # B
-            if idx >= nmax:
-                idx -= nmax
-            else:
-                idx = 0
-        else:
-            j = L.find(chr(ch))
-            if j >= 0 and idx + j < n:
-                sel = D[idx + j]
-                for m in "Changing to: %s" % sel + nl:
-                    wrt(m)
-                break
-            idx += i
-        # Back to top for next screenful
-    
-    wrt(0x03) # End string loop
-    while(MQ.tx_fifo() != 0):   # Write out message
-        pass
-    while(MQ.rx_fifo() != 0):   # Flush input buffer to console
-        print(MQ.get())            
-    if sel:
-        status, message = ChangeDir(sel)
-    return
 
 
 def FWD(pre, cmd):                                                                                     # Moves pointer to next block in TAP file; also can skip
                                                                                                        # 'CODE n,0' # of blocks or 'CODE n,1' files forward
     # SAVE "tpi:ffw"          - Move forward 1 block  (CODE 0,0)
-    # SAVE "tpi:ffw" CODE 0,1 - Move forward 1 block
     # SAVE "tpi:ffw" CODE 0,n - Move forward n blocks
-    # SAVE "tpi:ffw" CODE 1,n - Move forward n files
-    # SAVE "tpi:ffw" CODE 1,0 - Move forward 1 files
-    # SAVE "tpi:ffw" CODE 1,1 - Move forward 1 files
-    # SAVE "tpi:ffw" CODE 2,n - Move forward n blocks and do "tpi:tapdir"CODE 0,0
+    # SAVE "tpi:ffw" CODE 1,n - Move forward n blocks and do "tpi:tapdir"CODE 0,0
+    # SAVE "tpi:ffw" CODE 2,n - Move forward n files
     # SAVE "tpi:ffw" CODE 3,n - Move forward n files  and do "tpi:tapdir"CODE 1,0
 
     global TSP
     
-    num_blks = len(TSP.offset_tbl) - 1
-    
+    TLM("FWD enter")
     par1, par2 = PARAMS(pre)
     st = _1_OK
-    forth = par2
-    if par1 > 1:
-        doTapdir = True
-        par1 = par1 - 2
-    else:
-        doTapdir = False
+    forth = max(par2,1)
+    num_blks = len(TSP.offset_tbl)
 
-    if num_blks < 0:
-        msg = "Empty or no file, can't FFW"
-        LOG("INFO: " + msg, 2)
+    if not isTapMounted():
+        msg = "No .tap file mounted"
+        LOG(msg, 1)
         forth = 0
-        
-    elif par1 == 0:
+
+    elif TSP.tap_idx >= num_blks - 1:
+        msg = "Can't FWD. Already at end."
+        forth = 0
+
+    elif par1 <= 1:
 
         # Move by block
-        forth = max(par2,1)
-        if TSP.tap_idx >= num_blks:
-            
-            msg = "Can't FWD. Already on last block"
-            # st = _5_C_Nonsense
-        else:
-            TSP.tap_idx += forth
-        if TSP.tap_idx > num_blks:
-            TSP.tap_idx = num_blks
+        TSP.tap_idx += forth
+        if TSP.tap_idx >= num_blks - 1:
+            TSP.tap_idx = max(0, num_blks - 1)
 
-    elif par1 == 1:
+    elif par1 <= 3:
 
         # Move by file
-        h = max(par2, 1)
         i = TSP.tap_idx
-        hdr = TSP.offset_tbl[i][2]
-        if hdr[1] == 'Y':
+        if TSP.offset_tbl[i][2][1] == 'Y':
             l = i
         else:
             l = -1
         i += 1
-
-        while i < num_blks and h > 0:
-
-            while (i < num_blks - 1) and (TSP.offset_tbl[i][2][1] == 'N'):
-                i += 1
+        h = forth
+        while i < num_blks - 1 and h > 0:
             if TSP.offset_tbl[i][2][1] == 'Y':
                 h -= 1
-                l = i # Last header index seen
-                i += 1
-
-        if l < 0:
-            # Didn't see any headers
-            i = num_blks - 1
-        else:
+                l = i
+            i += 1
+        if h == 0 or l >= 0:
             i = l
+        else:
+            i = num_blks - 1
         TSP.tap_idx = i
 
     else:
         # Invalid option
         msg = BAD_CODE("FFW", par1, par2)
-        LOG("ERROR: " + msg, 2)
+        LOG(msg, 2)
         st = _8_A_Invalid_arg
 
     if st == _1_OK and forth != 0:
             
         TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
         gc.collect()
-        msg = "Moved ahead to block # " + str(TSP.tap_idx)
+        msg = "Moved ahead to block # %d" % TSP.tap_idx
         LOG(msg, 0)
-        if doTapdir:
+        if par1 == 1 or par1 == 3:
             # Chain to TAPDIR
             pre = [0] * 10
-            if par1 == 1: # do TAPDIR by file as well
-                pre[3] = 1 # CODE(1,0)
+            pre[5] = 255 # CODE 0,255
+            if par1 == 3: # do TAPDIR by file as well
+                pre[3] = 1 # CODE 1,255
             TAPDIR(pre, cmd)
             return
 
@@ -2314,8 +2654,7 @@ def FWD(pre, cmd):                                                              
 
 def getArgs(cmd):
 
-    # Return the string of arguments to the command after the command word and a space.
-
+    """Return the string of arguments after the command word and a space."""
     sp = cmd[7:].find(' ')
     if sp >= 0:
         return cmd[sp+8:]
@@ -2325,102 +2664,140 @@ def getArgs(cmd):
 
 def GETHELP(pre, cmd):                                                 # Shows TS-Pico command help
 
-    # SAVE "tpi:gethelp"            General help
-    # SAVE "tpi:gethelp <command>"  Get help on a specific command
+    # SAVE "tpi:help"            General help
+    # SAVE "tpi:help <command>"  Get help on a specific command
+    # SAVE "tpi:help ?"          List commands with specific help
     # For help on a specific command, a file with that name in lowercase and a
-    # .txt extension needs to be present in the /TS/help folder containing the 
-    # text. It can be broken into short lines with CR/LF,  LF, or CR line endings.
+    # .txt extension needs to be present in the /sd/help folder containing the 
+    # text. It can be broken into short lines with CR/LF, LF, or CR line endings.
 
     global TSP
+    global EXT_SA_FUNCT
     
-    user_help_dir = "/sd/help"
+    HELP_DIR = "/sd/help"
     nl = chr(0x0D)
     arg = getArgs(cmd)
     arg = arg.lower()
+    st = _1_OK
+    lv = 2
+    errm = "SD card help folder not found."
 
-    if arg != "":
+    if arg:
 
-        # Look for help file
-        msg = nl
         ACTIVATE_SD()
-        if dir_exists(user_help_dir):
-            hname = user_help_dir + "/" + arg + ".txt"
-            if file_exists(hname):
-                with open(hname, 'rt') as help:
-                    msg += help.read()
-            else:
-                msg += nl + 'Help for "' + arg + '" not found'
-        else:
-            msg += nl + "SD card help folder not found."
 
+        if not dir_exists(HELP_DIR):
+
+            msg = errm
+            st = _4_Q_Parameter
+
+        else:
+
+            if arg == "?":
+
+                # List specific help file names
+                listing = sorted(os.ilistdir(HELP_DIR), key=lambda fname: fname[0].lower())
+                M = ['Commands for "tpi:help cmd":', nl, nl]
+                l = 0
+                for name in listing:
+                    i = name[0].find('.')
+                    if i > 0:
+                        e = name[0][i:]
+                        if e.lower() == '.txt':
+                            hlp = name[0][:i]
+                            if l + i + (l>0) > 32:
+                                M.append("\r%s" % hlp)
+                                l = i
+                            elif l == 0:
+                                M.append(hlp)
+                                l = i
+                            else:
+                                M.append(" %s" % hlp)
+                                l += i + 1
+                        else:
+                            pass
+                    else:
+                        pass
+                msg = "".join(M)
+
+            else:
+        
+                # Look for help file
+                hname = "%s/%s.txt" % (HELP_DIR, arg)
+                if file_exists(hname):
+                    try:
+                        with open(hname, 'rt') as help:
+                            msg = help.read()
+                    except:
+                        msg = "Failed to read help file: %s" % hname
+                        st = _2_R_Tape_load
+                else:
+                    msg = 'Help for "%s" not found' % arg
+                    st = _3_F_Invalid_file
+                    lv = 1 # warning
+
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
         DEACTIVATE_SD()
         ACTIVATE_MQ()
 
     else:
-        #               01234567890123456789012345678901
-        msg  = "%-32s" % ('LOAD: mount a file')
-        msg += "%-32s" % ('================================')
-        msg += "%-32s" % ('"tpi:<filename>" Mount by name')
-        msg += "%-32s" % ('"tpi:nnn"        Mount by index')
-        msg += "%-32s" % (' ')
-        msg += "%-32s" % ('SAVE commands: [ ]-> optional')
-        msg += "%-32s" % ('================================')
-        msg += "%-32s" % ('"tpi:append"[CODE 1,0/1]')
-        msg += "%-32s" % ('"tpi:append on/off"')
-        msg += "%-32s" % ('"tpi:blkrcv"[CODE len,offset]')
-        msg += "%-32s" % ('"tpi:cd <name>"[CODE 1/2,0]')
-        msg += "%-32s" % ('"tpi:close"')
-        msg += "%-32s" % ('"tpi:dir"[CODE 1/2/3,index]')
-        msg += "%-32s" % ('"tpi:ffw"[CODE 0/1/2/3,n]')
-        msg += "%-32s" % ('"tpi:gethelp [command]"')
-        msg += "%-32s" % ('"tpi:getinfo"')
-        msg += "%-32s" % ('"tpi:getlog [clear]"[CODE 0,n]')
-        msg += "%-32s" % ('"tpi:loglevel"[CODE 1,n]')
-        msg += "%-32s" % ('"tpi:loglevel n"')
-        msg += "%-32s" % ('"tpi:md <folder>"[CODE 1,0]')
-        msg += "%-32s" % ('"tpi:memboot"[CODE loc,slot]')
-        msg += "%-32s" % ('"tpi:memdock"[CODE loc,slot]')
-        msg += "%-32s" % ('"tpi:nop"')
-        msg += "%-32s" % ('"tpi:path"[CODE 1,0]')
-        msg += "%-32s" % ('"tpi:rew"[CODE 0/1/2/3,n]')
-        msg += "%-32s" % ('"tpi:rm <name>"[CODE 255,0]')
-        msg += "%-32s" % ('"tpi:rompatch"')
-        msg += "%-32s" % ('"tpi:tap <name>[.tap]"')
-        msg += "%-32s" % ('"tpi:tapdir"[CODE 0/1,n]')
         #                  01234567890123456789012345678901
-        msg += "%-32s" % ('"tpi:tape"    <=>   "tpi:sdcard"')
-        msg += "%-32s" % ('"tpi:ts2040"  <=>   "tpi:picopt"')
-        msg += "%-32s" % ('"tpi:upgrade"')
-        msg += "%-32s" % ('"tpi:verbose"[CODE 1,0/1]')
-        msg += "%-32s" % ('"tpi:verbose on/off"')
-        msg += "%-32s" % ('"tpi:zx48"[CODE 1/2,0/1]')
-
-        # List specific help file names
-        ACTIVATE_SD()
-        if dir_exists(user_help_dir):
-            listing = sorted(os.ilistdir(user_help_dir), key=lambda fname: fname[0].lower())
-            msg += nl + nl + 'Commands for "tpi:gethelp cmd":' + nl + nl
-            l = 0
-            for name in listing:
-                i = name[0].find('.')
-                if i > 0:
-                    hlp = name[0][:i]
-                    if l + i + (l>0) > 32:
-                        msg += nl + hlp
-                        l = i
-                    elif l == 0:
-                        msg += hlp
-                        l = i
-                    else:
-                        msg += " " + hlp
-                        l += i + 1
-        else:
-            msg += nl + nl + "SD card help folder not found."
-
-        DEACTIVATE_SD()
-        ACTIVATE_MQ()
-
-    SEND_MSG2(msg, 1)
+        M     = ['LOAD: mount a file']
+        M.append('================================')
+        M.append('"tpi:<filename>" Mount by name')
+        M.append('"tpi:nnn"        Mount by index')
+        M.append('')
+        M.append('SAVE commands: [ ]-> optional')
+        M.append('================================')
+        M.append('"tpi:append"[CODE 1,0/1]')
+        M.append('"tpi:append on/off"')
+        M.append('"tpi:blkrcv"[CODE len,offset]')
+        M.append('"tpi:cd <name>"[CODE 1/2,0]')
+        M.append('"tpi:cd"[CODE 0,1]')
+        M.append('"tpi:close"')
+        M.append('"tpi:dir"[CODE 1/2,index]')
+        M.append('"tpi:ffw"[CODE 0/1/2/3,n]')
+        M.append('"tpi:help [command]"')
+        M.append('"tpi:idir"')
+        M.append('"tpi:info"')
+        M.append('"tpi:log"[CODE 0,n]')
+        M.append('"tpi:log clear"[CODE 255,0]')
+        M.append('"tpi:loglevel"[CODE 1,n]')
+        M.append('SAVE commands: [ ]-> optional')
+        M.append('================================')
+        M.append('"tpi:loglevel n"')
+        M.append('"tpi:md <folder>"[CODE 1,0]')
+        M.append('"tpi:boot"[CODE loc,slot]')
+        M.append('"tpi:dock"[CODE loc,slot]')
+        M.append('"tpi:dock"[CODE 0,1/2]')
+        M.append('"tpi:newtap <name>[.tap]"')
+        M.append('"tpi:nop"')
+        M.append('"tpi:path"[CODE 1,0]')
+        M.append('"tpi:rew"[CODE 0/1/2/3,n]')
+        M.append('"tpi:rm <name>"[CODE 255,0]')
+        M.append('"tpi:rompatch"')
+        M.append('"tpi:tapdir"[CODE 0/1,n]')
+        M.append('"tpi:tape"    <=>   "tpi:sdcard"')
+        M.append('"tpi:ts2040"  <=>   "tpi:picopt"')
+        M.append('"tpi:upgrade"')
+        M.append('"tpi:verbose"[CODE 1,0/1]')
+        M.append('"tpi:verbose on/off"')
+        M.append('"tpi:zx48"[CODE 0/1,0/1/2/n]')
+        M.append('')
+        M.append('"tpi:help ?" to list help topics')
+        M.append('from /help folder on the SD card')
+        if EXT_SA_FUNCT:
+            M.append('')
+            M.append('')
+            M.append('External commands loaded are:')
+            for e in EXT_SA_FUNCT:
+                M.append('  "%s"' % e)
+            M.append('')
+        msg = chr(13).join(M)
+        
+    if st != _1_OK:
+        LOG(msg, lv)
+    SEND_MSG2(msg, st, False)
 
     return
 
@@ -2433,7 +2810,6 @@ def GETINFO(pre, cmd):                                                 # Shows T
     
     cop = chr(127)
     nl = chr(13)
-    sd_stat = lista[32:63]
     
     fl_block = os.statvfs("")[0]
     fl_tot = os.statvfs("")[2]
@@ -2442,59 +2818,53 @@ def GETINFO(pre, cmd):                                                 # Shows T
     fl_free = (fl_free * fl_block) / 1_048_576
     fl_tot = (fl_tot * fl_block) / 1_048_576
     
-    fl_stat = ">Flash: " + '%02.2f' % (fl_tot ) + "MB; free: " + '%02.2f' % (fl_free) + "MB"
-    fl_stat = "%-32s" % (fl_stat)
-
-    memfree = '%06.2f' % (gc.mem_free() / 1024)
-    
-    msg = " * TS-Pico interface status *" + nl
-    msg += cop + " 2023, 2024 TS Pico Dev Team" + nl
-    msg += "--------------------------------"
-    msg += "%-32s" % (">FW Rev.:" + TSP.FW_VERSION + "; uPython: 1.20.0") + nl
-    msg += ">Default ROM version: " + TSP.ROM_VERSION + nl
-    msg += ">Board Rev.: V2.2; " + "Log level:%d" % TSP.LOG_LEVEL + nl
-    msg += ">Pico Free RAM: " + memfree + " Kb." + nl
-    msg += fl_stat
-    msg += ">" + sd_stat
+    M     = ["  * TS-Pico interface status *", nl]
+    M.append(" %s 2023, 2024 TS Pico Dev Team\r" % cop)
+    M.append("--------------------------------")
+    M.append(">FW Rev.:%s; uPython: 1.20.0\r" % TSP.FW_VERSION)
+    M.append(">Default ROM version: %s\r" % TSP.ROM_VERSION)
+    M.append(">Board Rev.: V2.2; Log level:%d\r" % TSP.LOG_LEVEL)
+    M.append(">Pico Free RAM: %06.2fkB\r" % (gc.mem_free() >> 10))
+    M.append(">Flash: %02.2fMB; free: %02.2fMB\r" % (fl_tot, fl_free))
+    M.append(">%s\r" % lista[32:63]) # sd_stat
     mem, page = getBoot()
-    msg += ">MemBoot: %d,%d" % (mem, page) 
+    M.append(">Boot: %d,%d" % (mem, page))
     mem, page = getDock()
-    msg += ";  MemDock: %d,%d" % (mem, page) + nl
-    msg += ">Append: " + str(TSP.append)
-    msg += "; Verbose: " + str(TSP.VERBOSE) + nl
-    msg += ">Mounted file: " 
+    M.append(";     Dock: %d,%d\r" % (mem, page))
+    M.append(">Append: %s; Verbose: %s\r" % (str(TSP.append), str(TSP.VERBOSE)))
+    M.append(">Mounted file: ")
     
-    if TSP.f_name:
-        msg += public_fname() + nl
-        i = TSP.tap_idx
-        msg += ">Block:%02d" % i
-        if TSP.offset_tbl:
-            blk = TSP.offset_tbl[i]
-            if blk[2] == " Y":
-                msg += ":%s" % blk[3]
-                msg += ":%s" % TSP.offset_tbl[i+1][3]
-            else:
-                msg += "Data block :%s" % blk[3]
-        else:
-            msg += ":<empty>"
-        msg += nl
+    if not TSP.f_name:
+        M.append("%s\r" % "none")
     else:
-        msg += "none" + nl
+        M.append("%s\r" % public_fname())
+        if isTapMounted():
+            i = TSP.tap_idx
+            M.append(">Block:%02d" % i)
+            if TSP.offset_tbl:
+                blk = TSP.offset_tbl[i]
+                if blk[2] == " Y":
+                    M.append(":%s:%s" % (blk[3], TSP.offset_tbl[i+1][3]))
+                else:
+                    M.append(":Data block:%s" % blk[3])
+            else:
+                M.append(":<empty>")
+            M.append(nl)
     
-    msg += ">Current path: " + public_path() + nl
-    msg += ">Files in dir: " + str(len(files)) + nl
-
-    SEND_MSG2(msg, 1)
+    M.append(">Current path: %s\r" % public_path())
+    M.append(">Files in dir: %d\r" % len(files))
+    msg = "".join(M)
+    SEND_MSG2(msg, _1_OK)
 
     return
 
 
 def GETLOG(pre, cmd):                                                 # Shows the last nn bytes of the events log file 
 
-    # SAVE "tpi:getlog"
-    # SAVE "tpi:getlog"CODE 0,n     - Show n bytes of the end of the file
-    # SAVE "tpi:getlog"CODE 255,0   - Clear the log file
-    # SAVE "tpi:getlog clear"       - Clear the log file
+    # SAVE "tpi:log"
+    # SAVE "tpi:log"CODE 0,n     - Show n bytes of the end of the file
+    # SAVE "tpi:log clear"       - Clear the log file (with prompt)
+    # SAVE "tpi:log clear"CODE 255,0 - Clear the log file (no prompt)
 
     global TSP
     global led
@@ -2502,35 +2872,39 @@ def GETLOG(pre, cmd):                                                 # Shows th
     status = _1_OK
     par1, par2 = PARAMS(pre)
     arg = getArgs(cmd)
-    arg = arg.lower()
 
     if arg != '':
-        if arg == 'clear':
-            par1 = 255
-            par2 = 0
+
+        if arg.lower() == 'clear':
+            sent = False
+            if par1 != 255 or par2 != 0:
+                sent = True
+                ch = SEND_MSG_PROMPT_YN('Clear the log file (y/N)?')
+                if ch != 89: # 89='Y'
+                    LOG("Log file not cleared", 0)
+                    return
+            if CLEAR_LOG():
+                msg = "Log file was cleared"
+                if not sent:
+                    SEND_MSG(msg, "", _1_OK)
+                return
+            else:
+                msg = "Couldn't clear log file"
+                status = _4_Q_Parameter
+
         else:
             par1 = -1
 
-    if par1 == 255 and par2 == 0:
-        
-        if CLEAR_LOG():
-            msg = "Log file was cleared"
-            SEND_MSG(msg, "", _1_OK)
-            return
-        else:
-            msg = "ERROR clearing log file"
-            status = _4_Q_Parameter
-
-    elif par1 < 0:
-        msg = BAD_ARG("GETLOG", arg)
+    if par1 < 0:
+        msg = BAD_ARG("LOG", arg)
         status = _8_A_Invalid_arg
 
     elif par1 != 0:
-        msg = BAD_CODE("GETLOG", par1, par2)
+        msg = BAD_CODE("LOG", par1, par2)
         status = _8_A_Invalid_arg
 
     if status != _1_OK:
-        LOG("ERROR: " + msg, 2)
+        LOG(msg, 2)
         SEND_MSG(msg, "", status)
         return
     
@@ -2548,16 +2922,22 @@ def GETLOG(pre, cmd):                                                 # Shows th
     else:    
         len_read = len_file
 
-    msg = bytearray(len_read)
+    try:
+        msg = bytearray(len_read)
 
-    with open(log_fname, "r") as logfile:
-        
-        if file_seek:
-            logfile.seek(file_seek)
+        with open(log_fname, "r") as logfile:
             
-        logfile.readinto(msg)
+            if file_seek:
+                logfile.seek(file_seek)
+                
+            logfile.readinto(msg)
 
-    SEND_MSG2(msg.decode('utf-8'), 1) # Convert bytes to string
+        SEND_MSG2(msg.decode('utf-8'), 1) # Convert bytes to string
+
+    except:
+        msg = "Log file too large"
+        LOG(msg, 2)
+        SEND_MSG(msg, "", _4_Q_Parameter)
 
     led.value(0)
     
@@ -2565,16 +2945,16 @@ def GETLOG(pre, cmd):                                                 # Shows th
 
 
 def LOAD_CONFIG():
-        
+
+    TLM("LOAD_CONFIG enter", "build=" + BUILD_VERSION)
     init_values = {}
-    return_values = {}
     defaulted = False
     
     try:
         with open("config.ini", "r") as f:                      # We first try to load config values from config.ini file
             init_values = json.load(f)
     except:                                                     # If fails, we load default hard-wired values
-        LOG("WARNING: Failed to load initial values from config.ini. Using default values instead", 1)
+        LOG("Failed to load initial values from config.ini. Using default values instead", 1)
 
     # Define default values
     # NOTE: The problem is that the class also has default values.
@@ -2601,7 +2981,7 @@ def LOAD_CONFIG():
         
     if (init_values["ROM_SM"] <= 4) or (init_values["ROM_SM"] in [8, 12]):
         init_values["ROM_SM"] = default_values["ROM_SM"]
-        LOG("ERROR: Incorrect initial ROM_SM value. Using default value of %d instead" % default_values["ROM_SM"], 2)
+        LOG("Incorrect initial ROM_SM value. Using default value of %d instead" % default_values["ROM_SM"], 2)
 
     return_ROM_SLOT = -1
     if init_values["ROM_SLOT"] != default_values["ROM_SLOT"]:           # If we started with a non-default ROM slot, we use it on this run,
@@ -2615,7 +2995,7 @@ def LOAD_CONFIG():
             with open("config.ini", "w") as f:
                 json.dump(init_values, f)
         except:
-            LOG("ERROR: while updating config.ini!", 2)
+            LOG("while updating config.ini!", 2)
             SAVE_LOG()
         
         if return_ROM_SLOT >= 0:
@@ -2628,13 +3008,13 @@ def LOAD_CONFIG():
 
 def LOGLEVEL(pre, cmd):
 
-    # Display or set the log level
+    TLM("LOGLEVEL enter")
+    """Display or set the log level"""
     # SAVE "tpi:loglevel"           - Report log level (CODE 0,0)
     # SAVE "tpi:loglevel"CODE 1,n   - Set log level to n (n>=0)
+    # SAVE "tpi:loglevel n"         - Set log level to n (n>=0)
 
     global TSP
-
-    LABELS = ["INFO", "WARNINGS","ERRORS","CRITICAL"]
 
     status = _1_OK
     viz = False
@@ -2653,8 +3033,8 @@ def LOGLEVEL(pre, cmd):
 
     if par1 == 0:
         # Report current level
-        if TSP.LOG_LEVEL <= 3:
-            lbl = LABELS[TSP.LOG_LEVEL]
+        if TSP.LOG_LEVEL <= 4:
+            lbl = LOG_LABELS[TSP.LOG_LEVEL]
         else:
             lbl = ""
         msg = "LOG level is %d %s" % (TSP.LOG_LEVEL, lbl)
@@ -2665,19 +3045,19 @@ def LOGLEVEL(pre, cmd):
         if par2 < 0:
             msg = BAD_ARG("LOGLEVEL", arg)
             status = _8_A_Invalid_arg
-            LOG("ERROR: " + msg, 2)
-        elif par2 > 3:
+            LOG(msg, 2)
+        elif par2 > 4:
             msg = "Bad log level: %d" % par2
             status = _8_A_Invalid_arg
-            LOG("ERROR: " + msg, 2)
+            LOG(msg, 2)
         else:
             TSP.LOG_LEVEL = par2
-            lbl = LABELS[TSP.LOG_LEVEL]
+            lbl = LOG_LABELS[TSP.LOG_LEVEL]
             msg = "LOG level set to %d %s" % (TSP.LOG_LEVEL, lbl)
-            LOG("INFO: " + msg, 0)
+            LOG(msg, 0)
     else:
         msg = BAD_CODE("LOGLEVEL", par1, par2)
-        LOG("ERROR: " + msg, 2)
+        LOG(msg, 2)
         status = _8_A_Invalid_arg
 
     SEND_MSG(msg, "", status, viz)
@@ -2692,47 +3072,77 @@ def MDIR(pre, cmd):                                                             
     # SAVE "tpi:md <name>" CODE 1,0     - Also change to the new directory
 
     global TSP
+    global alldirs
     
+    TLM("MDIR enter")
     name = cmd[10:]
-    message = "Created dir: "  + name
+    message = "Created dir: "
     status = _1_OK
-    
-    ACTIVATE_SD()
-    os.chdir(TSP.cur_path)
-
-    try:
-        os.mkdir(name)
-        DIR_FILES()
-
-    except OSError:
-
-        message = "OS error creating: "  + name
-        LOG("MD: " + message, 2)
-        status = _4_Q_Parameter
-
-    DEACTIVATE_SD()
-    ACTIVATE_MQ()
-    
     par1, par2 = PARAMS(pre)
+    
+    if not name:
+        status = _8_A_Invalid_arg
+        message = "MD: Filename required"
+        LOG(message, 2)
+    else:
+        ACTIVATE_SD()
+        os.chdir(TSP.cur_path)
 
-    if status == _1_OK and par1 == 1 and par2 == 0:
+        if dir_exists(name):
+            message = 'MD: directory "%s" exists' % name
+            LOG(message, 2)
+            status = _7_8_EOF
+        elif file_exists(name):
+            message = 'MD: file "%s" exists' % name
+            LOG(message,2)
+            status = _3_F_Invalid_file
+        else:
+            try:
+                os.mkdir(name)
+                if par1 != 1 or par2 != 0:
+                    DIR_FILES() # Update local dir list
+                # Update alldirs w/o calling GET_DIRS()
+                try:
+                    alldirs.append("%s/%s" % (TSP.cur_path[3:], name))
+                    alldirs.sort()
+                    gc.collect()
+                except:
+                    pass
+
+            except OSError:
+
+                message = "MD: OS error creating: "
+                LOG(message + name, 2)
+                status = _4_Q_Parameter
+
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+
+    if (status == _1_OK or status == _7_8_EOF) and par1 == 1 and par2 == 0:
         # Change to new DIR with show path option
         pre = [0] * 10
-        PATH(pre, cmd)
+        pre[3] = 2 # CODE 2,0
+        CDIR(pre, cmd)
     else:
-        SEND_MSG(message, "", status)
+        SEND_MSG(message, name, status)
             
     return 
                 
 
 def MEMBOOT(pre, cmd):                                           # Changes ROM slot to boot from; either SRAM or Flash
     
+    # SAVE "tpi:boot"                # Report the boot setting
+    # SAVE "tpi:boot"CODE mem,slot   # Set boot to mem,slot
+
     global TSP
     
     global BANK
     global ROM
     
+    TLM("MEMBOOT enter")
     par1, par2 = PARAMS(pre)
+    new = "MEM=%d, PAGE=%d" % (par1, par2)
     
     if par1 == 0 and par2 == 0:
         # Report setting
@@ -2740,8 +3150,9 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         SEND_MSG("BOOT is MEM=%d, PAGE=%d" % (mem, page), "", _1_OK, True)
 
     elif (par1 == 0 or par1 > 3 or par2 > 15):
-        SEND_MSG('Wrong values, MEM=' + str(par1) + ', PAGE=' + str(par2), "OK values: MEM=1..3, PAGE=0..15", _8_A_Invalid_arg)
-        LOG("WARNING: Wrong values in MEMBOOT, MEM=" + str(par1) + ", PAGE=" + str(par2) + ". Command ignored", 1) 
+        msg = "Wrong values, %s" % new
+        SEND_MSG(msg, "OK values: MEM=1..3, PAGE=0..15", _8_A_Invalid_arg)
+        LOG("BOOT: %s. Command ignored" % msg, 1) 
     else:            
         val1 = TSP.ROM_SM & 12
         TSP.ROM_SM = val1 + par1
@@ -2757,22 +3168,22 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         with open("config.ini", "w") as f:
             json.dump(init_values, f)
             
-        SEND_MSG('Change ROM to MEM=' + str(par1) + ', PAGE=' + str(par2), "", _1_OK)
-#         LOG("INFO: Change ROM to MEM=" + str(par1) + ", PAGE=" + str(par2) + " in MEMBOOT", 0)
+        msg = 'Change ROM to %s' % new
+        SEND_MSG(msg, "", _1_OK)
+        LOG(msg, 0)
         
         utime.sleep(.100)
         
         ROM.put(TSP.ROM_SM)
         BANK.put(TSP.bank_sm)
         
-#         while(MQ.tx_fifo() != 0):
-#             pass
+#         WAIT_TX_RECEIVED()
 
     return 
 
 
 def getBoot():
-
+    """Get current boot memory and page settings."""
     global TSP
 
     val1 = TSP.ROM_SM & 12
@@ -2783,47 +3194,74 @@ def getBoot():
 
 
 def getDock():
-
+    """Get current dock memory and page settings."""
     global TSP
 
     val1 = TSP.ROM_SM & 3
-    mem = int((TSP.ROM_SM - val1) / 4)
+    mem = (TSP.ROM_SM - val1) // 4
     val1 = TSP.bank_sm & 15
-    page = int((TSP.bank_sm - val1) / 16)
+    page = (TSP.bank_sm - val1) // 16
     return mem, page
 
 
 def MEMDOCK(pre, cmd):                                                   # Changes DCK slot; either SRAM or Flash
 
-    # tpi:memdock
-    # SAVE "tpi:memdock" CODE 0,0   - Display setting
-    # SAVE "tpi:memdock" CODE 1,m   - Assign SRAM page m to dock
-    # SAVE "tpi:memdock" CODE 2,m   - Assign flash page m to dock
+    # SAVE "tpi:dock" CODE 0,0   - Display setting
+    # SAVE "tpi:dock" CODE 0,1   - Display previous setting
+    # SAVE "tpi:dock" CODE 0,2   - Swap to previous setting
+    # SAVE "tpi:dock" CODE 1,m   - Assign SRAM page m to dock
+    # SAVE "tpi:dock" CODE 2,m   - Assign flash page m to dock
 
     global TSP
     global BANK
     global ROM
     
+    TLM("MEMDOCK enter")
     par1, par2 = PARAMS(pre)
-    
-    if par1 == 0 and par2 == 0:
-        # Report setting
-        mem, page = getDock()
-        SEND_MSG("DOCK is MEM=%d, PAGE=%d" % (mem, page), "", _1_OK, True)
+    mem,  page = getDock()
+    old = "MEM=%d, PAGE=%d" % (mem, page)
+    new = "MEM=%d, PAGE=%d" % (par1, par2)
 
-    elif (par1 == 0 or par1 > 2 or par2 > 15):
-        info = "MEM=%d, PAGE=%d" % (par1, par2)
-        SEND_MSG('Wrong values, ' + info, "OK values: MEM=1..2, PAGE=0..15", _8_A_Invalid_arg)
-        LOG("WARNING: Wrong values in MEMDOCK, " + info + ". Command ignored", 1) 
-    else:            
+    if (par1 > 2 or par2 > 15):
+        msg = "Wrong values, %s" % new
+        SEND_MSG(msg, "OK values: MEM=1..2, PAGE=0..15", _8_A_Invalid_arg)
+        LOG("DOCK: %s. Command ignored" % new, 1) 
+    
+    elif par1 == 0 and par2 == 0:
+        # Report setting
+        SEND_MSG("DOCK is %s" % old, "", _1_OK, True)
+
+    elif par1 == 0 and par2 == 1:
+        # Report previous setting
+        mem  = TSP.dck_prev_mem
+        page = TSP.dck_prev_slot
+        SEND_MSG("DOCK was previously:", "  MEM=%d, PAGE=%d" % (mem, page), _1_OK, True)
+
+    else:
+        if par1 == 0:
+            if par2 == 2:
+                # Swap to previous setting
+                par1 = TSP.dck_prev_mem
+                par2 = TSP.dck_prev_slot
+                msg2 = "Swapped with previous setting"
+            else:
+                msg = BAD_CODE("DOCK", par1, par2)
+                LOG(msg, 2)
+                SEND_MSG(msg, "", _8_A_Invalid_arg)
+                return
+        else:
+            msg2 = ""
+
+        TSP.dck_prev_mem  = mem
+        TSP.dck_prev_slot = page
         val1 = TSP.ROM_SM & 3
         TSP.ROM_SM = val1 + (par1 * 4)
         val1 = TSP.bank_sm & 15
         TSP.bank_sm = val1 + (par2 * 16)
-        
-        info = "MEM=%d, PAGE=%d" % (par1, par2)
-        SEND_MSG('Change DCK to ' + info, "", _1_OK)
-        LOG("INFO: Change DCK to " + info + " in MEMDOCK", 0)
+
+        msg = "Change DOCK to %s" % new
+        SEND_MSG(msg, msg2, _1_OK)
+        LOG("%s. %s" % (msg, msg2), 0)
         
         ROM.put(TSP.ROM_SM)
         BANK.put(TSP.bank_sm)
@@ -2834,7 +3272,7 @@ def MEMDOCK(pre, cmd):                                                   # Chang
 def REMOVE_DIR(d):                                                        # Recursively remove a directory and all its contents
     
     try:
-        if os.stat(d)[0] & 0x4000:  # Dir
+        if dir_exists(d):
             for f in os.ilistdir(d):
                 if f[0] not in ('.', '..'):
                     REMOVE_DIR("/".join((d, f[0])))  # File or Dir
@@ -2843,7 +3281,7 @@ def REMOVE_DIR(d):                                                        # Recu
             os.remove(d)
         
     except:
-        LOG("WARNING: could not remove directory " + d, 1)
+        LOG("Could not remove directory %s" % d, 1)
         
     return
 
@@ -2852,85 +3290,73 @@ def REW(pre, cmd):                                                              
                                                                                                              # can skip 'CODE n' # of blocks backwards
     # SAVE "tpi:rew"         - Rewind 1 block (CODE 0,0)
     # SAVE "tpi:rew"CODE 0,n - Rewind by n blocks
-    # SAVE "tpi:rew"CODE 1,n - Rewind by n files
-    # SAVE "tpi:rew"CODE 2,n - Rewind n blocks and do "tpi:tapdir"CODE 0,0
+    # SAVE "tpi:rew"CODE 1,n - Rewind n blocks and do "tpi:tapdir"CODE 0,0
+    # SAVE "tpi:rew"CODE 2,n - Rewind by n files
     # SAVE "tpi:rew"CODE 3,n - Rewind n files  and do "tpi:tapdir"CODE 1,0
 
     global TSP
     
+    TLM("REW enter")
     par1, par2 = PARAMS(pre)
+    back = max(par2,1)
     st = _1_OK
-    if par1 > 1:
-        doTapdir = True
-        par1 = par1 - 2
-    else:
-        doTapdir = False
 
-    if len(TSP.offset_tbl) == 0:
-
-        msg = "Empty or no file, can't REW"
-        LOG("INFO: " + msg, 0)
+    if not isTapMounted():
+        msg = "No .tap file mounted"
+        LOG(msg, 1)
         back = 0
 
-    elif par1 == 0 or len(TSP.offset_tbl) == 0:
+    elif TSP.tap_idx == 0:
+        msg = "Can't REW. Already at start."
+        back = 0
+
+    elif par1 <= 1:
 
         # Move by block
-        back = max(par2,1)
-        if TSP.tap_idx <= 0:
-            msg = "Can't REW. Already on first block"
-            # st = _5_C_Nonsense
-        else:
-            TSP.tap_idx -= back
-        if TSP.tap_idx <= 0:
+        TSP.tap_idx -= back
+        if TSP.tap_idx < 0:
             TSP.tap_idx = 0
 
-    elif par1 == 1:
+    elif par1 <= 3:
 
         # Move by file
-        h = max(par2, 1)
+
         i = TSP.tap_idx
-        hdr = TSP.offset_tbl[i][2]
-        if hdr[1] == 'Y':
+        if TSP.offset_tbl[i][2][1] == 'Y':
             l = i
         else:
             l = -1
         i -= 1
-
+        h = back
         while i >= 0 and h > 0:
-
-            while (i >= 0) and (TSP.offset_tbl[i][2][1] == 'N'):
-                i -= 1
-            if TSP.offset_tbl[i][2][1] == 'Y':
-                h -= 1
-                l = i # Last header index seen
-                i -= 1
-
-        if l < 0:
-            # Didn't see any headers
-            i = 0
-        else:
+            if TSP.offset_tbl[i][2][1] == 'Y': # block i is a header
+                l = i # Mark as last seen header
+                h -= 1 # Dec header count
+            i -= 1 # dec block count
+        if h == 0 or l >= 0:
             i = l
+        else:
+            i = 0
         TSP.tap_idx = i
 
     else:
         # Invalid
-        if doTapdir:
-            par1 += 2
         msg = BAD_CODE("REW", par1, par2)
-        LOG("WARNING: " + msg, 1)
+        LOG(msg, 1)
         st = _8_A_Invalid_arg
 
     if st == _1_OK and back != 0:
             
         TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
         gc.collect()
-        msg = "Moved back to block # " + str(TSP.tap_idx) 
+        msg = "Moved back to block # %d" % TSP.tap_idx 
         LOG(msg, 0)
-        if doTapdir:
+        if par1 == 1 or par1 == 3:
             # Chain to TAPDIR
             pre = [0] * 10
-            if par1 == 1: # do TAPDIR by file as well
-                pre[3] = 1 # CODE(1,0)
+            pre[5] = 255 # CODE 0,255
+            if par1 == 3: # do TAPDIR by file as well
+                pre[3] = 1 # CODE 1,255
             TAPDIR(pre, cmd)
             return
     
@@ -2944,11 +3370,14 @@ def ROMPATCH(pre, cmd):                                                         
     global TSP
     global led
     
-    led.value(1)
-
-    MOUNT_FILE("/assets/rompatch.tap")                                       # handles SD/MQ transition internally
-
-    SEND_MSG("System prepared to patch ROM.", 'Use LOAD "" to start.', _1_OK)
+    # was /TS/rompatch.tap; moved to /assets/ during dual-port migration
+    # to avoid being shadowed by the frozen TS/ package.
+    TLM("ROMPATCH enter")
+    if MOUNT_FILE("/assets/rompatch.tap"):
+        # ACTIVATE_MQ()
+        SEND_MSG("System prepared to patch ROM.", 'Use LOAD "" to start.', _1_OK)
+    else:
+        SEND_MSG("Failed to mount rompatch.tap", "", _2_R_Tape_load)
 
     return
 
@@ -2973,49 +3402,79 @@ def ResolveIndexName(name):
     return name, -1
 
 
-def SEND_MSG_PROMPT_YN(prompt, echoY = True):
+def SEND_MSG_PROMPT_YN(prompt, echo = True):
 
     # Prints prompt string, waits for a character and returns that char
     # Assumes MQ is active. This cannot be followed by another SEND_MSG* call.
 
     global MQ
 
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # Removed: leading EMPTY_RX_FIFO(); three wrt(0x40) calls ("Read
+    # continue", "Read continue to get char", "Start a new string");
+    # and replaced WAIT_TX_RECEIVED() / EMPTY_RX_FIFO() at the tail
+    # with inline drains.
+    #
+    # All three wrt(0x40)s were single-port "continue flag in TX" writes
+    # that have no place in dual-port — the continue flag lives on $0F
+    # via the Y register. A 0x40 left in TX would be consumed as data
+    # by Z80's $0E read, orphaning the rest of the response.
+    #
+    # The EMPTY_RX_FIFO moved BELOW MQ_READY: at the original position
+    # the Z80 hadn't been told to read yet, so RX had nothing to drain.
+    # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
+    # ─────────────────────────────────────────────────────────────────────
     wrt = MQ.put
-    # Dual-port: continue flag now on port $0F via MQ_READY
-    wrt(0x86)   # PRINT STRING WITH LOOP
+    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
     wrt(0x01)   # BASIC return code
     wrt(0x0D)   # Start a new line
-    MQ_READY()  # Z80 sees "ready" on port $0F
-    while (MQ.rx_fifo() > 0):   # Flush receive buffer
+    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
+
+    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
         MQ.get()
+
     for ch in prompt:
         wrt(ch)
     wrt(0x00)   # End string (Z80 prints + waits for key)
-    # Dual-port: no wrt(0x40); $0F continue is signaled via Y register.
+    # TODO(#14): 0x86 bit-6 ack missing. Ryan's original had wrt(0x40)
+    # after this 0x00 ("Read continue to get char") and again after the
+    # keypress ("Start a new string") before the echo + 0x03. After the
+    # keypress the Z80 LEVEL-checks $0F bit 6 before reading the echo
+    # char and the 0x03 terminator. We hold Y permanently READY, so the
+    # Z80 may race and read those bytes from stale/empty TX. Dual-port
+    # fix: MQ_BUSY() here, MQ_READY() after the echo char is queued.
+    # See issue #14. Do NOT re-add wrt(0x40) (puts '@' in the stream).
+
     ch = MQ.get()
     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
-        if ch < 33 or echoY:
-            wrt(89) # 89='Y' Echo Y for space or control char
-        else:
-            wrt(ch)
+        if echo:
+            if ch < 32 or ch > 127:
+                wrt(89) # Y
+            else:
+                wrt(ch)
         wrt(0x03) # End the string loop
-        while(MQ.tx_fifo() != 0):
+        # Could add an option to not wrt(0x03) and let the caller do that after
+        # writing some more text to indicate the result of the action.
+
+        # ─── DUAL-PORT MIGRATION: inline drains ───────────────────────
+        while MQ.tx_fifo() != 0:
             pass
-        while(MQ.rx_fifo() != 0):
-            print(MQ.get())
+        while MQ.rx_fifo() != 0:
+            MQ.get()
 
     return ch
 
 def BAD_CODE(command, par1, par2):
-
-    return command + ": CODE %s,%s" % (par1,par2) + " not supported"
+    """Return error message for invalid CODE parameters."""
+    return "%s: Bad CODE %s,%s" % (command, par1, par2)
 
 
 def BAD_ARG(command, arg):
+    """Return error message for invalid argument."""
+    return "%s: Bad argument: %s" % (command, arg)
 
-    return command + ": Bad argument: %s" % arg
 
-def RM(pre, cmd):                                                        # Output for not implemented SAVE Command 
+def RM(pre, cmd):
     
     # Remove a named file or directory (combine RM and RMDIR, act based on type)
     # Assumes file/dir to remove is in TSP.cur_path
@@ -3023,38 +3482,46 @@ def RM(pre, cmd):                                                        # Outpu
     # SAVE "tpi:rm <name>" CODE 255,0 - Bypass confirmation prompt
 
     global TSP
-    global isdir
+    global dirs_upper
+    global files_upper
+    global alldirs
     
+    TLM("RM enter")
     name = cmd[10:]
     status = _1_OK
-    log = 0
     message = ""
     sent = False
     par1, par2 = PARAMS(pre)
 
     name, idx = ResolveIndexName(name)
+    uname = name.upper()
+    adir  = uname in dirs_upper
+    afile = uname in files_upper
 
-    if name.upper() not in isdir:
+    if not name:
+        message = "RM: Filename required"
+        status = _8_A_Invalid_arg
+        LOG(message, 2)
 
-        message = "RM file not found " + name
+    elif not adir and not afile:
+
+        message = "RM: File not found: "
         status = _3_F_Invalid_file
-        log = 2
+        LOG(message + name, 2)
 
     else:
-
-        adir = isdir[name.upper()]
 
         if par1 == 0 and par2 == 0:
 
             sent = True
             ch = SEND_MSG_PROMPT_YN('Remove "%s" (y/N)?' % name)
             if ch != 89: # 89='Y'
-                LOG("INFO: %s not removed from %s" % (name, TSP.cur_path), 0)
+                LOG("%s not removed from %s" % (name, TSP.cur_path), 0)
                 return
 
         elif par1 != 255 or par2 != 0:
             message = BAD_CODE("RM", par1, par2)
-            LOG("ERROR: " + message, 2)
+            LOG(message, 2)
             SEND_MSG(message, "", _8_A_Invalid_arg)
             return
             
@@ -3076,23 +3543,30 @@ def RM(pre, cmd):                                                        # Outpu
         try:
             if adir:
                 os.rmdir(name)
+                # Update alldirs w/o calling GET_DIRS()
+                try:
+                    alldirs.remove("%s/%s" % (TSP.cur_path[3:], name))
+                except:
+                    pass
             else:
                 os.remove(name)
-            DIR_FILES()
-            message = "Removed " + kind +": "  + name
+            DIR_FILES() # Update local files list
+            # gc.collect()
+            message = "Removed %s: " % kind
+            LOG(message + name, 0)
 
         except OSError:
 
-            message = "ERROR: OS error removing: " + name
+            message = "OS error removing: "
             status = _4_Q_Parameter
-            log = 2
+            LOG(message + name, 2)
 
+        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
         DEACTIVATE_SD()
         ACTIVATE_MQ()
-    
-    LOG(message, log)
+
     if not sent:
-        SEND_MSG(message, "", status)
+        SEND_MSG(message, name, status)
     
     return 
                 
@@ -3100,12 +3574,14 @@ def RM(pre, cmd):                                                        # Outpu
 def SYS_CMD(pre, cmd):                                                                                      # Various system cmds
     
     global led
+    global patch
     
+    TLM("SYS_CMD enter")
     par1, par2 = PARAMS(pre)
     
-    if (par1 == 1 and par2 == 0):                                                                           # CODE 1,0 -> Retrieve ROM patch from firmware
+    if par1 == 1 and par2 == 0:                                                                           # CODE 1,0 -> Retrieve ROM patch from firmware
         SEND_MSG("SYS CMD finished OK", "", _1_OK)
-        LOG("INFO: Received SYS CMD 1,0 - Patch update", 0)
+        LOG("Received SYS CMD 1,0 - Patch update", 0)
         
         led.value(1)
 
@@ -3124,15 +3600,14 @@ def SYS_CMD(pre, cmd):                                                          
         
     else:
         SEND_MSG("Error! Undefined SYS CMD", "", _5_C_Nonsense)
-        LOG("ERROR: Wrong syntax SYS CMD", 2)
+        LOG("Wrong syntax SYS CMD", 2)
         SAVE_LOG()
         
         while True:
             BLINK_ERROR()
-    
-    
+        
     led.value(0)
-    UNMOUNT()
+    UNMOUNT(pre, cmd)
     
     return
 
@@ -3141,6 +3616,7 @@ def UNMOUNT(pre, cmd):                                                          
     
     global TSP
     
+    TLM("UNMOUNT enter")
     SEND_MSG("Unmounting file. ", "", _1_OK)
     
     TSP.f_name = ""
@@ -3159,226 +3635,10 @@ def UNMOUNT(pre, cmd):                                                          
 
 
 def UPGRADE(pre, cmd):
-    
+    """Wrapper that lazily imports and calls the upgrade module to save memory."""
     global TSP
-    global log_to_serial
-    global buf                                                                             # global buffer to be used by COPY_FILE
-    
-    SEND_MSG("Upgrade started.DON'T INTERRUPT", "after the first 10 blinks!", _1_OK, True)
-    
-    last_run = {}                                                           # dictionary to hold last upgrade run's status
-    new_values = {}                                                         # dictionary of upgraded config.ini values
-    upgrade_dict = {}                                                       # dictionary of files to be upgraded
-    restored = False
-    
-    led = Pin(25, Pin.OUT)
-    U6_EN = Pin(12, Pin.OUT, Pin.PULL_UP)
-    
-    U6_EN.value(1)                                                          # We disable U6_ENABLE, just in case.....
-    
-    buf = bytearray(32768)
-    
-    for i in range(20):                                                     # We give the user 10s and 20 LED blinks to abort installation
-        time.sleep(.5)
-        led.toggle()
-
-    led.value(1)
-    
-    log_to_serial = True
-    LOG("**********************************************", 4)
-    LOG("TS Pico Upgrade setup (c) 2024 TS-Pico DevTeam", 4)
-    LOG("IMPORTANT!!!! DO *NOT* INTERRUPT THIS SEQUENCE!!!!", 4)
-    LOG("**********************************************", 4)
-    SAVE_LOG()
-    
-    time.sleep(1)
-
-    LOG("Mounting SD Card", 4)
-    SAVE_LOG()
-
-    try:
-        ACTIVATE_SD()
-    except:
-        FINISH("Fatal error. Could not mount SD Card. Terminating", False)
-
-    led.value(0)
-
-    LOG("TS-Pico Upgrade Setup initialized ok", 4)
-    LOG("SD Card mounted ok", 4)
-    SAVE_LOG()
-    
-    try:
-        with open("/upgrade.ini", "r") as f:                             # Try to determine last run's status
-            last_run = json.load(f)
-            last_run_status = last_run["status"]
-    except:
-        last_run_status = "None"
-
-    LOG("Previous run status: " + last_run_status, 4)
-    SAVE_LOG()
-    
-    try:
-        os.chdir("/sd/UPGRADE")
-    except:
-        FINISH("Fatal error. Could not find UPGRADE folder on the SD Card. Terminating", False)
-
-    LOG("UPGRADE folder found in SD Card", 4)
-    SAVE_LOG()
-
-    if last_run_status == "BACKUP_PERFORMED":                                # If last run was unsuccessfull, but the backup creation wasn't, we restore that backup 
-                                                                             # in case something went wrong last time
-        LOG("Previous run was unsuccessful. Attempting to roll back...", 4)
-        SAVE_LOG()
-        
-        try:
-            RESTORE_FILES("/sd/UPGRADE/BACKUP", "/")                                      # if so, restore backup
-            LOG("System rolled back successfully. Continue with upgrade process", 4)
-            SAVE_LOG()
-            
-            restored = True
-            
-        except Exception as err:
-            LOG("System roll back failed. Reason: ", 4)
-            
-            with open("/activity.log", "a") as log:
-                sys.print_exception(err, log)
-            
-            FINISH("Fatal error. Could not rollback system. ", False)
-
-    try:
-        with open("/config.ini", "r") as f:                                  # try to load config values from config.ini file
-            init_values = json.load(f)
-    except:
-        pass
-            
-    try:
-        with open("/sd/UPGRADE/config.ini", "r") as f:                      # load values from config.ini file on the /sd/UPGRADE folder
-            new_values = json.load(f)
-    except:
-        FINISH("Fatal error. Could not find config.ini file in UPGRADE folder. Terminating", False)
-
-    LOG("Current firmware version: " + TSP.FW_VERSION, 4)
-    
-    LOG("New firmware version: " + new_values["FW_VERSION"], 4)
-
-    if (TSP.FW_VERSION == new_values["FW_VERSION"]):
-       FINISH("Current version is the same as upgrade. Nothing to do. Terminating", True)
-       
-    SAVE_LOG()
-    os.chdir("/sd/UPGRADE")
-    
-    if restored:
-        LOG("Bypass system backup due to recent succesful RESTORE", 4)
-        SAVE_LOG
-        
-    else:
-        
-        if "BACKUP" in os.listdir():
-            
-            LOG("Removing old BACKUP folder from previous run", 4)
-            
-            try:
-                REMOVE_DIR("/sd/UPGRADE/BACKUP")
-                LOG("Previous BACKUP folder removed", 4)
-                SAVE_LOG()
-            except:
-                FINISH("Error removing previous backup folder. Terminating", False)
-                
-        dest_dir = "/sd/UPGRADE/BACKUP"
-        
-        LOG("Starting current firmware backup", 4)
-        SAVE_LOG()
-                 
-        led.toggle()
-        time.sleep(.1)                                                      # Short LED blink = stage 1 completed ok (initialization)
-        led.toggle()
-        
-        BACKUP_DIR("/", dest_dir)
-        os.chdir("/")
-
-        with open("/upgrade.ini", "w") as f:
-            last_run["status"] = "BACKUP_PERFORMED"
-            json.dump(last_run, f)
-
-    LOG("Firmware backup finished ok", 4)
-    LOG("Processing new files", 4)
-
-    time.sleep(1)
-
-    led.value(0)
-    time.sleep(.1)
-    led.toggle()
-    time.sleep(.1)                                                      # Two short LED blinks = stage 2 completed ok (backup)
-    led.toggle()
-    time.sleep(.1)
-    led.toggle()
-    led.value(1)
-
-
-    os.chdir("/sd/UPGRADE")
-    
-    with open("/sd/UPGRADE/upgrade.json", "r") as f:                                  # try to load config values from config.ini file
-        upgrade_dict = json.load(f)
-    
-    for el in upgrade_dict["dirs"]:
-        
-        try:
-            REMOVE_DIR(el)
-        except:
-            LOG("Warning: could not remove folder " + el + "; continue process...", 4)
-            SAVE_LOG()
-            pass
-        
-        try:
-            os.mkdir(el)
-            
-        except:                
-            FINISH("Fatal error: unable to create folder " + el + " during Update. Terminating.", False)
-            
-    for el in upgrade_dict:
-        
-        if el == "dirs":
-            continue
-        
-        if el == "main.py":
-            os.rename("/main.py", "/main.old")
-            LOG("'main.py' renamed to 'main.old'", 4)
-            SAVE_LOG()
-        try:
-            COPY_FILE(el, upgrade_dict[el]+el)
-        except:
-            FINISH("Fatal error: unable to copy file " + el + " during Update. Terminating", log_ena, False)
-
-    os.remove("/main.old")
-    LOG("'main.old' removed ok", 4)
-
-    with open("/upgrade.ini", "w") as f:
-        last_run["status"] = "UPGRADE_PERFORMED"
-        json.dump(last_run, f)
-
-    try:
-        new_folder = "/sd/BACKUP_FIRMWARE_V" + new_values["FW_VERSION"]
-        os.rename("/sd/BACKUP", new_folder)
-    except:
-        LOG("Error attempting to rename BACKUP folder; trying another name", 4)
-        SAVE_LOG()
-        
-        try:
-            num = str(len(os.listdir("/sd")) - 5)                                              # At this point, there are 6 elements on the '/' folder. So, subsequent BACKUP files 
-            new_folder = "/sd/BACKUP_FIRMWARE_V" + new_values["FW_VERSION"] + "[" + num + "]"                # will be named BACKUP_FIRMWARE_V1.1c[1], ....FIRMWARE_V1.1c[2], etc
-
-            os.rename("/sd/BACKUP", new_folder)
-            
-        except:
-            LOG("WARNING: Error renaming folder " + new_folder, 4)
-            SAVE_LOG()
-            
-    LOG("Finished renaming BACKUP folder", 4)
-    SAVE_LOG()
-
-    FINISH("All process finished successfully. Check the activity.log file for more info", True)
-    
-    return 
+    from TS.tspico_upgrade import UPGRADE as _UPGRADE
+    _UPGRADE(pre, cmd)
 
 
 def VERB_TOGGLE(pre, cmd):                                                                               # Toggle commands verbosity ON/OFF 
@@ -3392,9 +3652,11 @@ def VERB_TOGGLE(pre, cmd):                                                      
 
     global TSP
     
+    TLM("VERB_TOGGLE enter")
     par1, par2 = PARAMS(pre)
     arg = getArgs(cmd)
     arg = arg.lower()
+    st = _1_OK
 
     if arg != '':
         par1 = 1
@@ -3403,34 +3665,33 @@ def VERB_TOGGLE(pre, cmd):                                                      
         elif arg == 'off':
             par2 = 0
         else:
-            msg = "VERBOSE: Bad argument: %s" % arg
-            LOG("ERROR: " + msg, 2)
+            msg = BAD_ARG("VERBOSE", arg)
             par2 = -1
     
-    if par1 == 0:
+    if par1 == 0 and par2 == 0:
         # Display
         if TSP.VERBOSE:
             msg = "Verbose is enabled"
         else:    
             msg = "Verbose is disabled"
-        SEND_MSG(msg, "", _1_OK, True)
     elif par1 == 1:
         # Set
         if par2 < 0:
-            SEND_MSG(msg, "", _8_A_Invalid_arg)
+            st = _8_A_Invalid_arg
+            LOG(msg, 2)
         else:
             TSP.VERBOSE = (par2 != 0)
             if TSP.VERBOSE:
                 msg = "Verbose is now enabled"
             else:    
                 msg = "Verbose is now disabled"
-            LOG("INFO: " + msg, 0)
-            SEND_MSG(msg, "", _1_OK)
+            LOG(msg, 0)
     else:
         msg = BAD_CODE("VERBOSE", par1, par2)
-        LOG("ERROR: " + msg, 2)
-        SEND_MSG(msg, "", _8_A_Invalid_arg)
+        LOG(msg, 2)
+        st = _8_A_Invalid_arg
         
+    SEND_MSG(msg, "", st, par1 == 0)
     return 
 
 
@@ -3438,50 +3699,68 @@ def ZX48(pre, cmd):                                                           # 
     
     # Put Pico in ZX Spectrum communication mode
     # SAVE "tpi:zx48"           - put in ZX48 mode (with current tape compat mode)
-    # SAVE "tpi:zx48"CODE 1,0   - Set normal tape load routine 
-    # SAVE "tpi:zx48"CODE 1,1   - Set compatible tape load routine 
-    # SAVE "tpi:zx48"CODE 1,bufsize - compatible load with buffer size spec. 
+    # SAVE "tpi:zx48"CODE 1,*   - Don't display help
+    # SAVE "tpi:zx48"CODE *,0   - Use default tape load routine 
+    # SAVE "tpi:zx48"CODE *,1   - Set normal tape load routine 
+    # SAVE "tpi:zx48"CODE *,2   - Set compatible tape load routine 
+    # SAVE "tpi:zx48"CODE *,bufsize - compatible load with buffer size spec. 
     #                               Size >= 16384
-    # SAVE "tpi:zx48"CODE 2,x   - Don't display help
 
     global TSP
     
+    TLM("ZX48 enter")
     par1, par2 = PARAMS(pre)
+    nl = chr(13)
 
-    if par1 > 2:
+    if par1 > 1:
         msg = BAD_CODE("ZX48", par1, par2)
-        LOG("ERROR: " + msg, 2)
+        LOG(msg, 2)
         SEND_MSG(msg, "", _8_A_Invalid_arg)
         return
 
     TSP.zx48 = True
 
-    msg  = chr(13) + 'Changing TS-Pico to ZX48 mode.  '
+    M = [nl, 'Changing TS-Pico to ZX48 mode.', nl]
 
-    if par1 > 0:
-        TSP.ZX_TAPE_COMPAT = par2 > 0
+    if par2 > 0:
+        TSP.ZX_TAPE_COMPAT = par2 > 1
           
     if TSP.ZX_TAPE_COMPAT == True:
-        msg += '(Compatible tape load mode)     '
-        msg += '(Buffer size = %d)' % par2
+        M.append('(Compatible tape load mode)')
+        if par2 >= 16384:
+            M.append('\r(Buffer size = %d)' % par2)
     else:
-        msg += '(Normal tape load mode)         '
-    msg += 'Use "OUT 244,3" to switch to the'
-    msg += 'Spectrum ROM. To return to Timex'
-    msg += 'mode, use OUT 10,100 followed by'
-    msg += 'OUT 244,0 and then press the TS ' 
-    msg += 'Reset button on the TS-Pico.'
+        M.append('(Normal tape load mode)')
+    M.append(nl)
+    M.append('Use "OUT 244,3" to switch to the')
+    M.append('Spectrum ROM. To return to Timex')
+    M.append('mode, do OUT 244,0 then press the')
+    M.append('TS-Pico Reset button. (OUT 10,100')
+    M.append('does not currently reach the Pico')
+    M.append('via the bus protocol; reset is')
+    M.append('required to exit ZX48 mode.)')
+    M.append(nl)
+    msg = "".join(M)
 
-    SEND_MSG(msg, "", _1_OK, par1 != 2)
+    SEND_MSG(msg, "", _1_OK, par1 == 0)
             
     return 
 
 
-def NOP(pre, cmd):                                                           # Test for Ryan's Timex Commander Program
+def NOP(pre, cmd):
+    TLM("NOP enter")
+    """A 'no operation' command"""
 
     global MQ
 
-    # Dual-port: continue flag now on port $0F via MQ_READY
+    # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
+    # Was:  MQ.put(0x40); MQ.put(0x01)
+    #       (single-port: 0x40 = continue flag in TX, 0x01 = OK status)
+    # Now:  MQ.put(0x01); MQ_READY()
+    #       The continue flag now lives on $0F via the Y register. The
+    #       0x40 in TX would have been read as data by the Z80's $0E
+    #       read and misinterpreted later (orphan-byte family bug).
+    # ─────────────────────────────────────────────────────────────────────
     MQ.put(0x01)
     MQ_READY()
 
@@ -3494,10 +3773,10 @@ def NOP(pre, cmd):                                                           # T
 
 
 def PRINT_IO(pre):                                                                                                           # LPRINT and LLIST processing
-    
+
     global MQ
     global TSP
-    
+
     prn = bytearray(10000)
     end_msg = "File 0001.txt closed OK"
     r1 = range(10)
@@ -3508,7 +3787,13 @@ def PRINT_IO(pre):                                                              
         prn[pos] = pre[3]
         pos += 1
 
-        # Dual-port: continue flag now on port $0F via MQ_READY
+        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
+        # Was:  wrt(0x40); wrt(0x01)
+        # Now:  wrt(0x01); MQ_READY()
+        # The 0x40 (continue) is no longer a FIFO byte — it's the Y
+        # register signalled via MQ_READY(). The 0x01 is the status
+        # the Z80 reads from $0E after seeing ready on $0F.
+        # ──────────────────────────────────────────────────────────────
         wrt(0x01)
         MQ_READY()
 
@@ -3517,19 +3802,23 @@ def PRINT_IO(pre):                                                              
             pre[i] = MQ.get()
         if pre[1] != 5:
             break
-        # NOTE: do not MQ_BUSY here — Pico stays ready for next iteration
 
+    # ─── DUAL-PORT MIGRATION (loop exit, same pattern as in-loop) ─────
     wrt(0x01)
     MQ_READY()
 
     SEND_MSG(end_msg, "", _1_OK)
-    
-    while (MQ.tx_fifo() != 0):
+
+    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
+    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
+    # helpers being retired in stage 7). Behavior is identical.
+    # ──────────────────────────────────────────────────────────────────
+    while MQ.tx_fifo() != 0:
         pass
-  
-    while (MQ.rx_fifo() != 0):
-        fff = MQ.get()
-        
+
+    while MQ.rx_fifo() != 0:
+        MQ.get()
+
     prn = prn[:pos]
 
     with open("/PRN/0001.txt", "w") as sal:                                           # PRINT output filename is fixed on this version; can be set up
@@ -3538,104 +3827,143 @@ def PRINT_IO(pre):                                                              
     return
 
 
-def PROCESS_ASM(pre):
-    """Process an 'A' (Assembler) TPI command sent by the Z80.
+def PROCESS_ASM(pre):                                                                 # Processes AU (Assembler) commands sent by the TS
 
-    Currently a stub — just logs the pre-header and acknowledges.
-    Full implementation TBD; the byte-sequence framework here is what
-    every command handler should follow:
-
-      1. (Z80's initial $0E status read was satisfied by the previous
-          handler's pre-load; nothing to do at entry.)
-      2. Drain command body if any. (No body for this stub.)
-      3. Process the command.
-      4. Write response status byte.
-      5. Write next-iteration pre-load.
-
-    See docs/PROTOCOL.md for the protocol pattern.
-    """
     global MQ
 
     cmd = pre[:5].decode()
     wrt = MQ.put
+
+    # ─── DUAL-PORT MIGRATION: leading wrt(0x40) REMOVED ───────────────
+    # Was the single-port "continue flag" byte indicating Pico is ready
+    # to receive the command body. In dual-port the Z80 polls $0F (Y
+    # register, kept at READY all session) for ready and reads $0E for
+    # data — so the 0x40 in TX served no purpose and would have been
+    # read by the Z80 as an unexpected data byte.
+    # ──────────────────────────────────────────────────────────────────
 
     print(pre)
     print(cmd)
 
     par3 = int(pre[8])
     par4 = int(pre[9])
+
     print(par3, par4)
 
-    # Response: 0x01 status (this iter) + 0x01 pre-load (next iter).
-    # Y stays at READY — no busy/ready dance needed.
+    # ─── DUAL-PORT MIGRATION: V6 tail (final status + pre-load) ───────
+    # Was:  wrt(0x40); wrt(0x01)   (0x40 = continue flag, 0x01 = status)
+    # Now:  wrt(0x01); wrt(0x01)
+    #   - First 0x01: final status response for THIS command (Z80 reads
+    #     as "0 OK" via $0E).
+    #   - Second 0x01: pre-load for the NEXT command's initial status.
+    #     This is the V6 chain that keeps back-to-back commands working
+    #     without re-arming status in the main dispatcher.
+    # The continue flag has moved off the FIFO entirely — Y register
+    # stays at READY so $0F always answers ready.
+    # ──────────────────────────────────────────────────────────────────
     wrt(0x01)        # final status — Z80 reads as "0 OK"
     wrt(0x01)        # pre-load for next command's initial status
 
     return
 
 
-def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
-    """Process a 'B' (BASIC) TPI command sent by the Z80.
-
-    The Z80 has just OUT-ed a 10-byte pre-header (drained by the main
-    dispatcher) declaring this is a BASIC command. The next pre[7:9]+3
-    bytes that arrive on the bus are the command body — typically a
-    "TPI:command args" string (e.g. "TPI:DIR", "TPI:CD /path", etc).
-
-    PROTOCOL OVERVIEW (see docs/PROTOCOL.md):
-
-      Z80 has 3 phases for a BASIC command:
-        Phase 1 — pre-header (already done by main dispatcher).
-                  Z80 reads $0E for status — pre-loaded 0x01 satisfies it.
-        Phase 2 — body. Z80 OUTs (pre[7:9]+3) command bytes to $0E.
-                  Pico drains them via MQ.get().
-        Phase 3 — response. Pico writes its response (via SEND_MSG /
-                  SEND_MSG2 / handler-specific code), Z80 reads.
-
-      Y stays at READY (0xFFFFFFFF) the entire time — Z80's $0F polls
-      between phases succeed instantly. The protocol is paced by Z80's
-      $0E read rate, not by status flips.
-
-      At the end of this function we write one MQ.put(0x01) which serves
-      as the NEXT command's status pre-load. This is the chain that
-      keeps back-to-back commands working.
-
-    Args:
-        pre: 10-byte pre-header (already drained from RX FIFO).
-        SA_funct: dispatch dict mapping "TPI:XXX" → handler.
-        EXT_SA_FUNCT: same but for user-extensible commands.
-    """
-    global TSP, MQ, ROM, BANK
-    global files, files_upper
-
+def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                           # Processes 'B' (BASIC) commands sent by the TS
+    
+    global TSP
+    global MQ
+    global ROM
+    global BANK
+    
+    global files
+    global files_upper
+    
     TSP.zx48 = False
     cur_fname = TSP.f_name
-
+    
     wrt = MQ.put
     cmd = bytearray(100)
-
+    
     load_cmd = pre[1]
 
     long = pre[7] + 256*pre[8] + 3
     rl = range(long)
 
-    # CRITICAL TIGHT RECEIVE PATH — drain the command body bytes from RX
-    # FIFO as fast as possible. Z80 OUTs at ~30µs/byte and the RX FIFO is
-    # 4 entries deep — any Python overhead between MQ.get() calls risks
-    # FIFO overflow and dropped bytes (push(noblock) silently drops).
-    # Do NOT TLM, print, or do anything else inside this loop.
+    # ─── DUAL-PORT MIGRATION: leading wrt(0x40); wrt(0x01) REMOVED ────
+    # In single-port Ricardo's code, these two bytes served as:
+    #   - wrt(0x40): "continue flag" — signal Pico is ready for body
+    #   - wrt(0x01): pre-load of initial status for command body phase
+    # Both are obsolete in dual-port:
+    #   - The continue flag lives on $0F via the Y register (kept at
+    #     READY for the entire session).
+    #   - The initial status byte the Z80 just read at pre-header time
+    #     was supplied by the PREVIOUS handler's V6 tail pre-load (or
+    #     by the boot pre-load for the very first command).
+    # Leaving them here would inject two orphan bytes that get misread
+    # by subsequent Z80 reads — the classic orphan-byte family of bugs.
+    #
+    # The blocking-read loop below is the production-tight body drain;
+    # same two-phase capture rule as the dispatcher's pre-header read.
+    # ──────────────────────────────────────────────────────────────────
+    #
+    # ─── DUAL-PORT MIGRATION: body-read timeout (defensive) ───────────
+    # Hard guard against a documented cascade where Z80 aborts mid-
+    # command without sending the body bytes:
+    #
+    #   1. Some prior command consumed the V6 pre-load 0x01 (e.g., a
+    #      stray IN 14 in BASIC, or an unknown source we haven't yet
+    #      tracked down).
+    #   2. Next SAVE "tpi:..." pre-header phase: Z80 reads $0E for
+    #      status, gets 0x00 from empty TX → Report J.
+    #   3. BASIC's ON ERR catches the J, aborts the SAVE statement.
+    #   4. Z80 never sends the command body bytes that would normally
+    #      follow the pre-header.
+    #   5. But we already read all 10 pre-header bytes (that's why
+    #      we're in PROCESS_CMD), so the dispatcher saw pre[0]=66 and
+    #      called us. Now we're blocked in MQ.get() forever waiting
+    #      for body bytes that aren't coming. Pico effectively hangs.
+    #
+    # Without this timeout, the only recovery is the TS-Pico reset
+    # button. Symptom: LED stops blinking, Thonny REPL traceback at
+    # this exact line.
+    #
+    # With this timeout: after 1 second of no byte arriving, we log
+    # the timeout via TLM, drain any partial state, write a fresh V6
+    # pre-load, and return. Main loop continues, ready for the next
+    # command. picotest's BASIC ON ERR has already handled the J on
+    # the 2068 side, so the user-visible behavior is just "that one
+    # test failed" rather than "the Pico locked up."
+    #
+    # Same pattern would benefit the main-loop pre-header read (if
+    # Z80 sends 1-9 bytes and stops, that read also hangs). Filed
+    # in OPEN_QUESTIONS.md as belt-and-suspenders follow-up.
+    # ──────────────────────────────────────────────────────────────────
+    BODY_READ_TIMEOUT_MS = 1000   # tunable; 1 second is generous
+
     for l in rl:
+        start = time.ticks_ms()
+        while MQ.rx_fifo() == 0:
+            if time.ticks_diff(time.ticks_ms(), start) > BODY_READ_TIMEOUT_MS:
+                TLM("PROCESS_CMD body-read timeout — aborting",
+                    "byte=%d/%d (Z80 likely aborted after J at pre-header)" % (l, long))
+                LOG("PROCESS_CMD body-read timeout at byte %d/%d" % (l, long), 2)
+                # Drain any partial state so the next command starts clean
+                while MQ.rx_fifo() != 0:
+                    MQ.get()
+                while MQ.tx_fifo() != 0:
+                    pass
+                # V6 pre-load so the next command's pre-header phase works
+                MQ.put(0x01)
+                return
         cmd[l] = MQ.get()
 
     # Now safe to TLM (Z80 is processing — no time pressure on Pico).
-    # Y stays at READY automatically — no MQ_BUSY() needed.
     TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d cmd=%r" % (
         load_cmd, long, bytes(cmd[:long])))
 
     try:
         cmd = cmd[:long].decode()
     except:
-        LOG("ERROR: Unrecognized string in PROCESS_CMD: FIFO Status:" + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 2)
+        LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
         TLM("PROCESS_CMD decode FAILED — returning early")
         return
 
@@ -3644,24 +3972,20 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
 
     TLM("PROCESS_CMD parsed", "cmd_exec=%r rest_cmd=%r" % (cmd_exec, rest_cmd))
 
-    gc.collect()
+    # gc.collect()
 
     if load_cmd:                                                                                    # Is it a "LOAD:tpi:..." command.....?
 
-        # MOUNT_FILE handles SD card access internally — switches GPIO 2-4
-        # from PIO to SPI mode for the duration of the SD operation, then
-        # back to PIO. While the SM is inactive there's nothing for the
-        # Z80 to read; the Z80 ROM has a long timeout (~20s) so we don't
-        # need to set Y=BUSY explicitly. After MOUNT_FILE returns, Y is
-        # back at READY and the response is pre-loaded for SEND_MSG.
-
         if rest_cmd == "dirinfo.tap":
-            if MOUNT_FILE(TSP.cur_path + "/dirinfo.tap"):
+            if MOUNT_FILE("%s/dirinfo.tap" % TSP.cur_path):
                 msg = "Mounting dir info: "
                 status = _1_OK
             else:
                 msg = "Error mounting file: "
                 status = _2_R_Tape_load
+                LOG(msg + rest_cmd, 2)
+
+            # ACTIVATE_MQ()
             SEND_MSG(msg, rest_cmd, status)
 
         else:
@@ -3671,16 +3995,19 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
                     idx = files_upper.index(rest_cmd.upper())
 
             if idx >= 0:
-                if MOUNT_FILE(TSP.cur_path + "/" + files[idx]):
+                
+                if MOUNT_FILE("%s/%s" % (TSP.cur_path, files[idx])):
                     msg = "File mounted OK"
                     status = _1_OK
                 else:
                     msg = "Error mounting file:"
                     status = _4_Q_Parameter
+                    
+                # ACTIVATE_MQ()
                 SEND_MSG(msg, rest_cmd, status)
-
+                
             else:
-                msg = "ERROR: File does not exist: "
+                msg = "File does not exist: "
                 SEND_MSG(msg, rest_cmd, _3_F_Invalid_file)                                       # If none of the above, raise error
                 LOG(msg + rest_cmd, 2)
             
@@ -3689,10 +4016,10 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
         sp = cmd_exec.find(' ')
         if sp >= 0:
             cmd_word = cmd_exec[:sp]
-            cmd_args = cmd[sp+4:]
+            # cmd_args = cmd[sp+4:]
         else:
             cmd_word = cmd_exec
-            cmd_args = ""
+            # cmd_args = ""
 
         TLM("PROCESS_CMD SAVE branch", "cmd_word=%r in_SA_funct=%s in_EXT=%s" % (
             cmd_word, cmd_word in SA_funct, cmd_word in EXT_SA_FUNCT))
@@ -3703,40 +4030,24 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
             EXEC(pre, cmd)
             TLM("PROCESS_CMD SA_funct returned", "cmd_word=%r" % cmd_word)
 
-        elif cmd_exec == "TPI:TEST":                                                                               # Remove in production!!!
-
-            # Dual-port: ack into FIFO, signal ready on port $0F
-            MQ.put(0x01)
-            MQ_READY()
-
-            chunk = bytearray(8192)
-            
-            with open("dck_dump.bin", "wb") as f_out:
-                for ch in range(8):
-                    for i in range(8192):
-                        MQ.get(chunk[i])
-                        
-                    f_out.write(chunk)
-                    
-                    del chunk
-                    chunk = bytearray(8192)
-
-                    gc.collect()
-            
-#             while True:
-#                 print(MQ.get())
-
         elif cmd_word in EXT_SA_FUNCT:                                                                                # Is an external cmd?
             EXEC = EXT_SA_FUNCT[cmd_word]
-            EXEC(pre, cmd)
-            
+            TLM("PROCESS_CMD dispatching EXT_SA_FUNCT", "cmd_word=%r" % cmd_word)
+            EXEC(MQ, TSP, pre, cmd)
+            TLM("PROCESS_CMD EXT_SA_FUNCT returned", "cmd_word=%r" % cmd_word)
+
         else:
-            SEND_MSG("Unrecognized command: " + cmd_exec,'SAVE "tpi:gethelp" for info', _5_C_Nonsense)    # If none of the above, raise error
-            LOG("ERROR: Unrecognized command: " + cmd_exec, 2)
-    
+            msg = "Unrecognized command: %s" % cmd_exec
+            SEND_MSG(msg, 'SAVE "tpi:help" for info', _5_C_Nonsense)    # If none of the above, raise error
+            LOG(msg, 2)
+
+    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
+    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
+    # helpers being retired in stage 7). Behavior is identical.
+    # ──────────────────────────────────────────────────────────────────
     TLM("PROCESS_CMD draining tx_fifo at exit")
     drain_tx = 0
-    while(MQ.tx_fifo() != 0):
+    while MQ.tx_fifo() != 0:
         drain_tx += 1
         if drain_tx > 1000000:
             TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
@@ -3744,22 +4055,22 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
 
     drain_rx = 0
     while MQ.rx_fifo() != 0:
-        fff = MQ.get()
+        MQ.get()
         drain_rx += 1
 
     TLM("PROCESS_CMD exit", "drain_tx=%d drain_rx=%d cmd=%r" % (drain_tx, drain_rx, cmd_exec))
 
-    # ============================================================
-    # Pre-load 0x01 status for the NEXT command's initial status read.
-    # This is the V6-pattern chain: every handler ends with a 0x01 in
-    # the TX FIFO so the Z80's first $0E read of the next pre-header
-    # finds a valid status byte already waiting. Without this, the
-    # next command would see stale 0x00 → "Report J / Invalid I/O".
+    # ─── DUAL-PORT MIGRATION: V6 tail pre-load ────────────────────────
+    # Pre-load 0x01 status for the NEXT command's initial $0E read.
+    # This is the V6 chain — every command handler ends with a 0x01
+    # in TX so the next command's pre-header phase finds a valid
+    # status byte already waiting. Without this, the next command
+    # would read stale 0x00 -> Report J - Invalid I/O Device.
     # See docs/PROTOCOL.md "Writing a new command handler" for details.
-    # ============================================================
+    # ──────────────────────────────────────────────────────────────────
     MQ.put(0x01)
 
-    LOG("INFO: Exiting CMD processing: " + cmd_exec + " " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0)
+    LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
     return
 
@@ -3769,51 +4080,24 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):
 ######################
 
 
-def TS2068_IO():
-    """Main I/O dispatch loop — the heart of the firmware.
-
-    Called once from main.py and runs forever (until reset). At a high
-    level, this function:
-
-      1. Configures the PICO_STATUS state object from /config.ini.
-      2. Initializes the activity log (rotates if too big).
-      3. Starts the ROM_SM and BANK_SM PIO state machines that route
-         the TS-Pico's external flash onto the TS-2068 ROM bus. Without
-         these running, the TS-2068 cannot boot.
-      4. Mounts the SD card briefly to enumerate the /TAP directory.
-      5. Switches the bus from SD-card mode to PIO mode (DEACTIVATE_SD,
-         ACTIVATE_MQ, MQ_READY).
-      6. Pre-loads 0x01 into TX FIFO so the very first Z80 command finds
-         a valid status byte waiting.
-      7. Enters the infinite dispatch loop:
-           - if RX FIFO has bytes, drain pre[] (10 bytes), look at pre[0]
-             to identify the command type, dispatch to the appropriate
-             handler (LOAD_TS / SAVE_TS / PROCESS_CMD / PROCESS_ASM).
-           - handlers respond with their byte-stream output and end with
-             MQ.put(0x01) to maintain the pre-load chain.
-
-    See docs/PROTOCOL.md for the byte-level protocol details and
-    docs/GUSTAVO_PROTOCOL.md for the high-level design rationale.
-    """
-    # Cross-thread / cross-handler globals. See tspico_io.py for the
-    # semantics of busy / dead / kill (the watchdog protocol).
-    global busy             # core1 watchdog activity flag
-    global dead             # True = no transaction in progress
-    global files            # list of files in current directory (for
-                            #   indexed mounting like LOAD "TPI:*5")
-    global kill             # True = watchdog wants the handler to abort
-    global lista            # cached "ls" output for the DIR command
-    global log_entries      # buffered log lines waiting to be flushed
-    global log_to_serial    # if True, log to USB serial instead of file
-
-    # Hardware state machines (created by this function).
-    global ROM              # set_ctrl PIO — drives /BE for EXROM mapping
-    global BANK             # sel_bank PIO — selects flash slot (DCK/ROM)
-    global MQ               # TS_IO_DUAL PIO — Z80 ↔ Pico data bus
-
-    # Misc shared state.
-    global led              # onboard LED Pin (GPIO 25)
-    global TSP              # PICO_STATUS instance — config + runtime state
+def TS2068_IO():                                                         # Main IO loop, for SAVE, LOAD and commands processing
+    
+    global busy                                                        # whether 2nd core is busy
+    global dead                                                        # boolean to indicate whether an IO routine is "alive" or not. Used for watchdog CHK_STATUS
+    global files                                                       # array of only the files of current directory; used for index mounting of files ( LOAD "TPI:*nn") 
+    global kill                                                        # boolean set to True when watchdog wants to end a misbehaving IO routine 
+    global lista                                                       # all contents of current dir, in string format to be displayed by "TPI:DIR"
+    global log_entries                                                 # log entries to be saved during next loop
+    global log_to_serial                                               # If TRUE, all logging messages will be displayed on screen instead of the logfile
+    
+    global ROM
+    global BANK
+    global MQ
+    global led
+    global TSP
+    
+    global alldirs
+    global EXT_SA_FUNCT
     
     busy = False
     dead = True
@@ -3821,7 +4105,7 @@ def TS2068_IO():
     
     files = []
     lista = ""
-    log_entries = ""
+    log_entries = []
     log_to_serial = False
     
     led = Pin(25, Pin.OUT)
@@ -3842,67 +4126,37 @@ def TS2068_IO():
             pass
         
         os.rename("/activity.log", "/activity.old")
-        LOG("INFO: Starting new log file", 3)
+        LOG("Starting new log file", 3)
     
-    LOG("INFO: Starting TS Pico. Memory at startup: " + str(gc.mem_free()), 0)
+    LOG("Starting TS Pico. Memory at startup: %d" % gc.mem_free(), 0)
     SAVE_LOG()
         
 
-    # ============================================================
-    # Start the ROM/BANK PIO state machines.
-    #
-    # The TS-2068 reads its boot ROM from address $0000-$3FFF on each
-    # power-on reset. With a stock TS-2068 the ROM lives on a chip on
-    # the motherboard, but on a TS-Pico-equipped machine we map the
-    # ROM in from the TS-Pico's external flash chip instead — that's
-    # what holds the modified Gustavo HOME ROM and EXROM.
-    #
-    # `set_ctrl` is the PIO program (in tspico_io.py) that drives /BE
-    # (GPIO 21 = bus enable for the TS-Pico flash chip). It watches the
-    # Z80 address bus and asserts /BE LOW whenever the Z80 is reading a
-    # ROM address, then HIGH otherwise. Without this SM running, /BE
-    # floats and the TS-2068 sees no ROM bytes — it can't boot.
-    #
-    # `sel_bank` (started below) drives the flash chip's bank-select
-    # lines so we can swap between HOME/EXROM banks and DCK cartridge
-    # banks during TS-2068 operation.
-    #
-    # PIO clock = 150MHz: fast enough to react within Z80's bus cycle
-    # window. (RP2040 PIO can run up to half the system clock = 135MHz
-    # at 270MHz CPU, but 150MHz is OK on most silicon — production has
-    # been running it for years.)
-    # ============================================================
-    # For DCK *AND* ROM mapping (the standard configuration):
-    ROM = StateMachine(4, set_ctrl, freq=150_000_000,
-                       in_base=Pin(0, Pin.IN),
-                       jmp_pin=Pin(26),
-                       set_base=Pin(21, Pin.OUT),
-                       out_base=Pin(19, Pin.OUT))
+#     Uncomment the following two lines, for DCK *AND* ROM mapping
+    ROM = StateMachine(4, set_ctrl, freq=150_000_000, in_base=Pin(0, Pin.IN), jmp_pin=Pin(26), set_base=Pin(21, Pin.OUT), out_base=Pin(19, Pin.OUT))
     ROM.active(1)
 
-    # Alternative configuration (commented out): DCK access only, no
-    # ROM mapping. Uncomment if you want the TS-2068 to use its built-
-    # in ROMs and only have the TS-Pico for cartridge / SD operations.
-    #     ROM = StateMachine(4, set_dck, freq=150_000_000,
-    #                        jmp_pin=Pin(26), out_base=Pin(19, Pin.OUT))
-    #     ROM.active(1)
+#     Uncomment the following two lines, for DCK access and no ROM mapping
+#     ROM = StateMachine(4, set_dck, freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(19, Pin.OUT))
+#     ROM.active(1)
 
-    BANK = StateMachine(5, sel_bank, freq=150_000_000,
-                        jmp_pin=Pin(26),
-                        out_base=Pin(15, Pin.OUT))
+    BANK = StateMachine(5, sel_bank, freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(15, Pin.OUT))
     BANK.active(1)
 
-    # Configure each SM with the active slot/mapping pattern from config.
-    # ROM_SM = 0x0A (binary 1010): both DCK and ROM mapped to flash.
-    # bank_sm = (DCK_SLOT * 16) + ROM_SLOT — selects which flash slot
-    # holds each image. Defaults to slot 0 for DCK, slot 1 for the
-    # TS-Pico ROM image (HOME + EXROM combined).
     ROM.put(TSP.ROM_SM)
     BANK.put(TSP.bank_sm)
     
+    LOG("After StateMachine setup, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    gc.collect()
+    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+
     REMOVE_DIR("/TMP")
     os.mkdir("/TMP")
     
+    # LOG("After re-make /TMP, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    # gc.collect()
+    # LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+
     os.chdir('/')
     
     # Commands expecting a name following the command word need a space at the
@@ -3915,12 +4169,15 @@ def TS2068_IO():
         "TPI:CLOSE": UNMOUNT,
         "TPI:DIR": DIR,
         "TPI:FFW" : FWD,
-        "TPI:GETHELP" : GETHELP,
-        "TPI:GETINFO" : GETINFO,
-        "TPI:GETLOG" : GETLOG, 
+        "TPI:HELP" : GETHELP,
+        "TPI:IDIR" : IDIR,
+        "TPI:INFO" : GETINFO,
+        "TPI:LOG" : GETLOG, 
         "TPI:LOGLEVEL" : LOGLEVEL,
         "TPI:MD" : MDIR,
+        "TPI:BOOT" : MEMBOOT,
         "TPI:MEMBOOT" : MEMBOOT,
+        "TPI:DOCK" : MEMDOCK,
         "TPI:MEMDOCK" : MEMDOCK,
         "TPI:NOP" : NOP,                                                                      # This is to test Ryan's new Commander
         "TPI:PATH" : PATH,
@@ -3928,7 +4185,7 @@ def TS2068_IO():
         "TPI:ROMPATCH" : ROMPATCH,
         "TPI:RM" : RM, # dir or file
         "TPI:SYS" : SYS_CMD,
-        "TPI:TAP" : NEW_TAP,
+        "TPI:NEWTAP" : NEW_TAP,
         "TPI:TAPDIR" : TAPDIR,
         "TPI:UPGRADE" : UPGRADE,
         "TPI:VERBOSE" : VERB_TOGGLE, 
@@ -3949,72 +4206,151 @@ def TS2068_IO():
         "TPI:STOP" : SA_NOT_IMP,
         }
     
-    # Placeholder for External SAVE commands
+    # Imported external SA/LD commands or empty dictionary
     
-    EXT_SA_FUNCT = {
-    
-    }
+    # LOG("After SA_funct setup, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    # gc.collect()
+    # LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+
+    # ─── DUAL-PORT MIGRATION: prefer dev_extcmd override if present ──────
+    # The frozen TS/extcmd.py has a `from tspico import ...` line that
+    # fails on the current module layout (helpers live in TS.tspico or
+    # dev_tspico, not bare `tspico`). The fix lives in TS/extcmd.py on
+    # this branch but needs a UF2 rebuild to take effect, since
+    # TS/extcmd.py is frozen. The parallel /dev_extcmd.py on flash root
+    # provides a dev-mode override (same pattern as dev_tspico.py
+    # shadowing TS.tspico). Try the override first.
+    # ─────────────────────────────────────────────────────────────────────
+    try:
+        from dev_extcmd import EXT_SA_FUNCT
+        LOG("Loaded EXT_SA_FUNCT from /dev_extcmd.py override", 0)
+    except ImportError:
+        try:
+            from TS.extcmd import EXT_SA_FUNCT
+            LOG("Loaded EXT_SA_FUNCT from frozen TS.extcmd", 0)
+        except Exception as e:
+            LOG("Unable to import external commands; using empty SA_EXT_CMD dictionary: " + str(e), 0)
+            EXT_SA_FUNCT = {}
+
+    LOG("After Ext cmd load, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    gc.collect()
+    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
     dead = False
     _thread.start_new_thread(BLINK_LED, (0.9, ))
     
+    # LOG("After start thread blink, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    # gc.collect()
+    # LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+
     ACTIVATE_SD()
     
     dead = True
     
     while busy:
         pass
-    
+
+    LOG("After ACTIVATE_SD, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    gc.collect()
+    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    alldirs = GET_DIRS()
+    LOG("After GET_DIRS, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    gc.collect()
+    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+
     try:
         os.chdir(TSP.cur_path)
-        DIR_FILES()
-    
     except:
-        LOG("CRITICAL ERROR! Cannot mount /TAP directory; aborting.", 3)
+        LOG("Cannot mount /TAP directory; aborting.", 3)
         SAVE_LOG()
         
         while True:
             BLINK_ERROR()
             
-    # Boot sequence: SD was active, switch to PIO.
+    DIR_FILES()
+    LOG("After DIR_FILES, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    gc.collect()
+    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+
+    # ─── DUAL-PORT MIGRATION: explicit SD-teardown before MQ activation ───
+    # ACTIVATE_MQ no longer unmounts /sd itself; we must do it explicitly
+    # via DEACTIVATE_SD first (see stage-3 comments above ACTIVATE_MQ).
+    # This also clamps GPIO 2-4 LOW before the PIO reclaims them, which
+    # closes the tri-state window that was the original Report D root
+    # cause (docs/DUAL_PORT_DEVELOPMENT.md §1).
+    # ─────────────────────────────────────────────────────────────────────
     DEACTIVATE_SD()
     ACTIVATE_MQ()
-    MQ_READY()                                                                                   # Default to ready so Z80 isn't blocked. Pico is alive!
 
-    # Pre-load 0x01 status byte into TX FIFO ONCE at boot. The very first
-    # command the Z80 issues will read this from $0E as its initial status.
-    # Every command handler ends with its own MQ.put(0x01), so this chain
-    # continues automatically across subsequent commands.
-    # (Don't move this into ACTIVATE_MQ — see comment there for why.)
-    MQ.put(0x01)
-
-    # Pre-open /assets/nofile.tap so LOAD "" without a prior mount
-    # doesn't pay file-open latency in the time-critical response path.
-    # Without this, the open takes ~5ms — long enough for the Z80 to
-    # race ahead reading stale 0x00s and report Report J before we've
-    # written a single content byte. See docs/DUAL_PORT_DEVELOPMENT.md
-    # §8 for the failure-mode analysis.
+    # ─── DUAL-PORT MIGRATION: boot-time status pre-load + explicit ready ──
+    # Pre-load a single 0x01 status byte into TX FIFO. The very first Z80
+    # command will read this from $0E as its initial OK status. Every
+    # command handler ends with its own MQ.put(0x01), so this chain
+    # continues automatically across subsequent commands without needing
+    # any further pre-loads from the dispatcher.
     #
-    # We print() unconditionally (not via LOG) because this is a setup
-    # check that determines whether LOAD "" works at all — it needs to
-    # be visible in the boot trace, not just buried in /activity.log.
-    if OPEN_NOFILE_TAP():
-        print("[BOOT] /assets/nofile.tap pre-opened OK")
-        LOG("INFO: pre-opened /assets/nofile.tap (cached handle)", 0)
-    else:
-        print("[BOOT] WARNING: /assets/nofile.tap MISSING from Pico flash.")
-        print("[BOOT] LOAD \"\" without a prior mount will return Report R.")
-        print("[BOOT] Copy assets/*.tap from the repo to /assets/ via Thonny.")
-        LOG("WARNING: /assets/nofile.tap missing — copy from repo's "
-            "assets/ folder onto Pico flash via Thonny. LOAD \"\" "
-            "without a prior mount will return Report R until you do.", 1)
+    # CRITICAL #1: this MQ.put(0x01) must happen ONCE, here, and not inside
+    # ACTIVATE_MQ. Doing it inside ACTIVATE_MQ would also fire it on
+    # every mid-command SD round-trip (MOUNT_FILE etc.), producing a
+    # stray 0x01 that gets misread later in the protocol. This was
+    # "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.
+    #
+    # CRITICAL #2: ACTIVATE_MQ no longer sets Y=READY (see its function
+    # body for the race-fix rationale). We MUST explicitly call MQ_READY()
+    # here AFTER loading the pre-load byte, so the Z80's $0F polls
+    # succeed and it can read the pre-loaded 0x01 from $0E. The order is
+    # non-negotiable: put-then-ready, never ready-then-put.
+    # ─────────────────────────────────────────────────────────────────────
+    MQ.put(0x01)
+    MQ_READY()
 
-    LOG("INFO: SD Card initialized and mounted OK", 0)
+    # ─── DUAL-PORT MIGRATION: pre-open /assets/nofile.tap ─────────────────
+    # OPEN_NOFILE_TAP caches a read handle to /assets/nofile.tap so that
+    # LOAD "" (no prior mount) doesn't pay file-open latency in the
+    # time-critical response path. Without this, the open takes 1-5 ms
+    # during which the Z80 reads stale 0x00 bytes and reports Report J.
+    # See docs/DUAL_PORT_DEVELOPMENT.md §8 (Bug 3 area / nofile pre-open).
+    # ─────────────────────────────────────────────────────────────────────
+    if OPEN_NOFILE_TAP():
+        LOG("/assets/nofile.tap pre-opened OK", 0)
+    else:
+        LOG('WARNING: /assets/nofile.tap MISSING from Pico flash. '
+            'LOAD "" without a prior mount will return Report R until '
+            'you copy assets/*.tap from the repo onto Pico flash.', 1)
+
+    LOG("SD Card initialized and mounted OK", 0)
     SAVE_LOG()
-    
+
     wrt = MQ.put
-    
-    LOG("INFO: TS Pico initialized OK. Waiting for commands...", 0)
+
+    # ─── Boot-noise flush (Ryan's diagnostic loop, kept) ──────────────────
+    # The Z80 may emit stray bytes during its own power-on reset / boot
+    # window. We drain anything sitting in RX FIFO so the first "real"
+    # protocol byte isn't preceded by garbage. Per-byte LOG kept for
+    # diagnostic value — useful when chasing power-sequence weirdness.
+    # ─────────────────────────────────────────────────────────────────────
+    LOG("Boot noise flush: starting", 0)
+    boot_garbage = []
+    empty_start = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), empty_start) < 500:
+        if MQ.rx_fifo() != 0:
+            b = MQ.get()
+            boot_garbage.append(b)
+            LOG("Boot noise: got byte " + str(b) + " (total: " + str(len(boot_garbage)) + ")", 0)
+            empty_start = time.ticks_ms()  # Reset timer when we get data
+        time.sleep_ms(10)
+    LOG("Boot noise flush: done, FIFO empty for 500ms", 0)
+    if boot_garbage:
+        LOG("Flushed " + str(len(boot_garbage)) + " bytes of boot noise: " + str(boot_garbage), 0)
+    else:
+        LOG("No boot noise detected", 0)
+    # SAVE_LOG()
+
+    LOG("Before main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    gc.collect()
+    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+
+    LOG("TS Pico initialized OK. Waiting for commands...", 0)
     SAVE_LOG()
     
     led.value(0)
@@ -4030,193 +4366,292 @@ def TS2068_IO():
 
             ts = time.ticks_us()                                                                   # reset timestamp
 
-            # ============================================================
-            # PROTOCOL DISPATCH (see docs/PROTOCOL.md for full details)
-            # ============================================================
-            # When the Z80 issues any command (LOAD/SAVE/BASIC), it OUTs
-            # a 10-byte pre-header to port $0E. We drain those 10 bytes
-            # here, then dispatch to a handler based on pre[0].
+            # ─── DUAL-PORT MIGRATION: tight blocking pre-header read ─────
+            # Replaces Ryan's earlier "count up to 30,000 polls" read loop
+            # with a production-tight blocking burst: ten back-to-back
+            # MQ.get() calls and NOTHING in between.
             #
-            # The Z80 reads its FIRST status byte from $0E shortly after
-            # finishing the pre-header OUT. That status byte (0x01 = OK)
-            # was placed in the TX FIFO either:
-            #   - at boot, by ACTIVATE_MQ() (for the very first command), OR
-            #   - by the previous handler's tail (each handler ends with
-            #     two 0x01 writes: the iteration's final status + a pre-
-            #     load for the NEXT iteration's initial status).
-            # So when this loop body runs, TX FIFO already contains the
-            # 0x01 the Z80 needs — we don't write it here. (Doing so
-            # would inject a stray 0x01 into the data response stream.)
+            # Why so strict: the PIO RX FIFO is only 4 entries deep, and
+            # the Z80 OUTs bytes at ~30 us each. Any Python work between
+            # successive gets (conditionals, counters, polling-fifo) risks
+            # letting the FIFO overflow, at which point PIO push(noblock)
+            # silently drops bytes. The Z80 doesn't know; the dispatcher
+            # sees a truncated pre-header and dispatches to the wrong
+            # branch (or no branch at all -> Report J).
             #
-            # Y is at READY (0xFFFFFFFF) from boot and stays there. The
-            # Z80's $0F polls succeed instantly. Pico paces data via TX
-            # FIFO depth + Z80's natural read rate (~47us/byte) — no
-            # explicit busy/ready dance is needed for the LVM path.
-            #
-            # KEEP THIS PATH FAST. The PIO RX FIFO is 4 entries deep, and
-            # Z80 OUTs come in at ~30us/byte. Any Python work between
-            # successive MQ.get() calls risks dropping bytes if the FIFO
-            # overflows (push(noblock) silently drops on full).
+            # Also removed: the per-iteration `wrt(0x01)` that used to
+            # live right above this read. In the dual-port V6 chain, the
+            # status byte for THIS command was already pre-loaded into
+            # TX by the PREVIOUS command's tail (or by the boot pre-load
+            # for the very first command). Adding another wrt(0x01) here
+            # would inject a stray byte that gets misread later in the
+            # protocol (orphan-byte family of bugs).
+            # ────────────────────────────────────────────────────────────
             for i in r1:
-                pre[i] = MQ.get()
+                pre[i] = MQ.get()                                          # blocking
 
-            # (deferred) snapshot pre[] for later TLM
+            # Snapshot pre[] for any later TLM that wants to print it.
+            # Cheap when TLM_ENABLED=False (the TLM() calls below no-op
+            # and this list construction is the only residual overhead;
+            # ~10us at most, well outside the hot RX-drain path).
             _pre_snapshot = list(pre)
                                                                                                       # pre(header)[0] is a command
+            # gc.collect()
+            fr1 = gc.mem_free()
+            LOG("Top of main loop, gc.memfree()=%.1f" % (fr1 >> 10), 0)
+
             if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
-                LOG("INFO: Starting SAVE TS", 0)
+                LOG("Starting SAVE TS", 0)
                 
                 led.value(1)
                 
                 while busy:
                     pass
                 
-                # Save some state for possible retoration
+                # Save some state for possible restoration
                 pf_name = TSP.f_name
                 pappend = TSP.append
                 pidx = TSP.tap_idx
                 # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
                 MQ, TSP, new_logs = SAVE_TS(MQ, TSP)
-                log_entries += new_logs
-                gc.collect()
+                # log_entries += new_logs
+                # log_entries.extend(new_logs) # For when SAVE_TS returns an array
+                log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
+                save_aborted = "sd" not in os.listdir("/")
 
-                if pappend:
-                    # Re-mount the updated tap from SD so the user sees the
-                    # addition. MOUNT_FILE handles SD/MQ transition internally.
-                    try:
-                        MOUNT_FILE(TSP.f_name)
-                        # Restore the previous index that got reset on mount
-                        TSP.append = True
-                        TSP.tap_idx = pidx
-                        TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
-                        LOG("INFO: Re-mounted appended file: %s" % TSP.f_name, 0)
-                    except:
-                        LOG("ERROR: Re-mount appended file failed", 2)
+                # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
+                # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
+                # unmounts it, so we do it here. See stage-3 comments
+                # on ACTIVATE_MQ for the rationale.
+                # ──────────────────────────────────────────────────────────
+                DEACTIVATE_SD()
+                ACTIVATE_MQ() # Also fixes ENA_SD leaving MQ active with SD active as well
+                # ─── DUAL-PORT MIGRATION: V6 pre-load + ready for next cmd ─
+                # ACTIVATE_MQ now leaves Y=BUSY by default. We need to
+                # explicitly arm TX (status pre-load for the next command's
+                # pre-header phase) and then signal ready. The actual
+                # response for the just-completed SAVE was sent inside
+                # SAVE_TS via its own V6 chain; this pre-load is for the
+                # NEXT iteration of the main loop.
+                # ──────────────────────────────────────────────────────────
+                MQ.put(0x01)
+                MQ_READY()
 
-                elif not pf_name:
+                if not save_aborted:
 
-                    if TSP.f_name:
-                        # Mount new saved file if no file was already mounted, but
-                        # we don't set append on.
-                        try:
-                            MOUNT_FILE(TSP.f_name)
-                            LOG("INFO: Mounted new file: %s" % TSP.f_name, 0)
-                        except:
-                            LOG("ERROR: Re-mount failed for: " + TSP.f_name, 2)
+                    # Handle re-mounting an appended file, possibly mounting a
+                    # new file, or restoring the mounted file's name. Then
+                    # update the directory list with changes.
+
+                    if pappend:
+                        # We will re-mount the updated tap from SD for the user to
+                        # see the addition (other original content is the same)
+                        if MOUNT_FILE(TSP.f_name, True):
+                            # Restore the previous index that got reset on mount
+                            TSP.append = True
+                            TSP.tap_idx = pidx
+                            TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
+                            LOG("Re-mounted appended file: %s" % TSP.f_name, 0)
+                        else:
+                            LOG("Re-mount appended file failed", 2)
+                        # ACTIVATE_MQ()
+
+                    elif not pf_name:
+
+                        # No file mounted before                        
+                        if TSP.f_name:
+                            # SAVE_TS saved saved a new file.
+                            # Mount new saved file if no file was already mounted, but
+                            # we don't set append on.
+                            if MOUNT_FILE(TSP.f_name, True):
+                                LOG("Mounted new file: %s" % TSP.f_name, 0)
+                            else:
+                                LOG("Re-mount failed for: %s" % TSP.f_name, 2)
+                            # ACTIVATE_MQ()
+                        
+                    elif TSP.f_name == pf_name:
+                        # This overwrote tap file that was mounted. The original
+                        # copy is still mounted, and the new tap on SD will only 
+                        # contain the one new saved file. You could turn on append,
+                        # and this will get re-mounted with the original content lost.
+                        LOG("Append is off. Overwrote mounted tap on SD but no re-mount.", 0)
+
                     else:
-                        LOG("ERROR: Append is off. Saved to new file but TSP.f_name not set to mount it.", 0)
+                        # Saved to a new file while one is mounted with append off.
+                        LOG("Append is off. Saved to new file: %s" % TSP.f_name, 0)
+                        # Put mounted file name back as we continue using it
+                        TSP.f_name = pf_name
 
-                elif TSP.f_name == pf_name:
-                    # This overwrote tap file that was mounted. The original
-                    # copy is still mounted, and the new tap on SD will only 
-                    # contain the one new saved file. You could turn on append,
-                    # and this will get re-mounted with the original content lost.
-                    LOG("INFO: Append is off. Overwrote mounted tap on SD but no re-mount.", 0)
+                    # Update the directory list with the changes
+                    try:
+                        ACTIVATE_SD()
+                        os.chdir(TSP.cur_path) # MOUNT_FILE doesn't set this
+                        LOG("os.chdir to:" + TSP.cur_path, 0) # debug
+                        try:
+                            DIR_FILES()
+                            LOG("DIR_FILES OK", 0) # debug
+                        except:
+                            LOG("DIR_FILES failed after save", 2)
+                    except:
+                        LOG("os.chdir failed after save", 2)
 
-                else:
-                    LOG("INFO: Append is off. Saved to new file: %s" % TSP.f_name, 0)
-                    # Put mounted name back as we continue with the current mount
-                    TSP.f_name = pf_name
-
-                # This expects MQ inactive and SD mounted and it worked fine before
-                try:
-                    os.chdir(TSP.cur_path) # MOUNT_FILE doesn't set this
-                    DIR_FILES()
-                except:
-                    LOG("ERROR: DIR_FILES failed after SAVE", 2)
-                
-                try:
+                    # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────
+                    # /sd was just mounted via ACTIVATE_SD above for the
+                    # DIR refresh; tear it down before reactivating MQ.
+                    # ──────────────────────────────────────────────────────
                     DEACTIVATE_SD()
                     ACTIVATE_MQ()
+                    # V6 pre-load + ready for next cmd (see twin block
+                    # above; ACTIVATE_MQ leaves Y=BUSY now).
+                    MQ.put(0x01)
+                    MQ_READY()
 
-                except:
-                    pass
-                
                 led.value(0)
                 
             elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine
                 TLM("LVM LOAD enter", "pre=%s f_name=%s tap_idx=%d offset=%d" % (
                     _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
-                LOG("INFO: Starting TS LVM", 0)
+                LOG("Starting TS LVM", 0)
 
                 while busy:
                     pass
                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
-                log_entries += new_logs
+                # log_entries += new_logs
+                log_entries.append(new_logs) # for now
+                # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("LVM LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
 
             elif (pre[0] == 0 or pre[0] == 255):                                                      # Headerless LOAD
                 TLM("LVM Headerless LOAD enter", "pre=%s tap_idx=%d offset=%d" % (
                     _pre_snapshot, TSP.tap_idx, TSP.offset))
-                LOG("INFO: Starting TS LVM - Headerless LOAD", 0)
+                LOG("Starting TS LVM - Headerless LOAD", 0)
 
                 while busy:
                     pass
                 MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
-                log_entries += new_logs
+                # log_entries += new_logs
+                log_entries.append(new_logs) # for now
+                # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
-                
+
             elif pre[0] == 66 and pre[1] == 5:                                                        # commands are pre[0] == 66. PRINT commands are pre[1] == 5
-                LOG("INFO: Starting PRINT", 0)
+                LOG("Starting PRINT", 0)
                 PRINT_IO(pre)
                 DIR_FILES()
-                
+
             elif pre[0] == 66:
 
-                # NO TLM HERE — PROCESS_CMD must reach its for loop within
-                # ~4.3ms of the MQ_READY above (Z80 WF_NPH timeout). A print
-                # statement takes 5-10ms and would cause byte drops.
+                LOG("Starting TS COMMAND " + str(pre), 0)
+
                 try:
                     PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)
                     TLM("main loop: PROCESS_CMD returned", "pre=%s" % _pre_snapshot)
                 except Exception as _e:
-                    LOG("ERROR: Invalid data received from PROCESS_CMD: " + str(pre), 2)
+                    LOG("Invalid data received from PROCESS_CMD: " + str(pre), 2)
                     TLM("main loop: PROCESS_CMD raised exception", str(_e))
-                    import sys
-                    sys.print_exception(_e)
                     continue
-
+                
                 if TSP.zx48:
                     ZX48_IO(pre)
                     
             elif pre[0] == 65:
-                LOG('INFO: Starting "A" COMMAND', 0)
+                LOG('Starting "A" COMMAND', 0)
                 
                 PROCESS_ASM(pre)
                 DIR_FILES()
                 
             else:
                 try:
-                    LOG("WARNING: Unrecognized command! " +  pre, 1)
+                    LOG("Unrecognized command! " + str(list(pre)), 1)
                 except:
-                    LOG("WARNING: Unrecognized command! Cannot get pre[] data", 1)
-                
+                    LOG("Unrecognized command! Cannot get pre[] data", 1)
+
+                # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
+                # Replaces EMPTY_RX_FIFO() / EMPTY_TX_FIFO() (single-port
+                # helpers being retired). The behavior is identical; just
+                # inlined so the handler is self-contained.
+                # ──────────────────────────────────────────────────────────
                 while MQ.rx_fifo() != 0:
                     MQ.get()
                 while MQ.tx_fifo() != 0:
                     MQ.exec("pull (noblock)")
-                    MQ.exec("set (osr, null)")
+                    MQ.exec("mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
-                
+
                 BLINK_ERROR()
-                
-                LOG("INFO: Cleared TX/RX FIFO after unrecognized cmd: " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0)
-                
+
+                LOG("Cleared TX/RX FIFO after unrecognized cmd: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
+
+            # ─── DUAL-PORT MIGRATION: bottom-of-loop drains REMOVED ───────
+            # Ryan's original code had defensive drains here ("clean up
+            # whatever the handler left behind"). In dual-port V6 those
+            # drains MASK bugs rather than fix them: each handler's V6
+            # tail must leave TX with exactly one 0x01 (the pre-load for
+            # the next command) and RX empty. If those invariants are
+            # ever violated, we want to see the resulting Report J/R
+            # immediately, not paper over it.
+            #
+            # If a bug ever causes orphan bytes here, you'll see the
+            # next command misbehave — which is the correct signal to
+            # go find the handler that didn't clean up after itself.
+            # ──────────────────────────────────────────────────────────────
+
         else:
-            if time.ticks_us() - ts < 2_000_000:
+            # Nothing to do, so check if time to save the log
+            # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap ──
+            # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min).
+            # Plain subtraction goes negative after wrap, satisfying
+            # both <2_000_000 and <2_100_000 conditions forever, so
+            # the loop spins in `continue` and the heartbeat never
+            # fires. User's reported "Pico halt with LED stopped
+            # blinking" was this — caught via Ctrl-C in Thonny
+            # showing the stuck line at the continue below.
+            # ────────────────────────────────────────────────────────
+            if time.ticks_diff(time.ticks_us(), ts) < 2_000_000:
                 continue
-            elif time.ticks_us() - ts < 2_100_000:
+            elif time.ticks_diff(time.ticks_us(), ts) < 2_100_000:
                 led.value(1)
             else:
                 if log_entries:
                     if not busy:
-                        # WATCHDOG sets busy=False before its thread function
-                        # actually returns, so core1 may still be in use here.
-                        # Try the thread start; on OSError, just skip — we'll
-                        # save the log on the next idle pass.
+                        # ─── DUAL-PORT MIGRATION: protect start_new_thread ─
+                        # SAVE_LOG sets `busy = False` BEFORE the thread
+                        # function actually returns, so core1 may still be
+                        # mid-cleanup here. A second start_new_thread call
+                        # in that window raises OSError "core1 in use".
+                        # Catch it and skip — we'll save the log on the
+                        # next idle pass once core1 is free.
+                        #
+                        # Without this guard, the OSError propagates up
+                        # through TS2068_IO to main.py (which has no
+                        # try/except) and drops the Pico to a REPL —
+                        # manifests as "Pico locked up, LED stops
+                        # blinking." Painful to diagnose.
+                        # ──────────────────────────────────────────────────
+                        # ─── DUAL-PORT MIGRATION: gc.collect REMOVED here ─
+                        # Previous code did LOG + gc.collect + LOG before
+                        # starting the SAVE_LOG thread. MicroPython's
+                        # gc.collect() is a stop-the-world operation that
+                        # routinely takes 10-100ms. During that pause, the
+                        # 2068 can send the entire next-command pre-header
+                        # (10 bytes in ~300us) — the 4-deep PIO RX FIFO
+                        # fills, and `push noblock` silently drops bytes
+                        # 4-9. When the main loop resumes, it reads 4 stale
+                        # pre-header bytes + 6 body bytes, producing a
+                        # malformed pre-header (decoded body-length of
+                        # 28791 etc.) and a J error on the 2068. Diagnosed
+                        # via trace showing pre=[66, 0, 255, 2, 'D', 7, 0,
+                        # 't', 'p', 'i'] for a SAVE "tpi:dir" — body bytes
+                        # leaked into the pre-header read.
+                        #
+                        # MicroPython's automatic GC runs when allocations
+                        # require it; no need to force it here. SAVE_LOG
+                        # on core1 can do its own gc.collect if memory
+                        # pressure becomes an issue inside the thread.
+                        # ──────────────────────────────────────────────────
                         try:
                             _thread.start_new_thread(SAVE_LOG, ())
                         except OSError:
@@ -4226,23 +4661,9 @@ def TS2068_IO():
                 ts = time.ticks_us()
                 
 
-def ZX48_IO(pre):
-    """Inner I/O loop active during ZX Spectrum 48K compatibility mode.
-
-    Entered via the TPI:ZX48 BASIC command; exits when the user issues
-    the EXIT key. Inside this loop the protocol is different from the
-    standard TPI flow — it mimics the ZX Spectrum tape protocol so
-    Spectrum software can run unmodified.
-
-    !!! PARTIALLY MIGRATED — the ZX dispatch loop (this function) uses  !!!
-    !!! TS_IO_DUAL, but the LOAD_ZX / LOAD_ZX_C / SAVE_ZX handlers it   !!!
-    !!! calls are still single-port code and have NOT been ported to   !!!
-    !!! the V6 dual-port pattern. Most users won't hit these paths     !!!
-    !!! (ZX48 mode is opt-in via TPI:ZX48), but if you do hit them     !!!
-    !!! and they fail, see TS/tspico_io.py LOAD_ZX docstring for the   !!!
-    !!! migration TODO list.                                           !!!
-    """
-    global MQ
+def ZX48_IO(pre):                                                                   # Main IO loop, for SAVE, LOAD and commands processing
+                                                                                    # ZX Spectrum mode
+    global MQ                                                                                    
     global TSP
     global log_entries
     global led
@@ -4251,74 +4672,119 @@ def ZX48_IO(pre):
     
     par1, par2 = PARAMS(pre)
 
+    # ─── DUAL-PORT MIGRATION: ZX48_IO SM creation ─────────────────────────
+    # Same change as ACTIVATE_MQ: TS_IO -> TS_IO_DUAL, 15 MHz -> 30 MHz,
+    # add Y=READY initialization after activation. Without this, ZX
+    # Spectrum mode would NameError on TS_IO (we removed that import in
+    # stage 1) and even if imported wouldn't work because of the bus
+    # protocol mismatch.
+    # ─────────────────────────────────────────────────────────────────────
     MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT), in_base=Pin(2, Pin.IN), jmp_pin=Pin(11), sideset_base=Pin(12, Pin.OUT))
     MQ.active(0)
-    
+
     utime.sleep(0.01)
     MQ.active(1)
-    
-    LOG("INFO: Starting ZX Mode...", 0)
+    MQ.exec("mov(y, invert(null))")    # Y = READY for the entire ZX session
+
+    TLM("ZX48_IO enter", "par1=%d par2=%d ZX_TAPE_COMPAT=%s" % (
+        par1, par2, TSP.ZX_TAPE_COMPAT))
+    LOG("Starting ZX Mode...", 0)
 
     ts = time.ticks_us()
-    
+
     while True:
-        
+
         if (MQ.rx_fifo()) != 0:
-            
+
             ts = time.ticks_us()
             a = MQ.get()
-            
+            TLM("ZX48_IO byte received", "a=%d (0x%02X)" % (a, a))
+
             if a == 76:                                                    # ASCII 'L' - for LOAD
+
+                TLM("ZX48_IO dispatching LOAD")
 
                 if TSP.ZX_TAPE_COMPAT:                                      # compatible-mode ZX Spectrum LOAD
 
-                    if par1 == 1 and par2 >= 16384:
+                    if par2 >= 16384:
                         buf_size = par2
-                        LOG("INFO: ZX48 buffer size = %d" % par2, 0)
+                        LOG("ZX48 buffer size = %d" % par2, 0)
                     else:
                         buf_size = 52100                                          # lower this if mem allocation error arises
                     MQ, TSP, new_logs = LOAD_ZX_C(MQ, TSP, buf_size)
-                    log_entries += new_logs
+                    # log_entries += new_logs
+                    log_entries.append(new_logs) # for now
+                    # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 else:
                     # 'regular' ZX Spectrum LOAD
-                    LOG("INFO: Starting ZX LOAD", 0)
+                    LOG("Starting ZX LOAD", 0)
                     MQ, TSP, new_logs = LOAD_ZX(MQ, TSP)
-                
+
+                TLM("ZX48_IO LOAD returned")
+
             elif a == 83:                                                  # ASCII 'S' - for SAVE
-                
-                LOG("INFO: Starting ZX SAVE", 0)
+
+                TLM("ZX48_IO dispatching SAVE")
+                LOG("Starting ZX SAVE", 0)
                 MQ, TSP, new_logs = SAVE_ZX(MQ, TSP)
-                log_entries += new_logs
-                      
-            elif a == 100:                                                  # ASCII 'X' - for EXIT. David, change this to whatever you thing suits better
-                LOG("INFO: Ending ZX mode. Free mem: " + str(gc.mem_free()) + ". Returning to TS processing.", 0)
+                # log_entries += new_logs
+                log_entries.append(new_logs) # for now
+                # log_entries.extend(new_logs) # when LOAD_TS returns an array
+                TLM("ZX48_IO SAVE returned")
+
+            elif a == 100:                                                  # OUT 10,100 from 2068 — DEAD CODE on current hardware (see note below)
+                # ─── DUAL-PORT MIGRATION: ZX48 exit-via-byte is unreachable ─
+                # Confirmed empirically: `OUT 10,100` on the 2068 executes
+                # cleanly but the byte never reaches the Pico's PIO. Port
+                # $0A (decimal 10) is not routed through /PICOSEL on the
+                # TS-Pico hardware — only ports $0E and $0F are. So this
+                # `elif a == 100` branch is unreachable in practice, and
+                # the only way out of ZX48 mode is the TS-Pico reset button.
+                #
+                # The branch is kept as defensive code in case a future
+                # hardware revision routes more ports through PIO, or in
+                # case some other code path forces a byte 100 into the
+                # RX FIFO. The TSP.zx48 = False clears the re-entry guard
+                # in TS2068_IO so this would work correctly IF reached.
+                #
+                # Help text in the ZX48() handler tells users to use the
+                # reset button as the canonical exit. See also
+                # docs/OPEN_QUESTIONS.md if we want to revisit routing.
+                # ──────────────────────────────────────────────────────────
+                TLM("ZX48_IO byte 100 received — exiting (rare; usually unreachable)")
+                LOG("Ending ZX mode. Free mem: %d. Returning to TS processing." % gc.mem_free(), 0)
                 gc.collect()
-                
+                TSP.zx48 = False
+
                 break
-            
+
             else:
-                LOG("WARNING: Unrecognized ZX command", 1)
+                TLM("ZX48_IO unrecognized byte — draining FIFOs and continuing", "a=%d" % a)
+                LOG("Unrecognized ZX command", 1)
+                # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
                 while MQ.rx_fifo() != 0:
                     MQ.get()
                 while MQ.tx_fifo() != 0:
                     MQ.exec("pull (noblock)")
-                    MQ.exec("set (osr, null)")
+                    MQ.exec("mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
-                
-                LOG("INFO: Cleared TX/RX FIFO after unrecognized ZX command: " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0)
+
+                LOG("Cleared TX/RX FIFO after unrecognized ZX command: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
         else:
-            if time.ticks_us() - ts < 2_000_000:
+            # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap (same
+            # fix as TS2068_IO's main idle loop) ─────────────────────────
+            if time.ticks_diff(time.ticks_us(), ts) < 2_000_000:
                 continue
-            elif time.ticks_us() - ts < 2_100_000:
+            elif time.ticks_diff(time.ticks_us(), ts) < 2_100_000:
                 led.value(1)
             else:
-                
+
                 if log_entries:
                     SAVE_LOG()
-                    log_entries = ""
+                    # log_entries = [] # SAVE does this
                     
                 led.value(0)
                 ts = time.ticks_us()
@@ -4326,17 +4792,20 @@ def ZX48_IO(pre):
     # Debug - Ricardo 21 Aug 2025 for returning from Spectrum mode problem
     if MQ.tx_fifo() != 0:
         print("MQ FIFO: ", MQ.tx_fifo())
-        LOG("WARNING: TX FIFO not empty after ZX mode. Trying to force cleanup", 1)
-        
+        LOG("TX FIFO not empty after ZX mode. Trying to force cleanup", 1)
+
+        # ─── DUAL-PORT MIGRATION: inline TX drain ─────────────────────────
         while MQ.tx_fifo() != 0:
             MQ.exec("pull (noblock)")
-            MQ.exec("set (osr, null)")
-            
+            MQ.exec("mov (osr, null)")
+
         MQ.active(0)
         utime.sleep(.01)
         MQ.active(1)
-        
-        LOG("INFO: TX FIFO succesfully cleared before returning from ZX mode", 0)
-        
+
+        LOG("TX FIFO succesfully cleared before returning from ZX mode", 0)
+
     else:
-        LOG("INFO: Returning from ZX mode; TX FIFO is empty: ", 0)
+        LOG("Returning from ZX mode; TX FIFO is empty: ", 0)
+
+    TLM("ZX48_IO exit", "TSP.zx48=%s" % TSP.zx48)

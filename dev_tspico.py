@@ -432,7 +432,11 @@ TLM_ENABLED = False
 # LOAD_CONFIG entry and via __init__-time print so it appears even
 # before TLM is enabled.
 BUILD_VERSION = "2026-05-27-J (inline-wrt SEND_MSG2 + suppress_scroll<500)"
-print("[dev_tspico] BUILD_VERSION =", BUILD_VERSION)
+# Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
+# when loaded via the dev override __name__ == "dev_tspico". This file is
+# kept byte-identical between the two locations so the stamp prints the
+# correct label regardless of which copy actually loaded.
+print("[%s] BUILD_VERSION =" % __name__, BUILD_VERSION)
 
 _tlm_last = 0   # last TLM timestamp, microseconds
 
@@ -1661,6 +1665,18 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 if not new_rom:
                     wrt(13)
                 wrt(0x00)       # end of this page
+                # TODO(#14): 0x86 bit-6 ack missing here. Ryan's
+                # single-port code had wrt(0x40) after this 0x00 and
+                # again after the keypress (below). In the 0x86
+                # PRINT_STRING_LOOP protocol the Z80 does a LEVEL check
+                # on $0F bit 6 after the keypress before reading the
+                # next page. We hold Y permanently READY, so the Z80
+                # never waits → races into stale/empty TX. The dual-
+                # port fix is MQ_BUSY() here (bit 6 → 0) and MQ_READY()
+                # once the next page's bytes are queued (after the
+                # erase-prompt loop below). See issue #14 for the full
+                # protocol writeup. DO NOT just re-add wrt(0x40) — that
+                # puts a literal '@' into the data stream in dual-port.
 
                 ch = MQ.get()   # wait for keypress
                 if ch == 78:    # 'N' → done
@@ -1672,6 +1688,11 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 else:
                     ll = 21
 
+                # TODO(#14): MQ_READY() belongs here (after erase-prompt
+                # bytes are queued) to re-assert bit 6 and release the
+                # Z80's level-check wait. Paired with the MQ_BUSY() noted
+                # above. Ryan's original had wrt(0x40) "Start new string"
+                # at this point.
                 if new_rom:
                     for _eb in range(s):
                         wrt(0x08)
@@ -1946,6 +1967,13 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
         # No wrt(0x40) "wait for keypress" — $0F continue is signalled
         # via Y register (still at READY from MQ_READY() above).
+        #
+        # TODO(#14): this is WRONG for the 0x86 multi-page loop. ListMenu
+        # redraws a fresh page each `while idx < n` iteration, and the
+        # Z80 does a LEVEL check on $0F bit 6 after each keypress before
+        # reading the next page. Holding Y permanently READY means the
+        # Z80 never waits → races into stale TX. Need MQ_BUSY() here and
+        # MQ_READY() once the next page is queued. See issue #14.
         # ──────────────────────────────────────────────────────────────
         ch = MQ.get()   # Get a key
         if ch == 78:    # 'N' then done (ROM ended the loops)
@@ -3408,6 +3436,14 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     for ch in prompt:
         wrt(ch)
     wrt(0x00)   # End string (Z80 prints + waits for key)
+    # TODO(#14): 0x86 bit-6 ack missing. Ryan's original had wrt(0x40)
+    # after this 0x00 ("Read continue to get char") and again after the
+    # keypress ("Start a new string") before the echo + 0x03. After the
+    # keypress the Z80 LEVEL-checks $0F bit 6 before reading the echo
+    # char and the 0x03 terminator. We hold Y permanently READY, so the
+    # Z80 may race and read those bytes from stale/empty TX. Dual-port
+    # fix: MQ_BUSY() here, MQ_READY() after the echo char is queued.
+    # See issue #14. Do NOT re-add wrt(0x40) (puts '@' in the stream).
 
     ch = MQ.get()
     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
