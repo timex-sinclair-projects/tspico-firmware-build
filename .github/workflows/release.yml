@@ -194,16 +194,32 @@ jobs:
           echo "=== bundle tree ==="
           find "${STAGE}" -type f | sort
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
+          UF2: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
         run: |
-          # --generate-notes uses GitHub's auto-generated release notes
-          # (PR titles, commits since previous tag). Edit on the release
-          # page afterwards if you want to curate.
-          gh release create "${TAG}" \
-            "tspico-${TAG}.zip" \
-            "${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2#firmware.uf2 (raw, for in-place reflash)" \
-            --title "TS-Pico Firmware ${TAG}" \
-            --generate-notes
+          # Idempotent: a maintainer may pre-create the release (e.g. to
+          # write custom notes), which pushes the tag and triggers this
+          # workflow. In that case `gh release create` would fail with
+          # "a release with the same tag name already exists". So:
+          #   - release exists  → upload assets to it (--clobber replaces
+          #     any same-named assets), leaving the existing title/notes
+          #     untouched.
+          #   - release absent  → create it fresh with auto-generated
+          #     notes and the workflow's standard title.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists — uploading assets to it."
+            gh release upload "${TAG}" \
+              "tspico-${TAG}.zip" \
+              "${UF2}#firmware.uf2 (raw, for in-place reflash)" \
+              --clobber
+          else
+            echo "Release ${TAG} does not exist — creating it."
+            gh release create "${TAG}" \
+              "tspico-${TAG}.zip" \
+              "${UF2}#firmware.uf2 (raw, for in-place reflash)" \
+              --title "TS-Pico Firmware ${TAG}" \
+              --generate-notes
+          fi
