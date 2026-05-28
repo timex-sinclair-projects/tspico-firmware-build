@@ -432,7 +432,11 @@ TLM_ENABLED = False
 # LOAD_CONFIG entry and via __init__-time print so it appears even
 # before TLM is enabled.
 BUILD_VERSION = "2026-05-27-J (inline-wrt SEND_MSG2 + suppress_scroll<500)"
-print("[dev_tspico] BUILD_VERSION =", BUILD_VERSION)
+# Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
+# when loaded via the dev override __name__ == "dev_tspico". This file is
+# kept byte-identical between the two locations so the stamp prints the
+# correct label regardless of which copy actually loaded.
+print("[%s] BUILD_VERSION =" % __name__, BUILD_VERSION)
 
 _tlm_last = 0   # last TLM timestamp, microseconds
 
