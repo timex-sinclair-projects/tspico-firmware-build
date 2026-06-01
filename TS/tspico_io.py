@@ -317,6 +317,26 @@ def TS_IO_DUAL():
     # value that lands in RX, so MicroPython can check `(raw >> 8) & 1`
     # to know which port the Z80 wrote to (the BASIC command path uses
     # this to validate writes go to $0E rather than $0F).
+    #
+    # ─── Issue #14 (PIO auto-busy on Z80 OUT) ───────────────────────────
+    # After every Z80 write, drop Y to 0. This signals BUSY on port $0F
+    # bit 6 — telling the Z80 (per Gustavo's V5 protocol) "Pico received
+    # your byte, hold off while I process it." MicroPython then calls
+    # MQ_READY() when it has the response ready and the Z80's next
+    # WAIT EXECUTION poll exits.
+    #
+    # Without this, Y stayed at whatever Python last set it to and the
+    # Z80's bit-6 LEVEL check after sending data (e.g., a 0x86 scroll-
+    # prompt keypress) was instantly satisfied, racing into stale or
+    # empty TX FIFO. MicroPython is structurally too slow to win that
+    # race; doing it in the PIO is single-cycle. See issue #14.
+    #
+    # Cost: +1 PIO instruction (was 19/32, now 20/32). Python-side
+    # contract: anywhere Python wants Y=READY after a Z80 OUT, it must
+    # explicitly call MQ_READY(). See ACTIVATE_MQ / PROCESS_CMD / LVM
+    # SAVE / SEND_MSG2 scroll branch / ListMenu / SEND_MSG_PROMPT_YN
+    # / ZX48_IO for the audit.
+    # ────────────────────────────────────────────────────────────────────
     label("z80_out")
     nop()                   .side(0)      # padding cycle for bus settle
     in_(pins, 9)            .side(0) [2]  # sample D0-D7 + A0; [2] adds 2
@@ -324,6 +344,11 @@ def TS_IO_DUAL():
                                           # Z80's data is stable before
                                           # we latch it (bus setup time)
     push(noblock)           .side(0)      # ISR → RX FIFO (drops if full)
+    mov(y, null)            .side(0)      # Y = 0 → $0F bit 6 = 0 (BUSY)
+                                          # auto-asserted on every Z80 OUT
+                                          # so the Z80's WAIT EXECUTION
+                                          # poll blocks until Python is
+                                          # ready and calls MQ_READY().
 
     # ============================================================
     # END OF CYCLE — wait for /PICOSEL to release, return to idle
@@ -633,6 +658,7 @@ def LOAD_TS(pre, MQ, TSP):
             wrt = MQ.put
             wrt(0x02)        # tape error — Z80 will display "R Tape loading error"
             wrt(0x01)        # next-iter pre-load (so subsequent commands work)
+            MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy)
             return MQ, TSP, log_entries
         arch = _nofile_arch
         local_fname = "/assets/nofile.tap"
@@ -752,6 +778,13 @@ def LOAD_TS(pre, MQ, TSP):
     # work (e.g., header block followed by data block).
     wrt(0x01)                                          # this iter's final status
     wrt(0x01)                                          # next iter's status pre-load
+    # ─── Issue #14: PIO auto-busy compensation ──────────────────────
+    # The PIO drops Y to 0 on every Z80 OUT (echo bytes, CRC bytes,
+    # etc.). Without an explicit MQ_READY here, Y stays BUSY, the
+    # Z80's $0F poll never sees ready, and the two pre-loaded 0x01
+    # bytes sit in TX never to be read → Report J on next command.
+    # ────────────────────────────────────────────────────────────────
+    MQ.exec("mov(y, invert(null))")                    # Y = READY
 
     # ---- Advance TAP position for the next call ----
     TSP.tap_idx += 1
@@ -1039,6 +1072,7 @@ def SAVE_TS(MQ, TSP):
         # (Status 0x01 means "OK" but Z80 will see CRC fail elsewhere.)
         wrt(0x01)
         wrt(0x01)
+        MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy)
         dead = True
         return MQ, TSP, log_entries
 
@@ -1052,6 +1086,7 @@ def SAVE_TS(MQ, TSP):
     # Z80 reads it after polling $0F (Y=READY).
     # ============================================================
     wrt(0x01)
+    MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from header phase)
 
     # ============================================================
     # Phase 3: receive the (BLEN+4)-byte DATA block.
@@ -1072,6 +1107,7 @@ def SAVE_TS(MQ, TSP):
             # the Z80 hanging on a status read.
             wrt(0x01)
             wrt(0x01)
+            MQ.exec("mov(y, invert(null))")  # #14: Y → READY
             dead = True
             while busy:
                 pass
@@ -1085,6 +1121,7 @@ def SAVE_TS(MQ, TSP):
             LOG_ADD("ERROR: SAVE_TS killed by watchdog", 2, TSP.LOG_LEVEL)
             wrt(0x01)            # still terminate the protocol cleanly
             wrt(0x01)
+            MQ.exec("mov(y, invert(null))")  # #14: Y → READY
             dead = True
             return MQ, TSP, log_entries
 
@@ -1098,6 +1135,7 @@ def SAVE_TS(MQ, TSP):
     # ============================================================
     wrt(0x01)        # final status — Z80 reads this and reports "0 OK"
     wrt(0x01)        # pre-load for the NEXT command's initial status
+    MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from data phase)
 
     dead = True
     totbytes = len(hdr) + long
