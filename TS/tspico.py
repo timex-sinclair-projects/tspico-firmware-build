@@ -1665,21 +1665,24 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 if not new_rom:
                     wrt(13)
                 wrt(0x00)       # end of this page
-                # TODO(#14): 0x86 bit-6 ack missing here. Ryan's
-                # single-port code had wrt(0x40) after this 0x00 and
-                # again after the keypress (below). In the 0x86
-                # PRINT_STRING_LOOP protocol the Z80 does a LEVEL check
-                # on $0F bit 6 after the keypress before reading the
-                # next page. We hold Y permanently READY, so the Z80
-                # never waits → races into stale/empty TX. The dual-
-                # port fix is MQ_BUSY() here (bit 6 → 0) and MQ_READY()
-                # once the next page's bytes are queued (after the
-                # erase-prompt loop below). See issue #14 for the full
-                # protocol writeup. DO NOT just re-add wrt(0x40) — that
-                # puts a literal '@' into the data stream in dual-port.
+                # ─── Issue #14: 0x86 bit-6 ack ────────────────────────
+                # The Z80's 0x86 PRINT_STRING_LOOP handler, after the
+                # keypress, does a LEVEL check on $0F bit 6
+                # (`wait_bit6`) before reading the next page from $0E.
+                # If we hold Y permanently READY, the wait is
+                # satisfied instantly and the Z80 races into a stale
+                # or empty TX FIFO. Drop Y to BUSY across the keypress
+                # wait, then re-assert it just before pushing the
+                # next-page bytes. Ryan's single-port code did the
+                # same with two wrt(0x40) calls (bit-6 bytes consumed
+                # by the Z80 as in-band ack); in dual-port the ack
+                # lives on $0F, not in the byte stream.
+                # ──────────────────────────────────────────────────────
+                MQ_BUSY()       # bit 6 → 0 so wait_bit6 actually waits
 
                 ch = MQ.get()   # wait for keypress
-                if ch == 78:    # 'N' → done
+                if ch == 78:    # 'N' → done; Z80 exits 0x86 without bit-6 check
+                    MQ_READY()  # restore bit 6 for downstream reads
                     return
                 if ch == 48:
                     ll = 10
@@ -1688,11 +1691,10 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 else:
                     ll = 21
 
-                # TODO(#14): MQ_READY() belongs here (after erase-prompt
-                # bytes are queued) to re-assert bit 6 and release the
-                # Z80's level-check wait. Paired with the MQ_BUSY() noted
-                # above. Ryan's original had wrt(0x40) "Start new string"
-                # at this point.
+                # Assert bit 6 immediately before the first next-page
+                # wrt so the Z80's wait_bit6 exit finds a real byte
+                # in TX rather than 0x00 from an empty FIFO.
+                MQ_READY()
                 if new_rom:
                     for _eb in range(s):
                         wrt(0x08)
@@ -1964,20 +1966,30 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             wrt(m)
             
         wrt(0x00)       # End of this string (Z80 displays + waits for key)
-        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
-        # No wrt(0x40) "wait for keypress" — $0F continue is signalled
-        # via Y register (still at READY from MQ_READY() above).
-        #
-        # TODO(#14): this is WRONG for the 0x86 multi-page loop. ListMenu
-        # redraws a fresh page each `while idx < n` iteration, and the
-        # Z80 does a LEVEL check on $0F bit 6 after each keypress before
-        # reading the next page. Holding Y permanently READY means the
-        # Z80 never waits → races into stale TX. Need MQ_BUSY() here and
-        # MQ_READY() once the next page is queued. See issue #14.
+        # ─── Issue #14: 0x86 bit-6 ack ────────────────────────────────
+        # ListMenu uses 0x86 PRINT_STRING_LOOP and redraws a fresh
+        # page each iteration. After the keypress the Z80 does a
+        # LEVEL check on $0F bit 6 before reading the next page. With
+        # Y permanently READY the Z80 races into stale/empty TX.
+        # Drop Y to BUSY across the keypress wait; re-assert it
+        # immediately before the first wrt of the next iteration.
+        # Ryan's single-port code had two wrt(0x40) calls here
+        # ("wait for keypress" / "Start last string") — in dual-port
+        # the ack lives on $0F via the Y register, not in the byte
+        # stream. See issue #14 for the full protocol writeup.
         # ──────────────────────────────────────────────────────────────
+        MQ_BUSY()       # bit 6 → 0 so wait_bit6 actually waits
+
         ch = MQ.get()   # Get a key
         if ch == 78:    # 'N' then done (ROM ended the loops)
+            MQ_READY()  # restore bit 6 for downstream reads
             return -1
+        # All non-N branches end up writing something — either an
+        # echo char + erase bytes (selection path) or fall through
+        # to the next iteration's redraw at the top of `while idx<n`.
+        # Re-assert bit 6 here so the Z80's wait_bit6 exit finds a
+        # real byte ready as soon as the next wrt lands.
+        MQ_READY()
         if ch == 66: # B
             if idx >= nmax:
                 idx -= nmax
@@ -1986,10 +1998,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         elif ch in LISTMENU_CHOICES:
             j = idx + LISTMENU_CHOICES[ch]
             if j < n:
-                # ─── DUAL-PORT MIGRATION ──────────────────────────────
-                # No wrt(0x40) "Start last string" — same rationale as
-                # the other removed wrt(0x40)s in this function.
-                # ──────────────────────────────────────────────────────
                 wrt(ch)
                 # Erase bottom two lines
                 for b in range(32):
@@ -3436,16 +3444,23 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     for ch in prompt:
         wrt(ch)
     wrt(0x00)   # End string (Z80 prints + waits for key)
-    # TODO(#14): 0x86 bit-6 ack missing. Ryan's original had wrt(0x40)
-    # after this 0x00 ("Read continue to get char") and again after the
-    # keypress ("Start a new string") before the echo + 0x03. After the
-    # keypress the Z80 LEVEL-checks $0F bit 6 before reading the echo
-    # char and the 0x03 terminator. We hold Y permanently READY, so the
-    # Z80 may race and read those bytes from stale/empty TX. Dual-port
-    # fix: MQ_BUSY() here, MQ_READY() after the echo char is queued.
-    # See issue #14. Do NOT re-add wrt(0x40) (puts '@' in the stream).
+    # ─── Issue #14: 0x86 bit-6 ack ────────────────────────────────────
+    # After the keypress, if it's not 'N', the Z80 LEVEL-checks $0F
+    # bit 6 before reading the echo char and 0x03 terminator. With Y
+    # held permanently READY, the Z80 races and reads from stale/
+    # empty TX. Drop Y to BUSY across the wait, then re-assert it
+    # immediately before the echo wrt. Ryan's single-port code had
+    # two wrt(0x40) calls ("Read continue to get char" / "Start a
+    # new string"); in dual-port the ack lives on $0F via the Y
+    # register, not in the byte stream. See issue #14.
+    # ──────────────────────────────────────────────────────────────────
+    MQ_BUSY()       # bit 6 → 0 so wait_bit6 actually waits
 
     ch = MQ.get()
+    # Both branches re-assert bit 6: the non-N path so the Z80's
+    # wait_bit6 exits with a real byte ready; the 'N' path for
+    # downstream reads (V6 pre-load by PROCESS_CMD, etc.).
+    MQ_READY()
     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
         if echo:
             if ch < 32 or ch > 127:
