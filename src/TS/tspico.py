@@ -4781,7 +4781,7 @@ def ZX48_IO(pre):                                                               
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("ZX48_IO SAVE returned")
 
-            elif a == 100:                                                  # OUT 10,100 from 2068 — DEAD CODE on current hardware (see note below)
+            elif a == 14:                                                  # OUT 10,100 from 2068 — DEAD CODE on current hardware (see note below)
                 # ─── DUAL-PORT MIGRATION: ZX48 exit-via-byte is unreachable ─
                 # Confirmed empirically: `OUT 10,100` on the 2068 executes
                 # cleanly but the byte never reaches the Pico's PIO. Port
@@ -4800,7 +4800,7 @@ def ZX48_IO(pre):                                                               
                 # reset button as the canonical exit. See also
                 # docs/OPEN_QUESTIONS.md if we want to revisit routing.
                 # ──────────────────────────────────────────────────────────
-                TLM("ZX48_IO byte 100 received — exiting (rare; usually unreachable)")
+                TLM("ZX48_IO byte 14 received — exiting (rare; usually unreachable)")
                 LOG("Ending ZX mode. Free mem: %d. Returning to TS processing." % gc.mem_free(), 0)
                 gc.collect()
                 TSP.zx48 = False
