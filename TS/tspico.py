@@ -688,22 +688,43 @@ def ACTIVATE_MQ(ready=True):                                                    
 # enough for the 4-deep RX FIFO to overflow and lose Z80 bytes.
 # ───────────────────────────────────────────────────────────────────────
 def MQ_READY():
-    """Signal 'ready' to Z80 — bit 6 set on $0F reads (Y = 0xFFFFFFFF)."""
+    """Signal 'ready' to Z80 — bit 6 set on $0F reads (Y = 0xFFFFFFFF).
+
+    Per the V1.5 protocol (Gustavo's V5 doc), the Z80 polls $0F bit 6
+    in WAIT EXECUTION before reading TX or writing RX, and only
+    proceeds when it observes bit 6 = 1. MQ_READY asserts that.
+
+    With the issue-#14 PIO auto-busy (`mov(y, null)` after every Z80
+    OUT in TS_IO_DUAL), the contract is:
+
+      - PIO drops Y to 0 (BUSY) on every Z80 write to $0E or $0F.
+      - Python MUST call MQ_READY() when it has the response (TX
+        bytes loaded, or no further input expected) and wants the
+        Z80's next WAIT EXECUTION poll to proceed.
+
+    Callers that legitimately need Y=READY after a Z80 OUT:
+      - PROCESS_CMD tail (V6 pre-load 0x01 for next command)
+      - LVM SAVE post-block status code
+      - SEND_MSG / SEND_MSG2 / SEND_MSG_PROMPT_YN entry
+      - ListMenu after keypress receipt
+      - ZX48_IO echo path
+      - extcmd handlers that return data
+    """
     # invert(null) is the documented MicroPython PIO syntax for ~0.
     # The tilde form `~null` does NOT parse correctly via runtime
     # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
-    # Without this, Y stays at 0, $0F always reads 0, Z80 sees
-    # "never ready" and reports J.
     MQ.exec("mov(y, invert(null))")
 
 
 def MQ_BUSY():
     """Signal 'not ready' to Z80 — bit 6 clear on $0F reads (Y = 0).
 
-    In normal operation we keep Y=READY constantly; the protocol's
-    natural pacing via TX FIFO depth handles flow control. MQ_BUSY
-    is here for completeness and any future code that needs an
-    explicit busy signal.
+    With the issue-#14 PIO auto-busy, MQ_BUSY is rarely needed
+    explicitly — the PIO drops Y to 0 on every Z80 OUT. Kept for:
+      - ACTIVATE_MQ initialization (ensures known state at boot).
+      - Code paths that want to assert BUSY without an inbound write
+        (e.g., signalling an aborted exchange or a long-pause
+        background operation).
     """
     MQ.exec("set(y, 0)")
 
@@ -1474,10 +1495,19 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     # ─────────────────────────────────────────────────────────────────────
     if TSP.VERBOSE or forceDisplay:
 
+        # ─── Issue #14: pre-fill TX, then MQ_READY, then stream body ───
+        # PIO auto-busy left Y = 0 from the last Z80 OUT before this
+        # call. The body for-loop would fill TX to 4 (FIFO depth) and
+        # then deadlock — Z80 can't drain while Y is BUSY, wrt() blocks
+        # on full FIFO. Put the first 3 header bytes in TX (satisfying
+        # "byte in buffer before signaling ready"), THEN MQ_READY, then
+        # the body loop is paced by Z80 reads.
+        # ───────────────────────────────────────────────────────────────
         wrt(0x81)               # PRINT STRING — this IS the D-block status
         wrt(st)                 # Return code
         wrt(0x0D)               # Start with a newline
-        for m in msg:           # Write message
+        MQ_READY()              # Z80 starts reading the 3-byte header
+        for m in msg:           # Write message (paced by Z80 reads)
             wrt(m) # Will let ~ and | pass as FREE and STICK
         if msg1:                # Write msg1
             wrt(0x0D)
@@ -1488,8 +1518,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     else:
 
         wrt(st)                 # Return code (< 0x80) — IS the D-block status
-
-    MQ_READY()                  # Z80 sees "ready" on $0F → reads bytes from $0E
+        MQ_READY()              # one-byte status is in TX; signal ready
 
     TLM("SEND_MSG enter+loaded", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
         msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
@@ -1665,21 +1694,22 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 if not new_rom:
                     wrt(13)
                 wrt(0x00)       # end of this page
-                # TODO(#14): 0x86 bit-6 ack missing here. Ryan's
-                # single-port code had wrt(0x40) after this 0x00 and
-                # again after the keypress (below). In the 0x86
-                # PRINT_STRING_LOOP protocol the Z80 does a LEVEL check
-                # on $0F bit 6 after the keypress before reading the
-                # next page. We hold Y permanently READY, so the Z80
-                # never waits → races into stale/empty TX. The dual-
-                # port fix is MQ_BUSY() here (bit 6 → 0) and MQ_READY()
-                # once the next page's bytes are queued (after the
-                # erase-prompt loop below). See issue #14 for the full
-                # protocol writeup. DO NOT just re-add wrt(0x40) — that
-                # puts a literal '@' into the data stream in dual-port.
+                # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ─
+                # When the Z80 sends the keypress (its OUT $0E for the
+                # 'Y'/'N'/digit), the PIO automatically drops Y to 0
+                # via the `mov(y, null)` after `push(noblock)` in
+                # TS_IO_DUAL's z80_out path. So as soon as MQ.get()
+                # returns we're already in BUSY state — no MQ_BUSY()
+                # call needed here, no race to win.
+                #
+                # All we have to do is re-assert MQ_READY() before
+                # pushing the first byte of the next page. That fires
+                # the Z80's wait_bit6 exit with real data ready.
+                # ──────────────────────────────────────────────────────
 
-                ch = MQ.get()   # wait for keypress
-                if ch == 78:    # 'N' → done
+                ch = MQ.get()   # wait for keypress (PIO auto-drops Y on Z80 OUT)
+                if ch == 78:    # 'N' → done. Z80 exits 0x86 without bit-6 check
+                    MQ_READY()  # restore Y for downstream reads (V6 pre-load)
                     return
                 if ch == 48:
                     ll = 10
@@ -1688,11 +1718,10 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 else:
                     ll = 21
 
-                # TODO(#14): MQ_READY() belongs here (after erase-prompt
-                # bytes are queued) to re-assert bit 6 and release the
-                # Z80's level-check wait. Paired with the MQ_BUSY() noted
-                # above. Ryan's original had wrt(0x40) "Start new string"
-                # at this point.
+                # Re-assert Y=READY immediately before the next-page
+                # writes so the Z80's wait_bit6 finds bit 6 = 1 the
+                # moment we start pushing erase-prompt bytes.
+                MQ_READY()
                 if new_rom:
                     for _eb in range(s):
                         wrt(0x08)
@@ -1964,20 +1993,19 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             wrt(m)
             
         wrt(0x00)       # End of this string (Z80 displays + waits for key)
-        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
-        # No wrt(0x40) "wait for keypress" — $0F continue is signalled
-        # via Y register (still at READY from MQ_READY() above).
-        #
-        # TODO(#14): this is WRONG for the 0x86 multi-page loop. ListMenu
-        # redraws a fresh page each `while idx < n` iteration, and the
-        # Z80 does a LEVEL check on $0F bit 6 after each keypress before
-        # reading the next page. Holding Y permanently READY means the
-        # Z80 never waits → races into stale TX. Need MQ_BUSY() here and
-        # MQ_READY() once the next page is queued. See issue #14.
+        # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ────────
+        # PIO drops Y to 0 automatically when the Z80 writes the
+        # keypress (its OUT $0E). MQ.get() returns with us already in
+        # BUSY state. Re-assert MQ_READY() before the next wrt for
+        # both branches: the navigation paths fall through to the
+        # next `while idx < n` iteration which redraws, and the
+        # selection path writes the echo + erase bytes.
         # ──────────────────────────────────────────────────────────────
-        ch = MQ.get()   # Get a key
+        ch = MQ.get()   # Get a key (PIO auto-drops Y on Z80 OUT)
         if ch == 78:    # 'N' then done (ROM ended the loops)
+            MQ_READY()  # restore Y for downstream reads
             return -1
+        MQ_READY()      # Y → READY before any next-iteration / echo write
         if ch == 66: # B
             if idx >= nmax:
                 idx -= nmax
@@ -1986,10 +2014,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         elif ch in LISTMENU_CHOICES:
             j = idx + LISTMENU_CHOICES[ch]
             if j < n:
-                # ─── DUAL-PORT MIGRATION ──────────────────────────────
-                # No wrt(0x40) "Start last string" — same rationale as
-                # the other removed wrt(0x40)s in this function.
-                # ──────────────────────────────────────────────────────
                 wrt(ch)
                 # Erase bottom two lines
                 for b in range(32):
@@ -3436,16 +3460,15 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     for ch in prompt:
         wrt(ch)
     wrt(0x00)   # End string (Z80 prints + waits for key)
-    # TODO(#14): 0x86 bit-6 ack missing. Ryan's original had wrt(0x40)
-    # after this 0x00 ("Read continue to get char") and again after the
-    # keypress ("Start a new string") before the echo + 0x03. After the
-    # keypress the Z80 LEVEL-checks $0F bit 6 before reading the echo
-    # char and the 0x03 terminator. We hold Y permanently READY, so the
-    # Z80 may race and read those bytes from stale/empty TX. Dual-port
-    # fix: MQ_BUSY() here, MQ_READY() after the echo char is queued.
-    # See issue #14. Do NOT re-add wrt(0x40) (puts '@' in the stream).
+    # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ───────────────
+    # PIO drops Y to 0 automatically on the Z80's keypress OUT, so by
+    # the time MQ.get() returns we're already BUSY. Re-assert MQ_READY()
+    # before pushing the echo + 0x03 so the Z80's wait_bit6 exits with
+    # real bytes ready to read.
+    # ──────────────────────────────────────────────────────────────────────
 
-    ch = MQ.get()
+    ch = MQ.get()       # PIO auto-drops Y on Z80 OUT (keypress)
+    MQ_READY()          # both branches need Y=READY for downstream reads
     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
         if echo:
             if ch < 32 or ch > 127:
@@ -3863,6 +3886,7 @@ def PROCESS_ASM(pre):                                                           
     # ──────────────────────────────────────────────────────────────────
     wrt(0x01)        # final status — Z80 reads as "0 OK"
     wrt(0x01)        # pre-load for next command's initial status
+    MQ_READY()       # #14: Y was dropped by Z80's command-body OUTs; restore
 
     return
 
@@ -3953,6 +3977,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
                     pass
                 # V6 pre-load so the next command's pre-header phase works
                 MQ.put(0x01)
+                MQ_READY()  # #14: Y was dropped by partial Z80 OUTs; restore
                 return
         cmd[l] = MQ.get()
 
@@ -4069,6 +4094,15 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     # See docs/PROTOCOL.md "Writing a new command handler" for details.
     # ──────────────────────────────────────────────────────────────────
     MQ.put(0x01)
+
+    # ─── Issue #14: re-assert Y=READY after the V6 pre-load ───────────
+    # The PIO drops Y to 0 on every Z80 OUT (pre-header + body bytes
+    # for this command have all been Z80 OUTs). Without an explicit
+    # MQ_READY here, Y stays BUSY and the Z80's WAIT EXECUTION before
+    # its next status read blocks until timeout → Report J. The
+    # pre-load byte sits in TX but the Z80 never reads it.
+    # ──────────────────────────────────────────────────────────────────
+    MQ_READY()
 
     LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
@@ -4389,6 +4423,21 @@ def TS2068_IO():                                                         # Main 
             # ────────────────────────────────────────────────────────────
             for i in r1:
                 pre[i] = MQ.get()                                          # blocking
+
+            # ─── Issue #14: signal READY before Z80's status-read poll ────
+            # The PIO drops Y to 0 on every Z80 OUT (per the issue-#14
+            # `mov(y, null)` in TS_IO_DUAL's z80_out path). By the time
+            # this for-loop finishes, Y has been dropped 10 times and is
+            # currently BUSY. The Z80 has finished its pre-header OUTs
+            # and is now in WAIT EXECUTION polling $0F bit 6, expecting
+            # to read the V6 pre-load 0x01 (already sitting in TX from
+            # the previous command's tail, or from the boot pre-load
+            # for the very first command). Without an explicit MQ_READY
+            # here the Z80 polls $0F for ~700ms with bit 6 = 0, times
+            # out → Report J → aborts before sending the command body.
+            # The pre-load byte sits in TX never to be read.
+            # ──────────────────────────────────────────────────────────────
+            MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
             # Cheap when TLM_ENABLED=False (the TLM() calls below no-op
