@@ -4416,6 +4416,21 @@ def TS2068_IO():                                                         # Main 
             for i in r1:
                 pre[i] = MQ.get()                                          # blocking
 
+            # ─── Issue #14: signal READY before Z80's status-read poll ────
+            # The PIO drops Y to 0 on every Z80 OUT (per the issue-#14
+            # `mov(y, null)` in TS_IO_DUAL's z80_out path). By the time
+            # this for-loop finishes, Y has been dropped 10 times and is
+            # currently BUSY. The Z80 has finished its pre-header OUTs
+            # and is now in WAIT EXECUTION polling $0F bit 6, expecting
+            # to read the V6 pre-load 0x01 (already sitting in TX from
+            # the previous command's tail, or from the boot pre-load
+            # for the very first command). Without an explicit MQ_READY
+            # here the Z80 polls $0F for ~700ms with bit 6 = 0, times
+            # out → Report J → aborts before sending the command body.
+            # The pre-load byte sits in TX never to be read.
+            # ──────────────────────────────────────────────────────────────
+            MQ_READY()
+
             # Snapshot pre[] for any later TLM that wants to print it.
             # Cheap when TLM_ENABLED=False (the TLM() calls below no-op
             # and this list construction is the only residual overhead;
