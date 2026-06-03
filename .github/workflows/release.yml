@@ -113,37 +113,30 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          # Bundle layout (per maintainer request):
+          # Bundle layout:
           #
           #   ts-pico/
           #   ├── DEPLOY.md
-          #   ├── main.py             ← top-level: the boot script
-          #   ├── config.ini          ← top-level: runtime config
-          #   ├── assets/             ← top-level: internal protocol .tap files
-          #   │   └── *.tap
-          #   └── pico/               ← complete drop-in for Pico flash
-          #       ├── firmware.uf2
-          #       ├── main.py
-          #       ├── config.ini
-          #       ├── words.txt
-          #       ├── assets/*.tap
-          #       └── help/*.txt
+          #   ├── pico/               ← complete Pico-side drop-in
+          #   │   ├── firmware.uf2
+          #   │   ├── main.py
+          #   │   ├── config.ini
+          #   │   ├── words.txt
+          #   │   ├── assets/*.tap
+          #   │   └── help/*.txt
+          #   └── rom/                ← Z80-side EXROM image
+          #       └── TSPICO-STORAGE-V15W.ROM
           #
-          # The top-level `main.py`, `config.ini`, and `assets/` are the
-          # canonical sources; `pico/` aggregates everything that needs
-          # to be on the Pico's flash filesystem (UF2 + flash content)
-          # for a single drag-drop deploy.
+          # pico/ carries everything that goes on the Pico (UF2 + flash
+          # filesystem content). rom/ carries the modified Z80 EXROM
+          # that has to be flashed into the TS-2068 expansion-board ROM
+          # chip for the protocol to work.
           STAGE="ts-pico"
-          mkdir -p "${STAGE}/assets"
           mkdir -p "${STAGE}/pico/assets"
           mkdir -p "${STAGE}/pico/help"
+          mkdir -p "${STAGE}/rom"
 
           UF2_SRC="${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2"
-
-          # Top-level: the boot/config/assets the user cares about directly.
-          cp main.py     "${STAGE}/main.py"
-          cp config.ini  "${STAGE}/config.ini"
-          cp assets/*.tap "${STAGE}/assets/"
 
           # pico/: complete Pico-flash payload (UF2 + everything that
           # lives on the Pico's filesystem).
@@ -154,11 +147,26 @@ jobs:
           cp assets/*.tap "${STAGE}/pico/assets/"
           cp help/*.txt   "${STAGE}/pico/help/"
 
+          # rom/: Z80-side EXROM. Copy whatever .ROM files live in the
+          # repo's rom/ directory — typically just the one current
+          # release ROM.
+          cp rom/*.ROM "${STAGE}/rom/"
+
           # Bundle deploy instructions.
           cat > "${STAGE}/DEPLOY.md" <<EOF
           # TS-Pico Firmware ${TAG}
 
-          ## Quick deploy
+          This bundle contains both halves of the TS-Pico system:
+
+          - \`pico/\` — everything that goes on the Raspberry Pi Pico
+            (firmware UF2 plus the files that live on the Pico's
+            internal flash filesystem).
+          - \`rom/\` — the modified Z80 EXROM image that must be
+            programmed into the TS-2068 expansion-board ROM chip.
+
+          Both halves must match for the protocol to work.
+
+          ## Quick deploy — Pico side
 
           1. **Flash the firmware**: hold BOOTSEL on the Pico, plug in USB,
              drag-drop \`pico/firmware.uf2\` onto the \`RPI-RP2\` drive
@@ -184,15 +192,11 @@ jobs:
              INFO: SD Card initialized and mounted OK
              \`\`\`
 
-          ## What's in this bundle
+          ## Quick deploy — Z80 side
 
-          - \`main.py\`, \`config.ini\`, \`assets/\` at the top level —
-            the canonical user-facing files (edit \`config.ini\` here,
-            copy back into \`pico/\` if you change anything before
-            deploying).
-          - \`pico/\` — the complete Pico-flash payload: the firmware UF2
-            plus every file that needs to live on the Pico's internal
-            filesystem.
+          Program the \`.ROM\` image from \`rom/\` into the TS-2068
+          expansion-board ROM chip using your usual ROM programmer.
+          The image is a raw binary; load it at offset 0.
 
           See README.md in the repo for the full picture:
           https://github.com/timex-sinclair-projects/tspico-firmware-build
