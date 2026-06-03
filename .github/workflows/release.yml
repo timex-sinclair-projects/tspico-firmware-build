@@ -113,59 +113,78 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          STAGE="tspico-${TAG}"
-          mkdir -p "${STAGE}/pico-flash/assets"
-          mkdir -p "${STAGE}/pico-flash/help"
+          # Bundle layout:
+          #
+          #   ts-pico/
+          #   ├── DEPLOY.md
+          #   ├── pico/               ← complete Pico-side drop-in
+          #   │   ├── firmware.uf2
+          #   │   ├── main.py
+          #   │   ├── config.ini
+          #   │   ├── words.txt
+          #   │   ├── assets/*.tap
+          #   │   └── help/*.txt
+          #   └── rom/                ← Z80-side EXROM image
+          #       └── TSPICO-STORAGE-V15W.ROM
+          #
+          # pico/ carries everything that goes on the Pico (UF2 + flash
+          # filesystem content). rom/ carries the modified Z80 EXROM
+          # that has to be flashed into the TS-2068 expansion-board ROM
+          # chip for the protocol to work.
+          STAGE="ts-pico"
+          mkdir -p "${STAGE}/pico/assets"
+          mkdir -p "${STAGE}/pico/help"
+          mkdir -p "${STAGE}/rom"
 
-          # Firmware UF2 — goes at the top level, flashed via BOOTSEL.
-          cp ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2 \
-             "${STAGE}/firmware.uf2"
+          UF2_SRC="${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2"
 
-          # Pico flash root content.
-          cp main.py     "${STAGE}/pico-flash/"
-          cp config.ini  "${STAGE}/pico-flash/"
-          cp words.txt   "${STAGE}/pico-flash/"
+          # pico/: complete Pico-flash payload (UF2 + everything that
+          # lives on the Pico's filesystem).
+          cp "${UF2_SRC}" "${STAGE}/pico/firmware.uf2"
+          cp main.py      "${STAGE}/pico/main.py"
+          cp config.ini   "${STAGE}/pico/config.ini"
+          cp words.txt    "${STAGE}/pico/words.txt"
+          cp assets/*.tap "${STAGE}/pico/assets/"
+          cp help/*.txt   "${STAGE}/pico/help/"
 
-          # Dev-override convenience files (optional for end users; useful
-          # for iterating without rebuilding the UF2). Both are at the
-          # tag's tree; we only copy if present.
-          if [ -f dev_tspico.mpy ]; then
-            cp dev_tspico.mpy "${STAGE}/pico-flash/"
-          fi
-          if [ -f dev_extcmd.py ]; then
-            cp dev_extcmd.py "${STAGE}/pico-flash/"
-          fi
-
-          # Internal protocol TAPs go in /assets/.
-          cp assets/*.tap "${STAGE}/pico-flash/assets/"
-
-          # Help text files go in /help/.
-          cp help/*.txt "${STAGE}/pico-flash/help/"
+          # rom/: Z80-side EXROM. Copy whatever .ROM files live in the
+          # repo's rom/ directory — typically just the one current
+          # release ROM.
+          cp rom/*.ROM "${STAGE}/rom/"
 
           # Bundle deploy instructions.
           cat > "${STAGE}/DEPLOY.md" <<EOF
           # TS-Pico Firmware ${TAG}
 
-          ## Quick deploy
+          This bundle contains both halves of the TS-Pico system:
+
+          - \`pico/\` — everything that goes on the Raspberry Pi Pico
+            (firmware UF2 plus the files that live on the Pico's
+            internal flash filesystem).
+          - \`rom/\` — the modified Z80 EXROM image that must be
+            programmed into the TS-2068 expansion-board ROM chip.
+
+          Both halves must match for the protocol to work.
+
+          ## Quick deploy — Pico side
 
           1. **Flash the firmware**: hold BOOTSEL on the Pico, plug in USB,
-             drag-drop \`firmware.uf2\` onto the \`RPI-RP2\` drive that
-             appears. The Pico will reboot into MicroPython.
+             drag-drop \`pico/firmware.uf2\` onto the \`RPI-RP2\` drive
+             that appears. The Pico will reboot into MicroPython.
 
           2. **Connect via Thonny** and confirm you're at a bare REPL.
 
-          3. **Copy the contents of \`pico-flash/\` to the Pico's root**
-             via Thonny's file pane. Preserve the directory structure:
+          3. **Copy everything *inside* \`pico/\` (except \`firmware.uf2\`)
+             to the Pico's flash root** via Thonny's file pane. Preserve
+             the directory structure:
 
              | Bundle path | Goes to Pico path |
              |---|---|
-             | \`pico-flash/main.py\`       | \`/main.py\`       |
-             | \`pico-flash/config.ini\`    | \`/config.ini\`    |
-             | \`pico-flash/words.txt\`     | \`/words.txt\`     |
-             | \`pico-flash/dev_tspico.mpy\` (optional) | \`/dev_tspico.mpy\` |
-             | \`pico-flash/dev_extcmd.py\` (optional)  | \`/dev_extcmd.py\`  |
-             | \`pico-flash/assets/*.tap\`  | \`/assets/*.tap\`  |
-             | \`pico-flash/help/*.txt\`    | \`/help/*.txt\`    |
+             | \`pico/main.py\`       | \`/main.py\`       |
+             | \`pico/config.ini\`    | \`/config.ini\`    |
+             | \`pico/words.txt\`     | \`/words.txt\`     |
+             | \`pico/assets/*.tap\`  | \`/assets/*.tap\`  |
+             | \`pico/help/*.txt\`    | \`/help/*.txt\`    |
 
           4. **Reboot the Pico**. You should see the boot banner:
              \`\`\`
@@ -173,26 +192,26 @@ jobs:
              INFO: SD Card initialized and mounted OK
              \`\`\`
 
-          ## What's in this bundle
+          ## Quick deploy — Z80 side
 
-          - \`firmware.uf2\` — MicroPython + frozen TS package.
-          - \`pico-flash/\` — everything that needs to live on the Pico's
-            internal flash filesystem.
-
-          The two \`dev_*\` files are **optional overrides** that let you
-          iterate on \`tspico.py\` / \`extcmd.py\` without rebuilding the
-          UF2. Skip them unless you're actively developing.
+          Program the \`.ROM\` image from \`rom/\` into the TS-2068
+          expansion-board ROM chip using your usual ROM programmer.
+          The image is a raw binary; load it at offset 0.
 
           See README.md in the repo for the full picture:
           https://github.com/timex-sinclair-projects/tspico-firmware-build
           EOF
 
-          # Zip up the bundle.
-          zip -r "${STAGE}.zip" "${STAGE}"
-          ls -la "${STAGE}.zip"
+          # Zip the bundle. Filename carries the tag; the folder inside
+          # is just `ts-pico/` so paths in DEPLOY.md stay version-free.
+          ZIP="ts-pico-${TAG}.zip"
+          zip -r "${ZIP}" "${STAGE}"
+          ls -la "${ZIP}"
           echo ""
           echo "=== bundle tree ==="
           find "${STAGE}" -type f | sort
+          echo ""
+          echo "ZIP_NAME=${ZIP}" >> "$GITHUB_ENV"
 
       - name: Create or update GitHub Release
         env:
@@ -212,13 +231,13 @@ jobs:
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists — uploading assets to it."
             gh release upload "${TAG}" \
-              "tspico-${TAG}.zip" \
+              "${ZIP_NAME}" \
               "${UF2}#firmware.uf2 (raw, for in-place reflash)" \
               --clobber
           else
             echo "Release ${TAG} does not exist — creating it."
             gh release create "${TAG}" \
-              "tspico-${TAG}.zip" \
+              "${ZIP_NAME}" \
               "${UF2}#firmware.uf2 (raw, for in-place reflash)" \
               --title "TS-Pico Firmware ${TAG}" \
               --generate-notes
