@@ -7,8 +7,12 @@
 # and uses ~80% less storage besides.
 #
 # Usage:
-#   ./build-dev-mpy.sh                    # builds dev_tspico.mpy in repo root
-#   ./build-dev-mpy.sh /path/to/file.py   # builds <file>.mpy alongside the .py
+#   src/build-dev-mpy.sh                  # builds src/dev_tspico.mpy
+#   src/build-dev-mpy.sh /path/to/file.py # builds <file>.mpy alongside the .py
+#
+# The script resolves its own location, so the default source path
+# (`<script-dir>/dev_tspico.py`) works whether you run it from the repo
+# root, from src/, or anywhere else.
 #
 # Setup (one-time):
 #   pip install --user mpy-cross==1.20.*  # match the UF2's MicroPython version
@@ -22,7 +26,8 @@
 
 set -euo pipefail
 
-SRC="${1:-dev_tspico.py}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="${1:-${SCRIPT_DIR}/dev_tspico.py}"
 
 if ! command -v mpy-cross >/dev/null 2>&1; then
     if [ -x "$HOME/.local/bin/mpy-cross" ]; then

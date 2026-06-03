@@ -9,6 +9,10 @@ It's written for new developers who want to read or extend the firmware.
 You don't need to know PIO assembly or Z80 internals — we'll cover the
 parts you need as we go.
 
+> **Source-code paths in this doc** (e.g. `TS/tspico_io.py`) are
+> Python-package paths. The actual files live under `src/` in the repo
+> — `TS/tspico_io.py` is at `src/TS/tspico_io.py`.
+
 > **Looking for the design context first?** Read
 > [`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) — it explains the
 > protocol from the design side: what Gustavo built, why he modified

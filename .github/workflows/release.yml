@@ -75,13 +75,13 @@ jobs:
       - name: Stage frozen modules
         run: |
           mkdir -p ${{ github.workspace }}/micropython/ports/rp2/modules/TS
-          cp TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
-          cp TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
-          cp TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
-          cp TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
-          cp TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
-          cp TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
-          cp manifest.py         ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
+          cp src/TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
+          cp src/TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
+          cp src/TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
+          cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
+          cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
+          cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
+          cp src/manifest.py         ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
 
       - name: Build mpy-cross
         working-directory: ${{ github.workspace }}/micropython
@@ -97,12 +97,12 @@ jobs:
           make clean
           make -j$(nproc)
 
-      - name: Compile dev_tspico.mpy (if dev_tspico.py present)
-        if: hashFiles('dev_tspico.py') != ''
+      - name: Compile dev_tspico.mpy (if src/dev_tspico.py present)
+        if: hashFiles('src/dev_tspico.py') != ''
         run: |
           MPYC="${{ github.workspace }}/micropython/mpy-cross/build/mpy-cross"
-          "$MPYC" dev_tspico.py
-          ls -la dev_tspico.mpy
+          "$MPYC" src/dev_tspico.py
+          ls -la src/dev_tspico.mpy
 
       # ──────────────────────────────────────────────────────────────────
       # Assemble the release bundle. Structure mirrors the Pico-flash
@@ -140,17 +140,17 @@ jobs:
 
           # pico/: complete Pico-flash payload (UF2 + everything that
           # lives on the Pico's filesystem).
-          cp "${UF2_SRC}" "${STAGE}/pico/firmware.uf2"
-          cp main.py      "${STAGE}/pico/main.py"
-          cp config.ini   "${STAGE}/pico/config.ini"
-          cp words.txt    "${STAGE}/pico/words.txt"
-          cp assets/*.tap "${STAGE}/pico/assets/"
-          cp help/*.txt   "${STAGE}/pico/help/"
+          cp "${UF2_SRC}"      "${STAGE}/pico/firmware.uf2"
+          cp src/main.py       "${STAGE}/pico/main.py"
+          cp src/config.ini    "${STAGE}/pico/config.ini"
+          cp src/words.txt     "${STAGE}/pico/words.txt"
+          cp src/assets/*.tap  "${STAGE}/pico/assets/"
+          cp src/help/*.txt    "${STAGE}/pico/help/"
 
           # rom/: Z80-side EXROM. Copy whatever .ROM files live in the
-          # repo's rom/ directory — typically just the one current
+          # repo's src/rom/ directory — typically just the one current
           # release ROM.
-          cp rom/*.ROM "${STAGE}/rom/"
+          cp src/rom/*.ROM "${STAGE}/rom/"
 
           # Bundle deploy instructions.
           cat > "${STAGE}/DEPLOY.md" <<EOF

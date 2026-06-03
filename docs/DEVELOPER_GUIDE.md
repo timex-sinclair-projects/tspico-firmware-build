@@ -124,13 +124,13 @@ flash root, preserving structure. From a release bundle this is
 
 | Pico path | Source in repo | Required? |
 |---|---|---|
-| `/main.py` | `main.py` | yes |
-| `/config.ini` | `config.ini` | yes |
-| `/words.txt` | `words.txt` | yes (for `tpi:.rndw`) |
-| `/assets/*.tap` | `assets/*.tap` | yes |
-| `/help/*.txt` | `help/*.txt` | yes (for `tpi:help`) |
-| `/dev_tspico.mpy` | built from `dev_tspico.py` | only if iterating |
-| `/dev_extcmd.py` | `dev_extcmd.py` | only if iterating |
+| `/main.py` | `src/main.py` | yes |
+| `/config.ini` | `src/config.ini` | yes |
+| `/words.txt` | `src/words.txt` | yes (for `tpi:.rndw`) |
+| `/assets/*.tap` | `src/assets/*.tap` | yes |
+| `/help/*.txt` | `src/help/*.txt` | yes (for `tpi:help`) |
+| `/dev_tspico.mpy` | built from `src/dev_tspico.py` | only if iterating |
+| `/dev_extcmd.py` | `src/dev_extcmd.py` | only if iterating |
 
 **Don't create a `/TS/` folder on the Pico.** That's the
 shadowing trap — see §5.
@@ -156,42 +156,52 @@ If `dev_tspico.mpy` (or `.py`) is present at root you'll also see:
 
 ## 4. Repo layout
 
+All firmware sources live under `src/`. The repo root carries only
+the README, the docs/ and archive/ folders, and GitHub config.
+
 ```
 .
-├── main.py             # Boot entry. Sets pins, frequency, then enters TS2068_IO()
-├── config.ini          # JSON runtime config (log level, ROM/DCK slots, etc.)
-├── words.txt           # Word list used by tpi:.rndw extcmd
-├── manifest.py         # MicroPython frozen-module manifest
-├── build-dev-mpy.sh    # One-liner: dev_tspico.py → dev_tspico.mpy
-│
-├── TS/                 # The frozen package (baked into the UF2)
-│   ├── __init__.py
-│   ├── tspico.py       # Main module (~4000 lines): I/O loop, commands, logging
-│   ├── tspico_io.py    # PIO state machines (TS_IO_DUAL, sel_bank, set_ctrl, set_dck)
-│   ├── sdcard.py       # SD-card SPI driver
-│   ├── extcmd.py       # User-extensible TPI:.XXX command handlers
-│   └── help.py
-│
-├── dev_tspico.py       # Dev-override copy of TS/tspico.py — edit here
-├── dev_extcmd.py       # Dev-override copy of TS/extcmd.py
-│
-├── assets/             # Internal protocol .tap files (live at /assets/ on Pico)
-├── help/               # Help text shown by tpi:help <topic>
-│
-├── test/               # Bus-level harnesses for protocol bring-up
-│   └── _harness_template.py   # READ THIS before writing a new harness
-├── test-progs/         # BASIC test programs (picotest.tap etc.)
-│
-├── docs/               # Architecture, protocol, development narrative
-│   ├── GUSTAVO_PROTOCOL.md       # Z80-ROM view of the protocol
-│   ├── PROTOCOL.md               # Pico-firmware view
-│   ├── DUAL_PORT_DEVELOPMENT.md  # How the dual-port code was earned
-│   ├── EXTCMD_PROTOCOL.md        # Writing TPI:.XXX handlers
-│   ├── PROTOCOL_V2_PROPOSAL.md   # Future-revision design sketch
-│   ├── OPEN_QUESTIONS.md         # Live design questions
-│   └── DEVELOPER_GUIDE.md        # ← this file
-│
-└── .github/workflows/
+├── README.md
+├── docs/                          # Architecture, protocol, development narrative
+│   ├── GUSTAVO_PROTOCOL.md        # Z80-ROM view of the protocol
+│   ├── PROTOCOL.md                # Pico-firmware view
+│   ├── DUAL_PORT_DEVELOPMENT.md   # How the dual-port code was earned
+│   ├── EXTCMD_PROTOCOL.md         # Writing TPI:.XXX handlers
+│   ├── PROTOCOL_V2_PROPOSAL.md    # Future-revision design sketch
+│   ├── LOW-LEVEL-PROTOCOL-V5.TXT  # Gustavo's authoritative wire spec
+│   ├── OPEN_QUESTIONS.md          # Live design questions
+│   └── DEVELOPER_GUIDE.md         # ← this file
+├── archive/                       # Historical reference material
+└── src/
+    ├── CLAUDE.md          # Contributor conventions (Claude Code)
+    ├── main.py            # Boot entry. Sets pins, frequency, then enters TS2068_IO()
+    ├── config.ini         # JSON runtime config (log level, ROM/DCK slots, etc.)
+    ├── words.txt          # Word list used by tpi:.rndw extcmd
+    ├── manifest.py        # MicroPython frozen-module manifest
+    ├── build-dev-mpy.sh   # One-liner: dev_tspico.py → dev_tspico.mpy
+    │
+    ├── TS/                # The frozen package (baked into the UF2)
+    │   ├── __init__.py
+    │   ├── tspico.py      # Main module (~4000 lines): I/O loop, commands, logging
+    │   ├── tspico_io.py   # PIO state machines (TS_IO_DUAL, sel_bank, set_ctrl, set_dck)
+    │   ├── sdcard.py      # SD-card SPI driver
+    │   ├── extcmd.py      # User-extensible TPI:.XXX command handlers
+    │   └── help.py
+    │
+    ├── dev_tspico.py      # Dev-override copy of TS/tspico.py — edit here
+    ├── dev_extcmd.py      # Dev-override copy of TS/extcmd.py
+    │
+    ├── assets/            # Internal protocol .tap files (live at /assets/ on Pico)
+    ├── help/              # Help text shown by tpi:help <topic>
+    ├── rom/               # Z80-side EXROM image
+    ├── pico/              # Test artifacts (.dck / .rom)
+    │
+    ├── test/              # Bus-level harnesses for protocol bring-up
+    │   └── _harness_template.py   # READ THIS before writing a new harness
+    └── test-progs/        # BASIC test programs (picotest.tap etc.)
+
+# GitHub-managed at root:
+.github/workflows/
     ├── build.yml        # Builds firmware.uf2 + dev_tspico.mpy on every push
     └── release.yml      # Builds the release bundle on git tag push
 ```

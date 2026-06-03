@@ -13,6 +13,10 @@ This is a working document. The contract is not yet ratified — the
 team needs to discuss the open questions in §6 before any
 implementation lands.
 
+> **Source-code paths in this doc** (e.g. `TS/extcmd.py`) are
+> Python-package paths. The actual files in the repo live under `src/`
+> — `TS/extcmd.py` is at `src/TS/extcmd.py`.
+
 ---
 
 ## 1. What extcmd is for
