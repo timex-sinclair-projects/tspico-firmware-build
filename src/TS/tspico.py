@@ -4781,20 +4781,25 @@ def ZX48_IO(pre):                                                               
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("ZX48_IO SAVE returned")
 
-            elif a == 14:                                                  # OUT 10,100 from 2068 — DEAD CODE on current hardware (see note below)
+            elif a == 14:                                                  # OUT 14,14 from 2068 — DEAD CODE on current hardware (see note below)
                 # ─── DUAL-PORT MIGRATION: ZX48 exit-via-byte is unreachable ─
-                # Confirmed empirically: `OUT 10,100` on the 2068 executes
-                # cleanly but the byte never reaches the Pico's PIO. Port
-                # $0A (decimal 10) is not routed through /PICOSEL on the
-                # TS-Pico hardware — only ports $0E and $0F are. So this
-                # `elif a == 100` branch is unreachable in practice, and
-                # the only way out of ZX48 mode is the TS-Pico reset button.
+                # Confirmed empirically: the byte never reaches the Pico's
+                # PIO in the way this branch expects, so the `elif a == 14`
+                # branch is unreachable in practice, and the only way out
+                # of ZX48 mode is the TS-Pico reset button.
+                #
+                # (Historical note: the original guard was `a == 100` for
+                # `OUT 10,100` — port $0A isn't routed through /PICOSEL at
+                # all. The guard was switched to `a == 14` / `OUT 14,14`
+                # for lower cognitive load on the 2068 BASIC side; the
+                # routing details for port $0E in ZX48 mode haven't been
+                # re-traced post-change.)
                 #
                 # The branch is kept as defensive code in case a future
-                # hardware revision routes more ports through PIO, or in
-                # case some other code path forces a byte 100 into the
-                # RX FIFO. The TSP.zx48 = False clears the re-entry guard
-                # in TS2068_IO so this would work correctly IF reached.
+                # hardware/PIO revision surfaces the byte, or some other
+                # code path forces a byte 14 into the RX FIFO. The
+                # TSP.zx48 = False clears the re-entry guard in TS2068_IO
+                # so this would work correctly IF reached.
                 #
                 # Help text in the ZX48() handler tells users to use the
                 # reset button as the canonical exit. See also
