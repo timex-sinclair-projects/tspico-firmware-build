@@ -1495,10 +1495,19 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     # ─────────────────────────────────────────────────────────────────────
     if TSP.VERBOSE or forceDisplay:
 
+        # ─── Issue #14: pre-fill TX, then MQ_READY, then stream body ───
+        # PIO auto-busy left Y = 0 from the last Z80 OUT before this
+        # call. The body for-loop would fill TX to 4 (FIFO depth) and
+        # then deadlock — Z80 can't drain while Y is BUSY, wrt() blocks
+        # on full FIFO. Put the first 3 header bytes in TX (satisfying
+        # "byte in buffer before signaling ready"), THEN MQ_READY, then
+        # the body loop is paced by Z80 reads.
+        # ───────────────────────────────────────────────────────────────
         wrt(0x81)               # PRINT STRING — this IS the D-block status
         wrt(st)                 # Return code
         wrt(0x0D)               # Start with a newline
-        for m in msg:           # Write message
+        MQ_READY()              # Z80 starts reading the 3-byte header
+        for m in msg:           # Write message (paced by Z80 reads)
             wrt(m) # Will let ~ and | pass as FREE and STICK
         if msg1:                # Write msg1
             wrt(0x0D)
@@ -1509,8 +1518,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     else:
 
         wrt(st)                 # Return code (< 0x80) — IS the D-block status
-
-    MQ_READY()                  # Z80 sees "ready" on $0F → reads bytes from $0E
+        MQ_READY()              # one-byte status is in TX; signal ready
 
     TLM("SEND_MSG enter+loaded", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
         msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
