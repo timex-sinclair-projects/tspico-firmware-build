@@ -1,0 +1,3002 @@
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-1
+
+        ***********************************************************************
+        * TS-2068 LOW LEVEL UNIFIED COMMUNICATION PROTOCOL VERS: 1.5 SEP-2024 *
+        ***********************************************************************
+
+                (C) 2023/24 Gustavo Pane - Buenos Aires - Argentina
+
+                          panegustavo@yahoo.com.ar
+
+			  ****   PRELIMINAR   ****
+                          ****      AND       ****
+                          ****  CONFIDENTIAL  ****
+        INTRODUCTION
+
+        This document details the communication protocol specifications between 
+        the operating system of the TS-2068 computer implemented at the release
+	1.5 of the TS-PICO ROM OS and the peripherals that support functionalities
+	of storage and communication.
+
+        The new basic commands added to the traditional ones use the protocol
+        TPI ("Timex Protocol Interface"). In this document you will find examples 
+        of these extended commands in Basic (called TPI commands from now on) and
+        the detail of the low-level protocol data exchange for each one of them.
+
+        The first part of this document, corresponds to the TPI storage commands
+        such as (SAVE, LOAD, VERIFY, MERGE), and to the TPI printer commands 
+        (COPY, LPRINT, etc).
+
+        In this document you will also find the communication messages used to 
+        load and save the entire memory of the TS2068 to a "SNAPSHOT" file in
+        .TMS format called "Timex Memory Snapshot".
+
+        The document also includes the messages used to be able to run other
+        operating systems written for this hardware platform. As an example, we 
+        can mention CP/M in its 2.2 or 3.0 versions.
+
+        The latest available version of this TPI command extension for the TS-2068,
+        is included in the original TS-PICO interface launched this year for the
+        40th Anniversary of the TS-2068.
+
+        For more details on the use of the commands and functionalities, please 
+        consult the TS-PICO user manual which explains with examples, the 
+        implementation of this protocol in the distribution version.
+
+        The information herein is confidential, only the people authorized may use 
+        it in order to develop the interfaces and firmware required, and  must not 
+        be distributed or published to third parties without the  previous express 
+        author's consent.
+
+        The author is not responsible for any damage or harm caused by the use of 
+        the information contained at this document. However, if you find any error 
+        or consider that a functionality should be added or improved, please 
+        contact me at panegustavo@yahoo.com.ar with the subject TPI ERROR 
+        or TPI CHANGE REQUEST ( these observations will be analyzed and could 
+        be included at further releases of this document).It is recommended that 
+	you attach traces and a complete description of the reported event 
+	(BASIC command executed and exchange of values ??between the TS2068 and 
+	the TS-PICO).
+
+        This document supersedes all previous versions and may change without notice.
+				
+							(C) 2024 Gustavo Pane
+                                                             Buenos Aires
+                                                               Argentina
+
+                                                email: panegustavo@yahoo.com.ar
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-2
+
+INTRODUCTION:
+-------------
+
+THE COMMUNICATIONS PROTOCOL BETWEEN TS-2068 AND TS-PICO,
+USES 2 Z80 I/O COMMUNICATION PORTS:
+
+The information exchange is of the MASTER/SLAVE type. 
+Communication always originates from the Z80 (MASTER) side via a 
+defined PREHEADER, and the response is received from the TS-PICO side. 
+
+An initial request from the SLAVE side cannot be initiated in this release.
+This mode is only supported in the hardware that controls the Z80's NMI, 
+requesting the transmission of the message to the TS2068 at any time 
+(ASYNCHRONOUSLY).
+
+=============================
+HARDWARE COMUNICATION LAYER
+=============================
+
+(Z80 I/O ADDRESS 14) DATA PORT (R/W)  (D0 - D7 8 BITS DATA)
+(Z80 I/O ADDRESS 15) CONTROL PORT (R) (D6 = CONTINUE FLAG) 
+                     (In this version, only the read address 
+		      of the status port (Input 15) is used.)
+
+In the current version of the communication protocol, 
+for each read or write exchanged with the TS-PICO, 
+a check of the communication queue status was added 
+using bits 4 and 5 of the status register (I/O PORT 15). 
+
+The Z80 will attempt to process the data up to 256 times 
+before aborting the operation with a BASIC error. 
+
+This behavior prevents the Z80 from executing an infinite 
+loop waiting for communication ready with the TS-PICO.
+
+====================================================================
+             STATUS PORT READ I/O PORT 15
+====================================================================
+D7 = **RESERVED** NOT USED IN THE CURRENT VERSION OF TS-PICO
+--------------------------------------------------------------------------
+D6=0 Means that ts-pico is busy (processing a message)
+D6=1 Means that ts-pico is ready to continue with the 
+     interpreter basic program or function in rom.
+--------------------------------------------------------------------------
+D5=0 Means that the TS-PICO receive queue is full or not ready 
+     to receive data. (Z80 Write op is not permitted).
+
+D5=1 Means that the TS-PICO receive queue is ready and 
+     accepting new values ??(Z80 Write op is permitted).
+--------------------------------------------------------------------------
+D4=0 Means that TS-PICO has no data to transmit (empty queue) 
+     or the queue is not ready. (Z80 Read op is not permitted).
+
+D4=1 Means that TS-PICO has data to transmit in the queue. 
+     (Z80 Read is permitted).
+--------------------------------------------------------------------------
+D3 -> D0 ** Reserved ** Not used in the current version of TS-PICO **
+--------------------------------------------------------------------------
+
+====================================================================
+
+Al the read/write operations wait for the data and if busy, try 256 times
+before trigger an automatic error message to avoid that an infinite loop
+hangs the computer in case that the ts-pico is not ready.
+
+When the system boots up, all the communication ports are initialized to the
+value of 00h in all the bits. The TS-PICO must also correctly initialize the 
+data flow control bit values ??on I/O STATUS PORT 15.
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-2
+
+=============================
+SOFTWARE COMUNICATION LAYER
+=============================
+
+THE SYSTEM COMMUNICATES THROUGH A DATA BLOCK WITH MESSAGES PREDEFINED AND
+CONTROLLES THEIR INTEGRITY BY A CRC VALUE SENT AS LAST BYTE. (SEE MESSAGES 
+DESCRIPTION CHAPTER)
+
+ONCE THE CRC IS SENT, IT MUST BE COMPARED WITH THE LOCAL VALUE CALCULATED 
+FROM THE BEGINNING OF THE MESSAGE AND IF THEY MATCH, THE MESSAGE IS VALID,
+AND THE RESPONSE SHOULD BE 01 (WHICH MEANS OK). OTHERWISE, YOU SHOULD 
+RESPOND WITH THE CORRESPONDING ERROR CODE (SEE TABLE OF ERRORS). 
+
+AS A GENERAL RULE, THE VALUE OF THE ERROR CODE CAN BE CALCULATED AS THE CRC
+OF ALL BYTES RECEIVED +01
+
+IF THE RESULTING FINAL VALUE IS 0x01, NO INFORMATION TRANSMISSION ERROR HAS
+OCCURRED AND YOU SHOULD PROCEED WITH THE EXECUTION OF THE COMMAND NORMALLY.
+
+IF THE VALUE IS DIFFERENT, THE VALUE RETURNED SHOULD BE A VALID ERROR CODE 
+ACCORDING TO THE ERROR TABLE OPTIONS.
+
+IT IS IMPORTANT TO CARRY OUT THE CRC CONTROL TO BE ABLE TO DETECT INCOMPLETE
+MESSAGES, WRONG MESSAGES, NOT SUPPORTED MESSAGES, MESSAGES WITH TRANSMISSION 
+FAILURES, OVERRUN ERRORS OR LACK OF SYNCHRONISM. IN ALL THESE CASES, THE 
+RECEIVER BUFFER MUST BE DISCARDED. THE TS-PICO VERSION DOES NOT SUPPORT 
+MESSAGE RETRANSMISSION, THEREFORE IT IS NOT RECOMMENDED TO RESPOND WITH A 
+STATIC VALUE (Status Code 0x01 = OK) YOU SHOULD ALWAYS RESPOND WITH THE
+CORRECT CODE ACCORDING TO THE CASE, TO AVOID LOSS OF INFORMATION OR
+MALFORMED FILES.
+
+FOR THE SLVM COMMANDS 2 BYTES WITH THE SESSION ID ARE SENT. THIS SESSION ID
+SHOULD BE THE SAME IN THE HEADER BLOCK AND THE DATA BLOCK. IF THE INFORMATION 
+OF SESSION CONTAINS VALUE 0000, THE MESSAGE BLOCK MEANS THAT IT WAS NOT GENERATED
+FROM A BASIC COMMAND.
+
+**NOT ALL DOCUMENTED FUNCTIONS OR PROTOCOL DEFINITIONS ARE AVAILABLE IN THIS ROM VERSION**
+
+BELOW IS AN EXAMPLE OF THE TYPICAL BASIC SLVM GROUP (SAVE).
+THE COMPLETE COMMAND INCLUDES THE FOLLOWING PHASES:
+1) PRE-HEADER MESSAGE
+2) RETURN ERROR CODE
+3) WAIT FOR EXECUTION
+4) HEADER BLOCK
+5) WAIT FOR EXECUTION
+6) RETURN ERROR CODE
+7) DATA BLOCK
+8) WAIT FOR EXECUTION
+9) RETURN ERROR CODE
+
+IN THE PHASE OF WAIT FOR EXECUTION A 2.8ms TIMER IS ACTIVATED. WHILE THE 
+TS-2068 IS WAITING THE CONTINUE SIGNAL, READING THE BIT 6 AT PORT 0x0F, 
+THE TS-PICO SHOULD EXECUTE  THE COMMAND AND RESPOND DURING THAT PERIOD OF TIME.
+IN CASE THE TIMER EXPIRES WAITING FOR THE CONTINUE SIGNAL, AN ERROR 
+J - INVALID I/O DEVICE (TIMEOUT CONDITION) IS RETURNED AUTOMATICALLY.
+
+For debugging and documenting the protocol, the TPI tracing module can be used 
+(enabled only in the debug version of the ROM). This protocol uses secondary
+communication ports 30 and 31 of the Z80 to send the values ??exchanged in the 
+low-level TPI communication messages between the TS-PICO and the Z80. 
+It is recommended to use at least a 16-bit counter on the receiving side of 
+these debug writes to use the counter's value as a relative time unit between 
+the message bytes. 
+Send at least three binary values ??to the data logger: 
+
+1 = TIMESTAMP (BYTE NUMBER), 2 = OPERATION TYPE (RD/WR), 3 = VALUE.
+
+The presentation software can format it in the tracing format used in this document.
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-3
+
+MENSAJE DE ENVIO DE CABECERA DE COMMANDOS
+-----------------------------------------
+
+===========================================================================
+BYTE	STAT	DATA	DATA	BYTE DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+00		0x00		Send BLOCK TYPE
+01		0x00		Send TADDR (00 = SAVE)
+02		0xFF		Send BYTE 1	*CMD DEPENDANT*
+03		0x63		Send BYTE 2	*CMD DEPENDANT*
+04		0x10		Send BYTE 3	*CMD DEPENDANT*
+05		0xA4		Send BYTE 4	*CMD DEPENDANT*
+06		0x6C		Send BYTE 5	*CMD DEPENDANT*
+07		0x11		Send BYTE 6	*CMD DEPENDANT*
+08		0x00		Send BYTE 7	*CMD DEPENDANT*
+--------------------------------------------------------------------------
+09		0x55		Send CRC FROM TIMEX (from bytes 00 to 08)
+--------------------------------------------------------------------------
+10			0x01	Read Status Code (01 = No Error)
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+11	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+
+2ND BLOCK OF THE COMMAND
+------------------------
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+--------------------------------------------------------------------------
+12		0x44	        "D" (DATA BLOCK CMD)  
+13		0x0A	        COMND LEN L           
+14		0x00	        COMND LEN H           
+15		0x54	        "T"                   
+16		0x50	        "P"                   
+17		0x49	        "I"                   
+18		0x3A	        ":"                   
+19		0x44	        "D"                   
+20		0x45	        "E"                   
+21		0x4C	        "L"                   
+22		0x45	        "E"                   
+23		0x54	        "T"                   
+24		0x45	        "E"                   
+--------------------------------------------------------------------------
+25		0x20            CRC FROM TIMEX        
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+26	0x40	        CONTINUE FLAG         
+--------------------------------------------------------------------------
+27			0x01    Status Code (No Error) or
+			0x8x	Special Function CODE (0x81 to 0x86)
+--------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-4
+
+FIELD BLOCK TYPE
+----------------
+
+VALUE	DESCRIPTION
+-----	-----------------------------------------
+0x00	PRE-HEADER BLOCK MESSAGE (SLVM OPERATION)
+0xFF	DATA-BLOCK BLOCK MESSAGE (SLVM OPERATION)
+0x42	"A" (ASM COMND) * RESERVED - NOT USED IN CURRENT TS-PICO*
+0x42	"B" (BASIC COMMAND BLOCK)
+0x43	"C" (CP/M CBIOS COMND)
+0x44	"D" (DATA BLOCK)
+0x45	"E" (EXTRA DATA) * RESERVED - NOT USED IN CURRENT TS-PICO*
+0x	"X" (USER DEFINED SEND CMND BLOCK ) * RESERVED - NOT USED IN CURRENT TS-PICO*
+0x	"Y" (USER DEFINED RECEIVE BLOCK) * RESERVED - NOT USED IN CURRENT TS-PICO*
+0x	"Z" (USER DEFINED SEND / RECEIVE BLOCK)
+
+"B" (BASIC COMMAND ID BLOCK VALUES)
+
+TADDR	COMMAND ID
+----------------------
+0x00	SAVE   
+0x01	LOAD   
+0x02	VERIFY 
+0x03	MERGE  
+0x04	COPY                    
+0x05	LPRINT                  
+0x06	NEW * RESERVED - NOT USED IN CURRENT TS-PICO *
+0x07	RUN * RESERVED - NOT USED IN CURRENT TS-PICO * 
+0x08	SET SNAP FILENAME       
+0x09	SAVE SNAP               
+0x0A	LOAD SNAP               
+
+FIELD STATUS CODE
+-----------------
+
+ERROR		TS-2068 BASIC
+CODE		EXECUTION
+;-----------------------------------
+0x00		PRINT REPORT J - INVALID I/O DEVICE	
+0x01		PRINT OK				
+0x02		PRINT REPORT R - TAPE LOADING ERROR	
+0x03		PRINT REPORT F - INVALID FILE NAME	
+0x04		PRINT REPORT Q - PARAMETER ERROR	
+0x05		PRINT REPORT C - NON SENSE IN BASIC	
+0x06		PRINT REPORT 6 - NUMBER TOO BIG		
+0x07		PRINT REPORT 8 - END OF FILE		
+0x08		PRINT REPORT A - INVALID ARGUMENT	
+0x09		PRINT REPORT 9 - STOP			
+0x0A		PRINT REPORT J - INVALID I/O DEVICE	
+0x0B -> 0x7F	PRINT REPORT D - BREAK-CONT REPEATS
+0x80		* FRAME RETRANSMISION - NOT USED IN CURRENT TS-PICO BASIC OS*
+0x81		FUNCTION PRINT STRING IN MAIN SCREEN
+0x82		FUNCTION PRINT STRING IN MAIN SCREEN & RETURN A KEY
+0x83		FUNCTION PRINT CHARACTER
+0x84		FUNCTION RETURN KEY
+0x85		FUNCTION GET STATUS (B0 = KEYBOARD /B1 = AUX / B2 = PRINTER / B3 = DISK )
+0x86		FUNCTION PRINT STRING WITH LOOP (Y/N)
+0x87		FUNCTION PRINT n CHARACTERS (n<256)
+0x88		FUNCTION CLEAR SCREEN & HOME CURSOR
+0x89 -> 0xFF	* RESERVED - NOT USED IN CURRENT TS-PICO V 1.5*
+
+USING STATUS CODE > 080H
+-------------------------
+
+AT THE LAST PHASE OF THE COMMAND, IF THE STATUS CODE RECEIVED IS GREATER 
+THAN 080H, IT MEANS THAT ADDITIONAL INFORMATION IS REQUIRED BY THE SPECIAL 
+FUNCTION INVOKED AND SHOULD BE ADDED EXTRA DATA TO THE COMMUNICATION PROTOCOL.
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-5
+
+CHAINING FUNCTION (CONTINUE FROM  COMMAND SAVE "TPI:DELETE" EXAMPLE ON PAGE 1-3)
+---------------------------------------------------------------------------------
+
+Example of Single Function  (Print String)
+------------------------------------------
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+27			0x81    Status Code Function Print String
+28			0x01    Status Code (No Error) (or Next Function)
+29			0x54	"1"                   
+30			0x54	"2"                   
+31			0x54	"3"                   
+32			0x0D	<ENTER>                   
+33			0x00    <NULL> End of String
+
+Example of calling two Function (Print String)
+-----------------------------------------------------
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+27			0x81    Indicate First  print string func #1
+28			0x81    Indicate Second print string func #2
+29			0x54	"A" String of First Function (Func #1)                  
+30			0x54	"B"                   
+31			0x54	"C"                   
+32			0x00    <NULL> End of String Func #1
+33			0x01    Return Status Code (No Error) (No More Functions < 128)
+34			0x54	"D"                   
+35			0x54	"E"                   
+36			0x54	"F"                   
+37			0x0D	<ENTER>                   
+38			0x00    <NULL> End of String Func #2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-5
+
+THE ADDITIONAL INFORMATION VARIES DEPENDING ON THE FUNCTION YOU WANT TO EXECUTE.
+
+BELOW IS A DETAIL OF THE DATA FLOW CORRESPONDING TO THE ADDITIONAL FUNCTIONS:
+
+FUNCTION PRINT STRING IN MAIN SCREEN (081H)
+-------------------------------------------
+
+THE PRINT_STRING FUNCTION (0X81H) MUST BE CALLED ONLY AT THE LAST STATUS CODE
+OF THE COMMAND.
+
+The next value to send is the error code or function number that should be sent back 
+to the operating system, according to the table of valid return codes. 
+(status code 01 = no error) (functions code > 0x80).
+
+THE STRING TO PRINT ON THE MAIN SCREEN IS SENT CHARACTER BY CHARACTER FINISHING 
+WITH THE NULL CHARACTER.
+
+THEN THE ERROR CODE SHOULD BE SENT BACK TO THE OPERATING SYSTEM ACCORDING TO THE
+TABLE OF RETURN CODES. GENERALLY, IF NO ERRORS OCCURED, THE VALUE SHOULD BE 0x01 
+(Status Code 01 = No Error)
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+.
+.
+.
+.
+--------------------------------------------------------------------------
+25		0x20		Send CRC FROM TIMEX
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+26	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+27			0x81	Read Status Code (81 = PRINT_STRING)
+--------------------------------------------------------------------------
+28			0x01	Return Status Code (01 = No Error)
+--------------------------------------------------------------------------
+29			0x41	Character ASCII to Print
+30			0x42	Character ASCII to Print
+31			0x43	Character ASCII to Print
+32			0x44	Character ASCII to Print
+33			0x45	Character ASCII to Print
+34			0x00	End of String 00 (NULL)
+--------------------------------------------------------------------------
+
+
+FUNCTION PRINT STRING IN MAIN SCREEN & RETURN A KEY (082H)
+-------------------------------------------------- --------
+THE FUNCTION PRINT_STRING & RETURN A KEY (0X82H) MUST BE CALLED ONLY AT THE LAST
+STATUS CODE OF THE COMMAND.
+
+The next value to send is the error code or function number that should be sent back 
+to the operating system, according to the table of valid return codes. 
+(status code 01 = no error) (functions code > 0x80).
+
+THE STRING TO PRINT ON THE MAIN SCREEN IS SENT CHARACTER BY CHARACTER FINISHING 
+WITH THE NULL CHARACTER. THEN, THE SYSTEM WAITS TILL A KEY IS PRESSED, AND THE 
+ASCII CODE OF THE KEY IS SENT TO THE TS-PICO. 
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-6
+
+THEN THE ERROR CODE SHOULD BE SENT BACK TO THE OPERATING SYSTEM ACCORDING TO THE 
+TABLE OF RETURN CODES. 
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+.
+--------------------------------------------------------------------------
+25		0x20		Send CRC FROM TIMEX
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+26	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+27			0x82	Read Status Code (82 = PRINT STRING & RET KEY)
+--------------------------------------------------------------------------
+28			0x01	Read Status Code (01 = No Error)
+--------------------------------------------------------------------------
+29			0x41	Character ASCII to Print
+30			0x42	Character ASCII to Print
+31			0x43	Character ASCII to Print
+32			0x44	Character ASCII to Print
+33			0x45	Character ASCII to Print
+34			0x00	End of String 00 (NULL)
+--------------------------------------------------------------------------
+-----------------------------WAIT FOR A KEY INPUT ------------------------
+--------------------------------------------------------------------------
+35		0x41		Send KEY Character ASCII (EXAMPLE "A")
+--------------------------------------------------------------------------
+
+PRINT CHARACTER (083H)
+-------------------------------------------------- --------
+The print character function (0x83h) must be called only at the last status code 
+of the command.
+
+The next value to send is the error code or function number that should be sent back 
+to the operating system, according to the table of valid return codes. 
+(status code 01 = no error) (functions code > 0x80).
+
+The character is printed on the main screen.
+then the error code should be sent back to the operating system according to the 
+table of return codes.
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+.
+--------------------------------------------------------------------------
+25		0x20		Send CRC FROM TIMEX
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+26	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+27			0x83	Read Status Code (83 = PRINT CHARACTER)
+--------------------------------------------------------------------------
+28			0x01	Read Status Code (01 = No Error)
+--------------------------------------------------------------------------
+29			0x41	Character ASCII to Print "A"
+--------------------------------------------------------------------------
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-7
+
+FUNCTION RETURN KEY (084H)
+-------------------------------------------------- --------
+
+THE RETURN KEY FUNCTION (0X84H) MUST BE CALLED ONLY AT THE LAST STATUS CODE OF
+THE COMMAND.
+
+The next value to send is the error code or function number that should be sent back 
+to the operating system, according to the table of valid return codes. 
+(status code 01 = no error) (functions code > 0x80).
+
+THE SYSTEM WAITS TILL A KEY IS PRESSED, AND THE ASCII CODE OF THE KEY IS SENT TO 
+THE TS-PICO. 
+
+THEN THE ERROR CODE SHOULD BE SENT BACK TO THE OPERATING SYSTEM ACCORDING TO THE
+TABLE OF RETURN CODES. 
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+.
+.	<<<<<<<<< LAST PART OF 1ST MESSAGE BLOCK >>>>>>>>>>
+.
+--------------------------------------------------------------------------
+25		0x20		Send CRC FROM TIMEX
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+26	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+.
+.		<<<<<<<<< END MESSAGE PHASE >>>>>>>>>>
+.
+--------------------------------------------------------------------------
+27			0x84	Read Status Code (84 = RETURN KEY)
+--------------------------------------------------------------------------
+28			0x01	Read Exit Status Code (01 = No Error)
+--------------------------------------------------------------------------
+-----------------------------WAIT FOR A KEY INPUT ------------------------
+--------------------------------------------------------------------------
+29		0x41		Send KEY Character ASCII (EXAMPLE "A")
+--------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-8
+
+FUNCTION GET TS-PICO STATUS (085H)
+-------------------------------------------------- --------
+THE GET TS-PICO STATUS FUNCTION (0X85H) MUST BE CALLED ONLY AT THE LAST STATUS CODE OF 
+THE COMMAND.
+
+The next value to send is the error code or function number that should be sent back 
+to the operating system, according to the table of valid return codes. 
+(status code 01 = no error) (functions code > 0x80).
+
+
+THE GET STATUS  RETURNS A BYTE THAT CORRESPONDS TO 1 BIT PER TS-PICO DEVICE
+
+B0 = KEYBOARD STATUS
+B1 = AUX STATUS
+B2 = PRINTER STATUS
+B3 = DISK STATUS
+
+AT THE CURRENT VERSION OF THE TS-PICO SOME OF THESE BITS MAY NOT BE SUPPORTED.
+0= READY
+1= BUSY
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+.
+.
+.	<<<<<<<<< LAST PART OF 1ST MESSAGE BLOCK >>>>>>>>>>
+.
+--------------------------------------------------------------------------
+25		0x20		Send CRC FROM TIMEX
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+26	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+.
+.		<<<<<<<<< END MESSAGE PHASE >>>>>>>>>>
+.
+--------------------------------------------------------------------------
+27			0x85	Read Status Code (85 = RETURN KEY)
+--------------------------------------------------------------------------
+28			0x01	Read Exit Status Code (01 = No Error)
+--------------------------------------------------------------------------
+29			0x41	Read STATUS Value
+--------------------------------------------------------------------------
+30			0x00	Read MACHINE Value
+--------------------------------------------------------------------------
+31			0x00	Read OS Value TS2068=1 - TS2048=2 - CPM=3 - NONE=0
+--------------------------------------------------------------------------
+
+FUNCTION PRINT STRING WITH LOOP (Y/N) (086H)
+-------------------------------------------------- --------
+
+The print_string with loop function (0x86) must be called only at the last status
+code of the command.
+
+The next value to send is the error code or function number that should be sent back 
+to the operating system, according to the table of valid return codes. 
+(status code 01 = no error) (functions code > 0x80).
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-9
+
+The string to print on the main screen with loop is sent character by character
+finishing with the null character (End of String) or 03h (CTRL-C BREAK). the message 
+to print must end with the scroll continue message "continue (y/n)". 
+this operation is repeated while the "n" key is not pressed, and continue in the 
+printing loop till received the end loop value 03h (CTRL-C BREAK) at the end.
+
+===========================================================================
+BYTE	STAT	DATA	DATA	DESCRIPTION
+NUMB	IN	OUT	IN	
+----	-----	-----	-----	----------------
+PORT    RD-15	WR-14	RD-14	Z80 I/O PORT
+===========================================================================
+.
+.
+--------------------------------------------------------------------------
+25		0x20		Send CRC FROM TIMEX
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+26	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+27			0x86	Read Status Code (86 = PRINT STRING WITH LOOP)
+--------------------------------------------------------------------------
+28			0x01	Return Status Code (01 = No Error)
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+29	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+30			0x41	Character ASCII to Print
+31			0x42	Character ASCII to Print
+32			0x43	Character ASCII to Print
+33			0x44	Character ASCII to Print
+34			0x45	Character ASCII to Print
+35			0x00	End of String 00 or 03,  00 continue in 
+				LOOP or 0x03 BREAK (CTRL-C) Exit the LOOP
+--------------------------------------------------------------------------
+-----------------------------WAIT FOR A KEY INPUT ------------------------
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+36	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+37		0x41		IF The Strings ends with 00H, 
+				Check KEY PRESS Value "Y" or "N" 
+	IF the reponse is "N" the LOOP ends with the Return Status Code
+	ELSE go to step 29 waiting for the Next string is available to print.
+				ELSE
+	Exit from the Print String Function LOOP and return to BASIC interpreter.
+
+--------------------------------------------------------------------------
+------------------------WAIT EXECUTION 2.8ms------------------------------
+--------------------------------------------------------------------------
+38	0x40			Read CONTINUE FLAG
+--------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-10
+
+MESSAGES SUPPORTED BY VERSION 1.0 OF THE TS-2068 ROM VERSION 2023 40 ANNIVERSARY.
+=================================================================================
+
+SAVE "9876543210" CODE 0,2      (00 = SAVE)
+
+CO RD-15      WR-14     RD-14    
+=============================================================
+00            0x00               BLOCK TYPE (00 = Header)
+01            0x00               TADDR (00 = SAVE)
+02            0xFF               BANK # (FF=HOME)
+03            0x63               SESION ID (Low Byte) 
+04            0x10               SESION ID (High Byte)
+05            0xA4               MEMORY ADDRESS (Low Byte) 
+06            0x6C               MEMORY ADDRESS (High Byte)
+07            0x11               BLOCK LEN (Low Byte)  
+08            0x00               BLOCK LEN (High Byte) 
+-------------------------------------------------------------
+09            0x55               CRC FROM TIMEX
+-------------------------------------------------------------
+10                      0x01     Status Code (01 = No Error)
+-----------------WAIT EXECUTION------------------------------
+11  0x40                         CONTINUE FLAG
+-------------------------------------------------------------
+12            0x00               BLOCK TYPE (00 = Header)
+13            0x63               SESION ID (Low Byte)
+14            0x10               SESION ID (High Byte)
+-------------------------------------------------------------
+15            0x03               HDTYPE
+16            0x39               "9"
+17            0x38               "8"
+18            0x37               "7"
+19            0x36               "6"
+20            0x35               "5"
+21            0x34               "4"
+22            0x33               "3"
+23            0x32               "2"
+24            0x31               "1"
+25            0x30               "0"
+26            0x02               BLOCK LEN (Low Byte)  
+27            0x00               BLOCK LEN (High Byte) 
+28            0x00               MEMORY ADDRESS (Low Byte)  
+29            0x00               MEMORY ADDRESS (High Byte) 
+30            0x75               HDVARS (Low Byte) 
+31            0x80               HDVARS (High Byte)
+-------------------------------------------------------------
+32            0x86               CRC FROM TIMEX
+-----------------WAIT EXECUTION------------------------------
+33  0x40                         CONTINUE FLAG
+-------------------------------------------------------------
+34                      0x01     Status Code (01 = No Error)
+-------------------------------------------------------------
+35            0xFF               Block Type (FF = BLOCK DATA)
+36            0x63               SESION ID (Low Byte) 
+37            0x10               SESION ID (High Byte)
+38            0xF3               DATA(0000)
+39            0x18               DATA(0001)
+-------------------------------------------------------------
+40            0x67               CRC FROM TIMEX
+-----------------WAIT EXECUTION------------------------------
+41  0x40                         CONTINUE FLAG
+-------------------------------------------------------------
+42                      0x01     Status Code (01 = No Error)
+-------------------------------------------------------------
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-11
+
+LOAD "9876543210" CODE                  (01 = LOAD)
+                                        (02 = VERIFY)
+CO RD-15      WR-14     RD-14           (03 = MERGE)
+============================================================
+00            0x00               BLOCK TYPE (00 = Header)
+01            0x01               TADDR (01 = LOAD)
+02            0xFF               BANK # (FF=HOME) 
+03            0x6A               SESION ID (Low Byte)   
+04            0x86               SESION ID (High Byte)  
+05            0xB6               MEMORY ADDRESS (Low Byte) 
+06            0x6C               MEMORY ADDRESS (High Byte)
+07            0x11               BLOCK LEN (Low Byte)  
+08            0x00               BLOCK LEN (High Byte) 
+-------------------------------------------------------------
+09            0xD9               CRC FROM TIMEX
+-------------------------------------------------------------
+10                      0x01     Status Code (01 = No Error)
+-----------------WAIT EXECUTION------------------------------
+11  0x40                         CONTINUE FLAG
+-------------------------------------------------------------
+12            0x00               REQUEST BLOCK TYPE ID (00 = Header)                
+-------------------------------------------------------------
+13                      0x00     BLOCK TYPE FROM FILE  (00 = Header) 
+14                      0x03     HDTYPE
+15                      0x39     "9"
+16                      0x38     "8"
+17                      0x37     "7"
+18                      0x36     "6"
+19                      0x35     "5"
+20                      0x34     "4"
+21                      0x33     "3"
+22                      0x32     "2"
+23                      0x31     "1"
+24                      0x30     "0"
+25                      0x02     BLOCK LEN (Low Byte)      
+26                      0x00     BLOCK LEN (High Byte)     
+27                      0x00     MEMORY ADDRESS (Low Byte) 
+28                      0x00     MEMORY ADDRESS (High Byte)
+29                      0x00     HDVARS (Low Byte)         
+30                      0x80     HDVARS (High Byte)        
+-------------------------------------------------------------
+31                      0x80     CRC FROM FILE
+-------------------------------------------------------------
+32            0x00               CRC FROM TIMEX
+-----------------WAIT EXECUTION------------------------------
+33  0x40                         CONTINUE FLAG
+-------------------------------------------------------------
+34                      0x01     Status Code (01 = No Error)
+-------------------------------------------------------------
+
+   <<<<<< LOAD "9876543210" CODE CONTINUE NEXT PAGE >>>>>>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-12
+
+        <<<<<< LOAD "9876543210" CODE CONTINUE >>>>>>
+
+CO RD-15      WR-14     RD-14           (03 = MERGE)
+-----------------PROCESS RETURN CMD--------------------------
+35            0xFF               BLOCK TYPE ID (FF = BLOCK DATA)  
+36            0x01               TADDR (00 = SAVE)         
+37            0xFF               BANK # (FF=HOME)          
+38            0x6A               SESION ID (Low Byte)      
+39            0x86               SESION ID (High Byte)     
+40            0x00               MEMORY ADDRESS (Low Byte) 
+41            0x00               MEMORY ADDRESS (High Byte)
+42            0x02               BLOCK LEN (Low Byte)      
+43            0x00               BLOCK LEN (High Byte)     
+-------------------------------------------------------------
+44            0xEF               CRC FROM TIMEX       
+-------------------------------------------------------------
+45                      0x01     Status Code (01 = No Error)
+-----------------WAIT EXECUTION------------------------------
+46  0x40                         CONTINUE FLAG
+-------------------------------------------------------------
+47            0xFF               REQUEST BLOCK TYPE ID (FF = BLOCK DATA)
+-------------------------------------------------------------
+48                      0xFF     BLOCK TYPE FROM FILE  (FF = BLOCK DATA) 
+49                      0xF3     DATA(0000)
+50                      0x18     DATA(0001)
+51                      0x14     CRC FROM FILE
+-------------------------------------------------------------
+52            0x00               CRC FROM TIMEX
+-----------------WAIT EXECUTION------------------------------
+53  0x40                         CONTINUE FLAG
+-------------------------------------------------------------
+54                      0x01     Status Code (01 = No Error)
+-------------------------------------------------------------
+
+
+*****************************************************************************                                   
+                                                
+;******************************                 ***********************           
+; ERROR CODE RETURN ON BLOCK                    * TADDR HEADERS VALUES*           
+;******************************                 ***********************
+0   = REPORT J - INVALID I/O DEVICE             00 = SAVE           
+1   = OK                                        01 = LOAD           
+2   = REPORT R - TAPE LOADING ERROR             02 = VERIFY         
+3   = REPORT F - INVALID FILE NAME              03 = MERGE          
+4   = REPORT Q - PARAMETER ERROR                04 = COPY           
+5   = REPORT C - NON SENSE IN BASIC             05 = LPRINT
+6   = REPORT 6 - NUMBER TOO BIG                 06 = NEW     * NOT USED IN PICO *
+7   = REPORT 8 - END OF FILE                    07 = RUN     * NOT USED IN PICO *
+8   = REPORT A - INVALID ARGUMENT               
+9   = REPORT 9 - STOP                           
+10  = REPORT J - INVALID I/O DEVICE             
+>10 = REPORT D - BREAK-CONT REPEATS             
+                                                
+**************  *************************       **************         
+* BLOCK TYPE *  * RET CODE FUNCTIONS    *       * FRAME ID's *         
+**************  *************************       **************         
+00 = HEADER     081H    PRINT STRNG             "A" (ASM COMND)        
+FF = DATA BLOC  082H    PRINT STRNG & RET KEY   "B" (BASIC COMND)      
+                083H    PRINT CHARACTER         "C" (CP/M CBIOS COMND) 
+                084H    RETURN KEY              "D" (DATA BLOCK)       
+                085H    GET STATUS		"E" (EXTRA DATA)       
+                086H    PRINT LOOP STRNG Y/N
+
+
+
+*****************************************************************************
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-13
+
+COPY    (04 = COPY SCREEN)                      SAVE "TPI:DELETE" CODE 4386,13124 (00 = SAVE CMD)
+---------------------------------------------   ---------------------------------------------
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14  
+=============================================   =============================================
+00         0x42         "B" (BASIC COMMAND)     00         0x42         "B" (BASIC COMND)
+01         0x04         COPY (TADDR)            01         0x00         SAVE (TADDR)
+02         0xFF         BANK NUMBER (FF=HOME)   02         0xFF         BANK NUMBER (FF=HOME)
+03         0xFF         COLOR MODE (FF=ATTR)    03         0x22         PMR 1 L
+04         0x00         VIDEO MODE              04         0x11         PMR 1 H
+05         0x20         COLUMS (X-MAX)          05         0x44         PMR 2 L
+06         0x18         LINES  (Y-MAX)          06         0x33         PMR 2 H
+07         0x00         DATA LEN L              07         0x0A         COMND LEN L
+08         0x1B         DATA LEN H              08         0x00         COMND LEN H 
+---------------------------------------------   ---------------------------------------------
+09         0x65         CRC FROM TIMEX          09         0xF3         CRC FROM TIMEX
+---------------------------------------------   ---------------------------------------------
+11                 0x01 Status Code             10                 0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------
+10 0x40                 CONTINUE FLAG           11 0x40                 CONTINUE FLAG    
+---------------------------------------------   ---------------------------------------------
+12         0x44         "D" (DATA BLOCK CMD)    12         0x44         "D" (DATA BLOCK CMD)  
+13         0x00         COMND LEN L             13         0x0A         COMND LEN L           
+14         0x1B         COMND LEN H             14         0x00         COMND LEN H           
+15         0x00         SCREEN DATA 0           15         0x54         "T"                   
+16         0x00         SCREEN DATA 1           16         0x50         "P"                   
+17         0x00             .                   17         0x49         "I"                   
+.          0x00             .                   18         0x3A         ":"                   
+.          0x00             .                   19         0x44         "D"                   
+.          0x00             .                   20         0x45         "E"                   
+6922       0x0F             .                   21         0x4C         "L"                   
+6923       0x0F             .                   22         0x45         "E"                   
+6924       0x0F         SCREEN DATA 6910        23         0x54         "T"                   
+6925       0x0F         SCREEN DATA 6911        24         0x45         "E"                   
+---------------------------------------------   ---------------------------------------------
+6926       0x93         CRC FROM TIMEX          25         0x20         CRC FROM TIMEX             
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------
+6927 0x40               CONTINUE FLAG           26 0x40                 CONTINUE FLAG    
+---------------------------------------------   ---------------------------------------------
+6928               0x01 Status Code             27                  0x01 Status Code
+---------------------------------------------   ---------------------------------------------
+
+*********************************************************************************************
+
+LPRINT  1       (05 = PRINT ASCII CHAR)          <<<< OPTIONAL MSG IF NOT ENDS WITH ";" >>>>
+
+---------------------------------------------   ---------------------------------------------           
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14                 
+=============================================   =============================================
+00         0x42         "B" (BASIC COMMAND)     00         0x42         "B" (BASIC COMMAND)     
+01         0x05         LPRINT CHR (TADDR)      01         0x05         LPRINT CHR (TADDR)      
+02         0xFF         BANK NUMBER (FF=HOME)   02         0xFF         BANK NUMBER (FF=HOME)             
+03         0x31         ASCII CHARACTER         03         0x0D         ASCII CHARACTER         
+04         0x01         CHR TYPE                04         0x01         CHR TYPE                        
+05         0x01         PRINT FLAGS             05         0x01         PRINT FLAGS             
+06         0x0F         COLOR ATTRIB (ATTRP)    06         0x0F         COLOR ATTRIB (ATTRP)    
+07         0x00         DATA LEN L              07         0x00         DATA LEN L              
+08         0x00         DATA LEN H              08         0x00         DATA LEN H              
+---------------------------------------------   ---------------------------------------------           
+09         0x86         CRC FROM TIMEX          09         0xBA         CRC FROM TIMEX          
+---------------------------------------------   ---------------------------------------------
+11                 0x01 Status Code             11                 0x01 Status Code 
+-----------------WAIT EXECUTION--------------   -----------------WAIT EXECUTION--------------
+10 0x40                 CONTINUE FLAG           10 0x40                 CONTINUE FLAG           
+---------------------------------------------   ---------------------------------------------           
+
+CHR TYPE = 01=ASCII             LEN 00 = NO DATA BLOCK          PRINT FLAGS BIT 0,1  LISTING
+CHR TYPE = 02=BITMAP-UDG        LEN 08 = BITMAP CHAR DATA       PRINT FLAGS BIT 4    AUTO
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-14
+
+LPRINT CHR$ 138;        ( BITMAP CHARACTER)
+
+-------------------------------------------------------------                           
+CO RD-15   WR-14  RD-14    
+=============================================================
+00         0x42         "B" (BASIC COMMAND)     
+01         0x05         LPRINT CHR (TADDR)              
+02         0xFF         BANK NUMBER (FF=HOME)             
+03         0x8A         ASCII CHARACTER 
+04         0x02         CHR TYPE        
+05         0x01         PRINT FLAGS 
+06         0x0F         COLOR ATTRIBUTES (ATTRP)
+07         0x08         DATA LEN L
+08         0x00         DATA LEN H
+-------------------------------------------------------------                           
+09         0x36         CRC FROM TIMEX  
+-------------------------------------------------------------                           
+10                 0x01 Status Code 
+-----------------WAIT EXECUTION------------------------------
+11 0x40                 CONTINUE FLAG           
+-------------------------------------------------------------
+
+<<<<<<  OPTIONAL MESSAGE PART  >>>>>>
+<<<<<<  FOR BITMAP CHAR ONLY   >>>>>>
+-------------------------------------------------------------
+12         0x44         "D" (DATA BLOCK CMD)    
+13         0x08         COMND LEN L             
+14         0x00         COMND LEN H             
+15         0xF0         "****    "
+16         0xF0         "****    "
+17         0xF0         "****    "
+18         0xF0         "****    "
+19         0xF0         "****    "
+20         0xF0         "****    "
+21         0xF0         "****    "
+22         0xF0         "****    "
+-------------------------------------------------------------                           
+23         0x4C         CRC FROM TIMEX  
+-----------------WAIT EXECUTION------------------------------
+24 0x40                 CONTINUE FLAG           
+-------------------------------------------------------------   
+25                0x01  Status Code
+-----------------PROCESS RESPONSE----------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-15
+
+LPRINT CHR$ 144;        ( UDG CHARACTER "A")
+
+-------------------------------------------------------------                           
+CO RD-15   WR-14  RD-14    
+=============================================================
+00         0x42         "B" (BASIC COMMAND)     
+01         0x05         LPRINT CHR (TADDR)              
+02         0xFF         BANK NUMBER (FF=HOME)             
+03         0x90         ASCII CHARACTER 
+04         0x02         CHR TYPE        
+05         0x01         PRINT FLAGS 
+06         0x0F         COLOR ATTRIBUTES (ATTRP)
+07         0x08         DATA LEN L
+08         0x00         DATA LEN H
+-------------------------------------------------------------                           
+09         0x2C         CRC FROM TIMEX  
+-------------------------------------------------------------                           
+10                 0x01 Status Code
+-----------------WAIT EXECUTION------------------------------
+11 0x40                 CONTINUE FLAG           
+-------------------------------------------------------------
+
+<<<<<<  OPTIONAL MESSAGE PART  >>>>>>
+<<<<<<  FOR BITMAP CHAR ONLY   >>>>>>
+-------------------------------------------------------------
+12         0x44         "D" (DATA BLOCK CMD)    
+13         0x08         COMND LEN L             
+14         0x00         COMND LEN H             
+15         0x00         "        "                      
+16         0x3C         "  ****  "              
+17         0x42         " *    * "              
+18         0x42         " *    * "              
+19         0x7E         " ****** "              
+20         0x42         " *    * "              
+21         0x42         " *    * "              
+22         0x00         "        "              
+-------------------------------------------------------------                           
+23         0x0E         CRC FROM TIMEX  
+-----------------WAIT EXECUTION------------------------------
+24 0x40                 CONTINUE FLAG           
+-------------------------------------------------------------   
+25                 0x01 Status Code
+-----------------PROCESS RESPONSE----------------------------
+
+                                        BMP RESOLUTION STD      HIGH RESOLUTION 
+SAVE "TPI:BMPSIZE" CODE 256,192          256 x  192              512 x  192
+                                         512 x  384             1024 x  384
+                                        1024 x  768             2048 x  768
+                                        2048 x 1596             4096 x 1596
+
+SAVE "TPI:TCAPST"       START CAPTURE IN TEXT FILE
+SAVE "TPI:TCAPEN"       END   CAPTURE IN TEXT FILE
+
+SAVE "TPI:TXTLIN" CODE 72       SET 72  LINES PER PAGE
+SAVE "TPI:TXTCOL" CODE 132      SET 132 CHARACTER PER LINE
+SAVE "TPI:TXTFON" CODE XXX      SET FONT XXX
+SAVE "TPI:TXTEOP"               SEND END OF PAGE
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-16
+
+LPRINT "1"; INK 4;"1"; PAPER 7;"3"
+
+---------------------------------------------                   
+CO RD-15   WR-14  RD-14                         01         02       03       04
+===================================================================================
+00         0x42         "B" (BASIC COMMAND)     0x42      0x42     0x42     0x42   
+01         0x05         LPRINT CHR (TADDR)      0x05      0x05     0x05     0x05   
+02         0xFF         BANK NUMBER (FF=HOME)   0xFF      0xFF     0xFF     0xFF   
+03         0x31         ASCII CHARACTER         0x10      0x10     0x04     0x32   
+04         0x01         CHR TYPE                0x01      0x01     0x01     0x01   
+05         0x01         PRINT FLAGS             0x01      0x01     0x01     0x01   
+06         0x0F         COLOR ATTRIBUTES        0x0F      0x0F     0x0F     0x0F   
+07         0x00         DATA LEN L              0x00      0x00     0x00     0x00   
+08         0x00         DATA LEN H              0x00      0x00     0x00     0x00   
+-----------------------------------------------------------------------------------             
+09         0x86         CRC FROM TIMEX          0xA7      0xA7     0xB3     0x85   
+-----------------------------------------------------------------------------------             
+10              0x01    Status Code                  0x01      0x01     0x01   0x01 
+----------------------------------WAIT EXECUTION-----------------------------------                                        
+11 0x40                 CONTINUE FLAG       0x40        0x40    0x40    0x40   
+-----------------------------------------------------------------------------------
+   <<<<<<  CONTINUE SEQUENCE >>>>>>
+-----------------------------------------------------------------------------------     
+CO RD-15   WR-14 RD-14                             05       06       07       08
+===================================================================================
+00         0x42         "B" (BASIC COMMAND)       0x42     0x42     0x42     0x42       
+01         0x05         LPRINT CHR (TADDR)        0x05     0x05     0x05     0x05       
+02         0xFF         BANK NUMBER (FF=HOME)     0xFF     0xFF     0xFF     0xFF       
+03         0x31         ASCII CHARACTER           0x11     0x07     0x33     0x0D       
+04         0x01         CHR TYPE                  0x01     0x01     0x01     0x01       
+05         0x01         PRINT FLAGS               0x01     0x01     0x01     0x01       
+06         0x0F         COLOR ATTRIBUTES          0x0F     0x0F     0x0F     0x0F       
+07         0x00         DATA LEN L                0x00     0x00     0x00     0x00       
+08         0x00         DATA LEN H                0x00     0x00     0x00     0x00       
+-----------------------------------------------------------------------------------
+09         0x86         CRC FROM TIMEX            0xA6     0xB0     0x84     0xBA       
+-----------------------------------------------------------------------------------
+10              0x01    Status Code                    0x01     0x01     0x01  0x01
+----------------------------------WAIT EXECUTION-----------------------------------                                        
+11 0x40                 CONTINUE FLAG             0x40     0x40     0x40     0x40       
+-----------------------------------------------------------------------------------
+
+FUNC    BASIC
+CODE    INSTRUCTION     FUNCTION
+-----   -------------   -----------------------------------------------------------
+10H  =  INK             (SELECT INK COLOR)
+11H  =  PAPER           (SELECT PAPER COLOR)
+12H  =  FLASH           (SELECT UNDERLINE CONTROL)
+13H  =  BRIGHT          (SELECT BOLD LETER CONTROL)
+14H  =  INVERSE         (SELECT ITALIC)
+15H  =  OVER xx         ( SEND ASCII EXTEND TO PRINTER (128 to 255) CHR$ (128 + xx)
+-----   -------------   -----------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-17
+
+LPRINT OVER 37          REM SEND Ñ TO PRINTER + <ENTER>
+LPRINT OVER 37;         REM SEND Ñ TO PRINTER
+
+        Envia caracter ascii (128+37) = 165
+-----------------------------------------------------------------                                 
+CO RD-15   WR-14 RD-14                          01         02    
+=================================================================
+00         0x42         "B" (BASIC COMMAND)     0x42      0x42   
+01         0x05         LPRINT CHR (TADDR)      0x05      0x05   
+02         0xFF         BANK NUMBER (FF=HOME)   0xFF      0xFF   
+03         0x15         ASCII CHARACTER         0x25      0x0D   
+04         0x01         CHR TYPE                0x01      0x01   
+05         0x01         PRINT FLAGS             0x01      0x01   
+06         0x0F         COLOR ATTRIBUTES        0x0F      0x0F   
+07         0x00         DATA LEN L              0x00      0x00   
+08         0x00         DATA LEN H              0x00      0x00   
+-----------------------------------------------------------------
+09         0xA2         CRC FROM TIMEX          0x92      0xBA   
+-----------------------------------------------------------------
+10              0x01    Status Code                 0x01    0x01 
+--------------------------WAIT EXECUTION-------------------------                                          
+11 0x40                 CONTINUE FLAG           0x40      0x40   
+-----------------------------------------------------------------
+
+LPRINT AT 10,20;"A"             REM LOCATE PRINTER HEAD OVER PAPER
+
+-----------------------------------------------------------------------------------                               
+CO RD-15   WR-14  RD-14                         01         02      03      04    
+===================================================================================
+00         0x42         "B" (BASIC COMMAND)     0x42      0x42    0x42    0x42   
+01         0x05         LPRINT CHR (TADDR)      0x05      0x05    0x05    0x05   
+02         0xFF         BANK NUMBER (FF=HOME)   0xFF      0xFF    0xFF    0xFF   
+03         0x16         ASCII CHARACTER         0x0A      0x14    0x41    0x0D   
+04         0x01         CHR TYPE                0x01      0x01    0x01    0x01   
+05         0x01         PRINT FLAGS             0x01      0x01    0x01    0x01   
+06         0x0F         COLOR ATTRIBUTES        0x0F      0x0F    0x0F    0x0F   
+07         0x00         DATA LEN L              0x00      0x00    0x00    0x00   
+08         0x00         DATA LEN H              0x00      0x00    0x00    0x00   
+-----------------------------------------------------------------------------------
+09         0xA1         CRC FROM TIMEX          0xBD      0xA3    0xF6    0xBA   
+-----------------------------------------------------------------------------------
+10                0x01  Status Code                  0x01      0x01    0x01    0x01 
+----------------------------WAIT EXECUTION-----------------------------------------                                   
+11 0x40                 CONTINUE FLAG       0x40     0x40     0x40     0x40
+-----------------------------------------------------------------------------------
+
+LPRINT AT 10,20,"A"             REM LOCATE PRINTER HEAD OVER PAPER
+
+---------------------------------------------------------------------------------------------                             
+CO RD-15   WR-14  RD-14                         01         02      01      03      04    
+=============================================================================================
+00         0x42         "B" (BASIC COMMAND)     0x42      0x42    0x42    0x42    0x42   
+01         0x05         LPRINT CHR (TADDR)      0x05      0x05    0x05    0x05    0x05   
+02         0xFF         BANK NUMBER (FF=HOME)   0xFF      0xFF    0xFF    0xFF    0xFF   
+03         0x16         ASCII CHARACTER         0x0A      0x14    0x06    0x41    0x0D   
+04         0x01         CHR TYPE                0x01      0x01    0x01    0x01    0x01   
+05         0x01         PRINT FLAGS             0x01      0x01    0x01    0x01    0x01   
+06         0x0F         COLOR ATTRIBUTES        0x0F      0x0F    0x0F    0x0F    0x0F   
+07         0x00         DATA LEN L              0x00      0x00    0x00    0x00    0x00   
+08         0x00         DATA LEN H              0x00      0x00    0x00    0x00    0x00   
+---------------------------------------------------------------------------------------------
+09         0xA1         CRC FROM TIMEX          0xBD      0xA3    0xB1    0xF6    0xBA   
+---------------------------------------------------------------------------------------------
+10                0x01  Status Code                  0x01      0x01    0x01   0x01    0x01 
+------------------------------------------WAIT EXECUTION-------------------------------------                                 
+11 0x40                 CONTINUE FLAG       0x40     0x40     0x40     0x40     0x40
+---------------------------------------------------------------------------------------------
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-18
+
+SAVE "TPI:BMPSIZE" CODE 256,192 (00 = SAVE CMD) SAVE "TPI:TXTSIZE" CODE 132,72 (00 = SAVE CMD)   
+                                                                                                 
+---------------------------------------------   ---------------------------------------------      
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14                      
+=============================================   =============================================      
+00         0x42         "B" (BASIC COMND)       00         0x42         "B" (BASIC COMND)          
+01         0x00         SAVE COMMAND (TADDR)    01         0x00         SAVE COMMAND (TADDR)         
+02         0xFF         BANK NUMBER (FF=HOME)   02         0xFF         BANK NUMBER (FF=HOME)
+03         0x00         PMR 1 L                 03         0x84         PMR 1 L                    
+04         0x01         PMR 1 H                 04         0x00         PMR 1 H                    
+05         0xC0         PMR 2 L                 05         0x48         PMR 2 L                    
+06         0x00         PMR 2 H                 06         0x00         PMR 2 H                    
+07         0x0B         COMND LEN L             07         0x0B         COMND LEN L                
+08         0x00         COMND LEN H             08         0x00         COMND LEN H                
+---------------------------------------------   ---------------------------------------------      
+09         0x77         CRC FROM TIMEX          09         0x7A         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+10                 0x01 Status Code             10                 0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+11 0x40                 CONTINUE FLAG           11 0x40                 CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+12      0x44            "D" (DATA BLOCK CMD)    12      0x44            "D" (DATA BLOCK CMD)       
+13      0x0B            COMND LEN L             13      0x0B            COMND LEN L                
+14      0x00            COMND LEN H             14      0x00            COMND LEN H                
+15      0x54            "T"                     15      0x54            "T"                        
+16      0x50            "P"                     16      0x50            "P"                        
+17      0x49            "I"                     17      0x49            "I"                        
+18      0x3A            ":"                     18      0x3A            ":"                        
+19      0x42            "B"                     19      0x42            "T"                        
+20      0x4D            "M"                     20      0x4D            "X"                        
+21      0x50            "P"                     21      0x50            "T"                        
+22      0x53            "S"                     22      0x53            "S"                        
+23      0x49            "I"                     23      0x49            "I"                        
+24      0x5A            "Z"                     24      0x5A            "Z"                        
+25      0x45            "E"                     25      0x45            "E"                        
+---------------------------------------------   ---------------------------------------------      
+26      0x62            CRC FROM TIMEX          26      0x62            CRC FROM TIMEX             
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+27 0x40         CONTINUE FLAG                   27 0x40         CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+28                 0x01 Status Code             28                 0x01 Status Code
+---------------------------------------------   ---------------------------------------------      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-19
+
+;------------------------------------------------------------------------------------------
+; SAVE "TPI:MEMBOOT" CODE 1,2	SET ACTIVE MEMORY FOR HOME & EXROM (SET PAGE 2)
+;
+; SAVE "TPI:MEMBOOT" CODE 1,0	SET ACTIVE MEMORY FOR HOME & EXROM (PAGE DEFAULT IN CONFIG FILE)
+
+;------------------------------------------------------------------------------------------
+;				PMR1: SET ( 0 = DEFAULT / 1 = R0M / 2 = RAM / 3 = NONE)
+;				PMR2: PAGE #(A16-A18) 
+;------------------------------------------------------------------------------------------
+; 00		42		"B"
+; 01		00		SAVE COMMAND (TADDR)
+; 02		FF		BANK # (00=DOCK FF=HOME ...)
+; 03		01		PMR1 SET MEMORY LOCATION (1 = R0M / 2 = RAM)
+; 04		00
+; 05		00		PMR2 PAGE #(A16-A18) 
+; 06		00
+; 07		0B		BLK_LEN
+; 08		00
+;---------------------------------------------
+; 09		B7		CRC
+;---------------------------------------------
+; 10			01	STATUS CODE
+;---------------------------------------------
+; 11	40			WAIT CONTINUE
+;------------------------------------------------------------------------------------------
+; 12		44		"D"
+; 13		0B		BLK_LEN
+; 14		00
+;---------------------------------------------
+; 15		54		"T"
+; 16		50		"P"
+; 17		49		"I"
+; 18		3A		":"
+; 19		4D		"M"
+; 20		45		"E"
+; 21		4D		"M"
+; 22		42		"B"
+; 23		4F		"O"
+; 24		4F		"O"
+; 25		54		"T"
+; 26		6B		CRC
+;---------------------------------------------
+; 27	40			WAIT CONTINUE
+;---------------------------------------------
+; 28			01	STATUS CODE
+;------------------------------------------------------------------------------------------
+
+
+;******************************************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-20
+
+;------------------------------------------------------------------------------------------
+; SAVE "TPI:READY"
+;------------------------------------------------------------------------------------------
+; 00 		42		"B"
+; 01		00		SAVE COMMAND (TADDR)
+; 02		FF		BANK # (00=DOCK FF=HOME ...)
+; 03		00		PMR1	(NOT USED)
+; 04		00
+; 05		00		PMR2	(NOT USED)
+; 06		00
+; 07		09		BLK_LEN
+; 08		00
+;---------------------------------------------
+; 09		B4		CRC
+;---------------------------------------------
+; 10			01	STATUS CODE
+;---------------------------------------------
+; 11	40			WAIT CONTINUE
+;------------------------------------------------------------------------------------------
+; 12		44		"D"
+; 13		09		BLK_LEN
+; 14		00
+;---------------------------------------------
+; 15		54		"T"
+; 16		50		"P"
+; 17		49		"I"
+; 18		3A		":"
+; 19		52		"R"
+; 20		45		"E"
+; 21		41		"A"
+; 22		44		"D"
+; 23		59		"Y"
+;---------------------------------------------
+; 24		71		CRC
+;---------------------------------------------
+; 25	40			WAIT CONTINUE
+;---------------------------------------------
+; 26			01	STATUS CODE
+;------------------------------------------------------------------------------------------
+
+;******************************************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-21
+
+;------------------------------------------------------------------------------------------
+; COPY TO DOCK RAM PAGE DATA AND SET AS DEFAULT CARTRIDGE BOOT
+;
+; SAVE "TPI:LDDOCK" CODE P_INFO,PAGE	SAVE "TPI:LDDOCK" CODE 13,2	
+; SAVE "TPI:LDDOCK" CODE MODE,PAGE/SUB_BANK 
+; SAVE "TPI:LDDOCK"		(NO PARAM, LOAD DEFAULT IN RAM PAGE 0 FROM FILE 1st option to load 
+;				TS2068.TCC OR 2ND load TS2068.DCK file from SD Card)
+;
+;				(P_INFO Param)
+; SAVE "TPI:LDDOCK" CODE 1,0	END METOD MODE = 0 LOAD AUTO IMAGE FROM ROM PAGE 08
+;				END METOD MODE = 1 NEW
+;				END METOD MODE = 2 RESET
+;				END METOD MODE = 3 JUMP TO LOAD_INIT_ADDR (Used in .TCC Format)
+;				END METOD MODE = 4 MEMORY FILL WITH 00
+;				END METOD MODE = 5 NO ACTION, ONLY COPY RAM FROM ROM
+;
+;				ROM SOURCE PAGE SETTING TO COPY DOCK RAM
+;				END METOD MODE =  8 DOCK SOURCE IS ROM PAGE  8 BINARY ="001000"
+;				END METOD MODE = 16 DOCK SOURCE IS ROM PAGE  9 BINARY ="010000"
+;				END METOD MODE = 24 DOCK SOURCE IS ROM PAGE 10 BINARY ="011000"
+;				END METOD MODE = 32 DOCK SOURCE IS ROM PAGE 11 BINARY ="100000"
+;				END METOD MODE = 40 DOCK SOURCE IS ROM PAGE 12 BINARY ="101000"
+;				END METOD MODE = 48 DOCK SOURCE IS ROM PAGE 13 BINARY ="110000"
+;				END METOD MODE = 56 DOCK SOURCE IS ROM PAGE 14 BINARY ="111000"
+;				END METOD MODE + 80H (Bit 7 = 1) SET DOCK BANK BANK AS RAM R/O
+;
+;				PAGE/SUB_BANK
+;				(PAGE  (0-7) - OPTIONAL RAM PAGE TO COPY ROM (DEST.DEFAULT = 00) 
+;------------------------------------------------------------------------------------------
+;	THE FILENAME OF DOCK IMAGEN IS LOCATED IN PARAMETER TABLE
+;------------------------------------------------------------------------------------------
+; 00		42		"B"
+; 01		00		SAVE COMMAND (TADDR)
+; 02		FF		BANK  (EXECUTION BANK NUMBER)
+; 03		0D		PMR1 = END METOD MODE
+; 04		00
+; 05		02		PMR2 = (MEMORY PAGE SETUP/SUB_BANK NUMBER)
+; 06		00
+; 07		0A		COMMAND BLK_LEN
+; 08		00
+;---------------------------------------------
+; 09		B8		CRC
+;---------------------------------------------
+; 10			01	STATUS CODE
+;---------------------------------------------
+; 11	40			WAIT CONTINUE
+;------------------------------------------------------------------------------------------
+; 12		44		"D"
+; 13		0A		COMMAND BLK_LEN
+; 14		00
+;---------------------------------------------
+; 15		54		"T"
+; 16		50		"P"
+; 17		49		"I"
+; 18		3A		":"
+; 19		4C		"L"
+; 20		44		"D"
+; 21		44		"D"
+; 22		4F		"O"
+; 23		43		"C"
+; 24		4B		"K"
+;---------------------------------------------
+; 25		32		CRC
+;---------------------------------------------
+; 26	40			WAIT CONTINUE
+;---------------------------------------------
+; 27			01	STATUS CODE
+;---------------------------------------------
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-22
+
+;******************************************************************************************
+; 
+; ------------------------
+; COMMAND PARAMETERS TABLE
+; ------------------------
+; 
+; -----------------
+; PARAMETERS ID
+; -----------------
+; 00-1F		ERROR CODES
+; ------------------------------
+; REQUEST PARAMETERS ID
+; ------------------------------
+; 20		BINARY BLOCK
+; 21		ASCII NAME 1
+; 22		ASCII NAME 2
+; 23		ASCII NAME 3
+;-------------------------------------------
+; DATA PARAMETER BLOCK TYPE ID 
+; ------------------------------------------
+; 27 = NO MORE PARAMETERS
+; 28 = CARTRIDGE HEADER
+; 29 = CARTRIDGE RAW IMAGEN LOW (CHUNK 0 TO 6)
+; 2A = CARTRIDGE RAW IMAGEN HIGH (CHUNK 7)
+; 2B = SNAPSHOOT FILENAME
+; 2C = SNAPSHOOT HARDWARE REGISTERS
+; 2D = SNAPSHOOT HOME DATA
+; 2E = SNAPSHOOT DOCK DATA
+; 2F = SNAPSHOOT EXP.BANK DATA
+;-------------------------------------------------------------------------------------------
+; ASSEMBLER COMMAND TABLE
+; -----------------------
+; 
+; COMMAND ID	FUNCTION	DESCRIPTION					PARAMETER
+; ----------	-------------	----------------------------------------	---------
+; 040H		STATUS		CHECK CONECTIVITY / RETURN STATUS			20
+; 041H		GETMPR		GET CURRENT MEMORY PAGE REGISTER VALUE (00 TO 0F)	20
+; 042H		SETMPR		SET MEMORY PAGE REGISTER VALUE (00 TO 0F)		20
+; 043H		SETDMR		SET DEFAULT MEMORY REGISTER (VALUE FROM CONFIG FILE)	20
+; 044H		CLOSPMT		CLOSE PARAMETER BLOCK / COMMAND ENDS			20
+; 045H		LDDOCK		LOAD CARTRIDGE IMAGE IN DOCK BANK		21,28,29,2A
+; 046H		TAPPOS		MOVE TAP POINTER POSITION (1=BEG,2=END,3=NXT_HDR,4=NXT_BLK)					
+; 047H		SNSNAP		SET SNAPSHOOT NAME				
+; 048H		SASNAP		SAVE SNAPSHOOT IMAGE				
+; 049H		LDSNAP		LOAD SNAPSHOOT IMAGE				
+;
+; 050H		DFSCMD		DIRECT FILE SYSTEM COMMAND
+;
+; 051H		CONCMD		DIRECT CONSOLE SYSTEM COMMAND
+;
+; 052H		COMCMD		DIRECT COMUNICATION SYSTEM COMMAND
+;
+; 053H		AUXCMD		DIRECT AUXILIAR SYSTEM COMMAND
+;
+; 060H		DATARD		RAW DATA READ
+; 061H		DATAWR		RAW DATA WRITE
+; 062H		CTRLRD		CONTROL DATA READ
+; 063H		CTRLWR		CONTROL DATA WRITE
+; 
+; 		;-------------------------
+; 		; NON BLOCKING ROUTINES
+; 		;-------------------------
+; 
+; 064H		SNDNBC		SEND NON BLOCKING COMMAND
+; 065H		POLING		CHECK IF LAST COMMAND WAS EXECUTED
+; 066H		ABORT		ABORT LAST SESSION ID COMMAND
+; 067H		BUSY		CHECK IF THE COMMUNIC. IS BUSY
+;-------------------------------------------------------------------------------------------
+
+
+;******************************************************************************************
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-23
+
+;----------------------------------------------------------------------------
+;	SEND LDDOCK PARAM (INFORMATION LOCATED COMMAND PARAMETER AREA)
+;	***************************************************************
+;	****             AVAILABLE ONLY FROM ASSEMBLER             ****
+;	****         TPIBIOS ROUTINE LDDOCK - 0E027H (57383)       ****
+;	***************************************************************
+;----------------------------------------------------------------------------
+
+
+;----------------------------------------------------------------------------
+; COMMAND LDDOCK
+;----------------------------------------------------------------------------
+; 00		44		"A"		; ASSEMBLER TYPE COMMAND
+; 01		45		COMMAND ID (45=LDDOCK)
+; 02		00		BANK # (00=DOCK FF=HOME ...)
+; 03		00		SESION ID LOW
+; 04		00		SESION ID HIGH
+;---------------------------------------------
+; 05		21		COMMAND PARAMETER ID ( 21= SINGLE ASCII PARAM) FILENAME
+; 06		03		COMMAND BLOCK NUMBER (00 = LAST COMMAND BLOCK MESSAGE / 01..02..ETC)
+; 07		0C		BLK_LEN LOW
+; 08		00		BLK_LEN HIGH
+;---------------------------------------------
+; 09		6B		CRC
+;---------------------------------------------
+; 10	40			WAIT CONTINUE
+;---------------------------------------------
+; 11			01	STATUS CODE
+;---------------------------------------------
+; 12		44		"D"
+; 13		0C		BLK_LEN
+; 14		00
+;---------------------------------------------
+;	DATA COMMAND ARGUMENT
+;---------------------------------------------
+; 15		46		"F"		; Cartridge Filename on the SD
+; 16		49		"I"
+; 17		4C		"L"
+; 18		45		"E"
+; 19		4E		"N"
+; 20		41		"A"
+; 21		4D		"M"
+; 22		45		"E"
+; 23		2E		"."	"."
+; 24		44		"D"	"T"
+; 25		43		"C"	"C"
+; 26	 	4B		"K"	"C"
+;---------------------------------------------
+; 27		6B		CRC
+;---------------------------------------------
+; 28			01	STATUS CODE
+;---------------------------------------------
+; 29	40			WAIT CONTINUE
+;---------------------------------------------
+; 30		28		REQUEST DATA PARAMETER BLOCK TYPE ID (28 = CARTRIDGE HEADER)
+;				(OR ERROR CODE IF VALUE <20H OR >80H)
+;---------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-24
+
+;----------------------------------------------------------------------------
+; COMMAND LDDOCK CARTRIDGE INFO TABLE
+;----------------------------------------------------------------------------
+; 31			44	"E"	RESPONSE TO COMMAND
+; 32			1C	BLK_LEN
+; 33			00
+;---------------------------------------------
+; 34			45	COMMAND ID (45=LDDOCK)
+; 35			00	BANK # (00=DOCK FF=HOME ...)
+; 36			00	SESION ID LOW
+; 37			00	SESION ID HIGH
+;---------------------------------------------
+; 38			28	DATA PARAMETER BLOCK TYPE ID ( 28 = CARTRIDGE HEADER )
+; 39			02	COMMAND BLOCK NUMBER (00 = SINGLE COMMAND BLOCK/LAST MESSAGE / MULTIPLE 02..01..ETC)
+; 40			00	LOADING ADDR LOW (0000 = N/A FOR CARTRIDGE HEADER)
+; 41			00	LOADING ADDR HIGH
+; 42			0B	CARTRIDGE HEADER LEN LOW
+; 43			00	CARTRIDGE HEADER LEN HIGH
+;---------------------------------------------
+; 44			00	01=SINGLE DATA DOCK BLOCK (MAX 56k) OR NN=MULTIPLE DATA DOCK BLOCKS
+; 45			00	FLAG OF USE DATA IN CHUNK 7 
+; 46			00	DESTINATION BANK NUMBER
+; 47			03	HS SETTINGS ON LOAD (ACTIVE IN 1 CHUNK 3 & 7 MUST BE DISABLED IN DOCK)
+; 48			01	CARTRIDGE TYPE (0=NONE / 1=ROM / 2=RAM / 3=RAM W-INIT)
+; 49			00	WRITE PROTECT BITMAP HS SETTINGS
+; 50			00	ACTION AFTER LOAD MODE PARAMETER (0=LOAD AUTO / 1=NEW / 2=RESET /
+;				  3=JUMP TO LOAD_INIT ADDR / 4 MEMORY FILL WITH 00 / 5 NO ACTION)
+; 51			00	CARTRIDGE_HEADER_TYPE ( 01=LROS / 02=AROS / 03=TCC)
+; 52			00	CARTRIDGE_INFO_LEN LOW  (LROS=5 / AROS = 08 /TCC = 32)
+; 53			00	CARTRIDGE_INFO_LEN HIGH
+;------------------------------------------------
+; TIMEX CARTRIDGE LROS / AROS HEADER (5/8 BYTES)
+;------------------------------------------------
+;						LROS TYPE	AROS TYPE
+;						-------------	---------------
+; 54			00	CARTRIDGE_00	NOT USED	LANG.TYPE
+; 55			00	CARTRIDGE_01	TYPE		TYPE
+; 56			00	CARTRIDGE_02	STARTING ADDR	STARTING ADDR
+; 57			00	CARTRIDGE_03	STARTING ADDR	STARTING ADDR
+; 58			00	CARTRIDGE_04	CHUNK SPECS	CHUNK SPECS
+; 59			00	CARTRIDGE_05			AUTOSTART
+; 60			00	CARTRIDGE_06			RESERVED BYTES
+; 61			00	CARTRIDGE_07			RESERVED BYTES
+;------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-25
+
+;------------------------------------------------
+;
+;	*******************************************************
+;	*** FIELDS ONLY AVAILABLES IN .TCC CARTRIDGE FORMAT ***
+;	*******************************************************
+;
+; 62			00	HEADER RELEASE VERSION
+; 63			00	DESTINATION BANK NUMBER AFTER LOAD (0 = DEFAULT)
+; 64			00	HS SETTINGS AFTER LOAD (0 = DISABLE 1 = ENABLE BANK)
+; 65			00	AFTER LOAD INIT_ADDR LOW (USE ONLY ON ACTION = 3)
+; 66			00	AFTER LOAD INIT_ADDR HIGH
+; 67			00	VALID INTERRUPT ENABLE ROUTINE AFTER LOAD  (0 = DISABLE / 1=ENABLE) (USE ONLY ON ACTION = 3)
+; 68			00	ASCII NAME
+; 69			00	ASCII NAME
+; 70			00	ASCII NAME
+; 71			00	ASCII NAME
+; 72			00	ASCII NAME
+; 73			00	ASCII NAME
+; 74			00	ASCII NAME
+; 75			00	ASCII NAME
+; 76			00	ASCII NAME
+; 77			00	ASCII NAME
+; 78			00	ASCII NAME
+; 79			00	ASCII NAME
+; 80			00	END OF STRING
+; 81			00	SERIAL NUM_0
+; 82			00	SERIAL NUM_1
+; 83			00	SERIAL NUM_2
+; 84			00	SERIAL NUM_3
+; 85			00	CRC OF CARTRIDGE HEADER
+;
+;	***********************************************************
+;	*** END FIELDS ONLY AVAILABLES IN .TCC CARTRIDGE FORMAT ***
+;	***********************************************************
+;
+;---------------------------------------------
+; 86			6B	CRC FROM STORAGE
+;---------------------------------------------
+; 87		6B		CRC FROM TIMEX
+;---------------------------------------------
+; 88	40			WAIT/CONTINUE
+;---------------------------------------------
+; 89		29		REQUEST DATA BLOCK LOW TYPE ID (29 = CARTRIDGE RAW IMAGEN LOW)
+;				(OR ERROR CODE IF VALUE <20H OR >80H)
+;---------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-26
+
+;------------------------------------------------------------------------------------------
+; COMMAND LDDOCK CARTRIDGE READ DATA BLOCK
+;------------------------------------------------------------------------------------------
+;	**** LOAD DATA CHUNK 0 -> 6 LOAD DATA FROM 0000 -> DFFF ONLY BLOCK LOW ID = 02 ****
+;------------------------------------------------------------------------------------------
+; 00			44	"E"	RESPONSE TO COMMAND
+; 01			0A	BLK_LEN	(RAW CARTRIDGE + 0AH)
+; 02			A0	
+;---------------------------------------------
+; 03			45	COMMAND ID (45=LDDOCK)
+; 04			00	BANK # (00=DOCK FF=HOME ...)
+; 05			00	SESION ID LOW
+; 06			00	SESION ID HIGH
+;---------------------------------------------
+; 07			09	DATA PARAMETER ID ( 09 = CARTRIDGE RAW IMAGEN LOW)
+; 08			01	COMMAND BLOCK NUMBER (00 = SINGLE COMMAND BLOCK/LAST MESSAGE / MULTIPLE 02..01..ETC)
+; 09			00	LOADING ADDR LOW
+; 10			00	LOADING ADDR HIGH
+; 11			0B	BLK_LEN LOW
+; 12			00	BLK_LEN HIGH
+;---------------------------------------------
+;---56K MAXIMUN - BLOCK SIZE FOR 1ST BLOCK----
+;---------------------------------------------
+; 13			00	CARTRIDGE IMAGEN DATA
+; 14			00
+; .			.
+; .			00
+; .			00
+;---------------------------------------------
+; 57357			6B	CRC
+;---------------------------------------------
+; 57358		01		STATUS CODE
+;---------------------------------------------
+; 57359	40			WAIT/CONTINUE
+;---------------------------------------------
+; 57360		2A		REQUEST DATA BLOCK LOW TYPE ID (2A = CARTRIDGE RAW IMAGEN HIGH)
+;				(OR ERROR CODE IF VALUE <20H OR >80H)
+;---------------------------------------------
+
+;------------------------------------------------------------------------------------------
+; COMMAND LDDOCK CARTRIDGE READ DATA BLOCK
+;------------------------------------------------------------------------------------------
+;	**** LOAD DATA CHUNK 7 LOAD DATA FROM E000 -> FFFF ONLY BLOCK HIGH ID = 03 ****
+;------------------------------------------------------------------------------------------
+; 00			44	"E"	RESPONSE TO COMMAND
+; 01			1C	BLK_LEN
+; 02			00
+;---------------------------------------------
+; 03			45	COMMAND ID (45=LDDOCK)
+; 04			00	BANK # (00=DOCK FF=HOME ...)
+; 05			00	SESION ID LOW
+; 06			00	SESION ID HIGH
+;---------------------------------------------
+; 07			2A	DATA PARAMETER ID ( 2A = CARTRIDGE RAW IMAGEN LOW)
+; 08			00	COMMAND BLOCK NUMBER (00 = SINGLE COMMAND BLOCK/LAST MESSAGE / MULTIPLE 02..01..ETC)
+; 09			00	LOADING ADDR LOW
+; 10			00	LOADING ADDR HIGH
+; 11			0B	BLK_LEN LOW
+; 12			00	BLK_LEN HIGH
+;---------------------------------------------
+;---8K MAXIMUN - BLOCK SIZE FOR HIGH BLOCK----
+;---------------------------------------------
+; 13			00	CARTRIDGE IMAGEN DATA
+; 14			00
+; .			.
+; 8202			00
+; 8203			00
+;---------------------------------------------
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-27
+
+;---------------------------------------------
+; 8205			6B	CRC
+;---------------------------------------------
+; 8206		01		STATUS CODE
+;---------------------------------------------
+; 8207	40			WAIT/CONTINUE
+;---------------------------------------------
+; 8208		27		NO MORE DATA REQUEST (27 = END)
+;				(OR ERROR CODE IF VALUE <20H OR >80H)
+;------------------------------------------------------------------------------------------
+
+;******************************************************************************************
+
+;----------------------------------------------------------------------------
+; COMMAND STATUS FROM ASSEMBLER				COMMAND ID: 040H
+;----------------------------------------------------------------------------
+; 00		44		"A" ; ASSEMBLER TYPE COMMAND
+; 01		40		COMMAND ID (40=STATUS)
+; 02		00		BANK # (00=DOCK FF=HOME ...)
+; 03		00		SESION ID LOW
+; 04		00		SESION ID HIGH
+;---------------------------------------------
+; 05		20		COMMAND PARAMETER ID (20= BINARY / RAW PARAM)
+; 06		00		COMMAND BLOCK NUMBER (00 = SINGLE COMMAND BLOCK MESSAGE)
+; 07		23		BLK_LEN LOW
+; 08		00		BLK_LEN HIGH
+;---------------------------------------------
+; 09		6B		CRC
+;---------------------------------------------
+; 10	40			WAIT CONTINUE
+;---------------------------------------------
+; 11		01		STATUS CODE
+;------------------------------------------------------------------------------------------
+; 12			44	"D"		
+; 13			23	BLK_LEN
+; 14			00	
+;---------------------------------------------
+; 15			00	SESION ID LOW
+; 16			00	SESION ID HIGH
+; 17			01	HEADER VERSION 1
+; 18			00	CPU % USAGE 
+; 19			00	STORAGE FREE SPACE MB LOW 
+; 20			00	STORAGE FREE SPACE MB MEDIUM
+; 21			00	STORAGE FREE SPACE MB HIGH
+; 22			00	STORAGE IN USE SPACE MB LOW 
+; 23			00	STORAGE IN USE SPACE MB MEDIUM
+; 24			00	STORAGE IN USE SPACE MB HIGH
+; 25			00	MESSAGE NUMBER LOW 
+; 26			00	MESSAGE NUMBER MEDIUM
+; 27			03	MESSAGE NUMBER HIGH
+; 28			01	MEMORY FREE KB LOW
+; 29			00	MEMORY FREE KB HIGH
+; 30			00	ERROR COUNT LOW
+; 31			00	ERROR COUNT HIGH
+; 32			00	RUNNING SECONDS TIME LOW
+; 33			00	RUNNING SECONDS TIME MED
+; 34			00	RUNNING SECONDS TIME HIGH
+;---------------------------------------------
+;		TAP FILE INFO
+;---------------------------------------------
+; 35		        01	MOUNT TAP FILE FLAG (0=NO MOUNT/ 1=MOUNT)
+; 36		        00	TAP SIZE LOW
+; 37		        02	TAP SIZE MID
+; 38		        00	TAP SIZE HIGH
+; 39		        0A	TAP FILENAME LEN
+;---------------------------------------------
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-28
+
+;---------------------------------------------
+;	DATA COMMAND ARGUMENT
+;---------------------------------------------
+; 40			46		"F"		; Cartridge Filename on the SD
+; 41			49		"I"
+; 42			4C		"L"
+; 43			45		"E"
+; 44			30		"0"
+; 45			31		"1"
+; 46			2E		"."
+; 47			54		"T"
+; 48			41		"A"
+; 49	 		50		"P"
+;---------------------------------------------
+; 50			6B	CRC
+;---------------------------------------------
+; 51		01		SEND STATUS CODE OF RECEIVED COMMAND
+;------------------------------------------------------------
+; 52	40			WAIT FOR CONTINUE TO FINISH
+;------------------------------------------------------------
+; 53		01		NO ERROR INDICATION (01 = OK)
+;				(OR ERROR CODE IF VALUE <20H OR >80H)
+;------------------------------------------------------------------------------------------
+
+;******************************************************************************************
+
+;----------------------------------------------------------------------------
+; COMMAND GETMPR	GET CURRENT MEMORY PAGE REGISTER VALUE
+;----------------------------------------------------------------------------
+; 00		44		"A"		; ASSEMBLER TYPE COMMAND
+; 01		41		COMMAND ID (41=GETMPR)
+; 02		00		BANK # (00=DOCK FF=HOME ...)
+; 03		00		SESION ID LOW
+; 04		00		SESION ID HIGH
+;---------------------------------------------
+; 05		01		COMMAND PARAMETER ID ( 00= NONE)
+; 06		01		COMMAND BLOCK NUMBER (00 = LAST COMMAND BLOCK MESSAGE)
+; 07		0B		BLK_LEN LOW
+; 08		00		BLK_LEN HIGH
+;---------------------------------------------
+; 09		6B		CRC
+;---------------------------------------------
+; 10	40			WAIT CONTINUE
+;---------------------------------------------
+; 11			01	STATUS CODE
+;---------------------------------------------
+; 12			44	"D"
+; 13			0B	BLK_LEN
+; 14			00	
+;---------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-29
+
+;---------------------------------------------
+;	DATA COMMAND ARGUMENT
+;---------------------------------------------
+; 15			01	CURRENT MEMORY PAGE REGISTER VALUE
+; 16			01	CURRENT HOME ROM MEMORY SOURCE ( 00 = NA / 01 = ROM / 02 = RAM) 
+; 17			00	CURRENT HOME ROM MAPPING SEGMENT (MA16 TO MA23) 
+; 18			01	CURRENT EXROM MEMORY SOURCE ( 00 = NA / 01 = ROM / 02 = RAM) 
+; 19			02	CURRENT EXROM MEMORY MAPPING SEGMENT (MA16 TO MA23)
+; 20			02	CURRENT DOCK MEMORY SOURCE ( 00 = NA / 01 = ROM / 02 = RAM) 
+; 21			00	CURRENT DOCK MAPPING SEGMENT (MA16 TO MA23)
+; 22			02	CURRENT DOCK MEMORY START LOW ADDR (0000 FOR LROS / 8000 FOR AROS)
+; 23			02	CURRENT DOCK MEMORY START HIGH ADDR
+; 24			02	CURRENT DOCK SIZE LOW
+; 25			02	CURRENT DOCK SIZE HIGH
+;---------------------------------------------
+; 26			6B	CRC
+;---------------------------------------------
+; 27		01		SEND STATUS CODE OF RECEIVED COMMAND
+;------------------------------------------------------------
+; 28	40			WAIT FOR CONTINUE TO FINISH
+;---------------------------------------------
+; 30		01		NO ERROR INDICATION (01 = OK)
+;				(OR ERROR CODE IF VALUE <20H OR >80H)
+;---------------------------------------------
+
+;------------------------------------------------------------------------------------------
+
+;******************************************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-30
+
+LOAD "DIR *.DCK" DATA A$()
+
+;------------------------------------------------------------------------------------------
+; LOAD "DIR *.DCK" DATA A$()
+;------------------------------------------------------------------------------------------
+;		00		BLOCK TYPE (00 = Header)
+;		01		TADDR (01=LOAD)
+;		FF		BANK2
+;		69		SESSION ID
+;		7F
+;		63		MEMORY ADDRESS
+;		6E
+;		11		BLK_LEN
+;		00
+;------------------------------------------------------------
+;		F4		CRC FROM TIMEX
+;------------------------------------------------------------
+;			01	STATUS CODE
+;------------------------------------------------------------
+;	40			WAIT CONTINUE
+;------------------------------------------------------------------------------------------
+;		00		REQUESTED BLOCK TYPE (00=HEADER)
+;------------------------------------------------------------
+;			00	BLOCK TYPE FROM FILE (00 = Header)
+;------------------------------------------------------------
+;			02	TYPE ALPHANUM ARRAY
+;			44	"D"
+;			4F 	"O"
+;			43 	"C"
+;			4B 	"K"
+;			2E 	"."
+;			44 	"D"
+;			41 	"A"
+;			54 	"T"
+;			20 	" "
+;			20	" "
+;			45	BLOCK LEN (Low Byte)
+;			01 	BLOCK LEN (High Byte)
+;			22	NOT USED
+;			C1	CHAR TYPE + LETTER "A"
+;			41	"A"
+;			80	NOT USED
+;------------------------------------------------------------
+;			18	CRC VALUE FROM FILE 
+;------------------------------------------------------------------------------------------
+;		00		CRC VALUE FROM TIMEX
+;------------------------------------------------------------------------------------------
+;	40			WAIT CONTINUE
+;------------------------------------------------------------------------------------------
+;			01	STATUS CODE
+;------------------------------------------------------------------------------------------
+;		FF		BLOCK TYPE (FF = Header)
+;		01		TADDR (01=LOAD)
+;		FF		BANK # (00=DOCK FF=HOME ...)
+;		69		SESSION ID LOW
+;		7F		SESSION ID HIGH
+;		00		MEMORY ADDRESS LOW
+;		00		MEMORY ADDRESS HIGH
+;		45		BLK_LEN LOW
+;		01		BLK_LEN HIGH
+;------------------------------------------------------------
+;		F4		CRC FROM TIMEX
+;------------------------------------------------------------
+;			01	STATUS CODE
+;------------------------------------------------------------
+;	40			WAIT CONTINUE
+;------------------------------------------------------------
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-31
+
+;------------------------------------------------------------
+;		FF		REQUESTED BLOCK TYPE (FF=BLOCK)
+;------------------------------------------------------------
+;			FF	BLOCK TYPE FROM FILE (FF = BLOCK)
+;------------------------------------------------------------
+;			02	CHARACTER ARRAY
+;			14	MAX FILES LOW
+;			00	MAX FILES HIGH
+;			10	RECORD LEN LOW
+;			00	RECORD LEN HIGH
+;------------------------------------------------------------
+; 			                    31 38 20    18 
+; 0020 20 20 20 20 20 20 20 20 20 20 20 20 20 32 32 32  16            
+; 0030 32 2E 64 63 6B 20 20 20 20 20 20 20 20 33 33 33    3333.dck    
+; 0040 33 2E 64 63 6B 20 20 20 20 20 20 20 20 34 34 34    4444.dck    
+; 0050 34 2E 64 63 6B 20 20 20 20 20 20 20 20 35 35 35    5555.dck    
+; 0060 35 2E 64 63 6B 20 20 20 20 20 20 20 20 36 36 36    6666.dck    
+; 0070 36 2E 64 63 6B 20 20 20 20 20 20 20 20 37 37 37    7777.dck    
+; 0080 37 2E 64 63 6B 20 20 20 20 20 20 20 20 38 38 38    8888.dck    
+; 0090 38 2E 64 63 6B 20 20 20 20 20 20 20 20 39 39 39    9999.dck    
+; 00A0 39 2E 64 63 6B 20 20 20 20 20 20 20 20 31 30 31    10101010.dck
+; 00B0 30 31 30 31 30 2E 64 63 6B 20 20 20 20 31 31 31    11111111.dck
+; 00C0 31 31 31 31 31 2E 64 63 6B 20 20 20 20 31 32 31    12121212.dck
+; 00D0 32 31 32 31 32 2E 64 63 6B 20 20 20 20 31 33 31    13131313.dck
+; 00E0 33 31 33 31 33 2E 64 63 6B 20 20 20 20 31 34 31    14141414.dck
+; 00F0 34 31 34 31 34 2E 64 63 6B 20 20 20 20 31 35 31    15151515.dck
+; 0100 35 31 35 31 35 2E 64 63 6B 20 20 20 20 31 36 31    16161616.dck
+; 0110 36 31 36 31 36 2E 64 63 6B 20 20 20 20 31 37 31    17171717.dck
+; 0120 37 31 37 31 37 2E 64 63 6B 20 20 20 20 31 38 31    18181818.dck
+; 0130 38 31 38 31 38 2E 64 63 6B 20 20 20 20 31 39 31    19191919.dck
+; 0140 39 31 39 31 39 2E 64 63 6B 20 20 20 20 32 30 32    20202020.dck
+; 0150 30 32 30 32 30 2E 64 63 6B 20 20 20 20             
+;------------------------------------------------------------
+;                      F7	CRC FROM FILE
+;------------------------------------------------------------
+
+;------------------------------------------------------------
+;		F4		CRC FROM TIMEX
+;------------------------------------------------------------
+;			01	STATUS CODE
+;------------------------------------------------------------
+;	40			WAIT CONTINUE
+;------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-32
+
+	;----------------------------------------------------------									       
+	; USER DEFINED MESSAGES - PROPIETARY  -
+	;----------------------------------------------------------									       
+	; MESSAGE TYPE "X" USED BY SEND COMMAND HEADER
+	; MESSAGE TYPE "Y" USED BY RECEIVE COMMAND HEADER
+	; MESSAGE TYPE "Z" USED BY SEND/RECEIVE AS DATA BLOCK
+	;
+	; HEADER  BLOCK -> HL
+	; MESSAGE BLOCK -> DE
+	;
+	;----------------------------------------------------------									       
+
+;------------------------------------------------------------------------------------------
+; HEADER MESSAGE SEND COMMAND BLOCK (MANDATORY)		MESSAGE TYPE "X"
+;------------------------------------------------------------------------------------------
+; SEND COMMAND HEADER FORMAT
+;------------------------------------------------------------------------------------------
+; CO   RD-15   WR-14   RD-14    PARAMETER			  DESCRIPTION
+;------------------------------------------------------------------------------------------
+; 00 		0x42		"X"				; MESSAGE TYPE "X"
+; 01		0x00		COMMAND ID			; Numeric USER Command ID
+;------------------------------------------------------------------------------------------
+; 02		0xFF		BANK # (00=DOCK FF=HOME ...)	; Bank Number (default: FF=HOME)
+;------------------------------------------------------------------------------------------
+; 03		0x00		PMR1 LOW			; USER PARAMETER 1 (16 BITS)
+; 04		0x00		PMR1 HIGH
+;------------------------------------------------------------------------------------------
+; 05		0x00		PMR2 LOW			; USER PARAMETER 2 (16 BITS)
+; 06		0x00		PMR2 HIGH
+;------------------------------------------------------------------------------------------
+; 07		0x0C		BLK_LEN LOW			; DATA BLOCK LEN LOW BYTE
+; 08		0x00		BLK_LEN HIGH			; DATA BLOCK LEN HIGH BYTE
+;------------------------------------------------------------------------------------------
+; 09		0xB4		CRC				; CRC VALUE (XOR OF PREVIOUS BYTES)
+;------------------------------------------------------------------------------------------
+; 10			0x01	STATUS CODE			; CMND EXECUTION STATUS CODE (01=NO ERROR)
+;------------------------------------------------------------------------------------------
+; 11	0x40			WAIT CONTINUE			; CONTINUE / FINISH CMND EXECUTION SIGNAL
+;------------------------------------------------------------------------------------------
+
+
+;------------------------------------------------------------------------------------------
+; CO   RD-15   WR-14   RD-14    PARAMETER			  DESCRIPTION
+;------------------------------------------------------------------------------------------
+; 12 		0x42		"Z"				; DATA BLOCK "Z"
+; 13		0x0C		BLK_LEN LOW			; DATA BLOCK LEN LOW BYTE
+; 14		0x00		BLK_LEN HIGH			; DATA BLOCK LEN HIGH BYTE
+;------------------------------------------------------------------------------------------
+; 15            0x0A            STRING LEN			; USER DEFINE AREA BYTE (0)
+; 16            0x39            "9"				; USER DEFINE AREA BYTE (1)
+; 17            0x38            "8"				; USER DEFINE AREA BYTE (2)
+; 18            0x37            "7"				; USER DEFINE AREA BYTE (3)
+; 19            0x36            "6"				; USER DEFINE AREA BYTE (4)
+; 20            0x35            "5"				; USER DEFINE AREA BYTE (5)
+; 21            0x34            "4"				; USER DEFINE AREA BYTE (6)
+; 22            0x33            "3"				; USER DEFINE AREA BYTE (7)
+; 23            0x32            "2"				; USER DEFINE AREA BYTE (8)
+; 24            0x31            "1"				; USER DEFINE AREA BYTE (9)
+; 25            0x30            "0"				; USER DEFINE AREA BYTE (10)
+; 26            0x00            END OF STRING		; USER DEFINE AREA BYTE (11)
+;------------------------------------------------------------------------------------------
+; 32            0x86               CRC FROM TIMEX
+;-----------------WAIT EXECUTION------------------------------
+; 33  0x40                         CONTINUE FLAG
+;------------------------------------------------------------------------------------------
+; 34                      0x01     Status Code (01 = No Error)
+;------------------------------------------------------------------------------------------
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-33
+
+;------------------------------------------------------------------------------------------
+; HEADER MESSAGE RECEIVE COMMAND DATA BLOCK (MANDATORY)		MESSAGE TYPE "Y"
+;------------------------------------------------------------------------------------------
+; SEND COMMAND HEADER FORMAT
+;------------------------------------------------------------------------------------------
+; CO   RD-15   WR-14   RD-14    PARAMETER			  DESCRIPTION
+;------------------------------------------------------------------------------------------
+; 00 		0x42		"Y"				; MESSAGE TYPE "Y"
+; 01		0x00		COMMAND ID			; Numeric USER Command ID
+;------------------------------------------------------------------------------------------
+; 02		0xFF		BANK # (00=DOCK FF=HOME ...)	; Bank Number (default: FF=HOME)
+;------------------------------------------------------------------------------------------
+; 03		0x00		PMR1 LOW			; USER PARAMETER 1 (16 BITS)
+; 04		0x00		PMR1 HIGH
+;------------------------------------------------------------------------------------------
+; 05		0x00		PMR2 LOW			; USER PARAMETER 2 (16 BITS)
+; 06		0x00		PMR2 HIGH
+;------------------------------------------------------------------------------------------
+; 07		0x00		BLK_LEN LOW			; DATA BLOCK LEN LOW BYTE  (MAX VALUE OR 0000
+; 08		0x00		BLK_LEN HIGH			; DATA BLOCK LEN HIGH BYTE  IF DEF. IN Z_MSG)
+;------------------------------------------------------------------------------------------
+; 09		0xB4		CRC				; CRC VALUE (XOR OF PREVIOUS BYTES)
+;------------------------------------------------------------------------------------------
+; 10			0x01	STATUS CODE			; CMND EXECUTION STATUS CODE (01=NO ERROR)
+;------------------------------------------------------------------------------------------
+; 11	0x40			WAIT CONTINUE			; CONTINUE / FINISH CMND EXECUTION SIGNAL
+;------------------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------------------
+; CO   RD-15   WR-14   RD-14    PARAMETER			  DESCRIPTION
+;------------------------------------------------------------------------------------------
+; 12 			0x42	   "Z"				; DATA BLOCK "Z"
+; 13			0x0C	   BLK_LEN LOW			; DATA BLOCK LEN LOW BYTE  (DATA VALUE OR  		
+; 14			0x00	   BLK_LEN HIGH			; DATA BLOCK LEN HIGH BYTE  0000 IF ASCIIZ) 
+;--------------------------------------------------------------------------------------------------
+; 15                    0x0A       STRING LEN			; USER DEFINE AREA BYTE (0)
+; 16                    0x39       "9"				; USER DEFINE AREA BYTE (1)
+; 17                    0x38       "8"				; USER DEFINE AREA BYTE (2)
+; 18                    0x37       "7"				; USER DEFINE AREA BYTE (3)
+; 19                    0x36       "6"				; USER DEFINE AREA BYTE (4)
+; 20                    0x35       "5"				; USER DEFINE AREA BYTE (5)
+; 21                    0x34       "4"				; USER DEFINE AREA BYTE (6)
+; 22                    0x33       "3"				; USER DEFINE AREA BYTE (7)
+; 23                    0x32       "2"				; USER DEFINE AREA BYTE (8)
+; 24                    0x31       "1"				; USER DEFINE AREA BYTE (9)
+; 25                    0x30       "0"				; USER DEFINE AREA BYTE (10)
+; 26                    0x00       END OF STRING		; USER DEFINE AREA BYTE (11)
+;------------------------------------------------------------------------------------------
+; 32			0x86       CRC FROM STORAGE		; CRC CALCULATED BY STORAGE
+;------------------------------------------------------------------------------------------
+; 32		0x86		   CRC FROM TIMEX
+;-----------------WAIT EXECUTION------------------------------
+; 33  0x40                         CONTINUE FLAG
+;------------------------------------------------------------------------------------------
+; 34            0x01		   SEND Status Code (01 = No Error)
+;------------------------------------------------------------------------------------------
+
+
+;******************************************************************************************
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-34
+
+;------------------------------------------------------------------------------------------
+; USER COMMAND HEADER DATA
+;------------------------------------------------------------------------------------------
+; HL+00   =>	DEFB 0x00	COMMAND ID			; Numeric USER Command ID
+;------------------------------------------------------------------------------------------
+; HL+01	  =>	DEFB 0xFF	BANK # (00=DOCK FF=HOME ...)	; Bank Number (default: FF=HOME)
+;------------------------------------------------------------------------------------------
+; HL+02	  =>	DEFW 0x00	PMR1				; USER PARAMETER 1 (16 BITS)
+;------------------------------------------------------------------------------------------
+; HL+04	  =>	DEFW 0x00	PMR2	 			; USER PARAMETER 2 (16 BITS)
+;------------------------------------------------------------------------------------------
+; HL+06	  =>	DEFW 0x0C	BLK_LEN				; DATA BLOCK LEN (16 BITS)
+;------------------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------------------
+; USER COMMAND DATA BLOCK
+;------------------------------------------------------------------------------------------
+; DE+00   =>	DEFW 0x0C	BLK_LEN				; DATA BLOCK LEN (16 BITS)
+;------------------------------------------------------------------------------------------
+; DE+02   =>	DEFB 0x0A       STRING LEN			; USER DEFINE AREA BYTE (0)
+; DE+03   =>	DEFB 0x39       "9"				; USER DEFINE AREA BYTE (1)
+; DE+04   =>	DEFB 0x38       "8"				; USER DEFINE AREA BYTE (2)
+; DE+05   =>	DEFB 0x37       "7"				; USER DEFINE AREA BYTE (3)
+; DE+06   =>	DEFB 0x36       "6"				; USER DEFINE AREA BYTE (4)
+; DE+07   =>	DEFB 0x35       "5"				; USER DEFINE AREA BYTE (5)
+; DE+08   =>	DEFB 0x34       "4"				; USER DEFINE AREA BYTE (6)
+; DE+09   =>	DEFB 0x33       "3"				; USER DEFINE AREA BYTE (7)
+; DE+10   =>	DEFB 0x32       "2"				; USER DEFINE AREA BYTE (8)
+; DE+11   =>	DEFB 0x31       "1"				; USER DEFINE AREA BYTE (9)
+; DE+12   =>	DEFB 0x30       "0"				; USER DEFINE AREA BYTE (10)
+; DE+13   =>	DEFB 0x00       END OF STRING		; USER DEFINE AREA BYTE (11)
+;------------------------------------------------------------------------------------------
+
+;********************************************************************************************* 
+; FOR RECEIVING DATA BLOCK, THE 2 FIRST BYTES OF THE BUFFER AREA ARE USING FOR STORAGE THE SIZE
+; OF THE DATA BLOCK RECEIVED.
+; THE USER NEED TO ALLOCATE 2 EXTRA BYTES MORE THAN THE DATA BLOCK RECEIVED (SIZE=DATA_LEN +2)
+;********************************************************************************************* 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-35
+
+
+                ***********************************************************
+                **    THE FOLLOWING FUNCTIONS REQUIRE A 64K DOCK BANK    **
+                ***********************************************************
+                ** SAVE "TPI:SNAPSHOT"                                   **
+                **                                                       **
+		** CP/M CBIOS MESSAGES                                   **
+                **                                                       **
+                ***********************************************************
+                **      * P R E L I M I N A R  I N F O R M A T I O N *   **
+                ***********************************************************
+
+        SEND THE FILENAME TO THE STORAGE DEVICE WITH THE FOLLOWING ASSEMBLER COMMAND
+
+        SET FILENAME TO USE IN NEXT SAVE/LOAD "Timex Memory Snapshot" (.TMS)                                   
+              The Snapshot rutines run at 3400H in the DOCK RAM Bank 
+
+USE THE SAVE COMMAND TO SET-UP THE FILENAME BEFORE 
+USE THE SNAPSHOT SAVE/LOAD BLOCK COMMANDS
+
+SAVE "TPI:SNAPSHOT"
+
+---------------------------------------------       
+CO RD-15   WR-14  RD-14                         
+=============================================       
+00         0x42         "A" (BASIC COMND)           
+01         0x47         COMMAND ID (47=SNSNAP)                  
+02         0xFF         BANK # (00=DOCK FF=HOME ...)
+03         0x00         SESION ID LOW
+04         0x00         SESION ID HIGH
+;---------------------------------------------
+05         0x2B         COMMAND PARAMETER ID ( 21= ASCII SNAPSHOOT FILENAME)
+06         0x04         COMMAND BLOCK NUMBER (00 = LAST COMMAND BLOCK MESSAGE / 01..02..ETC)
+07         0x0A         BLK_LEN LOW                
+08         0x00         BLK_LEN HIGH              
+---------------------------------------------       
+09         0xFB         CRC FROM TIMEX              
+---------------------------------------------       
+----------------WAIT EXECUTION---------------       
+---------------------------------------------       
+10 0x40                 CONTINUE FLAG               
+---------------------------------------------       
+11                0x01  Status Code
+---------------------------------------------       
+12	   0x44            "D" (DATA BLOCK CMD)        
+13         0x0C            COMND LEN L                 
+14         0x00            COMND LEN H                 
+---------------------------------------------       
+15         0x54            "T"                         
+16         0x50            "P"                         
+17         0x49            "I"                         
+18         0x3A            ":"                         
+19         0x53            "S"                         
+20         0x4E            "N"                         
+21         0x41            "A"                         
+22         0x50            "P"     
+23         0x53            "S"                         
+24         0x48            "H"                         
+25         0x4F            "O"                         
+26         0x54            "T"                         
+---------------------------------------------       
+27         0x5F            CRC FROM TIMEX              
+----------------WAIT EXECUTION---------------       
+28   0x40                  CONTINUE FLAG               
+---------------------------------------------       
+29	   0x2C		   NEXT PARAMETER TYPE ID (2C = HARDWARE REGISTERS)
+;			   (OR ERROR CODE IF VALUE <20H OR >80H)
+;---------------------------------------------
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-36
+
+FUNCTION LOAD SNAPSHOT BLOCK IMAGE FROM SD      FUNCTION SAVE SNAPSHOT BLOCK IMAGE ON SD
+
+---------------------------------------------   ---------------------------------------------      
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14                      
+=============================================   =============================================      
+00         0x42         "A" (ASSEMBLER COMND)   00         0x42         "A" (ASSEMBLER COMND)          
+01         0x48         LOAD SNAP (TADDR)       01         0x49         SAVE SNAP (TADDR)               
+02         0xFF         BANK NUMBER             02         0xFF         BANK NUMBER                
+03         0x01         SESION ID LOW		03         0x01         SESION ID LOW             
+04         0x01         SESION ID HIGH          04         0x00         SESION ID HIGH                   
+---------------------------------------------   ---------------------------------------------      
+05	   0x2C		COM PMR ID (2C= H.REG)	05	   0x2C		COM PMR ID (2C= H.REG)
+06	   0x03		CMND BLK NUMB		06	   0x03		CMND BLK NUMB         
+07	   0x0B		BLK_LEN LOW		07	   0x0B		BLK_LEN LOW           
+08	   0x00		BLK_LEN HIGH		08	   0x00		BLK_LEN HIGH          
+---------------------------------------------   ---------------------------------------------      
+09         0x2E         CRC FROM TIMEX          09         0x27         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+10              0x01    Status Code             10                 0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+11 0x40         CONTINUE FLAG                   11 0x40                 CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+12              0x44    "D" (DATA BLOCK CMD)    12         0x44         "D" (DATA BLOCK CMD)  
+13              0x00    SNAP_TOTAL_BLOCK_LEN L  13         0x00         SNAP_TOTAL_BLOCK_LEN L           
+14              0xC0    SNAP_TOTAL_BLOCK_LEN H  14         0x00         SNAP_TOTAL_BLOCK_LEN H      
+---------------------------------------------   ---------------------------------------------      
+15              0x00    HEADER_BLOCK_LEN L      15         0x00         HEADER_BLOCK_LEN L           
+16              0x00    HEADER_BLOCK_LEN H      16         0x00         HEADER_BLOCK_LEN H      
+17              0x01    HEADER_VERSION_ID       17         0x01         HEADER_VERSION_ID      
+---------------------------------------------   ---------------------------------------------      
+18              0x00    SNAP_OFST_Z80REG        18         0x00         SNAP_OFST_Z80REG           
+19              0x00    SNAP_HEADER_LEN         19         0x00         SNAP_HEADER_LEN  
+---------------------------------------------   ---------------------------------------------      
+20              0x00    MAIN_ROM_ID             20         0x00         MAIN_ROM_ID                  
+21              0x00    ROM_M393_IF1_FLAG       21         0x00         ROM_M393_FLAG                  
+22              0x00    ROM_M393_IF1_MAP        22         0x00         ROM_M393_IF1_MAP
+23              0x00    ROM_SIG_0               23         0x00         ROM_SIG_0                  
+24              0x00    ROM_SIG_1               24         0x00         ROM_SIG_1                  
+25              0x00    ROM_SIG_2               25         0x00         ROM_SIG_2                  
+26              0x00    ROM_SIG_3               26         0x00         ROM_SIG_3     
+---------------------------------------------   ---------------------------------------------      
+27              0x00    MACH_PORT_FF            27         0x00         MACH_PORT_FF               
+28              0x00    MACH_PORT_FE            28         0x00         MACH_PORT_FE               
+29              0x00    MACH_PORT_F4            29         0x00         MACH_PORT_F4
+30              0x00    MACH_PORT_EF            30         0x00         MACH_PORT_EF
+---------------------------------------------   ---------------------------------------------      
+31              0x00    MACH_AY3_FLAG           31         0x00         MACH_AY3_FLAG
+32              0x00    MACH_AY3_DATA_PORT L    32         0x00         MACH_AY3_DATA_PORT L
+33              0x00    MACH_AY3_DATA_PORT H    33         0x00         MACH_AY3_DATA_PORT H
+34              0x00    MACH_AY3_ADDR_PORT L    34         0x00         MACH_AY3_ADDR_PORT L
+35              0x00    MACH_AY3_ADDR_PORT H    35         0x00         MACH_AY3_ADDR_PORT H
+36              0x00    MACH_AY3_DA_00          36         0x00         MACH_AY3_DA_00
+37              0x00    MACH_AY3_DA_01          37         0x00         MACH_AY3_DA_01
+38              0x00    MACH_AY3_DA_02          38         0x00         MACH_AY3_DA_02
+39              0x00    MACH_AY3_DA_03          39         0x00         MACH_AY3_DA_03
+40              0x00    MACH_AY3_DA_04          40         0x00         MACH_AY3_DA_04
+41              0x00    MACH_AY3_DA_05          41         0x00         MACH_AY3_DA_05
+42              0x00    MACH_AY3_DA_06          42         0x00         MACH_AY3_DA_06
+43              0x00    MACH_AY3_DA_07          43         0x00         MACH_AY3_DA_07
+44              0x00    MACH_AY3_DA_08          44         0x00         MACH_AY3_DA_08
+45              0x00    MACH_AY3_DA_09          45         0x00         MACH_AY3_DA_09
+46              0x00    MACH_AY3_DA_10          46         0x00         MACH_AY3_DA_10
+47              0x00    MACH_AY3_DA_11          47         0x00         MACH_AY3_DA_11
+---------------------------------------------   ---------------------------------------------      
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-37
+
+---------------------------------------------   ---------------------------------------------      
+48              0x00    MACH_AY3_DA_12          48         0x00         MACH_AY3_DA_12
+49              0x00    MACH_AY3_DA_13          49         0x00         MACH_AY3_DA_13
+50              0x00    MACH_AY3_DA_14          50         0x00         MACH_AY3_DA_14
+51              0x00    MACH_AY3_DA_15          51         0x00         MACH_AY3_DA_15
+52              0x00    MACH_DOCK_ROM_FLAG      52         0x00         MACH_DOCK_ROM_FLAG
+53              0x00    MACH_DOCK_HS            53         0x00         MACH_DOCK_HS
+54              0x00    MACH_DOCK_AROS_FLAG     54         0x00         MACH_DOCK_AROS_FLAG             
+55              0x00    MACH_DOCK_LROS_FLAG     55         0x00         MACH_DOCK_LROS_FLAG       
+56              0x00    MACH_DOCK_RAM_FLAG      56         0x00         MACH_DOCK_RAM_FLAG             
+57              0x00    MACH_DOCK_SIZE_KB       57         0x00         MACH_DOCK_SIZE_KB        
+58              0x00    MACH_EXROM_FLAG         58         0x00         MACH_EXROM_FLAG         
+59              0x00    MACH_EXPB_QTY           59         0x00         MACH_EXPB_QTY          
+60              0x01    MEM_TOTAL_BLOCKS_QTY    60         0x00         MEM_TOTAL_BLOCKS_QTY            
+---------------------------------------------   ---------------------------------------------      
+61              0x01    CPU_ID                  61         0x00         CPU_ID                  
+62              0x01    CPU_MODEL               62         0x00         CPU_MODEL
+63              0xC8    CPU_KHZ L               63         0x00         CPU_KHZ L
+64              0x0D    CPU_KHZ H               64         0x00         CPU_KHZ H
+---------------------------------------------   ---------------------------------------------      
+65              0x00    CPU_REG_FLAGS           65         0x00         CPU_REG_FLAGS                  
+66              0x00    CPU_REG_A               66         0x00         CPU_REG_A                  
+67              0x00    CPU_REG_C               67         0x00         CPU_REG_C                  
+68              0x00    CPU_REG_B               68         0x00         CPU_REG_B                  
+69              0x00    CPU_REG_E               69         0x00         CPU_REG_E                  
+70              0x00    CPU_REG_D               70         0x00         CPU_REG_D                  
+71              0x00    CPU_REG_L               71         0x00         CPU_REG_L                  
+72              0x00    CPU_REG_H               72         0x00         CPU_REG_H                  
+73              0x00    CPU_FLAGS_ALT           73         0x00         CPU_FLAGS_ALT                  
+74              0x00    CPU_REG_A_ALT           74         0x00         CPU_REG_A_ALT                  
+75              0x00    CPU_REG_C_ALT           75         0x00         CPU_REG_C_ALT                 
+76              0x00    CPU_REG_B_ALT           76         0x00         CPU_REG_B_ALT                 
+77              0x00    CPU_REG_E_ALT           77         0x00         CPU_REG_E_ALT                 
+78              0x00    CPU_REG_D_ALT           78         0x00         CPU_REG_D_ALT                 
+79              0x00    CPU_REG_H_ALT           79         0x00         CPU_REG_H_ALT                 
+80              0x00    CPU_REG_L_ALT           80         0x00         CPU_REG_L_ALT                 
+81              0x00    CPU_REG_IX L            81         0x00         CPU_REG_IX L                 
+82              0x00    CPU_REG_IX H            82         0x00         CPU_REG_IX H                 
+83              0x00    CPU_REG_IY L            83         0x00         CPU_REG_IY L                 
+84              0x00    CPU_REG_IY H            84         0x00         CPU_REG_IY H                 
+85              0x00    CPU_REG_SP L            85         0x00         CPU_REG_SP L                 
+86              0x00    CPU_REG_SP H            86         0x00         CPU_REG_SP H                 
+87              0x00    CPU_REG_PC L            87         0x00         CPU_REG_PC L                 
+88              0x00    CPU_REG_PC H            88         0x00         CPU_REG_PC H                 
+89              0x00    CPU_REG_I               89         0x00         CPU_REG_I                 
+90              0x00    CPU_REG_R               90         0x00         CPU_REG_R          
+91              0x00    CPU_REG_R7              91         0x00         CPU_REG_R7                
+92              0x00    CPU_REG_MEMPTR          92         0x00         CPU_REG_MEMPTR               
+93              0x00    CPU_REG_IFF1            93         0x00         CPU_REG_IFF1                
+94              0x00    CPU_REG_IFF2            94         0x00         CPU_REG_IFF2     
+95              0x00    CPU_IM_MODE             95         0x00         CPU_IM_MODE               
+---------------------------------------------   ---------------------------------------------      
+96              0x00    SNAP_MODE               96         0x00         SNAP_MODE               
+97              0x00    SNAP_LOAD_ADDR L        97         0x00         SNAP_SAVE_ADDR L
+98              0x00    SNAP_LOAD_ADDR H        98         0x00         SNAP_SAVE_ADDR H              
+99              0x00    CRC_FILE_HEADER         99         0x00         CRC_FILE_HEADER    
+---------------------------------------------   ---------------------------------------------      
+100             0x77    CRC FROM TIMEX          100        0x7A         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+101        0x01         Status Code             101                0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+102 0x40                CONTINUE FLAG           102 0x40                CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+103	  0x2D		REQ PARAM ID=2D H.DATA	103	   0x2D		SET PARAM ID=2D H.DATA
+	(OR ERROR CODE IF VALUE <20H OR >80H)		(OR ERROR CODE IF VALUE <20H OR >80H)
+---------------------------------------------   ---------------------------------------------      
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-38
+---------------------------------------------   ---------------------------------------------      
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14                      
+=============================================   =============================================      
+00         0x42         "A" (ASSEMBLER COMND)   00         0x42         "A" (ASSEMBLER COMND)          
+01         0x48         LOAD SNAP (TADDR)       01         0x49         SAVE SNAP (TADDR)               
+02         0xFF         BANK NUMBER             02         0xFF         BANK NUMBER                
+03         0x01         SESION ID LOW		03         0x01         SESION ID LOW             
+04         0x01         SESION ID HIGH          04         0x00         SESION ID HIGH                   
+---------------------------------------------   ---------------------------------------------      
+05	   0x2D		COM PMR ID (2D= H.DATA)	05	   0x2D		COM PMR ID (2D= H.DATA)
+06	   0x03		CMND BLK NUMB		06	   0x03		CMND BLK NUMB         
+07	   0x0B		BLK_LEN LOW		07	   0x0B		BLK_LEN LOW           
+08	   0x00		BLK_LEN HIGH		08	   0x00		BLK_LEN HIGH          
+---------------------------------------------   ---------------------------------------------      
+09         0x2E         CRC FROM TIMEX          09         0x27         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+10              0x01    Status Code             10                 0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+11 0x40         CONTINUE FLAG                   11 0x40                 CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+105             0x44    "D" (DATA BLOCK CMD)    103        0x44         "D" (DATA BLOCK CMD)  
+---------------------------------------------   ---------------------------------------------      
+106             0x00    MEM_BLOCK1_BANK         104        0x00         MEM_BLOCK1_BANK            
+107             0x00    MEM_HOME_START_ADDR L   105        0x00         MEM_HOME_START_ADDR L          
+108             0x00    MEM_HOME_START_ADDR H   106        0x00         MEM_HOME_START_ADDR H    
+109             0x00    MEM_HOME_LEN L          107        0x00         MEM_HOME_LEN L           
+110             0x00    MEM_HOME_LEN H          108        0x00         MEM_HOME_LEN H      
+---------------------------------------------   ---------------------------------------------      
+111             0x00    MEM_HOME_DATA1_4000     111        0x00         MEM_HOME_DATA1_4000
+112             0x00    MEM_HOME_DATA1_4001     112        0x00         MEM_HOME_DATA1_4001
+.                                               .
+49262           0x00    MEM_HOME_DATA1_FFFF     49262      0x00         MEM_HOME_DATA1_FFFF
+---------------------------------------------   ---------------------------------------------      
+49261           0x00    CRC FROM TIMEX          49261      0x00         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+49262      0x01         Send Status Code OK     49262              0x01 Get Status Code  
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+49263 0x40              CONTINUE FLAG           49263 0x40              CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+49264	  0x2E		REQ PARAM ID=2C H.REG.	49264	   0x2E		SET PARAM ID=2C H.REG.
+	(OR ERROR CODE IF VALUE <20H OR >80H)	(OR ERROR CODE IF VALUE <20H OR >80H)
+---------------------------------------------   ---------------------------------------------      
+
+---------------------------------------------   ---------------------------------------------      
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14                      
+=============================================   =============================================      
+00         0x42         "A" (ASSEMBLER COMND)   00         0x42         "A" (ASSEMBLER COMND)          
+01         0x48         LOAD SNAP (TADDR)       01         0x49         SAVE SNAP (TADDR)               
+02         0xFF         BANK NUMBER             02         0xFF         BANK NUMBER                
+03         0x01         SESION ID LOW		03         0x01         SESION ID LOW             
+04         0x01         SESION ID HIGH          04         0x00         SESION ID HIGH                   
+---------------------------------------------   ---------------------------------------------      
+05	   0x2E		COM PMR ID (2C= H.REG)	05	   0x2E		COM PMR ID (2C= H.REG)
+06	   0x03		CMND BLK NUMB		06	   0x03		CMND BLK NUMB         
+07	   0x0B		BLK_LEN LOW		07	   0x0B		BLK_LEN LOW           
+08	   0x00		BLK_LEN HIGH		08	   0x00		BLK_LEN HIGH          
+---------------------------------------------   ---------------------------------------------      
+09         0x2E         CRC FROM TIMEX          09         0x27         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+10              0x01    Status Code             10                 0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+11 0x40         CONTINUE FLAG                   11 0x40                 CONTINUE FLAG              
+
+
+
+
+
+
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-39
+
+---------------------------------------------   ---------------------------------------------      
+49265           0x44    "D" (DATA BLOCK CMD)    49264      0x44         "D" (DATA BLOCK CMD)  
+---------------------------------------------   ---------------------------------------------      
+49267           0x00    MEM_BLOCK2_BANK         49265      0x00         MEM_BLOCK2_BANK           
+49268           0x00    MEM_DOCK_START_ADDR L   49266      0x00         MEM_DOCK_START_ADDR L          
+49269           0x00    MEM_DOCK_START_ADDR H   49267      0x00         MEM_DOCK_START_ADDR H    
+49270           0x00    MEM_DOCK_LEN L          49268      0x00         MEM_DOCK_LEN L           
+49271           0x00    MEM_DOCK_LEN H          49269      0x00         MEM_DOCK_LEN H      
+---------------------------------------------   ---------------------------------------------      
+49272           0x00    MEM_DOCK_DATA2_4000     49270      0x00         MEM_DOCK_DATA2_4000  
+49273           0x00    MEM_DOCK_DATA2_4001     49271      0x00         MEM_DOCK_DATA2_4001  
+.                                               .       
+98423           0x00    MEM_DOCK_DATA3_FFFF     98421      0x00         MEM_DOCK_DATA3_FFFF
+---------------------------------------------   ---------------------------------------------      
+98422           0x77    CRC FROM PICO           98422      0x7A         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+98423      0x01         Status Code             98423            0x01   Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+98424 0x40              CONTINUE FLAG           98424 0x40              CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+49264	  0x2F		REQ PARM (2F EXP.BANK)	49264	   0x2F		REQ PARM (2F EXP.BANK)
+	(OR ERROR CODE IF VALUE <20H OR >80H)	(OR ERROR CODE IF VALUE <20H OR >80H)
+---------------------------------------------   ---------------------------------------------      
+
+---------------------------------------------   ---------------------------------------------      
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14                      
+=============================================   =============================================      
+00         0x42         "A" (ASSEMBLER COMND)   00         0x42         "A" (ASSEMBLER COMND)          
+01         0x48         LOAD SNAP (TADDR)       01         0x49         SAVE SNAP (TADDR)               
+02         0xFF         BANK NUMBER             02         0xFF         BANK NUMBER                
+03         0x01         SESION ID LOW		03         0x01         SESION ID LOW             
+04         0x01         SESION ID HIGH          04         0x00         SESION ID HIGH                   
+---------------------------------------------   ---------------------------------------------      
+05	   0x2F		COM PMR ID(2F EXP.BANK)	05	   0x2F		COM PMR ID (2F= H.REG)
+06	   0x03		CMND BLK NUMB		06	   0x03		CMND BLK NUMB         
+07	   0x0B		BLK_LEN LOW		07	   0x0B		BLK_LEN LOW           
+08	   0x00		BLK_LEN HIGH		08	   0x00		BLK_LEN HIGH          
+---------------------------------------------   ---------------------------------------------      
+09         0x2E         CRC FROM TIMEX          09         0x27         CRC FROM TIMEX             
+---------------------------------------------   ---------------------------------------------      
+10              0x01    Status Code             10                 0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------      
+11 0x40         CONTINUE FLAG                   11 0x40                 CONTINUE FLAG              
+---------------------------------------------   ---------------------------------------------      
+
+---------------------------------------------   ---------------------------------------------      
+98425           0x44    "D" (DATA BLOCK CMD)    98425      0x44         "D" (DATA BLOCK CMD)  
+---------------------------------------------   ---------------------------------------------      
+98426           0x00    MEM_BLOCK3_BANK         98426      0x00         MEM_BLOCK3_BANK           
+98427           0x00    MEM_EXPB_START_ADDR L   98427      0x00         MEM_EXPB_START_ADDR L          
+98428           0x00    MEM_EXPB_START_ADDR H   98428      0x00         MEM_EXPB_START_ADDR H    
+98429           0x00    MEM_EXPB_LEN L          98429      0x00         MEM_EXPB_LEN L           
+98430           0x00    MEM_EXPB_LEN H          98430      0x00         MEM_EXPB_LEN H      
+---------------------------------------------   ---------------------------------------------      
+98431           0x00    MEM_EXPB_DATA3_4000     98431      0x00         MEM_EXPB_DATA3_4000  
+98432           0x00    MEM_EXPB_DATA3_4001     98432      0x00         MEM_EXPB_DATA3_4001  
+.                                               .       
+147582          0x00    MEM_EXPB_DATA3_FFFF     147582     0x00         MEM_EXPB_DATA3_FFFF
+---------------------------------------------   --------------------------------------------- 
+147583          0x44    CRC FROM PICO           147583     0x44         CRC FROM TIMEX        
+---------------------------------------------   --------------------------------------------- 
+147584     0x01		Status Code             147584             0x01 Status Code
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION--------------- 
+147585 0x40             CONTINUE FLAG           147585 0x40             CONTINUE FLAG         
+---------------------------------------------   --------------------------------------------- 
+147586		0x01	NO ERROR OK		49264	   0x01		NO ERROR OK
+	(OR ERROR CODE IF VALUE <20H OR >80H)	(OR ERROR CODE IF VALUE <20H OR >80H)
+---------------------------------------------   ---------------------------------------------                                                                                                 
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-40
+
+                                CP/M 2.2 CBIOS MESSAGES
+
+        CBIOS BOOT PRECESS MESSAGE                      CBIOS PRINT CONSOLE "A" CHARACTER
+---------------------------------------------   ---------------------------------------------           
+CO RD-15   WR-14 RD-14                          CO RD-15   WR-14  RD-14                 
+=============================================   =============================================
+00         0x43         "C" (CP/M COMMAND)      00         0x43         "C" (CP/M COMMAND)      
+01         0x00         CBIOS FUNCT             01         0x04         CBIOS FUN
+02         0x00         CPU REG A               02         0x00         CPU REG A
+03         0x00         CPU REG C               03         0x41         CPU REG C
+04         0x00         CPU REG B               04         0x00         CPU REG B       
+05         0x00         CPU REG E               05         0x00         CPU REG E
+06         0x00         CPU REG D               06         0x00         CPU REG D
+07         0x00         CPU REG L               07         0x00         CPU REG L
+08         0x00         CPU REG H               08         0x00         CPU REG H
+---------------------------------------------   ---------------------------------------------           
+09         0x43         CRC FROM TIMEX          09         0x06         CRC FROM TIMEX          
+---------------------------------------------   ---------------------------------------------
+11                 0x01 Status Code             11                 0x01 Status Code
+-----------------WAIT EXECUTION--------------   -----------------WAIT EXECUTION--------------
+10 0x40                 CONTINUE FLAG           10 0x40                 CONTINUE FLAG           
+---------------------------------------------   ---------------------------------------------           
+
+        CBIOS READ SECTOR MESSAGE                       CBIOS WRITE SECTOR MESSAGE
+---------------------------------------------   ---------------------------------------------           
+CO RD-15   WR-14  RD-14                         CO RD-15   WR-14  RD-14                 
+=============================================   =============================================
+00         0x43         "C" (CP/M COMMAND)      00         0x43         "C" (CP/M COMMAND)      
+01         0x0D         CBIOS FUNCT             01         0x0E         CBIOS FUN
+02         0x00         CPU REG A               02         0x00         CPU REG A
+03         0x00         CPU REG C               03         0x00         CPU REG C (DEBLOCK CODE)
+04         0x00         CPU REG B               04         0x00         CPU REG B       
+05         0x00         CPU REG E               05         0x00         CPU REG E
+06         0x00         CPU REG D               06         0x00         CPU REG D
+07         0x00         CPU REG L               07         0x00         CPU REG L
+08         0x00         CPU REG H               08         0x00         CPU REG H
+---------------------------------------------   ---------------------------------------------           
+09         0x4E         CRC FROM TIMEX          09         0x0C         CRC FROM TIMEX          
+---------------------------------------------   ---------------------------------------------
+10                 0x01 Status Code             10                 0x01 Status Code
+-----------------WAIT EXECUTION--------------   -----------------WAIT EXECUTION--------------
+11 0x40                 CONTINUE FLAG           11 0x40                 CONTINUE FLAG           
+---------------------------------------------   ---------------------------------------------           
+12         0x44         "D" (DATA BLOCK CMD)    12         0x44         "D" (DATA BLOCK CMD)  
+13         0x00         COMND LEN L             13         0x0A         COMND LEN L           
+14         0x1B         COMND LEN H             14         0x00         COMND LEN H           
+15         0x00         CBIOS FUNCT RESPONSE    15         0x54         CBIOS FUNCT RESPONSE    
+16         0x00         CPU REG A               16         0x50         CPU REG A       
+17         0x00         CPU REG C               17         0x49         CPU REG C       
+18         0x00         CPU REG B               18         0x3A         CPU REG B       
+19         0x00         CPU REG E               19         0x44         CPU REG E       
+20         0x00         CPU REG D               20         0x45         CPU REG D       
+21         0x0F         CPU REG L               21         0x4C         CPU REG L       
+22         0x0F         CPU REG H               22         0x45         CPU REG H       
+---------------------------------------------   ---------------------------------------------           
+23                 0x0F SECTOR BYTE 00          23         0x54         SECTOR BYTE 00     
+24                 0x0F SECTOR BYTE 01          24         0x45         SECTOR BYTE 01     
+.                                               .
+149                0x0F SECTOR BYTE 7E          23         0x54         SECTOR BYTE 7E     
+150                0x0F SECTOR BYTE 7F          24         0x45         SECTOR BYTE 7F     
+---------------------------------------------   ---------------------------------------------
+151                0x93 CRC FROM PICO           151        0x20         CRC FROM TIMEX             
+----------------WAIT EXECUTION---------------   ----------------WAIT EXECUTION---------------
+152        0x01         Status Code             152               0x01  Status Code
+---------------------------------------------   ---------------------------------------------
+153 0x40                CONTINUE FLAG           153 0x40                CONTINUE FLAG    
+---------------------------------------------   ---------------------------------------------
+
+TS-PICO PROTOCOL TPI *PRELIMINAR* 09/24 V:1.5  MACRO-80 3.44   09-Dec-81 PAGE  1-41
+
+********************************************************************************************* 
+
+MANDATORY CP/M  CBIOS FUNCTION MAP
+----------------------------------
+V:2.2   V:3.0   FUNC #          ; Description
+
+YES     YES     00      BOOT    ; Perform cold start initialization
+YES     YES     01      WBOOT   ; Perform warm start initialization
+YES     YES     02      CONST   ; Check for console input character ready
+YES     YES     03      CONIN   ; Read Console Character in
+YES     YES     04      CONOUT  ; Write Console Character out
+YES     YES     05      LIST    ; Write List Character out
+YES     YES     06      PUNCH   ; Write Auxiliary Output Character (USED AS ALT STORAGE DEVICE)
+YES     YES     07      READER  ; Read Auxiliary Input Character (USED AS ALT STORAGE DEVICE)
+YES     YES     08      HOME    ; Move to Track 00 on Selected Disk
+YES     YES     09      SELDSK  ; Select Disk Drive
+YES     YES     0A      SETTRK  ; Set Track Number
+YES     YES     0B      SETSEC  ; Set Sector Number
+NO      NO      0C      SETDMA  ; Set DMA Address
+YES     YES     0D      READ    ; Read Specified Sector
+YES     YES     0E      WRITE   ; Write Specified Sector
+YES     YES     0F      LISTST  ; Return List Status
+NO      NO      10      SECTRAN ; Translate Logical to Physical Sector
+------------------CP/M 3----------------------------------------------------------------------
+NO      YES     11      CONOST  ; Return Output Status of Console
+NO      YES     12      AUXIST  ; Return Input Status of Aux. Port
+NO      YES     13      AUXOST  ; Return Output Status of Aux. Port
+NO      YES     14      DEVTBL  ; Return Address of Char. I/O Table
+NO      YES     15      DEVINI  ; Initialize Char. I/O Devices
+NO      YES     16      DRVTBL  ; Return Address of Disk Drive Table
+NO      YES     17      MULTIO  ; Set Number of Logically Consecutive sectors to be RD or WR
+NO      YES     18      FLUSH   ; Force Physical Buffer Flushing for user-supported deblocking
+NO      YES     19      MOVE    ; Memory to Memory Move
+NO      YES     1A      TIME    ; Time Set/Get signal Clock
+NO      YES     1B      SELMEM  ; Select memory bank
+NO      YES     1C      SETBNK  ; Select bank for DMA operation
+NO      YES     1D      XMOVE   ; Set Bank When a Buffer is in a Bank other than 0 or 1
+NO      YES     1E      USERF   ; Reserved for System Implementor
+NO      YES     1F      RESERV1 ; Reserved
+NO      YES     20      RESERV2 ; Reserved
+NO      YES     21      RESERV3 ; Reserved
+NO      YES     22      RESERV4 ; Reserved
+NO      YES     23      RESERV5 ; Reserved
+NO      YES     24      RESERV6 ; Send STORAGE HWRD CMND (PHY,INIT CONFIG)
+NO      YES     25      RESERV6 ; Set TERMINAL HWRD CMND
+NO      YES     26      RESERV6 ; Set CPM CONFIG CMND
+
+********************************************************************************************* 
+
+(C) Gustavo Pane 
+    Sep 2024
+
+END OF DOC REV: 1.5
