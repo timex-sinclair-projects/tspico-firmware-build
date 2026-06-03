@@ -113,34 +113,46 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          STAGE="tspico-${TAG}"
-          mkdir -p "${STAGE}/pico-flash/assets"
-          mkdir -p "${STAGE}/pico-flash/help"
+          # Bundle layout (per maintainer request):
+          #
+          #   ts-pico/
+          #   ├── DEPLOY.md
+          #   ├── main.py             ← top-level: the boot script
+          #   ├── config.ini          ← top-level: runtime config
+          #   ├── assets/             ← top-level: internal protocol .tap files
+          #   │   └── *.tap
+          #   └── pico/               ← complete drop-in for Pico flash
+          #       ├── firmware.uf2
+          #       ├── main.py
+          #       ├── config.ini
+          #       ├── words.txt
+          #       ├── assets/*.tap
+          #       └── help/*.txt
+          #
+          # The top-level `main.py`, `config.ini`, and `assets/` are the
+          # canonical sources; `pico/` aggregates everything that needs
+          # to be on the Pico's flash filesystem (UF2 + flash content)
+          # for a single drag-drop deploy.
+          STAGE="ts-pico"
+          mkdir -p "${STAGE}/assets"
+          mkdir -p "${STAGE}/pico/assets"
+          mkdir -p "${STAGE}/pico/help"
 
-          # Firmware UF2 — goes at the top level, flashed via BOOTSEL.
-          cp ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2 \
-             "${STAGE}/firmware.uf2"
+          UF2_SRC="${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2"
 
-          # Pico flash root content.
-          cp main.py     "${STAGE}/pico-flash/"
-          cp config.ini  "${STAGE}/pico-flash/"
-          cp words.txt   "${STAGE}/pico-flash/"
+          # Top-level: the boot/config/assets the user cares about directly.
+          cp main.py     "${STAGE}/main.py"
+          cp config.ini  "${STAGE}/config.ini"
+          cp assets/*.tap "${STAGE}/assets/"
 
-          # Dev-override convenience files (optional for end users; useful
-          # for iterating without rebuilding the UF2). Both are at the
-          # tag's tree; we only copy if present.
-          if [ -f dev_tspico.mpy ]; then
-            cp dev_tspico.mpy "${STAGE}/pico-flash/"
-          fi
-          if [ -f dev_extcmd.py ]; then
-            cp dev_extcmd.py "${STAGE}/pico-flash/"
-          fi
-
-          # Internal protocol TAPs go in /assets/.
-          cp assets/*.tap "${STAGE}/pico-flash/assets/"
-
-          # Help text files go in /help/.
-          cp help/*.txt "${STAGE}/pico-flash/help/"
+          # pico/: complete Pico-flash payload (UF2 + everything that
+          # lives on the Pico's filesystem).
+          cp "${UF2_SRC}" "${STAGE}/pico/firmware.uf2"
+          cp main.py      "${STAGE}/pico/main.py"
+          cp config.ini   "${STAGE}/pico/config.ini"
+          cp words.txt    "${STAGE}/pico/words.txt"
+          cp assets/*.tap "${STAGE}/pico/assets/"
+          cp help/*.txt   "${STAGE}/pico/help/"
 
           # Bundle deploy instructions.
           cat > "${STAGE}/DEPLOY.md" <<EOF
@@ -149,23 +161,22 @@ jobs:
           ## Quick deploy
 
           1. **Flash the firmware**: hold BOOTSEL on the Pico, plug in USB,
-             drag-drop \`firmware.uf2\` onto the \`RPI-RP2\` drive that
-             appears. The Pico will reboot into MicroPython.
+             drag-drop \`pico/firmware.uf2\` onto the \`RPI-RP2\` drive
+             that appears. The Pico will reboot into MicroPython.
 
           2. **Connect via Thonny** and confirm you're at a bare REPL.
 
-          3. **Copy the contents of \`pico-flash/\` to the Pico's root**
-             via Thonny's file pane. Preserve the directory structure:
+          3. **Copy everything *inside* \`pico/\` (except \`firmware.uf2\`)
+             to the Pico's flash root** via Thonny's file pane. Preserve
+             the directory structure:
 
              | Bundle path | Goes to Pico path |
              |---|---|
-             | \`pico-flash/main.py\`       | \`/main.py\`       |
-             | \`pico-flash/config.ini\`    | \`/config.ini\`    |
-             | \`pico-flash/words.txt\`     | \`/words.txt\`     |
-             | \`pico-flash/dev_tspico.mpy\` (optional) | \`/dev_tspico.mpy\` |
-             | \`pico-flash/dev_extcmd.py\` (optional)  | \`/dev_extcmd.py\`  |
-             | \`pico-flash/assets/*.tap\`  | \`/assets/*.tap\`  |
-             | \`pico-flash/help/*.txt\`    | \`/help/*.txt\`    |
+             | \`pico/main.py\`       | \`/main.py\`       |
+             | \`pico/config.ini\`    | \`/config.ini\`    |
+             | \`pico/words.txt\`     | \`/words.txt\`     |
+             | \`pico/assets/*.tap\`  | \`/assets/*.tap\`  |
+             | \`pico/help/*.txt\`    | \`/help/*.txt\`    |
 
           4. **Reboot the Pico**. You should see the boot banner:
              \`\`\`
@@ -175,24 +186,28 @@ jobs:
 
           ## What's in this bundle
 
-          - \`firmware.uf2\` — MicroPython + frozen TS package.
-          - \`pico-flash/\` — everything that needs to live on the Pico's
-            internal flash filesystem.
-
-          The two \`dev_*\` files are **optional overrides** that let you
-          iterate on \`tspico.py\` / \`extcmd.py\` without rebuilding the
-          UF2. Skip them unless you're actively developing.
+          - \`main.py\`, \`config.ini\`, \`assets/\` at the top level —
+            the canonical user-facing files (edit \`config.ini\` here,
+            copy back into \`pico/\` if you change anything before
+            deploying).
+          - \`pico/\` — the complete Pico-flash payload: the firmware UF2
+            plus every file that needs to live on the Pico's internal
+            filesystem.
 
           See README.md in the repo for the full picture:
           https://github.com/timex-sinclair-projects/tspico-firmware-build
           EOF
 
-          # Zip up the bundle.
-          zip -r "${STAGE}.zip" "${STAGE}"
-          ls -la "${STAGE}.zip"
+          # Zip the bundle. Filename carries the tag; the folder inside
+          # is just `ts-pico/` so paths in DEPLOY.md stay version-free.
+          ZIP="ts-pico-${TAG}.zip"
+          zip -r "${ZIP}" "${STAGE}"
+          ls -la "${ZIP}"
           echo ""
           echo "=== bundle tree ==="
           find "${STAGE}" -type f | sort
+          echo ""
+          echo "ZIP_NAME=${ZIP}" >> "$GITHUB_ENV"
 
       - name: Create or update GitHub Release
         env:
@@ -212,13 +227,13 @@ jobs:
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists — uploading assets to it."
             gh release upload "${TAG}" \
-              "tspico-${TAG}.zip" \
+              "${ZIP_NAME}" \
               "${UF2}#firmware.uf2 (raw, for in-place reflash)" \
               --clobber
           else
             echo "Release ${TAG} does not exist — creating it."
             gh release create "${TAG}" \
-              "tspico-${TAG}.zip" \
+              "${ZIP_NAME}" \
               "${UF2}#firmware.uf2 (raw, for in-place reflash)" \
               --title "TS-Pico Firmware ${TAG}" \
               --generate-notes
