@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TS-Pico Web Updater</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --panel-2: #232733;
+    --text: #e6e8ec;
+    --muted: #9aa3b2;
+    --accent: #4c9aff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --error: #f85149;
+    --border: #2c313c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0 0 20px; color: var(--muted); }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+  }
+  .panel h2 { margin: 0 0 12px; font-size: 15px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted); }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 16px; transition: background .15s, border-color .15s;
+  }
+  button:hover:not(:disabled) { background: #2d3340; border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #3d87e6; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .spacer { flex: 1; }
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin: 4px 0; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .status {
+    display: inline-block; padding: 4px 10px; border-radius: 6px;
+    background: var(--panel-2); color: var(--muted); font-size: 13px;
+  }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  .status.error { color: var(--error); }
+  .progress { height: 14px; background: var(--panel-2); border-radius: 7px;
+    overflow: hidden; border: 1px solid var(--border); }
+  .progress > div { height: 100%; width: 0; background: var(--accent);
+    transition: width .2s; }
+  #progress-wrap { margin-top: 12px; }
+  #progress-wrap .row { margin-top: 6px; font-size: 13px; color: var(--muted); }
+  #log {
+    background: #0a0c10; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; height: 220px; overflow-y: auto;
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; color: #c9d1d9;
+  }
+  .log-line { } .log-ok { color: var(--ok); } .log-warn { color: var(--warn); }
+  .log-error { color: var(--error); }
+  a { color: var(--accent); }
+  .note { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 5px;
+    background: var(--panel-2); color: var(--warn); border: 1px solid var(--border); }
+  .danger { color: var(--error); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TS-Pico Web Updater <span class="badge">prototype</span></h1>
+    <p>Upload the TS-Pico release files to your Pico over USB — no Thonny needed.</p>
+  </header>
+
+  <!-- Shown only when the browser lacks WebSerial -->
+  <div class="panel" id="unsupported" hidden>
+    <h2 class="danger">Unsupported browser</h2>
+    <p>This tool needs the <strong>WebSerial API</strong>, which is only available in
+       Chromium-based browsers — <strong>Chrome, Edge, or Opera</strong> on
+       Windows, macOS, Linux, or ChromeOS. Safari and Firefox are not supported,
+       and there is no iOS option.</p>
+    <p class="note">Open this page in Chrome or Edge and try again. The Thonny
+       workflow in <code>DEPLOY.md</code> remains available as a fallback.</p>
+  </div>
+
+  <main id="main">
+    <!-- Release info -->
+    <div class="panel">
+      <h2>Release</h2>
+      <dl class="kv">
+        <dt>Latest firmware</dt><dd id="latest-version">loading…</dd>
+        <dt>Payload</dt><dd id="payload-summary">—</dd>
+        <dt>Installed on device</dt><dd id="installed-version">connect to read</dd>
+      </dl>
+      <div class="row" id="uf2-row" hidden>
+        <span class="note">UF2 firmware image:</span>
+        <a id="uf2-link" href="#">download firmware.uf2</a>
+        <span class="note">(drag onto RPI-RP2 after “Enter BOOTSEL mode”)</span>
+      </div>
+    </div>
+
+    <!-- Connection -->
+    <div class="panel">
+      <h2>1 · Connect</h2>
+      <div class="row">
+        <button id="btn-connect" class="primary">Connect to TS-Pico</button>
+        <span class="spacer"></span>
+        <span id="status" class="status">Not connected</span>
+      </div>
+      <p class="note">Plug the Pico into USB, click Connect, and pick it in the
+         browser’s port dialog. Close Thonny / mpremote first — only one program
+         can hold the port.</p>
+    </div>
+
+    <!-- Actions (after connect) -->
+    <div class="panel" id="connected-panel" hidden>
+      <h2>2 · Update &amp; verify</h2>
+      <div class="row">
+        <button id="btn-update" class="primary" disabled>Update files</button>
+        <button id="btn-verify" disabled>Verify</button>
+        <span class="spacer"></span>
+        <button id="btn-disconnect" disabled>Disconnect</button>
+      </div>
+
+      <div id="progress-wrap" hidden>
+        <div class="progress"><div id="progress-bar"></div></div>
+        <div class="row"><span id="progress-pct">0%</span></div>
+      </div>
+
+      <h2 style="margin-top:20px;">3 · Reboot</h2>
+      <div class="row">
+        <button id="btn-reboot" disabled>Reboot Pico</button>
+        <button id="btn-bootloader" disabled>Enter BOOTSEL mode</button>
+      </div>
+      <p class="note">“Reboot Pico” restarts the firmware after an update.
+         “Enter BOOTSEL mode” reboots into the RPI-RP2 drive so you can drag a new
+         <code>firmware.uf2</code> — no BOOTSEL button or paperclip needed.</p>
+    </div>
+
+    <!-- Log -->
+    <div class="panel">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+  </main>
+
+  <p class="note">
+    Built on ViperIDE’s MIT-licensed WebSerial transport and raw-REPL code.
+    Prototype for
+    <a href="https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26">issue&nbsp;#26</a>.
+  </p>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
