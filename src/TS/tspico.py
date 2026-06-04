@@ -3757,11 +3757,9 @@ def ZX48(pre, cmd):                                                           # 
     M.append(nl)
     M.append('Use "OUT 244,3" to switch to the')
     M.append('Spectrum ROM. To return to Timex')
-    M.append('mode, do OUT 244,0 then press the')
-    M.append('TS-Pico Reset button. (OUT 10,100')
-    M.append('does not currently reach the Pico')
-    M.append('via the bus protocol; reset is')
-    M.append('required to exit ZX48 mode.)')
+    M.append('mode, do OUT 244,0 then OUT 14,14')
+    M.append('to exit ZX48 mode and resume normal')
+    M.append('TS-Pico operation.')
     M.append(nl)
     msg = "".join(M)
 
@@ -4781,31 +4779,30 @@ def ZX48_IO(pre):                                                               
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("ZX48_IO SAVE returned")
 
-            elif a == 14:                                                  # OUT 14,14 from 2068 — DEAD CODE on current hardware (see note below)
-                # ─── DUAL-PORT MIGRATION: ZX48 exit-via-byte is unreachable ─
-                # Confirmed empirically: the byte never reaches the Pico's
-                # PIO in the way this branch expects, so the `elif a == 14`
-                # branch is unreachable in practice, and the only way out
-                # of ZX48 mode is the TS-Pico reset button.
+            elif a == 14:                                                  # OUT 14,14 from 2068 — canonical exit from ZX48 mode
+                # ─── ZX48 exit-via-byte ───────────────────────────────────
+                # The user exits ZX48 mode from the 2068 with `OUT 14,14`.
                 #
-                # (Historical note: the original guard was `a == 100` for
-                # `OUT 10,100` — port $0A isn't routed through /PICOSEL at
-                # all. The guard was switched to `a == 14` / `OUT 14,14`
-                # for lower cognitive load on the 2068 BASIC side; the
-                # routing details for port $0E in ZX48 mode haven't been
-                # re-traced post-change.)
+                # Why port 14: post dual-port migration the PIO only listens
+                # on ports $0E (decimal 14) and $0F (decimal 15). Before the
+                # migration the single-port PIO picked up writes on ports
+                # 0–15, so the original guard was `a == 100` (`OUT 10,100`).
+                # That stopped working once the dual-port PIO landed because
+                # port $0A is no longer routed to the RX FIFO. Switching the
+                # 2068-side command to `OUT 14,14` puts the byte on a port
+                # the Pico actually listens to.
                 #
-                # The branch is kept as defensive code in case a future
-                # hardware/PIO revision surfaces the byte, or some other
-                # code path forces a byte 14 into the RX FIFO. The
-                # TSP.zx48 = False clears the re-entry guard in TS2068_IO
-                # so this would work correctly IF reached.
+                # Why the value 14 specifically: it's arbitrary — any byte
+                # other than the ones the SAVE/LOAD branches above already
+                # claim (`a == 76` for 'L', `a == 83` for 'S') would work.
+                # We picked 14 to match the port and keep the BASIC line
+                # easy to remember (`OUT 14,14`).
                 #
-                # Help text in the ZX48() handler tells users to use the
-                # reset button as the canonical exit. See also
-                # docs/OPEN_QUESTIONS.md if we want to revisit routing.
+                # Clearing TSP.zx48 releases the re-entry guard in
+                # TS2068_IO so the main loop resumes TS-2068 mode cleanly
+                # on the next iteration.
                 # ──────────────────────────────────────────────────────────
-                TLM("ZX48_IO byte 14 received — exiting (rare; usually unreachable)")
+                TLM("ZX48_IO byte 14 received — exiting ZX48 mode")
                 LOG("Ending ZX mode. Free mem: %d. Returning to TS processing." % gc.mem_free(), 0)
                 gc.collect()
                 TSP.zx48 = False
