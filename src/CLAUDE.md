@@ -158,7 +158,7 @@ historically caused regressions:
 8. **Document the gotcha** — `docs/PROTOCOL.md` §7 has a "pitfalls"
    list. If your debugging found a non-obvious trap, add it. Future
    contributors will thank you.
-9. **Keep the harness in `/test/`** — even if it's purpose-built for
+9. **Keep the harness in `src/test/`** — even if it's purpose-built for
    one bug, leave it. It's documentation of how to think about that
    class of problem.
 
@@ -272,17 +272,22 @@ shape are documented in `docs/DUAL_PORT_DEVELOPMENT.md` §8.
 
 ## Structural conventions
 
-- **`TS/`** — frozen modules, baked into the UF2 by `manifest.py`.
+All firmware sources live under the repo's `src/` folder; paths below
+are relative to that. This file (`src/CLAUDE.md`) also lives there.
+
+- **`src/TS/`** — frozen modules, baked into the UF2 by `src/manifest.py`.
   Modifying these requires a rebuild + reflash.
-- **`/main.py`, `/config.ini`, `/assets/*.tap`** — live on the Pico's
-  flash filesystem, NOT frozen. Edit-and-reboot, no rebuild needed.
-- **`/dev_tspico.py`** — optional development override. If present on
-  the Pico's flash, `main.py` will use it instead of `TS.tspico`.
-  Useful for iterating on `tspico.py` without rebuilds. (The override
-  trick only works for `tspico.py`.)
-- **`/test/`** — bus-level test harnesses (this guide).
-- **`/docs/`** — three layers: protocol design, firmware implementation,
-  development history.
+- **`src/main.py`, `src/config.ini`, `src/assets/*.tap`** — copied to
+  the Pico's flash filesystem (as `/main.py`, `/config.ini`,
+  `/assets/*.tap`), NOT frozen. Edit-and-reboot, no rebuild needed.
+- **`src/dev_tspico.py`** — optional development override. Deployed to
+  the Pico as `/dev_tspico.py` (or `/dev_tspico.mpy`); if present,
+  `main.py` will use it instead of the frozen `TS.tspico`. Useful for
+  iterating on `tspico.py` without rebuilds. (The override trick only
+  works for `tspico.py`.)
+- **`src/test/`** — bus-level test harnesses (this guide).
+- **`docs/`** at the repo root — three layers: protocol design,
+  firmware implementation, development history.
 
 ## Telemetry
 

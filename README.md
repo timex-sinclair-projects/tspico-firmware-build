@@ -27,6 +27,38 @@ import the modules from the flash filesystem at runtime — frozen
 modules live in flash as pre-compiled bytecode and don't consume RAM
 during import.
 
+## Repo layout
+
+All firmware sources live under `src/`. The repo root only carries
+this README and the GitHub-managed folders:
+
+```
+.
+├── README.md
+├── docs/                  # protocol, architecture, dev guides
+├── archive/               # historical reference material
+└── src/
+    ├── CLAUDE.md          # contributor conventions (Claude Code)
+    ├── main.py            # Pico boot entry
+    ├── config.ini         # runtime config
+    ├── words.txt          # word list for tpi:.rndw
+    ├── manifest.py        # MicroPython frozen-module manifest
+    ├── build-dev-mpy.sh   # dev_tspico.py → dev_tspico.mpy
+    ├── dev_tspico.py      # dev-override of TS.tspico
+    ├── dev_extcmd.py      # dev-override of TS.extcmd
+    ├── TS/                # frozen package (tspico, tspico_io, sdcard, extcmd, help)
+    ├── assets/            # internal protocol .tap files
+    ├── help/              # tpi:help <topic> text
+    ├── rom/               # Z80-side EXROM image
+    ├── pico/              # test artifacts (.dck / .rom)
+    ├── test/              # bus-level harnesses
+    └── test-progs/        # BASIC test programs
+```
+
+The CI workflows (`.github/workflows/{build,release}.yml`) reference
+files under `src/` directly, so no symlinks or path tricks are
+needed.
+
 ## Deploy to the Pico
 
 After flashing the UF2, you need these things on the Pico's flash
@@ -34,11 +66,11 @@ filesystem (use Thonny):
 
 | Pico path | What it is | Source |
 |---|---|---|
-| `/main.py` | Boot entry point | `main.py` in this repo |
-| `/config.ini` | TS-Pico runtime config (log level, ROM/DCK slots, etc.) | `config.ini` in this repo |
-| `/assets/*.tap` | Internal protocol .TAP files | `assets/` in this repo |
-| `/help/*.txt` | Help text shown by `tpi:help <topic>` | `help/` in this repo |
-| `/words.txt` | Word list read by `tpi:.rndw` external command | `words.txt` in this repo |
+| `/main.py` | Boot entry point | `src/main.py` in this repo |
+| `/config.ini` | TS-Pico runtime config (log level, ROM/DCK slots, etc.) | `src/config.ini` in this repo |
+| `/assets/*.tap` | Internal protocol .TAP files | `src/assets/` in this repo |
+| `/help/*.txt` | Help text shown by `tpi:help <topic>` | `src/help/` in this repo |
+| `/words.txt` | Word list read by `tpi:.rndw` external command | `src/words.txt` in this repo |
 | `/SD/...` | (existing) — your SD card | unchanged |
 
 ### Step-by-step
@@ -59,17 +91,17 @@ filesystem (use Thonny):
 4. **Copy `main.py` and `config.ini` to the Pico's root** via Thonny.
 
 5. **Create `/assets/` folder** on the Pico, then copy the four .tap
-   files from `assets/` into it:
+   files from `src/assets/` into it:
    - `dckupdate.tap`
    - `nofile.tap`
    - `rompatch.tap`
    - `romupdate.tap`
 
 6. **Create `/help/` folder** on the Pico, then copy all `.txt` files
-   from this repo's `help/` directory into it. The `tpi:help <topic>`
+   from this repo's `src/help/` directory into it. The `tpi:help <topic>`
    command reads these from `/help/<topic>.txt`.
 
-7. **Copy `words.txt`** to the Pico's root (`/words.txt`). Required by
+7. **Copy `src/words.txt`** to the Pico's root (`/words.txt`). Required by
    the `tpi:.rndw` external-command example. If you don't plan to use
    `.rndw` you can skip this — but other extcmd handlers may also use
    it in the future.
@@ -114,7 +146,7 @@ except ImportError:
 
 **To override `tspico.py` for a debug session:**
 
-1. Edit `TS/tspico.py` locally
+1. Edit `src/TS/tspico.py` locally
 2. Copy the edited file to the Pico's flash as `/dev_tspico.py`
    (note the rename — root path, with `dev_` prefix)
 3. Reboot — REPL prints `[DEV] Using /dev_tspico.py override`
@@ -160,12 +192,12 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 - **Target:** Raspberry Pi Pico (`PICO` board on rp2 port)
 - **Toolchain:** `gcc-arm-none-eabi` on Ubuntu 22.04 runner
 - **Build time:** ~2 minutes per run
-- **Custom manifest:** `manifest.py` in repo root (overrides default
-  rp2 manifest to add the `TS/` package while keeping `rp2.py` etc.)
+- **Custom manifest:** `src/manifest.py` (overrides default rp2
+  manifest to add the `TS/` package while keeping `rp2.py` etc.)
 
 ## Iteration workflow
 
-1. Edit `TS/...` files on a feature branch (`git checkout -b my-fix`).
+1. Edit `src/TS/...` files on a feature branch (`git checkout -b my-fix`).
 2. Commit and push the branch.
 3. Open a pull request against `main`.
 4. GitHub Actions builds a UF2 **for the branch / PR** as well as for

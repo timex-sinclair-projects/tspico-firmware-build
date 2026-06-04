@@ -14,6 +14,10 @@ If you're going to extend or modify the dual-port code, read this
 *after* PROTOCOL.md and GUSTAVO_PROTOCOL.md. The patterns will make a
 lot more sense once you've seen how they were earned.
 
+> **Source-code paths in this doc** (e.g. `TS/tspico_io.py`, `main.py`)
+> are Python-package or Pico-flash paths. The actual files in the repo
+> live under `src/` — e.g. `TS/tspico_io.py` is at `src/TS/tspico_io.py`.
+
 ---
 
 ## 1. The starting point: the "Report D" problem

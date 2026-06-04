@@ -44,17 +44,17 @@ jobs:
           # tspico.py uses `from TS.sdcard import *` and `from TS.tspico_io import ...`
           # so we keep the TS/ package layout when freezing.
           mkdir -p ${{ github.workspace }}/micropython/ports/rp2/modules/TS
-          cp TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
-          cp TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
-          cp TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
-          cp TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
-          cp TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
-          cp TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
+          cp src/TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
+          cp src/TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
+          cp src/TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
+          cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
+          cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
+          cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
 
           # Install our custom frozen-modules manifest in place of the
           # default rp2 manifest. Our manifest explicitly freezes the
           # TS/ package so `import TS.tspico` works at runtime.
-          cp manifest.py ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
+          cp src/manifest.py ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
 
           echo "=== modules/ contents ==="
           ls -la ${{ github.workspace }}/micropython/ports/rp2/modules/
@@ -105,23 +105,23 @@ jobs:
       # Step is conditional: only branches with dev_tspico.py present
       # produce the artifact. On main (which uses the frozen TS.tspico
       # via the manifest) the file is absent and this step is skipped.
-      - name: Compile dev_tspico.mpy (if dev_tspico.py present)
-        if: hashFiles('dev_tspico.py') != ''
+      - name: Compile dev_tspico.mpy (if src/dev_tspico.py present)
+        if: hashFiles('src/dev_tspico.py') != ''
         run: |
           MPYC="${{ github.workspace }}/micropython/mpy-cross/build/mpy-cross"
           "$MPYC" --version
-          "$MPYC" dev_tspico.py
-          ls -la dev_tspico.mpy
+          "$MPYC" src/dev_tspico.py
+          ls -la src/dev_tspico.mpy
           echo ""
           echo "size comparison:"
-          du -h dev_tspico.py dev_tspico.mpy
+          du -h src/dev_tspico.py src/dev_tspico.mpy
 
       - name: Upload dev_tspico.mpy artifact
-        if: hashFiles('dev_tspico.py') != ''
+        if: hashFiles('src/dev_tspico.py') != ''
         uses: actions/upload-artifact@v4
         with:
           name: dev_tspico-mpy
-          path: dev_tspico.mpy
+          path: src/dev_tspico.mpy
           retention-days: 30
 
       - name: Upload build logs (on failure)
