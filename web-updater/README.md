@@ -75,17 +75,22 @@ To include the UF2 download link, pass a built firmware:
 A `github.io` page **cannot** fetch GitHub release assets — the download URL
 redirects to `objects.githubusercontent.com`, which sends no
 `Access-Control-Allow-Origin`, so the browser blocks the bytes. The fix is to
-publish the payload to the **same origin** as the page:
+publish the payload to the **same origin** as the page.
 
-> Extend `.github/workflows/release.yml` to copy the `pico/` payload plus a
-> generated `manifest.json` (the same outputs as `build-payload.sh`) onto the
-> `gh-pages` branch next to `index.html`. The page then fetches everything
-> same-origin — no CORS, no proxy.
+This is now **wired into `.github/workflows/release.yml`**: on every release it
+runs `build-payload.sh` (UF2 + `pico/` payload + `manifest.json`), stages a
+clean `_site/` (this page + `vendor/` + payload + manifest), and force-pushes it
+to the **`gh-pages`** branch. The page then fetches everything same-origin — no
+CORS, no proxy. `gh-pages` is an orphan/single-commit branch so the payload
+binaries don't accumulate history across releases.
 
-That wiring is **not done yet** — this prototype runs against the locally
-generated payload. Next steps to productionize:
+**One-time repo setup** (can't be done from the workflow): in
+**Settings → Pages**, set **Source → "Deploy from a branch" → branch
+`gh-pages` → folder `/ (root)`**. After the next release runs, the updater is
+live at `https://<owner>.github.io/<repo>/`. Until then, run it locally (above).
 
-- [ ] Add a `gh-pages` publish step to `release.yml` (payload + manifest).
+### Remaining to productionize
+
 - [ ] Test against a real TS-Pico in a TS-2068, including interrupting the
       firmware mid-`LOAD`.
 - [ ] Per-file byte-level progress (currently file-level / size-weighted).
