@@ -21,14 +21,17 @@ TS-Pico Python modules **frozen** into the firmware.
 >    to extend or modify the protocol code — it explains *why* the
 >    patterns are the way they are.
 >
-> Two contributor guides for setting up to work on the repo:
+> **Want to contribute?** Start here:
 >
-> - [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) — host
->   setup (Thonny, mpy-cross), the dev-override pattern, the deploy
->   flow, common debugging recipes.
-> - [`docs/CLAUDE_CODE_SETUP.md`](docs/CLAUDE_CODE_SETUP.md) —
->   setup for contributors using Claude Code: `gh` auth, the
->   PR/release workflow on this repo, permissions to allowlist.
+> - [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) — the
+>   entry-point orientation for new contributors. Tools, repo
+>   layout, the workflow, paths for hand-coders vs Claude-Code
+>   users, and multi-session coordination if you're running more
+>   than one workspace.
+> - [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) — the
+>   comprehensive hand-coder reference (referenced from
+>   GETTING_STARTED): the `.mpy` build flow, the dev-override
+>   pattern, the `/TS/` shadowing trap, debugging recipes.
 
 Freezing the modules eliminates the `MemoryError: memory allocation
 failed, allocating XXXX bytes` that occurs when MicroPython tries to
