@@ -2,8 +2,8 @@
 
 A single static page that uploads the TS-Pico release files — `main.py`,
 `config.ini`, `words.txt`, `assets/*.tap`, `help/*.txt` (subfolders preserved)
-— onto a Pico over **WebSerial**, replacing the Thonny copy step after the UF2
-is flashed. Prototype for
+— onto a Pico over **WebSerial**, replacing the manual file-copy step after
+the UF2 is flashed. Prototype for
 [issue #26](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26);
 see the research write-up for the full rationale.
 
@@ -50,7 +50,8 @@ apart from one import path. Each file's header notes exactly what changed.
 
 WebSerial is **Chromium-only**: Chrome, Edge, Opera on desktop/ChromeOS. No
 Safari, no Firefox, no iOS. The page detects this and shows a notice. Only one
-program can hold the serial port at a time — close Thonny/mpremote first.
+program can hold the serial port at a time — close any other program or
+browser tab connected to the Pico first.
 
 ## Run it locally
 

@@ -65,11 +65,18 @@ async function loadManifest() {
         `${manifest.fw_version || '?'}` + (manifest.tag ? ` (release ${manifest.tag})` : '')
     $('payload-summary').textContent =
         `${manifest.files.length} files, ${sizeFmt(total)}`
-    show($('uf2-row'), !!manifest.uf2)
+
+    // UF2 download button (Step 1). The firmware image ships with real releases;
+    // a locally-built test payload may not include it.
+    const a = $('uf2-link')
     if (manifest.uf2) {
-        const a = $('uf2-link')
         a.href = manifest.uf2
-        a.setAttribute('download', 'firmware.uf2')
+        a.classList.remove('disabled')
+        $('uf2-note').textContent = ''
+    } else {
+        a.removeAttribute('href')
+        a.classList.add('disabled')
+        $('uf2-note').textContent = 'Firmware image not in this payload (included in published releases).'
     }
     log(`Loaded manifest: firmware ${manifest.fw_version || '?'}, ${manifest.files.length} files.`)
 }
@@ -109,6 +116,7 @@ async function connect() {
             log('No readable /config.ini on device (fresh flash?).', 'warn')
         }
         $('installed-version').textContent = installed
+        updateFwHint(installed)
 
         setStatus('Connected', 'ok')
         show($('connected-panel'), true)
@@ -157,6 +165,8 @@ function resetUiToDisconnected() {
     enable($('btn-reboot'), false)
     enable($('btn-bootloader'), false)
     enable($('btn-disconnect'), false)
+    $('installed-version').textContent = 'connect in Step 2 to read'
+    show($('fw-hint'), false)
     setStatus('Not connected')
 }
 
@@ -298,6 +308,29 @@ async function bootloader() {
 // ---------------------------------------------------------------------------
 // UI plumbing
 // ---------------------------------------------------------------------------
+function updateFwHint(installed) {
+    const hint = $('fw-hint')
+    const latest = manifest && manifest.fw_version
+    hint.className = 'hint'
+    if (!latest) {
+        show(hint, false); return
+    }
+    if (installed === 'unknown') {
+        hint.classList.add('warn')
+        hint.textContent = `Couldn't read the installed firmware version. ` +
+            `If this is a fresh Pico, do Step 1 first, then upload files in Step 2.`
+    } else if (String(installed) === String(latest)) {
+        hint.classList.add('ok')
+        hint.textContent = `✓ Firmware is already up to date (${installed}). ` +
+            `You can skip Step 1 — just upload the files in Step 2.`
+    } else {
+        hint.classList.add('warn')
+        hint.textContent = `Installed firmware is ${installed}, latest is ${latest}. ` +
+            `Do Step 1 to flash the new firmware before uploading files.`
+    }
+    show(hint, true)
+}
+
 function setProgress(frac) {
     const pct = Math.round(frac * 100)
     $('progress-bar').style.width = pct + '%'
