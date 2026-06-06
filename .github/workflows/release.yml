@@ -12,6 +12,11 @@ name: Release TS-Pico Firmware
 # GitHub Release with auto-generated notes (from commit messages
 # since the previous tag).
 #
+# It then publishes the browser-based Web Updater (web-updater/) to the
+# gh-pages branch, bundling the UF2 + Pico-flash payload + a generated
+# manifest.json so the page serves everything same-origin (see the
+# "Stage/Deploy Pages site" steps below for why this sidesteps CORS).
+#
 # Manual dispatch is also supported for testing: run the workflow
 # from the Actions tab with workflow_dispatch and supply a tag.
 
@@ -113,97 +118,117 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          # Bundle layout:
+          # Bundle layout (at the zip's root — no wrapping folder):
           #
-          #   ts-pico/
-          #   ├── DEPLOY.md
-          #   ├── pico/               ← complete Pico-side drop-in
-          #   │   ├── firmware.uf2
+          #   firmware.uf2          ← drop onto RPI-RP2 in BOOTSEL mode
+          #   DEPLOY.md             ← end-user instructions
+          #   src/                  ← goes on the Pico's internal flash
           #   │   ├── main.py
           #   │   ├── config.ini
           #   │   ├── words.txt
           #   │   ├── assets/*.tap
-          #   │   └── help/*.txt
-          #   └── rom/                ← Z80-side EXROM image
-          #       └── TSPICO-STORAGE-V15W.ROM
+          #   │   └── rom/TSPICO.ROM      ← Z80 EXROM image (flash to chip)
+          #   └── SD card/          ← goes on the user's SD card
+          #       ├── TAP/                 (test TAPs, .dck/.rom etc.)
+          #       └── help/                (tpi:help <topic> text)
           #
-          # pico/ carries everything that goes on the Pico (UF2 + flash
-          # filesystem content). rom/ carries the modified Z80 EXROM
-          # that has to be flashed into the TS-2068 expansion-board ROM
-          # chip for the protocol to work.
-          STAGE="ts-pico"
-          mkdir -p "${STAGE}/pico/assets"
-          mkdir -p "${STAGE}/pico/help"
-          mkdir -p "${STAGE}/rom"
+          # The deploy story: flash the UF2, copy the contents of src/ to
+          # the Pico's flash root via Thonny (the ROM image gets flashed
+          # to the TS-2068 EXROM chip separately), and copy the contents
+          # of "SD card/" to the root of the SD card you'll plug into the
+          # TS-Pico.
+          STAGE="ts-pico-${TAG}"
+          mkdir -p "${STAGE}/src/assets"
+          mkdir -p "${STAGE}/src/rom"
+          mkdir -p "${STAGE}/SD card/TAP"
+          mkdir -p "${STAGE}/SD card/help"
 
           UF2_SRC="${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2"
 
-          # pico/: complete Pico-flash payload (UF2 + everything that
-          # lives on the Pico's filesystem).
-          cp "${UF2_SRC}"      "${STAGE}/pico/firmware.uf2"
-          cp src/main.py       "${STAGE}/pico/main.py"
-          cp src/config.ini    "${STAGE}/pico/config.ini"
-          cp src/words.txt     "${STAGE}/pico/words.txt"
-          cp src/assets/*.tap  "${STAGE}/pico/assets/"
-          cp src/help/*.txt    "${STAGE}/pico/help/"
+          # Top-level firmware UF2.
+          cp "${UF2_SRC}" "${STAGE}/firmware.uf2"
 
-          # rom/: Z80-side EXROM. Copy whatever .ROM files live in the
-          # repo's src/rom/ directory — typically just the one current
-          # release ROM.
-          cp src/rom/*.ROM "${STAGE}/rom/"
+          # src/: Pico-side payload (flash filesystem + EXROM image).
+          cp src/main.py       "${STAGE}/src/main.py"
+          cp src/config.ini    "${STAGE}/src/config.ini"
+          cp src/words.txt     "${STAGE}/src/words.txt"
+          cp src/assets/*.tap  "${STAGE}/src/assets/"
+          cp src/rom/*.ROM     "${STAGE}/src/rom/"
+
+          # SD card/: TAP files + help text the firmware reads from the
+          # mounted SD card at runtime. Copy recursively so subfolders
+          # (e.g. SD card/TAP/test/, SD card/TAP/pico/) come along.
+          cp -R "SD card/TAP/"   "${STAGE}/SD card/TAP/"
+          cp -R "SD card/help/"  "${STAGE}/SD card/help/"
+
+          # Strip macOS metadata that may have ridden along.
+          find "${STAGE}" -name ".DS_Store" -delete
 
           # Bundle deploy instructions.
           cat > "${STAGE}/DEPLOY.md" <<EOF
           # TS-Pico Firmware ${TAG}
 
-          This bundle contains both halves of the TS-Pico system:
+          This bundle has three deploy targets:
 
-          - \`pico/\` — everything that goes on the Raspberry Pi Pico
-            (firmware UF2 plus the files that live on the Pico's
-            internal flash filesystem).
-          - \`rom/\` — the modified Z80 EXROM image that must be
-            programmed into the TS-2068 expansion-board ROM chip.
+          1. **Pico firmware** — \`firmware.uf2\` at the zip root.
+          2. **Pico flash filesystem** — everything inside \`src/\`.
+          3. **TS-2068 EXROM** — \`src/rom/*.ROM\` (programmed into the
+             expansion-board ROM chip).
+          4. **SD card** — everything inside the \`SD card/\` folder.
 
-          Both halves must match for the protocol to work.
+          All four sides must match for the protocol to work end-to-end.
 
-          ## Quick deploy — Pico side
+          ## 1. Flash the Pico firmware
 
-          1. **Flash the firmware**: hold BOOTSEL on the Pico, plug in USB,
-             drag-drop \`pico/firmware.uf2\` onto the \`RPI-RP2\` drive
-             that appears. The Pico will reboot into MicroPython.
+          Hold **BOOTSEL** on the Pico, plug in USB, drag-drop
+          \`firmware.uf2\` onto the \`RPI-RP2\` drive that appears.
+          The Pico will reboot into MicroPython.
 
-          2. **Connect via Thonny** and confirm you're at a bare REPL.
+          ## 2. Copy src/ to the Pico's flash filesystem
 
-          3. **Copy everything *inside* \`pico/\` (except \`firmware.uf2\`)
-             to the Pico's flash root** via Thonny's file pane. Preserve
-             the directory structure:
+          Connect via Thonny. Copy everything *inside* \`src/\` to the
+          Pico's flash root, preserving the directory structure:
 
-             | Bundle path | Goes to Pico path |
-             |---|---|
-             | \`pico/main.py\`       | \`/main.py\`       |
-             | \`pico/config.ini\`    | \`/config.ini\`    |
-             | \`pico/words.txt\`     | \`/words.txt\`     |
-             | \`pico/assets/*.tap\`  | \`/assets/*.tap\`  |
-             | \`pico/help/*.txt\`    | \`/help/*.txt\`    |
+          | Bundle path | Goes to Pico path |
+          |---|---|
+          | \`src/main.py\`       | \`/main.py\`       |
+          | \`src/config.ini\`    | \`/config.ini\`    |
+          | \`src/words.txt\`     | \`/words.txt\`     |
+          | \`src/assets/*.tap\`  | \`/assets/*.tap\`  |
 
-          4. **Reboot the Pico**. You should see the boot banner:
-             \`\`\`
-             270000000
-             INFO: SD Card initialized and mounted OK
-             \`\`\`
+          (\`src/rom/\` does NOT go on the Pico — see step 3.)
 
-          ## Quick deploy — Z80 side
+          ## 3. Flash the EXROM into the TS-2068
 
-          Program the \`.ROM\` image from \`rom/\` into the TS-2068
-          expansion-board ROM chip using your usual ROM programmer.
-          The image is a raw binary; load it at offset 0.
+          Program \`src/rom/*.ROM\` into the TS-2068 expansion-board ROM
+          chip using your ROM programmer of choice. The image is a raw
+          binary loaded at offset 0.
+
+          ## 4. Copy "SD card/" to the SD card
+
+          Mount the SD card you intend to use with the TS-Pico. Copy
+          everything *inside* the \`SD card/\` folder to the card's root:
+
+          | Bundle path | Goes to SD card path |
+          |---|---|
+          | \`SD card/TAP/\`   | \`/TAP/\`   |
+          | \`SD card/help/\`  | \`/help/\`  |
+
+          ## Verify
+
+          Reboot the Pico. You should see:
+          \`\`\`
+          270000000
+          INFO: SD Card initialized and mounted OK
+          \`\`\`
 
           See README.md in the repo for the full picture:
           https://github.com/timex-sinclair-projects/tspico-firmware-build
           EOF
 
-          # Zip the bundle. Filename carries the tag; the folder inside
-          # is just `ts-pico/` so paths in DEPLOY.md stay version-free.
+          # Zip the bundle. The zip wraps a single ts-pico-${TAG}/
+          # folder so users don't get a flat dump of files when they
+          # unzip; the *contents* of that folder are what they deploy.
           ZIP="ts-pico-${TAG}.zip"
           zip -r "${ZIP}" "${STAGE}"
           ls -la "${ZIP}"
@@ -242,3 +267,58 @@ jobs:
               --title "TS-Pico Firmware ${TAG}" \
               --generate-notes
           fi
+
+      # ──────────────────────────────────────────────────────────────────
+      # Publish the Web Updater (web-updater/) to GitHub Pages, bundling the
+      # freshly-built firmware.uf2, the Pico-flash payload, and a generated
+      # manifest.json. The page fetches all of this SAME-ORIGIN — GitHub's
+      # release-asset CDN (objects.githubusercontent.com) sends no
+      # Access-Control-Allow-Origin header, so a browser on the Pages site
+      # cannot fetch release assets directly. Publishing the payload onto the
+      # Pages site itself sidesteps CORS entirely.
+      #
+      # One-time setup required in the repo: Settings → Pages → Source →
+      # "Deploy from a branch" → branch "gh-pages" → folder "/ (root)".
+      # ──────────────────────────────────────────────────────────────────
+      - name: Stage Pages site (updater + payload + manifest)
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          UF2: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
+        run: |
+          # build-payload.sh writes web-updater/pico/ and web-updater/manifest.json
+          # (the same outputs used for local testing) from src/, including the UF2.
+          bash web-updater/build-payload.sh "${PWD}/src" "${TAG}" "${UF2}"
+
+          # Assemble a clean publish dir: static page + vendored modules +
+          # generated payload + manifest. (web-updater/.gitignore excludes the
+          # generated pico/ + manifest.json from the repo, so copy explicitly.)
+          rm -rf _site
+          mkdir -p _site
+          cp web-updater/index.html web-updater/app.js _site/
+          cp -r web-updater/vendor                     _site/vendor
+          cp -r web-updater/pico                       _site/pico
+          cp    web-updater/manifest.json              _site/manifest.json
+          touch _site/.nojekyll   # serve files as-is; skip Jekyll processing
+
+          echo "=== Pages site tree ==="
+          find _site -type f | sort
+
+      - name: Deploy Pages site to gh-pages branch
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Force-push a single-commit orphan branch so the payload binaries
+          # don't accumulate history across releases. gh-pages always reflects
+          # the latest release.
+          cd _site
+          git init -q
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Deploy TS-Pico Web Updater for ${TAG}"
+          git push -f \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:gh-pages
+          echo "Published updater to gh-pages."
+          echo "URL: https://$(echo "${GITHUB_REPOSITORY%/*}" | tr '[:upper:]' '[:lower:]').github.io/${GITHUB_REPOSITORY#*/}/"

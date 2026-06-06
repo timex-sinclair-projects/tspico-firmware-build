@@ -118,19 +118,23 @@ Then:
 
 ### Copy the flash content
 
-Connect via Thonny. Copy the contents of the repo into the Pico's
-flash root, preserving structure. From a release bundle this is
-`pico-flash/*`; from a fresh clone it's the repo root files:
+The system has three deploy targets — the Pico's internal flash, the
+TS-2068 EXROM chip, and the SD card. Connect via Thonny for the Pico,
+and use a card reader for the SD card. From a release bundle the
+sources are pre-arranged under `src/` and `SD card/`; from a fresh
+clone they're at the same paths in the repo:
 
-| Pico path | Source in repo | Required? |
-|---|---|---|
-| `/main.py` | `src/main.py` | yes |
-| `/config.ini` | `src/config.ini` | yes |
-| `/words.txt` | `src/words.txt` | yes (for `tpi:.rndw`) |
-| `/assets/*.tap` | `src/assets/*.tap` | yes |
-| `/help/*.txt` | `src/help/*.txt` | yes (for `tpi:help`) |
-| `/dev_tspico.mpy` | built from `src/dev_tspico.py` | only if iterating |
-| `/dev_extcmd.py` | `src/dev_extcmd.py` | only if iterating |
+| Target | Source in repo | Lands at | Required? |
+|---|---|---|---|
+| Pico flash    | `src/main.py`         | `/main.py`          | yes |
+| Pico flash    | `src/config.ini`      | `/config.ini`       | yes |
+| Pico flash    | `src/words.txt`       | `/words.txt`        | yes (for `tpi:.rndw`) |
+| Pico flash    | `src/assets/*.tap`    | `/assets/*.tap`     | yes |
+| Pico flash    | built from `src/dev_tspico.py` | `/dev_tspico.mpy` | only if iterating |
+| Pico flash    | `src/dev_extcmd.py`   | `/dev_extcmd.py`    | only if iterating |
+| TS-2068 EXROM | `src/rom/*.ROM`       | the expansion-board ROM chip | yes |
+| SD card       | `SD card/TAP/`        | `/TAP/` on the card | yes |
+| SD card       | `SD card/help/`       | `/help/` on the card | yes (for `tpi:help`) |
 
 **Don't create a `/TS/` folder on the Pico.** That's the
 shadowing trap — see §5.
@@ -156,8 +160,12 @@ If `dev_tspico.mpy` (or `.py`) is present at root you'll also see:
 
 ## 4. Repo layout
 
-All firmware sources live under `src/`. The repo root carries only
-the README, the docs/ and archive/ folders, and GitHub config.
+Two payload trees:
+
+- **`src/`** — anything that ends up on the Pico's flash filesystem
+  or in the TS-2068 EXROM chip.
+- **`SD card/`** — anything that ends up on the SD card the user
+  plugs into the TS-Pico (test/protocol TAPs, `tpi:help` text).
 
 ```
 .
@@ -172,7 +180,10 @@ the README, the docs/ and archive/ folders, and GitHub config.
 │   ├── OPEN_QUESTIONS.md          # Live design questions
 │   └── DEVELOPER_GUIDE.md         # ← this file
 ├── archive/                       # Historical reference material
-└── src/
+├── SD card/                       # Goes on the user's SD card
+│   ├── TAP/                       #   .tap library (incl. test/ + pico/ subdirs)
+│   └── help/                      #   tpi:help <topic> text
+└── src/                           # Goes on the Pico (or the EXROM chip)
     ├── CLAUDE.md          # Contributor conventions (Claude Code)
     ├── main.py            # Boot entry. Sets pins, frequency, then enters TS2068_IO()
     ├── config.ini         # JSON runtime config (log level, ROM/DCK slots, etc.)
@@ -192,13 +203,12 @@ the README, the docs/ and archive/ folders, and GitHub config.
     ├── dev_extcmd.py      # Dev-override copy of TS/extcmd.py
     │
     ├── assets/            # Internal protocol .tap files (live at /assets/ on Pico)
-    ├── help/              # Help text shown by tpi:help <topic>
-    ├── rom/               # Z80-side EXROM image
-    ├── pico/              # Test artifacts (.dck / .rom)
+    ├── rom/               # Z80-side EXROM image (programmed into TS-2068 chip)
     │
-    ├── test/              # Bus-level harnesses for protocol bring-up
-    │   └── _harness_template.py   # READ THIS before writing a new harness
-    └── test-progs/        # BASIC test programs (picotest.tap etc.)
+    └── test/              # Bus-level harnesses for protocol bring-up
+        └── _harness_template.py   # READ THIS before writing a new harness
+
+# (BASIC test programs — picotest.tap etc. — now live under "SD card/TAP/".)
 
 # GitHub-managed at root:
 .github/workflows/
