@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TS-Pico Web Updater</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --panel-2: #232733;
+    --text: #e6e8ec;
+    --muted: #9aa3b2;
+    --accent: #4c9aff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --error: #f85149;
+    --border: #2c313c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0 0 20px; color: var(--muted); }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+  }
+  .panel h2 { margin: 0 0 6px; font-size: 16px; }
+  .panel h2 .step { color: var(--accent); }
+  .panel .lead { margin: 0 0 14px; color: var(--muted); font-size: 13.5px; }
+  .panel h3 { margin: 18px 0 8px; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--muted); }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 16px; transition: background .15s, border-color .15s;
+  }
+  button:hover:not(:disabled) { background: #2d3340; border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #3d87e6; }
+  a.btn { display: inline-block; text-decoration: none; }
+  a.btn.disabled { pointer-events: none; opacity: .45; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .spacer { flex: 1; }
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin: 4px 0; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .status {
+    display: inline-block; padding: 4px 10px; border-radius: 6px;
+    background: var(--panel-2); color: var(--muted); font-size: 13px;
+  }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  .status.error { color: var(--error); }
+  .hint { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px;
+    background: var(--panel-2); border: 1px solid var(--border); font-size: 13.5px; }
+  .hint.ok { color: var(--ok); } .hint.warn { color: var(--warn); }
+  ol.steps { margin: 6px 0 0; padding-left: 20px; }
+  ol.steps li { margin: 6px 0; }
+  ol.steps ul { margin: 4px 0; padding-left: 18px; color: var(--muted); }
+  .progress { height: 14px; background: var(--panel-2); border-radius: 7px;
+    overflow: hidden; border: 1px solid var(--border); }
+  .progress > div { height: 100%; width: 0; background: var(--accent);
+    transition: width .2s; }
+  #progress-wrap { margin-top: 12px; }
+  #progress-wrap .row { margin-top: 6px; font-size: 13px; color: var(--muted); }
+  #log {
+    background: #0a0c10; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; height: 200px; overflow-y: auto;
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; color: #c9d1d9;
+  }
+  .log-ok { color: var(--ok); } .log-warn { color: var(--warn); }
+  .log-error { color: var(--error); }
+  a { color: var(--accent); }
+  .note { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  kbd { background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 5px;
+    background: var(--panel-2); color: var(--warn); border: 1px solid var(--border); }
+  .danger { color: var(--error); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TS-Pico Web Updater <span class="badge">prototype</span></h1>
+    <p>Install the TS-Pico firmware and files straight from your browser — over USB.</p>
+  </header>
+
+  <!-- Shown only when the browser lacks WebSerial -->
+  <div class="panel" id="unsupported" hidden>
+    <h2 class="danger">Unsupported browser</h2>
+    <p>This tool needs the <strong>WebSerial API</strong>, which is only available in
+       Chromium-based browsers — <strong>Chrome, Edge, or Opera</strong> on
+       Windows, macOS, Linux, or ChromeOS. Safari and Firefox are not supported,
+       and there is no iOS option.</p>
+    <p class="note">Open this page in Chrome, Edge, or Opera and try again.</p>
+  </div>
+
+  <main id="main">
+    <!-- Versions overview -->
+    <div class="panel">
+      <h2>What you’re installing</h2>
+      <dl class="kv">
+        <dt>Latest firmware</dt><dd id="latest-version">loading…</dd>
+        <dt>Files to upload</dt><dd id="payload-summary">—</dd>
+        <dt>Installed on device</dt><dd id="installed-version">connect in Step 2 to read</dd>
+      </dl>
+      <div class="hint" id="fw-hint" hidden></div>
+    </div>
+
+    <!-- Step 1: firmware UF2 -->
+    <div class="panel">
+      <h2><span class="step">Step 1</span> · Flash the firmware</h2>
+      <p class="lead">Installs the firmware itself. Only needed when the firmware
+         version changes — if Step 2 shows your firmware is already up to date,
+         you can skip straight to Step 2.</p>
+
+      <div class="row">
+        <a id="uf2-link" class="btn primary disabled" href="#" download="firmware.uf2">Download firmware.uf2</a>
+        <span class="note" id="uf2-note"></span>
+      </div>
+
+      <h3>Then flash it to the Pico</h3>
+      <ol class="steps">
+        <li>Put the Pico into <strong>BOOTSEL</strong> mode:
+          <ul>
+            <li><strong>Fresh Pico / first install:</strong> unplug it, hold the
+                <kbd>BOOTSEL</kbd> button down, and plug the USB cable back in.</li>
+            <li><strong>Already running TS-Pico firmware:</strong> connect in Step 2,
+                then click <strong>Enter BOOTSEL mode</strong> below — no button-holding needed.</li>
+          </ul>
+        </li>
+        <li>A drive named <strong>RPI-RP2</strong> appears. Drag the downloaded
+            <strong>firmware.uf2</strong> onto it.</li>
+        <li>The Pico reboots into the new firmware. Continue to Step 2.</li>
+      </ol>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="btn-bootloader" disabled>Enter BOOTSEL mode</button>
+        <span class="note">Reboots a connected Pico straight into the RPI-RP2 drive.</span>
+      </div>
+    </div>
+
+    <!-- Step 2: files -->
+    <div class="panel">
+      <h2><span class="step">Step 2</span> · Upload the files</h2>
+      <p class="lead">Copies <code>main.py</code>, <code>config.ini</code>,
+         <code>words.txt</code>, and the <code>assets/</code> folder onto the
+         Pico’s flash.</p>
+
+      <div class="row">
+        <button id="btn-connect" class="primary">Connect to TS-Pico</button>
+        <span class="spacer"></span>
+        <span id="status" class="status">Not connected</span>
+      </div>
+      <p class="note">Plug the Pico into USB, click Connect, and pick it in the
+         browser’s port dialog. Make sure no other program or browser tab is
+         connected to the Pico — only one connection at a time is allowed.</p>
+
+      <div id="connected-panel" hidden>
+        <h3>Transfer</h3>
+        <div class="row">
+          <button id="btn-update" class="primary" disabled>Upload files</button>
+          <button id="btn-verify" disabled>Verify</button>
+          <span class="spacer"></span>
+          <button id="btn-disconnect" disabled>Disconnect</button>
+        </div>
+
+        <div id="progress-wrap" hidden>
+          <div class="progress"><div id="progress-bar"></div></div>
+          <div class="row"><span id="progress-pct">0%</span></div>
+        </div>
+
+        <h3>Finish</h3>
+        <div class="row">
+          <button id="btn-reboot" disabled>Reboot Pico</button>
+          <span class="note">Restarts the firmware so the new files take effect.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="panel">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+  </main>
+
+  <p class="note">
+    Prototype for
+    <a href="https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26">issue&nbsp;#26</a>.
+  </p>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
