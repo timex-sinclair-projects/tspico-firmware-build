@@ -128,24 +128,31 @@
         <span class="note" id="uf2-note"></span>
       </div>
 
-      <h3>Then flash it to the Pico</h3>
+      <h3>Then put the Pico into BOOTSEL mode</h3>
+      <p class="note">Already running TS-Pico firmware and connected in Step 2?
+         Skip the buttons — just click <strong>Enter BOOTSEL mode</strong> below.
+         Otherwise, use the manual steps:</p>
       <ol class="steps">
-        <li>Put the Pico into <strong>BOOTSEL</strong> mode:
-          <ul>
-            <li><strong>Fresh Pico / first install:</strong> unplug it, hold the
-                <kbd>BOOTSEL</kbd> button down, and plug the USB cable back in.</li>
-            <li><strong>Already running TS-Pico firmware:</strong> connect in Step 2,
-                then click <strong>Enter BOOTSEL mode</strong> below — no button-holding needed.</li>
-          </ul>
-        </li>
-        <li>A drive named <strong>RPI-RP2</strong> appears. Drag the downloaded
-            <strong>firmware.uf2</strong> onto it.</li>
-        <li>The Pico reboots into the new firmware. Continue to Step 2.</li>
+        <li>Remove the TS-Pico from the expansion board.</li>
+        <li>Plug the USB cable into your computer.</li>
+        <li>Plug the other end (Micro-USB) into the Raspberry Pi Pico.</li>
+        <li>Press and hold the Pico <strong>Reset</strong> button.</li>
+        <li>While still holding Reset, press and hold the <kbd>BOOTSEL</kbd> button
+            on the Pico (the little white button next to the Micro-USB connector).</li>
+        <li>Release the <strong>Reset</strong> button.</li>
+        <li>Release the <kbd>BOOTSEL</kbd> button.</li>
+        <li>A drive named <strong>RPI-RP2</strong> will appear on your computer.
+            Find it in your file manager — <strong>don’t open or click into it.</strong></li>
+        <li>Drag the downloaded <strong>firmware.uf2</strong> onto the
+            <strong>RPI-RP2</strong> drive.</li>
+        <li>The Pico reboots into the new firmware. Leave it connected by USB and
+            continue to Step 2.</li>
       </ol>
 
       <div class="row" style="margin-top:12px;">
         <button id="btn-bootloader" disabled>Enter BOOTSEL mode</button>
-        <span class="note">Reboots a connected Pico straight into the RPI-RP2 drive.</span>
+        <span class="note">Already connected in Step 2? This reboots the Pico
+           straight into the RPI-RP2 drive — no buttons needed.</span>
       </div>
     </div>
 
