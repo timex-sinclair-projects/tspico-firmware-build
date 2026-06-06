@@ -29,55 +29,61 @@ during import.
 
 ## Repo layout
 
-All firmware sources live under `src/`. The repo root only carries
-this README and the GitHub-managed folders:
+Two payloads live in the repo, separated by what they deploy to:
+
+- **`src/`** — everything that ends up on the Pico (firmware sources,
+  the Pico-flash filesystem contents, and the Z80 EXROM image).
+- **`SD card/`** — everything that ends up on the SD card the user
+  plugs into the TS-Pico (the `tpi:help` text and the test/protocol
+  `.tap` library).
 
 ```
 .
 ├── README.md
 ├── docs/                  # protocol, architecture, dev guides
 ├── archive/               # historical reference material
-└── src/
+├── SD card/               # goes on the user's SD card
+│   ├── TAP/               #   /TAP/ — test + protocol TAPs (incl. test/, pico/ subdirs)
+│   └── help/              #   /help/ — tpi:help <topic> text
+└── src/                   # goes on the Pico (or the EXROM chip)
     ├── CLAUDE.md          # contributor conventions (Claude Code)
-    ├── main.py            # Pico boot entry
-    ├── config.ini         # runtime config
-    ├── words.txt          # word list for tpi:.rndw
+    ├── main.py            # Pico boot entry → flash root
+    ├── config.ini         # runtime config → flash root
+    ├── words.txt          # word list for tpi:.rndw → flash root
     ├── manifest.py        # MicroPython frozen-module manifest
     ├── build-dev-mpy.sh   # dev_tspico.py → dev_tspico.mpy
     ├── dev_tspico.py      # dev-override of TS.tspico
     ├── dev_extcmd.py      # dev-override of TS.extcmd
     ├── TS/                # frozen package (tspico, tspico_io, sdcard, extcmd, help)
-    ├── assets/            # internal protocol .tap files
-    ├── help/              # tpi:help <topic> text
-    ├── rom/               # Z80-side EXROM image
-    ├── pico/              # test artifacts (.dck / .rom)
-    ├── test/              # bus-level harnesses
-    └── test-progs/        # BASIC test programs
+    ├── assets/            # internal protocol .tap files → /assets/ on Pico
+    ├── rom/               # Z80-side EXROM image (programmed into TS-2068 chip)
+    └── test/              # bus-level harnesses (developer-only)
 ```
 
 The CI workflows (`.github/workflows/{build,release}.yml`) reference
-files under `src/` directly, so no symlinks or path tricks are
-needed.
+files under `src/` and `SD card/` directly, so no symlinks or path
+tricks are needed.
 
-## Deploy to the Pico
+## Deploy
 
-After flashing the UF2, you need these things on the Pico's flash
-filesystem (use Thonny):
+The system has three deploy targets — the Pico's internal flash, the
+TS-2068 EXROM chip, and the SD card you plug into the TS-Pico:
 
-| Pico path | What it is | Source |
+| Target | Source in repo | Lands at |
 |---|---|---|
-| `/main.py` | Boot entry point | `src/main.py` in this repo |
-| `/config.ini` | TS-Pico runtime config (log level, ROM/DCK slots, etc.) | `src/config.ini` in this repo |
-| `/assets/*.tap` | Internal protocol .TAP files | `src/assets/` in this repo |
-| `/help/*.txt` | Help text shown by `tpi:help <topic>` | `src/help/` in this repo |
-| `/words.txt` | Word list read by `tpi:.rndw` external command | `src/words.txt` in this repo |
-| `/SD/...` | (existing) — your SD card | unchanged |
+| Pico flash | `src/main.py`        | `/main.py` |
+| Pico flash | `src/config.ini`     | `/config.ini` |
+| Pico flash | `src/words.txt`      | `/words.txt` |
+| Pico flash | `src/assets/*.tap`   | `/assets/*.tap` |
+| TS-2068 EXROM | `src/rom/*.ROM`   | flashed into the expansion-board ROM chip |
+| SD card | `SD card/TAP/`         | `/TAP/` on the SD card |
+| SD card | `SD card/help/`        | `/help/` on the SD card |
 
 ### Step-by-step
 
 1. **Flash the firmware:** hold BOOTSEL → plug in USB → drag
-   `firmware.uf2` (download from Actions artifacts) onto the
-   `RPI-RP2` drive.
+   `firmware.uf2` (from the latest GitHub Release, or the per-branch
+   Actions artifact) onto the `RPI-RP2` drive.
 
 2. **Connect via Thonny.** You should be at a bare REPL.
 
@@ -88,7 +94,8 @@ filesystem (use Thonny):
    ```
    Both should succeed silently.
 
-4. **Copy `main.py` and `config.ini` to the Pico's root** via Thonny.
+4. **Copy `src/main.py`, `src/config.ini`, and `src/words.txt`** to
+   the Pico's root via Thonny.
 
 5. **Create `/assets/` folder** on the Pico, then copy the four .tap
    files from `src/assets/` into it:
@@ -97,14 +104,14 @@ filesystem (use Thonny):
    - `rompatch.tap`
    - `romupdate.tap`
 
-6. **Create `/help/` folder** on the Pico, then copy all `.txt` files
-   from this repo's `src/help/` directory into it. The `tpi:help <topic>`
-   command reads these from `/help/<topic>.txt`.
+6. **Program the EXROM image** (`src/rom/*.ROM`) into the TS-2068
+   expansion-board ROM chip with your usual ROM programmer. Raw
+   binary; load at offset 0.
 
-7. **Copy `src/words.txt`** to the Pico's root (`/words.txt`). Required by
-   the `tpi:.rndw` external-command example. If you don't plan to use
-   `.rndw` you can skip this — but other extcmd handlers may also use
-   it in the future.
+7. **Copy the contents of `SD card/`** to the root of the SD card you
+   intend to use with the TS-Pico — both the `TAP/` and `help/`
+   subfolders. The `tpi:help <topic>` command reads `/help/<topic>.txt`
+   from the SD card.
 
 8. **Reboot.** You should see:
    ```
