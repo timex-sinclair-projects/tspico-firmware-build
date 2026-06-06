@@ -23,15 +23,20 @@ UF2="${3:-}"
 
 OUT="$HERE/pico"
 rm -rf "$OUT"
-mkdir -p "$OUT/assets" "$OUT/help"
+mkdir -p "$OUT/assets"
 
 # Pico-flash filesystem content (everything except the UF2). Matches the
-# release.yml bundle layout.
+# src/ side of the release.yml bundle layout.
+#
+# NOTE: help/ is deliberately NOT included. As of the src/ re-org the BASIC
+# help text lives on the SD card (SD card/help/ in the bundle, read by the
+# firmware from /help/ on the mounted card at runtime), not on the Pico's
+# internal flash. The web updater only writes Pico flash, so help text is
+# out of its scope — it's installed by copying "SD card/" to the SD card.
 cp "$SRC/main.py"      "$OUT/main.py"
 cp "$SRC/config.ini"   "$OUT/config.ini"
 cp "$SRC/words.txt"    "$OUT/words.txt"
 cp "$SRC"/assets/*.tap "$OUT/assets/"
-cp "$SRC"/help/*.txt   "$OUT/help/"
 
 # Optional UF2 (flashed via BOOTSEL, not written over serial — referenced by
 # the manifest only as a download link).

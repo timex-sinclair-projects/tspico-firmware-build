@@ -1,11 +1,15 @@
 # TS-Pico Web Updater (prototype)
 
-A single static page that uploads the TS-Pico release files — `main.py`,
-`config.ini`, `words.txt`, `assets/*.tap`, `help/*.txt` (subfolders preserved)
-— onto a Pico over **WebSerial**, replacing the manual file-copy step after
-the UF2 is flashed. Prototype for
+A single static page that uploads the TS-Pico Pico-flash files — `main.py`,
+`config.ini`, `words.txt`, `assets/*.tap` (subfolders preserved) — onto a Pico
+over **WebSerial**, replacing the manual file-copy step after the UF2 is
+flashed. Prototype for
 [issue #26](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26);
 see the research write-up for the full rationale.
+
+> **Scope:** this writes the Pico's internal **flash** filesystem only. SD-card
+> content (the `SD card/` bundle — `help/` text and `TAP/` files) is installed
+> by copying it to the card directly, and is out of this tool's scope.
 
 It's a "very limited ViperIDE": it vendors ViperIDE's MIT-licensed WebSerial
 transport and raw-REPL file-writing code, and adds a small connect → update →
