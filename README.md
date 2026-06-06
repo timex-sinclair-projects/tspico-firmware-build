@@ -20,6 +20,15 @@ TS-Pico Python modules **frozen** into the firmware.
 >    fixed, and patterns that proved out. Read this if you're going
 >    to extend or modify the protocol code — it explains *why* the
 >    patterns are the way they are.
+>
+> Two contributor guides for setting up to work on the repo:
+>
+> - [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) — host
+>   setup (Thonny, mpy-cross), the dev-override pattern, the deploy
+>   flow, common debugging recipes.
+> - [`docs/CLAUDE_CODE_SETUP.md`](docs/CLAUDE_CODE_SETUP.md) —
+>   setup for contributors using Claude Code: `gh` auth, the
+>   PR/release workflow on this repo, permissions to allowlist.
 
 Freezing the modules eliminates the `MemoryError: memory allocation
 failed, allocating XXXX bytes` that occurs when MicroPython tries to
