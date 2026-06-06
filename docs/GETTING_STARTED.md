@@ -19,9 +19,8 @@ then jump to the section that matches your path.
 
 A Raspberry-Pi-Pico-based storage interface for the Timex Sinclair
 TS-2068. Two firmware halves talk to each other: a modified TS-2068
-EXROM (Z80 side, owned by Gustavo) and MicroPython running on the
-Pico (this repo, Pico-side lead: Ricardo). The protocol between
-them is called TPI.
+EXROM (Z80 side) and MicroPython running on the Pico (this repo).
+The protocol between them is called TPI.
 
 Background reading (in order, when you're ready):
 [`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) →
@@ -37,11 +36,61 @@ Background reading (in order, when you're ready):
 | `mpy-cross` v1.20.* | Pre-compile `src/dev_tspico.py` to `.mpy` | both |
 | Claude Code | AI-assisted editing | Claude path only |
 
-```bash
-# macOS
-brew install gh thonny
-pip install --user mpy-cross==1.20.*
+### macOS
 
+```bash
+brew install gh thonny
+pip3 install --user mpy-cross==1.20.*
+```
+
+### Windows
+
+`gh` and Thonny: install from the official sites
+([cli.github.com](https://cli.github.com),
+[thonny.org](https://thonny.org)) — both have signed installers.
+Or use winget if you have it:
+
+```powershell
+winget install GitHub.cli
+winget install AivarAnnamaa.Thonny
+```
+
+`mpy-cross` needs Python first (install from
+[python.org](https://www.python.org/downloads/) or via the
+Microsoft Store), then:
+
+```powershell
+pip install --user mpy-cross==1.20.*
+```
+
+If `mpy-cross` isn't on your PATH after install, you'll find it
+under `%APPDATA%\Python\Python3X\Scripts\`.
+
+### Linux
+
+```bash
+# Debian / Ubuntu
+sudo apt install gh thonny python3-pip
+
+# Fedora
+sudo dnf install gh thonny python3-pip
+
+# Arch
+sudo pacman -S github-cli thonny python-pip
+```
+
+Then in any shell:
+
+```bash
+pip install --user mpy-cross==1.20.*
+```
+
+If `~/.local/bin` isn't on your PATH, add it (`build-dev-mpy.sh`
+falls back to that location automatically).
+
+### Then on every OS
+
+```bash
 # Authenticate gh once
 gh auth login    # GitHub.com → HTTPS → browser-based
 
@@ -50,9 +99,22 @@ gh repo view timex-sinclair-projects/tspico-firmware-build
 mpy-cross --version    # should report mpy v6.1 for MP 1.20.0
 ```
 
-For Claude Code: install per
-[claude.com/claude-code](https://claude.com/claude-code), then run
-`claude` in your repo directory.
+### Claude Code (if you're using the AI-assisted path)
+
+Two interface options — pick whichever you prefer:
+
+- **The Claude desktop app** (macOS) ships a "Code" mode. Open the
+  app, switch into Code mode, and point it at your repo folder.
+  It's a comfortable GUI workflow with the same underlying
+  capabilities as the CLI.
+- **The Claude Code CLI.** Install from
+  [claude.com/claude-code](https://claude.com/claude-code), then
+  run `claude` in your repo directory. Available on macOS, Windows
+  (via WSL or native install where supported), and Linux.
+
+Both authenticate with your Anthropic account; no separate API key
+is required for interactive use. The rest of this doc applies the
+same way regardless of which interface you use.
 
 ## 3. Clone and orient
 
@@ -147,9 +209,11 @@ Claude-Code workflow.
 
 ## 6. Claude-assisted path
 
-Once Claude Code is installed and `gh` is authenticated (§2), `cd`
-into the repo and run `claude`. Claude reads `README.md` and the
-auto-loaded `src/CLAUDE.md` for context.
+Once Claude Code is installed and `gh` is authenticated (§2), open
+the repo in whichever interface you chose — point the Claude
+desktop app's Code mode at the folder, or `cd` into the repo and
+run `claude` from a terminal. Claude reads `README.md` and the
+auto-loaded `src/CLAUDE.md` for context either way.
 
 ### Permissions worth allowlisting up front
 
@@ -181,6 +245,13 @@ The fast loop, no UF2 rebuild needed:
 # upload src/dev_tspico.mpy to the Pico's flash root via Thonny
 # reset the Pico, test on the TS-2068
 ```
+
+You don't have to run `build-dev-mpy.sh` yourself — Claude Code can
+do it for you. Just say "build the mpy" (or similar) after an edit
+and it'll run the script, surface any errors, and tell you the
+output path so you can upload it via Thonny. The script is also
+what CI runs on every push, so the local build and the CI artifact
+stay in sync.
 
 The dev override loads automatically if `/dev_tspico.mpy` is
 present on the Pico's flash root. To revert: delete the file.
