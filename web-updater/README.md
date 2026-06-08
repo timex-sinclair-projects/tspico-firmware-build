@@ -7,9 +7,11 @@ flashed. Prototype for
 [issue #26](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26);
 see the research write-up for the full rationale.
 
-> **Scope:** this writes the Pico's internal **flash** filesystem only. SD-card
-> content (the `SD card/` bundle — `help/` text and `TAP/` files) is installed
-> by copying it to the card directly, and is out of this tool's scope.
+> **Scope:** the over-serial uploader writes the Pico's internal **flash**
+> filesystem only. SD-card content (the `SD card/` bundle — `help/` text and
+> `TAP/` files) is installed by copying it to the card directly — the page
+> offers it as a **Step 3** `.zip` download (for software testers), but does not
+> write it over the serial link.
 
 It's a "very limited ViperIDE": it vendors ViperIDE's MIT-licensed WebSerial
 transport and raw-REPL file-writing code, and adds a small connect → update →
@@ -25,9 +27,11 @@ web-updater/
 │   ├── transports.js     WebSerial transport (Transport + WebSerial only)
 │   ├── rawmode.js        MpRawMode: raw REPL, writeFile, makePath, walkFs…
 │   └── utils.js          sleep / Mutex / helpers (trimmed of UI deps)
-├── build-payload.sh    assembles pico/ + manifest.json from ../src (for testing)
-├── pico/               generated payload   (gitignored)
-└── manifest.json       generated file list (gitignored)
+├── build-payload.sh    assembles pico/ + sdcard.zip + manifest.json (for testing)
+├── pico/               generated payload      (gitignored)
+├── firmware-uf2.zip    generated zipped UF2, Step 1 fallback (gitignored)
+├── sdcard.zip          generated SD-card bundle, Step 3 (gitignored)
+└── manifest.json       generated file list    (gitignored)
 ```
 
 `vendor/transports.js` and `vendor/utils.js` are trimmed copies of the

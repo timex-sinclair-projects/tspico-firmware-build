@@ -125,8 +125,13 @@
 
       <div class="row">
         <a id="uf2-link" class="btn primary disabled" href="#" download="firmware.uf2">Download firmware.uf2</a>
+        <a id="uf2-zip-link" class="btn disabled" href="#" download="firmware-uf2.zip">Download as .zip</a>
         <span class="note" id="uf2-note"></span>
       </div>
+      <p class="note">On Windows, antivirus or SmartScreen sometimes blocks or
+         quarantines a raw <code>.uf2</code> download. If that happens, grab the
+         <strong>.zip</strong> instead — unzip it, then drag the
+         <code>firmware.uf2</code> inside onto the RPI-RP2 drive.</p>
 
       <h3>Then put the Pico into BOOTSEL mode</h3>
       <p class="note">Already running TS-Pico firmware and connected in Step 2?
@@ -192,6 +197,40 @@
           <span class="note">Restarts the firmware so the new files take effect.</span>
         </div>
       </div>
+    </div>
+
+    <!-- Step 3: SD card files (software testers only) -->
+    <div class="panel">
+      <h2><span class="step">Step 3</span> · Copy the SD card files
+        <span class="badge">testers</span></h2>
+      <p class="lead">For <strong>software testers</strong> only. The TS-Pico
+         reads TAP programs and <code>tpi:help</code> text from a FAT-formatted
+         SD card at runtime, so to exercise the firmware end-to-end on your own
+         hardware you need a card with these files on it. Download the bundle and
+         copy its contents to the root of the card you plug into the TS-Pico.
+         <strong>Production users can skip this</strong> — a ready-made SD card
+         image will be provided separately.</p>
+
+      <div class="row">
+        <a id="sdcard-link" class="btn primary disabled" href="#" download="sdcard.zip">Download SD card files (.zip)</a>
+        <span class="note" id="sdcard-note"></span>
+      </div>
+
+      <h3>Then copy them onto the card</h3>
+      <ol class="steps">
+        <li>Format an SD card as <strong>FAT32</strong> (or reuse one already
+            prepared for the TS-Pico).</li>
+        <li>Unzip the downloaded <strong>sdcard.zip</strong>.</li>
+        <li>Copy everything <em>inside</em> the unzipped folder to the
+            <strong>root</strong> of the SD card, preserving the subfolders:
+          <ul>
+            <li><code>TAP/</code> → <code>/TAP/</code> (test programs)</li>
+            <li><code>help/</code> → <code>/help/</code> (<code>tpi:help</code> text)</li>
+          </ul>
+        </li>
+        <li>Eject the card, insert it into the TS-Pico, and reboot. You should
+            see <code>INFO: SD Card initialized and mounted OK</code>.</li>
+      </ol>
     </div>
 
     <!-- Log -->

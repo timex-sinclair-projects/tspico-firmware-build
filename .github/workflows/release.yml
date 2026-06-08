@@ -298,6 +298,17 @@ jobs:
           cp -r web-updater/vendor                     _site/vendor
           cp -r web-updater/pico                       _site/pico
           cp    web-updater/manifest.json              _site/manifest.json
+          # Zipped UF2 fallback for Step 1 (Windows AV/SmartScreen sometimes
+          # blocks a raw .uf2 download). Always present since the release passes
+          # the freshly-built UF2 to build-payload.sh.
+          if [ -f web-updater/firmware-uf2.zip ]; then
+            cp web-updater/firmware-uf2.zip            _site/firmware-uf2.zip
+          fi
+          # SD card bundle for Step 3 (software testers). build-payload.sh emits
+          # it from "SD card/"; absent only if that folder is missing.
+          if [ -f web-updater/sdcard.zip ]; then
+            cp web-updater/sdcard.zip                  _site/sdcard.zip
+          fi
           touch _site/.nojekyll   # serve files as-is; skip Jekyll processing
 
           echo "=== Pages site tree ==="

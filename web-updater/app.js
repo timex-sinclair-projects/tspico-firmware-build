@@ -78,6 +78,36 @@ async function loadManifest() {
         a.classList.add('disabled')
         $('uf2-note').textContent = 'Firmware image not in this payload (included in published releases).'
     }
+
+    // Zipped UF2 fallback (Step 1). Some Windows setups block or quarantine a
+    // raw .uf2 download (antivirus / SmartScreen); the .zip sidesteps that. Only
+    // present when the payload includes the firmware image.
+    const az = $('uf2-zip-link')
+    if (manifest.uf2_zip) {
+        az.href = manifest.uf2_zip
+        az.classList.remove('disabled')
+    } else {
+        az.removeAttribute('href')
+        az.classList.add('disabled')
+    }
+
+    // SD card bundle (Step 3, software testers only). Built from the repo's
+    // "SD card/" folder by build-payload.sh; absent from payloads that don't
+    // include it. This is a plain same-origin download — the SD content goes on
+    // a physical card, not over the serial link.
+    const sd = $('sdcard-link')
+    if (manifest.sdcard && manifest.sdcard.path) {
+        sd.href = manifest.sdcard.path
+        sd.classList.remove('disabled')
+        const bits = []
+        if (manifest.sdcard.files) bits.push(`${manifest.sdcard.files} files`)
+        if (manifest.sdcard.size) bits.push(sizeFmt(manifest.sdcard.size))
+        $('sdcard-note').textContent = bits.length ? `(${bits.join(', ')})` : ''
+    } else {
+        sd.removeAttribute('href')
+        sd.classList.add('disabled')
+        $('sdcard-note').textContent = 'SD card bundle not in this payload (included in published releases).'
+    }
     log(`Loaded manifest: firmware ${manifest.fw_version || '?'}, ${manifest.files.length} files.`)
 }
 

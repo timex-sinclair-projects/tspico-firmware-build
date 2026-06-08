@@ -39,11 +39,46 @@ cp "$SRC/words.txt"    "$OUT/words.txt"
 cp "$SRC"/assets/*.tap "$OUT/assets/"
 
 # Optional UF2 (flashed via BOOTSEL, not written over serial — referenced by
-# the manifest only as a download link).
+# the manifest only as a download link). Also offered zipped: some Windows
+# antivirus/SmartScreen setups block or quarantine a raw .uf2 download, so the
+# .zip (firmware.uf2 at its root) is a fallback the user can unzip and drag.
 UF2_FIELD="null"
+UF2_ZIP_FIELD="null"
+UF2_ZIP="$HERE/firmware-uf2.zip"
+rm -f "$UF2_ZIP"
 if [ -n "$UF2" ] && [ -f "$UF2" ]; then
   cp "$UF2" "$OUT/firmware.uf2"
   UF2_FIELD='"pico/firmware.uf2"'
+  ( cd "$OUT" && zip -q "$UF2_ZIP" firmware.uf2 )
+  UF2_ZIP_FIELD='"firmware-uf2.zip"'
+  echo "Wrote $UF2_ZIP"
+fi
+
+# SD card bundle (Step 3 on the page — software testers only). The firmware
+# reads TAP programs and tpi:help text from a FAT SD card at runtime; testers
+# copy this onto a card to exercise the firmware end-to-end. This is OUTSIDE the
+# over-serial updater's scope (that writes Pico flash only) — it's offered as a
+# plain same-origin .zip download. Zipped with its *contents* (TAP/, help/) at
+# the zip root so "unzip → copy to card root" is a direct drag.
+#
+# Located relative to SRC: the "SD card/" folder is a sibling of src/ at the
+# repo root (release.yml calls this with SRC=<repo>/src).
+SDCARD_SRC="$(cd "$SRC/.." && pwd)/SD card"
+SDCARD_ZIP="$HERE/sdcard.zip"
+SDCARD_FIELD="null"
+rm -f "$SDCARD_ZIP"
+if [ -d "$SDCARD_SRC" ]; then
+  TMP="$(mktemp -d)"
+  cp -R "$SDCARD_SRC/." "$TMP/"
+  find "$TMP" -name '.DS_Store' -delete
+  ( cd "$TMP" && zip -rq "$SDCARD_ZIP" . )
+  rm -rf "$TMP"
+  SDCARD_BYTES="$(wc -c < "$SDCARD_ZIP" | tr -d ' ')"
+  SDCARD_NFILES="$(find "$SDCARD_SRC" -type f ! -name '.DS_Store' | wc -l | tr -d ' ')"
+  SDCARD_FIELD="{\"path\": \"sdcard.zip\", \"size\": ${SDCARD_BYTES}, \"files\": ${SDCARD_NFILES}}"
+  echo "Wrote $SDCARD_ZIP (${SDCARD_NFILES} files, ${SDCARD_BYTES} bytes)"
+else
+  echo "No SD card dir at $SDCARD_SRC — skipping sdcard.zip"
 fi
 
 # Generate manifest.json. Paths are relative to pico/; the page fetches each
@@ -51,9 +86,9 @@ fi
 # installed-vs-latest.
 FW_VERSION="$(python3 -c "import json,sys; print(json.load(open('$OUT/config.ini')).get('FW_VERSION','?'))")"
 
-python3 - "$OUT" "$TAG" "$FW_VERSION" "$UF2_FIELD" > "$HERE/manifest.json" <<'PY'
+python3 - "$OUT" "$TAG" "$FW_VERSION" "$UF2_FIELD" "$UF2_ZIP_FIELD" "$SDCARD_FIELD" > "$HERE/manifest.json" <<'PY'
 import json, os, sys
-out, tag, fw, uf2 = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+out, tag, fw, uf2, uf2_zip, sdcard = sys.argv[1:7]
 files = []
 for root, _dirs, names in os.walk(out):
     for n in sorted(names):
@@ -67,6 +102,8 @@ manifest = {
     'tag': tag,
     'fw_version': fw,
     'uf2': None if uf2 == 'null' else uf2.strip('"'),
+    'uf2_zip': None if uf2_zip == 'null' else uf2_zip.strip('"'),
+    'sdcard': None if sdcard == 'null' else json.loads(sdcard),
     'files': files,
 }
 print(json.dumps(manifest, indent=2))

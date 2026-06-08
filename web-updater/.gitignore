@@ -2,3 +2,5 @@
 # published to the gh-pages branch by the release workflow, not committed here.
 /pico/
 /manifest.json
+/sdcard.zip
+/firmware-uf2.zip
