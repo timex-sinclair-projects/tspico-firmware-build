@@ -4,6 +4,11 @@
 *.bin
 *.hex
 
+# Exception: flash_nuke.uf2 is a static, prebuilt asset (Raspberry Pi
+# pico-examples flash/nuke) committed on purpose so the Web Updater can serve
+# it as the "wipe the Pico" download. It is not a build output.
+!web-updater/flash_nuke.uf2
+
 # MicroPython compiled
 *.mpy
 __pycache__/

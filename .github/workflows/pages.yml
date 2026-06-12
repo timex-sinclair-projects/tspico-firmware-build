@@ -1,0 +1,135 @@
+name: Deploy site to GitHub Pages
+
+# Builds the combined ts-pico site and publishes it to GitHub Pages:
+#
+#   /            ← the Jekyll site (migrated from ts-pico.com, source in site/)
+#   /updater/    ← the Web Updater (web-updater/) + the latest firmware payload
+#
+# The updater fetches its payload (manifest.json, pico/, the UF2, zips) from
+# its own same-origin /updater/ path — that's why we mount the payload into the
+# built site here rather than linking to release assets (GitHub's release CDN
+# blocks cross-origin browser fetches; see web-updater/README.md).
+#
+# Triggers:
+#   - push to main touching site/, web-updater/, or "SD card/" (content edits)
+#   - a published Release (refreshes the updater payload with the new firmware,
+#     built by release.yml)
+#   - manual dispatch
+#
+# ── One-time repo setup ────────────────────────────────────────────────
+# Settings → Pages → Source → "GitHub Actions". (Replaces the old
+# "Deploy from a branch / gh-pages" setup that release.yml used.)
+#
+# ── Going live on ts-pico.com ──────────────────────────────────────────
+# 1. In site/_config.yml set `baseurl: ""`.
+# 2. Add a CNAME step (or commit site/CNAME containing "ts-pico.com").
+# 3. Settings → Pages → Custom domain → ts-pico.com, and point DNS at GitHub.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'web-updater/**'
+      - 'SD card/**'
+      - '.github/workflows/pages.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deploy; don't cancel an in-progress one (a release and a
+# push can race).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: site
+
+      - name: Build Jekyll site
+        working-directory: site
+        env:
+          JEKYLL_ENV: production
+        run: bundle exec jekyll build --trace
+        # Outputs to site/_site
+
+      - name: Fetch latest firmware UF2 for the updater payload
+        id: uf2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p _uf2
+          TAG=""
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          # Pull firmware.uf2 from the triggering release, else the latest one.
+          # Tolerate "no releases yet" — the updater still builds (wipe step +
+          # file upload work; the firmware download link just shows as absent).
+          if [ -n "$TAG" ]; then
+            gh release download "$TAG" --pattern 'firmware.uf2' --dir _uf2 || true
+          else
+            gh release download --pattern 'firmware.uf2' --dir _uf2 || true
+          fi
+          if [ -f _uf2/firmware.uf2 ]; then
+            echo "uf2=$PWD/_uf2/firmware.uf2" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG:-latest}" >> "$GITHUB_OUTPUT"
+            echo "Using firmware.uf2 from ${TAG:-the latest release}."
+          else
+            echo "uf2=" >> "$GITHUB_OUTPUT"
+            echo "tag=dev" >> "$GITHUB_OUTPUT"
+            echo "No firmware.uf2 release asset found — building updater without it."
+          fi
+
+      - name: Build updater payload (pico/, manifest.json, zips)
+        env:
+          UF2: ${{ steps.uf2.outputs.uf2 }}
+          TAG: ${{ steps.uf2.outputs.tag }}
+        run: bash web-updater/build-payload.sh "${PWD}/src" "${TAG}" "${UF2}"
+
+      - name: Mount Web Updater at /updater/
+        run: |
+          DEST=site/_site/updater
+          mkdir -p "$DEST"
+          cp web-updater/index.html web-updater/app.js "$DEST"/
+          cp web-updater/flash_nuke.uf2                "$DEST"/flash_nuke.uf2
+          cp -r web-updater/vendor                     "$DEST"/vendor
+          cp -r web-updater/pico                       "$DEST"/pico
+          cp    web-updater/manifest.json              "$DEST"/manifest.json
+          if [ -f web-updater/firmware-uf2.zip ]; then cp web-updater/firmware-uf2.zip "$DEST"/firmware-uf2.zip; fi
+          if [ -f web-updater/sdcard.zip ];       then cp web-updater/sdcard.zip       "$DEST"/sdcard.zip;       fi
+          touch site/_site/.nojekyll
+          echo "=== published tree (depth 2) ==="
+          find site/_site -maxdepth 2 | sort
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -10,8 +10,14 @@ see the research write-up for the full rationale.
 > **Scope:** the over-serial uploader writes the Pico's internal **flash**
 > filesystem only. SD-card content (the `SD card/` bundle — `help/` text and
 > `TAP/` files) is installed by copying it to the card directly — the page
-> offers it as a **Step 3** `.zip` download (for software testers), but does not
+> offers it as a **Step 4** `.zip` download (for software testers), but does not
 > write it over the serial link.
+
+> **Wipe step:** the page opens with an optional **Step 1 · Wipe the Pico**, a
+> plain download of the Raspberry Pi `flash/nuke` image (`flash_nuke.uf2`,
+> dragged onto RPI-RP2 in BOOTSEL mode). It's needed when a board carries
+> leftover files from an older distribution that block the current firmware from
+> booting. This is a static same-origin download — not part of the serial flow.
 
 It's a "very limited ViperIDE": it vendors ViperIDE's MIT-licensed WebSerial
 transport and raw-REPL file-writing code, and adds a small connect → update →
@@ -23,14 +29,15 @@ verify → reboot UI on top.
 web-updater/
 ├── index.html          page + styling
 ├── app.js              UI glue (connect, update, verify, reboot, bootloader)
+├── flash_nuke.uf2      Raspberry Pi flash-erase image, Step 1 (committed)
 ├── vendor/             ViperIDE code, MIT (copyright headers kept)
 │   ├── transports.js     WebSerial transport (Transport + WebSerial only)
 │   ├── rawmode.js        MpRawMode: raw REPL, writeFile, makePath, walkFs…
 │   └── utils.js          sleep / Mutex / helpers (trimmed of UI deps)
 ├── build-payload.sh    assembles pico/ + sdcard.zip + manifest.json (for testing)
 ├── pico/               generated payload      (gitignored)
-├── firmware-uf2.zip    generated zipped UF2, Step 1 fallback (gitignored)
-├── sdcard.zip          generated SD-card bundle, Step 3 (gitignored)
+├── firmware-uf2.zip    generated zipped UF2, Step 2 fallback (gitignored)
+├── sdcard.zip          generated SD-card bundle, Step 4 (gitignored)
 └── manifest.json       generated file list    (gitignored)
 ```
 
@@ -85,17 +92,21 @@ redirects to `objects.githubusercontent.com`, which sends no
 `Access-Control-Allow-Origin`, so the browser blocks the bytes. The fix is to
 publish the payload to the **same origin** as the page.
 
-This is now **wired into `.github/workflows/release.yml`**: on every release it
-runs `build-payload.sh` (UF2 + `pico/` payload + `manifest.json`), stages a
-clean `_site/` (this page + `vendor/` + payload + manifest), and force-pushes it
-to the **`gh-pages`** branch. The page then fetches everything same-origin — no
-CORS, no proxy. `gh-pages` is an orphan/single-commit branch so the payload
-binaries don't accumulate history across releases.
+This is **wired into `.github/workflows/pages.yml`**, which deploys the whole
+site to GitHub Pages. It builds the Jekyll site in `../site/`, then mounts this
+updater at **`/updater/`**: it runs `build-payload.sh` (UF2 + `pico/` payload +
+`manifest.json`) and copies the static page + `vendor/` + payload + manifest +
+`flash_nuke.uf2` into the built site under `updater/`. The page fetches its
+payload from that same-origin `/updater/` path — no CORS, no proxy. The
+firmware `.uf2` is downloaded from the latest GitHub **Release** at build time
+(server-side, where CORS doesn't apply); creating a release (`release.yml`)
+fires `pages.yml` to refresh the site with the new firmware.
 
 **One-time repo setup** (can't be done from the workflow): in
-**Settings → Pages**, set **Source → "Deploy from a branch" → branch
-`gh-pages` → folder `/ (root)`**. After the next release runs, the updater is
-live at `https://<owner>.github.io/<repo>/`. Until then, run it locally (above).
+**Settings → Pages**, set **Source → "GitHub Actions"**. After the next push or
+release, the updater is live at `https://<owner>.github.io/<repo>/updater/`.
+Until then, run it locally (above). The old "Deploy from a branch / `gh-pages`"
+setup is no longer used.
 
 ### Remaining to productionize
 

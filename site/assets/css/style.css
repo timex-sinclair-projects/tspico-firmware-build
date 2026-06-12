@@ -1,0 +1,158 @@
+/* TS Pico Interface — site styles */
+
+:root {
+  --ink: #15181d;
+  --muted: #5c6573;
+  --bg: #ffffff;
+  --panel: #f5f7fa;
+  --border: #e2e6ec;
+  --accent: #d6273e;        /* Sinclair red */
+  --accent-ink: #ffffff;
+  --link: #1f6fd6;
+  --max: 980px;
+  --text-max: 760px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+  font: 17px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 20px; }
+
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+img { max-width: 100%; height: auto; }
+
+h1, h2, h3 { line-height: 1.2; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; margin-top: 2.2rem; }
+
+/* Constrain prose width inside pages/posts for readability */
+.page, .post { max-width: var(--text-max); padding-top: 28px; padding-bottom: 48px; }
+.page-title { margin: 0 0 .4em; }
+
+/* --- Skip link / a11y --- */
+.skip-link {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--ink); color: #fff; padding: 8px 14px; z-index: 100;
+}
+.skip-link:focus { left: 8px; top: 8px; }
+
+/* --- Header --- */
+.site-header {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  /* Sinclair rainbow hairline */
+  box-shadow: 0 2px 0 0 transparent;
+}
+.site-header::after {
+  content: ""; display: block; height: 3px;
+  background: linear-gradient(90deg,
+    #d6273e 0 20%, #f08a24 20% 40%, #f5c518 40% 60%,
+    #2ca24c 60% 80%, #1f6fd6 80% 100%);
+}
+.header-inner {
+  display: flex; align-items: center; gap: 16px;
+  min-height: 60px; flex-wrap: wrap;
+}
+.brand {
+  font-weight: 800; font-size: 1.15rem; color: var(--ink);
+  letter-spacing: -.01em; white-space: nowrap;
+}
+.brand:hover { text-decoration: none; }
+.site-nav { display: flex; gap: 18px; flex: 1; flex-wrap: wrap; }
+.site-nav a { color: var(--muted); font-weight: 600; font-size: .96rem; }
+.site-nav a:hover { color: var(--ink); text-decoration: none; }
+.site-nav a.active { color: var(--accent); }
+.lang-switch { display: flex; gap: 6px; font-size: .8rem; font-weight: 700; }
+.lang-switch a { color: var(--muted); padding: 2px 6px; border-radius: 5px; }
+.lang-switch a.active { background: var(--accent); color: var(--accent-ink); }
+.lang-switch a:hover { text-decoration: none; }
+
+/* --- Hero (home) --- */
+.hero { padding: 56px 0 28px; text-align: center; }
+.hero h1 { font-size: 2.6rem; margin: 0 0 .25em; letter-spacing: -.02em; }
+.hero p.lead { font-size: 1.25rem; color: var(--muted); margin: 0 auto; max-width: 640px; }
+
+/* --- Sections --- */
+.section { padding: 22px 0; }
+.section .wrap { max-width: var(--text-max); }
+.section.alt { background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+/* --- Buttons --- */
+.btn {
+  display: inline-block; font-weight: 700; font-size: 1rem;
+  padding: 12px 26px; border-radius: 9px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+}
+.btn:hover { text-decoration: none; border-color: #cfd5dd; }
+.btn-buy { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn-buy:hover { background: #b81f33; border-color: #b81f33; }
+.btn-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin: 22px 0; }
+
+/* --- Responsive video embed --- */
+.video-embed {
+  position: relative; width: 100%; max-width: 720px; margin: 28px auto;
+  aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--border); background: #000;
+}
+.video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* --- Figures / images --- */
+figure { margin: 26px 0; }
+figure img { border-radius: 12px; border: 1px solid var(--border); }
+figcaption { color: var(--muted); font-size: .9rem; margin-top: 6px; }
+
+/* Team portraits float beside the bio */
+.portrait {
+  float: right; width: 240px; margin: 4px 0 16px 24px;
+  border-radius: 12px; border: 1px solid var(--border);
+}
+.post h2, .page h2 { clear: both; }
+
+/* --- PicoVideo promo card --- */
+.promo {
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; align-items: center;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 16px; padding: 28px; margin: 8px 0;
+}
+.promo img { border-radius: 10px; }
+.promo h2 { margin-top: 0; }
+
+/* --- Updates list --- */
+.updates-list { list-style: none; padding: 0; margin: 0; }
+.updates-list li { padding: 18px 0; border-bottom: 1px solid var(--border); }
+.updates-list li:last-child { border-bottom: 0; }
+.updates-list h2 { margin: 0 0 .2em; font-size: 1.3rem; }
+.updates-list time { color: var(--muted); font-size: .9rem; }
+
+.post-meta { color: var(--muted); font-size: .92rem; margin: 0 0 .2em; }
+
+/* --- Footer --- */
+.site-footer {
+  margin-top: 40px; border-top: 1px solid var(--border);
+  background: var(--panel); padding: 30px 0;
+}
+.footer-inner { max-width: var(--text-max); }
+.footer-links { margin: 6px 0; }
+.muted { color: var(--muted); font-size: .88rem; }
+
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+
+/* --- Small screens --- */
+@media (max-width: 680px) {
+  .promo { grid-template-columns: 1fr; }
+  .portrait { float: none; display: block; margin: 0 0 16px; width: 100%; max-width: 320px; }
+  .hero h1 { font-size: 2.1rem; }
+  .header-inner { min-height: 54px; }
+}

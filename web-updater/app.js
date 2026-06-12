@@ -195,7 +195,7 @@ function resetUiToDisconnected() {
     enable($('btn-reboot'), false)
     enable($('btn-bootloader'), false)
     enable($('btn-disconnect'), false)
-    $('installed-version').textContent = 'connect in Step 2 to read'
+    $('installed-version').textContent = 'connect in Step 3 to read'
     show($('fw-hint'), false)
     setStatus('Not connected')
 }
@@ -348,15 +348,15 @@ function updateFwHint(installed) {
     if (installed === 'unknown') {
         hint.classList.add('warn')
         hint.textContent = `Couldn't read the installed firmware version. ` +
-            `If this is a fresh Pico, do Step 1 first, then upload files in Step 2.`
+            `If this is a fresh Pico, do Step 2 first, then upload files in Step 3.`
     } else if (String(installed) === String(latest)) {
         hint.classList.add('ok')
         hint.textContent = `✓ Firmware is already up to date (${installed}). ` +
-            `You can skip Step 1 — just upload the files in Step 2.`
+            `You can skip Step 2 — just upload the files in Step 3.`
     } else {
         hint.classList.add('warn')
         hint.textContent = `Installed firmware is ${installed}, latest is ${latest}. ` +
-            `Do Step 1 to flash the new firmware before uploading files.`
+            `Do Step 2 to flash the new firmware before uploading files.`
     }
     show(hint, true)
 }

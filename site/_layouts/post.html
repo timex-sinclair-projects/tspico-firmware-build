@@ -1,0 +1,13 @@
+---
+layout: default
+---
+<article class="wrap post">
+  <p class="post-meta">
+    <a href="{{ '/updates/' | relative_url }}">Updates</a> ·
+    <time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: "%B %-d, %Y" }}</time>
+  </p>
+  <h1 class="page-title">{{ page.title }}</h1>
+  {{ content }}
+  <hr>
+  <p><a href="{{ '/updates/' | relative_url }}">← All updates</a></p>
+</article>
