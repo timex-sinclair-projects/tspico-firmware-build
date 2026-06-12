@@ -1,0 +1,17 @@
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="{{ '/' | relative_url }}">{{ site.title }}</a>
+    <nav class="site-nav" aria-label="Primary">
+      {%- for item in site.nav -%}
+        {%- assign item_url = item.url | relative_url -%}
+        {%- assign cur = page.url | relative_url -%}
+        <a href="{{ item_url }}"{% if cur == item_url %} class="active" aria-current="page"{% endif %}>{{ item.title }}</a>
+      {%- endfor -%}
+    </nav>
+    <div class="lang-switch" aria-label="Language">
+      <a href="{{ '/' | relative_url }}"{% if page.lang != 'es' %} class="active"{% endif %}>EN</a>
+      <a href="{{ '/es/' | relative_url }}"{% if page.lang == 'es' %} class="active"{% endif %}>ES</a>
+    </div>
+  </div>
+</header>

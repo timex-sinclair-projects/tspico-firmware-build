@@ -111,32 +111,30 @@
       <dl class="kv">
         <dt>Latest firmware</dt><dd id="latest-version">loading…</dd>
         <dt>Files to upload</dt><dd id="payload-summary">—</dd>
-        <dt>Installed on device</dt><dd id="installed-version">connect in Step 2 to read</dd>
+        <dt>Installed on device</dt><dd id="installed-version">connect in Step 3 to read</dd>
       </dl>
       <div class="hint" id="fw-hint" hidden></div>
     </div>
 
-    <!-- Step 1: firmware UF2 -->
+    <!-- Step 1: wipe the Pico (flash_nuke) -->
     <div class="panel">
-      <h2><span class="step">Step 1</span> · Flash the firmware</h2>
-      <p class="lead">Installs the firmware itself. Only needed when the firmware
-         version changes — if Step 2 shows your firmware is already up to date,
-         you can skip straight to Step 2.</p>
+      <h2><span class="step">Step 1</span> · Wipe the Pico</h2>
+      <p class="lead">Erases everything on the Pico’s flash for a clean slate.
+         <strong>Required if your TS-Pico is coming from an older distribution</strong>
+         — leftover files (such as an old <code>/TS/</code> folder) stop the current
+         firmware from booting. On a brand-new Pico there’s nothing to wipe, so you
+         can skip ahead to Step 2.</p>
 
       <div class="row">
-        <a id="uf2-link" class="btn primary disabled" href="#" download="firmware.uf2">Download firmware.uf2</a>
-        <a id="uf2-zip-link" class="btn disabled" href="#" download="firmware-uf2.zip">Download as .zip</a>
-        <span class="note" id="uf2-note"></span>
+        <a id="nuke-link" class="btn primary" href="flash_nuke.uf2" download="flash_nuke.uf2">Download flash_nuke.uf2</a>
+        <span class="note">Raspberry Pi’s official flash-erase image.</span>
       </div>
-      <p class="note">On Windows, antivirus or SmartScreen sometimes blocks or
-         quarantines a raw <code>.uf2</code> download. If that happens, grab the
-         <strong>.zip</strong> instead — unzip it, then drag the
-         <code>firmware.uf2</code> inside onto the RPI-RP2 drive.</p>
+      <p class="note danger">This permanently erases all files <em>and</em> the
+         firmware on the Pico — that’s intentional. Step 2 reinstalls the firmware
+         and Step 3 re-uploads the files. Nothing on your TS-2068, SD card, or
+         EXROM is touched.</p>
 
-      <h3>Then put the Pico into BOOTSEL mode</h3>
-      <p class="note">Already running TS-Pico firmware and connected in Step 2?
-         Skip the buttons — just click <strong>Enter BOOTSEL mode</strong> below.
-         Otherwise, use the manual steps:</p>
+      <h3>Put the Pico into BOOTSEL mode</h3>
       <ol class="steps">
         <li>Remove the TS-Pico from the expansion board.</li>
         <li>Plug the USB cable into your computer.</li>
@@ -148,22 +146,56 @@
         <li>Release the <kbd>BOOTSEL</kbd> button.</li>
         <li>A drive named <strong>RPI-RP2</strong> will appear on your computer.
             Find it in your file manager — <strong>don’t open or click into it.</strong></li>
+        <li>Drag the downloaded <strong>flash_nuke.uf2</strong> onto the
+            <strong>RPI-RP2</strong> drive.</li>
+        <li>The Pico erases its flash and <strong>automatically returns to BOOTSEL
+            mode</strong> — the <strong>RPI-RP2</strong> drive reappears. Leave it
+            connected and continue to Step 2.</li>
+      </ol>
+    </div>
+
+    <!-- Step 2: firmware UF2 -->
+    <div class="panel">
+      <h2><span class="step">Step 2</span> · Flash the firmware</h2>
+      <p class="lead">Installs the firmware itself. If you just did Step 1, the
+         Pico is already in BOOTSEL mode (the <strong>RPI-RP2</strong> drive is
+         showing) — go straight to the drag step below. Otherwise, if Step 3 shows
+         your firmware is already up to date, you can skip ahead to Step 3.</p>
+
+      <div class="row">
+        <a id="uf2-link" class="btn primary disabled" href="#" download="firmware.uf2">Download firmware.uf2</a>
+        <a id="uf2-zip-link" class="btn disabled" href="#" download="firmware-uf2.zip">Download as .zip</a>
+        <span class="note" id="uf2-note"></span>
+      </div>
+      <p class="note">On Windows, antivirus or SmartScreen sometimes blocks or
+         quarantines a raw <code>.uf2</code> download. If that happens, grab the
+         <strong>.zip</strong> instead — unzip it, then drag the
+         <code>firmware.uf2</code> inside onto the RPI-RP2 drive.</p>
+
+      <h3>Then flash it onto the RPI-RP2 drive</h3>
+      <p class="note">Need to get into BOOTSEL mode first? If you just wiped the
+         Pico in Step 1, it’s already there. Otherwise use the manual button
+         sequence in Step 1 above — or, if you’re already running TS-Pico firmware
+         and connected in Step 3, just click <strong>Enter BOOTSEL mode</strong> below.</p>
+      <ol class="steps">
+        <li>Make sure the <strong>RPI-RP2</strong> drive is showing —
+            <strong>don’t open or click into it.</strong></li>
         <li>Drag the downloaded <strong>firmware.uf2</strong> onto the
             <strong>RPI-RP2</strong> drive.</li>
         <li>The Pico reboots into the new firmware. Leave it connected by USB and
-            continue to Step 2.</li>
+            continue to Step 3.</li>
       </ol>
 
       <div class="row" style="margin-top:12px;">
         <button id="btn-bootloader" disabled>Enter BOOTSEL mode</button>
-        <span class="note">Already connected in Step 2? This reboots the Pico
+        <span class="note">Already connected in Step 3? This reboots the Pico
            straight into the RPI-RP2 drive — no buttons needed.</span>
       </div>
     </div>
 
-    <!-- Step 2: files -->
+    <!-- Step 3: files -->
     <div class="panel">
-      <h2><span class="step">Step 2</span> · Upload the files</h2>
+      <h2><span class="step">Step 3</span> · Upload the files</h2>
       <p class="lead">Copies <code>main.py</code>, <code>config.ini</code>,
          <code>words.txt</code>, and the <code>assets/</code> folder onto the
          Pico’s flash.</p>
@@ -199,9 +231,9 @@
       </div>
     </div>
 
-    <!-- Step 3: SD card files (software testers only) -->
+    <!-- Step 4: SD card files (software testers only) -->
     <div class="panel">
-      <h2><span class="step">Step 3</span> · Copy the SD card files
+      <h2><span class="step">Step 4</span> · Copy the SD card files
         <span class="badge">testers</span></h2>
       <p class="lead">For <strong>software testers</strong> only. The TS-Pico
          reads TAP programs and <code>tpi:help</code> text from a FAT-formatted

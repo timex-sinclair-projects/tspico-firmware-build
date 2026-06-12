@@ -1,0 +1,53 @@
+# TS Pico Interface — Jekyll site
+#
+# Migrated from the old WordPress site at ts-pico.com. Content lives as
+# Markdown in this folder; the Web Updater is published as a sub-page at
+# /updater/ by .github/workflows/pages.yml (it is NOT a Jekyll page).
+
+title: TS Pico Interface
+tagline: A modern expansion platform for the Timex/Sinclair 2068
+description: >-
+  The TS Pico is a modern expansion platform for the Timex/Sinclair 2068 —
+  ultra-fast load and save from an SD card, powered by a Raspberry Pi Pico.
+lang: en
+
+# --- URLs ---------------------------------------------------------------
+# Served today as a GitHub *project* page, so the site lives under a path:
+#   https://timex-sinclair-projects.github.io/tspico-firmware-build/
+# When you point ts-pico.com at it, set baseurl to "" (empty) and url to
+# "https://ts-pico.com" — that's the only change needed for the custom domain.
+baseurl: "/tspico-firmware-build"
+url: ""
+
+# Where the Web Updater is mounted (copied into the built site by the Pages
+# workflow). Nav and buttons link here.
+updater_url: "/updater/"
+
+# Store links (off-site)
+buy_tspico: "https://www.andertone.com/product/ts-pico/"
+buy_picovideo: "https://andertone.com/product/picovideo/"
+github_repo: "https://github.com/timex-sinclair-projects/tspico-firmware-build"
+
+# Primary navigation
+nav:
+  - title: Home
+    url: /
+  - title: Updates
+    url: /updates/
+  - title: The Team
+    url: /the-team/
+  - title: Web Updater
+    url: /updater/
+
+# Posts (the "Updates" blog) keep their original ts-pico.com URLs.
+permalink: /updates/:title/
+
+# --- Build --------------------------------------------------------------
+markdown: kramdown
+kramdown:
+  input: GFM
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - vendor

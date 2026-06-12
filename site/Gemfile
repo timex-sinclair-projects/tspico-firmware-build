@@ -1,0 +1,8 @@
+source "https://rubygems.org"
+
+# Plain Jekyll (the Pages deploy builds with the official jekyll/builder
+# action, so we are not limited to the github-pages gem's plugin allow-list).
+gem "jekyll", "~> 4.3"
+
+# Faraday/webrick bits Jekyll needs on newer Ruby.
+gem "webrick", "~> 1.8"

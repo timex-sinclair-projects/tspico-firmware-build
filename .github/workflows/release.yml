@@ -12,10 +12,9 @@ name: Release TS-Pico Firmware
 # GitHub Release with auto-generated notes (from commit messages
 # since the previous tag).
 #
-# It then publishes the browser-based Web Updater (web-updater/) to the
-# gh-pages branch, bundling the UF2 + Pico-flash payload + a generated
-# manifest.json so the page serves everything same-origin (see the
-# "Stage/Deploy Pages site" steps below for why this sidesteps CORS).
+# Publishing the website + Web Updater to GitHub Pages is done by a
+# separate workflow (.github/workflows/pages.yml), which is triggered when
+# this job creates the Release. See the note near the end of this file.
 #
 # Manual dispatch is also supported for testing: run the workflow
 # from the Actions tab with workflow_dispatch and supply a tag.
@@ -269,67 +268,14 @@ jobs:
           fi
 
       # ──────────────────────────────────────────────────────────────────
-      # Publish the Web Updater (web-updater/) to GitHub Pages, bundling the
-      # freshly-built firmware.uf2, the Pico-flash payload, and a generated
-      # manifest.json. The page fetches all of this SAME-ORIGIN — GitHub's
-      # release-asset CDN (objects.githubusercontent.com) sends no
-      # Access-Control-Allow-Origin header, so a browser on the Pages site
-      # cannot fetch release assets directly. Publishing the payload onto the
-      # Pages site itself sidesteps CORS entirely.
-      #
-      # One-time setup required in the repo: Settings → Pages → Source →
-      # "Deploy from a branch" → branch "gh-pages" → folder "/ (root)".
+      # Publishing the website + Web Updater to GitHub Pages is handled by a
+      # separate workflow, .github/workflows/pages.yml. Creating the Release
+      # above fires a `release: published` event, which triggers pages.yml; it
+      # rebuilds the Jekyll site and mounts the updater at /updater/ with THIS
+      # release's firmware.uf2 (downloaded from the release assets). That keeps
+      # the payload same-origin — GitHub's release-asset CDN
+      # (objects.githubusercontent.com) sends no Access-Control-Allow-Origin
+      # header, so a browser on the Pages site can't fetch release assets
+      # directly; serving them from /updater/ sidesteps CORS. See
+      # web-updater/README.md and pages.yml.
       # ──────────────────────────────────────────────────────────────────
-      - name: Stage Pages site (updater + payload + manifest)
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-          UF2: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
-        run: |
-          # build-payload.sh writes web-updater/pico/ and web-updater/manifest.json
-          # (the same outputs used for local testing) from src/, including the UF2.
-          bash web-updater/build-payload.sh "${PWD}/src" "${TAG}" "${UF2}"
-
-          # Assemble a clean publish dir: static page + vendored modules +
-          # generated payload + manifest. (web-updater/.gitignore excludes the
-          # generated pico/ + manifest.json from the repo, so copy explicitly.)
-          rm -rf _site
-          mkdir -p _site
-          cp web-updater/index.html web-updater/app.js _site/
-          cp -r web-updater/vendor                     _site/vendor
-          cp -r web-updater/pico                       _site/pico
-          cp    web-updater/manifest.json              _site/manifest.json
-          # Zipped UF2 fallback for Step 1 (Windows AV/SmartScreen sometimes
-          # blocks a raw .uf2 download). Always present since the release passes
-          # the freshly-built UF2 to build-payload.sh.
-          if [ -f web-updater/firmware-uf2.zip ]; then
-            cp web-updater/firmware-uf2.zip            _site/firmware-uf2.zip
-          fi
-          # SD card bundle for Step 3 (software testers). build-payload.sh emits
-          # it from "SD card/"; absent only if that folder is missing.
-          if [ -f web-updater/sdcard.zip ]; then
-            cp web-updater/sdcard.zip                  _site/sdcard.zip
-          fi
-          touch _site/.nojekyll   # serve files as-is; skip Jekyll processing
-
-          echo "=== Pages site tree ==="
-          find _site -type f | sort
-
-      - name: Deploy Pages site to gh-pages branch
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Force-push a single-commit orphan branch so the payload binaries
-          # don't accumulate history across releases. gh-pages always reflects
-          # the latest release.
-          cd _site
-          git init -q
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -qm "Deploy TS-Pico Web Updater for ${TAG}"
-          git push -f \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            HEAD:gh-pages
-          echo "Published updater to gh-pages."
-          echo "URL: https://$(echo "${GITHUB_REPOSITORY%/*}" | tr '[:upper:]' '[:lower:]').github.io/${GITHUB_REPOSITORY#*/}/"
