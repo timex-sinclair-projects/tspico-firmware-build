@@ -30,6 +30,13 @@ jobs:
             gcc-arm-none-eabi libnewlib-arm-none-eabi \
             python3
 
+      # Smoke-test the BASIC -> TAP toolchain on every push/PR. The .tap
+      # outputs aren't committed (generated under "SD card/TAP/basic/"), so
+      # this is the build that catches a .bas that won't tokenize. gcc/make
+      # come from build-essential installed above.
+      - name: Build BASIC programs (basic/ -> TAP)
+        run: ./tools/build-basic.sh
+
       - name: Clone MicroPython v1.20.0
         run: |
           git clone --depth 1 --branch v1.20.0 \

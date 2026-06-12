@@ -13,6 +13,22 @@
 *.mpy
 __pycache__/
 
+# BASIC -> TAP toolchain (tools/build-basic.sh)
+# Compiled zmakebas binary + objects (vendored source under tools/zmakebas/).
+tools/zmakebas/zmakebas
+tools/zmakebas/*.o
+# Generated .tap files compiled from basic/**/*.bas. Source is tracked; the
+# .tap is built into the delivery tree (release.yml / pages.yml bundle it).
+# Output paths follow the basic/ directory convention (see basic/README.md):
+#   basic/SD/<rest>  -> "SD card/<rest>"   basic/<rest> -> "src/<rest>"
+# Generated TAPs interleave with committed content, so each program's output is
+# ignored individually as its source is migrated (git rm --cached the old .tap,
+# then add its path here). The throwaway example program's output dir:
+/SD card/TAP/demo/
+# Migrated program outputs (add one line per program as you migrate it):
+#   /src/assets/nofile.tap
+#   /SD card/TAP/test/factorial.tap
+
 # Editor
 .vscode/
 .idea/
