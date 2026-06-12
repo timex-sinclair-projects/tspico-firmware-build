@@ -55,6 +55,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Compile the tracked BASIC sources (basic/*.bas) into TAPs before the
+      # SD-card payload is assembled. Outputs land in "SD card/TAP/basic/"
+      # (gitignored) and get zipped into sdcard.zip by build-payload.sh below.
+      # gcc/make are preinstalled on the ubuntu runner.
+      - name: Build BASIC programs (basic/ -> TAP)
+        run: ./tools/build-basic.sh
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:

@@ -108,6 +108,12 @@ jobs:
           "$MPYC" src/dev_tspico.py
           ls -la src/dev_tspico.mpy
 
+      # Compile the tracked BASIC sources (basic/*.bas) into TAPs. They land
+      # in "SD card/TAP/basic/" (gitignored) and get swept into the bundle by
+      # the `cp -R "SD card/TAP/"` below. gcc/make come from build-essential.
+      - name: Build BASIC programs (basic/ -> TAP)
+        run: ./tools/build-basic.sh
+
       # ──────────────────────────────────────────────────────────────────
       # Assemble the release bundle. Structure mirrors the Pico-flash
       # layout so an end user can drag-drop `pico-flash/` contents
