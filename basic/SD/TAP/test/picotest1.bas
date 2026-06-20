@@ -152,6 +152,7 @@
  2160 DATA 2,"tpi:help cd",0,0,"Command/topic help","Help page for ""tpi:cd""","0"
  2170 DATA 2,"tpi:help border",0,0,"Command/topic help","Help page for BORDER","0"
  2180 DATA 2,"tpi:help ?",0,0,"List external help files","List of words","0"
+ 2188 DATA 1,"tpi:test12.tap",0,0,"Mount multi-part test tap file","Mounted test12.tap","0"
  2190 DATA 2,"tpi:tapdir",0,0,"Mounted tap file directory","See the blocks stored in the tap file with '>' pointing  to the current block, 2.","0"
 #
 #                           01234567890123456789012345678901           Expect:789012345678901234567890101234567890123456789012345678901
