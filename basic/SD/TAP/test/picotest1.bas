@@ -1,4 +1,4 @@
-#! zmakebas -n picotest1 -a 1 -o - picotest1.bas | cat - test12.tap > picotest1.tap
+#! zmakebas -n picotest1 -a 1
 # TS-Pico BASIC Tester
     4 DEF FN S$(l,t$,a,b)=("LOAD " AND l=1)+("SAVE " AND l=2)+("IN " AND l=3)+("OUT " AND l=4)+((""""+t$+"""") AND l<3)+((("CODE " AND l<3)+STR$ a+((","+STR$ b) AND l<>3)) AND (a OR b OR l>2))
     6 LET demo=0
