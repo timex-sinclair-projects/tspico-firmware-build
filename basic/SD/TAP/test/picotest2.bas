@@ -1,4 +1,4 @@
-#! zmakebas -n tspicotst2 -a 1 -o picotest2.tap picotest2.bas
+#! zmakebas -n tspicotst2 -a 1
 # TS-Pico BASIC Tester
     4 DEF FN S$(l,t$,a,b)=("LOAD " AND l=1)+("SAVE " AND l=2)+""""+t$+""""+(("CODE "+STR$ a+","+STR$ b) AND (a OR b))
     7 LET e$="0123456789ABCDEFGHIJKLMNOPQR"
