@@ -1,4 +1,4 @@
-#! zmakebas -n tspicotst2 -a 1
+#! zmakebas -l -s 1 -i 10 -n picotest2 -a 1
 # TS-Pico BASIC Tester
     4 DEF FN S$(l,t$,a,b)=("LOAD " AND l=1)+("SAVE " AND l=2)+""""+t$+""""+(("CODE "+STR$ a+","+STR$ b) AND (a OR b))
     7 LET e$="0123456789ABCDEFGHIJKLMNOPQR"
@@ -32,6 +32,7 @@
   540 IF err=9 OR err=17 OR err=19 THEN ON ERR RESET : STOP 
   550 GO TO erl+1
 #
+  925 RESTORE 
   930 READ n
  1000 LET d=PEEK 23639+256*PEEK 23640
  1002 IF PEEK d<>13 THEN LET d=d+1: GO TO 1002
@@ -63,7 +64,7 @@
  1158 PAPER bg: CLS 
  1160 IF c$="m" THEN PRINT "Manual mode:"'"- GO TO 1200 to resume after"'"- GO TO 1100 to repeat this test"'' INVERSE 1;z$;TAB 31;" "; INVERSE 0; PAPER 4;"Expect"; PAPER bg;":"; INK df;r$: STOP 
  1162 IF c$="q" THEN STOP 
- 1164 IF c$="j" THEN INPUT "Test # to skip to (";(t+1);"-";(n);"):";s: LET s=((t+1) AND s=0)+(s AND s>t): GO TO 1000
+ 1164 IF c$="j" THEN GO TO 1400
  1166 IF c$="s" THEN GO TO 1000
  1170 LET err=0
  1172 ON ERR GO TO 500
@@ -74,7 +75,7 @@
  1198 IF l>2 THEN PRINT "Types 1 and 2 only": STOP 
  1200 FOR i=1 TO 100: NEXT i
  1220 PAPER cb
- 1230 INPUT PAPER 4;"Expect"; PAPER bd;":"; INK df;(r$); INK 2;((" (wrong code:"+e$(err+1)+")") AND err<>e); INK fg;": "; INVERSE 1;"Q"; INVERSE 0;"uit,"; INVERSE 1;"L"; INVERSE 0;"og,"; INVERSE 1;"R"; INVERSE 0;"epeat,"; INVERSE 1;"Enter"; INVERSE 0;":"; LINE c$
+ 1230 INPUT PAPER 4;"Expect"; PAPER bd;":"; INK df;(r$); INK 2;((" (wrong code:"+e$(err+1)+")") AND err<>e); INK fg' INVERSE 1;"Q"; INVERSE 0;"uit,"; INVERSE 1;"L"; INVERSE 0;"og,"; INVERSE 1;"R"; INVERSE 0;"epeat,"; INVERSE 1;"Enter"; INVERSE 0;":"; LINE c$
  1232 PAPER bg
  1240 IF c$="q" THEN STOP 
  1250 IF c$="l" THEN GO SUB 300
@@ -84,55 +85,51 @@
  1320 ON ERR RESET 
  1330 IF err>0 THEN INPUT '"*** ERROR clearing the log (Enter)";c$
 #
- 1400 GO TO 1000
+ 1399 GO TO 1000
+ 1400 INPUT "Test # to skip to (";(t+1);"-";(n);"):";s
+ 1410 LET s=((t+1) AND s=0)+(s AND s>t)
+ 1420 IF NOT demo THEN SAVE "tpi:verbose on"
+ 1430 GO TO 1000
 #
- 1999 DATA 43
-# 1-10
- 2010 DATA 2,"tpi:verbose on",0,0,"Turn on verbose mode","Verbose is now enabled","0"
- 2020 DATA 2,"tpi:loglevel 0",0,0,"Set loglevel to 0 for testing","LOG level set to 0 INFO","0"
- 2050 DATA 2,"tpi:cd /TAP",0,0,"Change to /TAP","cd to /TAP","0"
-#
- 2480 DATA 2,"tpi:md picotest",1,0,"Make test directory & change to it","We can ignore an error if it exists","0"
- 2490 DATA 2,"tpi:newtap foo",0,0,"Make a new tap file with append on","File created","0"
-#
- 2500 DATA 2,"tpi:append",0,0,"Show append state","Append is ON","0"
- 2510 DATA 2,"tpi:path",1,0,"Show mounted file","/TAP/picotest/foo.tap","0"
- 2520 DATA 2,"tpi:tapdir",0,0,"Show empty tapdir","Indicates empty","0"
- 2530 DATA 2,"tpi:dir",0,0,"Show new empty .tap file","foo.tap with size 0 b","0"
- 2540 DATA 2,"tpi:info",0,0,"Show info with tap file","foo.tap info shown in    tpi:info","0"
- 2550 DATA 2,"foo1",0,0,"Save program to empty tap","Program foo1 saved to    foo.tap","0"
- 2560 DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 program","Two blocks for program   'foo1'","0"
- 2570 DATA 2,"tpi:dir",0,0,"Show directory","foo.tap shown with non-  zero size","0"
- 2580 DATA 2,"foo2",0,0,"Save but PRESS SPACE to cancel","Program foo2 not saved,  error D","D"
- 2590 DATA 2,"foo2",0,0,"Save again but DO NOT cancel","Program foo2 saved","0"
-#
- 2600 DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 and foo2 programs","Four blocks for programs","0"
- 2610 DATA 2,"tpi:dir",0,0,"Show directory","foo.tap has a larger size","0"
- 2620 DATA 2,"tpi:append off",0,0,"Turn off append mode","Append is OFF","0"
- 2630 DATA 2,"foo3",0,0,"Save foo3 as a separate tap file","Saved foo3.tap","0"
+ 2000 DATA 38
 #                                     Expect:789012345678901234567890101234567890123456789012345678901
- 2640 DATA 2,"tpi:dir",0,0,"Show directory","See foo.tap the same size as before with the new smaller foo3.tap","0"
- 2650 DATA 2,"tpi:path",1,0,"Show mounted file","Still foo.tap","0"
- 2660 DATA 2,"tpi:tapdir",1,0,"Show tapdir by file","foo.tap does not include foo3","0"
- 2670 DATA 2,"foo",0,0,"Append=off, SAVE over foo.tap","Program is saved over the mounted tap","0"
- 2680 DATA 2,"tpi:tapdir",0,0,"Show tapdir","See the previous content remains even though foo.tap was overwritten","0"
- 2690 DATA 1,"tpi:foo.tap",0,0,"Mount foo.tap by name","foo.tap is re-mounted","0"
-#
- 2700 DATA 2,"tpi:tapdir",0,0,"Show tapdir of foo.tap","See the new content that overwrote the previous.","0"
- 2710 DATA 1,"tpi:00",0,0,"Mount foo.tap by index","foo.tap mounted","0"
- 2720 DATA 2,"Foo-Bar123",0,0,"Save to a new file","Filename used the allowed characters: digits, alpha, dash and underscore.","0"
- 2730 DATA 2,"foo$bar",0,0,"Save to a new file with invalid characters","File is not saved, error F","F"
- 2740 DATA 2,"tpi:path",1,0,"Show mounted file","Still is foo.tap","0"
- 2750 DATA 2,"tpi:close",0,0,"Unmount current file","foo.tap unmounted","0"
- 2760 DATA 2,"bam",0,0,"Save with no file mounted","bam.tap saved and mounted","0"
- 2770 DATA 2,"tpi:path",1,0,"Show mounted file","bam.tap is mounted","0"
- 2780 DATA 2,"tpi:dir",0,0,"Show files created","Should be: bam, foo, foo3 and Foo-Bar123","0"
-#
- 2910 DATA 2,"tpi:rm foo.tap",255,0,"Remove foo.tap","foo.tap removed","0"
- 2920 DATA 2,"tpi:rm foo3.tap",255,0,"Remove foo3.tap","foo3.tap removed","0"
- 2930 DATA 2,"tpi:rm bam.tap",255,0,"Remove bam.tap","bam.tap removed","0"
- 2940 DATA 2,"tpi:rm Foo-Bar123.tap",255,0,"Remove Foo-Bar123.tap","Foo-Bar123.tap removed","0"
- 2970 DATA 2,"tpi:cd ..",0,0,"Change to parent dir","Change to /TAP","0"
- 2980 DATA 2,"tpi:rm picotest",0,0,"Remove empty dir (choose Y)","Removed","0"
-#
- 7990 DATA 0
+# Setup
+DATA 2,"tpi:verbose on",0,0,"Turn on verbose mode","Verbose is now enabled","0"
+DATA 2,"tpi:loglevel 0",0,0,"Set loglevel to 0 for testing","LOG level set to 0 INFO","0"
+DATA 2,"tpi:newtap foo",0,0,"Make a new tap file with append on","File created","0"
+DATA 2,"tpi:append",0,0,"Show append state","Append is ON","0"
+DATA 2,"tpi:path",1,0,"Show mounted file","/TAP/picotest/foo.tap","0"
+DATA 2,"tpi:tapdir",0,0,"Show empty tapdir","Indicates empty","0"
+DATA 2,"tpi:dir",0,0,"Show new empty .tap file","foo.tap with size 0 b","0"
+DATA 2,"tpi:info",0,0,"Show info with tap file","foo.tap info shown in    tpi:info","0"
+DATA 2,"foo1",0,0,"Save program to empty tap","Program foo1 saved to    foo.tap","0"
+DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 program","Two blocks for program   'foo1'","0"
+DATA 2,"tpi:dir",0,0,"Show directory","foo.tap shown with non-  zero size","0"
+DATA 2,"foo2",0,0,"Save but PRESS SPACE to cancel","Program foo2 not saved,  error D","D"
+DATA 2,"foo2",0,0,"Save again but DO NOT cancel","Program foo2 saved","0"
+DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 and foo2 programs","Four blocks for programs","0"
+DATA 2,"tpi:dir",0,0,"Show directory","foo.tap has a larger size","0"
+DATA 2,"tpi:append off",0,0,"Turn off append mode","Append is OFF","0"
+DATA 2,"foo3",0,0,"Save foo3 as a separate tap file","Saved foo3.tap","0"
+DATA 2,"tpi:dir",0,0,"Show directory","See foo.tap the same size as before with the new smaller foo3.tap","0"
+DATA 2,"tpi:path",1,0,"Show mounted file","Still foo.tap","0"
+DATA 2,"tpi:tapdir",1,0,"Show tapdir by file","foo.tap does not include foo3","0"
+DATA 2,"foo",0,0,"Append=off, SAVE over foo.tap","Program is saved over the mounted tap","0"
+DATA 2,"tpi:tapdir",0,0,"Show tapdir","See the previous content remains even though foo.tap was overwritten","0"
+DATA 1,"tpi:foo.tap",0,0,"Mount foo.tap by name","foo.tap is re-mounted","0"
+DATA 2,"tpi:tapdir",0,0,"Show tapdir of foo.tap","See the new content that overwrote the previous.","0"
+DATA 1,"tpi:00",0,0,"Mount foo.tap by index","foo.tap mounted","0"
+DATA 2,"Foo-Bar123",0,0,"Save to a new file","Filename used the allowed characters: digits, alpha, dash and underscore.","0"
+DATA 2,"foo$bar",0,0,"Save to a new file with invalid characters","File is not saved, error F","F"
+DATA 2,"tpi:path",1,0,"Show mounted file","Still is foo.tap","0"
+DATA 2,"tpi:close",0,0,"Unmount current file","foo.tap unmounted","0"
+DATA 2,"bam",0,0,"Save with no file mounted","bam.tap saved and mounted","0"
+DATA 2,"tpi:path",1,0,"Show mounted file","bam.tap is mounted","0"
+DATA 2,"tpi:dir",0,0,"Show files created","Should be: bam, foo, foo3 and Foo-Bar123","0"
+DATA 2,"tpi:rm foo.tap",255,0,"Remove foo.tap","foo.tap removed","0"
+DATA 2,"tpi:rm foo3.tap",255,0,"Remove foo3.tap","foo3.tap removed","0"
+DATA 2,"tpi:rm bam.tap",255,0,"Remove bam.tap","bam.tap removed","0"
+DATA 2,"tpi:rm Foo-Bar123.tap",255,0,"Remove Foo-Bar123.tap","Foo-Bar123.tap removed","0"
+DATA 2,"tpi:close",0,0,"Unmount current file","Unmounted file to prepare for last test","0"
+DATA 1,"",0,0,"Do LOAD """" to load the No File! program (this program will end)","Chained to the No File!  program","0"
+DATA 0

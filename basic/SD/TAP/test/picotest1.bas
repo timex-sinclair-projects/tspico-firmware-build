@@ -1,5 +1,6 @@
-#! zmakebas -n picotest1 -a 1
+#! zmakebas -l -s 1 -i 10 -n picotest1 -a 1
 # TS-Pico BASIC Tester
+# Zmakebas source with mixed numbered and unumbered lines
     4 DEF FN S$(l,t$,a,b)=("LOAD " AND l=1)+("SAVE " AND l=2)+("IN " AND l=3)+("OUT " AND l=4)+((""""+t$+"""") AND l<3)+((("CODE " AND l<3)+STR$ a+((","+STR$ b) AND l<>3)) AND (a OR b OR l>2))
     6 LET demo=0
     7 LET e$="0123456789ABCDEFGHIJKLMNOPQR"
@@ -41,11 +42,8 @@
   530 IF err=19 THEN PRINT '"*** TS-Pico communication error"
   540 IF err=9 OR err=17 OR err=19 THEN ON ERR RESET : STOP 
   550 GO TO erl+1
-  900 PRINT "We start in the /TAP folder of"
-  901 PRINT "the SD card which is the ""root"""
-  902 PRINT "that the TS-Pico is limited to."
 #            01234567890123456789012345678901
-  910 PRINT '"For each command, you're shown"
+  910 PRINT "For each command, you're shown"
   911 PRINT "the command, a description of"
   912 PRINT "what it will do, and afterward,"
   913 PRINT "what the expected result is. At"
@@ -53,6 +51,7 @@
   915 PRINT """l"" to see the system log of"
   916 PRINT "the result."
   920 GO SUB 200
+  925 RESTORE 
   930 READ n
  1000 LET d=PEEK 23639+256*PEEK 23640
  1002 IF PEEK d<>13 THEN LET d=d+1: GO TO 1002
@@ -81,13 +80,11 @@
  1124 PRINT INK ch;u$
  1130 IF p THEN LPRINT '"Test #";t;" of ";n;", line ";dl'">";z$'u$
  1140 PRINT AT 0,0;
-#.           01234567890123456789012345678901   01234567890123456789012345678901
  1150 INPUT INVERSE 1;"Enter"; INVERSE 0;" to run, "; INVERSE 1;"S"; INVERSE 0;"kip, "; INVERSE 1;"J"; INVERSE 0;"ump, "; INVERSE 1;"Q"; INVERSE 0;"uit, "; INVERSE 1;"M"; INVERSE 0;"anual mode, "; INVERSE 1;"P"; INVERSE 0;"rinter log (";(p);"):"; LINE c$
-#.                          01234567890123456789012345678901  01234567890123456789012345678901
  1158 PAPER bg: CLS 
  1160 IF c$="m" THEN PRINT "Manual mode:"'"- GO TO 1200 to resume after"'"- GO TO 1100 to repeat this test"'' INVERSE 1;z$;TAB 31;" "; INVERSE 0; PAPER 4;"Expect"; PAPER bg;":"; INK df;r$: STOP 
  1162 IF c$="q" THEN STOP 
- 1164 IF c$="j" THEN INPUT "Test # to skip to (";(t+1);"-";(n);"):";s: LET s=((t+1) AND s=0)+(s AND s>t): GO TO 1000
+ 1164 IF c$="j" THEN GO TO 1400
  1166 IF c$="s" THEN GO TO 1000
  1168 IF c$="p" THEN LET p=NOT p: GO TO 1100
  1170 LET err=0: IF demo THEN PRINT "<output of ";z$;">";TAB 31;" ": GO TO 1200
@@ -108,7 +105,7 @@
  1214 IF P AND err=e THEN LPRINT "OK"
  1216 IF P AND err<>e THEN LPRINT "Wrong report code: ";e$(err+1)
  1220 PAPER cb
- 1230 INPUT PAPER 4;"Expect"; PAPER bd;":"; INK df;(r$); INK 2;((" (wrong code:"+e$(err+1)+")") AND err<>e); INK fg;": "; INVERSE 1;"Q"; INVERSE 0;"uit,"; INVERSE 1;"L"; INVERSE 0;"og,"; INVERSE 1;"R"; INVERSE 0;"epeat,"; INVERSE 1;"Enter";"(comment)" AND p; INVERSE 0;":"; LINE c$
+ 1230 INPUT PAPER 4;"Expect"; PAPER bd;":"; INK df;(r$); INK 2;((" (wrong code:"+e$(err+1)+")") AND err<>e); INK fg' INVERSE 1;"Q"; INVERSE 0;"uit,"; INVERSE 1;"L"; INVERSE 0;"og,"; INVERSE 1;"R"; INVERSE 0;"epeat,"; INVERSE 1;"Enter";"(comment)" AND p; INVERSE 0;":"; LINE c$
  1232 PAPER bg
  1240 IF c$="q" THEN STOP 
  1250 IF c$="l" THEN GO SUB 300
@@ -120,150 +117,130 @@
  1320 ON ERR RESET 
  1330 IF err>0 THEN INPUT '"*** ERROR clearing the log (Enter)";c$
 #
- 1400 GO TO 1000
+ 1399 GO TO 1000
+ 1400 INPUT "Test # to skip to (";(t+1);"-";(n);"):";s
+ 1410 LET s=((t+1) AND s=0)+(s AND s>t)
+ 1420 IF NOT demo THEN SAVE "tpi:verbose on"
+ 1430 GO TO 1000
 #
- 1900 REM Test DATA:
- 1910 REM 1: Type: 1=LOAD, 2=SAVE, 3=IN, 4=OUT, 0=end of data, negative to skip
- 1920 REM 2: tpi:command string
- 1930 REM 3: a value for CODE a,b or port for IN/OUT
- 1940 REM 4: b value for CODE a,b or byte count for IN (0=repeat until a 0 byte)
- 1950 REM 5: Description of command
- 1960 REM 6: Description of result
- 1970 REM 7: Error code expected: "0".."9","A".."R"
- 1999 DATA 88: REM Total number of tests (not critical if this is wrong)
-# 1-10
- 2000 DATA 2,"tpi:loglevel",0,0,"Show loglevel","LOG level set to the     default","0"
- 2010 DATA 2,"tpi:verbose on",0,0,"Turn on verbose mode","Verbose is now enabled","0"
- 2020 DATA 2,"tpi:loglevel 0",0,0,"Set loglevel to 0 for testing","LOG level set to 0 INFO","0"
- 2030 DATA 2,"tpi:verbose",0,0,"Show verbose mode","Verbose is enabled or    disabled","0"
- 2040 DATA 2,"tpi:path",0,0,"Shows the current path","Current path shown","0"
- 2050 DATA 2,"tpi:cd /TAP",0,0,"Change to /TAP","cd to /TAP","0"
- 2060 DATA 2,"tpi:cd ..",0,0,"Change to /TAP/..","cd to /TAP","0"
- 2070 DATA 2,"tpi:cd bazooka",0,0,"Change to non-existent dir","Error F","F"
- 2080 DATA 2,"tpi:cd",0,0,"Interactive CD","Change to dir chosen","0"
- 2090 DATA 2,"tpi:cd",0,1,"Interactive CD with global paths","Change to dir chosen","0"
+# DATA lines without line numbers, so use `zmakebas -l`
 #
- 2100 DATA 2,"tpi:dir",0,0,"Directory listing","Directories and numbered files with sizes","0"
- 2110 DATA 2,"tpi:dir",1,0,"Single file listing","Single file's full name  shown","0"
- 2120 DATA 2,"tpi:dir",2,0,"File listing","Numbered files with full names","0"
- 2130 DATA 2,"tpi:dir",2,2,"File listing starting starting  at given index","Numbered files listing   starting at 002","0"
- 2140 DATA 2,"tpi:info",0,0,"TS-Pico information","Info text","0"
- 2150 DATA 2,"tpi:help",0,0,"TS-Pico help summary","A few pages of help","0"
- 2160 DATA 2,"tpi:help cd",0,0,"Command/topic help","Help page for ""tpi:cd""","0"
- 2170 DATA 2,"tpi:help border",0,0,"Command/topic help","Help page for BORDER","0"
- 2180 DATA 2,"tpi:help ?",0,0,"List external help files","List of words","0"
- 2188 DATA 1,"tpi:test12.tap",0,0,"Mount multi-part test tap file","Mounted test12.tap","0"
- 2190 DATA 2,"tpi:tapdir",0,0,"Mounted tap file directory","See the blocks stored in the tap file with '>' pointing  to the current block, 2.","0"
-#
+REM Test DATA fields:
+REM 1: Test type: 1=LOAD, 2=SAVE, 3=IN, 4=OUT, 0=end of data, negative to skip
+REM 2: tpi:command string
+REM 3: a value for CODE a,b or port for IN/OUT
+REM 4: b value for CODE a,b or byte count for IN (0=repeat until a 0 byte)
+REM 5: Description of command
+REM 6: Description of result
+REM 7: Error code expected: "0".."9","A".."R"
+DATA 83: REM Total number of tests (not critical if this is wrong)
+# Initial setup: loglevel/verbose
+DATA 2,"tpi:loglevel",0,0,"Show loglevel","LOG level set to the     default","0"
+DATA 2,"tpi:verbose off",0,0,"Set verbose off","No message, but verbose  is off (for next test)","0"
+DATA 2,"tpi:nop",0,0,"No operation","No output, just a return code 0","0"
+DATA 2,"tpi:verbose on",0,0,"Turn on verbose mode","Verbose is now enabled","0"
+DATA 2,"tpi:loglevel 0",0,0,"Set loglevel to 0 for testing","LOG level set to 0 INFO","0"
+DATA 2,"tpi:verbose",0,0,"Show verbose mode","Verbose is enabled or    disabled","0"
+DATA 2,"tpi:path",0,0,"Shows the current path","Current path shown","0"
+#     01234567890123456789012345678901           Expect:789012345678901234567890101234567890123456789012345678901
+DATA 2,"tpi:path",1,0,"Shows the current mounted file","Should show picotest1.tapis mounted","0"
+# log
+DATA 2,"tpi:log",0,0,"Show the log file","A few lines of the log.  (log is cleared after each test)","0"
+DATA 2,"tpi:log",0,40,"Show last bytes of the log file","Show last 40 bytes","0"
+DATA 2,"tpi:log clear",0,0,"Clear the log file with a prompt (choose Y)","Log was cleared","0"
+DATA 2,"tpi:log clear",255,0,"Clear the log without a prompt","Log was cleared","0"
+# info/help
+DATA 2,"tpi:info",0,0,"TS-Pico information","Info text","0"
+DATA 2,"tpi:help",0,0,"TS-Pico help summary","A few pages of help","0"
+DATA 2,"tpi:help cd",0,0,"Command/topic help","Help page for ""tpi:cd""","0"
+DATA 2,"tpi:help border",0,0,"Command/topic help","Help page for BORDER","0"
+DATA 2,"tpi:help ?",0,0,"List external help files","List of words","0"
+# tapdir/ffw/rew
+DATA 1,"tpi:test12.tap",0,0,"Mount multi-part test tap file","Mounted test12.tap","0"
+DATA 2,"tpi:tapdir",0,0,"Mounted tap file directory","See the blocks stored in the tap file with '>' pointing  to the current block, 0.","0"
 #                           01234567890123456789012345678901           Expect:789012345678901234567890101234567890123456789012345678901
- 2200 DATA 2,"tpi:ffw",0,0,"Move the tap read pointer '>'   forward 1 block","Pointer at block 3","0"
- 2210 DATA 2,"tpi:ffw",0,1,"Move the tap read pointer '>'   forward 1 block","Pointer at block 4","0"
- 2220 DATA 2,"tpi:ffw",2,2,"Move the pointer forward by two files/headers","Pointer at block 8","0"
- 2230 DATA 2,"tpi:ffw",3,1,"Move forward by 1 file and show a tapdir","A tapdir listing with    pointer at block 10","0"
- 2240 DATA 2,"tpi:tapdir",0,3,"Show tapdir of 3 blocks around  current point","A tapdir of blocks 7 to  13","0"
- 2250 DATA 2,"tpi:tapdir",1,2,"Show tapdir of 2 files around   current point","A tapdir of even blocks 6 to 14","0"
- 2260 DATA 2,"tpi:ffw",0,999,"Move pointer to last block","Pointer on last block, 27","0"
- 2270 DATA 2,"tpi:ffw",0,1,"Move forward one block","Stays on last block with message indicating that.","0"
- 2280 DATA 2,"tpi:rew",0,3,"Move tap pointer backward by 3  blocks","Move to block 24","0"
- 2290 DATA 2,"tpi:rew",1,1,"Move pointer back by one block  and show tapdir","A tapdir showing pointer on block 23","0"
+DATA 2,"tpi:ffw",0,0,"Move the tap read pointer '>'   forward 1 block","Pointer at block 1","0"
+DATA 2,"tpi:ffw",0,1,"Move the tap read pointer '>'   forward 1 block","Pointer at block 2","0"
+DATA 2,"tpi:ffw",2,2,"Move the pointer forward by two files/headers","Pointer at block 6","0"
+DATA 2,"tpi:ffw",3,1,"Move forward by 1 file and show a tapdir","A tapdir listing with    pointer at block 8","0"
+DATA 2,"tpi:tapdir",0,3,"Show tapdir of 3 blocks around  current point","A tapdir of blocks 5 to  11","0"
+DATA 2,"tpi:tapdir",1,2,"Show tapdir of 2 files around   current point","A tapdir of even blocks 4 to 12","0"
+DATA 2,"tpi:ffw",0,999,"Move pointer to last block","Pointer on last block, 25","0"
+DATA 2,"tpi:ffw",0,1,"Move forward one block","Stays on last block with message indicating that.","0"
+DATA 2,"tpi:rew",0,3,"Move tap pointer backward by 3  blocks","Move to block 22","0"
+DATA 2,"tpi:rew",1,1,"Move pointer back by one block  and show tapdir","A tapdir showing pointer on block 21","0"
+DATA 2,"tpi:rew",0,999,"Move pointer to block 0","Pointer on block 0","0"
+DATA 2,"tpi:rew",1,1,"Move pointer back 1 file","Stays on block 0","0"
+# Make and remove: md/rm
+DATA 2,"tpi:md foo",0,0,"Make dir","create dir foo","0"
+DATA 2,"tpi:dir",0,0,"Directory listing","Directories and numbered files with sizes","0"
+DATA 2,"tpi:md foo",0,0,"Make dir but dir exists","End of File error, 8","8"
+DATA 2,"tpi:dir",1,0,"Single file listing","Single file's full name  shown","0"
+DATA 2,"tpi:dir",2,0,"File (no dirs) listing","Numbered files with full names","0"
+DATA 2,"tpi:dir",2,2,"File listing starting starting  at given index","Numbered files listing   starting at 002","0"
+DATA 2,"tpi:rm foo",0,0,"Remove dir with a prompt (choose Y)","removed /TAP/foo","0"
+DATA 2,"tpi:rm foo",255,0,"Remove non-existent dir without a prompt","Invalid filename F","F"
+DATA 2,"tpi:md b*m",0,0,"Make dir with a bad name","Parameter Error Q (OS error)","Q"
+DATA 2,"tpi:md temp",1,0,"Make test directory & change to it","We can ignore an error if it exists","0"
+DATA 2,"tpi:newtap foo",0,0,"Make a new tap file with append on","File foo.tap created and mounted","0"
+DATA 2,"tpi:append",0,0,"Show append state","Append is ON","0"
+DATA 2,"tpi:newtap bar",0,0,"Make another new tap file with  append on","File bar.tap created and mounted","0"
+DATA 2,"tpi:dir",2,0,"Directory file listing","See foo.tap and bar.tap  files","0"
+DATA 2,"tpi:close",0,0,"Unmount current file","bar.tap was unmounted","0"
+DATA 2,"tpi:append on",0,0,"Turn on append with no tap file mounted","Parameter Error Q","Q"
+# cd options
+DATA 2,"tpi:cd ..",1,0,"Change to parent dir and show   new dir list","Change to parent and showthe files with the temp dir","0"
+#        01234567890123456789012345678901        Expect:789012345678901234567890101234567890123456789012345678901
+DATA 2,"tpi:cd temp",2,0,"Change to dir and show path","Change back to temp and  show the path","0"
+DATA 2,"tpi:cd ..",1,2,"Change to parent dir and show   tpi:dir CODE 2,0","Change to parent and show  dir of files only","0"
+DATA 2,"tpi:cd picotest",1,1,"Change to dir and show tpi:idir to pick","Change to /TAP/picotest  and show idir","0"
 #
- 2300 DATA 2,"tpi:rew",0,999,"Move pointer to block 0","Pointer on block 0","0"
- 2310 DATA 2,"tpi:rew",1,1,"Move pointer back 1 file","Stays on block 0","0"
- 2320 DATA 2,"tpi:picopt",-1,24027,"Switch printing output to go to the TS-Pico","PEEK 24027=3 (Printing is not implemented yet)","3"
- 2330 DATA 2,"tpi:ts2040",-1,24027,"Switch printing output to go to the TS2040 printer","PEEK 24027=2 (This is the default)","2"
- 2340 DATA 2,"tpi:tape",-1,24027,"Switch SAVEs to go to the real  audio tape interface","PEEK 24027=0 (saving not being  tested)","0"
- 2350 DATA 2,"tpi:sdcard",-1,24027,"Switch SAVE/LOAD to use the SD  card","PEEK 24027=2 (default)","2"
- 2360 DATA 2,"tpi:close",0,0,"Unmount current file","Likely this tap file unmounted","0"
- 2370 DATA 2,"tpi:append on",0,0,"Turn on append with no tap file mounted","Parameter Error Q","Q"
- 2380 DATA 2,"tpi:log",0,0,"Show the log file","A few lines of the log.  (log is cleared after each test)","0"
- 2390 DATA 2,"tpi:log",0,40,"Show last bytes of the log file","Show last 40 bytes","0"
+DATA 2,"tpi:rm 000",0,0,"Remove file by index (choose N)","Asked to remove file #000","0"
+DATA 2,"tpi:rm 000",0,0,"Remove file by index (choose Y)","Removed file #000","0"
+# ./picotest/foo.tap remains
+DATA 2,"tpi:cd ..",0,0,"Change to parent dir","Change to test dir","0"
+DATA 2,"tpi:rm picotest",0,0,"Remove non-empty dir with prompt","Error is given only when there is no prompt ","0"
+DATA 2,"tpi:cd picotest",0,0,"Change to picotest","Change dir back to picotest","0"
+DATA 2,"tpi:rm foo.tap",255,0,"Remove file without prompt","File foo.tap removed","0"
+# Empty folder stuff
+DATA 2,"tpi:dir",0,0,"Dir of empty folder","Empty directory list","0"
+DATA 2,"tpi:dir",1,0,"Dir of files with empty folder","File index out of range, error 6","6"
+DATA 2,"tpi:dir",2,0,"File dir with empty folder","Error 6","6"
+DATA 2,"tpi:idir",0,0,"Interactive dir with an empty   folder","Directory is empty","0"
+DATA 2,"tpi:cd",0,0,"Interactive cd with empty folder","'..' was the only choice","0"
+DATA 2,"tpi:cd /",0,0,"Change to root folder","Change to /TAP folder","0"
+DATA 2,"tpi:cd",0,0,"Interactive cd","Changed to folder chosen","0"
+DATA 2,"tpi:cd",0,1,"Interactive cd with global      folder list","Changed to folder chosen","0"
+DATA 2,"tpi:cd /TAP/test",0,0,"CD with full path","Change to /TAP/test","0"
+DATA 2,"tpi:rm picotest",0,0,"Remove empty dir (choose Y)","Removed picotest dir","0"
+DATA 2,"tpi:dir",0,0,"Show directory","See that picotest dir was removed","0"
+# dock/boot
+DATA 2,"tpi:dock",0,0,"Show the dock setting","Likely MEM=2, PAGE=0","0"
+DATA 2,"tpi:dock",1,2,"Set the dock setting","Set to MEM=1, PAGE=2","0"
+DATA 2,"tpi:dock",0,1,"Show the previous dock setting","Likely MEM=2, PAGE=0","0"
+DATA 2,"tpi:dock",0,2,"Swap to previous dock setting","Likely MEM=2, PAGE=0","0"
+DATA 2,"tpi:boot",0,0,"Show the boot setting","Likely MEM=2, PAGE=1","0"
+# Modes picopt/ts2040, sdcard/tape
+DATA 2,"tpi:picopt",-1,24027,"Switch printing output to go to the TS-Pico","PEEK 24027=3 (Printing is not implemented yet)","3"
+DATA 2,"tpi:ts2040",-1,24027,"Switch printing output to go to the TS2040 printer","PEEK 24027=2 (This is the default)","2"
+DATA 2,"tpi:tape",-1,24027,"Switch SAVEs to go to the real  audio tape interface","PEEK 24027=0 (saving not being  tested)","0"
+DATA 2,"tpi:sdcard",-1,24027,"Switch SAVE/LOAD to use the SD  card","PEEK 24027=2 (default)","2"
+# Spectrum mode
+#       01234567890123456789012345678901        Expect:789012345678901234567890101234567890123456789012345678901
+#DATA 2,"tpi:zx48",0,0,"Set TS-Pico for Spectrum mode","TS-Pico stops responding until OUT 14,14 (next test)","0"
+#DATA 4,"out",14,14,"Re-enable TS-Pico from Spectrum mode","TS-Pico should respond to tpi: commands again","0"
+# rompatch/dck load/rom load
+DATA 2,"tpi:rompatch",0,0,"Mount rompatch.tap for patching the ROM","Should tell you to do a  LOAD """"","0"
+DATA 1,"tpi:test.dck",0,0,"Mount a .dck file","test.dck mounted (LOADing not tested here)","0"
+DATA 1,"tpi:test.rom",0,0,"Mount a .rom file","test.rom mounted (LOADing not tested here)","0"
+DATA 1,"tpi:test.bin",0,0,"Mount a .bin file","test.bin mounted (LOADing not tested here)","0"
+#DATA -3,"tpi:.rndw",0,0,"External command .rndw","Command output read with IN 14: the characters of a word","0"
+# wrap up and link to picotest2
+DATA 1,"tpi:picotest2.tap",0,0,"Mount the picotest2.tap file","picotest2.tap mounted","0"
+DATA 1,"",0,0,"Do LOAD """" to load the picotest2 program (picotest1 will end)","Chained to the picotest2 program","0"
 #
- 2400 DATA 2,"tpi:log clear",0,0,"Clear the log file with a prompt (choose Y)","Log was cleared","0"
- 2410 DATA 2,"tpi:log clear",255,0,"Clear the log without a prompt","Log was cleared","0"
- 2420 DATA 2,"tpi:cd /",0,0,"Change to 'root'","cd to /TAP","0"
- 2430 DATA 2,"tpi:md foo",0,0,"Make dir","create /TAP/foo","0"
- 2440 DATA 2,"tpi:md foo",0,0,"Make dir but dir exists","End of File error, 8","8"
- 2450 DATA 2,"tpi:rm foo",0,0,"Remove dir with a prompt (choose Y)","removed /TAP/foo","0"
- 2460 DATA 2,"tpi:rm foo",255,0,"Remove non-existent dir without a prompt","Invalid filename F","F"
- 2470 DATA 2,"tpi:md b*m",0,0,"Make dir with a bad name","Parameter Error Q (OS error)","Q"
- 2480 DATA 2,"tpi:md picotest",1,0,"Make test directory & change to it","We can ignore an error if it exists","0"
- 2490 DATA 2,"tpi:newtap foo",0,0,"Make a new tap file with append on","File created and mounted","0"
-# v--- remove ---v ?
-##
-# 2500 DATA 2,"tpi:append",0,0,"Show append state","Append is ON","0"
-# 2510 DATA 2,"tpi:path",1,0,"Show mounted file","/TAP/picotest/foo.tap","0"
-# 2520 DATA 2,"tpi:tapdir",0,0,"Show empty tapdir","Indicates empty","0"
-# 2530 DATA 2,"tpi:dir",0,0,"Show new empty .tap file","foo.tap with size 0 b","0"
-# 2540 DATA 2,"tpi:info",0,0,"Show info with tap file","foo.tap info shown in    tpi:info","0"
-# 2550 DATA 2,"foo1",0,0,"Save program to empty tap","Program foo1 saved to    foo.tap","0"
-# 2560 DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 program","Two blocks for program 'foo1'","0"
-# 2570 DATA 2,"tpi:dir",0,0,"Show directory","foo.tap with non-zero size","0"
-# 2580 DATA 2,"foo2",0,0,"Save but PRESS SPACE to cancel","Program foo2 not saved,  error D","D"
-# 2590 DATA 2,"foo2",0,0,"Save again but DO NOT cancel","Program foo2 saved","0"
-##
-# 2600 DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 and foo2 programs","Four blocks for programs","0"
-# 2610 DATA 2,"tpi:dir",0,0,"Show directory","foo.tap has a larger size","0"
-# 2620 DATA 2,"tpi:append off",0,0,"Turn off append mode","Append is OFF","0"
-# 2630 DATA 2,"foo3",0,0,"Save foo3 as a separate tap file","Saved foo3.tap","0"
-# 2640 DATA 2,"tpi:dir",0,0,"Show directory","See foo.tap the same size as before and new smaller foo3.tap","0"
-# 2650 DATA 2,"tpi:path",1,0,"Show mounted file","Still foo.tap","0"
-# 2660 DATA 2,"tpi:tapdir",1,0,"Show tapdir by file","foo.tap does not include foo3","0"
-# 2670 DATA 2,"foo",0,0,"Append=off, SAVE over foo.tap","Program is saved over the mounted tap","0"
-# 2680 DATA 2,"tpi:tapdir",0,0,"Show tapdir","See the previous content remains even though foo.tap was overwritten","0"
-# 2690 DATA 1,"tpi:foo.tap",0,0,"Mount foo.tap by name","foo.tap is mounted","0"
-##
-# 2700 DATA 2,"tpi:tapdir",0,0,"Show tapdir of foo.tap","See the new content that overwrote the previous.","0"
-# 2710 DATA 1,"tpi:00",0,0,"Mount foo.tap by index","foo.tap mounted","0"
-# 2720 DATA 2,"Foo-Bar123",0,0,"Save to a new file","Filename used the allowed characters: digits, alpha, dash and underscore.","0"
-# 2730 DATA 2,"foo$bar",0,0,"Save to a new file with invalid characters","File is not saved, error F","F"
-# 2740 DATA 2,"tpi:path",1,0,"Show mounted file","Still is foo.tap","0"
-# 2750 DATA 2,"tpi:close",0,0,"Unmount current file","foo.tap unmounted","0"
-# 2760 DATA 2,"bam",0,0,"Save with no file mounted","bam.tap saved and mounted","0"
-# 2770 DATA 2,"tpi:path",1,0,"Show mounted file","bam.tap is mounted","0"
-# ^--- remove ---^ ?
- 2780 DATA 2,"tpi:newtap bar",0,0,"Make a new tap file with append on","File created","0"
- 2790 DATA 2,"tpi:idir",0,0,"Interactive directory. Choose a file to mount.","Mounted the file chosen","0"
+DATA 0
 #
- 2800 DATA 2,"tpi:close",0,0,"Unmount tap file","Unmounted","0"
- 2810 DATA 2,"tpi:rm 000",0,0,"Remove file by index (choose N)","Asked to remove file #000","0"
- 2820 DATA 2,"tpi:rm 000",0,0,"Remove file by index (choose Y)","Removed file #000","0"
- 2840 DATA 2,"tpi:cd ..",2,0,"Change to parent dir and show   new dir path","Change to /TAP and show  the path","0"
- 2850 DATA 2,"tpi:cd picotest",1,0,"Change to dir and show tpi:dir","Change to /TAP/picotest  and show dir","0"
- 2860 DATA 2,"tpi:cd ..",1,2,"Change to parent dir and show   tpi:dir CODE 2,0","Change to /TAP and show  dir of files only","0"
- 2870 DATA 2,"tpi:cd picotest",1,1,"Change to dir and show tpi:idir to pick","Change to /TAP/picotest  and show idir","0"
- 2880 DATA 2,"tpi:cd ..",0,0,"Change to parent dir","Change to /TAP","0"
- 2890 DATA 2,"tpi:rm picotest",0,0,"Remove non-empty dir with prompt","Error is given only when there is no prompt ","0"
-#
- 2900 DATA 2,"tpi:cd picotest",0,0,"Change to picotest","Dir is now /TAP/picotest","0"
- 2910 DATA 2,"tpi:rm foo.tap",255,0,"Remove file without prompt","File removed","0"
- 2920 DATA 2,"tpi:dir",0,0,"Dir of empty folder","Empty directory list","0"
- 2930 DATA 2,"tpi:dir",1,0,"Dir of file with empty folder","File index out of range, error 6","6"
- 2940 DATA 2,"tpi:dir",2,0,"File dir with empty folder","Error 6","6"
- 2950 DATA 2,"tpi:idir",0,0,"Interactive dir with an empty   folder","Directory is empty","0"
- 2960 DATA 2,"tpi:cd",0,0,"Interactive cd with empty folder","'..' as the only choice'","0"
- 2970 DATA 2,"tpi:cd ..",0,0,"Change to parent dir","Change to /TAP","0"
- 2980 DATA 2,"tpi:rm picotest",0,0,"Remove empty dir (choose Y)","Removed","0"
- 2990 DATA 2,"tpi:dock",1,2,"Set the dock setting","Set to MEM=1, PAGE=2","0"
-#
- 3000 DATA 2,"tpi:dock",0,1,"Show the dock previous setting","Likely MEM=2, PAGE=0","0"
- 3010 DATA 2,"tpi:dock",0,2,"Swap to previous dock setting","Likely MEM=2, PAGE=0","0"
- 3020 DATA 2,"tpi:boot",0,0,"Show the boot setting","Likely MEM=2, PAGE=1","0"
- 3030 DATA 2,"tpi:dock",0,0,"Show the dock setting","Likely MEM=2, PAGE=0","0"
- 3040 DATA 2,"tpi:zx48",0,0,"Set TS-Pico for Spectrum mode","TS-Pico stops responding until OUT 14,14","0"
- 3050 DATA 4,"out",14,14,"Re-enable TS-Pico from Spectrum mode","TS-Pico should respond to tpi: commands again","0"
- 3060 DATA 2,"tpi:rompatch",0,0,"Mount rompatch.tap for patching the ROM","Should tell you to do a  LOAD """"","0"
- 3070 DATA 2,"tpi:cd pico",0,0,"Change to /TAP/pico folder","To get to test files","0"
- 3080 DATA 1,"tpi:test.dck",0,0,"Mount a .dck file","test.dck mounted (LOADing not tested here)","0"
- 3090 DATA 1,"tpi:test.rom",0,0,"Mount a .rom file","test.rom mounted (LOADing not tested here)","0"
-#
- 3100 DATA 1,"tpi:test.bin",0,0,"Mount a .bin file","test.bin mounted (LOADing not tested here)","0"
- 3110 DATA -3,"tpi:.rndw",0,0,"External command .rndw","Command output read with IN 14: the characters of a word","0"
- 3130 DATA 2,"tpi:verbose off",0,0,"Set verbose off","No message, but verbose  is off (for next test)","0"
- 3140 DATA 2,"tpi:nop",0,0,"No operation","No output, just a return code 0","0"
- 3150 DATA 2,"tpi:close",0,0,"Unmount current file","Unmounted file to prepare for last test","0"
- 3160 DATA 1,"",0,0,"Do LOAD """" to load the No File! program (this program will end)","Chained to the No File!  program","0"
-#
- 7990 DATA 0
  9999 LET demo=1: GO TO 7
 #
 # Things NOT tested:
@@ -308,3 +285,4 @@
 #     - It is recommended to use the TS-reset button on the TS-Pico after the "OUT
 #       244,x" commands rather than issuing a "NEW" command.
 # * External commands
+#
