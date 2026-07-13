@@ -4,5 +4,12 @@ romupdate.tap: romupdate.bas romupdate_code.tap
 dckupdate.tap: dckupdate.bas dckupdate_code.tap
 	zmakebas -n dckupdate -a 1 -o - dckupdate.bas | cat - dckupdate_code.tap > dckupdate.tap
 
-nofile.tap: nofile.bas
-	zmakebas -n "No file!" -a 1 -o nofile.tap nofile.bas
+nofile.tap: nofile_help.tap tc.tap
+	cat nofile_help.tap tc.tap > nofile.tap
+
+nofile_help.tap: nofile_help.bas
+	zmakebas -n "No file!" -a 1 -o nofile_help.tap nofile_help.bas
+
+tc.tap: tc.bas
+	zmakebas -n tc -a 1 -o tc.tap tc.bas
+
