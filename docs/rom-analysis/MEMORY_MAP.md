@@ -10,15 +10,16 @@
 | `ROMs/TSPICO-15w-exrom` | 16384 | `639c62742fa388750a0624e1270e1583` | Next EXROM (v1.5w), 15 bytes from v1.1 |
 | `ROMs/GENUINE-2068-exrom.bin` | **8192** | crc32 `ae16233a` | **Genuine** TS2068 EXROM baseline |
 | `ROMs/GENUINE-2068-home.bin` | 16384 | crc32 `bf44ec3f` | **Genuine** TS2068 HOME baseline |
-| `ROMs/WJ-2068-exrom.bin` | 8192 | `e3863481d1273af637922415e96dbb0b` | **NOT stock** — modified dump, reference only |
-| `ROMs/WJ-2068-home.bin` | 16384 | `6843dfddc231083e2220b6b11424eb8d` | **NOT stock** — modified dump, reference only |
 
 The genuine baselines were extracted from
 `~/Documents/github/zesarux-tspico-lab/zesarux/src/ts2068.rom` (HOME = bytes
 0-16383, EXROM = 16384-24575).
 
 > **The images in `TS2068 Ref Library/2068 ROMS/` are not stock**, despite their
-> names. They are a modified, partly bit-rotted EPROM dump. Diffing against them
+> names — `2068Home.BIN` (crc32 `7d411fe9`) and `2068Exrom.BIN` (crc32 `526f5676`)
+> are a modified, partly bit-rotted EPROM dump. They are deliberately **not** kept
+> in `ROMs/`, so nobody flashes or diffs against them by accident; `romdiff.py`
+> recognises both by crc32 and names them if one turns up. Diffing against them
 > inflates the HOME diff from 10 hunks to 26 and the EXROM diff from 36 to 51,
 > fabricating changes that are not Gustavo's. See
 > [DIFF_HOME_vs_STOCK.md#baseline](DIFF_HOME_vs_STOCK.md#baseline).

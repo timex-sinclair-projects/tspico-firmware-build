@@ -67,7 +67,7 @@ Two things trip up every reader of this ROM:
 - **The Pico's status byte is decremented before dispatch** (`DEC A` at `0x228A`),
   so every `CP nn` in the function chain matches status **`nn+1`**. `CP 85h` is
   function `0x86`.
-- **File offset == Z80 address** in all six images. No headers, no relocation.
+- **File offset == Z80 address** in every image here. No headers, no relocation.
 
 ## Files
 
@@ -111,11 +111,16 @@ reproducible.
 | `TSPICO-15w-exrom` | 16384 | `639c62742fa388750a0624e1270e1583` | Planned next |
 | `GENUINE-2068-exrom.bin` | 8192 | crc32 `ae16233a` | `zesarux/src/ts2068.rom` bytes 16384-24575 |
 | `GENUINE-2068-home.bin` | 16384 | crc32 `bf44ec3f` | `zesarux/src/ts2068.rom` bytes 0-16383 |
-| `WJ-2068-exrom.bin` | 8192 | `e3863481d1273af637922415e96dbb0b` | `2068Exrom.BIN` — **not stock**, reference only |
-| `WJ-2068-home.bin` | 16384 | `6843dfddc231083e2220b6b11424eb8d` | `2068Home.BIN` — **not stock**, reference only |
+
+**The W.J. images are deliberately absent.** `2068Home.BIN` / `2068Exrom.BIN` from
+the TS2068 Ref Library are *not* stock, and a hacked ROM sitting next to the real
+ones is a ROM someone eventually flashes. They are identified by crc32 instead —
+see the caveat below.
 
 `tools/romdiff.py` verifies every image's crc32 on each run and shouts if one is
-wrong, so a swapped baseline cannot silently corrupt the analysis again.
+wrong, so a swapped baseline cannot silently corrupt the analysis again. It also
+recognises the two **known-bad** baselines by crc32 and names them rather than
+letting them pass — see the caveat below.
 
 ## Reproducing
 

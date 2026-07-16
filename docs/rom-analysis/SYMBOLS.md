@@ -8,7 +8,7 @@ Names in `CAPS` are ours (the ROM ships no symbols). Names in `backticks` come f
 matters.
 
 "Genuine" means crc32 `bf44ec3f` (HOME) / `ae16233a` (EXROM) — **not** the
-mislabelled `WJ-*.bin` images. See
+mislabelled `2068Home.BIN` / `2068Exrom.BIN` in the TS2068 Ref Library. See
 [DIFF_HOME_vs_STOCK.md#baseline](DIFF_HOME_vs_STOCK.md#baseline).
 
 ## EXROM chunk 0 (`0x0000-0x1FFF`) — patched genuine EXROM

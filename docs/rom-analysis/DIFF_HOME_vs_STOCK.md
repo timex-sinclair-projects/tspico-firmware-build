@@ -20,10 +20,20 @@ TS-PICO HOME ROM.
 > reading before you trust any older analysis.
 
 `2068Home.BIN` in `TS2068 Ref Library/2068 ROMS/` (crc32 `7d411fe9`) is a
-**modified, partly bit-rotted EPROM dump**, not a genuine TS2068 HOME ROM. It is
-kept in `ROMs/` as `WJ-2068-home.bin` for reference. Diffing TS-PICO against it
-produces **389 bytes / 26 hunks — 147 bytes of which are pure phantom**, artefacts
-of the baseline rather than anything Gustavo did.
+**modified, partly bit-rotted EPROM dump**, not a genuine TS2068 HOME ROM. Diffing
+TS-PICO against it produces **389 bytes / 26 hunks — 147 bytes of which are pure
+phantom**, artefacts of the baseline rather than anything Gustavo did.
+
+It is deliberately **not** copied into `ROMs/`: a file sitting next to the real
+ROMs is a file someone eventually flashes. Instead `tools/romdiff.py` carries both
+bad crc32s in a `KNOWN_BAD` map and names them on sight:
+
+```
+genuine-home  GENUINE-2068-home.bin  16384 B  crc32=7d411fe9  !! this is the W.J.
+              modified HOME dump (TS2068 Ref Library/2068 ROMS/2068Home.BIN)
+!! WRONG IMAGE(S): genuine-home
+!! Every hunk count below is meaningless until this is fixed.
+```
 
 The genuine image (crc32 `bf44ec3f`) is `ROMs/GENUINE-2068-home.bin`, extracted
 from `~/Documents/github/zesarux-tspico-lab/zesarux/src/ts2068.rom` (bytes
@@ -31,7 +41,7 @@ from `~/Documents/github/zesarux-tspico-lab/zesarux/src/ts2068.rom` (bytes
 
 **The proof is that TS-PICO matches genuine where the "stock" image doesn't:**
 
-| Test | Genuine | TS-PICO | `WJ-2068-home.bin` |
+| Test | Genuine | TS-PICO | `2068Home.BIN` (W.J.) |
 |---|---|---|---|
 | Character set `0x3D00-0x3FFF` | — | **identical to genuine** | 38 bytes differ |
 | Copyright `0x1118` | `© 1982 Sinclair Research Ltd` / `© 1983 Timex Computer Corp` | **identical to genuine** | `T/S 2068 Computer The Superior Machine. (W.J.)` |
@@ -39,9 +49,9 @@ from `~/Documents/github/zesarux-tspico-lab/zesarux/src/ts2068.rom` (bytes
 
 A modified ROM does not coincidentally restore the genuine font in all 768 bytes
 and the genuine copyright string. TS-PICO was built *from* the `bf44ec3f` image;
-therefore `bf44ec3f` is the baseline. The `WJ-2068-home.bin` corruption of the
-`BIN` token is a functional regression no one would introduce deliberately —
-evidence that image is both hacked *and* degraded.
+therefore `bf44ec3f` is the baseline. The `BIN`-token corruption is a functional
+regression no one would introduce deliberately — evidence that image is both hacked
+*and* degraded.
 
 Verify:
 
@@ -59,7 +69,7 @@ the boot colours at `0x0D33`/`0x0DB0` into a dark theme, patches a genuine
 startup message `(W.J.)`. It is a curiosity, and **not** related to the TS-PICO.
 `W.J.` is unidentified.
 
-`WJ-2068-exrom.bin` (crc32 `526f5676`) is likewise **not** genuine — 99 bytes / 22
+`2068Exrom.BIN` (crc32 `526f5676`) is likewise **not** genuine — 99 bytes / 22
 hunks off `ae16233a`.
 
 ## The 10 hunks

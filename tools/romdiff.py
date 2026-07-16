@@ -26,14 +26,9 @@ IMAGES = {
     "tspico-15w-home": "TSPICO-15w-home",
     "tspico-11-exrom": "TSPICO-11-exrom",
     "tspico-15w-exrom": "TSPICO-15w-exrom",
-    # Genuine TS2068 baseline (crc32 bf44ec3f / ae16233a). Do NOT substitute the
-    # W.J. images below -- they are a modified, partly bit-rotted EPROM dump and
-    # diffing against them fabricates ~150 bytes of phantom "TS-PICO changes".
-    # See docs/rom-analysis/DIFF_HOME_vs_STOCK.md#baseline.
+    # Genuine TS2068 baseline. See KNOWN_BAD below before substituting anything.
     "genuine-home": "GENUINE-2068-home.bin",
     "genuine-exrom": "GENUINE-2068-exrom.bin",
-    "wj-home": "WJ-2068-home.bin",
-    "wj-exrom": "WJ-2068-exrom.bin",
 }
 
 # Expected CRC32s -- checked at run time so a swapped image cannot go unnoticed.
@@ -44,8 +39,18 @@ EXPECT_CRC = {
     "tspico-15w-home": 0xe8714bed,
     "tspico-11-exrom": 0x268649f6,
     "tspico-15w-exrom": 0xcacf18c5,
-    "wj-home": 0x7d411fe9,
-    "wj-exrom": 0x526f5676,
+}
+
+# Baselines that look stock but are not. `2068Home.BIN` / `2068Exrom.BIN` in the
+# TS2068 Ref Library are the obvious images to reach for and the obvious mistake
+# to make -- they are a modified, partly bit-rotted personal EPROM dump ("W.J."),
+# and diffing against them fabricates ~150 bytes of phantom "TS-PICO changes".
+# The images are deliberately not shipped here; this map exists so that dropping
+# one in gets named rather than silently believed.
+# See docs/rom-analysis/DIFF_HOME_vs_STOCK.md#baseline.
+KNOWN_BAD = {
+    0x7d411fe9: "the W.J. modified HOME dump (TS2068 Ref Library/2068 ROMS/2068Home.BIN)",
+    0x526f5676: "the W.J. modified EXROM dump (TS2068 Ref Library/2068 ROMS/2068Exrom.BIN)",
 }
 
 # Pairs to diff: (label, left, right, note)
@@ -56,10 +61,6 @@ COMPARISONS = [
      "Genuine 8K vs the low 8K only; chunk 1 (0x2000+) is all-new. Expect 2326 B / 36 hunks."),
     ("EXROM: TS-PICO v1.1 -> v1.5w", "tspico-11-exrom", "tspico-15w-exrom",
      "The shipping-vs-next delta. Expect 15 B / 2 hunks."),
-    ("HOME: genuine -> W.J. hack (NOT TS-PICO)", "genuine-home", "wj-home",
-     "The mislabelled 'stock' reference. Expect 147 B / 17 hunks. Context only."),
-    ("EXROM: genuine -> W.J. hack (NOT TS-PICO)", "genuine-exrom", "wj-exrom",
-     "Expect 99 B / 22 hunks. Context only."),
 ]
 
 GAP = 8  # bytes of agreement that close a hunk
@@ -120,6 +121,9 @@ def main():
         if k in EXPECT_CRC:
             if crc == EXPECT_CRC[k]:
                 flag = " OK"
+            elif crc in KNOWN_BAD:
+                flag = f" !! this is {KNOWN_BAD[crc]}"
+                bad.append(k)
             else:
                 flag = f" !! expected {EXPECT_CRC[k]:08x}"
                 bad.append(k)
@@ -128,7 +132,7 @@ def main():
     if bad:
         print("\n!! WRONG IMAGE(S): " + ", ".join(bad) +
               "\n!! Every hunk count below is meaningless until this is fixed."
-              "\n!! See docs/rom-analysis/README.md#rom-images")
+              "\n!! See docs/rom-analysis/DIFF_HOME_vs_STOCK.md#baseline")
 
     if roms["tspico-11-home"] != roms["tspico-15w-home"]:
         print("\n!! TSPICO-11-home and TSPICO-15w-home now DIFFER - "
