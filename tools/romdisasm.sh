@@ -9,10 +9,9 @@
 # all of them; the EXROM is a flat 16K occupying TS2068 chunks 0+1. See
 # docs/rom-analysis/MEMORY_MAP.md.
 #
-# The baseline images are GENUINE-*.bin (crc32 bf44ec3f / ae16233a). Do NOT
-# substitute 2068Home.BIN / 2068Exrom.BIN from the TS2068 Ref Library -- despite
-# the names those are a modified EPROM dump, not stock. Run tools/romdiff.py to
-# have the images crc32-checked. See docs/rom-analysis/DIFF_HOME_vs_STOCK.md#baseline.
+# The baseline images are ROMs/GENUINE-*.bin (crc32 bf44ec3f / ae16233a). Other
+# TS2068 ROM images are in circulation and are not interchangeable with these;
+# run tools/romdiff.py to have every image crc32-checked.
 #
 # NOTE: these are LINEAR sweeps. Data tables, text and 0xFF filler decode as
 # nonsense instructions, and a misaligned start desynchronises a whole region.

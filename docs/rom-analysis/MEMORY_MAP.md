@@ -13,16 +13,9 @@
 
 The genuine baselines were extracted from
 `~/Documents/github/zesarux-tspico-lab/zesarux/src/ts2068.rom` (HOME = bytes
-0-16383, EXROM = 16384-24575).
+0-16383, EXROM = 16384-24575). Other TS2068 ROM images are in circulation and are
+not interchangeable with these; `tools/romdiff.py` crc32-checks every image.
 
-> **The images in `TS2068 Ref Library/2068 ROMS/` are not stock**, despite their
-> names — `2068Home.BIN` (crc32 `7d411fe9`) and `2068Exrom.BIN` (crc32 `526f5676`)
-> are a modified, partly bit-rotted EPROM dump. They are deliberately **not** kept
-> in `ROMs/`, so nobody flashes or diffs against them by accident; `romdiff.py`
-> recognises both by crc32 and names them if one turns up. Diffing against them
-> inflates the HOME diff from 10 hunks to 26 and the EXROM diff from 36 to 51,
-> fabricating changes that are not Gustavo's. See
-> [DIFF_HOME_vs_STOCK.md#baseline](DIFF_HOME_vs_STOCK.md#baseline).
 
 ## The headline structural fact: the EXROM is 16K, not 8K
 

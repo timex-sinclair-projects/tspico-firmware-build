@@ -18,7 +18,6 @@ here is what the hardware actually runs.
 | The Z80↔Pico wire protocol as implemented | [PROTOCOL_FROM_ROM.md](PROTOCOL_FROM_ROM.md) |
 | What TS-PICO changed in the EXROM vs genuine | [DIFF_EXROM_vs_STOCK.md](DIFF_EXROM_vs_STOCK.md) |
 | What TS-PICO changed in the HOME ROM vs genuine | [DIFF_HOME_vs_STOCK.md](DIFF_HOME_vs_STOCK.md) |
-| Whether a baseline ROM is trustworthy | [DIFF_HOME_vs_STOCK.md#baseline](DIFF_HOME_vs_STOCK.md#baseline) |
 | A specific address — what lives there | [SYMBOLS.md](SYMBOLS.md) |
 
 ## The findings that matter most
@@ -54,11 +53,6 @@ here is what the hardware actually runs.
    never match, so its handler at `0x2216` is dead code. The obvious "should be
    `CP 87h`" fix doesn't quite fit — the dead handler *beeps* rather than clearing
    the screen. Ask Gustavo before patching.
-
-6. **The reference "stock" ROMs are not stock.** Both images in
-   `TS2068 Ref Library/2068 ROMS/` are a modified EPROM dump. Everything here has
-   been re-based on genuine images; see the caveat below, because this likely
-   affects other analyses too.
 
 ## Reading conventions
 
@@ -112,15 +106,10 @@ reproducible.
 | `GENUINE-2068-exrom.bin` | 8192 | crc32 `ae16233a` | `zesarux/src/ts2068.rom` bytes 16384-24575 |
 | `GENUINE-2068-home.bin` | 16384 | crc32 `bf44ec3f` | `zesarux/src/ts2068.rom` bytes 0-16383 |
 
-**The W.J. images are deliberately absent.** `2068Home.BIN` / `2068Exrom.BIN` from
-the TS2068 Ref Library are *not* stock, and a hacked ROM sitting next to the real
-ones is a ROM someone eventually flashes. They are identified by crc32 instead —
-see the caveat below.
-
-`tools/romdiff.py` verifies every image's crc32 on each run and shouts if one is
-wrong, so a swapped baseline cannot silently corrupt the analysis again. It also
-recognises the two **known-bad** baselines by crc32 and names them rather than
-letting them pass — see the caveat below.
+Other TS2068 ROM images are in circulation and are **not** interchangeable with
+these baselines — every hunk count here is only meaningful against crc32
+`bf44ec3f` / `ae16233a`. `tools/romdiff.py` verifies each image's crc32 on every
+run and refuses to be quiet about a mismatch.
 
 ## Reproducing
 
@@ -151,15 +140,12 @@ z80dasm -a -l -t -g 0x0000 -o out.asm -s out.sym ROMs/TSPICO-11-exrom
   I/O sites are `0x0E` at `0x2298`/`0x229D` and `0x0F` at `0x065B`, `0x2020`,
   `0x2023`, `0x2236`.
 
-- **The ROMs in `TS2068 Ref Library/2068 ROMS/` are NOT stock**, despite their
-  names — both are a modified, partly bit-rotted EPROM dump ("W.J."). This was
-  discovered mid-analysis and everything here has been re-based on the genuine
-  images. **If you find older TS-PICO ROM analysis — anywhere — check what it used
-  as its baseline.** Diffing against the W.J. images invents ~150 phantom bytes of
-  "TS-PICO changes" in HOME (a redrawn font, a rewritten copyright message, FP
-  bug-fixes) and fabricates alarming ones in the EXROM (e.g. that TS-PICO
-  bank-switches with interrupts enabled — it does not). Full story and proof:
-  [DIFF_HOME_vs_STOCK.md#baseline](DIFF_HOME_vs_STOCK.md#baseline).
+- **Hunk counts are baseline-specific.** Several TS2068 ROM images are in
+  circulation and they are not interchangeable. Everything here is measured against
+  crc32 `bf44ec3f` (HOME) / `ae16233a` (EXROM), the images in `ROMs/`; diff against
+  a different one and the numbers will not match. `tools/romdiff.py` crc32-checks
+  every image on each run. **If you find older TS-PICO ROM analysis — anywhere —
+  check which baseline it used before trusting its counts.**
 
 - **Command names and semantics are inferred** from the ROM's own dispatch
   structure and cross-referenced against [`docs/`](../); where the ROM and the docs

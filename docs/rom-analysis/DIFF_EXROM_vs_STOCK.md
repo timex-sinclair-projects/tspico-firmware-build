@@ -17,22 +17,12 @@ the 15 bytes that differ.
 
 ## Baseline
 
-> `2068Exrom.BIN` in `TS2068 Ref Library/2068 ROMS/` (crc32 `526f5676`) is **not
-> genuine** — it is 99 bytes / 22 hunks off the real thing, the EXROM half of the
-> same modified EPROM dump as `2068Home.BIN`. It is deliberately not kept in
-> `ROMs/`; `romdiff.py` recognises it by crc32 and names it if it turns up.
+The genuine TS2068 EXROM used throughout is `ROMs/GENUINE-2068-exrom.bin`
+(crc32 `ae16233a`), extracted from `zesarux/src/ts2068.rom` bytes 16384-24575.
 
-The genuine image (crc32 `ae16233a`) is `ROMs/GENUINE-2068-exrom.bin`, from
-`zesarux/src/ts2068.rom` bytes 16384-24575. **Diffing against the W.J. image
-inflates this diff from 36 hunks to 51 and fabricates changes that are not
-Gustavo's** — see [DIFF_HOME_vs_STOCK.md#baseline](DIFF_HOME_vs_STOCK.md#baseline)
-for the full story and proof.
-
-A concrete example of what the bad baseline invents: against `2068Exrom.BIN`,
-`BANK_ENABLE` appears to swap `DI`/`EI` for `PUSH BC`/`POP BC` at `0x129A`/`0x131B`
-— implying TS-PICO switches banks with interrupts enabled, a genuinely alarming
-claim. Against **genuine**, those bytes are *identical in both*. The swap is W.J.'s,
-not Gustavo's. **Treat any pre-rebase EXROM analysis with suspicion.**
+Other TS2068 EXROM images are in circulation and are **not** interchangeable with
+this one — the 36 hunks below are only meaningful against crc32 `ae16233a`.
+`tools/romdiff.py` crc32-checks every image on each run.
 
 ## How the space was found — the real story of the 36 hunks
 

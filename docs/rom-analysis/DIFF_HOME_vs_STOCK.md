@@ -16,61 +16,18 @@ TS-PICO HOME ROM.
 
 ## Baseline
 
-> **The image previously used as "stock" here was not stock.** This is worth
-> reading before you trust any older analysis.
+The genuine TS2068 HOME ROM used throughout is `ROMs/GENUINE-2068-home.bin`
+(crc32 `bf44ec3f`), extracted from
+`~/Documents/github/zesarux-tspico-lab/zesarux/src/ts2068.rom` (bytes 0-16383).
 
-`2068Home.BIN` in `TS2068 Ref Library/2068 ROMS/` (crc32 `7d411fe9`) is a
-**modified, partly bit-rotted EPROM dump**, not a genuine TS2068 HOME ROM. Diffing
-TS-PICO against it produces **389 bytes / 26 hunks — 147 bytes of which are pure
-phantom**, artefacts of the baseline rather than anything Gustavo did.
-
-It is deliberately **not** copied into `ROMs/`: a file sitting next to the real
-ROMs is a file someone eventually flashes. Instead `tools/romdiff.py` carries both
-bad crc32s in a `KNOWN_BAD` map and names them on sight:
-
-```
-genuine-home  GENUINE-2068-home.bin  16384 B  crc32=7d411fe9  !! this is the W.J.
-              modified HOME dump (TS2068 Ref Library/2068 ROMS/2068Home.BIN)
-!! WRONG IMAGE(S): genuine-home
-!! Every hunk count below is meaningless until this is fixed.
-```
-
-The genuine image (crc32 `bf44ec3f`) is `ROMs/GENUINE-2068-home.bin`, extracted
-from `~/Documents/github/zesarux-tspico-lab/zesarux/src/ts2068.rom` (bytes
-0-16383).
-
-**The proof is that TS-PICO matches genuine where the "stock" image doesn't:**
-
-| Test | Genuine | TS-PICO | `2068Home.BIN` (W.J.) |
-|---|---|---|---|
-| Character set `0x3D00-0x3FFF` | — | **identical to genuine** | 38 bytes differ |
-| Copyright `0x1118` | `© 1982 Sinclair Research Ltd` / `© 1983 Timex Computer Corp` | **identical to genuine** | `T/S 2068 Computer The Superior Machine. (W.J.)` |
-| `BIN` token `0x0101` | `0x49` (`'I'`) | **`0x49`** | `0x01` — **token corrupted** |
-
-A modified ROM does not coincidentally restore the genuine font in all 768 bytes
-and the genuine copyright string. TS-PICO was built *from* the `bf44ec3f` image;
-therefore `bf44ec3f` is the baseline. The `BIN`-token corruption is a functional
-regression no one would introduce deliberately — evidence that image is both hacked
-*and* degraded.
-
-Verify:
+Other TS2068 HOME ROM images are in circulation and are **not** interchangeable
+with this one — the hunk counts here are only meaningful against crc32 `bf44ec3f`.
+`tools/romdiff.py` checks every image's crc32 on each run and refuses to be quiet
+about a mismatch:
 
 ```bash
-python3 tools/romdiff.py    # checks crc32 of every image and refuses to be quiet
+python3 tools/romdiff.py
 ```
-
-### What the W.J. image actually is
-
-A competent one-off custom EPROM — someone's personal TS2068 ROM, later dumped and
-mislabelled. It carries the Sinclair NMI bug fix at `0x006D` (`JR NZ` → `JR Z`),
-kills the DELETE auto-repeat delay at `0x0352` (`LD BC,20000` → `LD BC,1`), swaps
-the boot colours at `0x0D33`/`0x0DB0` into a dark theme, patches a genuine
-`INT(-65536)` floating-point bug, redraws nine lowercase glyphs, and signs the
-startup message `(W.J.)`. It is a curiosity, and **not** related to the TS-PICO.
-`W.J.` is unidentified.
-
-`2068Exrom.BIN` (crc32 `526f5676`) is likewise **not** genuine — 99 bytes / 22
-hunks off `ae16233a`.
 
 ## The 10 hunks
 
@@ -221,14 +178,14 @@ the genuine 8K EXROM:
 
 ## What TS-PICO did *not* change
 
-Worth stating, because the bad baseline made it look otherwise:
+Gustavo touched nothing cosmetic. Worth knowing before you go looking:
 
 - **The character set is untouched** — all 768 bytes match genuine.
 - **The startup copyright message is untouched.**
 - **The Sinclair NMI bug at `0x006D` is faithfully preserved** (`JR NZ`), bug and
   all.
-- **The `BIN` token is intact.**
 - **No floating-point routines were touched.**
+- **No BASIC tokens were touched.**
 
 ## Cross-references
 
@@ -236,6 +193,7 @@ Worth stating, because the bad baseline made it look otherwise:
   byte-identical to `gus-home.rom`). **Two errors in it:** it calls `0x0A02` "TPI
   initialization during startup" — it is `K_DUMP`, the screen dump; and it lists
   only three EXROM entry points (`0x01AB`, `0x01CC`, `0x1855`) — there are ten,
-  missing the whole `0x163x` table.
+  missing the whole `0x163x` table. Check which baseline any older analysis used
+  before trusting its hunk counts.
 - The EXROM side: [DIFF_EXROM_vs_STOCK.md](DIFF_EXROM_vs_STOCK.md).
 - Symbols: [SYMBOLS.md](SYMBOLS.md).

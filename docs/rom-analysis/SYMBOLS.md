@@ -7,9 +7,8 @@ Names in `CAPS` are ours (the ROM ships no symbols). Names in `backticks` come f
 `docs/` or the TS2068 reference disassemblies. Confidence is flagged where it
 matters.
 
-"Genuine" means crc32 `bf44ec3f` (HOME) / `ae16233a` (EXROM) — **not** the
-mislabelled `2068Home.BIN` / `2068Exrom.BIN` in the TS2068 Ref Library. See
-[DIFF_HOME_vs_STOCK.md#baseline](DIFF_HOME_vs_STOCK.md#baseline).
+"Genuine" means the baseline TS2068 ROMs in `ROMs/` — crc32 `bf44ec3f` (HOME) /
+`ae16233a` (EXROM).
 
 ## EXROM chunk 0 (`0x0000-0x1FFF`) — patched genuine EXROM
 

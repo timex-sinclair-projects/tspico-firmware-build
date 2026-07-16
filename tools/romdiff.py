@@ -26,12 +26,14 @@ IMAGES = {
     "tspico-15w-home": "TSPICO-15w-home",
     "tspico-11-exrom": "TSPICO-11-exrom",
     "tspico-15w-exrom": "TSPICO-15w-exrom",
-    # Genuine TS2068 baseline. See KNOWN_BAD below before substituting anything.
+    # Baseline TS2068 ROMs, from zesarux/src/ts2068.rom.
     "genuine-home": "GENUINE-2068-home.bin",
     "genuine-exrom": "GENUINE-2068-exrom.bin",
 }
 
-# Expected CRC32s -- checked at run time so a swapped image cannot go unnoticed.
+# Expected CRC32s, checked at run time. Other TS2068 ROM images are in
+# circulation; the hunk counts below are only meaningful against these exact
+# baselines, so a substituted image gets called out rather than silently used.
 EXPECT_CRC = {
     "genuine-home": 0xbf44ec3f,
     "genuine-exrom": 0xae16233a,
@@ -39,18 +41,6 @@ EXPECT_CRC = {
     "tspico-15w-home": 0xe8714bed,
     "tspico-11-exrom": 0x268649f6,
     "tspico-15w-exrom": 0xcacf18c5,
-}
-
-# Baselines that look stock but are not. `2068Home.BIN` / `2068Exrom.BIN` in the
-# TS2068 Ref Library are the obvious images to reach for and the obvious mistake
-# to make -- they are a modified, partly bit-rotted personal EPROM dump ("W.J."),
-# and diffing against them fabricates ~150 bytes of phantom "TS-PICO changes".
-# The images are deliberately not shipped here; this map exists so that dropping
-# one in gets named rather than silently believed.
-# See docs/rom-analysis/DIFF_HOME_vs_STOCK.md#baseline.
-KNOWN_BAD = {
-    0x7d411fe9: "the W.J. modified HOME dump (TS2068 Ref Library/2068 ROMS/2068Home.BIN)",
-    0x526f5676: "the W.J. modified EXROM dump (TS2068 Ref Library/2068 ROMS/2068Exrom.BIN)",
 }
 
 # Pairs to diff: (label, left, right, note)
@@ -121,9 +111,6 @@ def main():
         if k in EXPECT_CRC:
             if crc == EXPECT_CRC[k]:
                 flag = " OK"
-            elif crc in KNOWN_BAD:
-                flag = f" !! this is {KNOWN_BAD[crc]}"
-                bad.append(k)
             else:
                 flag = f" !! expected {EXPECT_CRC[k]:08x}"
                 bad.append(k)
@@ -132,7 +119,7 @@ def main():
     if bad:
         print("\n!! WRONG IMAGE(S): " + ", ".join(bad) +
               "\n!! Every hunk count below is meaningless until this is fixed."
-              "\n!! See docs/rom-analysis/DIFF_HOME_vs_STOCK.md#baseline")
+              "\n!! See docs/rom-analysis/README.md#rom-images")
 
     if roms["tspico-11-home"] != roms["tspico-15w-home"]:
         print("\n!! TSPICO-11-home and TSPICO-15w-home now DIFFER - "
