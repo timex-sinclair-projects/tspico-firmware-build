@@ -125,6 +125,21 @@ VERBOSE          = True     # per-transaction logging over USB serial
 STALL_MS         = 3000     # inter-byte silence that counts as a stall (ms)
 VERIFY_DATA_CRC  = True     # production does NOT; we check it for diagnostics
 
+# A/B EXPERIMENT — which drain implementation to use for the header + data
+# blocks. This is the controlled test for WHY production SAVE stalls.
+#   "clean"       : the harness drain — rx-gated, NO per-byte work, with a
+#                   stall timeout. Proven to work on hardware.
+#   "prod"        : production's EXACT drain — a tight BLOCKING loop with the
+#                   per-byte mask, `buf[i] = MQ.get() & 0xFF` (tspico_io.py:1060).
+#   "prod_nomask" : the same tight BLOCKING loop WITHOUT the mask,
+#                   `buf[i] = MQ.get()` (this is the proven template pattern).
+# "prod"/"prod_nomask" have NO stall timeout: a dropped byte makes MQ.get()
+# block forever, exactly like production. That hang IS the reproduction — if
+# the 2068 never shows "0 OK", Ctrl-C the harness and note the mode stalled.
+# The decisive result: if "prod" hangs but "prod_nomask" (and "clean") complete,
+# the `& 0xFF` per-byte mask is the bug.
+DRAIN_MODE = "clean"
+
 # ===========================================================================
 # Local NULL_SM (parks SM0 with no pin claims so SPI can take GPIO 2-4).
 # Defined here to avoid importing the 200 KB TS.tspico module.
@@ -167,8 +182,8 @@ def boot():
 
     print("=" * 64)
     print(HARNESS_VERSION)
-    print("  WRITE_TARGET=%s  MOUNTED_TAP=%r  APPEND=%s" % (
-        WRITE_TARGET, MOUNTED_TAP, APPEND))
+    print("  WRITE_TARGET=%s  DRAIN_MODE=%s" % (WRITE_TARGET, DRAIN_MODE))
+    print("  MOUNTED_TAP=%r  APPEND=%s" % (MOUNTED_TAP, APPEND))
     print("=" * 64)
 
     u6_en   = Pin(12, Pin.OUT, Pin.PULL_UP)
@@ -292,6 +307,26 @@ def drain_phase(buf, n, stall_ms):
     return got
 
 
+def drain_prod(buf, n, mask):
+    """A/B: production's EXACT drain — a tight BLOCKING loop, optionally with
+    the per-byte `& 0xFF` mask. NO stall timeout: if a byte is dropped, get()
+    blocks forever (the production symptom). Only reached when DRAIN_MODE !=
+    "clean"."""
+    if mask:
+        for i in range(n):
+            buf[i] = MQ.get() & 0xFF     # <-- production tspico_io.py:1060
+    else:
+        for i in range(n):
+            buf[i] = MQ.get()
+    return n
+
+def drain(buf, n):
+    """Select the drain implementation from DRAIN_MODE (the A/B switch)."""
+    if DRAIN_MODE == "clean":
+        return drain_phase(buf, n, STALL_MS)
+    return drain_prod(buf, n, DRAIN_MODE == "prod")
+
+
 # ---------------------------------------------------------------------------
 # TAP reconstruction + write. In-place buffer reuse (session-strip) matching
 # the ROM's own framing, verified byte-exact on the host.
@@ -406,7 +441,7 @@ def handle_save(pre, T0):
 
     # --- PHASE 1: header block (21 bytes). Z80 has already cleared WF_NPH
     #     (we set READY after the pre-header). ---
-    got = drain_phase(hdr_buf, 21, STALL_MS)
+    got = drain(hdr_buf, 21)
     ev["hdr_got"] = got
     ev["t_hdr"] = time.ticks_diff(time.ticks_us(), T0)
     if got != 21:
@@ -432,7 +467,7 @@ def handle_save(pre, T0):
     mq_ready()
 
     # --- PHASE 2: data block (BLEN+4 bytes), NO pre-header. ---
-    got = drain_phase(blk_buf, long, STALL_MS)
+    got = drain(blk_buf, long)
     ev["data_got"] = got
     ev["t_data"] = time.ticks_diff(time.ticks_us(), T0)
     if got != long:

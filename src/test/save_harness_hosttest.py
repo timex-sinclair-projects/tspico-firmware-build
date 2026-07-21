@@ -297,6 +297,25 @@ def test_create_then_append_session():
         check(written == ref_tap + ref_tap, "file holds two programs")
 
 
+def test_prod_drain_modes():
+    print("test_prod_drain_modes: prod / prod_nomask still reconstruct correctly")
+    # The A/B drain modes change *timing* on hardware, not the output when all
+    # bytes are present. Here we confirm the code paths are correct and produce
+    # the same byte-identical .tap when fully fed.
+    prog, ref_tap = build_reference()
+    pre, hdr, data = simulate_wire(prog)
+    for mode in ("prod", "prod_nomask"):
+        with tempfile.TemporaryDirectory() as tmp:
+            sh = load_harness(tmp, "flash", mounted=None, append=False)
+            sh.DRAIN_MODE = mode
+            sh.MQ = FakeMQ(hdr + data)
+            ev = sh.handle_save(bytearray(pre), 0)
+            check(ev.get("ok"), "%s: handle_save ok" % mode)
+            with open(ev["path"], "rb") as f:
+                written = f.read()
+            check(written == ref_tap, "%s: .tap byte-identical to reference" % mode)
+
+
 def main():
     print("=" * 64)
     print("save_harness host test")
@@ -305,6 +324,7 @@ def main():
     test_append()
     test_create_then_append_session()
     test_stall_evidence()
+    test_prod_drain_modes()
     print("=" * 64)
     print("RESULT: %d passed, %d failed" % (PASS, FAIL))
     print("=" * 64)
