@@ -80,6 +80,7 @@ To test real SD create/append: set WRITE_TARGET="sd".
 import os
 import time
 import gc
+import _thread
 from machine import Pin, SPI, freq
 from rp2 import StateMachine, asm_pio, PIO
 
@@ -138,7 +139,23 @@ VERIFY_DATA_CRC  = True     # production does NOT; we check it for diagnostics
 # the 2068 never shows "0 OK", Ctrl-C the harness and note the mode stalled.
 # The decisive result: if "prod" hangs but "prod_nomask" (and "clean") complete,
 # the `& 0xFF` per-byte mask is the bug.
+# RESULT (2026-07-21, hardware): "prod" AND "prod_nomask" both completed -> the
+# mask is NOT the bug. Reset to the clean default; the search moved to the
+# watchdog thread below.
 DRAIN_MODE = "clean"
+
+# A/B EXPERIMENT 2 — a background watchdog THREAD on core1 during the data
+# drain, exactly like production (tspico_io.py:1095 spawns WATCHDOG via
+# _thread). Production's poll loop is a TIGHT busy-loop with NO sleep
+# (tspico_io.py:1360-1364, comment: "tight check, no sleep"). On the RP2040's
+# GIL that starves the core0 drain and overflows the 4-deep RX FIFO.
+#   "none"  : no thread (default; how the harness has always run).
+#   "prod"  : tight busy-loop, no sleep -- faithful to production.
+#   "sleep" : same loop but yields the GIL (time.sleep_ms(5)) -- the candidate fix.
+# Run this with DRAIN_MODE="clean" so a resulting drop is REPORTED ("data block
+# X/Y bytes") instead of hanging. If "prod" stalls the data drain while
+# "sleep"/"none" complete, the watchdog's no-sleep busy-loop is the bug.
+DATA_WATCHDOG = "none"
 
 # ===========================================================================
 # Local NULL_SM (parks SM0 with no pin claims so SPI can take GPIO 2-4).
@@ -182,7 +199,8 @@ def boot():
 
     print("=" * 64)
     print(HARNESS_VERSION)
-    print("  WRITE_TARGET=%s  DRAIN_MODE=%s" % (WRITE_TARGET, DRAIN_MODE))
+    print("  WRITE_TARGET=%s  DRAIN_MODE=%s  DATA_WATCHDOG=%s" % (
+        WRITE_TARGET, DRAIN_MODE, DATA_WATCHDOG))
     print("  MOUNTED_TAP=%r  APPEND=%s" % (MOUNTED_TAP, APPEND))
     print("=" * 64)
 
@@ -328,6 +346,50 @@ def drain(buf, n):
 
 
 # ---------------------------------------------------------------------------
+# A/B EXPERIMENT 2: a core1 watchdog thread that mirrors production's poll loop
+# (tspico_io.py:1360-1364). "prod" = tight busy-loop (no sleep); "sleep" =
+# yields the GIL. Lists used as mutable cross-thread flags.
+# ---------------------------------------------------------------------------
+
+_wd_stop = [True]
+_wd_alive = [False]
+
+def _watchdog_thread(mode, secs):
+    _wd_alive[0] = True
+    t0 = time.ticks_us()
+    lim = int(secs * 1_000_000)
+    while time.ticks_diff(time.ticks_us(), t0) < lim:
+        if _wd_stop[0]:
+            break
+        if mode == "sleep":
+            time.sleep_ms(5)          # yield the GIL to the core0 drain
+        # "prod": tight spin, no sleep -- faithful to tspico_io.py:1360-1364
+    _wd_alive[0] = False
+
+def start_data_watchdog():
+    """Spawn the core1 watchdog for the data phase (if enabled). Returns the
+    effective mode ("none" if a thread couldn't start)."""
+    if DATA_WATCHDOG == "none":
+        return "none"
+    _wd_stop[0] = False
+    _wd_alive[0] = False
+    try:
+        _thread.start_new_thread(_watchdog_thread, (DATA_WATCHDOG, 5))
+        return DATA_WATCHDOG
+    except Exception as e:
+        print("[warn] watchdog thread did not start: %r" % e)
+        return "none"
+
+def stop_data_watchdog(mode):
+    if mode == "none":
+        return
+    _wd_stop[0] = True
+    t0 = time.ticks_ms()               # let it actually exit before next txn
+    while _wd_alive[0] and time.ticks_diff(time.ticks_ms(), t0) < 500:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # TAP reconstruction + write. In-place buffer reuse (session-strip) matching
 # the ROM's own framing, verified byte-exact on the host.
 # ---------------------------------------------------------------------------
@@ -467,11 +529,17 @@ def handle_save(pre, T0):
     mq_ready()
 
     # --- PHASE 2: data block (BLEN+4 bytes), NO pre-header. ---
+    # A/B EXPERIMENT 2: production spawns its watchdog thread right here, before
+    # the data drain (tspico_io.py:1095). Mirror that so we can test whether the
+    # core1 busy-loop is what starves the drain.
+    wd = start_data_watchdog()
     got = drain(blk_buf, long)
+    stop_data_watchdog(wd)
     ev["data_got"] = got
+    ev["data_watchdog"] = wd
     ev["t_data"] = time.ticks_diff(time.ticks_us(), T0)
     if got != long:
-        ev["stall"] = "data block: %d/%d bytes" % (got, long)
+        ev["stall"] = "data block: %d/%d bytes (watchdog=%s)" % (got, long, wd)
         return ev
 
     if VERIFY_DATA_CRC:

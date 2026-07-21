@@ -316,6 +316,25 @@ def test_prod_drain_modes():
             check(written == ref_tap, "%s: .tap byte-identical to reference" % mode)
 
 
+def test_data_watchdog_wiring():
+    print("test_data_watchdog_wiring: watchdog thread machinery keeps output correct")
+    # The GIL-contention effect only appears on the RP2040 with real byte
+    # timing; here we just confirm spawning/joining the thread around the data
+    # drain doesn't break handle_save or the reconstructed .tap.
+    prog, ref_tap = build_reference()
+    pre, hdr, data = simulate_wire(prog)
+    with tempfile.TemporaryDirectory() as tmp:
+        sh = load_harness(tmp, "flash", mounted=None, append=False)
+        sh.DATA_WATCHDOG = "sleep"        # gentle: yields, exits quickly
+        sh.MQ = FakeMQ(hdr + data)
+        ev = sh.handle_save(bytearray(pre), 0)
+        check(ev.get("ok"), "sleep-watchdog: handle_save ok")
+        check(ev.get("data_watchdog") == "sleep", "watchdog mode recorded in event")
+        with open(ev["path"], "rb") as f:
+            written = f.read()
+        check(written == ref_tap, "sleep-watchdog: .tap byte-identical")
+
+
 def main():
     print("=" * 64)
     print("save_harness host test")
@@ -325,6 +344,7 @@ def main():
     test_create_then_append_session()
     test_stall_evidence()
     test_prod_drain_modes()
+    test_data_watchdog_wiring()
     print("=" * 64)
     print("RESULT: %d passed, %d failed" % (PASS, FAIL))
     print("=" * 64)
