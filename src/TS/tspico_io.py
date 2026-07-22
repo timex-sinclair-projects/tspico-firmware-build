@@ -1236,6 +1236,19 @@ def SAVE_TS(MQ, TSP):
     # to SPI mode for SD access. After the write completes, the main
     # dispatcher will switch back to PIO for the next Z80 transaction.
     # ============================================================
+    # RACE FIX: wait for the Z80 to actually READ the final status BEFORE
+    # ENA_SD hijacks GPIO 2-4. GPIO 2 = D0 = bit 0 of the status byte, so if
+    # the Z80's status read lands after the pin grab, the 0x01 corrupts to 0x00
+    # -> Report J. The two status bytes were staged as (final, pre-load); wait
+    # until the Z80 has consumed the final one (tx_fifo drops to <=1). Bounded
+    # so a missed read can't hang the save. This is what the clean harness does.
+    _tw = time.ticks_ms()
+    while MQ.tx_fifo() > 1:
+        if time.ticks_diff(time.ticks_ms(), _tw) >= 300:
+            TLM("SAVE_TS status-read wait TIMEOUT", "tx=%d" % MQ.tx_fifo())
+            break
+    TLM("SAVE_TS status read confirmed", "waited %dms tx=%d" % (
+        time.ticks_diff(time.ticks_ms(), _tw), MQ.tx_fifo()))
     TLM("SAVE_TS write start", "%r mode=%s" % (filename, mode))
     ENA_SD()
     with open(filename, mode) as f1:
