@@ -44,11 +44,18 @@ APPEND       = False         # TSP.append
 
 # FIX under test: an empty program sends BLEN=0 in the header, but the Z80's
 # SA-BYTES send loop decrements DE *then* tests it, so DE=0 wraps to 0xFFFF and
-# it actually sends 65536 data bytes (the classic ZX "SAVE 0 = SAVE 64K"). The
-# stock SAVE_TS computes long=BLEN+4=4 and reads only 4, leaving ~65532 bytes to
-# jam the FIFO -> infinite phantom saves. FIX: treat BLEN==0 as 65536 so we read
-# the whole 65540-byte block and stay in sync.
-FIX_BLEN0 = True
+# it floods 65536 data bytes (the classic ZX "SAVE 0 = SAVE 64K" ROM quirk).
+# An empty save should be REFUSED, not ingested. So when we see BLEN==0 in the
+# header we send an ERROR status at the post-header status read -- the Z80's
+# STATUS_TO_REPORT path RST-8's, shows a Report, and ABORTS before it sends the
+# data block, so there is no 64K flood at all.
+#
+# BLEN0_STATUS is the status byte sent for an empty save -> which BASIC Report:
+#   0x04 -> Report Q "Parameter error"      0x08 -> Report A "Invalid argument"
+#   0x05 -> Report C "Nonsense in BASIC"    0x00 -> Report J "Invalid I/O device"
+# (0x00 is the most reliable abort -- direct path, no FUNCTION-chain -- but the
+# least apt wording. 0x08 "Invalid argument" reads best; try it first.)
+BLEN0_STATUS = 0x08
 
 # ===========================================================================
 # Production-format telemetry
@@ -240,13 +247,31 @@ def SAVE_TS(MQ, TSP):
         return MQ, TSP, log_entries
 
     blen = hdr[14] + 256 * hdr[15]
-    if FIX_BLEN0 and blen == 0:
-        blen = 65536      # FIX: DE=0 wraps in the Z80's SA-BYTES loop -> 64K sent
+    _nm = "".join(chr(c) if 32 <= c < 127 else "." for c in hdr[4:14])
+    TLM("header CRC ok", "BLEN=%d name='%s'" % (blen, _nm))
+
+    if blen == 0:
+        # Empty program. Refuse it: send an ERROR status at the post-header
+        # status read so the Z80 RST-8's (Report) and ABORTS before sending the
+        # 64K flood (DE=0 wrap). No data phase at all in the good case.
+        TLM("EMPTY save (BLEN=0): refusing", "status 0x%02X" % BLEN0_STATUS)
+        wrt(BLEN0_STATUS)
+        MQ.exec("mov(y, invert(null))")   # Y ready so the Z80 reads our status
+        dead = True
+        # Safety net: if the abort didn't take and the Z80 floods anyway, drain
+        # until the bus goes quiet so the FIFO resyncs. Abort working => ~0 bytes.
+        _fl = 0
+        _last = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), _last) < 500:
+            if MQ.rx_fifo() > 0:
+                MQ.get()
+                _fl += 1
+                _last = time.ticks_ms()
+        TLM("empty-save refused", "drained %d residual byte(s)" % _fl)
+        return MQ, TSP, log_entries
+
     long = blen + 4
     blk  = bytearray(long)
-    _nm = "".join(chr(c) if 32 <= c < 127 else "." for c in hdr[4:14])
-    TLM("header CRC ok", "BLEN=%d long=%d name='%s'  (FIX_BLEN0=%s)" % (
-        blen, long, _nm, FIX_BLEN0))
 
     wrt(0x01)
     MQ.exec("mov(y, invert(null))")
