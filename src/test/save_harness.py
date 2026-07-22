@@ -155,7 +155,24 @@ DRAIN_MODE = "clean"
 # Run this with DRAIN_MODE="clean" so a resulting drop is REPORTED ("data block
 # X/Y bytes") instead of hanging. If "prod" stalls the data drain while
 # "sleep"/"none" complete, the watchdog's no-sleep busy-loop is the bug.
+# RESULT (2026-07-21, hardware): "prod" AND "sleep" both completed -> the
+# core1 watchdog thread is NOT the bug either.
 DATA_WATCHDOG = "none"
+
+# A/B EXPERIMENT 3 — the post-save SD handoff. Only meaningful with
+# WRITE_TARGET="sd". Production stages the final status then IMMEDIATELY churns
+# the SD/SM: ENA_SD (tspico_io.py:1196), then the dispatcher recreates/parks the
+# state machine several times -- DEACTIVATE_SD -> ACTIVATE_MQ -> MOUNT_FILE
+# (parks) -> ACTIVATE_SD + DIR_FILES (parks) -> ACTIVATE_MQ (tspico.py:4475-4555)
+# -- all WITHOUT waiting for the Z80 to finish its final WF_NPH + status read.
+# A ~20s hang = the Z80's WF_NPH timeout, i.e. the SM was torn out from under it.
+#   "clean"      : wait_tx_drained() before touching the SM; minimal write. (works)
+#   "no_wait"    : skip the wait (like production); still just the minimal write.
+#   "prod_churn" : skip the wait AND recreate/park the SM repeatedly after the
+#                  write, mimicking the dispatcher's post-save churn.
+# If "no_wait" and/or "prod_churn" make the 2068 hang ~20s while "clean"
+# completes, we've reproduced the production bug and know which step causes it.
+SD_HANDOFF = "clean"
 
 # ===========================================================================
 # Local NULL_SM (parks SM0 with no pin claims so SPI can take GPIO 2-4).
@@ -201,7 +218,8 @@ def boot():
     print(HARNESS_VERSION)
     print("  WRITE_TARGET=%s  DRAIN_MODE=%s  DATA_WATCHDOG=%s" % (
         WRITE_TARGET, DRAIN_MODE, DATA_WATCHDOG))
-    print("  MOUNTED_TAP=%r  APPEND=%s" % (MOUNTED_TAP, APPEND))
+    print("  MOUNTED_TAP=%r  APPEND=%s  SD_HANDOFF=%s" % (
+        MOUNTED_TAP, APPEND, SD_HANDOFF))
     print("=" * 64)
 
     u6_en   = Pin(12, Pin.OUT, Pin.PULL_UP)
@@ -266,6 +284,28 @@ def sd_restore():
     for gp in (2, 3, 4):
         Pin(gp, Pin.OUT).value(0)        # clamp low before PIO reclaims them
     make_mq()                            # rebuild the dual-port SM
+
+def simulate_prod_churn():
+    """A/B EXPERIMENT 3: mimic the dispatcher's post-save SD churn
+    (tspico.py:4475-4555) — recreate the SM, then park it twice to re-read the
+    SD, then recreate it — the way production does right while the Z80 is still
+    polling its final WF_NPH. write_tap() already did the actual SD write +
+    sd_restore(); this is the EXTRA churn layered on top."""
+    make_mq(); MQ.put(0x01); mq_ready()      # DEACTIVATE_SD + ACTIVATE_MQ (4475-4486)
+    sd_mount()                               # MOUNT_FILE -> ACTIVATE_SD (parks SM, 4514)
+    try:
+        for _ in os.listdir(SD_DIR):         # ~ re-read the tap
+            pass
+    except Exception:
+        pass
+    sd_restore()
+    sd_mount()                               # ACTIVATE_SD for DIR refresh (4535)
+    try:
+        for _ in os.listdir(SD_DIR):         # ~ DIR_FILES (4539)
+            pass
+    except Exception:
+        pass
+    sd_restore()                             # DEACTIVATE_SD + ACTIVATE_MQ (4550-4551)
 
 
 # ===========================================================================
@@ -553,7 +593,9 @@ def handle_save(pre, T0):
     if WRITE_TARGET == "sd":
         MQ.put(0x01)                 # final status only
         mq_ready()
-        wait_tx_drained()            # ensure Z80 consumed it before SM teardown
+        if SD_HANDOFF == "clean":
+            wait_tx_drained()        # let the Z80 finish its handshake first
+        # "no_wait"/"prod_churn": skip the wait, exactly like production
     else:
         MQ.put(0x01)                 # final status
         MQ.put(0x01)                 # next-command pre-load
@@ -567,6 +609,12 @@ def handle_save(pre, T0):
         ev["write_error"] = repr(e)
 
     if WRITE_TARGET == "sd":
+        if SD_HANDOFF == "prod_churn":
+            try:
+                simulate_prod_churn()    # the suspected killer
+            except Exception as e:
+                print("[warn] prod_churn: %r" % e)
+        ev["sd_handoff"] = SD_HANDOFF
         # SM was rebuilt by sd_restore(); seed the next-command pre-load now.
         MQ.put(0x01)
         mq_ready()
