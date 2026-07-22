@@ -42,6 +42,14 @@ CUR_PATH     = "/sd/TAP"     # production TSP.cur_path default
 MOUNTED_TAP  = None          # TSP.f_name; None => create-new
 APPEND       = False         # TSP.append
 
+# FIX under test: an empty program sends BLEN=0 in the header, but the Z80's
+# SA-BYTES send loop decrements DE *then* tests it, so DE=0 wraps to 0xFFFF and
+# it actually sends 65536 data bytes (the classic ZX "SAVE 0 = SAVE 64K"). The
+# stock SAVE_TS computes long=BLEN+4=4 and reads only 4, leaving ~65532 bytes to
+# jam the FIFO -> infinite phantom saves. FIX: treat BLEN==0 as 65536 so we read
+# the whole 65540-byte block and stay in sync.
+FIX_BLEN0 = True
+
 # ===========================================================================
 # Production-format telemetry
 # ===========================================================================
@@ -231,11 +239,14 @@ def SAVE_TS(MQ, TSP):
         dead = True
         return MQ, TSP, log_entries
 
-    long = hdr[14] + 256 * hdr[15] + 4
+    blen = hdr[14] + 256 * hdr[15]
+    if FIX_BLEN0 and blen == 0:
+        blen = 65536      # FIX: DE=0 wraps in the Z80's SA-BYTES loop -> 64K sent
+    long = blen + 4
     blk  = bytearray(long)
     _nm = "".join(chr(c) if 32 <= c < 127 else "." for c in hdr[4:14])
-    TLM("header CRC ok", "BLEN=%d long=%d name='%s'" % (
-        hdr[14] + 256 * hdr[15], long, _nm))
+    TLM("header CRC ok", "BLEN=%d long=%d name='%s'  (FIX_BLEN0=%s)" % (
+        blen, long, _nm, FIX_BLEN0))
 
     wrt(0x01)
     MQ.exec("mov(y, invert(null))")
