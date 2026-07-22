@@ -201,8 +201,12 @@ def SAVE_TS(MQ, TSP):
     global log_entries
     log_entries = ""
 
-    TLM("SAVE_TS enter", "dead=%s kill=%s busy=%s f_name=%r append=%s" % (
-        dead, kill, busy, TSP.f_name, TSP.append))
+    # Capture entry state, but do NOT print here — a print between the
+    # dispatcher's MQ_READY and this header read sits inside the Z80's tight
+    # 18C4/18D2 handshake window and can desync it. Fold it into the
+    # header-read-done line, which is AFTER the read.
+    _enter = "dead=%s kill=%s busy=%s f_name=%r append=%s" % (
+        dead, kill, busy, TSP.f_name, TSP.append)
     dead = False
     wrt = MQ.put
     gc.collect()
@@ -212,8 +216,8 @@ def SAVE_TS(MQ, TSP):
     hdr = bytearray(21)
     for i in range(21):
         hdr[i] = MQ.get() & 0xFF
-    TLM("header read done", "%dus  bytes=%s" % (
-        time.ticks_diff(time.ticks_us(), _t0),
+    TLM("header read done", "%dus  enter[%s]  bytes=%s" % (
+        time.ticks_diff(time.ticks_us(), _t0), _enter,
         " ".join("%02X" % b for b in hdr)))
 
     crc_calc = hdr[0]
@@ -341,10 +345,17 @@ gc.collect()
 try:
     while True:
         if MQ.rx_fifo() == 0:
+            # Keep the status pre-load alive during idle: if something on the
+            # 2068 side read $0E while idle and ate the pre-load, replenish it
+            # so the next SAVE's pre-header status read (18C4) still gets 0x01.
+            if MQ.tx_fifo() == 0:
+                MQ.put(0x01)
             continue
         for i in range(10):
             pre[i] = MQ.get()
         MQ_READY()
+        # ONE print here (we still want the pre-header if SAVE_TS then blocks),
+        # but nothing else in the tight window before the header read.
         TLM("pre-header", " ".join("%02X" % b for b in pre))
 
         if pre[0] == 0x00 and pre[1] == 0x00:
