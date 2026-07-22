@@ -1049,9 +1049,12 @@ def SAVE_TS(MQ, TSP):
     global log_entries
     log_entries = ""
 
+    from TS.tspico import TLM         # lazy import: tspico imports SAVE_TS, so a
+                                      # module-level import here would be circular
     dead = False
     wrt = MQ.put
     gc.collect()
+    TLM("SAVE_TS enter", "f_name=%r append=%s" % (TSP.f_name, TSP.append))
 
     # ============================================================
     # Phase 2: receive the 21-byte HEADER block
@@ -1059,6 +1062,7 @@ def SAVE_TS(MQ, TSP):
     hdr = bytearray(21)
     for i in range(21):
         hdr[i] = MQ.get() & 0xFF
+    TLM("SAVE_TS header read", "bytes=%s" % " ".join("%02X" % b for b in hdr))
 
     # Verify CRC: XOR of [0] + [3..19] should equal hdr[20].
     # (Skip session-ID bytes at [1] and [2] — TPI extension, not in CRC.)
@@ -1066,6 +1070,8 @@ def SAVE_TS(MQ, TSP):
     for i in range(3, 20):
         crc_calc ^= hdr[i]
     if crc_calc != hdr[20]:
+        TLM("SAVE_TS EXIT header CRC fail", "got 0x%02X want 0x%02X" % (
+            hdr[20], crc_calc))
         LOG_ADD("ERROR: Bad CRC on SAVE header (got 0x%02X, expected 0x%02X)" % (
             hdr[20], crc_calc), 2, TSP.LOG_LEVEL)
         # Even on error, give Z80 status bytes so it doesn't hang.
@@ -1078,7 +1084,37 @@ def SAVE_TS(MQ, TSP):
 
     # Compute the upcoming data block's size from header[14:16] = BLEN.
     # The data block transmitted is BLEN+4 bytes (type + 2 session + N + CRC).
-    long = hdr[14] + 256 * hdr[15] + 4
+    blen = hdr[14] + 256 * hdr[15]
+    TLM("SAVE_TS header ok", "BLEN=%d" % blen)
+
+    # ------------------------------------------------------------------
+    # EMPTY-PROGRAM GUARD. A blank SAVE has BLEN=0, but the Z80's SA-BYTES
+    # send loop decrements DE *then* tests it, so DE=0 wraps to 0xFFFF and it
+    # floods 65536 bytes onto the bus (the classic ZX "SAVE 0 = SAVE 64K" ROM
+    # quirk). We can't fix the 2068 ROM, so refuse the save: send an error
+    # status at THIS post-header status read so the Z80's STATUS_TO_REPORT path
+    # RST-8's (Report A "Invalid argument") and aborts BEFORE sending the data
+    # block. No 64K flood. A bounded drain resyncs the FIFO if the Z80 floods
+    # anyway (abort worked -> ~0 bytes drained).
+    # ------------------------------------------------------------------
+    if blen == 0:
+        TLM("SAVE_TS EXIT empty (BLEN=0), refusing")
+        wrt(0x08)                        # status 8 -> Report A "Invalid argument"
+        MQ.exec("mov(y, invert(null))")  # Y → READY so the Z80 reads our status
+        dead = True
+        _fl = 0
+        _last = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), _last) < 500:
+            if MQ.rx_fifo() > 0:
+                MQ.get()
+                _fl += 1
+                _last = time.ticks_ms()
+        LOG_ADD("SAVE refused: empty program (BLEN=0), drained %d flood bytes"
+                % _fl, 2, TSP.LOG_LEVEL)
+        TLM("SAVE_TS empty drained", "%d residual byte(s)" % _fl)
+        return MQ, TSP, log_entries
+
+    long = blen + 4
     blk  = bytearray(long)
 
     # ============================================================
@@ -1093,6 +1129,8 @@ def SAVE_TS(MQ, TSP):
     # Spawn a watchdog so a hung Z80 doesn't lock the loop forever.
     # ============================================================
     _thread.start_new_thread(WATCHDOG, (5, MQ, TSP))
+    TLM("SAVE_TS watchdog spawned", "kill=%s long=%d, waiting for data" % (
+        kill, long))
 
     # The Z80 takes up to ~1 second to start sending the data block
     # after reading the mid-status (it does internal processing). If we
@@ -1101,6 +1139,7 @@ def SAVE_TS(MQ, TSP):
     t_init = time.ticks_us()
     while MQ.rx_fifo() == 0:
         if time.ticks_diff(time.ticks_us(), t_init) >= 1_000_000:
+            TLM("SAVE_TS EXIT no data after 1s")
             LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s)",
                     2, TSP.LOG_LEVEL)
             # Provide the trailing status bytes anyway so we don't leave
@@ -1118,12 +1157,14 @@ def SAVE_TS(MQ, TSP):
     for i in range(long):
         blk[i] = MQ.get() & 0xFF
         if kill:
+            TLM("SAVE_TS EXIT killed by watchdog", "at byte %d/%d" % (i, long))
             LOG_ADD("ERROR: SAVE_TS killed by watchdog", 2, TSP.LOG_LEVEL)
             wrt(0x01)            # still terminate the protocol cleanly
             wrt(0x01)
             MQ.exec("mov(y, invert(null))")  # #14: Y → READY
             dead = True
             return MQ, TSP, log_entries
+    TLM("SAVE_TS data read done", "%d bytes" % long)
 
     # ============================================================
     # CRITICAL — write final status and next-iter pre-load IMMEDIATELY.
@@ -1139,6 +1180,7 @@ def SAVE_TS(MQ, TSP):
 
     dead = True
     totbytes = len(hdr) + long
+    TLM("SAVE_TS final status sent", "%d bytes total, Y=READY" % totbytes)
 
     # ============================================================
     # Reconstruct a standard TAP file from the received bytes.
@@ -1174,6 +1216,7 @@ def SAVE_TS(MQ, TSP):
         clean_fname = "".join(c for c in filename
                               if c.isalpha() or c.isdigit() or c in "_-")
         if clean_fname != filename:
+            TLM("SAVE_TS EXIT filename not allowed", repr(filename))
             msg = 'ERROR: Filename "%s" not allowed' % filename
             END_MSG(MQ, True, msg, [], 3)
             return MQ, TSP, log_entries
@@ -1193,11 +1236,13 @@ def SAVE_TS(MQ, TSP):
     # to SPI mode for SD access. After the write completes, the main
     # dispatcher will switch back to PIO for the next Z80 transaction.
     # ============================================================
+    TLM("SAVE_TS write start", "%r mode=%s" % (filename, mode))
     ENA_SD()
     with open(filename, mode) as f1:
         f1.write(hdr)
         f1.write(blk)
     os.chdir(TSP.cur_path)
+    TLM("SAVE_TS write done", "%d bytes -> %r" % (totbytes, filename))
 
     hdr = None
     blk = None
