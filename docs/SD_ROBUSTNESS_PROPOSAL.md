@@ -1,6 +1,6 @@
 # SD Card Robustness — Graceful Degradation & Remount
 
-**Status: PROPOSAL — not started, no code written.**
+**Status: PROPOSAL — not started, no code written.** Tracker: [#43](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/43).
 
 Today the TS-Pico treats "no SD card" as a fatal condition and stops.
 It should treat it as a *state*: note it, keep running, fail the
@@ -62,7 +62,8 @@ chain**, so the *next* command reads `0x00` from an empty TX FIFO and
 reports J, per the symptom-to-cause mapping in
 [`../src/CLAUDE.md`](../src/CLAUDE.md).
 
-This is a live bug independent of everything else in this document, and
+This is a live bug independent of everything else in this document —
+filed as [#42](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/42) — and
 it is the reason "return an error to the 2068" isn't currently
 something a handler can reliably do.
 

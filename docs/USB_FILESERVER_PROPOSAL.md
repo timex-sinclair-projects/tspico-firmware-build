@@ -1,6 +1,7 @@
 # USB File Server — Feasibility Study & Implementation Plan
 
-**Status: PROPOSAL — not started, no code written.** Written to answer
+**Status: PROPOSAL — not started, no code written.** Tracker:
+[#44](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/44). Written to answer
 "how hard would this be?" and to give the team something concrete to
 argue with.
 
