@@ -27,7 +27,7 @@
   370 RETURN 
   500 LET err=PEEK 23739
   510 LET erl=PEEK 23736+256*PEEK 23737
-  520 PRINT 'PAPER 2;"*** ERROR: ";e$(err+1);" ***";TAB 31;" "
+  520 PRINT ' PAPER 2;"*** ERROR: ";e$(err+1);" ***";TAB 31;" "
   530 IF err=19 THEN PRINT '"*** TS-Pico communication error"
   540 IF err=9 OR err=17 OR err=19 THEN ON ERR RESET : STOP 
   550 GO TO erl+1
@@ -87,9 +87,10 @@
 #
  1399 GO TO 1000
  1400 INPUT "Test # to skip to (";(t+1);"-";(n);"):";s
- 1410 LET s=((t+1) AND s=0)+(s AND s>t)
- 1420 IF NOT demo THEN SAVE "tpi:verbose on"
- 1430 GO TO 1000
+ 1410 LET s=((t+1) AND (s<=t OR s>n))+(s AND s>t)
+ 1420 SAVE "tpi:verbose on"
+ 1430 PRINT ''"Jumping to test ";s;"..."
+ 1440 GO TO 1000
 #
  2000 DATA 38
 #                                     Expect:789012345678901234567890101234567890123456789012345678901

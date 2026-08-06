@@ -119,21 +119,22 @@
 #
  1399 GO TO 1000
  1400 INPUT "Test # to skip to (";(t+1);"-";(n);"):";s
- 1410 LET s=((t+1) AND s=0)+(s AND s>t)
+ 1410 LET s=((t+1) AND (s<=t OR s>n))+(s AND s>t)
  1420 IF NOT demo THEN SAVE "tpi:verbose on"
- 1430 GO TO 1000
+ 1430 PRINT ''"Jumping to test ";s;"..."
+ 1440 GO TO 1000
 #
 # DATA lines without line numbers, so use `zmakebas -l`
 #
-REM Test DATA fields:
-REM 1: Test type: 1=LOAD, 2=SAVE, 3=IN, 4=OUT, 0=end of data, negative to skip
-REM 2: tpi:command string
-REM 3: a value for CODE a,b or port for IN/OUT
-REM 4: b value for CODE a,b or byte count for IN (0=repeat until a 0 byte)
-REM 5: Description of command
-REM 6: Description of result
-REM 7: Error code expected: "0".."9","A".."R"
-DATA 83: REM Total number of tests (not critical if this is wrong)
+ 1900 REM Test DATA fields:
+ 1910 REM 1: Test type: 1=LOAD, 2=SAVE, 3=IN, 4=OUT, 0=end of data, negative to skip
+ 1920 REM 2: tpi:command string
+ 1930 REM 3: a value for CODE a,b or port for IN/OUT
+ 1940 REM 4: b value for CODE a,b or byte count for IN (0=repeat until a 0 byte)
+ 1950 REM 5: Description of command
+ 1960 REM 6: Description of result
+ 1970 REM 7: Error code expected: "0".."9","A".."R"
+ 2000 DATA 83: REM Total number of tests (not critical if this is wrong)
 # Initial setup: loglevel/verbose
 DATA 2,"tpi:loglevel",0,0,"Show loglevel","LOG level set to the     default","0"
 DATA 2,"tpi:verbose off",0,0,"Set verbose off","No message, but verbose  is off (for next test)","0"
@@ -190,10 +191,10 @@ DATA 2,"tpi:close",0,0,"Unmount current file","bar.tap was unmounted","0"
 DATA 2,"tpi:append on",0,0,"Turn on append with no tap file mounted","Parameter Error Q","Q"
 # cd options
 DATA 2,"tpi:cd ..",1,0,"Change to parent dir and show   new dir list","Change to parent and showthe files with the temp dir","0"
-#        01234567890123456789012345678901        Expect:789012345678901234567890101234567890123456789012345678901
 DATA 2,"tpi:cd temp",2,0,"Change to dir and show path","Change back to temp and  show the path","0"
 DATA 2,"tpi:cd ..",1,2,"Change to parent dir and show   tpi:dir CODE 2,0","Change to parent and show  dir of files only","0"
-DATA 2,"tpi:cd picotest",1,1,"Change to dir and show tpi:idir to pick","Change to /TAP/picotest  and show idir","0"
+#        01234567890123456789012345678901                        Expect:789012345678901234567890101234567890123456789012345678901
+DATA 2,"tpi:cd picotest",1,1,"Change to dir and show tpi:idir to pick","Change to picotest dir   and show idir","0"
 #
 DATA 2,"tpi:rm 000",0,0,"Remove file by index (choose N)","Asked to remove file #000","0"
 DATA 2,"tpi:rm 000",0,0,"Remove file by index (choose Y)","Removed file #000","0"
