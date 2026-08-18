@@ -36,6 +36,14 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+  # Auto-publish the updater after a release build finishes. We chain off the
+  # Release workflow COMPLETING (workflow_run) rather than the `release:
+  # published` event: a Release created with the built-in GITHUB_TOKEN does NOT
+  # fire `release` for downstream workflows (GitHub's recursion guard), but
+  # workflow_run is not subject to that, so this actually runs.
+  workflow_run:
+    workflows: ["Release TS-Pico Firmware"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -51,6 +59,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # When chained off the Release workflow, only publish if that build passed.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,6 +95,10 @@ jobs:
           TAG=""
           if [ "${{ github.event_name }}" = "release" ]; then
             TAG="${{ github.event.release.tag_name }}"
+          else
+            # workflow_run / dispatch / push: resolve the latest published
+            # release so the manifest carries the real tag, not "latest".
+            TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || echo '')"
           fi
           # Pull firmware.uf2 from the triggering release, else the latest one.
           # Tolerate "no releases yet" — the updater still builds (wipe step +

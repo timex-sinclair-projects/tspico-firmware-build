@@ -64,7 +64,13 @@ if [ ! -d "$SRC_DIR" ]; then
 fi
 
 # ── Compile each .bas ──────────────────────────────────────────────────
-count=0
+# A source file normally holds ONE program -> one tape file. A file may also
+# hold SEVERAL programs, each introduced by its own `#! zmakebas` directive;
+# those are tokenized separately and concatenated, in source order, into one
+# multi-program .tap. (A TAP is just a sequence of tape files, so a multi-program
+# tape is the per-program tapes laid end to end.) See basic/README.md.
+files=0
+progs=0
 # -print0 / read -d '' so paths with spaces (e.g. "RND WORDS.bas") survive.
 while IFS= read -r -d '' bas; do
   rel="${bas#"$SRC_DIR"/}"            # e.g. SD/TAP/test/factorial.bas  or  assets/nofile.bas
@@ -78,21 +84,57 @@ while IFS= read -r -d '' bas; do
   fi
   out="$ROOT/${dest%.bas}.tap"
   disp="${dest%.bas}.tap"
-
-  # Options directive (first match wins). POSIX bracket class (not \s) so this
-  # works on both BSD (local) and GNU (CI) sed.
-  opts="$(sed -n 's/^#![[:space:]]*zmakebas[[:space:]]*//p' "$bas" | head -n1)"
-  [ -z "$opts" ] && opts="-n $name"
-
   mkdir -p "$(dirname "$out")"
-  if [ "$VERBOSE" = 1 ]; then
-    echo "==> $ZMK $opts -o \"$out\" \"$bas\""
+
+  # How many `#! zmakebas` directives does this source carry? 0 or 1 -> a single
+  # program; 2+ -> a multi-program tape. `|| true` so grep's "no match -> exit 1"
+  # doesn't trip `set -e`.
+  ndir="$(grep -cE '^#![[:space:]]*zmakebas' "$bas" || true)"
+
+  if [ "${ndir:-0}" -ge 2 ]; then
+    # ── Multi-program tape: split on each directive, tokenize, concatenate ──
+    echo "==> basic/$rel -> $disp ($ndir programs)"
+    tmp="$(mktemp -d)"
+    # Each `#! zmakebas` line starts a new segment; awk keeps each segment file
+    # open and appends to it, so 0001.bas, 0002.bas, ... come out in order. Lines
+    # before the first directive (file-level comments) are dropped — zmakebas
+    # would ignore them anyway.
+    awk -v dir="$tmp" '
+      /^#![[:space:]]*zmakebas/ { seg++ }
+      seg>0 { print > (dir "/" sprintf("%04d", seg) ".bas") }
+    ' "$bas"
+    first=1
+    for seg in "$tmp"/*.bas; do
+      # Per-program options ride on that program's own directive (first match).
+      sopts="$(sed -n 's/^#![[:space:]]*zmakebas[[:space:]]*//p' "$seg" | head -n1)"
+      [ -z "$sopts" ] && sopts="-n $name"
+      [ "$VERBOSE" = 1 ] && echo "    $ZMK $sopts -o - \"$seg\""
+      # shellcheck disable=SC2086  # $sopts is intentionally word-split
+      if [ "$first" = 1 ]; then
+        eval "\"\$ZMK\" $sopts -o - \"\$seg\"" > "$out"   # first program: create
+        first=0
+      else
+        eval "\"\$ZMK\" $sopts -o - \"\$seg\"" >> "$out"  # rest: append
+      fi
+      progs=$((progs + 1))
+    done
+    rm -rf "$tmp"
   else
-    echo "==> basic/$rel -> $disp"
+    # ── Single program: one tape file from the whole source (unchanged) ──
+    # Options directive (first match wins). POSIX bracket class (not \s) so this
+    # works on both BSD (local) and GNU (CI) sed.
+    opts="$(sed -n 's/^#![[:space:]]*zmakebas[[:space:]]*//p' "$bas" | head -n1)"
+    [ -z "$opts" ] && opts="-n $name"
+    if [ "$VERBOSE" = 1 ]; then
+      echo "==> $ZMK $opts -o \"$out\" \"$bas\""
+    else
+      echo "==> basic/$rel -> $disp"
+    fi
+    # shellcheck disable=SC2086  # $opts is intentionally word-split
+    eval "\"\$ZMK\" $opts -o \"\$out\" \"\$bas\""
+    progs=$((progs + 1))
   fi
-  # shellcheck disable=SC2086  # $opts is intentionally word-split
-  eval "\"\$ZMK\" $opts -o \"\$out\" \"\$bas\""
-  count=$((count + 1))
+  files=$((files + 1))
 done < <(find "$SRC_DIR" -type f -name '*.bas' -print0 | sort -z)
 
-echo "Built $count BASIC program(s)."
+echo "Built $progs BASIC program(s) into $files .tap file(s)."

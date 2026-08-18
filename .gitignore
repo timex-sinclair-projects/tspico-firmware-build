@@ -9,6 +9,12 @@
 # it as the "wipe the Pico" download. It is not a build output.
 !web-updater/flash_nuke.uf2
 
+# Exception: ROMs/ holds reference ROM images, not build outputs. The *.bin rule
+# above (for the compiled zmakebas binary) would otherwise swallow the TS2068
+# baselines that tools/romdiff.py and tools/romdisasm.sh diff against, leaving a
+# fresh clone unable to run either. See docs/rom-analysis/README.md.
+!ROMs/*.bin
+
 # MicroPython compiled
 *.mpy
 __pycache__/

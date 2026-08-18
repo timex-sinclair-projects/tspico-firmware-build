@@ -1,0 +1,96 @@
+; Curated TS-PICO EXROM symbols, recovered by reverse-engineering.
+; Feed to z80dasm to get a labelled disassembly:
+;
+;   z80dasm -a -l -t -g 0x0000 \
+;           -S docs/rom-analysis/tspico-exrom-symbols.sym \
+;           -o labelled.asm ROMs/TSPICO-15w-exrom
+;
+; Valid for both TSPICO-11-exrom and TSPICO-15w-exrom (all addresses are
+; identical between them). YN_LOOP_GUARD exists only in v1.5w.
+;
+; See SYMBOLS.md for the evidence behind each name and PROTOCOL_FROM_ROM.md
+; for how they fit together. Names are ours; the ROM ships no symbols.
+
+; ---- boot / banking ------------------------------------------------------
+BOOT_MAP_16K:		equ 0x0049	; LD A,03h; OUT (0F4h),A -> chunks 0+1
+CALL_HOME:		equ 0x03dd	; EXROM->HOME thunk (PUSH IX;EXX;LD HL,t;JP)
+BANK_SWITCH:		equ 0x0f99	; stock TS2068 low-level bank switcher
+
+; ---- status / BREAK ------------------------------------------------------
+READ_STATUS:		equ 0x0655	; the ONLY read of port 0x0F
+CHECK_BREAK:		equ 0x069f	; keyboard row 0xFE; carry clear = key down
+BREAK_ABORT:		equ 0x06aa	; POP BC; JP WAIT_PICO_READY_FAIL
+READ_STATUS_BYTE:	equ 0x02b9	; read + validate; returns A = status-1
+
+; ---- string / key primitives ---------------------------------------------
+READ_STATUS_AND_OPEN:	equ 0x01c3	; CALL READ_STATUS_BYTE; JP OPEN_MAIN_SCREEN
+PRINT_STRING_FROM_PICO:	equ 0x045f	; read bytes from Pico, print until done
+GET_KEY_AND_SEND:	equ 0x0471	; wait release, wait press, tail-call SEND_KEY
+OPEN_MAIN_SCREEN:	equ 0x04f1	; LD A,0FEh; open channel
+POLL_KEYPRESS:		equ 0x0546	; Z = no key
+LOOP_EXIT_OK:		equ 0x0810	; CALL 05FA; POP AF; RET
+LOOP_EXIT_ERR:		equ 0x0813	; POP AF; RET
+GET_STATUS_BIT_0:	equ 0x025e	; 0/1 flag for GET STATUS
+GET_STATUS_BIT_1:	equ 0x026a	; 0/1 flag for GET STATUS
+
+; ---- FUNCTION dispatch chain (entered with A = status - 1) ---------------
+FN_CHAIN_HEAD:		equ 0x026f	; CP 80h -> status 0x81
+FN_81_PRINT_STRING:	equ 0x0274
+FN_CHAIN_C1:		equ 0x2194	; CP 81h -> status 0x82
+FN_82_PRINT_STR_KEY:	equ 0x2198
+FN_83_PRINT_CHAR:	equ 0x21a8
+FN_84_RETURN_KEY:	equ 0x21be
+FN_85_GET_STATUS:	equ 0x21cb
+FN_86_YN_PROMPT:	equ 0x21e3	; PRINT STRING WITH LOOP (Y/N)
+YN_LOOP:		equ 0x21e7	; loop head - v1.5w patch site
+FN_87_PRINT_N_CHARS:	equ 0x2201
+FN_DEAD_BEEP:		equ 0x2216	; UNREACHABLE dead code - see PROTOCOL_FROM_ROM.md
+
+; ---- core Pico driver (in the stock ROM's 0x1800-0x1BFF hole) -----------
+WAIT_PICO_READY:	equ 0x1a54	; WF_NPH: 226 polls of status bit 6
+WAIT_PICO_READY_FAIL:	equ 0x1a61	; timeout/BREAK exit; A=02h, carry set
+WAIT_PICO_READY_OK:	equ 0x1a6e	; success exit; carry clear
+SESSION_SETUP:		equ 0x1a73	; SESSION ID from FRAMES; TPI:/NET: parse
+SEND_BYTE_CRC:		equ 0x1b7e	; send byte, XOR into CRC in D
+BUILD_PREHEADER_B:	equ 0x1ba0	; emit the 10-byte 'B' pre-header
+STATUS_TO_REPORT:	equ 0x1bf3	; status-1 -> BASIC report
+STATUS_OK:		equ 0x1c23
+SEND_KEY:		equ 0x1c40	; wait ready, then OUT (0Eh),A
+
+; ---- BASIC report targets ------------------------------------------------
+RPT_6_NUM_TOO_BIG:	equ 0x1c16
+RPT_8_END_OF_FILE:	equ 0x1c18
+RPT_9_STOP:		equ 0x1c1a	; the TS-PICO "comms aborted" report
+RPT_A_INVALID_ARG:	equ 0x1c1c
+RPT_J_INVALID_IO:	equ 0x1c21
+RPT_C_NONSENSE:		equ 0x1c35
+RPT_F_BAD_FILENAME:	equ 0x1c39
+RPT_Q_PARAM_ERROR:	equ 0x1c3c
+RPT_R_TAPE_ERROR:	equ 0x1c3e
+RPT_D_BREAK_CONT:	equ 0x00f8
+
+; ---- chunk 1: driver + port helpers -------------------------------------
+ENTRY_TABLE:		equ 0x2000	; only 0x2000 is live; 10 slots JP self
+BEEPER:			equ 0x203f	; relocated verbatim from genuine HOME 0x03F3
+BREAK_KEY:		equ 0x2009	; ADDRESS-PINNED copy of HOME's; do not move
+BIOS_TABLE:		equ 0x1840	; TPI BIOS: G_MODE/S_MODE/G_VERS/TX_A/RX_A/C_END/WF_NPH/EWAIT
+BIOS_G_VERS:		equ 0x1852	; LD BC,0015h; RET -> TPI BIOS version 21
+PRINTER_TABLE:		equ 0x1630	; 5 entries, targets of the HOME thunks
+SEND_DATA_BLOCK_D:	equ 0x223e	; 'D' (0x44) data-block sender
+PICO_TRANSACT:		equ 0x2274	; write -> wait -> read -> dispatch
+ERR_9:			equ 0x2294	; LD A,09h -> surfaces as Report J, not Report 9
+TSPICO_READ_DATA:	equ 0x2298	; IN A,(0Eh); AND A; RET
+TSPICO_WRITE_DATA:	equ 0x229d	; OUT (0Eh),A; AND A; RET
+YN_LOOP_GUARD:		equ 0x22a1	; *** v1.5w ONLY *** the 13-byte fix
+
+; ---- halt stubs (JP self - lock the machine if called) ------------------
+HALT_STUB_2003:		equ 0x2003
+HALT_STUB_2006:		equ 0x2006
+HALT_STUB_2027:		equ 0x2027
+HALT_STUB_202A:		equ 0x202a
+HALT_STUB_202D:		equ 0x202d
+HALT_STUB_2030:		equ 0x2030
+HALT_STUB_2033:		equ 0x2033
+HALT_STUB_2036:		equ 0x2036
+HALT_STUB_2039:		equ 0x2039
+HALT_STUB_203C:		equ 0x203c
