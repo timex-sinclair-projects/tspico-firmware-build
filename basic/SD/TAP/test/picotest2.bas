@@ -71,6 +71,7 @@
  1174 IF l=1 AND a=0 AND b=0 THEN LOAD t$
  1176 IF l=2 AND a=0 AND b=0 THEN SAVE t$
  1178 IF l=2 AND (a<>0 OR b<>0) THEN SAVE t$CODE a,b
+ 1180 IF l=5 THEN VERIFY t$
  1196 ON ERR RESET 
  1198 IF l>2 THEN PRINT "Types 1 and 2 only": STOP 
  1200 FOR i=1 TO 100: NEXT i
@@ -92,7 +93,15 @@
  1430 PRINT ''"Jumping to test ";s;"..."
  1440 GO TO 1000
 #
- 2000 DATA 38
+# Test DATA fields:
+# 1: Test type: 1=LOAD, 2=SAVE, 3=IN, 4=OUT, 5=VERIFY, 6=MERGE, 0=end of data, negative to skip
+# 2: tpi:command string
+# 3: a value for CODE a,b or port for IN/OUT
+# 4: b value for CODE a,b or byte count for IN (0=repeat until a 0 byte)
+# 5: Description of command
+# 6: Description of result
+# 7: Error code expected: "0".."9","A".."R"
+ 2000 DATA 39
 #                                     Expect:789012345678901234567890101234567890123456789012345678901
 # Setup
 DATA 2,"tpi:verbose on",0,0,"Turn on verbose mode","Verbose is now enabled","0"
@@ -105,6 +114,7 @@ DATA 2,"tpi:dir",0,0,"Show new empty .tap file","foo.tap with size 0 b","0"
 DATA 2,"tpi:info",0,0,"Show info with tap file","foo.tap info shown in    tpi:info","0"
 DATA 2,"foo1",0,0,"Save program to empty tap","Program foo1 saved to    foo.tap","0"
 DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 program","Two blocks for program   'foo1'","0"
+DATA 5,"foo1",0,0,"Verify program same as saved foo1","0"
 DATA 2,"tpi:dir",0,0,"Show directory","foo.tap shown with non-  zero size","0"
 DATA 2,"foo2",0,0,"Save but PRESS SPACE to cancel","Program foo2 not saved,  error D","D"
 DATA 2,"foo2",0,0,"Save again but DO NOT cancel","Program foo2 saved","0"
