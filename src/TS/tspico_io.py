@@ -20,6 +20,8 @@ from TS.sdcard import *
 #
 # Initialize them here so the race is impossible:
 # ---------------------------------------------------------------------------
+_KILL_CHECK_EVERY = const(64)   # bytes per chunk in the SAVE data drain
+
 kill = False        # set True by WATCHDOG to abort a hung transaction
 busy = False        # core1 watchdog activity flag
 dead = True         # True = no transaction in progress; False = active
@@ -360,7 +362,7 @@ def TS_IO_DUAL():
                                           # the bus until the next cycle
 
 
-def ABORT_TX(log_level):
+def ABORT_TX(log_level, what="LOAD_TS"):
     """Abort an in-flight LVM transaction.
 
     Called from LOAD_TS / SAVE_TS when the watchdog has flagged the
@@ -369,20 +371,43 @@ def ABORT_TX(log_level):
     finish its FIFO-clear cleanup (busy goes False).
 
     The watchdog itself does the actual TX/RX FIFO drain; this function
-    just signals it and waits.
+    just signals it and waits. Do NOT write status bytes before calling
+    this: the watchdog's cleanup loop is pumping `pull(noblock)` through
+    TX the whole time it waits for `dead`, so anything staged beforehand
+    is discarded. The dispatcher re-arms TX after we return.
+
+    Waiting matters for more than tidiness. The watchdog's cleanup ends
+    with MQ.active(0) -> BLINK() -> MQ.active(1), and BLINK blocks for
+    ~1 second. Returning early means core0 races ahead into the
+    dispatcher's ACTIVATE_MQ + status pre-load while core1 is still
+    bouncing the very same hardware state machine underneath it.
+
+    Args:
+        log_level: TSP.LOG_LEVEL.
+        what:      handler name for the log line.
     """
     global dead
     global busy
 
-    LOG_ADD("ERROR: LOAD_TS failed!", 2, log_level)
+    LOG_ADD("ERROR: %s failed!" % what, 2, log_level)
     dead = True
 
     # Spin until the watchdog thread on core1 finishes its cleanup.
     # The watchdog drains FIFOs, deactivates/reactivates the SM, then
     # sets busy = False. We can't proceed to send a response until then
     # because the bus state is unsafe during cleanup.
+    #
+    # Bounded: if the thread died before clearing `busy` (it never should,
+    # but an unhandled exception on core1 leaves no trace on core0), an
+    # unbounded spin here wedges the dispatcher forever. BLINK alone is
+    # ~1s, so give it 3s and then carry on.
+    _t = time.ticks_ms()
     while busy:
-        pass
+        if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
+            LOG_ADD("ERROR: ABORT_TX gave up waiting for core1 cleanup",
+                    2, log_level)
+            busy = False
+            break
 
     return
 
@@ -712,7 +737,7 @@ def LOAD_TS(pre, MQ, TSP):
 
     # ---- Spawn watchdog so a misbehaving Z80 doesn't lock the loop ----
     dead = False
-    _thread.start_new_thread(WATCHDOG, (3, MQ, TSP))
+    START_WATCHDOG(3, MQ, TSP)
 
     wrt = MQ.put
 
@@ -872,7 +897,7 @@ def LOAD_ZX(MQ, TSP):
     dead = False
     r = range(totbytes)
     
-    _thread.start_new_thread(WATCHDOG, (3, MQ, TSP))
+    START_WATCHDOG(3, MQ, TSP)
 
     wrt = MQ.put
     # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
@@ -1037,6 +1062,54 @@ def SAVE_NAME(hdr):
     return name, ok
 
 
+def _WAIT_CORE1(log_level, timeout_ms=3000):
+    """Wait (bounded) for the core1 watchdog to release `busy`.
+
+    Same rationale as ABORT_TX's wait, for the paths that end a
+    transaction without an abort handshake. Bounded because an
+    unbounded spin on a cross-core flag wedges the dispatcher if the
+    thread ever dies without clearing it.
+    """
+    global busy
+    _t = time.ticks_ms()
+    while busy:
+        if time.ticks_diff(time.ticks_ms(), _t) >= timeout_ms:
+            LOG_ADD("ERROR: timed out waiting for core1 watchdog", 2, log_level)
+            busy = False
+            break
+    return
+
+
+def REFUSE_SAVE(MQ, status, quiet_ms=500):
+    """Refuse a SAVE at the post-header status read. Returns bytes drained.
+
+    This is THE way to fail a SAVE. The Z80 has sent its header and is
+    polling $0F waiting for the mid-phase status; whatever we write here
+    is the verdict. An error status sends it down STATUS_TO_REPORT, which
+    RST-8's with a BASIC report and aborts the SAVE *before* the data
+    block is transmitted.
+
+    The alternative -- writing 0x01 "OK" and bailing out -- is what the
+    header-CRC and no-data paths used to do, and it is actively harmful:
+    the Z80 takes OK at face value and streams the whole data block at a
+    handler that has already returned. Nobody drains it, so the
+    dispatcher's next pre-header read picks up data bytes and dispatches
+    on garbage, and the trailing 0x01 is read as the final status, so the
+    2068 prints "0 OK" for a transfer that never produced a file.
+
+    Statuses in use (see docs/GUSTAVO_PROTOCOL.md section 8):
+        0x02 -> Report R, tape loading error  (bad header CRC, no data)
+        0x03 -> Report F, invalid file name   (name not in the allowlist)
+        0x06 -> Report 6, number too big      (data block won't fit in RAM)
+        0x08 -> Report A, invalid argument    (empty program, BLEN=0)
+
+    Caller is responsible for `dead = True` and for returning.
+    """
+    MQ.put(status)
+    MQ.exec("mov(y, invert(null))")   # Y -> READY so the Z80 reads our status
+    return DRAIN_REFUSED_SAVE(MQ, quiet_ms)
+
+
 def DRAIN_REFUSED_SAVE(MQ, quiet_ms=500):
     """Resync the RX FIFO after refusing a SAVE at the post-header status.
 
@@ -1148,12 +1221,21 @@ def SAVE_TS(MQ, TSP):
             hdr[20], crc_calc))
         LOG_ADD("ERROR: Bad CRC on SAVE header (got 0x%02X, expected 0x%02X)" % (
             hdr[20], crc_calc), 2, TSP.LOG_LEVEL)
-        # Even on error, give Z80 status bytes so it doesn't hang.
-        # (Status 0x01 means "OK" but Z80 will see CRC fail elsewhere.)
-        wrt(0x01)
-        wrt(0x01)
-        MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy)
+        # REFUSE. This used to write 0x01 0x01 -- "OK" -- on the theory
+        # that the Z80 "will see CRC fail elsewhere". It won't: the Z80
+        # computed its own CRC over the bytes it sent and is satisfied
+        # with them. A bad CRC here means the bytes were corrupted or
+        # dropped in transit, which only WE can see. Telling the Z80 OK
+        # made it stream the entire data block at a handler that had
+        # already returned -- undrained, so the dispatcher read data
+        # bytes as the next pre-header -- and the second 0x01 became the
+        # final status, so the 2068 printed "0 OK" for a save that never
+        # wrote a file.
         dead = True
+        _fl = REFUSE_SAVE(MQ, 0x02)      # -> Report R "Tape loading error"
+        LOG_ADD("SAVE refused: bad header CRC, drained %d byte(s)" % _fl,
+                2, TSP.LOG_LEVEL)
+        TLM("SAVE_TS CRC refusal drained", "%d residual byte(s)" % _fl)
         return MQ, TSP, log_entries
 
     # ------------------------------------------------------------------
@@ -1184,10 +1266,8 @@ def SAVE_TS(MQ, TSP):
         save_name, name_ok = SAVE_NAME(hdr)
         if not name_ok:
             TLM("SAVE_TS EXIT filename not allowed", "%r" % save_name)
-            wrt(0x03)                        # status 3 -> Report F "Invalid file name"
-            MQ.exec("mov(y, invert(null))")  # Y -> READY so the Z80 reads our status
             dead = True
-            _fl = DRAIN_REFUSED_SAVE(MQ)
+            _fl = REFUSE_SAVE(MQ, 0x03)      # -> Report F "Invalid file name"
             LOG_ADD('ERROR: SAVE refused: filename "%s" not allowed, '
                     "drained %d byte(s)" % (save_name, _fl), 2, TSP.LOG_LEVEL)
             TLM("SAVE_TS filename refusal drained", "%d residual byte(s)" % _fl)
@@ -1210,17 +1290,51 @@ def SAVE_TS(MQ, TSP):
     # ------------------------------------------------------------------
     if blen == 0:
         TLM("SAVE_TS EXIT empty (BLEN=0), refusing")
-        wrt(0x08)                        # status 8 -> Report A "Invalid argument"
-        MQ.exec("mov(y, invert(null))")  # Y → READY so the Z80 reads our status
         dead = True
-        _fl = DRAIN_REFUSED_SAVE(MQ)
+        _fl = REFUSE_SAVE(MQ, 0x08)      # -> Report A "Invalid argument"
         LOG_ADD("SAVE refused: empty program (BLEN=0), drained %d flood bytes"
                 % _fl, 2, TSP.LOG_LEVEL)
         TLM("SAVE_TS empty drained", "%d residual byte(s)" % _fl)
         return MQ, TSP, log_entries
 
     long = blen + 4
-    blk  = bytearray(long)
+
+    # ------------------------------------------------------------------
+    # BUFFER GUARD. BLEN is a 16-bit field, so a legitimate
+    # SAVE "x" CODE 0,65535 asks us for a 65539-byte bytearray -- there
+    # is no bound to apply here, only a request that may not fit the
+    # MicroPython heap. Unguarded, a MemoryError propagates out of the
+    # dispatcher into main.py and drops the Pico to a REPL. Worse, the
+    # allocation happens BEFORE the mid-phase status is written, so the
+    # Z80 would also sit in WAIT EXECUTION until its ~19.9s WF_NPH
+    # timeout. Collect and retry once, then refuse properly.
+    # ------------------------------------------------------------------
+    try:
+        blk = bytearray(long)
+    except MemoryError:
+        gc.collect()
+        try:
+            blk = bytearray(long)
+        except MemoryError:
+            TLM("SAVE_TS EXIT no memory", "need %d bytes" % long)
+            dead = True
+            _fl = REFUSE_SAVE(MQ, 0x06)  # -> Report 6 "Number too big"
+            LOG_ADD("SAVE refused: cannot allocate %d bytes, drained %d"
+                    % (long, _fl), 2, TSP.LOG_LEVEL)
+            return MQ, TSP, log_entries
+
+    # ============================================================
+    # Phase 3 setup: spawn the watchdog BEFORE announcing READY.
+    #
+    # Order matters. The Z80 cannot send a data byte until it sees
+    # Y=READY, so spawning first means the spawn (and its OSError
+    # fallback) can never overlap an in-flight burst. Spawning after
+    # the READY put the thread creation inside the window where bytes
+    # are already arriving into a 4-deep RX FIFO.
+    # ============================================================
+    _wd = START_WATCHDOG(5, MQ, TSP)
+    TLM("SAVE_TS watchdog spawned", "ok=%s long=%d, waiting for data" % (
+        _wd, long))
 
     # ============================================================
     # Mid-status: Pico writes 0x01 between header and data phases.
@@ -1228,14 +1342,6 @@ def SAVE_TS(MQ, TSP):
     # ============================================================
     wrt(0x01)
     MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from header phase)
-
-    # ============================================================
-    # Phase 3: receive the (BLEN+4)-byte DATA block.
-    # Spawn a watchdog so a hung Z80 doesn't lock the loop forever.
-    # ============================================================
-    _thread.start_new_thread(WATCHDOG, (5, MQ, TSP))
-    TLM("SAVE_TS watchdog spawned", "kill=%s long=%d, waiting for data" % (
-        kill, long))
 
     # The Z80 takes up to ~1 second to start sending the data block
     # after reading the mid-status (it does internal processing). If we
@@ -1245,29 +1351,45 @@ def SAVE_TS(MQ, TSP):
     while MQ.rx_fifo() == 0:
         if time.ticks_diff(time.ticks_us(), t_init) >= 1_000_000:
             TLM("SAVE_TS EXIT no data after 1s")
-            LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s)",
-                    2, TSP.LOG_LEVEL)
-            # Provide the trailing status bytes anyway so we don't leave
-            # the Z80 hanging on a status read.
-            wrt(0x01)
-            wrt(0x01)
-            MQ.exec("mov(y, invert(null))")  # #14: Y → READY
+            # Refuse rather than write 0x01 0x01. If the Z80 aborted
+            # (BREAK) it isn't reading and the byte is harmless -- the
+            # dispatcher's ACTIVATE_MQ discards it. If it was merely slow,
+            # claiming OK meant it went on to stream a data block into a
+            # returned handler, jamming RX for the next command.
             dead = True
-            while busy:
-                pass
+            _fl = REFUSE_SAVE(MQ, 0x02)  # -> Report R "Tape loading error"
+            LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s), drained %d"
+                    % _fl, 2, TSP.LOG_LEVEL)
+            _WAIT_CORE1(TSP.LOG_LEVEL)
             return MQ, TSP, log_entries
 
     # Drain the data block. Z80 writes ~30µs per byte; MQ.get() blocks
     # until each byte arrives, paced by the bus.
-    for i in range(long):
-        blk[i] = MQ.get() & 0xFF
+    #
+    # The kill check is deliberately NOT per-byte any more. src/CLAUDE.md's
+    # two-phase capture rule says do no Python work inside a drain: RX is
+    # 4 deep and a byte lands every ~30µs, so every extra bytecode spends
+    # margin we may need. A per-byte check bought nothing in return --
+    # a genuinely hung Z80 leaves us blocked *inside* MQ.get(), where the
+    # check is never reached. What actually unblocks us is the watchdog's
+    # `push(noblock)` pump, and it pumps continuously until we set `dead`,
+    # so noticing within a chunk is just as good.
+    i = 0
+    while i < long:
+        n = long - i
+        if n > _KILL_CHECK_EVERY:
+            n = _KILL_CHECK_EVERY
+        for j in range(i, i + n):
+            blk[j] = MQ.get() & 0xFF
+        i += n
         if kill:
             TLM("SAVE_TS EXIT killed by watchdog", "at byte %d/%d" % (i, long))
-            LOG_ADD("ERROR: SAVE_TS killed by watchdog", 2, TSP.LOG_LEVEL)
-            wrt(0x01)            # still terminate the protocol cleanly
-            wrt(0x01)
-            MQ.exec("mov(y, invert(null))")  # #14: Y → READY
-            dead = True
+            # No status bytes here: the watchdog is pumping pull(noblock)
+            # through TX while it waits for `dead`, so anything staged now
+            # is discarded. ABORT_TX sets `dead` and waits for core1 to
+            # finish bouncing the SM (its BLINK alone is ~1s) before we
+            # let the dispatcher touch it. This is what LOAD_TS does.
+            ABORT_TX(TSP.LOG_LEVEL, "SAVE_TS")
             return MQ, TSP, log_entries
     TLM("SAVE_TS data read done", "%d bytes" % long)
 
@@ -1280,7 +1402,15 @@ def SAVE_TS(MQ, TSP):
     # these two writes BEFORE the slow file-save below.
     # ============================================================
     wrt(0x01)        # final status — Z80 reads this and reports "0 OK"
-    wrt(0x01)        # pre-load for the NEXT command's initial status
+    wrt(0x01)        # SENTINEL — do not remove. Nominally the pre-load for
+                     # the next command's status read, but the dispatcher's
+                     # ACTIVATE_MQ() builds a fresh StateMachine and discards
+                     # it, then re-arms with its own MQ.put(0x01). Its real
+                     # job is downstream: the "wait until tx_fifo() <= 1"
+                     # spin before ENA_SD uses it to tell "Z80 read the final
+                     # status" (2 -> 1) from "TX was always empty". Delete it
+                     # as redundant and that wait returns instantly, handing
+                     # back the GPIO 2-4 pin-grab race that #40 fixed.
     MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from data phase)
 
     dead = True
@@ -1349,31 +1479,86 @@ def SAVE_TS(MQ, TSP):
     TLM("SAVE_TS status read confirmed", "waited %dms tx=%d" % (
         time.ticks_diff(time.ticks_ms(), _tw), MQ.tx_fifo()))
     TLM("SAVE_TS write start", "%r mode=%s" % (filename, mode))
-    ENA_SD()
-    with open(filename, mode) as f1:
-        f1.write(hdr)
-        f1.write(blk)
-    os.chdir(TSP.cur_path)
-    TLM("SAVE_TS write done", "%d bytes -> %r" % (totbytes, filename))
+
+    # The write is guarded but the failure CANNOT be reported: the final
+    # status went out before ENA_SD, by design (#40 -- ENA_SD grabs
+    # GPIO 2-4, and GPIO 2 is D0, so a status read landing after the grab
+    # corrupts 0x01 to 0x00 and gives Report J). So the 2068 has already
+    # printed "0 OK" by the time we get here. That is an accepted
+    # limitation of the protocol ordering, not an oversight -- but it is
+    # no reason to also take the dispatcher down. ENA_SD swallows its own
+    # mount failure, so a pulled card surfaces here as OSError from
+    # open(); unguarded that reaches main.py and drops the Pico to a REPL.
+    ok = True
+    try:
+        ENA_SD()
+        with open(filename, mode) as f1:
+            f1.write(hdr)
+            f1.write(blk)
+    except Exception as _e:
+        ok = False
+        LOG_ADD("ERROR: SAVE write FAILED for %s: %s" % (filename, _e),
+                2, TSP.LOG_LEVEL)
+        TLM("SAVE_TS write FAILED", "%r: %s" % (filename, _e))
+        if mode == "wb":
+            # We advertised this name to the dispatcher, which would try to
+            # mount it. Nothing landed, so take it back.
+            TSP.f_name = ""
+    try:
+        os.chdir(TSP.cur_path)
+    except OSError as _e:
+        LOG_ADD("ERROR: chdir to %s failed after save: %s" % (TSP.cur_path, _e),
+                2, TSP.LOG_LEVEL)
+
+    if ok:
+        TLM("SAVE_TS write done", "%d bytes -> %r" % (totbytes, filename))
 
     hdr = None
     blk = None
     gc.collect()
 
-    LOG_ADD("INFO: SAVE TS complete: %d bytes -> %s" % (
-        totbytes, filename), 0, TSP.LOG_LEVEL)
+    if ok:
+        LOG_ADD("INFO: SAVE TS complete: %d bytes -> %s" % (
+            totbytes, filename), 0, TSP.LOG_LEVEL)
     return MQ, TSP, log_entries
 
 
 def SAVE_ZX(MQ, TSP):
     """SAVE routine for ZX Spectrum compatibility mode.
 
-    !!! NOT DUAL-PORT COMPLIANT — see LOAD_ZX docstring for details. !!!
+    !!! NOT DUAL-PORT COMPLIANT — BELIEVED NON-FUNCTIONAL AS SHIPPED !!!
 
-    Calls the legacy ENA_MQ() helper which spins up the OLD single-port
-    TS_IO state machine, and uses single-port byte sequences (wrt(0x40)
-    etc.). Migration would parallel SAVE_TS — see that function's V6-
-    pattern implementation as a template.
+    Reached from ZX48_IO on an 'S' byte, i.e. after the user enters ZX
+    Spectrum mode with SAVE "tpi:zx48". Audited against the dual-port
+    protocol; everything below is read from the code, not inferred:
+
+      * THE SM SWAP IS THE HEADLINE. The last thing this function does is
+        `MQ = ENA_MQ(MQ)`, which builds the LEGACY single-port TS_IO
+        program at 15 MHz and hands it back to ZX48_IO -- which created a
+        TS_IO_DUAL at 30 MHz on purpose and keeps using the returned
+        handle for the rest of the session. ZX48_IO's own comment says
+        TS_IO "wouldn't work because of the bus protocol mismatch". So
+        even a SAVE that otherwise succeeded leaves ZX mode on the wrong
+        state machine.
+      * No Y-register handling anywhere. Since issue #14 the PIO drops Y
+        to 0 (BUSY) on EVERY Z80 OUT, and nothing here ever puts it back
+        with MQ_READY() / mov(y, invert(null)). Every dual-port handler
+        does.
+      * No header CRC check, so a corrupted transfer is written to disk
+        as if it were good.
+      * No BLEN=0 guard, so a blank SAVE hits the same 64K SA-BYTES flood
+        that #40 fixed for SAVE_TS.
+      * No filename validation, so the name goes straight into a path.
+
+    The last two crash risks -- an unmasked 9-bit RX value assigned to a
+    bytearray, and bytes.decode() on a name carrying BASIC tokens -- are
+    fixed inline below, because those drop the Pico to a REPL rather than
+    merely failing the SAVE. The protocol faults are left alone
+    deliberately: changing them blind, on a path with no test coverage
+    and no confirmed-working baseline, would be guesswork. Migrating this
+    properly means porting SAVE_TS's V6 pattern (guarded refusals,
+    START_WATCHDOG, the tx-drain wait before ENA_SD) and testing it on
+    hardware in ZX mode.
     """
     global kill
     global dead
@@ -1391,10 +1576,11 @@ def SAVE_ZX(MQ, TSP):
     
     hdr = bytearray(21)
     
-    _thread.start_new_thread(WATCHDOG, (5, MQ, TSP))
+    START_WATCHDOG(5, MQ, TSP)
     
     for i in r1:
-        hdr[i] = MQ.get()
+        hdr[i] = MQ.get() & 0xFF    # mask: RX values are 9-bit (bit 8 = A0),
+                                    # and >255 into a bytearray is ValueError
         
     long = (256*hdr[15]) + hdr[14] + 4
     r2 = range(long)
@@ -1404,7 +1590,7 @@ def SAVE_ZX(MQ, TSP):
     MQ.get()
     
     for i in r2:
-        blk[i] = MQ.get()
+        blk[i] = MQ.get() & 0xFF    # see the header drain above
         if kill:
             LOG_ADD("ERROR: SAVE_ZX failed! " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 2, TSP.LOG_LEVEL)
             dead = True
@@ -1427,9 +1613,18 @@ def SAVE_ZX(MQ, TSP):
     blk[0] = blk0
     blk[1] = blk1
     
-    filename = hdr[4:14].decode()
-    filename = filename.strip() + ".tap"
-    filename = TSP.cur_path + "/" + filename
+    # SAVE_NAME instead of hdr[4:14].decode(): a TS-2068 name can carry
+    # bytes >= 0x80 (graphics characters, BASIC tokens) and decode()
+    # raises on those, which here would propagate to main.py and drop the
+    # Pico to a REPL. Unlike SAVE_TS we have no way to report a refusal on
+    # this path yet, so an unusable name falls back to "noname" rather
+    # than taking the firmware down.
+    zx_name, zx_ok = SAVE_NAME(hdr)
+    if not zx_ok or not zx_name:
+        LOG_ADD('WARNING: SAVE ZX name "%s" not usable, saving as noname'
+                % zx_name, 1, TSP.LOG_LEVEL)
+        zx_name = "noname"
+    filename = TSP.cur_path + "/" + zx_name + ".tap"
     
     ENA_SD()
     
@@ -1454,6 +1649,44 @@ def SAVE_ZX(MQ, TSP):
     LOG_ADD("INFO: Finished SAVE ZX successfully " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0, TSP.LOG_LEVEL)
 
     return MQ, TSP, log_entries
+
+
+def START_WATCHDOG(secs, MQ, TSP):
+    """Spawn the core1 WATCHDOG for an LVM transaction. Returns True if it ran.
+
+    ALWAYS use this instead of calling _thread.start_new_thread(WATCHDOG,
+    ...) directly. An unguarded spawn is the nastiest failure mode in this
+    firmware: if core1 is still finishing a previous watchdog's cleanup
+    -- which ends with a ~1 second BLINK() -- the call raises OSError
+    "core1 in use", and with no handler it propagates out of TS2068_IO
+    into main.py, which has no try/except either. The Pico drops to a
+    REPL and the user sees "locked up, LED stopped blinking". tspico.py
+    guards its SAVE_LOG spawn for exactly this reason; the LVM handlers
+    did not.
+
+    Losing the watchdog for one transaction is a far smaller problem than
+    losing the dispatcher, so a failed spawn is logged and the caller
+    proceeds unguarded. We deliberately do NOT retry-with-sleep: by the
+    time a caller needs the watchdog the Z80 may be moments from
+    streaming, and the RX FIFO is only 4 deep -- a few ms of sleep here
+    would drop bytes, trading a rare hang for routine corruption.
+
+    `kill` is cleared HERE, on core0, before the thread starts. WATCHDOG
+    clears it too, but on core1 -- and the caller's drain loop reads
+    `kill` as soon as this returns. Clearing it on the spawning core
+    removes that race instead of documenting it (see WATCHDOG's own
+    comment about the window).
+    """
+    global kill
+
+    kill = False
+    try:
+        _thread.start_new_thread(WATCHDOG, (secs, MQ, TSP))
+        return True
+    except OSError:
+        LOG_ADD("WARNING: core1 busy, running without a watchdog",
+                1, TSP.LOG_LEVEL)
+        return False
 
 
 def WATCHDOG(secs, MQ, TSP):

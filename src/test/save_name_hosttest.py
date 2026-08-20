@@ -30,6 +30,7 @@ So the assertions here are about the WIRE, not just the return value:
 Run:  python3 src/test/save_name_hosttest.py
 """
 
+import io
 import os
 import sys
 import types
@@ -364,9 +365,220 @@ def test_end_msg_would_have_overflowed(tio):
           % (len(msg) + 4, TX_FIFO_DEPTH))
 
 
+
+
+def test_bad_crc_refuses(tio):
+    """A corrupt header must NOT be answered with "OK".
+
+    The old code wrote 0x01 0x01 here on the theory that the Z80 "will see
+    CRC fail elsewhere". It doesn't -- it validated its own bytes and is
+    happy -- so it streamed the whole data block at a handler that had
+    already returned, and read the trailing 0x01 as the final status.
+    Result: "0 OK" on screen, no file on disk, and a data block left in RX
+    for the dispatcher to mistake for the next pre-header.
+    """
+    print("test_bad_crc_refuses: corrupt header CRC")
+    with tempfile.TemporaryDirectory() as d:
+        payload = bytes(range(48))
+        hdr = build_header(b"test", len(payload))
+        hdr[20] ^= 0xFF                              # corrupt the CRC
+        dat = build_data(payload)
+        MQ = FakeMQ(bytes(hdr) + bytes(dat), z80_reads=False)
+        TSP = FakeTSP(d)
+
+        tio.SAVE_TS(MQ, TSP)
+
+        check(MQ.written == [0x02],
+              "refused with 0x02 -> Report R, got %r" % (MQ.written,))
+        check(0x01 not in MQ.written,
+              "never claimed OK on a corrupt header")
+        check(os.listdir(d) == [],
+              "wrote no file, got %r" % (os.listdir(d),))
+        check(MQ.rx_fifo() == 0,
+              "drained the data block the Z80 may still send (%d left)"
+              % MQ.rx_fifo())
+
+
+def test_no_memory_refuses(tio):
+    """A data block too big for the heap must refuse, not raise.
+
+    BLEN is 16-bit and SAVE "x" CODE 0,65535 is legal, so there is no
+    bound to apply -- only an allocation that may fail. Unguarded, the
+    MemoryError reaches main.py and drops the Pico to a REPL, and because
+    the allocation happens before the mid-phase status the 2068 also hangs
+    to its ~19.9s WF_NPH timeout.
+    """
+    print("test_no_memory_refuses: allocation failure is reported, not raised")
+    real_bytearray = tio.bytearray if hasattr(tio, "bytearray") else bytearray
+    with tempfile.TemporaryDirectory() as d:
+        hdr = build_header(b"big", 60000)
+        MQ = FakeMQ(bytes(hdr), z80_reads=False)
+        TSP = FakeTSP(d)
+
+        import builtins
+        real = builtins.bytearray
+        calls = []
+
+        def fake_bytearray(*a):
+            # Fail only the big data-block allocation, not the 21-byte header.
+            if a and isinstance(a[0], int) and a[0] > 1000:
+                calls.append(a[0])
+                raise MemoryError("simulated heap exhaustion")
+            return real(*a)
+
+        builtins.bytearray = fake_bytearray
+        try:
+            raised = None
+            try:
+                tio.SAVE_TS(MQ, TSP)
+            except Exception as e:
+                raised = e
+        finally:
+            builtins.bytearray = real
+
+        check(raised is None,
+              "SAVE_TS handled MemoryError (%s)" % (
+                  "clean" if raised is None else repr(raised)))
+        check(len(calls) == 2,
+              "retried the allocation after gc.collect (%d attempts)" % len(calls))
+        check(MQ.written == [0x06],
+              "refused with 0x06 -> Report 6, got %r" % (MQ.written,))
+        check(os.listdir(d) == [], "wrote no file")
+
+
+def test_watchdog_spawn_failure_survives(tio):
+    """A busy core1 must not take the dispatcher down.
+
+    tspico.py documents this exact failure for its SAVE_LOG spawn: the
+    OSError propagates through TS2068_IO into main.py, which has no
+    try/except, and the Pico drops to a REPL -- "locked up, LED stopped
+    blinking". The LVM handlers spawned their watchdogs unguarded.
+    """
+    print("test_watchdog_spawn_failure_survives: OSError from core1")
+    with tempfile.TemporaryDirectory() as d:
+        payload = bytes(range(32))
+        MQ = FakeMQ(bytes(build_header(b"test", len(payload)))
+                    + bytes(build_data(payload)), z80_reads=True)
+        TSP = FakeTSP(d)
+
+        import _thread
+        real = _thread.start_new_thread
+        _thread.start_new_thread = lambda fn, args: (_ for _ in ()).throw(
+            OSError("core1 in use"))
+        tio.ENA_SD = lambda: None
+        saved_chdir, os.chdir = os.chdir, lambda p: None
+        try:
+            raised = None
+            try:
+                tio.SAVE_TS(MQ, TSP)
+            except Exception as e:
+                raised = e
+        finally:
+            _thread.start_new_thread = real
+            os.chdir = saved_chdir
+
+        check(raised is None,
+              "SAVE_TS survived the failed spawn (%s)" % (
+                  "clean" if raised is None else repr(raised)))
+        check(os.listdir(d) == ["test.tap"],
+              "still completed the save, got %r" % (os.listdir(d),))
+
+
+def test_kill_flag_cleared_on_core0(tio):
+    """A stale kill flag must not abort the next transaction.
+
+    WATCHDOG clears `kill`, but on core1 -- while the drain loop that
+    reads it runs on core0 and starts immediately after the spawn.
+    START_WATCHDOG clears it on the spawning core instead, which closes
+    the window rather than documenting it.
+    """
+    print("test_kill_flag_cleared_on_core0: stale kill does not abort")
+    with tempfile.TemporaryDirectory() as d:
+        payload = bytes(range(32))
+        MQ = FakeMQ(bytes(build_header(b"test", len(payload)))
+                    + bytes(build_data(payload)), z80_reads=True)
+        TSP = FakeTSP(d)
+
+        tio.kill = True               # left over from a previous abort
+        tio.ENA_SD = lambda: None
+        saved_chdir, os.chdir = os.chdir, lambda p: None
+        try:
+            tio.SAVE_TS(MQ, TSP)
+        finally:
+            os.chdir = saved_chdir
+            tio.kill = False
+
+        check(os.listdir(d) == ["test.tap"],
+              "completed despite a stale kill flag, got %r" % (os.listdir(d),))
+
+
+def test_sd_write_failure_survives(tio):
+    """A failed SD write must not take the dispatcher down.
+
+    ENA_SD swallows its own mount failure, so a pulled card surfaces as
+    OSError from open(). The status already went out (by design -- see the
+    #40 pin-grab ordering), so this cannot be reported to the 2068; the
+    requirement is only that the firmware stays up and the bogus f_name is
+    retracted so the dispatcher does not try to mount a file that is not
+    there.
+    """
+    print("test_sd_write_failure_survives: card pulled mid-save")
+    with tempfile.TemporaryDirectory() as d:
+        payload = bytes(range(32))
+        MQ = FakeMQ(bytes(build_header(b"test", len(payload)))
+                    + bytes(build_data(payload)), z80_reads=True)
+        TSP = FakeTSP(d)
+
+        def boom():
+            raise OSError(5, "no SD card")
+        tio.ENA_SD = boom
+        saved_chdir, os.chdir = os.chdir, lambda p: None
+        try:
+            raised = None
+            try:
+                tio.SAVE_TS(MQ, TSP)
+            except Exception as e:
+                raised = e
+        finally:
+            os.chdir = saved_chdir
+
+        check(raised is None,
+              "SAVE_TS survived the write failure (%s)" % (
+                  "clean" if raised is None else repr(raised)))
+        check(TSP.f_name == "",
+              "retracted f_name so the dispatcher won't mount a ghost, got %r"
+              % (TSP.f_name,))
+
+
+def test_no_unguarded_thread_spawns(tio):
+    """Structural: no LVM handler may call start_new_thread directly."""
+    print("test_no_unguarded_thread_spawns: structural check")
+    src = io.open(os.path.join(SRC, "TS", "tspico_io.py"),
+                  encoding="utf-8").read()
+    for name in ("LOAD_TS", "LOAD_ZX", "SAVE_TS", "SAVE_ZX"):
+        body = src.split("def %s(" % name, 1)[1].split("\ndef ", 1)[0]
+        check("_thread.start_new_thread" not in body,
+              "%s spawns via START_WATCHDOG, not directly" % name)
+
+
+def test_end_msg_has_no_callers(tio):
+    """END_MSG is a documented trap; nothing in the tree may call it."""
+    print("test_end_msg_has_no_callers: structural check")
+    hits = []
+    for mod in ("tspico_io.py", "tspico.py"):
+        path = os.path.join(SRC, "TS", mod)
+        for n, line in enumerate(io.open(path, encoding="utf-8"), 1):
+            stripped = line.strip()
+            if stripped.startswith("#") or "def END_MSG" in stripped:
+                continue
+            if "END_MSG(" in stripped and "SEND_MSG" not in stripped:
+                hits.append("%s:%d" % (mod, n))
+    check(not hits, "no live END_MSG call sites, found %r" % (hits,))
+
+
 def main():
     print("=" * 64)
-    print("SAVE_TS filename host test")
+    print("SAVE_TS audit host test")
     print("=" * 64)
 
     install_fakes()
@@ -383,6 +595,13 @@ def main():
     test_empty_name_is_legal(tio)
     test_append_ignores_header_name(tio)
     test_end_msg_would_have_overflowed(tio)
+    test_bad_crc_refuses(tio)
+    test_no_memory_refuses(tio)
+    test_watchdog_spawn_failure_survives(tio)
+    test_kill_flag_cleared_on_core0(tio)
+    test_sd_write_failure_survives(tio)
+    test_no_unguarded_thread_spawns(tio)
+    test_end_msg_has_no_callers(tio)
 
     print("=" * 64)
     print("RESULT: %d passed, %d failed" % (PASS, FAIL))

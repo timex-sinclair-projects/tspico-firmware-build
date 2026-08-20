@@ -376,6 +376,56 @@ match what the Z80 expects.
   ones — so spaces, dots and parens produce a file that way but a
   Report F via a plain `SAVE`. Worth reconciling; until then, don't
   "fix" one side in isolation and assume the other matches.
+- **Never answer an error with `0x01`.** Two SAVE paths used to write
+  "OK" and bail out — the header-CRC failure and the no-data timeout —
+  on the theory that the Z80 would notice the problem itself. It won't:
+  it validated the bytes *it* sent and is satisfied, so a CRC mismatch is
+  something only the Pico can see. Answering OK makes the Z80 stream the
+  entire data block at a handler that has already returned. Nothing
+  drains it, so the dispatcher's next pre-header read consumes data bytes
+  and dispatches on garbage, and the trailing `0x01` is read as the final
+  status — "0 OK" on screen for a save that never wrote a file. Refuse at
+  the post-header status read via `REFUSE_SAVE()` instead.
+- **Never call `_thread.start_new_thread()` unguarded.** If core1 is
+  still finishing a previous watchdog's cleanup — which ends with a ~1
+  second `BLINK()` — the call raises `OSError` "core1 in use". Nothing up
+  the stack catches it: it leaves `TS2068_IO` and reaches `main.py`,
+  which has no try/except either, so the Pico drops to a REPL and the
+  user sees "locked up, LED stopped blinking". Use `START_WATCHDOG()`,
+  which logs and runs the transaction unguarded rather than taking the
+  dispatcher down. Don't "fix" a failed spawn by retrying with a sleep —
+  a few ms of sleep with the Z80 streaming into a 4-deep RX FIFO trades a
+  rare hang for routine corruption.
+- **After the watchdog fires, wait for core1 before touching the SM.**
+  Its cleanup does `MQ.active(0)` → `BLINK()` → `MQ.active(1)`, and BLINK
+  blocks for ~1 second. A handler that returns as soon as it sees `kill`
+  lets core0 race into the dispatcher's `ACTIVATE_MQ()` and status
+  pre-load while core1 is still bouncing the same hardware state machine.
+  Call `ABORT_TX()`, which sets `dead` and waits. And don't stage status
+  bytes before it — the watchdog is pumping `pull(noblock)` through TX the
+  whole time it waits, so they are discarded.
+- **Don't announce READY and then go do SD work.** `ACTIVATE_SD()` grabs
+  GPIO 2-4 for SPI, and GPIO 2 is D0. Any `$0E` or `$0F` cycle that lands
+  after the grab reads corrupted data — this is the pin-grab race #40
+  fixed inside `SAVE_TS`, and the post-SAVE dispatcher block reintroduced
+  it by arming TX + `MQ_READY()` and *then* calling `MOUNT_FILE` and
+  `DIR_FILES`. The 2068 prints `0 OK` and returns to the prompt while the
+  Pico is still working, so the window is reachable in normal use. Arm
+  exactly once, after the last SD access; leave Y at BUSY until then.
+- **Guard every allocation sized by a Z80-supplied field.** `BLEN` is
+  16 bits and `SAVE "x" CODE 0,65535` is legal, so there is no sane bound
+  to clamp to — only an allocation that may fail. An unguarded
+  `MemoryError` reaches `main.py` and drops the Pico to a REPL, and if the
+  allocation sits before the mid-phase status write the 2068 *also* hangs
+  to its ~19.9s `WF_NPH` timeout. Collect, retry once, then refuse.
+- **A failed SD write cannot be reported, by design.** The final status
+  must go out before `ENA_SD()` (see the pin-grab race above), so by the
+  time `open()` fails the 2068 has already printed `0 OK`. That is an
+  accepted consequence of the ordering — but still wrap the write, or an
+  `OSError` from a pulled card takes the dispatcher down on top of losing
+  the file.
+- **`END_MSG()` has no callers and should keep it that way.** It is
+  retained as documented context for the trap above, not as an API.
 
 ---
 

@@ -4473,18 +4473,29 @@ def TS2068_IO():                                                         # Main 
                 # on ACTIVATE_MQ for the rationale.
                 # ──────────────────────────────────────────────────────────
                 DEACTIVATE_SD()
-                ACTIVATE_MQ() # Also fixes ENA_SD leaving MQ active with SD active as well
-                # ─── DUAL-PORT MIGRATION: V6 pre-load + ready for next cmd ─
-                # ACTIVATE_MQ now leaves Y=BUSY by default. We need to
-                # explicitly arm TX (status pre-load for the next command's
-                # pre-header phase) and then signal ready. The actual
-                # response for the just-completed SAVE was sent inside
-                # SAVE_TS via its own V6 chain; this pre-load is for the
-                # NEXT iteration of the main loop.
-                # ──────────────────────────────────────────────────────────
-                MQ.put(0x01)
-                MQ_READY()
 
+                # ─── ARM EXACTLY ONCE, AFTER ALL SD WORK ──────────────────
+                # This used to do ACTIVATE_MQ() + MQ.put(0x01) + MQ_READY()
+                # RIGHT HERE, and then fall into the `not save_aborted`
+                # block below, which calls MOUNT_FILE (-> ACTIVATE_SD) and
+                # ACTIVATE_SD + DIR_FILES before arming a SECOND time.
+                #
+                # That told the 2068 "ready, status waiting" and then spent
+                # hundreds of milliseconds on the SD card. ACTIVATE_SD grabs
+                # GPIO 2-4 for SPI -- the same pins the PIO drives D0-D2 on
+                # -- so it is exactly the pin-grab race #40 fixed inside
+                # SAVE_TS, reintroduced one level up. And the second
+                # ACTIVATE_MQ() builds a fresh StateMachine, so a next
+                # command that started during that window had the SM torn
+                # down underneath it mid-transaction.
+                #
+                # The 2068 prints "0 OK" and returns to the prompt while we
+                # are still doing this work, so the window is genuinely
+                # reachable by a fast typist or a running program.
+                #
+                # Now: all SD work first, then arm once at the bottom. Y
+                # stays BUSY throughout, which is precisely what $0F is for.
+                # ──────────────────────────────────────────────────────────
                 if not save_aborted:
 
                     # Handle re-mounting an appended file, possibly mounting a
@@ -4548,11 +4559,15 @@ def TS2068_IO():                                                         # Main 
                     # DIR refresh; tear it down before reactivating MQ.
                     # ──────────────────────────────────────────────────────
                     DEACTIVATE_SD()
-                    ACTIVATE_MQ()
-                    # V6 pre-load + ready for next cmd (see twin block
-                    # above; ACTIVATE_MQ leaves Y=BUSY now).
-                    MQ.put(0x01)
-                    MQ_READY()
+
+                # Single arm point for BOTH outcomes (saved or aborted), and
+                # the first moment in this branch that no further SD access
+                # is pending. ACTIVATE_MQ leaves Y=BUSY, so the order is
+                # fixed: rebuild the SM, stage the status byte the next
+                # pre-header phase will read, and only then signal ready.
+                ACTIVATE_MQ()
+                MQ.put(0x01)
+                MQ_READY()
 
                 led.value(0)
                 
