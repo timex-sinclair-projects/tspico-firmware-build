@@ -10,7 +10,7 @@ Three questions that kept coming up, answered from the EXROM. Addresses are
 | Does `SAVE ""` reach the Pico? | **No.** Rejected at `$0228` with Report F, before any pre-header exists. Same branch rejects names over 10 characters. The same check exists in the stock Spectrum 48K ROM at `$0634`. |
 | Does the "press any key" prompt send anything first? | **No.** The wait at `$08AA` precedes the first block send at `$0893`. |
 | Does SPACE abort? | **Yes — via `$00E5`, which tests SPACE alone.** Two different checks exist and they disagree; see below. |
-| Does BREAK at the prompt stop bytes reaching the Pico? | **No.** The wait has no BREAK test at all. The header block goes out first, and `$00E5` reports D on the way back. |
+| Does BREAK at the prompt stop bytes reaching the Pico? | **No.** The keypress comes first and the wait has no break test, so SPACE *satisfies* it; the header block is then sent normally and `$00E5` reports D on the way back out. |
 | Is the Pico told when the user BREAKs? | **No.** Provably — see below. |
 
 ## `SAVE ""` and over-long names — rejected before the Pico
@@ -159,6 +159,22 @@ FUSE, because check 1 is stock), while **a Pico ready-wait needs full BREAK**
    **the whole 21-byte header block to the Pico**.
 3. On return, `$00E5` finds SPACE still down and reports **D BREAK**.
 4. The data block is never sent.
+
+**The order is prompt → keypress → header → break noticed.** The header is sent
+*because* the key was pressed, not before it. `$08AA` is a plain "is any key
+down" scan (`IN A,($FE)` with `A=0`, `AND $1F`, loop while nothing is down), so
+SPACE counts as the key that starts the save rather than as a break.
+
+**A consequence worth testing on hardware:** whether SPACE aborts at all may
+depend on how long it is held. Between the keypress at `$08B6` and the re-test at
+`$00E5` sit the HOME thunk, the pre-header, the header block, and at least one
+`WF_NPH` wait — and every `WF_NPH` costs >=88 ms even when the Pico answers
+immediately (see [PROTOCOL_FROM_ROM.md](PROTOCOL_FROM_ROM.md)). A typical
+keypress is 80-150 ms, so a quick tap may well be released before `$00E5` looks,
+letting the SAVE run to completion. On stock hardware, where the tape routine has
+no Pico round-trip in between, that gap is far smaller — which is why FUSE aborts
+reliably and a TS-Pico might not. Unverified; it is an inference from the timing,
+not something read off a trace.
 
 So the user sees `D BREAK` and assumes nothing happened, but the Pico has
 received a complete SAVE header and is waiting for a data block that will never
