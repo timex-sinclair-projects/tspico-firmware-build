@@ -17,8 +17,18 @@
 #   of the block, so a GO SUB return address would be stranded on the stack
 #   and every trapped test would leak one.
 #
-#   Expected value -1 means "observe, do not judge" -- cases where the
-#   answer is worth recording but was not confirmed from the ROM.
+#   Expected value -1 means "observe, do not judge". No case uses it now --
+#   the two that did were settled from the ROM (see below) -- but the
+#   mechanism is kept for adding cases whose answer is not yet known.
+#
+# TWO CASES NEVER REACH THE PICO
+#   SAVE "" and SAVE with a name over 10 characters are both rejected by the
+#   EXROM's filename evaluator at $021A, before any pre-header is built, and
+#   both give Report F. The length test is one comparison: an empty name
+#   wraps BC to $FFFF and lands in the same branch as an over-long one. The
+#   rejection is guarded on T-ADDR = 0, so LOAD tolerates both (empty means
+#   "match anything", over-long is truncated to 10). See
+#   docs/rom-analysis/ERROR_TRAPPING.md.
 #
 # WHAT IT WRITES
 #   Successful cases create files named zz* in the current TS-Pico
@@ -149,7 +159,7 @@
 1188 save s$
 1192 go to 400
 
-1200 let d$="empty name": let e=0
+1200 let d$="empty name (ROM rejects)": let e=15
 1204 let s$=""
 1208 save s$
 1212 go to 400
@@ -184,7 +194,7 @@
 1328 save s$
 1332 go to 400
 
-1340 let d$="name longer than 10": let e=-1
+1340 let d$="name over 10 (ROM rejects)": let e=15
 1344 let s$="abcdefghijkl"
 1348 save s$
 1352 go to 400
