@@ -4461,11 +4461,20 @@ def TS2068_IO():                                                         # Main 
                 pidx = TSP.tap_idx
                 # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
-                MQ, TSP, new_logs = SAVE_TS(MQ, TSP)
+                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP)
                 # log_entries += new_logs
                 # log_entries.extend(new_logs) # For when SAVE_TS returns an array
                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
-                save_aborted = "sd" not in os.listdir("/")
+                # `saved` comes straight from SAVE_TS: True only if a .tap
+                # actually reached the card. This used to be
+                #     save_aborted = "sd" not in os.listdir("/")
+                # i.e. reading the mount table to guess whether a file had
+                # been written. That guess is right for the refusal paths
+                # only by accident (they return before ENA_SD, so /sd is
+                # still unmounted), and it is WRONG for the case that
+                # matters most: a write that fails after ENA_SD -- card
+                # pulled, disk full -- where /sd IS mounted, no file exists,
+                # and the block below would go on to mount a ghost.
 
                 # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
                 # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
@@ -4476,7 +4485,7 @@ def TS2068_IO():                                                         # Main 
 
                 # ─── ARM EXACTLY ONCE, AFTER ALL SD WORK ──────────────────
                 # This used to do ACTIVATE_MQ() + MQ.put(0x01) + MQ_READY()
-                # RIGHT HERE, and then fall into the `not save_aborted`
+                # RIGHT HERE, and then fall into the `saved`
                 # block below, which calls MOUNT_FILE (-> ACTIVATE_SD) and
                 # ACTIVATE_SD + DIR_FILES before arming a SECOND time.
                 #
@@ -4496,7 +4505,7 @@ def TS2068_IO():                                                         # Main 
                 # Now: all SD work first, then arm once at the bottom. Y
                 # stays BUSY throughout, which is precisely what $0F is for.
                 # ──────────────────────────────────────────────────────────
-                if not save_aborted:
+                if saved:
 
                     # Handle re-mounting an appended file, possibly mounting a
                     # new file, or restoring the mounted file's name. Then

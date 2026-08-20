@@ -242,8 +242,9 @@ def test_refuses_bad_name(tio, name, label):
         MQ = FakeMQ(bytes(hdr) + bytes(dat), z80_reads=False)
         TSP = FakeTSP(d)
 
+        result = None
         try:
-            tio.SAVE_TS(MQ, TSP)
+            result = tio.SAVE_TS(MQ, TSP)
             raised = None
         except FifoOverflow as e:
             raised = e
@@ -268,6 +269,8 @@ def test_refuses_bad_name(tio, name, label):
         check(MQ.rx_fifo() == 0,
               "RX drained, so the next pre-header starts clean (%d left)"
               % MQ.rx_fifo())
+        check(result is not None and len(result) == 4 and result[3] is False,
+              "returned saved=False, got %r" % (result,))
 
 
 def test_accepts_good_name(tio):
@@ -576,6 +579,119 @@ def test_end_msg_has_no_callers(tio):
     check(not hits, "no live END_MSG call sites, found %r" % (hits,))
 
 
+
+
+def test_saved_flag(tio):
+    """SAVE_TS's 4th return value must say whether a .tap reached the card.
+
+    The dispatcher used to infer this with
+    `save_aborted = "sd" not in os.listdir("/")` -- sniffing the mount
+    table. The refusal paths happened to satisfy it (they return before
+    ENA_SD, so /sd is unmounted), but the case that matters most did not:
+    a write that FAILS after ENA_SD leaves /sd mounted and no file on
+    disk, so the old heuristic said "saved" and sent the dispatcher off to
+    mount a file that was never created.
+    """
+    print("test_saved_flag: the return value, including the case the old heuristic got wrong")
+
+    # (a) a real save reports True
+    with tempfile.TemporaryDirectory() as d:
+        payload = bytes(range(32))
+        MQ = FakeMQ(bytes(build_header(b"test", len(payload)))
+                    + bytes(build_data(payload)), z80_reads=True)
+        TSP = FakeTSP(d)
+        tio.ENA_SD = lambda: None
+        saved_chdir, os.chdir = os.chdir, lambda p: None
+        try:
+            r = tio.SAVE_TS(MQ, TSP)
+        finally:
+            os.chdir = saved_chdir
+        check(len(r) == 4, "returns a 4-tuple, got %d elements" % len(r))
+        check(len(r) == 4 and r[3] is True,
+              "successful save reports saved=True, got %r" % (r,))
+        check(os.listdir(d) == ["test.tap"], "and the file is really there")
+
+    # (b) THE CASE THE OLD HEURISTIC GOT WRONG: write fails after ENA_SD.
+    with tempfile.TemporaryDirectory() as d:
+        payload = bytes(range(32))
+        MQ = FakeMQ(bytes(build_header(b"test", len(payload)))
+                    + bytes(build_data(payload)), z80_reads=True)
+        TSP = FakeTSP(d)
+
+        # ENA_SD succeeds and leaves /sd "mounted" -- so the old
+        # `"sd" not in os.listdir("/")` test would have said save_aborted
+        # = False, i.e. "we saved" -- but the write itself fails.
+        mounted = {"sd": True}
+        tio.ENA_SD = lambda: None
+        real_open = tio.open if hasattr(tio, "open") else open
+        import builtins
+        real_bopen = builtins.open
+
+        def failing_open(path, mode="r", *a, **k):
+            if str(path).endswith(".tap") and "w" in mode or "a" in mode:
+                raise OSError(28, "No space left on device")
+            return real_bopen(path, mode, *a, **k)
+
+        builtins.open = failing_open
+        saved_chdir, os.chdir = os.chdir, lambda p: None
+        try:
+            r = tio.SAVE_TS(MQ, TSP)
+        finally:
+            builtins.open = real_bopen
+            os.chdir = saved_chdir
+
+        check(len(r) == 4 and r[3] is False,
+              "failed write reports saved=False, got %r" % (r,))
+        check(os.listdir(d) == [],
+              "and no file exists, got %r" % (os.listdir(d),))
+        check(mounted.get("sd") is True,
+              "while /sd is still mounted -- exactly what fooled the old check")
+        check(TSP.f_name == "",
+              "f_name retracted so the dispatcher can't mount a ghost, got %r"
+              % (TSP.f_name,))
+
+    # (c) append mode reports True on success
+    with tempfile.TemporaryDirectory() as d:
+        target = os.path.join(d, "mounted.tap")
+        open(target, "wb").write(b"\x00" * 8)
+        payload = bytes(range(16))
+        MQ = FakeMQ(bytes(build_header(b"whatever", len(payload)))
+                    + bytes(build_data(payload)), z80_reads=True)
+        TSP = FakeTSP(d, f_name=target, append=True)
+        tio.ENA_SD = lambda: None
+        saved_chdir, os.chdir = os.chdir, lambda p: None
+        try:
+            r = tio.SAVE_TS(MQ, TSP)
+        finally:
+            os.chdir = saved_chdir
+        check(len(r) == 4 and r[3] is True,
+              "append reports saved=True, got %r" % (r,))
+
+
+def test_dispatchers_unpack_four(tio):
+    """Structural: both SAVE_TS call sites must unpack the 4-tuple.
+
+    src/dev_tspico.py is a live override -- main.py prefers it over the
+    frozen TS.tspico when deployed, and CI compiles it to .mpy -- so a
+    three-value unpack there would ValueError the moment it loads.
+    """
+    print("test_dispatchers_unpack_four: structural check")
+    for rel in (os.path.join("TS", "tspico.py"), "dev_tspico.py"):
+        path = os.path.join(SRC, rel)
+        text = io.open(path, encoding="utf-8").read()
+        for n, line in enumerate(text.splitlines(), 1):
+            if "= SAVE_TS(" in line:
+                check("new_logs, saved = SAVE_TS(" in line,
+                      "%s:%d unpacks 4 values" % (rel, n))
+        # Comment lines are exempt: TS/tspico.py quotes the old line
+        # verbatim to explain why it went away.
+        live = [ln for ln in text.splitlines()
+                if 'save_aborted = "sd" not in os.listdir' in ln
+                and not ln.strip().startswith("#")]
+        check(not live,
+              "%s no longer sniffs the mount table, found %r" % (rel, live))
+
+
 def main():
     print("=" * 64)
     print("SAVE_TS audit host test")
@@ -602,6 +718,8 @@ def main():
     test_sd_write_failure_survives(tio)
     test_no_unguarded_thread_spawns(tio)
     test_end_msg_has_no_callers(tio)
+    test_saved_flag(tio)
+    test_dispatchers_unpack_four(tio)
 
     print("=" * 64)
     print("RESULT: %d passed, %d failed" % (PASS, FAIL))

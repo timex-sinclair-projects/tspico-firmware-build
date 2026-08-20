@@ -1190,7 +1190,20 @@ def SAVE_TS(MQ, TSP):
              .VERBOSE, and .LOG_LEVEL.
 
     Returns:
-        (MQ, TSP, log_entries) for the dispatcher's calling convention.
+        (MQ, TSP, log_entries, saved) for the dispatcher's calling
+        convention. `saved` is True only if a .tap actually reached the
+        SD card, and is the dispatcher's cue to re-mount and refresh the
+        directory listing.
+
+        The dispatcher used to infer that with
+        `save_aborted = "sd" not in os.listdir("/")` -- reading the mount
+        table to guess whether a file had been written. That was already
+        indirect, and it got wronger as this function grew refusal paths
+        that return before ENA_SD: it happens to answer correctly for
+        those only because they leave /sd unmounted. It answers WRONGLY
+        for the case that matters most -- a write that fails after
+        ENA_SD (card pulled, disk full), where /sd is mounted, no file
+        exists, and the dispatcher would go on to mount a ghost.
     """
     global busy, dead, kill
     global log_entries
@@ -1236,7 +1249,7 @@ def SAVE_TS(MQ, TSP):
         LOG_ADD("SAVE refused: bad header CRC, drained %d byte(s)" % _fl,
                 2, TSP.LOG_LEVEL)
         TLM("SAVE_TS CRC refusal drained", "%d residual byte(s)" % _fl)
-        return MQ, TSP, log_entries
+        return MQ, TSP, log_entries, False
 
     # ------------------------------------------------------------------
     # FILENAME GUARD. The 10-byte ZX name is already in hand (hdr[4:14]),
@@ -1271,7 +1284,7 @@ def SAVE_TS(MQ, TSP):
             LOG_ADD('ERROR: SAVE refused: filename "%s" not allowed, '
                     "drained %d byte(s)" % (save_name, _fl), 2, TSP.LOG_LEVEL)
             TLM("SAVE_TS filename refusal drained", "%d residual byte(s)" % _fl)
-            return MQ, TSP, log_entries
+            return MQ, TSP, log_entries, False
 
     # Compute the upcoming data block's size from header[14:16] = BLEN.
     # The data block transmitted is BLEN+4 bytes (type + 2 session + N + CRC).
@@ -1295,7 +1308,7 @@ def SAVE_TS(MQ, TSP):
         LOG_ADD("SAVE refused: empty program (BLEN=0), drained %d flood bytes"
                 % _fl, 2, TSP.LOG_LEVEL)
         TLM("SAVE_TS empty drained", "%d residual byte(s)" % _fl)
-        return MQ, TSP, log_entries
+        return MQ, TSP, log_entries, False
 
     long = blen + 4
 
@@ -1321,7 +1334,7 @@ def SAVE_TS(MQ, TSP):
             _fl = REFUSE_SAVE(MQ, 0x06)  # -> Report 6 "Number too big"
             LOG_ADD("SAVE refused: cannot allocate %d bytes, drained %d"
                     % (long, _fl), 2, TSP.LOG_LEVEL)
-            return MQ, TSP, log_entries
+            return MQ, TSP, log_entries, False
 
     # ============================================================
     # Phase 3 setup: spawn the watchdog BEFORE announcing READY.
@@ -1361,7 +1374,7 @@ def SAVE_TS(MQ, TSP):
             LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s), drained %d"
                     % _fl, 2, TSP.LOG_LEVEL)
             _WAIT_CORE1(TSP.LOG_LEVEL)
-            return MQ, TSP, log_entries
+            return MQ, TSP, log_entries, False
 
     # Drain the data block. Z80 writes ~30µs per byte; MQ.get() blocks
     # until each byte arrives, paced by the bus.
@@ -1390,7 +1403,7 @@ def SAVE_TS(MQ, TSP):
             # finish bouncing the SM (its BLINK alone is ~1s) before we
             # let the dispatcher touch it. This is what LOAD_TS does.
             ABORT_TX(TSP.LOG_LEVEL, "SAVE_TS")
-            return MQ, TSP, log_entries
+            return MQ, TSP, log_entries, False
     TLM("SAVE_TS data read done", "%d bytes" % long)
 
     # ============================================================
@@ -1489,14 +1502,14 @@ def SAVE_TS(MQ, TSP):
     # no reason to also take the dispatcher down. ENA_SD swallows its own
     # mount failure, so a pulled card surfaces here as OSError from
     # open(); unguarded that reaches main.py and drops the Pico to a REPL.
-    ok = True
+    saved = True
     try:
         ENA_SD()
         with open(filename, mode) as f1:
             f1.write(hdr)
             f1.write(blk)
     except Exception as _e:
-        ok = False
+        saved = False
         LOG_ADD("ERROR: SAVE write FAILED for %s: %s" % (filename, _e),
                 2, TSP.LOG_LEVEL)
         TLM("SAVE_TS write FAILED", "%r: %s" % (filename, _e))
@@ -1510,17 +1523,17 @@ def SAVE_TS(MQ, TSP):
         LOG_ADD("ERROR: chdir to %s failed after save: %s" % (TSP.cur_path, _e),
                 2, TSP.LOG_LEVEL)
 
-    if ok:
+    if saved:
         TLM("SAVE_TS write done", "%d bytes -> %r" % (totbytes, filename))
 
     hdr = None
     blk = None
     gc.collect()
 
-    if ok:
+    if saved:
         LOG_ADD("INFO: SAVE TS complete: %d bytes -> %s" % (
             totbytes, filename), 0, TSP.LOG_LEVEL)
-    return MQ, TSP, log_entries
+    return MQ, TSP, log_entries, saved
 
 
 def SAVE_ZX(MQ, TSP):

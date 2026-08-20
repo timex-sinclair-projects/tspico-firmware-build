@@ -4463,11 +4463,14 @@ def TS2068_IO():                                                         # Main 
                 pidx = TSP.tap_idx
                 # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
-                MQ, TSP, new_logs = SAVE_TS(MQ, TSP)
+                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP)
                 # log_entries += new_logs
                 # log_entries.extend(new_logs) # For when SAVE_TS returns an array
                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
-                save_aborted = "sd" not in os.listdir("/")
+                # SAVE_TS reports whether a .tap actually reached the card;
+                # this used to sniff the mount table for it. Kept in step with
+                # TS/tspico.py -- SAVE_TS returns a 4-tuple now, so unpacking
+                # three here would ValueError the moment this override loads.
 
                 # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
                 # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
@@ -4475,19 +4478,14 @@ def TS2068_IO():                                                         # Main 
                 # on ACTIVATE_MQ for the rationale.
                 # ──────────────────────────────────────────────────────────
                 DEACTIVATE_SD()
-                ACTIVATE_MQ() # Also fixes ENA_SD leaving MQ active with SD active as well
-                # ─── DUAL-PORT MIGRATION: V6 pre-load + ready for next cmd ─
-                # ACTIVATE_MQ now leaves Y=BUSY by default. We need to
-                # explicitly arm TX (status pre-load for the next command's
-                # pre-header phase) and then signal ready. The actual
-                # response for the just-completed SAVE was sent inside
-                # SAVE_TS via its own V6 chain; this pre-load is for the
-                # NEXT iteration of the main loop.
-                # ──────────────────────────────────────────────────────────
-                MQ.put(0x01)
-                MQ_READY()
 
-                if not save_aborted:
+                # ARM EXACTLY ONCE, AFTER ALL SD WORK. Arming here and then
+                # calling MOUNT_FILE / DIR_FILES below re-created the #40
+                # pin-grab race (ACTIVATE_SD takes GPIO 2-4; GPIO 2 is D0),
+                # and the second ACTIVATE_MQ() tore the SM down under any
+                # command that started meanwhile. See TS/tspico.py for the
+                # full note.
+                if saved:
 
                     # Handle re-mounting an appended file, possibly mounting a
                     # new file, or restoring the mounted file's name. Then
@@ -4550,11 +4548,11 @@ def TS2068_IO():                                                         # Main 
                     # DIR refresh; tear it down before reactivating MQ.
                     # ──────────────────────────────────────────────────────
                     DEACTIVATE_SD()
-                    ACTIVATE_MQ()
-                    # V6 pre-load + ready for next cmd (see twin block
-                    # above; ACTIVATE_MQ leaves Y=BUSY now).
-                    MQ.put(0x01)
-                    MQ_READY()
+
+                # Single arm point for both outcomes, after the last SD access.
+                ACTIVATE_MQ()
+                MQ.put(0x01)
+                MQ_READY()
 
                 led.value(0)
                 
