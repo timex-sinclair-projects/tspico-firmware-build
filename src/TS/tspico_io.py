@@ -769,6 +769,52 @@ def LOAD_TS(pre, MQ, TSP):
         local_fname = "/TMP/temp.tap"
         arch = open(local_fname, "rb")
 
+    # ------------------------------------------------------------------
+    # BOUNDED SEARCH. The Z80 drives the LOAD retry loop: it asks for a
+    # header, compares the name ITSELF, and asks again on a mismatch. We
+    # serve one block per call and wrap at EOF, so a LOAD that can never
+    # match used to cycle the tape forever -- neither side counted laps.
+    #
+    # The user's only escape was BREAK, and the Pico is never told about
+    # that: the EXROM's abort path (READ_STATUS $0655 -> $06AA -> $1A61)
+    # writes nothing, and the whole EXROM contains exactly one
+    # `OUT ($0E),A`. See docs/rom-analysis/BREAK_AND_ABORT.md. So the loop
+    # has to be bounded HERE; there is no signal to wait for.
+    #
+    # One full lap is allowed deliberately -- a program that legitimately
+    # needs to wrap around cannot rewind, because it does not speak TPI.
+    # A second lap would just repeat the first, so we stop and say so.
+    #
+    # A data-block request means the Z80 accepted a header, which ends the
+    # search. Everything else extends it.
+    # ------------------------------------------------------------------
+    ld_start = getattr(TSP, "ld_start", -1)      # getattr: a stale
+    ld_wrapped = getattr(TSP, "ld_wrapped", False)  # dev_tspico may predate
+                                                    # these fields
+    if pre[0] == 0xFF:
+        TSP.ld_start = -1                        # accepted -> search over
+    elif ld_start < 0:
+        TSP.ld_start = TSP.offset                # a search begins here
+        TSP.ld_wrapped = False
+    elif ld_wrapped and TSP.offset >= ld_start:
+        # Back where we started, having been round once. Nothing matches.
+        TSP.ld_start = -1
+        TSP.ld_wrapped = False
+        LOG_ADD("ERROR: LOAD found no matching block in a full pass of "
+                "the TAP; stopping the search.", 2, TSP.LOG_LEVEL)
+        # No TLM() here: unlike SAVE_TS, LOAD_TS never lazily imports it, so
+        # a call would NameError at runtime. LOG_ADD already records this.
+        # Inline rather than _close_if_local(): that helper is defined much
+        # further down, so calling it here would NameError. Same rule --
+        # never close the module-owned cached nofile handle.
+        if arch is not _nofile_arch:
+            arch.close()
+        wrt = MQ.put
+        wrt(0x07)        # status 7 -> Report 8 "End of file"
+        wrt(0x01)        # next-iter pre-load, so the next command works
+        MQ.exec("mov(y, invert(null))")          # Y -> READY
+        return MQ, TSP, log_entries
+
     # ---- Read the TAP block prefix [len_lo, len_hi, type] ----
     # TAP file format (standard ZX/TS): each block is
     #   [len_lo][len_hi][block_type][content...][CRC byte]
@@ -790,12 +836,20 @@ def LOAD_TS(pre, MQ, TSP):
         if TSP.offset >= TSP.totlen:
             TSP.tap_idx = 0
             TSP.offset  = 0
+            TSP.ld_wrapped = True          # one lap of the tape completed
             LOG_ADD("WARNING: EOF reached searching in LOAD_TS; rewinding.",
                     1, TSP.LOG_LEVEL)
         arch.seek(TSP.offset)
         arch.readinto(blk_info)
         totbytes = blk_info[0] + 256 * blk_info[1]
-        BLINK()
+        # BLINK() used to be called here. It sleeps ~1 second, INSIDE a live
+        # transaction, while the Z80 sits in WF_NPH. The protocol tolerates
+        # it (the ready wait allows 19.9s) so it never broke anything, but
+        # it throttled a block-type-mismatch search to about one block per
+        # second -- which is most of why a non-matching LOAD felt like a
+        # hang rather than a fast spin. It was a visual debug aid, not a
+        # protocol step; BLINK's real job is the watchdog's "something went
+        # wrong" signal. The LED is already driven by the dispatcher.
 
     # ---- Header-only: optionally patch the autorun byte ----
     # For non-autorun BASIC programs, the original Spectrum tape header
@@ -895,6 +949,7 @@ def LOAD_TS(pre, MQ, TSP):
             if TSP.totlen != 0 and TSP.offset >= TSP.totlen:
                 TSP.tap_idx = 0
                 TSP.offset  = 0
+                TSP.ld_wrapped = True      # one lap of the tape completed
                 LOG_ADD("INFO: reached end of TAP, rewinding.",
                         0, TSP.LOG_LEVEL)
     else:

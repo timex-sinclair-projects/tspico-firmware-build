@@ -502,6 +502,14 @@ class PICO_STATUS():                                                            
         self.f_name = []                                                        # string of current filename
         self.offset = 0                                                         # integer pointer to current position on a large TAP file
         self.offset_tbl = []                                                    # table of offsets for each segment in a .TAP file
+        # LOAD search bookkeeping, used by LOAD_TS to bound the Z80's
+        # retry loop. ld_start is the offset a search began at (-1 = no
+        # search in progress); ld_wrapped records that the tape has been
+        # round once since then. Together they let LOAD_TS stop after one
+        # full pass instead of cycling forever -- there is no BREAK signal
+        # from the Z80 to stop it (docs/rom-analysis/BREAK_AND_ABORT.md).
+        self.ld_start = -1
+        self.ld_wrapped = False
         self.tap_idx = 0                                                        # pointer to position of next block to be LOADed in the mounted TAP 
         self.totlen = 0                                                         # integer holding total length in bytes, of a large TAP file
         self.zx48 = False                                                       # boolean for ZX Spectrum compatibility mode

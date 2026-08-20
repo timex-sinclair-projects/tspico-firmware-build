@@ -692,6 +692,140 @@ def test_dispatchers_unpack_four(tio):
               "%s no longer sniffs the mount table, found %r" % (rel, live))
 
 
+
+
+def test_load_search_is_bounded(tio):
+    """A LOAD that can never match must stop after one full pass.
+
+    The Z80 drives this loop -- it compares names itself and asks again on
+    a mismatch -- and it never tells the Pico when the user gives up: the
+    EXROM's BREAK path writes nothing, and the whole EXROM holds exactly
+    one OUT ($0E),A. So the bound has to live here.
+
+    One lap is allowed on purpose: a program that legitimately needs to
+    wrap around cannot rewind, because it does not speak TPI. A second lap
+    would only repeat the first.
+    """
+    print("test_load_search_is_bounded: header search stops after one lap")
+    with tempfile.TemporaryDirectory() as d:
+        # A three-header tape. Every request asks for a header (pre[0]=0x00)
+        # and the Z80 never accepts one, so this is the runaway case.
+        # Real 17-byte tape headers, so LOAD_TS's autorun-patch path is
+        # exercised rather than running off the end of a stub block.
+        def hdr17(name, htype=0):
+            h = bytearray(17)
+            h[0] = htype
+            h[1:11] = (name + b" " * 10)[:10]
+            h[11] = 8            # data length
+            h[13] = 0x80         # no autorun
+            h[15] = 8
+            return bytes(h)
+
+        blocks = [hdr17(b"prog%d" % n) for n in range(3)]
+        tap = b""
+        for b in blocks:
+            parity = 0x00
+            for x in b:
+                parity ^= x
+            n = len(b) + 2
+            tap += bytes([n & 0xFF, (n >> 8) & 0xFF, 0x00]) + b + bytes([parity])
+        tmp = os.path.join(d, "temp.tap")
+        open(tmp, "wb").write(tap)
+
+        TSP = FakeTSP(d)
+        TSP.f_name = "x.tap"
+        TSP.totlen = len(tap)
+        TSP.offset = 0
+        TSP.tap_idx = 0
+        TSP.ld_start = -1
+        TSP.ld_wrapped = False
+
+        import builtins
+        real_open = builtins.open
+        builtins.open = lambda p, *a, **k: real_open(
+            tmp if str(p).endswith(("temp.tap", "nofile.tap")) else p, *a, **k)
+
+        pre = bytearray(10)          # pre[0] = 0x00 -> header request
+        served, refused_at = 0, None
+        try:
+            for i in range(12):      # far more than the tape holds
+                # The Z80 echoes a block-type ack and its computed CRC after
+                # every block it takes; LOAD_TS drains both.
+                MQ = FakeMQ(bytes([0x00, 0x00]), z80_reads=True)
+                tio.LOAD_TS(pre, MQ, TSP)
+                if MQ.written and MQ.written[0] == 0x07:
+                    refused_at = i + 1
+                    break
+                served += 1
+        finally:
+            builtins.open = real_open
+
+        check(refused_at is not None,
+              "the search terminated instead of cycling forever")
+        check(refused_at is not None and served >= len(blocks),
+              "it served the whole tape first (%d of %d blocks) -- one full "
+              "lap is allowed" % (served, len(blocks)))
+        check(refused_at is not None and refused_at <= len(blocks) + 2,
+              "and stopped promptly after that lap, at request %s"
+              % refused_at)
+        check(TSP.ld_start == -1,
+              "search state reset, so the next LOAD starts clean (got %r)"
+              % (TSP.ld_start,))
+
+
+def test_load_data_request_ends_the_search(tio):
+    """A data-block request means the Z80 accepted a header."""
+    print("test_load_data_request_ends_the_search: acceptance resets the bound")
+    with tempfile.TemporaryDirectory() as d:
+        body = b"\x01" * 8
+        parity = 0xFF
+        for x in body:
+            parity ^= x
+        tap = bytes([len(body) + 2, 0, 0xFF]) + body + bytes([parity])
+        tmp = os.path.join(d, "temp.tap")
+        open(tmp, "wb").write(tap)
+
+        TSP = FakeTSP(d)
+        TSP.f_name = "x.tap"
+        TSP.totlen = len(tap)
+        TSP.offset = 0
+        TSP.tap_idx = 0
+        TSP.ld_start = 999          # pretend a search was running
+        TSP.ld_wrapped = True
+
+        import builtins
+        real_open = builtins.open
+        builtins.open = lambda p, *a, **k: real_open(
+            tmp if str(p).endswith(("temp.tap", "nofile.tap")) else p, *a, **k)
+        pre = bytearray(10)
+        pre[0] = 0xFF               # data block request
+        try:
+            MQ = FakeMQ(bytes([0xFF, 0x00]), z80_reads=True)
+            tio.LOAD_TS(pre, MQ, TSP)
+        finally:
+            builtins.open = real_open
+
+        check(TSP.ld_start == -1,
+              "a data request cleared the search (got %r)" % (TSP.ld_start,))
+        check(not (MQ.written and MQ.written[0] == 0x07),
+              "and it was served, not refused")
+
+
+def test_no_blink_inside_a_transaction(tio):
+    """BLINK sleeps ~1s; it must not be called from a live LOAD."""
+    print("test_no_blink_inside_a_transaction: structural check")
+    import ast
+    src = io.open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read()
+    tree = ast.parse(src)
+    for name in ("LOAD_TS", "SAVE_TS"):
+        fn = next(n for n in ast.walk(tree)
+                  if isinstance(n, ast.FunctionDef) and n.name == name)
+        called = {c.func.id for c in ast.walk(fn)
+                  if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+        check("BLINK" not in called,
+              "%s does not call BLINK (it blocks ~1s mid-transaction)" % name)
+
+
 def main():
     print("=" * 64)
     print("SAVE_TS audit host test")
@@ -720,6 +854,9 @@ def main():
     test_end_msg_has_no_callers(tio)
     test_saved_flag(tio)
     test_dispatchers_unpack_four(tio)
+    test_load_search_is_bounded(tio)
+    test_load_data_request_ends_the_search(tio)
+    test_no_blink_inside_a_transaction(tio)
 
     print("=" * 64)
     print("RESULT: %d passed, %d failed" % (PASS, FAIL))

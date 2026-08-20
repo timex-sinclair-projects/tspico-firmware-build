@@ -7,10 +7,10 @@ Three questions that kept coming up, answered from the EXROM. Addresses are
 
 | Question | Answer |
 |---|---|
-| Does `SAVE ""` reach the Pico? | **No.** Rejected at `$0228` with Report F, before any pre-header exists. Same branch rejects names over 10 characters. |
+| Does `SAVE ""` reach the Pico? | **No.** Rejected at `$0228` with Report F, before any pre-header exists. Same branch rejects names over 10 characters. The same check exists in the stock Spectrum 48K ROM at `$0634`. |
 | Does the "press any key" prompt send anything first? | **No.** The wait at `$08AA` precedes the first block send at `$0893`. |
-| Does SPACE abort? | **No — never, anywhere.** The prompt accepts any key including SPACE; the Pico wait needs SPACE **and** CAPS SHIFT. |
-| Does BREAK at the prompt stop bytes reaching the Pico? | **No.** The wait has no BREAK test. BREAK aborts later, after bytes are already out. |
+| Does SPACE abort? | **Yes — via `$00E5`, which tests SPACE alone.** Two different checks exist and they disagree; see below. |
+| Does BREAK at the prompt stop bytes reaching the Pico? | **No.** The wait has no BREAK test at all. The header block goes out first, and `$00E5` reports D on the way back. |
 | Is the Pico told when the user BREAKs? | **No.** Provably — see below. |
 
 ## `SAVE ""` and over-long names — rejected before the Pico
@@ -102,7 +102,40 @@ So BREAK at the prompt does **not** prevent the transaction; it aborts a few
 bytes in, leaving the Pico mid-transaction. That is the same failure shape as
 breaking out of a LOAD loop.
 
-### What actually counts as BREAK
+### There are TWO break checks and they do not agree
+
+This is the part that is easy to get wrong — I got it wrong first time round.
+
+**Check 1 — `$00E5`, the tape-return exit. SPACE alone.** Stock TS2068 EXROM
+code, byte-identical to the genuine image, and the direct analogue of the
+Spectrum's `SA/LD-RET` at `$053F`:
+
+```asm
+00E5  F5         PUSH AF
+00E6  3A 48 5C   LD A,($5C48)   ; BORDCR
+00E9  E6 38      AND $38
+00EB  0F 0F 0F   RRCA x3
+00EE  D3 FE      OUT ($FE),A    ; restore the border
+00F0  3E 7F      LD A,$7F
+00F2  DB FE      IN A,($FE)     ; row $7F, bit 0 = SPACE
+00F4  1F         RRA
+00F5  FB         EI
+00F6  38 02      JR C,$00FA     ; SPACE up -> fine
+00F8  CF 0C      RST 8 : DEFB $0C  ; <- Report D BREAK.  SPACE ALONE.
+00FA  F1 C9      POP AF : RET
+```
+
+**Every Pico block send returns through it**, because the sender pushes it as its
+own return address:
+
+```asm
+1882  21 E5 00   LD HL,$00E5
+1885  E5         PUSH HL
+```
+
+**Check 2 — `$069F`, guarding the Pico status wait. SPACE *and* CAPS SHIFT.**
+This one is TS-Pico code (the `$0655`/`$069F` region differs from the genuine
+EXROM in 59 of 96 bytes):
 
 ```asm
 069F  CD 56 08   CALL $0856     ; 10x $07F6, debounced
@@ -113,12 +146,25 @@ breaking out of a LOAD loop.
 06A8  1F C9      RRA : RET      ; carry = CAPS SHIFT state
 ```
 
-`$07F6` loads `A,$7F` before its `IN A,($FE)`, so it reads the row holding SPACE
-at bit 0. Carry clear on return — the abort condition at `$0655`'s
-`JP NC,$06AA` — needs **both** bits low: **SPACE and CAPS SHIFT together**.
+Carry clear — the abort at `$0655`'s `JP NC,$06AA` — needs **both** bits low.
 
-**SPACE on its own never aborts a Pico wait.** At the prompt it starts the save;
-during a transfer it is ignored.
+So: **SPACE alone aborts a tape operation** (check 1, and this is what you see in
+FUSE, because check 1 is stock), while **a Pico ready-wait needs full BREAK**
+(check 2). Do not generalise either one to the other.
+
+### What SPACE at the prompt actually does
+
+1. The wait at `$08AA` sees a key down and returns — it has no BREAK test.
+2. `$0893: CALL $0068` → `$1879`, which pushes `$00E5` as its return and sends
+   **the whole 21-byte header block to the Pico**.
+3. On return, `$00E5` finds SPACE still down and reports **D BREAK**.
+4. The data block is never sent.
+
+So the user sees `D BREAK` and assumes nothing happened, but the Pico has
+received a complete SAVE header and is waiting for a data block that will never
+come. On this branch that is handled: `SAVE_TS`'s no-data-after-1s guard refuses
+with Report R and drains, and the dispatcher's `ACTIVATE_MQ` launders the
+leftover status byte.
 
 ## The Pico is never told about a BREAK
 
@@ -162,7 +208,15 @@ either side counts laps, so a LOAD that can never match cycles forever.
 Any fix has to be Pico-side. A ROM change could signal the break, but the ROM is
 the part we do not control.
 
-> Also worth knowing: `BLINK()` is called from `LOAD_TS`'s wrong-block-type
-> branch. It blocks for ~1 second, inside a live transaction. `WF_NPH` tolerates
-> it (19.9 s budget), but it throttles a mismatch search to roughly one block per
-> second, which is most of why the loop feels like a hang.
+`LOAD_TS` now bounds it: a search ends after one full lap of the tape with
+nothing accepted, answering status `0x07` → **Report 8, End of file**. One lap is
+allowed on purpose — a program that legitimately needs to wrap cannot rewind,
+because it does not speak TPI — but a second lap would only repeat the first. A
+data-block request (`pre[0] == 0xFF`) means the Z80 accepted a header and ends
+the search.
+
+> `BLINK()` used to be called from `LOAD_TS`'s wrong-block-type branch. It blocks
+> for ~1 second, inside a live transaction. `WF_NPH` tolerated it (19.9 s budget)
+> so it never broke anything, but it throttled a mismatch search to roughly one
+> block per second — most of why the loop felt like a hang rather than a fast
+> spin. It was a visual debug aid, not a protocol step, and has been removed.
