@@ -21,6 +21,7 @@ here is what the hardware actually runs.
 | A specific address — what lives there | [SYMBOLS.md](SYMBOLS.md) |
 | How `ON ERR` reports an error code to BASIC | [ERROR_TRAPPING.md](ERROR_TRAPPING.md) |
 | What BREAK does, and what the Pico is never told | [BREAK_AND_ABORT.md](BREAK_AND_ABORT.md) |
+| A proposed EXROM patch (SAVE prompt / BREAK ordering) | [PATCH_SAVE_PROMPT_BREAK.md](PATCH_SAVE_PROMPT_BREAK.md) |
 | The ZX48-mode Spectrum ROM and its tape protocol | [ZX48_ROM.md](ZX48_ROM.md) |
 
 ## The findings that matter most

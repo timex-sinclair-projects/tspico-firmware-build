@@ -509,6 +509,7 @@ class PICO_STATUS():                                                            
         # full pass instead of cycling forever -- there is no BREAK signal
         # from the Z80 to stop it (docs/rom-analysis/BREAK_AND_ABORT.md).
         self.ld_start = -1
+        self.ld_start_idx = 0
         self.ld_wrapped = False
         self.tap_idx = 0                                                        # pointer to position of next block to be LOADed in the mounted TAP 
         self.totlen = 0                                                         # integer holding total length in bytes, of a large TAP file

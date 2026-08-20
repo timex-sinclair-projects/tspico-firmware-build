@@ -826,6 +826,57 @@ def test_no_blink_inside_a_transaction(tio):
               "%s does not call BLINK (it blocks ~1s mid-transaction)" % name)
 
 
+
+
+def test_aborted_search_rewinds(tio):
+    """A BREAK mid-search must leave the tape where the search began.
+
+    The Z80 never signals the abort, so all the Pico sees is the watchdog
+    firing. Without the rewind, the next LOAD would start from wherever the
+    abandoned search happened to stop -- which looks to the user like the
+    tape moved on its own.
+    """
+    print("test_aborted_search_rewinds: BREAK mid-search restores position")
+    TSP = FakeTSP("/tmp")
+    TSP.tap_idx = 4
+    TSP.offset = 1234
+    TSP.ld_start = 200          # a search began here...
+    TSP.ld_start_idx = 1        # ...at block 1
+    TSP.ld_wrapped = True
+
+    moved = tio.REWIND_ABORTED_SEARCH(TSP)
+    check(moved is True, "reported that it rewound")
+    check(TSP.offset == 200, "offset back to the search start, got %r" % TSP.offset)
+    check(TSP.tap_idx == 1, "tap_idx back to the search start, got %r" % TSP.tap_idx)
+    check(TSP.ld_start == -1 and TSP.ld_wrapped is False,
+          "search state cleared so the next LOAD starts fresh")
+
+    # An abort with no search running must NOT move anything: that position
+    # is a block the Z80 actually accepted.
+    TSP2 = FakeTSP("/tmp")
+    TSP2.tap_idx, TSP2.offset, TSP2.ld_start = 7, 5000, -1
+    moved = tio.REWIND_ABORTED_SEARCH(TSP2)
+    check(moved is False, "no search in progress -> reported no rewind")
+    check(TSP2.offset == 5000 and TSP2.tap_idx == 7,
+          "and left the position alone (%r, %r)" % (TSP2.offset, TSP2.tap_idx))
+
+
+def test_abort_paths_rewind(tio):
+    """Structural: both LOAD_TS abort paths must call the rewind."""
+    print("test_abort_paths_rewind: structural check")
+    import ast
+    src = io.open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read()
+    fn = next(n for n in ast.walk(ast.parse(src))
+              if isinstance(n, ast.FunctionDef) and n.name == "LOAD_TS")
+    aborts = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+              and isinstance(n.func, ast.Name) and n.func.id == "ABORT_TX"]
+    rewinds = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+               and isinstance(n.func, ast.Name) and n.func.id == "REWIND_ABORTED_SEARCH"]
+    check(len(aborts) == 2, "LOAD_TS has 2 abort paths, found %d" % len(aborts))
+    check(len(rewinds) == len(aborts),
+          "each one rewinds (%d rewinds for %d aborts)" % (len(rewinds), len(aborts)))
+
+
 def main():
     print("=" * 64)
     print("SAVE_TS audit host test")
@@ -857,6 +908,8 @@ def main():
     test_load_search_is_bounded(tio)
     test_load_data_request_ends_the_search(tio)
     test_no_blink_inside_a_transaction(tio)
+    test_aborted_search_rewinds(tio)
+    test_abort_paths_rewind(tio)
 
     print("=" * 64)
     print("RESULT: %d passed, %d failed" % (PASS, FAIL))

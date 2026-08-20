@@ -362,6 +362,34 @@ def TS_IO_DUAL():
                                           # the bus until the next cycle
 
 
+def REWIND_ABORTED_SEARCH(TSP):
+    """Put the tape back where a LOAD search started. Returns True if it moved.
+
+    The user's only way out of a LOAD that cannot match is BREAK, and the
+    Z80 never tells us about it -- its abort path writes nothing, and the
+    whole EXROM holds exactly one `OUT ($0E),A`
+    (docs/rom-analysis/BREAK_AND_ABORT.md). All we ever see is the transfer
+    going quiet, and 3 seconds later the watchdog firing.
+
+    By then the search has walked an arbitrary distance through the tape,
+    so without this the next LOAD starts from wherever the abandoned search
+    happened to stop -- which to the user looks like the tape position
+    moved on its own. Rewinding to where the search began is the closest we
+    can get to "leave it where they left it" with no signal to work from.
+
+    Only rewinds a search in progress. An abort in the middle of a block
+    the Z80 had already accepted is left alone: that position is where the
+    user actually is.
+    """
+    if getattr(TSP, "ld_start", -1) < 0:
+        return False
+    TSP.offset = TSP.ld_start
+    TSP.tap_idx = getattr(TSP, "ld_start_idx", 0)
+    TSP.ld_start = -1
+    TSP.ld_wrapped = False
+    return True
+
+
 def ABORT_TX(log_level, what="LOAD_TS"):
     """Abort an in-flight LVM transaction.
 
@@ -795,6 +823,7 @@ def LOAD_TS(pre, MQ, TSP):
         TSP.ld_start = -1                        # accepted -> search over
     elif ld_start < 0:
         TSP.ld_start = TSP.offset                # a search begins here
+        TSP.ld_start_idx = TSP.tap_idx           # ... and at this block index
         TSP.ld_wrapped = False
     elif ld_wrapped and TSP.offset >= ld_start:
         # Back where we started, having been round once. Nothing matches.
@@ -893,6 +922,9 @@ def LOAD_TS(pre, MQ, TSP):
             wrt(b)
             if kill:
                 ABORT_TX(TSP.LOG_LEVEL)
+                if REWIND_ABORTED_SEARCH(TSP):
+                    LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
+                            "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
                 _close_if_local()
                 return MQ, TSP, log_entries
     else:
@@ -904,6 +936,9 @@ def LOAD_TS(pre, MQ, TSP):
             wrt(el[0])
             if kill:
                 ABORT_TX(TSP.LOG_LEVEL)
+                if REWIND_ABORTED_SEARCH(TSP):
+                    LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
+                            "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
                 _close_if_local()
                 return MQ, TSP, log_entries
 
