@@ -34,6 +34,7 @@ tools/zmakebas/*.o
 # Migrated program outputs (add one line per program as you migrate it):
 #   /src/assets/nofile.tap
 #   /SD card/TAP/test/factorial.tap
+/SD card/TAP/picotest-s.tap
 
 # Editor
 .vscode/

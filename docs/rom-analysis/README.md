@@ -19,6 +19,8 @@ here is what the hardware actually runs.
 | What TS-PICO changed in the EXROM vs genuine | [DIFF_EXROM_vs_STOCK.md](DIFF_EXROM_vs_STOCK.md) |
 | What TS-PICO changed in the HOME ROM vs genuine | [DIFF_HOME_vs_STOCK.md](DIFF_HOME_vs_STOCK.md) |
 | A specific address — what lives there | [SYMBOLS.md](SYMBOLS.md) |
+| How `ON ERR` reports an error code to BASIC | [ERROR_TRAPPING.md](ERROR_TRAPPING.md) |
+| The ZX48-mode Spectrum ROM and its tape protocol | [ZX48_ROM.md](ZX48_ROM.md) |
 
 ## The findings that matter most
 
