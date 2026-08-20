@@ -357,6 +357,7 @@ from TS.tspico_io import (
     TS_IO_DUAL,                          # was: TS_IO (single-port)
     LOAD_TS, LOAD_ZX, LOAD_ZX_C,
     SAVE_TS, SAVE_ZX,
+    CORE1_BUSY,                          # core1 flag lives in tspico_io, not here
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
 )
 
@@ -4770,6 +4771,26 @@ def ZX48_IO(pre):                                                               
             ts = time.ticks_us()
             a = MQ.get()
             TLM("ZX48_IO byte received", "a=%d (0x%02X)" % (a, a))
+
+            # Wait for core1 before dispatching, the way the three
+            # main-loop LVM branches do. Without it a watchdog left
+            # over from the previous ZX transaction is still inside
+            # its cleanup -- which ends with a ~1s BLINK() -- and the
+            # spawn in the handler below raises OSError 'core1 in
+            # use'. Nothing here or in main.py catches that, so the
+            # Pico drops to a REPL. START_WATCHDOG() now survives it,
+            # but waiting means we keep the watchdog instead of
+            # running the transfer unguarded. Bounded, so a thread
+            # that died without clearing the flag cannot wedge us.
+            # BOTH flags: `busy` here is tspico.py's own (SAVE_LOG,
+            # BLINK_LED, CHK_STATUS); CORE1_BUSY() is tspico_io's
+            # WATCHDOG. They are different variables -- see that
+            # function's docstring -- and core1 is one resource.
+            _t = time.ticks_ms()
+            while busy or CORE1_BUSY():
+                if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
+                    LOG("ZX48_IO gave up waiting for core1", 2)
+                    break
 
             if a == 76:                                                    # ASCII 'L' - for LOAD
 

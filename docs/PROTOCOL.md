@@ -427,6 +427,90 @@ match what the Z80 expects.
 - **`END_MSG()` has no callers and should keep it that way.** It is
   retained as documented context for the trap above, not as an API.
 
+- **ZX48 mode is a different protocol. Do not apply this section to it.**
+  See §7b below — the one time someone reasoned about ZX mode using TPI
+  rules, they shipped a hang.
+
+---
+
+## 7b. ZX48 mode is NOT TPI
+
+`SAVE "tpi:zx48"` puts the 2068 into ZX Spectrum mode, where `OUT 244,3`
+selects a customized Spectrum ROM — a stock 48K image whose `SA-BYTES`
+($04C2) and `LD-BYTES` ($0556) are replaced with TS-Pico stubs. Everything
+below is transcribed from that ROM, not from the TPI spec.
+
+Three properties make it incompatible with the rest of this document:
+
+- **Port `$0F` is never read.** The ROM contains zero `IN A,($0F)`. The Y
+  register, `MQ_READY()`, the whole dual-port ready mechanism — none of it
+  participates. The PIO's issue-#14 auto-busy is harmless here.
+- **There is no status byte.** `$053F`, the shared exit for both tape
+  routines, restores the border and `RST 8`s on BREAK; that is the only
+  error report in the entire path. A Pico-side failure **cannot** be
+  communicated to the Z80. `REFUSE_SAVE()` has no counterpart — a guard can
+  only log, or swallow bytes to keep the FIFO in sync.
+- **Parity seeds from the flag byte**, not from byte 0 as TPI's CRC does.
+
+### SAVE — `SA-BYTES` $04C2, per block. No handshake.
+
+```
+OUT $0E,'S'      ; then ~940us  (LD B,$FF / DJNZ)
+OUT $0E,len_lo   ; then ~940us
+OUT $0E,len_hi   ; then ~940us
+OUT $0E,flag     ; 0x00 header / 0xFF data, then ~940us
+DE x  OUT $0E,b  ; ~60us apart  (LD B,$10 / DJNZ)
+OUT $0E,parity   ; XOR of flag and every data byte
+```
+
+Blind timed writes — the Pico just has to keep up. `DE` is decremented
+*after* the send, so `DE=0` wraps to `$FFFF` and floods 65536 bytes: the
+same quirk [#40](https://github.com/timex-sinclair-projects/tspico-firmware-build/pull/40)
+fixed for TS mode. With no status byte to refuse with, the only option is
+to swallow the flood and write nothing.
+
+Note `SA-BYTES` sends a fresh `'S'` for **every** block. `ZX48_IO` consumes
+the header block's; the data block's is consumed inside `SAVE_ZX`.
+
+### LOAD — `LD-BYTES` $0556, per block. One handshake.
+
+```
+OUT $0E,'L'
+poll IN $0E until the byte reads 0x40      <-- the handshake
+~940us, then IN $0E -> flag  (seeds the parity accumulator)
+DE x  IN $0E -> data byte                  (~15us apart)
+IN $0E -> parity, compared against the accumulator
+```
+
+**The `0x40` is load-bearing, and it is not the single-port continue flag.**
+It is polled on `$0E`, the *data* port. The dual-port compliance sweep in
+`c649e69` stripped `wrt(0x40)` from `LOAD_ZX` and `LOAD_ZX_C` reasoning
+that "0x40 continue flag is on port $0F (scratch Y)" — true for TPI, wrong
+here. With nothing matching `0x40` the poll never exits: TX drains,
+`pull(noblock)` drives `0x00` forever, and ZX LOAD hangs hard. That
+regression shipped.
+
+Because the poll **discards** every non-`0x40` byte, the handshake also
+resynchronises the stream. That is why `LOAD_ZX` can afford to be one byte
+generous, and why a slow Pico response is fine here even though the
+equivalent would break `LOAD_TS`.
+
+### Two `busy` flags, not one
+
+`tspico.py` imports named symbols from `tspico_io`, and `busy` is not among
+them — so its `global busy` binds a **different** module-level variable,
+the one its own `SAVE_LOG` / `BLINK_LED` / `CHK_STATUS` threads set. A
+`while busy:` in `tspico.py` does **not** wait for the LVM watchdog,
+however much it reads like it does. Core1 is one resource, so anything
+deciding whether it can spawn must consult both: its own `busy` and
+`CORE1_BUSY()`.
+
+The three `while busy:` waits in `tspico.py`'s main LVM loop are subject to
+this and are deliberately unchanged — they are unbounded spins, so making
+them wait on something that can actually be True would turn a no-op into a
+potential hang. `START_WATCHDOG()` tolerating a failed spawn is what
+protects those paths today.
+
 ---
 
 ## 8. Where to look in the source

@@ -430,6 +430,82 @@ def BLINK():
     return
 
 
+# ===========================================================================
+# THE ZX48 WIRE PROTOCOL
+#
+# Read off the customized Spectrum ROM ("Spectrum nuevo LD.rom", a stock
+# 48K image with SA-BYTES at $04C2 and LD-BYTES at $0556 replaced), NOT
+# inferred from the TPI spec. ZX48 mode is NOT TPI and the two must not be
+# reasoned about interchangeably:
+#
+#   * The ROM contains ZERO `IN A,($0F)`. Port $0F -- the Y register, the
+#     whole dual-port ready mechanism -- is never read in ZX mode. Nothing
+#     here needs MQ_READY(), and the PIO's issue-#14 auto-busy is harmless.
+#   * There is no status byte and no STATUS_TO_REPORT path. $053F, the
+#     shared exit for both routines, restores the border and RST-8's only
+#     on BREAK. A Pico-side error CANNOT be reported to the Z80 in ZX mode,
+#     so SAVE_TS's REFUSE_SAVE() pattern does not apply here at all --
+#     writing a status byte would just orphan it in the stream.
+#
+# SAVE, per block -- blind timed OUTs, no handshake ($04C2):
+#     OUT $0E,'S'      ; then ~940us (LD B,$FF / DJNZ)
+#     OUT $0E,len_lo   ; then ~940us
+#     OUT $0E,len_hi   ; then ~940us
+#     OUT $0E,flag     ; 0x00 header / 0xFF data, then ~940us
+#     DE x  OUT $0E,b  ; ~60us apart (LD B,$10 / DJNZ)
+#     OUT $0E,parity   ; XOR of flag and every data byte
+#   DE is decremented AFTER the send, so DE=0 wraps to 0xFFFF and floods
+#   65536 bytes -- the same SAVE-0-is-SAVE-64K quirk #40 fixed for TS mode.
+#
+# LOAD, per block -- ONE handshake, then blind timed INs ($0556):
+#     OUT $0E,'L'
+#     poll IN $0E until the byte reads 0x40      <-- the only handshake
+#     ~940us, then IN $0E -> flag (seeds the parity accumulator)
+#     DE x  IN $0E -> data byte                  (~15us apart)
+#     IN $0E -> parity, compared against the accumulator
+#
+#   THE 0x40 IS LOAD-BEARING AND IS NOT THE SINGLE-PORT CONTINUE FLAG.
+#   It is polled on $0E, the DATA port. The dual-port compliance sweep in
+#   c649e69 stripped `wrt(0x40)` from LOAD_ZX on the reasoning "0x40
+#   continue flag is on port $0F (scratch Y)" -- true for TPI, wrong here.
+#   With nothing matching 0x40 the poll never exits: TX drains, the PIO's
+#   pull(noblock) then drives 0x00 forever, and ZX LOAD hangs hard.
+#
+#   Because the loop DISCARDS every non-0x40 byte, the handshake also
+#   resynchronises the stream. That is why LOAD_ZX can afford to be one
+#   byte generous (see its comment) and why a slow Pico response is fine
+#   here even though the equivalent would break LOAD_TS.
+# ===========================================================================
+
+ZX_READY = const(0x40)   # LD-BYTES polls $0E for this; see the block above
+
+
+def ENA_MQ_DUAL():
+    """Rebuild and activate the DUAL-PORT state machine. Returns the new SM.
+
+    The ZX handlers need this after an SD access has repurposed GPIO 2-4.
+    Its single-port twin ENA_MQ() below must NOT be used for that any more:
+    it builds the legacy TS_IO program at 15 MHz, and SAVE_ZX used to hand
+    that back to ZX48_IO -- which had deliberately built a TS_IO_DUAL at
+    30 MHz and keeps using the returned handle for the rest of the session.
+    ZX48_IO's own comment says TS_IO "wouldn't work because of the bus
+    protocol mismatch", so every ZX operation after the first SAVE was
+    running on the wrong PIO program.
+
+    Mirrors ZX48_IO's own setup exactly, Y=READY included. ZX mode never
+    reads $0F, but leaving Y at READY keeps the SM in the state the rest
+    of the firmware expects when the user exits back to TS mode.
+    """
+    sm = StateMachine(0, TS_IO_DUAL, freq=30_000_000,
+                      out_base=Pin(2, Pin.OUT), in_base=Pin(2, Pin.IN),
+                      jmp_pin=Pin(11), sideset_base=Pin(12, Pin.OUT))
+    sm.active(0)
+    utime.sleep(0.01)
+    sm.active(1)
+    sm.exec("mov(y, invert(null))")
+    return sm
+
+
 def ENA_MQ(MQ):
     """Re-create and activate the (legacy single-port) TS_IO state machine.
 
@@ -847,25 +923,28 @@ def LOAD_TS(pre, MQ, TSP):
 def LOAD_ZX(MQ, TSP):
     """LOAD routine for ZX Spectrum compatibility mode.
 
-    !!! NOT DUAL-PORT COMPLIANT — needs migration. !!!
+    ZX48 IS NOT TPI. Do not model this on LOAD_TS. The protocol is the
+    customized Spectrum ROM's patched LD-BYTES at $0556, transcribed in
+    THE ZX48 WIRE PROTOCOL near the top of this module:
 
-    This function (and its siblings LOAD_ZX_C and SAVE_ZX) was written
-    against the original single-port TS_IO PIO program. It uses patterns
-    that don't work correctly under the dual-port architecture:
-      - assumes wrt(0x40) populates port $0F via the FIFO (in dual-port
-        $0F is decoupled and reads the Y register)
-      - calls the legacy ENA_MQ() which spins up the OLD single-port
-        TS_IO state machine (in dual-port we use TS_IO_DUAL via
-        ACTIVATE_MQ in tspico.py)
-      - missing the V6 pre-load chain (final + next-iter 0x01 writes)
+        OUT $0E,'L'
+        poll IN $0E until the byte reads 0x40      <-- the handshake
+        IN $0E -> flag byte (seeds the Z80's parity accumulator)
+        DE x  IN $0E -> data byte
+        IN $0E -> parity, compared against the accumulator
+
+    The previous version of this docstring told you to "drop any
+    wrt(0x40)" and "end with two MQ.put(0x01) writes". BOTH ARE WRONG
+    HERE and the first one shipped a hang: 0x40 is polled on $0E, the
+    DATA port, and is the only thing that lets LD-BYTES proceed. There is
+    no $0F polling and no status byte anywhere in ZX mode -- the ROM
+    contains zero `IN A,($0F)`, and $053F (its shared exit) RST-8's on
+    BREAK and nothing else. A trailing 0x01 would just be read as tape
+    data.
 
     Reached only when the user explicitly invokes ZX48 mode AND has
-    ZX_TAPE_COMPAT enabled in /config.ini. Both default to off, so this
-    path is dormant in standard installs.
-
-    To migrate: model this on the (working) LOAD_TS pattern above — drop
-    any wrt(0x40), keep TS_IO_DUAL as MQ, end with two MQ.put(0x01)
-    writes. See docs/PROTOCOL.md "Writing a new command handler" §5.
+    ZX_TAPE_COMPAT disabled (this is "normal" mode; LOAD_ZX_C is the
+    "compatible" one). Both default to off.
     """
     global dead
     global kill
@@ -900,8 +979,26 @@ def LOAD_ZX(MQ, TSP):
     START_WATCHDOG(3, MQ, TSP)
 
     wrt = MQ.put
-    # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
-    wrt(blk_info[2])
+
+    # RESTORED. c649e69 deleted this with the note "Dual-port: 0x40
+    # continue flag is on port $0F (scratch Y)" -- correct for TPI, wrong
+    # for ZX. LD-BYTES at $0556 polls `IN A,($0E)` and loops until the byte
+    # reads 0x40; it never touches $0F. With nothing matching, the poll
+    # never exits: TX drains, pull(noblock) drives 0x00 forever, and ZX
+    # LOAD hangs. See THE ZX48 WIRE PROTOCOL near the top of this module.
+    wrt(ZX_READY)
+    wrt(blk_info[2])                  # flag byte -- seeds the Z80's parity
+
+    # NOTE on the byte count, which looks off by one and is not a bug.
+    # A TAP block on disk is [len_lo][len_hi][flag][data...][parity] with
+    # len = datalen + 2. We consumed the 3-byte prefix into blk_info and
+    # now stream `totbytes` = datalen + 2 more, so the Z80 is offered
+    # 0x40 + flag + datalen + 2 = datalen + 4 bytes while LD-BYTES consumes
+    # 0x40 + flag + datalen + parity = datalen + 3. The spare byte is the
+    # NEXT block's len_lo and is harmless: the following LOAD opens with
+    # the handshake poll, which discards everything that is not 0x40. This
+    # is what v1.1 did; left as-is rather than tightened, because the
+    # tightening cannot be verified without hardware.
     
     for i in r:
         arch.readinto(el)
@@ -932,13 +1029,14 @@ def LOAD_ZX(MQ, TSP):
 def LOAD_ZX_C(MQ, TSP, buf_size):
     """ZX Spectrum LOAD routine in 'compatible' mode (heavily buffered).
 
-    !!! NOT DUAL-PORT COMPLIANT — see LOAD_ZX docstring above. !!!
+    Same wire protocol as LOAD_ZX -- the ROM has only ONE patched loader
+    ($0556) and both modes reach it through the same 'L' dispatch -- so
+    every block must still lead with the 0x40 handshake. See LOAD_ZX and
+    THE ZX48 WIRE PROTOCOL near the top of this module.
 
     Used for some hard-to-load TAPs that need the entire data block in
     memory before streaming to the Z80. Inefficient and can OOM the
     Pico — kept around because some legacy TAPs need it.
-
-    Inherits all the dual-port migration TODOs from LOAD_ZX.
     """
     global log_entries
     log_entries = " "
@@ -997,17 +1095,32 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
     for ar in cur_buf:
 
         led.value(1)
-        # Dual-port: 0x40 (= 64) continue flag is on port $0F (scratch Y).
-        # MQ.put(64) removed — just stream data bytes.
+        # RESTORED, same reasoning as LOAD_ZX -- the removal note this
+        # replaces ("MQ.put(64) removed") is itself the evidence that
+        # compatible mode handshakes exactly like normal mode. The ROM has
+        # only ONE patched loader ($0556) and compatible mode reaches it
+        # through the same 'L' dispatch, so it must.
+        #
+        # Each cur_buf entry is one TAP block MINUS its 2-byte length
+        # prefix, i.e. exactly [flag][data...][parity], so the handshake
+        # byte plus the entry is precisely what LD-BYTES consumes -- none
+        # of LOAD_ZX's spare byte.
+        MQ.put(ZX_READY)
 
         for el in ar:
             MQ.put(el)
 
         led.value(0)
         
-    while(MQ.tx_fifo() != 0):
-        pass
-    
+    # Bounded: if the Z80 stopped reading (BREAK) an unbounded spin here
+    # wedges ZX mode with no way out but the reset button.
+    _t = time.ticks_ms()
+    while MQ.tx_fifo() != 0:
+        if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
+            LOG_ADD("WARNING: LOAD_ZX_C gave up draining TX (%d left)"
+                    % MQ.tx_fifo(), 1, TSP.LOG_LEVEL)
+            break
+
     cur_buf = []
     
     return MQ, TSP, log_entries
@@ -1122,6 +1235,10 @@ def DRAIN_REFUSED_SAVE(MQ, quiet_ms=500):
     data block anyway, and those bytes would otherwise sit in RX and be
     misread as the next command's pre-header. Drain until the bus has
     been quiet for `quiet_ms`.
+
+    SAVE_ZX also uses it, for a different reason: ZX mode has no status
+    byte to refuse with, so its empty-save guard cannot prevent the 64K
+    flood and must simply swallow it to keep the FIFO in sync.
 
     Returns the number of bytes drained (0 = the abort took cleanly).
     """
@@ -1539,39 +1656,26 @@ def SAVE_TS(MQ, TSP):
 def SAVE_ZX(MQ, TSP):
     """SAVE routine for ZX Spectrum compatibility mode.
 
-    !!! NOT DUAL-PORT COMPLIANT — BELIEVED NON-FUNCTIONAL AS SHIPPED !!!
+    ZX48 IS NOT TPI. The protocol is the customized Spectrum ROM's patched
+    SA-BYTES at $04C2, transcribed in THE ZX48 WIRE PROTOCOL near the top
+    of this module. Per block, with NO handshake at all -- just blind OUTs
+    paced by DJNZ delays:
 
-    Reached from ZX48_IO on an 'S' byte, i.e. after the user enters ZX
-    Spectrum mode with SAVE "tpi:zx48". Audited against the dual-port
-    protocol; everything below is read from the code, not inferred:
+        OUT $0E,'S' / len_lo / len_hi / flag / DE data bytes / parity
 
-      * THE SM SWAP IS THE HEADLINE. The last thing this function does is
-        `MQ = ENA_MQ(MQ)`, which builds the LEGACY single-port TS_IO
-        program at 15 MHz and hands it back to ZX48_IO -- which created a
-        TS_IO_DUAL at 30 MHz on purpose and keeps using the returned
-        handle for the rest of the session. ZX48_IO's own comment says
-        TS_IO "wouldn't work because of the bus protocol mismatch". So
-        even a SAVE that otherwise succeeded leaves ZX mode on the wrong
-        state machine.
-      * No Y-register handling anywhere. Since issue #14 the PIO drops Y
-        to 0 (BUSY) on EVERY Z80 OUT, and nothing here ever puts it back
-        with MQ_READY() / mov(y, invert(null)). Every dual-port handler
-        does.
-      * No header CRC check, so a corrupted transfer is written to disk
-        as if it were good.
-      * No BLEN=0 guard, so a blank SAVE hits the same 64K SA-BYTES flood
-        that #40 fixed for SAVE_TS.
-      * No filename validation, so the name goes straight into a path.
+    Consequences that make this genuinely different from SAVE_TS, all read
+    off the ROM rather than assumed:
 
-    The last two crash risks -- an unmasked 9-bit RX value assigned to a
-    bytearray, and bytes.decode() on a name carrying BASIC tokens -- are
-    fixed inline below, because those drop the Pico to a REPL rather than
-    merely failing the SAVE. The protocol faults are left alone
-    deliberately: changing them blind, on a path with no test coverage
-    and no confirmed-working baseline, would be guesswork. Migrating this
-    properly means porting SAVE_TS's V6 pattern (guarded refusals,
-    START_WATCHDOG, the tx-drain wait before ENA_SD) and testing it on
-    hardware in ZX mode.
+      * No $0F polling: the ROM contains zero `IN A,($0F)`. Nothing here
+        needs MQ_READY(), and the PIO's issue-#14 auto-busy is harmless.
+      * No status byte and no STATUS_TO_REPORT path -- $053F, the shared
+        exit, RST-8's on BREAK and nothing else. A Pico-side error CANNOT
+        be reported to the Z80, so SAVE_TS's REFUSE_SAVE() has no
+        counterpart here. Guards can only log, or swallow bytes to keep
+        the FIFO in sync.
+      * Parity seeds from the FLAG byte (hdr[2]), not hdr[0] as in TPI.
+      * ZX48_IO consumes only the FIRST block's 'S'; SA-BYTES sends a new
+        one per block, so the data block's is consumed here.
     """
     global kill
     global dead
@@ -1595,12 +1699,75 @@ def SAVE_ZX(MQ, TSP):
         hdr[i] = MQ.get() & 0xFF    # mask: RX values are 9-bit (bit 8 = A0),
                                     # and >255 into a bytearray is ValueError
         
-    long = (256*hdr[15]) + hdr[14] + 4
-    r2 = range(long)
-    
-    blk = bytearray(long)
-    
+    # WIRE LAYOUT (SA-BYTES $04C2, header block: DE=17, flag=0x00):
+    #   hdr[0]     len_lo = 17         hdr[1]  len_hi = 0
+    #   hdr[2]     flag   = 0x00       hdr[3]  Spectrum header type
+    #   hdr[4:14]  filename            hdr[14],[15]  data length
+    #   hdr[16:20] param1, param2      hdr[20] parity
+    # hdr[3..20] lines up byte-for-byte with SAVE_TS's TPI header, which is
+    # why hdr[4:14] and hdr[14],[15] work in both. The HEADS differ: TPI
+    # carries block_type at [0] and a session ID at [1],[2]; ZX carries the
+    # TAP length prefix at [0],[1] and the flag at [2].
+    #
+    # PARITY. The Z80 seeds its accumulator with the FLAG byte ($04DF:
+    # LD H,A) and XORs every header byte in, so the check is
+    # XOR(hdr[2], hdr[3..19]) == hdr[20]. Seeding from hdr[0] the way
+    # SAVE_TS does would be wrong here -- that slot holds the length
+    # prefix, not the flag.
+    #
+    # We can only WARN, never refuse. $053F, the ROM's shared exit for both
+    # tape routines, RST-8's on BREAK and nothing else: ZX mode has no
+    # status byte, so SAVE_TS's REFUSE_SAVE() has no counterpart here.
+    # Saving anyway also matches how a real tape behaves -- the Z80 runs
+    # its own parity check on LOAD and reports R itself.
+    crc_h = hdr[2]
+    for i in range(3, 20):
+        crc_h ^= hdr[i]
+    if crc_h != hdr[20]:
+        LOG_ADD("WARNING: SAVE ZX header parity mismatch "
+                "(got 0x%02X, expected 0x%02X); saving anyway"
+                % (hdr[20], crc_h), 1, TSP.LOG_LEVEL)
+
+    blen = (256*hdr[15]) + hdr[14]
+    long = blen + 4
+
+    # THE STRAY GET, EXPLAINED. SA-BYTES sends a fresh 'S' at the start of
+    # EVERY block ($04C8), so the data block re-announces itself. ZX48_IO
+    # consumed the header block's 'S' before dispatching here; this consumes
+    # the data block's. After it the next `long` bytes are len_lo, len_hi,
+    # flag=0xFF, `blen` data bytes, parity.
     MQ.get()
+
+    # EMPTY-SAVE FLOOD. $04F5 decrements DE *after* the send, so DE=0 wraps
+    # to 0xFFFF and the Z80 puts 65536 bytes on the bus -- the same quirk
+    # #40 fixed for TS mode. There we refuse with a status byte; ZX has no
+    # such channel, so the only way to keep the FIFO in sync is to swallow
+    # the whole flood and write nothing.
+    if blen == 0:
+        LOG_ADD("ERROR: SAVE ZX refused: empty program (BLEN=0); "
+                "draining the 64K flood", 2, TSP.LOG_LEVEL)
+        dead = True
+        _n = DRAIN_REFUSED_SAVE(MQ)
+        LOG_ADD("INFO: SAVE ZX drained %d flood byte(s)" % _n,
+                0, TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries
+
+    r2 = range(long)
+
+    # Guarded: blen is a 16-bit field, so this can ask for ~64KB. An
+    # unguarded MemoryError leaves ZX48_IO and reaches main.py, which has
+    # no try/except -- the Pico drops to a REPL.
+    try:
+        blk = bytearray(long)
+    except MemoryError:
+        gc.collect()
+        try:
+            blk = bytearray(long)
+        except MemoryError:
+            LOG_ADD("ERROR: SAVE ZX cannot allocate %d bytes" % long,
+                    2, TSP.LOG_LEVEL)
+            dead = True
+            return MQ, TSP, log_entries
     
     for i in r2:
         blk[i] = MQ.get() & 0xFF    # see the header drain above
@@ -1639,13 +1806,18 @@ def SAVE_ZX(MQ, TSP):
         zx_name = "noname"
     filename = TSP.cur_path + "/" + zx_name + ".tap"
     
-    ENA_SD()
-    
-    with open(filename, 'wb') as f1:
-        f1.write(hdr)
-        
-    with open(filename, 'ab') as f1:
-        f1.write(blk)
+    # Guarded: a pulled card surfaces here as OSError from open().
+    # ZX mode cannot report it to the Z80 (no status byte), but that is
+    # no reason to take the firmware down as well.
+    try:
+        ENA_SD()
+        with open(filename, "wb") as f1:
+            f1.write(hdr)
+        with open(filename, "ab") as f1:
+            f1.write(blk)
+    except Exception as _e:
+        LOG_ADD("ERROR: SAVE ZX write FAILED for %s: %s" % (filename, _e),
+                2, TSP.LOG_LEVEL)
         
     hdr = []
     blk = []
@@ -1656,12 +1828,52 @@ def SAVE_ZX(MQ, TSP):
     while(MQ.rx_fifo() != 0):
         fff = MQ.get()
         
-    os.umount("/sd")
-    MQ = ENA_MQ(MQ)
+    # Guarded: ENA_SD swallows its own mount failure, in which case
+    # umount raises OSError -- which from here reaches main.py and
+    # drops the Pico to a REPL.
+    try:
+        os.umount("/sd")
+    except OSError as _e:
+        LOG_ADD("WARNING: SAVE ZX umount failed: %s" % _e,
+                1, TSP.LOG_LEVEL)
+
+    # THE HEADLINE FIX. This was `MQ = ENA_MQ(MQ)`, which builds the
+    # LEGACY single-port TS_IO program at 15 MHz and hands it back to
+    # ZX48_IO -- which deliberately built a TS_IO_DUAL at 30 MHz and
+    # keeps using the returned handle for the rest of the session.
+    # ZX48_IO's own comment says TS_IO "wouldn't work because of the
+    # bus protocol mismatch", so every ZX operation after the first
+    # SAVE was running on the wrong PIO program.
+    MQ = ENA_MQ_DUAL()
 
     LOG_ADD("INFO: Finished SAVE ZX successfully " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0, TSP.LOG_LEVEL)
 
     return MQ, TSP, log_entries
+
+
+def CORE1_BUSY():
+    """True while this module's WATCHDOG thread still owns core1.
+
+    THERE ARE TWO SEPARATE `busy` VARIABLES AND THEY ARE EASY TO CONFUSE.
+    tspico.py imports only named symbols from this module, and `busy` is
+    not one of them, so its own `global busy` binds a DIFFERENT
+    module-level variable -- the one its SAVE_LOG / BLINK_LED / CHK_STATUS
+    threads set. A `while busy:` in tspico.py therefore does NOT wait for
+    the LVM watchdog here, however much it reads like it does.
+
+    That matters because core1 is one resource: _thread.start_new_thread
+    raises OSError "core1 in use" if ANY of those threads is still
+    running. Code that wants to know whether it is safe to spawn has to
+    consult both flags -- its own `busy` and this function.
+
+    NOTE the three `while busy:` waits in tspico.py's main LVM loop are
+    subject to exactly this, and are deliberately NOT changed here: they
+    are unbounded spins, so making them wait on something that can
+    actually be True would convert a no-op into a potential hang. They are
+    left as-is until someone can test that on hardware. START_WATCHDOG()
+    tolerating a failed spawn is what actually protects those paths today.
+    """
+    return busy
 
 
 def START_WATCHDOG(secs, MQ, TSP):
