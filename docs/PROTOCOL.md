@@ -343,6 +343,39 @@ match what the Z80 expects.
   block. If you want a verbose status message, write the directive
   bytes BEFORE the pre-load `0x01` so the directive IS the final
   response, not an addition.
+- **Validate a SAVE before you write the final status, not after.** The
+  V6 chain's `MQ.put(0x01)` final status IS the Z80 printing `0 OK` —
+  once it's in TX, the transaction is decided. Any check that runs after
+  it can only report into a Z80 that has already gone back to the BASIC
+  prompt and stopped reading `$0E`, so the report has nowhere to go and
+  the handler blocks in `MQ.put` on a full 4-deep TX FIFO. The `WATCHDOG`
+  can't rescue it either: `dead = True` is set alongside the final status,
+  so that thread has already exited. `SAVE "bad file"` used to do exactly
+  this — a false `0 OK` followed by a wedged Pico until reset.
+
+  The place to refuse a SAVE is the **post-header status read**, where
+  `SAVE_TS` writes the mid-phase `0x01`. Write an error status there
+  instead and the Z80's `STATUS_TO_REPORT` path RST-8's, shows the BASIC
+  report, and aborts *before* sending the data block. Both current guards
+  use this: `BLEN == 0` → `0x08` (Report A, empty program) and a
+  disallowed filename → `0x03` (Report F). Follow either as a template,
+  and finish with `DRAIN_REFUSED_SAVE()` so a Z80 that sends the data
+  block anyway doesn't leave bytes in RX to be misread as the next
+  command's pre-header.
+- **Never call `bytes.decode()` on anything the Z80 sent.** A TS-2068
+  filename can legitimately contain bytes >= 0x80 (graphics characters,
+  BASIC tokens), and `decode()` raises on those. `SAVE_TS` and `LOAD_TS`
+  run *unguarded* inside the dispatcher's main loop — there's no
+  try/except around the call in `tspico.py` — so an exception doesn't
+  produce an error report, it takes the whole loop down. Build the string
+  byte-by-byte instead; `SAVE_NAME()` in `TS/tspico_io.py` is the pattern.
+- **The two filename allowlists disagree, deliberately for now.**
+  `SAVE_TS` accepts only alphanumerics, `_` and `-`. The
+  `SAVE "tpi:<name>"` create path in `TS/tspico.py` is far more
+  permissive — any printable character except the eight FAT-reserved
+  ones — so spaces, dots and parens produce a file that way but a
+  Report F via a plain `SAVE`. Worth reconciling; until then, don't
+  "fix" one side in isolation and assume the other matches.
 
 ---
 

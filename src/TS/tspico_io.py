@@ -988,6 +988,80 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
     return MQ, TSP, log_entries
 
 
+def SAVE_NAME(hdr):
+    """Extract the ZX filename from a SAVE header block and judge it.
+
+    The 10-byte, space-padded name lives at hdr[4:14]. Returns a tuple:
+
+        name -- printable rendering of the name with the ZX space padding
+                stripped. Always safe to put in a log line or a TLM: any
+                byte that isn't printable ASCII is shown as '?'.
+        ok   -- True if every byte is in the FAT-safe allowlist
+                (alphanumeric, '_' or '-'), i.e. usable as a filename.
+
+    Built byte-by-byte on purpose, NOT via bytes.decode(). A TS-2068 name
+    can legitimately carry bytes >= 0x80 (graphics characters, BASIC
+    tokens), and decode() raises on those. SAVE_TS runs unguarded inside
+    the dispatcher's main loop (no try/except around the call in
+    tspico.py), so an exception here would take the whole loop down
+    rather than produce an error report.
+
+    NOTE -- this allowlist is stricter than the one the `SAVE "tpi:<name>"`
+    create path uses in TS/tspico.py, which allows any printable character
+    other than the eight FAT-reserved ones. Spaces, dots and parens are
+    creatable that way but not via a plain SAVE. That divergence is known
+    and left as-is for now; see docs/PROTOCOL.md section 7.
+    """
+    raw = hdr[4:14]
+
+    # Trim the ZX space padding by index, so we never build a str out of
+    # bytes we are about to reject anyway.
+    lo, hi = 0, len(raw)
+    while lo < hi and raw[lo] == 0x20:
+        lo += 1
+    while hi > lo and raw[hi - 1] == 0x20:
+        hi -= 1
+
+    name = ""
+    ok = True
+    for i in range(lo, hi):
+        b = raw[i]
+        if b < 0x20 or b >= 0x7F:
+            name += "?"            # control byte, BASIC token or graphics char
+            ok = False
+            continue
+        c = chr(b)
+        name += c
+        if not (c.isalpha() or c.isdigit() or c in "_-"):
+            ok = False             # printable, but not FAT-safe here
+    return name, ok
+
+
+def DRAIN_REFUSED_SAVE(MQ, quiet_ms=500):
+    """Resync the RX FIFO after refusing a SAVE at the post-header status.
+
+    Refusing works by writing an error status where the Z80 expects the
+    mid-phase 0x01: its STATUS_TO_REPORT path RST-8's, shows the BASIC
+    report and aborts BEFORE sending the data block. When that lands no
+    data arrives at all and this returns 0 almost immediately.
+
+    This is the safety net for when it doesn't land -- the Z80 sends the
+    data block anyway, and those bytes would otherwise sit in RX and be
+    misread as the next command's pre-header. Drain until the bus has
+    been quiet for `quiet_ms`.
+
+    Returns the number of bytes drained (0 = the abort took cleanly).
+    """
+    n = 0
+    last = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), last) < quiet_ms:
+        if MQ.rx_fifo() > 0:
+            MQ.get()
+            n += 1
+            last = time.ticks_ms()
+    return n
+
+
 def SAVE_TS(MQ, TSP):
     """Receive a Z80 SAVE transaction via Gustavo's TPI v2.4 protocol.
 
@@ -1082,6 +1156,43 @@ def SAVE_TS(MQ, TSP):
         dead = True
         return MQ, TSP, log_entries
 
+    # ------------------------------------------------------------------
+    # FILENAME GUARD. The 10-byte ZX name is already in hand (hdr[4:14]),
+    # so judge it HERE -- at the post-header status read -- rather than
+    # after the whole transfer. Refusing at this point uses the same
+    # mechanism as the empty-program guard below: write an error status
+    # where the Z80 expects the mid-phase 0x01, its STATUS_TO_REPORT path
+    # RST-8's (status 3 -> Report F "Invalid file name") and it aborts
+    # BEFORE sending the data block.
+    #
+    # This check used to live at the END of the function. By then the V6
+    # chain had ALREADY written the final status 0x01, so the Z80 had
+    # printed "0 OK" -- the verdict arrived after the verdict had been
+    # announced -- and the error was then reported via END_MSG(), which
+    # that function's own docstring forbids from SAVE_TS. END_MSG's ~34
+    # bytes overflowed the 4-deep TX FIFO that the Z80 had already
+    # stopped reading; MQ.put() blocks when TX is full, and the WATCHDOG
+    # was gone (dead=True by then), so the Pico wedged in the
+    # dispatcher's main loop until reset. Reproducer: SAVE "bad file"
+    # -- the interior space is not in the allowlist.
+    #
+    # Skipped when appending: in that mode the target is the mounted TAP
+    # (TSP.f_name) and the header's name is never used.
+    # ------------------------------------------------------------------
+    save_name = None
+    if not (TSP.f_name and TSP.append):
+        save_name, name_ok = SAVE_NAME(hdr)
+        if not name_ok:
+            TLM("SAVE_TS EXIT filename not allowed", "%r" % save_name)
+            wrt(0x03)                        # status 3 -> Report F "Invalid file name"
+            MQ.exec("mov(y, invert(null))")  # Y -> READY so the Z80 reads our status
+            dead = True
+            _fl = DRAIN_REFUSED_SAVE(MQ)
+            LOG_ADD('ERROR: SAVE refused: filename "%s" not allowed, '
+                    "drained %d byte(s)" % (save_name, _fl), 2, TSP.LOG_LEVEL)
+            TLM("SAVE_TS filename refusal drained", "%d residual byte(s)" % _fl)
+            return MQ, TSP, log_entries
+
     # Compute the upcoming data block's size from header[14:16] = BLEN.
     # The data block transmitted is BLEN+4 bytes (type + 2 session + N + CRC).
     blen = hdr[14] + 256 * hdr[15]
@@ -1102,13 +1213,7 @@ def SAVE_TS(MQ, TSP):
         wrt(0x08)                        # status 8 -> Report A "Invalid argument"
         MQ.exec("mov(y, invert(null))")  # Y → READY so the Z80 reads our status
         dead = True
-        _fl = 0
-        _last = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), _last) < 500:
-            if MQ.rx_fifo() > 0:
-                MQ.get()
-                _fl += 1
-                _last = time.ticks_ms()
+        _fl = DRAIN_REFUSED_SAVE(MQ)
         LOG_ADD("SAVE refused: empty program (BLEN=0), drained %d flood bytes"
                 % _fl, 2, TSP.LOG_LEVEL)
         TLM("SAVE_TS empty drained", "%d residual byte(s)" % _fl)
@@ -1211,17 +1316,11 @@ def SAVE_TS(MQ, TSP):
         filename = TSP.f_name
         mode = "ab"
     else:
-        filename = hdr[4:14].decode().strip()
-        # Filename safety: only allow alphanumeric, dash, underscore.
-        clean_fname = "".join(c for c in filename
-                              if c.isalpha() or c.isdigit() or c in "_-")
-        if clean_fname != filename:
-            TLM("SAVE_TS EXIT filename not allowed", repr(filename))
-            msg = 'ERROR: Filename "%s" not allowed' % filename
-            END_MSG(MQ, True, msg, [], 3)
-            return MQ, TSP, log_entries
-        if not clean_fname:
-            clean_fname = "noname"
+        # save_name was extracted and validated at the post-header status
+        # read (see the FILENAME GUARD above), so by here it is known to
+        # be FAT-safe. An all-spaces / empty ZX name is legal and lands on
+        # the traditional fallback.
+        clean_fname = save_name or "noname"
         filename = TSP.cur_path + "/" + clean_fname + ".tap"
         mode = "wb"
         TSP.f_name = filename
