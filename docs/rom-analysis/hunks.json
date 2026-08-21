@@ -1,0 +1,698 @@
+[
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 101,
+    "end": 101,
+    "length": 1,
+    "old": "ff",
+    "new": "15"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 1011,
+    "end": 1053,
+    "length": 43,
+    "old": "f37dcb3dcb3d2fe6034f0600dd210f04dd093a485ce6380f0f0ff608000000040c0d20fd0e3f05c21404ee",
+    "new": "22cd5d210020c3fc03e521fcfee5210000e5e52acd5dcd0d04c9f53ac25ca72804f1c390fdf1c3d0650000"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 1256,
+    "end": 1282,
+    "length": 27,
+    "old": "cd54283a3b5c87faed1be1d0e5cdaf2f626b0df809cbfec9cd1a06",
+    "new": "11925ced53d75dc31d0a213916c3500a21361618f8c9c9c9cd090a"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 2562,
+    "end": 2607,
+    "length": 46,
+    "old": "f306b0210040e5c5cd4a0ac1e1247ce607200a7dc6206f3f9fe6f8846710e7180df321005b0608c5cd4a0ac110f9",
+    "new": "d9213016c3e33c4f3adb5d0f79d21a06fdcb014eca1e06fe80304b22cd5dc3f204c3f83c22cd5d213c16c3500a00"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 2634,
+    "end": 2689,
+    "length": 56,
+    "old": "78fe039fe602d3fb57cd0920380a3e04d3fbfbcd350acf0cdbfb87f830eb0e205e230608cb12cb13cb1adbfb1f30fb7ad3fb10f00d20e9c9",
+    "new": "22cd5d213316e521fcfee5f53ac25ca72acd5dc2640af1cd7265f1cd32fdfea5da730ad6a5cd4507c9fe90d2260a47f5cd6d06f1c3e80400"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 3596,
+    "end": 3596,
+    "length": 1,
+    "old": "01",
+    "new": "03"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 9413,
+    "end": 9422,
+    "length": 10,
+    "old": "bc5c19234616001e1219",
+    "new": "cf17cd441bc9011400c9"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 9544,
+    "end": 9568,
+    "length": 25,
+    "old": "01ab01c501fefec5010000c5c53ac25ca72007cdd065cd441b",
+    "new": "d921ab01c3e33ccdef1bd921cc0118f4cde51bd921551818eb"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 9664,
+    "end": 9664,
+    "length": 1,
+    "old": "09",
+    "new": "43"
+  },
+  {
+    "comparison": "HOME: genuine -> TS-PICO",
+    "start": 15580,
+    "end": 15615,
+    "length": 36,
+    "old": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "new": "cd231fd9215518e521fcfee5f53ac25ca7d92004f1cd7265f1cd32fd22cd5dc3f8040000"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 3,
+    "end": 5,
+    "length": 3,
+    "old": "ffffff",
+    "new": "c3bc1c"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 37,
+    "end": 37,
+    "length": 1,
+    "old": "00",
+    "new": "fb"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 51,
+    "end": 55,
+    "length": 5,
+    "old": "ffffffffff",
+    "new": "0105ad0733"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 74,
+    "end": 74,
+    "length": 1,
+    "old": "01",
+    "new": "03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 90,
+    "end": 106,
+    "length": 17,
+    "old": "214f00110060010b00edb0c3006021e500",
+    "new": "c3ae1c110060010b00ed00c9189bc37918"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 252,
+    "end": 254,
+    "length": 3,
+    "old": "140815",
+    "new": "c36d19"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 427,
+    "end": 468,
+    "length": 42,
+    "old": "3a745c01e1199132745cdde5d921ef1be52e0026ffe5210000e5e5d9cd990fdde1fdcb017e2866011100",
+    "new": "c3100201e1199132745cd9214f25c3dd08cd1f22afc3f603cdb902c3f104c3dd03fdcb017e2866c3731a"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 477,
+    "end": 499,
+    "length": 23,
+    "old": "dde5d9213000e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "cde2011812dde5d921300018dfd921c724c3dd08000000"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 515,
+    "end": 537,
+    "length": 23,
+    "old": "dde5d921af2fe52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "cd08021812dde5d921af2f18b921ea01e53a745cc3ae01"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 568,
+    "end": 590,
+    "length": 23,
+    "old": "dde5d9211800e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "cd3d021812dde5d92118001884d9210800c3dd08000000"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 604,
+    "end": 645,
+    "length": 42,
+    "old": "dde5d9212000e52e0026ffe5210000e5e5d9cd990fd921702ce52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1822cdc103137ab33e01c83e00c9000000afc9fe80c29421cdb902cdf104c35f04000000cdd702cde002"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 695,
+    "end": 744,
+    "length": 50,
+    "old": "dde5d9212000e52e0026ffe5210000e5e5d9cd990fdde1fe2920c3dde5d9212000e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812cd9822da2f19a7ca2f193dc837c900000000cdd702fe2920c3cdd7021812dde5d9212000c3dd03dde5d921702cc3dd03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 766,
+    "end": 788,
+    "length": 23,
+    "old": "dde5d9212000e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "cdd7021812dde5d9211800c3dd03dde5d9211000c3dd03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 878,
+    "end": 923,
+    "length": 46,
+    "old": "dde5d921511ce52e0026ffe5210000e5e5d9cd990fdde11835dde5d921e51be52e0026ffe5210000e5e5d9cd990f",
+    "new": "cd73031812dde5d921511cc3dd03dde5d921231fc3dd031835dde5dde5cd9203dde1180ad9215825c3dd08000000"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 956,
+    "end": 1079,
+    "length": 124,
+    "old": "dde5d921511ce52e0026ffe5210000e5e5d9cd990fdde1182adde5d9212000e52e0026ffe5210000e5e5d9cd990fd921e51be52e0026ffe5210000e5e5d9cd990fdde1fdcb017ec8dde5d921231fe52e0026ffe5210000e5e5d9cd990fdde1dd710bdd700cdde5d921231fe52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "cd73031812dde5d921b002c3dd03dde5d921e51bc3dd03182acdd702cdca031822e52100ffe52600e5e5d9cd990fdde1c9dde5d9213f07c3dd033eff32cf5dc3491c00fdcb017ec8dde5cd0d04dde1180ed921dc3cc3dd083e0937c9000000dd710bdd700ccd7c031812dde5d9213012c3dd03dde5d921af2fc3dd03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1117,
+    "end": 1158,
+    "length": 42,
+    "old": "dde5d9212000e52e0026ffe5210000e5e5d9cd990fd921e51be52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1822f51803cdfa05cd8e063803c3f206f1a7c900cdc103137ab320f8cd460528fbc3401ccdd702cdca03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1254,
+    "end": 1276,
+    "length": 23,
+    "old": "dde5d9213012e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812e521000022d15de1c9f53efecd2604f1c900cd2604"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1348,
+    "end": 1370,
+    "length": 23,
+    "old": "dde5d9211000e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812fdcb01aefdcb01decdc103affdcb016e180ecd0c03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1380,
+    "end": 1402,
+    "length": 23,
+    "old": "dde5d9211000e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812c83a085ce67ffe61d8fe7bd0e6dfc9000000cd0c03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1519,
+    "end": 1541,
+    "length": 23,
+    "old": "dde5d921bb1fe52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812dde5d921bb1fc3dd03fd3652ffc30c030000cdf105"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1610,
+    "end": 1632,
+    "length": 23,
+    "old": "dde5d921bb12e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812dde5d921bb12c3dd03cd9f06d2aa06db0fc9cd4c06"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1667,
+    "end": 1715,
+    "length": 49,
+    "old": "dde5d9214d17e52e0026ffe5210000e5e5d9cd990fdde1c1e5c5dde5d921bb12e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812dde5d9214d17c3dd03cd9822a7c8fe803fc9cd8506c1e5c51812cd56081fd83efedbfe1fc9c1c3611a000000cd4c06"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 1773,
+    "end": 1795,
+    "length": 23,
+    "old": "dde5d9213000e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "cde2011812ca6d04fe03cafa21c3620421300ac3df1600"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 2036,
+    "end": 2084,
+    "length": 49,
+    "old": "dde5d921bb12e52e0026ffe5210000e5e5d9cd990fdde1231817dde5d921bb12e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812c50606c506003e7f10fcc110f6c1dbfec900cd4c062318171812cdfa05f1c93e02cd2419a7fbc93e02c36218cd4c06"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 2132,
+    "end": 2154,
+    "length": 23,
+    "old": "dde5d9213012e52e0026ffe5210000e5e5d9cd990fdde1",
+    "new": "1812c5060acdf60710fbc1c90000000000000000cd2604"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 2279,
+    "end": 2281,
+    "length": 3,
+    "old": "21ea5e",
+    "new": "c3bc01"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 2772,
+    "end": 2774,
+    "length": 3,
+    "old": "2b3680",
+    "new": "cd8220"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 3912,
+    "end": 3912,
+    "length": 1,
+    "old": "5d",
+    "new": "69"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 4362,
+    "end": 4366,
+    "length": 5,
+    "old": "b05c7cb520",
+    "new": "375d7cb528"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 4830,
+    "end": 4839,
+    "length": 10,
+    "old": "cb87d3f41835dbf4cbc7",
+    "new": "e6fcd3f41835dbf4f603"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 4866,
+    "end": 4867,
+    "length": 2,
+    "old": "cb87",
+    "new": "e6fc"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 5136,
+    "end": 5136,
+    "length": 1,
+    "old": "08",
+    "new": "09"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 5663,
+    "end": 5663,
+    "length": 1,
+    "old": "01",
+    "new": "03"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 5680,
+    "end": 7370,
+    "length": 1691,
+    "old": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "new": "c38117c3c317c3cd17c36816c30f18f5cd9d223805aa57f1a7c9f137c9f53e4257cd9d22380ff132d95dcd3f163acf5dcd3f16a7c9f137c9f53e05cd4d16da201cf1e5cd3f16fe8030063e012e0018043e022e08cd3f163a3c5ce610fdcb01662802f601fdcb304e2802f602cd3f163a8d5ccd3f1626007d22cd5dcd3f167ccd3f167acd9d22da201c7da728082ad75dcd3e221803cd2818daf21ba7c2f21be13ad95dfe052001f1af22cd5d21350ae52e0026ffe52acd5dc3e40807164352253461703e4257cd9d223e00d83a745cfed82004d6d4180efedb2004d6d61806fede2002d6d8cd3f163acf5dcd3f16dbffe63f47e607f50eff2810780f0f0fe60721eb16d55f160019d14e79cd3f16f1f5fe0620023e03cd3f16212018fe0320022e407dcd3f167ccd3f1621004022d35df121001b280321003b22cd5d7dcd3f167ccd3f167acd3f161600210040cd3e22c93adb5de601280ccdf316da211ca7c2f31b181ff306b0210040e5c5cddc17c1e1247ce607200a7dc6206f3f9fe6f8846710e722cd5dc3fd0600dde5d921300ac3dd03cddc17d9211906c3dd08f321005b0608c5cddc17c110f918d778fe039fe602d3fb57cd09203805cdba17cf0cdbfb87f830f00e205e230608cb12cb13cb1adbfb1f30fb7ad3fb10f00d20e9c9f5e5d6906f2600c5ed4b7b5c29292909c122d75de1f1c368160e0ecd9822a7ca14043dc21604cd541ada1404c9ffffffff1814181e180c182518201803c3541ac37922011500c9f53adb5de60f06004ff1c9aff5e60f32db5df1c9c39822c39d22a7c9f121e500c36b00f53adb5de60228f1f121e500e5f5f36fa720040e01180afeff20040e0318400e09cd9d22da2f19d53a745ccd63193acf5dcd6319ed5bd15dcd5919dde5d1cd5919d1cd4719cd9d22386c0ccd9822da1f1ca7ca1f1c3d205e0ccd541ada1f1cf167cd9d223851ed53cd5ded5bd15dcd36197ca7c4e804ed5bcd5ddd7e00cd9d223835ac67dd231b7ab320ef7ccd9d2238260ccd541ada201ccd9822da201ca7ca201c3dc46f02fb200e37c90c7ccd9d2238040dc9e1e1e1e1a7c8c3f31b7bcd9d2238f3cd56197acd9d2238ea180f7bcd9d2238e1cd56197acd9d2238d8ad6fc97bcd9d2238cecd56197acd9d2238c518ecc33019f53adb5de602ca4d1af121e500e5f3d5f5e1cbb5e56fa720040e05180afeff20040e0718020e0af1087d67cd9d22da2f193a745ccd51193acf5dcd5119ed5bd15dcd471924cce80425dde5d1cd4719d1cd36197dcd9d2238a40ccd9822da201ca7ca201c3d2061cd541ada201ccd2419cd982238886f08203a3045dd7500087cad67dd231b7ab320e7cd9822da6a19aca7c215083ccd2419cd541ada201ccd9822da201ca7ca201c3dc46f0237fb2001c93fc9cb10adc0cb402802bf370818b008dd7e00ad28b8c9e1c33e1ce1f53adb5de60f32db5df1d1d1e1011100c3d501f1140815c3ff00f5c506e2cd5506cb77200f10f73e400000000000c1f13e0237c9c1f1373fc9e5d52a785c237cb528fb22d15d2a655c2b462b4e2b562b5e78a720b679fe20d22f1c3a745ca72805fe02d2451a79fe2030a0a7289dfe053899d5d5e122d35ded43d55d065f78a623fe54281cfe4ec23a1a78a623fe45c23a1a78a623fe54c23a1a3adb5df6c0181778a623fe50c23a1a78a623fe49c23a1a3adb5dcbffcbb732db5d3e3abec23a1a79fe06da3a1a3a745ca7c20e21e5af676f22d75d22d95dcd0303feaf2811cd6b1b282ac3391acdd702cdca03c37c03cd211bed43d75dcd0303fe2cc2271ccd211bed43d95dcd0303cd6b1b20d6fdcb017eca711be1ed4bd55d23065f78a6fe54ca8e20fe53cac320fe50ca1121c30e21fe0dc8fe3ac9e1d1c3231ccd9d22da201c1805cd9d223803aa57c9e1e1e1e1c33e1cf53adb5dcbbfcbb732db5df1cd2f0479b728e8ed43cd5d410e0d3e4257cd9d2238d83a745ccd7e1b3acf5dcd7e1b2ad75d7dcd7e1b7ccd7e1b2ad95d7dcd7e1b7ccd7e1b78cd7e1b3ace5dcd7e1bcd7e1b1600e12ad35dcd3e22daf11ba7ca231cf5aff1d1e1fb3dca3e1c3dca391c3dca3c1c3dca351c3d280f3d280e3d280f3d280a3d280ec3f800cf05cf07cf08cf09e1e1e1cf12d1e1afc9e1e1e1d1e1c3351cfdcb017e28eefbc3d908c32802cf19cf1acd541ada871bc39d22215d1c11005b012900edb0cd005b21ea5ec3861cafcd055bc9110b5bc3ed03800d0d7f20323032342054696d6578205069636f20496e746572666163e521ea5e22bc5caf32be5c3215633efddbfecb57c2ea08af772377110700197732c65ccd3e0ac31809214f00110060010b00edb0c30060f53ac25ca72004f1c30763f1c3c7fa"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 8152,
+    "end": 8156,
+    "length": 5,
+    "old": "2167cf6571",
+    "new": "2267d06572"
+  },
+  {
+    "comparison": "EXROM chunk0: genuine -> TS-PICO v1.1",
+    "start": 8174,
+    "end": 8174,
+    "length": 1,
+    "old": "a3",
+    "new": "8e"
+  },
+  {
+    "comparison": "EXROM: TS-PICO v1.1 -> v1.5w",
+    "start": 8693,
+    "end": 8694,
+    "length": 2,
+    "old": "e721",
+    "new": "a122"
+  },
+  {
+    "comparison": "EXROM: TS-PICO v1.1 -> v1.5w",
+    "start": 8865,
+    "end": 8877,
+    "length": 13,
+    "old": "ffffffffffffffffffffffffff",
+    "new": "cd541a3803c3e721f13e0937c9"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 23,
+    "end": 23,
+    "length": 1,
+    "old": "ff",
+    "new": "bf"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 43,
+    "end": 47,
+    "length": 5,
+    "old": "ffffffffff",
+    "new": "84878b8d92"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 109,
+    "end": 109,
+    "length": 1,
+    "old": "20",
+    "new": "28"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 257,
+    "end": 257,
+    "length": 1,
+    "old": "49",
+    "new": "01"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 850,
+    "end": 851,
+    "length": 2,
+    "old": "204e",
+    "new": "0100"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 3379,
+    "end": 3379,
+    "length": 1,
+    "old": "07",
+    "new": "38"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 3504,
+    "end": 3504,
+    "length": 1,
+    "old": "38",
+    "new": "07"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4376,
+    "end": 4431,
+    "length": 56,
+    "old": "7f20313938322053696e636c616972205265736561726368204c74640d0d7f20313938332054696d657820436f6d707574657220436f72f0",
+    "new": "170000542f53203230363820436f6d707574657220546865202020200d0d5375706572696f72204d616368696e652e202028572e4a2e29a0"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 13297,
+    "end": 13306,
+    "length": 10,
+    "old": "77237323722b2b2bd1c9",
+    "new": "f53cb3b2c2e435c3ef35"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 13794,
+    "end": 13821,
+    "length": 28,
+    "old": "201a2323233e80a62bb62b20033e80ae2b2036772336ff2b3e181833",
+    "new": "181af177237323722b2b2bd1c9f12b36912336803c18ed0000000000"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 14264,
+    "end": 14276,
+    "length": 13,
+    "old": "f5d5110000cd8737d1f13d18f2",
+    "new": "d9212b00856f6e2636d9afc900"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 16142,
+    "end": 16142,
+    "length": 1,
+    "old": "3c",
+    "new": "3a"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 16177,
+    "end": 16182,
+    "length": 6,
+    "old": "0c1018101010",
+    "new": "1c2078202020"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 16209,
+    "end": 16222,
+    "length": 14,
+    "old": "0400040404241800202830302824",
+    "new": "0800180808483000404448704844"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 16242,
+    "end": 16246,
+    "length": 5,
+    "old": "7844444444",
+    "new": "4c32222222"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 16274,
+    "end": 16275,
+    "length": 2,
+    "old": "1c20",
+    "new": "4c32"
+  },
+  {
+    "comparison": "HOME: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 16289,
+    "end": 16308,
+    "length": 20,
+    "old": "10381010100c0000004444444438000000444428",
+    "new": "2078202024180000004848484834000000444444"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 2642,
+    "end": 2649,
+    "length": 8,
+    "old": "47cbf870cbb8230e",
+    "new": "4fcbf971cbb92306"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 2696,
+    "end": 2697,
+    "length": 2,
+    "old": "0efe",
+    "new": "0000"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 2843,
+    "end": 2843,
+    "length": 1,
+    "old": "00",
+    "new": "ff"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 2889,
+    "end": 2889,
+    "length": 1,
+    "old": "00",
+    "new": "ff"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4366,
+    "end": 4366,
+    "length": 1,
+    "old": "20",
+    "new": "28"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4416,
+    "end": 4416,
+    "length": 1,
+    "old": "f5",
+    "new": "d5"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4432,
+    "end": 4437,
+    "length": 6,
+    "old": "7323722bc1f1",
+    "new": "c1d17323722b"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4619,
+    "end": 4626,
+    "length": 8,
+    "old": "2efeff281da7281f",
+    "new": "24feff2837a72827"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4656,
+    "end": 4681,
+    "length": 26,
+    "old": "1818dbf42f470e001810dbffe6802f0747dbf42fe601b0470e00",
+    "new": "0effdbffe680281218080effdbffe6802008dbf42f1802dbf44f"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4721,
+    "end": 4762,
+    "length": 42,
+    "old": "2310f7dbf42fa128180d2011dbffe68057dbf4e6010fa228043efe18083eff1804af180178d1c1c9f5c5",
+    "new": "1f10f7dbffe6802806dbf42fa1280adbf42fa128083eff18083efe1804af180178d1c1c900000000f5f3"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4817,
+    "end": 4820,
+    "length": 4,
+    "old": "17cb193f",
+    "new": "cbff18ed"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4891,
+    "end": 4891,
+    "length": 1,
+    "old": "c1",
+    "new": "fb"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4938,
+    "end": 4938,
+    "length": 1,
+    "old": "f5",
+    "new": "f3"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 4976,
+    "end": 4976,
+    "length": 1,
+    "old": "f1",
+    "new": "fb"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 5136,
+    "end": 5136,
+    "length": 1,
+    "old": "08",
+    "new": "09"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 5343,
+    "end": 5346,
+    "length": 4,
+    "old": "7504dd74",
+    "new": "7304dd72"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 5363,
+    "end": 5365,
+    "length": 3,
+    "old": "070f38",
+    "new": "0b3c28"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 5482,
+    "end": 5482,
+    "length": 1,
+    "old": "47",
+    "new": "5f"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 7476,
+    "end": 7482,
+    "length": 7,
+    "old": "ac64b3640e6516",
+    "new": "a964b3640f6517"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 7528,
+    "end": 7528,
+    "length": 1,
+    "old": "4f",
+    "new": "44"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 8152,
+    "end": 8156,
+    "length": 5,
+    "old": "2167cf6571",
+    "new": "2267d06572"
+  },
+  {
+    "comparison": "EXROM: genuine -> W.J. hack (NOT TS-PICO)",
+    "start": 8174,
+    "end": 8174,
+    "length": 1,
+    "old": "a3",
+    "new": "8e"
+  }
+]

@@ -78,6 +78,46 @@ CI runs this automatically:
    With no directive, the default is `-n <basename>`.
 3. Build, and the `.tap` appears at the destination its folder maps to.
 
+## Multiple programs in one TAP (multi-program tapes)
+
+A `.tap` is just a sequence of tape files laid end to end, so one delivery TAP
+can hold **several** BASIC programs in a fixed order (e.g. an autostarting menu
+followed by the programs it loads — the way Ryan's `picotest.tap` is built).
+
+To author one, put **more than one** `#! zmakebas` directive in a single source
+file. Each directive starts a new program; the lines below it (up to the next
+directive or end of file) are that program's listing. The build tokenizes each
+program separately and concatenates them — **in top-to-bottom source order** —
+into the one `.tap` the file maps to. Per-program options ride on each program's
+own directive, exactly as for a single program.
+
+```
+#! zmakebas -n loader -a 10        <- program 1: "loader", autostarts at line 10
+10 print "menu..."
+...
+
+#! zmakebas -n data1               <- program 2: "data1", no autostart
+10 rem ...
+
+#! zmakebas -n data2               <- program 3: "data2", no autostart
+10 rem ...
+```
+
+The file's path maps to its destination exactly as usual — nothing special; a
+multi-program source is still one `.bas` → one `.tap`. The only difference is
+that the `.tap` now contains three tape files instead of one. A source with a
+single directive (the common case) is unchanged. See
+[`SD/TAP/demo/multi.bas`](SD/TAP/demo/multi.bas) for a working example.
+
+Notes:
+- The sequence is literally the order the directives appear — reorder the
+  blocks to reorder the tape.
+- Lines before the *first* directive are file-level comments (dropped); give
+  each actual program its own `#! zmakebas` line.
+- This is build-time concatenation only. zmakebas remains one-way, so a TAP that
+  was authored elsewhere as multiple files still needs each program's source
+  recovered before it can be migrated here.
+
 ## Source format (zmakebas)
 
 Plain text, one BASIC line per line, real line numbers (or `@labels` with `-l`).
@@ -104,7 +144,7 @@ Add each program's source at the path the convention maps to its committed TAP:
 | `basic/assets/dckupdate.bas`       | `src/assets/dckupdate.tap`     |
 | `basic/SD/TAP/test/factorial.bas`  | `SD card/TAP/test/factorial.tap` |
 | `basic/SD/TAP/test/RND WORDS.bas`  | `SD card/TAP/test/RND WORDS.tap` |
-| `basic/SD/picotest.bas`            | `SD card/TAP/picotest.tap`     |
+| `basic/SD/TAP/picotest.bas`        | `SD card/TAP/picotest.tap` — **multi-program** (14 tape files: `tspicotest` autostarting at line 1, then `test1`…`test12`); author as one source with a `#! zmakebas` directive per program (see [Multiple programs in one TAP](#multiple-programs-in-one-tap-multi-program-tapes)) |
 
 To migrate one (do this **per program**, as its source lands):
 
