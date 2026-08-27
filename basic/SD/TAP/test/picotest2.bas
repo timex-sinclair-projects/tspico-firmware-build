@@ -1,6 +1,6 @@
 #! zmakebas -l -s 1 -i 10 -n picotest2 -a 1
 # TS-Pico BASIC Tester
-    4 DEF FN S$(l,t$,a,b)=("LOAD " AND l=1)+("SAVE " AND l=2)+""""+t$+""""+(("CODE "+STR$ a+","+STR$ b) AND (a OR b))
+    4 DEF FN S$(l,t$,a,b)=("LOAD " AND l=1)+("SAVE " AND l=2)+("VERIFY " AND l=5)+""""+t$+""""+(("CODE "+STR$ a+","+STR$ b) AND (a OR b))
     7 LET e$="0123456789ABCDEFGHIJKLMNOPQR"
    10 LET l=0: LET t$="": LET a=0: LET b=0
    20 LET fg=9: LET bg=7: LET bd=5
@@ -10,7 +10,7 @@
    30 BORDER bd: PAPER bd: INK fg: BRIGHT 0: FLASH 0: INVERSE 0: OVER 0
    44 CLS 
    52 PRINT " TS-Pico ";TAB 16;" TS-Pico Tester "
-   70 PRINT #0; INK df;"    \* 2025 TS-Pico DevTeam      ";
+   70 PRINT #0; INK df;"    \* 2026 TS-Pico DevTeam      ";
    80 PRINT #0;"This tests some TS-Pico commandsfor saving with user assistance.";
 #               01234567890123456789012345678901
    90 PRINT #0''"Press a key to start...";
@@ -73,7 +73,7 @@
  1178 IF l=2 AND (a<>0 OR b<>0) THEN SAVE t$CODE a,b
  1180 IF l=5 THEN VERIFY t$
  1196 ON ERR RESET 
- 1198 IF l>2 THEN PRINT "Types 1 and 2 only": STOP 
+ 1198 IF l>2 AND l<>5 THEN PRINT "Types 1, 2 and 5 only": STOP 
  1200 FOR i=1 TO 100: NEXT i
  1220 PAPER cb
  1230 INPUT PAPER 4;"Expect"; PAPER bd;":"; INK df;(r$); INK 2;((" (wrong code:"+e$(err+1)+")") AND err<>e); INK fg' INVERSE 1;"Q"; INVERSE 0;"uit,"; INVERSE 1;"L"; INVERSE 0;"og,"; INVERSE 1;"R"; INVERSE 0;"epeat,"; INVERSE 1;"Enter"; INVERSE 0;":"; LINE c$
@@ -102,7 +102,6 @@
 # 6: Description of result
 # 7: Error code expected: "0".."9","A".."R"
  2000 DATA 39
-#                                     Expect:789012345678901234567890101234567890123456789012345678901
 # Setup
 DATA 2,"tpi:verbose on",0,0,"Turn on verbose mode","Verbose is now enabled","0"
 DATA 2,"tpi:loglevel 0",0,0,"Set loglevel to 0 for testing","LOG level set to 0 INFO","0"
@@ -114,7 +113,8 @@ DATA 2,"tpi:dir",0,0,"Show new empty .tap file","foo.tap with size 0 b","0"
 DATA 2,"tpi:info",0,0,"Show info with tap file","foo.tap info shown in    tpi:info","0"
 DATA 2,"foo1",0,0,"Save program to empty tap","Program foo1 saved to    foo.tap","0"
 DATA 2,"tpi:tapdir",0,0,"Show foo.tap with foo1 program","Two blocks for program   'foo1'","0"
-DATA 5,"foo1",0,0,"Verify program same as saved foo1","0"
+#                    Expect:789012345678901234567890101234567890123456789012345678901
+DATA 5,"foo1",0,0,"Use VERIFY to compare program inmemory is the same as saved foo1","Program verified OK","0"
 DATA 2,"tpi:dir",0,0,"Show directory","foo.tap shown with non-  zero size","0"
 DATA 2,"foo2",0,0,"Save but PRESS SPACE to cancel","Program foo2 not saved,  error D","D"
 DATA 2,"foo2",0,0,"Save again but DO NOT cancel","Program foo2 saved","0"
