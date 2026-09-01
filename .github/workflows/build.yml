@@ -31,11 +31,46 @@ jobs:
             python3
 
       # Smoke-test the BASIC -> TAP toolchain on every push/PR. The .tap
-      # outputs aren't committed (generated under "SD card/TAP/basic/"), so
-      # this is the build that catches a .bas that won't tokenize. gcc/make
+      # outputs aren't committed (they're gitignored; see basic/README.md),
+      # so this is the build that catches a .bas that won't tokenize. gcc/make
       # come from build-essential installed above.
       - name: Build BASIC programs (basic/ -> TAP)
-        run: ./tools/build-basic.sh
+        run: ./tools/build-basic.sh 2>&1 | tee "$RUNNER_TEMP/basic-build.log"
+
+      # Publish the generated .tap files so a branch build is testable without
+      # a local toolchain. They are gitignored by design, so before this step
+      # the only way to get one was to clone and run build-basic.sh yourself --
+      # which meant a UF2 could be tested from CI but the BASIC programs that
+      # exercise it could not.
+      #
+      # The destination paths come from build-basic.sh's own "==> src -> dst"
+      # output rather than a glob, because "SD card/" also holds COMMITTED
+      # .tap files and a glob would sweep those up too. Trailing " (N programs)"
+      # marks a multi-program tape and is not part of the path. `IFS= read -r`
+      # keeps the space in "SD card" intact.
+      - name: Stage generated .tap files
+        run: |
+          set -euo pipefail
+          mkdir -p basic-taps
+          sed -n 's/^==> basic\/.* -> //p' "$RUNNER_TEMP/basic-build.log" \
+            | sed 's/ ([0-9]* programs)$//' \
+            | while IFS= read -r dst; do
+                if [ ! -f "$dst" ]; then
+                  echo "::error::build-basic.sh reported '$dst' but it does not exist"
+                  exit 1
+                fi
+                mkdir -p "basic-taps/$(dirname "$dst")"
+                cp "$dst" "basic-taps/$dst"
+              done
+          echo "staged:"
+          find basic-taps -type f -print0 | xargs -0 ls -l
+
+      - name: Upload generated .tap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: basic-taps
+          path: basic-taps/
+          retention-days: 30
 
       - name: Clone MicroPython v1.20.0
         run: |
