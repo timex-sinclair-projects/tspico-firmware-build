@@ -19,6 +19,7 @@ here is what the hardware actually runs.
 | What TS-PICO changed in the EXROM vs genuine | [DIFF_EXROM_vs_STOCK.md](DIFF_EXROM_vs_STOCK.md) |
 | What TS-PICO changed in the HOME ROM vs genuine | [DIFF_HOME_vs_STOCK.md](DIFF_HOME_vs_STOCK.md) |
 | A specific address — what lives there | [SYMBOLS.md](SYMBOLS.md) |
+| What changed in the TS-Pico ZX Spectrum ROM v2, and why | [PATCH_ZX48_HANDSHAKE.md](PATCH_ZX48_HANDSHAKE.md) |
 
 ## The findings that matter most
 

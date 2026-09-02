@@ -1,14 +1,17 @@
 # Proposed ZX Spectrum ROM patch: handshake on `$0F` at block boundaries
 
-**Status:** proposal, not applied to any shipped image. Written as a
-self-contained handoff.
+**Status:** **applied** — the result is committed as
+[`ROMs/TSPICO-ZX48-V2.BIN`](../../ROMs/TSPICO-ZX48-V2.BIN) and wired into
+[`flash/manifest.json`](../../flash/manifest.json) as slot 0. This document is
+the record of what was changed and why.
 
 **Target:** the TS-PICO's customised ZX Spectrum ROM — the 16K at flash
 `0x000000` (slot 0 of `Pico-v15w.rom`), crc32 `029861D1`. **Not** for
 `Spectrum nuevo LD.rom`; see §6.
 
 **Size:** 29 bytes of new code into stock Sinclair filler, 8 bytes changed
-in place at two call sites. Nothing moves, no code is displaced.
+in place at two call sites, plus a 41-byte boot banner (§4). Nothing moves,
+no code is displaced.
 
 **Pairs with:** the firmware `MQ_READY` assertions in `LOAD_ZX`,
 `LOAD_ZX_C` and `SAVE_ZX` (branch `zx48-dual-port-migration`). Those are
@@ -133,23 +136,51 @@ The poll runs with interrupts disabled (the ROM's own `DI`), so a dead
 Pico freezes the machine for the timeout before reporting. That matches
 what the tape routines already do.
 
-## 4. Checksums
+## 4. Labelling the ROM
+
+The image is now self-identifying at boot. Ricardo's existing hook at `$386E`
+(`OUT ($FF),A` before the copyright print) gets one further redirect, so the
+boot line reads:
 
 ```
-16K ZX ROM   crc32  029861D1  ->  CB6533B0
-flash slot 0 crc32  A8E12A24  ->  56788DE0     (32K slot: ROM + 16K of 00)
-512K image   crc32  38E82DCB  ->  317FFFEE     (only slot 0 changed)
+(c) 1982 Sinclair / TS-Pico ZX v2
 ```
 
-37 bytes differ from the shipped ROM: `$04CC-$04CF`, `$0563-$0566`,
-`$3874-$3890`.
+31 characters, one screen line, no scroll. **Sinclair's own string is not
+touched** — it stays at `$1539` exactly as it was; the boot simply prints a
+different message table:
 
-## 5. Verifying a patched image
+```asm
+3870  CD 91 38     CALL $3891       ; was CALL $0C0A (PO-MSG) directly
+...
+3891  11 98 38     LD DE,$3898      ; our message table
+3894  AF           XOR A            ; message 0
+3895  C3 0A 0C     JP $0C0A         ; PO-MSG prints it, then RETs to $3873
+3898  A0           DEFB $A0         ; the $80-terminated placeholder
+                                    ; PO-SEARCH skips when A = 0
+3899  ...          "(c) 1982 Sinclair / TS-Pico ZX v2", last char OR $80
+```
+
+The boot code at `$1295` sets `A = 0` / `DE = $1538` before calling the hook;
+we override both, so the stock path is unchanged for every other caller of
+PO-MSG.
+
+## 5. Checksums
+
+```
+16K ZX ROM   crc32  029861D1  ->  B3D40C73     (handshake + banner)
+flash slot 0 crc32  A8E12A24  ->  1BE816C2     (32K slot: ROM + 16K of 00)
+```
+
+78 bytes differ from the shipped ROM: `$04CC-$04CF`, `$0563-$0566`,
+`$3871-$3872`, `$3874-$38B7`.
+
+## 6. Verifying a patched image
 
 ```bash
 python3 - <<'PY'
 import zlib
-rom = open("zx-spectrum-handshake.bin","rb").read()      # the 16K image
+rom = open("ROMs/TSPICO-ZX48-V2.BIN","rb").read()        # the 16K image
 def chk(a, hexs, what):
     want = bytes.fromhex(hexs.replace(" ",""))
     got  = rom[a:a+len(want)]
@@ -160,12 +191,13 @@ chk(0x04CC, "CD 8A 38 00", "SAVE call site")
 chk(0x3874, "16 04 01 00 00 DB 0F E6 40 20 09 0B 78 B1 20 F5 15 20 EF C9 37 C9", "WAIT_RDY")
 chk(0x388A, "CD 74 38 D8 FB CF 1A", "SAVE_WAIT")
 chk(0x0556, "08 CD 3F 05 21 3F 05 E5", "LD-BYTES head untouched")
-chk(0x386E, "D3 FF CD 0A 0C C9", "Ricardo's $FF hook untouched")
-print("crc32 %08X (expect CB6533B0)" % zlib.crc32(rom))
+chk(0x386E, "D3 FF CD 91 38 C9", "boot hook -> banner")
+chk(0x1539, "7F 20 31 39 38 32 20 53 69 6E 63 6C 61 69 72", "Sinclair string untouched")
+print("crc32 %08X (expect B3D40C73)" % zlib.crc32(rom))
 PY
 ```
 
-## 6. Do not apply this to `Spectrum nuevo LD.rom`
+## 7. Do not apply this to `Spectrum nuevo LD.rom`
 
 That image expects a different firmware. Its `LD-BYTES` polls `$0E` for
 `0x40` before the first byte — the single-port continue flag, which the
@@ -180,7 +212,7 @@ its `$40` poll removed (6 bytes at `$0563`, which is exactly where this
 patch's `CALL`/`RET NC` goes) and the `$057C` displacement resolved
 first. Worth doing as one revision rather than two.
 
-## 7. Delivery
+## 8. Delivery
 
 The ROM lives in flash slot 0, so it ships either in a rebuilt 512K image
 (`tools/build-flash.py`, phase 3) or via `romupdate.tap` into a spare

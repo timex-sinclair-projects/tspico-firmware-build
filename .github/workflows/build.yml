@@ -37,6 +37,12 @@ jobs:
       - name: Build BASIC programs (basic/ -> TAP)
         run: ./tools/build-basic.sh
 
+      # Fails the build if a ROM in flash/manifest.json changed without its
+      # crc32 being updated -- i.e. nobody would notice that the next 512K
+      # image ships a different ROM than the manifest claims.
+      - name: Check the flash manifest against the ROMs in the repo
+        run: python3 tools/build-flash.py check flash/manifest.json
+
       - name: Clone MicroPython v1.20.0
         run: |
           git clone --depth 1 --branch v1.20.0 \
