@@ -111,18 +111,24 @@ class FakeMQ:
         self.tx = []
         self.rx = []
         self.execs = []
+        self.log = []             # ordered ("put"/"get"/"exec", value)
         self.pending = 0          # what tx_fifo() reports
 
     def put(self, v):
-        self.tx.append(v if isinstance(v, int) else v[0])
+        v = v if isinstance(v, int) else v[0]
+        self.tx.append(v)
+        self.log.append(("put", v))
 
     def get(self):
         if not self.rx:
             raise AssertionError("Z80 stalled: handler read past the wire data")
-        return self.rx.pop(0)
+        v = self.rx.pop(0)
+        self.log.append(("get", v))
+        return v
 
     def exec(self, s):
         self.execs.append(s)
+        self.log.append(("exec", "READY" if "invert(null)" in s else s))
 
     def tx_fifo(self):
         return self.pending
@@ -135,6 +141,11 @@ class FakeMQ:
 
     def ready(self):
         return any("invert(null)" in e for e in self.execs)
+
+    def ready_positions(self):
+        """Indices in .log where READY was raised."""
+        return [i for i, (kind, v) in enumerate(self.log)
+                if kind == "exec" and v == "READY"]
 
 
 class FakeTSP:
@@ -203,6 +214,11 @@ def test_load_zx_streams_exactly_one_block(tio, tmpdir):
     ok &= check(TSP.offset == hdr_len + 2,
                 "offset advanced past the block (%d)" % TSP.offset)
     ok &= check(MQ.ready(), "left Y = READY")
+    # The patched ROM polls $0F after its 'L' and reads $0E the instant the
+    # poll succeeds, so the flag byte must be staged BEFORE Y goes high.
+    rdy = MQ.ready_positions()
+    ok &= check(bool(rdy) and MQ.log[0][0] == "put",
+                "staged the flag byte before raising READY")
     return ok
 
 
@@ -267,6 +283,14 @@ def test_save_zx_roundtrip(tio, tmpdir):
         ok &= check(got == tap,
                     "TAP is byte-identical to the reference (%d bytes)" % len(got))
     ok &= check(not MQ.rx, "consumed the whole wire sequence")
+    # A ROM patched to poll $0F after 'S' needs READY raised on entry (the
+    # 'S' dropped it via PIO auto-busy) and again after the data block's 'S'.
+    rdy = MQ.ready_positions()
+    gets = [i for i, (kind, _) in enumerate(MQ.log) if kind == "get"]
+    ok &= check(bool(rdy) and rdy[0] < gets[0],
+                "raised READY on entry, before reading the header block")
+    ok &= check(len(rdy) >= 2 and gets[20] < rdy[1] < gets[22],
+                "raised READY again between the data block's 'S' and its bytes")
     new_sms = SM_CALLS[before:]
     ok &= check(len(new_sms) == 1, "rebuilt the bus SM once")
     if new_sms:

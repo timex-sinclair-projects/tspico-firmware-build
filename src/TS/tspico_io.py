@@ -923,6 +923,12 @@ def LOAD_ZX(MQ, TSP):
     # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
     wrt(blk_info[2])
 
+    # Stage the flag byte FIRST, then raise READY. A ROM patched to poll
+    # $0F after its 'L' reads $0E the instant the poll succeeds, so the
+    # byte has to be in TX before Y goes high. Harmless with the current
+    # ROM, which ignores $0F and just waits ~1ms.
+    MQ.exec("mov(y, invert(null))")
+
     for i in r:
         arch.readinto(el)
         wrt(el[0])
@@ -1027,7 +1033,14 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
     
     wrt = MQ.put
     led = Pin(25, Pin.OUT)
-    
+
+    # Stage the first byte before raising READY — see the same note in
+    # LOAD_ZX. memoryview keeps this from copying the (large) buffer.
+    if cur_buf and len(cur_buf[0]):
+        MQ.put(cur_buf[0][0])
+        MQ.exec("mov(y, invert(null))")
+        cur_buf[0] = memoryview(cur_buf[0])[1:]
+
     for ar in cur_buf:
 
         led.value(1)
@@ -1389,7 +1402,13 @@ def SAVE_ZX(MQ, TSP):
     hdr = bytearray(21)
     
     _thread.start_new_thread(WATCHDOG, (5, MQ, TSP))
-    
+
+    # Raise READY: we are in the handler and listening. The Z80's 'S'
+    # dropped Y (PIO auto-busy), and a ROM patched to poll $0F after 'S'
+    # waits here instead of guessing with a ~1ms delay — which is not
+    # long enough to cover ZX48_IO's dispatch plus this thread spawn.
+    MQ.exec("mov(y, invert(null))")
+
     for i in r1:
         hdr[i] = MQ.get() & 0xFF
 
@@ -1399,6 +1418,7 @@ def SAVE_ZX(MQ, TSP):
     blk = bytearray(long)
 
     MQ.get()                     # the 'S' that opens the data block
+    MQ.exec("mov(y, invert(null))")   # READY again for the data block's poll
 
     for i in r2:
         blk[i] = MQ.get() & 0xFF
