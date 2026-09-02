@@ -409,15 +409,45 @@ def ENA_MQ(MQ):
     """Re-create and activate the (legacy single-port) TS_IO state machine.
 
     NOTE: This is the OLD single-port version using `TS_IO` at 15MHz.
-    It's kept for backwards compatibility with code paths that haven't
-    been migrated to dual-port. New code should use ACTIVATE_MQ() in
-    tspico.py instead, which uses TS_IO_DUAL at 30MHz.
+
+    *** UNUSED as of the 2026-09 ZX48 migration — do not call it. ***
+    SAVE_ZX was its last caller; on the dual-port bus it silently
+    replaced the session's SM with one that doesn't decode $0E from $0F.
+    Use ENA_MQ_DUAL() below, or ACTIVATE_MQ() in tspico.py. Kept only so
+    the single-port program has a working reference implementation.
     """
     MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
 
     MQ.active(1)
+
+    return MQ
+
+
+def ENA_MQ_DUAL(MQ):
+    """Re-create and activate the dual-port TS_IO_DUAL state machine.
+
+    The dual-port counterpart of ENA_MQ() above, and the one ZX48-mode
+    handlers must use. Needed after ENA_SD(), which re-claims GPIO 2-4
+    for SPI: the SM has to be rebuilt on the way back to the bus.
+
+    In TS-2068 mode the main dispatcher does this via ACTIVATE_MQ() in
+    tspico.py, but ZX48_IO never calls back into the dispatcher between
+    transactions, so a ZX handler that touches the SD card has to
+    restore the bus itself.
+
+    Leaves Y = READY: the PIO drops Y to 0 on every Z80 OUT (issue #14
+    auto-busy), and a fresh SM starts with Y undefined.
+    """
+    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
+                      in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
+                      sideset_base=Pin(12, Pin.OUT))
+
+    MQ.active(0)
+    utime.sleep(0.01)
+    MQ.active(1)
+    MQ.exec("mov(y, invert(null))")
 
     return MQ
 
@@ -820,27 +850,39 @@ def LOAD_TS(pre, MQ, TSP):
 
 
 def LOAD_ZX(MQ, TSP):
-    """LOAD routine for ZX Spectrum compatibility mode.
+    """Send one TAP block to the Spectrum ROM in ZX48 mode.
 
-    !!! NOT DUAL-PORT COMPLIANT — needs migration. !!!
+    ZX48 is a much simpler protocol than the TS-2068 LVM one that
+    LOAD_TS implements. The customised Spectrum ROM (flash slot 0) has
+    no status port, no pre-header and no echo phase:
 
-    This function (and its siblings LOAD_ZX_C and SAVE_ZX) was written
-    against the original single-port TS_IO PIO program. It uses patterns
-    that don't work correctly under the dual-port architecture:
-      - assumes wrt(0x40) populates port $0F via the FIFO (in dual-port
-        $0F is decoupled and reads the Y register)
-      - calls the legacy ENA_MQ() which spins up the OLD single-port
-        TS_IO state machine (in dual-port we use TS_IO_DUAL via
-        ACTIVATE_MQ in tspico.py)
-      - missing the V6 pre-load chain (final + next-iter 0x01 writes)
+        Z80  -> OUT ($0E),'L'      (76; consumed by ZX48_IO's dispatch)
+        Pico -> flag byte          (block type: 0x00 header, 0xFF data)
+        Pico -> content bytes      (Z80 reads at ~43us each)
+        Pico -> CRC byte
+        Z80  -> nothing            (its SA/LD-RET just returns)
 
-    Reached only when the user explicitly invokes ZX48 mode AND has
-    ZX_TAPE_COMPAT enabled in /config.ini. Both default to off, so this
-    path is dormant in standard installs.
+    So the response is exactly `totbytes` bytes: the TAP block minus
+    its 2-byte length prefix. There is deliberately NO status byte and
+    NO V6 pre-load chain here — any extra byte stays in TX and the next
+    'L' reads it as that block's flag byte.
 
-    To migrate: model this on the (working) LOAD_TS pattern above — drop
-    any wrt(0x40), keep TS_IO_DUAL as MQ, end with two MQ.put(0x01)
-    writes. See docs/PROTOCOL.md "Writing a new command handler" §5.
+    DUAL-PORT MIGRATION (2026-09):
+      - The single-port version wrote 0x40 ("continue") ahead of the
+        flag byte, which the Z80 read off the shared FIFO. Under
+        dual-port that flag lives on $0F (scratch Y), so the write is
+        gone. NOTE: Ricardo's newer Spectrum ROM ("nuevo LD") polls
+        $0E for 0x40 before the first byte and is therefore NOT
+        compatible with this firmware — the ROM in flash slot 0 of
+        Pico-v15w.rom is. See docs/rom-analysis/.
+      - Off-by-one fix: this streamed flag + totbytes bytes, one more
+        than the Z80 reads. The extra byte (the next block's length-low)
+        stayed in TX and poisoned the following transaction; the
+        "TX FIFO not empty after ZX mode" cleanup in ZX48_IO was
+        papering over exactly that.
+      - Y is left READY on exit. The PIO drops Y to 0 on every Z80 OUT
+        (issue #14 auto-busy), including the 'L' that got us here, so a
+        future ROM that polls $0F would otherwise stall.
     """
     global dead
     global kill
@@ -870,26 +912,34 @@ def LOAD_ZX(MQ, TSP):
     totbytes = blk_info[0] + 256 * blk_info[1]
     
     dead = False
-    r = range(totbytes)
-    
+    # totbytes counts flag + content + CRC. The flag is sent below, so
+    # the file loop streams the remaining totbytes-1 bytes. Sending
+    # totbytes here is the off-by-one described in the docstring.
+    r = range(totbytes - 1)
+
     _thread.start_new_thread(WATCHDOG, (3, MQ, TSP))
 
     wrt = MQ.put
     # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
     wrt(blk_info[2])
-    
+
     for i in r:
         arch.readinto(el)
-        wrt(el)
-        
+        wrt(el[0])
+
         if kill:
             ABORT_TX(TSP.LOG_LEVEL)
             arch.close()
-            
+
             return MQ, TSP, log_entries
-       
+
     arch.close()
-    
+
+    # Y = READY. Nothing else to send: the Z80 has read its CRC byte and
+    # returns without a status read.
+    MQ.exec("mov(y, invert(null))")
+    led.value(0)
+
     TSP.offset += totbytes + 2
     TSP.tap_idx += 1
     
@@ -905,15 +955,24 @@ def LOAD_ZX(MQ, TSP):
 
 
 def LOAD_ZX_C(MQ, TSP, buf_size):
-    """ZX Spectrum LOAD routine in 'compatible' mode (heavily buffered).
+    """ZX Spectrum LOAD in 'compatible' mode — stream the tape continuously.
 
-    !!! NOT DUAL-PORT COMPLIANT — see LOAD_ZX docstring above. !!!
+    Where LOAD_ZX answers one 'L' with exactly one block, this reads up
+    to buf_size of the TAP into memory and streams every block back to
+    back. MQ.put() blocks on a full TX FIFO, so the Z80 paces it: blocks
+    the Spectrum ROM skips over (wrong name, wrong type) are consumed by
+    its own LD-BYTES calls exactly as they would be off a tape running
+    continuously. That is what makes hard-to-load TAPs work here and not
+    in LOAD_ZX. It is memory-hungry and can OOM the Pico.
 
-    Used for some hard-to-load TAPs that need the entire data block in
-    memory before streaming to the Z80. Inefficient and can OOM the
-    Pico — kept around because some legacy TAPs need it.
+    Each buffered entry is rd_bytes[2:len+2] — flag + content + CRC, the
+    TAP block minus its length prefix — so no per-call byte accounting
+    is needed and the LOAD_ZX off-by-one never applied here.
 
-    Inherits all the dual-port migration TODOs from LOAD_ZX.
+    DUAL-PORT MIGRATION (2026-09): the 0x40 continue byte is gone (it
+    lives on $0F now), the end-of-stream wait is bounded instead of
+    spinning forever, and Y is left READY. See LOAD_ZX for the full
+    protocol notes.
     """
     global log_entries
     log_entries = " "
@@ -979,12 +1038,27 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
             MQ.put(el)
 
         led.value(0)
-        
-    while(MQ.tx_fifo() != 0):
-        pass
-    
+
+    # Wait for the Z80 to drain what's left, but bounded: in compatible
+    # mode we stream the whole tape, so if the Spectrum ROM found its
+    # file and stopped asking, the tail never gets read and the old
+    # unbounded spin here hung ZX48 mode until reset. After the timeout
+    # we drop the remainder — leaving it in TX would make the next 'L'
+    # read a stale byte as its flag.
+    _tw = time.ticks_ms()
+    while MQ.tx_fifo() != 0:
+        if time.ticks_diff(time.ticks_ms(), _tw) >= 2000:
+            LOG_ADD("WARNING: LOAD_ZX_C timed out with %d bytes unread; "
+                    "discarding tail." % MQ.tx_fifo(), 1, TSP.LOG_LEVEL)
+            while MQ.tx_fifo() != 0:
+                MQ.exec("pull (noblock)")
+                MQ.exec("mov (osr, null)")
+            break
+
+    MQ.exec("mov(y, invert(null))")                   # Y = READY
+
     cur_buf = []
-    
+
     return MQ, TSP, log_entries
 
 
@@ -1267,14 +1341,36 @@ def SAVE_TS(MQ, TSP):
 
 
 def SAVE_ZX(MQ, TSP):
-    """SAVE routine for ZX Spectrum compatibility mode.
+    """Receive a SAVE from the Spectrum ROM in ZX48 mode and write a TAP.
 
-    !!! NOT DUAL-PORT COMPLIANT — see LOAD_ZX docstring for details. !!!
+    The Spectrum ROM's SA-BYTES sends, per block and with no handshake:
 
-    Calls the legacy ENA_MQ() helper which spins up the OLD single-port
-    TS_IO state machine, and uses single-port byte sequences (wrt(0x40)
-    etc.). Migration would parallel SAVE_TS — see that function's V6-
-    pattern implementation as a template.
+        OUT ($0E),'S'   (83)      then len_lo, len_hi, flag,
+                                  content bytes, CRC byte
+
+    ZX48_IO consumed the header block's 'S' when it dispatched here, so
+    this reads:
+
+        21 bytes   len_lo, len_hi, flag, 17 header bytes, CRC
+         1 byte    the 'S' that opens the data block  (discarded)
+      len+4 bytes  len_lo, len_hi, flag, content, CRC
+
+    where len comes from the tape header's length field (hdr[14:16]).
+    The two length fields are then rewritten into TAP form (block length
+    = content + flag + CRC) and both blocks are appended to a .tap on the
+    SD card named after the header.
+
+    The Z80 reads nothing back — SA-BYTES ends with EI/RET — so there is
+    no status byte to send, and sending one would leave an orphan in TX.
+
+    DUAL-PORT MIGRATION (2026-09):
+      - Was ending with ENA_MQ(), which rebuilt the OLD single-port
+        TS_IO state machine at 15 MHz and handed it back to ZX48_IO as
+        the session's SM: after one ZX SAVE the bus stopped decoding
+        $0E/$0F apart for the rest of the session. Now ENA_MQ_DUAL().
+      - RX reads are masked to 8 bits like SAVE_TS. The RX word is 9
+        bits (bit 8 = A0), and an unmasked value >= 256 assigned into a
+        bytearray raises and drops the Pico to the REPL.
     """
     global kill
     global dead
@@ -1295,17 +1391,17 @@ def SAVE_ZX(MQ, TSP):
     _thread.start_new_thread(WATCHDOG, (5, MQ, TSP))
     
     for i in r1:
-        hdr[i] = MQ.get()
-        
+        hdr[i] = MQ.get() & 0xFF
+
     long = (256*hdr[15]) + hdr[14] + 4
     r2 = range(long)
-    
+
     blk = bytearray(long)
-    
-    MQ.get()
-    
+
+    MQ.get()                     # the 'S' that opens the data block
+
     for i in r2:
-        blk[i] = MQ.get()
+        blk[i] = MQ.get() & 0xFF
         if kill:
             LOG_ADD("ERROR: SAVE_ZX failed! " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 2, TSP.LOG_LEVEL)
             dead = True
@@ -1350,7 +1446,10 @@ def SAVE_ZX(MQ, TSP):
         fff = MQ.get()
         
     os.umount("/sd")
-    MQ = ENA_MQ(MQ)
+    # ENA_SD() re-claimed GPIO 2-4 for SPI, so the bus SM has to be
+    # rebuilt before ZX48_IO's loop reads the FIFO again. DUAL-PORT: this
+    # was ENA_MQ(), which rebuilt the single-port TS_IO SM at 15 MHz.
+    MQ = ENA_MQ_DUAL(MQ)
 
     LOG_ADD("INFO: Finished SAVE ZX successfully " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0, TSP.LOG_LEVEL)
 

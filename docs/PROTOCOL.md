@@ -343,6 +343,35 @@ match what the Z80 expects.
   block. If you want a verbose status message, write the directive
   bytes BEFORE the pre-load `0x01` so the directive IS the final
   response, not an addition.
+- **ZX48 mode is a different protocol — don't apply the V6 chain to
+  it.** The customised Spectrum ROM in flash slot 0 has no status port,
+  no pre-header and no echo phase: after `'L'` it reads exactly
+  `flag + content + CRC` and returns, and after `'S'` it writes the
+  block and returns. A status byte or pre-load `0x01` written by a ZX
+  handler is an orphan that the *next* `'L'` reads as its flag byte.
+  `LOAD_ZX` streamed one byte too many for exactly this reason (flag +
+  `totbytes` instead of `totbytes`); the surplus was the next block's
+  length-low byte, and the "TX FIFO not empty after ZX mode" cleanup in
+  `ZX48_IO` was mopping it up rather than fixing it. Covered now by
+  `src/test/zx48_hosttest.py`.
+- **Never call `ENA_MQ()` — it rebuilds the single-port SM.** It
+  creates `TS_IO` at 15 MHz, which does not decode `$0E` from `$0F`.
+  `SAVE_ZX` called it after its SD write and handed the result back to
+  `ZX48_IO` as the session's state machine, so every ZX transaction
+  after the first save ran on the wrong bus program. Any handler that
+  calls `ENA_SD()` and isn't returning to the main dispatcher must
+  restore the bus with `ENA_MQ_DUAL()` (or `ACTIVATE_MQ()` in
+  `tspico.py`) instead.
+- **Mask RX reads to 8 bits.** The RX word is 9 bits — bit 8 carries
+  A0, i.e. which port the Z80 wrote. `MQ.get()` unmasked into a
+  `bytearray` raises `ValueError` on any `$0F` write and drops the Pico
+  to the REPL. `SAVE_TS` masks; `SAVE_ZX` didn't until the ZX48
+  migration.
+- **`while MQ.tx_fifo() != 0: pass` can hang forever.** It waits for the
+  Z80 to drain, which never happens if the Z80 has stopped asking (in
+  ZX48 compatible mode the Pico streams the whole tape, so the tail is
+  routinely unread). Bound the wait, then drain TX explicitly — leaving
+  bytes behind is the orphan-byte bug above.
 
 ---
 
