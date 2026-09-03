@@ -98,12 +98,12 @@ one routine:
 
 ```asm
 25C8: 06 CF     LD B,$CF      ; CAT     ─┐
-25CA: 18 0A     JR $25D4       │
+25CA: 18 0A     JR $25D6       │
 25CC: 06 D0     LD B,$D0      ; FORMAT ─┤  all fall through
-25CE: 18 06     JR $25D4       │          to the same stub
+25CE: 18 06     JR $25D6       │          to the same stub
 25D0: 06 D1     LD B,$D1      ; MOVE   ─┤
-25D2: 18 02     JR $25D4       │
-25D4: 06 D2     LD B,$D2      ; ERASE  ─┘
+25D2: 18 02     JR $25D6       │
+25D4: 06 D2     LD B,$D2      ; ERASE  ─┘ (falls through)
 25D6: CD 89 28  CALL $2889    ; = BIT 7,(IY+1); RET   -- run-time?
 25D9: 20 06     JR NZ,$25E1
 25DB: CD 69 25  CALL $2569    ; syntax pass: skip to end of statement
@@ -119,6 +119,40 @@ for the FDD 3000 — and it is **byte-identical in `GENUINE-2068-home.bin` and
 **The hook is therefore a 3-byte patch at `$25D6`**, redirecting `CALL $2889`
 into the EXROM with the token already in `B`. No RST trampoline, no RAM patch,
 no error-path interception, no backward token scan.
+
+### But the parameter table has to be patched too **[verified in ZEsarUX]**
+
+The stub is only reached if the statement's *syntax classes* are satisfied first,
+and they are not satisfied by a bare keyword. The parameter-table entry for `CAT`
+is `0A 2C 05 C8 25`: class `$0A`, then a literal `,` (any table byte ≥ `$20` is a
+separator that must be present — `1AA2: CP 20h` / `1AB2: RST 18h; CP C; JP NZ,1BED`),
+then class `$05` with routine `$25C8`. Measured on the shipping ROM by counting
+arrivals at `$25C8`:
+
+| Line | reaches `$25C8`? | result |
+|---|---|---|
+| `CAT` | **no** | `CAT ?` — syntax error |
+| `CAT "x"` | **no** | `CAT "x"?` — syntax error |
+| `CAT "x",` | **yes** (2×) | accepted |
+
+So bare `CAT` never gets near the hook. The fix is one byte per command, in the
+**syntax offset table**, advancing each entry two bytes past the `0A 2C` prefix so
+it starts at the `class $05 + routine` pair — class `$05` means *the routine checks
+its own syntax*, which is exactly what our handler wants:
+
+| Addr | Command | Offset | Entry becomes |
+|---|---|---|---|
+| `$1946` | CAT | `$D0` → `$D2` | `$1A18` = `05 C8 25` |
+| `$1947` | FORMAT | `$C0` → `$C2` | `$1A09` = `05 CC 25` |
+| `$1948` | MOVE | `$C4` → `$C6` | `$1A0E` = `05 D0 25` |
+| `$1949` | ERASE | `$C8` → `$CA` | `$1A13` = `05 D4 25` |
+
+Nothing moves and no table grows — the target bytes already exist inside the
+current entries. Verified in ZEsarUX on a patched image: bare `CAT` now reaches
+`$25C8` twice (syntax pass and run pass) and the line is accepted; bare `ERASE`
+reaches `$25D4`; `LOAD ""` still parses and runs unchanged.
+
+**Total HOME ROM footprint: 7 bytes** — 3 at `$25D6`, 4 in the offset table.
 
 `OPEN #` (`$D3`) and `CLOSE #` (`$D4`) are better still: they already *parse*,
 routing to `$142A` and `$139F` respectively **[verified]**, both unmodified in
@@ -137,7 +171,7 @@ specifier strings `$142A` accepts, exactly as the Interface 1 does for `"m"`.
 | Region | Space | Use |
 |---|---|---|
 | EXROM `$22AE`–`$3FFF` | **7,506 bytes free** | all new Z80 code |
-| HOME ROM | effectively none | 3-byte hook patches only |
+| HOME ROM | effectively none | 7 bytes of hook patches only (§2) |
 | RAM below `RAMTOP` | allocated at install | channel driver + per-channel buffers (§6) |
 
 Per [`rom-analysis/MEMORY_MAP.md`](rom-analysis/MEMORY_MAP.md), appending at
@@ -152,7 +186,7 @@ append-and-retarget pattern the v1.5w fix used.
    BASIC statement                    TS-PICO firmware (MicroPython)
    ───────────────                    ──────────────────────────────
    CAT / ERASE / MOVE / FORMAT
-        │ HOME $25D6 hook (3 bytes)
+        │ HOME hook: 3 bytes @ $25D6 + 4 in the syntax offset table
         ▼
    EXROM $22AE+  parse args
         │  synthesise "TPI:DIR ..." etc.
@@ -378,13 +412,11 @@ occupies TS-2068 chunks 0 and 1 simultaneously.
 
 Ordered by how much they could change the design.
 
-1. **What does bare `CAT` do on a stock TS-2068?** The parameter-table entry for
-   `CAT` is `0A 2C 05 C8 25` — under the Sinclair class scheme that reads as
-   "string expression, comma, then routine `$25C8`", which would make bare `CAT`
-   a *syntax* error before dispatch ever reaches `$25D4`. If so, either the
-   syntax has to carry an argument or the parameter table needs patching too
-   (a 1-byte change, but it moves the hook from "3 bytes" to "3 bytes plus a
-   table edit"). **Verify on the emulator before writing any code.**
+1. ~~**What does bare `CAT` do on a stock TS-2068?**~~ **RESOLVED** — it is a
+   syntax error and never reaches the command routine; the syntax offset table
+   needs four one-byte patches alongside the `$25D6` hook. Measured in ZEsarUX;
+   see [§2](#but-the-parameter-table-has-to-be-patched-too-verified-in-zesarux)
+   and [§10.5](#105-how-the-zesarux-measurements-were-made).
 2. **What report does `$2567` raise?** It is `RST $08` with error byte `$12`.
    Worth knowing, because it is what users see today and what we are replacing.
 3. **Block type and sub-op numbering** for §6.3 — needs Gustavo.
@@ -452,7 +484,8 @@ parameter-table entry address is `$1945 + (token - $CE) + offset_byte`.
 | `$EF` LOAD | `$19E1` | `0B` | (class-0B tape path) |
 | `$F8` SAVE | `$19E0` | `0B` | (class-0B tape path) |
 
-The four disk routines converge at `$25D4`; `$2889` is `BIT 7,(IY+1); RET`.
+The four disk routines converge at `$25D6` — note the `JR` displacements land
+*past* `$25D4`, which is only ERASE's own `LD B`. `$2889` is `BIT 7,(IY+1); RET`.
 All of it is byte-identical in `GENUINE-2068-home.bin` and `TSPICO-11-home`.
 
 ```bash
@@ -530,11 +563,74 @@ EOF
 | Value | Meaning | Source |
 |---|---|---|
 | `$22AE`–`$3FFF` | 7,506 free bytes in the EXROM | `rom-analysis/MEMORY_MAP.md` |
-| `$25D6` | HOME ROM disk-token hook site | §10.2 |
+| `$25D6` | HOME ROM disk-token hook site (**not** `$25D4`) | §10.2 |
 | `$142A` / `$139F` | HOME ROM `OPEN #` / `CLOSE #` | §10.2 |
 | `$5C4F` / `$5C51` / `$5C10` | `CHANS` / `CURCHL` / `STRMS` | HOME ROM, live |
 | `$1A73` | TPI filename prefix parse (`TPI:` / `NET:`) | `rom-analysis/SYMBOLS.md` |
 | `$1BA0` | `'B'` pre-header builder | `rom-analysis/PROTOCOL_FROM_ROM.md` |
 | `$1840` | TPI BIOS jump table | `rom-analysis/PROTOCOL_FROM_ROM.md` |
 | `$5DD3` / `$5DD5` | command-string address / length | `rom-analysis/PROTOCOL_FROM_ROM.md` |
+| `$1946`–`$1949` | syntax offset table bytes to patch | §2, §10.5 |
 | ~88 ms | cost of one `WF_NPH` poll | `tools/wf_nph_timing.py` |
+
+### 10.5 How the ZEsarUX measurements were made
+
+Setup is the issue-#35 lab: `~/Documents/github/zesarux-tspico-lab`, whose
+`work/zesarux-tspico` is a ZEsarUX 13.0 build patched to give the TS2068 a full
+16K EXROM (stock ZEsarUX mirrors segment 0, which breaks any TS-PICO image —
+see that repo's `NOTES.md`). Driven over ZRCP on port 10000 via `work/zrcp.py`.
+
+**Two gotchas cost real time here; both are worth knowing before the next
+ROM experiment.**
+
+1. **Breakpoints do not halt the CPU under `--vo null`.** A ZRCP breakpoint whose
+   default action is "break" opens the debugger *menu*, and with no video driver
+   that is a no-op — the CPU keeps running and polling `get-registers` shows
+   nothing. `get-breakpointspasscount` also stays at `0 0` unless a pass count is
+   configured, so it is not a hit indicator either. Use a **breakpoint action**
+   with an observable side effect instead:
+
+   ```
+   --enable-breakpoints
+   --set-breakpoint 1 PC=25C8H
+   --set-breakpointaction 1 "let var0=var0+1"
+   ```
+
+   then read it back with ZRCP `evaluate var0` before and after the event. Always
+   run a positive control (a breakpoint on `$1A71`, the statement dispatcher,
+   which any line must reach) — that is what caught the non-halting behaviour.
+
+2. **Typing a keyword token is unnecessary.** Disk keywords are buried in extended
+   mode, but the edit line can be built directly: press one key that yields a
+   single-token keyword (`J` → `LOAD`, ASCII 106), type any remaining ASCII, then
+   overwrite the first byte of the edit line with the token under test. The buffer
+   length never changes, so no `WORKSP` bookkeeping is disturbed. Read `E_LINE`
+   (`$5C59`) *immediately* before the write and assert the first byte is still
+   `$EF` — the editor reallocates, and a stale address silently pokes the wrong
+   place. `read-memory`/`write-memory` take **decimal** addresses and values;
+   breakpoint conditions take hex with an `H` suffix.
+
+Harnesses used for this round are throwaway (`multi.py`, `trial.py`); if this
+becomes a regular activity they belong in `tools/` alongside `wf_nph_timing.py`.
+
+Results, on `src/rom/TSPICO.ROM`, counting arrivals at each checkpoint for one
+immediate-mode line:
+
+| Line | `$1A71` | `$25C8` | `$25D4` | `$2567` | screen |
+|---|---|---|---|---|---|
+| `CAT` | 17 | 0 | 0 | 0 | `CAT ?` |
+| `CAT "x"` | 16 | 0 | 0 | 0 | `CAT "x"?` |
+| `CAT "x",` | 2 | 2 | 0 | 1 | accepted |
+| `LOAD ""` (control) | 2 | 0 | 0 | 0 | runs |
+
+(The high `$1A71` counts on the rejected lines are the editor re-checking syntax
+on every keystroke and redraw; the accepted lines show the expected 2 = one
+syntax pass plus one run pass.)
+
+And on the same image with the four offset-table bytes patched per §2:
+
+| Line | `$1A71` | `$25C8` | `$25D4` | screen |
+|---|---|---|---|---|
+| `CAT` | 2 | **2** | 0 | accepted |
+| `ERASE` | 2 | 0 | **2** | accepted |
+| `LOAD ""` (regression) | 2 | 0 | 0 | runs, unchanged |
