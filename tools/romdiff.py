@@ -26,6 +26,10 @@ IMAGES = {
     "tspico-15w-home": "TSPICO-15w-home",
     "tspico-11-exrom": "TSPICO-11-exrom",
     "tspico-15w-exrom": "TSPICO-15w-exrom",
+    # v1.7 = Gustavo's SAVE-prompt BREAK release (Nov 2025 / Sep 2026 build),
+    # the ROM currently shipped in src/rom/TSPICO.ROM.
+    "tspico-17-home": "TSPICO-17-home",
+    "tspico-17-exrom": "TSPICO-17-exrom",
     # Baseline TS2068 ROMs, from zesarux/src/ts2068.rom.
     "genuine-home": "GENUINE-2068-home.bin",
     "genuine-exrom": "GENUINE-2068-exrom.bin",
@@ -41,6 +45,8 @@ EXPECT_CRC = {
     "tspico-15w-home": 0xe8714bed,
     "tspico-11-exrom": 0x268649f6,
     "tspico-15w-exrom": 0xcacf18c5,
+    "tspico-17-home": 0xc2b6cbf6,
+    "tspico-17-exrom": 0xeb1a329d,
 }
 
 # Pairs to diff: (label, left, right, note)
@@ -51,6 +57,11 @@ COMPARISONS = [
      "Genuine 8K vs the low 8K only; chunk 1 (0x2000+) is all-new. Expect 2326 B / 36 hunks."),
     ("EXROM: TS-PICO v1.1 -> v1.5w", "tspico-11-exrom", "tspico-15w-exrom",
      "The shipping-vs-next delta. Expect 15 B / 2 hunks."),
+    ("EXROM: TS-PICO v1.5w -> v1.7", "tspico-15w-exrom", "tspico-17-exrom",
+     "The SAVE-prompt BREAK release: the $0886 call site, the new routine at "
+     "$22AE, the copyright year and the version byte. Expect 89 B / 4 hunks."),
+    ("HOME: TS-PICO v1.5w -> v1.7", "tspico-15w-home", "tspico-17-home",
+     "Version byte at $0065 only. Expect 1 B / 1 hunk."),
 ]
 
 GAP = 8  # bytes of agreement that close a hunk

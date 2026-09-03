@@ -20,6 +20,7 @@ here is what the hardware actually runs.
 | What TS-PICO changed in the HOME ROM vs genuine | [DIFF_HOME_vs_STOCK.md](DIFF_HOME_vs_STOCK.md) |
 | A specific address — what lives there | [SYMBOLS.md](SYMBOLS.md) |
 | What changed in the TS-Pico ZX Spectrum ROM v2, and why | [PATCH_ZX48_HANDSHAKE.md](PATCH_ZX48_HANDSHAKE.md) |
+| Why the 2068 ROM went v1.5w → v1.7 (BREAK at the SAVE prompt) | [REVIEW_ROM_V17_SAVE_BREAK.md](REVIEW_ROM_V17_SAVE_BREAK.md) |
 
 ## The findings that matter most
 
