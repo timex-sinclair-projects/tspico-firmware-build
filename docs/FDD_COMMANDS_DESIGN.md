@@ -458,27 +458,39 @@ point, with corrections:
 
 ## 8. Build and test infrastructure
 
-Two gaps have to close before any of this can ship.
+**The build pipeline now exists** (`tools/build-rom.py` + `src/rom/fdd/`). It
+closes what used to be the two blocking gaps here:
 
-**There is no ROM source.** `gus-home.asm` and `gus-exrom.asm` in the reference
-library are `z80dasm` linear sweeps, not Gustavo's sources — the same class of
-artefact as [`rom-analysis/disasm/`](rom-analysis/disasm/), and subject to the
-same caveat that data and filler decode as nonsense instructions. Every ROM
-change is therefore *append new code at `$22AE`, patch a handful of bytes at the
-hook sites, verify with `tools/romdiff.py`*. That is workable — it is exactly the
-v1.5w pattern — but it means the build must be reproducible and diffable, not
-hand-edited.
+```bash
+python3 tools/build-rom.py --verify      # -> build/TSPICO-fdd.ROM
+```
 
-**There is no Z80 assembler in the toolchain.** `tools/` carries `zmakebas` only.
-Phase 1 needs an assembler (`z80asm` or `sjasmplus`), vendored the way `zmakebas`
-is, plus a build step that assembles to `$22AE`, splices the result and the hook
-patches into a ROM image, and re-runs `romdiff.py` so every byte changed is
-accounted for.
+The pipeline: assemble `src/rom/fdd/fddcmd.asm` with **sjasmplus** (the assembler,
+`brew install sjasmplus` — checked at start, matching the `z80dasm` dependency in
+`romdisasm.sh`); copy the crc-checked base `src/rom/TSPICO.ROM`; splice the module
+into free EXROM at **`$3000`** (file `$7000`), asserting the region is `$FF`; apply
+the declarative `PATCHES` manifest (each patch asserts the bytes it overwrites, so
+a moved ROM fails loudly); and, with `--verify`, assert that **only** the module
+region and enabled patches changed. Because file offset == Z80 address in both
+banks, the report reads in Z80 addresses. This is the reproducible, diffable
+append-and-patch pattern the v1.5w fix used, mechanised.
 
-**Testing wants the emulator.** Iterating on ROM patches against hardware only
-would be miserable. This is where the ZEsarUX TS-PICO work pays for itself; note
-that the emulator's EXROM must be widened from 8K to 16K, since the TS-PICO EXROM
-occupies TS-2068 chunks 0 and 1 simultaneously.
+First build is proven end to end: it assembles the `$3000` skeleton, applies the
+verified 4-byte syntax-offset patch, produces `build/TSPICO-fdd.ROM` changing
+exactly 17 bytes in 2 hunks (HOME `$1946`, EXROM `$3000`), **boots in ZEsarUX**, and
+bare `CAT` reaches the disk stub in the built image. The `$25D6` disk-token hook is
+staged in the manifest (disabled) pending its HOME→EXROM thunk stub.
+
+> **There is still no Gustavo ROM source**, and we don't need one. `gus-home.asm`/
+> `gus-exrom.asm` in the reference library are `z80dasm` linear sweeps, not sources
+> (same caveat as [`rom-analysis/disasm/`](rom-analysis/disasm/)). We never
+> reassemble the whole ROM — we splice our own module into free space and patch a
+> handful of named bytes, all verified against the base.
+
+**Testing uses the emulator.** Iterating on ROM patches against hardware only would
+be miserable. This is where the ZEsarUX TS-PICO work pays for itself; note that the
+emulator's EXROM must be widened from 8K to 16K, since the TS-PICO EXROM occupies
+TS-2068 chunks 0 and 1 simultaneously.
 
 ---
 
