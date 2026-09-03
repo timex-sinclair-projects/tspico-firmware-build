@@ -250,8 +250,27 @@ argument so the statement is accepted, the runtime pass builds and sends.
 
 Verified in ZEsarUX, each command producing the exact string above (`CAT` → `tpi:dir`,
 `ERASE "AB"` → `tpi:rm AB`, `FORMAT "X"` → `tpi:newtap X`, `MOVE "Y"` → `tpi:cd Y`),
-with the `'B'` pre-header going out port `$0E`. A live response needs a responding
-Pico (the issue-#35 bridge or hardware); the bare emulator has nothing to answer.
+with the `'B'` pre-header going out port `$0E`.
+
+**End-to-end through the real firmware (issue-#35 bridge).** `CAT` was then run
+against the real `TS/tspico.py` command logic, using a new bridge runtime
+(`tspico_runtime.py` in the ZEsarUX lab) that mocks the MicroPython environment
+and points the "SD card" at a host directory. The full round trip works: `CAT`
+sends the `'B'` `tpi:dir` command, the real `DIR` handler reads the host SD
+directory, builds its 288-char listing, and streams all 304 response bytes back;
+the Z80 consumes them, the ROM dispatches its print handler with output aimed at
+the main-screen channel (`CURCHL` = the `S` channel), and the command completes
+cleanly. So the command path is proven against the actual firmware.
+
+The listing does not yet *render* on the emulated screen: the ROM's function-`$86`
+handler (`$21E3`, "print string with loop") reads an empty string from the stream
+and prints nothing. This is a byte-alignment gap in the func-`$86` streaming
+handshake between `SEND_MSG2` and the ROM **over the bridge** — the same path
+`SAVE "tpi:..."` uses on real hardware, where it works — so it is bridge-fidelity
+work (the socket model not fully replicating the PIO FIFO backpressure the
+streamed display relies on), not a defect in the disk-command ROM code. Finishing
+it is the lab's M2b/M3 milestone; a real Pico or hardware renders the listing
+directly.
 
 Open polish items: `MOVE` currently means change-directory (single arg) rather than
 the rename in §9 item 4 — that needs a Pico `move` verb; and `ERASE` maps to `rm`,
