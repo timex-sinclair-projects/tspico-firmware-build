@@ -19,7 +19,7 @@ side of the wire.
 
 | If you want… | Read |
 |---|---|
-| Why the ROM hook is three bytes and not a trampoline | [§2](#2-the-hook-the-home-rom-already-does-most-of-the-work) |
+| Why the ROM hook is a 7-byte patch, not a trampoline | [§2](#2-the-hook-the-home-rom-already-does-most-of-the-work) |
 | The overall split of work | [§3](#3-architecture) |
 | The cheap first milestone | [§4](#4-phase-1--statement-shortcuts) |
 | The part that needs real design | [§6](#6-phase-3--channel-io) |
@@ -81,7 +81,7 @@ declarative, and adding a command is a table row plus a handler.
 > `CLOSE_HANDLER`'s "restores STRMS entries" comment is wrong (`$5C82`/`$5C86`/
 > `$5C8A` are `ECHO_E`/`DF_CCL`/`SPOSNL`, screen-position variables). The
 > `DEFB` bytes are faithful to `3000_2068.ROM`; the prose is not. A corrected
-> decode of the command table is in [§10.3](#103-fdd-3000-command-table-decoded).
+> decode of the command table is in [§10.3](#103-fdd-3000-command-table-fully-decoded).
 
 ---
 
@@ -213,6 +213,15 @@ Phase 3's bulk transfers need anything new.
 Scope: `CAT`, `ERASE`, `MOVE`, `FORMAT` become statements that build a `TPI:`
 command string and hand it to the existing send path.
 
+**Prerequisite, now verified.** The ROM-side hook is the **7-byte** patch from §2
+— 3 bytes at `$25D6` plus 4 bytes in the syntax offset table (`$1946`–`$1949`) so
+a bare keyword reaches the routine at all. Both halves are confirmed in ZEsarUX:
+without the offset-table bytes, `CAT` is a syntax error that never reaches the
+stub; with them, bare `CAT` and bare `ERASE` are accepted and `LOAD ""` is
+unaffected (§2, §10.5). So Phase 1 no longer carries any risk in the hook
+*mechanism* — the remaining unknowns are the build pipeline (§8) and the Pico
+handlers.
+
 Proposed mapping (syntax is ours to choose; this is a starting point):
 
 | Statement | Becomes | Notes |
@@ -221,7 +230,7 @@ Proposed mapping (syntax is ours to choose; this is a starting point):
 | `CAT "*.tap"` | `TPI:DIR *.TAP` | filtered |
 | `CAT #` | `TPI:TAPDIR` | blocks inside the mounted TAP — see below |
 | `ERASE "name"` | new `TPI:ERASE name` | **not** the existing select-then-`RM` two-step |
-| `MOVE "a" TO "b"` | new `TPI:MOVE a b` | rename/move |
+| `MOVE "a" TO "b"` | new `TPI:MOVE a b` | rename/move — we define the syntax (see below) |
 | `MOVE "path"` | `TPI:CD path` | debatable; see §9 |
 | `FORMAT "name"` | `TPI:NEWTAP name` | create + mount a TAP |
 
@@ -234,15 +243,35 @@ surprising split, but this is a UX decision, not a technical one.
 select-then-delete, which is racy when a statement issues both halves. Add a
 Pico-side handler that takes the name directly.
 
+**`MOVE`'s syntax is ours to invent.** The FDD 3000 is no reference here: its own
+`MOVE` table entry (`$D1`) is malformed — a `$04`→`$06` substitution that would
+mis-parse its arguments (§10.3). So there is no prior-art parse to match; define
+`MOVE "a" TO "b"` cleanly. The `TO` token (`$CC`) is parsed by our own routine.
+
+**Reserve Report J for a dead device — don't inherit the stub's meaning.** Today
+the `$25D6` stub raises **Report J, "Invalid I/O device"** (§10.6), and that is
+*also* what a TS-PICO comms failure raises (the internal error-9 path). So on a
+stock machine "there are no disk commands" and "the Pico didn't answer" are
+indistinguishable. The new handlers must not perpetuate that: map handler-level
+failures onto the specific reports the Pico already returns — F *Invalid file
+name*, Q *Parameter error*, 8 *End of file*, and so on (the full status→report
+table is in [`rom-analysis/PROTOCOL_FROM_ROM.md`](rom-analysis/PROTOCOL_FROM_ROM.md))
+— and leave J to mean the device is genuinely absent or unresponsive. This is
+almost free: the `'B'`-block path already surfaces the Pico's status byte as a
+report, so it is a matter of the handlers returning the right status.
+
 Pico-side work in this phase is small: a few handlers in `SA_funct`, most of them
 thin wrappers over `DIR`, `RM`, `CD`, `TAPDIR`, `NEW_TAP`. Each must honour the
 V6 tail pre-load contract in `PROCESS_CMD` — handlers write their response and
 return; they do **not** write their own `0x01`. See
 [`EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md) §3a.
 
-**Deliverable:** one command working end to end proves the `$25D6` hook, the
-EXROM append, the string synthesis, and the build pipeline (§8). Everything after
-that is repetition.
+**Deliverable:** the hook mechanism is already proven in the emulator (§2), so the
+first end-to-end command instead proves the two things still unverified — the
+build pipeline that assembles at `$22AE`, splices the EXROM code and the seven
+HOME-ROM patch bytes, and passes `romdiff.py` (§8); and a Pico `SA_funct` handler
+returning a real result with the right report. Everything after that is
+repetition.
 
 ---
 
@@ -297,6 +326,13 @@ all live and referenced throughout the ROM. So the Interface 1 approach works:
 install a channel record carrying output and input routine addresses, point a
 `STRMS` entry at it, and stock `PRINT #`, `INPUT #`, `LIST #` and `INKEY$ #`
 route to us with no statement interception whatsoever.
+
+This is exactly where we part ways with the FDD 3000. Its command table has
+dedicated entries for the `PRINT` (`$F5`) and `INPUT` (`$EE`) tokens, each with an
+inline `"#"` list (§10.3) — i.e. it re-implements the statements. That is a large
+amount of fragile work (PRINT item lists, `AT`/`TAB`, INPUT's line editor and
+assignment) for a strictly worse result than the channel record, which gets all
+of it from stock ROM for free.
 
 **Placement constraint:** channel routines are called with **HOME paged in**, so
 they cannot live in the EXROM. Put the driver in RAM below `RAMTOP` — the FDD
