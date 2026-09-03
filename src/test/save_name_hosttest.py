@@ -877,6 +877,70 @@ def test_abort_paths_rewind(tio):
           "each one rewinds (%d rewinds for %d aborts)" % (len(rewinds), len(aborts)))
 
 
+
+def test_load_abort_rearms_tx(tio):
+    """After an aborted LOAD, TX must hold exactly one 0x01 and Y = READY.
+
+    LOAD_TS's normal exit ends with the V6 chain (two 0x01s + Y=READY).
+    The abort paths bypass it, and the watchdog has just drained both
+    FIFOs -- so without an explicit re-arm the next command's status read
+    finds an empty TX and the dispatcher answers Report J.
+    docs/PROTOCOL.md 7 states the rule; SAVE_TS is exempt only because
+    the dispatcher's ACTIVATE_MQ re-arms after it, and nothing at all
+    runs after LOAD_TS.
+
+    Ryan hit this on #48: VERIFY makes the Z80 abandon the transfer as
+    soon as the comparison fails, and every command after it answered J
+    until a few `tpi:nop`s re-primed the chain.
+
+    ONE byte, not two. The Z80 has already reported and gone -- a second
+    would sit in TX and be read as the first byte of the next response,
+    the one-byte shift that surfaces as Report R.
+    """
+    print("test_load_abort_rearms_tx: abort leaves TX primed for the next cmd")
+    TSP = FakeTSP("/tmp")
+    MQ = FakeMQ(z80_reads=False)          # Z80 has gone back to BASIC
+
+    tio.REARM_AFTER_LOAD_ABORT(MQ, TSP)
+
+    check(MQ.written == [0x01],
+          "exactly one 0x01 written, got %r" % (MQ.written,))
+    check(len(MQ.tx) == 1,
+          "and it is sitting in TX for the next command, got %d" % len(MQ.tx))
+    check(len(MQ.tx) <= TX_FIFO_DEPTH,
+          "fits the %d-deep TX FIFO" % TX_FIFO_DEPTH)
+    check(any("invert(null)" in e for e in MQ.execs),
+          "Y restored to READY (execs=%r)" % (MQ.execs,))
+
+
+def test_abort_paths_rearm(tio):
+    """Structural: both LOAD_TS abort paths re-arm, and do it after ABORT_TX.
+
+    Ordering matters. ABORT_TX waits for core1 to finish draining and
+    re-activating the SM; anything written before it returns is eaten by
+    the watchdog's pull(noblock) cleanup loop.
+    """
+    print("test_abort_paths_rearm: structural check")
+    import ast
+    src = io.open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read()
+    fn = next(n for n in ast.walk(ast.parse(src))
+              if isinstance(n, ast.FunctionDef) and n.name == "LOAD_TS")
+
+    def calls(name):
+        return [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name) and n.func.id == name]
+
+    aborts = calls("ABORT_TX")
+    rearms = calls("REARM_AFTER_LOAD_ABORT")
+    check(len(rearms) == len(aborts) == 2,
+          "each of the 2 abort paths re-arms (%d re-arms for %d aborts)"
+          % (len(rearms), len(aborts)))
+
+    ok = all(any(a.lineno < r.lineno for a in aborts) for r in rearms)
+    check(ok, "every re-arm comes after an ABORT_TX")
+
+
+
 def main():
     print("=" * 64)
     print("SAVE_TS audit host test")
@@ -910,6 +974,8 @@ def main():
     test_no_blink_inside_a_transaction(tio)
     test_aborted_search_rewinds(tio)
     test_abort_paths_rewind(tio)
+    test_load_abort_rearms_tx(tio)
+    test_abort_paths_rearm(tio)
 
     print("=" * 64)
     print("RESULT: %d passed, %d failed" % (PASS, FAIL))

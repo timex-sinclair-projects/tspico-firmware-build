@@ -320,6 +320,23 @@ match what the Z80 expects.
 - **If `LOAD_TS` returns without writing the trailing two `0x01`s, the
   next LOAD will hang or fail with Report J.** The pre-load chain is
   load-bearing; honor it in any new handler.
+- **An early return re-arms too — and with ONE `0x01`, not two.**
+  `LOAD_TS`'s abort paths skip the V6 chain by construction, and the
+  watchdog has just drained both FIFOs, so TX comes back empty and Y is
+  left wherever the partial Z80 OUTs dropped it. That is the rule above
+  firing on an error path: the next command's status read finds nothing
+  and gets Report J. `REARM_AFTER_LOAD_ABORT()` writes the one pre-load
+  byte and restores Y, *after* `ABORT_TX` (anything staged before it is
+  eaten by the watchdog's `pull(noblock)` cleanup loop). One byte,
+  because the pair on the normal path exists only so the Z80 can consume
+  the first as this transaction's final status — after an abort it has
+  already reported and gone, and a second byte would be read as the
+  first byte of the next response: the one-byte shift that surfaces as
+  Report R. `SAVE_TS` is exempt only because the dispatcher calls
+  `ACTIVATE_MQ()` after it and re-arms with its own `MQ.put(0x01)`;
+  **nothing runs after `LOAD_TS` returns.** Found via VERIFY, which
+  makes the Z80 abandon the transfer mid-block as soon as the comparison
+  fails — the R is correct, the J on everything after it was not.
 - **Don't pre-load `0x01` inside `ACTIVATE_MQ()`.** It's tempting (the
   pre-load chain expects a status byte ready in TX after the SM is
   re-activated), but `ACTIVATE_MQ` is called both at boot AND mid-

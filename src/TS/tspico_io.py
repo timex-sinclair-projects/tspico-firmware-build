@@ -390,6 +390,52 @@ def REWIND_ABORTED_SEARCH(TSP):
     return True
 
 
+def REARM_AFTER_LOAD_ABORT(MQ, TSP):
+    """Re-prime TX so the command AFTER an aborted LOAD isn't Report J.
+
+    LOAD_TS's normal exit ends with the V6 chain: two MQ.put(0x01) writes
+    (this iteration's final status, then the pre-load the NEXT command's
+    initial $0E status read consumes) followed by Y = READY. The abort
+    paths never reach it. The watchdog has just drained both FIFOs, so TX
+    comes back empty and Y is left wherever the partial Z80 OUTs dropped
+    it — the next command's status read finds nothing and the dispatcher
+    answers Report J.
+
+    docs/PROTOCOL.md §7 states the rule this restores: "if LOAD_TS returns
+    without writing the trailing two 0x01s, the next LOAD will hang or fail
+    with Report J. The pre-load chain is load-bearing; honor it in any new
+    handler." SAVE_TS gets away with the same shape only because the
+    dispatcher calls ACTIVATE_MQ() after it and re-arms with its own
+    MQ.put(0x01); nothing at all runs after LOAD_TS returns.
+
+    ONE 0x01 here, not two. The pair on the normal path exists because the
+    Z80 is still listening and consumes the first as this transaction's
+    final status. After an abort there is no Z80 waiting — it has already
+    reported and gone back to BASIC — so a second byte would sit in TX and
+    be read as the first byte of the next command's response. That is the
+    one-byte CRC shift that surfaces as Report R. Same shape as the
+    dispatcher's own body-read-timeout recovery in tspico.py: one pre-load,
+    then restore Y.
+
+    The symptom this fixes, from Ryan on #48: VERIFY makes the Z80 abandon
+    the transfer mid-block as soon as the comparison fails (a Program block
+    covers the variables area, so verifying a running program against its
+    own earlier SAVE always mismatches). Reporting R there is correct — but
+    every command after it answered J until something re-primed the chain,
+    which is why "a few tpi:nop calls would clear up the queue".
+
+    Call AFTER ABORT_TX, never before: ABORT_TX waits for core1 to finish
+    draining and re-activating the SM, and anything staged earlier is eaten
+    by the watchdog's pull(noblock) cleanup loop. (If ABORT_TX hit its 3s
+    bail-out, core1 may still be bouncing the SM and this write can be
+    lost — no worse than the nothing that was written before.)
+    """
+    MQ.put(0x01)                        # V6 pre-load for the next command
+    MQ.exec("mov(y, invert(null))")     # #14: Y → READY (PIO auto-busy)
+    LOG_ADD("INFO: LOAD aborted; TX re-armed for the next command.",
+            0, TSP.LOG_LEVEL)
+
+
 def ABORT_TX(log_level, what="LOAD_TS"):
     """Abort an in-flight LVM transaction.
 
@@ -926,6 +972,7 @@ def LOAD_TS(pre, MQ, TSP):
                     LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
                             "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
                 _close_if_local()
+                REARM_AFTER_LOAD_ABORT(MQ, TSP)
                 return MQ, TSP, log_entries
     else:
         # Data block: stream from file byte-by-byte (avoid allocating a
@@ -940,6 +987,7 @@ def LOAD_TS(pre, MQ, TSP):
                     LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
                             "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
                 _close_if_local()
+                REARM_AFTER_LOAD_ABORT(MQ, TSP)
                 return MQ, TSP, log_entries
 
     _close_if_local()
