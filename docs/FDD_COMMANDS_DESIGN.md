@@ -170,13 +170,20 @@ specifier strings `$142A` accepts, exactly as the Interface 1 does for `"m"`.
 
 | Region | Space | Use |
 |---|---|---|
-| EXROM `$22AE`–`$3FFF` | **7,506 bytes free** | all new Z80 code |
+| EXROM `$3000`–`$3FFF` | **4,096 bytes** (proposed base) | all new Z80 code |
+| EXROM `$22A1`–`$2FFF` | 3,423 bytes | left free for Gustavo |
 | HOME ROM | effectively none | 7 bytes of hook patches only (§2) |
 | RAM below `RAMTOP` | allocated at install | channel driver + per-channel buffers (§6) |
 
-Per [`rom-analysis/MEMORY_MAP.md`](rom-analysis/MEMORY_MAP.md), appending at
-`$22AE` displaces nothing and moves no existing address — the same
-append-and-retarget pattern the v1.5w fix used.
+Current EXROM code ends at `$22A0`; everything above is `$FF` filler. Rather than
+appending at the first free byte, the proposal (§9 item 7) is to base our code at
+**`$3000`**, which reserves a clean 4 KB region for the disk feature and leaves
+Gustavo the 3.4 KB immediately after his current code — his natural append point.
+4 KB is ample: the FDD 3000's entire disk OS fit in 4 KB, and we reuse Gustavo's
+TPI send path rather than carrying a low-level driver. Keep the base a single
+assembler `EQU` so it can move in one line. Per
+[`rom-analysis/MEMORY_MAP.md`](rom-analysis/MEMORY_MAP.md), nothing in that region
+is occupied, so this displaces no existing address.
 
 ---
 
@@ -321,11 +328,28 @@ This is the part with real design content.
 ### 6.1 A channel record, not statement interception
 
 The TS-2068 HOME ROM retains the full Sinclair stream/channel machinery
-**[verified]**: `CHANS` (`$5C4F`), `CURCHL` (`$5C51`) and `STRMS` (`$5C10`) are
-all live and referenced throughout the ROM. So the Interface 1 approach works:
-install a channel record carrying output and input routine addresses, point a
-`STRMS` entry at it, and stock `PRINT #`, `INPUT #`, `LIST #` and `INKEY$ #`
-route to us with no statement interception whatsoever.
+**[verified on a live boot]**: `CHANS` (`$5C4F`), `CURCHL` (`$5C51`) and `STRMS`
+(`$5C10`) are all live. So the Interface 1 approach works: install a channel
+record carrying output and input routine addresses, point a `STRMS` entry at it,
+and stock `PRINT #`, `INPUT #`, `LIST #` and `INKEY$ #` route to us with no
+statement interception whatsoever.
+
+What the live machine confirms (booted TS-PICO, ZEsarUX):
+
+- **A channel record is 5 bytes** — `out_addr(2), in_addr(2), letter(1)`. The
+  default `CHANS` at `$6840` holds K (`$0500`/`$0C0E`), S, R (`$0AE7`/`$11BF`) and
+  P, then `$80`. A disk channel is one of these records **extended** past the
+  letter with its buffer and handle state (the Interface-1 `M`-channel trick);
+  `PRINT #`/`INPUT #` call the out/in routine with `CURCHL` pointing at the record,
+  so the driver finds its buffer at a fixed offset past the header.
+- **Twelve user streams are free.** `STRMS` pre-opens 0–3 (K/S/S/P); streams
+  **4–15 are all closed and available**. So opening several disk channels at once
+  — one for read, one for write, and copying between them — is directly supported;
+  the real limit is Pico-side handles and buffer RAM, not the stream table.
+- **Read/write (`R`) mode is feasible.** The 2068 already carries a bidirectional
+  `R` channel; a disk channel whose out *and* in routines both point to our driver,
+  backed by a MicroPython `r+`/`w+` file, gives it. The one subtlety is flushing
+  and re-`seek`-ing on a read↔write direction change on the same handle.
 
 This is exactly where we part ways with the FDD 3000. Its command table has
 dedicated entries for the `PRINT` (`$F5`) and `INPUT` (`$EE`) tokens, each with an
@@ -344,6 +368,20 @@ poll of `$0F`. A few hundred bytes covers the driver and its buffers.
 channel specifier (`"d"`, by analogy with Interface 1's `"m"`), allocate a
 channel record and buffer, issue `TPI:OPEN`, and wire the `STRMS` entry.
 `CLOSE #` at `$139F` flushes, issues `TPI:CLOSE`, and reclaims.
+
+**Do it via `CHANS`, not `SYSCON`.** The TS-2068 has a *second*, Timex-specific
+channel mechanism — `SYSCON` (`$5CBC`) — and it is the "proper" extension point
+that stock `OPEN #`/`CLOSE #` consult for any non-K/S/P letter. It is fully
+reverse-engineered in [§10.7](#107-syscon-channel-format--reverse-engineered), and
+the conclusion there is that **`SYSCON` is a banked-device-driver ABI**: entries
+carry a bank byte and handlers invoked through the RAM dispatcher `$65D0` with
+subfunction codes (`$88` open, `$02` close), not plain out/in vectors. That is the
+right vehicle for a DOCK-cartridge disk and it unlocks the ≥128 system-stream
+space, but it is heavier than we need. So the primary path is **a direct `CHANS`
+channel record with a small hook on `OPEN #`'s letter dispatch** (Route B);
+`SYSCON` registration (Route A) stays documented as the fully-native alternative.
+Either way `SYSCON` is empty at boot (`$5EEA`, header + `$80`), so nothing there
+constrains us.
 
 ### 6.2 The load-bearing constraint: handshake latency
 
@@ -463,17 +501,36 @@ Ordered by how much they could change the design.
 3. **Block type and sub-op numbering** for §6.3 — needs Gustavo.
 4. **`MOVE` meaning.** Mapping it to `CD` is convenient but semantically odd;
    `MOVE "a" TO "b"` as rename is the better fit and leaves `CD` to a separate
-   statement or to `TPI:CD`.
+   statement or to `TPI:CD`. (The FDD 3000 is no guide — its own `MOVE` entry is
+   malformed, §10.3.)
 5. **Handle lifetime across resets.** What happens to open handles when the 2068
    is reset, the path changes, or a command aborts mid-transfer? The Pico must
    not leak file objects, and BASIC must not hold a stream pointing at a closed
-   handle.
-6. **Does direct-to-SD `SAVE`/`LOAD` belong in this work?** Saving a program to a
+   handle. Related: **`NEW`/`CLEAR` destroy appended `CHANS` channels** (and any
+   `SYSCON` entry we add), so disk channels must be re-established afterwards —
+   design the setup to be idempotent per-`OPEN`, or hook the `NEW` path.
+6. **`SYSCON` vs `CHANS` for the channel hook** — **RESOLVED toward `CHANS`
+   (Route B).** `SYSCON` is now fully reverse-engineered (§10.7) and turns out to
+   be a banked-driver ABI, heavier than we need; Route A stays documented as the
+   fully-native alternative. Reopen only if disk streams must work in banked
+   contexts or in the ≥128 system-stream space.
+7. **EXROM base address.** Proposal: assemble our code at **`$3000`**, giving us
+   `$3000–$3FFF` (4 KB — ample; the FDD 3000's *entire* disk OS fit in 4 KB) and
+   leaving Gustavo `$22A1–$2FFF` (3.4 KB, ~5× his current footprint). Keep the base
+   a single `EQU` so it is trivially movable; Gustavo may prefer we take the top
+   instead. Needs his sign-off.
+8. **AROS scope.** An AROS runs in the DOCK bank with its own ROM, so it cannot use
+   our EXROM handlers or the HOME stream layer; it *can* still drive the TS-PICO
+   ports directly (they are bank-independent) if it speaks TPI itself. The design
+   targets BASIC-under-HOME and promises AROS nothing beyond that — but our RAM
+   driver/buffers must not assume persistence across an AROS session, and vice
+   versa.
+9. **Does direct-to-SD `SAVE`/`LOAD` belong in this work?** Saving a program to a
    real file rather than into a mounted TAP is clearly wanted, but it changes the
    meaning of `SAVE`. An Interface-1-style `SAVE *"name"` or an explicit mode is
    less disruptive than redefining the bare statement. Out of scope here; flagged
    so the channel design doesn't accidentally foreclose it.
-7. ~~**The tail of the FDD 3000 command table is undecoded.**~~ **RESOLVED** — it
+10. ~~**The tail of the FDD 3000 command table is undecoded.**~~ **RESOLVED** — it
    decodes completely; see the full 20-entry table in
    [§10.3](#103-fdd-3000-command-table-fully-decoded). The apparent desync was a
    flaw in a descriptor-walking script, not the table. Two residual curiosities,
@@ -664,10 +721,13 @@ EOF
 
 | Value | Meaning | Source |
 |---|---|---|
-| `$22AE`–`$3FFF` | 7,506 free bytes in the EXROM | `rom-analysis/MEMORY_MAP.md` |
+| `$22A1`–`$3FFF` | free EXROM (last code byte `$22A0`); we base at `$3000` | §2, `rom-analysis/MEMORY_MAP.md` |
 | `$25D6` | HOME ROM disk-token hook site (**not** `$25D4`) | §10.2 |
 | `$142A` / `$139F` | HOME ROM `OPEN #` / `CLOSE #` | §10.2 |
-| `$5C4F` / `$5C51` / `$5C10` | `CHANS` / `CURCHL` / `STRMS` | HOME ROM, live |
+| `$5C4F` / `$5C51` / `$5C10` | `CHANS` / `CURCHL` / `STRMS` (streams 4–15 free) | live boot |
+| 5 bytes | channel record: `out(2) in(2) letter(1)` | live `CHANS` $6840 |
+| `$5CBC` → `$5EEA` | `SYSCON` ptr → table (empty at boot); banked-driver ABI | §10.7 |
+| `$65D0` / `$6499` | RAM banked-dispatch / `BANK_ENABLE` (SYSCON path) | §10.7 |
 | `$1A73` | TPI filename prefix parse (`TPI:` / `NET:`) | `rom-analysis/SYMBOLS.md` |
 | `$1BA0` | `'B'` pre-header builder | `rom-analysis/PROTOCOL_FROM_ROM.md` |
 | `$1840` | TPI BIOS jump table | `rom-analysis/PROTOCOL_FROM_ROM.md` |
@@ -778,3 +838,74 @@ Two further gotchas for anyone repeating this, on top of §10.5's:
 - **Arm that breakpoint after boot, not on the command line.** Passing
   `--set-breakpoint 1 PC=0058H` at launch hangs startup with a blank screen;
   setting the same breakpoint over ZRCP once the editor is up works fine.
+
+### 10.7 SYSCON channel format — reverse-engineered
+
+`SYSCON` (`$5CBC`) is the TS-2068's **system-configuration table**: the
+Timex-designed mechanism for registering channels beyond the built-in K/S/P.
+Reverse-engineered from the genuine HOME ROM's own consumers, cross-checked
+against a live boot and against the Zebra OS-64 reimplementation.
+
+**Live state on a booted TS-PICO:** `SYSCON = $5EEA` (in RAM, above the sysvars),
+and the table is **empty** — a 12-byte header then an immediate `$80` terminator
+(`FF 00 FF FF FF FF FF FF 00 FF FF FF 80 …`). Nothing registers extension
+channels today, so the mechanism is dormant and free for us to use.
+
+**How streams reach SYSCON.** The per-stream word in `STRMS` (`$5C10`) is an offset
+with a flag in its **high byte**:
+
+- `$0000` → stream closed.
+- high bit **clear** → offset into `CHANS`; the channel record is `CHANS+offset-1`
+  (the ordinary K/S/P/R path).
+- high bit **set** → offset into `SYSCON`; the record is `SYSCON+(offset & $7FFF)`.
+  Set at `$123F` (`CP $80` on the offset's high byte → `$1265`).
+
+**Table shape.** Header is **12 bytes**; entries begin at `SYSCON+12`; the scanner
+(`FIND_SYSCON`, `$1374`) strides **22 bytes** per entry and stops at a `+0 == $80`.
+Two header fields are used by the banked-output path: **header+2..3** is a pointer
+to a secondary bank-map table (`$17CF`), and **header+4** is a bank number fed to
+`BANK_ENABLE` (`$6499`) at `$17C0`.
+
+**Entry layout (type `$01`, a code-letter channel)** — the offsets each consumer
+actually reads:
+
+| Off | Field | Read by |
+|---|---|---|
+| `+0` | tag: `$01` = code channel, `$00` = empty slot, `$80` = end of table | scanner `$1374` (`CP $01`), close `$13DF` (`CP $00/$80`) |
+| `+1` | **bank** number for the handler | open `$1499` (`LD B`), close `$13E7` |
+| `+2` | **channel code letter** (what `OPEN #n,"X"` matches) | scanner `$1387` (`CP C`) |
+| `+3..4` | **OPEN** handler pointer | open `$149E–$14A0` |
+| `+5..6` | **CLOSE** handler pointer | close `$13EC–$13EE` |
+| `+7..21` | handler-private (further bank/pointer pairs for the other subfunctions) | — |
+
+**The catch: SYSCON handlers are banked device drivers, not plain vectors.** They
+are not called like a CHANS out/in routine. They are invoked through the RAM
+bank-dispatcher **`$65D0`** with the entry's `bank` (`+1`) and a **subfunction code**
+in `C`:
+
+| Subfunction | `C` | Call site |
+|---|---|---|
+| OPEN | `$88` | `$149A` |
+| CLOSE | `$02` | `$13FA` |
+
+So registering a disk channel in SYSCON means **conforming to the `$65D0`
+banked-driver ABI** — a bank byte, handlers reachable in that bank, and dispatch
+by subfunction — with `$6499`/`$65D0` (both RAM-resident, copied from EXROM at
+boot) in the loop. This is exactly how a DOCK-cartridge disk system would
+integrate, and it also unlocks the ≥128 "system console" stream space. It is
+**not** a simple "add a row of vectors" table.
+
+**Consequence for the design (resolves the Route A/B choice in §6.1).** Because
+SYSCON is a banked-driver ABI, the pragmatic path is **Route B — a direct `CHANS`
+channel record** (5-byte `out/in/letter` header, extended Interface-1-style with
+buffer + handle state), reached by a small hook on `OPEN #`'s letter dispatch, with
+out/in routines in a HOME-paged RAM driver. Route A (a real SYSCON entry) is now
+fully characterized and remains open as the "fully native" option — worth it only
+if we want disk streams to behave identically to a Timex peripheral, including in
+banked contexts, and are willing to implement the `$65D0` subfunction ABI.
+
+```bash
+# Re-derive the entry field offsets from the genuine ROM's own consumers.
+z80dasm -a -g 0 ROMs/GENUINE-2068-home.bin > /tmp/home.asm 2>/dev/null
+sed -n '/;1374/,/;139e/p; /;13d8/,/;1406/p; /;1488/,/;14c6/p' /tmp/home.asm
+```
