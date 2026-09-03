@@ -162,9 +162,11 @@ jobs:
 
           # SD card/: TAP files + help text the firmware reads from the
           # mounted SD card at runtime. Copy recursively so subfolders
-          # (e.g. SD card/TAP/test/, SD card/TAP/pico/) come along.
+          # (e.g. SD card/TAP/test/) come along, then pick up the loose
+          # programs that build to the card's root (readme.tap).
           cp -R "SD card/TAP/"   "${STAGE}/SD card/TAP/"
           cp -R "SD card/help/"  "${STAGE}/SD card/help/"
+          cp "SD card/"*.tap     "${STAGE}/SD card/"
 
           # Strip macOS metadata that may have ridden along.
           find "${STAGE}" -name ".DS_Store" -delete
@@ -216,8 +218,9 @@ jobs:
 
           | Bundle path | Goes to SD card path |
           |---|---|
-          | \`SD card/TAP/\`   | \`/TAP/\`   |
-          | \`SD card/help/\`  | \`/help/\`  |
+          | \`SD card/TAP/\`     | \`/TAP/\`     |
+          | \`SD card/help/\`    | \`/help/\`    |
+          | \`SD card/readme.tap\` | \`/readme.tap\` |
 
           ## Verify
 

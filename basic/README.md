@@ -26,7 +26,7 @@ Examples:
 
 ```
 basic/SD/TAP/test/factorial.bas  ->  SD card/TAP/test/factorial.tap   (SD: /TAP/test/factorial.tap)
-basic/SD/picotest.bas            ->  SD card/picotest.tap             (SD: /picotest.tap)
+basic/SD/readme.bas              ->  SD card/readme.tap               (SD: /readme.tap)
 basic/assets/nofile.bas          ->  src/assets/nofile.tap            (Pico: /assets/nofile.tap)
 ```
 
@@ -78,11 +78,40 @@ CI runs this automatically:
    With no directive, the default is `-n <basename>`.
 3. Build, and the `.tap` appears at the destination its folder maps to.
 
+## Programs with a CODE block: the `#! append` directive
+
+zmakebas only emits BASIC programs. A program that pulls in a machine-code
+block — `romupdate.bas` does `LOAD ""CODE 32600` — needs that CODE tape file
+sitting right behind it on the tape. Name it with a second directive:
+
+```
+#! zmakebas -n romupdate -a 1
+#! append romupdate_code.tap
+```
+
+The build tokenizes the program, then concatenates the named file onto the
+`.tap`. The path is relative to the `.bas`'s own directory, so the block lives
+beside its source — it's a **tracked binary input**, not a build output:
+
+```
+basic/assets/romupdate.bas         <- source (tracked)
+basic/assets/romupdate_code.tap    <- CODE block (tracked binary input)
+        │
+        └──build──▶  src/assets/romupdate.tap   (generated, gitignored)
+```
+
+Several `#! append` lines append in order. In a multi-program tape each
+program carries its own — a directive belongs to whichever `#! zmakebas` block
+it follows. A missing target fails the build rather than emitting a short TAP.
+
+Assembling those CODE blocks is out of scope for this pipeline; they're
+hand-built artifacts checked in as-is.
+
 ## Multiple programs in one TAP (multi-program tapes)
 
 A `.tap` is just a sequence of tape files laid end to end, so one delivery TAP
 can hold **several** BASIC programs in a fixed order (e.g. an autostarting menu
-followed by the programs it loads — the way Ryan's `picotest.tap` is built).
+followed by the programs it loads — the way `nofile.tap` is built).
 
 To author one, put **more than one** `#! zmakebas` directive in a single source
 file. Each directive starts a new program; the lines below it (up to the next
@@ -138,13 +167,12 @@ Add each program's source at the path the convention maps to its committed TAP:
 
 | Add source at | Builds to (the committed TAP it replaces) |
 |---|---|
-| `basic/assets/nofile.bas`          | `src/assets/nofile.tap`        |
 | `basic/assets/rompatch.bas`        | `src/assets/rompatch.tap`      |
-| `basic/assets/romupdate.bas`       | `src/assets/romupdate.tap`     |
-| `basic/assets/dckupdate.bas`       | `src/assets/dckupdate.tap`     |
 | `basic/SD/TAP/test/factorial.bas`  | `SD card/TAP/test/factorial.tap` |
 | `basic/SD/TAP/test/RND WORDS.bas`  | `SD card/TAP/test/RND WORDS.tap` |
-| `basic/SD/TAP/picotest.bas`        | `SD card/TAP/picotest.tap` — **multi-program** (14 tape files: `tspicotest` autostarting at line 1, then `test1`…`test12`); author as one source with a `#! zmakebas` directive per program (see [Multiple programs in one TAP](#multiple-programs-in-one-tap-multi-program-tapes)) |
+
+`rompatch.tap` is the last of the `src/assets/` set still committed as a
+binary; `nofile`, `romupdate` and `dckupdate` are now built from source here.
 
 To migrate one (do this **per program**, as its source lands):
 
@@ -155,12 +183,12 @@ To migrate one (do this **per program**, as its source lands):
 3. Stop tracking the binary and let the build own it:
 
    ```sh
-   git rm --cached "src/assets/nofile.tap"        # untrack, keep on disk
-   echo "/src/assets/nofile.tap" >> .gitignore    # ignore the now-generated file
+   git rm --cached "src/assets/rompatch.tap"        # untrack, keep on disk
+   echo "/src/assets/rompatch.tap" >> .gitignore    # ignore the now-generated file
    ```
 
-   Once **all four** `src/assets/*.tap` are BASIC-generated, a single
-   `/src/assets/*.tap` line can replace those four per-file entries.
+   Once `rompatch` lands too, a single `/src/assets/*.tap` line can replace
+   the per-file entries in `.gitignore`.
 
 Until a program is migrated this way, leave its committed `.tap` in place — the
 firmware build needs it.

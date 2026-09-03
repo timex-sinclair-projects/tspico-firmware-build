@@ -1,3 +1,5 @@
+#! zmakebas -n dckupdate -a 1
+#! append dckupdate_code.tap
 # Store previous RAMTOP in SEED
     4 POKE 23670,PEEK 23730: POKE 23671,PEEK 23731
     6 CLEAR 32599: LET demo=0: LET n=0
@@ -11,11 +13,11 @@
    40 IF NOT demo THEN GO SUB 1500
    44 INK fg: CLS : PRINT AT 1,0;
    48 IF NOT demo THEN SAVE "tpi:path"CODE 1,0
-   49 IF demo THEN PRINT '"Current mounted file is:"'"/TAP/demo.rom"
+   49 IF demo THEN PRINT '"Current mounted file is:"'"/TAP/demo.dck"
    50 PRINT AT 0,0; INK fg; PAPER bd;TAB 31;" "
    52 PRINT INK 5; PAPER 0;" TS-Pico ";
    54 PRINT INK 2;"\::"; INK 4;"\::"; INK 1; BRIGHT 1;"\::";
-   56 PRINT PAPER 7; INK 0;TAB 20;" ROM Loader "
+   56 PRINT PAPER 7; INK 0;TAB 20;" DCK Loader "
    58 PRINT PAPER bd;TAB 31;" "
    60 PLOT INK 0; PAPER bd;0,168: DRAW 255,0: DRAW 0,-9: DRAW -255,0
    70 PRINT #0; INK df;"    \* 2025 TS-Pico DevTeam      ";
@@ -33,26 +35,33 @@
   270 NEXT i
   280 SAVE "tpi:blkrcv"
   300 IF loc=1 THEN GO TO 400
-  310 PRINT ">Erasing slot ";sl;" of Flash";TAB 26;"...";
-  320 IF low=0 AND NOT demo THEN RANDOMIZE USR 32800
-  350 IF low=1 AND NOT demo THEN RANDOMIZE USR 32600
+  310 PRINT ">Erasing LOWER 32Kb block...";
+  320 IF NOT demo THEN RANDOMIZE USR 32800
+  330 PRINT "OK"
+  340 PRINT ">Erasing UPPER 32Kb block...";
+  350 IF NOT demo THEN RANDOMIZE USR 32600
   360 PRINT "OK"
-  400 PRINT ">Writing slot ";sl;" of ";l$;TAB 26;"...";
-  410 IF low=0 AND NOT demo THEN RANDOMIZE USR 32870
-  440 IF low=1 AND NOT demo THEN RANDOMIZE USR 32670
+  400 PRINT ">Writing LOWER 32Kb block...";
+  410 IF NOT demo THEN RANDOMIZE USR 32870
+  420 PRINT "OK"
+  430 PRINT ">Writing UPPER 32Kb block...";
+  440 IF NOT demo THEN RANDOMIZE USR 32670
   450 PRINT "OK"
   460 REM Need to wait some time after this before giving a tpi: command or it will fail.
   470 REM So do it after the INPUT below.
   500 PRINT 
-  530 PRINT "-Select this ROM with one of:"
-  540 PRINT " 1.SAVE ""tpi:boot""CODE ";loc;",";sl;":NEW"
-  550 PRINT " 2.SAVE ""tpi:dock""CODE ";loc;",";sl
-  560 PRINT " for changes to be effective."
-  580 INPUT "BOOT resets to 2,1 after boot."''"Boot to ROM ";(loc);",";(sl);" NOW (y/N)?";c$
-  590 PRINT '">Unmounting .rom file     ...";
+  510 PRINT "-To activate, set DOCK to slot,"
+  520 PRINT " then NEW, or press TS-reset."
+  530 PRINT "-To select this as DOCK use:"
+  540 PRINT "   SAVE ""tpi:dock""CODE ";loc;",";sl
+  550 PRINT " Select 2,0 for the default."
+  560 PRINT "-To skip cartridge load at boot,"
+  570 PRINT " press ""D"" during boot."
+  580 INPUT "Set DOCK to ";(loc);",";(sl);" and"'"RESTART NOW (y/N)?";c$
+  590 PRINT '">Unmounting .dck file    ...";
   600 IF NOT demo THEN SAVE "tpi:close"
   610 PRINT "OK"
-  620 IF c$="y" OR c$="Y" THEN LET n=1
+  620 IF c$="y" OR c$="Y" THEN LET n=1: GO TO 3000
   630 PRINT ">Restoring DOCK slot...";
   640 ON ERR GO TO 670
   650 IF NOT demo THEN SAVE "tpi:memdock"CODE 0,2: REM Restore prev setting
@@ -69,11 +78,13 @@
  1032 LET w$=""
  1034 IF loc=loc0 THEN LET w$="BOOT is using "+l$+" slot "+STR$ sl0
  1040 IF loc=2 THEN GO TO 1100
- 1050 INPUT "Remember, slots are 32K in size.";(w$)''"Select slot (0..14)? ";sl
+ 1050 INPUT "Remember, slots are 32K in size.";(w$)'"and cartridges use two slots."''"Select slot (even 0..14)? ";sl
  1060 IF sl<0 OR sl>14 THEN GO TO 1050
+ 1070 IF (sl/2)>INT (sl/2) THEN GO TO 1050
  1080 GO TO 1160
- 1100 INPUT "Remember, slots are 32K in size.";(w$)'"Slots 0..3 are for the system."''"Select slot (4..14)? ";sl
+ 1100 INPUT "Remember, slots are 32K in size,"'"and cartridges use two slots.   ";(w$)'"Slots 0..3 are for the system."''"Select slot (even 4..14)? ";sl
  1110 IF sl>14 THEN GO TO 1100
+ 1120 IF (sl/2)>INT (sl/2) THEN GO TO 1100
  1130 IF sl>=4 THEN GO TO 1160
  1140 INPUT " "; PAPER wb; BRIGHT 1; INK 9;"** WARNING!!! ** WARNING!!! **"' BRIGHT 0; PAPER bd;"Are you "; INK wb;"ABSOLUTELY SURE"; INK 9;" you wantto write to system area slot ";(sl);"?"'"This is HIGHLY "; INK wb;"NOT"; INK 9;" RECOMMENDED"''"Please confirm (y/N)? ";c$
  1150 IF c$<>"y" AND c$<>"Y" THEN GO TO 1000
@@ -83,13 +94,11 @@
  1180 IF c$<>"y" AND c$<>"Y" THEN GO TO 1000
  1200 PRINT " Slot  : ";sl;" "
  1210 PRINT 
- 1220 INPUT "SRAM data is lost at power off,"'"Flash data persists."''"Any changes (y/N)? ";c$
+ 1220 INPUT "SRAM data is lost at power off,"'"Flash data persists. DOCK resets"'"to config setting at power-on."''"Any changes (y/N)? ";c$
  1230 IF c$="y" OR c$="Y" THEN GO TO 1000
- 1240 PRINT ">Select slot ";sl;" of ";l$;TAB 26;"...";
+ 1240 PRINT ">Select slot ";sl;" of ";l$;TAB 25;"...";
  1250 IF NOT demo THEN SAVE "tpi:memdock"CODE loc,sl
  1260 PRINT "OK"
- 1270 LET low=0
- 1280 IF (sl/2)>INT (sl/2) THEN LET low=1
  1290 RETURN 
 # Get current BOOT slot
  1500 INK bg: CLS 
@@ -113,7 +122,6 @@
  3000 IF NOT n THEN GO TO 3100
 # Put RAMTOP back and then restart
  3010 PRINT ">Reboot (use reset if needed)...";
- 3020 IF NOT demo THEN SAVE "tpi:memboot"CODE loc,sl: NEW 
  3030 CLEAR ramtop: NEW 
 # Put RAMTOP back and then clear program
  3100 CLEAR ramtop
