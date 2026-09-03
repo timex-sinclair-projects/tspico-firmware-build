@@ -39,6 +39,19 @@
 # `-l` for labels, `-3` for ZX-Next, etc. — see tools/zmakebas/zmakebas.1).
 # Default if absent: `-n <basename>`.
 #
+# ── Appending a pre-built tape block: the #! append directive ──────────
+# zmakebas only emits BASIC programs, so a program that pulls in a machine-code
+# block (`LOAD ""CODE 32600`) needs that CODE tape file laid down right after
+# it on the tape. A second directive names one:
+#
+#   #! zmakebas -n romupdate -a 1
+#   #! append romupdate_code.tap
+#
+# The path is relative to the .bas's own directory (the block is a tracked
+# binary input, so it lives beside its source under basic/). Several `#! append`
+# lines append in order, and in a multi-program tape each program carries its
+# own — the directive belongs to whichever `#! zmakebas` block it follows.
+#
 set -euo pipefail
 
 VERBOSE=0
@@ -62,6 +75,41 @@ if [ ! -d "$SRC_DIR" ]; then
   echo "No basic/ directory at $SRC_DIR — nothing to build."
   exit 0
 fi
+
+# ── Emit one program to stdout ─────────────────────────────────────────
+# Tokenize one source (or one segment of a multi-program source), then
+# concatenate any tape blocks its `#! append` directives name.
+#   $1 the .bas (or segment) to tokenize
+#   $2 the directory relative `#! append` paths resolve against
+#   $3 the `-n` name to fall back on when there's no options directive
+emit_program() {
+  local seg="$1" srcdir="$2" defname="$3"
+  local opts blob
+
+  # Options directive (first match wins). POSIX bracket class (not \s) so this
+  # works on both BSD (local) and GNU (CI) sed.
+  opts="$(sed -n 's/^#![[:space:]]*zmakebas[[:space:]]*//p' "$seg" | head -n1)"
+  [ -z "$opts" ] && opts="-n $defname"
+  [ "$VERBOSE" = 1 ] && echo "    $ZMK $opts -o - \"$seg\"" >&2
+  # shellcheck disable=SC2086  # $opts is intentionally word-split
+  eval "\"\$ZMK\" $opts -o - \"\$seg\""
+
+  # `#! append <file>` — a pre-built tape block (a CODE header plus its data,
+  # which zmakebas can't produce) concatenated after this program.
+  while IFS= read -r blob; do
+    blob="${blob%"${blob##*[![:space:]]}"}"       # strip trailing whitespace
+    [ -z "$blob" ] && continue
+    case "$blob" in /*) ;; *) blob="$srcdir/$blob" ;; esac
+    if [ ! -f "$blob" ]; then
+      echo "ERROR: $seg: '#! append' target not found: $blob" >&2
+      exit 1
+    fi
+    [ "$VERBOSE" = 1 ] && echo "    append $blob" >&2
+    cat "$blob"
+  done < <(sed -n 's/^#![[:space:]]*append[[:space:]]*//p' "$seg")
+
+  return 0
+}
 
 # ── Compile each .bas ──────────────────────────────────────────────────
 # A source file normally holds ONE program -> one tape file. A file may also
@@ -105,33 +153,21 @@ while IFS= read -r -d '' bas; do
     ' "$bas"
     first=1
     for seg in "$tmp"/*.bas; do
-      # Per-program options ride on that program's own directive (first match).
-      sopts="$(sed -n 's/^#![[:space:]]*zmakebas[[:space:]]*//p' "$seg" | head -n1)"
-      [ -z "$sopts" ] && sopts="-n $name"
-      [ "$VERBOSE" = 1 ] && echo "    $ZMK $sopts -o - \"$seg\""
-      # shellcheck disable=SC2086  # $sopts is intentionally word-split
+      # Per-program options and `#! append` blocks ride on that program's own
+      # segment; emit_program picks them up.
       if [ "$first" = 1 ]; then
-        eval "\"\$ZMK\" $sopts -o - \"\$seg\"" > "$out"   # first program: create
+        emit_program "$seg" "$(dirname "$bas")" "$name" > "$out"   # first: create
         first=0
       else
-        eval "\"\$ZMK\" $sopts -o - \"\$seg\"" >> "$out"  # rest: append
+        emit_program "$seg" "$(dirname "$bas")" "$name" >> "$out"  # rest: append
       fi
       progs=$((progs + 1))
     done
     rm -rf "$tmp"
   else
-    # ── Single program: one tape file from the whole source (unchanged) ──
-    # Options directive (first match wins). POSIX bracket class (not \s) so this
-    # works on both BSD (local) and GNU (CI) sed.
-    opts="$(sed -n 's/^#![[:space:]]*zmakebas[[:space:]]*//p' "$bas" | head -n1)"
-    [ -z "$opts" ] && opts="-n $name"
-    if [ "$VERBOSE" = 1 ]; then
-      echo "==> $ZMK $opts -o \"$out\" \"$bas\""
-    else
-      echo "==> basic/$rel -> $disp"
-    fi
-    # shellcheck disable=SC2086  # $opts is intentionally word-split
-    eval "\"\$ZMK\" $opts -o \"\$out\" \"\$bas\""
+    # ── Single program: one tape file from the whole source ──
+    echo "==> basic/$rel -> $disp"
+    emit_program "$bas" "$(dirname "$bas")" "$name" > "$out"
     progs=$((progs + 1))
   fi
   files=$((files + 1))
