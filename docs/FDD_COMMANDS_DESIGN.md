@@ -111,8 +111,8 @@ one routine:
 25E1: C3 67 25  JP  $2567     ; RST $08 + error byte
 ```
 
-Timex loads **the token into `B` and then raises an error**. `B` is of no use to
-an error handler. That stub was staged as an extension point — almost certainly
+Timex loads **the token into `B` and then raises an error** — Report J,
+*Invalid I/O device* (§10.6). `B` is of no use to an error handler. That stub was staged as an extension point — almost certainly
 for the FDD 3000 — and it is **byte-identical in `GENUINE-2068-home.bin` and
 `TSPICO-11-home`**, so nothing in the TS-PICO ROM has claimed it.
 
@@ -417,8 +417,13 @@ Ordered by how much they could change the design.
    needs four one-byte patches alongside the `$25D6` hook. Measured in ZEsarUX;
    see [§2](#but-the-parameter-table-has-to-be-patched-too-verified-in-zesarux)
    and [§10.5](#105-how-the-zesarux-measurements-were-made).
-2. **What report does `$2567` raise?** It is `RST $08` with error byte `$12`.
-   Worth knowing, because it is what users see today and what we are replacing.
+2. ~~**What report does `$2567` raise?**~~ **RESOLVED — Report J, "Invalid I/O
+   device".** `RST $08` with error byte `$12` sets `ERR_NR = 18`, and the report
+   printed is entry `n+1` = 19 in the message table at `$0F67`. Confirmed two
+   ways: statically from the table, and by capturing `ERR_NR` in ZEsarUX
+   (`$25D6` → `$25E1` → `$2567` → `ERR_NR = 18`), on the patched image via bare
+   `CAT` and on the **unpatched** shipping ROM via `CAT "x",`. See
+   [§10.6](#106-what-the-stock-rom-reports-and-why-it-matters).
 3. **Block type and sub-op numbering** for §6.3 — needs Gustavo.
 4. **`MOVE` meaning.** Mapping it to `CD` is convenient but semantically odd;
    `MOVE "a" TO "b"` as rename is the better fit and leaves `CD` to a separate
@@ -571,6 +576,8 @@ EOF
 | `$1840` | TPI BIOS jump table | `rom-analysis/PROTOCOL_FROM_ROM.md` |
 | `$5DD3` / `$5DD5` | command-string address / length | `rom-analysis/PROTOCOL_FROM_ROM.md` |
 | `$1946`–`$1949` | syntax offset table bytes to patch | §2, §10.5 |
+| `$0F67` | report message table (29 entries) | §10.6 |
+| `$2567` = `CF 12` | stub's `RST 08` → Report J | §10.6 |
 | ~88 ms | cost of one `WF_NPH` poll | `tools/wf_nph_timing.py` |
 
 ### 10.5 How the ZEsarUX measurements were made
@@ -634,3 +641,43 @@ And on the same image with the four offset-table bytes patched per §2:
 | `CAT` | 2 | **2** | 0 | accepted |
 | `ERASE` | 2 | 0 | **2** | accepted |
 | `LOAD ""` (regression) | 2 | 0 | 0 | runs, unchanged |
+
+### 10.6 What the stock ROM reports, and why it matters
+
+The disk-command stub ends at `$2567` = `CF 12` — `RST $08` with error byte
+`$12`. The report table lives at `$0F67` (29 entries, TS-2068 adds *Missing
+LROS* at index 28), and `RST $08; DEFB n` prints entry **`n+1`**. So:
+
+| | |
+|---|---|
+| `DEFB $12` | `ERR_NR = 18` → index 19 → **Report J — Invalid I/O device** |
+| `DEFB $0B` | `ERR_NR = 11` → index 12 → *Nonsense in BASIC* (the classic Report C — sanity check on the `n+1` rule) |
+
+Verified on the machine, not just in the table: `ERR_NR` captured at the instant
+HOME `$0055` (`LD (IY+0),L`) stores it gives **18** both for bare `CAT` on the
+§2-patched image and for `CAT "x",` on the **unpatched** shipping ROM — so it is
+the stub's own report, not an artefact of the patch. Control: `RETURN` with no
+`GOSUB` captures 6 → Report 7 *RETURN without GOSUB*, as it must.
+
+**Why this matters for the design.** Report J is *already* what a TS-PICO comms
+failure produces — the ROM's internal "error 9" enters the dispatcher at
+`$1BF3` as `A=9` = status 10 = Report J (see
+[`rom-analysis/PROTOCOL_FROM_ROM.md`](rom-analysis/PROTOCOL_FROM_ROM.md#internal-error-9-surfaces-as-report-j-not-report-9)).
+So today "this machine has no disk commands" and "the Pico did not answer" are
+**the same report**, and a user cannot tell them apart. The new handlers should
+not inherit that: reserve J for a genuinely absent or unresponsive device and
+map handler-level failures onto the more specific reports the Pico already
+returns (F *Invalid file name*, Q *Parameter error*, 8 *End of file*, and so on
+— the status→report table is in `PROTOCOL_FROM_ROM.md`).
+
+Two further gotchas for anyone repeating this, on top of §10.5's:
+
+- **Error reports cannot be read off the screen.** The report is printed to the
+  lower screen and then wiped as soon as the editor redraws its input line, so
+  `get-ocr` almost always shows a bare `K`. Control: `RETURN` with no `GOSUB` —
+  a guaranteed instant error — also leaves no trace on screen. (`LOAD ""`
+  *appears* to persist only because it takes ~20 s to time out, so the OCR lands
+  inside the window.) Capture `ERR_NR` at `$0055` instead.
+- **Arm that breakpoint after boot, not on the command line.** Passing
+  `--set-breakpoint 1 PC=0058H` at launch hangs startup with a blank screen;
+  setting the same breakpoint over ZRCP once the editor is up works fine.
