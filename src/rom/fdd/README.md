@@ -28,6 +28,22 @@ Requires **sjasmplus** (`brew install sjasmplus`). The build:
 Outputs land in `build/` (git-ignored). Load `build/TSPICO-fdd.ROM` in ZEsarUX
 (`--romfile`) exactly like the shipping ROM.
 
+### When the base ROM changes
+
+`build-rom.py` refuses to patch a `src/rom/TSPICO.ROM` whose crc32 doesn't match
+its recorded `BASE_ROM_CRC` — so a merged ROM update stops the build until you
+re-base:
+
+```bash
+python3 tools/build-rom.py --rebase      # re-check patch sites, update the crc
+```
+
+`--rebase` confirms every patch's `before` bytes still match and the `$3000`
+module region is still free, then rewrites `BASE_ROM_CRC`. If an anchor moved it
+**refuses** (non-zero exit) and names the site, so a real conflict can't be
+papered over. It doesn't touch `ROMs/` or `romdiff.py`'s `EXPECT_CRC` — update
+those in the same pass if you keep the split halves in sync.
+
 ## Where things live
 
 - **Base address `$3000`** is set by `FDD_BASE` in `fddcmd.asm` and mirrored by

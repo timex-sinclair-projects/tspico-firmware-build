@@ -18,10 +18,13 @@ Usage:
     python3 tools/build-rom.py            # build build/TSPICO-fdd.ROM
     python3 tools/build-rom.py --verify   # build, then assert clean hunk set
     python3 tools/build-rom.py --keep     # keep intermediate .bin/.sym
+    python3 tools/build-rom.py --rebase   # after a new base ROM merges: re-check
+                                          # the patch sites and update BASE_ROM_CRC
 """
 
 import argparse
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -107,6 +110,74 @@ def file_offset(bank, addr):
     die(f"unknown bank {bank!r}")
 
 
+def rebase():
+    """Re-base onto the current src/rom/TSPICO.ROM after a new ROM merges.
+
+    Confirms every patch's `before` bytes still match and the module region is
+    still free, then rewrites BASE_ROM_CRC in this file. Refuses (non-zero exit)
+    if any anchor moved — a moved site means a patch is now wrong and needs a
+    human, not a silent crc bump.
+    """
+    if not BASE_ROM.exists():
+        die(f"base ROM missing: {BASE_ROM}")
+    base = BASE_ROM.read_bytes()
+    new_crc = zlib.crc32(base) & 0xFFFFFFFF
+    print(f"current base crc32 = {new_crc:#010x}  (recorded {BASE_ROM_CRC:#010x})")
+    if new_crc == BASE_ROM_CRC:
+        print("already current — nothing to do.")
+        return
+
+    problems = []
+
+    # every patch's `before` must still be present in the (unpatched) base
+    for p in PATCHES:
+        before_hex = p.get("before")
+        if not before_hex:
+            continue
+        before = bytes.fromhex(before_hex)
+        off = file_offset(p["bank"], p["addr"])
+        actual = bytes(base[off:off + len(before)])
+        state = "enabled" if p.get("enabled", True) else "staged "
+        if actual == before:
+            print(f"  ok    [{state}] {p['bank']} ${p['addr']:04X}: "
+                  f"{before.hex(' ')}")
+        else:
+            problems.append(
+                f"{p['bank']} ${p['addr']:04X} now holds {actual.hex(' ')}, "
+                f"patch {p['name']!r} expects {before.hex(' ')}")
+
+    # the module region we own ($3000..$3FFF of the EXROM) must still be free
+    mstart = file_offset("exrom", FDD_ORG)
+    mend = EXROM_FILE_BASE + 0x4000
+    if all(b == 0xFF for b in base[mstart:mend]):
+        print(f"  ok    module region EXROM ${FDD_ORG:04X}-$3FFF is free ($FF)")
+    else:
+        first = next(i for i in range(mstart, mend) if base[i] != 0xFF)
+        problems.append(
+            f"EXROM ${first - EXROM_FILE_BASE:04X} is no longer $FF — our "
+            f"${FDD_ORG:04X} region is occupied in the new base")
+
+    if problems:
+        print("\nrebase REFUSED — a patch anchor moved:")
+        for m in problems:
+            print("  !! " + m)
+        die("re-examine the patch manifest against the new ROM before rebasing.")
+
+    src = pathlib.Path(__file__)
+    text = src.read_text()
+    new_text, n = re.subn(
+        r"^BASE_ROM_CRC\s*=\s*0x[0-9a-fA-F]+",
+        f"BASE_ROM_CRC    = {new_crc:#010x}",
+        text, count=1, flags=re.M)
+    if n != 1:
+        die("could not locate the BASE_ROM_CRC assignment to update")
+    src.write_text(new_text)
+    print(f"\nrebased: BASE_ROM_CRC {BASE_ROM_CRC:#010x} -> {new_crc:#010x}")
+    print("All patch anchors survived the new base. Run --verify to rebuild.")
+    print("NOTE: if you keep the split halves in ROMs/ and romdiff.py's "
+          "EXPECT_CRC, update those too.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--verify", action="store_true",
@@ -114,7 +185,14 @@ def main():
                          "module region and the enabled patch sites")
     ap.add_argument("--keep", action="store_true",
                     help="keep intermediate fddcmd.bin/.sym next to the output")
+    ap.add_argument("--rebase", action="store_true",
+                    help="after a new base ROM merges: re-check the patch sites "
+                         "and rewrite BASE_ROM_CRC (no build)")
     args = ap.parse_args()
+
+    if args.rebase:
+        rebase()
+        return
 
     need_sjasmplus()
     if not BASE_ROM.exists():
