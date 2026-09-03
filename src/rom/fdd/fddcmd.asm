@@ -6,84 +6,189 @@
 ;
 ;  Entered from the HOME-ROM disk-token hook ($25D6, applied by the build
 ;  manifest) via the returning HOME->EXROM thunk at HOME $03FC: HL held the
-;  entry ($3000), so control lands here with the EXROM paged in and returns to
-;  the BASIC interpreter when we RET. Only the RUNTIME pass reaches here (the
-;  hook makes the syntax pass accept and return); B carries the BASIC token
-;  that was dispatched.
+;  entry ($3000), so control lands in FDD_DISPATCH with the EXROM paged and
+;  returns to the BASIC interpreter when we RET. B carries the BASIC token.
+;
+;  BASIC calls a command's routine TWICE — once to syntax-check the statement
+;  (FLAGS bit 7 clear) and once to execute it (bit 7 set). Both reach here. The
+;  syntax pass must consume the argument so the statement is accepted (otherwise
+;  a trailing "name" is "nonsense"); the runtime pass builds and sends.
+;
+;  Each handler builds a "tpi:<verb> <arg>" command string in the calculator
+;  stack workspace, pushes a string descriptor for it, and jumps to the shipping
+;  TPI send entry ($1A73) — reusing the whole SAVE "tpi:..." machinery (send +
+;  scrolling display of the Pico's response). A live response needs a Pico (the
+;  issue-#35 bridge or hardware); the bare emulator has nothing to answer.
 ;******************************************************************************
 
         DEVICE  NOSLOT64K
 
 FDD_BASE        EQU $3000          ; keep in sync with FDD_ORG in build-rom.py
 
-; --- HOME/EXROM entry points we call (see rom-analysis/) ----------------------
+; --- HOME/EXROM sysvars & entry points (see rom-analysis/) --------------------
+CH_ADD          EQU $5C5D          ; address of the next char in the BASIC line
+FLAGS           EQU $5C3B          ; bit 7 set = runtime, clear = syntax check
 TADDR           EQU $5C74          ; T-ADDR: low byte becomes the TPI TADDR field
-STKEND          EQU $5C65          ; calculator stack end pointer
-SAVE_EXEC_TPI   EQU $1A73          ; EXROM: parse TPI: prefix off the calc stack
-                                   ; and send the 'B' command block (+ display)
+STKEND          EQU $5C65          ; calculator stack end pointer (our scratch top)
+SAVE_EXEC_TPI   EQU $1A73          ; EXROM: parse "tpi:" off the calc stack, send
+
+CR              EQU $0D            ; BASIC end-of-line
+DQUOTE          EQU $22            ; string-literal quote
 
 ; --- BASIC tokens -------------------------------------------------------------
 TOK_CAT         EQU $CF
+TOK_FORMAT      EQU $D0
+TOK_MOVE        EQU $D1
+TOK_ERASE       EQU $D2
 
         ORG     FDD_BASE
 
 ;------------------------------------------------------------------------------
-; FDD_DISPATCH — runtime entry. B = dispatched token.
+; FDD_DISPATCH — entry for both the syntax-check and runtime pass. B = token.
 ;------------------------------------------------------------------------------
 FDD_DISPATCH:
+        ld      a,(FLAGS)          ; read FLAGS directly (IY is clobbered by the
+        bit     7,a                ; bank call). bit 7: set = runtime, clear = syntax
+        jr      nz,FDD_RUN
+        ; --- syntax pass: consume the (optional) quoted argument, accept ---
+        ld      de,(STKEND)        ; throwaway sink above the calc stack
+        call    COPY_ARG           ; advances CH_ADD past the argument
+        ret
+
+FDD_RUN:
         ld      a,b
         cp      TOK_CAT
         jr      z,FDD_CAT
-        ; FORMAT/MOVE/ERASE not yet implemented — return cleanly (no-op) so an
-        ; unhandled disk keyword does nothing rather than erroring or hanging.
-        ret
+        cp      TOK_FORMAT
+        jr      z,FDD_FORMAT
+        cp      TOK_MOVE
+        jr      z,FDD_MOVE
+        cp      TOK_ERASE
+        jr      z,FDD_ERASE
+        ret                        ; unknown token — no-op
 
         db      "FDDCMD",0         ; signature — build.py verifies this
 FDD_VERSION:
-        db      1
+        db      3
 
 ;------------------------------------------------------------------------------
-; FDD_CAT — "CAT" -> issue the equivalent of SAVE "tpi:dir".
-;
-; Reuses the shipping TPI command path: push a string descriptor for "tpi:dir"
-; onto the calculator stack, set T-ADDR to the SAVE op (0), then jump to
-; SAVE_EXEC_TPI, which reads the descriptor, recognises the "tpi:" prefix, sends
-; the 'B' command block, and handles the Pico's directory response (scrolling
-; display) exactly as SAVE "tpi:dir" does. It returns to BASIC on its own, so we
-; JP (not CALL).
-;
-; Verified in ZEsarUX: runtime CAT reaches here, the "tpi:dir" prefix parses as
-; a TPI command (device flag bit7 set), and the 10-byte 'B' pre-header goes out
-; port $0E. A live directory listing needs a responding Pico (the issue-#35
-; bridge or real hardware); the bare emulator has nothing to answer.
+; Command handlers.  HL -> NUL-terminated "tpi:<verb> " prefix.
+;   CAT takes no argument (fixed "tpi:dir").
+;   FORMAT/MOVE/ERASE append the quoted argument from the BASIC line.
 ;------------------------------------------------------------------------------
 FDD_CAT:
-        ; T-ADDR := 0  (TADDR field = SAVE)
-        xor     a
-        ld      (TADDR),a
-        ld      (TADDR+1),a
+        ld      hl,CMD_DIR
+        jr      FDD_SEND           ; no argument
+FDD_FORMAT:
+        ld      hl,CMD_NEWTAP
+        jr      FDD_SEND_ARG
+FDD_MOVE:
+        ld      hl,CMD_CD
+        jr      FDD_SEND_ARG
+FDD_ERASE:
+        ld      hl,CMD_RM
+        jr      FDD_SEND_ARG
 
-        ; push a 5-byte string descriptor {00, addr, len} onto the calc stack:
-        ;   the sent string lives in EXROM (read during the send, EXROM paged).
-        ld      hl,(STKEND)
-        ld      (hl),0             ; string marker
+;------------------------------------------------------------------------------
+; FDD_SEND_ARG — build "<prefix><quoted arg from the line>" and send.
+; FDD_SEND     — build "<prefix>" alone (no argument) and send.
+;
+; The command string is assembled in the calculator-stack workspace starting at
+; STKEND; a 5-byte string descriptor is pushed above it and STKEND advanced, so
+; SAVE_EXEC_TPI reads it exactly like a SAVE "tpi:..." filename.
+;------------------------------------------------------------------------------
+FDD_SEND_ARG:
+        ld      de,(STKEND)        ; DE = build ptr = start of command string
+        push    de                 ; [start]
+        call    COPY_CSTR          ; copy the NUL-terminated prefix (HL) to (DE)
+        call    COPY_ARG           ; append the quoted line argument
+        jr      FDD_SEND_TAIL
+FDD_SEND:
+        ld      de,(STKEND)
+        push    de                 ; [start]
+        call    COPY_CSTR          ; prefix only
+
+FDD_SEND_TAIL:
+        ; DE -> end of the command string; [start] on stack. Build descriptor.
+        pop     hl                 ; HL = start
+        ld      a,e
+        sub     l
+        ld      c,a
+        ld      a,d
+        sbc     a,h
+        ld      b,a                ; BC = length = end - start
+        ex      de,hl              ; HL = end (descriptor position), DE = start
+        ld      (hl),0             ; marker
         inc     hl
-        ld      de,CAT_CMD
         ld      (hl),e             ; addr low
         inc     hl
         ld      (hl),d             ; addr high
         inc     hl
-        ld      (hl),CAT_CMD_LEN   ; len low
+        ld      (hl),c             ; len low
         inc     hl
-        ld      (hl),0             ; len high
+        ld      (hl),b             ; len high
         inc     hl
-        ld      (STKEND),hl        ; STKEND += 5
+        ld      (STKEND),hl        ; STKEND past the descriptor
 
+        xor     a                  ; T-ADDR := 0 (TADDR field = SAVE)
+        ld      (TADDR),a
+        ld      (TADDR+1),a
         jp      SAVE_EXEC_TPI
 
-CAT_CMD:
-        db      "tpi:dir"
-CAT_CMD_LEN     EQU $-CAT_CMD
+;------------------------------------------------------------------------------
+; COPY_CSTR — copy the NUL-terminated string at (HL) to (DE). Stops on NUL
+; (not copied). Advances HL past the NUL and DE past the last copied byte.
+;------------------------------------------------------------------------------
+COPY_CSTR:
+        ld      a,(hl)
+        inc     hl
+        and     a
+        ret     z
+        ld      (de),a
+        inc     de
+        jr      COPY_CSTR
+
+;------------------------------------------------------------------------------
+; COPY_ARG — copy a "..." literal argument from the BASIC line into (DE), and
+; advance CH_ADD past it so the statement parses/continues cleanly. Scans from
+; CH_ADD for the opening quote (skipping the token/spaces); if there is no quote
+; before end-of-statement, copies nothing. On return DE is past the copied
+; characters and (CH_ADD) points just after the argument.
+;
+; Runs on both passes: at runtime DE is the real command buffer; on the syntax
+; pass DE is throwaway scratch above the calc stack and only the CH_ADD advance
+; matters.
+;------------------------------------------------------------------------------
+COPY_ARG:
+        ld      hl,(CH_ADD)
+.find:  ld      a,(hl)
+        cp      CR
+        jr      z,.end             ; end of statement, no argument
+        cp      ':'
+        jr      z,.end
+        inc     hl
+        cp      DQUOTE
+        jr      nz,.find
+.copy:  ld      a,(hl)
+        cp      DQUOTE
+        jr      z,.close
+        cp      CR
+        jr      z,.end
+        inc     hl
+        ld      (de),a
+        inc     de
+        jr      .copy
+.close: inc     hl                 ; step past the closing quote
+.end:   ld      (CH_ADD),hl
+        ret
+
+;------------------------------------------------------------------------------
+; TPI command prefixes (NUL-terminated). Verbs map to existing Pico commands.
+;------------------------------------------------------------------------------
+CMD_DIR:    db "tpi:dir",0
+CMD_NEWTAP: db "tpi:newtap ",0
+CMD_CD:     db "tpi:cd ",0
+CMD_RM:     db "tpi:rm ",0
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE

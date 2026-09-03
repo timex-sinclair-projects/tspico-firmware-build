@@ -62,13 +62,15 @@ PATCHES = [
         name="disk-token hook: $25D6 stub -> EXROM FDD_DISPATCH",
         bank="home", addr=0x25D6,
         before="cd 89 28 20 06 cd 69 25 cd 44 1b c3 67 25",
-        after="fd cb 01 7e 20 01 c9 21 00 30 c3 fc 03 00",
+        after="21 00 30 c3 fc 03 00 00 00 00 00 00 00 00",
         note="Repurpose the 14-byte disk-command stub ($25D6-$25E3, which all of "
-             "CAT/FORMAT/MOVE/ERASE fall into). Syntax pass (BIT 7,(IY+1) clear) "
-             "returns to accept the statement; runtime pass loads HL=$3000 and "
-             "JP $03FC — the returning HOME->EXROM thunk — entering FDD_DISPATCH "
-             "with the EXROM paged and B = the token. Nothing external jumps into "
-             "this region except the command fall-throughs; $2567 is untouched.",
+             "CAT/FORMAT/MOVE/ERASE fall into) as LD HL,$3000 / JP $03FC — the "
+             "returning HOME->EXROM thunk — entering FDD_DISPATCH with the EXROM "
+             "paged and B = the token, on BOTH the syntax and runtime pass. The "
+             "module tests BIT 7,(IY+1): syntax pass consumes the argument and "
+             "returns to accept the statement; runtime pass builds and sends the "
+             "TPI command. Nothing external jumps into this region except the "
+             "command fall-throughs; $2567 is untouched.",
     ),
 ]
 

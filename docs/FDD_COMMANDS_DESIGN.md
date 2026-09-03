@@ -229,14 +229,35 @@ repurposed: the syntax pass returns to accept the statement; the runtime pass do
 ZEsarUX: runtime `CAT` reaches `$3000` with `B = $CF`, `BC` survives the bank call,
 and control returns to BASIC with the machine alive.
 
-**`CAT` is implemented** (`src/rom/fdd/fddcmd.asm`, `FDD_CAT`). It synthesises the
-equivalent of `SAVE "tpi:dir"` — pushes a `"tpi:dir"` string descriptor onto the
-calculator stack, sets `T-ADDR = 0`, and jumps to the shipping TPI send entry
-(`$1A73`). Verified in ZEsarUX: the `"tpi:"` prefix parses as a TPI command (device
-flag bit 7 set) and the 10-byte `'B'` pre-header goes out port `$0E`. A live
-directory listing needs a responding Pico (the issue-#35 bridge or hardware); the
-bare emulator has nothing to answer. FORMAT/MOVE/ERASE are dispatched by token but
-currently return as clean no-ops.
+**All four commands are implemented** (`src/rom/fdd/fddcmd.asm`). Each builds a
+`tpi:<verb> <arg>` command string in the calculator-stack workspace, pushes a
+string descriptor for it, sets `T-ADDR = 0`, and jumps to the shipping TPI send
+entry (`$1A73`) — reusing the entire `SAVE "tpi:..."` machinery (send + scrolling
+display of the response):
+
+| Statement | TPI command built | Pico verb |
+|---|---|---|
+| `CAT` | `tpi:dir` | `DIR` |
+| `ERASE "name"` | `tpi:rm name` | `RM` |
+| `FORMAT "name"` | `tpi:newtap name` | `NEWTAP` |
+| `MOVE "path"` | `tpi:cd path` | `CD` |
+
+The verbs map to Pico commands that exist today. The argument is read from the
+BASIC line and appended after the verb. Both the syntax-check and runtime pass
+reach the module (via the always-transfer hook, §2); the module tests FLAGS bit 7
+(read directly — the bank call clobbers `IY`): the syntax pass consumes the
+argument so the statement is accepted, the runtime pass builds and sends.
+
+Verified in ZEsarUX, each command producing the exact string above (`CAT` → `tpi:dir`,
+`ERASE "AB"` → `tpi:rm AB`, `FORMAT "X"` → `tpi:newtap X`, `MOVE "Y"` → `tpi:cd Y`),
+with the `'B'` pre-header going out port `$0E`. A live response needs a responding
+Pico (the issue-#35 bridge or hardware); the bare emulator has nothing to answer.
+
+Open polish items: `MOVE` currently means change-directory (single arg) rather than
+the rename in §9 item 4 — that needs a Pico `move` verb; and `ERASE` maps to `rm`,
+which has its own confirmation prompt. The argument is taken as a string *literal*
+from the line; a string *expression* (`ERASE a$`) would need the ROM's evaluator
+(class `$0A`) instead of the line scan.
 
 Proposed mapping (syntax is ours to choose; this is a starting point):
 
