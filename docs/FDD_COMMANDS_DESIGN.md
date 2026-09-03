@@ -437,10 +437,13 @@ Ordered by how much they could change the design.
    meaning of `SAVE`. An Interface-1-style `SAVE *"name"` or an explicit mode is
    less disruptive than redefining the bare statement. Out of scope here; flagged
    so the channel design doesn't accidentally foreclose it.
-7. **The tail of the FDD 3000 command table is undecoded** (§10.3). At least one
-   parse descriptor consumes inline operands in a way that isn't pinned down, so
-   the walk desynchronises partway through. Nothing in this design depends on it;
-   noted so nobody re-derives it and assumes the earlier rows are wrong.
+7. ~~**The tail of the FDD 3000 command table is undecoded.**~~ **RESOLVED** — it
+   decodes completely; see the full 20-entry table in
+   [§10.3](#103-fdd-3000-command-table-fully-decoded). The apparent desync was a
+   flaw in a descriptor-walking script, not the table. Two residual curiosities,
+   neither affecting this design: two bodies (RESTORE, MOVE) are malformed
+   (`$04`→`$06` substitution), and eight entries carry standard-BASIC token values
+   that read as reused opcodes rather than disk verbs.
 
 ---
 
@@ -506,14 +509,16 @@ for f in ('ROMs/GENUINE-2068-home.bin', 'ROMs/TSPICO-11-home'):
 EOF
 ```
 
-### 10.3 FDD 3000 command table, decoded
+### 10.3 FDD 3000 command table, fully decoded
 
-Corrects the annotations in `fdd3000_annotated.asm`. Entry grammar:
-`token, descriptor..., $FE, stack_adjust, exec_lo, exec_hi`; descriptors index
-the parse-function table at `$00DA` by *byte offset*; descriptors `$04` and `$06`
-consume an inline NUL-terminated character list from the table.
+Corrects the annotations in `fdd3000_annotated.asm`. **Entry grammar:**
+`token, descriptor..., $FE, stack_adjust, exec_lo, exec_hi`. The ROM enumerates
+entries purely by scanning to the next `$FE` and skipping 3 bytes (`TABLE_SKIP`,
+`$007D`) — it does *not* parse the descriptors to find boundaries — so that scan
+is the ground truth for where each entry begins. Descriptors index the
+parse-function table at `$00DA` by *byte offset*.
 
-Parse-function table (`$00DA`, read from the binary, not from the listing):
+Parse-function table (`$00DA`, read from the binary):
 
 | Off | → | | Off | → | | Off | → | | Off | → |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -522,44 +527,100 @@ Parse-function table (`$00DA`, read from the binary, not from the listing):
 | `$04` | `$0129` | | `$0C` | `$01C5` | | `$14` | `$01F0` | | `$1C` | `$0867` |
 | `$06` | `$0158` | | `$0E` | `$01D0` | | `$16` | `$01F7` | | `$1E` | `$079E` |
 
-The first six entries decode cleanly, and their exec addresses all land on
-identifiable handlers:
+**Exactly one descriptor consumes inline table bytes: `$04` (`$0129`,
+`PARSE_CHAR_PARAM`).** It reads the caller's saved table pointer off the stack
+(`LD HL,0; ADD HL,SP`), matches the input character against the NUL-terminated
+list that follows the `$04` byte, and writes the advanced pointer back so the
+parse loop resumes past the list. This is the *only* `ADD HL,SP` in the whole
+parse region, and `$0158` (`$06`) in particular is a straight expression/`LINE`
+parse (`CALL $025E; JR Z,…; CALL $0219; CALL $0222; …`) that never touches the
+stack. So the earlier claim that `$06` also consumes inline was wrong.
 
-| Token | Keyword | Descriptors | Exec |
-|---|---|---|---|
-| `$CF` | CAT | `0C` | `$0715` |
-| `$EF` | LOAD | `1A` | `$0C08` |
-| `$F8` | SAVE | `18` | `$09C9` |
-| `$D3` | OPEN # | `00 12 02 12 04+"IOAR"` `06` | `$08CE` |
-| `$D4` | CLOSE # | `0A` | `$08BE` |
-| **`$F5`** | **PRINT** | `04+"#"` `00 08` | `$0744` |
-| **`$EE`** | **INPUT** | `04+"#"` `00 12 1E` | — |
+The complete table — 20 entries, ending exactly at `$0304 = $FF`:
 
-Two things worth carrying away, and they are the only two this design depends on:
+| Token | Keyword | Off | Descriptor body | Exec |
+|---|---|---|---|---|
+| `$CF` | CAT | `$0264` | `0C` | `$0715` |
+| `$EF` | LOAD | `$026A` | `1A` | `$0C08` |
+| `$F8` | SAVE | `$0270` | `18` | `$09C9` |
+| `$D3` | OPEN # | `$0276` | `00 12 02 12 04+"IOAR" 06` | `$08CE` |
+| `$D4` | CLOSE # | `$0286` | `0A` | `$08BE` |
+| `$F5` | PRINT | `$028C` | `04+"#" 00 08` | `$0744` |
+| `$EE` | INPUT | `$0296` | `04+"#" 00 12 1E` | `$0000` |
+| `$F0` | LIST | `$02A1` | `1C` | `$0871` |
+| `$E5` | RESTORE | `$02A7` | `06 ⚠23 00 00` | `$0848` |
+| `$D5` | MERGE | `$02B0` | `02` | `$0C76` |
+| `$EC` | GO TO | `$02B6` | `02 14` | `$0839` |
+| `$ED` | GO SUB | `$02BD` | `0C 16` | `$0829` |
+| `$FC` | DRAW | `$02C4` | *(none)* | `$0A43` |
+| `$D0` | FORMAT | `$02C9` | `02 10 16` | `$0E6D` |
+| `$D2` | ERASE | `$02D1` | `02 0E` | `$08A6` |
+| `$F1` | LET | `$02D8` | `02 04+"¬" 02` | `$094E` |
+| `$D1` | MOVE | `$02E2` | `02 06 ⚠AC 00 02` | `$0916` |
+| `$E9` | DIM | `$02EC` | `02` | `$08AF` |
+| `$AB` | ATTR | `$02F2` | `02 04+"PUVI"` | `$0E89` |
+| `$F3` | NEXT | `$02FE` | `0C` | `$0853` |
 
-- The **SAVE and LOAD parse/exec pairs are swapped** relative to the annotated
-  listing. `$F8` SAVE uses parse `$0952` / exec `$09C9`; `$EF` LOAD uses parse
-  `$0B7F` / exec `$0C08`. The listing has it the other way round.
-- **`PRINT` and `INPUT` are in the table**, each with an inline `"#"` character
-  list — the FDD 3000 re-implements the statements rather than installing a
-  channel record. This is the design decision §6.1 rejects.
+Four things to carry away:
 
-**The tail of the table does not decode under this grammar.** From the `INPUT`
-row onward the walk produces impossible descriptor values (`$23`, `$AC`) and one
-exec address of `$0000`, which means at least one further descriptor consumes
-inline operands the way `$04` does. `$06` was the obvious candidate and is ruled
-out — its routine at `$0158` never touches the saved table pointer (it is
-`CALL $025E; JR Z,$017B; CALL $0219; CALL $0222; ...`, a straight parse). The
-remaining suspect is `$1E` → `$079E`. Resolving this is FDD archaeology, not a
-prerequisite for anything here, so it is left open.
+- **The decode is complete.** The earlier "tail does not decode" was a flaw in a
+  descriptor-walking script, not in the table. The ROM's own scan-to-`$FE`
+  boundary logic lands on a valid token every time and terminates exactly at the
+  `$FF`. 18 of 20 descriptor bodies are also clean descriptor streams.
 
+- **SAVE and LOAD parse/exec pairs are swapped** relative to the annotated
+  listing: `$F8` SAVE = parse `$0952` / exec `$09C9`; `$EF` LOAD = parse `$0B7F`
+  / exec `$0C08`.
+
+- **`PRINT` and `INPUT` are in the table**, each with an inline `"#"` list — the
+  FDD 3000 re-implements the statements rather than installing a channel record.
+  This is the design decision §6.1 rejects. (INPUT's exec is `$0000`; its `$1E` →
+  `$079E` parser takes over and the entry's exec field is never read — dead
+  filler, not a decode failure.)
+
+- **Two bodies are malformed (⚠): RESTORE and MOVE.** Each carries a `$06` exactly
+  where the structurally-parallel entry carries `$04`, followed by the identical
+  NUL-terminated list:
+
+  | | body | vs | |
+  |---|---|---|---|
+  | PRINT / INPUT | `04 23 00` = `04+"#"` | ↔ | RESTORE `06 23 00` |
+  | LET | `04 AC 00` = `04+"¬"` | ↔ | MOVE `02 06 AC 00 02` |
+
+  Since `$06` provably does not consume inline, the byte after it (`$23` / `$AC`)
+  would be read as a descriptor and mis-index the parse table. In practice
+  `$0158`'s semicolon check error-exits (`JP NZ,$043E`) before the bad byte is
+  reached for most inputs, so the defect is usually masked rather than fatal — but
+  it is a genuine anomaly in the ROM data (a `$04`→`$06` substitution), not a gap
+  in this decode. That `MOVE`, a headline disk command, is one of the two is
+  itself notable.
+
+**On the keyword-vs-function mismatch.** The table matches raw TS-2068 BASIC token
+*values*, and the intercept fires on `‹token› *` (`CP '*'` at `$00A3`). Eight of
+the twenty (RESTORE, GO TO, GO SUB, DRAW, DIM, ATTR, NEXT, LET) are not plausible
+disk verbs, and their exec targets do not correspond to the keyword's meaning
+(e.g. GO SUB → `$0829`, ATTR → `$0E89` = the P/U/V/I drive-select handler). The
+FDD 3000 appears to have reused convenient token byte-values as opcodes for its
+own Interface-1-derived command set rather than as their BASIC keywords.
+Identifying each one's intent is FDD archaeology and is **not** a prerequisite for
+this design — noted only so nobody re-derives it and assumes the decode is wrong.
 
 ```bash
 python3 - <<'EOF'
 p = "TS2068 Ref Library/3000_2068.ROM"   # adjust to your reference library
 b = open(p, 'rb').read()
-print(' '.join(f'{x:02X}' for x in b[0x0264:0x0305]))   # command table
-print(' '.join(f'{x:02X}' for x in b[0x00DA:0x00FA]))   # parse-function table
+TOK = {0xCF:'CAT',0xD0:'FORMAT',0xD1:'MOVE',0xD2:'ERASE',0xD3:'OPEN#',0xD4:'CLOSE#',
+       0xD5:'MERGE',0xEE:'INPUT',0xEF:'LOAD',0xF0:'LIST',0xF1:'LET',0xF3:'NEXT',
+       0xF5:'PRINT',0xF8:'SAVE',0xFC:'DRAW',0xE5:'RESTORE',0xE9:'DIM',0xEC:'GOTO',
+       0xED:'GOSUB',0xAB:'ATTR'}
+p2 = 0x0264
+while b[p2] != 0xFF:                        # exact TABLE_SKIP: scan to $FE, +3
+    tok = b[p2]; s = p2 + 1
+    while b[s] != 0xFE: s += 1
+    ex = b[s+2] | (b[s+3] << 8)
+    print("$%04X %-8s exec=$%04X body=%s" % (
+        p2, TOK.get(tok,'?'), ex, ' '.join('%02X'%x for x in b[p2+1:s])))
+    p2 = s + 4
 EOF
 ```
 
