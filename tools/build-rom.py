@@ -58,15 +58,17 @@ PATCHES = [
              "(string,comma) prefix to the 'class $05 + routine' pair, so a bare "
              "keyword is accepted. Verified in ZEsarUX; see design doc §2/§10.5.",
     ),
-    # --- planned, not yet applied -------------------------------------------
     dict(
-        name="disk-token hook: redirect $25D6 into the EXROM module",
+        name="disk-token hook: $25D6 stub -> EXROM FDD_DISPATCH",
         bank="home", addr=0x25D6,
-        before="cd 89 28", after=None,   # filled once the HOME->EXROM thunk stub exists
-        note="Replace `CALL $2889` with `CALL <home thunk stub>` that banks in "
-             "the EXROM and enters FDD_DISPATCH with the token in B. Needs the "
-             "small HOME-resident thunk (design doc §2); staged until then.",
-        enabled=False,
+        before="cd 89 28 20 06 cd 69 25 cd 44 1b c3 67 25",
+        after="fd cb 01 7e 20 01 c9 21 00 30 c3 fc 03 00",
+        note="Repurpose the 14-byte disk-command stub ($25D6-$25E3, which all of "
+             "CAT/FORMAT/MOVE/ERASE fall into). Syntax pass (BIT 7,(IY+1) clear) "
+             "returns to accept the statement; runtime pass loads HL=$3000 and "
+             "JP $03FC — the returning HOME->EXROM thunk — entering FDD_DISPATCH "
+             "with the EXROM paged and B = the token. Nothing external jumps into "
+             "this region except the command fall-throughs; $2567 is untouched.",
     ),
 ]
 

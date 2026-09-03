@@ -220,14 +220,23 @@ Phase 3's bulk transfers need anything new.
 Scope: `CAT`, `ERASE`, `MOVE`, `FORMAT` become statements that build a `TPI:`
 command string and hand it to the existing send path.
 
-**Prerequisite, now verified.** The ROM-side hook is the **7-byte** patch from §2
-— 3 bytes at `$25D6` plus 4 bytes in the syntax offset table (`$1946`–`$1949`) so
-a bare keyword reaches the routine at all. Both halves are confirmed in ZEsarUX:
-without the offset-table bytes, `CAT` is a syntax error that never reaches the
-stub; with them, bare `CAT` and bare `ERASE` are accepted and `LOAD ""` is
-unaffected (§2, §10.5). So Phase 1 no longer carries any risk in the hook
-*mechanism* — the remaining unknowns are the build pipeline (§8) and the Pico
-handlers.
+**Prerequisite, done and verified.** The ROM-side hook is wired. The 4-byte
+syntax-offset patch (`$1946`–`$1949`) makes a bare keyword reach the routine, and
+the `$25D6` stub (14 bytes, which all of CAT/FORMAT/MOVE/ERASE fall into) is
+repurposed: the syntax pass returns to accept the statement; the runtime pass does
+`LD HL,$3000` / `JP $03FC` — the returning HOME→EXROM thunk — landing in
+`FDD_DISPATCH` (our module) with the EXROM paged and `B` = the token. Confirmed in
+ZEsarUX: runtime `CAT` reaches `$3000` with `B = $CF`, `BC` survives the bank call,
+and control returns to BASIC with the machine alive.
+
+**`CAT` is implemented** (`src/rom/fdd/fddcmd.asm`, `FDD_CAT`). It synthesises the
+equivalent of `SAVE "tpi:dir"` — pushes a `"tpi:dir"` string descriptor onto the
+calculator stack, sets `T-ADDR = 0`, and jumps to the shipping TPI send entry
+(`$1A73`). Verified in ZEsarUX: the `"tpi:"` prefix parses as a TPI command (device
+flag bit 7 set) and the 10-byte `'B'` pre-header goes out port `$0E`. A live
+directory listing needs a responding Pico (the issue-#35 bridge or hardware); the
+bare emulator has nothing to answer. FORMAT/MOVE/ERASE are dispatched by token but
+currently return as clean no-ops.
 
 Proposed mapping (syntax is ours to choose; this is a starting point):
 
