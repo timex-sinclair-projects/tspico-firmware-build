@@ -3767,11 +3767,9 @@ def ZX48(pre, cmd):                                                           # 
     M.append(nl)
     M.append('Use "OUT 244,3" to switch to the')
     M.append('Spectrum ROM. To return to Timex')
-    M.append('mode, do OUT 244,0 then press the')
-    M.append('TS-Pico Reset button. (OUT 10,100')
-    M.append('does not currently reach the Pico')
-    M.append('via the bus protocol; reset is')
-    M.append('required to exit ZX48 mode.)')
+    M.append('mode, do OUT 244,0 then OUT 14,14')
+    M.append('to exit ZX48 mode and resume normal')
+    M.append('TS-Pico operation.')
     M.append(nl)
     msg = "".join(M)
 
@@ -3901,6 +3899,45 @@ def PROCESS_ASM(pre):                                                           
     return
 
 
+def FAIL_CMD(status):
+    """Put TX into a known state and hand the Z80 exactly one status byte.
+
+    Recovery path for PROCESS_CMD (issue #42). A handler may have written
+    part of a response before it failed, so clear TX first: a partial
+    response shifts every byte the Z80 reads after it, turning a clean
+    error into a CRC mismatch a phase or two downstream -- the
+    orphan-byte family described in src/CLAUDE.md.
+
+    Deliberately NOT SEND_MSG. With TSP.VERBOSE on, SEND_MSG streams the
+    message text and blocks in MQ.put() once TX fills. On this path we do
+    not know the Z80 is still reading -- if it has already aborted,
+    nothing drains TX and the Pico hangs, which is the exact failure this
+    recovery exists to prevent. One byte always fits the 4-deep FIFO and
+    can never block. The human-readable explanation goes to
+    /activity.log, which is retrievable; a wedged Pico is not.
+    """
+    global MQ
+
+    # Both loops are bounded. The equivalent drains elsewhere in this
+    # file spin freely, which is fine on a healthy path -- but this is
+    # the recovery path, and an unbounded loop here would be the very
+    # hang we are trying to prevent. The FIFOs are 4 deep; anything
+    # past a few iterations means the SM is not draining and spinning
+    # will not help.
+    for _ in range(64):
+        if MQ.tx_fifo() == 0:
+            break
+        MQ.exec("pull (noblock)")
+        MQ.exec("mov (osr, null)")
+    for _ in range(64):
+        if MQ.rx_fifo() == 0:
+            break
+        MQ.get()
+
+    MQ.put(status)
+    MQ_READY()
+
+
 def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                           # Processes 'B' (BASIC) commands sent by the TS
     
     global TSP
@@ -3995,126 +4032,176 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d cmd=%r" % (
         load_cmd, long, bytes(cmd[:long])))
 
+    # --- Issue #42: the V6 pre-load tail must ALWAYS run -----------------
+    # Everything from the body decode through the command dispatch runs
+    # inside a try/finally whose `finally` IS the tail at the bottom of
+    # this function (drains + MQ.put(0x01) + MQ_READY).
+    #
+    # Before this, a handler that raised -- MOUNT_FILE's unguarded
+    # os.stat() with no SD card is the easy one to hit -- propagated out
+    # of PROCESS_CMD to the main loop, which logs it and `continue`s.
+    # That skipped the tail, so the V6 pre-load was never written and the
+    # NEXT command's pre-header phase read 0x00 from an empty TX FIFO and
+    # reported J. The failure surfaced one command later than its cause,
+    # which is the orphan-byte family's signature (see src/CLAUDE.md
+    # "Symptom-to-cause mapping").
+    #
+    # `return` inside a `try` still runs its `finally`, so the early
+    # return on an undecodable body is fixed by the same change -- it was
+    # the second instance of this bug.
+    #
+    # NOTE: the body-read timeout loop ABOVE is deliberately left OUTSIDE
+    # the try. It writes its own MQ.put(0x01) before returning; pulling
+    # it inside would hand it a SECOND pre-load from the finally, and
+    # that orphan byte is exactly what produces Report R on the next
+    # data block.
+    # ---------------------------------------------------------------------
+    cmd_exec = "?"        # the tail logs this; it must exist even when
+                          # the decode below never gets to assign it
+
     try:
-        cmd = cmd[:long].decode()
-    except:
-        LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
-        TLM("PROCESS_CMD decode FAILED — returning early")
-        return
+        try:
+            cmd = cmd[:long].decode()
+        except:
+            LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
+            TLM("PROCESS_CMD decode FAILED — status sent, tail restores V6")
+            # Garbage on the wire, not a handler bug — but the Z80 is still
+            # waiting for this command's status byte. Hand it one, then let
+            # the finally below re-arm the V6 chain for the NEXT command.
+            # (Before issue #42 this `return` skipped the tail entirely.)
+            FAIL_CMD(_5_C_Nonsense)
+            return
 
-    cmd_exec = cmd[3:].upper() # Command starting with "TPI:" in uppercase
-    rest_cmd = cmd[7:] # Command after "tpi:"
+        cmd_exec = cmd[3:].upper() # Command starting with "TPI:" in uppercase
+        rest_cmd = cmd[7:] # Command after "tpi:"
 
-    TLM("PROCESS_CMD parsed", "cmd_exec=%r rest_cmd=%r" % (cmd_exec, rest_cmd))
+        TLM("PROCESS_CMD parsed", "cmd_exec=%r rest_cmd=%r" % (cmd_exec, rest_cmd))
 
-    # gc.collect()
+        # gc.collect()
 
-    if load_cmd:                                                                                    # Is it a "LOAD:tpi:..." command.....?
+        if load_cmd:                                                                                    # Is it a "LOAD:tpi:..." command.....?
 
-        if rest_cmd == "dirinfo.tap":
-            if MOUNT_FILE("%s/dirinfo.tap" % TSP.cur_path):
-                msg = "Mounting dir info: "
-                status = _1_OK
-            else:
-                msg = "Error mounting file: "
-                status = _2_R_Tape_load
-                LOG(msg + rest_cmd, 2)
-
-            # ACTIVATE_MQ()
-            SEND_MSG(msg, rest_cmd, status)
-
-        else:
-            rest_cmd, idx = ResolveIndexName(rest_cmd)
-            if idx < 0:
-                if rest_cmd.upper() in files_upper:                                                                                  # Is rest_cmd a valid file?
-                    idx = files_upper.index(rest_cmd.upper())
-
-            if idx >= 0:
-                
-                if MOUNT_FILE("%s/%s" % (TSP.cur_path, files[idx])):
-                    msg = "File mounted OK"
+            if rest_cmd == "dirinfo.tap":
+                if MOUNT_FILE("%s/dirinfo.tap" % TSP.cur_path):
+                    msg = "Mounting dir info: "
                     status = _1_OK
                 else:
-                    msg = "Error mounting file:"
-                    status = _4_Q_Parameter
-                    
+                    msg = "Error mounting file: "
+                    status = _2_R_Tape_load
+                    LOG(msg + rest_cmd, 2)
+
                 # ACTIVATE_MQ()
                 SEND_MSG(msg, rest_cmd, status)
-                
+
             else:
-                msg = "File does not exist: "
-                SEND_MSG(msg, rest_cmd, _3_F_Invalid_file)                                       # If none of the above, raise error
-                LOG(msg + rest_cmd, 2)
+                rest_cmd, idx = ResolveIndexName(rest_cmd)
+                if idx < 0:
+                    if rest_cmd.upper() in files_upper:                                                                                  # Is rest_cmd a valid file?
+                        idx = files_upper.index(rest_cmd.upper())
+
+                if idx >= 0:
+                
+                    if MOUNT_FILE("%s/%s" % (TSP.cur_path, files[idx])):
+                        msg = "File mounted OK"
+                        status = _1_OK
+                    else:
+                        msg = "Error mounting file:"
+                        status = _4_Q_Parameter
+                    
+                    # ACTIVATE_MQ()
+                    SEND_MSG(msg, rest_cmd, status)
+                
+                else:
+                    msg = "File does not exist: "
+                    SEND_MSG(msg, rest_cmd, _3_F_Invalid_file)                                       # If none of the above, raise error
+                    LOG(msg + rest_cmd, 2)
             
-    else:                                                                                                 # ...or it's a "SAVE:tpi:..." command
-        # Split command word from any arguments
-        sp = cmd_exec.find(' ')
-        if sp >= 0:
-            cmd_word = cmd_exec[:sp]
-            # cmd_args = cmd[sp+4:]
-        else:
-            cmd_word = cmd_exec
-            # cmd_args = ""
+        else:                                                                                                 # ...or it's a "SAVE:tpi:..." command
+            # Split command word from any arguments
+            sp = cmd_exec.find(' ')
+            if sp >= 0:
+                cmd_word = cmd_exec[:sp]
+                # cmd_args = cmd[sp+4:]
+            else:
+                cmd_word = cmd_exec
+                # cmd_args = ""
 
-        TLM("PROCESS_CMD SAVE branch", "cmd_word=%r in_SA_funct=%s in_EXT=%s" % (
-            cmd_word, cmd_word in SA_funct, cmd_word in EXT_SA_FUNCT))
+            TLM("PROCESS_CMD SAVE branch", "cmd_word=%r in_SA_funct=%s in_EXT=%s" % (
+                cmd_word, cmd_word in SA_funct, cmd_word in EXT_SA_FUNCT))
 
-        if cmd_word in SA_funct:
-            EXEC = SA_funct[cmd_word]
-            TLM("PROCESS_CMD dispatching SA_funct", "cmd_word=%r" % cmd_word)
-            EXEC(pre, cmd)
-            TLM("PROCESS_CMD SA_funct returned", "cmd_word=%r" % cmd_word)
+            if cmd_word in SA_funct:
+                EXEC = SA_funct[cmd_word]
+                TLM("PROCESS_CMD dispatching SA_funct", "cmd_word=%r" % cmd_word)
+                EXEC(pre, cmd)
+                TLM("PROCESS_CMD SA_funct returned", "cmd_word=%r" % cmd_word)
 
-        elif cmd_word in EXT_SA_FUNCT:                                                                                # Is an external cmd?
-            EXEC = EXT_SA_FUNCT[cmd_word]
-            TLM("PROCESS_CMD dispatching EXT_SA_FUNCT", "cmd_word=%r" % cmd_word)
-            EXEC(MQ, TSP, pre, cmd)
-            TLM("PROCESS_CMD EXT_SA_FUNCT returned", "cmd_word=%r" % cmd_word)
+            elif cmd_word in EXT_SA_FUNCT:                                                                                # Is an external cmd?
+                EXEC = EXT_SA_FUNCT[cmd_word]
+                TLM("PROCESS_CMD dispatching EXT_SA_FUNCT", "cmd_word=%r" % cmd_word)
+                EXEC(MQ, TSP, pre, cmd)
+                TLM("PROCESS_CMD EXT_SA_FUNCT returned", "cmd_word=%r" % cmd_word)
 
-        else:
-            msg = "Unrecognized command: %s" % cmd_exec
-            SEND_MSG(msg, 'SAVE "tpi:help" for info', _5_C_Nonsense)    # If none of the above, raise error
-            LOG(msg, 2)
+            else:
+                msg = "Unrecognized command: %s" % cmd_exec
+                SEND_MSG(msg, 'SAVE "tpi:help" for info', _5_C_Nonsense)    # If none of the above, raise error
+                LOG(msg, 2)
 
-    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
-    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
-    # helpers being retired in stage 7). Behavior is identical.
-    # ──────────────────────────────────────────────────────────────────
-    TLM("PROCESS_CMD draining tx_fifo at exit")
-    drain_tx = 0
-    while MQ.tx_fifo() != 0:
-        drain_tx += 1
-        if drain_tx > 1000000:
-            TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
-            break
 
-    drain_rx = 0
-    while MQ.rx_fifo() != 0:
-        MQ.get()
-        drain_rx += 1
+    except Exception as _e:
+        # Any handler that raised.
+        #
+        # Protocol FIRST, diagnostics second. FAIL_CMD allocates nothing
+        # and cannot block, so it runs before the logging: if the handler
+        # died of MemoryError, LOG/TLM may well fail too, and the one
+        # thing that must not fail is getting a status byte to a Z80
+        # that is sitting in WAIT EXECUTION.
+        FAIL_CMD(_10_J_Invalid_IO)
+        try:
+            LOG("EXCEPTION in handler for %s: %s" % (cmd_exec, _e), 3)
+            TLM("PROCESS_CMD handler raised", "cmd=%r err=%s" % (cmd_exec, _e))
+        except:
+            pass                  # never let logging mask the real failure
 
-    TLM("PROCESS_CMD exit", "drain_tx=%d drain_rx=%d cmd=%r" % (drain_tx, drain_rx, cmd_exec))
+    finally:
+        # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
+        # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
+        # helpers being retired in stage 7). Behavior is identical.
+        # ──────────────────────────────────────────────────────────────────
+        TLM("PROCESS_CMD draining tx_fifo at exit")
+        drain_tx = 0
+        while MQ.tx_fifo() != 0:
+            drain_tx += 1
+            if drain_tx > 1000000:
+                TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
+                break
 
-    # ─── DUAL-PORT MIGRATION: V6 tail pre-load ────────────────────────
-    # Pre-load 0x01 status for the NEXT command's initial $0E read.
-    # This is the V6 chain — every command handler ends with a 0x01
-    # in TX so the next command's pre-header phase finds a valid
-    # status byte already waiting. Without this, the next command
-    # would read stale 0x00 -> Report J - Invalid I/O Device.
-    # See docs/PROTOCOL.md "Writing a new command handler" for details.
-    # ──────────────────────────────────────────────────────────────────
-    MQ.put(0x01)
+        drain_rx = 0
+        while MQ.rx_fifo() != 0:
+            MQ.get()
+            drain_rx += 1
 
-    # ─── Issue #14: re-assert Y=READY after the V6 pre-load ───────────
-    # The PIO drops Y to 0 on every Z80 OUT (pre-header + body bytes
-    # for this command have all been Z80 OUTs). Without an explicit
-    # MQ_READY here, Y stays BUSY and the Z80's WAIT EXECUTION before
-    # its next status read blocks until timeout → Report J. The
-    # pre-load byte sits in TX but the Z80 never reads it.
-    # ──────────────────────────────────────────────────────────────────
-    MQ_READY()
+        TLM("PROCESS_CMD exit", "drain_tx=%d drain_rx=%d cmd=%r" % (drain_tx, drain_rx, cmd_exec))
 
-    LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
+        # ─── DUAL-PORT MIGRATION: V6 tail pre-load ────────────────────────
+        # Pre-load 0x01 status for the NEXT command's initial $0E read.
+        # This is the V6 chain — every command handler ends with a 0x01
+        # in TX so the next command's pre-header phase finds a valid
+        # status byte already waiting. Without this, the next command
+        # would read stale 0x00 -> Report J - Invalid I/O Device.
+        # See docs/PROTOCOL.md "Writing a new command handler" for details.
+        # ──────────────────────────────────────────────────────────────────
+        MQ.put(0x01)
+
+        # ─── Issue #14: re-assert Y=READY after the V6 pre-load ───────────
+        # The PIO drops Y to 0 on every Z80 OUT (pre-header + body bytes
+        # for this command have all been Z80 OUTs). Without an explicit
+        # MQ_READY here, Y stays BUSY and the Z80's WAIT EXECUTION before
+        # its next status read blocks until timeout → Report J. The
+        # pre-load byte sits in TX but the Z80 never reads it.
+        # ──────────────────────────────────────────────────────────────────
+        MQ_READY()
+
+        LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
     return
 
@@ -4809,26 +4896,30 @@ def ZX48_IO(pre):                                                               
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("ZX48_IO SAVE returned")
 
-            elif a == 100:                                                  # OUT 10,100 from 2068 — DEAD CODE on current hardware (see note below)
-                # ─── DUAL-PORT MIGRATION: ZX48 exit-via-byte is unreachable ─
-                # Confirmed empirically: `OUT 10,100` on the 2068 executes
-                # cleanly but the byte never reaches the Pico's PIO. Port
-                # $0A (decimal 10) is not routed through /PICOSEL on the
-                # TS-Pico hardware — only ports $0E and $0F are. So this
-                # `elif a == 100` branch is unreachable in practice, and
-                # the only way out of ZX48 mode is the TS-Pico reset button.
+            elif a == 14:                                                  # OUT 14,14 from 2068 — canonical exit from ZX48 mode
+                # ─── ZX48 exit-via-byte ───────────────────────────────────
+                # The user exits ZX48 mode from the 2068 with `OUT 14,14`.
                 #
-                # The branch is kept as defensive code in case a future
-                # hardware revision routes more ports through PIO, or in
-                # case some other code path forces a byte 100 into the
-                # RX FIFO. The TSP.zx48 = False clears the re-entry guard
-                # in TS2068_IO so this would work correctly IF reached.
+                # Why port 14: post dual-port migration the PIO only listens
+                # on ports $0E (decimal 14) and $0F (decimal 15). Before the
+                # migration the single-port PIO picked up writes on ports
+                # 0–15, so the original guard was `a == 100` (`OUT 10,100`).
+                # That stopped working once the dual-port PIO landed because
+                # port $0A is no longer routed to the RX FIFO. Switching the
+                # 2068-side command to `OUT 14,14` puts the byte on a port
+                # the Pico actually listens to.
                 #
-                # Help text in the ZX48() handler tells users to use the
-                # reset button as the canonical exit. See also
-                # docs/OPEN_QUESTIONS.md if we want to revisit routing.
+                # Why the value 14 specifically: it's arbitrary — any byte
+                # other than the ones the SAVE/LOAD branches above already
+                # claim (`a == 76` for 'L', `a == 83` for 'S') would work.
+                # We picked 14 to match the port and keep the BASIC line
+                # easy to remember (`OUT 14,14`).
+                #
+                # Clearing TSP.zx48 releases the re-entry guard in
+                # TS2068_IO so the main loop resumes TS-2068 mode cleanly
+                # on the next iteration.
                 # ──────────────────────────────────────────────────────────
-                TLM("ZX48_IO byte 100 received — exiting (rare; usually unreachable)")
+                TLM("ZX48_IO byte 14 received — exiting ZX48 mode")
                 LOG("Ending ZX mode. Free mem: %d. Returning to TS processing." % gc.mem_free(), 0)
                 gc.collect()
                 TSP.zx48 = False

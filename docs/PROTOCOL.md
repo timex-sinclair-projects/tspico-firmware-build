@@ -443,90 +443,61 @@ match what the Z80 expects.
   the file.
 - **`END_MSG()` has no callers and should keep it that way.** It is
   retained as documented context for the trap above, not as an API.
-
-- **ZX48 mode is a different protocol. Do not apply this section to it.**
-  See §7b below — the one time someone reasoned about ZX mode using TPI
-  rules, they shipped a hang.
-
----
-
-## 7b. ZX48 mode is NOT TPI
-
-`SAVE "tpi:zx48"` puts the 2068 into ZX Spectrum mode, where `OUT 244,3`
-selects a customized Spectrum ROM — a stock 48K image whose `SA-BYTES`
-($04C2) and `LD-BYTES` ($0556) are replaced with TS-Pico stubs. Everything
-below is transcribed from that ROM, not from the TPI spec.
-
-Three properties make it incompatible with the rest of this document:
-
-- **Port `$0F` is never read.** The ROM contains zero `IN A,($0F)`. The Y
-  register, `MQ_READY()`, the whole dual-port ready mechanism — none of it
-  participates. The PIO's issue-#14 auto-busy is harmless here.
-- **There is no status byte.** `$053F`, the shared exit for both tape
-  routines, restores the border and `RST 8`s on BREAK; that is the only
-  error report in the entire path. A Pico-side failure **cannot** be
-  communicated to the Z80. `REFUSE_SAVE()` has no counterpart — a guard can
-  only log, or swallow bytes to keep the FIFO in sync.
-- **Parity seeds from the flag byte**, not from byte 0 as TPI's CRC does.
-
-### SAVE — `SA-BYTES` $04C2, per block. No handshake.
-
-```
-OUT $0E,'S'      ; then ~940us  (LD B,$FF / DJNZ)
-OUT $0E,len_lo   ; then ~940us
-OUT $0E,len_hi   ; then ~940us
-OUT $0E,flag     ; 0x00 header / 0xFF data, then ~940us
-DE x  OUT $0E,b  ; ~60us apart  (LD B,$10 / DJNZ)
-OUT $0E,parity   ; XOR of flag and every data byte
-```
-
-Blind timed writes — the Pico just has to keep up. `DE` is decremented
-*after* the send, so `DE=0` wraps to `$FFFF` and floods 65536 bytes: the
-same quirk [#40](https://github.com/timex-sinclair-projects/tspico-firmware-build/pull/40)
-fixed for TS mode. With no status byte to refuse with, the only option is
-to swallow the flood and write nothing.
-
-Note `SA-BYTES` sends a fresh `'S'` for **every** block. `ZX48_IO` consumes
-the header block's; the data block's is consumed inside `SAVE_ZX`.
-
-### LOAD — `LD-BYTES` $0556, per block. One handshake.
-
-```
-OUT $0E,'L'
-poll IN $0E until the byte reads 0x40      <-- the handshake
-~940us, then IN $0E -> flag  (seeds the parity accumulator)
-DE x  IN $0E -> data byte                  (~15us apart)
-IN $0E -> parity, compared against the accumulator
-```
-
-**The `0x40` is load-bearing, and it is not the single-port continue flag.**
-It is polled on `$0E`, the *data* port. The dual-port compliance sweep in
-`c649e69` stripped `wrt(0x40)` from `LOAD_ZX` and `LOAD_ZX_C` reasoning
-that "0x40 continue flag is on port $0F (scratch Y)" — true for TPI, wrong
-here. With nothing matching `0x40` the poll never exits: TX drains,
-`pull(noblock)` drives `0x00` forever, and ZX LOAD hangs hard. That
-regression shipped.
-
-Because the poll **discards** every non-`0x40` byte, the handshake also
-resynchronises the stream. That is why `LOAD_ZX` can afford to be one byte
-generous, and why a slow Pico response is fine here even though the
-equivalent would break `LOAD_TS`.
-
-### Two `busy` flags, not one
-
-`tspico.py` imports named symbols from `tspico_io`, and `busy` is not among
-them — so its `global busy` binds a **different** module-level variable,
-the one its own `SAVE_LOG` / `BLINK_LED` / `CHK_STATUS` threads set. A
-`while busy:` in `tspico.py` does **not** wait for the LVM watchdog,
-however much it reads like it does. Core1 is one resource, so anything
-deciding whether it can spawn must consult both: its own `busy` and
-`CORE1_BUSY()`.
-
-The three `while busy:` waits in `tspico.py`'s main LVM loop are subject to
-this and are deliberately unchanged — they are unbounded spins, so making
-them wait on something that can actually be True would turn a no-op into a
-potential hang. `START_WATCHDOG()` tolerating a failed spawn is what
-protects those paths today.
+- **There are two `busy` flags, not one.** `tspico.py` imports named
+  symbols from `tspico_io` and `busy` is not among them, so its
+  `global busy` binds a *different* module-level variable — the one its
+  own `SAVE_LOG` / `BLINK_LED` / `CHK_STATUS` threads set. A
+  `while busy:` in `tspico.py` does **not** wait for the LVM watchdog,
+  however much it reads like it does. Core1 is one resource, so anything
+  deciding whether it can spawn must consult both: its own `busy` and
+  `CORE1_BUSY()`. The three `while busy:` waits in the main LVM loop are
+  subject to this and are deliberately unchanged — they are unbounded
+  spins, so making them wait on something that can actually be True
+  would turn a no-op into a potential hang.
+- **ZX48 mode is a different protocol — don't apply the V6 chain to
+  it.** The customised Spectrum ROM in flash slot 0 has no status port,
+  no pre-header and no echo phase: after `'L'` it reads exactly
+  `flag + content + CRC` and returns, and after `'S'` it writes the
+  block and returns. A status byte or pre-load `0x01` written by a ZX
+  handler is an orphan that the *next* `'L'` reads as its flag byte.
+  `LOAD_ZX` streamed one byte too many for exactly this reason (flag +
+  `totbytes` instead of `totbytes`); the surplus was the next block's
+  length-low byte, and the "TX FIFO not empty after ZX mode" cleanup in
+  `ZX48_IO` was mopping it up rather than fixing it. Covered now by
+  `src/test/zx48_hosttest.py`.
+- **Never call `ENA_MQ()` — it rebuilds the single-port SM.** It
+  creates `TS_IO` at 15 MHz, which does not decode `$0E` from `$0F`.
+  `SAVE_ZX` called it after its SD write and handed the result back to
+  `ZX48_IO` as the session's state machine, so every ZX transaction
+  after the first save ran on the wrong bus program. Any handler that
+  calls `ENA_SD()` and isn't returning to the main dispatcher must
+  restore the bus with `ENA_MQ_DUAL()` (or `ACTIVATE_MQ()` in
+  `tspico.py`) instead.
+- **Mask RX reads to 8 bits.** The RX word is 9 bits — bit 8 carries
+  A0, i.e. which port the Z80 wrote. `MQ.get()` unmasked into a
+  `bytearray` raises `ValueError` on any `$0F` write and drops the Pico
+  to the REPL. `SAVE_TS` masks; `SAVE_ZX` didn't until the ZX48
+  migration.
+- **`while MQ.tx_fifo() != 0: pass` can hang forever.** It waits for the
+  Z80 to drain, which never happens if the Z80 has stopped asking (in
+  ZX48 compatible mode the Pico streams the whole tape, so the tail is
+  routinely unread). Bound the wait, then drain TX explicitly — leaving
+  bytes behind is the orphan-byte bug above.
+- **Never let an exception escape a command handler.** `PROCESS_CMD`
+  writes the V6 pre-load as the last thing it does. If a handler raises,
+  that write is skipped — the main loop catches the exception and
+  `continue`s — so the NEXT command's pre-header phase reads `0x00`
+  from an empty TX FIFO and reports J. The symptom shows up one command
+  *after* the one that actually failed, which makes it maddening to
+  trace. Since the issue-#42 fix the dispatch runs inside a
+  `try`/`finally` whose `finally` is the tail, so this is handled
+  centrally — but the underlying rule still binds anything you add
+  outside that block: **every exit path from a command must leave
+  exactly one `0x01` in TX.** Not zero (Report J on the next command),
+  and not two (the second is an orphan byte that shifts the next data
+  block — Report R). A recovery path that stages its own pre-load, as
+  the body-read timeout does, must stay OUTSIDE the `try`, or the
+  `finally` hands it a second one.
 
 ---
 

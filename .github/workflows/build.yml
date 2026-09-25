@@ -72,6 +72,23 @@ jobs:
           path: basic-taps/
           retention-days: 30
 
+      # Host-side tests. These mock machine/rp2 and run the REAL firmware
+      # modules on CPython, so they catch control-flow regressions without
+      # a Pico attached. They are NOT a substitute for hardware testing —
+      # nothing here observes the Z80 bus (see src/CLAUDE.md) — but they
+      # do pin invariants that used to be verifiable only by flashing a
+      # UF2 and typing commands on a 2068. Added with the issue-#42 fix,
+      # whose regression test is process_cmd_hosttest.py.
+      - name: Run host-side tests
+        run: |
+          python3 src/test/save_harness_hosttest.py
+          python3 src/test/process_cmd_hosttest.py
+      # Fails the build if a ROM in flash/manifest.json changed without its
+      # crc32 being updated -- i.e. nobody would notice that the next 512K
+      # image ships a different ROM than the manifest claims.
+      - name: Check the flash manifest against the ROMs in the repo
+        run: python3 tools/build-flash.py check flash/manifest.json
+
       - name: Clone MicroPython v1.20.0
         run: |
           git clone --depth 1 --branch v1.20.0 \
