@@ -374,9 +374,13 @@ def check(cond, msg):
     print(("  PASS  " if cond else "  FAIL  ") + msg)
 
 
+LOG_STATUS = []       # (port 0Fh status, line) at every printed log line
+
+
 def new_harness():
     pio = FakePIO()
-    h = H.Harness(pio, pio.ticks_ms, pio.ticks_diff, log=lambda *a: None)
+    h = H.Harness(pio, pio.ticks_ms, pio.ticks_diff,
+                  log=lambda line: LOG_STATUS.append((pio.status(), line)))
     h.start()
     return pio, h
 
@@ -537,6 +541,12 @@ def main():
             bad.append("Exception.__init__ call")
     check(not bad, "no exception class overrides __init__ or calls Exception.__init__ "
                    "(MicroPython raises AttributeError) %s" % (bad or ""))
+
+    print("printing only while the Z80 is held")
+    not_busy = [(st, line) for st, line in LOG_STATUS if st != 0x00]
+    check(LOG_STATUS and not not_busy,
+          "all %d log lines printed with status 00 (the Z80 waiting after a SYNC), "
+          "never once it may be sending %s" % (len(LOG_STATUS), not_busy[:2] or ""))
 
     print("never blocked, never dropped")
     check(pio.dropped == 0, "no RX overflow in any scenario (%d dropped)" % pio.dropped)

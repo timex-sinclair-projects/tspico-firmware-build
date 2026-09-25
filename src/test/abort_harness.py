@@ -73,7 +73,7 @@ import time
 import gc
 from array import array
 
-HARNESS_VERSION = "abort_harness v2 (2026-09-26)"
+HARNESS_VERSION = "abort_harness v3 (2026-09-26)"
 
 # ===========================================================================
 # CONFIG -- edit these, then re-run.
@@ -85,6 +85,7 @@ DCK_SLOT = 0
 STALL_MS = 1500         # silence inside a transaction that counts as a stall
 SAVE_DATA_START_MS = 3000   # the Z80 can take ~1 s before a SAVE data block
 KEY_WAIT_MS = 120000    # how long a 0x86 "Scroll?" prompt waits for a key
+QUIET_MS = 500          # v1.7 has no SYNC: print the log only after this much quiet
 
 LOAD_PROG_LEN = 16000   # bytes in the synthetic REM line served by LOAD ""
 PAGES = 4               # 0x86 pages served for any TPI: command
@@ -279,10 +280,12 @@ class Link:
                 raise Stall()
 
     # ---- the one way back to idle ------------------------------------------
-    def to_idle(self, recovered=False):
+    def to_idle(self, recovered=False, status=True):
         """Known state for the next command, whatever happened: TX and RX
         empty, exactly one 0x01 pre-load staged (the ROM reads it with no
-        wait straight after the next pre-header), status idle or recovered."""
+        wait straight after the next pre-header), status idle or recovered.
+        status=False leaves Y alone, so the caller decides when the Z80 may
+        go on (see the SYNC path in serve_once)."""
         mq = self.mq
         n = 0
         while mq.tx_fifo() and n < 64:
@@ -291,7 +294,8 @@ class Link:
         while mq.rx_fifo():
             mq.get()
         mq.put(0x01)
-        self.set_status(ST_RECOVERED if recovered else ST_IDLE)
+        if status:
+            self.set_status(ST_RECOVERED if recovered else ST_IDLE)
 
 
 # ===========================================================================
@@ -346,13 +350,26 @@ class Harness:
                       "abort": 0, "stall": 0, "error": 0, "other": 0,
                       "stale": 0, "mismatch": 0}
         self.events = []        # (kind, detail) -- for the host test
+        self.pending = []       # log lines not printed yet
 
     def start(self):
         self.link.to_idle()
 
     def _event(self, kind, detail=""):
+        # Never print here: a USB print takes milliseconds, and the Z80 may
+        # already be sending the next command. Lines wait in `pending` until
+        # flush_log() runs at a moment the Z80 is known to be waiting.
         self.events.append((kind, detail))
-        self.log("[%s] %s" % (kind, detail))
+        self.pending.append("[%s] %s" % (kind, detail))
+
+    def flush_log(self):
+        """Print queued log lines and collect garbage. Only call this when
+        the Z80 can't be sending: after a SYNC (it waits for IDLE) or after a
+        quiet spell."""
+        for line in self.pending:
+            self.log(line)
+        del self.pending[:]
+        gc.collect()
 
     # ---- one command --------------------------------------------------------
     def serve_once(self, idle_ms=None):
@@ -361,26 +378,46 @@ class Harness:
         link, mq = self.link, self.link.mq
         rx = mq.rx_fifo
         raw = self.raw
-        if not rx():
-            t0 = link.ticks_ms()
-            while not rx():
-                if idle_ms is not None and link.ticks_diff(link.ticks_ms(), t0) >= idle_ms:
-                    return False
-        self.what = "pre-header"
-        try:
-            # Straight into the tight capture: the first byte is not taken on
-            # its own, because the Z80 sends the other nine right behind it.
+        while True:
+            if not rx():
+                t0 = link.ticks_ms()
+                while not rx():
+                    quiet = link.ticks_diff(link.ticks_ms(), t0)
+                    if self.pending and quiet >= QUIET_MS:
+                        self.flush_log()            # v1.7 path: no SYNC to wait on
+                    if idle_ms is not None and quiet >= idle_ms:
+                        return False
+            self.what = "pre-header"
             try:
+                # Straight into the tight capture: the first byte is not taken
+                # on its own, because the Z80 sends the other nine right
+                # behind it.
                 link.drain(raw, 10, STALL_MS)
+                break
             except Abort as a:
-                if got(a) == 1:
-                    # A lone port-0Fh write: SYNC (the ROM then waits for
-                    # READY + IDLE before it sends anything else).
-                    self.stats["sync"] += 1
+                if got(a) != 1:
+                    self.stats["abort"] += 1
                     link.to_idle()
-                    self._event("sync", "0Fh <- %02X" % (raw[0] & 0xFF))
+                    self._event("abort", self.what)
                     return True
-                raise
+            except Stall as e:
+                n = got(e)
+                self.stats["stall"] += 1
+                link.to_idle(recovered=True)
+                self._event("stall", "pre-header: got %d/10 [%s] -> RECOVERED" % (
+                    n, " ".join("%03X" % raw[i] for i in range(n))))
+                return True
+            # A lone port-0Fh write: SYNC. The ROM now waits (up to ~1 s) for
+            # READY + IDLE and sends its pre-header straight after. So: reset
+            # the FIFOs, do everything slow (printing, garbage collection)
+            # while it is held, and only then say IDLE and go straight back
+            # to waiting for that pre-header -- no return, no gc in between.
+            self.stats["sync"] += 1
+            link.to_idle(status=False)
+            self._event("sync", "0Fh <- %02X" % (raw[0] & 0xFF))
+            self.flush_log()
+            link.set_status(ST_IDLE)
+        try:
             pre = self.pre
             for i in range(10):
                 pre[i] = raw[i]
@@ -758,10 +795,13 @@ def main():
     gc.collect()
     try:
         while True:
+            # Straight back in: no gc or printing between commands. The
+            # harness does both itself while the Z80 is held (after a SYNC)
+            # or after a quiet spell.
             h.serve_once()
-            gc.collect()
     except KeyboardInterrupt:
         pass
+    h.flush_log()
     print("")
     print("SUMMARY  " + h.summary())
     mq.active(0)
