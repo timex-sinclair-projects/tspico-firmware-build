@@ -1395,7 +1395,7 @@ def OFF_TABLE():                                                             # B
     fsize = arch.tell()
     arch.seek(0,0)
     
-    blks = ['Program', 'Number arr.', 'Char arr.', 'Code blk']
+    blks = ['Program', 'Num. array', 'Char array', 'Code block']
     
     while TSP.offset < fsize:
         rd_bytes = bytearray(30)
@@ -2180,7 +2180,7 @@ def TAPDIR(pre, cmd):                                                        # D
                                 N.append(" ")
                             N.append("%02d " % idx)
                             if el[2] == " Y":
-                                N.append("%-11s %5s " % (TSP.offset_tbl[idx+1][3], TSP.offset_tbl[idx+1][1])) # File type, Len
+                                N.append("%-10s  %5s " % (TSP.offset_tbl[idx+1][3], TSP.offset_tbl[idx+1][1])) # File type, Len
                             else:
                                 N.append("Data block  %5s " % el[1]) # Len
                             N.append("%-10s" % el[3]) # Desc.
