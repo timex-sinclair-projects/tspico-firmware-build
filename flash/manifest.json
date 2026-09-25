@@ -1,0 +1,72 @@
+{
+  "_comment": "TS-PICO 512K flash map: 16 slots of 32K, 0x00 fill. DCK entries are 64K (two slots), which is why their numbering steps by 2. Slots marked from_base are third-party images taken from the base image at build time -- see flash/README.md.",
+  "slot_size": 32768,
+  "fill": 0,
+  "slots": [
+    {
+      "slot": 0,
+      "kind": "ROM/DCK",
+      "size": 32768,
+      "name": "TS-Pico ZX Spectrum ROM v2",
+      "file": "../ROMs/TSPICO-ZX48-V2.BIN",
+      "crc32": "1BE816C2"
+    },
+    {
+      "slot": 1,
+      "kind": "ROM",
+      "size": 32768,
+      "name": "TS-Pico TS-2068 storage ROM v1.7",
+      "file": "../src/rom/TSPICO.ROM",
+      "crc32": "09D4CA63"
+    },
+    {
+      "slot": 2,
+      "kind": "ROM/DCK",
+      "size": 32768,
+      "name": "ZX Diagnostics v0.37",
+      "from_base": true,
+      "crc32": "FA54FB1D"
+    },
+    {
+      "slot": 3,
+      "kind": "ROM",
+      "size": 32768,
+      "name": "Rodolfo Guerra TK90/95 ROM",
+      "from_base": true,
+      "crc32": "9554B434"
+    },
+    {
+      "slot": 8,
+      "kind": "DCK",
+      "size": 65536,
+      "name": "Pinball (LROS)",
+      "from_base": true,
+      "crc32": null,
+      "note": "absent from Pico-v15w.rom -- the whole 64K is 0x00"
+    },
+    {
+      "slot": 10,
+      "kind": "DCK",
+      "size": 65536,
+      "name": "Flight Simulator (AROS)",
+      "from_base": true,
+      "crc32": "377A9681"
+    },
+    {
+      "slot": 12,
+      "kind": "DCK",
+      "size": 65536,
+      "name": "Crazy Bugs (AROS)",
+      "from_base": true,
+      "crc32": "AD7E5D44"
+    },
+    {
+      "slot": 14,
+      "kind": "DCK",
+      "size": 65536,
+      "name": "Casino (AROS)",
+      "from_base": true,
+      "crc32": "BADC1E9D"
+    }
+  ]
+}
