@@ -320,6 +320,23 @@ match what the Z80 expects.
 - **If `LOAD_TS` returns without writing the trailing two `0x01`s, the
   next LOAD will hang or fail with Report J.** The pre-load chain is
   load-bearing; honor it in any new handler.
+- **An early return re-arms too — and with ONE `0x01`, not two.**
+  `LOAD_TS`'s abort paths skip the V6 chain by construction, and the
+  watchdog has just drained both FIFOs, so TX comes back empty and Y is
+  left wherever the partial Z80 OUTs dropped it. That is the rule above
+  firing on an error path: the next command's status read finds nothing
+  and gets Report J. `REARM_AFTER_LOAD_ABORT()` writes the one pre-load
+  byte and restores Y, *after* `ABORT_TX` (anything staged before it is
+  eaten by the watchdog's `pull(noblock)` cleanup loop). One byte,
+  because the pair on the normal path exists only so the Z80 can consume
+  the first as this transaction's final status — after an abort it has
+  already reported and gone, and a second byte would be read as the
+  first byte of the next response: the one-byte shift that surfaces as
+  Report R. `SAVE_TS` is exempt only because the dispatcher calls
+  `ACTIVATE_MQ()` after it and re-arms with its own `MQ.put(0x01)`;
+  **nothing runs after `LOAD_TS` returns.** Found via VERIFY, which
+  makes the Z80 abandon the transfer mid-block as soon as the comparison
+  fails — the R is correct, the J on everything after it was not.
 - **Don't pre-load `0x01` inside `ACTIVATE_MQ()`.** It's tempting (the
   pre-load chain expects a status byte ready in TX after the SM is
   re-activated), but `ACTIVATE_MQ` is called both at boot AND mid-
@@ -343,6 +360,144 @@ match what the Z80 expects.
   block. If you want a verbose status message, write the directive
   bytes BEFORE the pre-load `0x01` so the directive IS the final
   response, not an addition.
+- **Validate a SAVE before you write the final status, not after.** The
+  V6 chain's `MQ.put(0x01)` final status IS the Z80 printing `0 OK` —
+  once it's in TX, the transaction is decided. Any check that runs after
+  it can only report into a Z80 that has already gone back to the BASIC
+  prompt and stopped reading `$0E`, so the report has nowhere to go and
+  the handler blocks in `MQ.put` on a full 4-deep TX FIFO. The `WATCHDOG`
+  can't rescue it either: `dead = True` is set alongside the final status,
+  so that thread has already exited. `SAVE "bad file"` used to do exactly
+  this — a false `0 OK` followed by a wedged Pico until reset.
+
+  The place to refuse a SAVE is the **post-header status read**, where
+  `SAVE_TS` writes the mid-phase `0x01`. Write an error status there
+  instead and the Z80's `STATUS_TO_REPORT` path RST-8's, shows the BASIC
+  report, and aborts *before* sending the data block. Both current guards
+  use this: `BLEN == 0` → `0x08` (Report A, empty program) and a
+  disallowed filename → `0x03` (Report F). Follow either as a template,
+  and finish with `DRAIN_REFUSED_SAVE()` so a Z80 that sends the data
+  block anyway doesn't leave bytes in RX to be misread as the next
+  command's pre-header.
+- **Never call `bytes.decode()` on anything the Z80 sent.** A TS-2068
+  filename can legitimately contain bytes >= 0x80 (graphics characters,
+  BASIC tokens), and `decode()` raises on those. `SAVE_TS` and `LOAD_TS`
+  run *unguarded* inside the dispatcher's main loop — there's no
+  try/except around the call in `tspico.py` — so an exception doesn't
+  produce an error report, it takes the whole loop down. Build the string
+  byte-by-byte instead; `SAVE_NAME()` in `TS/tspico_io.py` is the pattern.
+- **The two filename allowlists disagree, deliberately for now.**
+  `SAVE_TS` accepts only alphanumerics, `_` and `-`. The
+  `SAVE "tpi:<name>"` create path in `TS/tspico.py` is far more
+  permissive — any printable character except the eight FAT-reserved
+  ones — so spaces, dots and parens produce a file that way but a
+  Report F via a plain `SAVE`. Worth reconciling; until then, don't
+  "fix" one side in isolation and assume the other matches.
+- **Never answer an error with `0x01`.** Two SAVE paths used to write
+  "OK" and bail out — the header-CRC failure and the no-data timeout —
+  on the theory that the Z80 would notice the problem itself. It won't:
+  it validated the bytes *it* sent and is satisfied, so a CRC mismatch is
+  something only the Pico can see. Answering OK makes the Z80 stream the
+  entire data block at a handler that has already returned. Nothing
+  drains it, so the dispatcher's next pre-header read consumes data bytes
+  and dispatches on garbage, and the trailing `0x01` is read as the final
+  status — "0 OK" on screen for a save that never wrote a file. Refuse at
+  the post-header status read via `REFUSE_SAVE()` instead.
+- **Never call `_thread.start_new_thread()` unguarded.** If core1 is
+  still finishing a previous watchdog's cleanup — which ends with a ~1
+  second `BLINK()` — the call raises `OSError` "core1 in use". Nothing up
+  the stack catches it: it leaves `TS2068_IO` and reaches `main.py`,
+  which has no try/except either, so the Pico drops to a REPL and the
+  user sees "locked up, LED stopped blinking". Use `START_WATCHDOG()`,
+  which logs and runs the transaction unguarded rather than taking the
+  dispatcher down. Don't "fix" a failed spawn by retrying with a sleep —
+  a few ms of sleep with the Z80 streaming into a 4-deep RX FIFO trades a
+  rare hang for routine corruption.
+- **After the watchdog fires, wait for core1 before touching the SM.**
+  Its cleanup does `MQ.active(0)` → `BLINK()` → `MQ.active(1)`, and BLINK
+  blocks for ~1 second. A handler that returns as soon as it sees `kill`
+  lets core0 race into the dispatcher's `ACTIVATE_MQ()` and status
+  pre-load while core1 is still bouncing the same hardware state machine.
+  Call `ABORT_TX()`, which sets `dead` and waits. And don't stage status
+  bytes before it — the watchdog is pumping `pull(noblock)` through TX the
+  whole time it waits, so they are discarded.
+- **Don't announce READY and then go do SD work.** `ACTIVATE_SD()` grabs
+  GPIO 2-4 for SPI, and GPIO 2 is D0. Any `$0E` or `$0F` cycle that lands
+  after the grab reads corrupted data — this is the pin-grab race #40
+  fixed inside `SAVE_TS`, and the post-SAVE dispatcher block reintroduced
+  it by arming TX + `MQ_READY()` and *then* calling `MOUNT_FILE` and
+  `DIR_FILES`. The 2068 prints `0 OK` and returns to the prompt while the
+  Pico is still working, so the window is reachable in normal use. Arm
+  exactly once, after the last SD access; leave Y at BUSY until then.
+- **Guard every allocation sized by a Z80-supplied field.** `BLEN` is
+  16 bits and `SAVE "x" CODE 0,65535` is legal, so there is no sane bound
+  to clamp to — only an allocation that may fail. An unguarded
+  `MemoryError` reaches `main.py` and drops the Pico to a REPL, and if the
+  allocation sits before the mid-phase status write the 2068 *also* hangs
+  to its ~19.9s `WF_NPH` timeout. Collect, retry once, then refuse.
+- **A failed SD write cannot be reported, by design.** The final status
+  must go out before `ENA_SD()` (see the pin-grab race above), so by the
+  time `open()` fails the 2068 has already printed `0 OK`. That is an
+  accepted consequence of the ordering — but still wrap the write, or an
+  `OSError` from a pulled card takes the dispatcher down on top of losing
+  the file.
+- **`END_MSG()` has no callers and should keep it that way.** It is
+  retained as documented context for the trap above, not as an API.
+- **There are two `busy` flags, not one.** `tspico.py` imports named
+  symbols from `tspico_io` and `busy` is not among them, so its
+  `global busy` binds a *different* module-level variable — the one its
+  own `SAVE_LOG` / `BLINK_LED` / `CHK_STATUS` threads set. A
+  `while busy:` in `tspico.py` does **not** wait for the LVM watchdog,
+  however much it reads like it does. Core1 is one resource, so anything
+  deciding whether it can spawn must consult both: its own `busy` and
+  `CORE1_BUSY()`. The three `while busy:` waits in the main LVM loop are
+  subject to this and are deliberately unchanged — they are unbounded
+  spins, so making them wait on something that can actually be True
+  would turn a no-op into a potential hang.
+- **ZX48 mode is a different protocol — don't apply the V6 chain to
+  it.** The customised Spectrum ROM in flash slot 0 has no status port,
+  no pre-header and no echo phase: after `'L'` it reads exactly
+  `flag + content + CRC` and returns, and after `'S'` it writes the
+  block and returns. A status byte or pre-load `0x01` written by a ZX
+  handler is an orphan that the *next* `'L'` reads as its flag byte.
+  `LOAD_ZX` streamed one byte too many for exactly this reason (flag +
+  `totbytes` instead of `totbytes`); the surplus was the next block's
+  length-low byte, and the "TX FIFO not empty after ZX mode" cleanup in
+  `ZX48_IO` was mopping it up rather than fixing it. Covered now by
+  `src/test/zx48_hosttest.py`.
+- **Never call `ENA_MQ()` — it rebuilds the single-port SM.** It
+  creates `TS_IO` at 15 MHz, which does not decode `$0E` from `$0F`.
+  `SAVE_ZX` called it after its SD write and handed the result back to
+  `ZX48_IO` as the session's state machine, so every ZX transaction
+  after the first save ran on the wrong bus program. Any handler that
+  calls `ENA_SD()` and isn't returning to the main dispatcher must
+  restore the bus with `ENA_MQ_DUAL()` (or `ACTIVATE_MQ()` in
+  `tspico.py`) instead.
+- **Mask RX reads to 8 bits.** The RX word is 9 bits — bit 8 carries
+  A0, i.e. which port the Z80 wrote. `MQ.get()` unmasked into a
+  `bytearray` raises `ValueError` on any `$0F` write and drops the Pico
+  to the REPL. `SAVE_TS` masks; `SAVE_ZX` didn't until the ZX48
+  migration.
+- **`while MQ.tx_fifo() != 0: pass` can hang forever.** It waits for the
+  Z80 to drain, which never happens if the Z80 has stopped asking (in
+  ZX48 compatible mode the Pico streams the whole tape, so the tail is
+  routinely unread). Bound the wait, then drain TX explicitly — leaving
+  bytes behind is the orphan-byte bug above.
+- **Never let an exception escape a command handler.** `PROCESS_CMD`
+  writes the V6 pre-load as the last thing it does. If a handler raises,
+  that write is skipped — the main loop catches the exception and
+  `continue`s — so the NEXT command's pre-header phase reads `0x00`
+  from an empty TX FIFO and reports J. The symptom shows up one command
+  *after* the one that actually failed, which makes it maddening to
+  trace. Since the issue-#42 fix the dispatch runs inside a
+  `try`/`finally` whose `finally` is the tail, so this is handled
+  centrally — but the underlying rule still binds anything you add
+  outside that block: **every exit path from a command must leave
+  exactly one `0x01` in TX.** Not zero (Report J on the next command),
+  and not two (the second is an orphan byte that shifts the next data
+  block — Report R). A recovery path that stages its own pre-load, as
+  the body-read timeout does, must stay OUTSIDE the `try`, or the
+  `finally` hands it a second one.
 
 ---
 
