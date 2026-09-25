@@ -334,6 +334,32 @@ def rom_cmd(text, keys, bad_checksum=False):
         pages += 1
 
 
+def pio_body(path, name):
+    """The instruction lines of PIO program `name` in a source file, with
+    comments, whitespace and the docstring stripped, so the harness's
+    embedded copies can be compared with the firmware's."""
+    import re
+    lines = open(path, encoding="utf-8").read().replace("\r", "").splitlines()
+    for i, line in enumerate(lines):
+        if line.split("#")[0].strip() == "def %s():" % name:
+            indent = len(line) - len(line.lstrip())
+            break
+    else:
+        return None
+    body = []
+    for line in lines[i + 1:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= indent:
+            break                               # back out of the function
+        body.append(line)
+    text = re.sub(r'"""[\s\S]*?"""', "", "\n".join(body), count=1)
+    out = []
+    for line in text.splitlines():
+        line = re.sub(r"\s+", "", line.split("#")[0])
+        if line:
+            out.append(line)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Test plumbing
 # ---------------------------------------------------------------------------
@@ -492,6 +518,13 @@ def main():
     for _ in range(10):
         pio2.pump()
     check(pio2.result == "T", "a ready-wait that sees FB raises Report T (%s)" % pio2.result)
+
+    print("embedded PIO programs match src/TS/tspico_io.py")
+    for mine, theirs in (("SEL_BANK", "sel_bank"), ("SET_CTRL", "set_ctrl"),
+                         ("TS_IO_DUAL_COPY", "TS_IO_DUAL")):
+        a = pio_body(os.path.join(HERE, "abort_harness.py"), mine)
+        b = pio_body(os.path.join(os.path.dirname(HERE), "TS", "tspico_io.py"), theirs)
+        check(a and a == b, "%s == %s (%d instructions)" % (mine, theirs, len(b)))
 
     print("never blocked, never dropped")
     check(pio.dropped == 0, "no RX overflow in any scenario (%d dropped)" % pio.dropped)

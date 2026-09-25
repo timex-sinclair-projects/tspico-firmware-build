@@ -562,14 +562,111 @@ class Harness:
 # Pico hardware -- only runs on the device
 # ===========================================================================
 
+# ---------------------------------------------------------------------------
+# PIO programs. The harness prefers the firmware's own copies (TS.tspico_io),
+# but not every UF2 freezes that module, so it carries exact copies of the
+# three it needs. abort_harness_hosttest.py checks they still match
+# src/TS/tspico_io.py instruction for instruction.
+# ---------------------------------------------------------------------------
+
+try:
+    from rp2 import asm_pio, PIO
+except ImportError:                             # CPython (host test)
+    asm_pio = None
+
+if asm_pio is not None:
+    @asm_pio(out_init=(PIO.OUT_LOW,) * 4, out_shiftdir=PIO.SHIFT_RIGHT,
+             autopull=True, pull_thresh=8)
+    def SEL_BANK():                             # bank selection via A15..A18
+        wrap_target()
+        pull(noblock)
+        mov(x, osr)
+        wait(0, gpio, 13)
+        jmp(pin, "low")
+        out(null, 4)
+        out(pins, 4)
+        jmp("fin")
+        label("low")
+        out(pins, 4)
+        label("fin")
+        wait(1, gpio, 13)
+        wrap()
+
+    @asm_pio(set_init=(PIO.OUT_HIGH,) * 2, in_shiftdir=PIO.SHIFT_LEFT,
+             out_init=(PIO.OUT_HIGH,) * 2, out_shiftdir=PIO.SHIFT_RIGHT,
+             autopull=True, pull_thresh=8)
+    def SET_CTRL():                             # /BE, A14_L, /U10_CE, /U10_OE
+        wrap_target()
+        mov(pins, invert(null))
+        mov(y, null)
+        set(pins, 3)
+        pull(noblock)
+        mov(x, osr)
+        wait(0, gpio, 13)
+        nop()                  [2]
+        jmp(pin, "low")
+        out(null, 2)
+        out(pins, 2)
+        jmp("pass")
+        label("low")
+        in_(pins, 2)
+        mov(y, isr)
+        mov(isr, null)
+        jmp(y_dec, "home")
+        set(pins, 2)
+        jmp("wait")
+        label("home")
+        jmp(y_dec, "pass")
+        set(pins, 0)
+        label("wait")
+        nop()                  [10]
+        out(pins, 2)
+        label("pass")
+        wait(1, gpio, 13)
+        wrap()
+
+    @asm_pio(sideset_init=(PIO.OUT_HIGH), out_init=(PIO.OUT_LOW,) * 8,
+             out_shiftdir=PIO.SHIFT_RIGHT, in_shiftdir=PIO.SHIFT_LEFT)
+    def TS_IO_DUAL_COPY():                      # dual-port $0E / $0F with auto-busy
+        wait(0, gpio, 14)       .side(1)
+        jmp(pin, "z80_out")     .side(1)
+        in_(pins, 9)            .side(0)
+        mov(osr, isr)           .side(0)
+        mov(isr, null)          .side(0)
+        out(null, 8)            .side(0)
+        out(x, 1)               .side(0)
+        jmp(not_x, "rd_data")   .side(0)
+        mov(osr, y)             .side(0)
+        out(pins, 8)            .side(0)
+        jmp("fin")              .side(0)
+        label("rd_data")
+        pull(noblock)           .side(0)
+        out(pins, 8)            .side(0)
+        jmp("fin")              .side(0)
+        label("z80_out")
+        nop()                   .side(0)
+        in_(pins, 9)            .side(0) [2]
+        push(noblock)           .side(0)
+        mov(y, null)            .side(0)
+        label("fin")
+        wait(1, gpio, 14)       .side(0)
+        mov(null, osr)          .side(1)
+
+
 def boot():
     from machine import Pin, freq
     from rp2 import StateMachine
-    from TS.tspico_io import TS_IO_DUAL, set_ctrl, sel_bank
+    try:
+        from TS.tspico_io import TS_IO_DUAL, set_ctrl, sel_bank
+        pio_src = "TS.tspico_io"
+    except ImportError:
+        TS_IO_DUAL, set_ctrl, sel_bank = TS_IO_DUAL_COPY, SET_CTRL, SEL_BANK
+        pio_src = "harness copies (no TS.tspico_io in this firmware)"
 
     freq(270_000_000)
     print("=" * 64)
     print(HARNESS_VERSION)
+    print("  PIO programs from %s" % pio_src)
     print("  ROM_SLOT=%d  DRAIN_MODE=%s  LOAD_PROG_LEN=%d  PAGES=%d" % (
         ROM_SLOT, DRAIN_MODE, LOAD_PROG_LEN, PAGES))
     print("=" * 64)
