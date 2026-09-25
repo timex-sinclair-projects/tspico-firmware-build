@@ -40,7 +40,12 @@ The harness answers
   LOAD ""           a synthetic BASIC program: one REM line, LOAD_PROG_LEN
                     bytes -- long enough to press BREAK in the middle.
   SAVE "x" ...      any SAVE; the data is received, checked and discarded
-                    (a partial SAVE after BREAK must never be written).
+                    (a partial SAVE after BREAK must never be written). The
+                    session ID (pre-header bytes 3-4) must repeat in both
+                    blocks. If the data block doesn't open with FF + session,
+                    the SAVE was abandoned after its header -- v1.7 and
+                    earlier don't tell the Pico -- and those bytes are kept as
+                    the start of the next command, so it isn't swallowed.
   SAVE "tpi:..."    any TPI command gets PAGES pages of 0x86 paged output, so
                     BREAK can be tried at the "Scroll?" key wait.
 
@@ -58,7 +63,10 @@ Usage on a Pico
      during the block),  SAVE "tpi:dir"  (BREAK at "Scroll?"), and each one
      again without BREAK. After every BREAK the next command must work first
      time.
-  4. Watch the USB serial log. Ctrl-C prints a summary.
+  4. With ROM_SLOT = 1 (shipping v1.7, no SYNC): SAVE "t", hold BREAK so it
+     stops after "Bytes:"/"Program:", then LOAD "" -- the log should show
+     [stale] and the LOAD should work first time.
+  5. Watch the USB serial log. Ctrl-C prints a summary.
 """
 
 import time
@@ -107,6 +115,22 @@ class Abort(Exception):
 
 class Stall(Exception):
     """The Z80 went quiet mid-transaction with no abort (reset, old ROM...)."""
+
+
+class Mismatch(Stall):
+    """Bytes that can't belong to this transaction (session ID disagrees):
+    give up on it as recovered, like a stall."""
+
+
+class NotOurs(Exception):
+    """A SAVE's data block didn't open with FF + this statement's session ID.
+    With v1.7 and earlier (no SYNC) that means the SAVE was abandoned after
+    its header -- a BREAK in the ready-wait -- and these bytes are the start
+    of the user's next command."""
+
+    def __init__(self, head):
+        Exception.__init__(self)
+        self.head = head
 
 
 # ===========================================================================
@@ -282,7 +306,8 @@ class Harness:
         self.header = make_header("breaktest", LOAD_PROG_LEN)
         self.program = make_program(LOAD_PROG_LEN)
         self.stats = {"sync": 0, "load": 0, "save": 0, "cmd": 0,
-                      "abort": 0, "stall": 0, "error": 0, "other": 0}
+                      "abort": 0, "stall": 0, "error": 0, "other": 0,
+                      "stale": 0, "mismatch": 0}
         self.events = []        # (kind, detail) -- for the host test
 
     def start(self):
@@ -309,37 +334,60 @@ class Harness:
             self._event("sync", "0Fh <- %02X" % (w & 0xFF))
             return True
 
-        what = "pre-header"
+        self.what = "pre-header"
         try:
             self.pre[0] = w
             link.drain(memoryview(self.pre)[1:], 9, STALL_MS)
-            pre = self.pre
-            if pre[0] == 0x00 and pre[1] == 0x00:
-                what = "save"
-                self.save()
-            elif pre[0] in (0x00, 0xFF) and 0 < pre[1] < 10:
-                what = "load"
-                self.load()
-            elif pre[0] == 0x42:
-                what = "cmd"
-                self.command()
-            else:
-                self.stats["other"] += 1
-                link.to_idle()
-                self._event("other", " ".join("%02X" % b for b in pre))
+            while True:
+                try:
+                    self.dispatch()
+                    break
+                except NotOurs as e:
+                    # Keep the bytes: they open the next command. Its status
+                    # is read with no wait straight after its pre-header, so
+                    # make sure exactly one 0x01 is waiting (with v1.7 the
+                    # header-block status is usually still unread in TX).
+                    self.stats["stale"] += 1
+                    self._event("stale", "SAVE abandoned after its header; "
+                                "%02X %02X %02X opens the next command" % tuple(e.head))
+                    if not link.mq.tx_fifo():
+                        link.mq.put(0x01)
+                    self.pre[0], self.pre[1], self.pre[2] = e.head
+                    self.what = "pre-header"
+                    link.drain(memoryview(self.pre)[3:], 7, STALL_MS)
         except Abort:
             self.stats["abort"] += 1
             link.to_idle()
-            self._event("abort", what)
+            self._event("abort", self.what)
+        except Mismatch as e:
+            self.stats["mismatch"] += 1
+            link.to_idle(recovered=True)
+            self._event("mismatch", "%s: %s -> RECOVERED" % (self.what, e))
         except Stall:
             self.stats["stall"] += 1
             link.to_idle(recovered=True)
-            self._event("stall", what + " -> RECOVERED")
+            self._event("stall", self.what + " -> RECOVERED")
         except Exception as e:                  # never leave the bus in a mess
             self.stats["error"] += 1
             link.to_idle(recovered=True)
-            self._event("error", "%s: %r" % (what, e))
+            self._event("error", "%s: %r" % (self.what, e))
         return True
+
+    def dispatch(self):
+        pre, link = self.pre, self.link
+        if pre[0] == 0x00 and pre[1] == 0x00:
+            self.what = "save"
+            self.save()
+        elif pre[0] in (0x00, 0xFF) and 0 < pre[1] < 10:
+            self.what = "load"
+            self.load()
+        elif pre[0] == 0x42:
+            self.what = "cmd"
+            self.command()
+        else:
+            self.stats["other"] += 1
+            link.to_idle()
+            self._event("other", " ".join("%02X" % b for b in pre))
 
     # ---- LOAD ---------------------------------------------------------------
     def load(self):
@@ -386,44 +434,55 @@ class Harness:
     # ---- SAVE ---------------------------------------------------------------
     def save(self):
         """Header block (21) then data block (BLEN+4), received and checked,
-        never written anywhere."""
+        never written anywhere.
+
+        Session ID: bytes 3-4 of the pre-header, repeated as bytes 1-2 of both
+        blocks (FRAMES-derived, one per BASIC statement; 0000 = not from BASIC,
+        so not checked). The header's copy must match, or the bytes are
+        misaligned. The data block's first three bytes are read on their own
+        and must be FF + the session: if not, this SAVE was abandoned and
+        they belong to the next command (see NotOurs)."""
         link = self.link
         hdr = self.buf
+        s_lo, s_hi = self.pre[3], self.pre[4]
+        check_session = s_lo or s_hi
         link.set_status(ST_MID)
         link.drain(hdr, 21, STALL_MS, first_ms=STALL_MS)
+        if check_session and (hdr[1] != s_lo or hdr[2] != s_hi):
+            raise Mismatch("header block session %02X%02X, pre-header %02X%02X" % (
+                hdr[2], hdr[1], s_hi, s_lo))
         hcrc_ok = xor_all(hdr, 3, 20, seed=hdr[0]) == hdr[20]
         blen = hdr[14] | (hdr[15] << 8)
         name = bytes(hdr[4:14])
         link.mq.put(0x01)                       # header-block status
         link.set_status(ST_MID)                 # data block still to come
-        # Data block: BLEN+4 bytes (flag, 2 session bytes, content, parity).
-        # Received in 512-byte chunks so any size fits; parity checked on the fly.
-        long = blen + 4
+
+        head = bytearray(3)                     # FF, session lo, session hi
+        link.drain(head, 3, STALL_MS, first_ms=SAVE_DATA_START_MS)
+        if head[0] != 0xFF or (check_session and (head[1] != s_lo or head[2] != s_hi)):
+            raise NotOurs(head)
+
+        # Content + parity (BLEN+1 bytes) in buffer-sized chunks; the parity
+        # seeds with the flag and skips the session bytes.
+        rest = blen + 1
         got = 0
-        parity = 0
-        first = True
+        parity = 0xFF
+        dcrc_ok = False
         view = memoryview(self.buf)
-        while got < long:
-            k = min(len(self.buf), long - got)
-            link.drain(view, k, STALL_MS,
-                       first_ms=SAVE_DATA_START_MS if first else None)
-            if first:
-                parity = self.buf[0]
-                start = 3
-                first = False
-            else:
-                start = 0
-            end = k - 1 if got + k == long else k
-            parity = xor_all(self.buf, start, end, seed=parity)
-            if got + k == long:
+        while got < rest:
+            k = min(len(self.buf), rest - got)
+            link.drain(view, k, STALL_MS)
+            last = got + k == rest
+            parity = xor_all(self.buf, 0, k - 1 if last else k, seed=parity)
+            if last:
                 dcrc_ok = parity == self.buf[k - 1]
             got += k
         link.mq.put(0x01)                       # final status
         link.mq.put(0x01)                       # next command's pre-load
         link.set_status(ST_IDLE)
         self.stats["save"] += 1
-        self._event("save", "%r BLEN=%d hdrCRC=%s dataCRC=%s (discarded)" % (
-            name, blen, hcrc_ok, dcrc_ok))
+        self._event("save", "%r BLEN=%d hdrCRC=%s dataCRC=%s session=%02X%02X (discarded)" % (
+            name, blen, hcrc_ok, dcrc_ok, s_hi, s_lo))
 
     # ---- TPI: command -> 0x86 pages ----------------------------------------
     def command(self):
@@ -442,6 +501,15 @@ class Harness:
         link.drain(body, n + 4, STALL_MS)
         sum_ok = xor_all(body, 0, n + 3) == body[n + 3]
         cmd = bytes(body[3:n + 3]).decode("ascii", "replace").strip()
+        if not sum_ok:
+            # As production's FAIL_CMD: one status byte (02 -> Report R), then
+            # the next command's pre-load.
+            link.mq.put(0x02)
+            link.mq.put(0x01)
+            link.set_status(ST_IDLE)
+            self.stats["cmd"] += 1
+            self._event("cmd", "%r bad checksum -> Report R" % cmd)
+            return
         echo = []
         send = link.send
         send(0x86, echo)                        # PRINT_STRING_WITH_LOOP
@@ -469,7 +537,7 @@ class Harness:
                 link.mq.put(0x01)               # next command's pre-load
                 link.set_status(ST_IDLE)
                 self.stats["cmd"] += 1
-                self._event("cmd", "%r stopped with N at page %d (checksum %s)" % (cmd, page, sum_ok))
+                self._event("cmd", "%r stopped with N at page %d" % (cmd, page))
                 return
             link.set_status(ST_MID)
             for _ in range(len(prompt)):        # erase the prompt (new ROM)
@@ -481,12 +549,13 @@ class Harness:
         link.mq.put(0x01)                       # next command's pre-load
         link.set_status(ST_IDLE)
         self.stats["cmd"] += 1
-        self._event("cmd", "%r all %d pages (checksum %s)" % (cmd, PAGES, sum_ok))
+        self._event("cmd", "%r all %d pages" % (cmd, PAGES))
 
     def summary(self):
         s = self.stats
         return ("SYNCs %(sync)d  LOADs %(load)d  SAVEs %(save)d  cmds %(cmd)d  "
-                "aborts %(abort)d  stalls %(stall)d  errors %(error)d  other %(other)d" % s)
+                "aborts %(abort)d  stalls %(stall)d  stale SAVEs %(stale)d  "
+                "session mismatches %(mismatch)d  errors %(error)d  other %(other)d" % s)
 
 
 # ===========================================================================

@@ -194,10 +194,12 @@ def pre_header(b0, b1, lo=0, hi=0):
     return p + [c]
 
 
-def rom_load(flag, length, break_at=None, stop_at=None):
+def rom_load(flag, length, break_at=None, stop_at=None, sync_first=True):
     """One LOAD block. break_at: press BREAK at that byte (256-byte check).
-    stop_at: the 2068 is reset there (just stops, no abort)."""
-    yield from sync()
+    stop_at: the 2068 is reset there (just stops, no abort).
+    sync_first=False: a v1.7-or-earlier ROM, which has no SYNC."""
+    if sync_first:
+        yield from sync()
     for b in pre_header(flag, 1, length & 0xFF, length >> 8):
         yield out(0x0E, b)
     st = yield ("in",)                                  # 19C7: no wait
@@ -229,9 +231,15 @@ def rom_load(flag, length, break_at=None, stop_at=None):
     return "ok" if st == 0x01 else "J"
 
 
-def rom_save(blen, break_at=None, stop_after_header=False):
-    """A SAVE: header call then data call (the data call has no SYNC)."""
-    yield from sync()
+def rom_save(blen, break_at=None, stop_after_header=False, sync_first=True,
+             v17_break_after_header=False, header_session=(0x34, 0x12)):
+    """A SAVE: header call then data call (the data call has no SYNC).
+    v17_break_after_header: a v1.7 ROM whose ready-wait after the header
+    block sees BREAK -- it gives up (Report J) without reading the status
+    and without telling the Pico. header_session: the session bytes the
+    header block carries (the pre-header's are 34 12)."""
+    if sync_first:
+        yield from sync()
     for b in pre_header(0x00, 0x00):
         yield out(0x0E, b)
     st = yield ("in",)                                  # 18C4: no wait
@@ -240,13 +248,15 @@ def rom_save(blen, break_at=None, stop_after_header=False):
     r = yield from ready_wait()                         # 18D2
     if r:
         return r
-    hdr = [0x00, 0x34, 0x12, 0x03] + list(b"savetest  ") + [
+    hdr = [0x00, header_session[0], header_session[1], 0x03] + list(b"savetest  ") + [
         blen & 0xFF, blen >> 8, 0x00, 0x80, 0x00, 0x00]
     c = hdr[0]
     for b in hdr[3:]:
         c ^= b
     for b in hdr + [c]:
         yield out(0x0E, b)
+    if v17_break_after_header:
+        return "J"                                      # 190B: BREAK, status unread
     r = yield from ready_wait()                         # 190B
     if r:
         return r
@@ -271,7 +281,7 @@ def rom_save(blen, break_at=None, stop_after_header=False):
     return "ok" if st == 0x01 else "J"
 
 
-def rom_cmd(text, keys):
+def rom_cmd(text, keys, bad_checksum=False):
     """A TPI: command whose reply is 0x86 paged output. keys: what the user
     presses at each "Scroll?" prompt -- 'Y', 'N' or 'BREAK'."""
     body = list(text.encode())
@@ -288,6 +298,8 @@ def rom_cmd(text, keys):
     c = 0
     for b in d:
         c ^= b
+    if bad_checksum:
+        c ^= 0x5A
     for b in d + [c]:                                   # 224D-2274: 'D', len, text, XOR
         yield out(0x0E, b)
     r = yield from ready_wait()                         # 2279
@@ -295,7 +307,7 @@ def rom_cmd(text, keys):
         return r
     st = yield ("in",)
     if st != 0x86:
-        return "J"
+        return "st%02X" % st                            # 2286-228C: status -> report
     rc = yield ("in",)                                  # 02B9: return code
     if rc == 0:
         return "silent"                                 # 192F: AND A / RET Z
@@ -411,7 +423,11 @@ def main():
     print("TPI command -> 0x86 pages")
     r = run(pio, h, rom_cmd("tpi:dir", ["Y", "Y", "Y"]))
     check(r == "ok:%d" % H.PAGES and idle_ok(pio), "all %d pages, end-of-message 03 (%s)" % (H.PAGES, r))
-    check("checksum True" in h.events[-1][1], "command body read to its XOR checksum byte: " + h.events[-1][1])
+    r = run(pio, h, rom_cmd("tpi:dir", [], bad_checksum=True))
+    check(r == "st02" and idle_ok(pio) and "bad checksum" in h.events[-1][1],
+          "damaged command body -> status 02 (Report R), then idle with one pre-load (%s)" % r)
+    r = run(pio, h, rom_cmd("tpi:dir", ["N"]))
+    check(r == "N:1", "and the next command works (%s)" % r)
     r = run(pio, h, rom_cmd("tpi:dir", ["Y", "N"]))
     check(r == "N:2" and idle_ok(pio), "'N' at the second prompt stops cleanly (%s)" % r)
     r = run(pio, h, rom_cmd("tpi:dir", ["BREAK"]))
@@ -444,6 +460,30 @@ def main():
           "harness times out -> idle with RECOVERED (status FB), one pre-load")
     r = run(pio, h, rom_load(0x00, 17))
     check(r == "ok" and pio.status() == 0xFF, "next command's SYNC clears RECOVERED and it works (%s)" % r)
+
+    print("session ID: v1.7 ROM, BREAK after the SAVE header, then the next command")
+
+    def v17_save_break_then_load():
+        r = yield from rom_save(3000, sync_first=False, v17_break_after_header=True)
+        assert r == "J"
+        return (yield from rom_load(0x00, 17, sync_first=False))
+
+    n = len(h.events)
+    r = run(pio, h, v17_save_break_then_load())
+    kinds = [e[0] for e in h.events[n:]]
+    check(r == "ok" and kinds == ["stale", "load"],
+          "the data-block check sees the LOAD pre-header instead of FF + session, keeps "
+          "those bytes and serves the LOAD first time (%s: %s)" % (r, kinds))
+    check(idle_ok(pio), "idle, one pre-load")
+
+    print("session ID: header block from a different statement")
+    r = run(pio, h, rom_save(3000, header_session=(0x99, 0x77)))
+    check(r == "T" and h.events[-1][0] == "mismatch" and idle_ok(pio, recovered=True),
+          "harness gives up as RECOVERED; the waiting Z80 raises Report T (%s: %s)" % (
+              r, h.events[-1][1]))
+    r = run(pio, h, rom_save(200))
+    check(r == "ok" and "session=1234" in h.events[-1][1],
+          "next SAVE (SYNC clears RECOVERED) works, session checked: %s" % h.events[-1][1])
 
     print("RECOVERED seen by a waiting Z80")
     pio2, h2 = new_harness()
