@@ -1,0 +1,43 @@
+# Line endings and binary safety.
+#
+# WHY THIS FILE EXISTS
+# Commit 79f12a1 rewrote src/TS/tspico_io.py with LF endings. The file had
+# been CRLF for its whole history, so every line changed: a 48-line fix read
+# as 2425 insertions / 794 deletions, and the file then conflicted with main
+# in its entirety because git had no common lines to anchor on. Nothing in
+# the repo prevented it or made it visible in review.
+#
+# The fix is to let git own the decision. The firmware sources below are
+# stored LF and checked out CRLF, so an editor that writes LF produces no
+# diff at all -- the flip becomes impossible to commit by accident.
+#
+# SCOPE IS DELIBERATELY NARROW. Most .py in this repo is LF (29 files) and
+# only the firmware sources are CRLF (8), so there is no blanket *.py rule --
+# that would convert the majority and cause exactly the churn this is meant
+# to stop. Same for "SD card/help/*.txt", which is 89 CRLF / 40 LF: worth
+# reconciling one day, but not here.
+
+# ─── Firmware sources: CRLF in the working tree, LF in the repo ──────────
+# These are the modules frozen into the UF2 (src/TS/), the flash-filesystem
+# copies (src/main.py, src/dev_tspico.py) and the archived original.
+src/main.py         text eol=crlf
+src/dev_tspico.py   text eol=crlf
+src/TS/*.py         text eol=crlf
+archive/*.py        text eol=crlf
+
+# ─── Binary assets: never convert, never try to diff ─────────────────────
+# ROM and tape images are the ground truth this repo reverse-engineers; a
+# line-ending conversion would silently corrupt them. Marked explicitly so
+# that a future `* text=auto` can't reach them. ROMs/ holds extensionless
+# 16K images (TSPICO-11-exrom and friends), hence the directory rule.
+ROMs/**             binary
+src/rom/**          binary
+*.tap               binary
+*.rom               binary
+*.bin               binary
+*.dck               binary
+*.uf2               binary
+*.mpy               binary
+*.png               binary
+*.jpg               binary
+*.pdf               binary
