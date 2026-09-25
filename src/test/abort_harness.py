@@ -102,23 +102,19 @@ TX_DEPTH = 4            # TS_IO_DUAL FIFOs are not joined: 4 words each way
 ST_IDLE, ST_MID, ST_RECOVERED = "idle", "mid", "recovered"
 
 
+# MicroPython note: these exceptions carry their data in args -- no custom
+# __init__ (MicroPython can't call Exception.__init__) and no instance
+# attributes. Read them with got() / detail() / e.args[0].
+
 class Abort(Exception):
     """The Z80 wrote to port 0Fh (SYNC or BREAK) in the middle of something.
-    got = words received up to and including that write."""
-
-    def __init__(self, got=0):
-        Exception.__init__(self)
-        self.got = got
+    args[0] = words received up to and including that write."""
 
 
 class Stall(Exception):
     """The Z80 went quiet mid-transaction with no abort (reset, old ROM, or
-    bytes the PIO dropped). got = words received before the silence."""
-
-    def __init__(self, got=0, detail=""):
-        Exception.__init__(self)
-        self.got = got
-        self.detail = detail
+    bytes the PIO dropped). args[0] = words received before the silence;
+    args[1], if present, says why."""
 
 
 class Mismatch(Stall):
@@ -130,11 +126,15 @@ class NotOurs(Exception):
     """A SAVE's data block didn't open with FF + this statement's session ID.
     With v1.7 and earlier (no SYNC) that means the SAVE was abandoned after
     its header -- a BREAK in the ready-wait -- and these bytes are the start
-    of the user's next command."""
+    of the user's next command. args[0] = that command's 10-byte pre-header."""
 
-    def __init__(self, head):
-        Exception.__init__(self)
-        self.head = head
+
+def got(e):
+    return e.args[0] if e.args else 0
+
+
+def detail(e):
+    return e.args[1] if len(e.args) > 1 else ""
 
 
 # ===========================================================================
@@ -373,7 +373,7 @@ class Harness:
             try:
                 link.drain(raw, 10, STALL_MS)
             except Abort as a:
-                if a.got == 1:
+                if got(a) == 1:
                     # A lone port-0Fh write: SYNC (the ROM then waits for
                     # READY + IDLE before it sends anything else).
                     self.stats["sync"] += 1
@@ -393,9 +393,9 @@ class Harness:
                     # (and made sure its 0x01 status is waiting); serve it.
                     self.stats["stale"] += 1
                     self._event("stale", "SAVE abandoned after its header; "
-                                "%s opens the next command" % " ".join("%02X" % b for b in e.head))
+                                "%s opens the next command" % " ".join("%02X" % b for b in e.args[0]))
                     for i in range(10):
-                        pre[i] = e.head[i]
+                        pre[i] = e.args[0][i]
                     self.what = "pre-header"
         except Abort as a:
             self.stats["abort"] += 1
@@ -404,15 +404,16 @@ class Harness:
         except Mismatch as e:
             self.stats["mismatch"] += 1
             link.to_idle(recovered=True)
-            self._event("mismatch", "%s: %s -> RECOVERED" % (self.what, e.detail))
+            self._event("mismatch", "%s: %s -> RECOVERED" % (self.what, detail(e)))
         except Stall as e:
             self.stats["stall"] += 1
             evidence = ""
             if self.what == "pre-header":
-                evidence = ": got %d/10 [%s]" % (e.got, " ".join(
-                    "%03X" % raw[i] for i in range(e.got)))
-            elif e.got:
-                evidence = ": %d bytes then silence" % e.got
+                n = got(e)
+                evidence = ": got %d/10 [%s]" % (n, " ".join(
+                    "%03X" % raw[i] for i in range(n)))
+            elif got(e):
+                evidence = ": %d bytes then silence" % got(e)
             link.to_idle(recovered=True)
             self._event("stall", "%s%s -> RECOVERED" % (self.what, evidence))
         except Exception as e:                  # never leave the bus in a mess

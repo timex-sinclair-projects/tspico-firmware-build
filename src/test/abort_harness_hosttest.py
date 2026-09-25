@@ -519,6 +519,25 @@ def main():
         b = pio_body(os.path.join(os.path.dirname(HERE), "TS", "tspico_io.py"), theirs)
         check(a and a == b, "%s == %s (%d instructions)" % (mine, theirs, len(b)))
 
+    print("MicroPython-safe exceptions")
+    import ast
+    tree = ast.parse(open(os.path.join(HERE, "abort_harness.py"), encoding="utf-8").read())
+    exc_names = {"Exception"}
+    bad = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            bases = {b.id for b in node.bases if isinstance(b, ast.Name)}
+            if bases & exc_names or node.name in ("Abort", "Stall", "Mismatch", "NotOurs"):
+                exc_names.add(node.name)
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+                        bad.append("%s.__init__" % node.name)
+        if isinstance(node, ast.Attribute) and node.attr == "__init__" and \
+                isinstance(node.value, ast.Name) and node.value.id == "Exception":
+            bad.append("Exception.__init__ call")
+    check(not bad, "no exception class overrides __init__ or calls Exception.__init__ "
+                   "(MicroPython raises AttributeError) %s" % (bad or ""))
+
     print("never blocked, never dropped")
     check(pio.dropped == 0, "no RX overflow in any scenario (%d dropped)" % pio.dropped)
     print("  PASS  no put() into a full TX FIFO (FakePIO raises PutWouldBlock if one happens)")
