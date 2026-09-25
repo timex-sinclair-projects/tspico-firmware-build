@@ -65,15 +65,34 @@ def assemble(man, root, overrides, base=None):
     known-good 512K image. Without --base those slots are left as fill
     and the build reports them, so a partial image is never mistaken for
     a shipping one.
+
+    An override may also name a slot the manifest doesn't list (the spare
+    slots 4-7, say, for a test ROM): it gets one 32K slot. An override that
+    lands inside a 64K DCK entry but not on its first slot can't be placed
+    without clobbering the cartridge, so it's an error, as is any override
+    that doesn't fit -- nothing a --slot asks for is ever silently dropped.
     """
     img = bytearray([FILL]) * FLASH_SIZE
     if base:
         blob = open(base, "rb").read()
         if len(blob) != FLASH_SIZE:
             sys.exit("--base %s is %d bytes, expected %d" % (base, len(blob), FLASH_SIZE))
+    listed = {e["slot"] for e in man["slots"]}
+    covered = {}                                   # slot -> entry whose span holds it
+    for e in man["slots"]:
+        for s in range(e["slot"], e["slot"] + e.get("size", SLOT_SIZE) // SLOT_SIZE):
+            covered[s] = e
+    errors = []
+    for s in sorted(set(overrides) - listed):
+        if s in covered:
+            e = covered[s]
+            errors.append("--slot %d: slot %d is the second half of the %dK %s entry "
+                          "at slot %d (%s)" % (s, s, e.get("size", SLOT_SIZE) // 1024,
+                          e.get("kind", "?"), e["slot"], e.get("name", "?")))
+    spare = [{"slot": s} for s in sorted(set(overrides) - listed) if s not in covered]
     used = {}
     missing = []
-    for e in man["slots"]:
+    for e in man["slots"] + spare:
         s = e["slot"]
         size = e.get("size", SLOT_SIZE)
         if e.get("from_base") and s not in overrides:
@@ -87,12 +106,19 @@ def assemble(man, root, overrides, base=None):
         path = overrides.get(s, os.path.join(root, e["file"]) if e.get("file") else None)
         if not path:
             continue
-        blk = open(path, "rb").read()
+        try:
+            blk = open(path, "rb").read()
+        except OSError as x:
+            errors.append("slot %d: can't read %s (%s)" % (s, path, x.strerror))
+            continue
         if len(blk) > size:
-            sys.exit("slot %d: %s is %d bytes, max %d" % (s, path, len(blk), size))
+            errors.append("slot %d: %s is %d bytes, max %d" % (s, path, len(blk), size))
+            continue
         blk = blk + bytes([FILL]) * (size - len(blk))            # pad short images
         img[s * SLOT_SIZE:s * SLOT_SIZE + size] = blk
         used[s] = (path, crc(blk), s in overrides, e.get("crc32"))
+    if errors:
+        sys.exit("\n".join(errors))
     return bytes(img), used, missing
 
 
@@ -100,9 +126,21 @@ def cmd_build(args):
     man = json.load(open(args.manifest))
     root = os.path.dirname(os.path.abspath(args.manifest))
     overrides = {}
+    errors = []
     for o in args.slot or []:
-        n, _, path = o.partition("=")
-        overrides[int(n)] = path
+        n, eq, path = o.partition("=")
+        try:
+            n = int(n)
+        except ValueError:
+            n = None
+        if not eq or not path or n is None or not 0 <= n < SLOTS:
+            errors.append("--slot %s: expected N=FILE with N in 0..%d" % (o, SLOTS - 1))
+        elif n in overrides:
+            errors.append("--slot %s: slot %d already set to %s" % (o, n, overrides[n]))
+        else:
+            overrides[n] = path
+    if errors:
+        sys.exit("\n".join(errors))
     img, used, missing = assemble(man, root, overrides, args.base)
     open(args.out, "wb").write(img)
     print("%s  %d bytes  crc32 %s" % (args.out, len(img), crc(img)))
