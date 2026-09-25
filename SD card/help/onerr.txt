@@ -12,13 +12,21 @@ ZX Spectrum BASIC.
 Enable error trapping and jump
 to the line n when an error
 occurs. The routine can examine
-the system variables ERRLN
-(error line), ERRC (error code),
-and ERRS (error statement) if it
-needs to handle the error, then
-branch elsewhere, possibly to 
-the ERRLN line or the one after
-it.
+these system variables, then
+branch elsewhere, possibly to
+the error line or the one after
+it:
+
+ ERRT 23739 error code
+ ERRC 23736 line of error
+ ERRS 23738 statement of error
+ ERRLN 23734 the GO TO line
+
+ERRT is the report index: 0 for
+"0 OK", 10 for A, 15 for F, 27
+for R. So PEEK 23739 = 15 means
+report F. Counting runs 0-9 then
+A-R with no gap.
 
   ON ERR CONT
 This will simply ignore the
@@ -38,4 +46,5 @@ When you type it in L mode, you
 get the symbol but the keyword
 when in K mode.
 
-See also: RESET, CONTINUE, GOTO,sysvars
+See also: RESET, CONTINUE, GOTO,
+sysvars, errors

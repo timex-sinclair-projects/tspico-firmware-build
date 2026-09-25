@@ -357,6 +357,7 @@ from TS.tspico_io import (
     TS_IO_DUAL,                          # was: TS_IO (single-port)
     LOAD_TS, LOAD_ZX, LOAD_ZX_C,
     SAVE_TS, SAVE_ZX,
+    CORE1_BUSY,                          # core1 flag lives in tspico_io, not here
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
 )
 
@@ -501,6 +502,15 @@ class PICO_STATUS():                                                            
         self.f_name = []                                                        # string of current filename
         self.offset = 0                                                         # integer pointer to current position on a large TAP file
         self.offset_tbl = []                                                    # table of offsets for each segment in a .TAP file
+        # LOAD search bookkeeping, used by LOAD_TS to bound the Z80's
+        # retry loop. ld_start is the offset a search began at (-1 = no
+        # search in progress); ld_wrapped records that the tape has been
+        # round once since then. Together they let LOAD_TS stop after one
+        # full pass instead of cycling forever -- there is no BREAK signal
+        # from the Z80 to stop it (docs/rom-analysis/BREAK_AND_ABORT.md).
+        self.ld_start = -1
+        self.ld_start_idx = 0
+        self.ld_wrapped = False
         self.tap_idx = 0                                                        # pointer to position of next block to be LOADed in the mounted TAP 
         self.totlen = 0                                                         # integer holding total length in bytes, of a large TAP file
         self.zx48 = False                                                       # boolean for ZX Spectrum compatibility mode
@@ -4550,11 +4560,14 @@ def TS2068_IO():                                                         # Main 
                 pidx = TSP.tap_idx
                 # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
-                MQ, TSP, new_logs = SAVE_TS(MQ, TSP)
+                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP)
                 # log_entries += new_logs
                 # log_entries.extend(new_logs) # For when SAVE_TS returns an array
                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
-                save_aborted = "sd" not in os.listdir("/")
+                # SAVE_TS reports whether a .tap actually reached the card;
+                # this used to sniff the mount table for it. Kept in step with
+                # TS/tspico.py -- SAVE_TS returns a 4-tuple now, so unpacking
+                # three here would ValueError the moment this override loads.
 
                 # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
                 # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
@@ -4562,19 +4575,14 @@ def TS2068_IO():                                                         # Main 
                 # on ACTIVATE_MQ for the rationale.
                 # ──────────────────────────────────────────────────────────
                 DEACTIVATE_SD()
-                ACTIVATE_MQ() # Also fixes ENA_SD leaving MQ active with SD active as well
-                # ─── DUAL-PORT MIGRATION: V6 pre-load + ready for next cmd ─
-                # ACTIVATE_MQ now leaves Y=BUSY by default. We need to
-                # explicitly arm TX (status pre-load for the next command's
-                # pre-header phase) and then signal ready. The actual
-                # response for the just-completed SAVE was sent inside
-                # SAVE_TS via its own V6 chain; this pre-load is for the
-                # NEXT iteration of the main loop.
-                # ──────────────────────────────────────────────────────────
-                MQ.put(0x01)
-                MQ_READY()
 
-                if not save_aborted:
+                # ARM EXACTLY ONCE, AFTER ALL SD WORK. Arming here and then
+                # calling MOUNT_FILE / DIR_FILES below re-created the #40
+                # pin-grab race (ACTIVATE_SD takes GPIO 2-4; GPIO 2 is D0),
+                # and the second ACTIVATE_MQ() tore the SM down under any
+                # command that started meanwhile. See TS/tspico.py for the
+                # full note.
+                if saved:
 
                     # Handle re-mounting an appended file, possibly mounting a
                     # new file, or restoring the mounted file's name. Then
@@ -4637,11 +4645,11 @@ def TS2068_IO():                                                         # Main 
                     # DIR refresh; tear it down before reactivating MQ.
                     # ──────────────────────────────────────────────────────
                     DEACTIVATE_SD()
-                    ACTIVATE_MQ()
-                    # V6 pre-load + ready for next cmd (see twin block
-                    # above; ACTIVATE_MQ leaves Y=BUSY now).
-                    MQ.put(0x01)
-                    MQ_READY()
+
+                # Single arm point for both outcomes, after the last SD access.
+                ACTIVATE_MQ()
+                MQ.put(0x01)
+                MQ_READY()
 
                 led.value(0)
                 
@@ -4835,6 +4843,26 @@ def ZX48_IO(pre):                                                               
             ts = time.ticks_us()
             a = MQ.get()
             TLM("ZX48_IO byte received", "a=%d (0x%02X)" % (a, a))
+
+            # Wait for core1 before dispatching, the way the three
+            # main-loop LVM branches do. Without it a watchdog left
+            # over from the previous ZX transaction is still inside
+            # its cleanup -- which ends with a ~1s BLINK() -- and the
+            # spawn in the handler below raises OSError 'core1 in
+            # use'. Nothing here or in main.py catches that, so the
+            # Pico drops to a REPL. START_WATCHDOG() now survives it,
+            # but waiting means we keep the watchdog instead of
+            # running the transfer unguarded. Bounded, so a thread
+            # that died without clearing the flag cannot wedge us.
+            # BOTH flags: `busy` here is tspico.py's own (SAVE_LOG,
+            # BLINK_LED, CHK_STATUS); CORE1_BUSY() is tspico_io's
+            # WATCHDOG. They are different variables -- see that
+            # function's docstring -- and core1 is one resource.
+            _t = time.ticks_ms()
+            while busy or CORE1_BUSY():
+                if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
+                    LOG("ZX48_IO gave up waiting for core1", 2)
+                    break
 
             if a == 76:                                                    # ASCII 'L' - for LOAD
 
