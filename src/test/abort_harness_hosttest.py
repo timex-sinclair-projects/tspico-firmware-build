@@ -96,8 +96,10 @@ class FakePIO:
 
     # ---- clock for the harness ----
     def ticks_ms(self):
+        # The clock advances, the Z80 doesn't: it moves only when the harness
+        # touches the FIFOs, so a clock read in a wait loop can't make the
+        # simulated Z80 outrun the harness's reads.
         self.clock += 1
-        self.pump()
         return self.clock
 
     @staticmethod
@@ -436,15 +438,6 @@ def main():
     check(h.events[-1] == ("abort", "save") and idle_ok(pio), "harness heard the abort in its drain -> idle, nothing written")
     r = run(pio, h, rom_save(200))
     check(r == "ok", "next SAVE works first time (%s)" % r)
-
-    print("SAVE, BREAK mid-block, DRAIN_MODE='exception'")
-    H.DRAIN_MODE = "exception"
-    r = run(pio, h, rom_save(3000, break_at=1000))
-    check(r == "D" and h.events[-1] == ("abort", "save") and idle_ok(pio),
-          "a 9-bit word stored into the buffer raises -> same abort (%s)" % r)
-    r = run(pio, h, rom_save(200))
-    check(r == "ok", "and the next SAVE works (%s)" % r)
-    H.DRAIN_MODE = "check"
 
     print("TPI command -> 0x86 pages")
     r = run(pio, h, rom_cmd("tpi:dir", ["Y", "Y", "Y"]))
