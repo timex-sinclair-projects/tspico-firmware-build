@@ -23,6 +23,7 @@ Run:  python3 src/test/abort_harness_hosttest.py
 """
 
 import os
+import re
 import sys
 from collections import deque
 
@@ -142,6 +143,11 @@ class FakePIO:
                 self._advance(self.tx.popleft())        #  wait; see underruns)
             else:
                 self.underruns += 1
+        elif kind == "idle":                            # the 2068 doing something
+            if op[1] <= 0:                              # else (user typing...)
+                self._advance(None)
+            else:
+                self.pending = ("idle", op[1] - 1)
         elif kind == "wait":                            # poll port 0Fh
             need, budget = op[1], op[2]
             st = self.status()
@@ -234,7 +240,7 @@ def rom_load(flag, length, break_at=None, stop_at=None, sync_first=True):
 
 
 def rom_save(blen, break_at=None, stop_after_header=False, sync_first=True,
-             v17_break_after_header=False, header_session=(0x34, 0x12)):
+             v17_break_after_header=False, header_session=(0x34, 0x12), flood=0):
     """A SAVE: header call then data call (the data call has no SYNC).
     v17_break_after_header: a v1.7 ROM whose ready-wait after the header
     block sees BREAK -- it gives up (Report J) without reading the status
@@ -264,9 +270,13 @@ def rom_save(blen, break_at=None, stop_after_header=False, sync_first=True,
         return r
     st = yield ("in",)
     if st != 0x01:
-        return "J"
+        return "st%02X" % st                            # 08 -> Report A, etc.
     if stop_after_header:
         return "reset"
+    if flood:                                           # garbage, not a data block
+        for _ in range(flood):
+            yield out(0x0E, 0x00)
+        return "flood"
     data = [0xFF, 0x34, 0x12] + [(i * 7) & 0xFF for i in range(blen)]
     c = data[0]
     for b in data[3:]:
@@ -427,7 +437,10 @@ def main():
     print("LOAD data, BREAK mid-block")
     r = run(pio, h, rom_load(0xFF, H.LOAD_PROG_LEN, break_at=5000))
     check(r == "D", "Z80 sees Report D (got %s)" % r)
-    check(h.events[-1] == ("abort", "load") and idle_ok(pio), "harness heard the abort in its send loop -> idle, one pre-load")
+    k, d = h.events[-1]
+    m = re.match(r"load data: Z80 had read (\d+) of (\d+) bytes$", d)
+    check(k == "abort" and m and 5000 <= int(m.group(1)) <= 5260 and int(m.group(2)) == H.LOAD_PROG_LEN + 2
+          and idle_ok(pio), "harness heard the abort in its send loop -> idle, one pre-load: [%s] %s" % (k, d))
     r = run(pio, h, rom_load(0x00, 17))
     check(r == "ok", "next LOAD works first time (%s)" % r)
 
@@ -439,7 +452,8 @@ def main():
     print("SAVE, BREAK mid-block")
     r = run(pio, h, rom_save(3000, break_at=1000))
     check(r == "D", "Z80 sees Report D (got %s)" % r)
-    check(h.events[-1] == ("abort", "save") and idle_ok(pio), "harness heard the abort in its drain -> idle, nothing written")
+    check(h.events[-1] == ("abort", "save data block: after 1024 of 3004 bytes") and idle_ok(pio),
+          "harness heard the abort in its drain -> idle, nothing written: [%s] %s" % h.events[-1])
     r = run(pio, h, rom_save(200))
     check(r == "ok", "next SAVE works first time (%s)" % r)
 
@@ -454,7 +468,7 @@ def main():
     r = run(pio, h, rom_cmd("tpi:dir", ["Y", "N"]))
     check(r == "N:2" and idle_ok(pio), "'N' at the second prompt stops cleanly (%s)" % r)
     r = run(pio, h, rom_cmd("tpi:dir", ["BREAK"]))
-    check(r == "D" and h.events[-1] == ("abort", "cmd") and idle_ok(pio),
+    check(r == "D" and h.events[-1] == ("abort", "cmd key wait, page 1") and idle_ok(pio),
           "BREAK at the Scroll? key wait -> Report D, harness idle (%s)" % r)
     r = run(pio, h, rom_cmd("tpi:dir", ["N"]))
     check(r == "N:1", "next command works first time (%s)" % r)
@@ -469,7 +483,7 @@ def main():
     n = len(h.events)
     r = run(pio, h, reset_then_load())
     kinds = [e[0] for e in h.events[n:]]
-    check(r == "ok" and kinds == ["sync", "abort", "load"] and h.events[n + 1][1] == "load",
+    check(r == "ok" and kinds == ["sync", "abort", "load"] and h.events[n + 1][1].startswith("load data: Z80 had read"),
           "the new LOAD's SYNC reaches the harness mid-send, aborts the stale LOAD, "
           "and the new one succeeds (%s: %s)" % (r, kinds))
     check(idle_ok(pio), "idle, one pre-load")
@@ -489,6 +503,7 @@ def main():
     def v17_save_break_then_load():
         r = yield from rom_save(3000, sync_first=False, v17_break_after_header=True)
         assert r == "J"
+        yield ("idle", 50)                              # Report J, user types LOAD ""
         return (yield from rom_load(0x00, 17, sync_first=False))
 
     n = len(h.events)
@@ -507,6 +522,21 @@ def main():
     r = run(pio, h, rom_save(200))
     check(r == "ok" and "session=1234" in h.events[-1][1],
           "next SAVE (SYNC clears RECOVERED) works, session checked: %s" % h.events[-1][1])
+
+    print("empty program (BLEN=0): refused like production, no 64K flood")
+    r = run(pio, h, rom_save(0))
+    check(r == "st08" and "refused" in h.events[-1][1] and idle_ok(pio),
+          "status 08 -> Report A, harness idle (%s: %s)" % (r, h.events[-1][1]))
+
+    print("a flood of zeros where the SAVE data block should be")
+    pio3, h3 = new_harness()
+    r = run(pio3, h3, rom_save(3000, sync_first=False, flood=400), serves=2)
+    kinds = [e[0] for e in h3.events]
+    check(kinds == ["stall"] and "garbage" in h3.events[-1][1],
+          "one stall, no stale-SAVE loop (%s: %s)" % (kinds, h3.events[-1][1][:60] if h3.events else ""))
+    check(idle_ok(pio3, recovered=True), "idle with RECOVERED, one pre-load, the flood drained")
+    r = run(pio3, h3, rom_load(0x00, 17))
+    check(r == "ok", "next command works (%s)" % r)
 
     print("RECOVERED seen by a waiting Z80")
     pio2, h2 = new_harness()

@@ -197,7 +197,7 @@ class Link:
                 got += 1
             else:
                 if got and raw[got - 1] & 0x100:
-                    raise Abort(got)
+                    raise Abort(got, "after %d of %d bytes" % (got - 1, n))
                 ticks, diff = self.ticks_ms, self.ticks_diff
                 t0 = ticks()
                 while not rx():
@@ -205,7 +205,7 @@ class Link:
                         raise Stall(got)
                 limit = stall_ms
         if raw[n - 1] & 0x100:
-            raise Abort(n)
+            raise Abort(n, "after %d of %d bytes" % (n - 1, n))
         return n
 
     def drain_xor(self, n, stall_ms, first_ms=None):
@@ -223,7 +223,7 @@ class Link:
                 got += 1
             else:
                 if p & 0x100:
-                    raise Abort(got)
+                    raise Abort(got, "after %d of %d bytes" % (got - 1, n))
                 ticks, diff = self.ticks_ms, self.ticks_diff
                 t0 = ticks()
                 while not rx():
@@ -231,7 +231,7 @@ class Link:
                         raise Stall(got)
                 limit = stall_ms
         if p & 0x100:
-            raise Abort(n)
+            raise Abort(n, "after %d of %d bytes" % (n - 1, n))
         return p
 
     # ---- send ---------------------------------------------------------------
@@ -279,6 +279,27 @@ class Link:
             elif self.ticks_diff(self.ticks_ms(), t0) >= STALL_MS:
                 raise Stall()
 
+    def put_status(self, b):
+        """Stage a status / pre-load byte, but never block: MQ.put() into a
+        full TX FIFO waits forever on a Pico. Returns False if it couldn't."""
+        if self.mq.tx_fifo() < TX_DEPTH:
+            self.mq.put(b)
+            return True
+        return False
+
+    def drain_quiet(self, quiet_ms, limit_ms):
+        """Read and discard until the Z80 has been silent for quiet_ms (at
+        most limit_ms in all). Returns how many words were thrown away."""
+        mq, ticks, diff = self.mq, self.ticks_ms, self.ticks_diff
+        n = 0
+        t_start = t_last = ticks()
+        while diff(ticks(), t_last) < quiet_ms and diff(ticks(), t_start) < limit_ms:
+            if mq.rx_fifo():
+                mq.get()
+                n += 1
+                t_last = ticks()
+        return n
+
     # ---- the one way back to idle ------------------------------------------
     def to_idle(self, recovered=False, status=True):
         """Known state for the next command, whatever happened: TX and RX
@@ -293,7 +314,7 @@ class Link:
             n += 1
         while mq.rx_fifo():
             mq.get()
-        mq.put(0x01)
+        self.put_status(0x01)
         if status:
             self.set_status(ST_RECOVERED if recovered else ST_IDLE)
 
@@ -398,7 +419,7 @@ class Harness:
                 if got(a) != 1:
                     self.stats["abort"] += 1
                     link.to_idle()
-                    self._event("abort", self.what)
+                    self._event("abort", "%s: %s" % (self.what, detail(a)))
                     return True
             except Stall as e:
                 n = got(e)
@@ -421,13 +442,18 @@ class Harness:
             pre = self.pre
             for i in range(10):
                 pre[i] = raw[i]
+            rescued = False
             while True:
                 try:
                     self.dispatch()
                     break
                 except NotOurs as e:
                     # save() already took the whole of this next pre-header
-                    # (and made sure its 0x01 status is waiting); serve it.
+                    # (and made sure its 0x01 status is waiting); serve it --
+                    # once. A second one in a row isn't a rescued command.
+                    if rescued:
+                        raise Stall(10, "a second stale SAVE in a row")
+                    rescued = True
                     self.stats["stale"] += 1
                     self._event("stale", "SAVE abandoned after its header; "
                                 "%s opens the next command" % " ".join("%02X" % b for b in e.args[0]))
@@ -437,9 +463,11 @@ class Harness:
         except Abort as a:
             self.stats["abort"] += 1
             link.to_idle()
-            self._event("abort", self.what)
+            d = detail(a)
+            self._event("abort", self.what + (": " + d if d else ""))
         except Mismatch as e:
             self.stats["mismatch"] += 1
+            link.drain_quiet(200, 2000)
             link.to_idle(recovered=True)
             self._event("mismatch", "%s: %s -> RECOVERED" % (self.what, detail(e)))
         except Stall as e:
@@ -449,8 +477,11 @@ class Harness:
                 n = got(e)
                 evidence = ": got %d/10 [%s]" % (n, " ".join(
                     "%03X" % raw[i] for i in range(n)))
+            elif detail(e):
+                evidence = ": " + detail(e)
             elif got(e):
                 evidence = ": %d bytes then silence" % got(e)
+            link.drain_quiet(200, 2000)             # let any flood finish first
             link.to_idle(recovered=True)
             self._event("stall", "%s%s -> RECOVERED" % (self.what, evidence))
         except Exception as e:                  # never leave the bus in a mess
@@ -483,8 +514,10 @@ class Harness:
         link, mq = self.link, self.link.mq
         if self.pre[0] == 0x00:
             flag, body, parity = 0x00, self.header, self.header_parity
+            self.what = "load header"
         else:
             flag, body, parity = 0xFF, self.program, self.program_parity
+            self.what = "load data"
         echo = []
         put = mq.put
         txf = mq.tx_fifo
@@ -494,28 +527,36 @@ class Harness:
         put(flag)
         n = len(body)
         i = 0
-        while i < n and txf() < depth:
-            put(body[i])
-            i += 1
-        link.set_status(ST_MID)
-        # The Z80 reads a byte every ~30-40 us with no handshake: an empty TX
-        # FIFO hands it 0x00. Per byte: one FIFO test, one put -- the slow
-        # path (TX full) is where we listen for an abort.
-        while i < n:
-            if txf() < depth:
+        queued = 1                              # flag
+        try:
+            while i < n and txf() < depth:
                 put(body[i])
                 i += 1
-            else:
+            link.set_status(ST_MID)
+            # The Z80 reads a byte every ~30-40 us with no handshake: an empty
+            # TX FIFO hands it 0x00. Per byte: one FIFO test, one put -- the
+            # slow path (TX full) is where we listen for an abort.
+            while i < n:
+                if txf() < depth:
+                    put(body[i])
+                    i += 1
+                else:
+                    link.tx_wait(echo)
+            if txf() >= depth:
                 link.tx_wait(echo)
-        if txf() >= depth:
-            link.tx_wait(echo)
-        put(parity)
-        link.wait_tx_empty(echo)
-        while len(echo) < 2:
-            echo.append(link.get(STALL_MS))
+            put(parity)
+            queued = 2                          # flag + parity
+            link.wait_tx_empty(echo)
+            while len(echo) < 2:
+                echo.append(link.get(STALL_MS))
+        except Abort:
+            # Bytes the Z80 had actually read = queued minus what's still in
+            # TX. 0-4 means it was still in the ready-wait before the data.
+            read = max(0, queued + i - txf())
+            raise Abort(0, "Z80 had read %d of %d bytes" % (read, n + 2))
         # Final status + next command's pre-load, then idle.
-        put(0x01)
-        put(0x01)
+        link.put_status(0x01)
+        link.put_status(0x01)
         link.set_status(ST_IDLE)
         self.stats["load"] += 1
         self._event("load", "%s block %d bytes, echo %s" % (
@@ -538,6 +579,7 @@ class Harness:
         s_lo, s_hi = self.pre[3], self.pre[4]
         check_session = s_lo or s_hi
         link.set_status(ST_MID)
+        self.what = "save header block"
         link.drain(raw, 21, STALL_MS, first_ms=STALL_MS)
         if check_session and (raw[1] != s_lo or raw[2] != s_hi):
             raise Mismatch(21, "header block session %02X%02X, pre-header %02X%02X" % (
@@ -545,9 +587,24 @@ class Harness:
         hcrc_ok = xor_all(raw, 3, 20, seed=raw[0]) == raw[20]
         blen = raw[14] | (raw[15] << 8)
         name = "".join(chr(c) if 32 <= c < 127 else "?" for c in raw[4:14])
-        mq.put(0x01)                            # header-block status
+        if blen == 0:
+            # An empty program: the ROM's SAVE loop decrements DE before
+            # testing it, so BLEN=0 floods 64K. Refuse it the way production
+            # does (tspico_io.py EMPTY-PROGRAM GUARD): status 08 at this
+            # status read makes the ROM raise Report A instead of sending the
+            # data block. Drain whatever arrives anyway, then idle.
+            link.put_status(0x08)
+            link.set_status(ST_MID)
+            n = link.drain_quiet(300, 3000)
+            link.to_idle()
+            self.stats["save"] += 1
+            self._event("save", "%r refused: empty program (BLEN=0) -> Report A; "
+                        "%d flood bytes drained" % (name, n))
+            return
+        link.put_status(0x01)                   # header-block status
         link.set_status(ST_MID)                 # data block still to come
 
+        self.what = "save data block"
         link.drain(raw, 3, STALL_MS, first_ms=SAVE_DATA_START_MS)
         if raw[0] != 0xFF or (check_session and (raw[1] != s_lo or raw[2] != s_hi)):
             # Not our data block: the first three bytes of the next command's
@@ -556,18 +613,33 @@ class Harness:
             # empty (with v1.7 the header-block status is usually still
             # there, unread), then take the rest before doing anything else.
             if not mq.tx_fifo():
-                mq.put(0x01)
+                mq.put(0x01)                    # TX is empty: can't block
             head = [raw[0], raw[1], raw[2]]
             link.drain(self.rest, 7, STALL_MS)
-            raise NotOurs(head + [self.rest[i] for i in range(7)])
+            nxt = head + [self.rest[i] for i in range(7)]
+            # Only believe it if it looks like a real pre-header: good CRC,
+            # a known first byte, and -- for LOAD/SAVE -- a non-zero session
+            # (BASIC never sends 0000). A 64K flood of zeros passes the CRC.
+            crc = 0
+            for b in nxt[:9]:
+                crc ^= b
+            if crc != nxt[9] or not (nxt[0] == 0x42 or
+                                     (nxt[0] in (0x00, 0xFF) and (nxt[3] or nxt[4]))):
+                raise Stall(10, "garbage where the SAVE data block should be: %s" % (
+                    " ".join("%02X" % b for b in nxt)))
+            raise NotOurs(nxt)
 
         # Content + parity: BLEN+1 bytes, XORed on the fly and not stored.
         # The parity seeds with the flag (FF) and skips the session bytes, so
         # XOR(content) ^ parity == FF for a good block.
-        p = link.drain_xor(blen + 1, STALL_MS)
+        try:
+            p = link.drain_xor(blen + 1, STALL_MS)
+        except Abort as a:
+            # Count the 3 bytes (flag + session) taken before the content.
+            raise Abort(0, "after %d of %d bytes" % (3 + max(0, got(a) - 1), blen + 4))
         dcrc_ok = p == 0xFF
-        mq.put(0x01)                            # final status
-        mq.put(0x01)                            # next command's pre-load
+        link.put_status(0x01)                   # final status
+        link.put_status(0x01)                   # next command's pre-load
         link.set_status(ST_IDLE)
         self.stats["save"] += 1
         self._event("save", "%r BLEN=%d hdrCRC=%s dataCRC=%s session=%02X%02X (discarded)" % (
@@ -587,14 +659,15 @@ class Harness:
         # status back to busy after we have said READY.
         n = self.pre[7] + 256 * self.pre[8]
         body = array("H", [0] * (n + 4))
+        self.what = "cmd body"
         link.drain(body, n + 4, STALL_MS)
         sum_ok = xor_all(body, 0, n + 3) == body[n + 3]
         cmd = "".join(chr(c) if 32 <= c < 127 else "?" for c in body[3:n + 3]).strip()
         if not sum_ok:
             # As production's FAIL_CMD: one status byte (02 -> Report R), then
             # the next command's pre-load.
-            link.mq.put(0x02)
-            link.mq.put(0x01)
+            link.put_status(0x02)
+            link.put_status(0x01)
             link.set_status(ST_IDLE)
             self.stats["cmd"] += 1
             self._event("cmd", "%r bad checksum -> Report R" % cmd)
@@ -608,6 +681,7 @@ class Harness:
         link.set_status(ST_MID)
         prompt = b"Scroll? (Y/n)"
         for page in range(1, PAGES + 1):
+            self.what = "cmd output, page %d" % page
             for line in range(1, 5):
                 text = "page %d/%d line %d: %s" % (page, PAGES, line, cmd)
                 for ch in text[:31]:
@@ -621,9 +695,10 @@ class Harness:
             link.wait_tx_empty(echo)
             del echo[:]
             link.set_status(ST_MID)
+            self.what = "cmd key wait, page %d" % page
             key = link.get(KEY_WAIT_MS)         # the Z80's SEND_KEY
             if key == 0x4E:                     # 'N'
-                link.mq.put(0x01)               # next command's pre-load
+                link.put_status(0x01)           # next command's pre-load
                 link.set_status(ST_IDLE)
                 self.stats["cmd"] += 1
                 self._event("cmd", "%r stopped with N at page %d" % (cmd, page))
@@ -635,7 +710,7 @@ class Harness:
                 send(0x08, echo)
         send(0x03, echo)                        # end of message (new ROM)
         link.wait_tx_empty(echo)
-        link.mq.put(0x01)                       # next command's pre-load
+        link.put_status(0x01)                   # next command's pre-load
         link.set_status(ST_IDLE)
         self.stats["cmd"] += 1
         self._event("cmd", "%r all %d pages" % (cmd, PAGES))
