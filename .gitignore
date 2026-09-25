@@ -32,8 +32,16 @@ tools/zmakebas/*.o
 # then add its path here). The throwaway example program's output dir:
 /SD card/TAP/demo/
 # Migrated program outputs (add one line per program as you migrate it):
-#   /src/assets/nofile.tap
+/src/assets/nofile.tap
+/src/assets/romupdate.tap
+/src/assets/dckupdate.tap
+/SD card/readme.tap
+/SD card/TAP/test/picotest1.tap
+/SD card/TAP/test/picotest2.tap
+# Still committed, no source yet:
+#   /src/assets/rompatch.tap
 #   /SD card/TAP/test/factorial.tap
+#   /SD card/TAP/test/RND WORDS.tap
 
 # Editor
 .vscode/
