@@ -3952,12 +3952,16 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     cur_fname = TSP.f_name
     
     wrt = MQ.put
-    cmd = bytearray(100)
-    
     load_cmd = pre[1]
 
-    long = pre[7] + 256*pre[8] + 3
+    # The body is 'D', len lo, len hi, the command text, then an XOR of
+    # all of those (EXROM 224Dh-2274h, the same in v1.1 to v1.7): len+4
+    # bytes. Reading len+3 left the checksum byte in RX. It landed after
+    # the handler had set READY, dropped Y back to BUSY (PIO auto-busy),
+    # and only the tail's RX drain disposed of it. Read it and check it.
+    long = pre[7] + 256*pre[8] + 4
     rl = range(long)
+    cmd = bytearray(long)           # sized to the body (was a fixed 100)
 
     # ─── DUAL-PORT MIGRATION: leading wrt(0x40); wrt(0x01) REMOVED ────
     # In single-port Ricardo's code, these two bytes served as:
@@ -4060,8 +4064,21 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
                           # the decode below never gets to assign it
 
     try:
+        # A bad checksum means the body was damaged or misaligned on the
+        # wire: answer Report R (as a LOAD parity error does) rather
+        # than run whatever the bytes happen to spell.
+        chk = 0
+        for b in cmd[:long - 1]:
+            chk ^= b
+        if chk != cmd[long - 1]:
+            LOG("PROCESS_CMD bad command checksum: got 0x%02X, expected 0x%02X" % (
+                cmd[long - 1], chk), 2)
+            TLM("PROCESS_CMD checksum FAILED -- Report R, tail restores V6")
+            FAIL_CMD(_2_R_Tape_load)
+            return
+
         try:
-            cmd = cmd[:long].decode()
+            cmd = cmd[:long - 1].decode()
         except:
             LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
             TLM("PROCESS_CMD decode FAILED — status sent, tail restores V6")
