@@ -343,6 +343,21 @@ match what the Z80 expects.
   block. If you want a verbose status message, write the directive
   bytes BEFORE the pre-load `0x01` so the directive IS the final
   response, not an addition.
+- **Never let an exception escape a command handler.** `PROCESS_CMD`
+  writes the V6 pre-load as the last thing it does. If a handler raises,
+  that write is skipped — the main loop catches the exception and
+  `continue`s — so the NEXT command's pre-header phase reads `0x00`
+  from an empty TX FIFO and reports J. The symptom shows up one command
+  *after* the one that actually failed, which makes it maddening to
+  trace. Since the issue-#42 fix the dispatch runs inside a
+  `try`/`finally` whose `finally` is the tail, so this is handled
+  centrally — but the underlying rule still binds anything you add
+  outside that block: **every exit path from a command must leave
+  exactly one `0x01` in TX.** Not zero (Report J on the next command),
+  and not two (the second is an orphan byte that shifts the next data
+  block — Report R). A recovery path that stages its own pre-load, as
+  the body-read timeout does, must stay OUTSIDE the `try`, or the
+  `finally` hands it a second one.
 
 ---
 
