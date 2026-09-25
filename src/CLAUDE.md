@@ -210,9 +210,51 @@ on this repo MUST follow these rules.
   explicit say-so.
 - After merge, delete the branch: `gh pr merge --squash --delete-branch`.
 
+### Line endings: set `merge.renormalize` once, before you merge anything
+
+**Do this in every clone of this repo:**
+
+```bash
+git config merge.renormalize true
+```
+
+Without it, any branch created before `c897e91` conflicts with main on
+**every line** of `src/TS/*.py`, `src/main.py` and `src/dev_tspico.py` —
+a whole-file conflict in files that have no real overlap at all.
+
+Why: those files are CRLF on disk but LF in the repo, pinned by
+`.gitattributes`. `c897e91` added that and renormalized them, so older
+branches still hold CRLF blobs and git finds no common lines to anchor on.
+`merge.renormalize=true` normalizes both sides before comparing and the
+merge comes out clean.
+
+**Never hand-resolve one of these.** A whole-file conflict offers you two
+complete copies of the file and no guidance; picking one silently discards
+everything the other side did — in these files, potentially an entire PR's
+worth of firmware changes. If a merge conflicts in a file you did not
+expect, check for this before touching anything:
+
+```bash
+git show HEAD:src/TS/tspico_io.py | file -   # repo side: no CRLF
+file src/TS/tspico_io.py                     # working tree: "with CRLF line terminators"
+```
+
+Storage LF + working tree CRLF is correct and healthy. It also means an
+editor that rewrites a file as LF produces **no diff**, which is the point:
+the accident that caused this (`79f12a1`, which made a 48-line fix read as
+2425 insertions / 794 deletions and then blocked its own merge) can no
+longer be committed.
+
+The same trap applies to `git rebase` and `git cherry-pick`, which replay
+commits through the same machinery and honour the config once it is set.
+Verified: cherry-picking `8e896d2` (a pre-`c897e91` commit) onto main
+conflicts in both `src/TS/tspico.py` and `src/dev_tspico.py` with the
+config unset, and applies cleanly with it set.
+
 ### Quick reference
 
 ```bash
+git config merge.renormalize true            # 0. once per clone (see above)
 git checkout -b descriptive-branch-name      # 1. branch
 # ... make changes, harness-test, etc.
 git push -u origin descriptive-branch-name   # 2. push (triggers CI)
