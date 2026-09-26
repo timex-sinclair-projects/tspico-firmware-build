@@ -179,6 +179,21 @@ apart, and the driver retries CMD0 and waits up to 1.5 s for a slow card
 to start (#60, #61), so a failure that survives all that after a Ctrl-C
 is this case, not a bad card.
 
+A card can also mount and then fail its first write -- often the step
+just before it stops answering CMD0. `activity.log` then shows
+
+```
+ERROR:DIR_FILES: SD card error, directory listing skipped: [Errno 5] EIO: write fail
+WARNING:SD card mounted but failing; continuing without a directory listing
+```
+
+and the boot carries on into the dispatcher, so the 2068 still gets a
+working TS-Pico for anything that doesn't need the card (LOAD from the
+flash assets), and `tpi:dir` says the card failed. The write need not come from anything that looks like a write --
+FatFs flushes a sector dirtied by an earlier `os.remove` when the next
+call, even `os.ilistdir()`, moves on, so `DIR_FILES` catches `OSError`
+around all of its SD work. Power-cycle to recover the card.
+
 ---
 
 ## 4. Repo layout

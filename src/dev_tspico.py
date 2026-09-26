@@ -1038,7 +1038,53 @@ def shorten_filename(nom, l):
     return nom
 
 
+def DIR_HEADER(sd_stat):                                                                      # lista header: path, SD line, column titles (4 x 32 chars)
+    return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (public_path(27), sd_stat[:32])
+
+
 def DIR_FILES():                                                                             # Get all files and directories from current path
+    """
+    Rebuild files[], lista and dirinfo.tap for the current directory.
+
+    Returns True on success. On an SD card error (OSError) it logs an ERROR
+    with the reason, leaves an empty listing that says so, and returns False
+    instead of raising.
+
+    Any FatFs call can reach the card here, not just the dirinfo.tap write.
+    The field failure (activity.log, 2026-09-26) was EIO from
+    sdcard.writeblocks raised inside os.ilistdir(): FatFs flushing the
+    sector that os.remove("dirinfo.tap") had dirtied. Uncaught, that took
+    TS2068_IO down at boot with a FATAL and the 2068 got no TS-Pico at all,
+    not even LOAD from the flash assets.
+    """
+
+    global files
+    global dirs
+    global lista
+    global files_upper
+    global dirs_upper
+
+    try:
+        LIST_DIR_FILES()
+        return True
+    except OSError as e:
+        LOG("DIR_FILES: SD card error, directory listing skipped: %s" % e, 2)
+
+    files = []
+    dirs = []
+    files_upper = []
+    dirs_upper = []
+    lista = DIR_HEADER("SD: card error") + "SD card error; power cycle\r"   # same layout: GETINFO reads lista[32:63]
+
+    try:
+        os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage
+    except:
+        pass
+
+    return False
+
+
+def LIST_DIR_FILES():                                                                        # DIR_FILES without the error handling; raises OSError on SD errors
     
     global files
     global dirs
@@ -1128,7 +1174,7 @@ def DIR_FILES():                                                                
     sd_tot   = (sd_tot  * sd_block) / 1_073_741_824
     sd_stat  = "SD: %02.4fGB; free: %02.4fGB" % (sd_tot, sd_free)
 
-    header = "Path:%-27s%-32sFile Name                   Size--------------------------------" % (public_path(27), sd_stat[:32])
+    header = DIR_HEADER(sd_stat)
     
     if not L:
         lista = header + "%s\r" % "Directory is empty"
@@ -4414,8 +4460,11 @@ def TS2068_IO():                                                         # Main 
         
         while True:
             BLINK_ERROR()
-            
-    DIR_FILES()
+
+    # A card that mounts but then fails a read or write (EIO) must not stop
+    # the boot: DIR_FILES logs the ERROR and returns False, and we carry on
+    # into the dispatcher so the 2068 still has LOAD from the flash assets.
+    sd_ok = DIR_FILES()
     LOG("After DIR_FILES, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
     LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
@@ -4466,7 +4515,10 @@ def TS2068_IO():                                                         # Main 
             'LOAD "" without a prior mount will return Report R until '
             'you copy assets/*.tap from the repo onto Pico flash.', 1)
 
-    LOG("SD Card initialized and mounted OK", 0)
+    if sd_ok:
+        LOG("SD Card initialized and mounted OK", 0)
+    else:
+        LOG("SD card mounted but failing; continuing without a directory listing", 1)
     SAVE_LOG()
 
     wrt = MQ.put
@@ -4650,8 +4702,8 @@ def TS2068_IO():                                                         # Main 
                         os.chdir(TSP.cur_path) # MOUNT_FILE doesn't set this
                         LOG("os.chdir to:" + TSP.cur_path, 0) # debug
                         try:
-                            DIR_FILES()
-                            LOG("DIR_FILES OK", 0) # debug
+                            if DIR_FILES():
+                                LOG("DIR_FILES OK", 0) # debug
                         except:
                             LOG("DIR_FILES failed after save", 2)
                     except:
