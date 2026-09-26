@@ -156,6 +156,29 @@ If `dev_tspico.mpy` (or `.py`) is present at root you'll also see:
 [DEV] Using /dev_tspico.py override
 ```
 
+### If the SD card won't mount after a soft reboot
+
+Stopping the firmware with **Ctrl-C** (or Thonny's Stop / Run) can
+interrupt it in the middle of talking to the SD card: it writes
+`/activity.log` and reads files, so a block transfer can be left half
+finished. The card stays powered through a soft reboot and still thinks
+that transfer is under way; some cards then won't answer the reset
+command (CMD0) until they're power-cycled, and the Pico has no way to
+cut the card's power. The boot shows:
+
+```
+[ACTIVATE_SD] attempt 1/5 failed: OSError(19, 'no SD card')
+...
+```
+
+and ends in the blinking error loop. **Unplug and replug the TS-Pico**
+(a full power cycle, not Ctrl-D) and it will mount normally. A cold
+power-up -- what users do -- and a UF2 update always start the card
+clean. `ACTIVATE_SD` already retries the whole mount five times, 0.5 s
+apart, and the driver retries CMD0 and waits up to 1.5 s for a slow card
+to start (#60, #61), so a failure that survives all that after a Ctrl-C
+is this case, not a bad card.
+
 ---
 
 ## 4. Repo layout
