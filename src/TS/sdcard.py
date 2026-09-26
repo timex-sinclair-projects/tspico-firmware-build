@@ -58,6 +58,14 @@ def gb(bigval, b0, bn):
 
 _CMD_TIMEOUT = const(50)
 
+# How long ACMD41 may take to bring the card out of idle. The SD spec allows
+# up to 1 s after power-up, and a cold card at boot really does take longer
+# than the ~250 ms (50 x 5 ms) this loop used to allow -- the mount then
+# failed with (110, 'card type', 'v2') while the same card mounted fine a few
+# seconds later. MicroPython's stock driver allows 5 s; 1.5 s covers the spec
+# with margin and costs a fast card nothing (it answers on the first tries).
+_INIT_TIMEOUT_MS = const(1500)
+
 _R1_IDLE_STATE = const(1 << 0)
 # R1_ERASE_RESET = const(1 << 1)
 _R1_ILLEGAL_COMMAND = const(1 << 2)
@@ -152,9 +160,12 @@ class SDCard:
         if not (v1 or v2):
             raise OSError(EIO, "couldn't determine SD card version")
         arg41 = _HCS_BIT if v2 else 0  # we support high capacity, on v2 cards
-        for i in range(_CMD_TIMEOUT):  # loop on acmd41 to get
+        t0 = time.ticks_ms()
+        while True:  # loop on acmd41 until the card leaves idle
             self.cmd(55, 0)
             if (r := self.cmd(41, arg41)) == 0:
+                break
+            if time.ticks_diff(time.ticks_ms(), t0) >= _INIT_TIMEOUT_MS:
                 break
             time.sleep_ms(5)
         if r != 0:
@@ -200,8 +211,14 @@ class SDCard:
             self.CIDBYTES = bytearray(16)
             self.CID = 0
 
-        # CMD16: set block length to 512 bytes
-        if self.cmd(16, 512) != 0:
+        # CMD16: set block length to 512 bytes. A card that has only just
+        # left idle can still refuse the first one (seen at boot as "can't
+        # set 512 block size"), so give it a few tries.
+        for _ in range(3):
+            if self.cmd(16, 512) == 0:
+                break
+            time.sleep_ms(5)
+        else:
             raise OSError(EIO, "can't set 512 block size")
 
         # set to high data rate now that it's initialised
