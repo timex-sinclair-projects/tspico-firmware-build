@@ -161,7 +161,11 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
             wait that only the watchdog can end would then never end.
 
     Data bytes the Z80 writes meanwhile (the block-type echo it sends just
-    before its data loop) are appended to echo.
+    before its data loop) are kept in echo, a bytearray(3) of [count, byte,
+    byte] (see ECHO_KEEP) -- never a list: this runs while the Z80 is
+    streaming, and a list append can allocate, and an allocation can start
+    a GC that stops core0 for 15-25 ms. The Z80 reads a byte every 50 us
+    from a 4-deep FIFO, so that pause is ~300 empty reads and Report R.
     """
     rx = MQ.rx_fifo
     txf = MQ.tx_fifo
@@ -171,12 +175,22 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
             w = MQ.get()
             if w & PORT_0F:
                 return 1
-            echo.append(w & 0xFF)
+            ECHO_KEEP(echo, w)
         elif kill:
             return 2
         elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
             return 3
     return 0
+
+
+def ECHO_KEEP(echo, w):
+    """Keep the Z80's echo byte w in echo = bytearray(3): [count, block
+    type, CRC]. Anything past the second is dropped, as before. No
+    allocation (see TX_ROOM)."""
+    n = echo[0]
+    if n < 2:
+        echo[n + 1] = w & 0xFF
+        echo[0] = n + 1
 
 
 def RX_WORD(MQ, stall_ms):
@@ -1095,6 +1109,18 @@ def LOAD_TS(pre, MQ, TSP):
             hdr[14] = 0x28
             hdr[17] = hdr[17] ^ 0x80 ^ hdr[14]       # fix CRC after the patch
 
+    # ---- Collect garbage NOW, while the Z80 waits for READY ----
+    # Issue #51: once READY is up the Z80 reads a byte every 50 us with no
+    # handshake, and the 4-deep TX FIFO covers ~200 us. A GC that starts
+    # mid-stream (any allocation on core0, or core0 waiting for the heap
+    # lock while the watchdog's LOG_ADD collects on core1) stops core0 for
+    # 15-25 ms with a full firmware heap: hundreds of empty reads, Report
+    # R. Hardware, 2026-09-26: "LOAD watchdog fired with 15772 of 16096
+    # bytes queued" on the 8th LOAD of a session. Here it costs nothing --
+    # the Z80 is parked in WAIT_PICO_READY (the dispatcher doesn't say
+    # READY for LOAD) -- and leaves the heap far from its next threshold.
+    gc.collect()
+
     # ---- Spawn watchdog so a misbehaving Z80 doesn't lock the loop ----
     dead = False
     START_WATCHDOG(3, MQ, TSP)
@@ -1133,9 +1159,11 @@ def LOAD_TS(pre, MQ, TSP):
     # ────────────────────────────────────────────────────────────────────
     put = MQ.put
     txf = MQ.tx_fifo
-    echo = []           # the Z80's two echo bytes (block type, CRC)
+    echo = bytearray(3) # [count, block type, CRC] -- see ECHO_KEEP; no allocation mid-stream
     why = 0             # 0 ok, 1 port-0Fh write, 2 watchdog, 3 stall (TX_ROOM's codes)
     sent = 1            # bytes queued for the Z80, flag included
+    dry = 0             # times TX was found empty mid-stream (a near-miss:
+    dry_at = -1         # the Z80 may have read 0x00) and the first byte
     # READY only once the flag and the first bytes are queued: the
     # dispatcher no longer says it for LOAD (see TS2068_IO). The first time
     # TX fills is the moment -- and the only place this is tested, so the
@@ -1145,13 +1173,18 @@ def LOAD_TS(pre, MQ, TSP):
     if hdr is not None:
         # Header block: stream from the in-memory buffer (already loaded).
         for b in hdr:
-            if txf() >= TX_DEPTH:
+            n = txf()
+            if n >= TX_DEPTH:
                 if not primed:
                     MQ.exec("mov(y, invert(null))")     # READY: data waiting
                     primed = True
                 why = TX_ROOM(MQ, echo)
                 if why:
                     break
+            elif not n and primed:
+                dry += 1
+                if dry_at < 0:
+                    dry_at = sent
             put(b)
             sent += 1
     else:
@@ -1161,13 +1194,18 @@ def LOAD_TS(pre, MQ, TSP):
         rd = arch.readinto
         for _ in range(totbytes - 1):
             rd(el)
-            if txf() >= TX_DEPTH:
+            n = txf()
+            if n >= TX_DEPTH:
                 if not primed:
                     MQ.exec("mov(y, invert(null))")     # READY: data waiting
                     primed = True
                 why = TX_ROOM(MQ, echo)
                 if why:
                     break
+            elif not n and primed:
+                dry += 1
+                if dry_at < 0:
+                    dry_at = sent
             put(el[0])
             sent += 1
     if not primed:
@@ -1180,14 +1218,20 @@ def LOAD_TS(pre, MQ, TSP):
     # collected above, while TX was full) and its computed CRC after it,
     # and only after the CRC checked out. Bounded, and listening for 0Fh:
     # a BREAK can also land in the ROM's ready-wait around the block.
-    while not why and len(echo) < 2:
+    while not why and echo[0] < 2:
         w = RX_WORD(MQ, 1000)
         if w < 0:
             why = 3
         elif w & PORT_0F:
             why = 1
         else:
-            echo.append(w & 0xFF)
+            ECHO_KEEP(echo, w)
+
+    if dry:
+        # TX ran empty after READY: each time the Z80 may have read 0x00.
+        # Normally 0; anything else says where a Pico-side pause began.
+        LOG_ADD("WARNING: LOAD TX ran dry %d times, first at byte %d of %d."
+                % (dry, dry_at, totbytes), 1, TSP.LOG_LEVEL)
 
     if why == 2:
         # The watchdog fired: its own cleanup path, as before. How far we'd
@@ -1221,8 +1265,8 @@ def LOAD_TS(pre, MQ, TSP):
         return MQ, TSP, log_entries
 
     _close_if_local()
-    blq_t = echo[0]                                   # block_type ack
-    crc   = echo[1]                                   # Z80's computed CRC
+    blq_t = echo[1]                                   # block_type ack
+    crc   = echo[2]                                   # Z80's computed CRC
 
     # ============================================================
     # Phase 3: final status + pre-load for the NEXT command

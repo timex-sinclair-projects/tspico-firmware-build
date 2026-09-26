@@ -21,6 +21,7 @@ What it pins:
 Run:  python3 src/test/load_ts_hosttest.py
 """
 
+import ast
 import os
 import sys
 import tempfile
@@ -49,6 +50,8 @@ class FakePIO:
         self.pending = None
         self.result = None
         self.tx_at_ready = []       # TX contents each time a READY wait passed
+        self.z80_every = 1          # the Z80 reads once per this many FIFO calls
+        self._tick = 0
 
     def rx_fifo(self):
         self.pump()
@@ -113,7 +116,8 @@ class FakePIO:
             self.y = 0
             self._advance(None)
         elif k == "in":
-            if self.tx:
+            self._tick += 1
+            if self.tx and self._tick % self.z80_every == 0:
                 self._advance(self.tx.pop(0))
         elif k == "wait":
             need, left = op[1], op[2]
@@ -313,6 +317,39 @@ def main():
         check("LOAD_TS failed" in log and "re-armed" in log,
               "kill during the block takes ABORT_TX + REARM_AFTER_LOAD_ABORT as before")
         tsp.offset, tsp.tap_idx = 0, 0
+
+        print("no allocation while the Z80 streams (R at 15772 of 16096, 2026-09-26)")
+        io_src = open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read().replace("\r", "")
+        tree = ast.parse(io_src)
+        fns = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+        allocs = []
+        for name in ("TX_ROOM", "ECHO_KEEP"):
+            for n in ast.walk(fns[name]):
+                if isinstance(n, (ast.List, ast.Dict, ast.ListComp, ast.JoinedStr, ast.BinOp)) and \
+                        not (isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.BitAnd))):
+                    allocs.append((name, n.lineno))
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "append":
+                    allocs.append((name, n.lineno))
+        check(not allocs, "TX_ROOM / ECHO_KEEP build no lists, strings or appends (%s)" % allocs)
+        body = io_src[io_src.index("def LOAD_TS("):io_src.index("def LOAD_TS(") + 40000]
+        loop = body[body.index("    primed = False"):body.index("# Phase 2")]
+        check(".append(" not in loop and "LOG" not in loop and "%" not in loop,
+              "LOAD_TS's stream loops: no append, no LOG, no string formatting")
+        check(body.index("gc.collect()") < body.index("START_WATCHDOG(3"),
+              "LOAD_TS collects garbage before the watchdog, while the Z80 waits for READY")
+
+        print("TX-dry counter")
+        load(pio, 0x00, len(header))
+        pio.z80_every = 3                       # a Z80 slower than the Pico, as on hardware
+        r, log = load(pio, 0xFF, len(data))
+        pio.z80_every = 1
+        check(r == "ok" and "ran dry" not in log,
+              "Z80 slower than the Pico: TX never runs dry, nothing logged (%s)" % r)
+        load(pio, 0x00, len(header))
+        r, log = load(pio, 0xFF, len(data))     # the fake Z80 keeps up with every put
+        check("WARNING: LOAD TX ran dry" in log and "of 3002" in log,
+              "Z80 as fast as the Pico: the near-misses are logged with the first byte (%r)"
+              % log.strip().splitlines()[:1])
 
         print("v1.7 LOAD: no port-0Fh writes, nothing changes")
         r0, _ = load(pio, 0x00, len(header))
