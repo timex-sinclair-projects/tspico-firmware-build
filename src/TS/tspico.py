@@ -386,6 +386,12 @@ LISTMENU_CHOICES = {
 # Log level labels - shared by LOG() and LOGLEVEL()
 LOG_LABELS = ("INFO", "WARNING", "ERROR", "CRITICAL","SPECIAL")
 
+# True from ACTIVATE_SD (which parks MQ on NULL_SM and hands GPIO 2-4 to
+# SPI) until the next ACTIVATE_MQ. FAIL_CMD reads it: a handler that raised
+# while the card had the bus would otherwise leave the Z80 talking to a
+# parked state machine for the rest of the session.
+sd_active = False
+
 # Status codes returned to the 2068 - each maps to a BASIC error
 _1_OK = const(1)
 _2_R_Tape_load = const(2)
@@ -635,8 +641,10 @@ def DEACTIVATE_SD():
 def ACTIVATE_MQ(ready=True):                                                                      # Re-enable TX/RX SM, after a SDCard access (DUAL-PORT)
 
     global MQ
+    global sd_active
 
     TLM("ACTIVATE_MQ enter", "ready=%s" % ready)
+    sd_active = False
     MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
@@ -766,11 +774,13 @@ def MQ_BUSY():
 def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
 
     global MQ
+    global sd_active
 
     TLM("ACTIVATE_SD enter")
     MQ = StateMachine(0, NULL_SM, freq=15_000_000)
     MQ.active(1)
     MQ.active(0)
+    sd_active = True
 
     U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
     D0          = Pin(2,  Pin.IN)
@@ -801,15 +811,17 @@ def ACTIVATE_SD():                                                              
             print("[ACTIVATE_SD] attempt %d/5 failed: %r" % (attempt, e))
             time.sleep_ms(500)
 
-    TLM("ACTIVATE_SD FAILED after 5 attempts — entering BLINK_ERROR loop", repr(err))
+    # Raise rather than loop in BLINK_ERROR. This runs inside commands
+    # (CD, MD, RM, NEWTAP, HELP, every MOUNT_FILE), and a card that wedges
+    # mid-session -- often right after a failed write -- used to brick the
+    # TS-Pico until power-cycle. Raised, it becomes that one command
+    # failing: PROCESS_CMD's handler catches it and FAIL_CMD re-arms the
+    # bus (sd_active is still True). The boot call in TS2068_IO catches it
+    # and keeps the old blink loop, since there is no card to work with.
+    TLM("ACTIVATE_SD FAILED after 5 attempts", repr(err))
     LOG(f"Mounting SD Card failed in ACTIVATE_SD after 5 attempts! {err}", 2)
     SAVE_LOG()
-    spi = -99
-
-    while True:
-        BLINK_ERROR()
-
-    return spi
+    raise OSError(19, "SD card mount failed after 5 attempts: %s" % err)
 
 
 def BLINK_ERROR():                                                             # An onboard LED-blinking routine. This for an error condition. Interval is fixed
@@ -3981,6 +3993,19 @@ def FAIL_CMD(status):
     """
     global MQ
 
+    # The handler may have died with the card holding the bus: MQ parked on
+    # NULL_SM, GPIO 2-4 on SPI. Anything put() there never reaches the Z80,
+    # and nothing would ever rebuild the bus SM -- the TS-Pico goes deaf
+    # for the rest of the session. Hand the bus back first, the same
+    # DEACTIVATE_SD -> ACTIVATE_MQ pair every SD handler ends with (Y stays
+    # BUSY until the MQ_READY below). Guarded: this is the recovery path.
+    if sd_active:
+        try:
+            DEACTIVATE_SD()
+            ACTIVATE_MQ()
+        except Exception:
+            pass
+
     # Both loops are bounded. The equivalent drains elsewhere in this
     # file spin freely, which is fine on a healthy path -- but this is
     # the recovery path, and an unbounded loop here would be the very
@@ -4437,7 +4462,11 @@ def TS2068_IO():                                                         # Main 
     # gc.collect()
     # LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
-    ACTIVATE_SD()
+    try:
+        ACTIVATE_SD()
+    except OSError:
+        while True:                                                    # no card at boot: nothing to serve (logged by ACTIVATE_SD)
+            BLINK_ERROR()
     
     dead = True
     
@@ -4679,57 +4708,70 @@ def TS2068_IO():                                                         # Main 
                     # new file, or restoring the mounted file's name. Then
                     # update the directory list with changes.
 
-                    if pappend:
-                        # We will re-mount the updated tap from SD for the user to
-                        # see the addition (other original content is the same)
-                        if MOUNT_FILE(TSP.f_name, True):
-                            # Restore the previous index that got reset on mount
-                            TSP.append = True
-                            TSP.tap_idx = pidx
-                            TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
-                            LOG("Re-mounted appended file: %s" % TSP.f_name, 0)
-                        else:
-                            LOG("Re-mount appended file failed", 2)
-                        # ACTIVATE_MQ()
-
-                    elif not pf_name:
-
-                        # No file mounted before                        
-                        if TSP.f_name:
-                            # SAVE_TS saved saved a new file.
-                            # Mount new saved file if no file was already mounted, but
-                            # we don't set append on.
+                    # MOUNT_FILE raises when the card has stopped answering
+                    # (ACTIVATE_SD gives up). This is the dispatcher, not a
+                    # PROCESS_CMD handler, so nothing above would catch it
+                    # and it would end TS2068_IO. The SAVE itself already
+                    # reached the card; log and fall through to the re-arm.
+                    sd_gone = False
+                    try:
+                        if pappend:
+                            # We will re-mount the updated tap from SD for the user to
+                            # see the addition (other original content is the same)
                             if MOUNT_FILE(TSP.f_name, True):
-                                LOG("Mounted new file: %s" % TSP.f_name, 0)
+                                # Restore the previous index that got reset on mount
+                                TSP.append = True
+                                TSP.tap_idx = pidx
+                                TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
+                                LOG("Re-mounted appended file: %s" % TSP.f_name, 0)
                             else:
-                                LOG("Re-mount failed for: %s" % TSP.f_name, 2)
+                                LOG("Re-mount appended file failed", 2)
                             # ACTIVATE_MQ()
-                        
-                    elif TSP.f_name == pf_name:
-                        # This overwrote tap file that was mounted. The original
-                        # copy is still mounted, and the new tap on SD will only 
-                        # contain the one new saved file. You could turn on append,
-                        # and this will get re-mounted with the original content lost.
-                        LOG("Append is off. Overwrote mounted tap on SD but no re-mount.", 0)
 
-                    else:
-                        # Saved to a new file while one is mounted with append off.
-                        LOG("Append is off. Saved to new file: %s" % TSP.f_name, 0)
-                        # Put mounted file name back as we continue using it
-                        TSP.f_name = pf_name
+                        elif not pf_name:
+
+                            # No file mounted before                        
+                            if TSP.f_name:
+                                # SAVE_TS saved saved a new file.
+                                # Mount new saved file if no file was already mounted, but
+                                # we don't set append on.
+                                if MOUNT_FILE(TSP.f_name, True):
+                                    LOG("Mounted new file: %s" % TSP.f_name, 0)
+                                else:
+                                    LOG("Re-mount failed for: %s" % TSP.f_name, 2)
+                                # ACTIVATE_MQ()
+                        
+                        elif TSP.f_name == pf_name:
+                            # This overwrote tap file that was mounted. The original
+                            # copy is still mounted, and the new tap on SD will only 
+                            # contain the one new saved file. You could turn on append,
+                            # and this will get re-mounted with the original content lost.
+                            LOG("Append is off. Overwrote mounted tap on SD but no re-mount.", 0)
+
+                        else:
+                            # Saved to a new file while one is mounted with append off.
+                            LOG("Append is off. Saved to new file: %s" % TSP.f_name, 0)
+                            # Put mounted file name back as we continue using it
+                            TSP.f_name = pf_name
+                    except Exception as e:
+                        LOG("Re-mount after save failed: %s" % e, 2)
+                        sd_gone = True
 
                     # Update the directory list with the changes
-                    try:
-                        ACTIVATE_SD()
-                        os.chdir(TSP.cur_path) # MOUNT_FILE doesn't set this
-                        LOG("os.chdir to:" + TSP.cur_path, 0) # debug
+                    # (skipped if the re-mount just watched the card fail:
+                    # another 5 attempts would only push the Z80 toward J)
+                    if not sd_gone:
                         try:
-                            if DIR_FILES():
-                                LOG("DIR_FILES OK", 0) # debug
-                        except:
-                            LOG("DIR_FILES failed after save", 2)
-                    except:
-                        LOG("os.chdir failed after save", 2)
+                            ACTIVATE_SD()
+                            os.chdir(TSP.cur_path) # MOUNT_FILE doesn't set this
+                            LOG("os.chdir to:" + TSP.cur_path, 0) # debug
+                            try:
+                                if DIR_FILES():
+                                    LOG("DIR_FILES OK", 0) # debug
+                            except:
+                                LOG("DIR_FILES failed after save", 2)
+                        except Exception as e:
+                            LOG("SD refresh failed after save: %s" % e, 2)
 
                     # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────
                     # /sd was just mounted via ACTIVATE_SD above for the

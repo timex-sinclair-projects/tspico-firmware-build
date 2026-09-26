@@ -189,10 +189,22 @@ WARNING:SD card mounted but failing; continuing without a directory listing
 
 and the boot carries on into the dispatcher, so the 2068 still gets a
 working TS-Pico for anything that doesn't need the card (LOAD from the
-flash assets), and `tpi:dir` says the card failed. The write need not come from anything that looks like a write --
-FatFs flushes a sector dirtied by an earlier `os.remove` when the next
-call, even `os.ilistdir()`, moves on, so `DIR_FILES` catches `OSError`
-around all of its SD work. Power-cycle to recover the card.
+flash assets), and `tpi:dir` says the card failed. The write need not
+come from anything that looks like a write -- FatFs flushes a sector
+dirtied by an earlier `os.remove` when the next call, even
+`os.ilistdir()`, moves on, so `DIR_FILES` catches `OSError` around all of
+its SD work. Power-cycle to recover the card.
+
+The same can happen mid-session. Once the card stops answering, every
+command that needs it (CD, MD, RM, NEWTAP, HELP, LOAD "tpi:file", the
+re-mount after a SAVE) spends its five `ACTIVATE_SD` attempts -- about 5 s for a
+card that ignores CMD0, 12.5 s at worst, inside the Z80's ~20 s wait --
+and then fails with Report J;
+`activity.log` shows `Mounting SD Card failed in ACTIVATE_SD after 5
+attempts!` and the handler exception. Everything else keeps working. Only
+at boot, with no card at all, does `ACTIVATE_SD`'s failure still end in
+the blinking error loop. (It used to end there from any command, which
+bricked the TS-Pico until power-cycle.)
 
 ---
 
