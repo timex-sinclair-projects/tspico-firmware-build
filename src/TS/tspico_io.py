@@ -148,6 +148,48 @@ def MQ_TO_IDLE(MQ, recovered=False, status=True):
         MQ_STATUS(MQ, "recovered" if recovered else "idle")
 
 
+def TX_ROOM(MQ, echo, stall_ms=3000):
+    """LOAD's slow path. TX is full, so the Z80 hasn't read the last byte
+    yet: wait for room, listening, instead of blocking in MQ.put(). Returns
+
+        0   there is room
+        1   a write to port 0Fh -- BREAK, or a new command's SYNC after a
+            2068 reset. The Z80 has stopped reading and waits for IDLE.
+        2   the watchdog fired
+        3   TX stayed full for stall_ms: the Z80 has gone away. Bounded on
+            its own, because START_WATCHDOG can fail ("core1 busy") and a
+            wait that only the watchdog can end would then never end.
+
+    Data bytes the Z80 writes meanwhile (the block-type echo it sends just
+    before its data loop) are appended to echo.
+    """
+    rx = MQ.rx_fifo
+    txf = MQ.tx_fifo
+    t0 = time.ticks_ms()
+    while txf() >= TX_DEPTH:
+        if rx():
+            w = MQ.get()
+            if w & PORT_0F:
+                return 1
+            echo.append(w & 0xFF)
+        elif kill:
+            return 2
+        elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+            return 3
+    return 0
+
+
+def RX_WORD(MQ, stall_ms):
+    """One word from the Z80, or -1 after stall_ms of silence -- never the
+    unbounded wait of a bare MQ.get()."""
+    if not MQ.rx_fifo():
+        t0 = time.ticks_ms()
+        while not MQ.rx_fifo():
+            if time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                return -1
+    return MQ.get()
+
+
 def OPEN_NOFILE_TAP():
     """Pre-open /assets/nofile.tap and cache the handle.
 
@@ -532,8 +574,13 @@ def REARM_AFTER_LOAD_ABORT(MQ, TSP):
     bail-out, core1 may still be bouncing the SM and this write can be
     lost — no worse than the nothing that was written before.)
     """
-    MQ.put(0x01)                        # V6 pre-load for the next command
-    MQ.exec("mov(y, invert(null))")     # #14: Y → READY (PIO auto-busy)
+    # Issue #51: through MQ_TO_IDLE, not a bare MQ.put(0x01). This assumed
+    # the watchdog's cleanup had emptied TX -- but ABORT_TX stops waiting for
+    # that cleanup after 3 s, and a put() into a still-full TX blocks forever,
+    # the very hang the watchdog exists to prevent. MQ_TO_IDLE empties TX and
+    # RX first, stages exactly one 0x01 (the rule above) and sets Y = READY
+    # (idle), and it can't block.
+    MQ_TO_IDLE(MQ)
     LOG_ADD("INFO: LOAD aborted; TX re-armed for the next command.",
             0, TSP.LOG_LEVEL)
 
@@ -586,6 +633,29 @@ def ABORT_TX(log_level, what="LOAD_TS"):
             break
 
     return
+
+
+def STOP_WATCHDOG(log_level):
+    """End a transaction's watchdog WITHOUT its cleanup, for a transaction
+    that ended itself -- e.g. on a BREAK (issue #51) -- and will put the bus
+    right with MQ_TO_IDLE. Sets `dead` so WATCHDOG's poll loop exits before
+    its timeout, then waits (bounded) for core1 to let go.
+
+    Unlike ABORT_TX, nothing here is an error and nothing waits for the
+    watchdog's FIFO flush and ~1 s BLINK: a BREAK should be answered as fast
+    as the Z80 asks. If the watchdog had already timed out and is mid-
+    cleanup, the wait below simply lets it finish first.
+    """
+    global dead, busy
+
+    dead = True
+    _t = time.ticks_ms()
+    while busy:
+        if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
+            LOG_ADD("ERROR: STOP_WATCHDOG gave up waiting for core1",
+                    2, log_level)
+            busy = False
+            break
 
 
 def BLINK():
@@ -1047,49 +1117,95 @@ def LOAD_TS(pre, MQ, TSP):
         if arch is not _nofile_arch:
             arch.close()
 
+    # ─── Issue #51: never block in MQ.put() ─────────────────────────────
+    # The Z80 reads a byte every ~30-47 us with no handshake. MQ.put()
+    # used to pace this loop by blocking while the 4-deep TX FIFO was full
+    # -- and when the Z80 stopped reading (BREAK), it blocked until the
+    # 3 s watchdog fired. Now the loop only puts when there is room; when
+    # TX is full it waits in TX_ROOM, which listens: a write to port 0Fh
+    # is the 1.8b ROM's BREAK abort (or a new command's SYNC after a 2068
+    # reset), and any data byte is the Z80's block-type echo, kept for
+    # phase 2. Per byte on the fast path: read, one FIFO test, one put --
+    # no more work than the old read + put + kill test.
+    #
+    # Older ROMs never write 0Fh; for them only the watchdog (2) can end
+    # the loop early, exactly as before.
+    # ────────────────────────────────────────────────────────────────────
+    put = MQ.put
+    txf = MQ.tx_fifo
+    echo = []           # the Z80's two echo bytes (block type, CRC)
+    why = 0             # 0 ok, 1 port-0Fh write, 2 watchdog, 3 stall (TX_ROOM's codes)
+    sent = 1            # bytes queued for the Z80, flag included
+
     if hdr is not None:
         # Header block: stream from the in-memory buffer (already loaded).
         for b in hdr:
-            wrt(b)
-            if kill:
-                ABORT_TX(TSP.LOG_LEVEL)
-                if REWIND_ABORTED_SEARCH(TSP):
-                    LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
-                            "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
-                _close_if_local()
-                REARM_AFTER_LOAD_ABORT(MQ, TSP)
-                return MQ, TSP, log_entries
+            if txf() >= TX_DEPTH:
+                why = TX_ROOM(MQ, echo)
+                if why:
+                    break
+            put(b)
+            sent += 1
     else:
         # Data block: stream from file byte-by-byte (avoid allocating a
         # potentially huge buffer for ~14KB+ data blocks).
         el = bytearray(1)
+        rd = arch.readinto
         for _ in range(totbytes - 1):
-            arch.readinto(el)
-            wrt(el[0])
-            if kill:
-                ABORT_TX(TSP.LOG_LEVEL)
-                if REWIND_ABORTED_SEARCH(TSP):
-                    LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
-                            "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
-                _close_if_local()
-                REARM_AFTER_LOAD_ABORT(MQ, TSP)
-                return MQ, TSP, log_entries
+            rd(el)
+            if txf() >= TX_DEPTH:
+                why = TX_ROOM(MQ, echo)
+                if why:
+                    break
+            put(el[0])
+            sent += 1
+
+    # ============================================================
+    # Phase 2: the Z80's echo (block_type ack + computed CRC)
+    # ============================================================
+    # The Z80 OUTs its block type before the data loop (usually already
+    # collected above, while TX was full) and its computed CRC after it,
+    # and only after the CRC checked out. Bounded, and listening for 0Fh:
+    # a BREAK can also land in the ROM's ready-wait around the block.
+    while not why and len(echo) < 2:
+        w = RX_WORD(MQ, 1000)
+        if w < 0:
+            why = 3
+        elif w & PORT_0F:
+            why = 1
+        else:
+            echo.append(w & 0xFF)
+
+    if why == 2:
+        # The watchdog fired: its own cleanup path, as before.
+        ABORT_TX(TSP.LOG_LEVEL)
+        if REWIND_ABORTED_SEARCH(TSP):
+            LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
+                    "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
+        _close_if_local()
+        REARM_AFTER_LOAD_ABORT(MQ, TSP)
+        return MQ, TSP, log_entries
+
+    if why:
+        # BREAK (1) or silence (3). Bytes the Z80 had actually read =
+        # queued minus what's still in TX; 0-4 means it was still in the
+        # ready-wait before the data. Then: watchdog off, the search
+        # rewound if one was in progress, and straight back to idle --
+        # the 1.8b ROM is waiting for READY + IDLE to raise Report D.
+        read = max(0, sent - txf())
+        STOP_WATCHDOG(TSP.LOG_LEVEL)
+        rewound = REWIND_ABORTED_SEARCH(TSP)
+        _close_if_local()
+        MQ_TO_IDLE(MQ, recovered=(why == 3))
+        LOG_ADD("INFO: LOAD %s after the Z80 read %d of %d bytes%s." % (
+            "stopped by BREAK" if why == 1 else "stalled -> RECOVERED",
+            read, totbytes, "; tape rewound to offset %d" % TSP.offset
+            if rewound else ""), 1 if why == 1 else 2, TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries
 
     _close_if_local()
-
-    # ============================================================
-    # Phase 2: drain the Z80's echo (block_type ack + computed CRC)
-    # ============================================================
-    # Z80 OUTs:
-    #   - block_type ack: H register, which equals block_type
-    #   - computed CRC: XOR accumulator after the data loop, should match
-    #     the file CRC we sent as the last byte of phase 1
-    # We drain both. MQ.get() blocks until the Z80 actually OUTs them,
-    # which it does only after successfully verifying its computed CRC
-    # against the one we sent. So if MQ.get() returns, the data block
-    # was received correctly.
-    blq_t = MQ.get() & 0xFF                           # block_type ack
-    crc   = MQ.get() & 0xFF                           # Z80's computed CRC
+    blq_t = echo[0]                                   # block_type ack
+    crc   = echo[1]                                   # Z80's computed CRC
 
     # ============================================================
     # Phase 3: final status + pre-load for the NEXT command
