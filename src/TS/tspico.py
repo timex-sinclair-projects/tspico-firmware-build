@@ -4605,8 +4605,21 @@ def TS2068_IO():                                                         # Main 
             # here the Z80 polls $0F for ~700ms with bit 6 = 0, times
             # out → Report J → aborts before sending the command body.
             # The pre-load byte sits in TX never to be read.
+            #
+            # EXCEPT for LOAD (issue #51): LOAD_TS says READY itself, once
+            # the block's first bytes are queued. The ROM reads the pre-load
+            # status with no wait, then waits for READY and reads the flag
+            # at once -- READY here, before LOAD_TS has queued anything,
+            # raced LOAD_TS's start (TLM print, watchdog thread, file seek,
+            # any gc) against the ROM's ~88 ms poll. Losing it hands the ROM
+            # 0x00 from an empty TX for the flag: Report R, the ROM stops
+            # reading, and the Pico waits on a full TX for the watchdog.
+            # Seen on hardware after a BREAK. The ROM's ready-wait allows
+            # ~20 s, so saying READY later costs nothing.
             # ──────────────────────────────────────────────────────────────
-            MQ_READY()
+            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10
+                    and not (pre[0] == 0 and pre[1] == 0)):
+                MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
             # Cheap when TLM_ENABLED=False (the TLM() calls below no-op

@@ -1136,11 +1136,19 @@ def LOAD_TS(pre, MQ, TSP):
     echo = []           # the Z80's two echo bytes (block type, CRC)
     why = 0             # 0 ok, 1 port-0Fh write, 2 watchdog, 3 stall (TX_ROOM's codes)
     sent = 1            # bytes queued for the Z80, flag included
+    # READY only once the flag and the first bytes are queued: the
+    # dispatcher no longer says it for LOAD (see TS2068_IO). The first time
+    # TX fills is the moment -- and the only place this is tested, so the
+    # per-byte fast path is unchanged.
+    primed = False
 
     if hdr is not None:
         # Header block: stream from the in-memory buffer (already loaded).
         for b in hdr:
             if txf() >= TX_DEPTH:
+                if not primed:
+                    MQ.exec("mov(y, invert(null))")     # READY: data waiting
+                    primed = True
                 why = TX_ROOM(MQ, echo)
                 if why:
                     break
@@ -1154,11 +1162,16 @@ def LOAD_TS(pre, MQ, TSP):
         for _ in range(totbytes - 1):
             rd(el)
             if txf() >= TX_DEPTH:
+                if not primed:
+                    MQ.exec("mov(y, invert(null))")     # READY: data waiting
+                    primed = True
                 why = TX_ROOM(MQ, echo)
                 if why:
                     break
             put(el[0])
             sent += 1
+    if not primed:
+        MQ.exec("mov(y, invert(null))")                 # a block shorter than TX
 
     # ============================================================
     # Phase 2: the Z80's echo (block_type ack + computed CRC)
@@ -1177,7 +1190,11 @@ def LOAD_TS(pre, MQ, TSP):
             echo.append(w & 0xFF)
 
     if why == 2:
-        # The watchdog fired: its own cleanup path, as before.
+        # The watchdog fired: its own cleanup path, as before. How far we'd
+        # got says why: a handful of bytes queued means the Z80 stopped at
+        # the very start (it didn't like the flag), not mid-block.
+        LOG_ADD("ERROR: LOAD watchdog fired with %d of %d bytes queued."
+                % (sent, totbytes), 2, TSP.LOG_LEVEL)
         ABORT_TX(TSP.LOG_LEVEL)
         if REWIND_ABORTED_SEARCH(TSP):
             LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "

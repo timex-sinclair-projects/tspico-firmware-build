@@ -48,6 +48,7 @@ class FakePIO:
         self.script = None
         self.pending = None
         self.result = None
+        self.tx_at_ready = []       # TX contents each time a READY wait passed
 
     def rx_fifo(self):
         self.pump()
@@ -117,6 +118,7 @@ class FakePIO:
         elif k == "wait":
             need, left = op[1], op[2]
             if (self.status() & need) == need:
+                self.tx_at_ready.append(list(self.tx))
                 self._advance(self.status())
             elif left <= 0:
                 self._advance(None)
@@ -230,8 +232,9 @@ def main():
         """The dispatcher's side: pre-load staged, READY after the pre-header,
         then LOAD_TS; the Z80 script runs alongside."""
         pio.tx = [0x01]
-        pio.y = 0xFFFFFFFF
-        pio.rx = []
+        pio.y = 0          # BUSY: the pre-header OUTs dropped it, and the
+        pio.rx = []        # dispatcher no longer says READY for a LOAD
+        pio.tx_at_ready = []
         io.log_entries = ""
         io.kill = False
         io.dead = True
@@ -247,13 +250,27 @@ def main():
 
     pio = FakePIO()
     try:
+        print("READY only once the block is queued (the R-after-BREAK race)")
+        r, _ = load(pio, 0x00, len(header))
+        first = pio.tx_at_ready[0] if pio.tx_at_ready else None
+        check(r == "ok" and first and first[0] == 0x00 and len(first) == 4,
+              "header: when the Z80 first sees READY, TX already holds the flag + 3 bytes (%s)" % first)
+        tsp.offset, tsp.tap_idx = 0, 0
+        for name in ("TS/tspico.py", "dev_tspico.py"):
+            src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
+            body = src[src.index("got = RX_CAPTURE(MQ, pre_raw, 10, 1000)"):src.index("_pre_snapshot = list(pre)")]
+            check("if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10" in body and "MQ_READY()" in body,
+                  "%s: the dispatcher skips READY after a LOAD pre-header (LOAD_TS says it)" % name)
+
         print("normal LOAD (header, then data)")
         r, _ = load(pio, 0x00, len(header) + 0)
         check(r == "ok" and tsp.offset == len(header) + 4 and tsp.tap_idx == 1 and idle(pio),
               "header block: loaded, one pre-load left, status FF, tape at the data block (%s)" % r)
         r, _ = load(pio, 0xFF, len(data))
-        check(r == "ok" and tsp.offset == 0 and idle(pio),
-              "data block: loaded, tape wrapped to the start (%s, offset %d)" % (r, tsp.offset))
+        first = pio.tx_at_ready[0] if pio.tx_at_ready else None
+        check(r == "ok" and tsp.offset == 0 and idle(pio) and first and first[0] == 0xFF,
+              "data block: loaded, flag waiting at READY, tape wrapped to the start (%s, offset %d)"
+              % (r, tsp.offset))
 
         print("BREAK mid-block (1.8b ROM)")
         load(pio, 0x00, len(header))
@@ -267,7 +284,9 @@ def main():
         check(tsp.offset == off, "tape left at the data block the user broke out of")
         r1, _ = load(pio, 0x00, len(header))
         check(r1 == "ok", "next LOAD \"\" (a header) works first time, searching past the data block (%s)" % r1)
-        load(pio, 0xFF, len(data))
+        r2, _ = load(pio, 0xFF, len(data))
+        check(r2 == "ok" and pio.tx_at_ready and pio.tx_at_ready[0][0] == 0xFF,
+              "...and its data block too, flag waiting at READY -- the step that failed on hardware (%s)" % r2)
 
         print("BREAK in the ready-wait before the data")
         load(pio, 0x00, len(header))
