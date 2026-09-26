@@ -778,21 +778,38 @@ def ACTIVATE_SD():                                                              
     D0          = Pin(2,  Pin.IN)
     D1          = Pin(3,  Pin.IN)
     D2          = Pin(4,  Pin.IN)
+    # GPIO 2-4 are also Z80 data lines D0-D2 through the U6 buffer. Hold
+    # U6 off (GPIO 12 high, as main.py sets it at boot) so the bus can't
+    # fight the SD card; ACTIVATE_MQ hands the pin back to the PIO.
+    Pin(12, Pin.OUT, value=1)
 
-    try:
-        spi = SPI(0, sck=D0, mosi=D1, miso=D2)
-        sd = SDCard(spi, U3_CS)
-        os.mount(sd, "/sd")
-        TLM("ACTIVATE_SD exit", "SD mounted at /sd")
+    # A card can refuse to start up at boot and be perfectly happy a few
+    # seconds later, so try the whole mount a few times before giving up.
+    # Each failure is PRINTED with its reason: the log copy only reaches
+    # /activity.log if logging itself is working, and the console used to
+    # show nothing but "FAILED".
+    err = None
+    for attempt in range(1, 6):
+        try:
+            spi = SPI(0, sck=D0, mosi=D1, miso=D2)
+            sd = SDCard(spi, U3_CS)
+            os.mount(sd, "/sd")
+            TLM("ACTIVATE_SD exit", "SD mounted at /sd (attempt %d)" % attempt)
+            if attempt > 1:
+                LOG("SD card mounted on attempt %d (before that: %s)" % (attempt, err), 1)
+            return spi
+        except Exception as e:
+            err = e
+            print("[ACTIVATE_SD] attempt %d/5 failed: %r" % (attempt, e))
+            time.sleep_ms(500)
 
-    except Exception as e:
-        TLM("ACTIVATE_SD FAILED — entering BLINK_ERROR loop")
-        LOG(f"Mounting SD Card failed in ACTIVATE_SD! {e}", 2)
-        SAVE_LOG()
-        spi = -99
+    TLM("ACTIVATE_SD FAILED after 5 attempts — entering BLINK_ERROR loop", repr(err))
+    LOG(f"Mounting SD Card failed in ACTIVATE_SD after 5 attempts! {err}", 2)
+    SAVE_LOG()
+    spi = -99
 
-        while True:
-            BLINK_ERROR()
+    while True:
+        BLINK_ERROR()
 
     return spi
 
