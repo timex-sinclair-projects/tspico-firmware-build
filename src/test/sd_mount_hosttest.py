@@ -2,8 +2,9 @@
 
 A TS-Pico's SD card failed to mount at boot while the same card mounted
 fine by hand seconds later. ACTIVATE_SD now tries the whole mount up to 5
-times, 0.5 s apart, prints each failure with its reason, and only then drops
-into the BLINK_ERROR loop.
+times, 0.5 s apart, prints each failure with its reason, and only then gives
+up -- by raising OSError, not by looping in BLINK_ERROR (the boot call keeps
+the blink loop; mid-session callers recover, see sd_wedged_hosttest.py).
 
 Runs the REAL TS.tspico.ACTIVATE_SD (device modules faked the same way as
 process_cmd_hosttest.py) with SDCard / SPI / os.mount replaced by fakes.
@@ -23,7 +24,7 @@ import process_cmd_hosttest as P                                # noqa: E402
 
 
 class Bricked(Exception):
-    """ACTIVATE_SD reached its BLINK_ERROR loop."""
+    """ACTIVATE_SD called BLINK_ERROR (it no longer should)."""
 
 
 results = []
@@ -64,29 +65,34 @@ def main():
         del logs[:]
         out = io.StringIO()
         bricked = False
+        raised = None
         with contextlib.redirect_stdout(out):
             try:
                 t.ACTIVATE_SD()
             except Bricked:
                 bricked = True
-        return state, bricked, out.getvalue()
+            except OSError as e:
+                raised = e
+        return state, bricked, raised, out.getvalue()
 
     print("ACTIVATE_SD")
-    state, bricked, out = run(0)
-    check(state["n"] == 1 and state["mounted"] == 1 and not bricked and not out,
+    state, bricked, raised, out = run(0)
+    check(state["n"] == 1 and state["mounted"] == 1 and not bricked and not raised and not out,
           "card fine at once: one attempt, mounted, nothing printed")
 
-    state, bricked, out = run(2)
-    check(state["n"] == 3 and state["mounted"] == 1 and not bricked,
+    state, bricked, raised, out = run(2)
+    check(state["n"] == 3 and state["mounted"] == 1 and not bricked and not raised,
           "card fails twice then works: mounted on attempt 3 (%d attempts)" % state["n"])
     check(out.count("failed") == 2 and "no SD card" in out,
           "each failed attempt printed with its reason: %r" % out.strip().splitlines()[:1])
     check(any(lvl == 1 and "attempt 3" in m for lvl, m in logs),
           "the recovery is logged (warning)")
 
-    state, bricked, out = run(99)
-    check(state["n"] == 5 and bricked and state["mounted"] == 0,
-          "card never works: exactly 5 attempts, then the BLINK_ERROR loop")
+    state, bricked, raised, out = run(99)
+    check(state["n"] == 5 and not bricked and state["mounted"] == 0,
+          "card never works: exactly 5 attempts, no BLINK_ERROR loop")
+    check(isinstance(raised, OSError) and raised.args[0] == 19,
+          "card never works: raises OSError(ENODEV) for the caller to handle")
     check(any(lvl == 2 and "after 5 attempts" in m and "no SD card" in m for lvl, m in logs),
           "the final error, with its reason, is logged")
 

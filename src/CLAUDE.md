@@ -18,6 +18,10 @@ the hard way.
    Details below.
 3. **Don't trust your protocol intuition until the bytes confirm it**.
    The spec, the Z80 disassembly, and the running ROM disagree in places.
+4. **If a TS-Pico is plugged into this machine, talk to it yourself.**
+   Flash UF2s, watch telemetry and use the REPL with
+   [`tools/pico-serial.py`](../tools/pico-serial.py) -- don't ask the
+   user to copy/paste from Thonny. See "Talking to the Pico directly".
 
 ---
 
@@ -338,6 +342,58 @@ Set `TLM_ENABLED = False` in `/main.py` (line near top, after
 Default is `True` for development. Diagnostic prints over USB serial
 take ~5-10ms each — long enough to disrupt protocol timing if they
 fire in a hot path.
+
+## Talking to the Pico directly
+
+When the user's TS-Pico is connected over USB (`ls /dev/cu.usbmodem*` on
+macOS, `/dev/ttyACM*` on Linux), **do the Pico-side work yourself** with
+[`tools/pico-serial.py`](../tools/pico-serial.py): flashing, watching
+telemetry, reading files and state at the REPL. The user's job is the
+2068 side -- typing the BASIC commands and telling you what the screen
+shows. Relaying tracebacks and REPL output through Thonny copy/paste is
+slow, lossy, and (see below) easy to get wrong.
+
+```bash
+python3 tools/pico-serial.py flash --branch my-branch   # CI UF2 -> Pico, no buttons
+python3 tools/pico-serial.py watch --seconds 900        # passive telemetry capture
+python3 tools/pico-serial.py break                      # Ctrl-C -> REPL
+python3 tools/pico-serial.py run "import TS.tspico as T; print(T.files)"
+python3 tools/pico-serial.py run --file snippet.py      # multi-line, paste mode
+python3 tools/pico-serial.py softreset                  # Ctrl-D -> main.py again
+```
+
+- **`watch` is always safe.** It opens the port read-only and never
+  writes, so it can't disturb the firmware; it reattaches if the Pico is
+  unplugged. Run it in the background (it's a long-lived process) before
+  the user types a command. `main.py` sets `TLM_ENABLED = True`, so every
+  command prints its trace. Plugging USB into a Pico the 2068 is already
+  powering does not reset it, and the 2068 boots fine with the Pico
+  already powered from USB.
+- **`flash` needs no buttons.** It drops to the REPL and calls
+  `machine.bootloader()`, which reboots the RP2040 into BOOTSEL; then it
+  copies the UF2 and waits for the reboot (~10 s). With `--branch` it
+  takes the `tspico-firmware-uf2` artifact from that branch's latest CI
+  run, and refuses one that hasn't finished or didn't pass. (By hand:
+  hold BOOTSEL, tap the TS-Pico's reset button, release BOOTSEL.)
+- **`break` stops the firmware** -- the 2068 has no TS-Pico until
+  `softreset` or a power cycle. Only send it when the Pico is idle, never
+  mid-SD access: a half-finished block transfer can wedge the card until
+  power-cycle (`docs/DEVELOPER_GUIDE.md`, "If the SD card won't mount
+  after a soft reboot"). Tell the user before you do it.
+- **Only one program can own the port.** Every subcommand refuses to
+  start while something else has it open. That's usually Thonny, and
+  Thonny interrupts `main.py` when it connects. `KeyboardInterrupt`
+  isn't an `Exception`, so `main.py` logs nothing and the 2068 just gets
+  a long pause and Report J. Ask the user to disconnect Thonny.
+- **"Long pause, then J, and no telemetry at all"** means the dispatcher
+  never got a whole pre-header. Suspect Thonny, or a ROM/firmware
+  mismatch, before the change under test. A 1.8b "sync" EXROM opens every
+  command with `OUT (0Fh),03h`, and firmware without the SYNC-aware
+  capture (`f5ff48e`, #51) blocks forever in the pre-header `MQ.get()`.
+  `break` shows where it's stuck; test such a branch on a throwaway build
+  that includes the SYNC fix.
+- `/activity.log` only records `TSP.LOG_LEVEL` and above (ERROR by
+  default); the full story is in the telemetry `watch` captures.
 
 ## When you're stuck
 
