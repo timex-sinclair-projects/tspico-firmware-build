@@ -46,6 +46,108 @@ log_entries = ""    # log messages collected during a transaction
 _nofile_arch = None
 
 
+# ---------------------------------------------------------------------------
+# BREAK / SYNC support (issue #51). Proven on hardware by
+# src/test/abort_harness.py with the 1.8b "sync" test ROM
+# (src/rom/TSPICO-SYNC.ROM); see the TS-Pico BREAK abort proposal.
+#
+# A Z80 write to port 0Fh lands in the RX FIFO like any other write, but
+# with A0 in bit 8: 0x100 | value. The 1.8b ROM writes 03h there to open
+# every command (SYNC) and to report BREAK, then waits up to ~1 s for status
+# READY (bit 6) + IDLE (bit 3). ROMs up to v1.7 never write to 0Fh, so none
+# of this changes anything for them.
+# ---------------------------------------------------------------------------
+from array import array
+
+PORT_0F = const(0x100)          # bit 8 of an RX word: the Z80 wrote port 0Fh
+TX_DEPTH = const(4)             # TS_IO_DUAL's FIFOs are not joined
+
+
+def MQ_STATUS(MQ, st):
+    """Set what the Z80 reads on port 0Fh (the PIO's Y register).
+
+        "idle"       0xFF  ready, no transaction open -- what firmware has
+                           always shown, so older ROMs see no difference
+        "mid"        0xF7  ready, transaction open (IDLE, bit 3, clear)
+        "recovered"  0xFB  ready + idle, RECOVERED (bit 2, active low): this
+                           Pico gave up on a transaction by itself. The 1.8b
+                           ROM reports "T TS-Pico reset, try again"; its next
+                           SYNC clears it. Older ROMs only test bit 6.
+
+    mid/recovered take two exec()s; the moment in between reads as busy.
+    No logging here: this runs on time-critical paths.
+    """
+    if st == "idle":
+        MQ.exec("mov(y, invert(null))")
+    elif st == "mid":
+        MQ.exec("set(y, 8)")
+        MQ.exec("mov(y, invert(y))")
+    else:
+        MQ.exec("set(y, 4)")
+        MQ.exec("mov(y, invert(y))")
+
+
+def RX_CAPTURE(MQ, raw, n, stall_ms):
+    """Take a burst of n words from the Z80 into raw, an array('H') (the
+    words are 9-bit). Returns:
+
+        n          the whole burst arrived
+        k, 0<=k<n  k words, then stall_ms of silence
+        -k         word k-1 was a write to port 0Fh (SYNC or BREAK); the Z80
+                   is now waiting for READY + IDLE
+
+    The two-phase rule (src/CLAUDE.md): the loop does nothing per word but
+    test the FIFO, get and store -- the Z80 writes every ~30 us and the FIFO
+    holds 4. The 0Fh test and the clock run only when the FIFO is empty,
+    which is exactly when the Z80 has paused or stopped; a 0Fh write is
+    always the last thing it sends before it stops.
+    """
+    rx = MQ.rx_fifo
+    get = MQ.get
+    got = 0
+    while got < n:
+        if rx():
+            raw[got] = get()
+            got += 1
+        else:
+            if got and raw[got - 1] & PORT_0F:
+                return -got
+            t0 = time.ticks_ms()
+            while not rx():
+                if time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                    return got
+    if raw[n - 1] & PORT_0F:
+        return -n
+    return n
+
+
+def MQ_TO_IDLE(MQ, recovered=False, status=True):
+    """The one way back to a known state, whatever happened: TX and RX empty,
+    exactly one 0x01 pre-load staged (the ROM reads it with no wait straight
+    after the next pre-header), status idle -- or recovered.
+
+    status=False leaves Y alone, so the caller decides when the Z80 may go
+    on. After a SYNC the Z80 waits for IDLE: that is the moment to do slow
+    work (logging, gc), before setting it -- never after.
+
+    Bounded: the FIFOs are 4 deep, so a few passes are enough; spinning
+    longer means the SM isn't draining, and this path must never hang.
+    """
+    for _ in range(64):
+        if MQ.tx_fifo() == 0:
+            break
+        MQ.exec("pull (noblock)")
+        MQ.exec("mov (osr, null)")
+    for _ in range(64):
+        if MQ.rx_fifo() == 0:
+            break
+        MQ.get()
+    if MQ.tx_fifo() < TX_DEPTH:
+        MQ.put(0x01)
+    if status:
+        MQ_STATUS(MQ, "recovered" if recovered else "idle")
+
+
 def OPEN_NOFILE_TAP():
     """Pre-open /assets/nofile.tap and cache the handle.
 

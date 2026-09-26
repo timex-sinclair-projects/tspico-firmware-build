@@ -359,7 +359,9 @@ from TS.tspico_io import (
     SAVE_TS, SAVE_ZX,
     CORE1_BUSY,                          # core1 flag lives in tspico_io, not here
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
+    RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
 )
+from array import array
 
 #####################
 # SERVICE FUNCTIONS #
@@ -4504,6 +4506,7 @@ def TS2068_IO():                                                         # Main 
     led.value(0)
 
     pre = bytearray(10)
+    pre_raw = array("H", [0] * 10)          # 9-bit capture: bit 8 = port 0Fh write
     r1 = range(10)
 
     ts = time.ticks_us()                                                                           # ts -> timestamp
@@ -4535,8 +4538,43 @@ def TS2068_IO():                                                         # Main 
             # would inject a stray byte that gets misread later in the
             # protocol (orphan-byte family of bugs).
             # ────────────────────────────────────────────────────────────
+            # ─── Issue #51: SYNC and a bounded, tight capture ────────────
+            # Still a tight burst read (the rule above stands), but into a
+            # 9-bit word array, and it can't block forever:
+            #
+            #  * The 1.8b ROM opens every command with OUT (0Fh),03h (SYNC)
+            #    and then waits for READY + IDLE before sending the pre-
+            #    header. That write arrives as 0x103. Old code stored it as
+            #    pre[0] and then blocked for ten bytes that were never coming.
+            #  * A half-sent pre-header used to hang here for good (the
+            #    main-loop case in docs/OPEN_QUESTIONS.md); now it's a 1 s
+            #    stall and a RECOVERED status.
+            #
+            # ROMs up to v1.7 never write 0Fh: for them only the stall path
+            # is new.
+            # ────────────────────────────────────────────────────────────
+            got = RX_CAPTURE(MQ, pre_raw, 10, 1000)
+            if got < 0:
+                # A write to 0Fh, with the Z80 now held until we say IDLE:
+                # SYNC, a BREAK abort that landed after its transaction had
+                # finished, or a SYNC right behind a half-sent pre-header
+                # (2068 reset). Reset, do any slow work NOW, then IDLE and
+                # straight back to the capture -- nothing slow after IDLE,
+                # the pre-header follows within microseconds.
+                MQ_TO_IDLE(MQ, status=False)
+                if got != -1:
+                    LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
+                MQ_STATUS(MQ, "idle")
+                continue
+            if got != 10:
+                # Part of a pre-header, then a second of silence: a 2068
+                # reset, a lost byte, or noise. Don't guess at a command.
+                LOG("Partial pre-header %d/10: %s -- RECOVERED" % (
+                    got, " ".join("%03X" % pre_raw[i] for i in range(got))), 2)
+                MQ_TO_IDLE(MQ, recovered=True)
+                continue
             for i in r1:
-                pre[i] = MQ.get()                                          # blocking
+                pre[i] = pre_raw[i]
 
             # ─── Issue #14: signal READY before Z80's status-read poll ────
             # The PIO drops Y to 0 on every Z80 OUT (per the issue-#14
