@@ -20,6 +20,7 @@ PROTOCOL CONTRACT (see docs/PROTOCOL.md for full details):
 
 from random import randint
 import math
+from rp2 import StateMachine        # for the MQ: annotations below
 
 from TS.sdcard import *
 
