@@ -223,8 +223,13 @@ def cmd_flash(args):
     if bool(args.uf2) + bool(args.branch) + bool(args.run) != 1:
         sys.exit("flash: give exactly one of UF2, --branch, --run")
     tmp = tempfile.mkdtemp(prefix="tspico-uf2-")
-    uf2 = args.uf2 or ci_uf2(args.branch, args.run, tmp)
+    try:
+        flash(args, args.uf2 or ci_uf2(args.branch, args.run, tmp))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
+
+def flash(args, uf2):
     drive = rp2_drive()
     if not drive:
         print("Putting the Pico into BOOTSEL via machine.bootloader() ...")
@@ -246,8 +251,21 @@ def cmd_flash(args):
         if not drive:
             sys.exit("RPI-RP2 never appeared -- use BOOTSEL + reset by hand, then rerun")
 
+    # The mount point exists before macOS has finished mounting it: copying
+    # straight away can fail with EACCES. Wait for the bootloader's own
+    # INFO_UF2.TXT, then retry the copy briefly.
+    end = time.time() + args.timeout
+    while not os.path.exists(os.path.join(drive, "INFO_UF2.TXT")) and time.time() < end:
+        time.sleep(0.25)
     print("Copying %s -> %s" % (uf2, drive))
-    shutil.copyfile(uf2, os.path.join(drive, os.path.basename(uf2)))
+    while True:
+        try:
+            shutil.copyfile(uf2, os.path.join(drive, os.path.basename(uf2)))
+            break
+        except PermissionError:
+            if time.time() >= end:
+                raise
+            time.sleep(0.5)
     end = time.time() + args.timeout
     while rp2_drive() and time.time() < end:         # unmounts when it reboots
         time.sleep(0.25)
@@ -255,7 +273,6 @@ def cmd_flash(args):
         time.sleep(0.25)
     print("Pico rebooted into the new firmware" if find_port(args.port)
           else "Copied; serial port not back yet")
-    shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():
