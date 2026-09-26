@@ -86,6 +86,8 @@ jobs:
           python3 src/test/rom_sync_hosttest.py
           python3 src/test/abort_harness_hosttest.py
           python3 src/test/sync_io_hosttest.py
+          python3 src/test/build_flash_hosttest.py
+          python3 src/test/sdcard_init_hosttest.py
       # Fails the build if a ROM in flash/manifest.json changed without its
       # crc32 being updated -- i.e. nobody would notice that the next 512K
       # image ships a different ROM than the manifest claims.

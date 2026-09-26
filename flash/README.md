@@ -37,6 +37,23 @@ TS-2068 ROM with the Spectrum cartridge in the dock.
 Without `--base` the build reports the missing third-party slots and exits
 non-zero, so a partial image can't be mistaken for a shippable one.
 
+`--slot N=FILE` replaces a slot's contents for one build without touching the
+manifest. It works on the spare slots 4–7 too, which is the easy way to put a
+test ROM on a board alongside the shipping ones:
+
+```bash
+# shipping image plus a test ROM in spare slot 4 (select it with ROM_SLOT=4)
+./tools/build-flash.py build flash/manifest.json --base Pico-v15w.rom \
+    --slot 4=src/rom/TSPICO-SYNC.ROM --out Pico-test.rom
+```
+
+A spare slot takes one 32K image, zero-padded if shorter. The build refuses —
+exits non-zero and writes nothing — rather than drop an override: a file
+bigger than its slot, a slot number outside 0–15, a slot given twice, or the
+second half of a 64K cartridge (slots 9, 11, 13, 15). The summary marks every
+override with `<- override`. `verify` only checks the manifest's slots, so it
+ignores whatever you put in a spare one.
+
 ## Why a base image instead of vendoring everything
 
 Six of the eight populated slots are other people's work: ZX Diagnostics
