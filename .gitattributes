@@ -41,3 +41,8 @@ src/rom/**          binary
 *.png               binary
 *.jpg               binary
 *.pdf               binary
+
+# ─── ROM patch sources: text, despite living under src/rom/ ──────────────
+# The sjasmplus sources that build test ROMs from the images above. Later
+# rules win, so this overrides src/rom/** for them.
+src/rom/patches/*.asm   text eol=lf

@@ -359,7 +359,9 @@ from TS.tspico_io import (
     SAVE_TS, SAVE_ZX,
     CORE1_BUSY,                          # core1 flag lives in tspico_io, not here
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
+    RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
 )
+from array import array
 
 #####################
 # SERVICE FUNCTIONS #
@@ -4040,12 +4042,16 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     cur_fname = TSP.f_name
     
     wrt = MQ.put
-    cmd = bytearray(100)
-    
     load_cmd = pre[1]
 
-    long = pre[7] + 256*pre[8] + 3
+    # The body is 'D', len lo, len hi, the command text, then an XOR of
+    # all of those (EXROM 224Dh-2274h, the same in v1.1 to v1.7): len+4
+    # bytes. Reading len+3 left the checksum byte in RX. It landed after
+    # the handler had set READY, dropped Y back to BUSY (PIO auto-busy),
+    # and only the tail's RX drain disposed of it. Read it and check it.
+    long = pre[7] + 256*pre[8] + 4
     rl = range(long)
+    cmd = bytearray(long)           # sized to the body (was a fixed 100)
 
     # ─── DUAL-PORT MIGRATION: leading wrt(0x40); wrt(0x01) REMOVED ────
     # In single-port Ricardo's code, these two bytes served as:
@@ -4148,8 +4154,21 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
                           # the decode below never gets to assign it
 
     try:
+        # A bad checksum means the body was damaged or misaligned on the
+        # wire: answer Report R (as a LOAD parity error does) rather
+        # than run whatever the bytes happen to spell.
+        chk = 0
+        for b in cmd[:long - 1]:
+            chk ^= b
+        if chk != cmd[long - 1]:
+            LOG("PROCESS_CMD bad command checksum: got 0x%02X, expected 0x%02X" % (
+                cmd[long - 1], chk), 2)
+            TLM("PROCESS_CMD checksum FAILED -- Report R, tail restores V6")
+            FAIL_CMD(_2_R_Tape_load)
+            return
+
         try:
-            cmd = cmd[:long].decode()
+            cmd = cmd[:long - 1].decode()
         except:
             LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
             TLM("PROCESS_CMD decode FAILED — status sent, tail restores V6")
@@ -4585,6 +4604,7 @@ def TS2068_IO():                                                         # Main 
     led.value(0)
 
     pre = bytearray(10)
+    pre_raw = array("H", [0] * 10)          # 9-bit capture: bit 8 = port 0Fh write
     r1 = range(10)
 
     ts = time.ticks_us()                                                                           # ts -> timestamp
@@ -4616,8 +4636,43 @@ def TS2068_IO():                                                         # Main 
             # would inject a stray byte that gets misread later in the
             # protocol (orphan-byte family of bugs).
             # ────────────────────────────────────────────────────────────
+            # ─── Issue #51: SYNC and a bounded, tight capture ────────────
+            # Still a tight burst read (the rule above stands), but into a
+            # 9-bit word array, and it can't block forever:
+            #
+            #  * The 1.8b ROM opens every command with OUT (0Fh),03h (SYNC)
+            #    and then waits for READY + IDLE before sending the pre-
+            #    header. That write arrives as 0x103. Old code stored it as
+            #    pre[0] and then blocked for ten bytes that were never coming.
+            #  * A half-sent pre-header used to hang here for good (the
+            #    main-loop case in docs/OPEN_QUESTIONS.md); now it's a 1 s
+            #    stall and a RECOVERED status.
+            #
+            # ROMs up to v1.7 never write 0Fh: for them only the stall path
+            # is new.
+            # ────────────────────────────────────────────────────────────
+            got = RX_CAPTURE(MQ, pre_raw, 10, 1000)
+            if got < 0:
+                # A write to 0Fh, with the Z80 now held until we say IDLE:
+                # SYNC, a BREAK abort that landed after its transaction had
+                # finished, or a SYNC right behind a half-sent pre-header
+                # (2068 reset). Reset, do any slow work NOW, then IDLE and
+                # straight back to the capture -- nothing slow after IDLE,
+                # the pre-header follows within microseconds.
+                MQ_TO_IDLE(MQ, status=False)
+                if got != -1:
+                    LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
+                MQ_STATUS(MQ, "idle")
+                continue
+            if got != 10:
+                # Part of a pre-header, then a second of silence: a 2068
+                # reset, a lost byte, or noise. Don't guess at a command.
+                LOG("Partial pre-header %d/10: %s -- RECOVERED" % (
+                    got, " ".join("%03X" % pre_raw[i] for i in range(got))), 2)
+                MQ_TO_IDLE(MQ, recovered=True)
+                continue
             for i in r1:
-                pre[i] = MQ.get()                                          # blocking
+                pre[i] = pre_raw[i]
 
             # ─── Issue #14: signal READY before Z80's status-read poll ────
             # The PIO drops Y to 0 on every Z80 OUT (per the issue-#14
@@ -4631,8 +4686,21 @@ def TS2068_IO():                                                         # Main 
             # here the Z80 polls $0F for ~700ms with bit 6 = 0, times
             # out → Report J → aborts before sending the command body.
             # The pre-load byte sits in TX never to be read.
+            #
+            # EXCEPT for LOAD (issue #51): LOAD_TS says READY itself, once
+            # the block's first bytes are queued. The ROM reads the pre-load
+            # status with no wait, then waits for READY and reads the flag
+            # at once -- READY here, before LOAD_TS has queued anything,
+            # raced LOAD_TS's start (TLM print, watchdog thread, file seek,
+            # any gc) against the ROM's ~88 ms poll. Losing it hands the ROM
+            # 0x00 from an empty TX for the flag: Report R, the ROM stops
+            # reading, and the Pico waits on a full TX for the watchdog.
+            # Seen on hardware after a BREAK. The ROM's ready-wait allows
+            # ~20 s, so saying READY later costs nothing.
             # ──────────────────────────────────────────────────────────────
-            MQ_READY()
+            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10
+                    and not (pre[0] == 0 and pre[1] == 0)):
+                MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
             # Cheap when TLM_ENABLED=False (the TLM() calls below no-op

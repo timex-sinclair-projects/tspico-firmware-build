@@ -166,13 +166,17 @@ def make_pre(cmd_text, load_cmd=0):
     return pre
 
 
-def make_body(cmd_text):
-    """The body the Z80 OUTs: 3 lead bytes, then the command text.
-
-    PROCESS_CMD reads pre[7:9] + 3 bytes and slices cmd[3:] as the
-    command, so the first three are positional padding.
-    """
-    return b"\x00\x00\x00" + cmd_text
+def make_body(cmd_text, good_checksum=True):
+    """The body the Z80 OUTs (EXROM 224Dh-2274h): 'D', len lo, len hi, the
+    command text, then an XOR of all of those -- len+4 bytes. PROCESS_CMD
+    checks the XOR and slices cmd[3:] as the command."""
+    n = len(cmd_text)
+    body = bytearray(b"D") + bytes([n & 0xFF, (n >> 8) & 0xFF]) + cmd_text
+    c = 0
+    for b in body:
+        c ^= b
+    body.append(c if good_checksum else c ^ 0x5A)
+    return bytes(body)
 
 
 def fresh(mod, mq):
@@ -249,7 +253,7 @@ def test_successful_handler_writes_one_preload(t):
 
 def test_undecodable_body_preserves_preload(t):
     print("test_undecodable_body_preserves_preload")
-    body = b"\x00\x00\x00\xff\xfe\xff\xfe"       # not valid UTF-8
+    body = make_body(b"\xff\xfe\xff\xfe")        # good checksum, not valid UTF-8
     mq = FakeMQ(body)
     fresh(t, mq)
 
@@ -264,6 +268,38 @@ def test_undecodable_body_preserves_preload(t):
           "V6 pre-load restored after a decode failure (got %r)" % (mq.tx_log,))
     check(t._5_C_Nonsense in mq.tx_log,
           "an error status reached the Z80 (TX=%r)" % (mq.tx_log,))
+
+
+def test_bad_checksum_reports_r(t):
+    print("test_bad_checksum_reports_r")
+    mq = FakeMQ(make_body(b"tpi:dir", good_checksum=False))
+    fresh(t, mq)
+    ran = []
+
+    t.PROCESS_CMD(make_pre(b"tpi:dir"), {"TPI:DIR": lambda *a: ran.append(a)}, {})
+
+    check(not ran, "the handler never runs on a damaged body")
+    check(mq.tx_log == [t._2_R_Tape_load, 0x01],
+          "Report R status, then exactly one V6 pre-load (got %r)" % (mq.tx_log,))
+    check(mq.rx_fifo() == 0,
+          "the whole body, checksum byte included, was consumed (RX left %d)" % mq.rx_fifo())
+
+
+def test_checksum_byte_is_consumed(t):
+    print("test_checksum_byte_is_consumed")
+    mq = FakeMQ(make_body(b"tpi:fine") + b"\x42")  # + the NEXT command's first byte
+    fresh(t, mq)
+    seen = []
+
+    def fine(pre, cmd):
+        seen.append((cmd, mq.rx_fifo()))
+
+    t.PROCESS_CMD(make_pre(b"tpi:fine"), {"TPI:FINE": fine}, {})
+
+    check(seen and seen[0][0][3:] == "tpi:fine",
+          "handler's cmd[3:] is exactly the text, no checksum byte on the end (%r)" % (seen,))
+    check(seen and seen[0][1] == 1,
+          "when the handler runs, only the next command's byte is in RX (%r)" % (seen,))
 
 
 def test_body_read_timeout_writes_one_preload(t):
@@ -308,6 +344,8 @@ def main():
     for fn in (test_handler_exception_preserves_preload,
                test_successful_handler_writes_one_preload,
                test_undecodable_body_preserves_preload,
+               test_bad_checksum_reports_r,
+               test_checksum_byte_is_consumed,
                test_body_read_timeout_writes_one_preload,
                test_fail_cmd_clears_partial_response):
         fn(t)

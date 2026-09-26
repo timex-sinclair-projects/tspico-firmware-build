@@ -862,17 +862,21 @@ def test_aborted_search_rewinds(tio):
 
 
 def test_abort_paths_rewind(tio):
-    """Structural: both LOAD_TS abort paths must call the rewind."""
+    """Structural: every LOAD_TS abort path must call the rewind.
+
+    Two paths since issue #51: the watchdog's (ABORT_TX) and the BREAK /
+    stall path (STOP_WATCHDOG), which ends the transaction itself.
+    """
     print("test_abort_paths_rewind: structural check")
     import ast
     src = io.open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read()
     fn = next(n for n in ast.walk(ast.parse(src))
               if isinstance(n, ast.FunctionDef) and n.name == "LOAD_TS")
     aborts = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
-              and isinstance(n.func, ast.Name) and n.func.id == "ABORT_TX"]
+              and isinstance(n.func, ast.Name) and n.func.id in ("ABORT_TX", "STOP_WATCHDOG")]
     rewinds = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
                and isinstance(n.func, ast.Name) and n.func.id == "REWIND_ABORTED_SEARCH"]
-    check(len(aborts) == 2, "LOAD_TS has 2 abort paths, found %d" % len(aborts))
+    check(len(aborts) == 2, "LOAD_TS has 2 abort paths (watchdog, BREAK/stall), found %d" % len(aborts))
     check(len(rewinds) == len(aborts),
           "each one rewinds (%d rewinds for %d aborts)" % (len(rewinds), len(aborts)))
 
@@ -930,14 +934,19 @@ def test_abort_paths_rearm(tio):
         return [n for n in ast.walk(fn) if isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Name) and n.func.id == name]
 
+    # The watchdog path re-arms with REARM_AFTER_LOAD_ABORT after ABORT_TX;
+    # the BREAK / stall path (issue #51) with MQ_TO_IDLE after STOP_WATCHDOG.
     aborts = calls("ABORT_TX")
     rearms = calls("REARM_AFTER_LOAD_ABORT")
-    check(len(rearms) == len(aborts) == 2,
-          "each of the 2 abort paths re-arms (%d re-arms for %d aborts)"
-          % (len(rearms), len(aborts)))
+    stops = calls("STOP_WATCHDOG")
+    idles = calls("MQ_TO_IDLE")
+    check(len(rearms) == len(aborts) == 1 and len(idles) == len(stops) == 1,
+          "both abort paths re-arm (%d/%d after ABORT_TX, %d/%d after STOP_WATCHDOG)"
+          % (len(rearms), len(aborts), len(idles), len(stops)))
 
-    ok = all(any(a.lineno < r.lineno for a in aborts) for r in rearms)
-    check(ok, "every re-arm comes after an ABORT_TX")
+    ok = all(any(a.lineno < r.lineno for a in aborts) for r in rearms) and \
+        all(any(t.lineno < r.lineno for t in stops) for r in idles)
+    check(ok, "every re-arm comes after its path's ABORT_TX / STOP_WATCHDOG")
 
 
 

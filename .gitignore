@@ -54,3 +54,6 @@ tools/zmakebas/*.o
 .idea/
 *.swp
 .DS_Store
+
+# sjasmplus listing from tools/build-rom.sh
+src/rom/patches/*.lst

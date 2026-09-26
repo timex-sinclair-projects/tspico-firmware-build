@@ -287,6 +287,13 @@ def test_save_remount(t):
 
 def main():
     P.install_fakes()
+    # TS2068_IO's boot imports the extension commands. The real dev_extcmd
+    # annotates with StateMachine without importing it -- fine on
+    # MicroPython and CPython 3.14 (annotations never evaluated), NameError
+    # on <= 3.13, which is what CI runs. The commands aren't under test.
+    ext = types.ModuleType("dev_extcmd")
+    ext.EXT_SA_FUNCT = {}
+    sys.modules["dev_extcmd"] = ext
     import TS.tspico as t
 
     t.TLM_ENABLED = False
