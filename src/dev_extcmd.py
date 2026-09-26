@@ -17,6 +17,7 @@ the dev_tspico.py pattern.
 
 from random import randint
 import math
+from rp2 import StateMachine        # for the MQ: annotations below
 
 from TS.sdcard import *
 
