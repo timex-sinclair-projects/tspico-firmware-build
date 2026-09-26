@@ -1126,7 +1126,12 @@ def LOAD_TS(pre, MQ, TSP):
 
     # ---- Spawn watchdog so a misbehaving Z80 doesn't lock the loop ----
     dead = False
-    START_WATCHDOG(3, MQ, TSP)
+    # Budget scaled to the block. Hardware 2026-09-26: the Z80 read TS-Pico
+    # Commander's 16,096-byte block at ~190 us/byte -- still reading when a
+    # flat 3 s budget killed it ~220 bytes from the end (Report R). TX_ROOM
+    # and RX_WORD bound real silence on their own; this only has to outlast
+    # a slow but live Z80: 3 s + 1 s per 4K.
+    START_WATCHDOG(3 + totbytes // 4096, MQ, TSP)
 
     wrt = MQ.put
 
@@ -1173,6 +1178,9 @@ def LOAD_TS(pre, MQ, TSP):
     # per-byte fast path is unchanged.
     primed = False
     t_ready = time.ticks_ms()   # reset when READY actually rises
+    # Z80 read-rate profile (issue #51 diagnostic): ms after READY at every
+    # 1024th byte queued. One AND per byte; the clock is read 1/1024 bytes.
+    prof = array("I", bytes(4 * ((totbytes >> 10) + 1)))
 
     if hdr is not None:
         # Header block: stream from the in-memory buffer (already loaded).
@@ -1214,6 +1222,8 @@ def LOAD_TS(pre, MQ, TSP):
                     dry_at = sent
             put(el[0])
             sent += 1
+            if not sent & 0x3FF:
+                prof[sent >> 10] = time.ticks_diff(time.ticks_ms(), t_ready)
     if not primed:
         MQ.exec("mov(y, invert(null))")                 # a block shorter than TX
 
@@ -1232,6 +1242,15 @@ def LOAD_TS(pre, MQ, TSP):
             why = 1
         else:
             ECHO_KEEP(echo, w)
+
+    if totbytes >= 8192:
+        # Where the time went: ms per 1K block. Near 52 = the ROM loop's
+        # 178 T-states/byte; far above it = the Z80 was slowed down.
+        k = sent >> 10
+        LOG_ADD("DIAG: LOAD %d bytes, %s; ms/KB after READY: %s"
+                % (totbytes, "ok" if not why and echo[0] >= 2 else "why=%d" % why,
+                   " ".join(str(prof[i] - prof[i - 1] if i > 1 else prof[1])
+                            for i in range(1, k + 1))), 2, TSP.LOG_LEVEL)
 
     if dry:
         # TX ran empty after READY: each time the Z80 may have read 0x00.
