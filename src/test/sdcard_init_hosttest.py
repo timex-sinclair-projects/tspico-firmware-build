@@ -66,18 +66,35 @@ class FakePin:
         pass
 
 
-def make_card(sd, clock, ready_after_ms, cmd16_refusals=0):
+def make_card(sd, clock, ready_after_ms, cmd16_refusals=0, cmd0_silent=0, acmd_silent=0):
+    """cmd0_silent / acmd_silent: how many CMD0 / CMD55 the card ignores
+    first -- the driver's cmd() raises ETIMEDOUT for those, as it does on
+    real hardware when no response byte ever arrives."""
     class Card(sd.SDCard):
         def __init__(self):
             self.acmd41_started = None
             self.acmd41_calls = 0
             self.cmd16_left = cmd16_refusals
+            self.cmd0_left = cmd0_silent
+            self.acmd_left = acmd_silent
+            self.cmd0_finals = []
             self.pending = bytes(16)
             sd.SDCard.__init__(self, FakeSPI(), FakePin())
 
         def cmd(self, cmd, arg, final=0, release=True, skip1=False):
             clock.ms += 1                               # every command takes time
-            if cmd in (0, 8, 55):
+            if cmd == 0:
+                self.cmd0_finals.append(final)
+                if self.cmd0_left:
+                    self.cmd0_left -= 1
+                    clock.ms += 25                      # cmd()'s response wait
+                    raise OSError(sd.ETIMEDOUT, "command:", 0, "arg:", 0)
+                return 0x01
+            if cmd == 55 and self.acmd_left:
+                self.acmd_left -= 1
+                clock.ms += 25
+                raise OSError(sd.ETIMEDOUT, "command:", 55, "arg:", 0)
+            if cmd in (8, 55):
                 return 0x01                             # idle; CMD8 idle = v2 card
             if cmd == 41:
                 self.acmd41_calls += 1
@@ -139,6 +156,20 @@ def main():
     c, e = attempt(sd, clock, ready_after_ms=10_000)
     check(e is not None and e.args[0] == sd.ETIMEDOUT and 1500 <= clock.ms <= 1600,
           "card that never leaves idle: ETIMEDOUT after ~1.5 s, no hang (%r at %d ms)" % (e, clock.ms))
+
+    print("CMD0 (reset into SPI idle)")
+    c, e = attempt(sd, clock, ready_after_ms=5, cmd0_silent=3)
+    check(c is not None, "card ignores the first 3 CMD0s (soft reboot / just powered): mounts%s"
+          % ("" if c else ": %r -- the old driver gave up on the first" % (e,)))
+    c, e = attempt(sd, clock, ready_after_ms=5, cmd0_silent=10_000)
+    check(e is not None and e.args[0] == sd.ENODEV and 500 <= clock.ms <= 600,
+          "card that never answers CMD0: 'no SD card' after ~0.5 s (%r at %d ms)" % (e, clock.ms))
+    c, e = attempt(sd, clock, ready_after_ms=5)
+    check(c is not None and set(c.cmd0_finals) == {0},
+          "CMD0 no longer clocks out 149 stray bytes (final=%s)" % (sorted(set(c.cmd0_finals)) if c else "?"))
+    c, e = attempt(sd, clock, ready_after_ms=300, acmd_silent=4)
+    check(c is not None, "no answer to the first ACMD41s counts as 'not ready yet': mounts%s"
+          % ("" if c else ": %r" % (e,)))
 
     print("CMD16")
     c, e = attempt(sd, clock, ready_after_ms=5, cmd16_refusals=1)

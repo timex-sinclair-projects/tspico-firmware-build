@@ -66,6 +66,12 @@ _CMD_TIMEOUT = const(50)
 # with margin and costs a fast card nothing (it answers on the first tries).
 _INIT_TIMEOUT_MS = const(1500)
 
+# How long to keep trying CMD0 (reset into SPI idle). A card that is still
+# finishing something from before a soft reboot, or not quite awake at
+# power-up, can miss the first one entirely; MicroPython's stock driver
+# retries it, and so must we.
+_CMD0_TIMEOUT_MS = const(500)
+
 _R1_IDLE_STATE = const(1 << 0)
 # R1_ERASE_RESET = const(1 << 1)
 _R1_ILLEGAL_COMMAND = const(1 << 2)
@@ -145,12 +151,27 @@ class SDCard:
         # use explicit string here for small memory footprint
         self.spi.write(b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff")
 
-        # CMD0: init card; should return _R1_IDLE_STATE (allow 5 attempts)
-        for _ in range(5):
-            if self.cmd(0, 0, 0x95) == _R1_IDLE_STATE:
-                break
-        else:
-            raise OSError(ENODEV, "no SD card")
+        # CMD0: init card; should return _R1_IDLE_STATE. cmd() RAISES when
+        # the card doesn't answer (stock MicroPython's returns -1), so the
+        # old "allow 5 attempts" loop gave up on the first unanswered CMD0
+        # -- seen at boot as (110, 'command:', 0, 'arg:', 0) about 30 ms
+        # in. A missed or garbled CMD0 is just a failed attempt: clock the
+        # card with CS high so it can finish whatever it was doing, and
+        # try again for up to _CMD0_TIMEOUT_MS.
+        # (cmd()'s third argument is `final`, extra bytes to clock out --
+        # not a CRC as in the stock driver; cmd() computes the CRC itself.
+        # The old call passed 0x95 there and clocked 149 bytes for nothing.)
+        t0 = time.ticks_ms()
+        while True:
+            try:
+                if self.cmd(0, 0) == _R1_IDLE_STATE:
+                    break
+            except OSError:
+                pass
+            if time.ticks_diff(time.ticks_ms(), t0) >= _CMD0_TIMEOUT_MS:
+                raise OSError(ENODEV, "no SD card")
+            self.spi.write(b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff")
+            time.sleep_ms(5)
 
         # CMD8: determine card version
         r = self.cmd(8, 0x01AA, 4)  # probe version
@@ -162,8 +183,12 @@ class SDCard:
         arg41 = _HCS_BIT if v2 else 0  # we support high capacity, on v2 cards
         t0 = time.ticks_ms()
         while True:  # loop on acmd41 until the card leaves idle
-            self.cmd(55, 0)
-            if (r := self.cmd(41, arg41)) == 0:
+            try:
+                self.cmd(55, 0)
+                r = self.cmd(41, arg41)
+            except OSError:
+                r = -1  # no answer yet: still busy, same as "not ready"
+            if r == 0:
                 break
             if time.ticks_diff(time.ticks_ms(), t0) >= _INIT_TIMEOUT_MS:
                 break
