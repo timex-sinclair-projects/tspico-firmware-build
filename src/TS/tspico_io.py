@@ -25,6 +25,7 @@ _KILL_CHECK_EVERY = const(64)   # bytes per chunk in the SAVE data drain
 kill = False        # set True by WATCHDOG to abort a hung transaction
 busy = False        # core1 watchdog activity flag
 dead = True         # True = no transaction in progress; False = active
+tx_wait_ms = 0      # TX_ROOM: how long TX had been full when the watchdog fired
 log_entries = ""    # log messages collected during a transaction
 
 # Cached "no file mounted" fallback handle.
@@ -167,6 +168,7 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
     a GC that stops core0 for 15-25 ms. The Z80 reads a byte every 50 us
     from a 4-deep FIFO, so that pause is ~300 empty reads and Report R.
     """
+    global tx_wait_ms
     rx = MQ.rx_fifo
     txf = MQ.tx_fifo
     t0 = time.ticks_ms()
@@ -177,6 +179,7 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
                 return 1
             ECHO_KEEP(echo, w)
         elif kill:
+            tx_wait_ms = time.ticks_diff(time.ticks_ms(), t0)
             return 2
         elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
             return 3
@@ -1169,6 +1172,7 @@ def LOAD_TS(pre, MQ, TSP):
     # TX fills is the moment -- and the only place this is tested, so the
     # per-byte fast path is unchanged.
     primed = False
+    t_ready = time.ticks_ms()   # reset when READY actually rises
 
     if hdr is not None:
         # Header block: stream from the in-memory buffer (already loaded).
@@ -1178,6 +1182,7 @@ def LOAD_TS(pre, MQ, TSP):
                 if not primed:
                     MQ.exec("mov(y, invert(null))")     # READY: data waiting
                     primed = True
+                    t_ready = time.ticks_ms()
                 why = TX_ROOM(MQ, echo)
                 if why:
                     break
@@ -1199,6 +1204,7 @@ def LOAD_TS(pre, MQ, TSP):
                 if not primed:
                     MQ.exec("mov(y, invert(null))")     # READY: data waiting
                     primed = True
+                    t_ready = time.ticks_ms()
                 why = TX_ROOM(MQ, echo)
                 if why:
                     break
@@ -1230,15 +1236,19 @@ def LOAD_TS(pre, MQ, TSP):
     if dry:
         # TX ran empty after READY: each time the Z80 may have read 0x00.
         # Normally 0; anything else says where a Pico-side pause began.
-        LOG_ADD("WARNING: LOAD TX ran dry %d times, first at byte %d of %d."
-                % (dry, dry_at, totbytes), 1, TSP.LOG_LEVEL)
+        LOG_ADD("ERROR: LOAD TX ran dry %d times, first at byte %d of %d."
+                % (dry, dry_at, totbytes), 2, TSP.LOG_LEVEL)
 
     if why == 2:
         # The watchdog fired: its own cleanup path, as before. How far we'd
         # got says why: a handful of bytes queued means the Z80 stopped at
         # the very start (it didn't like the flag), not mid-block.
-        LOG_ADD("ERROR: LOAD watchdog fired with %d of %d bytes queued."
-                % (sent, totbytes), 2, TSP.LOG_LEVEL)
+        # Timing says which: TX full for most of the 3 s = the Z80 stopped
+        # reading early; TX full only briefly = it was still reading, slowly.
+        LOG_ADD("ERROR: LOAD watchdog fired with %d of %d bytes queued, "
+                "%d ms after READY; TX full for the last %d ms; dry %d."
+                % (sent, totbytes, time.ticks_diff(time.ticks_ms(), t_ready),
+                   tx_wait_ms, dry), 2, TSP.LOG_LEVEL)
         ABORT_TX(TSP.LOG_LEVEL)
         if REWIND_ABORTED_SEARCH(TSP):
             LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "

@@ -347,7 +347,7 @@ def main():
               "Z80 slower than the Pico: TX never runs dry, nothing logged (%s)" % r)
         load(pio, 0x00, len(header))
         r, log = load(pio, 0xFF, len(data))     # the fake Z80 keeps up with every put
-        check("WARNING: LOAD TX ran dry" in log and "of 3002" in log,
+        check("ERROR: LOAD TX ran dry" in log and "of 3002" in log,
               "Z80 as fast as the Pico: the near-misses are logged with the first byte (%r)"
               % log.strip().splitlines()[:1])
 
