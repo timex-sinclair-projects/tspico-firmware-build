@@ -215,6 +215,12 @@ class Z80:
             self.logic(self.a | self.c)
         elif op == 0xB3:
             self.logic(self.a | self.e)
+        elif op == 0xB5:
+            self.logic(self.a | self.l)
+        elif op == 0x7C:
+            self.a = self.h
+        elif op == 0x2B:
+            self.set_hl((self.hl() - 1) & 0xFFFF); t = 6
         elif op == 0xF6:
             self.logic(self.a | self.fetch()); t = 7
         elif op == 0xE6:
@@ -354,14 +360,15 @@ def main():
     check(len(rom) == 16384, "v3 is 16K")
     diff = [i for i in range(16384) if rom[i] != base[i]]
     outside = [i for i in diff if not (CALL_SITE <= i < CALL_SITE + 3 or i == 0x38B7
-                                       or NEW_CODE <= i < NEW_END)]
-    check(not outside, "only the call site, the banner digit and the new code changed (%s)"
+                                       or 0x3874 <= i < 0x388A or NEW_CODE <= i < NEW_END)]
+    check(not outside, "only the call site, WAIT_RDY, the banner digit and the new code changed (%s)"
           % [hex(i) for i in outside[:5]])
     check(base[CALL_SITE:CALL_SITE + 3] == bytes.fromhex("CDF12B")
           and rom[CALL_SITE:CALL_SITE + 3] == bytes.fromhex("CDB838"),
           "0631h: CALL STK-FETCH became CALL 38B8h")
     check(all(b == 0xFF for b in base[NEW_CODE:NEW_END]), "38B8h-3CFFh was free (FFh) in v2")
     check(base[0x38B7] == 0xB2 and rom[0x38B7] == 0xB3, "banner: 'ZX v2' -> 'ZX v3'")
+    check(rom[0x388A:0x3891] == base[0x388A:0x3891], "SAVE_WAIT at 388Ah untouched")
     if shutil.which("sjasmplus"):
         with tempfile.TemporaryDirectory() as tmp:
             src = os.path.join(tmp, "src", "rom", "patches")
@@ -376,6 +383,25 @@ def main():
             check(built == rom, "the committed image is what the source builds")
     else:
         print("  SKIP  sjasmplus not installed: rebuild check")
+
+    print("WAIT_RDY keeps DE (v2 left D = 4: LOAD/SAVE moved 0400h + E bytes)")
+    for ready, what in ((True, "READY"), (False, "timeout")):
+        z = Z80(rom, Pico())
+        z.pico.ready_at = 1000 if ready else None
+        z.set_de(0x1B00)                    # a 6912-byte block's length
+        z.m[0xFE00:0xFE02] = b"\x00\x00"
+        z.push(0x0566)                      # LD-BYTES' RET NC after the call
+        z.pc = 0x3874
+        try:
+            while z.pc != 0x0566 and z.t < 20e6 * MHZ:
+                z.step()
+        except AssertionError as e:
+            check(False, str(e))
+        secs = z.t / MHZ / 1e6
+        check(z.pc == 0x0566 and z.cf == ready and z.de() == 0x1B00
+              and (ready or 3 < secs < 5),
+              "%s: carry %s, DE still 1B00h (%04Xh)%s"
+              % (what, z.cf, z.de(), "" if ready else ", after %.1f s" % secs))
 
     print("names that aren't tpi: take the stock path")
     for name in ("hello", "tpi:", "tpx:abc", "ab"):

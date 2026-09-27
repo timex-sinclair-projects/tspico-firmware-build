@@ -6,6 +6,9 @@
 ; Input:  ROMs/TSPICO-ZX48-V2.BIN   the ZX v2 ROM, crc32 B3D40C73 (16K)
 ; Output: src/rom/TSPICO-ZX48-V3.BIN
 ;
+; What it fixes: v2's WAIT_RDY left D = 4, so every ZX48 LOAD and SAVE moved
+; 0400h + (length AND FFh) bytes -- see WAIT_RDY_V3 below.
+;
 ; What it adds: LOAD "tpi:name" mounts a file on the TS-Pico, as it does in
 ; TS-2068 mode, so a Spectrum program can be mounted and loaded without
 ; going back to the 2068 ROM:
@@ -21,7 +24,7 @@
 ; finishes the statement itself:
 ;
 ;   Z80  -> OUT (0Eh),'T'                   (84)
-;   Z80  <- waits for READY on 0Fh          (v2's WAIT_RDY, ~3.8 s, else J)
+;   Z80  <- waits for READY on 0Fh          (WAIT_RDY, ~3.8 s, else J)
 ;   Z80  -> op (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE), length, the name after
 ;           "tpi:" -- about 54 us per byte, for the Pico's 4-deep RX FIFO
 ;   Z80  <- waits for READY again, up to ~30 s (mounting copies the file to
@@ -41,7 +44,7 @@ PORT_DATA       equ 0Eh
 PORT_STATUS     equ 0Fh
 
 ; ---- v2 and stock 48K ROM routines and variables ----------------------------
-WAIT_RDY        equ 3874h       ; v2: poll 0Fh bit 6, carry = READY (~3.8 s)
+WAIT_RDY        equ 3874h       ; poll 0Fh bit 6, carry = READY (~3.8 s); v3 below
 STK_FETCH       equ 2BF1h       ; DE = start, BC = length of the string on the stack
 CHAN_OPEN       equ 1601h       ; A = stream
 PR_STRING       equ 203Ch       ; print BC bytes from DE
@@ -68,6 +71,33 @@ NEW_CODE        equ 38B8h       ; free (FFh) after v2's banner, to 3CFFh
 ; ---- the one call site ------------------------------------------------------
         AT 0631h
         call TPI_CHK            ; was CALL STK_FETCH (CD F1 2B)
+
+; ---- WAIT_RDY, rewritten: v2's left D = 4 ---------------------------------------
+; v2's WAIT_RDY used D as its outer counter. Its callers, LD-BYTES ($0563) and
+; SA-BYTES (via $388A), hold the block length in DE, so every ZX48 LOAD and
+; SAVE moved 0400h + (length AND FFh) bytes: a 6912-byte block stopped after
+; 1024 (Report R), and a 17-byte header read 1041 bytes, zeros past the end
+; of the block (the checksum still passed), over whatever followed the header
+; buffer. Found on hardware 2026-09-27. Same entry, same size (fits the old
+; 22 bytes), same ~3.8 s timeout; the counters are now B and HL, which both
+; callers set again before they use them. DE and IX are kept.
+; Out: carry set = READY; carry clear = timed out. Corrupts A, B, HL.
+        AT 3874h
+WAIT_RDY_V3:
+        ld b,4                  ; 4 x 65536 polls
+.outer: ld hl,0
+.poll:  in a,(PORT_STATUS)
+        and 40h                 ; bit 6 = READY
+        jr nz,.ready
+        dec hl
+        ld a,h
+        or l                    ; also leaves carry clear
+        jr nz,.poll
+        djnz .outer
+        ret                     ; timed out, carry clear
+.ready: scf
+        ret
+        ASSERT $ <= 388Ah       ; SAVE_WAIT at 388Ah is kept
 
 ; ---- banner: "... TS-Pico ZX v2" -> "v3" --------------------------------------
         AT 38B7h
@@ -116,7 +146,7 @@ TPI_CMD:
         out (PORT_DATA),a
         push de
         push bc
-        call WAIT_RDY           ; corrupts A, BC, D
+        call WAIT_RDY           ; corrupts A, B, HL
         pop bc
         pop de
         ld a,ERR_J

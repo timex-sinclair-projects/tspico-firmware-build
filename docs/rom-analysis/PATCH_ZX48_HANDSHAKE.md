@@ -5,6 +5,15 @@
 [`flash/manifest.json`](../../flash/manifest.json) as slot 0. This document is
 the record of what was changed and why.
 
+> **Bug, found on hardware 2026-09-27 — fixed in ZX v3.** The `WAIT_RDY`
+> below uses **D** as its outer loop counter and returns with D = 4. Both
+> callers hold the block length in DE, so with this ROM every ZX48 LOAD and
+> SAVE moves `0400h + (length AND FFh)` bytes: a 6912-byte block stops after
+> 1024 (Report R), and a 17-byte header reads 1041 bytes, the extra ones zeros
+> past the end of the block (the checksum still passes). v3
+> (`src/rom/patches/tspico-zx48-v3.asm`) rewrites it in the same 22 bytes
+> with B and HL as the counters, keeping DE.
+
 **Target:** the TS-PICO's customised ZX Spectrum ROM — the 16K at flash
 `0x000000` (slot 0 of `Pico-v15w.rom`), crc32 `029861D1`. **Not** for
 `Spectrum nuevo LD.rom`; see §6.
