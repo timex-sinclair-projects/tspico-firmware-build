@@ -361,8 +361,20 @@ from TS.tspico_io import (
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
+    RX_BLOCK, RXB_ABORT,                 # printer bodies
+    MQX,                                 # fast MQ.exec (9.6 ms -> 18 us)
 )
+from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from array import array
+
+# ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
+# (TS/printer.py; the 2068 sends printer output here while TPMODE bit 0 is
+# set -- SAVE "tpi:picopt".) Text is buffered in RAM and written to the SD
+# card only while the Z80 is parked in a READY wait: see PRINT_FLUSH.
+PRT = TextCapture()
+prn_path = None             # the open /sd/VLPRINT capture; None: next char opens one
+bmp_size = (512, 384)       # SAVE "tpi:bmp" CODE x,y
+PRINT_FLUSH_AT = 4096       # buffered text that forces a flush mid-printout
 
 #####################
 # SERVICE FUNCTIONS #
@@ -615,7 +627,7 @@ def DEACTIVATE_SD():
 #      270 MHz setting) so 30 MHz is conservative.
 #
 #   3. Y = READY after activation
-#      The new line `MQ.exec("mov(y, invert(null))")` sets Y to
+#      The new line `MQX(MQ, "mov(y, invert(null))")` sets Y to
 #      0xFFFFFFFF so $0F reads always have bit 6 set (= ready).
 #      We keep Y at READY for the entire session; the protocol's
 #      natural pacing via TX FIFO depth handles flow control.
@@ -660,7 +672,7 @@ def ACTIVATE_MQ(ready=True):                                                    
         # to signal ready, in that order.
         #
         # The old behavior was:
-        #     MQ.exec("mov(y, invert(null))")    # Y=READY immediately
+        #     MQX(MQ, "mov(y, invert(null))")    # Y=READY immediately
         # which created a race: between this exec and the caller's
         # response-byte load, the Z80 (which has been polling $0F
         # throughout any preceding SD operation) sees ready, immediately
@@ -734,7 +746,7 @@ def MQ_READY():
     # invert(null) is the documented MicroPython PIO syntax for ~0.
     # The tilde form `~null` does NOT parse correctly via runtime
     # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
-    MQ.exec("mov(y, invert(null))")
+    MQX(MQ, "mov(y, invert(null))")
 
 
 # ─── Issue #51 stage 4: command I/O that never blocks ──────────────────
@@ -761,7 +773,13 @@ class CmdAbort(BaseException):
 
 
 _CMD_ECHO = bytearray(3)            # TX_ROOM's scratch; stray keys land here
-CMD_STALL_MS = 3000                 # TX full this long = the Z80 has gone
+# How long command output waits on a Z80 that has stopped reading before
+# giving up (RECOVERED). NOT short: the Z80 legitimately stops for as long
+# as the user takes -- the ROM's own "scroll?" prompt, a slow listing --
+# and 3 s killed tpi:idir / a mount-error reply on hardware (2026-09-27).
+# A Z80 that has really gone, on the 1.8b ROM, says so at once: BREAK or
+# the next command's SYNC is a port-0Fh write.
+CMD_STALL_MS = 600_000
 KEY_WAIT_MS = 86_400_000            # a key wait waits for the user, as the ROM
                                     # does (a day); BREAK ends it at once
 
@@ -805,8 +823,8 @@ def CMD_FLUSH():
     for _ in range(64):
         if MQ.tx_fifo() == 0:
             break
-        MQ.exec("pull (noblock)")
-        MQ.exec("mov (osr, null)")
+        MQX(MQ, "pull (noblock)")
+        MQX(MQ, "mov (osr, null)")
     for _ in range(64):
         if MQ.rx_fifo() == 0:
             break
@@ -824,7 +842,7 @@ def MQ_BUSY():
         (e.g., signalling an aborted exchange or a long-pause
         background operation).
     """
-    MQ.exec("set(y, 0)")
+    MQX(MQ, "set(y, 0)")
 
 
 # ─── DUAL-PORT MIGRATION: retired single-port helpers ────────────────────
@@ -976,18 +994,18 @@ def CHK_STATUS(secs):                                                           
     if not dead:
         LOG("Abnormal termination. Clearing TX/RX FIFO....", 2)
         while not dead:
-            MQ.exec("pull (noblock)")
-            MQ.exec("mov (osr, null)")
-            MQ.exec("mov (isr, null)")
-            MQ.exec("push (noblock)")
+            MQX(MQ, "pull (noblock)")
+            MQX(MQ, "mov (osr, null)")
+            MQX(MQ, "mov (isr, null)")
+            MQX(MQ, "push (noblock)")
             kill = True
              
         # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
         while MQ.rx_fifo() != 0:
             MQ.get()
         while MQ.tx_fifo() != 0:
-            MQ.exec("pull (noblock)")
-            MQ.exec("mov (osr, null)")
+            MQX(MQ, "pull (noblock)")
+            MQX(MQ, "mov (osr, null)")
         MQ.active(0)
 
         LOG("TX/RX FIFO successfully cleared. Operation finished", 0)
@@ -1883,17 +1901,21 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 else:
                     ll = 21
 
-                # Re-assert Y=READY immediately before the next-page
-                # writes so the Z80's wait_bit6 finds bit 6 = 1 the
-                # moment we start pushing erase-prompt bytes.
-                MQ_READY()
+                # READY only once the first erase bytes are in TX --
+                # data in TX first, then READY: the Z80 reads TX the moment it sees
+                # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
+                # READY-before-data here (READY landed ~9.6 ms late); with MQX the
+                # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
                 if new_rom:
                     for _eb in range(s):
                         wrt(0x08)
                         wrt(0x20)
                         wrt(0x08)
+                        if not _eb:
+                            MQ_READY()
                 else:
                     wrt(0x0D)
+                    MQ_READY()
 
     wrt(end_char)
     TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
@@ -2063,7 +2085,12 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     sel = -1
     pgs = (n - 1) // nmax + 1
 
-    MQ_READY()                          # Y = READY → $0F polls succeed
+    # READY is said below, once the first bytes of each reply are in TX --
+    # data in TX first, then READY: the Z80 reads TX the moment it sees
+    # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
+    # READY-before-data here (READY landed ~9.6 ms late); with MQX the
+    # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
+    need_ready = True
 
     while MQ.rx_fifo() != 0:            # Drain any pre-existing keystrokes
         MQ.get()
@@ -2085,6 +2112,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     if n == 0:
         wrt(0x86)                       # PRINT_STRING_WITH_LOOP function code
         wrt(1)                          # status: no error
+        MQ_READY()                      # data in TX first, then READY
         wrt(0x0D)
         wrt(0x0D)
         for m in hdr1:
@@ -2108,6 +2136,9 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             Init = False
         else:
             wrt(ch)     # Show previous choice
+        if need_ready:
+            MQ_READY()  # data in TX first, then READY
+            need_ready = False
         wrt(0x0D)
         wrt(0x0D)
         for m in hdr1:
@@ -2131,10 +2162,10 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         while i < nmax:
             wrt(0x0D)
             i += 1
-        a = (idx * 32 / n + 0.5) // 1
+        a = int(idx * 32 / n + 0.5)
         for k in range(a):
             wrt('-')
-        w = (j * 32 / n + 0.5) // 1
+        w = int(j * 32 / n + 0.5)
         for k in range(w):
             wrt('=')
         for k in range(32 - a - w):
@@ -2159,7 +2190,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         if ch == 78:    # 'N' then done (ROM ended the loops)
             MQ_READY()  # restore Y for downstream reads
             return -1
-        MQ_READY()      # Y → READY before any next-iteration / echo write
+        need_ready = True   # READY after the next reply's first byte
         if ch == 66: # B
             if idx >= nmax:
                 idx -= nmax
@@ -2169,6 +2200,8 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             j = idx + LISTMENU_CHOICES[ch]
             if j < n:
                 wrt(ch)
+                MQ_READY()      # data in TX first, then READY
+                need_ready = False
                 # Erase bottom two lines
                 for b in range(32):
                     wrt(0x08)
@@ -2195,6 +2228,8 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             wrt(m)
             
     wrt(0x03) # End string loop
+    if need_ready:
+        MQ_READY()      # 'F' past the last page: nothing else was sent
     # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
     CMD_DRAIN()
     while MQ.rx_fifo() != 0:
@@ -3621,14 +3656,20 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     # ──────────────────────────────────────────────────────────────────────
 
     ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
-    MQ_READY()          # both branches need Y=READY for downstream reads
-    if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
+    if ch == 78: # 'N' causes the ROM to end the string loop and any exchange
+        MQ_READY()      # nothing more to send; restore Y for downstream reads
+    else:
+        # The echo and 0x03 first, THEN READY -- data in TX first, then READY: the Z80 reads TX the moment it sees
+        # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
+        # READY-before-data here (READY landed ~9.6 ms late); with MQX the
+        # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
         if echo:
             if ch < 32 or ch > 127:
                 wrt(89) # Y
             else:
                 wrt(ch)
         wrt(0x03) # End the string loop
+        MQ_READY()
         # Could add an option to not wrt(0x03) and let the caller do that after
         # writing some more text to indicate the result of the action.
 
@@ -3945,60 +3986,182 @@ def NOP(pre, cmd):
 ##################################
 
 
-def PRINT_IO(pre):                                                                                                           # LPRINT and LLIST processing
+def PRINT_FLUSH():
+    """Append the buffered printer text to the capture file, opening the next
+    numbered /VLPRINT/PRNnnnn.TXT if none is open.
 
-    global MQ
-    global TSP
+    Touches the SD card, which takes the bus state machine away (ACTIVATE_SD
+    parks MQ on NULL_SM, and a Z80 that starts a command meanwhile reads a
+    floating bus). So ONLY call it while the Z80 is parked in a READY wait
+    (~20 s): inside a printer transaction before its READY, inside a
+    command, or after another command's pre-header before its handler says
+    READY. Leaves MQ rebuilt, Y = BUSY, TX empty: callers stage statuses
+    after it.
+    """
+    global prn_path
+    if not PRT.buf:
+        return
+    try:
+        ACTIVATE_SD()
+        if prn_path is None:
+            prn_path = next_name(VLPRINT, "PRN", "TXT")
+        with open(prn_path, "ab") as f:
+            f.write(PRT.buf)
+        LOG("Printer: %d bytes -> %s" % (len(PRT.buf), prn_path), 0)
+        PRT.buf = bytearray()
+    except Exception as e:
+        LOG("Printer flush failed, %d bytes kept: %s" % (len(PRT.buf), e), 2)
+        if len(PRT.buf) > 32768:                    # no card: don't eat the heap
+            PRT.buf = bytearray()
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
 
-    prn = bytearray(10000)
-    end_msg = "File 0001.txt closed OK"
-    r1 = range(10)
-    wrt = MQ.put
 
-    pos = 0
-    while True:
-        prn[pos] = pre[3]
-        pos += 1
+def COPY_BMP(scr, mode, colour):
+    """COPY's screen -> the next /VSCREEN/SCRnnnn.BMP, at the SAVE "tpi:bmp"
+    size (default 512x384). Same SD rule as PRINT_FLUSH. True if written."""
+    try:
+        ACTIVATE_SD()
+        path = next_name(VSCREEN, "SCR", "BMP")
+        w0 = 512 if mode == 3 else 256
+        sx = max(1, bmp_size[0] // w0)
+        sy = max(1, bmp_size[1] // 192)
+        with open(path, "wb") as f:
+            w, h = write_bmp(f, scr, mode, colour, sx, sy)
+        LOG("COPY: mode %d -> %s (%dx%d)" % (mode, path, w, h), 0)
+        return True
+    except Exception as e:
+        LOG("COPY to BMP failed: %s" % e, 2)
+        return False
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
 
-        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
-        # Was:  wrt(0x40); wrt(0x01)
-        # Now:  wrt(0x01); MQ_READY()
-        # The 0x40 (continue) is no longer a FIFO byte — it's the Y
-        # register signalled via MQ_READY(). The 0x01 is the status
-        # the Z80 reads from $0E after seeing ready on $0F.
-        # ──────────────────────────────────────────────────────────────
-        wrt(0x01)
-        MQ_READY()
 
-        pre = [0] * 10
-        for i in r1:
-            pre[i] = MQ.get()
-        if pre[1] != 5:
-            break
+def PRINT_IO(pre):
+    """One printer transaction: an LPRINT / LLIST character (pre[1] = 5) or
+    COPY (pre[1] = 4 / 6). Gustavo's manual 2.26-2.27; wire format in
+    TS/printer.py.
 
-    # ─── DUAL-PORT MIGRATION (loop exit, same pattern as in-loop) ─────
-    wrt(0x01)
-    MQ_READY()
+    Each character is its own transaction -- the dispatcher hands every one
+    here, SYNC and all. (This used to loop reading the next pre-headers
+    itself: on the 1.8b ROM the per-character SYNC misaligned it after the
+    first character, and the first non-printer pre-header ended the loop and
+    was swallowed, answered with "file closed OK".)
 
-    SEND_MSG(end_msg, "", _1_OK)
+    No body: the Z80 read the pre-load status straight after the pre-header
+    and waits for READY. A body (a character >= 80h's pattern, COPY's
+    screen) goes through the ROM's 223Eh: READY, 'D' + len + data + XOR,
+    READY, final status.
+    """
+    n = pre[7] | (pre[8] << 8)
+    body = None
+    ok = True
+    if n:
+        body = bytearray(n + 4)
+        MQ_STATUS(MQ, "mid")
+        why, got = RX_BLOCK(MQ, body, n + 4, 1000, 1000)
+        if why:
+            MQ_TO_IDLE(MQ, recovered=(why != RXB_ABORT))
+            LOG("Printer body %s after %d of %d bytes" % (
+                "stopped by BREAK" if why == RXB_ABORT else "stalled", got, n + 4), 1)
+            return
+        x = 0
+        for i in range(n + 3):
+            x ^= body[i]
+        ok = x == body[n + 3] and body[0] == 0x44
+    status = _1_OK
+    if pre[1] == 5:
+        PRT.feed(pre[3])
+        if len(PRT.buf) >= PRINT_FLUSH_AT:
+            PRINT_FLUSH()                           # the Z80 waits for READY
+    elif not (ok and body is not None
+              and COPY_BMP(memoryview(body)[3:n + 3], pre[4], pre[3])):
+        status = _2_R_Tape_load
+    if body is not None:
+        MQ.put(status)                              # 223Eh's final status
+    MQ.put(0x01)                                    # next command's pre-load
+    MQ_STATUS(MQ, "idle")
 
-    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
-    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
-    # helpers being retired in stage 7). Behavior is identical.
-    # ──────────────────────────────────────────────────────────────────
-    while MQ.tx_fifo() != 0:
-        pass
 
-    while MQ.rx_fifo() != 0:
-        MQ.get()
+def PRN_OPEN(pre, cmd):
+    """SAVE "tpi:opprint": close any capture and start the next numbered one."""
+    global prn_path
+    PRINT_FLUSH()
+    st = _1_OK
+    try:
+        ACTIVATE_SD()
+        prn_path = next_name(VLPRINT, "PRN", "TXT")
+        open(prn_path, "w").close()
+        msg = "Printer capture: " + prn_path[3:]
+    except Exception as e:
+        prn_path = None
+        msg, st = "Printer capture: SD error", _3_F_Invalid_file
+        LOG("OPPRINT failed: %s" % e, 2)
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+    PRT.col = PRT.line = 0
+    SEND_MSG(msg, "", st)
 
-    prn = prn[:pos]
 
-    with open("/PRN/0001.txt", "w") as sal:                                           # PRINT output filename is fixed on this version; can be set up
-            sal.write(prn)                                                            # in future version
+def PRN_CLOSE(pre, cmd):
+    """SAVE "tpi:clprint": write out and close the capture file. The next
+    printed character opens a new one."""
+    global prn_path
+    PRINT_FLUSH()
+    msg = "Printer capture closed: " + prn_path[3:] if prn_path else "No printer capture open"
+    prn_path = None
+    PRT.col = PRT.line = 0
+    SEND_MSG(msg, "", _1_OK)
 
-    return
 
+def PRN_FLAG(pre, cmd):
+    """SAVE "tpi:autolf" / "noautolf" / "autopg" / "noautopg"."""
+    word = cmd[7:].split(" ")[0].upper()
+    on = not word.startswith("NO")
+    if word.endswith("AUTOLF"):
+        PRT.autolf = on
+        msg = "Printer: CR+LF line ends " + ("on" if on else "off")
+    else:
+        PRT.autopg = on
+        msg = "Printer: paging every %d lines %s" % (PRT.lines, "on" if on else "off")
+    SEND_MSG(msg, "", _1_OK)
+
+
+def PRN_SIZE(pre, cmd):
+    """SAVE "tpi:prnsz" CODE cols,lines (or "tpi:prnsz cols lines"): page
+    size for wrapping and AUTOPG. No parameters: report it."""
+    cols, lines = PARAMS(pre)
+    args = getArgs(cmd).replace(",", " ").split()
+    try:
+        if args:
+            cols, lines = int(args[0]), int(args[1]) if len(args) > 1 else PRT.lines
+        if cols or lines:
+            if not (0 <= cols <= 255 and 0 <= lines <= 255):
+                raise ValueError
+            PRT.cols, PRT.lines = cols, lines
+    except (ValueError, IndexError):
+        SEND_MSG("Printer size: bad parameters", "", _4_Q_Parameter)
+        return
+    SEND_MSG("Printer size: %d columns, %d lines" % (PRT.cols, PRT.lines), "", _1_OK)
+
+
+def PRN_BMP(pre, cmd):
+    """SAVE "tpi:bmp" CODE x,y: COPY picture size -- 256/512/1024/2048 x
+    192/384/768/1536 (hi-res screens 512/1024/2048/4096 wide). No
+    parameters: report it."""
+    global bmp_size
+    x, y = PARAMS(pre)
+    if x or y:
+        if y == 1596:                               # as printed in the manual
+            y = 1536
+        if x not in (256, 512, 1024, 2048, 4096) or y not in (192, 384, 768, 1536):
+            SEND_MSG("BMP size: use 256-4096 x 192-1536", "", _4_Q_Parameter)
+            return
+        bmp_size = (x, y)
+    SEND_MSG("COPY picture: %dx%d" % bmp_size, "", _1_OK)
 
 def PROCESS_ASM(pre):                                                                 # Processes AU (Assembler) commands sent by the TS
 
@@ -4082,8 +4245,8 @@ def FAIL_CMD(status):
     for _ in range(64):
         if MQ.tx_fifo() == 0:
             break
-        MQ.exec("pull (noblock)")
-        MQ.exec("mov (osr, null)")
+        MQX(MQ, "pull (noblock)")
+        MQX(MQ, "mov (osr, null)")
     for _ in range(64):
         if MQ.rx_fifo() == 0:
             break
@@ -4504,19 +4667,20 @@ def TS2068_IO():                                                         # Main 
         "TPI:UPGRADE" : UPGRADE,
         "TPI:VERBOSE" : VERB_TOGGLE, 
         "TPI:ZX48" : ZX48,
-        "TPI:AUTOLF" : SA_NOT_IMP,
-        "TPI:AUTOPG" : SA_NOT_IMP,
-        "TPI:BMP" : SA_NOT_IMP,
-        "TPI:CLPRINT" : SA_NOT_IMP,
+        "TPI:AUTOLF" : PRN_FLAG,
+        "TPI:AUTOPG" : PRN_FLAG,
+        "TPI:BMP" : PRN_BMP,
+        "TPI:CLPRINT" : PRN_CLOSE,
         "TPI:CONFIG" : SA_NOT_IMP,
         "TPI:DELETE" : SA_NOT_IMP,
         "TPI:FRESET" : SA_NOT_IMP,
         "TPI:GETCONFIG" : SA_NOT_IMP, 
         "TPI:LIST" : SA_NOT_IMP,
         "TPI:MEMINFO" : SA_NOT_IMP,
-        "TPI:NOAUTOLF" : SA_NOT_IMP,
-        "TPI:OPPRINT" : SA_NOT_IMP,
-        "TPI:PRNSZ" : SA_NOT_IMP,
+        "TPI:NOAUTOLF" : PRN_FLAG,
+        "TPI:NOAUTOPG" : PRN_FLAG,
+        "TPI:OPPRINT" : PRN_OPEN,
+        "TPI:PRNSZ" : PRN_SIZE,
         "TPI:STOP" : SA_NOT_IMP,
         }
     
@@ -4738,6 +4902,18 @@ def TS2068_IO():                                                         # Main 
                 MQ_TO_IDLE(MQ, status=False)
                 if got != -1:
                     LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
+                # A log write on core1 (SAVE_LOG) stops BOTH cores while it
+                # programs flash, and the Z80 sends its pre-header the moment
+                # we say IDLE: a freeze mid-burst lost bytes (hardware,
+                # 2026-09-27: "Partial pre-header 8/10" -> RECOVERED -> Report
+                # T in Commander). The Z80 waits up to ~1 s for IDLE after a
+                # SYNC, so let the write finish first (bounded).
+                _t = time.ticks_ms()
+                while busy and time.ticks_diff(time.ticks_ms(), _t) < 800:
+                    pass
+                # (No gc.collect() here: 4.6 ms on every SYNC -- every LPRINT
+                # character -- and not needed: RX_CAPTURE allocates nothing,
+                # so no GC can start during the pre-header burst.)
                 MQ_STATUS(MQ, "idle")
                 continue
             if got != 10:
@@ -4780,8 +4956,20 @@ def TS2068_IO():                                                         # Main 
             # its TLM print and gc.collect(). SAVE_TS says READY straight
             # before its capture loop.
             # ──────────────────────────────────────────────────────────────
+            # Printer text still in RAM: put it on the SD card now, while this
+            # command's Z80 is parked in its READY wait (it read its pre-load
+            # status straight after the pre-header; give it a moment, and put
+            # the status back if the SD access wiped it unread).
+            if PRT.buf and not (pre[0] == 66 and pre[1] in (4, 5, 6)):
+                _t = time.ticks_ms()
+                while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), _t) < 50:
+                    pass
+                _unread = MQ.tx_fifo()
+                PRINT_FLUSH()
+                if _unread:
+                    MQ.put(0x01)
             if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10) \
-                    and not (pre[0] == 66 and pre[1] != 5):   # commands: PROCESS_CMD says it
+                    and pre[0] != 66:   # commands, printer: the handler says it
                 MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
@@ -4791,8 +4979,11 @@ def TS2068_IO():                                                         # Main 
             _pre_snapshot = list(pre)
                                                                                                       # pre(header)[0] is a command
             # gc.collect()
-            fr1 = gc.mem_free()
-            LOG("Top of main loop, gc.memfree()=%.1f" % (fr1 >> 10), 0)
+            # gc.mem_free() walks the whole heap: 3.1 ms on the Pico, paid on
+            # every transaction -- every LPRINT / LLIST character -- for a
+            # line only kept at LOG_LEVEL 0. Only then.
+            if TSP.LOG_LEVEL == 0:
+                LOG("Top of main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
             if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
                 LOG("Starting SAVE TS", 0)
@@ -4968,18 +5159,8 @@ def TS2068_IO():                                                         # Main 
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
 
-            elif pre[0] == 66 and pre[1] == 5:                                                        # commands are pre[0] == 66. PRINT commands are pre[1] == 5
-                LOG("Starting PRINT", 0)
-                try:
-                    PRINT_IO(pre)
-                except CmdAbort:
-                    # PRINT_IO's closing SEND_MSG was stopped (BREAK, or the
-                    # Z80 stopped reading): same one way back as PROCESS_CMD.
-                    CMD_FLUSH()
-                    MQ.put(0x01)
-                    MQ_READY()
-                    LOG("PRINT closing message stopped", 1)
-                DIR_FILES()
+            elif pre[0] == 66 and pre[1] in (4, 5, 6):                                # LPRINT / LLIST char, COPY
+                PRINT_IO(pre)
 
             elif pre[0] == 66:
 
@@ -5016,8 +5197,8 @@ def TS2068_IO():                                                         # Main 
                 while MQ.rx_fifo() != 0:
                     MQ.get()
                 while MQ.tx_fifo() != 0:
-                    MQ.exec("pull (noblock)")
-                    MQ.exec("mov (osr, null)")
+                    MQX(MQ, "pull (noblock)")
+                    MQX(MQ, "mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
@@ -5125,7 +5306,7 @@ def ZX48_IO(pre):                                                               
 
     utime.sleep(0.01)
     MQ.active(1)
-    MQ.exec("mov(y, invert(null))")    # Y = READY for the entire ZX session
+    MQX(MQ, "mov(y, invert(null))")    # Y = READY for the entire ZX session
 
     TLM("ZX48_IO enter", "par1=%d par2=%d ZX_TAPE_COMPAT=%s" % (
         par1, par2, TSP.ZX_TAPE_COMPAT))
@@ -5230,8 +5411,8 @@ def ZX48_IO(pre):                                                               
                 while MQ.rx_fifo() != 0:
                     MQ.get()
                 while MQ.tx_fifo() != 0:
-                    MQ.exec("pull (noblock)")
-                    MQ.exec("mov (osr, null)")
+                    MQX(MQ, "pull (noblock)")
+                    MQX(MQ, "mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
@@ -5261,8 +5442,8 @@ def ZX48_IO(pre):                                                               
 
         # ─── DUAL-PORT MIGRATION: inline TX drain ─────────────────────────
         while MQ.tx_fifo() != 0:
-            MQ.exec("pull (noblock)")
-            MQ.exec("mov (osr, null)")
+            MQX(MQ, "pull (noblock)")
+            MQX(MQ, "mov (osr, null)")
 
         MQ.active(0)
         utime.sleep(.01)
