@@ -862,36 +862,32 @@ def test_aborted_search_rewinds(tio):
 
 
 def test_abort_paths_rewind(tio):
-    """Structural: every LOAD_TS abort path must call the rewind.
+    """Structural: LOAD_TS's abort path rewinds an interrupted search.
 
-    Two paths since issue #51: the watchdog's (ABORT_TX) and the BREAK /
-    stall path (STOP_WATCHDOG), which ends the transaction itself.
+    Since issue #51 stage 5 there is ONE abort path -- BREAK (a port-0Fh
+    write) or the Z80 going silent -- and no watchdog: no START_WATCHDOG,
+    ABORT_TX or STOP_WATCHDOG left in LOAD_TS.
     """
     print("test_abort_paths_rewind: structural check")
     import ast
     src = io.open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read()
     fn = next(n for n in ast.walk(ast.parse(src))
               if isinstance(n, ast.FunctionDef) and n.name == "LOAD_TS")
-    aborts = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
-              and isinstance(n.func, ast.Name) and n.func.id in ("ABORT_TX", "STOP_WATCHDOG")]
-    rewinds = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
-               and isinstance(n.func, ast.Name) and n.func.id == "REWIND_ABORTED_SEARCH"]
-    check(len(aborts) == 2, "LOAD_TS has 2 abort paths (watchdog, BREAK/stall), found %d" % len(aborts))
-    check(len(rewinds) == len(aborts),
-          "each one rewinds (%d rewinds for %d aborts)" % (len(rewinds), len(aborts)))
-
+    names = [n.func.id for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+    check(not {"START_WATCHDOG", "ABORT_TX", "STOP_WATCHDOG", "REARM_AFTER_LOAD_ABORT"} & set(names),
+          "LOAD_TS uses no watchdog (%s)" % sorted({"START_WATCHDOG", "ABORT_TX", "STOP_WATCHDOG",
+                                                    "REARM_AFTER_LOAD_ABORT"} & set(names)))
+    check(names.count("REWIND_ABORTED_SEARCH") == 1, "its one abort path rewinds the search")
 
 
 def test_load_abort_rearms_tx(tio):
     """After an aborted LOAD, TX must hold exactly one 0x01 and Y = READY.
 
     LOAD_TS's normal exit ends with the V6 chain (two 0x01s + Y=READY).
-    The abort paths bypass it, and the watchdog has just drained both
-    FIFOs -- so without an explicit re-arm the next command's status read
-    finds an empty TX and the dispatcher answers Report J.
-    docs/PROTOCOL.md 7 states the rule; SAVE_TS is exempt only because
-    the dispatcher's ACTIVATE_MQ re-arms after it, and nothing at all
-    runs after LOAD_TS.
+    The abort path bypasses it, so without an explicit re-arm the next
+    command's status read finds an empty TX and the dispatcher answers
+    Report J. Nothing runs after LOAD_TS, so it re-arms itself -- with
+    MQ_TO_IDLE, the one way back to idle (issue #51).
 
     Ryan hit this on #48: VERIFY makes the Z80 abandon the transfer as
     soon as the comparison fails, and every command after it answered J
@@ -902,10 +898,9 @@ def test_load_abort_rearms_tx(tio):
     the one-byte shift that surfaces as Report R.
     """
     print("test_load_abort_rearms_tx: abort leaves TX primed for the next cmd")
-    TSP = FakeTSP("/tmp")
     MQ = FakeMQ(z80_reads=False)          # Z80 has gone back to BASIC
 
-    tio.REARM_AFTER_LOAD_ABORT(MQ, TSP)
+    tio.MQ_TO_IDLE(MQ)
 
     check(MQ.written == [0x01],
           "exactly one 0x01 written, got %r" % (MQ.written,))
@@ -918,12 +913,8 @@ def test_load_abort_rearms_tx(tio):
 
 
 def test_abort_paths_rearm(tio):
-    """Structural: both LOAD_TS abort paths re-arm, and do it after ABORT_TX.
-
-    Ordering matters. ABORT_TX waits for core1 to finish draining and
-    re-activating the SM; anything written before it returns is eaten by
-    the watchdog's pull(noblock) cleanup loop.
-    """
+    """Structural: LOAD_TS's abort path re-arms with MQ_TO_IDLE, after the
+    rewind (MQ_TO_IDLE is the last word to the Z80 before returning)."""
     print("test_abort_paths_rearm: structural check")
     import ast
     src = io.open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read()
@@ -934,20 +925,10 @@ def test_abort_paths_rearm(tio):
         return [n for n in ast.walk(fn) if isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Name) and n.func.id == name]
 
-    # The watchdog path re-arms with REARM_AFTER_LOAD_ABORT after ABORT_TX;
-    # the BREAK / stall path (issue #51) with MQ_TO_IDLE after STOP_WATCHDOG.
-    aborts = calls("ABORT_TX")
-    rearms = calls("REARM_AFTER_LOAD_ABORT")
-    stops = calls("STOP_WATCHDOG")
-    idles = calls("MQ_TO_IDLE")
-    check(len(rearms) == len(aborts) == 1 and len(idles) == len(stops) == 1,
-          "both abort paths re-arm (%d/%d after ABORT_TX, %d/%d after STOP_WATCHDOG)"
-          % (len(rearms), len(aborts), len(idles), len(stops)))
-
-    ok = all(any(a.lineno < r.lineno for a in aborts) for r in rearms) and \
-        all(any(t.lineno < r.lineno for t in stops) for r in idles)
-    check(ok, "every re-arm comes after its path's ABORT_TX / STOP_WATCHDOG")
-
+    idles, rewinds = calls("MQ_TO_IDLE"), calls("REWIND_ABORTED_SEARCH")
+    check(len(idles) == 1, "the abort path re-arms with MQ_TO_IDLE (%d)" % len(idles))
+    check(idles and rewinds and rewinds[0].lineno < idles[0].lineno,
+          "after the rewind")
 
 
 def main():

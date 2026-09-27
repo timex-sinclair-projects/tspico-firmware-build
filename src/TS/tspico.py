@@ -966,62 +966,6 @@ def BLINK_LED(pause):                                                           
     return    
 
 
-def CHK_STATUS(secs):                                                                                 # Watchdog that executes on the second thread, 
-                                                                                                      # and kills the IO routine if needed.
-    global MQ                                                                                                      
-                                                                                                      
-    global kill
-    global dead
-    global busy
-    
-    global led
-    
-    kill = False
-    busy = True
-    
-    LOG("Starting watchdog...", 0)
-    secs = secs * 1_000_000
-    
-    t_init = time.ticks_us()
-    # ─── DUAL-PORT MIGRATION: use ticks_diff to handle 30-bit wrap ───────
-    # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min). Plain
-    # subtraction goes negative after wrap (negative < secs → True → spin
-    # forever). ticks_diff() handles wrap correctly.
-    # ─────────────────────────────────────────────────────────────────────
-    while time.ticks_diff(time.ticks_us(), t_init) < secs:
-        if dead:
-            break
-    if not dead:
-        LOG("Abnormal termination. Clearing TX/RX FIFO....", 2)
-        while not dead:
-            MQX(MQ, "pull (noblock)")
-            MQX(MQ, "mov (osr, null)")
-            MQX(MQ, "mov (isr, null)")
-            MQX(MQ, "push (noblock)")
-            kill = True
-             
-        # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
-        while MQ.rx_fifo() != 0:
-            MQ.get()
-        while MQ.tx_fifo() != 0:
-            MQX(MQ, "pull (noblock)")
-            MQX(MQ, "mov (osr, null)")
-        MQ.active(0)
-
-        LOG("TX/RX FIFO successfully cleared. Operation finished", 0)
-        
-        BLINK_ERROR()
-        
-        MQ.active(1)
-        
-        LOG("Ending watchdog. Operation ended normally", 0)
-        
-    kill = False
-    busy = False
-    
-    return
-
-
 def COPY_FILE(src_file, dst_file):                                                          # Copy the large .TAP file to Pico's internal flash
                                                                                              # best compatibility and performance
     global dead

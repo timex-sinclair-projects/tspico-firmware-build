@@ -24,7 +24,6 @@ from TS.sdcard import *
 kill = False        # set True by WATCHDOG to abort a hung transaction
 busy = False        # core1 watchdog activity flag
 dead = True         # True = no transaction in progress; False = active
-tx_wait_ms = 0      # TX_ROOM: how long TX had been full when the watchdog fired
 log_entries = ""    # log messages collected during a transaction
 
 # Cached "no file mounted" fallback handle.
@@ -208,7 +207,6 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
     a GC that stops core0 for 15-25 ms. The Z80 reads a byte every 50 us
     from a 4-deep FIFO, so that pause is ~300 empty reads and Report R.
     """
-    global tx_wait_ms
     # Call MQ's methods directly -- never `txf = MQ.tx_fifo` here. Storing a
     # bound method allocates it (16 bytes), and this runs once per byte of a
     # LOAD: 32 bytes a call filled the heap every ~6.5 KB, and each GC froze
@@ -223,7 +221,6 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
                 return 1
             ECHO_KEEP(echo, w)
         elif kill:
-            tx_wait_ms = time.ticks_diff(time.ticks_ms(), t0)
             return 2
         elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
             return 3
@@ -644,57 +641,6 @@ def REWIND_ABORTED_SEARCH(TSP):
     TSP.ld_start = -1
     TSP.ld_wrapped = False
     return True
-
-
-def REARM_AFTER_LOAD_ABORT(MQ, TSP):
-    """Re-prime TX so the command AFTER an aborted LOAD isn't Report J.
-
-    LOAD_TS's normal exit ends with the V6 chain: two MQ.put(0x01) writes
-    (this iteration's final status, then the pre-load the NEXT command's
-    initial $0E status read consumes) followed by Y = READY. The abort
-    paths never reach it. The watchdog has just drained both FIFOs, so TX
-    comes back empty and Y is left wherever the partial Z80 OUTs dropped
-    it — the next command's status read finds nothing and the dispatcher
-    answers Report J.
-
-    docs/PROTOCOL.md §7 states the rule this restores: "if LOAD_TS returns
-    without writing the trailing two 0x01s, the next LOAD will hang or fail
-    with Report J. The pre-load chain is load-bearing; honor it in any new
-    handler." SAVE_TS gets away with the same shape only because the
-    dispatcher calls ACTIVATE_MQ() after it and re-arms with its own
-    MQ.put(0x01); nothing at all runs after LOAD_TS returns.
-
-    ONE 0x01 here, not two. The pair on the normal path exists because the
-    Z80 is still listening and consumes the first as this transaction's
-    final status. After an abort there is no Z80 waiting — it has already
-    reported and gone back to BASIC — so a second byte would sit in TX and
-    be read as the first byte of the next command's response. That is the
-    one-byte CRC shift that surfaces as Report R. Same shape as the
-    dispatcher's own body-read-timeout recovery in tspico.py: one pre-load,
-    then restore Y.
-
-    The symptom this fixes, from Ryan on #48: VERIFY makes the Z80 abandon
-    the transfer mid-block as soon as the comparison fails (a Program block
-    covers the variables area, so verifying a running program against its
-    own earlier SAVE always mismatches). Reporting R there is correct — but
-    every command after it answered J until something re-primed the chain,
-    which is why "a few tpi:nop calls would clear up the queue".
-
-    Call AFTER ABORT_TX, never before: ABORT_TX waits for core1 to finish
-    draining and re-activating the SM, and anything staged earlier is eaten
-    by the watchdog's pull(noblock) cleanup loop. (If ABORT_TX hit its 3s
-    bail-out, core1 may still be bouncing the SM and this write can be
-    lost — no worse than the nothing that was written before.)
-    """
-    # Issue #51: through MQ_TO_IDLE, not a bare MQ.put(0x01). This assumed
-    # the watchdog's cleanup had emptied TX -- but ABORT_TX stops waiting for
-    # that cleanup after 3 s, and a put() into a still-full TX blocks forever,
-    # the very hang the watchdog exists to prevent. MQ_TO_IDLE empties TX and
-    # RX first, stages exactly one 0x01 (the rule above) and sets Y = READY
-    # (idle), and it can't block.
-    MQ_TO_IDLE(MQ)
-    LOG_ADD("INFO: LOAD aborted; TX re-armed for the next command.",
-            0, TSP.LOG_LEVEL)
 
 
 def ABORT_TX(log_level, what="LOAD_TS"):
@@ -1219,14 +1165,14 @@ def LOAD_TS(pre, MQ, TSP):
     # READY for LOAD) -- and leaves the heap far from its next threshold.
     gc.collect()
 
-    # ---- Spawn watchdog so a misbehaving Z80 doesn't lock the loop ----
-    dead = False
-    # Budget scaled to the block. Hardware 2026-09-26: the Z80 read TS-Pico
-    # Commander's 16,096-byte block at ~190 us/byte -- still reading when a
-    # flat 3 s budget killed it ~220 bytes from the end (Report R). TX_ROOM
-    # and RX_WORD bound real silence on their own; this only has to outlast
-    # a slow but live Z80: 3 s + 1 s per 4K.
-    START_WATCHDOG(3 + totbytes // 4096, MQ, TSP)
+    # ---- No watchdog (issue #51 stage 5) ----
+    # This used to start a core1 WATCHDOG thread with a total-time budget.
+    # Every wait below is bounded on its own now -- TX_ROOM gives up after
+    # 3 s of the Z80 not reading, RX_WORD after 1 s of silence, and a BREAK
+    # / SYNC (port-0Fh write) ends the LOAD at once -- which the abort
+    # harness proved on hardware without any watchdog. Gone with it: the
+    # "core1 busy" spawn failures, the ~1 s BLINK with the bus state
+    # machine off, and a total-time budget that killed slow-but-live LOADs.
 
     wrt = MQ.put
 
@@ -1356,35 +1302,17 @@ def LOAD_TS(pre, MQ, TSP):
         LOG_ADD("ERROR: LOAD TX ran dry %d times, first at byte %d of %d."
                 % (dry, dry_at, totbytes), 2, TSP.LOG_LEVEL)
 
-    if why == 2:
-        # The watchdog fired: its own cleanup path, as before. How far we'd
-        # got says why: a handful of bytes queued means the Z80 stopped at
-        # the very start (it didn't like the flag), not mid-block.
-        # Timing says which: TX full for most of the 3 s = the Z80 stopped
-        # reading early; TX full only briefly = it was still reading, slowly.
-        LOG_ADD("ERROR: LOAD watchdog fired with %d of %d bytes queued, "
-                "%d ms after READY; TX full for the last %d ms; dry %d."
-                % (sent, totbytes, time.ticks_diff(time.ticks_ms(), t_ready),
-                   tx_wait_ms, dry), 2, TSP.LOG_LEVEL)
-        ABORT_TX(TSP.LOG_LEVEL)
-        if REWIND_ABORTED_SEARCH(TSP):
-            LOG_ADD("INFO: LOAD aborted mid-search; tape rewound to "
-                    "offset %d." % TSP.offset, 0, TSP.LOG_LEVEL)
-        _close_if_local()
-        REARM_AFTER_LOAD_ABORT(MQ, TSP)
-        return MQ, TSP, log_entries
-
     if why:
-        # BREAK (1) or silence (3). Bytes the Z80 had actually read =
-        # queued minus what's still in TX; 0-4 means it was still in the
-        # ready-wait before the data. Then: watchdog off, the search
-        # rewound if one was in progress, and straight back to idle --
-        # the 1.8b ROM is waiting for READY + IDLE to raise Report D.
+        # BREAK (1) or silence (3; 2 would be a stale watchdog `kill` from
+        # ZX48 mode -- treated as silence). Bytes the Z80 had actually read
+        # = queued minus what's still in TX; 0-4 means it was still in the
+        # ready-wait before the data. Then: the search rewound if one was
+        # in progress, and straight back to idle -- the 1.8b ROM is waiting
+        # for READY + IDLE to raise Report D.
         read = max(0, sent - txf())
-        STOP_WATCHDOG(TSP.LOG_LEVEL)
         rewound = REWIND_ABORTED_SEARCH(TSP)
         _close_if_local()
-        MQ_TO_IDLE(MQ, recovered=(why == 3))
+        MQ_TO_IDLE(MQ, recovered=(why != 1))
         LOG_ADD("INFO: LOAD %s after the Z80 read %d of %d bytes%s." % (
             "stopped by BREAK" if why == 1 else "stalled -> RECOVERED",
             read, totbytes, "; tape rewound to offset %d" % TSP.offset
@@ -2053,11 +1981,9 @@ def SAVE_TS(MQ, TSP, pre=None):
     # the READY put the thread creation inside the window where bytes
     # are already arriving into a 4-deep RX FIFO.
     # ============================================================
-    # 3 s + 1 s per 4K: the Z80 SAVEs at ~43 us/byte, and RX_BLOCK bounds
-    # real silence on its own (see LOAD_TS for why a flat budget failed).
-    _wd = START_WATCHDOG(3 + long // 4096, MQ, TSP)
-    TLM("SAVE_TS watchdog spawned", "ok=%s long=%d, waiting for data" % (
-        _wd, long))
+    # No watchdog (stage 5): RX_BLOCK bounds silence on its own, and a
+    # BREAK / SYNC ends the SAVE at once. See LOAD_TS.
+    TLM("SAVE_TS header ok, waiting for data", "long=%d" % long)
 
     # ============================================================
     # Mid-status: Pico writes 0x01 between header and data phases.
@@ -2074,16 +2000,6 @@ def SAVE_TS(MQ, TSP, pre=None):
     # after that, 1 s of silence mid-block means it has gone.
     why, got = RX_BLOCK(MQ, blk, long, 1000, 1000)
 
-    if why == RXB_KILL:
-        TLM("SAVE_TS EXIT killed by watchdog", "at byte %d/%d" % (got, long))
-        # No status bytes here: the watchdog is pumping pull(noblock)
-        # through TX while it waits for `dead`, so anything staged now
-        # is discarded. ABORT_TX sets `dead` and waits for core1 to
-        # finish bouncing the SM (its BLINK alone is ~1s) before we
-        # let the dispatcher touch it. This is what LOAD_TS does.
-        ABORT_TX(TSP.LOG_LEVEL, "SAVE_TS")
-        return MQ, TSP, log_entries, False
-
     if why == RXB_STALL and got == 0:
         TLM("SAVE_TS EXIT no data after 1s")
         # Refuse rather than write 0x01 0x01. If the Z80 aborted
@@ -2095,7 +2011,6 @@ def SAVE_TS(MQ, TSP, pre=None):
         _fl = REFUSE_SAVE(MQ, 0x02)  # -> Report R "Tape loading error"
         LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s), drained %d"
                 % _fl, 2, TSP.LOG_LEVEL)
-        _WAIT_CORE1(TSP.LOG_LEVEL)
         return MQ, TSP, log_entries, False
 
     if why:
@@ -2103,8 +2018,9 @@ def SAVE_TS(MQ, TSP, pre=None):
         # the Z80 went silent mid-block. The partial SAVE is discarded --
         # nothing is written to SD or flash. The Z80 is waiting for READY +
         # IDLE (BREAK) or has gone (stall); the dispatcher's re-arm after we
-        # return is the way back, with RECOVERED for a stall.
-        STOP_WATCHDOG(TSP.LOG_LEVEL)
+        # return is the way back, with RECOVERED for a stall. (A stale
+        # watchdog `kill` from ZX48 mode would read as RXB_KILL: treated
+        # as a stall here too.)
         dead = True
         if why == RXB_ABORT:
             LOG_ADD("INFO: SAVE stopped by BREAK after the Z80 sent %d of %d "
@@ -2149,7 +2065,6 @@ def SAVE_TS(MQ, TSP, pre=None):
         while MQ.tx_fifo() > 1:
             if time.ticks_diff(time.ticks_ms(), _tw) >= 300:
                 break
-        _WAIT_CORE1(TSP.LOG_LEVEL)
         LOG_ADD("ERROR: SAVE data block parity %02X, expected %02X -> Report R; "
                 "nothing written." % (blk[long - 1], par), 2, TSP.LOG_LEVEL)
         TLM("SAVE_TS EXIT data parity", "got %02X want %02X" % (blk[long - 1], par))
