@@ -49,11 +49,20 @@ def load_driver():
 
 
 class FakeSPI:
+    """An idle card at byte level: MISO is always 0xFF. (The command layer
+    is simulated by overriding SDCard.cmd; _recover() talks raw SPI.)"""
     def init(self, *a, **k):
         pass
 
     def write(self, *a):
         pass
+
+    def readinto(self, buf, w=0):
+        for i in range(len(buf)):
+            buf[i] = 0xFF
+
+    def read(self, n, w=0):
+        return bytes([0xFF]) * n
 
 
 class FakePin:
