@@ -270,8 +270,12 @@ def main():
             sync = src[i:src.index("if got != 10:", i)]
             check(sync.index("while busy and") < sync.index('MQ_STATUS(MQ, "idle")'),
                   "%s: after a SYNC, IDLE waits for a SAVE_LOG flash write to finish" % name)
-            check(sync.index("gc.collect()") < sync.index('MQ_STATUS(MQ, "idle")'),
-                  "%s: after a SYNC, garbage is collected before IDLE (Z80 held)" % name)
+            code = [l.strip() for l in src[i:src.index("if pre[0] == 0 and pre[1] == 0:", i)].split("\n")
+                    if l.strip() and not l.strip().startswith("#")]
+            walks = [k for k, l in enumerate(code) if "gc.collect()" in l or
+                     ("gc.mem_free()" in l and not (k and code[k - 1] == "if TSP.LOG_LEVEL == 0:"))]
+            check(not walks, "%s: no heap walk (gc.collect / gc.mem_free) on every SYNC / transaction %s"
+                  % (name, [code[k] for k in walks]))
             pc = src[src.index("def PROCESS_CMD("):src.index("def TS2068_IO(")]
             a = pc.index('MQ_STATUS(MQ, "mid")')
             check(pc[a:].split("\n")[1].strip().startswith("got = RX_CAPTURE(MQ, raw, long,"),

@@ -4905,10 +4905,9 @@ def TS2068_IO():                                                         # Main 
                 _t = time.ticks_ms()
                 while busy and time.ticks_diff(time.ticks_ms(), _t) < 800:
                     pass
-                # And collect garbage now, while the Z80 is held: a GC that
-                # starts during the pre-header burst overflows the 4-deep
-                # FIFO just the same (the abort harness always did this).
-                gc.collect()
+                # (No gc.collect() here: 4.6 ms on every SYNC -- every LPRINT
+                # character -- and not needed: RX_CAPTURE allocates nothing,
+                # so no GC can start during the pre-header burst.)
                 MQ_STATUS(MQ, "idle")
                 continue
             if got != 10:
@@ -4970,8 +4969,11 @@ def TS2068_IO():                                                         # Main 
             _pre_snapshot = list(pre)
                                                                                                       # pre(header)[0] is a command
             # gc.collect()
-            fr1 = gc.mem_free()
-            LOG("Top of main loop, gc.memfree()=%.1f" % (fr1 >> 10), 0)
+            # gc.mem_free() walks the whole heap: 3.1 ms on the Pico, paid on
+            # every transaction -- every LPRINT / LLIST character -- for a
+            # line only kept at LOG_LEVEL 0. Only then.
+            if TSP.LOG_LEVEL == 0:
+                LOG("Top of main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
             if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
                 LOG("Starting SAVE TS", 0)
