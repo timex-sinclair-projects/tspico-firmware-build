@@ -1,4 +1,4 @@
-"""Host-side check of the 1.8b "sync" test ROM -- runs on CPython, no Pico.
+"""Host-side check of ROM 2.0 (was the 1.8b "sync" test ROM) -- CPython, no Pico.
 
 src/rom/TSPICO-SYNC.ROM is v1.7 (src/rom/TSPICO.ROM) plus the patches in
 src/rom/patches/tspico-sync.asm. This test pins down, byte for byte:
@@ -183,7 +183,7 @@ def main():
     check(msg > 0 and ex[msg + 23] == ord("n") | 0x80, "report text 'TS-Pico reset, try again' ends with bit 7")
 
     print("version marks")
-    check(home[0x0065] == 0x18 and ex[0x1853] == 0x18, "HOME 0065 and G_VERS say 18h")
+    check(home[0x0065] == 0x20 and ex[0x1853] == 0x20, "HOME 0065 and G_VERS say 20h: version 2.0")
     line = ex[0x1C6C:0x1C86]
     check(line[-1] & 0x80 and ex[0x1C86] == base[EX + 0x1C86], "copyright line same length, bit 7 on last char")
     print("         banner:%s" % (line[:-1] + bytes([line[-1] & 0x7F])).decode())

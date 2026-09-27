@@ -116,6 +116,13 @@ class Bus:
             elif op[0] == "in":
                 if self.tx:
                     self._advance(self.tx.pop(0))
+            elif op[0] == "ready":             # ZX v3's WAIT_RDY: ~3.8 s, then Report R
+                if self.y & 0x40:
+                    self._advance(None)
+                elif len(op) > 1 and op[1] <= 0:
+                    raise Done("v3 timed out waiting for READY")
+                else:
+                    self.pending = ("ready", (op[1] if len(op) > 1 else 20000) - 1)
             elif op[0] == "idle":
                 self.pending = ("idle", op[1] - 1) if op[1] > 1 else None
                 if self.pending is None:
@@ -148,10 +155,13 @@ class Bus:
             self.result, self.script, self.pending = e.value, None, None
 
 
-def ld_bytes(n):
-    """The original ROM's LD-BYTES: 'L', then flag + n + CRC, no handshake."""
+def ld_bytes(n, v3=False):
+    """The original ROM's LD-BYTES: 'L', then flag + n + CRC, no handshake.
+    ZX v3's waits for READY after the 'L'."""
     yield ("idle", 20)
     yield ("out", 0x0E, 0x4C)
+    if v3:
+        yield ("ready",)
     flag = yield ("in",)
     h, data = flag, bytearray()
     for _ in range(n):
@@ -162,7 +172,7 @@ def ld_bytes(n):
     return flag, bytes(data), crc == h
 
 
-def z80_load_updater(tape):
+def z80_load_updater(tape, v3=False):
     """LOAD "" of the updater tape: the loader (header + program), then its
     LOAD ""CODE (header + code). Lengths as the ROM would ask."""
     yield ("idle", 200)
@@ -170,7 +180,7 @@ def z80_load_updater(tape):
     o = 0
     while o < len(tape):
         n = tape[o] | tape[o + 1] << 8
-        got.append((yield from ld_bytes(n - 2)))
+        got.append((yield from ld_bytes(n - 2, v3)))
         o += n + 2
     return got
 
@@ -244,13 +254,13 @@ def main():
     base[0x8000:0x10000] = rom("ROMs", "TSPICO-15w-home") + rom("ROMs", "TSPICO-15w-exrom")
     base = bytes(base)
 
-    def session(we=True):
+    def session(we=True, v3=False):
         """LOAD "" the tape, then run the updater against serve()."""
         bus = Bus()
         box = {}
 
         def z80():
-            got = yield from z80_load_updater(data.TAPE)
+            got = yield from z80_load_updater(data.TAPE, v3)
             box["tape"] = got
             box["flash"], box["st"] = attach_cpu(bus, code, base, we=we)
             yield ("idle", 5)
@@ -283,6 +293,13 @@ def main():
     check(ev[:3] == ["waiting", "tape", "updater"] and st[0] == ("P", 1) and st[-1] == ("D", 0)
           and len([s for s in st if s[0] == "W"]) == 192,
           "web page lines: waiting, tape, updater, P 1 ... 192 W ... D (%s ...)" % ev[:4])
+
+    print("a board that already has ZX v3 in slot 0 (it waits for READY after 'L')")
+    end, box, lines, bus = session(v3=True)
+    tape = box.get("tape") or []
+    check(len(tape) == 4 and all(ok for _, _, ok in tape) and end == "halt"
+          and bytes(box["flash"].m[0x8000:0x10000]) == data.IMG1,
+          "READY comes up after each 'L': the tape loads and the upgrade completes (%s)" % end)
 
     print("P10 not fitted")
     end, box, lines, bus = session(we=False)

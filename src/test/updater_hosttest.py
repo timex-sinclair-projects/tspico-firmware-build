@@ -246,7 +246,7 @@ def main():
     base[0:0x8000] = rom("ROMs", "TSPICO-ZX48-V2.BIN") + bytes(0x4000)
     base[0x8000:0x10000] = rom("ROMs", "TSPICO-15w-home") + rom("ROMs", "TSPICO-15w-exrom")
     base = bytes(base)
-    rom17 = open(os.path.join(REPO, "src", "rom", "TSPICO.ROM"), "rb").read()
+    rom17 = open(os.path.join(REPO, "src", "rom", "TSPICO-SYNC.ROM"), "rb").read()   # ROM 2.0
     zx3 = open(os.path.join(REPO, "src", "rom", "TSPICO-ZX48-V3.BIN"), "rb").read()
     images = {1: rom17, 0: zx3}
 
