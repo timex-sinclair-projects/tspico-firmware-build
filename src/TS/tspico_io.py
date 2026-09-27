@@ -140,18 +140,21 @@ def RX_CAPTURE(MQ, raw, n, stall_ms):
     which is exactly when the Z80 has paused or stopped; a 0Fh write is
     always the last thing it sends before it stops.
     """
-    rx = MQ.rx_fifo
-    get = MQ.get
+    # No `rx = MQ.rx_fifo` here: storing a bound method allocates, and an
+    # allocation can start a GC right as the Z80's burst begins -- the
+    # 4-deep FIFO overflows and bytes go missing from the middle of the
+    # pre-header ("Partial pre-header 8/10" -> RECOVERED -> Report T,
+    # hardware 2026-09-27). Direct calls allocate nothing.
     got = 0
     while got < n:
-        if rx():
-            raw[got] = get()
+        if MQ.rx_fifo():
+            raw[got] = MQ.get()
             got += 1
         else:
             if got and raw[got - 1] & PORT_0F:
                 return -got
             t0 = time.ticks_ms()
-            while not rx():
+            while not MQ.rx_fifo():
                 if time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
                     return got
     if raw[n - 1] & PORT_0F:

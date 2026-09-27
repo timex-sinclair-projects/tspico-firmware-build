@@ -4905,6 +4905,10 @@ def TS2068_IO():                                                         # Main 
                 _t = time.ticks_ms()
                 while busy and time.ticks_diff(time.ticks_ms(), _t) < 800:
                     pass
+                # And collect garbage now, while the Z80 is held: a GC that
+                # starts during the pre-header burst overflows the 4-deep
+                # FIFO just the same (the abort harness always did this).
+                gc.collect()
                 MQ_STATUS(MQ, "idle")
                 continue
             if got != 10:

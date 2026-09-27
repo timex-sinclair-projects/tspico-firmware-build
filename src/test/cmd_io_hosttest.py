@@ -252,6 +252,13 @@ def main():
         check(r[0] == "ok" and pio.empty_reads == 0 and menu_result == [ord("Y")] and idle(pio),
               "SEND_MSG_PROMPT_YN: prompt, Y, echo -- 0 empty reads (%s, %d)" % (r[0], pio.empty_reads))
 
+        print("the pre-header capture allocates nothing")
+        import ast
+        io_src = open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read().replace("\r", "")
+        fn = [n for n in ast.parse(io_src).body if isinstance(n, ast.FunctionDef) and n.name == "RX_CAPTURE"][0]
+        bad = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Attribute)]
+        check(not bad, "RX_CAPTURE stores no bound methods (%s)" % bad)
+
         print("READY for a command comes from PROCESS_CMD")
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
@@ -263,6 +270,8 @@ def main():
             sync = src[i:src.index("if got != 10:", i)]
             check(sync.index("while busy and") < sync.index('MQ_STATUS(MQ, "idle")'),
                   "%s: after a SYNC, IDLE waits for a SAVE_LOG flash write to finish" % name)
+            check(sync.index("gc.collect()") < sync.index('MQ_STATUS(MQ, "idle")'),
+                  "%s: after a SYNC, garbage is collected before IDLE (Z80 held)" % name)
             pc = src[src.index("def PROCESS_CMD("):src.index("def TS2068_IO(")]
             a = pc.index('MQ_STATUS(MQ, "mid")')
             check(pc[a:].split("\n")[1].strip().startswith("got = RX_CAPTURE(MQ, raw, long,"),
