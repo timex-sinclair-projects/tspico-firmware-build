@@ -360,6 +360,7 @@ from TS.tspico_io import (
     CORE1_BUSY,                          # core1 flag lives in tspico_io, not here
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
+    TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
 )
 from array import array
 
@@ -734,6 +735,83 @@ def MQ_READY():
     # The tilde form `~null` does NOT parse correctly via runtime
     # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
     MQ.exec("mov(y, invert(null))")
+
+
+# ─── Issue #51 stage 4: command I/O that never blocks ──────────────────
+# Command output (SEND_MSG, SEND_MSG2, ListMenu, SEND_MSG_PROMPT_YN) used
+# MQ.put(), which blocks for good once the 4-deep TX FIFO is full and the
+# Z80 has stopped reading -- and no watchdog covers commands. The 1.8b
+# ROM's BREAK at a "Scroll? (Y/n)" or menu key wait arrives as a port-0Fh
+# write (0x103): MQ.get() handed it back as a key, SEND_MSG2 took it for
+# "next page" and wrote the erase + next page into a TX nobody read. The
+# Pico hung until reset.
+#
+# Now every byte goes through CMD_PUT, which waits in TX_ROOM when TX is
+# full and listens; key waits go through CMD_KEY. A BREAK, or a Z80 that
+# stops reading, raises CmdAbort, which PROCESS_CMD catches: it empties
+# both FIFOs and its finally-tail stages the one pre-load and says READY
+# + IDLE -- what the 1.8b ROM's BRK_ABORT waits for before Report D.
+#
+# CmdAbort is a BaseException so a handler's `except Exception:` can't
+# swallow it and carry on writing to a Z80 that has gone.
+# ────────────────────────────────────────────────────────────────────────
+class CmdAbort(BaseException):
+    """args[0]: 1 = port-0Fh write (BREAK / SYNC), 3 = the Z80 stopped
+    reading (TX stayed full), as TX_ROOM's codes."""
+
+
+_CMD_ECHO = bytearray(3)            # TX_ROOM's scratch; stray keys land here
+CMD_STALL_MS = 3000                 # TX full this long = the Z80 has gone
+KEY_WAIT_MS = 86_400_000            # a key wait waits for the user, as the ROM
+                                    # does (a day); BREAK ends it at once
+
+
+def CMD_PUT(b):
+    """MQ.put() for command output that never blocks. Raises CmdAbort."""
+    if MQ.tx_fifo() >= TX_DEPTH:
+        _CMD_ECHO[0] = 0
+        why = TX_ROOM(MQ, _CMD_ECHO, CMD_STALL_MS)
+        if why:
+            raise CmdAbort(why)
+    MQ.put(b)
+
+
+def CMD_KEY():
+    """The Z80's key at a prompt (its OUT $0E). A write to port 0Fh -- the
+    1.8b ROM's BREAK at the key wait -- raises CmdAbort."""
+    w = RX_WORD(MQ, KEY_WAIT_MS)
+    if w < 0:
+        raise CmdAbort(3)
+    if w & PORT_0F:
+        raise CmdAbort(1)
+    return w & 0xFF
+
+
+def CMD_DRAIN():
+    """Wait until the Z80 has read everything queued -- bounded, and
+    listening for BREAK, unlike the `while MQ.tx_fifo() != 0` spins it
+    replaces. Raises CmdAbort."""
+    t0 = time.ticks_ms()
+    while MQ.tx_fifo():
+        if MQ.rx_fifo() and MQ.get() & PORT_0F:
+            raise CmdAbort(1)
+        if time.ticks_diff(time.ticks_ms(), t0) >= CMD_STALL_MS:
+            raise CmdAbort(3)
+
+
+def CMD_FLUSH():
+    """Empty both FIFOs after a CmdAbort, bounded. No pre-load: the
+    caller's tail stages the one 0x01."""
+    for _ in range(64):
+        if MQ.tx_fifo() == 0:
+            break
+        MQ.exec("pull (noblock)")
+        MQ.exec("mov (osr, null)")
+    for _ in range(64):
+        if MQ.rx_fifo() == 0:
+            break
+        MQ.get()
+
 
 
 def MQ_BUSY():
@@ -1572,7 +1650,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     global MQ
     global TSP
 
-    wrt = MQ.put
+    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
 
     # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
     # The two `wrt(0x40)` "Read continue flag" writes in the single-port
@@ -1617,15 +1695,8 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     TLM("SEND_MSG enter+loaded", "msg=%r msg1=%r st=%d verbose=%s force=%s" % (
         msg[:30] if isinstance(msg, str) else msg, msg1, st, TSP.VERBOSE, forceDisplay))
 
-    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
-    drain_loops = 0
-    while MQ.tx_fifo() != 0:
-        drain_loops += 1
-        if drain_loops > 1000000:
-            TLM("SEND_MSG STUCK", "tx still has %d bytes after 1M loops" % MQ.tx_fifo())
-            break
-
-    TLM("SEND_MSG exit", "drain_loops=%d" % drain_loops)
+    CMD_DRAIN()
+    TLM("SEND_MSG exit")
     return
 
 
@@ -1672,7 +1743,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     SCROLL_THRESHOLD = 500
     suppress_scroll = (n < SCROLL_THRESHOLD)
 
-    wrt = MQ.put
+    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
 
     # Write the 4 header bytes directly to TX, then set Y=READY.
     # FIFO is 4-deep so this fills it; MQ_READY immediately after means
@@ -1801,7 +1872,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 # the Z80's wait_bit6 exit with real data ready.
                 # ──────────────────────────────────────────────────────
 
-                ch = MQ.get()   # wait for keypress (PIO auto-drops Y on Z80 OUT)
+                ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
                 if ch == 78:    # 'N' → done. Z80 exits 0x86 without bit-6 check
                     MQ_READY()  # restore Y for downstream reads (V6 pre-load)
                     return
@@ -1827,22 +1898,12 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     wrt(end_char)
     TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
 
-    # ─── DUAL-PORT MIGRATION: inline drain (was WAIT_TX_RECEIVED) ─────────
-    drain_loops = 0
-    while MQ.tx_fifo() != 0:
-        drain_loops += 1
-        if drain_loops > 1000000:
-            TLM("SEND_MSG2 STUCK", "tx still has %d after 1M loops" % MQ.tx_fifo())
-            break
-
+    CMD_DRAIN()
     rx_drained = 0
-    while(MQ.rx_fifo() != 0):   # Flush input buffer to console
-        b = MQ.get()
+    while MQ.rx_fifo() != 0:    # stray bytes (keys typed during output)
+        MQ.get()
         rx_drained += 1
-        print(b)
-
-    TLM("SEND_MSG2 exit", "drain_loops=%d rx_drained=%d tx=%d rx=%d" % (
-        drain_loops, rx_drained, MQ.tx_fifo(), MQ.rx_fifo()))
+    TLM("SEND_MSG2 exit", "rx_drained=%d" % rx_drained)
 
 
 def WALK(top):
@@ -1997,7 +2058,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     # — the continue flag now lives on $0F via Y register (kept at READY
     # for the entire session by MQ_READY() below).
     # ─────────────────────────────────────────────────────────────────────
-    wrt = MQ.put
+    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
     Init = True
     sel = -1
     pgs = (n - 1) // nmax + 1
@@ -2032,8 +2093,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         for m in "(no items available)":
             wrt(m)
         wrt(0x03)                       # end of loop (no scroll, no keypress)
-        while MQ.tx_fifo() != 0:
-            pass
+        CMD_DRAIN()
         while MQ.rx_fifo() != 0:
             MQ.get()
         return -1
@@ -2095,7 +2155,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         # next `while idx < n` iteration which redraws, and the
         # selection path writes the echo + erase bytes.
         # ──────────────────────────────────────────────────────────────
-        ch = MQ.get()   # Get a key (PIO auto-drops Y on Z80 OUT)
+        ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
         if ch == 78:    # 'N' then done (ROM ended the loops)
             MQ_READY()  # restore Y for downstream reads
             return -1
@@ -2136,8 +2196,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             
     wrt(0x03) # End string loop
     # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
-    while MQ.tx_fifo() != 0:
-        pass
+    CMD_DRAIN()
     while MQ.rx_fifo() != 0:
         MQ.get()
 
@@ -3542,7 +3601,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     # the Z80 hadn't been told to read yet, so RX had nothing to drain.
     # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
     # ─────────────────────────────────────────────────────────────────────
-    wrt = MQ.put
+    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
     wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
     wrt(0x01)   # BASIC return code
     wrt(0x0D)   # Start a new line
@@ -3561,7 +3620,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     # real bytes ready to read.
     # ──────────────────────────────────────────────────────────────────────
 
-    ch = MQ.get()       # PIO auto-drops Y on Z80 OUT (keypress)
+    ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
     MQ_READY()          # both branches need Y=READY for downstream reads
     if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
         if echo:
@@ -3574,8 +3633,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
         # writing some more text to indicate the result of the action.
 
         # ─── DUAL-PORT MIGRATION: inline drains ───────────────────────
-        while MQ.tx_fifo() != 0:
-            pass
+        CMD_DRAIN()
         while MQ.rx_fifo() != 0:
             MQ.get()
 
@@ -4111,23 +4169,24 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     # ──────────────────────────────────────────────────────────────────
     BODY_READ_TIMEOUT_MS = 1000   # tunable; 1 second is generous
 
+    # Stage 4 (#51): READY here, not in the dispatcher -- the Z80 sends the
+    # whole body the moment it sees it, ~35 us a byte into a 4-deep RX FIFO,
+    # and the dispatcher said it before its own logging. RX_CAPTURE ends on
+    # a port-0Fh write (BREAK / SYNC) or on silence instead of hanging.
+    raw = array("H", bytes(2 * long))
+    MQ_STATUS(MQ, "mid")
+    got = RX_CAPTURE(MQ, raw, long, BODY_READ_TIMEOUT_MS)
+    if got != long:
+        MQ_TO_IDLE(MQ, status=False)            # empty FIFOs, one pre-load
+        TLM("PROCESS_CMD body %s" % ("aborted (0Fh)" if got < 0 else "timeout"),
+            "got=%d of %d" % (got, long))
+        LOG("PROCESS_CMD body %s at byte %d/%d" % (
+            "aborted by BREAK/SYNC" if got < 0 else "read timeout",
+            -got - 1 if got < 0 else got, long), 1 if got < 0 else 2)
+        MQ_STATUS(MQ, "idle" if got < 0 else "recovered")
+        return
     for l in rl:
-        start = time.ticks_ms()
-        while MQ.rx_fifo() == 0:
-            if time.ticks_diff(time.ticks_ms(), start) > BODY_READ_TIMEOUT_MS:
-                TLM("PROCESS_CMD body-read timeout — aborting",
-                    "byte=%d/%d (Z80 likely aborted after J at pre-header)" % (l, long))
-                LOG("PROCESS_CMD body-read timeout at byte %d/%d" % (l, long), 2)
-                # Drain any partial state so the next command starts clean
-                while MQ.rx_fifo() != 0:
-                    MQ.get()
-                while MQ.tx_fifo() != 0:
-                    pass
-                # V6 pre-load so the next command's pre-header phase works
-                MQ.put(0x01)
-                MQ_READY()  # #14: Y was dropped by partial Z80 OUTs; restore
-                return
-        cmd[l] = MQ.get()
+        cmd[l] = raw[l] & 0xFF
 
     # Now safe to TLM (Z80 is processing — no time pressure on Pico).
     TLM("PROCESS_CMD enter", "load_cmd=%d cmd_len=%d cmd=%r" % (
@@ -4157,6 +4216,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     # that orphan byte is exactly what produces Report R on the next
     # data block.
     # ---------------------------------------------------------------------
+    cmd_abort = 0        # CmdAbort code, if the output was stopped
     cmd_exec = "?"        # the tail logs this; it must exist even when
                           # the decode below never gets to assign it
 
@@ -4261,6 +4321,15 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
                 LOG(msg, 2)
 
 
+    except CmdAbort as _a:
+        # The Z80 stopped this command's output: BREAK at a key wait (the
+        # 1.8b ROM's 0Fh write) or it stopped reading. Nothing more goes to
+        # it -- empty both FIFOs; the tail below stages the one pre-load and
+        # says READY + IDLE (RECOVERED if it went silent).
+        CMD_FLUSH()
+        cmd_abort = _a.args[0]
+        LOG("%s stopped by %s" % (cmd_exec, "BREAK" if cmd_abort == 1 else "a Z80 that stopped reading"),
+            1 if cmd_abort == 1 else 2)
     except Exception as _e:
         # Any handler that raised.
         #
@@ -4313,7 +4382,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         # its next status read blocks until timeout → Report J. The
         # pre-load byte sits in TX but the Z80 never reads it.
         # ──────────────────────────────────────────────────────────────────
-        MQ_READY()
+        MQ_STATUS(MQ, "recovered" if cmd_abort == 3 else "idle")
 
         LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
@@ -4707,7 +4776,8 @@ def TS2068_IO():                                                         # Main 
             # ──────────────────────────────────────────────────────────────
             # SAVE too (stage 3): SAVE_TS says READY straight before its
             # header capture -- see TS/tspico.py.
-            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10):
+            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10) \
+                    and not (pre[0] == 66 and pre[1] != 5):   # commands: PROCESS_CMD says it
                 MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
@@ -4869,7 +4939,15 @@ def TS2068_IO():                                                         # Main 
 
             elif pre[0] == 66 and pre[1] == 5:                                                        # commands are pre[0] == 66. PRINT commands are pre[1] == 5
                 LOG("Starting PRINT", 0)
-                PRINT_IO(pre)
+                try:
+                    PRINT_IO(pre)
+                except CmdAbort:
+                    # PRINT_IO's closing SEND_MSG was stopped (BREAK, or the
+                    # Z80 stopped reading): same one way back as PROCESS_CMD.
+                    CMD_FLUSH()
+                    MQ.put(0x01)
+                    MQ_READY()
+                    LOG("PRINT closing message stopped", 1)
                 DIR_FILES()
 
             elif pre[0] == 66:
