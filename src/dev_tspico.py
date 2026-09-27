@@ -773,7 +773,13 @@ class CmdAbort(BaseException):
 
 
 _CMD_ECHO = bytearray(3)            # TX_ROOM's scratch; stray keys land here
-CMD_STALL_MS = 3000                 # TX full this long = the Z80 has gone
+# How long command output waits on a Z80 that has stopped reading before
+# giving up (RECOVERED). NOT short: the Z80 legitimately stops for as long
+# as the user takes -- the ROM's own "scroll?" prompt, a slow listing --
+# and 3 s killed tpi:idir / a mount-error reply on hardware (2026-09-27).
+# A Z80 that has really gone, on the 1.8b ROM, says so at once: BREAK or
+# the next command's SYNC is a port-0Fh write.
+CMD_STALL_MS = 600_000
 KEY_WAIT_MS = 86_400_000            # a key wait waits for the user, as the ROM
                                     # does (a day); BREAK ends it at once
 

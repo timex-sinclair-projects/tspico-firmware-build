@@ -231,7 +231,12 @@ def main():
         check(pio.dropped == 0, "no RX overflow (%d)" % pio.dropped)
 
         print("the Z80 stops reading mid-listing")
+        check(t.CMD_STALL_MS >= 60000,
+              "the output stall limit is long (%d ms): the Z80 waits for the user at the ROM's scroll? prompt"
+              % t.CMD_STALL_MS)
+        stall, t.CMD_STALL_MS = t.CMD_STALL_MS, 3000   # exercise the path quickly
         pio, r = run(b"tpi:list", stop_after=200)
+        t.CMD_STALL_MS = stall
         check(idle(pio, 0xFB), "RECOVERED (FB) after the stall, one pre-load, no hang (tx=%r st=%02X)"
               % (pio.tx, pio.status()))
 
