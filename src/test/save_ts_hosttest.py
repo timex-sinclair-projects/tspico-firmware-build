@@ -158,7 +158,9 @@ def main():
               "MQ_STATUS(mid) is immediately followed by the header capture")
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
-            check("if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10):\n                MQ_READY()" in src
+            i = src.index("if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)")
+            cond = src[i:src.index("MQ_READY()", i)]
+            check("and not (pre[0] == 0 and pre[1] == 0)" not in cond      # SAVE no longer excepted
                   and "SAVE_TS(MQ, TSP, pre)" in src,
                   "%s: no READY after a SAVE pre-header; SAVE_TS gets pre" % name)
 

@@ -339,6 +339,8 @@ def main():
                                                  # keeps TLM off our FakeMQ
     ft = FakeTime()
     t.time = ft
+    import TS.tspico_io as tio     # RX_CAPTURE / TX_ROOM / RX_WORD (stage 4)
+    tio.time = ft
     t.utime = ft
 
     for fn in (test_handler_exception_preserves_preload,
