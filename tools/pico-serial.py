@@ -278,8 +278,9 @@ def rp2_drive():
     return None
 
 
-def ci_uf2(branch, run_id, dest):
-    """Download the tspico-firmware-uf2 artifact; return the .uf2 path."""
+def ci_uf2(branch, run_id, dest, artifact="tspico-firmware-uf2"):
+    """Download a UF2 artifact (tspico-firmware-uf2, or tspico-upgrade-uf2
+    for the upgrade firmware); return the .uf2 path."""
     if run_id is None:
         runs = json.loads(subprocess.run(
             ["gh", "run", "list", "--branch", branch, "--workflow", "build.yml",
@@ -293,9 +294,9 @@ def ci_uf2(branch, run_id, dest):
             sys.exit("latest CI run %s for %r is %s/%s -- wait for it or pass --run"
                      % (run_id, branch, r["status"], r["conclusion"] or "-"))
         print("CI run %s (%s)" % (run_id, r["headSha"][:7]))
-    subprocess.run(["gh", "run", "download", str(run_id), "-n", "tspico-firmware-uf2",
+    subprocess.run(["gh", "run", "download", str(run_id), "-n", artifact,
                     "-D", dest], check=True)
-    found = glob.glob(os.path.join(dest, "*.uf2"))
+    found = glob.glob(os.path.join(dest, "**", "*.uf2"), recursive=True)
     if not found:
         sys.exit("artifact had no .uf2")
     return found[0]
@@ -306,7 +307,8 @@ def cmd_flash(args):
         sys.exit("flash: give exactly one of UF2, --branch, --run")
     tmp = tempfile.mkdtemp(prefix="tspico-uf2-")
     try:
-        flash(args, args.uf2 or ci_uf2(args.branch, args.run, tmp))
+        flash(args, args.uf2 or ci_uf2(args.branch, args.run, tmp,
+                                       "tspico-upgrade-uf2" if args.upgrade else "tspico-firmware-uf2"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -395,6 +397,8 @@ def main():
     f.add_argument("uf2", nargs="?", help="local .uf2 file")
     f.add_argument("--branch", help="latest successful CI build of this branch")
     f.add_argument("--run", help="a specific CI run id")
+    f.add_argument("--upgrade", action="store_true",
+                   help="the upgrade UF2 (src/upgrade/) instead of the firmware")
     f.add_argument("--timeout", type=float, default=30)
     f.set_defaults(fn=cmd_flash)
 
