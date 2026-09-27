@@ -103,6 +103,7 @@ jobs:
           python3 src/test/zx48_tpi_hosttest.py
           python3 src/test/rom_zx48_hosttest.py
           python3 src/test/updater_hosttest.py
+          python3 src/test/upgrade_hosttest.py
       # Fails the build if a ROM in flash/manifest.json changed without its
       # crc32 being updated -- i.e. nobody would notice that the next 512K
       # image ships a different ROM than the manifest claims.
@@ -173,6 +174,35 @@ jobs:
         with:
           name: tspico-firmware-uf2
           path: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
+          retention-days: 30
+
+      # The upgrade UF2: a separate firmware the web updater writes first, for
+      # boards coming from 1.1 / 1.5. It serves src/upgrade/updater.asm's tape
+      # to the original Spectrum ROM and feeds it the ROMs for flash slots 1
+      # and 0 (from flash/manifest.json). See src/upgrade/upgrade.py.
+      - name: Build the upgrade payload (updater tape + ROM images)
+        run: python3 tools/build-upgrade.py "$RUNNER_TEMP/upgrade"
+
+      - name: Stage the upgrade UF2's frozen modules
+        run: |
+          M=${{ github.workspace }}/micropython/ports/rp2
+          mkdir -p $M/modules-upgrade/TS
+          cp src/TS/__init__.py src/TS/tspico_io.py src/TS/sdcard.py $M/modules-upgrade/TS/
+          cp src/upgrade/upgrade.py src/upgrade/main.py "$RUNNER_TEMP/upgrade/upgrade_data.py" $M/modules-upgrade/
+          cp src/upgrade/manifest.py $M/boards/manifest_upgrade.py
+          ls -la $M/modules-upgrade $M/modules-upgrade/TS
+
+      - name: Build the upgrade UF2
+        working-directory: ${{ github.workspace }}/micropython/ports/rp2
+        run: make -j$(nproc) BUILD=build-UPGRADE FROZEN_MANIFEST=$PWD/boards/manifest_upgrade.py
+
+      - name: Upload the upgrade UF2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-upgrade-uf2
+          path: |
+            ${{ github.workspace }}/micropython/ports/rp2/build-UPGRADE/firmware.uf2
+            ${{ runner.temp }}/upgrade/updater.tap
           retention-days: 30
 
       # The Pico's MicroPython parser is RAM-hungry. Once dev_tspico.py

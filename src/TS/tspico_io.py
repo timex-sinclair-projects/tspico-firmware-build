@@ -1339,11 +1339,15 @@ def ZX_ROOM(MQ, stall_ms):
 # never ran empty, each 'L' arrived exactly at its block's flag.
 
 def TAPE_STREAM(path):
+    """TAPE_STREAM_OF the .tap file at path."""
+    with open(path, "rb") as f:
+        return TAPE_STREAM_OF(f.read())
+
+
+def TAPE_STREAM_OF(raw):
     """A .tap as one stream: each block's flag + content + CRC, the 2-byte
     lengths dropped. Returns (stream, starts), starts the offset of every
     block."""
-    with open(path, "rb") as f:
-        raw = f.read()
     stream = bytearray()
     starts = []
     o = 0
