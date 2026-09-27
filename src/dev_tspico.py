@@ -1895,17 +1895,21 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 else:
                     ll = 21
 
-                # Re-assert Y=READY immediately before the next-page
-                # writes so the Z80's wait_bit6 finds bit 6 = 1 the
-                # moment we start pushing erase-prompt bytes.
-                MQ_READY()
+                # READY only once the first erase bytes are in TX --
+                # data in TX first, then READY: the Z80 reads TX the moment it sees
+                # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
+                # READY-before-data here (READY landed ~9.6 ms late); with MQX the
+                # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
                 if new_rom:
                     for _eb in range(s):
                         wrt(0x08)
                         wrt(0x20)
                         wrt(0x08)
+                        if not _eb:
+                            MQ_READY()
                 else:
                     wrt(0x0D)
+                    MQ_READY()
 
     wrt(end_char)
     TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
@@ -2075,7 +2079,12 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     sel = -1
     pgs = (n - 1) // nmax + 1
 
-    MQ_READY()                          # Y = READY → $0F polls succeed
+    # READY is said below, once the first bytes of each reply are in TX --
+    # data in TX first, then READY: the Z80 reads TX the moment it sees
+    # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
+    # READY-before-data here (READY landed ~9.6 ms late); with MQX the
+    # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
+    need_ready = True
 
     while MQ.rx_fifo() != 0:            # Drain any pre-existing keystrokes
         MQ.get()
@@ -2097,6 +2106,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     if n == 0:
         wrt(0x86)                       # PRINT_STRING_WITH_LOOP function code
         wrt(1)                          # status: no error
+        MQ_READY()                      # data in TX first, then READY
         wrt(0x0D)
         wrt(0x0D)
         for m in hdr1:
@@ -2120,6 +2130,9 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             Init = False
         else:
             wrt(ch)     # Show previous choice
+        if need_ready:
+            MQ_READY()  # data in TX first, then READY
+            need_ready = False
         wrt(0x0D)
         wrt(0x0D)
         for m in hdr1:
@@ -2143,10 +2156,10 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         while i < nmax:
             wrt(0x0D)
             i += 1
-        a = (idx * 32 / n + 0.5) // 1
+        a = int(idx * 32 / n + 0.5)
         for k in range(a):
             wrt('-')
-        w = (j * 32 / n + 0.5) // 1
+        w = int(j * 32 / n + 0.5)
         for k in range(w):
             wrt('=')
         for k in range(32 - a - w):
@@ -2171,7 +2184,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
         if ch == 78:    # 'N' then done (ROM ended the loops)
             MQ_READY()  # restore Y for downstream reads
             return -1
-        MQ_READY()      # Y → READY before any next-iteration / echo write
+        need_ready = True   # READY after the next reply's first byte
         if ch == 66: # B
             if idx >= nmax:
                 idx -= nmax
@@ -2181,6 +2194,8 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             j = idx + LISTMENU_CHOICES[ch]
             if j < n:
                 wrt(ch)
+                MQ_READY()      # data in TX first, then READY
+                need_ready = False
                 # Erase bottom two lines
                 for b in range(32):
                     wrt(0x08)
@@ -2207,6 +2222,8 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
             wrt(m)
             
     wrt(0x03) # End string loop
+    if need_ready:
+        MQ_READY()      # 'F' past the last page: nothing else was sent
     # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
     CMD_DRAIN()
     while MQ.rx_fifo() != 0:
@@ -3633,14 +3650,20 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     # ──────────────────────────────────────────────────────────────────────
 
     ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
-    MQ_READY()          # both branches need Y=READY for downstream reads
-    if ch != 78: # 'N' causes the ROM to end the string loop and any exchange
+    if ch == 78: # 'N' causes the ROM to end the string loop and any exchange
+        MQ_READY()      # nothing more to send; restore Y for downstream reads
+    else:
+        # The echo and 0x03 first, THEN READY -- data in TX first, then READY: the Z80 reads TX the moment it sees
+        # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
+        # READY-before-data here (READY landed ~9.6 ms late); with MQX the
+        # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
         if echo:
             if ch < 32 or ch > 127:
                 wrt(89) # Y
             else:
                 wrt(ch)
         wrt(0x03) # End the string loop
+        MQ_READY()
         # Could add an option to not wrt(0x03) and let the caller do that after
         # writing some more text to indicate the result of the action.
 

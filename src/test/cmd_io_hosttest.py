@@ -38,13 +38,42 @@ READY, IDLE = L.READY, L.IDLE
 class PIO(L.FakePIO):
     """Records a put() into a full TX FIFO before raising: PROCESS_CMD's
     `except Exception` swallows the raise (it is an AssertionError), so
-    each scenario checks the flag itself."""
+    each scenario checks the flag itself.
+
+    STRICT like the real Z80: the first read after a READY wait happens at
+    once -- an empty TX reads as 00 (counted in empty_reads) instead of the
+    base fake's patient wait. That is what caught READY-before-data in
+    ListMenu (Commander crashed on tpi:cd once MQX made READY fast)."""
     blocked = False
 
+    def __init__(self):
+        L.FakePIO.__init__(self)
+        self.empty_reads = 0
+        self._after_ready = False
+
     def put(self, b):
+        if isinstance(b, str):                  # rp2 takes a 1-char str as a buffer
+            b = ord(b)
         if len(self.tx) >= 4:
             self.blocked = True
         return L.FakePIO.put(self, b)
+
+    def pump(self):
+        op = self.pending
+        if self.script is not None and op is not None:
+            if op[0] == "in" and self._after_ready:
+                self._after_ready = False
+                if self.tx:
+                    self._advance(self.tx.pop(0))
+                else:
+                    self.empty_reads += 1
+                    self._advance(0x00)
+                return
+            if op[0] == "wait" and (self.status() & op[1]) == op[1]:
+                self._after_ready = True
+            elif op[0] == "out":
+                self._after_ready = False
+        L.FakePIO.pump(self)
 
 results = []
 
@@ -100,6 +129,35 @@ def z80_cmd(body, keys=(), break_at_prompt=None, stop_after=None, body_break_at=
         text.append(c)
 
 
+def z80_menu(body, key):
+    """A command answered with ListMenu (tpi:cd): 0x86 page, key, echo."""
+    st = yield ("in",)
+    r = yield from L.ready_wait()
+    if st != 0x01 or r:
+        return ("start", st, r)
+    for b in body:
+        yield L.out(0x0E, b)
+    r = yield from L.ready_wait()
+    code = yield ("in",)
+    if r or code != 0x86:
+        return ("code", code, r)
+    yield ("in",)                               # return code
+    while True:
+        c = yield ("in",)
+        if c == 0x00:
+            break
+    yield L.out(0x0E, key)
+    r = yield from L.ready_wait()
+    text = bytearray()
+    while True:
+        c = yield ("in",)
+        if c == 0x03:
+            return ("ok", bytes(text))
+        if c == 0x00:
+            return ("page end instead of the echo", bytes(text))
+        text.append(c)
+
+
 def main():
     P.install_fakes()
     import TS.tspico as t
@@ -116,7 +174,26 @@ def main():
             t.SEND_MSG("done", "", t._1_OK)
         def listing(pre, cmd):
             t.SEND_MSG2(long_text, t._1_OK)
-        return {"TPI:SHORT": short, "TPI:LIST": listing}
+        def menu(pre, cmd):
+            menu_result.append(t.ListMenu(["FIRST", "SECOND"], "hdr1", "hdr2", "hdr3",
+                                          "Change to dir", "Changing to: "))
+        def ask(pre, cmd):
+            menu_result.append(t.SEND_MSG_PROMPT_YN("Sure? "))
+        return {"TPI:SHORT": short, "TPI:LIST": listing, "TPI:MENU": menu, "TPI:ASK": ask}
+
+    menu_result = []
+
+    def run_script(text, script):
+        pio = PIO()
+        P.fresh(t, pio)
+        t.TSP.ROM_VERSION = "1.7"
+        pio.tx = [0x01]
+        pio.y = 0
+        tio.kill = False
+        pio.run(script)
+        t.PROCESS_CMD(P.make_pre(text), handlers(), {})
+        pio.finish()
+        return pio, (pio.result or ("no result",))
 
     def run(text, **kw):
         pio = PIO()
@@ -161,6 +238,19 @@ def main():
         print("BREAK / SYNC during the command body")
         pio, r = run(b"tpi:list", body_break_at=4)
         check(r[0] == "D" and idle(pio), "straight back to idle, no hang (%s)" % (r[0],))
+
+        print("strict Z80: nothing read from an empty TX after READY")
+        pio, r = run(b"tpi:list")
+        check(pio.empty_reads == 0, "multi-page listing incl. Scroll? erase: 0 empty reads (%d)" % pio.empty_reads)
+        del menu_result[:]
+        pio, r = run_script(b"tpi:menu", z80_menu(P.make_body(b"tpi:menu"), ord("0")))
+        check(r[0] == "ok" and pio.empty_reads == 0 and menu_result == [0] and idle(pio),
+              "ListMenu (tpi:cd): page, key 0, echo -- 0 empty reads, FIRST chosen (%s, %d)"
+              % (r[0], pio.empty_reads))
+        del menu_result[:]
+        pio, r = run_script(b"tpi:ask", z80_menu(P.make_body(b"tpi:ask"), ord("Y")))
+        check(r[0] == "ok" and pio.empty_reads == 0 and menu_result == [ord("Y")] and idle(pio),
+              "SEND_MSG_PROMPT_YN: prompt, Y, echo -- 0 empty reads (%s, %d)" % (r[0], pio.empty_reads))
 
         print("READY for a command comes from PROCESS_CMD")
         for name in ("TS/tspico.py", "dev_tspico.py"):
