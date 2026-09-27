@@ -362,6 +362,7 @@ from TS.tspico_io import (
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
     RX_BLOCK, RXB_ABORT, RXB_OK,         # printer bodies, ZX tpi:
     ZX_FLUSH_TX, ZX_ROOM, ZX_STALL_MS,   # ZX48 mode (issue #51 stage 6)
+    TAPE_STREAM, ZX_ARM, ZX_STREAM,      # UPDATE mode (ZX_BOOTSTRAP)
     MQX,                                 # fast MQ.exec (9.6 ms -> 18 us)
 )
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
@@ -567,6 +568,7 @@ class PICO_STATUS():                                                            
             self.ROM_VERSION = init_values["ROM_VERSION"]                       # Current ROM version.
         except:                                                                 # if fail, assume hard-wired values
             self.ROM_VERSION = "1.0"
+        self.UPDATE = init_values.get("UPDATE", 0)                              # set by the web updater: serve /assets/update.tap (ZX_BOOTSTRAP)
         try:                                                                    # try to retrieve configuration values from init_values passed on startup
             self.ZX_TAPE_COMPAT = init_values["ZX_TAPE_COMPAT"]                 # boolean for ZX Spectrum "compatible" tape routine (True) or normal (False)
         except:                                                                 # if fail, assume hard-wired values
@@ -4784,6 +4786,9 @@ def TS2068_IO():                                                         # Main 
     
     led.value(0)
 
+    if getattr(TSP, "UPDATE", 0):
+        ZX_BOOTSTRAP()                      # returns when UPDATE mode ends
+
     pre = bytearray(10)
     pre_raw = array("H", [0] * 10)          # 9-bit capture: bit 8 = port 0Fh write
     r1 = range(10)
@@ -5192,6 +5197,83 @@ def TS2068_IO():                                                         # Main 
                 led.value(0)
                 ts = time.ticks_us()
                 
+
+UPDATE_TAPE = "/assets/update.tap"
+UPDATE_REWIND_MS = 5000     # a LOAD stopped part-way: rewind the tape after this
+
+
+def CONFIG_SET(key, value):
+    """Change one config.ini setting for the next boot; value None removes
+    it. Errors are logged, never raised: this runs on the boot path."""
+    try:
+        with open("config.ini", "r") as f:
+            values = json.load(f)
+        if value is None:
+            values.pop(key, None)
+        else:
+            values[key] = value
+        with open("config.ini", "w") as f:
+            json.dump(values, f)
+    except Exception as e:
+        LOG("config.ini: could not set %s: %r" % (key, e), 2)
+
+
+def ZX_BOOTSTRAP():
+    """UPDATE mode: serve the updater tape to the original Spectrum ROM, for
+    a board upgraded from 1.1 / 1.5 whose TS-2068 ROM can't talk to this
+    firmware. Runs before the main loop while config.ini has UPDATE set --
+    the web updater sets it when it writes a new UF2.
+
+    The user types OUT 244,3 (the Spectrum ROM in flash slot 0) and LOAD "".
+    That ROM has no handshake, so TX always holds the updater tape as one
+    stream (TAPE_STREAM / ZX_ARM / ZX_STREAM in tspico_io): nothing here
+    answers the 'L'. A word from the Z80 when it isn't reading means:
+
+        'L' (4Ch)        the Spectrum ROM's LD-BYTES; its bytes are waiting
+        a port-0Fh write the 1.8b ROM's SYNC: the new ROM is running
+        0Eh              OUT 14,14: the user's way out
+        anything else    an old TS-2068 ROM's command (its pre-headers open
+                         with 00h, FFh or 42h -- never 4Ch -- and a burst of
+                         10 bytes). It can't be served; swallow the burst,
+                         rewind the tape.
+
+    The first two end UPDATE mode (the flag is cleared) and the main loop
+    starts as usual. A missing tape does too: UPDATE must never leave a board
+    without its normal firmware.
+    """
+    global MQ
+
+    try:
+        stream, starts = TAPE_STREAM(UPDATE_TAPE)
+    except OSError:
+        LOG("UPDATE is set but %s is missing; starting normally" % UPDATE_TAPE, 2)
+        CONFIG_SET("UPDATE", None)
+        return
+    LOG("UPDATE mode: %s, %d bytes in %d blocks. On the 2068: OUT 244,3 then LOAD \"\""
+        % (UPDATE_TAPE, len(stream), len(starts)), 1)
+    SAVE_LOG()
+    gc.collect()
+    pos = ZX_ARM(MQ, stream)
+    while True:
+        w, pos = ZX_STREAM(MQ, stream, pos, UPDATE_REWIND_MS)
+        if w == 0x4C:
+            continue                        # LD-BYTES: the stream is already in TX
+        if w & PORT_0F or w == 0x0E:
+            break
+        _t = time.ticks_ms()                # an old 2068 ROM's command
+        while time.ticks_diff(time.ticks_ms(), _t) < 50:
+            if MQ.rx_fifo():
+                MQ.get()
+                _t = time.ticks_ms()
+        LOG("UPDATE mode: ignored a TS-2068 command (%02Xh...); tape rewound" % (w & 0xFF), 1)
+        pos = ZX_ARM(MQ, stream)
+    LOG("UPDATE mode ended (%s); starting normally"
+        % ("SYNC: the new ROM is running" if w & PORT_0F else "OUT 14,14"), 1)
+    CONFIG_SET("UPDATE", None)
+    TSP.UPDATE = 0
+    # A SYNC's Z80 now waits for READY + IDLE, then sends its pre-header.
+    MQ_TO_IDLE(MQ)
+
 
 # The ZX v3 ROM raises the report whose ERR_NR it is sent; FFh is 0 OK.
 ZX_REPORT = {_1_OK: 0xFF, _2_R_Tape_load: 0x1A, _3_F_Invalid_file: 0x0E,

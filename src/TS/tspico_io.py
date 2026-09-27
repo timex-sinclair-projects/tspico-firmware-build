@@ -1324,6 +1324,85 @@ def ZX_ROOM(MQ, stall_ms):
     return -1
 
 
+# ---- UPDATE mode: the original Spectrum ROM, no handshake ---------------------
+#
+# A board upgraded from 1.1 / 1.5 to this firmware still has its old TS-2068
+# ROM, which can't talk to it. Every shipped flash image has the same Spectrum
+# ROM in slot 0 (crc32 A8E12A24), and `OUT 244,3` switches to it whatever the
+# 2068 ROM is -- so that ROM loads the updater. It has no handshake at all: its
+# LD-BYTES sends 'L', waits a fixed ~0.94 ms and reads the flag, whatever is
+# in TX. So UPDATE mode doesn't answer 'L': TX always holds the next bytes of
+# the updater tape, kept as ONE stream (each block's flag, content and CRC,
+# back to back), and the next block's flag is already queued behind the last
+# block's CRC when the next 'L' comes. Proven on hardware with a v15w chip
+# (src/test/zx_bootstrap_harness.py): BASIC, SCREEN$ and CODE loaded, TX
+# never ran empty, each 'L' arrived exactly at its block's flag.
+
+def TAPE_STREAM(path):
+    """A .tap as one stream: each block's flag + content + CRC, the 2-byte
+    lengths dropped. Returns (stream, starts), starts the offset of every
+    block."""
+    with open(path, "rb") as f:
+        raw = f.read()
+    stream = bytearray()
+    starts = []
+    o = 0
+    while o + 2 <= len(raw):
+        n = raw[o] | (raw[o + 1] << 8)
+        starts.append(len(stream))
+        stream.extend(raw[o + 2:o + 2 + n])
+        o += 2 + n
+    return stream, starts
+
+
+def ZX_ARM(MQ, stream):
+    """Rewind the tape: empty TX and queue the stream's first bytes, so the
+    flag is there when the ROM reads, 0.94 ms after its 'L'. Returns the
+    stream position (bytes queued)."""
+    ZX_FLUSH_TX(MQ)
+    pos = 0
+    while pos < len(stream) and pos < TX_DEPTH:
+        MQ.put(stream[pos])
+        pos += 1
+    return pos
+
+
+def ZX_STREAM(MQ, stream, pos, rewind_ms):
+    """Keep TX fed from stream[pos:] until the Z80 writes a word; return
+    (word, pos). Never blocks in MQ.put().
+
+    The tape rewinds by itself (back to stream[0], armed):
+      * once the Z80 has read the whole stream, so the next LOAD "" starts
+        the tape again;
+      * after rewind_ms without a read part-way through -- a LOAD that was
+        stopped (BREAK between blocks, a reset), so the next one doesn't
+        start in the middle of the tape.
+
+    The per-byte path is a FIFO test and a put, as in the harness; the clock
+    runs only while TX is full (the Z80 isn't reading).
+    """
+    n = len(stream)
+    since = -1
+    while True:
+        k = MQ.tx_fifo()
+        if k < TX_DEPTH and pos < n:
+            MQ.put(stream[pos])
+            pos += 1
+            since = -1
+            continue
+        if MQ.rx_fifo():
+            return MQ.get(), pos
+        if pos >= n and k == 0:
+            pos = ZX_ARM(MQ, stream)                    # the whole tape was read
+            since = -1
+        elif k and pos > TX_DEPTH:                     # bytes waiting, the Z80 not reading
+            if since < 0:
+                since = time.ticks_ms()
+            elif time.ticks_diff(time.ticks_ms(), since) >= rewind_ms:
+                pos = ZX_ARM(MQ, stream)                # stopped part-way
+                since = -1
+
+
 def LOAD_ZX(MQ, TSP):
     """Send one TAP block to the Spectrum ROM in ZX48 mode.
 
