@@ -167,8 +167,8 @@ def main():
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
             i = src.index("if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)")
             cond = src[i:src.index("MQ_READY()", i)]
-            check("not (pre[0] == 66 and pre[1] != 5)" in cond,
-                  "%s: the dispatcher skips READY for commands (not LPRINT)" % name)
+            check("and pre[0] != 66" in cond,
+                  "%s: the dispatcher skips READY for all 42h traffic (commands, printer)" % name)
             pc = src[src.index("def PROCESS_CMD("):src.index("def TS2068_IO(")]
             a = pc.index('MQ_STATUS(MQ, "mid")')
             check(pc[a:].split("\n")[1].strip().startswith("got = RX_CAPTURE(MQ, raw, long,"),

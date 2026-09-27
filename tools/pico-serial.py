@@ -12,6 +12,8 @@ Usage:
     python3 tools/pico-serial.py run "import os; print(os.listdir('/'))"
     python3 tools/pico-serial.py run --file snippet.py # multi-line (paste mode)
     python3 tools/pico-serial.py softreset             # Ctrl-D: rerun main.py
+    python3 tools/pico-serial.py put local.py /remote.py   # copy a file onto the Pico
+    python3 tools/pico-serial.py get /activity.log out.log # copy one off it
     python3 tools/pico-serial.py flash --branch my-branch   # CI UF2 -> Pico
     python3 tools/pico-serial.py flash path/to/firmware.uf2
 
@@ -25,7 +27,10 @@ drive), then copies the UF2 and waits for the Pico to reboot into it. If
 RPI-RP2 is already mounted it just copies. With --branch/--run it downloads
 the `tspico-firmware-uf2` artifact from a successful CI run via `gh`.
 
-`break`, `run`, `softreset` and `flash` WRITE to the port. `break` stops the firmware
+`put` and `get` move files over the REPL (base64, so any content), with the
+firmware stopped at `>>>` -- `break` first.
+
+`break`, `run`, `put`, `get`, `softreset` and `flash` WRITE to the port. `break` stops the firmware
 (the 2068 has no TS-Pico until `softreset` or a power cycle) -- never send it
 while the Pico may be mid-SD access: see "If the SD card won't mount after a
 soft reboot" in docs/DEVELOPER_GUIDE.md. `run` assumes the REPL is at `>>>`.
@@ -197,6 +202,66 @@ def cmd_run(args):
     with_port(args, go)
 
 
+def _repl_line(fd, line, timeout=5):
+    """One line at the friendly REPL; returns its output up to the prompt."""
+    write_all(fd, line.encode() + b"\r")
+    return read_until(fd, timeout, PROMPT)
+
+
+def cmd_put(args):
+    import base64
+    data = open(args.local, "rb").read()
+    remote = args.remote
+
+    def go(fd):
+        read_until(fd, 0.2)
+        out = _repl_line(fd, "import binascii; _f = open(%r, 'wb')" % remote)
+        if b"Error" in out:
+            sys.exit(out.decode("utf-8", "replace"))
+        for i in range(0, len(data), 384):
+            chunk = base64.b64encode(data[i:i + 384]).decode()
+            out = _repl_line(fd, "_f.write(binascii.a2b_base64(%r))" % chunk)
+            if b"Error" in out:
+                _repl_line(fd, "_f.close()")
+                sys.exit(out.decode("utf-8", "replace"))
+        _repl_line(fd, "_f.close(); del _f")
+        out = _repl_line(fd, "import os; print(os.stat(%r)[6])" % remote)
+        size = out.decode("utf-8", "replace").split("\n")
+        ok = any(l.strip() == str(len(data)) for l in size)
+        print("%s -> %s: %d bytes%s" % (args.local, remote, len(data),
+                                        "" if ok else "  SIZE MISMATCH: %r" % out))
+        if not ok:
+            sys.exit(1)
+    with_port(args, go)
+
+
+def cmd_get(args):
+    import base64
+
+    def go(fd):
+        read_until(fd, 0.2)
+        out = _repl_line(fd, "import os; print(os.stat(%r)[6])" % args.remote)
+        try:
+            size = int(out.decode().split("\n")[-2].strip())
+        except (ValueError, IndexError):
+            sys.exit(out.decode("utf-8", "replace"))
+        _repl_line(fd, "import binascii; _f = open(%r, 'rb')" % args.remote)
+        data = b""
+        while len(data) < size:
+            out = _repl_line(fd, "print(binascii.b2a_base64(_f.read(384)).decode().strip())", 10)
+            lines = [l.strip() for l in out.decode("utf-8", "replace").split("\n")]
+            b64 = lines[-2] if len(lines) >= 2 else ""
+            chunk = base64.b64decode(b64) if b64 else b""
+            if not chunk:
+                break
+            data += chunk
+        _repl_line(fd, "_f.close(); del _f")
+        open(args.local, "wb").write(data)
+        print("%s -> %s: %d bytes%s" % (args.remote, args.local, len(data),
+                                        "" if len(data) == size else "  SHORT (expected %d)" % size))
+    with_port(args, go)
+
+
 def cmd_softreset(args):
     def go(fd):
         os.write(fd, b"\x04")
@@ -315,6 +380,16 @@ def main():
     s.add_argument("--timeout", type=float, default=3,
                    help="seconds of boot output to show")
     s.set_defaults(fn=cmd_softreset)
+
+    p = sub.add_parser("put", help="copy a local file onto the Pico (REPL at >>>)")
+    p.add_argument("local")
+    p.add_argument("remote")
+    p.set_defaults(fn=cmd_put)
+
+    g = sub.add_parser("get", help="copy a file off the Pico (REPL at >>>)")
+    g.add_argument("remote")
+    g.add_argument("local")
+    g.set_defaults(fn=cmd_get)
 
     f = sub.add_parser("flash", help="put the Pico in BOOTSEL and copy a UF2")
     f.add_argument("uf2", nargs="?", help="local .uf2 file")

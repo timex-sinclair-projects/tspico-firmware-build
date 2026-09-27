@@ -73,7 +73,7 @@ import time
 import gc
 from array import array
 
-HARNESS_VERSION = "abort_harness v3 (2026-09-26)"
+HARNESS_VERSION = "abort_harness v4 (2026-09-27, + printer capture)"
 
 # ===========================================================================
 # CONFIG -- edit these, then re-run.
@@ -367,7 +367,10 @@ class Harness:
         self.program = make_program(LOAD_PROG_LEN)
         self.header_parity = xor_all(self.header, 0, len(self.header), 0x00)
         self.program_parity = xor_all(self.program, 0, len(self.program), 0xFF)
-        self.stats = {"sync": 0, "load": 0, "save": 0, "cmd": 0,
+        self.prt_text = bytearray()             # LPRINT / LLIST characters, in order
+        self.prt_seen = 0                       # printer pre-headers logged verbatim
+        self.copy_body = None                   # last COPY body, saved at the next flush
+        self.stats = {"sync": 0, "load": 0, "save": 0, "cmd": 0, "print": 0,
                       "abort": 0, "stall": 0, "error": 0, "other": 0,
                       "stale": 0, "mismatch": 0}
         self.events = []        # (kind, detail) -- for the host test
@@ -390,6 +393,13 @@ class Harness:
         for line in self.pending:
             self.log(line)
         del self.pending[:]
+        if self.prt_text:
+            self.log("[print] text so far (%d): %r" % (len(self.prt_text), bytes(self.prt_text)))
+        if self.copy_body is not None:
+            with open("/copy_body.bin", "wb") as f:
+                f.write(self.copy_body)
+            self.log("[print] COPY body (%d bytes) saved to /copy_body.bin" % len(self.copy_body))
+            self.copy_body = None
         gc.collect()
 
     # ---- one command --------------------------------------------------------
@@ -498,6 +508,9 @@ class Harness:
         elif pre[0] in (0x00, 0xFF) and 0 < pre[1] < 10:
             self.what = "load"
             self.load()
+        elif pre[0] == 0x42 and pre[1] in (4, 5, 6):
+            self.what = "printer"
+            self.printer()
         elif pre[0] == 0x42:
             self.what = "cmd"
             self.command()
@@ -644,6 +657,42 @@ class Harness:
         self.stats["save"] += 1
         self._event("save", "%r BLEN=%d hdrCRC=%s dataCRC=%s session=%02X%02X (discarded)" % (
             name, blen, hcrc_ok, dcrc_ok, s_hi, s_lo))
+
+    # ---- LPRINT / LLIST / COPY (capture only) --------------------------------
+    def printer(self):
+        """Record what the ROM sends for the printer. Pre-header (EXROM 164Dh /
+        16F3h): 42, function (5 = one LPRINT/LLIST character; COPY takes 4-6
+        from T_ADDR), then per-function fields, body length at [7..8], XOR.
+        No body (an ordinary character): the ROM read the pre-load status
+        straight after the pre-header and now waits for READY (1828h). A body
+        (a character >= 80h's 8-byte pattern, or COPY's screen) goes through
+        223Eh: pre-load status, READY, 'D' + len + data + XOR, READY, final
+        status 01. Nothing is written anywhere except /copy_body.bin."""
+        link, pre = self.link, self.pre
+        n = pre[7] | (pre[8] << 8)
+        self.stats["print"] += 1
+        if pre[1] == 5 and n == 0 and self.prt_seen >= 4:
+            self.prt_text.append(pre[3])        # the common case: just keep the char
+        else:
+            note = ""
+            if n:
+                link.set_status(ST_MID)
+                buf = array("H", [0] * (n + 4))
+                self.what = "printer body"
+                link.drain(buf, n + 4, STALL_MS)
+                x = xor_all(buf, 0, n + 3)
+                note = " | body %02X len=%d xor=%s data[0:16]=%s" % (
+                    buf[0], buf[1] | (buf[2] << 8), "ok" if x == buf[n + 3] else "BAD",
+                    " ".join("%02X" % (buf[3 + i] & 0xFF) for i in range(min(16, n))))
+                if n > 64:
+                    self.copy_body = bytes(buf[i] & 0xFF for i in range(3, n + 3))
+                link.put_status(0x01)           # 223Eh's final status
+            if pre[1] == 5:
+                self.prt_text.append(pre[3])
+            self.prt_seen += 1
+            self._event("print", "pre %s%s" % (" ".join("%02X" % b for b in pre), note))
+        link.put_status(0x01)                   # next command's pre-load
+        link.set_status(ST_IDLE)
 
     # ---- TPI: command -> 0x86 pages ----------------------------------------
     def command(self):

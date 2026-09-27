@@ -361,8 +361,19 @@ from TS.tspico_io import (
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
+    RX_BLOCK, RXB_ABORT,                 # printer bodies
 )
+from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from array import array
+
+# ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
+# (TS/printer.py; the 2068 sends printer output here while TPMODE bit 0 is
+# set -- SAVE "tpi:picopt".) Text is buffered in RAM and written to the SD
+# card only while the Z80 is parked in a READY wait: see PRINT_FLUSH.
+PRT = TextCapture()
+prn_path = None             # the open /sd/VLPRINT capture; None: next char opens one
+bmp_size = (512, 384)       # SAVE "tpi:bmp" CODE x,y
+PRINT_FLUSH_AT = 4096       # buffered text that forces a flush mid-printout
 
 #####################
 # SERVICE FUNCTIONS #
@@ -3945,60 +3956,182 @@ def NOP(pre, cmd):
 ##################################
 
 
-def PRINT_IO(pre):                                                                                                           # LPRINT and LLIST processing
+def PRINT_FLUSH():
+    """Append the buffered printer text to the capture file, opening the next
+    numbered /VLPRINT/PRNnnnn.TXT if none is open.
 
-    global MQ
-    global TSP
+    Touches the SD card, which takes the bus state machine away (ACTIVATE_SD
+    parks MQ on NULL_SM, and a Z80 that starts a command meanwhile reads a
+    floating bus). So ONLY call it while the Z80 is parked in a READY wait
+    (~20 s): inside a printer transaction before its READY, inside a
+    command, or after another command's pre-header before its handler says
+    READY. Leaves MQ rebuilt, Y = BUSY, TX empty: callers stage statuses
+    after it.
+    """
+    global prn_path
+    if not PRT.buf:
+        return
+    try:
+        ACTIVATE_SD()
+        if prn_path is None:
+            prn_path = next_name(VLPRINT, "PRN", "TXT")
+        with open(prn_path, "ab") as f:
+            f.write(PRT.buf)
+        LOG("Printer: %d bytes -> %s" % (len(PRT.buf), prn_path), 0)
+        PRT.buf = bytearray()
+    except Exception as e:
+        LOG("Printer flush failed, %d bytes kept: %s" % (len(PRT.buf), e), 2)
+        if len(PRT.buf) > 32768:                    # no card: don't eat the heap
+            PRT.buf = bytearray()
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
 
-    prn = bytearray(10000)
-    end_msg = "File 0001.txt closed OK"
-    r1 = range(10)
-    wrt = MQ.put
 
-    pos = 0
-    while True:
-        prn[pos] = pre[3]
-        pos += 1
+def COPY_BMP(scr, mode, colour):
+    """COPY's screen -> the next /VSCREEN/SCRnnnn.BMP, at the SAVE "tpi:bmp"
+    size (default 512x384). Same SD rule as PRINT_FLUSH. True if written."""
+    try:
+        ACTIVATE_SD()
+        path = next_name(VSCREEN, "SCR", "BMP")
+        w0 = 512 if mode == 3 else 256
+        sx = max(1, bmp_size[0] // w0)
+        sy = max(1, bmp_size[1] // 192)
+        with open(path, "wb") as f:
+            w, h = write_bmp(f, scr, mode, colour, sx, sy)
+        LOG("COPY: mode %d -> %s (%dx%d)" % (mode, path, w, h), 0)
+        return True
+    except Exception as e:
+        LOG("COPY to BMP failed: %s" % e, 2)
+        return False
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
 
-        # ─── DUAL-PORT MIGRATION ──────────────────────────────────────
-        # Was:  wrt(0x40); wrt(0x01)
-        # Now:  wrt(0x01); MQ_READY()
-        # The 0x40 (continue) is no longer a FIFO byte — it's the Y
-        # register signalled via MQ_READY(). The 0x01 is the status
-        # the Z80 reads from $0E after seeing ready on $0F.
-        # ──────────────────────────────────────────────────────────────
-        wrt(0x01)
-        MQ_READY()
 
-        pre = [0] * 10
-        for i in r1:
-            pre[i] = MQ.get()
-        if pre[1] != 5:
-            break
+def PRINT_IO(pre):
+    """One printer transaction: an LPRINT / LLIST character (pre[1] = 5) or
+    COPY (pre[1] = 4 / 6). Gustavo's manual 2.26-2.27; wire format in
+    TS/printer.py.
 
-    # ─── DUAL-PORT MIGRATION (loop exit, same pattern as in-loop) ─────
-    wrt(0x01)
-    MQ_READY()
+    Each character is its own transaction -- the dispatcher hands every one
+    here, SYNC and all. (This used to loop reading the next pre-headers
+    itself: on the 1.8b ROM the per-character SYNC misaligned it after the
+    first character, and the first non-printer pre-header ended the loop and
+    was swallowed, answered with "file closed OK".)
 
-    SEND_MSG(end_msg, "", _1_OK)
+    No body: the Z80 read the pre-load status straight after the pre-header
+    and waits for READY. A body (a character >= 80h's pattern, COPY's
+    screen) goes through the ROM's 223Eh: READY, 'D' + len + data + XOR,
+    READY, final status.
+    """
+    n = pre[7] | (pre[8] << 8)
+    body = None
+    ok = True
+    if n:
+        body = bytearray(n + 4)
+        MQ_STATUS(MQ, "mid")
+        why, got = RX_BLOCK(MQ, body, n + 4, 1000, 1000)
+        if why:
+            MQ_TO_IDLE(MQ, recovered=(why != RXB_ABORT))
+            LOG("Printer body %s after %d of %d bytes" % (
+                "stopped by BREAK" if why == RXB_ABORT else "stalled", got, n + 4), 1)
+            return
+        x = 0
+        for i in range(n + 3):
+            x ^= body[i]
+        ok = x == body[n + 3] and body[0] == 0x44
+    status = _1_OK
+    if pre[1] == 5:
+        PRT.feed(pre[3])
+        if len(PRT.buf) >= PRINT_FLUSH_AT:
+            PRINT_FLUSH()                           # the Z80 waits for READY
+    elif not (ok and body is not None
+              and COPY_BMP(memoryview(body)[3:n + 3], pre[4], pre[3])):
+        status = _2_R_Tape_load
+    if body is not None:
+        MQ.put(status)                              # 223Eh's final status
+    MQ.put(0x01)                                    # next command's pre-load
+    MQ_STATUS(MQ, "idle")
 
-    # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
-    # Replaces WAIT_TX_RECEIVED() and EMPTY_RX_FIFO() (single-port
-    # helpers being retired in stage 7). Behavior is identical.
-    # ──────────────────────────────────────────────────────────────────
-    while MQ.tx_fifo() != 0:
-        pass
 
-    while MQ.rx_fifo() != 0:
-        MQ.get()
+def PRN_OPEN(pre, cmd):
+    """SAVE "tpi:opprint": close any capture and start the next numbered one."""
+    global prn_path
+    PRINT_FLUSH()
+    st = _1_OK
+    try:
+        ACTIVATE_SD()
+        prn_path = next_name(VLPRINT, "PRN", "TXT")
+        open(prn_path, "w").close()
+        msg = "Printer capture: " + prn_path[3:]
+    except Exception as e:
+        prn_path = None
+        msg, st = "Printer capture: SD error", _3_F_Invalid_file
+        LOG("OPPRINT failed: %s" % e, 2)
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+    PRT.col = PRT.line = 0
+    SEND_MSG(msg, "", st)
 
-    prn = prn[:pos]
 
-    with open("/PRN/0001.txt", "w") as sal:                                           # PRINT output filename is fixed on this version; can be set up
-            sal.write(prn)                                                            # in future version
+def PRN_CLOSE(pre, cmd):
+    """SAVE "tpi:clprint": write out and close the capture file. The next
+    printed character opens a new one."""
+    global prn_path
+    PRINT_FLUSH()
+    msg = "Printer capture closed: " + prn_path[3:] if prn_path else "No printer capture open"
+    prn_path = None
+    PRT.col = PRT.line = 0
+    SEND_MSG(msg, "", _1_OK)
 
-    return
 
+def PRN_FLAG(pre, cmd):
+    """SAVE "tpi:autolf" / "noautolf" / "autopg" / "noautopg"."""
+    word = cmd[7:].split(" ")[0].upper()
+    on = not word.startswith("NO")
+    if word.endswith("AUTOLF"):
+        PRT.autolf = on
+        msg = "Printer: CR+LF line ends " + ("on" if on else "off")
+    else:
+        PRT.autopg = on
+        msg = "Printer: paging every %d lines %s" % (PRT.lines, "on" if on else "off")
+    SEND_MSG(msg, "", _1_OK)
+
+
+def PRN_SIZE(pre, cmd):
+    """SAVE "tpi:prnsz" CODE cols,lines (or "tpi:prnsz cols lines"): page
+    size for wrapping and AUTOPG. No parameters: report it."""
+    cols, lines = PARAMS(pre)
+    args = getArgs(cmd).replace(",", " ").split()
+    try:
+        if args:
+            cols, lines = int(args[0]), int(args[1]) if len(args) > 1 else PRT.lines
+        if cols or lines:
+            if not (0 <= cols <= 255 and 0 <= lines <= 255):
+                raise ValueError
+            PRT.cols, PRT.lines = cols, lines
+    except (ValueError, IndexError):
+        SEND_MSG("Printer size: bad parameters", "", _4_Q_Parameter)
+        return
+    SEND_MSG("Printer size: %d columns, %d lines" % (PRT.cols, PRT.lines), "", _1_OK)
+
+
+def PRN_BMP(pre, cmd):
+    """SAVE "tpi:bmp" CODE x,y: COPY picture size -- 256/512/1024/2048 x
+    192/384/768/1536 (hi-res screens 512/1024/2048/4096 wide). No
+    parameters: report it."""
+    global bmp_size
+    x, y = PARAMS(pre)
+    if x or y:
+        if y == 1596:                               # as printed in the manual
+            y = 1536
+        if x not in (256, 512, 1024, 2048, 4096) or y not in (192, 384, 768, 1536):
+            SEND_MSG("BMP size: use 256-4096 x 192-1536", "", _4_Q_Parameter)
+            return
+        bmp_size = (x, y)
+    SEND_MSG("COPY picture: %dx%d" % bmp_size, "", _1_OK)
 
 def PROCESS_ASM(pre):                                                                 # Processes AU (Assembler) commands sent by the TS
 
@@ -4504,19 +4637,20 @@ def TS2068_IO():                                                         # Main 
         "TPI:UPGRADE" : UPGRADE,
         "TPI:VERBOSE" : VERB_TOGGLE, 
         "TPI:ZX48" : ZX48,
-        "TPI:AUTOLF" : SA_NOT_IMP,
-        "TPI:AUTOPG" : SA_NOT_IMP,
-        "TPI:BMP" : SA_NOT_IMP,
-        "TPI:CLPRINT" : SA_NOT_IMP,
+        "TPI:AUTOLF" : PRN_FLAG,
+        "TPI:AUTOPG" : PRN_FLAG,
+        "TPI:BMP" : PRN_BMP,
+        "TPI:CLPRINT" : PRN_CLOSE,
         "TPI:CONFIG" : SA_NOT_IMP,
         "TPI:DELETE" : SA_NOT_IMP,
         "TPI:FRESET" : SA_NOT_IMP,
         "TPI:GETCONFIG" : SA_NOT_IMP, 
         "TPI:LIST" : SA_NOT_IMP,
         "TPI:MEMINFO" : SA_NOT_IMP,
-        "TPI:NOAUTOLF" : SA_NOT_IMP,
-        "TPI:OPPRINT" : SA_NOT_IMP,
-        "TPI:PRNSZ" : SA_NOT_IMP,
+        "TPI:NOAUTOLF" : PRN_FLAG,
+        "TPI:NOAUTOPG" : PRN_FLAG,
+        "TPI:OPPRINT" : PRN_OPEN,
+        "TPI:PRNSZ" : PRN_SIZE,
         "TPI:STOP" : SA_NOT_IMP,
         }
     
@@ -4780,8 +4914,20 @@ def TS2068_IO():                                                         # Main 
             # its TLM print and gc.collect(). SAVE_TS says READY straight
             # before its capture loop.
             # ──────────────────────────────────────────────────────────────
+            # Printer text still in RAM: put it on the SD card now, while this
+            # command's Z80 is parked in its READY wait (it read its pre-load
+            # status straight after the pre-header; give it a moment, and put
+            # the status back if the SD access wiped it unread).
+            if PRT.buf and not (pre[0] == 66 and pre[1] in (4, 5, 6)):
+                _t = time.ticks_ms()
+                while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), _t) < 50:
+                    pass
+                _unread = MQ.tx_fifo()
+                PRINT_FLUSH()
+                if _unread:
+                    MQ.put(0x01)
             if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10) \
-                    and not (pre[0] == 66 and pre[1] != 5):   # commands: PROCESS_CMD says it
+                    and pre[0] != 66:   # commands, printer: the handler says it
                 MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
@@ -4968,18 +5114,8 @@ def TS2068_IO():                                                         # Main 
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
                 TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
 
-            elif pre[0] == 66 and pre[1] == 5:                                                        # commands are pre[0] == 66. PRINT commands are pre[1] == 5
-                LOG("Starting PRINT", 0)
-                try:
-                    PRINT_IO(pre)
-                except CmdAbort:
-                    # PRINT_IO's closing SEND_MSG was stopped (BREAK, or the
-                    # Z80 stopped reading): same one way back as PROCESS_CMD.
-                    CMD_FLUSH()
-                    MQ.put(0x01)
-                    MQ_READY()
-                    LOG("PRINT closing message stopped", 1)
-                DIR_FILES()
+            elif pre[0] == 66 and pre[1] in (4, 5, 6):                                # LPRINT / LLIST char, COPY
+                PRINT_IO(pre)
 
             elif pre[0] == 66:
 
