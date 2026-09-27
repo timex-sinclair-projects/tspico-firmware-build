@@ -63,6 +63,44 @@ PORT_0F = const(0x100)          # bit 8 of an RX word: the Z80 wrote port 0Fh
 TX_DEPTH = const(4)             # TS_IO_DUAL's FIFOs are not joined
 
 
+# ─── Fast exec: MQX(MQ, ) without the per-call assembler ───────────────
+# MicroPython 1.20's StateMachine.exec() runs the Python-level PIO
+# assembler (rp2.asm_pio_encode) on EVERY call, string or not: 9.6 ms a
+# call on this Pico (measured 2026-09-27), against 18 us for writing the
+# encoded instruction straight to the state machine's INSTR register --
+# which is all pio_sm_exec() does. Every LPRINT / LLIST character is a
+# whole transaction with a few execs, so a program listing crawled at
+# ~30-40 ms a character and looked hung. MQ is always PIO0 SM0. The
+# encoding depends on the loaded program's side-set configuration, so it
+# is cached per (instruction, side-set). On the host (no machine.mem32)
+# MQX falls back to MQX(MQ, ), so the simulated PIO still sees the text.
+try:
+    from machine import mem32 as _mem32
+except ImportError:
+    _mem32 = None
+_SM0_EXECCTRL = const(0x502000CC)
+_SM0_INSTR = const(0x502000D8)
+_SM0_PINCTRL = const(0x502000DC)
+_ENCODED = {}
+
+
+def MQX(MQ, instr):
+    """MQX(MQ, instr), ~500x faster on the Pico. Allocation-free once the
+    instruction has been seen with this side-set configuration."""
+    if _mem32 is None:
+        MQ.exec(instr)
+        return
+    ss = (_mem32[_SM0_PINCTRL] >> 29) | (((_mem32[_SM0_EXECCTRL] >> 30) & 1) << 3)
+    by_ss = _ENCODED.get(instr)
+    if by_ss is None:
+        by_ss = _ENCODED[instr] = {}
+    code = by_ss.get(ss)
+    if code is None:
+        import rp2
+        code = by_ss[ss] = rp2.asm_pio_encode(instr, ss & 7, ss >> 3)
+    _mem32[_SM0_INSTR] = code
+
+
 def MQ_STATUS(MQ, st):
     """Set what the Z80 reads on port 0Fh (the PIO's Y register).
 
@@ -78,13 +116,13 @@ def MQ_STATUS(MQ, st):
     No logging here: this runs on time-critical paths.
     """
     if st == "idle":
-        MQ.exec("mov(y, invert(null))")
+        MQX(MQ, "mov(y, invert(null))")
     elif st == "mid":
-        MQ.exec("set(y, 8)")
-        MQ.exec("mov(y, invert(y))")
+        MQX(MQ, "set(y, 8)")
+        MQX(MQ, "mov(y, invert(y))")
     else:
-        MQ.exec("set(y, 4)")
-        MQ.exec("mov(y, invert(y))")
+        MQX(MQ, "set(y, 4)")
+        MQX(MQ, "mov(y, invert(y))")
 
 
 def RX_CAPTURE(MQ, raw, n, stall_ms):
@@ -136,8 +174,8 @@ def MQ_TO_IDLE(MQ, recovered=False, status=True):
     for _ in range(64):
         if MQ.tx_fifo() == 0:
             break
-        MQ.exec("pull (noblock)")
-        MQ.exec("mov (osr, null)")
+        MQX(MQ, "pull (noblock)")
+        MQX(MQ, "mov (osr, null)")
     for _ in range(64):
         if MQ.rx_fifo() == 0:
             break
@@ -771,7 +809,7 @@ def ENA_MQ_DUAL(MQ):
     MQ.active(0)
     utime.sleep(0.01)
     MQ.active(1)
-    MQ.exec("mov(y, invert(null))")
+    MQX(MQ, "mov(y, invert(null))")
 
     return MQ
 
@@ -818,7 +856,7 @@ def ENA_MQ_DUAL(MQ):
     MQ.active(0)
     utime.sleep(0.01)
     MQ.active(1)
-    MQ.exec("mov(y, invert(null))")
+    MQX(MQ, "mov(y, invert(null))")
 
     return MQ
 
@@ -1059,7 +1097,7 @@ def LOAD_TS(pre, MQ, TSP):
             wrt = MQ.put
             wrt(0x02)        # tape error — Z80 will display "R Tape loading error"
             wrt(0x01)        # next-iter pre-load (so subsequent commands work)
-            MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy)
+            MQX(MQ, "mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy)
             return MQ, TSP, log_entries
         arch = _nofile_arch
         local_fname = "/assets/nofile.tap"
@@ -1113,7 +1151,7 @@ def LOAD_TS(pre, MQ, TSP):
         wrt = MQ.put
         wrt(0x07)        # status 7 -> Report 8 "End of file"
         wrt(0x01)        # next-iter pre-load, so the next command works
-        MQ.exec("mov(y, invert(null))")          # Y -> READY
+        MQX(MQ, "mov(y, invert(null))")          # Y -> READY
         return MQ, TSP, log_entries
 
     # ---- Read the TAP block prefix [len_lo, len_hi, type] ----
@@ -1242,7 +1280,7 @@ def LOAD_TS(pre, MQ, TSP):
             n = txf()
             if n >= TX_DEPTH:
                 if not primed:
-                    MQ.exec("mov(y, invert(null))")     # READY: data waiting
+                    MQX(MQ, "mov(y, invert(null))")     # READY: data waiting
                     primed = True
                     t_ready = time.ticks_ms()
                 why = TX_ROOM(MQ, echo)
@@ -1264,7 +1302,7 @@ def LOAD_TS(pre, MQ, TSP):
             n = txf()
             if n >= TX_DEPTH:
                 if not primed:
-                    MQ.exec("mov(y, invert(null))")     # READY: data waiting
+                    MQX(MQ, "mov(y, invert(null))")     # READY: data waiting
                     primed = True
                     t_ready = time.ticks_ms()
                 why = TX_ROOM(MQ, echo)
@@ -1279,7 +1317,7 @@ def LOAD_TS(pre, MQ, TSP):
             if not sent & 0x3FF:
                 prof[sent >> 10] = time.ticks_diff(time.ticks_ms(), t_ready)
     if not primed:
-        MQ.exec("mov(y, invert(null))")                 # a block shorter than TX
+        MQX(MQ, "mov(y, invert(null))")                 # a block shorter than TX
 
     # ============================================================
     # Phase 2: the Z80's echo (block_type ack + computed CRC)
@@ -1367,7 +1405,7 @@ def LOAD_TS(pre, MQ, TSP):
     # Z80's $0F poll never sees ready, and the two pre-loaded 0x01
     # bytes sit in TX never to be read → Report J on next command.
     # ────────────────────────────────────────────────────────────────
-    MQ.exec("mov(y, invert(null))")                    # Y = READY
+    MQX(MQ, "mov(y, invert(null))")                    # Y = READY
 
     # ---- Advance TAP position for the next call ----
     TSP.tap_idx += 1
@@ -1481,7 +1519,7 @@ def LOAD_ZX(MQ, TSP):
     # $0F after its 'L' reads $0E the instant the poll succeeds, so the
     # byte has to be in TX before Y goes high. Harmless with the current
     # ROM, which ignores $0F and just waits ~1ms.
-    MQ.exec("mov(y, invert(null))")
+    MQX(MQ, "mov(y, invert(null))")
 
     for i in r:
         arch.readinto(el)
@@ -1497,7 +1535,7 @@ def LOAD_ZX(MQ, TSP):
 
     # Y = READY. Nothing else to send: the Z80 has read its CRC byte and
     # returns without a status read.
-    MQ.exec("mov(y, invert(null))")
+    MQX(MQ, "mov(y, invert(null))")
     led.value(0)
 
     TSP.offset += totbytes + 2
@@ -1592,7 +1630,7 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
     # LOAD_ZX. memoryview keeps this from copying the (large) buffer.
     if cur_buf and len(cur_buf[0]):
         MQ.put(cur_buf[0][0])
-        MQ.exec("mov(y, invert(null))")
+        MQX(MQ, "mov(y, invert(null))")
         cur_buf[0] = memoryview(cur_buf[0])[1:]
 
     for ar in cur_buf:
@@ -1618,11 +1656,11 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
             LOG_ADD("WARNING: LOAD_ZX_C timed out with %d bytes unread; "
                     "discarding tail." % MQ.tx_fifo(), 1, TSP.LOG_LEVEL)
             while MQ.tx_fifo() != 0:
-                MQ.exec("pull (noblock)")
-                MQ.exec("mov (osr, null)")
+                MQX(MQ, "pull (noblock)")
+                MQX(MQ, "mov (osr, null)")
             break
 
-    MQ.exec("mov(y, invert(null))")                   # Y = READY
+    MQX(MQ, "mov(y, invert(null))")                   # Y = READY
 
     cur_buf = []
 
@@ -1722,7 +1760,7 @@ def REFUSE_SAVE(MQ, status, quiet_ms=500):
     Caller is responsible for `dead = True` and for returning.
     """
     MQ.put(status)
-    MQ.exec("mov(y, invert(null))")   # Y -> READY so the Z80 reads our status
+    MQX(MQ, "mov(y, invert(null))")   # Y -> READY so the Z80 reads our status
     return DRAIN_REFUSED_SAVE(MQ, quiet_ms)
 
 
@@ -2121,7 +2159,7 @@ def SAVE_TS(MQ, TSP, pre=None):
                      # status" (2 -> 1) from "TX was always empty". Delete it
                      # as redundant and that wait returns instantly, handing
                      # back the GPIO 2-4 pin-grab race that #40 fixed.
-    MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from data phase)
+    MQX(MQ, "mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from data phase)
 
     dead = True
     totbytes = len(hdr) + long
@@ -2287,7 +2325,7 @@ def SAVE_ZX(MQ, TSP):
     # dropped Y (PIO auto-busy), and a ROM patched to poll $0F after 'S'
     # waits here instead of guessing with a ~1ms delay — which is not
     # long enough to cover ZX48_IO's dispatch plus this thread spawn.
-    MQ.exec("mov(y, invert(null))")
+    MQX(MQ, "mov(y, invert(null))")
 
     for i in r1:
         hdr[i] = MQ.get() & 0xFF
@@ -2298,7 +2336,7 @@ def SAVE_ZX(MQ, TSP):
     blk = bytearray(long)
 
     MQ.get()                     # the 'S' that opens the data block
-    MQ.exec("mov(y, invert(null))")   # READY again for the data block's poll
+    MQX(MQ, "mov(y, invert(null))")   # READY again for the data block's poll
 
     for i in r2:
         blk[i] = MQ.get() & 0xFF
@@ -2494,18 +2532,18 @@ def WATCHDOG(secs, MQ, TSP):
         # internals (OSR, ISR, FIFOs). The kill = True flag tells the
         # main handler to abort its current loop iteration.
         while not dead:
-            MQ.exec("pull (noblock)")     # drain TX FIFO into OSR
-            MQ.exec("mov (osr, null)")    # discard OSR contents
-            MQ.exec("mov (isr, null)")    # clear ISR
-            MQ.exec("push (noblock)")     # push (nothing) to RX
+            MQX(MQ, "pull (noblock)")     # drain TX FIFO into OSR
+            MQX(MQ, "mov (osr, null)")    # discard OSR contents
+            MQX(MQ, "mov (isr, null)")    # clear ISR
+            MQX(MQ, "push (noblock)")     # push (nothing) to RX
             kill = True                   # signal main handler
 
         # Drain Python-side FIFOs.
         while MQ.rx_fifo() != 0:
             MQ.get()
         while MQ.tx_fifo() != 0:
-            MQ.exec("pull (noblock)")
-            MQ.exec("set (osr, null)")
+            MQX(MQ, "pull (noblock)")
+            MQX(MQ, "set (osr, null)")
 
         # Bounce the SM to flush any latched state, then BLINK to give
         # the user a visual indication something went wrong.

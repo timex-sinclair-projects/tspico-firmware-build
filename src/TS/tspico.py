@@ -362,6 +362,7 @@ from TS.tspico_io import (
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
     RX_BLOCK, RXB_ABORT,                 # printer bodies
+    MQX,                                 # fast MQ.exec (9.6 ms -> 18 us)
 )
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from array import array
@@ -626,7 +627,7 @@ def DEACTIVATE_SD():
 #      270 MHz setting) so 30 MHz is conservative.
 #
 #   3. Y = READY after activation
-#      The new line `MQ.exec("mov(y, invert(null))")` sets Y to
+#      The new line `MQX(MQ, "mov(y, invert(null))")` sets Y to
 #      0xFFFFFFFF so $0F reads always have bit 6 set (= ready).
 #      We keep Y at READY for the entire session; the protocol's
 #      natural pacing via TX FIFO depth handles flow control.
@@ -671,7 +672,7 @@ def ACTIVATE_MQ(ready=True):                                                    
         # to signal ready, in that order.
         #
         # The old behavior was:
-        #     MQ.exec("mov(y, invert(null))")    # Y=READY immediately
+        #     MQX(MQ, "mov(y, invert(null))")    # Y=READY immediately
         # which created a race: between this exec and the caller's
         # response-byte load, the Z80 (which has been polling $0F
         # throughout any preceding SD operation) sees ready, immediately
@@ -745,7 +746,7 @@ def MQ_READY():
     # invert(null) is the documented MicroPython PIO syntax for ~0.
     # The tilde form `~null` does NOT parse correctly via runtime
     # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
-    MQ.exec("mov(y, invert(null))")
+    MQX(MQ, "mov(y, invert(null))")
 
 
 # ─── Issue #51 stage 4: command I/O that never blocks ──────────────────
@@ -816,8 +817,8 @@ def CMD_FLUSH():
     for _ in range(64):
         if MQ.tx_fifo() == 0:
             break
-        MQ.exec("pull (noblock)")
-        MQ.exec("mov (osr, null)")
+        MQX(MQ, "pull (noblock)")
+        MQX(MQ, "mov (osr, null)")
     for _ in range(64):
         if MQ.rx_fifo() == 0:
             break
@@ -835,7 +836,7 @@ def MQ_BUSY():
         (e.g., signalling an aborted exchange or a long-pause
         background operation).
     """
-    MQ.exec("set(y, 0)")
+    MQX(MQ, "set(y, 0)")
 
 
 # ─── DUAL-PORT MIGRATION: retired single-port helpers ────────────────────
@@ -987,18 +988,18 @@ def CHK_STATUS(secs):                                                           
     if not dead:
         LOG("Abnormal termination. Clearing TX/RX FIFO....", 2)
         while not dead:
-            MQ.exec("pull (noblock)")
-            MQ.exec("mov (osr, null)")
-            MQ.exec("mov (isr, null)")
-            MQ.exec("push (noblock)")
+            MQX(MQ, "pull (noblock)")
+            MQX(MQ, "mov (osr, null)")
+            MQX(MQ, "mov (isr, null)")
+            MQX(MQ, "push (noblock)")
             kill = True
              
         # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────────────
         while MQ.rx_fifo() != 0:
             MQ.get()
         while MQ.tx_fifo() != 0:
-            MQ.exec("pull (noblock)")
-            MQ.exec("mov (osr, null)")
+            MQX(MQ, "pull (noblock)")
+            MQX(MQ, "mov (osr, null)")
         MQ.active(0)
 
         LOG("TX/RX FIFO successfully cleared. Operation finished", 0)
@@ -4215,8 +4216,8 @@ def FAIL_CMD(status):
     for _ in range(64):
         if MQ.tx_fifo() == 0:
             break
-        MQ.exec("pull (noblock)")
-        MQ.exec("mov (osr, null)")
+        MQX(MQ, "pull (noblock)")
+        MQX(MQ, "mov (osr, null)")
     for _ in range(64):
         if MQ.rx_fifo() == 0:
             break
@@ -5152,8 +5153,8 @@ def TS2068_IO():                                                         # Main 
                 while MQ.rx_fifo() != 0:
                     MQ.get()
                 while MQ.tx_fifo() != 0:
-                    MQ.exec("pull (noblock)")
-                    MQ.exec("mov (osr, null)")
+                    MQX(MQ, "pull (noblock)")
+                    MQX(MQ, "mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
@@ -5261,7 +5262,7 @@ def ZX48_IO(pre):                                                               
 
     utime.sleep(0.01)
     MQ.active(1)
-    MQ.exec("mov(y, invert(null))")    # Y = READY for the entire ZX session
+    MQX(MQ, "mov(y, invert(null))")    # Y = READY for the entire ZX session
 
     TLM("ZX48_IO enter", "par1=%d par2=%d ZX_TAPE_COMPAT=%s" % (
         par1, par2, TSP.ZX_TAPE_COMPAT))
@@ -5366,8 +5367,8 @@ def ZX48_IO(pre):                                                               
                 while MQ.rx_fifo() != 0:
                     MQ.get()
                 while MQ.tx_fifo() != 0:
-                    MQ.exec("pull (noblock)")
-                    MQ.exec("mov (osr, null)")
+                    MQX(MQ, "pull (noblock)")
+                    MQX(MQ, "mov (osr, null)")
                 MQ.active(0)
                 utime.sleep(.01)
                 MQ.active(1)
@@ -5397,8 +5398,8 @@ def ZX48_IO(pre):                                                               
 
         # ─── DUAL-PORT MIGRATION: inline TX drain ─────────────────────────
         while MQ.tx_fifo() != 0:
-            MQ.exec("pull (noblock)")
-            MQ.exec("mov (osr, null)")
+            MQX(MQ, "pull (noblock)")
+            MQX(MQ, "mov (osr, null)")
 
         MQ.active(0)
         utime.sleep(.01)
