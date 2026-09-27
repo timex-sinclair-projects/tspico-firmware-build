@@ -158,29 +158,49 @@ If `dev_tspico.mpy` (or `.py`) is present at root you'll also see:
 
 ### If the SD card won't mount after a soft reboot
 
-Stopping the firmware with **Ctrl-C** (or Thonny's Stop / Run) can
-interrupt it in the middle of talking to the SD card: it writes
-`/activity.log` and reads files, so a block transfer can be left half
-finished. The card stays powered through a soft reboot and still thinks
-that transfer is under way; some cards then won't answer the reset
-command (CMD0) until they're power-cycled, and the Pico has no way to
-cut the card's power. The boot shows:
+The SD module runs off the Pico's 3V3 (schematic: U3 on the 3V3 rail,
+nCS = GP28 with a 4K7 pull-up), so a Ctrl-C, soft reboot, `machine.reset()`
+or UF2 flash never power-cycles the card. If one of those lands **during**
+an SD access -- Thonny connecting interrupts `main.py`, often inside the
+~0.7 s of card work at boot -- the card is left inside the transfer. In
+the middle of a multi-block write (CMD25) it is still waiting for data and
+swallows the next CMD0 as data, and every boot then reported
 
 ```
 [ACTIVATE_SD] attempt 1/5 failed: OSError(19, 'no SD card')
-...
 ```
 
-and ends in the blinking error loop. **Unplug and replug the TS-Pico**
-(a full power cycle, not Ctrl-D) and it will mount normally. A cold
-power-up -- what users do -- and a UF2 update always start the card
-clean. `ACTIVATE_SD` already retries the whole mount five times, 0.5 s
-apart, and the driver retries CMD0 and waits up to 1.5 s for a slow card
-to start (#60, #61), so a failure that survives all that after a Ctrl-C
-is this case, not a bad card.
+until the power was pulled. A block refused mid-write (`EIO: write fail`)
+did the same, because `writeblocks` raised without sending STOP_TRAN.
+Card, wiring and driver are fine otherwise: at the REPL, reads at 1/5/10
+MHz and write-and-read-back tests show zero errors, and break-at-idle +
+soft reboot mounts every time.
 
-A card can also mount and then fail its first write -- often the step
-just before it stops answering CMD0. `activity.log` then shows
+The driver now repairs this itself (`TS/sdcard.py`, tested by
+`src/test/sd_recover_hosttest.py`):
+
+- **`init_card` starts with `_recover()`**: 520 x 0xFF with CS low
+  (finishes a half-sent block), STOP_TRAN, CMD12, each with a bounded busy
+  wait, then the usual CMD0. On a healthy card it's just clocks. When it
+  found the card mid-transfer, `ACTIVATE_SD` prints and logs
+  `SD card card was mid-transfer (...); recovered without a power cycle`.
+  With CRC checks off (the default) the half-sent block is **written**
+  with the 0xFF filler -- that sector was mid-rewrite anyway, but it's
+  the price of not needing a power cycle.
+- **`writeblocks` always ends with STOP_TRAN, `readblocks` with CMD12**,
+  also when a block fails or a Ctrl-C lands between blocks. STOP_TRAN
+  waits for the card to finish the last block first, or a busy card
+  takes it for a clock tick.
+- **Every busy wait is bounded** (`_BUSY_TIMEOUT_MS`, 1 s). A card that
+  never lets go is an `ETIMEDOUT` error, not a hung Pico.
+
+If the card still won't mount -- seen once, a card that held MISO low
+(busy) for over 90 s -- **unplug the USB cable and switch the 2068 off**,
+then power up. With USB connected, switching only the 2068 off and on
+does not power-cycle the TS-Pico or the card.
+
+A card can also mount and then fail its first write. `activity.log` then
+shows
 
 ```
 ERROR:DIR_FILES: SD card error, directory listing skipped: [Errno 5] EIO: write fail
@@ -193,18 +213,15 @@ flash assets), and `tpi:dir` says the card failed. The write need not
 come from anything that looks like a write -- FatFs flushes a sector
 dirtied by an earlier `os.remove` when the next call, even
 `os.ilistdir()`, moves on, so `DIR_FILES` catches `OSError` around all of
-its SD work. Power-cycle to recover the card.
+its SD work.
 
 The same can happen mid-session. Once the card stops answering, every
 command that needs it (CD, MD, RM, NEWTAP, HELP, LOAD "tpi:file", the
-re-mount after a SAVE) spends its five `ACTIVATE_SD` attempts -- about 5 s for a
-card that ignores CMD0, 12.5 s at worst, inside the Z80's ~20 s wait --
-and then fails with Report J;
-`activity.log` shows `Mounting SD Card failed in ACTIVATE_SD after 5
-attempts!` and the handler exception. Everything else keeps working. Only
-at boot, with no card at all, does `ACTIVATE_SD`'s failure still end in
-the blinking error loop. (It used to end there from any command, which
-bricked the TS-Pico until power-cycle.)
+re-mount after a SAVE) spends its five `ACTIVATE_SD` attempts and then
+fails with Report J; `activity.log` shows `Mounting SD Card failed in
+ACTIVATE_SD after 5 attempts!` and the handler exception. Everything else
+keeps working. Only at boot, with no card at all, does `ACTIVATE_SD`'s
+failure still end in the blinking error loop.
 
 ---
 
