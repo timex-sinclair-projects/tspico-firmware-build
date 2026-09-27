@@ -1336,13 +1336,16 @@ def LOAD_TS(pre, MQ, TSP):
             ECHO_KEEP(echo, w)
 
     if totbytes >= 8192:
+        # WARNING level (1), off by default: at ERROR it put a line in the log
+        # after every large LOAD, and the log write that followed on core1
+        # froze core0 during the next command (see TS2068_IO's SYNC branch).
         # Where the time went: ms per 1K block. Near 52 = the ROM loop's
         # 178 T-states/byte; far above it = the Z80 was slowed down.
         k = sent >> 10
         LOG_ADD("DIAG: LOAD %d bytes, %s; ms/KB after READY: %s"
                 % (totbytes, "ok" if not why and echo[0] >= 2 else "why=%d" % why,
                    " ".join(str(prof[i] - prof[i - 1] if i > 1 else prof[1])
-                            for i in range(1, k + 1))), 2, TSP.LOG_LEVEL)
+                            for i in range(1, k + 1))), 1, TSP.LOG_LEVEL)
 
     if dry:
         # TX ran empty after READY: each time the Z80 may have read 0x00.

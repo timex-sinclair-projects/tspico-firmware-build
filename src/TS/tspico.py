@@ -4896,6 +4896,15 @@ def TS2068_IO():                                                         # Main 
                 MQ_TO_IDLE(MQ, status=False)
                 if got != -1:
                     LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
+                # A log write on core1 (SAVE_LOG) stops BOTH cores while it
+                # programs flash, and the Z80 sends its pre-header the moment
+                # we say IDLE: a freeze mid-burst lost bytes (hardware,
+                # 2026-09-27: "Partial pre-header 8/10" -> RECOVERED -> Report
+                # T in Commander). The Z80 waits up to ~1 s for IDLE after a
+                # SYNC, so let the write finish first (bounded).
+                _t = time.ticks_ms()
+                while busy and time.ticks_diff(time.ticks_ms(), _t) < 800:
+                    pass
                 MQ_STATUS(MQ, "idle")
                 continue
             if got != 10:

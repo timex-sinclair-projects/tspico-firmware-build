@@ -259,6 +259,10 @@ def main():
             cond = src[i:src.index("MQ_READY()", i)]
             check("and pre[0] != 66" in cond,
                   "%s: the dispatcher skips READY for all 42h traffic (commands, printer)" % name)
+            i = src.index("got = RX_CAPTURE(MQ, pre_raw, 10, 1000)")
+            sync = src[i:src.index("if got != 10:", i)]
+            check(sync.index("while busy and") < sync.index('MQ_STATUS(MQ, "idle")'),
+                  "%s: after a SYNC, IDLE waits for a SAVE_LOG flash write to finish" % name)
             pc = src[src.index("def PROCESS_CMD("):src.index("def TS2068_IO(")]
             a = pc.index('MQ_STATUS(MQ, "mid")')
             check(pc[a:].split("\n")[1].strip().startswith("got = RX_CAPTURE(MQ, raw, long,"),
