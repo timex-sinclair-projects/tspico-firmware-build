@@ -15,7 +15,7 @@ What it pins:
     then raises Report D -- and the next LOAD works first time;
   * BREAK in the ready-wait before the data: same, "read 0-4 bytes";
   * the Z80 going silent mid-block: RECOVERED (FB) after the stall, no hang;
-  * the watchdog path (kill) is unchanged;
+  * no watchdog: LOAD_TS starts no thread; a stale kill reads as a stall;
   * a v1.7 LOAD, which never writes 0Fh, behaves exactly as before.
 
 Run:  python3 src/test/load_ts_hosttest.py
@@ -308,14 +308,23 @@ def main():
               "TX_ROOM's own stall bound ends it: RECOVERED (FB), one pre-load, no hang")
         tsp.offset, tsp.tap_idx = 0, 0
 
-        print("watchdog path unchanged")
+        print("no watchdog (stage 5)")
+        started = []
+        real_start = io.START_WATCHDOG
+        io.START_WATCHDOG = lambda *a: started.append(a)
+        load(pio, 0x00, len(header))
+        r, _ = load(pio, 0xFF, len(data))
+        io.START_WATCHDOG = real_start
+        check(r == "ok" and not started, "header + data load without starting a watchdog (%s)" % started)
+        tsp.offset, tsp.tap_idx = 0, 0
         load(pio, 0x00, len(header))
 
         def fire():
-            io.kill = True
+            io.kill = True                      # a stale kill from ZX48 mode
         r, log = load(pio, 0xFF, len(data), stop_at=2000, on_byte=(1999, fire))
-        check("LOAD_TS failed" in log and "re-armed" in log,
-              "kill during the block takes ABORT_TX + REARM_AFTER_LOAD_ABORT as before")
+        io.kill = False
+        check(idle(pio, 0xFB) and "stalled -> RECOVERED" in log,
+              "a stale watchdog kill is treated as a stall: RECOVERED, one pre-load")
         tsp.offset, tsp.tap_idx = 0, 0
 
         print("no allocation while the Z80 streams (R at 15772 of 16096, 2026-09-26)")
@@ -340,8 +349,8 @@ def main():
         loop = body[body.index("    primed = False"):body.index("# Phase 2")]
         check(".append(" not in loop and "LOG" not in loop and "%" not in loop,
               "LOAD_TS's stream loops: no append, no LOG, no string formatting")
-        check(body.index("gc.collect()") < body.index("START_WATCHDOG(3"),
-              "LOAD_TS collects garbage before the watchdog, while the Z80 waits for READY")
+        check(body.index("gc.collect()") < body.index("    primed = False"),
+              "LOAD_TS collects garbage before streaming, while the Z80 waits for READY")
 
         print("TX-dry counter")
         load(pio, 0x00, len(header))
