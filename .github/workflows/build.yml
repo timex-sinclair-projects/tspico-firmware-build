@@ -92,6 +92,7 @@ jobs:
           python3 src/test/sd_mount_hosttest.py
           python3 src/test/dir_files_eio_hosttest.py
           python3 src/test/sd_wedged_hosttest.py
+          python3 src/test/sd_recover_hosttest.py
           python3 src/test/save_name_hosttest.py
           python3 src/test/zx48_hosttest.py
       # Fails the build if a ROM in flash/manifest.json changed without its

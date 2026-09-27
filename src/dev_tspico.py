@@ -803,6 +803,13 @@ def ACTIVATE_SD():                                                              
         try:
             spi = SPI(0, sck=D0, mosi=D1, miso=D2)
             sd = SDCard(spi, U3_CS)
+            recovered = getattr(sd, "recovered", None)
+            if recovered:
+                # Left mid-transfer by an interrupted session (Ctrl-C or reset
+                # during an SD access): the driver brought it back without a
+                # power cycle. Worth knowing how often that happens.
+                print("[ACTIVATE_SD] %s -- recovered" % recovered)
+                LOG("SD card %s; recovered without a power cycle" % recovered, 1)
             os.mount(sd, "/sd")
             TLM("ACTIVATE_SD exit", "SD mounted at /sd (attempt %d)" % attempt)
             if attempt > 1:
