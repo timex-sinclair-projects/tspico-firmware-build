@@ -330,7 +330,12 @@ def main():
                     allocs.append((name, n.lineno))
                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "append":
                     allocs.append((name, n.lineno))
-        check(not allocs, "TX_ROOM / ECHO_KEEP build no lists, strings or appends (%s)" % allocs)
+                # `txf = MQ.tx_fifo` allocates a bound method on every call:
+                # 32 bytes/byte in TX_ROOM filled the heap every ~6.5 KB and
+                # each GC cost a LOAD ~110 bytes (hardware, 2026-09-27).
+                if isinstance(n, ast.Assign) and isinstance(n.value, ast.Attribute):
+                    allocs.append((name, n.lineno, "bound method"))
+        check(not allocs, "TX_ROOM / ECHO_KEEP build no lists, strings, appends or bound methods (%s)" % allocs)
         body = io_src[io_src.index("def LOAD_TS("):io_src.index("def LOAD_TS(") + 40000]
         loop = body[body.index("    primed = False"):body.index("# Phase 2")]
         check(".append(" not in loop and "LOG" not in loop and "%" not in loop,

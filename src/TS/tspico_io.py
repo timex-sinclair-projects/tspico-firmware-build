@@ -169,11 +169,15 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
     from a 4-deep FIFO, so that pause is ~300 empty reads and Report R.
     """
     global tx_wait_ms
-    rx = MQ.rx_fifo
-    txf = MQ.tx_fifo
+    # Call MQ's methods directly -- never `txf = MQ.tx_fifo` here. Storing a
+    # bound method allocates it (16 bytes), and this runs once per byte of a
+    # LOAD: 32 bytes a call filled the heap every ~6.5 KB, and each GC froze
+    # the Pico ~6 ms mid-block while the Z80 read ~110 empty bytes. Report R
+    # on every block over ~6 KB (hardware, 2026-09-27). A direct call
+    # allocates nothing.
     t0 = time.ticks_ms()
-    while txf() >= TX_DEPTH:
-        if rx():
+    while MQ.tx_fifo() >= TX_DEPTH:
+        if MQ.rx_fifo():
             w = MQ.get()
             if w & PORT_0F:
                 return 1
