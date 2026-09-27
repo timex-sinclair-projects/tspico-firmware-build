@@ -100,6 +100,23 @@ def read_until(fd, seconds, until=None):
     return out
 
 
+def write_all(fd, data):
+    """Write in small chunks, draining the Pico's echo in between. The port
+    is non-blocking, and the Pico echoes every pasted character: one big
+    os.write() fills both directions and fails with EAGAIN (a paste-mode
+    script of ~1 KB was enough)."""
+    for i in range(0, len(data), 64):
+        chunk = data[i:i + 64]
+        while chunk:
+            try:
+                n = os.write(fd, chunk)
+                chunk = chunk[n:]
+            except BlockingIOError:
+                n = 0
+            read_until(fd, 0.02)                   # drain echo; discarded
+    return len(data)
+
+
 def emit(data):
     sys.stdout.write(data.decode("utf-8", "replace").replace("\r\n", "\n"))
     sys.stdout.flush()
@@ -171,10 +188,10 @@ def cmd_run(args):
             # indentation that the line-by-line REPL would mangle.
             os.write(fd, b"\x05")
             read_until(fd, 1, b"=== ")
-            os.write(fd, code.replace("\r\n", "\n").replace("\n", "\r").encode())
-            os.write(fd, b"\x04")
+            write_all(fd, code.replace("\r\n", "\n").replace("\n", "\r").encode())
+            write_all(fd, b"\x04")
         else:
-            os.write(fd, code.encode() + b"\r")
+            write_all(fd, code.encode() + b"\r")
         emit(read_until(fd, args.timeout, PROMPT))
         print()
     with_port(args, go)
