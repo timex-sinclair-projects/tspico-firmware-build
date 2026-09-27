@@ -357,7 +357,6 @@ from TS.tspico_io import (
     TS_IO_DUAL,                          # was: TS_IO (single-port)
     LOAD_TS, LOAD_ZX, LOAD_ZX_C,
     SAVE_TS, SAVE_ZX,
-    CORE1_BUSY,                          # core1 flag lives in tspico_io, not here
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
@@ -5226,31 +5225,25 @@ def ZX48_IO(pre):                                                               
     LOG("Starting ZX Mode...", 0)
 
     ts = time.ticks_us()
+    nxt = -1        # a command byte a handler took in the middle of its block
 
     while True:
 
-        if (MQ.rx_fifo()) != 0:
+        if nxt >= 0 or MQ.rx_fifo():
 
             ts = time.ticks_us()
-            a = MQ.get()
+            if nxt >= 0:
+                a, nxt = nxt, -1
+            else:
+                a = MQ.get()
             TLM("ZX48_IO byte received", "a=%d (0x%02X)" % (a, a))
 
-            # Wait for core1 before dispatching, the way the three
-            # main-loop LVM branches do. Without it a watchdog left
-            # over from the previous ZX transaction is still inside
-            # its cleanup -- which ends with a ~1s BLINK() -- and the
-            # spawn in the handler below raises OSError 'core1 in
-            # use'. Nothing here or in main.py catches that, so the
-            # Pico drops to a REPL. START_WATCHDOG() now survives it,
-            # but waiting means we keep the watchdog instead of
-            # running the transfer unguarded. Bounded, so a thread
-            # that died without clearing the flag cannot wedge us.
-            # BOTH flags: `busy` here is tspico.py's own (SAVE_LOG,
-            # BLINK_LED, CHK_STATUS); CORE1_BUSY() is tspico_io's
-            # WATCHDOG. They are different variables -- see that
-            # function's docstring -- and core1 is one resource.
+            # Wait (bounded) for a SAVE_LOG still writing the log on core1:
+            # a flash write stops both cores, so it must not overlap a block.
+            # The ZX v2 ROM waits up to ~3.8 s for READY after its 'L' / 'S'.
+            # The handlers themselves use no core1 watchdog (issue #51).
             _t = time.ticks_ms()
-            while busy or CORE1_BUSY():
+            while busy:
                 if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
                     LOG("ZX48_IO gave up waiting for core1", 2)
                     break
@@ -5266,14 +5259,13 @@ def ZX48_IO(pre):                                                               
                         LOG("ZX48 buffer size = %d" % par2, 0)
                     else:
                         buf_size = 52100                                          # lower this if mem allocation error arises
-                    MQ, TSP, new_logs = LOAD_ZX_C(MQ, TSP, buf_size)
-                    # log_entries += new_logs
-                    log_entries.append(new_logs) # for now
-                    # log_entries.extend(new_logs) # when LOAD_TS returns an array
+                    MQ, TSP, new_logs, nxt = LOAD_ZX_C(MQ, TSP, buf_size)
                 else:
                     # 'regular' ZX Spectrum LOAD
                     LOG("Starting ZX LOAD", 0)
-                    MQ, TSP, new_logs = LOAD_ZX(MQ, TSP)
+                    MQ, TSP, new_logs, nxt = LOAD_ZX(MQ, TSP)
+                if new_logs.strip():
+                    log_entries.append(new_logs)
 
                 TLM("ZX48_IO LOAD returned")
 
@@ -5281,10 +5273,9 @@ def ZX48_IO(pre):                                                               
 
                 TLM("ZX48_IO dispatching SAVE")
                 LOG("Starting ZX SAVE", 0)
-                MQ, TSP, new_logs = SAVE_ZX(MQ, TSP)
-                # log_entries += new_logs
-                log_entries.append(new_logs) # for now
-                # log_entries.extend(new_logs) # when LOAD_TS returns an array
+                MQ, TSP, new_logs, nxt = SAVE_ZX(MQ, TSP)
+                if new_logs:
+                    log_entries.append(new_logs)
                 TLM("ZX48_IO SAVE returned")
 
             elif a == 14:                                                  # OUT 14,14 from 2068 — canonical exit from ZX48 mode

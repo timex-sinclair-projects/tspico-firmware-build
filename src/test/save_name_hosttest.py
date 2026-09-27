@@ -558,10 +558,13 @@ def test_no_unguarded_thread_spawns(tio):
     print("test_no_unguarded_thread_spawns: structural check")
     src = io.open(os.path.join(SRC, "TS", "tspico_io.py"),
                   encoding="utf-8").read()
-    for name in ("LOAD_TS", "LOAD_ZX", "SAVE_TS", "SAVE_ZX"):
-        body = src.split("def %s(" % name, 1)[1].split("\ndef ", 1)[0]
-        check("_thread.start_new_thread" not in body,
-              "%s spawns via START_WATCHDOG, not directly" % name)
+    import ast
+    fns = {n.name: n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef)}
+    for name in ("LOAD_TS", "LOAD_ZX", "LOAD_ZX_C", "SAVE_TS", "SAVE_ZX"):
+        calls = {c.func.attr if isinstance(c.func, ast.Attribute) else getattr(c.func, "id", "")
+                 for c in ast.walk(fns[name]) if isinstance(c, ast.Call)}
+        check(not calls & {"start_new_thread", "START_WATCHDOG", "ABORT_TX", "STOP_WATCHDOG"},
+              "%s spawns no thread and uses no watchdog (issue #51)" % name)
 
 
 def test_end_msg_has_no_callers(tio):

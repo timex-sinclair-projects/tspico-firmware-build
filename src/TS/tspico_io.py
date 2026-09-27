@@ -1,6 +1,5 @@
 import gc
 import os
-import _thread
 import time
 import utime
 
@@ -21,8 +20,8 @@ from TS.sdcard import *
 # Initialize them here so the race is impossible:
 # ---------------------------------------------------------------------------
 
-kill = False        # set True by WATCHDOG to abort a hung transaction
-busy = False        # core1 watchdog activity flag
+kill = False        # set by the core1 WATCHDOG, removed in issue #51; stays False
+busy = False        # was the core1 watchdog's flag; stays False
 dead = True         # True = no transaction in progress; False = active
 log_entries = ""    # log messages collected during a transaction
 
@@ -641,99 +640,6 @@ def REWIND_ABORTED_SEARCH(TSP):
     TSP.ld_start = -1
     TSP.ld_wrapped = False
     return True
-
-
-def ABORT_TX(log_level, what="LOAD_TS"):
-    """Abort an in-flight LVM transaction.
-
-    Called from LOAD_TS / SAVE_TS when the watchdog has flagged the
-    transaction as hung (kill = True). Logs the error, sets `dead = True`
-    so the watchdog knows we're aborting, then waits for the watchdog to
-    finish its FIFO-clear cleanup (busy goes False).
-
-    The watchdog itself does the actual TX/RX FIFO drain; this function
-    just signals it and waits. Do NOT write status bytes before calling
-    this: the watchdog's cleanup loop is pumping `pull(noblock)` through
-    TX the whole time it waits for `dead`, so anything staged beforehand
-    is discarded. The dispatcher re-arms TX after we return.
-
-    Waiting matters for more than tidiness. The watchdog's cleanup ends
-    with MQ.active(0) -> BLINK() -> MQ.active(1), and BLINK blocks for
-    ~1 second. Returning early means core0 races ahead into the
-    dispatcher's ACTIVATE_MQ + status pre-load while core1 is still
-    bouncing the very same hardware state machine underneath it.
-
-    Args:
-        log_level: TSP.LOG_LEVEL.
-        what:      handler name for the log line.
-    """
-    global dead
-    global busy
-
-    LOG_ADD("ERROR: %s failed!" % what, 2, log_level)
-    dead = True
-
-    # Spin until the watchdog thread on core1 finishes its cleanup.
-    # The watchdog drains FIFOs, deactivates/reactivates the SM, then
-    # sets busy = False. We can't proceed to send a response until then
-    # because the bus state is unsafe during cleanup.
-    #
-    # Bounded: if the thread died before clearing `busy` (it never should,
-    # but an unhandled exception on core1 leaves no trace on core0), an
-    # unbounded spin here wedges the dispatcher forever. BLINK alone is
-    # ~1s, so give it 3s and then carry on.
-    _t = time.ticks_ms()
-    while busy:
-        if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
-            LOG_ADD("ERROR: ABORT_TX gave up waiting for core1 cleanup",
-                    2, log_level)
-            busy = False
-            break
-
-    return
-
-
-def STOP_WATCHDOG(log_level):
-    """End a transaction's watchdog WITHOUT its cleanup, for a transaction
-    that ended itself -- e.g. on a BREAK (issue #51) -- and will put the bus
-    right with MQ_TO_IDLE. Sets `dead` so WATCHDOG's poll loop exits before
-    its timeout, then waits (bounded) for core1 to let go.
-
-    Unlike ABORT_TX, nothing here is an error and nothing waits for the
-    watchdog's FIFO flush and ~1 s BLINK: a BREAK should be answered as fast
-    as the Z80 asks. If the watchdog had already timed out and is mid-
-    cleanup, the wait below simply lets it finish first.
-    """
-    global dead, busy
-
-    dead = True
-    _t = time.ticks_ms()
-    while busy:
-        if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
-            LOG_ADD("ERROR: STOP_WATCHDOG gave up waiting for core1",
-                    2, log_level)
-            busy = False
-            break
-
-
-def BLINK():
-    """Blink the onboard LED 10 times for a fixed interval.
-
-    Used as a visual signal during boot or when an error condition is
-    detected. Blocking — caller is paused for ~1 second.
-    """
-    led = Pin(25, Pin.OUT)
-    led.value(1)
-
-    for i in range(10):
-        utime.sleep(.1)
-        led.toggle()
-
-    led.value(0)
-
-    return
-
-
 
 
 def ENA_MQ_DUAL(MQ):
@@ -1375,115 +1281,156 @@ def LOAD_TS(pre, MQ, TSP):
     return MQ, TSP, log_entries
 
 
+# ZX48 mode's time limits. The Spectrum ROM reads a LOAD byte every ~43 us
+# and writes a SAVE byte every ~83 us, with ~1 ms pauses around a block's
+# flag and CRC and ~1 s between a SAVE's two blocks. Nothing a live Z80
+# does in the middle of a block is slower than ZX_STALL_MS.
+ZX_STALL_MS = const(1000)       # a block the Z80 stopped reading or sending
+ZX_BLOCK_GAP_MS = const(3000)   # SAVE: the ROM's ~1 s pause before the data block
+
+
+def ZX_FLUSH_TX(MQ):
+    """Empty TX: the tail of a block the ROM did not read to the end.
+    Bounded, like MQ_TO_IDLE, whose first half this is -- ZX48 mode has no
+    status pre-load, so the rest of it does not apply."""
+    for _ in range(64):
+        if MQ.tx_fifo() == 0:
+            break
+        MQX(MQ, "pull (noblock)")
+        MQX(MQ, "mov (osr, null)")
+
+
+def ZX_ROOM(MQ, stall_ms):
+    """ZX48 LOAD's slow path: TX is full, so wait for room -- listening --
+    instead of blocking in MQ.put(). Returns
+
+        -1       there is room
+        -2       TX stayed full for stall_ms: the Z80 stopped reading
+        0..511   a word the Z80 wrote: it has left this block and sent its
+                 next command ('L', 'S', ...), for ZX48_IO to dispatch
+
+    The ROM reads a block in one DI loop with no way out, so it only stops
+    early when it asked for fewer bytes than the block holds: LD-BYTES reads
+    flag + the length it expects + CRC, whatever the block's own length.
+    LOAD "name" does that with every block before the one it wants, then
+    prints its name and asks for the next one. No allocation: see TX_ROOM.
+    """
+    t0 = time.ticks_ms()
+    while MQ.tx_fifo() >= TX_DEPTH:
+        if MQ.rx_fifo():
+            return MQ.get()
+        if time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+            return -2
+    return -1
+
+
 def LOAD_ZX(MQ, TSP):
     """Send one TAP block to the Spectrum ROM in ZX48 mode.
 
     ZX48 is a much simpler protocol than the TS-2068 LVM one that
     LOAD_TS implements. The customised Spectrum ROM (flash slot 0) has
-    no status port, no pre-header and no echo phase:
+    no pre-header, no status byte and no echo:
 
         Z80  -> OUT ($0E),'L'      (76; consumed by ZX48_IO's dispatch)
+        Z80  -> polls $0F for READY (ZX v2 ROM; up to ~3.8 s, then Report R)
         Pico -> flag byte          (block type: 0x00 header, 0xFF data)
         Pico -> content bytes      (Z80 reads at ~43us each)
         Pico -> CRC byte
-        Z80  -> nothing            (its SA/LD-RET just returns)
 
     So the response is exactly `totbytes` bytes: the TAP block minus
     its 2-byte length prefix. There is deliberately NO status byte and
-    NO V6 pre-load chain here — any extra byte stays in TX and the next
-    'L' reads it as that block's flag byte.
+    NO V6 pre-load chain here.
 
-    DUAL-PORT MIGRATION (2026-09):
-      - The single-port version wrote 0x40 ("continue") ahead of the
-        flag byte, which the Z80 read off the shared FIFO. Under
-        dual-port that flag lives on $0F (scratch Y), so the write is
-        gone. NOTE: Ricardo's newer Spectrum ROM ("nuevo LD") polls
-        $0E for 0x40 before the first byte and is therefore NOT
-        compatible with this firmware — the ROM in flash slot 0 of
-        Pico-v15w.rom is. See docs/rom-analysis/.
-      - Off-by-one fix: this streamed flag + totbytes bytes, one more
-        than the Z80 reads. The extra byte (the next block's length-low)
-        stayed in TX and poisoned the following transaction; the
-        "TX FIFO not empty after ZX mode" cleanup in ZX48_IO was
-        papering over exactly that.
-      - Y is left READY on exit. The PIO drops Y to 0 on every Z80 OUT
-        (issue #14 auto-busy), including the 'L' that got us here, so a
-        future ROM that polls $0F would otherwise stall.
+    Returns MQ, TSP, log_entries, nxt. nxt is the Z80's next command byte
+    when it arrived in the middle of this block (see ZX_ROOM), else -1;
+    ZX48_IO dispatches it next.
+
+    No watchdog (issue #51, as LOAD_TS): the stream never blocks in
+    MQ.put(). When TX is full it waits in ZX_ROOM, and gives up after
+    ZX_STALL_MS or when the Z80 sends its next command. Either way the
+    tape moves on past this block, as a real one would -- a LOAD "name"
+    skips the blocks before its file this way. It used to wait 3 s for
+    the watchdog on every skipped block, and then send the same block
+    again, because the tape position only moved on a complete read.
+
+    Bytes the ROM did not read are flushed from TX before the next block's
+    flag goes in. The flag goes in before READY: the ROM reads $0E the
+    instant READY rises. Y stays READY afterwards -- the Z80's reads don't
+    touch it, and its next OUT drops it.
     """
-    global dead
-    global kill
-    global busy
-    
     global log_entries
     log_entries = ""
-    
+
     led = Pin(25, Pin.OUT)
     led.value(1)
-   
-    totbytes = 0
-    
-    blk_info = bytearray(3)
-    el = bytearray(1)
 
-    if (not TSP.f_name or TSP.totlen == 0):
+    if not TSP.f_name or TSP.totlen == 0:
         local_fname = "/assets/nofile.tap"
         LOG_ADD("WARNING: no file mounted in LOAD_ZX", 1, TSP.LOG_LEVEL)
-    else:    
+    else:
         local_fname = "/TMP/temp.tap"
 
+    blk_info = bytearray(3)
     arch = open(local_fname, "rb")
     arch.seek(TSP.offset)
-
     arch.readinto(blk_info)
     totbytes = blk_info[0] + 256 * blk_info[1]
-    
-    dead = False
-    # totbytes counts flag + content + CRC. The flag is sent below, so
-    # the file loop streams the remaining totbytes-1 bytes. Sending
-    # totbytes here is the off-by-one described in the docstring.
-    r = range(totbytes - 1)
 
-    START_WATCHDOG(3, MQ, TSP)
+    ZX_FLUSH_TX(MQ)
+    # Collect garbage now, while the ROM waits for READY: a GC in the middle
+    # of the block stops core0 for 5-25 ms, and the Z80 reads 0x00 from an
+    # empty TX every 43 us meanwhile (see LOAD_TS).
+    gc.collect()
 
-    wrt = MQ.put
-    # Dual-port: 0x40 continue flag is on port $0F (scratch Y).
-    wrt(blk_info[2])
+    put = MQ.put
+    txf = MQ.tx_fifo
+    rd = arch.readinto
+    el = bytearray(1)
+    nxt = -1
+    sent = 1
+    dry = 0             # times TX ran empty mid-block: the Z80 may have read 0x00
+    primed = False      # TX has been full once; only then does empty mean late
 
-    # Stage the flag byte FIRST, then raise READY. A ROM patched to poll
-    # $0F after its 'L' reads $0E the instant the poll succeeds, so the
-    # byte has to be in TX before Y goes high. Harmless with the current
-    # ROM, which ignores $0F and just waits ~1ms.
-    MQX(MQ, "mov(y, invert(null))")
+    put(blk_info[2])                        # the flag
+    MQX(MQ, "mov(y, invert(null))")         # READY
 
-    for i in r:
-        arch.readinto(el)
-        wrt(el[0])
-
-        if kill:
-            ABORT_TX(TSP.LOG_LEVEL)
-            arch.close()
-
-            return MQ, TSP, log_entries
-
+    # totbytes counts flag + content + CRC; the flag is already queued.
+    for _ in range(totbytes - 1):
+        rd(el)
+        n = txf()
+        if n >= TX_DEPTH:
+            primed = True
+            nxt = ZX_ROOM(MQ, ZX_STALL_MS)
+            if nxt != -1:
+                break
+        elif not n and primed:
+            dry += 1
+        put(el[0])
+        sent += 1
     arch.close()
 
-    # Y = READY. Nothing else to send: the Z80 has read its CRC byte and
-    # returns without a status read.
-    MQX(MQ, "mov(y, invert(null))")
+    if nxt != -1:
+        read = max(0, sent - txf())
+        ZX_FLUSH_TX(MQ)
+        LOG_ADD("INFO: ZX LOAD: the ROM read %d of %d bytes, then %s." % (
+            read, totbytes, "stopped" if nxt == -2 else "sent 0x%02X" % (nxt & 0xFF)),
+            0 if nxt >= 0 else 1, TSP.LOG_LEVEL)
+        if nxt == -2:
+            nxt = -1
+    if dry:
+        LOG_ADD("ERROR: ZX LOAD: TX ran dry %d times in a %d-byte block."
+                % (dry, totbytes), 2, TSP.LOG_LEVEL)
+
     led.value(0)
 
     TSP.offset += totbytes + 2
     TSP.tap_idx += 1
-    
-    if (TSP.offset >= TSP.totlen):
+    if TSP.offset >= TSP.totlen:
         TSP.offset = 0
-        TSP.tap_idx  = 0
-        
+        TSP.tap_idx = 0
         LOG_ADD("WARNING: reached end of offset table in LOAD_ZX, rewinding...", 1, TSP.LOG_LEVEL)
-    
-    dead = True
-   
-    return MQ, TSP, log_entries
+
+    return MQ, TSP, log_entries, nxt
 
 
 def LOAD_ZX_C(MQ, TSP, buf_size):
@@ -1491,114 +1438,128 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
 
     Where LOAD_ZX answers one 'L' with exactly one block, this reads up
     to buf_size of the TAP into memory and streams every block back to
-    back. MQ.put() blocks on a full TX FIFO, so the Z80 paces it: blocks
-    the Spectrum ROM skips over (wrong name, wrong type) are consumed by
-    its own LD-BYTES calls exactly as they would be off a tape running
-    continuously. That is what makes hard-to-load TAPs work here and not
-    in LOAD_ZX. It is memory-hungry and can OOM the Pico.
+    back, the Z80 pacing it: blocks the Spectrum ROM skips over (wrong
+    name, wrong type) are consumed by its own LD-BYTES calls exactly as
+    they would be off a tape running continuously. That is what makes
+    hard-to-load TAPs work here and not in LOAD_ZX. It is memory-hungry
+    and can OOM the Pico.
 
     Each buffered entry is rd_bytes[2:len+2] — flag + content + CRC, the
-    TAP block minus its length prefix — so no per-call byte accounting
-    is needed and the LOAD_ZX off-by-one never applied here.
+    TAP block minus its length prefix.
 
-    DUAL-PORT MIGRATION (2026-09): the 0x40 continue byte is gone (it
-    lives on $0F now), the end-of-stream wait is bounded instead of
-    spinning forever, and Y is left READY. See LOAD_ZX for the full
-    protocol notes.
+    Returns MQ, TSP, log_entries, nxt, as LOAD_ZX.
+
+    No watchdog and no blocking MQ.put() (issue #51): when TX is full the
+    stream waits in ZX_ROOM. Every LD-BYTES call opens with an 'L' and
+    waits for READY, so an 'L' mid-stream gets READY and the tape runs on;
+    any other byte is the Z80's next command, and ends the stream. So does
+    ZX_STALL_MS without a read (BREAK between blocks, a reset). The bytes
+    left in TX are flushed: the next 'L' would read them as its flag.
     """
     global log_entries
     log_entries = " "
-    
+
     cur_buf = []
-    
+
     if (TSP.offset >= TSP.totlen):
-        return MQ, TSP, log_entries
-    
+        return MQ, TSP, log_entries, -1
+
     size_rd = TSP.totlen - TSP.offset
-    
+
     if (size_rd >= buf_size):
         size_rd = buf_size
     rd_bytes = bytearray(size_rd)
-    
+
     if (not TSP.f_name or TSP.totlen == 0):
         local_fname = "/assets/nofile.tap"
         LOG_ADD("WARNING: no file mounted in LOAD_ZX_C", 1, TSP.LOG_LEVEL)
-    else:    
+    else:
         local_fname = "/TMP/temp.tap"
-        
+
     arch = open(local_fname, "rb")
     arch.seek(TSP.offset)
-    
+
     try:
         arch.readinto(rd_bytes)
     except:
         LOG_ADD("ERROR: while reading file in LOAD_ZX_C!", 2, TSP.LOG_LEVEL)
-        return MQ, TSP, log_entries
-        
+        arch.close()
+        return MQ, TSP, log_entries, -1
+
     arch.close()
-    
+
     TSP.offset += len(rd_bytes)
-    
+
     while (rd_bytes):
-        gc.collect()
         long = rd_bytes[0] + (256*rd_bytes[1])
-        
+
         if (long > len(rd_bytes)):
             TSP.offset -= len(rd_bytes)
             break
         hasta = long + 2
 
         cur_buf.append(rd_bytes[2:hasta])
-        gc.collect()
 
         rd_bytes = rd_bytes[hasta:]
-        gc.collect()
-        
+
     del rd_bytes
-    gc.collect()
-    
-    wrt = MQ.put
+    ZX_FLUSH_TX(MQ)
+    gc.collect()                            # now, not mid-stream (see LOAD_ZX)
+
+    put = MQ.put
+    txf = MQ.tx_fifo
     led = Pin(25, Pin.OUT)
+    nxt = -1
 
     # Stage the first byte before raising READY — see the same note in
     # LOAD_ZX. memoryview keeps this from copying the (large) buffer.
     if cur_buf and len(cur_buf[0]):
-        MQ.put(cur_buf[0][0])
+        put(cur_buf[0][0])
         MQX(MQ, "mov(y, invert(null))")
         cur_buf[0] = memoryview(cur_buf[0])[1:]
 
     for ar in cur_buf:
-
         led.value(1)
-        # Dual-port: 0x40 (= 64) continue flag is on port $0F (scratch Y).
-        # MQ.put(64) removed — just stream data bytes.
-
         for el in ar:
-            MQ.put(el)
-
+            if txf() >= TX_DEPTH:
+                nxt = ZX_ROOM(MQ, ZX_STALL_MS)
+                while nxt == 76:            # 'L': the ROM's next LD-BYTES
+                    MQX(MQ, "mov(y, invert(null))")
+                    nxt = ZX_ROOM(MQ, ZX_STALL_MS)
+                if nxt != -1:
+                    break
+            put(el)
         led.value(0)
-
-    # Wait for the Z80 to drain what's left, but bounded: in compatible
-    # mode we stream the whole tape, so if the Spectrum ROM found its
-    # file and stopped asking, the tail never gets read and the old
-    # unbounded spin here hung ZX48 mode until reset. After the timeout
-    # we drop the remainder — leaving it in TX would make the next 'L'
-    # read a stale byte as its flag.
-    _tw = time.ticks_ms()
-    while MQ.tx_fifo() != 0:
-        if time.ticks_diff(time.ticks_ms(), _tw) >= 2000:
-            LOG_ADD("WARNING: LOAD_ZX_C timed out with %d bytes unread; "
-                    "discarding tail." % MQ.tx_fifo(), 1, TSP.LOG_LEVEL)
-            while MQ.tx_fifo() != 0:
-                MQX(MQ, "pull (noblock)")
-                MQX(MQ, "mov (osr, null)")
+        if nxt != -1:
             break
 
-    MQX(MQ, "mov(y, invert(null))")                   # Y = READY
+    # The tail: let the Z80 read what is left, answering its 'L's the same
+    # way. In compatible mode the whole buffer is streamed, so once the ROM
+    # has found its file the rest is never read -- the old unbounded wait
+    # here hung ZX48 mode until reset.
+    t0 = time.ticks_ms()
+    while nxt == -1 and txf():
+        if MQ.rx_fifo():
+            w = MQ.get()
+            if w == 76:
+                MQX(MQ, "mov(y, invert(null))")
+                t0 = time.ticks_ms()
+            else:
+                nxt = w
+        elif time.ticks_diff(time.ticks_ms(), t0) >= ZX_STALL_MS:
+            nxt = -2
+
+    if nxt != -1:
+        LOG_ADD("INFO: LOAD_ZX_C: stream ended with %d bytes unread (%s)."
+                % (txf(), "stopped" if nxt == -2 else "0x%02X" % (nxt & 0xFF)),
+                1, TSP.LOG_LEVEL)
+        ZX_FLUSH_TX(MQ)
+        if nxt == -2:
+            nxt = -1
 
     cur_buf = []
 
-    return MQ, TSP, log_entries
+    return MQ, TSP, log_entries, nxt
 
 
 def SAVE_NAME(hdr):
@@ -1648,24 +1609,6 @@ def SAVE_NAME(hdr):
         if not (c.isalpha() or c.isdigit() or c in "_-"):
             ok = False             # printable, but not FAT-safe here
     return name, ok
-
-
-def _WAIT_CORE1(log_level, timeout_ms=3000):
-    """Wait (bounded) for the core1 watchdog to release `busy`.
-
-    Same rationale as ABORT_TX's wait, for the paths that end a
-    transaction without an abort handshake. Bounded because an
-    unbounded spin on a cross-core flag wedges the dispatcher if the
-    thread ever dies without clearing it.
-    """
-    global busy
-    _t = time.ticks_ms()
-    while busy:
-        if time.ticks_diff(time.ticks_ms(), _t) >= timeout_ms:
-            LOG_ADD("ERROR: timed out waiting for core1 watchdog", 2, log_level)
-            busy = False
-            break
-    return
 
 
 def REFUSE_SAVE(MQ, status, quiet_ms=500):
@@ -2192,292 +2135,126 @@ def SAVE_TS(MQ, TSP, pre=None):
     return MQ, TSP, log_entries, saved
 
 
+def _xor(buf, start, end):
+    x = 0
+    for i in range(start, end):
+        x ^= buf[i]
+    return x
+
+
 def SAVE_ZX(MQ, TSP):
     """Receive a SAVE from the Spectrum ROM in ZX48 mode and write a TAP.
 
-    The Spectrum ROM's SA-BYTES sends, per block and with no handshake:
+    The Spectrum ROM's SA-BYTES sends, per block and with no handshake
+    after the READY poll:
 
-        OUT ($0E),'S'   (83)      then len_lo, len_hi, flag,
-                                  content bytes, CRC byte
+        OUT ($0E),'S'   (83)      then polls $0F for READY (ZX v2 ROM),
+                                  then len_lo, len_hi, flag, content, CRC
 
     ZX48_IO consumed the header block's 'S' when it dispatched here, so
     this reads:
 
         21 bytes   len_lo, len_hi, flag, 17 header bytes, CRC
-         1 byte    the 'S' that opens the data block  (discarded)
+         1 byte    the 'S' that opens the data block, ~1 s later
       len+4 bytes  len_lo, len_hi, flag, content, CRC
 
     where len comes from the tape header's length field (hdr[14:16]).
     The two length fields are then rewritten into TAP form (block length
-    = content + flag + CRC) and both blocks are appended to a .tap on the
+    = content + flag + CRC) and both blocks are written to a .tap on the
     SD card named after the header.
 
     The Z80 reads nothing back — SA-BYTES ends with EI/RET — so there is
     no status byte to send, and sending one would leave an orphan in TX.
+    A SAVE that fails is logged and not written; there is no way to tell
+    the Spectrum, except that a SAVE refused at the header never gets
+    READY for its data block, and the ROM gives Report R after ~3.8 s.
+
+    Returns MQ, TSP, log_entries, nxt, as LOAD_ZX.
+
+    No watchdog (issue #51): every wait is RX_BLOCK or RX_WORD, bounded.
+    Both blocks' parity is checked, and a header or data block that
+    stops, or fails its check, writes nothing -- as SAVE_TS.
 
     DUAL-PORT MIGRATION (2026-09):
       - Was ending with ENA_MQ(), which rebuilt the OLD single-port
         TS_IO state machine at 15 MHz and handed it back to ZX48_IO as
-        the session's SM: after one ZX SAVE the bus stopped decoding
-        $0E/$0F apart for the rest of the session. Now ENA_MQ_DUAL().
-      - RX reads are masked to 8 bits like SAVE_TS. The RX word is 9
-        bits (bit 8 = A0), and an unmasked value >= 256 assigned into a
-        bytearray raises and drops the Pico to the REPL.
+        the session's SM. Now ENA_MQ_DUAL().
+      - RX reads are masked to 8 bits (RX_BLOCK does it). The RX word is
+        9 bits (bit 8 = A0), and an unmasked value >= 256 assigned into
+        a bytearray raises and drops the Pico to the REPL.
     """
-    global kill
-    global dead
-    global busy
-    
     global log_entries
     log_entries = ""
-    
-    dead = False
-    
-    r1 = range(21)
-    crc_h = 0
-    ant = 0
-    wrt = MQ.put
-    
+
+    def fail(why, drain):
+        LOG_ADD("ERROR: ZX SAVE: %s; nothing saved." % why, 2, TSP.LOG_LEVEL)
+        if drain:
+            # Swallow the rest of what the ROM is sending -- including the
+            # data block's 'S', which then never gets READY -- so none of
+            # it is dispatched as a command.
+            DRAIN_REFUSED_SAVE(MQ, 1500)
+        return MQ, TSP, log_entries, -1
+
     hdr = bytearray(21)
-    
-    START_WATCHDOG(5, MQ, TSP)
 
-    # Raise READY: we are in the handler and listening. The Z80's 'S'
-    # dropped Y (PIO auto-busy), and a ROM patched to poll $0F after 'S'
-    # waits here instead of guessing with a ~1ms delay — which is not
-    # long enough to cover ZX48_IO's dispatch plus this thread spawn.
+    # READY: we are here and listening. The Z80's 'S' dropped Y (PIO
+    # auto-busy), and the ZX v2 ROM polls $0F before sending.
     MQX(MQ, "mov(y, invert(null))")
+    code, got = RX_BLOCK(MQ, hdr, 21, ZX_STALL_MS, ZX_STALL_MS)
+    if code != RXB_OK:
+        return fail("the header block stopped after %d of 21 bytes" % got, False)
+    if hdr[0] != 17 or hdr[1] != 0 or hdr[2] != 0 or _xor(hdr, 2, 21):
+        return fail("not a tape header (length %d, flag %d, parity %s)" % (
+            hdr[0] + 256 * hdr[1], hdr[2], "bad" if _xor(hdr, 2, 21) else "ok"), True)
 
-    for i in r1:
-        hdr[i] = MQ.get() & 0xFF
+    n = hdr[14] + 256 * hdr[15]
+    try:
+        gc.collect()
+        blk = bytearray(n + 4)
+    except MemoryError:
+        return fail("no room for a %d-byte block" % n, True)
 
-    long = (256*hdr[15]) + hdr[14] + 4
-    r2 = range(long)
-
-    blk = bytearray(long)
-
-    MQ.get()                     # the 'S' that opens the data block
+    w = RX_WORD(MQ, ZX_BLOCK_GAP_MS)
+    if w != 83:
+        LOG_ADD("ERROR: ZX SAVE: no data block after the header (%s); nothing saved."
+                % ("silence" if w < 0 else "got 0x%02X" % (w & 0xFF)), 2, TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries, w
     MQX(MQ, "mov(y, invert(null))")   # READY again for the data block's poll
 
-    for i in r2:
-        blk[i] = MQ.get() & 0xFF
-        if kill:
-            LOG_ADD("ERROR: SAVE_ZX failed! " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 2, TSP.LOG_LEVEL)
-            dead = True
-            blk = []
-            
-            return MQ, TSP, log_entries
+    code, got = RX_BLOCK(MQ, blk, n + 4, ZX_STALL_MS, ZX_STALL_MS)
+    if code != RXB_OK:
+        return fail("the data block stopped after %d of %d bytes" % (got, n + 4), False)
+    if blk[0] + 256 * blk[1] != n or _xor(blk, 2, n + 4):
+        return fail("the data block failed its check (length %d of %d, parity %s)" % (
+            blk[0] + 256 * blk[1], n, "bad" if _xor(blk, 2, n + 4) else "ok"), False)
 
-    dead = True
-    
-    while(MQ.rx_fifo() != 0):
-        fff = MQ.get()
+    name, _ = SAVE_NAME(hdr)
+    if not name or any(c in '?:*\\/|"<>' for c in name):
+        return fail("%r is not a usable file name" % name, False)
 
-    hdr[0] = 19
-    
-    l_blk = len(blk) - 2
-    
-    blk1 = int (l_blk / 256)
-    blk0 = l_blk - (blk1 * 256)
-    
-    blk[0] = blk0
-    blk[1] = blk1
-    
-    filename = hdr[4:14].decode()
-    filename = filename.strip() + ".tap"
-    filename = TSP.cur_path + "/" + filename
-    
-    ENA_SD()
-    
-    with open(filename, 'wb') as f1:
-        f1.write(hdr)
-        
-    with open(filename, 'ab') as f1:
-        f1.write(blk)
-        
-    hdr = []
-    blk = []
-    
-    while(MQ.tx_fifo() != 0):
+    hdr[0] = 19                     # TAP block lengths: flag + content + CRC
+    blk[0] = (n + 2) & 0xFF
+    blk[1] = (n + 2) >> 8
+
+    filename = TSP.cur_path + "/" + name + ".tap"
+    saved = False
+    try:
+        ENA_SD()
+        with open(filename, "wb") as f1:
+            f1.write(hdr)
+            f1.write(blk)
+        saved = True
+    except Exception as e:
+        LOG_ADD("ERROR: ZX SAVE: writing %s failed: %r" % (filename, e), 2, TSP.LOG_LEVEL)
+    try:
+        os.umount("/sd")
+    except Exception:
         pass
-    
-    while(MQ.rx_fifo() != 0):
-        fff = MQ.get()
-        
-    os.umount("/sd")
     # ENA_SD() re-claimed GPIO 2-4 for SPI, so the bus SM has to be
-    # rebuilt before ZX48_IO's loop reads the FIFO again. DUAL-PORT: this
-    # was ENA_MQ(), which rebuilt the single-port TS_IO SM at 15 MHz.
+    # rebuilt before ZX48_IO's loop reads the FIFO again.
     MQ = ENA_MQ_DUAL(MQ)
 
-    LOG_ADD("INFO: Finished SAVE ZX successfully " + str(MQ.tx_fifo()) + " " + str(MQ.rx_fifo()), 0, TSP.LOG_LEVEL)
+    if saved:
+        LOG_ADD("INFO: ZX SAVE wrote %s (%d bytes)" % (filename, n), 0, TSP.LOG_LEVEL)
 
-    return MQ, TSP, log_entries
-
-
-def CORE1_BUSY():
-    """True while this module's WATCHDOG thread still owns core1.
-
-    THERE ARE TWO SEPARATE `busy` VARIABLES AND THEY ARE EASY TO CONFUSE.
-    tspico.py imports only named symbols from this module, and `busy` is
-    not one of them, so its own `global busy` binds a DIFFERENT
-    module-level variable -- the one its SAVE_LOG / BLINK_LED / CHK_STATUS
-    threads set. A `while busy:` in tspico.py therefore does NOT wait for
-    the LVM watchdog here, however much it reads like it does.
-
-    That matters because core1 is one resource: _thread.start_new_thread
-    raises OSError "core1 in use" if ANY of those threads is still
-    running. Code that wants to know whether it is safe to spawn has to
-    consult both flags -- its own `busy` and this function.
-
-    NOTE the three `while busy:` waits in tspico.py's main LVM loop are
-    subject to exactly this, and are deliberately NOT changed here: they
-    are unbounded spins, so making them wait on something that can
-    actually be True would convert a no-op into a potential hang. They are
-    left as-is until someone can test that on hardware. START_WATCHDOG()
-    tolerating a failed spawn is what actually protects those paths today.
-    """
-    return busy
-
-
-def START_WATCHDOG(secs, MQ, TSP):
-    """Spawn the core1 WATCHDOG for an LVM transaction. Returns True if it ran.
-
-    ALWAYS use this instead of calling _thread.start_new_thread(WATCHDOG,
-    ...) directly. An unguarded spawn is the nastiest failure mode in this
-    firmware: if core1 is still finishing a previous watchdog's cleanup
-    -- which ends with a ~1 second BLINK() -- the call raises OSError
-    "core1 in use", and with no handler it propagates out of TS2068_IO
-    into main.py, which has no try/except either. The Pico drops to a
-    REPL and the user sees "locked up, LED stopped blinking". tspico.py
-    guards its SAVE_LOG spawn for exactly this reason; the LVM handlers
-    did not.
-
-    Losing the watchdog for one transaction is a far smaller problem than
-    losing the dispatcher, so a failed spawn is logged and the caller
-    proceeds unguarded. We deliberately do NOT retry-with-sleep: by the
-    time a caller needs the watchdog the Z80 may be moments from
-    streaming, and the RX FIFO is only 4 deep -- a few ms of sleep here
-    would drop bytes, trading a rare hang for routine corruption.
-
-    `kill` is cleared HERE, on core0, before the thread starts. WATCHDOG
-    clears it too, but on core1 -- and the caller's drain loop reads
-    `kill` as soon as this returns. Clearing it on the spawning core
-    removes that race instead of documenting it (see WATCHDOG's own
-    comment about the window).
-    """
-    global kill
-
-    kill = False
-    try:
-        _thread.start_new_thread(WATCHDOG, (secs, MQ, TSP))
-        return True
-    except OSError:
-        LOG_ADD("WARNING: core1 busy, running without a watchdog",
-                1, TSP.LOG_LEVEL)
-        return False
-
-
-def WATCHDOG(secs, MQ, TSP):
-    """Background timeout watcher for LVM transactions. Runs on core1.
-
-    Spawned by LOAD_TS / SAVE_TS via _thread.start_new_thread() right
-    before the bulk transfer begins. Its job is to detect when a
-    transaction has hung (e.g., user pressed BREAK, Z80 crashed, bus
-    glitch) and force-clean the FIFOs so the system can continue.
-
-    PROTOCOL between this thread (core1) and the main handler (core0):
-
-        Main handler                          WATCHDOG thread
-        ─────────────                          ───────────────
-        sets dead = False
-        spawns WATCHDOG(secs, MQ, TSP)
-                                               sets kill = False
-                                               sets busy = True
-                                               loops checking:
-                                                 - secs elapsed?  → cleanup
-                                                 - dead == True?   → exit cleanly
-        ... does work ...
-        sets dead = True (= "I'm done")
-                                               notices dead, breaks loop
-                                               sets busy = False
-                                               returns
-        observes busy == False
-        proceeds to next transaction
-
-    If the main handler doesn't set dead = True within `secs` seconds:
-      1. Log the abort.
-      2. Drain the PIO state machine's TX FIFO (pull noblock; clear OSR).
-      3. Drain the RX FIFO.
-      4. Bounce the SM (active off → BLINK warning → active on).
-      5. Set kill = True so the main handler's `if kill:` checks fire.
-      6. Wait for main handler to acknowledge (sets dead = True).
-      7. Set busy = False to release the dispatcher.
-
-    Args:
-        secs: timeout in seconds (typically 3 for LOAD, 5 for SAVE).
-        MQ:   TS_IO_DUAL state machine.
-        TSP:  PICO_STATUS for log level access.
-    """
-    global kill, dead, busy
-
-    led = Pin(25, Pin.OUT)
-
-    # Initialize the cross-thread flags. Doing this here (rather than
-    # at module level) ensures every transaction starts with a clean
-    # state. Note: there's a small race window where the main handler
-    # could reference `kill` BEFORE this line executes — that's why we
-    # also initialize them at module level (see top of file).
-    kill = False
-    busy = True
-
-    LOG_ADD("INFO: Starting watchdog...", 0, TSP.LOG_LEVEL)
-    secs = secs * 1_000_000     # convert to microseconds for ticks_us
-    led.value(1)
-    t_init = time.ticks_us()
-
-    # Polling loop: tight check, no sleep. We need to react quickly
-    # when `dead` flips True so the dispatcher can resume promptly.
-    while (time.ticks_us() - t_init) < secs:
-        if dead:
-            break
-
-    # Two exit paths from the loop above:
-    #   (a) `dead` went True before timeout → normal completion, skip cleanup.
-    #   (b) `secs` elapsed with dead still False → transaction hung; clean up.
-    if not dead:
-        LOG_ADD("ERROR: Abnormal termination. Clearing TX/RX FIFO....",
-                2, TSP.LOG_LEVEL)
-
-        # Pump PIO instructions to drain whatever's stuck in the SM
-        # internals (OSR, ISR, FIFOs). The kill = True flag tells the
-        # main handler to abort its current loop iteration.
-        while not dead:
-            MQX(MQ, "pull (noblock)")     # drain TX FIFO into OSR
-            MQX(MQ, "mov (osr, null)")    # discard OSR contents
-            MQX(MQ, "mov (isr, null)")    # clear ISR
-            MQX(MQ, "push (noblock)")     # push (nothing) to RX
-            kill = True                   # signal main handler
-
-        # Drain Python-side FIFOs.
-        while MQ.rx_fifo() != 0:
-            MQ.get()
-        while MQ.tx_fifo() != 0:
-            MQX(MQ, "pull (noblock)")
-            MQX(MQ, "set (osr, null)")
-
-        # Bounce the SM to flush any latched state, then BLINK to give
-        # the user a visual indication something went wrong.
-        MQ.active(0)
-        LOG_ADD("INFO: TX/RX FIFO successfully cleared. Operation finished",
-                0, TSP.LOG_LEVEL)
-        BLINK()
-        MQ.active(1)
-        LOG_ADD("INFO: Ending watchdog. Operation ended normally",
-                0, TSP.LOG_LEVEL)
-
-    # Always reset flags before exiting so the next transaction starts clean.
-    kill = False
-    busy = False
-
-    led.value(0)
+    return MQ, TSP, log_entries, -1

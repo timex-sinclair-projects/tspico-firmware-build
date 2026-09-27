@@ -309,13 +309,10 @@ def main():
         tsp.offset, tsp.tap_idx = 0, 0
 
         print("no watchdog (stage 5)")
-        started = []
-        real_start = io.START_WATCHDOG
-        io.START_WATCHDOG = lambda *a: started.append(a)
         load(pio, 0x00, len(header))
         r, _ = load(pio, 0xFF, len(data))
-        io.START_WATCHDOG = real_start
-        check(r == "ok" and not started, "header + data load without starting a watchdog (%s)" % started)
+        gone = [f for f in ("START_WATCHDOG", "WATCHDOG", "ABORT_TX", "STOP_WATCHDOG") if hasattr(io, f)]
+        check(r == "ok" and not gone, "header + data load; no watchdog left in tspico_io (%s)" % gone)
         tsp.offset, tsp.tap_idx = 0, 0
         load(pio, 0x00, len(header))
 
