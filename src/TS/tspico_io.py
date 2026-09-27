@@ -20,7 +20,6 @@ from TS.sdcard import *
 #
 # Initialize them here so the race is impossible:
 # ---------------------------------------------------------------------------
-_KILL_CHECK_EVERY = const(64)   # bytes per chunk in the SAVE data drain
 
 kill = False        # set True by WATCHDOG to abort a hung transaction
 busy = False        # core1 watchdog activity flag
@@ -209,6 +208,57 @@ def RX_WORD(MQ, stall_ms):
             if time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
                 return -1
     return MQ.get()
+
+
+# RX_BLOCK's result codes
+RXB_OK = const(0)       # all n bytes arrived
+RXB_ABORT = const(1)    # a write to port 0Fh (BREAK / SYNC); the Z80 waits for IDLE
+RXB_KILL = const(2)     # the watchdog fired
+RXB_STALL = const(3)    # silence: first_ms before the first byte, stall_ms after
+
+
+def RX_BLOCK(MQ, buf, n, first_ms, stall_ms):
+    """Take a SAVE data block of n bytes from the Z80 into buf (a bytearray).
+    Returns (code, words taken), code one of RXB_*.
+
+    The Z80's SAVE loop OUTs a byte every ~43 us with no handshake and the RX
+    FIFO holds 4, so the per-byte path is only: test the FIFO, get, store.
+    The port-0Fh test, the watchdog flag and the clock run only when the FIFO
+    is empty -- exactly when the Z80 has paused or stopped. A 0Fh write
+    (0x100 | value) is always the last thing it sends before it stops, so it
+    is the newest word then; `w` keeps it (buf only holds the low 8 bits).
+
+    Allocation-free per byte: the bound methods are taken ONCE per call.
+    Storing one per byte (as TX_ROOM once did) allocates 16 bytes each time,
+    and the GCs that follow freeze the Pico mid-block -- see alloc_probe.py.
+    """
+    rx = MQ.rx_fifo
+    get = MQ.get
+    got = 0
+    w = 0
+    limit = first_ms
+    while got < n:
+        if rx():
+            w = get()
+            buf[got] = w & 0xFF
+            got += 1
+        else:
+            if w & PORT_0F:
+                return RXB_ABORT, got
+            t0 = time.ticks_ms()
+            while not rx():
+                if kill:
+                    return RXB_KILL, got
+                if time.ticks_diff(time.ticks_ms(), t0) >= limit:
+                    return RXB_STALL, got
+            limit = stall_ms
+    if w & PORT_0F:
+        return RXB_ABORT, got
+    return RXB_OK, got
+
+
+# The SAVE header block, as 9-bit words (bit 8 = a port-0Fh write).
+_SAVE_HDR_RAW = array("H", bytes(42))
 
 
 def OPEN_NOFILE_TAP():
@@ -1130,7 +1180,12 @@ def LOAD_TS(pre, MQ, TSP):
 
     # ---- Spawn watchdog so a misbehaving Z80 doesn't lock the loop ----
     dead = False
-    START_WATCHDOG(3, MQ, TSP)
+    # Budget scaled to the block. Hardware 2026-09-26: the Z80 read TS-Pico
+    # Commander's 16,096-byte block at ~190 us/byte -- still reading when a
+    # flat 3 s budget killed it ~220 bytes from the end (Report R). TX_ROOM
+    # and RX_WORD bound real silence on their own; this only has to outlast
+    # a slow but live Z80: 3 s + 1 s per 4K.
+    START_WATCHDOG(3 + totbytes // 4096, MQ, TSP)
 
     wrt = MQ.put
 
@@ -1177,6 +1232,9 @@ def LOAD_TS(pre, MQ, TSP):
     # per-byte fast path is unchanged.
     primed = False
     t_ready = time.ticks_ms()   # reset when READY actually rises
+    # Z80 read-rate profile (issue #51 diagnostic): ms after READY at every
+    # 1024th byte queued. One AND per byte; the clock is read 1/1024 bytes.
+    prof = array("I", bytes(4 * ((totbytes >> 10) + 1)))
 
     if hdr is not None:
         # Header block: stream from the in-memory buffer (already loaded).
@@ -1218,6 +1276,8 @@ def LOAD_TS(pre, MQ, TSP):
                     dry_at = sent
             put(el[0])
             sent += 1
+            if not sent & 0x3FF:
+                prof[sent >> 10] = time.ticks_diff(time.ticks_ms(), t_ready)
     if not primed:
         MQ.exec("mov(y, invert(null))")                 # a block shorter than TX
 
@@ -1236,6 +1296,15 @@ def LOAD_TS(pre, MQ, TSP):
             why = 1
         else:
             ECHO_KEEP(echo, w)
+
+    if totbytes >= 8192:
+        # Where the time went: ms per 1K block. Near 52 = the ROM loop's
+        # 178 T-states/byte; far above it = the Z80 was slowed down.
+        k = sent >> 10
+        LOG_ADD("DIAG: LOAD %d bytes, %s; ms/KB after READY: %s"
+                % (totbytes, "ok" if not why and echo[0] >= 2 else "why=%d" % why,
+                   " ".join(str(prof[i] - prof[i - 1] if i > 1 else prof[1])
+                            for i in range(1, k + 1))), 2, TSP.LOG_LEVEL)
 
     if dry:
         # TX ran empty after READY: each time the Z80 may have read 0x00.
@@ -1686,7 +1755,7 @@ def DRAIN_REFUSED_SAVE(MQ, quiet_ms=500):
     return n
 
 
-def SAVE_TS(MQ, TSP):
+def SAVE_TS(MQ, TSP, pre=None):
     """Receive a Z80 SAVE transaction via Gustavo's TPI v2.4 protocol.
 
     Called by the main I/O dispatcher when the Z80 has issued a SAVE
@@ -1735,10 +1804,24 @@ def SAVE_TS(MQ, TSP):
       [1] and [2]. The session ID is a TPI extension on top of the
       original ZX tape format; standard ZX TAP CRC doesn't include them.
 
+    READY + ABORT (issue #51, stage 3):
+      The dispatcher does NOT say READY after a SAVE pre-header any more:
+      the Z80 streams the 21-byte header block the moment it sees READY,
+      ~43 us a byte into a 4-deep FIFO, so READY is raised here, straight
+      before the capture loop -- after the TLM print and gc.collect(). The
+      header and data block are taken by RX_CAPTURE / RX_BLOCK, which end on
+      a port-0Fh write (the 1.8b ROM's BREAK or SYNC) or on silence instead
+      of blocking in MQ.get(). A BREAK discards the partial SAVE -- nothing
+      is written; a stall sets TSP.save_recovered so the dispatcher answers
+      RECOVERED (the 1.8b ROM's Report T). Either way the dispatcher's
+      ACTIVATE_MQ + 0x01 re-arm afterwards is the single way back to idle.
+
     Args:
         MQ:  TS_IO_DUAL state machine.
         TSP: PICO_STATUS instance. We use TSP.f_name, .append, .cur_path,
-             .VERBOSE, and .LOG_LEVEL.
+             .VERBOSE, and .LOG_LEVEL; SAVE_TS sets TSP.save_recovered.
+        pre: the pre-header, for the session check (bytes 3-4 are repeated
+             as bytes 1-2 of both blocks; 0000 = not from BASIC, unchecked).
 
     Returns:
         (MQ, TSP, log_entries, saved) for the dispatcher's calling
@@ -1764,16 +1847,46 @@ def SAVE_TS(MQ, TSP):
                                       # module-level import here would be circular
     dead = False
     wrt = MQ.put
+    TSP.save_recovered = False
     gc.collect()
     TLM("SAVE_TS enter", "f_name=%r append=%s" % (TSP.f_name, TSP.append))
 
     # ============================================================
     # Phase 2: receive the 21-byte HEADER block
     # ============================================================
+    # READY here, not in the dispatcher: the Z80 sends all 21 bytes the
+    # moment it sees it, and nothing may run between this and the capture.
+    raw = _SAVE_HDR_RAW
+    MQ_STATUS(MQ, "mid")
+    got = RX_CAPTURE(MQ, raw, 21, 1000)
+    if got != 21:
+        dead = True
+        if got < 0:
+            LOG_ADD("INFO: SAVE stopped by BREAK in the header block "
+                    "(%d of 21 bytes); nothing written." % (-got - 1),
+                    1, TSP.LOG_LEVEL)
+        else:
+            TSP.save_recovered = True
+            LOG_ADD("ERROR: SAVE header block stalled after %d of 21 bytes "
+                    "-> RECOVERED." % got, 2, TSP.LOG_LEVEL)
+        TLM("SAVE_TS EXIT header", "got=%d" % got)
+        return MQ, TSP, log_entries, False
     hdr = bytearray(21)
     for i in range(21):
-        hdr[i] = MQ.get() & 0xFF
+        hdr[i] = raw[i] & 0xFF
     TLM("SAVE_TS header read", "bytes=%s" % " ".join("%02X" % b for b in hdr))
+
+    # SESSION CHECK. The pre-header's bytes 3-4 come back as bytes 1-2 of
+    # the header block; a mismatch means the bytes are misaligned (a lost
+    # or stray byte), so nothing after this can be trusted. 0000 means the
+    # SAVE didn't come from BASIC and carries no session.
+    if pre is not None and (pre[3] or pre[4]) and (hdr[1] != pre[3] or hdr[2] != pre[4]):
+        dead = True
+        _fl = REFUSE_SAVE(MQ, 0x02)          # -> Report R
+        LOG_ADD("ERROR: SAVE refused: header session %02X%02X, pre-header "
+                "%02X%02X; drained %d" % (hdr[2], hdr[1], pre[4], pre[3], _fl),
+                2, TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries, False
 
     # Verify CRC: XOR of [0] + [3..19] should equal hdr[20].
     # (Skip session-ID bytes at [1] and [2] — TPI extension, not in CRC.)
@@ -1896,7 +2009,9 @@ def SAVE_TS(MQ, TSP):
     # the READY put the thread creation inside the window where bytes
     # are already arriving into a 4-deep RX FIFO.
     # ============================================================
-    _wd = START_WATCHDOG(5, MQ, TSP)
+    # 3 s + 1 s per 4K: the Z80 SAVEs at ~43 us/byte, and RX_BLOCK bounds
+    # real silence on its own (see LOAD_TS for why a flat budget failed).
+    _wd = START_WATCHDOG(3 + long // 4096, MQ, TSP)
     TLM("SAVE_TS watchdog spawned", "ok=%s long=%d, waiting for data" % (
         _wd, long))
 
@@ -1905,56 +2020,58 @@ def SAVE_TS(MQ, TSP):
     # Z80 reads it after polling $0F (Y=READY).
     # ============================================================
     wrt(0x01)
-    MQ.exec("mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from header phase)
+    # READY, transaction still open: the Z80 reads the 0x01 and streams the
+    # data block straight away (no ready-wait before it), so the capture loop
+    # must follow at once.
+    MQ_STATUS(MQ, "mid")
 
-    # The Z80 takes up to ~1 second to start sending the data block
-    # after reading the mid-status (it does internal processing). If we
-    # wait longer than 1s with no data, assume the user pressed BREAK
-    # or something else aborted the SAVE.
-    t_init = time.ticks_us()
-    while MQ.rx_fifo() == 0:
-        if time.ticks_diff(time.ticks_us(), t_init) >= 1_000_000:
-            TLM("SAVE_TS EXIT no data after 1s")
-            # Refuse rather than write 0x01 0x01. If the Z80 aborted
-            # (BREAK) it isn't reading and the byte is harmless -- the
-            # dispatcher's ACTIVATE_MQ discards it. If it was merely slow,
-            # claiming OK meant it went on to stream a data block into a
-            # returned handler, jamming RX for the next command.
-            dead = True
-            _fl = REFUSE_SAVE(MQ, 0x02)  # -> Report R "Tape loading error"
-            LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s), drained %d"
-                    % _fl, 2, TSP.LOG_LEVEL)
-            _WAIT_CORE1(TSP.LOG_LEVEL)
-            return MQ, TSP, log_entries, False
+    # The Z80 can take up to ~1 s to start the data block after reading the
+    # status (it does internal processing), so the first byte gets 1 s;
+    # after that, 1 s of silence mid-block means it has gone.
+    why, got = RX_BLOCK(MQ, blk, long, 1000, 1000)
 
-    # Drain the data block. Z80 writes ~30µs per byte; MQ.get() blocks
-    # until each byte arrives, paced by the bus.
-    #
-    # The kill check is deliberately NOT per-byte any more. src/CLAUDE.md's
-    # two-phase capture rule says do no Python work inside a drain: RX is
-    # 4 deep and a byte lands every ~30µs, so every extra bytecode spends
-    # margin we may need. A per-byte check bought nothing in return --
-    # a genuinely hung Z80 leaves us blocked *inside* MQ.get(), where the
-    # check is never reached. What actually unblocks us is the watchdog's
-    # `push(noblock)` pump, and it pumps continuously until we set `dead`,
-    # so noticing within a chunk is just as good.
-    i = 0
-    while i < long:
-        n = long - i
-        if n > _KILL_CHECK_EVERY:
-            n = _KILL_CHECK_EVERY
-        for j in range(i, i + n):
-            blk[j] = MQ.get() & 0xFF
-        i += n
-        if kill:
-            TLM("SAVE_TS EXIT killed by watchdog", "at byte %d/%d" % (i, long))
-            # No status bytes here: the watchdog is pumping pull(noblock)
-            # through TX while it waits for `dead`, so anything staged now
-            # is discarded. ABORT_TX sets `dead` and waits for core1 to
-            # finish bouncing the SM (its BLINK alone is ~1s) before we
-            # let the dispatcher touch it. This is what LOAD_TS does.
-            ABORT_TX(TSP.LOG_LEVEL, "SAVE_TS")
-            return MQ, TSP, log_entries, False
+    if why == RXB_KILL:
+        TLM("SAVE_TS EXIT killed by watchdog", "at byte %d/%d" % (got, long))
+        # No status bytes here: the watchdog is pumping pull(noblock)
+        # through TX while it waits for `dead`, so anything staged now
+        # is discarded. ABORT_TX sets `dead` and waits for core1 to
+        # finish bouncing the SM (its BLINK alone is ~1s) before we
+        # let the dispatcher touch it. This is what LOAD_TS does.
+        ABORT_TX(TSP.LOG_LEVEL, "SAVE_TS")
+        return MQ, TSP, log_entries, False
+
+    if why == RXB_STALL and got == 0:
+        TLM("SAVE_TS EXIT no data after 1s")
+        # Refuse rather than write 0x01 0x01. If the Z80 aborted
+        # (BREAK on a ROM without the 0Fh abort) it isn't reading and the
+        # byte is harmless -- the dispatcher's ACTIVATE_MQ discards it. If
+        # it was merely slow, claiming OK meant it went on to stream a data
+        # block into a returned handler, jamming RX for the next command.
+        dead = True
+        _fl = REFUSE_SAVE(MQ, 0x02)  # -> Report R "Tape loading error"
+        LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s), drained %d"
+                % _fl, 2, TSP.LOG_LEVEL)
+        _WAIT_CORE1(TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries, False
+
+    if why:
+        # BREAK (a port-0Fh write; the 1.8b ROM checks every 256 bytes) or
+        # the Z80 went silent mid-block. The partial SAVE is discarded --
+        # nothing is written to SD or flash. The Z80 is waiting for READY +
+        # IDLE (BREAK) or has gone (stall); the dispatcher's re-arm after we
+        # return is the way back, with RECOVERED for a stall.
+        STOP_WATCHDOG(TSP.LOG_LEVEL)
+        dead = True
+        if why == RXB_ABORT:
+            LOG_ADD("INFO: SAVE stopped by BREAK after the Z80 sent %d of %d "
+                    "bytes; nothing written." % (max(0, got - 1), long),
+                    1, TSP.LOG_LEVEL)
+        else:
+            TSP.save_recovered = True
+            LOG_ADD("ERROR: SAVE data block stalled after %d of %d bytes -> "
+                    "RECOVERED; nothing written." % (got, long), 2, TSP.LOG_LEVEL)
+        TLM("SAVE_TS EXIT data", "why=%d got=%d/%d" % (why, got, long))
+        return MQ, TSP, log_entries, False
     TLM("SAVE_TS data read done", "%d bytes" % long)
 
     # ============================================================
@@ -1965,6 +2082,35 @@ def SAVE_TS(MQ, TSP):
     # 0x00 and reports "Report J / Invalid I/O Device". So we MUST do
     # these two writes BEFORE the slow file-save below.
     # ============================================================
+    # DATA PARITY. XOR of the flag and the content (skipping the 2 session
+    # bytes) must equal the last byte. The Z80 computed it over what it
+    # sent, so a mismatch means bytes were lost or corrupted in transit --
+    # only we can see that. Answer Report R and write nothing, instead of
+    # "0 OK" over a file that won't LOAD. Runs after the capture, while the
+    # Z80 waits for its final status (it allows ~20 s).
+    par = blk[0]
+    for i in range(3, long - 1):
+        par ^= blk[i]
+    if par != blk[long - 1]:
+        wrt(0x02)    # final status -> Report R
+        wrt(0x01)    # next command's pre-load
+        MQ_STATUS(MQ, "idle")
+        dead = True
+        # Wait (bounded) for the Z80 to READ the 02 before returning: the
+        # dispatcher's ACTIVATE_MQ rebuilds the SM, which throws an unread
+        # TX FIFO away and stages its own 0x01 -- and the Z80 would print
+        # "0 OK" for a SAVE that wrote nothing. Same wait as the success
+        # path's before ENA_SD.
+        _tw = time.ticks_ms()
+        while MQ.tx_fifo() > 1:
+            if time.ticks_diff(time.ticks_ms(), _tw) >= 300:
+                break
+        _WAIT_CORE1(TSP.LOG_LEVEL)
+        LOG_ADD("ERROR: SAVE data block parity %02X, expected %02X -> Report R; "
+                "nothing written." % (blk[long - 1], par), 2, TSP.LOG_LEVEL)
+        TLM("SAVE_TS EXIT data parity", "got %02X want %02X" % (blk[long - 1], par))
+        return MQ, TSP, log_entries, False
+
     wrt(0x01)        # final status — Z80 reads this and reports "0 OK"
     wrt(0x01)        # SENTINEL — do not remove. Nominally the pre-load for
                      # the next command's status read, but the dispatcher's

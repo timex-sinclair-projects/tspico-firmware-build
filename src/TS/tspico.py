@@ -4704,9 +4704,14 @@ def TS2068_IO():                                                         # Main 
             # reading, and the Pico waits on a full TX for the watchdog.
             # Seen on hardware after a BREAK. The ROM's ready-wait allows
             # ~20 s, so saying READY later costs nothing.
+            #
+            # And SAVE (stage 3): the Z80 streams the 21-byte header block,
+            # ~43 us a byte into a 4-deep RX FIFO, the moment it sees READY
+            # -- while this loop was still logging and SAVE_TS was still in
+            # its TLM print and gc.collect(). SAVE_TS says READY straight
+            # before its capture loop.
             # ──────────────────────────────────────────────────────────────
-            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10
-                    and not (pre[0] == 0 and pre[1] == 0)):
+            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10):
                 MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
@@ -4733,7 +4738,7 @@ def TS2068_IO():                                                         # Main 
                 pidx = TSP.tap_idx
                 # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
-                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP)
+                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP, pre)
                 # log_entries += new_logs
                 # log_entries.extend(new_logs) # For when SAVE_TS returns an array
                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
@@ -4858,10 +4863,12 @@ def TS2068_IO():                                                         # Main 
                 # the first moment in this branch that no further SD access
                 # is pending. ACTIVATE_MQ leaves Y=BUSY, so the order is
                 # fixed: rebuild the SM, stage the status byte the next
-                # pre-header phase will read, and only then signal ready.
+                # pre-header phase will read, and only then signal ready --
+                # READY + idle, or RECOVERED when SAVE_TS gave up on a Z80
+                # that went silent mid-transfer (the 1.8b ROM reports T).
                 ACTIVATE_MQ()
                 MQ.put(0x01)
-                MQ_READY()
+                MQ_STATUS(MQ, "recovered" if getattr(TSP, "save_recovered", False) else "idle")
 
                 led.value(0)
                 
