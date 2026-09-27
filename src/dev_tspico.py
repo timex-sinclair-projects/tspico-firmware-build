@@ -357,11 +357,11 @@ from TS.tspico_io import (
     TS_IO_DUAL,                          # was: TS_IO (single-port)
     LOAD_TS, LOAD_ZX, LOAD_ZX_C,
     SAVE_TS, SAVE_ZX,
-    CORE1_BUSY,                          # core1 flag lives in tspico_io, not here
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
-    RX_BLOCK, RXB_ABORT,                 # printer bodies
+    RX_BLOCK, RXB_ABORT, RXB_OK,         # printer bodies, ZX tpi:
+    ZX_FLUSH_TX, ZX_ROOM, ZX_STALL_MS,   # ZX48 mode (issue #51 stage 6)
     MQX,                                 # fast MQ.exec (9.6 ms -> 18 us)
 )
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
@@ -3558,6 +3558,35 @@ def ResolveIndexName(name):
     return name, -1
 
 
+def LOAD_TPI(name, only_tap=False):
+    """LOAD "tpi:<name>": mount a file from the current folder. Returns
+    (msg, name, status) for SEND_MSG -- or, in ZX48 mode, ZX_TPI.
+
+    name is a file name (any case), a number from the listing, or
+    dirinfo.tap. only_tap (ZX48 mode) refuses anything but a .tap: .ROM,
+    .DCK and .BIN mount a TS-2068 updater program instead.
+    """
+    if name == "dirinfo.tap":
+        if MOUNT_FILE("%s/dirinfo.tap" % TSP.cur_path):
+            return "Mounting dir info: ", name, _1_OK
+        msg = "Error mounting file: "
+        LOG(msg + name, 2)
+        return msg, name, _2_R_Tape_load
+
+    name, idx = ResolveIndexName(name)
+    if idx < 0 and name.upper() in files_upper:                                 # Is name a valid file?
+        idx = files_upper.index(name.upper())
+    if idx < 0:
+        msg = "File does not exist: "
+        LOG(msg + name, 2)
+        return msg, name, _3_F_Invalid_file                                     # If none of the above, raise error
+    if only_tap and files[idx][-4:].upper() != ".TAP":
+        return "Only .tap files in ZX48 mode: ", files[idx], _4_Q_Parameter
+    if MOUNT_FILE("%s/%s" % (TSP.cur_path, files[idx])):
+        return "File mounted OK", name, _1_OK
+    return "Error mounting file:", name, _4_Q_Parameter
+
+
 def SEND_MSG_PROMPT_YN(prompt, echo = True):
 
     # Prints prompt string, waits for a character and returns that char
@@ -4362,41 +4391,9 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
 
         if load_cmd:                                                                                    # Is it a "LOAD:tpi:..." command.....?
 
-            if rest_cmd == "dirinfo.tap":
-                if MOUNT_FILE("%s/dirinfo.tap" % TSP.cur_path):
-                    msg = "Mounting dir info: "
-                    status = _1_OK
-                else:
-                    msg = "Error mounting file: "
-                    status = _2_R_Tape_load
-                    LOG(msg + rest_cmd, 2)
+            msg, rest_cmd, status = LOAD_TPI(rest_cmd)
+            SEND_MSG(msg, rest_cmd, status)
 
-                # ACTIVATE_MQ()
-                SEND_MSG(msg, rest_cmd, status)
-
-            else:
-                rest_cmd, idx = ResolveIndexName(rest_cmd)
-                if idx < 0:
-                    if rest_cmd.upper() in files_upper:                                                                                  # Is rest_cmd a valid file?
-                        idx = files_upper.index(rest_cmd.upper())
-
-                if idx >= 0:
-                
-                    if MOUNT_FILE("%s/%s" % (TSP.cur_path, files[idx])):
-                        msg = "File mounted OK"
-                        status = _1_OK
-                    else:
-                        msg = "Error mounting file:"
-                        status = _4_Q_Parameter
-                    
-                    # ACTIVATE_MQ()
-                    SEND_MSG(msg, rest_cmd, status)
-                
-                else:
-                    msg = "File does not exist: "
-                    SEND_MSG(msg, rest_cmd, _3_F_Invalid_file)                                       # If none of the above, raise error
-                    LOG(msg + rest_cmd, 2)
-            
         else:                                                                                                 # ...or it's a "SAVE:tpi:..." command
             # Split command word from any arguments
             sp = cmd_exec.find(' ')
@@ -5196,6 +5193,70 @@ def TS2068_IO():                                                         # Main 
                 ts = time.ticks_us()
                 
 
+# The ZX v3 ROM raises the report whose ERR_NR it is sent; FFh is 0 OK.
+ZX_REPORT = {_1_OK: 0xFF, _2_R_Tape_load: 0x1A, _3_F_Invalid_file: 0x0E,
+             _4_Q_Parameter: 0x19}
+
+
+def ZX_TPI():
+    """LOAD "tpi:<name>" in ZX48 mode -- the ZX v3 ROM's 'T' command, which
+    ZX48_IO has taken. Returns nxt, as LOAD_ZX.
+
+    The ROM (src/rom/patches/tspico-zx48-v3.asm) waits for READY, then
+    sends op (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE), the length and the name
+    after "tpi:", ~54 us a byte. It waits up to ~30 s for READY again
+    (BREAK gives Report D), then reads a status -- FFh OK, else a report
+    code -- the message length and the message, which it prints.
+
+    Only LOAD, and only .tap files: the rest of the tpi: commands need the
+    TS-2068 ROM. Every wait is bounded; nothing here blocks on the bus.
+    """
+    global MQ
+
+    hdr = bytearray(2)
+    name = bytearray(255)
+    gc.collect()                            # before READY: the name streams with no handshake
+    MQX(MQ, "mov(y, invert(null))")         # READY: listening
+    code, got = RX_BLOCK(MQ, hdr, 2, ZX_STALL_MS, ZX_STALL_MS)
+    if code == RXB_OK:
+        code, got = RX_BLOCK(MQ, name, hdr[1], ZX_STALL_MS, ZX_STALL_MS)
+    if code != RXB_OK:
+        LOG("ZX tpi: command stopped after %d bytes" % got, 2)
+        return -1                           # the ROM gives up: Report J (or D)
+
+    rest = "".join(chr(b) for b in name[:hdr[1]] if 0x20 <= b < 0x7F)
+    TLM("ZX_TPI", "op=%d name=%r" % (hdr[0], rest))
+    if hdr[0] != 1:
+        msg, rest, st = 'Only LOAD "tpi:..." works in ZX48 mode', "", _4_Q_Parameter
+    else:
+        msg, rest, st = LOAD_TPI(rest, only_tap=True)   # may use the SD card: MQ is rebuilt
+    text = (msg.strip() + " " + rest).strip().encode()[:200]
+    LOG("ZX48 tpi: %s" % text.decode(), 0 if st == _1_OK else 2)
+
+    # The reply: status, length, message. The first bytes go in before
+    # READY -- the ROM reads the instant it sees it -- the rest as it reads.
+    out = bytearray(2 + len(text))
+    out[0] = ZX_REPORT.get(st, 0x19)
+    out[1] = len(text)
+    out[2:] = text
+    ZX_FLUSH_TX(MQ)
+    gc.collect()
+    i = 0
+    while i < len(out) and MQ.tx_fifo() < TX_DEPTH:
+        MQ.put(out[i])
+        i += 1
+    MQX(MQ, "mov(y, invert(null))")         # READY: the reply is waiting
+    while i < len(out):
+        w = ZX_ROOM(MQ, ZX_STALL_MS)
+        if w != -1:
+            ZX_FLUSH_TX(MQ)
+            LOG("ZX tpi: reply stopped at byte %d of %d" % (i, len(out)), 2)
+            return w if w >= 0 else -1
+        MQ.put(out[i])
+        i += 1
+    return -1
+
+
 def ZX48_IO(pre):                                                                   # Main IO loop, for SAVE, LOAD and commands processing
                                                                                     # ZX Spectrum mode
     global MQ                                                                                    
@@ -5226,31 +5287,25 @@ def ZX48_IO(pre):                                                               
     LOG("Starting ZX Mode...", 0)
 
     ts = time.ticks_us()
+    nxt = -1        # a command byte a handler took in the middle of its block
 
     while True:
 
-        if (MQ.rx_fifo()) != 0:
+        if nxt >= 0 or MQ.rx_fifo():
 
             ts = time.ticks_us()
-            a = MQ.get()
+            if nxt >= 0:
+                a, nxt = nxt, -1
+            else:
+                a = MQ.get()
             TLM("ZX48_IO byte received", "a=%d (0x%02X)" % (a, a))
 
-            # Wait for core1 before dispatching, the way the three
-            # main-loop LVM branches do. Without it a watchdog left
-            # over from the previous ZX transaction is still inside
-            # its cleanup -- which ends with a ~1s BLINK() -- and the
-            # spawn in the handler below raises OSError 'core1 in
-            # use'. Nothing here or in main.py catches that, so the
-            # Pico drops to a REPL. START_WATCHDOG() now survives it,
-            # but waiting means we keep the watchdog instead of
-            # running the transfer unguarded. Bounded, so a thread
-            # that died without clearing the flag cannot wedge us.
-            # BOTH flags: `busy` here is tspico.py's own (SAVE_LOG,
-            # BLINK_LED, CHK_STATUS); CORE1_BUSY() is tspico_io's
-            # WATCHDOG. They are different variables -- see that
-            # function's docstring -- and core1 is one resource.
+            # Wait (bounded) for a SAVE_LOG still writing the log on core1:
+            # a flash write stops both cores, so it must not overlap a block.
+            # The ZX v2 ROM waits up to ~3.8 s for READY after its 'L' / 'S'.
+            # The handlers themselves use no core1 watchdog (issue #51).
             _t = time.ticks_ms()
-            while busy or CORE1_BUSY():
+            while busy:
                 if time.ticks_diff(time.ticks_ms(), _t) >= 3000:
                     LOG("ZX48_IO gave up waiting for core1", 2)
                     break
@@ -5266,14 +5321,13 @@ def ZX48_IO(pre):                                                               
                         LOG("ZX48 buffer size = %d" % par2, 0)
                     else:
                         buf_size = 52100                                          # lower this if mem allocation error arises
-                    MQ, TSP, new_logs = LOAD_ZX_C(MQ, TSP, buf_size)
-                    # log_entries += new_logs
-                    log_entries.append(new_logs) # for now
-                    # log_entries.extend(new_logs) # when LOAD_TS returns an array
+                    MQ, TSP, new_logs, nxt = LOAD_ZX_C(MQ, TSP, buf_size)
                 else:
                     # 'regular' ZX Spectrum LOAD
                     LOG("Starting ZX LOAD", 0)
-                    MQ, TSP, new_logs = LOAD_ZX(MQ, TSP)
+                    MQ, TSP, new_logs, nxt = LOAD_ZX(MQ, TSP)
+                if new_logs.strip():
+                    log_entries.append(new_logs)
 
                 TLM("ZX48_IO LOAD returned")
 
@@ -5281,11 +5335,15 @@ def ZX48_IO(pre):                                                               
 
                 TLM("ZX48_IO dispatching SAVE")
                 LOG("Starting ZX SAVE", 0)
-                MQ, TSP, new_logs = SAVE_ZX(MQ, TSP)
-                # log_entries += new_logs
-                log_entries.append(new_logs) # for now
-                # log_entries.extend(new_logs) # when LOAD_TS returns an array
+                MQ, TSP, new_logs, nxt = SAVE_ZX(MQ, TSP)
+                if new_logs:
+                    log_entries.append(new_logs)
                 TLM("ZX48_IO SAVE returned")
+
+            elif a == 84:                                                  # ASCII 'T' - LOAD "tpi:..." (ZX v3 ROM)
+
+                TLM("ZX48_IO dispatching tpi:")
+                nxt = ZX_TPI()
 
             elif a == 14:                                                  # OUT 14,14 from 2068 — canonical exit from ZX48 mode
                 # ─── ZX48 exit-via-byte ───────────────────────────────────
