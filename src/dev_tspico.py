@@ -4705,8 +4705,9 @@ def TS2068_IO():                                                         # Main 
             # Seen on hardware after a BREAK. The ROM's ready-wait allows
             # ~20 s, so saying READY later costs nothing.
             # ──────────────────────────────────────────────────────────────
-            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10
-                    and not (pre[0] == 0 and pre[1] == 0)):
+            # SAVE too (stage 3): SAVE_TS says READY straight before its
+            # header capture -- see TS/tspico.py.
+            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10):
                 MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
@@ -4733,7 +4734,7 @@ def TS2068_IO():                                                         # Main 
                 pidx = TSP.tap_idx
                 # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
-                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP)
+                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP, pre)
                 # log_entries += new_logs
                 # log_entries.extend(new_logs) # For when SAVE_TS returns an array
                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
@@ -4835,7 +4836,8 @@ def TS2068_IO():                                                         # Main 
                 # Single arm point for both outcomes, after the last SD access.
                 ACTIVATE_MQ()
                 MQ.put(0x01)
-                MQ_READY()
+                # RECOVERED when SAVE_TS gave up on a silent Z80 (1.8b: Report T)
+                MQ_STATUS(MQ, "recovered" if getattr(TSP, "save_recovered", False) else "idle")
 
                 led.value(0)
                 

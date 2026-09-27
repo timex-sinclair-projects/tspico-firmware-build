@@ -256,7 +256,7 @@ def test_save_remount(t):
         t.MQ.rx = [0] * 10                     # pre[0]=0, pre[1]=0: SAVE
         env.stop_new_bus = True                # next bus SM ends the test
 
-    def save_ts(mq, tsp):
+    def save_ts(mq, tsp, pre=None):
         tsp.f_name = "/sd/TAP/NEW.tap"         # a new file, none mounted before
         env.card.wedged = True
         env.card.attempts = 0
