@@ -504,7 +504,7 @@ match what the Z80 expects.
   any other text arrive (a tool writing before its Ctrl-C landed, a
   terminal echoing telemetry back), the buffer is full and no Ctrl-C
   ever gets through. The Pico runs on, but USB stays deaf until a reset.
-  Reproduced on hardware with 600 bytes (2026-09-28, during PR #74).
+  Reproduced on hardware with 600 bytes (2026-09-28).
   `TS2068_IO` and `ZX48_IO` drain stdin at their idle heartbeat; see
   `src/test/stdin_drain_hosttest.py`.
 

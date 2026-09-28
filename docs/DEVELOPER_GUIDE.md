@@ -632,12 +632,27 @@ heartbeat**, not a hang. A truly hung Pico shows a steady LED state
 ### "The port opens but Ctrl-C gets nothing back"
 
 If the 2068 still works but USB is silent -- no `>>>` however many
-Ctrl-Cs, only a reset brings it back -- something sent the running
-firmware 511+ bytes of text and filled MicroPython's stdin buffer, so
-Ctrl-C was never seen. The firmware now drains stdin at the idle
-heartbeat (`DRAIN_STDIN`), so Ctrl-C lands within about 2 s; 2.0 and
-earlier need the TS-Pico's reset button. A tool should
-send Ctrl-C and wait for `>>>` before it sends anything else.
+Ctrl-Cs, only a reset brings it back -- there are two known ways to get
+there, and they look alike from the host:
+
+- **Text filled stdin (fixed).** Something sent the running firmware
+  511+ bytes of text, which fills MicroPython's stdin buffer, and then
+  Ctrl-C is never seen. Reproduced on hardware with 600 bytes. The
+  firmware now drains stdin at the idle heartbeat (`DRAIN_STDIN`), so
+  Ctrl-C lands within about 2 s; 2.0 and earlier need the reset button.
+  Tools should send Ctrl-C and wait for `>>>` before sending anything
+  else. Here the port always **opens** at once.
+- **USB not serviced at all (unexplained).** Seen once, 2026-09-28,
+  during the web-updater tests (PR #74): nothing had written to the
+  port, yet Chrome's first `open()` failed outright and the Ctrl-Cs
+  that followed got nothing. That points to core0 stuck somewhere that
+  never runs the USB task, not to stdin. It came about 15 minutes after
+  a first boot on a freshly wiped board, a 2068 power cycle and a
+  `SAVE "tpi:dir"`. Not reproduced yet.
+
+If it happens, note whether the port opens, try `python3
+tools/pico-serial.py watch` (read-only), and record what the 2068 did
+beforehand -- before you reset it.
 
 ### "First command after boot returns Report J"
 
