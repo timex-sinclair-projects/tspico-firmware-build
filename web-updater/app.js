@@ -287,11 +287,28 @@ async function readInstalled() {
     if (!/rp2|pico/i.test(info.machine + ' ' + info.sysname)) {
         log('Warning: this does not look like an RP2040/Pico.', 'warn')
     }
+    // The running firmware's own FW_VERSION (2.0 on) wins: Ctrl-C leaves its
+    // module loaded, and config.ini can hold a stale one (a 2.0 board may
+    // still say "1.00"). 1.x has no such constant, so fall back to
+    // config.ini: 1.5 wrote FW_VERSION there, 1.1's has none.
+    let code = ''
+    try {
+        code = (await raw.exec("import sys\nm=sys.modules.get('TS.tspico') or sys.modules.get('dev_tspico')\n" +
+            "print(getattr(m,'FW_VERSION','') if m else '')")).trim()
+    } catch (_e) { /* no firmware module */ }
     let cfg = null
     try { cfg = JSON.parse(new TextDecoder().decode(await raw.readFile('/config.ini'))) } catch (_e) { /* none */ }
-    // 2.x writes FW_VERSION; 1.5 did too; 1.1's config.ini has none.
-    const fw = cfg ? (cfg.FW_VERSION || '1.1 (no version in config.ini)') : 'unknown (no config.ini)'
-    const major = cfg ? majorOf(cfg.FW_VERSION || '1.1') : null
+    let fw, major
+    if (code) {
+        fw = code
+        major = majorOf(code)
+    } else if (cfg) {
+        fw = cfg.FW_VERSION || '1.1 (no version in config.ini)'
+        major = majorOf(cfg.FW_VERSION || '1.1')
+    } else {
+        fw = 'unknown (no firmware running, no config.ini)'
+        major = null
+    }
     return { fw, from1x: major !== null && major < 2 }
 }
 
