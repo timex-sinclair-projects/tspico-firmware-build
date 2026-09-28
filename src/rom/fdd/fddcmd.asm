@@ -51,6 +51,23 @@ H_EXPT_STR      EQU $1BEF          ; HOME: syntax class $0A -- SCANNING, then
 H_TEST_ROOM     EQU $1FBB          ; HOME: Report 4 unless BC bytes fit at STKEND
 IY_SYSVARS      EQU $5C3A          ; what every HOME routine expects in IY
 
+; --- SAVE/LOAD "f:name" (spec §4a) ---------------------------------------------
+SESSION_SETUP   EQU $1A73          ; EXROM: where $01D2 went before the hook
+SAVE_ETC_BODY   EQU $01D5          ; EXROM: stock SAVE-ETC after SESSION_SETUP's
+                                   ;   non-command exit ($1A45: BC = $0011)
+STATUS_REPORT   EQU $1BF3          ; EXROM: A = status-1 -> the matching report
+SYNC_WRITE      EQU $2300          ; EXROM: OUT (0Fh),03, wait READY+IDLE, OUT (0Eh),A
+BIOS_TX_A       EQU $1846          ; Pico Interface BIOS: OUT (0Eh),A
+BIOS_RX_A       EQU $1848          ;   IN A,(0Eh)
+BIOS_C_END      EQU $184A          ;   status: NC ok, else C with A = status-1
+BIOS_WF_NPH     EQU $184C          ;   wait for the Pico: C with A = 02/0C/1C
+BANK_SV         EQU $5DCF          ; pre-header byte 2
+MODE_SV         EQU $5DDB          ; SESSION_SETUP clears bits 7-4 for a plain name
+TOK_SCREEN      EQU $AA
+TOK_CODE        EQU $AF
+TOK_LINE        EQU $CA
+TOK_DATA        EQU $E4
+
 MAX_ARG         EQU 64             ; longest argument (per string); longer is F
 ROOM            EQU 2*MAX_ARG+32   ; workspace a command can need
 
@@ -70,6 +87,11 @@ TOK_ERASE       EQU $D2
 ; FDD_DISPATCH — entry for both the syntax-check and runtime pass. B = token.
 ;------------------------------------------------------------------------------
 FDD_DISPATCH:
+        jp      FDD_MAIN           ; $3000: the $25D6 disk-keyword hook
+F_HOOK_VEC:
+        jp      F_HOOK             ; $3003: the $01D2 SAVE/LOAD hook (build-rom.py)
+
+FDD_MAIN:
         ld      iy,IY_SYSVARS      ; the bank call clobbers IY; HOME needs it
         ld      a,b
         cp      TOK_CAT
@@ -86,7 +108,7 @@ FDD_DISPATCH:
 
         db      "FDDCMD",0         ; signature — build.py verifies this
 FDD_VERSION:
-        db      5
+        db      6
 
 ;------------------------------------------------------------------------------
 ; FDD_CAT -- CAT [string]
@@ -358,6 +380,210 @@ COPY_CSTR:
         ld      (de),a
         inc     de
         jr      COPY_CSTR
+
+;------------------------------------------------------------------------------
+; F_HOOK -- SAVE / LOAD / VERIFY / MERGE "f:<path>"            (spec §4a)
+;
+; $01D2 (the runtime SAVE-ETC's only jump to SESSION_SETUP) comes here instead.
+; The name is on the calculator stack, T-ADDR is 0-3, CH_ADD points past the
+; name. Anything that isn't "f:..." goes on to SESSION_SETUP untouched.
+;
+; For "f:<path>": send tpi:fopen <path> (PMR1 = T-ADDR + 256 * the next token,
+; PMR2 = this statement's session) through the Pico Interface BIOS -- it returns
+; here, prints only what the Pico asks it to, and leaves CH_ADD alone -- then
+; shorten the name (SAVE: <= 10 characters of the path, a stand-in the Pico
+; ignores; LOAD/VERIFY/MERGE: "", any name) and carry on with the stock body
+; exactly as SESSION_SETUP's non-command exit does. The Pico writes the SAVE
+; to <path>, or serves <path> as a one-shot tape for the LOAD.
+;------------------------------------------------------------------------------
+F_HOOK:
+        push    hl                 ; as SESSION_SETUP does; popped at the exit
+        push    de
+        call    PEEK_NAME          ; DE = text, BC = length
+        ld      a,b
+        and     a
+        jr      nz,.stock
+        ld      a,c
+        cp      3
+        jr      c,.stock           ; "f:" and at least one character
+        ld      a,(de)
+        and     $DF
+        cp      'F'
+        jr      nz,.stock
+        inc     de
+        ld      a,(de)
+        cp      ':'
+        jr      nz,.stock
+        ld      a,c
+        cp      MAX_ARG+3
+        jp      nc,TOO_LONG
+        ld      hl,(FRAMES)        ; the session id, as SESSION_SETUP makes it
+.nz:    inc     hl
+        ld      a,h
+        or      l
+        jr      z,.nz
+        ld      (SESSION_ID),hl
+        push    ix
+        call    SEND_FOPEN         ; an error status raises its report
+        pop     ix
+        ld      hl,(STKEND)        ; shorten the name in place
+        dec     hl
+        dec     hl                 ; -> length low
+        ld      a,(TADDR)
+        and     a
+        jr      nz,.anyname
+        ld      a,(hl)
+        sub     2                  ; the path, without "f:"
+        cp      11
+        jr      c,.fits
+        ld      a,10
+.fits:  ld      (hl),a
+        dec     hl
+        dec     hl                 ; -> address low
+        ld      a,(hl)
+        add     a,2
+        ld      (hl),a
+        inc     hl
+        ld      a,(hl)
+        adc     a,0
+        ld      (hl),a
+        jr      .go
+.anyname:
+        ld      (hl),0             ; LOAD "": the one-shot tape holds one file
+.go:    ld      a,(MODE_SV)
+        and     $0F
+        ld      (MODE_SV),a
+        pop     de
+        pop     hl
+        ld      bc,$0011
+        jp      SAVE_ETC_BODY
+.stock:
+        pop     de
+        pop     hl
+        jp      SESSION_SETUP
+
+; PEEK_NAME -- the string on top of the calculator stack, not popped:
+; DE = text, BC = length.
+PEEK_NAME:
+        ld      hl,(STKEND)
+        dec     hl
+        ld      b,(hl)
+        dec     hl
+        ld      c,(hl)
+        dec     hl
+        ld      d,(hl)
+        dec     hl
+        ld      e,(hl)
+        ret
+
+; SEND_FOPEN -- the 'B' command "tpi:fopen <path>", by hand through the BIOS:
+; pre-header 'B', 0 (a SAVE "tpi:" command), BANK, PMR1 (operation, token),
+; PMR2 (session), LEN, XOR; the preloaded status; wait for the Pico; body 'D',
+; LEN, text, XOR; the status. D = running XOR, E = token, C = command length.
+SEND_FOPEN:
+        ld      hl,(CH_ADD)        ; the token after the name, CH_ADD untouched
+.sp:    ld      a,(hl)
+        inc     hl
+        cp      ' '
+        jr      z,.sp
+        cp      TOK_CODE
+        jr      z,.tok
+        cp      TOK_SCREEN
+        jr      z,.tok
+        cp      TOK_DATA
+        jr      z,.tok
+        cp      TOK_LINE
+        jr      z,.tok
+        xor     a
+.tok:   push    af
+        call    PEEK_NAME
+        inc     de
+        inc     de
+        ex      de,hl              ; HL = path
+        ld      a,c
+        sub     2
+        ld      b,a                ; B = path length
+        add     a,FOPEN_LEN
+        ld      c,a                ; C = command length (< 128)
+        pop     af
+        ld      e,a                ; E = token
+        push    hl
+        push    bc
+        ld      a,'B'
+        ld      d,a
+        call    SYNC_WRITE
+        xor     a
+        call    TXX                ; T-ADDR 0: a command
+        ld      a,(BANK_SV)
+        call    TXX
+        ld      a,(TADDR)
+        call    TXX                ; PMR1 low: 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE
+        ld      a,e
+        call    TXX                ; PMR1 high: CODE / SCREEN$ / DATA / LINE / 0
+        ld      a,(SESSION_ID)
+        call    TXX                ; PMR2: the session
+        ld      a,(SESSION_ID+1)
+        call    TXX
+        ld      a,c
+        call    TXX                ; LEN
+        xor     a
+        call    TXX
+        ld      a,d
+        call    BIOS_TX_A          ; the pre-header's XOR
+        call    BIOS_RX_A          ; the preloaded status
+        call    BIOS_WF_NPH
+        jr      c,WF_FAIL
+        pop     bc
+        pop     hl
+        ld      a,'D'
+        ld      d,a
+        call    BIOS_TX_A
+        ld      a,c
+        call    TXX
+        xor     a
+        call    TXX
+        push    hl
+        push    bc
+        ld      hl,FOPEN_TXT
+        ld      b,FOPEN_LEN
+        call    TX_STR
+        pop     bc
+        pop     hl
+        call    TX_STR             ; the path
+        ld      a,d
+        call    BIOS_TX_A          ; the body's XOR
+        call    BIOS_C_END
+        ret     nc
+        jp      STATUS_REPORT      ; A = status-1: F, Q, R ... as for tpi: commands
+
+; TXX -- send A and fold it into the XOR in D.
+TXX:    push    af
+        xor     d
+        ld      d,a
+        pop     af
+        jp      BIOS_TX_A
+
+; TX_STR -- send B (>0) bytes from HL through TXX.
+TX_STR: ld      a,(hl)
+        inc     hl
+        call    TXX
+        djnz    TX_STR
+        ret
+
+WF_FAIL:                           ; the Pico didn't answer the pre-header
+        cp      $0C
+        jr      z,.brk
+        cp      $1C
+        jr      z,.rst
+        rst     8
+        db      $12                ; J Invalid I/O device (timeout)
+.brk:   rst     8
+        db      $0C                ; D BREAK - CONT repeats
+.rst:   rst     8
+        db      $1C                ; T TS-Pico reset, try again
+
+FOPEN_TXT:   db "tpi:fopen "
+FOPEN_LEN    EQU $-FOPEN_TXT
 
 ;------------------------------------------------------------------------------
 ; TPI command prefixes (NUL-terminated).

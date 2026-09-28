@@ -60,6 +60,14 @@ PATCHES = [
              "keyword is accepted. Verified in ZEsarUX; see design doc §2/§10.5.",
     ),
     dict(
+        name="SAVE/LOAD hook: $01D2 JP SESSION_SETUP -> JP F_HOOK_VEC ($3003)",
+        bank="exrom", addr=0x01D2,
+        before="c3 73 1a", after="c3 03 30",
+        note="The runtime SAVE-ETC's only jump to SESSION_SETUP. F_HOOK sends "
+             "tpi:fopen for an \"f:\" name, shortens it and continues at $01D5; "
+             "any other name goes on to $1A73 as before. Spec §4a.",
+    ),
+    dict(
         name="disk-token hook: $25D6 stub -> EXROM FDD_DISPATCH",
         bank="home", addr=0x25D6,
         before="cd 89 28 20 06 cd 69 25 cd 44 1b c3 67 25",
@@ -81,7 +89,7 @@ PATCHES = [
 # by --rebase), so a new base ROM that moves one fails loudly instead of the
 # module jumping into the wrong code. Keep in sync with fddcmd.asm's EQUs.
 ANCHORS = [
-    dict(name="SESSION_SETUP entry (TPI_SEND repeats \$1A73-\$1A7D)",
+    dict(name="SESSION_SETUP entry (TPI_SEND repeats $1A73-$1A7D)",
          bank="exrom", addr=0x1A73, bytes="e5 d5 2a 78 5c 23 7c b5 28 fb 22 d1 5d"),
     dict(name="SESSION_NAMED: SESSION_SETUP past the 5-31 char name gate",
          bank="exrom", addr=0x1AAC, bytes="d5 d5 e1 22 d3 5d ed 43 d5 5d"),
@@ -89,11 +97,21 @@ ANCHORS = [
          bank="exrom", addr=0x03DD, bytes="e5 21 00 ff e5 26 00 e5 e5 d9 cd 99 0f dd e1 c9"),
     dict(name="EXROM RST 8 error restart (Reports C/F from the module)",
          bank="exrom", addr=0x0008, bytes="2a 5d 5c 22 5f 5c"),
-    dict(name="H_EXPT_STR: syntax class \$0A (string expression)",
+    dict(name="H_EXPT_STR: syntax class $0A (string expression)",
          bank="home", addr=0x1BEF, bytes="cd 54 28 fd cb 01 76 c8"),
     dict(name="H_TEST_ROOM",
          bank="home", addr=0x1FBB, bytes="2a 65 5c 09 38 0e"),
-    dict(name="HOME->EXROM returning thunk the \$25D6 hook jumps to",
+    dict(name="SAVE_ETC_BODY: stock SAVE-ETC after SESSION_SETUP's non-command exit",
+         bank="exrom", addr=0x01D5, bytes="3a 74 5c a7 28 02 0e 22"),
+    dict(name="SESSION_SETUP's non-command exit F_HOOK copies ($1A45)",
+         bank="exrom", addr=0x1A45, bytes="d1 e1 01 11 00 c3 d5 01"),
+    dict(name="STATUS_REPORT: status-1 in A -> report",
+         bank="exrom", addr=0x1BF3, bytes="fb 3d ca 3e 1c 3d ca 39 1c"),
+    dict(name="SYNC_WRITE",
+         bank="exrom", addr=0x2300, bytes="f5 c5 3e 03 d3 0f cd 0e 23 c1 f1 c3 9d 22"),
+    dict(name="Pico Interface BIOS table (TX_A, RX_A, C_END, WF_NPH)",
+         bank="exrom", addr=0x1846, bytes="18 25 18 20 18 03 c3 9e 23 c3 cd 23"),
+    dict(name="HOME->EXROM returning thunk the $25D6 hook jumps to",
          bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
 ]
 

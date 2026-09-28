@@ -326,6 +326,80 @@ def test_cd_and_ren(t, root):
     check(r[-1] == t._4_Q_Parameter, "the mounted file: Q")
 
 
+def test_native_open(t, root):
+    print("SAVE / LOAD \"f:...\"  (tpi:fopen -> NATIVE_OPEN)")
+    from TS import native as N
+    build_card(root)
+    sent = setup(t, root)
+    flash = tempfile.mkdtemp(prefix="flash.")
+    cos = t.os
+    t.open = lambda p, mode="r": open(cos.real(p) if p.startswith("/sd/") else
+                                      os.path.join(flash, os.path.basename(p)), mode)
+    prompts = []
+    t.SEND_MSG_PROMPT_YN = lambda msg, echo=True: (prompts.append(msg), keys.pop(0))[1]
+    keys = []
+
+    def fopen(path, op, mod=0, session=0x4242):
+        pre = bytearray(10)
+        par1 = op | (mod << 8)
+        pre[3], pre[4], pre[5], pre[6] = par1 & 0xFF, par1 >> 8, session & 0xFF, session >> 8
+        del sent[:]
+        t.NATIVE_OPEN(pre, "xxxtpi:fopen " + path)
+        return sent[-1] if sent else None
+
+    r = fopen("games/new.bas", 0)
+    check(r[-1] == t._1_OK and t.TSP.native == dict(op=0, path="/sd/TAP/games/new.bas",
+                                                    session=0x4242, refuse=False),
+          "SAVE, new file: armed for the session (%r)" % (t.TSP.native,))
+    keys[:] = [ord("Y")]
+    r = fopen("advent.tap", 0)
+    check(prompts[-1].startswith("advent.tap exists. Replace (Y/N)?") and t.TSP.native["refuse"] is False,
+          "SAVE over a file: 'exists. Replace (Y/N)?', Y -> armed to overwrite")
+    keys[:] = [ord("N")]
+    fopen("advent.tap", 0)
+    check(t.TSP.native["refuse"] is True, "  N -> armed to refuse (SAVE_TS gives Report D)")
+    for path, st, what in (("games", t._4_Q_Parameter, "a directory"),
+                           ("nodir/x.bas", t._3_F_Invalid_file, "no such directory"),
+                           ("bad?name", t._3_F_Invalid_file, "a name FAT can't hold"),
+                           ("", t._3_F_Invalid_file, "no name")):
+        r = fopen(path, 0)
+        check(r[-1] == st and t.TSP.native is None, "SAVE to %s: refused, nothing armed" % what)
+    t.TSP.f_name = "/sd/TAP/CHESS.TAP"
+    r = fopen("chess.tap", 0)
+    check(r[-1] == t._4_Q_Parameter, "SAVE over the mounted file: Q")
+    t.TSP.f_name = ""
+
+    prog = bytes(range(200))
+    with open(os.path.join(root, "prog.bas"), "wb") as f:
+        f.write(bytes(N.plus3_header(0, len(prog), 10, len(prog))) + prog)
+    with open(os.path.join(root, "pic.scr"), "wb") as f:
+        f.write(bytes(6912))
+    with open(os.path.join(root, "raw.bin"), "wb") as f:
+        f.write(b"\x11" * 300)
+    r = fopen("prog.bas", 1)
+    tap = open(os.path.join(flash, "native.tap"), "rb").read()
+    check(r[-1] == t._1_OK and t.TSP.native["op"] == 1 and t.TSP.native["totlen"] == len(tap),
+          "LOAD a +3DOS program: armed with the one-shot tape")
+    check(tap == N.as_tap(0, len(prog), 10, len(prog), prog, "prog"),
+          "  the tape is exactly the header block + data block for it")
+    r = fopen("pic.scr", 1, t.MOD_SCREEN)
+    tap = open(os.path.join(flash, "native.tap"), "rb").read()
+    check(r[-1] == t._1_OK and tap[3:4] == b"\x03" and N.fields_from_tape_header(tap[3:20])[1:3] == (6912, 16384),
+          "LOAD ... SCREEN$ of a raw .scr: CODE 6912 at 16384")
+    r = fopen("raw.bin", 1, t.MOD_CODE)
+    tap = open(os.path.join(flash, "native.tap"), "rb").read()
+    check(r[-1] == t._1_OK and N.fields_from_tape_header(tap[3:20])[:2] == (3, 300),
+          "LOAD ... CODE of a headerless file: the whole file as CODE")
+    for path, op, mod, st, what in (("raw.bin", 1, 0, t._3_F_Invalid_file, "headerless file as a program"),
+                                    ("prog.bas", 1, t.MOD_CODE, t._4_Q_Parameter, "a program as CODE"),
+                                    ("pic.scr", 3, 0, t._4_Q_Parameter, "MERGE of a screen"),
+                                    ("raw.bin", 1, t.MOD_SCREEN, t._4_Q_Parameter, "SCREEN$ of 300 bytes"),
+                                    ("nothere", 1, 0, t._3_F_Invalid_file, "a missing file")):
+        r = fopen(path, op, mod)
+        check(r[-1] == st and t.TSP.native is None, "LOAD %s: refused, nothing armed (%r)" % (what, r[1]))
+    shutil.rmtree(flash, ignore_errors=True)
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -340,6 +414,7 @@ def main():
         test_erase(t, root)
         test_format(t, root)
         test_cd_and_ren(t, root)
+        test_native_open(t, root)
         t.PROMPT_EACH = real_prompt_each                          # test_erase stubs it
         test_prompt_each(t)
     finally:
