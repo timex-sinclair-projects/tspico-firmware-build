@@ -1,20 +1,32 @@
 /*
  * TS-Pico Web Updater — application glue.
  *
- * Drives the vendored ViperIDE WebSerial transport + MpRawMode to push a
- * release payload (main.py, config.ini, words.txt, assets/*.tap, help/*.txt)
- * onto a TS-Pico over USB, preserving subfolders. See README.md for the
- * deployment model (payload + manifest.json published same-origin).
+ * One guided run takes a TS-Pico from whatever it has (1.1, 1.5, 2.x, or a
+ * blank/wiped Pico) to the chosen build:
  *
- * Prototype for https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26
+ *   1. Connect   Web Serial -> raw REPL; read the installed version.
+ *   2. BOOTSEL   machine.bootloader(), then the bootloader over WebUSB
+ *                (PICOBOOT) or, failing that, the RPI-RP2 drive (File System
+ *                Access API). See flasher.js.
+ *   3. Wipe      erase all 2 MB (WebUSB) or write flash_nuke.uf2 (drive).
+ *   4. ROM       boards from 1.1/1.5 only: write upgrade.uf2, reboot, and
+ *                follow its "UPG {json}" lines while the user runs the updater
+ *                on the 2068 (OUT 244,3, LOAD ""). Then back to BOOTSEL.
+ *   5. Firmware  write firmware.uf2 and reboot.
+ *   6. Files     Web Serial again: main.py, config.ini, words.txt, assets/,
+ *                verify, reboot.
+ *
+ * Everything is fetched same-origin from a channel directory (release/ or
+ * main/), built by build-payload.sh and published by pages.yml.
  */
 
 import { WebSerial } from './vendor/transports.js'
 import { MpRawMode } from './vendor/rawmode.js'
-import { sleep, sizeFmt, splitPath, setReporter } from './vendor/utils.js'
+import { sizeFmt, splitPath, setReporter } from './vendor/utils.js'
+import { UsbBootsel, DriveBootsel, sleep } from './flasher.js'
 
 // ---------------------------------------------------------------------------
-// Small DOM helpers
+// DOM helpers
 // ---------------------------------------------------------------------------
 const $ = (id) => document.getElementById(id)
 const show = (el, on = true) => { el.hidden = !on }
@@ -23,373 +35,647 @@ const enable = (el, on = true) => { el.disabled = !on }
 function log(msg, kind = '') {
     const line = document.createElement('div')
     line.className = 'log-line' + (kind ? ' log-' + kind : '')
-    const ts = new Date().toLocaleTimeString()
-    line.textContent = `[${ts}] ${msg}`
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`
     const out = $('log')
     out.appendChild(line)
     out.scrollTop = out.scrollHeight
 }
 
-function setStatus(text, kind = '') {
-    const s = $('status')
-    s.textContent = text
-    s.className = 'status ' + kind
-}
-
-// Route library-level errors (utils.report) into our log.
 setReporter((title, err) => log(`${title}: ${err && err.message ? err.message : err}`, 'warn'))
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-let port = null      // WebSerial transport
-let raw = null       // MpRawMode (held open while connected)
-let manifest = null  // parsed manifest.json
-let busy = false
+const CHANNELS = ['release', 'main']
+const PICO_VID = 0x2E8A
+const ROM_BLOCKS = { 1: 128, 0: 64 }        // updater.asm: slot 1 is 32K, slot 0 the low 16K
+const ROM_FAIL = {
+    1: 'The updater got no answer from the TS-Pico.',
+    2: 'The flash can\'t be written: fit the P10 jumper, then type LOAD "" on the 2068 again.',
+    3: 'The data kept arriving wrong. Type LOAD "" on the 2068 to try again.',
+    4: 'A flash write didn\'t take. Type LOAD "" on the 2068 to try again.',
+}
+
+let channel = 'release'
+let manifest = null
+let serial = null        // WebSerial transport, open
+let raw = null           // MpRawMode, while in the raw REPL
+let boot = null          // UsbBootsel | DriveBootsel, while the Pico is in BOOTSEL
+let installed = null     // { fw, from1x } once read
+let running = false
 
 // ---------------------------------------------------------------------------
-// Manifest loading (same-origin: published next to this page)
+// Stages: each <li class="stage" id="st-..."> has .msg, .actions and a
+// progress bar. The run marks them active/done/skipped/error as it goes.
 // ---------------------------------------------------------------------------
-async function loadManifest() {
+const STAGES = ['connect', 'bootsel', 'wipe', 'rom', 'firmware', 'files']
+
+function stage(name) { return $('st-' + name) }
+
+function setStage(name, state, msg) {
+    const el = stage(name)
+    el.dataset.state = state
+    if (msg !== undefined) el.querySelector('.msg').textContent = msg
+    if (state !== 'active') {
+        el.querySelector('.actions').replaceChildren()
+        show(el.querySelector('.progress'), false)
+    }
+}
+
+function stageMsg(name, msg) {
+    stage(name).querySelector('.msg').textContent = msg
+}
+
+function stageProgress(name, frac) {
+    const bar = stage(name).querySelector('.progress')
+    show(bar, true)
+    bar.firstElementChild.style.width = Math.round(Math.min(1, frac) * 100) + '%'
+}
+
+/** Show buttons in a stage and wait for one. Resolves with the chosen value
+ *  inside the click's user activation, so the caller may open a browser
+ *  picker (WebUSB, Web Serial, directory) straight away. */
+function ask(name, choices) {
+    const box = stage(name).querySelector('.actions')
+    return new Promise((resolve) => {
+        box.replaceChildren(...choices.map((c, i) => {
+            const b = document.createElement('button')
+            b.textContent = c.label
+            if (i === 0) b.className = 'primary'
+            b.addEventListener('click', () => { box.replaceChildren(); resolve(c.value) })
+            return b
+        }))
+    })
+}
+
+class Stop extends Error {}                 // the user chose to stop; not a failure
+
+// ---------------------------------------------------------------------------
+// Channel + manifest
+// ---------------------------------------------------------------------------
+async function fetchManifest(ch) {
+    const resp = await fetch(`${ch}/manifest.json`, { cache: 'no-store' })
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    return await resp.json()
+}
+
+async function loadChannel(ch) {
+    channel = ch
+    try { localStorage.setItem('tspico-channel', ch) } catch (_e) { /* private mode */ }
+    for (const c of CHANNELS) $('ch-' + c).checked = (c === ch)
     try {
-        const resp = await fetch('manifest.json', { cache: 'no-store' })
-        if (!resp.ok) throw new Error('HTTP ' + resp.status)
-        manifest = await resp.json()
+        manifest = await fetchManifest(ch)
     } catch (err) {
-        log('Could not load manifest.json — is the payload published? ' + err.message, 'error')
+        manifest = null
+        log(`Could not load ${ch}/manifest.json: ${err.message}`, 'error')
         $('latest-version').textContent = 'unavailable'
+        refreshPlan()
         return
     }
-    const total = manifest.files.reduce((n, f) => n + (f.size || 0), 0)
-    $('latest-version').textContent =
-        `${manifest.fw_version || '?'}` + (manifest.tag ? ` (release ${manifest.tag})` : '')
-    $('payload-summary').textContent =
-        `${manifest.files.length} files, ${sizeFmt(total)}`
+    const m = manifest
+    const total = m.files.reduce((n, f) => n + (f.size || 0), 0)
+    $('latest-version').textContent = `${m.fw_version || '?'}` +
+        (m.rom_version ? ` (TS-2068 ROM ${m.rom_version})` : '')
+    const src = $('latest-source')
+    src.textContent = m.tag || ''
+    if (m.source_url) src.href = m.source_url; else src.removeAttribute('href')
+    $('payload-summary').textContent = `${m.files.length} files, ${sizeFmt(total)}` +
+        (m.uf2 ? '' : ' — no firmware image in this channel')
 
-    // UF2 download button (Step 1). The firmware image ships with real releases;
-    // a locally-built test payload may not include it.
-    const a = $('uf2-link')
-    if (manifest.uf2) {
-        a.href = manifest.uf2
-        a.classList.remove('disabled')
-        $('uf2-note').textContent = ''
-    } else {
-        a.removeAttribute('href')
-        a.classList.add('disabled')
-        $('uf2-note').textContent = 'Firmware image not in this payload (included in published releases).'
-    }
+    setLink('dl-uf2', m.uf2 && `${ch}/${m.uf2}`)
+    setLink('dl-uf2-zip', m.uf2_zip && `${ch}/${m.uf2_zip}`)
+    setLink('dl-upgrade', m.upgrade_uf2 && `${ch}/${m.upgrade_uf2}`)
+    setLink('sdcard-link', m.sdcard && m.sdcard.path && `${ch}/${m.sdcard.path}`)
+    $('sdcard-note').textContent = m.sdcard ? `(${m.sdcard.files} files, ${sizeFmt(m.sdcard.size)})` : ''
+    log(`Loaded ${ch} channel: firmware ${m.fw_version || '?'} (${m.tag}), ${m.files.length} files` +
+        (m.upgrade_uf2 ? ', ROM updater included.' : ', no ROM updater.'))
+    refreshPlan()
+}
 
-    // Zipped UF2 fallback (Step 1). Some Windows setups block or quarantine a
-    // raw .uf2 download (antivirus / SmartScreen); the .zip sidesteps that. Only
-    // present when the payload includes the firmware image.
-    const az = $('uf2-zip-link')
-    if (manifest.uf2_zip) {
-        az.href = manifest.uf2_zip
-        az.classList.remove('disabled')
-    } else {
-        az.removeAttribute('href')
-        az.classList.add('disabled')
-    }
-
-    // SD card bundle (Step 3, software testers only). Built from the repo's
-    // "SD card/" folder by build-payload.sh; absent from payloads that don't
-    // include it. This is a plain same-origin download — the SD content goes on
-    // a physical card, not over the serial link.
-    const sd = $('sdcard-link')
-    if (manifest.sdcard && manifest.sdcard.path) {
-        sd.href = manifest.sdcard.path
-        sd.classList.remove('disabled')
-        const bits = []
-        if (manifest.sdcard.files) bits.push(`${manifest.sdcard.files} files`)
-        if (manifest.sdcard.size) bits.push(sizeFmt(manifest.sdcard.size))
-        $('sdcard-note').textContent = bits.length ? `(${bits.join(', ')})` : ''
-    } else {
-        sd.removeAttribute('href')
-        sd.classList.add('disabled')
-        $('sdcard-note').textContent = 'SD card bundle not in this payload (included in published releases).'
-    }
-    log(`Loaded manifest: firmware ${manifest.fw_version || '?'}, ${manifest.files.length} files.`)
+function setLink(id, href) {
+    const a = $(id)
+    if (href) { a.href = href; a.classList.remove('disabled') }
+    else { a.removeAttribute('href'); a.classList.add('disabled') }
 }
 
 // ---------------------------------------------------------------------------
-// Connect / disconnect
+// The plan: what the run will do, from the options and what we know
 // ---------------------------------------------------------------------------
+function majorOf(v) {
+    const n = parseFloat(String(v))
+    return Number.isFinite(n) ? n : null
+}
+
+function refreshPlan() {
+    const m = manifest
+    const wantRom = $('opt-rom').checked
+    const hint = $('plan-hint')
+    let problem = ''
+    if (!m) problem = 'No payload loaded for this channel.'
+    else if (!m.uf2) problem = 'This channel has no firmware image. Pick the other channel, or use “Do it by hand”.'
+    else if (wantRom && !m.upgrade_uf2) problem = 'This channel has no ROM updater (upgrade.uf2). ' +
+        'Pick “Latest main build”, or untick the ROM update.'
+    enable($('btn-start'), !problem && !running)
+    enable($('opt-rom'), !!(m && m.upgrade_uf2) && !running)
+    enable($('opt-wipe'), !running && !wantRom)
+    if (wantRom) $('opt-wipe').checked = true   // the upgrade UF2 needs an empty filesystem
+
+    hint.className = 'hint'
+    if (problem) {
+        hint.classList.add('warn'); hint.textContent = problem
+    } else if (installed && installed.from1x && !wantRom) {
+        hint.classList.add('warn')
+        hint.textContent = `This board is on ${installed.fw}. Its TS-2068 ROM can't talk to ` +
+            `firmware ${m.fw_version} — tick “Update the TS-2068 ROM” or the 2068 won't work afterwards.`
+    } else {
+        hint.textContent = planText()
+    }
+    show(hint, true)
+    // Only stages that haven't run yet follow the options.
+    const plan = (name, on, off) => {
+        if (['pending', 'skipped', undefined].includes(stage(name).dataset.state)) {
+            setStage(name, on ? 'pending' : 'skipped', on ? '' : off)
+        }
+    }
+    plan('rom', wantRom, 'Not needed.')
+    plan('wipe', $('opt-wipe').checked, 'Keeping what’s on the Pico.')
+}
+
+function planText() {
+    const steps = []
+    if ($('opt-wipe').checked) steps.push('erase the Pico')
+    if ($('opt-rom').checked) steps.push('update the TS-2068 ROM (you’ll type two commands on the 2068)')
+    steps.push(`install firmware ${manifest.fw_version}`, 'copy its files')
+    return 'Start will ' + steps.join(', then ') + '. Keep the USB cable connected throughout.'
+}
+
+// ---------------------------------------------------------------------------
+// Serial: connect, raw REPL, reconnect after a reboot
+// ---------------------------------------------------------------------------
+async function openSerial(port) {
+    const t = new WebSerial()
+    t.port = port
+    const pi = port.getInfo()
+    t.info = { vid: (pi.usbVendorId || 0).toString(16), pid: (pi.usbProductId || 0).toString(16) }
+    await t.connect()
+    t.onDisconnect(() => {
+        if (serial === t) {
+            serial = null
+            raw = null
+            log('Serial port closed (the Pico rebooted or was unplugged).')
+            if (!running) showConnected(false)
+        }
+    })
+    return t
+}
+
+async function closeSerial() {
+    const t = serial
+    serial = null
+    raw = null
+    if (t) { try { await t.disconnect() } catch (_e) { /* gone */ } }
+}
+
+/** Wait for a Pico running MicroPython to show up on a serial port we
+ *  already have permission for (Chrome remembers it across reboots), and
+ *  open it. Asks for a click only if there's none. */
+async function reconnectSerial(name, ms = 30000) {
+    const end = Date.now() + ms
+    stageMsg(name, 'Waiting for the Pico to come back on USB…')
+    while (Date.now() < end) {
+        const ports = (await navigator.serial.getPorts())
+            .filter((p) => p.getInfo().usbVendorId === PICO_VID)
+        for (const p of ports) {
+            try {
+                serial = await openSerial(p)
+                log('Serial reconnected.')
+                return serial
+            } catch (_e) { /* still enumerating, or not ours */ }
+        }
+        await sleep(700)
+    }
+    stageMsg(name, 'Click Connect and pick the Pico (“Board in FS mode” / “USB Serial Device”).')
+    await ask(name, [{ label: 'Connect to TS-Pico', value: true }])
+    serial = new WebSerial()
+    await serial.requestAccess()
+    const t = await openSerial(serial.port)
+    serial = t
+    return serial
+}
+
+async function enterRaw() {
+    if (raw) return raw
+    raw = await MpRawMode.begin(serial)      // Ctrl-C the firmware, Ctrl-A raw REPL
+    return raw
+}
+
+/** Run code that resets the board: no reply will come. */
+async function execNoReply(code) {
+    await enterRaw()
+    try {
+        await raw.port.readUntil('>', 1000).catch(() => {})
+        await raw.port.write(code)
+        await raw.port.write('\x04')
+        await sleep(400)
+    } catch (_e) { /* expected: the port drops */ }
+    await closeSerial()
+}
+
+async function readInstalled() {
+    const info = await raw.getDeviceInfo()
+    log(`Device: ${info.machine} — ${info.version}`)
+    if (!/rp2|pico/i.test(info.machine + ' ' + info.sysname)) {
+        log('Warning: this does not look like an RP2040/Pico.', 'warn')
+    }
+    let cfg = null
+    try { cfg = JSON.parse(new TextDecoder().decode(await raw.readFile('/config.ini'))) } catch (_e) { /* none */ }
+    // 2.x writes FW_VERSION; 1.5 did too; 1.1's config.ini has none.
+    const fw = cfg ? (cfg.FW_VERSION || '1.1 (no version in config.ini)') : 'unknown (no config.ini)'
+    const major = cfg ? majorOf(cfg.FW_VERSION || '1.1') : null
+    return { fw, from1x: major !== null && major < 2 }
+}
+
 async function connect() {
-    if (busy) return
-    busy = true
     enable($('btn-connect'), false)
     try {
-        setStatus('Requesting serial port…')
-        port = new WebSerial()
-        await port.requestAccess()        // user picks the Pico in the browser dialog
-        port.onDisconnect(onPortLost)
-        await port.connect()              // open at 115200
-        log(`Port opened (VID:${port.info.vid} PID:${port.info.pid}). Entering raw REPL…`)
-
-        setStatus('Connecting to MicroPython…')
-        raw = await MpRawMode.begin(port) // Ctrl-C interrupt + Ctrl-A raw REPL
-
-        const info = await raw.getDeviceInfo()
-        log(`Device: ${info.machine} — ${info.version}`)
-        const looksLikePico = /rp2|pico/i.test(info.machine + ' ' + info.sysname)
-        if (!looksLikePico) {
-            log('Warning: this does not look like an RP2040/Pico. Proceed with caution.', 'warn')
-        }
-
-        // Read installed firmware version from /config.ini on the device.
-        let installed = 'unknown'
-        try {
-            const bytes = await raw.readFile('/config.ini')
-            const cfg = JSON.parse(new TextDecoder().decode(bytes))
-            installed = cfg.FW_VERSION || 'unknown'
-        } catch (_e) {
-            log('No readable /config.ini on device (fresh flash?).', 'warn')
-        }
-        $('installed-version').textContent = installed
-        updateFwHint(installed)
-
-        setStatus('Connected', 'ok')
-        show($('connected-panel'), true)
-        enable($('btn-update'), !!manifest)
-        enable($('btn-verify'), !!manifest)
-        enable($('btn-reboot'), true)
-        enable($('btn-bootloader'), true)
-        enable($('btn-disconnect'), true)
-        $('btn-connect').textContent = 'Connected'
+        setStage('connect', 'active', 'Pick the TS-Pico in the browser’s port list…')
+        const t = new WebSerial()
+        await t.requestAccess()
+        serial = await openSerial(t.port)
+        stageMsg('connect', 'Stopping the firmware and reading its version…')
+        await enterRaw()
+        installed = await readInstalled()
+        $('installed-version').textContent = installed.fw
+        if (manifest && manifest.upgrade_uf2) $('opt-rom').checked = installed.from1x
+        setStage('connect', 'done', `Connected. Installed: ${installed.fw}.`)
+        showConnected(true)
     } catch (err) {
         log('Connect failed: ' + err.message, 'error')
-        setStatus('Connect failed', 'error')
-        await safeDisconnect()
-        enable($('btn-connect'), true)
+        setStage('connect', 'error', 'Couldn’t connect. Close any other program using the Pico ' +
+            '(Thonny, another tab) and try again — or, if it won’t connect at all, put it in BOOTSEL ' +
+            'mode by hand (below) and press Start.')
+        await closeSerial()
     } finally {
-        busy = false
+        enable($('btn-connect'), !serial)
+        refreshPlan()
     }
 }
 
-function onPortLost() {
-    log('Serial port closed / device disconnected.', 'warn')
-    resetUiToDisconnected()
-}
-
-async function safeDisconnect() {
-    try { if (raw && raw.end) await raw.end() } catch (_e) { /* ignore */ }
-    try { if (port) await port.disconnect() } catch (_e) { /* ignore */ }
-    raw = null
-    port = null
-}
-
-async function disconnect() {
-    await safeDisconnect()
-    log('Disconnected.')
-    resetUiToDisconnected()
-}
-
-function resetUiToDisconnected() {
-    raw = null
-    port = null
-    show($('connected-panel'), false)
-    enable($('btn-connect'), true)
-    $('btn-connect').textContent = 'Connect to TS-Pico'
-    enable($('btn-update'), false)
-    enable($('btn-verify'), false)
-    enable($('btn-reboot'), false)
-    enable($('btn-bootloader'), false)
-    enable($('btn-disconnect'), false)
-    $('installed-version').textContent = 'connect in Step 3 to read'
-    show($('fw-hint'), false)
-    setStatus('Not connected')
+function showConnected(on) {
+    $('btn-connect').textContent = on ? 'Connected' : 'Connect to TS-Pico'
+    enable($('btn-connect'), !on && !running)
 }
 
 // ---------------------------------------------------------------------------
-// Update: write every manifest file to the device flash
+// BOOTSEL
 // ---------------------------------------------------------------------------
-async function update() {
-    if (busy || !raw || !manifest) return
-    busy = true
-    setControlsDuringTransfer(true)
+async function enterBootsel() {
+    setStage('bootsel', 'active', '')
+    if (serial) {
+        stageMsg('bootsel', 'Rebooting the Pico into BOOTSEL mode…')
+        log('machine.bootloader()')
+        await execNoReply('import machine\nmachine.bootloader()')
+    }
+    boot = await getBootsel('bootsel')
+    setStage('bootsel', 'done', `In BOOTSEL mode — using ${boot.describe()}.`)
+}
+
+/** A handle on the Pico's bootloader: the same kind as last time if we had
+ *  one (no picker needed), else WebUSB, else the drive. */
+async function getBootsel(name) {
+    if (boot && boot.kind === 'usb') {
+        const b = await UsbBootsel.find(20000)
+        if (b) return b
+    }
+    if (boot && boot.kind === 'drive') {
+        stageMsg(name, 'Waiting for the RPI-RP2 drive…')
+        if (await boot.waitPresent(20000)) return boot
+    }
+    if (UsbBootsel.supported()) {
+        const b = await UsbBootsel.find(3000)
+        if (b) return b
+    }
+    // First time: needs a click for the browser's picker.
+    return await pickBootsel(name)
+}
+
+async function pickBootsel(name) {
+    const usb = UsbBootsel.supported()
+    const drive = DriveBootsel.supported()
+    for (;;) {
+        const choices = []
+        if (usb) choices.push({ label: 'Allow USB access', value: 'usb' })
+        if (drive) choices.push({ label: 'Use the RPI-RP2 drive', value: 'drive' })
+        choices.push({ label: 'Stop', value: 'stop' })
+        stageMsg(name, usb
+            ? 'The Pico is in BOOTSEL mode. Click “Allow USB access” and pick “RP2 Boot” in the list.'
+            : 'The Pico is in BOOTSEL mode. Click “Use the RPI-RP2 drive” and pick the RPI-RP2 drive.')
+        const how = await ask(name, choices)
+        if (how === 'stop') throw new Stop()
+        try {
+            if (how === 'usb') {
+                const b = await UsbBootsel.request()
+                log(`Using ${b.describe()}.`)
+                return b
+            }
+            const d = await DriveBootsel.pick()
+            log(`Using ${d.describe()}.`)
+            return d
+        } catch (err) {
+            if (err.name === 'NotFoundError' || err.name === 'AbortError') {
+                log('Nothing picked.', 'warn')
+                continue
+            }
+            log(`${how === 'usb' ? 'USB' : 'Drive'} access failed: ${err.message}`, 'error')
+            if (how === 'usb') {
+                log('On Windows the Pico’s bootloader has no WebUSB driver unless you ' +
+                    'installed WinUSB for “RP2 Boot” (Zadig). On Linux it needs picotool’s ' +
+                    'udev rule. The RPI-RP2 drive works everywhere — use that.', 'warn')
+            }
+        }
+    }
+}
+
+async function fetchBytes(path) {
+    const resp = await fetch(path, { cache: 'no-store' })
+    if (!resp.ok) throw new Error(`${path}: HTTP ${resp.status}`)
+    return new Uint8Array(await resp.arrayBuffer())
+}
+
+async function writeImage(name, path, label) {
+    setStage(name, 'active', `Downloading ${label}…`)
+    const bytes = await fetchBytes(path)
+    stageMsg(name, `Writing ${label} (${sizeFmt(bytes.length)}) via ${boot.describe()}…`)
+    await boot.writeUf2(bytes, path.split('/').pop(), (f) => stageProgress(name, f))
+    log(`Wrote ${label}.`, 'ok')
+}
+
+// ---------------------------------------------------------------------------
+// The TS-2068 ROM update, driven from the 2068 and watched over serial
+// ---------------------------------------------------------------------------
+async function romUpdate() {
+    await writeImage('rom', `${channel}/${manifest.upgrade_uf2}`, 'the ROM updater')
+    await boot.reboot()
+    await reconnectSerial('rom')
+
+    const box = $('rom-steps')
+    show(box, true)
+    stage('rom').querySelector('.msg').after(box)
+    stageMsg('rom', 'Now on the TS-2068 (the TS-Pico stays plugged into it and into USB):')
+    stageProgress('rom', 0)
+
+    let slot1Done = false
+    let resolveDone
+    const done = new Promise((r) => { resolveDone = r })
+    const status = (text, kind = '') => {
+        const s = $('rom-status')
+        s.textContent = text
+        s.className = 'hint ' + kind
+    }
+    status('Waiting for LOAD "" on the 2068…')
+
+    let buf = ''
+    serial.onReceive((data) => {
+        buf += data
+        let nl
+        while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl).trim()
+            buf = buf.slice(nl + 1)
+            if (!line.startsWith('UPG ')) continue
+            let ev
+            try { ev = JSON.parse(line.slice(4)) } catch (_e) { continue }
+            onUpg(ev)
+        }
+    })
+
+    let phase = 1
+    const onUpg = (ev) => {
+        if (ev.event !== 'status' || ev.code !== 'W') log('2068: ' + line(ev))
+        switch (ev.event) {
+            case 'waiting': status('Waiting for LOAD "" on the 2068…'); break
+            case 'tape': status(ev.note ? `The updater stopped; the tape rewound. Type LOAD "" again.`
+                : 'Loading the updater from the TS-Pico…'); break
+            case 'ignored': status('That went to the TS-2068 ROM, not the Spectrum ROM. ' +
+                'Type OUT 244,3 first, then LOAD "".', 'warn'); break
+            case 'updater': status('The updater is running. Don’t turn anything off.'); break
+            case 'status':
+                if (ev.code === 'P') {
+                    phase = ev.arg
+                    status(phase === 1 ? 'Writing the TS-2068 ROM (slot 1)…' : 'Writing the ZX Spectrum ROM (slot 0)…')
+                } else if (ev.code === 'W') {
+                    const before = phase === 1 ? 0 : ROM_BLOCKS[1]
+                    stageProgress('rom', (before + ev.arg + 1) / (ROM_BLOCKS[1] + ROM_BLOCKS[0]))
+                } else if (ev.code === 'V') {
+                    if (phase === 1) slot1Done = true
+                    log(`Slot ${phase} verified.`, 'ok')
+                } else if (ev.code === 'D') {
+                    stageProgress('rom', 1)
+                    status('Both ROMs written and verified. The 2068 says DONE.', 'ok')
+                    resolveDone('done')
+                } else if (ev.code === 'X') {
+                    status((ROM_FAIL[ev.arg] || `The update failed (reason ${ev.arg}).`) +
+                        (slot1Done ? ' (The TS-2068 ROM is already new; you can also continue without the ZX ROM.)' : ''),
+                    'warn')
+                    if (slot1Done) offerSkip()
+                }
+                break
+        }
+    }
+    const line = (ev) => Object.entries(ev).map(([k, v]) => `${k}=${v}`).join(' ')
+
+    // An escape hatch: if the serial events never arrive but the 2068 shows
+    // DONE, the user can carry on.
+    let skipOffered = false
+    const offerSkip = () => {
+        if (skipOffered) return
+        skipOffered = true
+        ask('rom', [
+            { label: 'The 2068 says DONE — continue', value: 'done' },
+            { label: 'Stop', value: 'stop' },
+        ]).then(resolveDone)
+    }
+    setTimeout(offerSkip, 20000)
+
+    const how = await done
+    serial.onReceive(() => {})
+    show(box, false)
+    if (how === 'stop') throw new Stop()
+    setStage('rom', 'done', slot1Done || how === 'done' ? 'TS-2068 ROM updated.' : 'Done.')
+
+    // Back to BOOTSEL for the real firmware.
+    stageMsg('firmware', 'Rebooting the Pico into BOOTSEL mode…')
+    await execNoReply('import machine\nmachine.bootloader()')
+    boot = await getBootsel('firmware')
+}
+
+// ---------------------------------------------------------------------------
+// Files: upload, verify, reboot
+// ---------------------------------------------------------------------------
+async function uploadFiles() {
+    setStage('files', 'active', '')
+    await reconnectSerial('files', 45000)    // first boot after a wipe formats the filesystem
+    stageMsg('files', 'Entering the REPL…')
+    await enterRaw()
+
     const files = manifest.files
     const totalBytes = files.reduce((n, f) => n + (f.size || 0), 0)
     let doneBytes = 0
-    let failed = 0
-
-    setProgress(0)
-    log(`Starting update: ${files.length} files, ${sizeFmt(totalBytes)}.`)
-    try {
-        for (let i = 0; i < files.length; i++) {
-            const f = files[i]
-            const dest = '/' + f.path
-            setStatus(`Writing ${f.path} (${i + 1}/${files.length})`)
-            try {
-                const resp = await fetch('pico/' + f.path, { cache: 'no-store' })
-                if (!resp.ok) throw new Error('fetch HTTP ' + resp.status)
-                const data = new Uint8Array(await resp.arrayBuffer())
-
-                const [dir] = splitPath(dest)
-                if (dir) await raw.makePath('/' + dir)
-                await raw.writeFile(dest, data)
-
-                log(`  ✓ ${f.path} (${sizeFmt(data.byteLength)})`, 'ok')
-            } catch (err) {
-                failed++
-                log(`  ✗ ${f.path}: ${err.message}`, 'error')
-            }
-            doneBytes += f.size || 0
-            setProgress(totalBytes ? doneBytes / totalBytes : (i + 1) / files.length)
-        }
-        if (failed === 0) {
-            setStatus('Update complete', 'ok')
-            log('Update complete. Run Verify, then Reboot.', 'ok')
-        } else {
-            setStatus(`Update finished with ${failed} error(s)`, 'error')
-            log(`Update finished with ${failed} failed file(s).`, 'error')
-        }
-    } finally {
-        setControlsDuringTransfer(false)
-        busy = false
+    for (let i = 0; i < files.length; i++) {
+        const f = files[i]
+        stageMsg('files', `Writing ${f.path} (${i + 1}/${files.length})…`)
+        const data = await fetchBytes(`${channel}/pico/${f.path}`)
+        const [dir] = splitPath('/' + f.path)
+        if (dir) await raw.makePath('/' + dir)
+        await raw.writeFile('/' + f.path, data)
+        log(`  ✓ ${f.path} (${sizeFmt(data.byteLength)})`, 'ok')
+        doneBytes += f.size || 0
+        stageProgress('files', totalBytes ? doneBytes / totalBytes : (i + 1) / files.length)
     }
+
+    stageMsg('files', 'Verifying…')
+    const bad = await verifyFiles()
+    if (bad) throw new Error(`${bad} file(s) didn’t verify — see the log`)
+
+    stageMsg('files', 'Restarting the firmware…')
+    await execNoReply('import machine\nmachine.reset()')
+    setStage('files', 'done', `All ${files.length} files written and verified. The Pico restarted.`)
 }
 
-// ---------------------------------------------------------------------------
-// Verify: walk the device FS and compare names/sizes against the manifest
-// ---------------------------------------------------------------------------
-async function verify() {
-    if (busy || !raw || !manifest) return
-    busy = true
-    setControlsDuringTransfer(true)
-    setStatus('Verifying…')
-    try {
-        const tree = await raw.walkFs()
-        const onDevice = new Map()
-        flatten(tree, onDevice)
-
-        let ok = 0, mismatch = 0, missing = 0
-        for (const f of manifest.files) {
-            const key = '/' + f.path
-            if (!onDevice.has(key)) {
-                log(`  ✗ missing: ${f.path}`, 'error'); missing++
-            } else if (onDevice.get(key) !== f.size) {
-                log(`  ✗ size mismatch: ${f.path} (device ${onDevice.get(key)}, expected ${f.size})`, 'error')
-                mismatch++
-            } else {
-                ok++
-            }
-        }
-        if (mismatch === 0 && missing === 0) {
-            setStatus(`Verified ✓ all ${ok} files match`, 'ok')
-            log(`Verify passed: ${ok}/${manifest.files.length} files match.`, 'ok')
-        } else {
-            setStatus(`Verify found problems (${missing} missing, ${mismatch} mismatched)`, 'error')
-        }
-    } catch (err) {
-        log('Verify failed: ' + err.message, 'error')
-        setStatus('Verify failed', 'error')
-    } finally {
-        setControlsDuringTransfer(false)
-        busy = false
+async function verifyFiles() {
+    const onDevice = new Map()
+    flatten(await raw.walkFs(), onDevice)
+    let bad = 0
+    for (const f of manifest.files) {
+        const got = onDevice.get('/' + f.path)
+        if (got === undefined) { log(`  ✗ missing: ${f.path}`, 'error'); bad++ }
+        else if (got !== f.size) { log(`  ✗ size mismatch: ${f.path} (device ${got}, expected ${f.size})`, 'error'); bad++ }
     }
+    if (!bad) log(`Verify passed: ${manifest.files.length} files match.`, 'ok')
+    return bad
 }
 
-// Flatten walkFs() tree into a Map<fullpath, size> for files only.
 function flatten(nodes, map) {
     for (const n of nodes) {
-        if ('content' in n) {
-            flatten(n.content, map)
+        if ('content' in n) flatten(n.content, map)
+        else map.set(n.path, n.size)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The run
+// ---------------------------------------------------------------------------
+async function start() {
+    if (running || !manifest || !manifest.uf2) return
+    const wipe = $('opt-wipe').checked
+    const rom = $('opt-rom').checked
+    if (!serial && !confirm('The Pico isn’t connected over serial. Continue only if it’s already ' +
+        'in BOOTSEL mode (the RPI-RP2 drive is showing). Otherwise click Cancel and Connect first.')) return
+    if (wipe && !confirm('This erases everything on the Pico — firmware and files — and installs ' +
+        `firmware ${manifest.fw_version}. Nothing on the TS-2068, SD card or EXROM is touched` +
+        (rom ? ' except the ROM update you asked for.' : '.') + '\n\nContinue?')) return
+
+    running = true
+    setRunning(true)
+    let current = 'bootsel'
+    try {
+        await enterBootsel()
+
+        if (wipe) {
+            current = 'wipe'
+            setStage('wipe', 'active', 'Erasing the Pico’s flash…')
+            if (boot.kind === 'usb') {
+                await boot.wipe((f) => stageProgress('wipe', f))
+            } else {
+                await boot.wipe(await fetchBytes('flash_nuke.uf2'), (f) => stageProgress('wipe', f))
+            }
+            setStage('wipe', 'done', 'Erased.')
+            log('Flash erased.', 'ok')
+        }
+
+        if (rom) {
+            current = 'rom'
+            await romUpdate()
+        }
+
+        current = 'firmware'
+        await writeImage('firmware', `${channel}/${manifest.uf2}`, `firmware ${manifest.fw_version}`)
+        await boot.reboot()
+        setStage('firmware', 'done', `Firmware ${manifest.fw_version} installed.`)
+
+        current = 'files'
+        await uploadFiles()
+
+        $('installed-version').textContent = manifest.fw_version
+        log('All done.', 'ok')
+        show($('done'), true)
+    } catch (err) {
+        if (err instanceof Stop) {
+            setStage(current, 'error', 'Stopped.')
+            log('Stopped.', 'warn')
         } else {
-            map.set(n.path, n.size)
+            setStage(current, 'error', err.message)
+            log(`${current}: ${err.message}`, 'error')
+            log('You can press Start again: every step can be repeated, and a Pico stuck in ' +
+                'BOOTSEL mode is always recoverable.', 'warn')
+        }
+        if (boot && boot.close) await boot.close()
+    } finally {
+        running = false
+        setRunning(false)
+    }
+}
+
+function setRunning(on) {
+    enable($('btn-start'), !on)
+    enable($('opt-wipe'), !on)
+    for (const c of CHANNELS) enable($('ch-' + c), !on)
+    showConnected(!!serial)
+    if (on) {
+        show($('done'), false)
+        for (const s of STAGES) {
+            if (s !== 'connect') setStage(s, 'pending', '')
         }
     }
+    refreshPlan()
 }
 
 // ---------------------------------------------------------------------------
-// Reboot / bootloader (fire-and-forget: device drops serial on reset)
-// ---------------------------------------------------------------------------
-async function fireAndForget(code, note) {
-    if (!raw) return
-    log(note)
-    try {
-        // Send a bare exec without waiting for the OK that will never come —
-        // the board resets mid-command.
-        await raw.port.readUntil('>', 1000).catch(() => {})
-        await raw.port.write(code)
-        await raw.port.write('\x04')        // Ctrl-D: execute
-        await sleep(400)
-    } catch (_e) { /* expected: serial drops */ }
-    await safeDisconnect()
-    resetUiToDisconnected()
-}
-
-async function reboot() {
-    if (busy) return
-    await fireAndForget('import machine\nmachine.reset()',
-        'Rebooting Pico (machine.reset())…')
-    log('Pico is rebooting. It will reconnect as a serial device shortly.', 'ok')
-}
-
-async function bootloader() {
-    if (busy) return
-    if (!confirm('Reboot the Pico into BOOTSEL (UF2 flashing) mode?\n\n' +
-        'An RPI-RP2 drive will appear. Drag firmware.uf2 onto it, then ' +
-        'reconnect here to copy the files.')) return
-    await fireAndForget('import machine\nmachine.bootloader()',
-        'Entering BOOTSEL mode (machine.bootloader())…')
-    log('Pico should now appear as the RPI-RP2 drive. Drop firmware.uf2 on it.', 'ok')
-}
-
-// ---------------------------------------------------------------------------
-// UI plumbing
-// ---------------------------------------------------------------------------
-function updateFwHint(installed) {
-    const hint = $('fw-hint')
-    const latest = manifest && manifest.fw_version
-    hint.className = 'hint'
-    if (!latest) {
-        show(hint, false); return
-    }
-    if (installed === 'unknown') {
-        hint.classList.add('warn')
-        hint.textContent = `Couldn't read the installed firmware version. ` +
-            `If this is a fresh Pico, do Step 2 first, then upload files in Step 3.`
-    } else if (String(installed) === String(latest)) {
-        hint.classList.add('ok')
-        hint.textContent = `✓ Firmware is already up to date (${installed}). ` +
-            `You can skip Step 2 — just upload the files in Step 3.`
-    } else {
-        hint.classList.add('warn')
-        hint.textContent = `Installed firmware is ${installed}, latest is ${latest}. ` +
-            `Do Step 2 to flash the new firmware before uploading files.`
-    }
-    show(hint, true)
-}
-
-function setProgress(frac) {
-    const pct = Math.round(frac * 100)
-    $('progress-bar').style.width = pct + '%'
-    $('progress-pct').textContent = pct + '%'
-}
-
-function setControlsDuringTransfer(active) {
-    show($('progress-wrap'), active)
-    enable($('btn-update'), !active)
-    enable($('btn-verify'), !active)
-    enable($('btn-reboot'), !active)
-    enable($('btn-bootloader'), !active)
-    enable($('btn-disconnect'), !active)
-}
-
-function init() {
-    // Browser support gate.
+async function init() {
     if (typeof navigator.serial === 'undefined') {
         show($('unsupported'), true)
         show($('main'), false)
         return
     }
     $('btn-connect').addEventListener('click', connect)
-    $('btn-disconnect').addEventListener('click', disconnect)
-    $('btn-update').addEventListener('click', update)
-    $('btn-verify').addEventListener('click', verify)
-    $('btn-reboot').addEventListener('click', reboot)
-    $('btn-bootloader').addEventListener('click', bootloader)
-    loadManifest()
+    $('btn-start').addEventListener('click', start)
+    $('opt-wipe').addEventListener('change', refreshPlan)
+    $('opt-rom').addEventListener('change', refreshPlan)
+    for (const c of CHANNELS) {
+        $('ch-' + c).addEventListener('change', () => loadChannel(c))
+    }
+    const how = []
+    if (UsbBootsel.supported()) how.push('USB (WebUSB)')
+    if (DriveBootsel.supported()) how.push('the RPI-RP2 drive')
+    log(`This browser can write firmware via ${how.join(' or ') || 'nothing (use Do it by hand)'}.`)
+
+    // Channel: ?channel=main, else the last one used, else release. A channel
+    // that isn't published is disabled.
+    let want = new URLSearchParams(location.search).get('channel')
+    if (!want) { try { want = localStorage.getItem('tspico-channel') } catch (_e) { /* private mode */ } }
+    for (const c of CHANNELS) {
+        try {
+            const m = await fetchManifest(c)
+            $('ch-' + c + '-label').textContent = m.tag ? `(${m.fw_version}, ${m.tag})` : ''
+        } catch (_e) {
+            enable($('ch-' + c), false)
+            $('ch-' + c + '-label').textContent = '(not published)'
+            if (want === c) want = null
+        }
+    }
+    if (!CHANNELS.includes(want) || $('ch-' + want).disabled) {
+        want = CHANNELS.find((c) => !$('ch-' + c).disabled) || 'release'
+    }
+    await loadChannel(want)
 }
 
 init()

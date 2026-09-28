@@ -205,6 +205,15 @@ jobs:
             ${{ runner.temp }}/upgrade/updater.tap
           retention-days: 30
 
+      # The web updater's WebUSB flash path, against a fake PICOBOOT device,
+      # with the two UF2s just built: every block lands where the UF2 says,
+      # and the read-back verify catches a write that didn't take.
+      - name: Test the web updater's flasher with the built UF2s
+        run: |
+          node web-updater/test/flasher.test.mjs \
+            ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2 \
+            ${{ github.workspace }}/micropython/ports/rp2/build-UPGRADE/firmware.uf2
+
       # The Pico's MicroPython parser is RAM-hungry. Once dev_tspico.py
       # grew past ~4500 lines (post stage-9 telemetry additions), parsing
       # it at boot started to OOM. Pre-compiled .mpy bytecode skips the

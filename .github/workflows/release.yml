@@ -71,7 +71,7 @@ jobs:
             https://github.com/micropython/micropython.git ${{ github.workspace }}/micropython
 
       # ──────────────────────────────────────────────────────────────────
-      # The next four steps mirror .github/workflows/build.yml. If you
+      # The next steps mirror .github/workflows/build.yml. If you
       # change either workflow, update both. (Extracting to a composite
       # action is the cleaner option but adds an indirection we don't
       # need yet — two callers.)
@@ -85,6 +85,7 @@ jobs:
           cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
           cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
           cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
+          cp src/TS/printer.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/printer.py
           cp src/manifest.py         ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
 
       - name: Build mpy-cross
@@ -107,6 +108,22 @@ jobs:
           MPYC="${{ github.workspace }}/micropython/mpy-cross/build/mpy-cross"
           "$MPYC" src/dev_tspico.py
           ls -la src/dev_tspico.mpy
+
+      # The upgrade UF2 (src/upgrade/), as in build.yml: the web updater writes
+      # it before the firmware for boards coming from 1.1 / 1.5, whose TS-2068
+      # ROM can't talk to the current firmware. Published as upgrade.uf2.
+      - name: Build the upgrade UF2
+        run: |
+          python3 tools/build-upgrade.py "$RUNNER_TEMP/upgrade"
+          M=${{ github.workspace }}/micropython/ports/rp2
+          mkdir -p $M/modules-upgrade/TS
+          cp src/TS/__init__.py src/TS/tspico_io.py src/TS/sdcard.py $M/modules-upgrade/TS/
+          cp src/upgrade/upgrade.py src/upgrade/main.py "$RUNNER_TEMP/upgrade/upgrade_data.py" $M/modules-upgrade/
+          cp src/upgrade/manifest.py $M/boards/manifest_upgrade.py
+          cd $M
+          make -j$(nproc) BUILD=build-UPGRADE FROZEN_MANIFEST=$PWD/boards/manifest_upgrade.py
+          cp build-UPGRADE/firmware.uf2 "$RUNNER_TEMP/upgrade.uf2"
+          ls -la "$RUNNER_TEMP/upgrade.uf2"
 
       # Compile the tracked BASIC sources (basic/*.bas) into TAPs. They land
       # in "SD card/TAP/basic/" (gitignored) and get swept into the bundle by
@@ -284,9 +301,11 @@ jobs:
           UF2: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
           FLASH_ROM: ${{ steps.flash.outputs.rom }}
         run: |
-          # Assets: bundle + raw UF2, plus the 512K flash image when the
-          # build-flash step produced one (see the step above).
-          ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)" )
+          # Assets: bundle + raw UF2 + the upgrade UF2, plus the 512K flash
+          # image when the build-flash step produced one (see the step above).
+          # pages.yml publishes firmware.uf2 and upgrade.uf2 to the updater.
+          ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)"
+                   "${RUNNER_TEMP}/upgrade.uf2#upgrade.uf2 (ROM updater for boards coming from 1.1/1.5)" )
           if [ -n "${FLASH_ROM:-}" ] && [ -f "${FLASH_ROM}" ]; then
             ASSETS+=( "${FLASH_ROM}#${FLASH_ROM} (512K flash image, for a chip programmer)" )
           fi

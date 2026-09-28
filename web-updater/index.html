@@ -45,7 +45,7 @@
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.primary:hover:not(:disabled) { background: #3d87e6; }
   a.btn { display: inline-block; text-decoration: none; }
-  a.btn.disabled { pointer-events: none; opacity: .45; }
+  a.disabled { pointer-events: none; opacity: .45; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .spacer { flex: 1; }
   .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin: 4px 0; }
@@ -85,13 +85,42 @@
   .badge { font-size: 11px; padding: 2px 7px; border-radius: 5px;
     background: var(--panel-2); color: var(--warn); border: 1px solid var(--border); }
   .danger { color: var(--error); }
+  /* The guided run */
+  .choice { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+  .choice input { margin-top: 4px; }
+  .choice small { display: block; color: var(--muted); font-size: 13px; }
+  ol.stages { list-style: none; margin: 16px 0 0; padding: 0; counter-reset: st; }
+  ol.stages > li { position: relative; padding: 10px 0 10px 38px;
+    border-top: 1px solid var(--border); counter-increment: st; }
+  ol.stages > li::before { content: counter(st); position: absolute; left: 0; top: 10px;
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 13px; font-weight: 700; background: var(--panel-2); color: var(--muted);
+    border: 1px solid var(--border); }
+  ol.stages > li[data-state="active"]::before { border-color: var(--accent); color: var(--accent); }
+  ol.stages > li[data-state="done"]::before { content: "✓"; color: var(--ok); border-color: var(--ok); }
+  ol.stages > li[data-state="error"]::before { content: "!"; color: var(--error); border-color: var(--error); }
+  ol.stages > li[data-state="skipped"] { opacity: .5; }
+  ol.stages > li[data-state="skipped"]::before { content: "–"; }
+  ol.stages .title { font-weight: 600; }
+  ol.stages .msg { color: var(--muted); font-size: 13.5px; min-height: 1em; }
+  ol.stages > li[data-state="error"] .msg { color: var(--error); }
+  ol.stages .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  ol.stages .actions:empty { display: none; }
+  ol.stages .progress { margin-top: 8px; }
+  #rom-steps ol { margin: 6px 0; padding-left: 20px; }
+  #rom-steps code { font-size: 14px; }
+  details { margin-top: 6px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  .channels label { display: block; margin: 4px 0; }
+  .channels small { color: var(--muted); }
+  #done { border-color: var(--ok); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>TS-Pico Web Updater <span class="badge">prototype</span></h1>
-    <p>Install the TS-Pico firmware and files straight from your browser — over USB.</p>
+    <h1>TS-Pico Web Updater</h1>
+    <p>Install or upgrade the TS-Pico firmware straight from your browser — over USB, no dragging files.</p>
   </header>
 
   <!-- Shown only when the browser lacks WebSerial -->
@@ -105,167 +134,154 @@
   </div>
 
   <main id="main">
-    <!-- Versions overview -->
+
+    <!-- What's being installed -->
     <div class="panel">
       <h2>What you’re installing</h2>
+      <div class="channels">
+        <label><input type="radio" name="channel" id="ch-release" value="release">
+          <strong>Latest release</strong> <small id="ch-release-label"></small></label>
+        <label><input type="radio" name="channel" id="ch-main" value="main">
+          <strong>Latest main build</strong> <span class="badge">testers</span>
+          <small id="ch-main-label"></small></label>
+      </div>
       <dl class="kv">
-        <dt>Latest firmware</dt><dd id="latest-version">loading…</dd>
-        <dt>Files to upload</dt><dd id="payload-summary">—</dd>
-        <dt>Installed on device</dt><dd id="installed-version">connect in Step 3 to read</dd>
+        <dt>Firmware</dt><dd><span id="latest-version">loading…</span> <a id="latest-source" target="_blank" rel="noopener"></a></dd>
+        <dt>Files for the Pico</dt><dd id="payload-summary">—</dd>
+        <dt>Installed on device</dt><dd id="installed-version">connect to read</dd>
       </dl>
-      <div class="hint" id="fw-hint" hidden></div>
     </div>
 
-    <!-- Step 1: wipe the Pico (flash_nuke) -->
+    <!-- The guided run -->
     <div class="panel">
-      <h2><span class="step">Step 1</span> · Wipe the Pico</h2>
-      <p class="lead">Erases everything on the Pico’s flash for a clean slate.
-         <strong>Required if your TS-Pico is coming from an older distribution</strong>
-         — leftover files (such as an old <code>/TS/</code> folder) stop the current
-         firmware from booting. On a brand-new Pico there’s nothing to wipe, so you
-         can skip ahead to Step 2.</p>
+      <h2>Upgrade your TS-Pico</h2>
+      <p class="lead">Leave the TS-Pico plugged into the TS-2068 and connect the Pico’s
+         Micro-USB port to this computer. Close Thonny or anything else using the Pico.</p>
 
-      <div class="row">
-        <a id="nuke-link" class="btn primary" href="flash_nuke.uf2" download="flash_nuke.uf2">Download flash_nuke.uf2</a>
-        <span class="note">Raspberry Pi’s official flash-erase image.</span>
-      </div>
-      <p class="note danger">This permanently erases all files <em>and</em> the
-         firmware on the Pico — that’s intentional. Step 2 reinstalls the firmware
-         and Step 3 re-uploads the files. Nothing on your TS-2068, SD card, or
-         EXROM is touched.</p>
+      <ol class="stages">
+        <li class="stage" id="st-connect" data-state="active">
+          <div class="title">Connect</div>
+          <div class="msg">Reads what’s installed and picks the right steps.</div>
+          <div class="row" style="margin-top:8px;">
+            <button id="btn-connect" class="primary">Connect to TS-Pico</button>
+          </div>
+          <details>
+            <summary>It won’t connect / the Pico has no working firmware</summary>
+            <p class="note">Put it into BOOTSEL mode by hand, then press <strong>Start</strong>
+               below without connecting:</p>
+            <ol class="steps">
+              <li>Plug the USB cable into the Pico and your computer.</li>
+              <li>Press and hold the Pico’s <kbd>BOOTSEL</kbd> button (the little white
+                  button next to the Micro-USB connector).</li>
+              <li>While holding it, press and release the TS-Pico’s <strong>Pico reset</strong>
+                  button (or unplug and replug the USB cable).</li>
+              <li>Release <kbd>BOOTSEL</kbd>. A drive named <strong>RPI-RP2</strong> appears —
+                  leave it alone.</li>
+            </ol>
+          </details>
+          <div class="actions"></div>
+          <div class="progress" hidden><div></div></div>
+        </li>
 
-      <h3>Put the Pico into BOOTSEL mode</h3>
-      <ol class="steps">
-        <li>Remove the TS-Pico from the expansion board.</li>
-        <li>Plug the USB cable into your computer.</li>
-        <li>Plug the other end (Micro-USB) into the Raspberry Pi Pico.</li>
-        <li>Press and hold the Pico <strong>Reset</strong> button.</li>
-        <li>While still holding Reset, press and hold the <kbd>BOOTSEL</kbd> button
-            on the Pico (the little white button next to the Micro-USB connector).</li>
-        <li>Release the <strong>Reset</strong> button.</li>
-        <li>Release the <kbd>BOOTSEL</kbd> button.</li>
-        <li>A drive named <strong>RPI-RP2</strong> will appear on your computer.
-            Find it in your file manager — <strong>don’t open or click into it.</strong></li>
-        <li>Drag the downloaded <strong>flash_nuke.uf2</strong> onto the
-            <strong>RPI-RP2</strong> drive.</li>
-        <li>The Pico erases its flash and <strong>automatically returns to BOOTSEL
-            mode</strong> — the <strong>RPI-RP2</strong> drive reappears. Leave it
-            connected and continue to Step 2.</li>
+        <li class="stage" id="st-options" data-state="pending">
+          <div class="title">Choose</div>
+          <label class="choice"><input type="checkbox" id="opt-wipe" checked>
+            <span>Erase the Pico first
+              <small>Wipes the Pico’s firmware and files for a clean start. Recommended, and
+                 required when coming from 1.1 or 1.5 — leftover files (like an old
+                 <code>/TS/</code> folder) stop the new firmware from booting.</small></span></label>
+          <label class="choice"><input type="checkbox" id="opt-rom">
+            <span>Update the TS-2068 ROM (boards coming from 1.1 or 1.5)
+              <small>Firmware 2.0 needs the matching 2.0 ROM in the TS-Pico’s flash chip. The
+                 page loads a small updater onto the 2068 and walks you through it. Some boards
+                 need the <strong>P10 jumper</strong> fitted so the chip can be written.</small></span></label>
+          <div class="hint" id="plan-hint" hidden></div>
+          <div class="row" style="margin-top:12px;">
+            <button id="btn-start" class="primary" disabled>Start</button>
+          </div>
+        </li>
+
+        <li class="stage" id="st-bootsel" data-state="pending">
+          <div class="title">Enter BOOTSEL mode</div>
+          <div class="msg"></div><div class="actions"></div>
+          <div class="progress" hidden><div></div></div>
+        </li>
+        <li class="stage" id="st-wipe" data-state="pending">
+          <div class="title">Erase the Pico</div>
+          <div class="msg"></div><div class="actions"></div>
+          <div class="progress" hidden><div></div></div>
+        </li>
+        <li class="stage" id="st-rom" data-state="pending">
+          <div class="title">Update the TS-2068 ROM</div>
+          <div class="msg"></div>
+          <div id="rom-steps" hidden>
+            <ol>
+              <li>Fit the <strong>P10 jumper</strong> if your board has one.</li>
+              <li>Turn the TS-2068 on (or off and on).</li>
+              <li>Type <code>OUT 244,3</code> and press <kbd>ENTER</kbd> — this switches to the
+                  Spectrum ROM.</li>
+              <li>Type <code>LOAD ""</code> (<kbd>J</kbd>, then <kbd>SYMBOL SHIFT</kbd>+<kbd>P</kbd>
+                  twice) and press <kbd>ENTER</kbd>.</li>
+              <li>Wait for <strong>DONE</strong> on the TV. This page follows along.</li>
+            </ol>
+            <div class="hint" id="rom-status"></div>
+          </div>
+          <div class="actions"></div>
+          <div class="progress" hidden><div></div></div>
+        </li>
+        <li class="stage" id="st-firmware" data-state="pending">
+          <div class="title">Install the firmware</div>
+          <div class="msg"></div><div class="actions"></div>
+          <div class="progress" hidden><div></div></div>
+        </li>
+        <li class="stage" id="st-files" data-state="pending">
+          <div class="title">Copy the files</div>
+          <div class="msg"></div><div class="actions"></div>
+          <div class="progress" hidden><div></div></div>
+        </li>
       </ol>
     </div>
 
-    <!-- Step 2: firmware UF2 -->
-    <div class="panel">
-      <h2><span class="step">Step 2</span> · Flash the firmware</h2>
-      <p class="lead">Installs the firmware itself. If you just did Step 1, the
-         Pico is already in BOOTSEL mode (the <strong>RPI-RP2</strong> drive is
-         showing) — go straight to the drag step below. Otherwise, if Step 3 shows
-         your firmware is already up to date, you can skip ahead to Step 3.</p>
-
-      <div class="row">
-        <a id="uf2-link" class="btn primary disabled" href="#" download="firmware.uf2">Download firmware.uf2</a>
-        <a id="uf2-zip-link" class="btn disabled" href="#" download="firmware-uf2.zip">Download as .zip</a>
-        <span class="note" id="uf2-note"></span>
-      </div>
-      <p class="note">On Windows, antivirus or SmartScreen sometimes blocks or
-         quarantines a raw <code>.uf2</code> download. If that happens, grab the
-         <strong>.zip</strong> instead — unzip it, then drag the
-         <code>firmware.uf2</code> inside onto the RPI-RP2 drive.</p>
-
-      <h3>Then flash it onto the RPI-RP2 drive</h3>
-      <p class="note">Need to get into BOOTSEL mode first? If you just wiped the
-         Pico in Step 1, it’s already there. Otherwise use the manual button
-         sequence in Step 1 above — or, if you’re already running TS-Pico firmware
-         and connected in Step 3, just click <strong>Enter BOOTSEL mode</strong> below.</p>
-      <ol class="steps">
-        <li>Make sure the <strong>RPI-RP2</strong> drive is showing —
-            <strong>don’t open or click into it.</strong></li>
-        <li>Drag the downloaded <strong>firmware.uf2</strong> onto the
-            <strong>RPI-RP2</strong> drive.</li>
-        <li>The Pico reboots into the new firmware. Leave it connected by USB and
-            continue to Step 3.</li>
-      </ol>
-
-      <div class="row" style="margin-top:12px;">
-        <button id="btn-bootloader" disabled>Enter BOOTSEL mode</button>
-        <span class="note">Already connected in Step 3? This reboots the Pico
-           straight into the RPI-RP2 drive — no buttons needed.</span>
-      </div>
+    <div class="panel" id="done" hidden>
+      <h2 style="color:var(--ok)">Done</h2>
+      <p>Turn the TS-2068 off and on. It should start with the new ROM and firmware —
+         try <code>LOAD "tpi:dir"</code>. If you updated the ROM, you can remove the P10 jumper.</p>
     </div>
 
-    <!-- Step 3: files -->
+    <!-- Manual path -->
     <div class="panel">
-      <h2><span class="step">Step 3</span> · Upload the files</h2>
-      <p class="lead">Copies <code>main.py</code>, <code>config.ini</code>,
-         <code>words.txt</code>, and the <code>assets/</code> folder onto the
-         Pico’s flash.</p>
-
-      <div class="row">
-        <button id="btn-connect" class="primary">Connect to TS-Pico</button>
-        <span class="spacer"></span>
-        <span id="status" class="status">Not connected</span>
-      </div>
-      <p class="note">Plug the Pico into USB, click Connect, and pick it in the
-         browser’s port dialog. Make sure no other program or browser tab is
-         connected to the Pico — only one connection at a time is allowed.</p>
-
-      <div id="connected-panel" hidden>
-        <h3>Transfer</h3>
-        <div class="row">
-          <button id="btn-update" class="primary" disabled>Upload files</button>
-          <button id="btn-verify" disabled>Verify</button>
-          <span class="spacer"></span>
-          <button id="btn-disconnect" disabled>Disconnect</button>
-        </div>
-
-        <div id="progress-wrap" hidden>
-          <div class="progress"><div id="progress-bar"></div></div>
-          <div class="row"><span id="progress-pct">0%</span></div>
-        </div>
-
-        <h3>Finish</h3>
-        <div class="row">
-          <button id="btn-reboot" disabled>Reboot Pico</button>
-          <span class="note">Restarts the firmware so the new files take effect.</span>
-        </div>
-      </div>
+      <details>
+        <summary>Do it by hand instead</summary>
+        <p class="note">Everything the page does, as downloads. Put the Pico in BOOTSEL mode
+           (see “It won’t connect” above) before each <code>.uf2</code>, then drag it onto the
+           <strong>RPI-RP2</strong> drive.</p>
+        <ol class="steps">
+          <li><a href="flash_nuke.uf2" download="flash_nuke.uf2">flash_nuke.uf2</a> — erases the
+              Pico; it comes back as RPI-RP2 by itself.</li>
+          <li>From 1.1 / 1.5 only: <a id="dl-upgrade" class="disabled" download="upgrade.uf2">upgrade.uf2</a>
+              — then on the 2068 type <code>OUT 244,3</code> and <code>LOAD ""</code> and wait for DONE.</li>
+          <li><a id="dl-uf2" class="disabled" download="firmware.uf2">firmware.uf2</a>
+              (or <a id="dl-uf2-zip" class="disabled" download="firmware-uf2.zip">as a .zip</a>, if
+              Windows blocks the <code>.uf2</code>).</li>
+          <li>Then press <strong>Connect</strong> above and <strong>Start</strong> with
+              “Erase” unticked — it only copies the files if the firmware is already current.</li>
+        </ol>
+      </details>
     </div>
 
-    <!-- Step 4: SD card files (software testers only) -->
+    <!-- SD card files (software testers only) -->
     <div class="panel">
-      <h2><span class="step">Step 4</span> · Copy the SD card files
-        <span class="badge">testers</span></h2>
-      <p class="lead">For <strong>software testers</strong> only. The TS-Pico
-         reads TAP programs and <code>tpi:help</code> text from a FAT-formatted
-         SD card at runtime, so to exercise the firmware end-to-end on your own
-         hardware you need a card with these files on it. Download the bundle and
-         copy its contents to the root of the card you plug into the TS-Pico.
-         <strong>Production users can skip this</strong> — a ready-made SD card
-         image will be provided separately.</p>
-
+      <h2>SD card files <span class="badge">testers</span></h2>
+      <p class="lead">The TS-Pico reads TAP programs and <code>tpi:help</code> text from a
+         FAT-formatted SD card. Testers: unzip this to the root of the card, keeping the
+         <code>TAP/</code> and <code>help/</code> folders. Everyone else can skip it — a
+         ready-made SD card image will be provided separately.</p>
       <div class="row">
-        <a id="sdcard-link" class="btn primary disabled" href="#" download="sdcard.zip">Download SD card files (.zip)</a>
+        <a id="sdcard-link" class="btn primary disabled" download="sdcard.zip">Download SD card files (.zip)</a>
         <span class="note" id="sdcard-note"></span>
       </div>
-
-      <h3>Then copy them onto the card</h3>
-      <ol class="steps">
-        <li>Format an SD card as <strong>FAT32</strong> (or reuse one already
-            prepared for the TS-Pico).</li>
-        <li>Unzip the downloaded <strong>sdcard.zip</strong>.</li>
-        <li>Copy everything <em>inside</em> the unzipped folder to the
-            <strong>root</strong> of the SD card, preserving the subfolders:
-          <ul>
-            <li><code>TAP/</code> → <code>/TAP/</code> (test programs)</li>
-            <li><code>help/</code> → <code>/help/</code> (<code>tpi:help</code> text)</li>
-          </ul>
-        </li>
-        <li>Eject the card, insert it into the TS-Pico, and reboot. You should
-            see <code>INFO: SD Card initialized and mounted OK</code>.</li>
-      </ol>
     </div>
 
-    <!-- Log -->
     <div class="panel">
       <h2>Log</h2>
       <div id="log"></div>
@@ -273,8 +289,9 @@
   </main>
 
   <p class="note">
-    Prototype for
-    <a href="https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26">issue&nbsp;#26</a>.
+    Firmware writing uses <a href="https://github.com/piersfinlayson/picoflash">Pico⚡Flash</a>
+    and file transfer uses <a href="https://github.com/vshymanskyy/ViperIDE">ViperIDE</a> code (both MIT).
+    <a href="https://github.com/timex-sinclair-projects/tspico-firmware-build/tree/main/web-updater">Source</a>.
   </p>
 </div>
 

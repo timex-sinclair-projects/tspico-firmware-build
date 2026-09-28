@@ -1,123 +1,136 @@
-# TS-Pico Web Updater (prototype)
+# TS-Pico Web Updater
 
-A single static page that uploads the TS-Pico Pico-flash files — `main.py`,
-`config.ini`, `words.txt`, `assets/*.tap` (subfolders preserved) — onto a Pico
-over **WebSerial**, replacing the manual file-copy step after the UF2 is
-flashed. Prototype for
-[issue #26](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26);
-see the research write-up for the full rationale.
+A single static page that takes a TS-Pico from whatever it has — 1.1, 1.5,
+2.x, or a blank or wiped Pico — to the current firmware, from the browser,
+with no files to drag. Started as the prototype for
+[issue #26](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/26).
 
-> **Scope:** the over-serial uploader writes the Pico's internal **flash**
-> filesystem only. SD-card content (the `SD card/` bundle — `help/` text and
-> `TAP/` files) is installed by copying it to the card directly — the page
-> offers it as a **Step 4** `.zip` download (for software testers), but does not
-> write it over the serial link.
+## What a run does
 
-> **Wipe step:** the page opens with an optional **Step 1 · Wipe the Pico**, a
-> plain download of the Raspberry Pi `flash/nuke` image (`flash_nuke.uf2`,
-> dragged onto RPI-RP2 in BOOTSEL mode). It's needed when a board carries
-> leftover files from an older distribution that block the current firmware from
-> booting. This is a static same-origin download — not part of the serial flow.
+The user connects, ticks what they need, and presses **Start**:
 
-It's a "very limited ViperIDE": it vendors ViperIDE's MIT-licensed WebSerial
-transport and raw-REPL file-writing code, and adds a small connect → update →
-verify → reboot UI on top.
+1. **Connect** — Web Serial → Ctrl-C the firmware → raw REPL. Reads
+   `FW_VERSION` from `/config.ini` (1.1 has none) and pre-ticks the ROM update
+   for a board on 1.x.
+2. **BOOTSEL** — `machine.bootloader()` over the REPL, then a handle on the
+   boot ROM: **WebUSB/PICOBOOT** if the browser can open it, else the
+   **RPI-RP2 drive** through the File System Access API (see below). A Pico
+   that won't connect can be put in BOOTSEL by hand; Start then skips step 1.
+3. **Wipe** — erase all 2 MB (WebUSB), or write `flash_nuke.uf2` onto the
+   drive and wait for it to come back. Clears old files such as a `/TS/`
+   folder that would shadow the frozen modules.
+4. **ROM update** (boards from 1.1/1.5) — write `upgrade.uf2`
+   ([src/upgrade/](../src/upgrade/)), reboot, reopen the serial port, and
+   follow its `UPG {json}` lines while the user types `OUT 244,3` and
+   `LOAD ""` on the 2068: tape loading, each block written, verify, DONE, or a
+   failure (e.g. the P10 jumper). Then `machine.bootloader()` again.
+5. **Firmware** — write `firmware.uf2` (WebUSB also reads it back to verify)
+   and reboot.
+6. **Files** — reopen the serial port (Chrome remembers the permission, so no
+   picker), write `main.py`, `config.ini`, `words.txt`, `assets/*.tap`,
+   verify names and sizes, `machine.reset()`.
+
+Every step can be rerun; a Pico left in BOOTSEL is always recoverable.
+
+## Writing a UF2 without dragging
+
+| Path | How | Works on |
+|---|---|---|
+| **WebUSB (PICOBOOT)** | [Pico⚡Flash](https://github.com/piersfinlayson/picoflash)'s protocol code talks to the boot ROM's vendor interface: erase, write, read back, reboot. | Chrome/Edge on macOS, ChromeOS, Android. Linux needs picotool's udev rule. **An RP2040 on Windows needs WinUSB bound to “RP2 Boot” (Zadig)** — its boot ROM has no Microsoft OS descriptors. |
+| **RPI-RP2 drive** | `showDirectoryPicker()` on the drive (checked by its `INFO_UF2.TXT`), then the UF2 is written onto it, as a drag would. The Pico reboots on the last block, so a failing close/rename afterwards is expected; the drive disappearing is the success signal. The handle is by path, so it works again when the drive comes back. | Any desktop Chrome/Edge, no driver. |
+
+The page offers WebUSB first and falls back to the drive when the device
+can't be opened. The logic is in [flasher.js](flasher.js); a host test runs it
+against a fake PICOBOOT device with real UF2s:
+
+```sh
+node test/flasher.test.mjs [firmware.uf2 ...]
+```
+
+CI runs it on every build with the two UF2s it just built.
+
+## Channels
+
+The page installs from one of two payloads, chosen at the top of the page
+(also `?channel=main`):
+
+- **`release/`** — the latest GitHub Release: its `firmware.uf2` and
+  `upgrade.uf2` assets, and the Pico files from its tag.
+- **`main/`** — the latest green `build.yml` run on `main`, for testers: its
+  `tspico-firmware-uf2` and `tspico-upgrade-uf2` artifacts, and the Pico files
+  from its commit.
+
+Each channel is a directory with `manifest.json`, `pico/`, `firmware.uf2`,
+`firmware-uf2.zip`, `upgrade.uf2` and `sdcard.zip`. A release from before
+`upgrade.uf2` existed simply has no ROM update; the page says so and points at
+the other channel.
 
 ## What's here
 
 ```
 web-updater/
 ├── index.html          page + styling
-├── app.js              UI glue (connect, update, verify, reboot, bootloader)
-├── flash_nuke.uf2      Raspberry Pi flash-erase image, Step 1 (committed)
-├── vendor/             ViperIDE code, MIT (copyright headers kept)
-│   ├── transports.js     WebSerial transport (Transport + WebSerial only)
-│   ├── rawmode.js        MpRawMode: raw REPL, writeFile, makePath, walkFs…
-│   └── utils.js          sleep / Mutex / helpers (trimmed of UI deps)
-├── build-payload.sh    assembles pico/ + sdcard.zip + manifest.json (for testing)
-├── pico/               generated payload      (gitignored)
-├── firmware-uf2.zip    generated zipped UF2, Step 2 fallback (gitignored)
-├── sdcard.zip          generated SD-card bundle, Step 4 (gitignored)
-└── manifest.json       generated file list    (gitignored)
+├── app.js              the guided run (serial, stages, ROM-update monitor)
+├── flasher.js          BOOTSEL writing: UsbBootsel (WebUSB) + DriveBootsel (drive)
+├── flash_nuke.uf2      Raspberry Pi flash-erase image (drive path + manual download)
+├── build-payload.sh    assembles one channel directory
+├── test/               host test for flasher.js
+├── vendor/
+│   ├── transports.js     ViperIDE WebSerial transport (trimmed)
+│   ├── rawmode.js        ViperIDE MpRawMode: raw REPL, writeFile, walkFs…
+│   ├── utils.js          ViperIDE helpers (trimmed)
+│   └── picoflash/        Pico⚡Flash PICOBOOT library (see its README)
+├── release/            generated channel (gitignored)
+└── main/               generated channel (gitignored)
 ```
-
-`vendor/transports.js` and `vendor/utils.js` are trimmed copies of the
-upstream files (Bluetooth/WebSocket/WebRTC transports and the
-toastr/analytics/peerjs dependencies removed); `vendor/rawmode.js` is verbatim
-apart from one import path. Each file's header notes exactly what changed.
-
-## How it works
-
-1. **Connect** — `navigator.serial.requestPort()` → open at 115200 → Ctrl-C to
-   interrupt the running firmware → Ctrl-A into the raw REPL. Reads device info
-   and the installed `FW_VERSION` from `/config.ini`.
-2. **Update** — for each file in `manifest.json`: fetch `pico/<path>`
-   same-origin, `makePath()` its directory, `writeFile()` the bytes. Writes go
-   to a temp file and `os.rename()` into place (atomic), and are binary-safe so
-   `.tap` files transfer fine.
-3. **Verify** — `walkFs()` the device and compare names/sizes against the
-   manifest.
-4. **Reboot** — `machine.reset()` to restart the firmware, or
-   `machine.bootloader()` to drop into the RPI-RP2 drive for a UF2 flash with no
-   BOOTSEL button.
 
 ## Browser support
 
-WebSerial is **Chromium-only**: Chrome, Edge, Opera on desktop/ChromeOS. No
-Safari, no Firefox, no iOS. The page detects this and shows a notice. Only one
-program can hold the serial port at a time — close any other program or
-browser tab connected to the Pico first.
+Web Serial is **Chromium-only**: Chrome, Edge, Opera on desktop/ChromeOS. No
+Safari, Firefox or iOS; the page says so. Only one program can hold the serial
+port — close Thonny or other tabs first.
 
 ## Run it locally
 
-WebSerial requires a secure context, which includes `http://localhost`. From
-this directory:
+Web Serial and WebUSB need a secure context, which includes
+`http://localhost`. From the repo root:
 
 ```sh
-./build-payload.sh          # generate pico/ + manifest.json from ../src
-python3 -m http.server 8000 # or any static server
-# open http://localhost:8000/ in Chrome or Edge
+# a channel from local sources (no UF2 -> the page offers only the file copy)
+web-updater/build-payload.sh
+# or the main channel from a CI run's artifacts
+gh run download <run-id> -n tspico-firmware-uf2 -D /tmp/fw
+gh run download <run-id> -n tspico-upgrade-uf2 -D /tmp/upg
+CHANNEL=main OUT_DIR=web-updater/main \
+  UPGRADE_UF2="$(find /tmp/upg -path '*build-UPGRADE/firmware.uf2')" \
+  web-updater/build-payload.sh src main@local /tmp/fw/firmware.uf2
+python3 -m http.server 8000 --directory web-updater
 ```
 
-To include the UF2 download link, pass a built firmware:
+## Deployment
 
-```sh
-./build-payload.sh ../src dev-local /path/to/firmware.uf2
-```
+[pages.yml](../.github/workflows/pages.yml) builds the Jekyll site and mounts
+this page at **`/updater/`** with both channels next to it. It runs on pushes to
+`main` touching the site or updater, when a Release is published, when the
+Release workflow finishes, and when a `build.yml` run on `main` goes green (so
+`main/` follows main).
 
-## Deployment (the CORS gotcha)
+Everything the page loads is **same-origin**: a `github.io` page can't fetch
+release assets (their CDN sends no `Access-Control-Allow-Origin`) or CI
+artifacts (they need a token), so the workflow downloads them server-side and
+publishes them with the page.
 
-A `github.io` page **cannot** fetch GitHub release assets — the download URL
-redirects to `objects.githubusercontent.com`, which sends no
-`Access-Control-Allow-Origin`, so the browser blocks the bytes. The fix is to
-publish the payload to the **same origin** as the page.
+One-time repo setup: **Settings → Pages → Source → “GitHub Actions”**.
 
-This is **wired into `.github/workflows/pages.yml`**, which deploys the whole
-site to GitHub Pages. It builds the Jekyll site in `../site/`, then mounts this
-updater at **`/updater/`**: it runs `build-payload.sh` (UF2 + `pico/` payload +
-`manifest.json`) and copies the static page + `vendor/` + payload + manifest +
-`flash_nuke.uf2` into the built site under `updater/`. The page fetches its
-payload from that same-origin `/updater/` path — no CORS, no proxy. The
-firmware `.uf2` is downloaded from the latest GitHub **Release** at build time
-(server-side, where CORS doesn't apply); creating a release (`release.yml`)
-fires `pages.yml` to refresh the site with the new firmware.
+## Still to do
 
-**One-time repo setup** (can't be done from the workflow): in
-**Settings → Pages**, set **Source → "GitHub Actions"**. After the next push or
-release, the updater is live at `https://<owner>.github.io/<repo>/updater/`.
-Until then, run it locally (above). The old "Deploy from a branch / `gh-pages`"
-setup is no longer used.
-
-### Remaining to productionize
-
-- [ ] Test against a real TS-Pico in a TS-2068, including interrupting the
-      firmware mid-`LOAD`.
-- [ ] Per-file byte-level progress (currently file-level / size-weighted).
-- [ ] Optional drag-drop `.zip` fallback for offline use
-      ([fflate](https://github.com/101arrowz/fflate)).
-- [ ] Win/macOS/Linux pass; `dialout` group note for Linux.
+- [ ] Hardware pass on a 1.1 board and a 1.5 board end to end, on macOS
+      (WebUSB) and Windows (drive path).
+- [ ] Confirm Chrome on Windows lets `showDirectoryPicker()` pick a drive root.
+- [ ] Per-file byte-level progress for the file copy.
 
 ## License
 
-The `vendor/` files are MIT, © Volodymyr Shymanskyy (ViperIDE). The rest is
-part of this repository.
+`vendor/transports.js`, `rawmode.js`, `utils.js`: MIT, © Volodymyr Shymanskyy
+(ViperIDE). `vendor/picoflash/`: MIT, © Piers Finlayson (Pico⚡Flash). The rest
+is part of this repository.
