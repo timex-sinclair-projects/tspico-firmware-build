@@ -629,6 +629,16 @@ Subtle case: a 100 ms blink every 2 seconds is the **normal idle
 heartbeat**, not a hang. A truly hung Pico shows a steady LED state
 (usually on).
 
+### "The port opens but Ctrl-C gets nothing back"
+
+If the 2068 still works but USB is silent -- no `>>>` however many
+Ctrl-Cs, only a reset brings it back -- something sent the running
+firmware 511+ bytes of text and filled MicroPython's stdin buffer, so
+Ctrl-C was never seen. The firmware now drains stdin at the idle
+heartbeat (`DRAIN_STDIN`), so Ctrl-C lands within about 2 s; 2.0 and
+earlier need the TS-Pico's reset button. A tool should
+send Ctrl-C and wait for `>>>` before it sends anything else.
+
 ### "First command after boot returns Report J"
 
 You probably forgot to `MQ_READY()` after the main loop drains the
