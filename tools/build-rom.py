@@ -43,7 +43,7 @@ OUT_ROM  = OUT_DIR / "TSPICO-fdd.ROM"
 # $4000+$3000 = $7000.
 EXROM_FILE_BASE = 0x4000
 FDD_ORG         = 0x3000          # must match FDD_BASE in fddcmd.asm
-BASE_ROM_CRC    = 0x88a9dc63      # guard: rebuilt only against this exact base
+BASE_ROM_CRC    = 0x09d4ca63      # guard: rebuilt only against this exact base
 
 # --- Declarative patch manifest ----------------------------------------------
 # bank: "home" or "exrom" (selects the file offset); addr: Z80 address in that
