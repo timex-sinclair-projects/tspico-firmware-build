@@ -113,7 +113,7 @@ def setup(t, root):
     for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ"):
         setattr(t, n, lambda *a, **k: None)
     t.SEND_MSG2 = lambda msg, st, exp=True: sent.append(("MSG2", msg, st))
-    t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(("MSG", msg, msg1, st))
+    t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(("MSG", msg, msg1, force, st))
     t.led = types.SimpleNamespace(value=lambda *a: None, toggle=lambda: None)
     t.LOG = lambda *a: None
     t.busy = False
@@ -271,6 +271,8 @@ def test_format(t, root):
     check(r[-1] == t._1_OK and on_card(root, "new.tap") and os.path.getsize(os.path.join(root, "new.tap")) == 0,
           "name without .tap: empty new.tap")
     check(t.mounted and t.mounted[-1].upper() == "/SD/TAP/NEW.TAP" and t.TSP.append, "  mounted, append on")
+    check(r[0] == "MSG" and r[1].startswith("New .tap mounted") and r[3] is True,
+          "  'New .tap mounted' is always displayed (forceDisplay)")
     r = call(t, sent, F, "tpi:format games/level2.tap")
     check(r[-1] == t._1_OK and on_card(root, "GAMES", "level2.tap"), "in a subdirectory")
     t.mounted[:] = []

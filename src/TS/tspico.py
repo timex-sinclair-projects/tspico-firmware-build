@@ -2335,7 +2335,7 @@ def DISK_FORMAT(pre, cmd):                                                    # 
         SEND_MSG("Made it, but can't mount it", "", _4_Q_Parameter)
         return
     TSP.append = True                                                         # SAVE adds to it, as tpi:newtap does
-    SEND_MSG("New .tap mounted: ", public_fname(), _1_OK)
+    SEND_MSG("New .tap mounted: ", public_fname(), _1_OK, True)               # always shown: it changes what LOAD ""/SAVE use
 
 
 def DISK_NEW_TAP(name):                                                       # an empty .tap; its real path
