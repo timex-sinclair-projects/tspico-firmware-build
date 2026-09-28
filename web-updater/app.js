@@ -425,14 +425,59 @@ async function romUpdate() {
     stageProgress('rom', 0)
 
     let slot1Done = false
-    let resolveDone
-    const done = new Promise((r) => { resolveDone = r })
+    let writing = false                     // the updater is running: never interrupt the Pico now
+    let lastEvent = Date.now()
+    let resolveDone, rejectDone
+    const done = new Promise((res, rej) => { resolveDone = res; rejectDone = rej })
     const status = (text, kind = '') => {
         const s = $('rom-status')
         s.textContent = text
         s.className = 'hint ' + kind
     }
     status('Waiting for LOAD "" on the 2068…')
+
+    const fmt = (ev) => Object.entries(ev).map(([k, v]) => `${k}=${v}`).join(' ')
+    let phase = 1
+    const onUpg = (ev) => {
+        lastEvent = Date.now()
+        if (ev.event !== 'status' || ev.code !== 'W') log('2068: ' + fmt(ev))
+        switch (ev.event) {
+            case 'waiting': status('Waiting for LOAD "" on the 2068…'); break
+            case 'tape':
+                writing = false
+                status(ev.note ? 'The updater stopped; the tape rewound. Type LOAD "" again.'
+                    : 'Loading the updater from the TS-Pico…')
+                break
+            case 'ignored': status('That went to the TS-2068 ROM, not the Spectrum ROM. ' +
+                'Type OUT 244,3 first, then LOAD "".', 'warn'); break
+            case 'updater':
+                writing = true
+                status('The updater is running. Don’t turn anything off.')
+                break
+            case 'status':
+                if (ev.code === 'P') {
+                    phase = ev.arg
+                    status(phase === 1 ? 'Writing the TS-2068 ROM (slot 1)…' : 'Writing the ZX Spectrum ROM (slot 0)…')
+                } else if (ev.code === 'W') {
+                    const before = phase === 1 ? 0 : ROM_BLOCKS[1]
+                    stageProgress('rom', (before + ev.arg + 1) / (ROM_BLOCKS[1] + ROM_BLOCKS[0]))
+                } else if (ev.code === 'V') {
+                    if (phase === 1) slot1Done = true
+                    log(`Slot ${phase} verified.`, 'ok')
+                } else if (ev.code === 'D') {
+                    writing = false
+                    stageProgress('rom', 1)
+                    status('Both ROMs written and verified. The 2068 says DONE.', 'ok')
+                    resolveDone('done')
+                } else if (ev.code === 'X') {
+                    writing = false
+                    status((ROM_FAIL[ev.arg] || `The update failed (reason ${ev.arg}).`) +
+                        (slot1Done ? ' (The TS-2068 ROM is already new; you can also continue without the ZX ROM.)' : ''),
+                    'warn')
+                }
+                break
+        }
+    }
 
     let buf = ''
     serial.onReceive((data) => {
@@ -448,55 +493,27 @@ async function romUpdate() {
         }
     })
 
-    let phase = 1
-    const onUpg = (ev) => {
-        if (ev.event !== 'status' || ev.code !== 'W') log('2068: ' + line(ev))
-        switch (ev.event) {
-            case 'waiting': status('Waiting for LOAD "" on the 2068…'); break
-            case 'tape': status(ev.note ? `The updater stopped; the tape rewound. Type LOAD "" again.`
-                : 'Loading the updater from the TS-Pico…'); break
-            case 'ignored': status('That went to the TS-2068 ROM, not the Spectrum ROM. ' +
-                'Type OUT 244,3 first, then LOAD "".', 'warn'); break
-            case 'updater': status('The updater is running. Don’t turn anything off.'); break
-            case 'status':
-                if (ev.code === 'P') {
-                    phase = ev.arg
-                    status(phase === 1 ? 'Writing the TS-2068 ROM (slot 1)…' : 'Writing the ZX Spectrum ROM (slot 0)…')
-                } else if (ev.code === 'W') {
-                    const before = phase === 1 ? 0 : ROM_BLOCKS[1]
-                    stageProgress('rom', (before + ev.arg + 1) / (ROM_BLOCKS[1] + ROM_BLOCKS[0]))
-                } else if (ev.code === 'V') {
-                    if (phase === 1) slot1Done = true
-                    log(`Slot ${phase} verified.`, 'ok')
-                } else if (ev.code === 'D') {
-                    stageProgress('rom', 1)
-                    status('Both ROMs written and verified. The 2068 says DONE.', 'ok')
-                    resolveDone('done')
-                } else if (ev.code === 'X') {
-                    status((ROM_FAIL[ev.arg] || `The update failed (reason ${ev.arg}).`) +
-                        (slot1Done ? ' (The TS-2068 ROM is already new; you can also continue without the ZX ROM.)' : ''),
-                    'warn')
-                    if (slot1Done) offerSkip()
-                }
-                break
+    // An escape hatch for when the serial events don't arrive but the 2068
+    // shows DONE -- offered only while the updater isn't writing, because
+    // continuing interrupts the Pico, and the updater needs it until DONE.
+    let offered = false
+    const watch = setInterval(() => {
+        if (!serial) {
+            rejectDone(new Error('The Pico disconnected during the ROM update. Plug it back in and press ' +
+                'Start again (untick Erase if the ROM part finished).'))
+            return
         }
-    }
-    const line = (ev) => Object.entries(ev).map(([k, v]) => `${k}=${v}`).join(' ')
+        if (!offered && !writing && Date.now() - lastEvent > 20000) {
+            offered = true
+            ask('rom', [
+                { label: 'The 2068 says DONE — continue', value: 'done' },
+                { label: 'Stop', value: 'stop' },
+            ]).then(resolveDone)
+        }
+    }, 1000)
 
-    // An escape hatch: if the serial events never arrive but the 2068 shows
-    // DONE, the user can carry on.
-    let skipOffered = false
-    const offerSkip = () => {
-        if (skipOffered) return
-        skipOffered = true
-        ask('rom', [
-            { label: 'The 2068 says DONE — continue', value: 'done' },
-            { label: 'Stop', value: 'stop' },
-        ]).then(resolveDone)
-    }
-    setTimeout(offerSkip, 20000)
-
-    const how = await done
+    let how
+    try { how = await done } finally { clearInterval(watch) }
     serial.onReceive(() => {})
     show(box, false)
     if (how === 'stop') throw new Stop()
