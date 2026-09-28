@@ -3258,9 +3258,19 @@ def BLKRCV(pre, cmd):                                                           
     wrt = MQ.put
     
     status = _1_OK
-    
+
+    # The Z80 erases and writes the DOCK slot as soon as this returns OK.
+    # If that slot is the one it boots from, stop here (MEMDOCK normally
+    # refused it already): report Q, nothing streamed, nothing erased.
+    mem, page = getDock()
+    clash = BOOT_SLOT_CLASH(mem, page, TSP.f_name)
+    if clash:
+        LOG("BLKRCV: %s Command refused" % clash[0], 1)
+        SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
+        return
+
     led.value(1)
-    
+
     if TSP.f_name[-4:].upper() == ".DCK":
 
         # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
@@ -4095,7 +4105,28 @@ def getDock():
     return mem, page
 
 
-def MEMDOCK(pre, cmd):                                                   # Changes DCK slot; either SRAM or Flash
+def BOOT_SLOT_CLASH(mem, page, f_name):
+    """Would the ROM updater, writing f_name through DOCK mem,page, overwrite
+    the slot the 2068 is running from? Returns the refusal (msg, msg1), or None.
+
+    romupdate/dckupdate erase and write the DOCK slot from Z80 code; if that is
+    the boot slot, the ROM vanishes under the running Z80 and both machines hang
+    with the slot half-written. A .ROM/.BIN writes page `page`; a 64K .DCK
+    writes `page` and `page`+1."""
+
+    ext = f_name[-4:].upper()
+    if ext not in (".ROM", ".BIN", ".DCK"):
+        return None
+    bmem, bpage = getBoot()
+    if mem != bmem:
+        return None
+    if bpage != page and not (ext == ".DCK" and bpage == page + 1):
+        return None
+    return ("Can't write %s slot %d:" % ("SRAM" if mem == 1 else "Flash", bpage),
+            "the 2068 is running from it." + chr(13) + "Boot another slot first.")
+
+
+def MEMDOCK(pre, cmd):                                                  # Changes DCK slot; either SRAM or Flash
 
     # SAVE "tpi:dock" CODE 0,0   - Display setting
     # SAVE "tpi:dock" CODE 0,1   - Display previous setting
@@ -4142,6 +4173,15 @@ def MEMDOCK(pre, cmd):                                                   # Chang
                 return
         else:
             msg2 = ""
+
+        # With a .ROM/.DCK mounted this is romupdate/dckupdate picking the
+        # slot it is about to erase: refuse the booted one here, before the
+        # DOCK moves. (BLKRCV checks again; plain DOCK use is unaffected.)
+        clash = BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
+        if clash:
+            LOG("DOCK: %s Command refused" % clash[0], 1)
+            SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
+            return
 
         TSP.dck_prev_mem  = mem
         TSP.dck_prev_slot = page

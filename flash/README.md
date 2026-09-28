@@ -83,3 +83,12 @@ to restore it.
   itself. (`rompatch.tap` is unrelated: it applies a fixed 12K v1.2-era payload
   baked into the firmware and stamps `ROM_VERSION = 1.2`. Don't use it to
   upgrade to 1.5+.)
+- **You can't update the slot you booted from.** The Z80 erases the slot it's
+  writing, so it would erase the ROM it's running on, and both machines hang
+  with the slot half-written. With a `.ROM`/`.BIN`/`.DCK` mounted, the firmware
+  refuses `tpi:memdock` to the boot slot, and `tpi:blkrcv` checks the DOCK again
+  before it sends anything. The updater stops with Report Q ("Can't write
+  Flash slot N: the 2068 is running from it"); nothing has been erased. A `.DCK`
+  fills slots n and n+1, so it is refused when either one is the boot slot.
+  Boot a different slot (`SAVE "tpi:boot" CODE 2,1: NEW`), then run the updater
+  again.
