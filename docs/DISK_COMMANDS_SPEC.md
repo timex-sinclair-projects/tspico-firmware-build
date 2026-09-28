@@ -114,7 +114,7 @@ directory" command.
 Filtered and other-directory listings use **the existing `tpi:dir` layout**:
 32-column rows, the `Path:` line, `File Name … Size`. They read like the listing
 users already know. Only the second header line changes, to the match count.
-Real output from `catalog_hosttest`'s fixture, one screen row per line:
+Real output (a small test directory), one screen row per line:
 
 ```text
 CAT "*"                                   CAT "advent.tap"
