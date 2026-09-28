@@ -516,7 +516,7 @@ python3 tools/build-rom.py --verify      # -> build/TSPICO-fdd.ROM
 
 The pipeline: assemble `src/rom/fdd/fddcmd.asm` with **sjasmplus** (the assembler,
 `brew install sjasmplus` — checked at start, matching the `z80dasm` dependency in
-`romdisasm.sh`); copy the crc-checked base `src/rom/TSPICO.ROM`; splice the module
+`romdisasm.sh`); copy the crc-checked base `src/rom/TSPICO-SYNC.ROM` (ROM 2.0 = v1.7 + `patches/tspico-sync.asm`); splice the module
 into free EXROM at **`$3000`** (file `$7000`), asserting the region is `$FF`; apply
 the declarative `PATCHES` manifest (each patch asserts the bytes it overwrites, so
 a moved ROM fails loudly); and, with `--verify`, assert that **only** the module

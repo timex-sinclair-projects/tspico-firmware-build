@@ -4,7 +4,8 @@
 Pipeline (see docs/FDD_COMMANDS_DESIGN.md §8):
 
   1. assemble src/rom/fdd/fddcmd.asm with sjasmplus  -> module binary + symbols
-  2. copy the base ROM (src/rom/TSPICO.ROM), verifying its crc32 first
+  2. copy the base ROM (src/rom/TSPICO-SYNC.ROM, the shipping ROM 2.0 = v1.7 +
+     patches/tspico-sync.asm), verifying its crc32 first
   3. splice the module into the EXROM at its ORG ($3000 -> file $7000),
      after asserting that region is free ($FF)
   4. apply the declarative PATCHES manifest below; every patch states the bytes
@@ -32,7 +33,7 @@ import tempfile
 import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-BASE_ROM = ROOT / "src" / "rom" / "TSPICO.ROM"
+BASE_ROM = ROOT / "src" / "rom" / "TSPICO-SYNC.ROM"   # ROM 2.0 (flash/manifest.json)
 ASM_SRC  = ROOT / "src" / "rom" / "fdd" / "fddcmd.asm"
 OUT_DIR  = ROOT / "build"
 OUT_ROM  = OUT_DIR / "TSPICO-fdd.ROM"
@@ -43,7 +44,7 @@ OUT_ROM  = OUT_DIR / "TSPICO-fdd.ROM"
 # $4000+$3000 = $7000.
 EXROM_FILE_BASE = 0x4000
 FDD_ORG         = 0x3000          # must match FDD_BASE in fddcmd.asm
-BASE_ROM_CRC    = 0x09d4ca63      # guard: rebuilt only against this exact base
+BASE_ROM_CRC    = 0x56bd89a4      # guard: rebuilt only against this exact base
 
 # --- Declarative patch manifest ----------------------------------------------
 # bank: "home" or "exrom" (selects the file offset); addr: Z80 address in that
@@ -115,7 +116,7 @@ def file_offset(bank, addr):
 
 
 def rebase():
-    """Re-base onto the current src/rom/TSPICO.ROM after a new ROM merges.
+    """Re-base onto the current BASE_ROM after a new ROM merges.
 
     Confirms every patch's `before` bytes still match and the module region is
     still free, then rewrites BASE_ROM_CRC in this file. Refuses (non-zero exit)

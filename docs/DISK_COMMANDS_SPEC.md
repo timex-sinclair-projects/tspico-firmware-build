@@ -332,8 +332,10 @@ container is the same. The header's issue/version bytes can mark a file as
    needs no new wire protocol. Text files come with channels (step 5).
 5. **Channels** (§4). This needs Gustavo to sign off the block type.
 
-**Before any of this: re-base this branch.** Its commit a1499e9 anchors to
-`src/rom/TSPICO.ROM`, which is v1.7 (crc `0x09d4ca63`). The ROM that ships as 2.0
-is `TSPICO-SYNC.ROM` (crc `0x56bd89a4`), which is v1.7 plus
-`patches/tspico-sync.asm`. The two regions don't collide: the sync patch uses
-EXROM `$2300–$23D3`, and the FDD module is at `$3000`.
+**Base ROM:** the build patches `TSPICO-SYNC.ROM` (ROM 2.0, crc `0x56bd89a4`), which is
+v1.7 plus `patches/tspico-sync.asm`. The sync patch touches nothing the disk
+module uses:
+
+- It uses EXROM `$2300–$23D3`. The module is at `$3000`.
+- The hook sites (HOME `$1946`, `$25D6`), the `$03FC` thunk and the `$1A73` send
+  entry are unchanged.

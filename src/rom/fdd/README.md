@@ -5,7 +5,7 @@ Z80 source for the native disk commands (`CAT`/`FORMAT`/`MOVE`/`ERASE`, and late
 [`docs/FDD_COMMANDS_DESIGN.md`](../../../docs/FDD_COMMANDS_DESIGN.md).
 
 - **`fddcmd.asm`** — the module, assembled at **`$3000`** and spliced into the
-  EXROM half of `src/rom/TSPICO.ROM`. Today it is a skeleton: it establishes the
+  EXROM half of `src/rom/TSPICO-SYNC.ROM` (the shipping ROM 2.0). Today it is a skeleton: it establishes the
   base address, the `FDD_DISPATCH` entry point the HOME-ROM hook will call, and
   the signature the build verifies. The command handlers are stubs.
 
@@ -18,7 +18,7 @@ python3 tools/build-rom.py --verify      # -> build/TSPICO-fdd.ROM
 Requires **sjasmplus** (`brew install sjasmplus`). The build:
 
 1. assembles `fddcmd.asm` (→ raw slice + symbols),
-2. copies the crc-checked base `src/rom/TSPICO.ROM`,
+2. copies the crc-checked base `src/rom/TSPICO-SYNC.ROM` (ROM 2.0),
 3. splices the module into free EXROM at `$3000` (asserts the region is `$FF`),
 4. applies the declarative patch manifest in `tools/build-rom.py` (each patch
    asserts the bytes it overwrites),
@@ -30,7 +30,7 @@ Outputs land in `build/` (git-ignored). Load `build/TSPICO-fdd.ROM` in ZEsarUX
 
 ### When the base ROM changes
 
-`build-rom.py` refuses to patch a `src/rom/TSPICO.ROM` whose crc32 doesn't match
+`build-rom.py` refuses to patch a base ROM whose crc32 doesn't match
 its recorded `BASE_ROM_CRC` — so a merged ROM update stops the build until you
 re-base:
 
