@@ -392,6 +392,15 @@ On the Pico, `tpi:fopen` arms `TSP.native` for that session:
   state in and out around the unchanged `LOAD_TS` on each call. After the data block,
   the mounted tape carries on exactly where it was.
 
+**Prompts on the lower screen.** Response function `$86` (the Y/N "print string with
+loop") always prints on the main screen. For `SAVE "f:x" SCREEN$` that would put the
+prompt into the saved picture. The fdd ROM adds function `$88`, the same loop on stream `$FD`
+(the lower screen). It is implemented as `LOWER_LOOP`, reached from the dispatcher's last check at
+`$2213`, a duplicate `CP 86h` that could never match, now patched to `CP 87h`. The
+Pico sends `$88` only for `tpi:fopen`, which only this ROM sends. The shipping ROM has no
+`$88`, so other prompts (`ERASE "*.x"`, `tpi:rm`, …) stay on `$86` until the Pico can tell
+which ROM it is talking to.
+
 The type is checked when `tpi:fopen` arrives:
 
 - a program for a plain `LOAD`/`MERGE`;
@@ -405,7 +414,7 @@ session doesn't match the next SAVE or LOAD is stale and is dropped.
 
 | Form | Meaning |
 |---|---|
-| `SAVE "f:foo.bas"` / `SAVE "f:foo.bas" LINE 10` | Write the program (and its variables) to `foo.bas`. If the file exists, ask `foo.bas exists. Replace (Y/N)?` Y overwrites. N gives Report D, because the ROM can't see the answer, so the Pico refuses the SAVE header that follows |
+| `SAVE "f:foo.bas"` / `SAVE "f:foo.bas" LINE 10` | Write the program (and its variables) to `foo.bas`. If the file exists, ask `Replace foo.bas? (Y/N)` **on the lower screen**, so it can't end up in a `SCREEN$`. Y overwrites. N gives Report D, because the ROM can't see the answer, so the Pico refuses the SAVE header that follows |
 | `SAVE "f:pic.scr" SCREEN$` | Write the screen to `PIC.SCR` |
 | `SAVE "f:game.bin" CODE 32768,4000` | Write the bytes to `GAME.BIN` |
 | `SAVE "f:d.dat" DATA a()` | Write the array to `D.DAT` |

@@ -336,7 +336,7 @@ def test_native_open(t, root):
     t.open = lambda p, mode="r": open(cos.real(p) if p.startswith("/sd/") else
                                       os.path.join(flash, os.path.basename(p)), mode)
     prompts = []
-    t.SEND_MSG_PROMPT_YN = lambda msg, echo=True: (prompts.append(msg), keys.pop(0))[1]
+    t.SEND_MSG_PROMPT_YN = lambda msg, echo=True, lower=False: (prompts.append((msg, lower)), keys.pop(0))[1]
     keys = []
 
     def fopen(path, op, mod=0, session=0x4242):
@@ -353,8 +353,14 @@ def test_native_open(t, root):
           "SAVE, new file: armed for the session (%r)" % (t.TSP.native,))
     keys[:] = [ord("Y")]
     r = fopen("advent.tap", 0)
-    check(prompts[-1].startswith("advent.tap exists. Replace (Y/N)?") and t.TSP.native["refuse"] is False,
-          "SAVE over a file: 'exists. Replace (Y/N)?', Y -> armed to overwrite")
+    check(prompts[-1] == ("Replace advent.tap? (Y/N)", True) and t.TSP.native["refuse"] is False,
+          "SAVE over a file: 'Replace advent.tap? (Y/N)' on the lower screen, Y -> armed to overwrite (%r)"
+          % (prompts[-1],))
+    with open(os.path.join(root, "averyveryverylongname.bas"), "wb") as f:
+        f.write(b"x")
+    keys[:] = [ord("Y")]
+    fopen("averyveryverylongname.bas", 0)
+    check(len(prompts[-1][0]) <= 31, "  a long name is cut so prompt + key fit one line (%r)" % (prompts[-1][0],))
     keys[:] = [ord("N")]
     fopen("advent.tap", 0)
     check(t.TSP.native["refuse"] is True, "  N -> armed to refuse (SAVE_TS gives Report D)")

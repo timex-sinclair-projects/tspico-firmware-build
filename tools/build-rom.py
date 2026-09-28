@@ -68,6 +68,15 @@ PATCHES = [
              "any other name goes on to $1A73 as before. Spec §4a.",
     ),
     dict(
+        name="response function $88: the dead $2213 check -> LOWER_VEC ($3006)",
+        bank="exrom", addr=0x2213,
+        before="fe 86 c0 cd b9 02", after="fe 87 ca 06 30 c9",
+        note="$2213's CP 86h follows $21FD's JR NZ, so it can never match (the "
+             "duplicate-0x86 bug in PROTOCOL_FROM_ROM.md). Now CP 87h / JP Z / RET: "
+             "function $88 = $86's Y/N loop on the lower screen. Every other "
+             "function returns exactly as before.",
+    ),
+    dict(
         name="disk-token hook: $25D6 stub -> EXROM FDD_DISPATCH",
         bank="home", addr=0x25D6,
         before="cd 89 28 20 06 cd 69 25 cd 44 1b c3 67 25",
@@ -111,6 +120,12 @@ ANCHORS = [
          bank="exrom", addr=0x2300, bytes="f5 c5 3e 03 d3 0f cd 0e 23 c1 f1 c3 9d 22"),
     dict(name="Pico Interface BIOS table (TX_A, RX_A, C_END, WF_NPH)",
          bank="exrom", addr=0x1846, bytes="18 25 18 20 18 03 c3 9e 23 c3 cd 23"),
+    dict(name="$86's pieces LOWER_LOOP reuses: READ_STATUS, OPEN_STREAM via $04F1, the loop",
+         bank="exrom", addr=0x01C3, bytes="cd b9 02 c3 f1 04"),
+    dict(name="$04F1: open stream $FE through $0426",
+         bank="exrom", addr=0x04F1, bytes="f5 3e fe cd 26 04 f1 c9"),
+    dict(name="$86 handler: CALL $01C3, then the loop at $21E6",
+         bank="exrom", addr=0x21E3, bytes="cd c3 01 f5 cd 5f 04"),
     dict(name="HOME->EXROM returning thunk the $25D6 hook jumps to",
          bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
 ]

@@ -63,6 +63,10 @@ BIOS_C_END      EQU $184A          ;   status: NC ok, else C with A = status-1
 BIOS_WF_NPH     EQU $184C          ;   wait for the Pico: C with A = 02/0C/1C
 BANK_SV         EQU $5DCF          ; pre-header byte 2
 MODE_SV         EQU $5DDB          ; SESSION_SETUP clears bits 7-4 for a plain name
+READ_STATUS     EQU $02B9          ; EXROM: the response's status byte -> AF ($01C3's first half)
+OPEN_STREAM     EQU $0426          ; EXROM: open stream A ($04F1 opens $FE, the main screen)
+LOOP_BODY       EQU $21E6          ; EXROM: function $86's loop after $01C3 (PUSH AF; print/key...)
+STREAM_LOWER    EQU $FD            ; stream -3: K, the lower screen
 TOK_SCREEN      EQU $AA
 TOK_CODE        EQU $AF
 TOK_LINE        EQU $CA
@@ -90,6 +94,8 @@ FDD_DISPATCH:
         jp      FDD_MAIN           ; $3000: the $25D6 disk-keyword hook
 F_HOOK_VEC:
         jp      F_HOOK             ; $3003: the $01D2 SAVE/LOAD hook (build-rom.py)
+LOWER_VEC:
+        jp      LOWER_LOOP         ; $3006: function $88 from the $2213 dispatch patch
 
 FDD_MAIN:
         ld      iy,IY_SYSVARS      ; the bank call clobbers IY; HOME needs it
@@ -108,7 +114,7 @@ FDD_MAIN:
 
         db      "FDDCMD",0         ; signature — build.py verifies this
 FDD_VERSION:
-        db      6
+        db      7
 
 ;------------------------------------------------------------------------------
 ; FDD_CAT -- CAT [string]
@@ -584,6 +590,27 @@ WF_FAIL:                           ; the Pico didn't answer the pre-header
 
 FOPEN_TXT:   db "tpi:fopen "
 FOPEN_LEN    EQU $-FOPEN_TXT
+
+;------------------------------------------------------------------------------
+; LOWER_LOOP -- response function $88: function $86 ("print string with loop",
+; the Y/N prompt) on the LOWER screen, so a prompt doesn't write over the
+; picture -- which SAVE "f:x" SCREEN$ would then save. Reached from the
+; function dispatcher's last, otherwise dead, check at $2213 (patched to
+; CP 87h / JP Z,$3006 / RET) with A = function - 1.
+;
+; Exactly $86's handler with a different stream: $01C3 is READ_STATUS then
+; "open stream $FE"; this opens $FD instead and joins $86's loop, which prints
+; through the current channel and leaves via its own POP AF / RET.
+; The Pico only sends $88 to a ROM it knows has it (tpi:fopen comes only from
+; this module).
+;------------------------------------------------------------------------------
+LOWER_LOOP:
+        call    READ_STATUS
+        push    af
+        ld      a,STREAM_LOWER
+        call    OPEN_STREAM
+        pop     af
+        jp      LOOP_BODY
 
 ;------------------------------------------------------------------------------
 ; TPI command prefixes (NUL-terminated).

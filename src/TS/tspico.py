@@ -2460,8 +2460,8 @@ def NATIVE_OPEN(pre, cmd):                                                     #
         real, exists = real
         TSP.native = dict(op=0, path=real, session=session, refuse=False)
         if exists:                                                             # TOS: "Supersede (Y/N)?"
-            ch = SEND_MSG_PROMPT_YN("%s exists. Replace (Y/N)?"
-                                    % shorten_filename(xstr(catalog.basename(real)), 16))
+            ch = SEND_MSG_PROMPT_YN("Replace %s? (Y/N)"                        # lower screen: SCREEN$ must not save it
+                                    % shorten_filename(xstr(catalog.basename(real)), 16), lower=True)    # 31 + the key echo = one line
             TSP.native["refuse"] = ch not in (89, 121)                         # SAVE_TS refuses it: Report D
             return
         SEND_MSG("Saving to %s" % catalog.public(real), "", _1_OK)
@@ -4160,10 +4160,13 @@ def LOAD_TPI(name, only_tap=False):
     return "Error mounting file:", name, _4_Q_Parameter
 
 
-def SEND_MSG_PROMPT_YN(prompt, echo = True):
+def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
 
     # Prints prompt string, waits for a character and returns that char
     # Assumes MQ is active. This cannot be followed by another SEND_MSG* call.
+    # lower=True: on the lower screen (response function 0x88), so the prompt
+    # doesn't write over the picture. ONLY the fdd ROM has 0x88 -- pass it only
+    # for a command that ROM sent (tpi:fopen). Keep such a prompt to one line.
 
     global MQ
 
@@ -4183,9 +4186,10 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
     # ─────────────────────────────────────────────────────────────────────
     wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
-    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+    wrt(0x88 if lower else 0x86)   # PRINT STRING WITH LOOP (0x88: lower screen) -- this IS the D-block status
     wrt(0x01)   # BASIC return code
-    wrt(0x0D)   # Start a new line
+    if not lower:
+        wrt(0x0D)   # Start a new line (the lower screen starts clear)
     MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
 
     while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
