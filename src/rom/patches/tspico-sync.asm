@@ -1,10 +1,13 @@
 ; =============================================================================
-; TS-Pico 1.8b "sync" TEST ROM -- patches applied on top of v1.7 TSPICO.ROM
+; TS-Pico ROM 2.0 (was the 1.8b "sync" test ROM) -- patches on top of v1.7
 ; =============================================================================
 ;
 ; Build:  tools/build-rom.sh        (needs sjasmplus 1.20+)
 ; Input:  src/rom/TSPICO.ROM        v1.7, crc32 09D4CA63 (HOME 16K + EXROM 16K)
-; Output: src/rom/TSPICO-SYNC.ROM   test build -- NOT the shipping slot-1 ROM
+; Output: src/rom/TSPICO-SYNC.ROM   ROM 2.0, the shipping slot-1 ROM (flash/manifest.json)
+;
+; Version 2.0 (2026-09-27): the ROM and the TS-Pico firmware share one version
+; number from here on (firmware: FW_VERSION in src/TS/tspico.py).
 ;
 ; What it adds (see the "TS-Pico BREAK abort proposal", version 4+):
 ;
@@ -77,7 +80,7 @@ EXROM           equ 4000h       ; file offset of the EXROM half
 ; =============================================================================
 
         HOMEAT 0065h
-        db 18h                  ; HOME version marker (v1.7 = 17h)
+        db 20h                  ; HOME version marker: 2.0 (v1.7 = 17h)
 
 ; Report printer. v1.7:  0F12 LD A,B / LD DE,0F65h / CALL 073Fh
 ;                        0F19 XOR A / LD DE,1115h / CALL 073Fh
@@ -98,10 +101,10 @@ EXROM           equ 4000h       ; file offset of the EXROM half
 ; =============================================================================
 
         EXAT 1853h
-        db 18h                  ; BIOS G_VERS: LD BC,0018h (v1.7 = 0017h)
+        db 20h                  ; BIOS G_VERS: LD BC,0020h, 2.0 (v1.7 = 0017h)
 
         EXAT 1C6Ch              ; boot copyright line, same length as v1.7's
-        db " 2026 TS-Pico 1.8b sync t", "1" | 80h
+        db " 2026 TS-Pico ROM v2.0   ", " " | 80h
         ASSERT $ == 1C86h
 
 ; =============================================================================

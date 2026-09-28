@@ -9,7 +9,7 @@ cartridge slot numbers step by 2.
 | Slot | Offset | Kind | Contents | Source |
 |---|---|---|---|---|
 | 0 | `0x000000` | ROM/DCK | TS-Pico ZX Spectrum ROM v3 | [`src/rom/TSPICO-ZX48-V3.BIN`](../src/rom/TSPICO-ZX48-V3.BIN) (built from v2 by `tools/build-rom.sh`; v2's LOAD/SAVE are broken, see [`PATCH_ZX48_HANDSHAKE.md`](../docs/rom-analysis/PATCH_ZX48_HANDSHAKE.md)) |
-| 1 | `0x008000` | ROM | TS-Pico TS-2068 ROM | [`src/rom/TSPICO.ROM`](../src/rom/TSPICO.ROM) |
+| 1 | `0x008000` | ROM | TS-Pico TS-2068 ROM 2.0 | [`src/rom/TSPICO-SYNC.ROM`](../src/rom/TSPICO-SYNC.ROM) (v1.7, `src/rom/TSPICO.ROM`, plus `src/rom/patches/tspico-sync.asm`) |
 | 2 | `0x010000` | ROM/DCK | ZX Diagnostics v0.37 | base image |
 | 3 | `0x018000` | ROM | Rodolfo Guerra's TK90/95 ROM | base image |
 | 4–7 | `0x020000` | — | spare | — |

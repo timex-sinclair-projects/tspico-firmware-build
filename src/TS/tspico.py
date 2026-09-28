@@ -454,6 +454,11 @@ TLM_ENABLED = False
 # LOAD_CONFIG entry and via __init__-time print so it appears even
 # before TLM is enabled.
 BUILD_VERSION = "2026-05-27-J (inline-wrt SEND_MSG2 + suppress_scroll<500)"
+
+# The TS-Pico version: the firmware and its TS-2068 ROM (src/rom/TSPICO-SYNC.ROM,
+# flash slot 1) share one number from 2.0 on. tpi:info reports this, not the
+# FW_VERSION an older config.ini may still hold.
+FW_VERSION = "2.0"
 # Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
 # when loaded via the dev override __name__ == "dev_tspico". This file is
 # kept byte-identical between the two locations so the stamp prints the
@@ -559,14 +564,11 @@ class PICO_STATUS():                                                            
             self.VERBOSE = init_values["VERBOSE"]                               # Verbosity of status messages. Default = False, no verbosity. 
         except:                                                                 # if fail, assume hard-wired values
             self.VERBOSE = False
-        try:                                                                    # try to retrieve configuration values from init_values passed on startup
-            self.FW_VERSION = init_values["FW_VERSION"]                         # Current firmware version.
-        except:                                                                 # if fail, assume hard-wired values
-            self.FW_VERSION = "Unknown"
+        self.FW_VERSION = FW_VERSION                                            # the code's own version, never config.ini's
         try:                                                                    # try to retrieve configuration values from init_values passed on startup
             self.ROM_VERSION = init_values["ROM_VERSION"]                       # Current ROM version.
         except:                                                                 # if fail, assume hard-wired values
-            self.ROM_VERSION = "1.0"
+            self.ROM_VERSION = FW_VERSION
         try:                                                                    # try to retrieve configuration values from init_values passed on startup
             self.ZX_TAPE_COMPAT = init_values["ZX_TAPE_COMPAT"]                 # boolean for ZX Spectrum "compatible" tape routine (True) or normal (False)
         except:                                                                 # if fail, assume hard-wired values
@@ -3125,10 +3127,9 @@ def LOAD_CONFIG():
     default_values["ROM_SM"] = 10                              # Flash/SRAM activation pattern bitmap for DCK access (MSB=10) and ROM access (LSB=10)
     default_values["LOG_LEVEL"] = 2                            # Only log errors and up
     default_values["VERBOSE"] = False                          # Disable verbosity on commands
-    default_values["FW_VERSION"] = "Unknown"
     default_values["ZX_TAPE_COMPAT"] = False                   # Use regular tape load routine in zx48 mode
-    default_values["FW_VERSION"] = "1.00"
-    default_values["ROM_VERSION"] = "1.00"
+    default_values["FW_VERSION"] = FW_VERSION
+    default_values["ROM_VERSION"] = FW_VERSION                 # the ROM this firmware ships with
     # Fill any missing values with the default
     for key, value in default_values.items():
         if key not in init_values:
