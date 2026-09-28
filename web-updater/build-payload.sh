@@ -1,113 +1,128 @@
 #!/usr/bin/env bash
 #
-# Assemble the updater payload: copy the Pico-flash files out of ../src into
-# web-updater/pico/ and generate manifest.json (file list + sizes + firmware
-# version). This mirrors what the release workflow will publish to the
-# gh-pages branch alongside index.html, so the page can fetch everything
-# same-origin (GitHub's release-asset CDN blocks browser CORS — see README).
+# Assemble one updater payload ("channel"): the Pico-flash files from SRC_DIR,
+# the firmware and upgrade UF2s, the SD-card bundle, and a manifest.json
+# describing them. pages.yml builds two channels next to the page --
+# release/ (the latest GitHub Release) and main/ (the latest green build of
+# main, for testers) -- and the page fetches everything from them
+# same-origin (GitHub's release-asset CDN blocks browser CORS; see README).
 #
 # Usage:
 #   ./build-payload.sh [SRC_DIR] [TAG] [UF2_PATH]
 #
 #   SRC_DIR   firmware source dir (default: ../src)
-#   TAG       release tag string for the manifest (default: dev-local)
-#   UF2_PATH  optional firmware.uf2 to include for the download link
+#   TAG       label for the manifest: a release tag, or main@<sha> (default: dev-local)
+#   UF2_PATH  firmware.uf2 to include (optional)
 #
-# Output (gitignored): web-updater/pico/ and web-updater/manifest.json
+# Optional environment:
+#   OUT_DIR      where to write the channel (default: web-updater/release)
+#   CHANNEL      "release" or "main" (default: release)
+#   UPGRADE_UF2  the upgrade UF2 (src/upgrade/) for boards coming from 1.1/1.5
+#   SDCARD_DIR   the SD-card folder to zip (default: SRC_DIR/../SD card)
+#   SOURCE_URL   a link the page shows for where this build came from
+#
+# Output (gitignored): OUT_DIR/{manifest.json, pico/, firmware.uf2,
+# firmware-uf2.zip, upgrade.uf2, sdcard.zip}
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="${1:-$HERE/../src}"
+SRC="$(cd "$SRC" && pwd)"
 TAG="${2:-dev-local}"
 UF2="${3:-}"
+OUT="${OUT_DIR:-$HERE/release}"
+CHANNEL="${CHANNEL:-release}"
+UPGRADE_UF2="${UPGRADE_UF2:-}"
+SDCARD_SRC="${SDCARD_DIR:-$(cd "$SRC/.." && pwd)/SD card}"
+SOURCE_URL="${SOURCE_URL:-}"
 
-OUT="$HERE/pico"
 rm -rf "$OUT"
-mkdir -p "$OUT/assets"
+mkdir -p "$OUT/pico/assets"
+OUT="$(cd "$OUT" && pwd)"
 
-# Pico-flash filesystem content (everything except the UF2). Matches the
-# src/ side of the release.yml bundle layout.
+# Pico-flash filesystem content: what the UF2 doesn't carry. The UF2 freezes
+# the TS/ package (src/manifest.py); main.py, config.ini, words.txt and the
+# assets live on the Pico's LittleFS and are written over the serial REPL.
 #
-# NOTE: help/ is deliberately NOT included. As of the src/ re-org the BASIC
-# help text lives on the SD card (SD card/help/ in the bundle, read by the
-# firmware from /help/ on the mounted card at runtime), not on the Pico's
-# internal flash. The web updater only writes Pico flash, so help text is
-# out of its scope — it's installed by copying "SD card/" to the SD card.
-cp "$SRC/main.py"      "$OUT/main.py"
-cp "$SRC/config.ini"   "$OUT/config.ini"
-cp "$SRC/words.txt"    "$OUT/words.txt"
-cp "$SRC"/assets/*.tap "$OUT/assets/"
+# help/ is deliberately NOT included: the BASIC help text lives on the SD card
+# (SD card/help/), read by the firmware from /help/ on the mounted card.
+cp "$SRC/main.py"      "$OUT/pico/main.py"
+cp "$SRC/config.ini"   "$OUT/pico/config.ini"
+cp "$SRC/words.txt"    "$OUT/pico/words.txt"
+cp "$SRC"/assets/*.tap "$OUT/pico/assets/"
 
-# Optional UF2 (flashed via BOOTSEL, not written over serial — referenced by
-# the manifest only as a download link). Also offered zipped: some Windows
-# antivirus/SmartScreen setups block or quarantine a raw .uf2 download, so the
-# .zip (firmware.uf2 at its root) is a fallback the user can unzip and drag.
+# The firmware UF2 -- written through the bootloader, not the REPL. Also
+# offered zipped for the manual path: some Windows antivirus/SmartScreen
+# setups block or quarantine a raw .uf2 download.
 UF2_FIELD="null"
 UF2_ZIP_FIELD="null"
-UF2_ZIP="$HERE/firmware-uf2.zip"
-rm -f "$UF2_ZIP"
 if [ -n "$UF2" ] && [ -f "$UF2" ]; then
   cp "$UF2" "$OUT/firmware.uf2"
-  UF2_FIELD='"pico/firmware.uf2"'
-  ( cd "$OUT" && zip -q "$UF2_ZIP" firmware.uf2 )
+  UF2_FIELD='"firmware.uf2"'
+  ( cd "$OUT" && zip -q firmware-uf2.zip firmware.uf2 )
   UF2_ZIP_FIELD='"firmware-uf2.zip"'
-  echo "Wrote $UF2_ZIP"
+  echo "Included firmware.uf2 (+ firmware-uf2.zip)"
+else
+  echo "No firmware UF2 -- the page will offer only the file upload for this channel"
 fi
 
-# SD card bundle (Step 3 on the page — software testers only). The firmware
-# reads TAP programs and tpi:help text from a FAT SD card at runtime; testers
-# copy this onto a card to exercise the firmware end-to-end. This is OUTSIDE the
-# over-serial updater's scope (that writes Pico flash only) — it's offered as a
-# plain same-origin .zip download. Zipped with its *contents* (TAP/, help/) at
-# the zip root so "unzip → copy to card root" is a direct drag.
-#
-# Located relative to SRC: the "SD card/" folder is a sibling of src/ at the
-# repo root (release.yml calls this with SRC=<repo>/src).
-SDCARD_SRC="$(cd "$SRC/.." && pwd)/SD card"
-SDCARD_ZIP="$HERE/sdcard.zip"
+# The upgrade UF2 (src/upgrade/): a separate firmware that serves the ROM
+# updater tape to a 2068 whose ROM predates 2.0. The page writes it between
+# the wipe and the real firmware when the user is coming from 1.1/1.5.
+UPGRADE_FIELD="null"
+if [ -n "$UPGRADE_UF2" ] && [ -f "$UPGRADE_UF2" ]; then
+  cp "$UPGRADE_UF2" "$OUT/upgrade.uf2"
+  UPGRADE_FIELD='"upgrade.uf2"'
+  echo "Included upgrade.uf2"
+else
+  echo "No upgrade UF2 -- the ROM update step is unavailable for this channel"
+fi
+
+# SD card bundle (software testers only): a plain download, with its contents
+# (TAP/, help/) at the zip root so "unzip -> copy to card root" is a direct drag.
 SDCARD_FIELD="null"
-rm -f "$SDCARD_ZIP"
 if [ -d "$SDCARD_SRC" ]; then
   TMP="$(mktemp -d)"
   cp -R "$SDCARD_SRC/." "$TMP/"
   find "$TMP" -name '.DS_Store' -delete
-  ( cd "$TMP" && zip -rq "$SDCARD_ZIP" . )
+  ( cd "$TMP" && zip -rq "$OUT/sdcard.zip" . )
   rm -rf "$TMP"
-  SDCARD_BYTES="$(wc -c < "$SDCARD_ZIP" | tr -d ' ')"
+  SDCARD_BYTES="$(wc -c < "$OUT/sdcard.zip" | tr -d ' ')"
   SDCARD_NFILES="$(find "$SDCARD_SRC" -type f ! -name '.DS_Store' | wc -l | tr -d ' ')"
   SDCARD_FIELD="{\"path\": \"sdcard.zip\", \"size\": ${SDCARD_BYTES}, \"files\": ${SDCARD_NFILES}}"
-  echo "Wrote $SDCARD_ZIP (${SDCARD_NFILES} files, ${SDCARD_BYTES} bytes)"
+  echo "Included sdcard.zip (${SDCARD_NFILES} files, ${SDCARD_BYTES} bytes)"
 else
-  echo "No SD card dir at $SDCARD_SRC — skipping sdcard.zip"
+  echo "No SD card dir at $SDCARD_SRC -- skipping sdcard.zip"
 fi
 
-# Generate manifest.json. Paths are relative to pico/; the page fetches each
-# as pico/<path>. fw_version is pulled from config.ini so the page can compare
-# installed-vs-latest.
-FW_VERSION="$(python3 -c "import json,sys; print(json.load(open('$OUT/config.ini')).get('FW_VERSION','?'))")"
-
-python3 - "$OUT" "$TAG" "$FW_VERSION" "$UF2_FIELD" "$UF2_ZIP_FIELD" "$SDCARD_FIELD" > "$HERE/manifest.json" <<'PY'
+# manifest.json. File paths are relative to pico/; UF2 and zip paths to the
+# channel directory. Versions come from config.ini, which carries both.
+python3 - "$OUT" "$TAG" "$CHANNEL" "$SOURCE_URL" "$UF2_FIELD" "$UF2_ZIP_FIELD" \
+          "$UPGRADE_FIELD" "$SDCARD_FIELD" > "$OUT/manifest.json" <<'PY'
 import json, os, sys
-out, tag, fw, uf2, uf2_zip, sdcard = sys.argv[1:7]
+out, tag, channel, source_url, uf2, uf2_zip, upgrade, sdcard = sys.argv[1:9]
+cfg = json.load(open(os.path.join(out, 'pico', 'config.ini')))
+opt = lambda v: None if v == 'null' else json.loads(v)
 files = []
-for root, _dirs, names in os.walk(out):
+for root, _dirs, names in os.walk(os.path.join(out, 'pico')):
     for n in sorted(names):
-        if n == 'firmware.uf2':
-            continue  # not a filesystem file
         full = os.path.join(root, n)
-        rel = os.path.relpath(full, out).replace(os.sep, '/')
+        rel = os.path.relpath(full, os.path.join(out, 'pico')).replace(os.sep, '/')
         files.append({'path': rel, 'size': os.path.getsize(full)})
 files.sort(key=lambda f: f['path'])
-manifest = {
+print(json.dumps({
+    'channel': channel,
     'tag': tag,
-    'fw_version': fw,
-    'uf2': None if uf2 == 'null' else uf2.strip('"'),
-    'uf2_zip': None if uf2_zip == 'null' else uf2_zip.strip('"'),
-    'sdcard': None if sdcard == 'null' else json.loads(sdcard),
+    'source_url': source_url or None,
+    'fw_version': cfg.get('FW_VERSION', '?'),
+    'rom_version': cfg.get('ROM_VERSION'),
+    'uf2': opt(uf2),
+    'uf2_zip': opt(uf2_zip),
+    'upgrade_uf2': opt(upgrade),
+    'sdcard': opt(sdcard),
     'files': files,
-}
-print(json.dumps(manifest, indent=2))
+}, indent=2))
 PY
 
-echo "Wrote $OUT ($(find "$OUT" -type f | wc -l | tr -d ' ') files) and $HERE/manifest.json"
-echo "Firmware version: $FW_VERSION  Tag: $TAG"
+echo "Wrote $OUT ($(find "$OUT/pico" -type f | wc -l | tr -d ' ') Pico files)"
+echo "Channel: $CHANNEL  Tag: $TAG  Firmware: $(python3 -c "import json;print(json.load(open('$OUT/manifest.json'))['fw_version'])")"

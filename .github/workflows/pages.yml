@@ -2,18 +2,23 @@ name: Deploy site to GitHub Pages
 
 # Builds the combined ts-pico site and publishes it to GitHub Pages:
 #
-#   /            ← the Jekyll site (migrated from ts-pico.com, source in site/)
-#   /updater/    ← the Web Updater (web-updater/) + the latest firmware payload
+#   /                  ← the Jekyll site (migrated from ts-pico.com, source in site/)
+#   /updater/          ← the Web Updater (web-updater/)
+#   /updater/release/  ← payload from the latest GitHub Release
+#   /updater/main/     ← payload from the latest green build of main (testers)
 #
-# The updater fetches its payload (manifest.json, pico/, the UF2, zips) from
-# its own same-origin /updater/ path — that's why we mount the payload into the
-# built site here rather than linking to release assets (GitHub's release CDN
-# blocks cross-origin browser fetches; see web-updater/README.md).
+# A payload is manifest.json, pico/ (the files written over serial),
+# firmware.uf2, upgrade.uf2 (the 1.1/1.5 ROM updater) and the zips. The page
+# fetches them from its own same-origin path — that's why we mount them into
+# the built site here rather than linking to release assets or CI artifacts
+# (GitHub's release CDN blocks cross-origin browser fetches, and artifacts need
+# a token; see web-updater/README.md).
 #
 # Triggers:
 #   - push to main touching site/, web-updater/, or "SD card/" (content edits)
 #   - a published Release (refreshes the updater payload with the new firmware,
 #     built by release.yml)
+#   - a green build of main (refreshes the main/ channel)
 #   - manual dispatch
 #
 # ── One-time repo setup ────────────────────────────────────────────────
@@ -41,12 +46,17 @@ on:
   # published` event: a Release created with the built-in GITHUB_TOKEN does NOT
   # fire `release` for downstream workflows (GitHub's recursion guard), but
   # workflow_run is not subject to that, so this actually runs.
+  #
+  # Same for main's build, so the testers' main/ channel follows main. (Not a
+  # `branches:` filter here: it would apply to the Release run too, whose
+  # head_branch is its tag. The job's `if` filters instead.)
   workflow_run:
-    workflows: ["Release TS-Pico Firmware"]
+    workflows: ["Release TS-Pico Firmware", "Build TS-Pico Firmware"]
     types: [completed]
 
 permissions:
   contents: read
+  actions: read       # gh run download: the main/ channel's CI artifacts
   pages: write
   id-token: write
 
@@ -59,11 +69,19 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # When chained off the Release workflow, only publish if that build passed.
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # When chained off a workflow, only publish if it passed -- and for the
+    # firmware build, only for pushes to main (not branches or PRs).
+    if: >-
+      ${{ github.event_name != 'workflow_run' ||
+          (github.event.workflow_run.conclusion == 'success' &&
+           (github.event.workflow_run.name == 'Release TS-Pico Firmware' ||
+            (github.event.workflow_run.head_branch == 'main' &&
+             github.event.workflow_run.event == 'push'))) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # the main/ channel archives src/ at its build's commit
 
       # Compile the tracked BASIC sources (basic/*.bas) into TAPs before the
       # SD-card payload is assembled. Outputs land in "SD card/TAP/basic/"
@@ -86,58 +104,96 @@ jobs:
         run: bundle exec jekyll build --trace
         # Outputs to site/_site
 
-      - name: Fetch latest firmware UF2 for the updater payload
-        id: uf2
+      # ── release/ channel: the latest published GitHub Release ──────────
+      - name: Fetch the latest release's UF2s
+        id: rel
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p _uf2
+          mkdir -p _rel
           TAG=""
           if [ "${{ github.event_name }}" = "release" ]; then
             TAG="${{ github.event.release.tag_name }}"
           else
-            # workflow_run / dispatch / push: resolve the latest published
-            # release so the manifest carries the real tag, not "latest".
             TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || echo '')"
           fi
-          # Pull firmware.uf2 from the triggering release, else the latest one.
-          # Tolerate "no releases yet" — the updater still builds (wipe step +
-          # file upload work; the firmware download link just shows as absent).
+          # Tolerate "no releases yet" and releases from before upgrade.uf2
+          # existed: the page shows what's missing and offers the main/ channel.
           if [ -n "$TAG" ]; then
-            gh release download "$TAG" --pattern 'firmware.uf2' --dir _uf2 || true
-          else
-            gh release download --pattern 'firmware.uf2' --dir _uf2 || true
+            gh release download "$TAG" --pattern 'firmware.uf2' --dir _rel || true
+            gh release download "$TAG" --pattern 'upgrade.uf2'  --dir _rel || true
           fi
-          if [ -f _uf2/firmware.uf2 ]; then
-            echo "uf2=$PWD/_uf2/firmware.uf2" >> "$GITHUB_OUTPUT"
-            echo "tag=${TAG:-latest}" >> "$GITHUB_OUTPUT"
-            echo "Using firmware.uf2 from ${TAG:-the latest release}."
-          else
-            echo "uf2=" >> "$GITHUB_OUTPUT"
-            echo "tag=dev" >> "$GITHUB_OUTPUT"
-            echo "No firmware.uf2 release asset found — building updater without it."
-          fi
+          echo "tag=${TAG:-dev}" >> "$GITHUB_OUTPUT"
+          ls -la _rel
 
-      - name: Build updater payload (pico/, manifest.json, zips)
+      - name: Build the release/ channel
         env:
-          UF2: ${{ steps.uf2.outputs.uf2 }}
-          TAG: ${{ steps.uf2.outputs.tag }}
-        run: bash web-updater/build-payload.sh "${PWD}/src" "${TAG}" "${UF2}"
+          CHANNEL: release
+          OUT_DIR: ${{ github.workspace }}/_payload/release
+          UPGRADE_UF2: ${{ github.workspace }}/_rel/upgrade.uf2
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.rel.outputs.tag }}
+        run: |
+          # The Pico files come from the release's own commit when there is
+          # one, so they match its firmware.
+          SRC="$PWD/src"
+          if git rev-parse -q --verify "refs/tags/${{ steps.rel.outputs.tag }}" >/dev/null; then
+            mkdir -p _rel/tree
+            git archive "${{ steps.rel.outputs.tag }}" src | tar -x -C _rel/tree
+            SRC="$PWD/_rel/tree/src"
+          fi
+          SDCARD_DIR="$PWD/SD card" bash web-updater/build-payload.sh "$SRC" "${{ steps.rel.outputs.tag }}" "$PWD/_rel/firmware.uf2"
+
+      # ── main/ channel: the latest green build of main, for testers ─────
+      # CI artifacts need a token to download, so the browser can't fetch
+      # them; we fetch them here and publish them same-origin like the rest.
+      - name: Fetch the latest green main build's UF2s
+        id: main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN="$(gh run list --workflow build.yml --branch main --event push --status success \
+                   --limit 1 --json databaseId,headSha --jq '.[0] | "\(.databaseId) \(.headSha)"')"
+          if [ -z "$RUN" ]; then
+            echo "No green build of main -- no main/ channel."
+            echo "run=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          read -r ID SHA <<< "$RUN"
+          mkdir -p _main/fw _main/upg
+          gh run download "$ID" -n tspico-firmware-uf2 -D _main/fw
+          gh run download "$ID" -n tspico-upgrade-uf2  -D _main/upg || true
+          # The upgrade artifact nests its UF2 under its build path.
+          UPG="$(find _main/upg -path '*build-UPGRADE/firmware.uf2' | head -1)"
+          echo "run=$ID" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "upg=${UPG:+$PWD/$UPG}" >> "$GITHUB_OUTPUT"
+          echo "main/ channel: run $ID at $SHA"
+
+      - name: Build the main/ channel
+        if: steps.main.outputs.run != ''
+        env:
+          CHANNEL: main
+          OUT_DIR: ${{ github.workspace }}/_payload/main
+          UPGRADE_UF2: ${{ steps.main.outputs.upg }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.main.outputs.run }}
+        run: |
+          SHA="${{ steps.main.outputs.sha }}"
+          mkdir -p _main/tree
+          git archive "$SHA" src | tar -x -C _main/tree
+          SDCARD_DIR="$PWD/SD card" bash web-updater/build-payload.sh \
+            "$PWD/_main/tree/src" "main@${SHA:0:7}" "$PWD/_main/fw/firmware.uf2"
 
       - name: Mount Web Updater at /updater/
         run: |
           DEST=site/_site/updater
           mkdir -p "$DEST"
-          cp web-updater/index.html web-updater/app.js "$DEST"/
-          cp web-updater/flash_nuke.uf2                "$DEST"/flash_nuke.uf2
-          cp -r web-updater/vendor                     "$DEST"/vendor
-          cp -r web-updater/pico                       "$DEST"/pico
-          cp    web-updater/manifest.json              "$DEST"/manifest.json
-          if [ -f web-updater/firmware-uf2.zip ]; then cp web-updater/firmware-uf2.zip "$DEST"/firmware-uf2.zip; fi
-          if [ -f web-updater/sdcard.zip ];       then cp web-updater/sdcard.zip       "$DEST"/sdcard.zip;       fi
+          cp web-updater/index.html web-updater/app.js web-updater/flasher.js "$DEST"/
+          cp web-updater/flash_nuke.uf2 "$DEST"/flash_nuke.uf2
+          cp -r web-updater/vendor "$DEST"/vendor
+          cp -r _payload/.        "$DEST"/
           touch site/_site/.nojekyll
-          echo "=== published tree (depth 2) ==="
-          find site/_site -maxdepth 2 | sort
+          echo "=== published updater tree ==="
+          find "$DEST" -maxdepth 2 | sort
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
