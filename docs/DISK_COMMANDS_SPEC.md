@@ -132,10 +132,12 @@ File Name                   Size          Blk Type         Len  Name
 - **The index is the number `LOAD "tpi:n"` uses.** It is shown only for names in the
   current directory's `files[]`. Other files (another directory, or a type `DIR`
   doesn't index, such as `.TXT`) get a blank index.
-- **Which files:**
-  - With no pattern, the listing uses `DIR`'s filter (`TAP TZX DCK ROM BIN`, now
-    `catalog.DIR_EXT`).
-  - With a pattern, every match is shown, so `CAT "*"` shows everything.
+- **Which files:** every file, bare `CAT` included (and so bare `SAVE "tpi:dir"`).
+  - The types `LOAD "tpi:n"` indexes (`TAP TZX DCK ROM BIN`, `catalog.DIR_EXT`) come
+    first, with their numbers.
+  - Every other file follows, unnumbered. `files[]` and `dirinfo.tap` still hold only
+    the numbered ones, so the numbers and `dirinfo.tap` readers are unchanged.
+  - With a pattern, every match is shown in name order.
   - Dotfiles and `dirinfo.tap` are hidden unless the pattern names them.
 - **Misses are Report F:** no match, a missing name, a pattern under a file, an
   empty directory, or a path above the root.
@@ -150,7 +152,7 @@ block table and marks the tape position with `>`.
 - a mark on the mounted TAP in directory listings;
 - a free-space footer;
 - autostart line and load address in TAP listings;
-- `BAS`/`SCR`/`DAT`/`TXT` in the default filter.
+- numbers for `BAS`/`SCR`/`DAT` files.
 
 The last waits for native files (§4a), because `DIR`'s filter also decides what `LOAD "tpi:n"` can index.
 

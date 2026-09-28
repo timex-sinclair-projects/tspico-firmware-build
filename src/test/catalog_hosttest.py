@@ -218,8 +218,13 @@ def test_dir(t, root):
     check("dirinfo" not in body, "tpi:dir *: dirinfo.tap never listed")
 
     body = run("tpi:dir games")[1]
-    check("Path:/games" in body and "    ARCADE.TAP" in body and "README" not in body,
-          "tpi:dir games: another dir, default filter, no indices")
+    check("Path:/games" in body and "    ARCADE.TAP" in body, "tpi:dir games: another dir, no indices")
+    with open(os.path.join(root, "GAMES", "AAA.TXT"), "wb") as f:
+        f.write(b"t")
+    body = run("tpi:dir games")[1]
+    check(body.find("    AAA.TXT") > body.find("    ARCADE.TAP") > 0,
+          "tpi:dir games: other files after the DIR types, like bare DIR")
+    os.remove(os.path.join(root, "GAMES", "AAA.TXT"))
 
     body = run("tpi:dir /games/*.t*")[1]
     check("ARCADE.TAP" in body and "Path:/games" in body, "tpi:dir /games/*.t*: absolute path + pattern")

@@ -12,9 +12,11 @@ CAT "g.tap" the blocks in a
             .tap file
 CAT ""      the mounted .tap
 
-The number before a file is the
-one LOAD "tpi:n" takes. name can
-be any string expression, e.g.
+Files LOAD "tpi:n" can use come
+first, with their number n. All
+other files follow, unnumbered.
+name can be any string
+expression, e.g.
 CAT d$+"/*.tap". A name that is
 not found gives Report F.
 

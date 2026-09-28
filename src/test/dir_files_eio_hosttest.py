@@ -47,7 +47,7 @@ class FakeOS:
 
     def __init__(self, fail_on=None):
         self.fail_on = fail_on
-        self.files = {"GAME.TAP": 1234, "dirinfo.tap": 64}
+        self.files = {"GAME.TAP": 1234, "NOTES.TXT": 12, ".hidden": 1, "dirinfo.tap": 64}
         self.written = {}
 
     def _maybe_fail(self, op):
@@ -125,6 +125,11 @@ def test_dir_files(t, logs):
     ok = t.DIR_FILES()
     check(ok is True and t.files == ["GAME.TAP"] and "GAME.TAP" in t.lista,
           "healthy card: returns True, lists GAME.TAP")
+    L = t.lista[128:]
+    check(L.find("000 GAME.TAP") >= 0 and L.find("    NOTES.TXT") > L.find("000 GAME.TAP"),
+          "healthy card: other files listed after the indexed ones, unnumbered")
+    check(".hidden" not in t.lista and "dirinfo" not in t.lista[128:], "healthy card: no dotfiles, no dirinfo.tap")
+    check(len(t.lista) % 32 == 0, "healthy card: whole 32-column rows")
     check("dirinfo.tap" in fos.files and fos.files["dirinfo.tap"] > 0,
           "healthy card: dirinfo.tap written")
     check(not any(lvl >= 2 for lvl, _ in logs), "healthy card: no ERROR logged")

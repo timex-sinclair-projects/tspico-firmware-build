@@ -1235,6 +1235,14 @@ def LIST_DIR_FILES():                                                           
             dirinfo.append(nom)
 
             i += 1
+
+    # Then every other file, without an index: LOAD "tpi:n" only counts the
+    # types above, and files[] / dirinfo.tap keep exactly those (spec §2).
+    for archs in listing:
+        if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
+                and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
+            L.append("    %-18s%10s" % (shorten_filename(archs[0].replace("~", "?"), 18),
+                                        catalog.size_text(int(archs[3]))))
     
     del listing
 
@@ -2013,21 +2021,23 @@ def CATALOG_TEXT(arg):                                                          
     else:
         if not is_dir:
             return "Not a directory: %s" % where, _3_F_Invalid_file
-        dirs_l, files_l = [], []
+        dirs_l, files_l, other_l = [], [], []
         for item in sorted(os.ilistdir(real), key=lambda it: it[0].lower()):
             name = item[0]
             if name == "dirinfo.tap":
                 continue
             if pat is None:
-                if name[0] == '.' or (item[1] != 16384 and name[-3:].upper() not in catalog.DIR_EXT):
+                if name[0] == '.':
                     continue
             elif not catalog.match(name, pat) or (name[0] == '.' and pat[0] != '.'):
                 continue
             if item[1] == 16384:
                 dirs_l.append((name, True, 0))
+            elif pat is None and name[-3:].upper() not in catalog.DIR_EXT:
+                other_l.append((name, False, item[3]))                          # like DIR: after the indexable ones
             else:
                 files_l.append((name, False, item[3]))
-        entries = dirs_l + files_l
+        entries = dirs_l + files_l + other_l
         if not entries:
             return ("No match for %s" % pat) if pat else ("Directory is empty"), _3_F_Invalid_file
         path = catalog.public(real)
