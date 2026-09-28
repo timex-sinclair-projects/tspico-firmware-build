@@ -82,65 +82,77 @@ through keyword-inside-argument forms (§3), or stay on `SAVE "tpi:..."`.
 
 ## 2. `CAT` — catalogue
 
-| Form | Meaning |
-|---|---|
-| `CAT` | List the current SD directory |
-| `CAT "games"` | List another directory (it doesn't change into it) |
-| `CAT "*.tap"`, `CAT "games/b*"` | List only the matching entries |
-| `CAT "name.tap"` | List the **blocks inside** that TAP (like `tpi:tapdir`, but for any TAP, not only the mounted one) |
-| `CAT ""` | List the blocks in the **mounted** TAP. It mirrors `LOAD ""`, which means "the tape" |
-| `CAT #s` / `CAT #s,"*.tap"` | Send the listing to stream `s` instead of the screen, e.g. `CAT #3` to the (virtual) printer |
+**Implemented** (ROM `fddcmd.asm` v4, firmware `CATALOG` + `TS/catalog.py`).
+`CAT` is a front end for `tpi:dir`, so **`SAVE "tpi:dir <arg>"` behaves the same
+as `CAT "<arg>"`**. There is one implementation, in the firmware.
+
+| Form | Sends | Meaning |
+|---|---|---|
+| `CAT` | `tpi:dir` | The current directory: the cached listing, unchanged |
+| `CAT "games"` | `tpi:dir games` | Another directory, without changing into it |
+| `CAT "*.tap"`, `CAT "games/b*"` | `tpi:dir *.tap` | The matching entries. `*` matches any run, `?` one character, case-insensitive, last path component only |
+| `CAT "name.tap"` | `tpi:dir name.tap` | The blocks inside that TAP. It doesn't have to be mounted |
+| `CAT ""` | `tpi:tapdir` | The mounted TAP. It mirrors `LOAD ""`, which means "the tape" |
+| `CAT #s` … | — | **Not yet.** The ROM's print path always opens the main screen. Redirecting it needs its own ROM change |
+
+- **The argument is any string expression** (`CAT a$`, `CAT d$+"/*.tap"`), checked
+  at line entry by HOME's class-`$0A` routine:
+  - `CAT 5` and `CAT "x"5` are rejected with the usual `?` marker.
+  - An undefined variable is Report 2 at run time.
+  - `CAT "x": PRINT 1` runs both statements.
+- **The argument is limited to 23 characters.** `SESSION_SETUP` takes `tpi:` names
+  of 5–31 characters, and `tpi:dir ` uses 8. Longer is Report F, and nothing is sent.
+- **Paths:** `/` starts at the SD root (`/sd/TAP`) and `..` goes up, but never above the
+  root. Names are matched case-insensitively.
 
 Treating a TAP as a directory whose entries are blocks is the TOS model: a
 container you can `CAT` into. It removes the need for a separate "tape
 directory" command.
 
-### What a directory listing shows
+### What a listing shows
 
-Taken from TOS's `CAT *` (manual §3.3), trimmed to what applies:
-
-```text
-/GAMES                         TAP: ADVENT.TAP
- #  Name                      Size
- 1  <ARCADE>
- 2  <UTILS>
- 3  ADVENT.TAP               48213 *
- 4  CHESS.TAP                16384
- 5  MANIC.TZX                40960
-3 files, 2 dirs      SD free 7.21G
-```
-
-- **Header:** the current path, which is TOS's first line. After it, the mounted TAP, if
-  there is one.
-- **Entries:**
-  - Directories come first, in `<>`.
-  - Then files, sorted case-insensitively.
-  - Each row has an index, the name and the size in bytes.
-  - The index is the same number `LOAD "tpi:3"` already accepts.
-  - `*` marks the mounted TAP. This stands in for TOS's `S` (open) column.
-  - Names longer than the column width are cut short with `~`. `CAT "x"` on a single file prints its full name.
-- **Footer:** the file and directory counts and the SD free space. This stands in for TOS's `MAX / CUR / REM`.
-- **Which files:** bare `CAT` shows the types the TS-Pico can use (TAP, TZX, DCK,
-  ROM, BIN, BAS, SCR, DAT, TXT, BMP), which is today's filter plus native files
-  (§4a) and the virtual-printer output.
-  An explicit pattern shows every name that matches, so `CAT "*"` shows everything.
-  Dotfiles are hidden unless a pattern names them.
-
-### What a TAP listing shows
+Filtered and other-directory listings use **the existing `tpi:dir` layout**:
+32-column rows, the `Path:` line, `File Name … Size`. They read like the listing
+users already know. Only the second header line changes, to the match count.
+Real output from `catalog_hosttest`'s fixture, one screen row per line:
 
 ```text
-ADVENT.TAP (mounted)
- #  Type      Name         Len
- 1  Program   ADVENT       1823  LINE 10
- 2  Bytes     ADVCODE     41000  @32768
+CAT "*"                                   CAT "advent.tap"
+Path:/                                    File:/advent.tap
+*: 3 files, 1 dir                         5 blocks
+File Name                   Size          Blk Type         Len  Name
+--------------------------------          --------------------------------
+<GAMES>                      0 B           00 Program       102 ADVENT
+000 ADVENT.TAP             504 B           02 Code block    302 ADVCODE
+001 CHESS.TAP           16.00 kB           04 Data block     52 headerless
+    README.TXT              12 B
 ```
 
-- Block number, type, header name and length.
-- The autostart line for a program, and the start address for bytes.
-- Headerless blocks are listed as `Data`.
-- `>` marks the tape position, i.e. what `LOAD ""` will read next.
+- **Directories first** in `<>`, then files, each group sorted case-insensitively.
+- **The index is the number `LOAD "tpi:n"` uses.** It is shown only for names in the
+  current directory's `files[]`. Other files (another directory, or a type `DIR`
+  doesn't index, such as `.TXT`) get a blank index.
+- **Which files:**
+  - With no pattern, the listing uses `DIR`'s filter (`TAP TZX DCK ROM BIN`, now
+    `catalog.DIR_EXT`).
+  - With a pattern, every match is shown, so `CAT "*"` shows everything.
+  - Dotfiles and `dirinfo.tap` are hidden unless the pattern names them.
+- **Misses are Report F:** no match, a missing name, a pattern under a file, an
+  empty directory, or a path above the root.
 
----
+A TAP listing is `tpi:tapdir CODE 1`'s header layout. The code is shared
+(`catalog.tap_header_rows`), so it looks the same. In addition, it also lists data blocks
+with no header in front of them. For the mounted file it uses the live
+block table and marks the tape position with `>`.
+
+**Not yet, from the earlier draft:**
+
+- a mark on the mounted TAP in directory listings;
+- a free-space footer;
+- autostart line and load address in TAP listings;
+- `BAS`/`SCR`/`DAT`/`TXT` in the default filter.
+
+The last waits for native files (§4a), because `DIR`'s filter also decides what `LOAD "tpi:n"` can index.
 
 ## 3. `MOVE`, `ERASE`, `FORMAT`
 

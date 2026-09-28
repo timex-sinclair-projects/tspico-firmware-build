@@ -31,6 +31,12 @@ FLAGS           EQU $5C3B          ; bit 7 set = runtime, clear = syntax check
 TADDR           EQU $5C74          ; T-ADDR: low byte becomes the TPI TADDR field
 STKEND          EQU $5C65          ; calculator stack end pointer (our scratch top)
 SAVE_EXEC_TPI   EQU $1A73          ; EXROM: parse "tpi:" off the calc stack, send
+CALL_HOME       EQU $03DD          ; EXROM->HOME returning thunk: PUSH IX / EXX /
+                                   ;   LD HL,target / JP CALL_HOME (MEMORY_MAP.md)
+H_EXPT_STR      EQU $1BEF          ; HOME: syntax class $0A -- SCANNING, then
+                                   ;   Report C unless the result is a string
+IY_SYSVARS      EQU $5C3A          ; what every HOME routine expects in IY
+MAX_CAT_ARG     EQU 23             ; "tpi:dir " + 23 = 31, SESSION_SETUP's limit
 
 CR              EQU $0D            ; BASIC end-of-line
 DQUOTE          EQU $22            ; string-literal quote
@@ -47,6 +53,10 @@ TOK_ERASE       EQU $D2
 ; FDD_DISPATCH — entry for both the syntax-check and runtime pass. B = token.
 ;------------------------------------------------------------------------------
 FDD_DISPATCH:
+        ld      iy,IY_SYSVARS      ; the bank call clobbers IY; HOME needs it
+        ld      a,b
+        cp      TOK_CAT
+        jp      z,FDD_CAT          ; CAT parses its own argument, both passes
         ld      a,(FLAGS)          ; read FLAGS directly (IY is clobbered by the
         bit     7,a                ; bank call). bit 7: set = runtime, clear = syntax
         jr      nz,FDD_RUN
@@ -57,28 +67,122 @@ FDD_DISPATCH:
 
 FDD_RUN:
         ld      a,b
-        cp      TOK_CAT
-        jr      z,FDD_CAT
         cp      TOK_FORMAT
-        jr      z,FDD_FORMAT
+        jp      z,FDD_FORMAT
         cp      TOK_MOVE
-        jr      z,FDD_MOVE
+        jp      z,FDD_MOVE
         cp      TOK_ERASE
-        jr      z,FDD_ERASE
+        jp      z,FDD_ERASE
         ret                        ; unknown token — no-op
 
         db      "FDDCMD",0         ; signature — build.py verifies this
 FDD_VERSION:
-        db      3
+        db      4
+
+;------------------------------------------------------------------------------
+; FDD_CAT -- CAT [string-expression]      (DISK_COMMANDS_SPEC.md §2)
+;
+;   CAT            -> "tpi:dir"          the current directory
+;   CAT ""         -> "tpi:tapdir"       the mounted TAP (LOAD "" means the tape)
+;   CAT "x" / a$   -> "tpi:dir x"        a directory, a pattern or a TAP's blocks
+;
+; Any string expression is allowed. HOME's class-$0A routine evaluates it: on
+; the syntax pass it only checks (and moves CH_ADD past it), on the runtime pass
+; it leaves the string on the calculator stack. Anything after the expression
+; other than ':' or end of line is Report C. An argument longer than 23
+; characters is Report F: SESSION_SETUP takes names of 5-31 characters, and
+; "tpi:dir " uses 8.
+;------------------------------------------------------------------------------
+FDD_CAT:
+        call    SKIP_SPACES        ; A = next character, CH_ADD at it
+        cp      CR
+        jr      z,.bare
+        cp      ':'
+        jr      z,.bare
+        call    HC_EXPT_STR        ; HOME: string expression (C if not)
+        call    SKIP_SPACES
+        cp      CR
+        jr      z,.parsed
+        cp      ':'
+        jr      z,.parsed
+        rst     8                  ; EXROM error restart
+        db      $0B                ; C Nonsense in BASIC
+.parsed:
+        ld      a,(FLAGS)
+        bit     7,a
+        ret     z                  ; syntax pass: statement accepted
+        ; runtime: pop the string off the calculator stack (STK-FETCH layout)
+        ld      hl,(STKEND)
+        dec     hl
+        ld      b,(hl)
+        dec     hl
+        ld      c,(hl)
+        dec     hl
+        ld      d,(hl)
+        dec     hl
+        ld      e,(hl)
+        dec     hl
+        ld      (STKEND),hl        ; DE = text, BC = length
+        ld      a,b
+        or      c
+        jr      z,.tape            ; CAT "" -> the mounted TAP
+        ld      a,b
+        and     a
+        jr      nz,.toolong
+        ld      a,c
+        cp      MAX_CAT_ARG+1
+        jr      nc,.toolong
+        push    de                 ; [text]
+        ld      de,(STKEND)
+        pop     hl                 ; HL = text, DE = build pointer
+        push    de                 ; [start] for FDD_SEND_TAIL
+        push    hl
+        push    bc
+        ld      hl,CMD_DIR_ARG
+        call    COPY_CSTR          ; "tpi:dir "
+        pop     bc
+        pop     hl
+        ldir                       ; + the argument
+        jr      FDD_SEND_TAIL
+.toolong:
+        rst     8
+        db      $0E                ; F Invalid file name
+.tape:
+        ld      hl,CMD_TAPDIR
+        jr      FDD_SEND
+.bare:
+        ld      a,(FLAGS)
+        bit     7,a
+        ret     z                  ; syntax pass: bare CAT is fine
+        ld      hl,CMD_DIR
+        jr      FDD_SEND
+
+;------------------------------------------------------------------------------
+; SKIP_SPACES -- A = the character at CH_ADD, stepping CH_ADD over spaces.
+;------------------------------------------------------------------------------
+SKIP_SPACES:
+        ld      hl,(CH_ADD)
+.loop:  ld      a,(hl)
+        cp      ' '
+        jr      nz,.done
+        inc     hl
+        jr      .loop
+.done:  ld      (CH_ADD),hl
+        ret
+
+;------------------------------------------------------------------------------
+; HC_EXPT_STR -- CALL this to run HOME's class-$0A (string expression) routine.
+;------------------------------------------------------------------------------
+HC_EXPT_STR:
+        push    ix
+        exx
+        ld      hl,H_EXPT_STR
+        jp      CALL_HOME
 
 ;------------------------------------------------------------------------------
 ; Command handlers.  HL -> NUL-terminated "tpi:<verb> " prefix.
-;   CAT takes no argument (fixed "tpi:dir").
 ;   FORMAT/MOVE/ERASE append the quoted argument from the BASIC line.
 ;------------------------------------------------------------------------------
-FDD_CAT:
-        ld      hl,CMD_DIR
-        jr      FDD_SEND           ; no argument
 FDD_FORMAT:
         ld      hl,CMD_NEWTAP
         jr      FDD_SEND_ARG
@@ -186,6 +290,8 @@ COPY_ARG:
 ; TPI command prefixes (NUL-terminated). Verbs map to existing Pico commands.
 ;------------------------------------------------------------------------------
 CMD_DIR:    db "tpi:dir",0
+CMD_DIR_ARG: db "tpi:dir ",0
+CMD_TAPDIR: db "tpi:tapdir",0
 CMD_NEWTAP: db "tpi:newtap ",0
 CMD_CD:     db "tpi:cd ",0
 CMD_RM:     db "tpi:rm ",0

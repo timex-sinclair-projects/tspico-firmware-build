@@ -237,7 +237,7 @@ display of the response):
 
 | Statement | TPI command built | Pico verb |
 |---|---|---|
-| `CAT` | `tpi:dir` | `DIR` |
+| `CAT` / `CAT "x"` / `CAT ""` | `tpi:dir` / `tpi:dir x` / `tpi:tapdir` | `DIR` (with `CATALOG` for an argument) / `TAPDIR` |
 | `ERASE "name"` | `tpi:rm name` | `RM` |
 | `FORMAT "name"` | `tpi:newtap name` | `NEWTAP` |
 | `MOVE "path"` | `tpi:cd path` | `CD` |

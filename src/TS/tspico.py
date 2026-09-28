@@ -2033,7 +2033,7 @@ def CATALOG_TEXT(arg):                                                          
     upper = [f.upper() for f in files] if here else []
     index_of = lambda n: upper.index(n.upper()) if n.upper() in upper else None
     nf = sum(1 for e in entries if not e[1])
-    line2 = "%s%d files, %d dirs" % (("%s: " % pat) if pat else "", nf, len(entries) - nf)
+    line2 = (("%s: " % pat) if pat else "") + catalog.counts(nf, len(entries) - nf)
     header = DIR_HEADER(line2, shorten_filename(xstr(path), 27))
     return header + "".join(catalog.dir_rows(entries, index_of, shorten_filename)), _1_OK
 

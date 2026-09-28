@@ -101,6 +101,12 @@ def size_text(size):
     return "%d B" % size
 
 
+def counts(nf, nd):
+    """ "3 files, 1 dir" """
+
+    return "%d file%s, %d dir%s" % (nf, "" if nf == 1 else "s", nd, "" if nd == 1 else "s")
+
+
 def dir_rows(entries, index_of, shorten):
     """Listing rows (32 chars each, no CR -- the screen wraps) for
     entries = [(name, is_dir, size), ...] already sorted and filtered.
@@ -182,5 +188,5 @@ def tap_header_rows(tbl, cur_idx=None, idx1=0, idx2=None, orphans=False):
                 N.append("%-10s  %5s " % ("(no data)", 0))
             else:
                 N.append("Data block  %5s " % el[1])
-            N.append("%-10s" % el[3])
+            N.append("%-10s" % ("headerless" if orphans and orphan else el[3]))
     return N

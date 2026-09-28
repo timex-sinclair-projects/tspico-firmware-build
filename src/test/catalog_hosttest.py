@@ -115,7 +115,7 @@ def test_catalog(c):
     check("ADVENT" in rows and "ADVCODE" in rows and "Data block" not in rows,
           "header rows: headers only by default (TAPDIR's behaviour)")
     rows = "".join(c.tap_header_rows(tbl, orphans=True))
-    check("Data block     52" in rows, "header rows: orphans=True shows the headerless block")
+    check("Data block     52 headerless" in rows, "header rows: orphans=True shows the headerless block, named so")
     rows = c.tap_header_rows(tbl, cur_idx=1)
     check(rows[0] == " " and ">" in rows and "Data block    102" in "".join(rows),
           "header rows: the position is marked, even on a data block")
@@ -160,6 +160,9 @@ class HostOS:
 
 
 def test_dir(t, root):
+    import TS.catalog
+    global c_counts
+    c_counts = TS.catalog.counts
     print("tspico DIR / CATALOG")
 
     hos = HostOS(root)
@@ -197,6 +200,7 @@ def test_dir(t, root):
     check("000 ADVENT.TAP" in body and "001 CHESS.TAP" in body and "MANIC" not in body,
           "tpi:dir *.tap: matches with the LOAD \"tpi:n\" index")
     check("*.tap: 2 files, 0 dirs" in body, "tpi:dir *.tap: count line")
+    check("*: 4 files, 2 dirs" in run("tpi:dir *")[1] and c_counts(1, 1) == "1 file, 1 dir", "count line: plurals")
     check(sd == ["sd", "off", "mq"], "SD activated, then handed back to the MQ (%r)" % sd)
     check(len(body) % 32 == 0, "listing is whole 32-character rows (%d)" % len(body))
 
