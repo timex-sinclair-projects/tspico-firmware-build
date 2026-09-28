@@ -366,6 +366,7 @@ from TS.tspico_io import (
     DRAIN_STDIN,                         # keep Ctrl-C reachable over USB
 )
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
+from TS import catalog
 from array import array
 
 # ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
@@ -1102,8 +1103,10 @@ def shorten_filename(nom, l):
     return nom
 
 
-def DIR_HEADER(sd_stat):                                                                      # lista header: path, SD line, column titles (4 x 32 chars)
-    return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (public_path(27), sd_stat[:32])
+def DIR_HEADER(sd_stat, path=None):                                                           # lista header: path, SD line, column titles (4 x 32 chars)
+    if path is None:
+        path = public_path(27)
+    return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (path, sd_stat[:32])
 
 
 def DIR_FILES():                                                                             # Get all files and directories from current path
@@ -1170,7 +1173,7 @@ def LIST_DIR_FILES():                                                           
     num_dirs = 0
     num_files = 0
     
-    ext = ['TAP', 'TZX', 'DCK', 'ROM', 'BIN']                                                 # extensions to be included
+    ext = catalog.DIR_EXT                                                                     # extensions to be included
     starts = ['.']                                                                            # first characters of files to be excluded
     
     ordered = True                                                                            # In the future, this could be controlled by an option
@@ -1514,46 +1517,9 @@ def OFF_TABLE():                                                             # B
     global TSP
     
     arch = open("/TMP/temp.tap", "rb")
-    TSP.offset_tbl = []
-    TSP.offset = 0
+    TSP.offset_tbl = catalog.tap_table(arch)
     TSP.tap_idx = 0
-    # Get file size
-    arch.seek(0,2)
-    fsize = arch.tell()
-    arch.seek(0,0)
-    
-    blks = ['Program', 'Num. array', 'Char array', 'Code block']
-    
-    while TSP.offset < fsize:
-        rd_bytes = bytearray(30)
-        arch.seek(TSP.offset)
-        arch.readinto(rd_bytes)
-        long = rd_bytes[0] + (256*rd_bytes[1])
-        
-        code_blk = rd_bytes[2]
-
-        if (code_blk == 0):
-            hdr = " Y"
-            try:
-                name_raw = rd_bytes[4:14].decode()
-                name = ''.join(' ' if ((ord(l) <= 30) or (ord(l) >= 127)) else l for l in name_raw)
-                blk_type = blks[rd_bytes[3]]
-            except:
-                name = "??????????"
-                blk_type = "undefined"
-        else:
-            hdr = " N"
-            name = blk_type
-            
-        values = [TSP.offset, long, hdr, name]
-        TSP.offset_tbl.append(values)
-            
-        long += 2
-        TSP.offset += long
-    
     TSP.offset = 0
-    if fsize > 0:
-        del rd_bytes
     
     arch.close()
     gc.collect()
@@ -1915,6 +1881,8 @@ def DIR(pre, cmd):                                                              
     # SAVE "tpi:dir"CODE 1,n    - Show long name for file n
     # SAVE "tpi:dir"CODE 2,0    - Show a dir of files with their index and whole names
     # SAVE "tpi:dir"CODE 2,n    - Show a dir of files starting at file n
+    # SAVE "tpi:dir <arg>"      - CAT "<arg>": another directory, a pattern
+    #                             ("*.tap", "games/b*") or a TAP's contents
 
     global lista
     global led
@@ -1924,6 +1892,11 @@ def DIR(pre, cmd):                                                              
 
     TLM("DIR enter", "par1=%d par2=%d files=%d lista_len=%d" % (
         par1, par2, len(files), len(lista)))
+
+    arg = getArgs(cmd).strip()
+    if par1 == 0 and arg:
+        CATALOG(arg)
+        return
 
     if par1 == 0:
         # Regular listing
@@ -1967,6 +1940,102 @@ def DIR(pre, cmd):                                                              
   
     return
 
+
+
+def CATALOG(arg):                                                                               # CAT "arg" / SAVE "tpi:dir arg"
+
+    """List what arg names: a directory, the files matching a pattern in the
+    last path component, or the blocks of a TAP file. Bare DIR stays the
+    cached lista; this reads the card, so it brackets the SD access itself.
+    See docs/DISK_COMMANDS_SPEC.md §2."""
+
+    TLM("CATALOG enter", "arg=%r" % arg)
+    led.value(1)
+    ACTIVATE_SD()
+    try:
+        msg, st = CATALOG_TEXT(arg)
+    except OSError as e:
+        LOG("CATALOG: SD card error: %s" % e, 2)
+        msg, st = "SD card error", _3_F_Invalid_file
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+    if st == _1_OK:
+        SEND_MSG2(msg, _1_OK, False)
+    else:
+        LOG(msg, 1)
+        SEND_MSG(msg, arg, st)
+    led.value(0)
+
+
+def CATALOG_TEXT(arg):                                                                          # CATALOG's listing, SD already active
+
+    global TSP
+    global files
+
+    where, pat = catalog.split_arg(arg)
+    real = catalog.resolve(TSP.cur_path, where)
+    if real is None:
+        return "Not found: %s" % arg, _3_F_Invalid_file
+    try:
+        mode = os.stat(real)[0]
+    except OSError:
+        return "Not found: %s" % arg, _3_F_Invalid_file
+    is_dir = mode & 0x4000
+
+    if pat is None and not is_dir:                                                              # one file: a TAP's blocks, else its entry
+        name = real[real.rfind('/') + 1:]
+        if name[-4:].upper() == '.TAP':
+            if TSP.f_name.upper() == real.upper() and TSP.offset_tbl:
+                tbl, cur = TSP.offset_tbl, TSP.tap_idx                                          # the mounted file: its live table and position
+            else:
+                with open(real, "rb") as f:
+                    tbl = catalog.tap_table(f)
+                cur = None
+            N = ["File:%-27s" % shorten_filename(xstr(catalog.public(real)), 27)]
+            N.append("%-32s" % ("%d blocks%s" % (len(tbl), ", mounted" if cur is not None else "")))
+            N.append("Blk Type         Len  Name      ")
+            N.append("--------------------------------")
+            rows = catalog.tap_header_rows(tbl, cur, orphans=True)
+            N.extend(rows if rows else ["%s\r" % "<empty file>"])
+            return "".join(N), _1_OK
+        parent = real[:real.rfind('/')]
+        for item in os.ilistdir(parent):                                                        # the name as stored, not as typed
+            if item[0].upper() == name.upper():
+                name = item[0]
+                break
+        entries = [(name, False, os.stat(real)[6])]
+        path = catalog.public(parent)
+    else:
+        if not is_dir:
+            return "Not a directory: %s" % where, _3_F_Invalid_file
+        dirs_l, files_l = [], []
+        for item in sorted(os.ilistdir(real), key=lambda it: it[0].lower()):
+            name = item[0]
+            if name == "dirinfo.tap":
+                continue
+            if pat is None:
+                if name[0] == '.' or (item[1] != 16384 and name[-3:].upper() not in catalog.DIR_EXT):
+                    continue
+            elif not catalog.match(name, pat) or (name[0] == '.' and pat[0] != '.'):
+                continue
+            if item[1] == 16384:
+                dirs_l.append((name, True, 0))
+            else:
+                files_l.append((name, False, item[3]))
+        entries = dirs_l + files_l
+        if not entries:
+            return ("No match for %s" % pat) if pat else ("Directory is empty"), _3_F_Invalid_file
+        path = catalog.public(real)
+
+    listed = real if is_dir else real[:real.rfind('/')]
+    here = listed.upper() == TSP.cur_path.upper()
+    upper = [f.upper() for f in files] if here else []
+    index_of = lambda n: upper.index(n.upper()) if n.upper() in upper else None
+    nf = sum(1 for e in entries if not e[1])
+    line2 = "%s%d files, %d dirs" % (("%s: " % pat) if pat else "", nf, len(entries) - nf)
+    header = DIR_HEADER(line2, shorten_filename(xstr(path), 27))
+    return header + "".join(catalog.dir_rows(entries, index_of, shorten_filename)), _1_OK
 
 def IDIR(pre, cmd):
 
@@ -2292,25 +2361,7 @@ def TAPDIR(pre, cmd):                                                        # D
                 
             else: # Header listing
 
-                for el in TSP.offset_tbl:
-
-                    if idx >= idx1 and idx <= idx2:
-
-                        if el[2] == " Y" or idx == TSP.tap_idx:
-
-                            # Block number
-                            if idx == TSP.tap_idx:
-                                N.append(">")
-                            else:
-                                N.append(" ")
-                            N.append("%02d " % idx)
-                            if el[2] == " Y":
-                                N.append("%-10s  %5s " % (TSP.offset_tbl[idx+1][3], TSP.offset_tbl[idx+1][1])) # File type, Len
-                            else:
-                                N.append("Data block  %5s " % el[1]) # Len
-                            N.append("%-10s" % el[3]) # Desc.
-                    
-                    idx += 1
+                N.extend(catalog.tap_header_rows(TSP.offset_tbl, TSP.tap_idx, idx1, idx2))
                     
         nom = "".join(N)
 

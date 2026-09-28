@@ -86,6 +86,7 @@ jobs:
           cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
           cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
           cp src/TS/printer.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/printer.py
+          cp src/TS/catalog.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/catalog.py
           cp src/manifest.py         ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
 
       - name: Build mpy-cross
