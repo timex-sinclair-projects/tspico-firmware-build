@@ -138,7 +138,15 @@ jobs:
           SRC="$PWD/src"
           if git rev-parse -q --verify "refs/tags/${{ steps.rel.outputs.tag }}" >/dev/null; then
             mkdir -p _rel/tree
-            git archive "${{ steps.rel.outputs.tag }}" src | tar -x -C _rel/tree
+            git archive "${{ steps.rel.outputs.tag }}" src basic tools 2>/dev/null | tar -x -C _rel/tree \
+              || git archive "${{ steps.rel.outputs.tag }}" src | tar -x -C _rel/tree
+            # nofile/romupdate/dckupdate.tap are generated (gitignored), so an
+            # archive of src/ alone ships only the committed rompatch.tap. Build
+            # them from the same commit. Tags from before build-basic.sh (#34)
+            # still committed their TAPs, so there is nothing to build.
+            if [ -x _rel/tree/tools/build-basic.sh ]; then
+              ./_rel/tree/tools/build-basic.sh
+            fi
             SRC="$PWD/_rel/tree/src"
           fi
           SDCARD_DIR="$PWD/SD card" bash web-updater/build-payload.sh "$SRC" "${{ steps.rel.outputs.tag }}" "$PWD/_rel/firmware.uf2"
@@ -179,7 +187,10 @@ jobs:
         run: |
           SHA="${{ steps.main.outputs.sha }}"
           mkdir -p _main/tree
-          git archive "$SHA" src | tar -x -C _main/tree
+          git archive "$SHA" src basic tools | tar -x -C _main/tree
+          # Build the generated TAPs (nofile/romupdate/dckupdate) for this
+          # commit -- they are gitignored, so the archive doesn't have them.
+          ./_main/tree/tools/build-basic.sh
           SDCARD_DIR="$PWD/SD card" bash web-updater/build-payload.sh \
             "$PWD/_main/tree/src" "main@${SHA:0:7}" "$PWD/_main/fw/firmware.uf2"
 
