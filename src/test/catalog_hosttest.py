@@ -142,8 +142,16 @@ class HostOS:
         self.root = root
 
     def real(self, p):
+        """Resolve case-insensitively, as FAT does (CI's Linux FS does not)."""
         assert p.startswith("/sd/TAP"), p
-        return self.root + p[len("/sd/TAP"):]
+        cur = self.root
+        for part in p[len("/sd/TAP"):].split("/"):
+            if not part:
+                continue
+            hits = [n for n in os.listdir(cur) if n.lower() == part.lower()] \
+                if os.path.isdir(cur) else []
+            cur = os.path.join(cur, hits[0] if hits else part)
+        return cur
 
     def stat(self, p):
         st = os.stat(self.real(p))
