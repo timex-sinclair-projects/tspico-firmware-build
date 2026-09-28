@@ -1,0 +1,353 @@
+"""Host-side test for MOVE / ERASE / FORMAT (and tpi:ren) -- CPython, no Pico.
+
+Runs the REAL TS.tspico handlers the ROM's disk keywords turn into --
+tpi:copy a|b, tpi:erase x, tpi:format x, tpi:cd x / tpi:cd -, tpi:ren a|b --
+against a temporary directory standing in for the SD card (/sd/TAP), with
+FAT's case-insensitive names. The SD/MQ switching and the message senders are
+faked; what reaches SEND_MSG / SEND_MSG2 and what ends up on the "card" is
+checked. PROMPT_EACH (ERASE's per-file Y/N) is checked byte by byte against
+the ListMenu sequence the ROM's function-0x86 loop expects.
+
+See docs/DISK_COMMANDS_SPEC.md §3.
+
+Run:  python3 src/test/disk_cmds_hosttest.py
+"""
+
+import os
+import shutil
+import sys
+import tempfile
+import types
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import process_cmd_hosttest as P                                # noqa: E402
+
+results = []
+
+
+def check(cond, msg):
+    results.append(bool(cond))
+    print(("  PASS  " if cond else "  FAIL  ") + msg)
+
+
+class CardOS:
+    """os for tspico with /sd/TAP mapped onto a temp dir, case-insensitive like FAT."""
+
+    def __init__(self, root):
+        self.root = root
+        self.cwd = "/sd/TAP"
+
+    def real(self, p):
+        assert p.startswith("/sd/TAP"), p
+        cur = self.root
+        for part in p[len("/sd/TAP"):].split("/"):
+            if not part:
+                continue
+            hits = [n for n in os.listdir(cur) if n.lower() == part.lower()] \
+                if os.path.isdir(cur) else []
+            cur = os.path.join(cur, hits[0] if hits else part)
+        return cur
+
+    def stat(self, p):
+        r = self.real(p)
+        st = os.stat(r)
+        return (0x4000 if os.path.isdir(r) else 0x8000, 0, 0, 0, 0, 0, st.st_size, 0, 0, 0)
+
+    def ilistdir(self, p=None):
+        r = self.real(p or self.cwd)
+        for n in os.listdir(r):
+            full = os.path.join(r, n)
+            yield (n, 16384, 0, 0) if os.path.isdir(full) else (n, 32768, 0, os.path.getsize(full))
+
+    def remove(self, p):
+        os.remove(self.real(p))
+
+    def rmdir(self, p):
+        os.rmdir(self.real(p))
+
+    def mkdir(self, p):
+        os.mkdir(self.real(p))
+
+    def rename(self, a, b):
+        os.rename(self.real(a), self.real(b))
+
+    def chdir(self, p):
+        if not os.path.isdir(self.real(p)):
+            raise OSError(2, "ENOENT")
+        self.cwd = p
+
+    def getcwd(self):
+        return self.cwd
+
+
+def on_card(root, *path, exact=False):
+    """Is it there? Case-insensitive like FAT; exact=True also checks the case."""
+    cur = root
+    for part in path:
+        hits = [n for n in os.listdir(cur) if (n == part if exact else n.lower() == part.lower())] \
+            if os.path.isdir(cur) else []
+        if not hits:
+            return False
+        cur = os.path.join(cur, hits[0])
+    return True
+
+
+def build_card(root):
+    shutil.rmtree(root, ignore_errors=True)
+    os.makedirs(os.path.join(root, "GAMES", "ARCADE"))
+    os.makedirs(os.path.join(root, "EMPTY"))
+    os.makedirs(os.path.join(root, "FULL"))
+    for rel, data in (("ADVENT.TAP", b"A" * 700), ("CHESS.TAP", b"C" * 1500),
+                      ("NOTES.BAK", b"n"), ("OLD.BAK", b"o"), ("KEEP.BAK", b"k"),
+                      ("FULL/X.TAP", b"x"), ("GAMES/MANIC.TAP", b"m" * 10)):
+        with open(os.path.join(root, *rel.split("/")), "wb") as f:
+            f.write(data)
+
+
+def setup(t, root):
+    cos = CardOS(root)
+    sent = []
+    t.os = cos
+    t.open = lambda p, mode="r": open(cos.real(p), mode)
+    for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ"):
+        setattr(t, n, lambda *a, **k: None)
+    t.SEND_MSG2 = lambda msg, st, exp=True: sent.append(("MSG2", msg, st))
+    t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(("MSG", msg, msg1, st))
+    t.led = types.SimpleNamespace(value=lambda *a: None, toggle=lambda: None)
+    t.LOG = lambda *a: None
+    t.busy = False
+    t.dir_files_calls = 0
+
+    def dir_files():
+        t.dir_files_calls += 1
+        return True
+    t.DIR_FILES = dir_files
+    t.mounted = []
+
+    def mount(real, remounting=False):
+        t.mounted.append(real)
+        t.TSP.f_name = real
+        return True
+    t.MOUNT_FILE = mount
+    t.GET_DIRS = lambda path="/sd/TAP": ["/TAP"]
+    t.alldirs = ["/TAP", "/TAP/EMPTY", "/TAP/FULL", "/TAP/GAMES", "/TAP/GAMES/ARCADE"]
+    t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", f_name="", offset_tbl=[], tap_idx=0,
+                                  append=False, VERBOSE=False, LOG_LEVEL=2)
+    t.prev_path = None
+    return sent
+
+
+def call(t, sent, handler, cmd):
+    del sent[:]
+    handler(bytearray(10), "xxx" + cmd)
+    return sent[-1] if sent else None
+
+
+def test_copy(t, root):
+    print("MOVE a TO b  (tpi:copy)")
+    build_card(root)
+    sent = setup(t, root)
+    C = t.DISK_COPY
+    r = call(t, sent, C, "tpi:copy advent.tap|advent2.tap")
+    check(r[-1] == t._1_OK and on_card(root, "advent2.tap"), "file -> new name (%r)" % (r,))
+    check(open(os.path.join(root, "advent2.tap"), "rb").read() == b"A" * 700, "  contents copied whole")
+    check(on_card(root, "ADVENT.TAP"), "  source untouched")
+    check(t.dir_files_calls >= 1, "  current dir listing refreshed")
+    r = call(t, sent, C, "tpi:copy chess.tap|games")
+    check(r[-1] == t._1_OK and on_card(root, "GAMES", "chess.tap"), "file -> a directory keeps its name")
+    r = call(t, sent, C, "tpi:copy advent.tap|chess.tap")
+    check(r[-1] == t._3_F_Invalid_file and open(os.path.join(root, "CHESS.TAP"), "rb").read() == b"C" * 1500,
+          "existing target: Report F, not overwritten")
+    r = call(t, sent, C, "tpi:copy nothere.tap|x.tap")
+    check(r[-1] == t._3_F_Invalid_file, "missing source: Report F")
+    r = call(t, sent, C, "tpi:copy games|x")
+    check(r[-1] == t._4_Q_Parameter, "a directory as the source: Report Q")
+    r = call(t, sent, C, "tpi:copy advent.tap|nodir/x.tap")
+    check(r[-1] == t._3_F_Invalid_file and not on_card(root, "nodir"), "destination dir missing: Report F")
+    r = call(t, sent, C, "tpi:copy *.bak|full")
+    check(r[0] == "MSG2" and r[-1] == t._1_OK, "pattern -> dir: a listing")
+    check(all(on_card(root, "FULL", n) for n in ("KEEP.BAK", "NOTES.BAK", "OLD.BAK")), "  every match copied")
+    check("KEEP.BAK" in r[1] and "copied" in r[1] and len(r[1]) % 32 == 0, "  one 32-column row per file")
+    r = call(t, sent, C, "tpi:copy *.bak|full")
+    check(r[0] == "MSG2" and r[1].count("exists") == 3, "  again: each one 'exists', none overwritten")
+    r = call(t, sent, C, "tpi:copy *.bak|advent.tap")
+    check(r[-1] == t._4_Q_Parameter, "pattern to a file: Report Q")
+    r = call(t, sent, C, "tpi:copy *.zzz|full")
+    check(r[-1] == t._3_F_Invalid_file, "pattern with no match: Report F")
+    r = call(t, sent, C, "tpi:copy ../x|y")
+    check(r[-1] == t._3_F_Invalid_file, "above the root: Report F")
+    r = call(t, sent, C, "tpi:copy advent.tap")
+    check(r[-1] == t._4_Q_Parameter, "one name only: Report Q")
+    r = call(t, sent, C, "tpi:copy /games/manic.tap /full")
+    check(r[-1] == t._1_OK and on_card(root, "FULL", "MANIC.TAP", exact=True),
+          "typed by hand with a space, absolute paths; the copy keeps the stored name")
+
+
+def test_erase(t, root):
+    print("ERASE  (tpi:erase)")
+    build_card(root)
+    sent = setup(t, root)
+    E = t.DISK_ERASE
+    r = call(t, sent, E, "tpi:erase notes.bak")
+    check(r[-1] == t._1_OK and not on_card(root, "NOTES.BAK"), "a file: gone, no prompt")
+    check(r[0] == "MSG", "  answered with SEND_MSG (silent unless VERBOSE)")
+    r = call(t, sent, E, "tpi:erase nothere")
+    check(r[-1] == t._3_F_Invalid_file, "missing: Report F")
+    r = call(t, sent, E, "tpi:erase games")
+    check(r[-1] == t._4_Q_Parameter and on_card(root, "GAMES"), "a directory without '/': Report Q, kept")
+    r = call(t, sent, E, "tpi:erase full/")
+    check(r[-1] == t._4_Q_Parameter and on_card(root, "FULL"), "non-empty directory: Report Q, kept")
+    with open(os.path.join(root, "EMPTY", "dirinfo.tap"), "wb") as f:
+        f.write(b"d")
+    r = call(t, sent, E, "tpi:erase empty/")
+    check(r[-1] == t._1_OK and not on_card(root, "EMPTY"), "empty directory (bar dirinfo.tap): removed")
+    check("/TAP/EMPTY" not in t.alldirs, "  and dropped from alldirs")
+    t.TSP.cur_path = "/sd/TAP/GAMES/ARCADE"
+    r = call(t, sent, E, "tpi:erase /games/")
+    check(r[-1] == t._4_Q_Parameter, "the current directory's parent: Report Q")
+    t.TSP.cur_path = "/sd/TAP"
+    t.TSP.f_name = "/sd/TAP/ADVENT.TAP"
+    r = call(t, sent, E, "tpi:erase advent.tap")
+    check(r[-1] == t._4_Q_Parameter and on_card(root, "ADVENT.TAP"), "the mounted file: Report Q, kept")
+    t.TSP.f_name = ""
+
+    asked = []
+
+    def answers(ans):
+        def prompt_each(prompts):
+            asked[:] = prompts
+            return ans
+        return prompt_each
+
+    t.PROMPT_EACH = answers([0, 2])                              # Y to KEEP, skip NOTES?, Y to OLD
+    build_card(root)
+    r = call(t, sent, E, "tpi:erase *.bak")
+    check(asked == ["Erase /KEEP.BAK (Y/N)?", "Erase /NOTES.BAK (Y/N)?", "Erase /OLD.BAK (Y/N)?"],
+          "pattern: one prompt per match, sorted (%r)" % asked)
+    check(not on_card(root, "KEEP.BAK") and on_card(root, "NOTES.BAK") and not on_card(root, "OLD.BAK"),
+          "  only the ones answered Y are erased")
+    check(sent == [], "  nothing sent after the prompt exchange")
+    t.PROMPT_EACH = answers([])
+    r = call(t, sent, E, "tpi:erase *.zzz")
+    check(r[-1] == t._3_F_Invalid_file, "pattern with no match: Report F, no prompt")
+
+
+def test_prompt_each(t):
+    print("PROMPT_EACH byte sequence")
+    tx = []
+    keys = []
+    t.CMD_PUT = lambda b: tx.append(b if isinstance(b, int) else ord(b))
+    t.MQ_READY = lambda: tx.append("READY")
+    t.CMD_DRAIN = lambda: tx.append("DRAIN")
+    t.CMD_KEY = lambda: keys.pop(0)
+    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
+
+    def run(k, prompts=("A?", "B?", "C?")):
+        del tx[:]
+        keys[:] = k
+        return t.PROMPT_EACH(list(prompts))
+
+    got = run([ord("Y"), ord(" "), ord("y")])
+    check(got == [0, 2], "Y / other / y -> indexes 0 and 2 (%r)" % got)
+    want = [0x86, 1, "READY", 0x0D, ord("A"), ord("?"), 0,
+            ord("Y"), "READY", 0x0D, ord("B"), ord("?"), 0,
+            ord(" "), "READY", 0x0D, ord("C"), ord("?"), 0,
+            ord("y"), 0x03, "READY", "DRAIN"]
+    check(tx == want, "0x86, 1, then echo-READY-prompt-0 per key, echo 0x03 READY at the end")
+    got = run([ord("Y"), ord("N")])
+    check(got == [0] and tx[-1] == "READY" and 0x03 not in tx,
+          "N: stops there, no 0x03 (the ROM already left its loop)")
+    got = run([ord("n")])
+    check(got == [] and 0x03 not in tx, "lower-case n stops too (the ROM tests AND 5Fh)")
+
+
+def test_format(t, root):
+    print("FORMAT  (tpi:format)")
+    build_card(root)
+    sent = setup(t, root)
+    F = t.DISK_FORMAT
+    r = call(t, sent, F, "tpi:format new")
+    check(r[-1] == t._1_OK and on_card(root, "new.tap") and os.path.getsize(os.path.join(root, "new.tap")) == 0,
+          "name without .tap: empty new.tap")
+    check(t.mounted and t.mounted[-1].upper() == "/SD/TAP/NEW.TAP" and t.TSP.append, "  mounted, append on")
+    r = call(t, sent, F, "tpi:format games/level2.tap")
+    check(r[-1] == t._1_OK and on_card(root, "GAMES", "level2.tap"), "in a subdirectory")
+    t.mounted[:] = []
+    r = call(t, sent, F, "tpi:format advent.tap")
+    check(r[-1] == t._3_F_Invalid_file and os.path.getsize(os.path.join(root, "ADVENT.TAP")) == 700
+          and not t.mounted, "existing file: Report F, not truncated, not mounted")
+    r = call(t, sent, F, "tpi:format notes.txt")
+    check(r[-1] == t._4_Q_Parameter and not on_card(root, "notes.txt"), "not a .tap: Report Q")
+    r = call(t, sent, F, "tpi:format nodir/x.tap")
+    check(r[-1] == t._3_F_Invalid_file, "missing directory: Report F")
+    r = call(t, sent, F, "tpi:format tools/")
+    check(r[-1] == t._1_OK and os.path.isdir(os.path.join(root, "tools")) and "/TAP/tools" in t.alldirs,
+          "dir/: made, and added to alldirs")
+    r = call(t, sent, F, "tpi:format tools/")
+    check(r[-1] == t._3_F_Invalid_file, "dir/ again: Report F")
+    r = call(t, sent, F, "tpi:format /")
+    check(r[-1] == t._3_F_Invalid_file, "'/' : Report F (never touches the card itself)")
+
+
+def test_cd_and_ren(t, root):
+    print("MOVE TO (tpi:cd) and tpi:ren")
+    build_card(root)
+    sent = setup(t, root)
+    st, _ = t.ChangeDir("games/arcade")
+    check(st == t._1_OK and t.TSP.cur_path == "/sd/TAP/games/arcade", "cd a/b (%s)" % t.TSP.cur_path)
+    st, _ = t.ChangeDir("-")
+    check(st == t._1_OK and t.TSP.cur_path == "/sd/TAP", "cd - : back to where we were")
+    st, _ = t.ChangeDir("-")
+    check(st == t._1_OK and t.TSP.cur_path.upper() == "/SD/TAP/GAMES/ARCADE", "cd - again: toggles")
+    st, _ = t.ChangeDir("../..")
+    check(st == t._1_OK and t.TSP.cur_path == "/sd/TAP", "cd ../.. (resolved)")
+    st, _ = t.ChangeDir("/games")
+    check(st == t._1_OK and t.TSP.cur_path == "/sd/TAP/games", "cd /games (resolved from the root)")
+    st, _ = t.ChangeDir("/")
+    check(st == t._1_OK and t.TSP.cur_path == "/sd/TAP", "cd / still the root")
+    st, _ = t.ChangeDir("nothere")
+    check(st == t._3_F_Invalid_file and t.TSP.cur_path == "/sd/TAP", "cd to a missing dir: F, unchanged")
+    t.prev_path = None
+    st, _ = t.ChangeDir("-")
+    check(st == t._3_F_Invalid_file, "cd - with no previous dir: F")
+
+    R = t.DISK_REN
+    r = call(t, sent, R, "tpi:ren advent.tap|adv.tap")
+    check(r[-1] == t._1_OK and on_card(root, "adv.tap") and not on_card(root, "ADVENT.TAP"), "rename a file")
+    r = call(t, sent, R, "tpi:ren adv.tap|games")
+    check(r[-1] == t._1_OK and on_card(root, "GAMES", "adv.tap"), "rename into a directory moves it")
+    r = call(t, sent, R, "tpi:ren chess.tap|old.bak")
+    check(r[-1] == t._3_F_Invalid_file and on_card(root, "CHESS.TAP"), "onto an existing name: F, kept")
+    r = call(t, sent, R, "tpi:ren games|games/arcade")
+    check(r[-1] == t._4_Q_Parameter, "a directory into itself: Q")
+    t.TSP.f_name = "/sd/TAP/CHESS.TAP"
+    r = call(t, sent, R, "tpi:ren chess.tap|c.tap")
+    check(r[-1] == t._4_Q_Parameter, "the mounted file: Q")
+
+
+def main():
+    P.install_fakes()
+    ext = types.ModuleType("dev_extcmd")
+    ext.EXT_SA_FUNCT = {}
+    sys.modules["dev_extcmd"] = ext
+    import TS.tspico as t
+    t.TLM_ENABLED = False
+    real_prompt_each = t.PROMPT_EACH
+    root = tempfile.mkdtemp(prefix="disk_hosttest.")
+    try:
+        test_copy(t, root)
+        test_erase(t, root)
+        test_format(t, root)
+        test_cd_and_ren(t, root)
+        t.PROMPT_EACH = real_prompt_each                          # test_erase stubs it
+        test_prompt_each(t)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    ok = all(results)
+    print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

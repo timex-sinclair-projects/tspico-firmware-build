@@ -1,0 +1,23 @@
+BASIC Command               MOVE
+--------------------------------
+MOVE TO "dir"
+Changes directory. ".." goes up,
+"/" is the SD card's top dir.
+MOVE TO "" goes back to the dir
+you were in before.
+
+MOVE "a.tap" TO "b.tap"
+Copies a file. The source is not
+changed. If the destination is a
+directory, the copy keeps its
+name. An existing file is never
+overwritten (Report F).
+
+MOVE "*.tap" TO "backup"
+Copies every match into the
+directory, listing each one.
+
+Names can be string expressions.
+Rename: SAVE "tpi:ren old|new"
+
+See also: cat, erase, cd, ren

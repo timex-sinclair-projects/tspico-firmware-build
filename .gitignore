@@ -4,6 +4,10 @@
 *.bin
 *.hex
 
+# Patched ROM images from tools/build-rom.py (asm -> spliced TSPICO ROM).
+# The base src/rom/TSPICO.ROM is tracked; the built variant is regenerated.
+/build/
+
 # Exception: flash_nuke.uf2 is a static, prebuilt asset (Raspberry Pi
 # pico-examples flash/nuke) committed on purpose so the Web Updater can serve
 # it as the "wipe the Pico" download. It is not a build output.

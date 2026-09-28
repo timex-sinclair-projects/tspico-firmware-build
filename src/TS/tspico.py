@@ -366,6 +366,7 @@ from TS.tspico_io import (
     DRAIN_STDIN,                         # keep Ctrl-C reachable over USB
 )
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
+from TS import catalog
 from array import array
 
 # ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
@@ -407,6 +408,10 @@ LOG_LABELS = ("INFO", "WARNING", "ERROR", "CRITICAL","SPECIAL")
 # while the card had the bus would otherwise leave the Z80 talking to a
 # parked state machine for the rest of the session.
 sd_active = False
+
+# The directory before the last successful change: MOVE TO "" (tpi:cd -) goes
+# back to it. One level, like cd -.
+prev_path = None
 
 # Status codes returned to the 2068 - each maps to a BASIC error
 _1_OK = const(1)
@@ -1102,8 +1107,10 @@ def shorten_filename(nom, l):
     return nom
 
 
-def DIR_HEADER(sd_stat):                                                                      # lista header: path, SD line, column titles (4 x 32 chars)
-    return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (public_path(27), sd_stat[:32])
+def DIR_HEADER(sd_stat, path=None):                                                           # lista header: path, SD line, column titles (4 x 32 chars)
+    if path is None:
+        path = public_path(27)
+    return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (path, sd_stat[:32])
 
 
 def DIR_FILES():                                                                             # Get all files and directories from current path
@@ -1170,7 +1177,7 @@ def LIST_DIR_FILES():                                                           
     num_dirs = 0
     num_files = 0
     
-    ext = ['TAP', 'TZX', 'DCK', 'ROM', 'BIN']                                                 # extensions to be included
+    ext = catalog.DIR_EXT                                                                     # extensions to be included
     starts = ['.']                                                                            # first characters of files to be excluded
     
     ordered = True                                                                            # In the future, this could be controlled by an option
@@ -1228,6 +1235,14 @@ def LIST_DIR_FILES():                                                           
             dirinfo.append(nom)
 
             i += 1
+
+    # Then every other file, without an index: LOAD "tpi:n" only counts the
+    # types above, and files[] / dirinfo.tap keep exactly those (spec §2).
+    for archs in listing:
+        if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
+                and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
+            L.append("    %-18s%10s" % (shorten_filename(archs[0].replace("~", "?"), 18),
+                                        catalog.size_text(int(archs[3]))))
     
     del listing
 
@@ -1514,46 +1529,9 @@ def OFF_TABLE():                                                             # B
     global TSP
     
     arch = open("/TMP/temp.tap", "rb")
-    TSP.offset_tbl = []
-    TSP.offset = 0
+    TSP.offset_tbl = catalog.tap_table(arch)
     TSP.tap_idx = 0
-    # Get file size
-    arch.seek(0,2)
-    fsize = arch.tell()
-    arch.seek(0,0)
-    
-    blks = ['Program', 'Num. array', 'Char array', 'Code block']
-    
-    while TSP.offset < fsize:
-        rd_bytes = bytearray(30)
-        arch.seek(TSP.offset)
-        arch.readinto(rd_bytes)
-        long = rd_bytes[0] + (256*rd_bytes[1])
-        
-        code_blk = rd_bytes[2]
-
-        if (code_blk == 0):
-            hdr = " Y"
-            try:
-                name_raw = rd_bytes[4:14].decode()
-                name = ''.join(' ' if ((ord(l) <= 30) or (ord(l) >= 127)) else l for l in name_raw)
-                blk_type = blks[rd_bytes[3]]
-            except:
-                name = "??????????"
-                blk_type = "undefined"
-        else:
-            hdr = " N"
-            name = blk_type
-            
-        values = [TSP.offset, long, hdr, name]
-        TSP.offset_tbl.append(values)
-            
-        long += 2
-        TSP.offset += long
-    
     TSP.offset = 0
-    if fsize > 0:
-        del rd_bytes
     
     arch.close()
     gc.collect()
@@ -1915,6 +1893,8 @@ def DIR(pre, cmd):                                                              
     # SAVE "tpi:dir"CODE 1,n    - Show long name for file n
     # SAVE "tpi:dir"CODE 2,0    - Show a dir of files with their index and whole names
     # SAVE "tpi:dir"CODE 2,n    - Show a dir of files starting at file n
+    # SAVE "tpi:dir <arg>"      - CAT "<arg>": another directory, a pattern
+    #                             ("*.tap", "games/b*") or a TAP's contents
 
     global lista
     global led
@@ -1924,6 +1904,11 @@ def DIR(pre, cmd):                                                              
 
     TLM("DIR enter", "par1=%d par2=%d files=%d lista_len=%d" % (
         par1, par2, len(files), len(lista)))
+
+    arg = getArgs(cmd).strip()
+    if par1 == 0 and arg:
+        CATALOG(arg)
+        return
 
     if par1 == 0:
         # Regular listing
@@ -1967,6 +1952,472 @@ def DIR(pre, cmd):                                                              
   
     return
 
+
+
+def CATALOG(arg):                                                                               # CAT "arg" / SAVE "tpi:dir arg"
+
+    """List what arg names: a directory, the files matching a pattern in the
+    last path component, or the blocks of a TAP file. Bare DIR stays the
+    cached lista; this reads the card, so it brackets the SD access itself.
+    See docs/DISK_COMMANDS_SPEC.md §2."""
+
+    TLM("CATALOG enter", "arg=%r" % arg)
+    led.value(1)
+    ACTIVATE_SD()
+    try:
+        msg, st = CATALOG_TEXT(arg)
+    except OSError as e:
+        LOG("CATALOG: SD card error: %s" % e, 2)
+        msg, st = "SD card error", _3_F_Invalid_file
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+    if st == _1_OK:
+        SEND_MSG2(msg, _1_OK, False)
+    else:
+        LOG(msg, 1)
+        SEND_MSG(msg, arg, st)
+    led.value(0)
+
+
+def CATALOG_TEXT(arg):                                                                          # CATALOG's listing, SD already active
+
+    global TSP
+    global files
+
+    where, pat = catalog.split_arg(arg)
+    real = catalog.resolve(TSP.cur_path, where)
+    if real is None:
+        return "Not found: %s" % arg, _3_F_Invalid_file
+    try:
+        mode = os.stat(real)[0]
+    except OSError:
+        return "Not found: %s" % arg, _3_F_Invalid_file
+    is_dir = mode & 0x4000
+
+    if pat is None and not is_dir:                                                              # one file: a TAP's blocks, else its entry
+        name = real[real.rfind('/') + 1:]
+        if name[-4:].upper() == '.TAP':
+            if TSP.f_name.upper() == real.upper() and TSP.offset_tbl:
+                tbl, cur = TSP.offset_tbl, TSP.tap_idx                                          # the mounted file: its live table and position
+            else:
+                with open(real, "rb") as f:
+                    tbl = catalog.tap_table(f)
+                cur = None
+            N = ["File:%-27s" % shorten_filename(xstr(catalog.public(real)), 27)]
+            N.append("%-32s" % ("%d blocks%s" % (len(tbl), ", mounted" if cur is not None else "")))
+            N.append("Blk Type         Len  Name      ")
+            N.append("--------------------------------")
+            rows = catalog.tap_header_rows(tbl, cur, orphans=True)
+            N.extend(rows if rows else ["%s\r" % "<empty file>"])
+            return "".join(N), _1_OK
+        parent = real[:real.rfind('/')]
+        for item in os.ilistdir(parent):                                                        # the name as stored, not as typed
+            if item[0].upper() == name.upper():
+                name = item[0]
+                break
+        entries = [(name, False, os.stat(real)[6])]
+        path = catalog.public(parent)
+    else:
+        if not is_dir:
+            return "Not a directory: %s" % where, _3_F_Invalid_file
+        dirs_l, files_l, other_l = [], [], []
+        for item in sorted(os.ilistdir(real), key=lambda it: it[0].lower()):
+            name = item[0]
+            if name == "dirinfo.tap":
+                continue
+            if pat is None:
+                if name[0] == '.':
+                    continue
+            elif not catalog.match(name, pat) or (name[0] == '.' and pat[0] != '.'):
+                continue
+            if item[1] == 16384:
+                dirs_l.append((name, True, 0))
+            elif pat is None and name[-3:].upper() not in catalog.DIR_EXT:
+                other_l.append((name, False, item[3]))                          # like DIR: after the indexable ones
+            else:
+                files_l.append((name, False, item[3]))
+        entries = dirs_l + files_l + other_l
+        if not entries:
+            return ("No match for %s" % pat) if pat else ("Directory is empty"), _3_F_Invalid_file
+        path = catalog.public(real)
+
+    listed = real if is_dir else real[:real.rfind('/')]
+    here = listed.upper() == TSP.cur_path.upper()
+    upper = [f.upper() for f in files] if here else []
+    index_of = lambda n: upper.index(n.upper()) if n.upper() in upper else None
+    nf = sum(1 for e in entries if not e[1])
+    line2 = (("%s: " % pat) if pat else "") + catalog.counts(nf, len(entries) - nf)
+    header = DIR_HEADER(line2, shorten_filename(xstr(path), 27))
+    return header + "".join(catalog.dir_rows(entries, index_of, shorten_filename)), _1_OK
+
+
+# ─── MOVE / ERASE / FORMAT (docs/DISK_COMMANDS_SPEC.md §3) ─────────────────
+# The ROM turns MOVE "a" TO "b", ERASE "x" and FORMAT "x" into tpi:copy a|b,
+# tpi:erase x and tpi:format x; tpi:ren a|b has no keyword. Paths resolve like
+# CAT's (catalog.resolve: '/' is the SD root, '..' never climbs above it).
+# Nothing here overwrites: an existing target is Report F.
+
+def SD_CALL(fn, *args):                                                       # run fn with the SD card, then hand it back
+
+    """Run fn(*args) with the SD card active and always give the pins back to
+    the MQ. An SD error becomes ("SD card error", Report F)."""
+
+    ACTIVATE_SD()
+    try:
+        return fn(*args)
+    except OSError as e:
+        LOG("SD card error: %s" % e, 2)
+        return "SD card error", _3_F_Invalid_file
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+
+
+def REFRESH_IF(*dirs):                                                        # DIR_FILES if any dir is the current one
+
+    if any(d.upper() == TSP.cur_path.upper() for d in dirs):
+        os.chdir(TSP.cur_path)
+        DIR_FILES()
+
+
+def PROMPT_EACH(prompts):                                                     # one 0x86 exchange, one key per prompt
+
+    """Ask each prompt in one function-0x86 exchange and return the indexes
+    answered Y. Any other key skips that one. N ends the exchange -- the ROM
+    stops its loop on N -- so nothing from there on is chosen. Same byte
+    sequence as ListMenu: the echo of the last key starts the next string,
+    READY goes up after it, and 0x03 ends the loop."""
+
+    global MQ
+
+    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    while MQ.rx_fifo() != 0:                                                  # stray keystrokes
+        MQ.get()
+    wrt(0x86)                                                                 # PRINT STRING WITH LOOP -- the D-block status
+    wrt(1)                                                                    # BASIC return code
+    need_ready = True
+    yes = []
+    ch = None
+    for i, p in enumerate(prompts):
+        if ch is not None:
+            wrt(ch if 32 <= ch < 127 else 89)                                 # echo the last answer
+        if need_ready:
+            MQ_READY()                                                        # data in TX first, then READY
+            need_ready = False
+        wrt(0x0D)
+        for m in p:
+            wrt(m)
+        wrt(0x00)                                                             # Z80 prints, waits for a key
+        ch = CMD_KEY()                                                        # BREAK here raises CmdAbort
+        if ch in (78, 110):                                                   # N: the ROM has left its loop
+            MQ_READY()
+            return yes
+        if ch in (89, 121):
+            yes.append(i)
+        need_ready = True
+    wrt(ch if 32 <= ch < 127 else 89)
+    wrt(0x03)                                                                 # end the loop
+    MQ_READY()
+    CMD_DRAIN()
+    return yes
+
+
+def DISK_COPY(pre, cmd):                                                      # MOVE "a" TO "b" / SAVE "tpi:copy a|b"
+
+    # SAVE "tpi:copy a|b"      - copy file a to b (b may be a directory)
+    # SAVE "tpi:copy *.tap|d"  - copy the matching files into directory d
+
+    TLM("DISK_COPY enter")
+    a, b = catalog.split_pair(getArgs(cmd))
+    if not a or not b:
+        SEND_MSG("Copy needs a source and a destination", "", _4_Q_Parameter)
+        return
+    led.value(1)
+    msg, st = SD_CALL(DISK_COPY_WORK, a, b)
+    led.value(0)
+    if st == _1_OK and isinstance(msg, list):
+        SEND_MSG2("".join(msg), _1_OK, False)
+    else:
+        if st != _1_OK:
+            LOG(msg, 1)
+        SEND_MSG(msg, "", st)
+
+
+def DISK_COPY_WORK(a, b):                                                     # DISK_COPY with the SD active
+
+    cur = TSP.cur_path
+    where, pat = catalog.split_arg(a)
+    dst = catalog.resolve(cur, b)
+    if dst is None:
+        return "Not found: %s" % b, _3_F_Invalid_file
+    dst_is_dir = dir_exists(dst)
+    jobs = []
+    if pat:
+        src_dir = catalog.resolve(cur, where)
+        if src_dir is None or not dir_exists(src_dir):
+            return "Not found: %s" % a, _3_F_Invalid_file
+        if not dst_is_dir:
+            return "Copy them to a directory", _4_Q_Parameter
+        for item in sorted(os.ilistdir(src_dir), key=lambda it: it[0].lower()):
+            n = item[0]
+            if item[1] == 16384 or n == "dirinfo.tap" or not catalog.match(n, pat) \
+                    or (n[0] == '.' and pat[0] != '.'):
+                continue
+            jobs.append((src_dir + '/' + n, dst + '/' + n))
+        if not jobs:
+            return "No match for %s" % pat, _3_F_Invalid_file
+    else:
+        src = catalog.resolve(cur, a)
+        if src is None or not (file_exists(src) or dir_exists(src)):
+            return "Not found: %s" % a, _3_F_Invalid_file
+        if dir_exists(src):
+            return "Can't copy a directory", _4_Q_Parameter
+        name = catalog.basename(src)
+        for item in os.ilistdir(catalog.parent(src)):                         # the name as stored, not as typed
+            if item[0].upper() == name.upper():
+                name = item[0]
+                break
+        jobs.append((src, dst + '/' + name if dst_is_dir else dst))
+
+    rows = []
+    touched = []
+    for s_, d_ in jobs:
+        name = catalog.basename(s_)
+        if s_.upper() == d_.upper():
+            why = "same file"
+        elif file_exists(d_) or dir_exists(d_):
+            why = "exists"
+        elif not dir_exists(catalog.parent(d_)):
+            why = "no such dir"
+        elif COPY_FILE(s_, d_):
+            why = ""
+            touched.append(catalog.parent(d_))
+        else:
+            why = "copy failed"
+            try:
+                os.remove(d_)                                                 # no half-copied file left behind
+            except OSError:
+                pass
+        if pat is None:                                                       # one file: one answer
+            REFRESH_IF(*touched)
+            if why == "":
+                return "Copied %s" % name, _1_OK
+            if why == "copy failed":
+                return "Copy failed: %s" % name, _4_Q_Parameter
+            return "%s: %s" % (catalog.public(d_), why), _3_F_Invalid_file
+        rows.append("%-32s" % ("%s %s" % (shorten_filename(xstr(name), 18),
+                                          "copied" if why == "" else why))[:32])
+    REFRESH_IF(*touched)
+    return rows, _1_OK
+
+
+def DISK_ERASE(pre, cmd):                                                     # ERASE "x" / SAVE "tpi:erase x"
+
+    # SAVE "tpi:erase name"    - delete a file, no prompt (silent unless verbose)
+    # SAVE "tpi:erase *.bak"   - delete matching files, Erase <name> (Y/N)? each:
+    #                            Y erases, N stops, any other key skips
+    # SAVE "tpi:erase dir/"    - remove an empty directory
+
+    TLM("DISK_ERASE enter")
+    arg = getArgs(cmd).strip()
+    if not arg:
+        SEND_MSG("Name required", "", _4_Q_Parameter)
+        return
+    where, pat = catalog.split_arg(arg)
+    if pat is None:
+        msg, st = SD_CALL(DISK_ERASE_ONE, arg)
+        if st != _1_OK:
+            LOG(msg, 1)
+        SEND_MSG(msg, "", st)
+        return
+    found, st = SD_CALL(DISK_ERASE_MATCHES, where, pat)
+    if st != _1_OK:
+        SEND_MSG(found, "", st)
+        return
+    chosen = PROMPT_EACH(["Erase %s (Y/N)?" % shorten_filename(xstr(catalog.public(p)), 20)
+                          for p in found])
+    if chosen:                                                                # the exchange is over: now the card
+        SD_CALL(DISK_ERASE_LIST, [found[i] for i in chosen])
+
+
+def DISK_ERASE_ONE(arg):                                                      # one file, or an empty dir/
+
+    cur = TSP.cur_path
+    is_dir = arg.endswith('/')
+    real = catalog.resolve(cur, arg.rstrip('/') if is_dir else arg)
+    if real is None:
+        return "Not found: %s" % arg, _3_F_Invalid_file
+    if is_dir:
+        if not dir_exists(real):
+            return "Not found: %s" % arg, _3_F_Invalid_file
+        if catalog.within(cur, real):
+            return "Can't erase the current directory", _4_Q_Parameter
+        try:
+            os.remove(real + "/dirinfo.tap")                                  # DIR_FILES' own file doesn't count
+        except OSError:
+            pass
+        try:
+            os.rmdir(real)
+        except OSError:
+            return "Directory not empty", _4_Q_Parameter
+        alldirs[:] = [d for d in alldirs if not catalog.within(d, real[3:])]
+        REFRESH_IF(catalog.parent(real))
+        return "Erased %s" % catalog.public(real), _1_OK
+    if dir_exists(real):
+        return 'A directory: ERASE "%s/"' % arg, _4_Q_Parameter
+    if not file_exists(real):
+        return "Not found: %s" % arg, _3_F_Invalid_file
+    if TSP.f_name and TSP.f_name.upper() == real.upper():
+        return "File is mounted", _4_Q_Parameter
+    os.remove(real)
+    REFRESH_IF(catalog.parent(real))
+    return "Erased %s" % catalog.public(real), _1_OK
+
+
+def DISK_ERASE_MATCHES(where, pat):                                           # the files a pattern names
+
+    d = catalog.resolve(TSP.cur_path, where)
+    if d is None or not dir_exists(d):
+        return "Not found: %s" % where, _3_F_Invalid_file
+    found = [d + '/' + it[0] for it in sorted(os.ilistdir(d), key=lambda it: it[0].lower())
+             if it[1] != 16384 and it[0] != "dirinfo.tap" and catalog.match(it[0], pat)
+             and (it[0][0] != '.' or pat[0] == '.')]
+    if not found:
+        return "No match for %s" % pat, _3_F_Invalid_file
+    return found, _1_OK
+
+
+def DISK_ERASE_LIST(paths):                                                   # after PROMPT_EACH: erase the chosen
+
+    for p in paths:
+        if TSP.f_name and TSP.f_name.upper() == p.upper():
+            LOG("ERASE: %s is mounted, kept" % p, 1)
+            continue
+        try:
+            os.remove(p)
+            LOG("Erased %s" % p, 0)
+        except OSError as e:
+            LOG("ERASE: %s: %s" % (p, e), 2)
+    REFRESH_IF(*[catalog.parent(p) for p in paths])
+    return None, _1_OK
+
+
+def DISK_FORMAT(pre, cmd):                                                    # FORMAT "x" / SAVE "tpi:format x"
+
+    # SAVE "tpi:format name.tap" - create an empty .tap and mount it (".tap" may be left off)
+    # SAVE "tpi:format dir/"     - make a directory
+    # Never formats the card, and never overwrites.
+
+    global TSP
+
+    TLM("DISK_FORMAT enter")
+    arg = getArgs(cmd).strip()
+    if not arg:
+        SEND_MSG("Name required", "", _4_Q_Parameter)
+        return
+    if arg.endswith('/'):
+        msg, st = SD_CALL(DISK_MAKE_DIR, arg.rstrip('/'))
+        SEND_MSG(msg, "", st)
+        return
+    base = catalog.basename(arg)
+    if '.' not in base:
+        arg += '.tap'
+    elif base[base.rfind('.'):].upper() != '.TAP':
+        SEND_MSG('FORMAT makes "x.tap" or "dir/"', "", _4_Q_Parameter)
+        return
+    real, st = SD_CALL(DISK_NEW_TAP, arg)
+    if st != _1_OK:
+        LOG(real, 1)
+        SEND_MSG(real, "", st)
+        return
+    if not MOUNT_FILE(real):
+        SEND_MSG("Made it, but can't mount it", "", _4_Q_Parameter)
+        return
+    TSP.append = True                                                         # SAVE adds to it, as tpi:newtap does
+    SEND_MSG("New .tap mounted: ", public_fname(), _1_OK)
+
+
+def DISK_NEW_TAP(name):                                                       # an empty .tap; its real path
+
+    real = catalog.resolve(TSP.cur_path, name)
+    if real is None:
+        return "Not found: %s" % name, _3_F_Invalid_file
+    base = catalog.basename(real)
+    if not base or any(c < ' ' or c > '~' or c in ':*?\\|"<>' for c in base):
+        return "Name not allowed: %s" % base, _3_F_Invalid_file
+    if file_exists(real) or dir_exists(real):
+        return "Already exists: %s" % catalog.public(real), _3_F_Invalid_file
+    if not dir_exists(catalog.parent(real)):
+        return "Not found: %s" % catalog.public(catalog.parent(real)), _3_F_Invalid_file
+    with open(real, "wb"):
+        pass
+    REFRESH_IF(catalog.parent(real))
+    return real, _1_OK
+
+
+def DISK_MAKE_DIR(name):                                                      # FORMAT "dir/"
+
+    real = catalog.resolve(TSP.cur_path, name)
+    if real is None or real == catalog.ROOT:
+        return "Not allowed: %s/" % name, _3_F_Invalid_file
+    if file_exists(real) or dir_exists(real):
+        return "Already exists: %s" % catalog.public(real), _3_F_Invalid_file
+    if not dir_exists(catalog.parent(real)):
+        return "Not found: %s" % catalog.public(catalog.parent(real)), _3_F_Invalid_file
+    os.mkdir(real)
+    try:
+        alldirs.append(real[3:])
+        alldirs.sort()
+    except Exception:
+        pass
+    REFRESH_IF(catalog.parent(real))
+    return "Made %s/" % catalog.public(real), _1_OK
+
+
+def DISK_REN(pre, cmd):                                                       # SAVE "tpi:ren a|b" (no keyword)
+
+    # SAVE "tpi:ren old|new"   - rename (or move, if new is a directory)
+    # SAVE "tpi:ren old new"   - the same, typed with a space
+
+    TLM("DISK_REN enter")
+    a, b = catalog.split_pair(getArgs(cmd))
+    if not a or not b:
+        SEND_MSG("Rename needs two names", "", _4_Q_Parameter)
+        return
+    msg, st = SD_CALL(DISK_REN_WORK, a, b)
+    SEND_MSG(msg, "", st)
+
+
+def DISK_REN_WORK(a, b):
+
+    global alldirs
+
+    cur = TSP.cur_path
+    src = catalog.resolve(cur, a)
+    if src is None or not (file_exists(src) or dir_exists(src)):
+        return "Not found: %s" % a, _3_F_Invalid_file
+    is_dir = dir_exists(src)
+    if is_dir and catalog.within(cur, src):
+        return "Can't rename the current directory", _4_Q_Parameter
+    if TSP.f_name and catalog.within(TSP.f_name, src):
+        return "File is mounted", _4_Q_Parameter
+    dst = catalog.resolve(cur, b)
+    if dst is None:
+        return "Not found: %s" % b, _3_F_Invalid_file
+    if dir_exists(dst):
+        dst = dst + '/' + catalog.basename(src)
+    if file_exists(dst) or dir_exists(dst):
+        return "Already exists: %s" % catalog.public(dst), _3_F_Invalid_file
+    if not dir_exists(catalog.parent(dst)):
+        return "Not found: %s" % b, _3_F_Invalid_file
+    if is_dir and catalog.within(dst, src):
+        return "Can't move a directory into itself", _4_Q_Parameter
+    os.rename(src, dst)
+    if is_dir:
+        alldirs = GET_DIRS()
+    REFRESH_IF(catalog.parent(src), catalog.parent(dst))
+    return "Renamed to %s" % catalog.public(dst), _1_OK
 
 def IDIR(pre, cmd):
 
@@ -2292,25 +2743,7 @@ def TAPDIR(pre, cmd):                                                        # D
                 
             else: # Header listing
 
-                for el in TSP.offset_tbl:
-
-                    if idx >= idx1 and idx <= idx2:
-
-                        if el[2] == " Y" or idx == TSP.tap_idx:
-
-                            # Block number
-                            if idx == TSP.tap_idx:
-                                N.append(">")
-                            else:
-                                N.append(" ")
-                            N.append("%02d " % idx)
-                            if el[2] == " Y":
-                                N.append("%-10s  %5s " % (TSP.offset_tbl[idx+1][3], TSP.offset_tbl[idx+1][1])) # File type, Len
-                            else:
-                                N.append("Data block  %5s " % el[1]) # Len
-                            N.append("%-10s" % el[3]) # Desc.
-                    
-                    idx += 1
+                N.extend(catalog.tap_header_rows(TSP.offset_tbl, TSP.tap_idx, idx1, idx2))
                     
         nom = "".join(N)
 
@@ -2623,8 +3056,17 @@ def ChangeDir(potential_new_path, SDactive = False):
     if not SDactive:
         ACTIVATE_SD()
     npath = "%s/%s" % (TSP.cur_path, potential_new_path)
+    global prev_path
+    old_path = TSP.cur_path
 
-    if potential_new_path == ".." and TSP.cur_path.count("/") > 2:
+    if potential_new_path == "-":                                                 # MOVE TO "": back where we were
+        if prev_path and dir_exists(prev_path):
+            new_path = prev_path
+        else:
+            new_path = TSP.cur_path
+            status = _3_F_Invalid_file
+
+    elif potential_new_path == ".." and TSP.cur_path.count("/") > 2:
         # remove the last element from the current path
         # unless the last element is TAP
         #print("attempt to move up one directory")
@@ -2638,6 +3080,10 @@ def ChangeDir(potential_new_path, SDactive = False):
         
     elif potential_new_path[0:5].lower() == "/tap/":
         new_path = "/sd" + potential_new_path
+
+    elif catalog.resolve(TSP.cur_path, potential_new_path) and \
+            dir_exists(catalog.resolve(TSP.cur_path, potential_new_path)):             # "a/b", "../x", "/games", normalised
+        new_path = catalog.resolve(TSP.cur_path, potential_new_path)
 
     elif dir_exists(npath):
         new_path = npath
@@ -2656,6 +3102,8 @@ def ChangeDir(potential_new_path, SDactive = False):
             status = _4_Q_Parameter
         
     if status == _1_OK:
+        if TSP.cur_path != old_path:
+            prev_path = old_path
         message = "Changed dir to: %s" % potential_new_path
         LOG(message, 0)
         DIR_FILES()
@@ -4588,6 +5036,10 @@ def TS2068_IO():                                                         # Main 
         "TPI:CD" : CDIR,
         "TPI:CLOSE": UNMOUNT,
         "TPI:DIR": DIR,
+        "TPI:COPY": DISK_COPY,
+        "TPI:ERASE": DISK_ERASE,
+        "TPI:FORMAT": DISK_FORMAT,
+        "TPI:REN": DISK_REN,
         "TPI:FFW" : FWD,
         "TPI:HELP" : GETHELP,
         "TPI:IDIR" : IDIR,

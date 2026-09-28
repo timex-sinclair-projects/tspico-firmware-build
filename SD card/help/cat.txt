@@ -1,0 +1,26 @@
+BASIC Command                CAT
+--------------------------------
+CAT [name]
+
+Lists files on the SD card.
+CAT         the current dir
+CAT "games" another directory
+CAT "*.tap" matching names:
+            * any run, ? one
+            character
+CAT "g.tap" the blocks in a
+            .tap file
+CAT ""      the mounted .tap
+
+Files LOAD "tpi:n" can use come
+first, with their number n. All
+other files follow, unnumbered.
+name can be any string
+expression, e.g.
+CAT d$+"/*.tap". A name that is
+not found gives Report F.
+
+Same as SAVE "tpi:dir name".
+
+See also: move, erase, format,
+dir, tapdir

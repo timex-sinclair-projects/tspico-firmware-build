@@ -1,0 +1,16 @@
+TS-Pico Command              REN
+--------------------------------
+SAVE "tpi:ren old|new"
+SAVE "tpi:ren old new"
+
+Renames a file or directory. If
+new is a directory, old is moved
+into it. An existing name is not
+overwritten (Report F), and the
+mounted file and the current
+directory can't be renamed
+(Report Q).
+
+To copy a file, use MOVE.
+
+See also: move, erase, cat
