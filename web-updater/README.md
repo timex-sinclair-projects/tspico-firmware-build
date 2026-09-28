@@ -41,7 +41,10 @@ Every step can be rerun; a Pico left in BOOTSEL is always recoverable.
 
 The page offers WebUSB first and falls back to the drive when the device
 can't be opened. `?via=drive` forces the drive route (for testing it, or when
-WebUSB misbehaves on a machine). The logic is in [flasher.js](flasher.js); a host test runs it
+WebUSB misbehaves on a machine). Chrome titles the drive picker "select where this site
+can save changes", so the page tells users to pick the RPI-RP2 drive itself
+there; a wrong folder is caught by the `INFO_UF2.TXT` check and the button is
+offered again. The logic is in [flasher.js](flasher.js); a host test runs it
 against a fake PICOBOOT device with real UF2s:
 
 ```sh

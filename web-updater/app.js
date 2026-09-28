@@ -404,7 +404,9 @@ async function pickBootsel(name) {
         choices.push({ label: 'Stop', value: 'stop' })
         stageMsg(name, usb
             ? 'The Pico is in BOOTSEL mode. Click “Allow USB access” and pick “RP2 Boot” in the list.'
-            : 'The Pico is in BOOTSEL mode. Click “Use the RPI-RP2 drive” and pick the RPI-RP2 drive.')
+            : 'The Pico is in BOOTSEL mode. Click “Use the RPI-RP2 drive”. Chrome then asks you to ' +
+              '“select where this site can save changes”: choose the RPI-RP2 drive itself — on a Mac ' +
+              'under Locations, on Windows under This PC — not a folder, click Select, and allow editing.')
         const how = await ask(name, choices)
         if (how === 'stop') throw new Stop()
         try {
