@@ -171,8 +171,41 @@ the card is one mistyped line away from disaster. Formatting stays in the web up
 
 ## 4. `OPEN #` / `CLOSE #` — file channels (phase 3)
 
-The channel design is in `FDD_COMMANDS_DESIGN.md` §6: a `CHANS` record, a
-driver in RAM, buffered blocks, and its own polling of port `$0F`. The statement
+**None of this works until we supply a real channel.** Stock `OPEN #` only knows
+K, S and P. The Technical Manual (§4.1) describes the lookup tables involved:
+
+- **SPEC_T** holds the OPEN routine for each device letter.
+- **CL_TAB** holds the CLOSE routine for each letter.
+- **SELTAB** holds a routine that runs every time a stream using that letter is selected.
+
+Any other letter is Report J. So every form below depends on this work:
+
+1. **A channel record in `CHANS`.** It has the 5-byte header (output address,
+   input address, letter `F`), then our state: the Pico handle, mode, record length,
+   current record, and the 256-byte block buffer. It is inserted with MAKE-ROOM
+   just before the `$80` that ends `CHANS`, the way the Interface 1 builds `M` channels. The
+   stream's `STRMS` entry points at it.
+2. **Output and input routines that are reachable with HOME paged in**, because
+   `RST 10` / INCH call them there. Put a small stub in the record that jumps to
+   the EXROM via the existing returning thunk (`LD HL,addr` / `JP $03FC`), so
+   the driver code sits with the rest of the module at `$3000`, not in RAM. The
+   design doc's plan of a RAM driver still works as a fallback if the thunk
+   can't carry `A` (the character) and the flags through intact.
+3. **OPEN and CLOSE hooks.**
+   - At `$142A`: recognise `f:`/`d:` names, parse mode and record length, open the Pico
+     handle, build the record and set `STRMS`.
+   - At `$139F`: flush the buffer, close the handle, reclaim the record and zero
+     `STRMS`.
+4. **A select-time entry for `F` in SELTAB, or proof that an unknown letter
+   there is harmless.**
+5. **`NEW`, `CLEAR` and reset** rebuild `CHANS` and orphan our records. The Pico
+   side has to close handles that are orphaned this way (§ reset rule below).
+
+`SYSCON` (Timex's own extension table, design doc §10.7) is not the vehicle.
+It's a banked-driver ABI, and the open path that would consult it (`$1488–$14C6`) seems to have
+no callers in the HOME ROM. That's a static finding and still needs confirming.
+
+Design doc §6 covers the buffering and the handshake timing. The statement
 surface this spec recommends is:
 
 | Form | Meaning |
