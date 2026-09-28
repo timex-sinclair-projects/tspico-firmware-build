@@ -93,6 +93,36 @@ def split_arg(arg):
     return (arg[:k] if k > 0 else '/'), last
 
 
+def split_pair(arg):
+    """ "a.tap|b.tap" -> ("a.tap", "b.tap"). The ROM joins MOVE's two names with
+    '|', which FAT names can't contain; typed by hand (SAVE "tpi:copy a b") a
+    single space works too. Either half is '' when missing."""
+
+    if '|' in arg:
+        a, b = arg.split('|', 1)
+    else:
+        parts = arg.split()
+        if len(parts) != 2:
+            return arg.strip(), ''
+        a, b = parts
+    return a.strip(), b.strip()
+
+
+def basename(path):
+    return path[path.rfind('/') + 1:]
+
+
+def parent(path):
+    return path[:path.rfind('/')] or ROOT
+
+
+def within(path, top):
+    """True if path is top or somewhere below it (case-insensitive, as FAT)."""
+
+    p, t = path.upper(), top.upper()
+    return p == t or p.startswith(t + '/')
+
+
 def size_text(size):
     """Size column, exactly as LIST_DIR_FILES has always shown it."""
 

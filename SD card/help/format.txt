@@ -1,0 +1,17 @@
+BASIC Command             FORMAT
+--------------------------------
+FORMAT "new.tap"
+Makes a new, empty .tap file and
+mounts it, ready to SAVE into.
+".tap" may be left off.
+
+FORMAT "tools/"
+Makes a directory.
+
+Neither overwrites anything that
+is already there (Report F).
+It never formats the SD card.
+
+Same as SAVE "tpi:format name".
+
+See also: cat, erase, newtap, md

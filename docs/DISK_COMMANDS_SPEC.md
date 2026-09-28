@@ -100,8 +100,8 @@ as `CAT "<arg>"`**. There is one implementation, in the firmware.
   - `CAT 5` and `CAT "x"5` are rejected with the usual `?` marker.
   - An undefined variable is Report 2 at run time.
   - `CAT "x": PRINT 1` runs both statements.
-- **The argument is limited to 23 characters.** `SESSION_SETUP` takes `tpi:` names
-  of 5–31 characters, and `tpi:dir ` uses 8. Longer is Report F, and nothing is sent.
+- **The argument can be up to 64 characters** (Report F beyond, nothing sent). See §3
+  for how the module gets past SESSION_SETUP's 31-character limit.
 - **Paths:** `/` starts at the SD root (`/sd/TAP`) and `..` goes up, but never above the
   root. Names are matched case-insensitively.
 
@@ -156,16 +156,43 @@ The last waits for native files (§4a), because `DIR`'s filter also decides what
 
 ## 3. `MOVE`, `ERASE`, `FORMAT`
 
-| Form | Meaning | Notes |
+**Implemented** (ROM `fddcmd.asm` v5, firmware `DISK_COPY` / `DISK_ERASE` /
+`DISK_FORMAT` / `DISK_REN` + `ChangeDir`). Every argument is a string
+expression, up to 64 characters.
+
+| Form | Sends | Meaning |
 |---|---|---|
-| `MOVE TO "games"` | **Change directory.** `MOVE TO ".."` goes up, `MOVE TO "/"` goes to the root | Reads as English. With no source it can't be confused with a copy |
-| `MOVE "a.tap" TO "b.tap"` | **Copy** a file | Same meaning as TOS `MOVE *` and Interface 1 `MOVE`. The source is untouched |
-| `MOVE "*.tap" TO "backup"` | Copy the matching files into a directory | As in TOS, a pattern requires a directory as the destination. Each name is printed as it's copied |
-| `ERASE "old.tap"` | Delete a file. One round trip, no prompt | Programs need to delete temp files silently |
-| `ERASE "*.bak"` | Delete the matching files, with a TOS-style `Erase <name> (Y/N)?` for each | Wildcard deletes always confirm |
-| `ERASE "olddir/"` | Remove a directory. It must be empty, otherwise Report Q | The trailing `/` says "I mean the directory" |
-| `FORMAT "new.tap"` | Create an empty TAP and mount it (`NEWTAP`) | Refuses if the file exists (Report F), rather than truncating it |
-| `FORMAT "tools/"` | Make a directory | The trailing `/` again |
+| `MOVE TO "games"` | `tpi:cd games` | **Change directory.** `".."` goes up, `"/"` is the root, and paths such as `"a/b"`, `"../x"` and `"/games"` work |
+| `MOVE TO ""` | `tpi:cd -` | Back to the directory before the last change (one level, like `cd -`) |
+| `MOVE "a.tap" TO "b.tap"` | `tpi:copy a.tap\|b.tap` | **Copy** a file. The source is untouched. If the destination is a directory, the copy keeps its name |
+| `MOVE "*.tap" TO "backup"` | `tpi:copy *.tap\|backup` | Copy every match into a directory, listing each file as `copied` or `exists` |
+| `ERASE "old.tap"` | `tpi:erase old.tap` | Delete a file. No prompt, and silent unless `VERBOSE` |
+| `ERASE "*.bak"` | `tpi:erase *.bak` | `Erase <name> (Y/N)?` for each match. **Y** erases it, **N** stops, any other key skips it |
+| `ERASE "olddir/"` | `tpi:erase olddir/` | Remove an empty directory (`dirinfo.tap` doesn't count). Not empty is Report Q |
+| `FORMAT "new.tap"` / `FORMAT "new"` | `tpi:format new.tap` | Create an empty TAP and mount it with append on, as `tpi:newtap` does |
+| `FORMAT "tools/"` | `tpi:format tools/` | Make a directory |
+| — | `tpi:ren old\|new` | Rename (or move into a directory). It has no keyword |
+
+- **The separator.** `MOVE` joins its two names with `|`, which a FAT name can't contain.
+  Typed by hand, `SAVE "tpi:copy a b"` with a space also works.
+- **Nothing is ever overwritten.** An existing destination is Report F: `MOVE`
+  onto a file, `FORMAT` of an existing name, `tpi:ren` onto a name.
+- **Report Q is for requests that can't be carried out:**
+  - the mounted file or the current directory (or one of its parents) for `ERASE`/`tpi:ren`;
+  - a directory as `MOVE`'s source;
+  - a pattern copied to something that isn't a directory;
+  - `FORMAT` of a name that isn't `.tap`.
+- **Report F is for names:** a missing file, a path above the root, an empty name, or a name
+  longer than 64 characters (checked in the ROM, and nothing is sent).
+- **Why N stops instead of skipping.** The ROM's function-`$86` prompt loop ends the whole exchange on N,
+  so N can't mean "skip this one". Other keys skip. The erasing happens after the
+  exchange, because the SD card and the 2068 link share pins. That means the
+  per-file results aren't printed; errors go to the log.
+- **No more 31-character limit.** The module sends through `TPI_SEND`, which is
+  SESSION_SETUP entered past its 5–31 character name gate. Everything past the
+  gate handles 16-bit lengths, and the Pico sizes its buffer from the pre-header.
+  This also lifts `CAT`'s old 23-character limit. `build-rom.py` checks the bytes at
+  every base-ROM address the module relies on (`ANCHORS`).
 
 **Decided: `MOVE "a" TO "b"` copies.** This is what TOS and the Interface 1
 mean, and a mistyped name can't lose data. Rename becomes a new firmware verb,

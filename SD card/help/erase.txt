@@ -1,0 +1,24 @@
+BASIC Command              ERASE
+--------------------------------
+ERASE "old.tap"
+Deletes a file. No question is
+asked, so programs can remove
+their own work files.
+
+ERASE "*.bak"
+Asks about each matching file:
+ Y erases it
+ N stops (no more are erased)
+ any other key skips it
+
+ERASE "olddir/"
+Removes an empty directory. The
+/ says you mean the directory.
+
+The mounted .tap and the current
+directory can't be erased
+(Report Q).
+
+Same as SAVE "tpi:erase name".
+
+See also: cat, move, format

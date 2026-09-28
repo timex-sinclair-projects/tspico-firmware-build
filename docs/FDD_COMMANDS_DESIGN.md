@@ -238,9 +238,9 @@ display of the response):
 | Statement | TPI command built | Pico verb |
 |---|---|---|
 | `CAT` / `CAT "x"` / `CAT ""` | `tpi:dir` / `tpi:dir x` / `tpi:tapdir` | `DIR` (with `CATALOG` for an argument) / `TAPDIR` |
-| `ERASE "name"` | `tpi:rm name` | `RM` |
-| `FORMAT "name"` | `tpi:newtap name` | `NEWTAP` |
-| `MOVE "path"` | `tpi:cd path` | `CD` |
+| `ERASE "x"` | `tpi:erase x` | `DISK_ERASE` (file, pattern with Y/N each, or `dir/`) |
+| `FORMAT "x"` | `tpi:format x` | `DISK_FORMAT` (`x.tap` new + mounted, or `dir/`) |
+| `MOVE TO "x"` / `MOVE "a" TO "b"` | `tpi:cd x` (`""` → `tpi:cd -`) / `tpi:copy a\|b` | `CDIR` / `DISK_COPY` |
 
 The verbs map to Pico commands that exist today. The argument is read from the
 BASIC line and appended after the verb. Both the syntax-check and runtime pass

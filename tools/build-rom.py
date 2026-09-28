@@ -76,6 +76,41 @@ PATCHES = [
 ]
 
 
+# --- Anchors: base-ROM code the module calls or jumps into --------------------
+# Not patched, only relied on. Each is checked in the base before building (and
+# by --rebase), so a new base ROM that moves one fails loudly instead of the
+# module jumping into the wrong code. Keep in sync with fddcmd.asm's EQUs.
+ANCHORS = [
+    dict(name="SESSION_SETUP entry (TPI_SEND repeats \$1A73-\$1A7D)",
+         bank="exrom", addr=0x1A73, bytes="e5 d5 2a 78 5c 23 7c b5 28 fb 22 d1 5d"),
+    dict(name="SESSION_NAMED: SESSION_SETUP past the 5-31 char name gate",
+         bank="exrom", addr=0x1AAC, bytes="d5 d5 e1 22 d3 5d ed 43 d5 5d"),
+    dict(name="CALL_HOME: EXROM->HOME returning thunk",
+         bank="exrom", addr=0x03DD, bytes="e5 21 00 ff e5 26 00 e5 e5 d9 cd 99 0f dd e1 c9"),
+    dict(name="EXROM RST 8 error restart (Reports C/F from the module)",
+         bank="exrom", addr=0x0008, bytes="2a 5d 5c 22 5f 5c"),
+    dict(name="H_EXPT_STR: syntax class \$0A (string expression)",
+         bank="home", addr=0x1BEF, bytes="cd 54 28 fd cb 01 76 c8"),
+    dict(name="H_TEST_ROOM",
+         bank="home", addr=0x1FBB, bytes="2a 65 5c 09 38 0e"),
+    dict(name="HOME->EXROM returning thunk the \$25D6 hook jumps to",
+         bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
+]
+
+
+def check_anchors(base):
+    """Messages for every anchor whose bytes differ in base (empty = all good)."""
+    bad = []
+    for a in ANCHORS:
+        want = bytes.fromhex(a["bytes"])
+        off = file_offset(a["bank"], a["addr"])
+        got = bytes(base[off:off + len(want)])
+        if got != want:
+            bad.append("%s $%04X (%s) holds %s, the module expects %s"
+                       % (a["bank"], a["addr"], a["name"], got.hex(" "), want.hex(" ")))
+    return bad
+
+
 def die(msg):
     sys.exit("build-rom: " + msg)
 
@@ -151,6 +186,9 @@ def rebase():
                 f"{p['bank']} ${p['addr']:04X} now holds {actual.hex(' ')}, "
                 f"patch {p['name']!r} expects {before.hex(' ')}")
 
+    for m in check_anchors(base):
+        problems.append("anchor moved: " + m)
+
     # the module region we own ($3000..$3FFF of the EXROM) must still be free
     mstart = file_offset("exrom", FDD_ORG)
     mend = EXROM_FILE_BASE + 0x4000
@@ -216,6 +254,12 @@ def main():
 
     out = bytearray(base)
     touched = []   # (start, end) file-offset ranges we intend to change
+
+    bad = check_anchors(base)
+    if bad:
+        die("the base ROM no longer has code the module relies on:\n  " + "\n  ".join(bad))
+    print("anchors: %d base-ROM entry points the module uses are where it expects"
+          % len(ANCHORS))
 
     # --- 3. splice the module into free EXROM ---
     mstart = file_offset("exrom", FDD_ORG)

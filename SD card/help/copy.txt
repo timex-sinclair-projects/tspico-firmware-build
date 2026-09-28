@@ -27,3 +27,4 @@ but this currently is not
 implemented.
 
 See also: LPRINT, ts2040, picopt
+To copy a file, see MOVE.
