@@ -159,16 +159,36 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RUN="$(gh run list --workflow build.yml --branch main --event push --status success \
-                   --limit 1 --json databaseId,headSha --jq '.[0] | "\(.databaseId) \(.headSha)"')"
-          if [ -z "$RUN" ]; then
-            echo "No green build of main -- no main/ channel."
+          # Don't filter with --status success: while other main builds are
+          # in flight it has returned a months-old run (Pages run
+          # 36475123993). List recent runs, keep the green ones client-side,
+          # newest first, and take the first whose firmware still downloads.
+          CANDIDATES="$(gh run list --workflow build.yml --branch main --event push \
+                          --limit 20 --json databaseId,headSha,conclusion,createdAt \
+                          --jq 'map(select(.conclusion == "success")) | sort_by(.createdAt) | reverse
+                                | .[] | "\(.databaseId) \(.headSha)"')"
+          ID= SHA=
+          while read -r CID CSHA; do
+            [ -n "$CID" ] || continue
+            HAVE="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CID/artifacts" \
+                      --jq '[.artifacts[] | select(.name == "tspico-firmware-uf2" and (.expired | not))] | length')" || HAVE=
+            if [ "$HAVE" != "1" ]; then
+              echo "Run $CID ($CSHA): no unexpired tspico-firmware-uf2 artifact, trying the next."
+              continue
+            fi
+            rm -rf _main && mkdir -p _main/fw _main/upg
+            if ! gh run download "$CID" -n tspico-firmware-uf2 -D _main/fw; then
+              echo "Run $CID ($CSHA): firmware download failed, trying the next."
+              continue
+            fi
+            ID=$CID SHA=$CSHA
+            break
+          done <<< "$CANDIDATES"
+          if [ -z "$ID" ]; then
+            echo "No green build of main with a downloadable firmware -- no main/ channel."
             echo "run=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          read -r ID SHA <<< "$RUN"
-          mkdir -p _main/fw _main/upg
-          gh run download "$ID" -n tspico-firmware-uf2 -D _main/fw
           gh run download "$ID" -n tspico-upgrade-uf2  -D _main/upg || true
           # The upgrade artifact nests its UF2 under its build path.
           UPG="$(find _main/upg -path '*build-UPGRADE/firmware.uf2' | head -1)"
