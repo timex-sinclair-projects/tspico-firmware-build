@@ -64,6 +64,11 @@ The page installs from one of two payloads, chosen at the top of the page
   `tspico-firmware-uf2` and `tspico-upgrade-uf2` artifacts, and the Pico files
   from its commit.
 
+The Pico files are the channel's `src/` from `git archive`, plus the TAPs
+`tools/build-basic.sh` generates from that same commit (`nofile`, `romupdate`
+and `dckupdate` are gitignored, so the archive alone doesn't have them).
+`build-payload.sh` refuses to build a channel without those three.
+
 Each channel is a directory with `manifest.json`, `pico/`, `firmware.uf2`,
 `firmware-uf2.zip`, `upgrade.uf2` and `sdcard.zip`. A release from before
 `upgrade.uf2` existed simply has no ROM update; the page says so and points at
