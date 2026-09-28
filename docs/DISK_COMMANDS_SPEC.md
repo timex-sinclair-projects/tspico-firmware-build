@@ -190,15 +190,85 @@ The design choices:
   prefix keeps `OPEN #4,"p"` meaning the printer, and leaves room for other
   devices. The Interface 1 precedent is `"m";1;"name"`, but a prefix inside one
   string is simpler and is still a single string expression.
-- **Random access.** The TOS `PRINT *#n;x$;AT p` needs statement interception.
-  Instead, set the record pointer with a statement form we own:
-  `MOVE #4 TO p`, which reads as "move stream 4 to record p". It keeps
-  PRINT and INPUT stock. EOF shows up as Report 8 on `INPUT #`, as it does for
-  tape reads today.
+- **Random access** uses `TAB` as the record pointer. See §4b. EOF shows up as Report 8 on
+  `INPUT #`, as it does for tape reads today.
 - **Streams 4–15 only.** That's 12 at once. The practical limit is buffer RAM:
   about 256 bytes per open channel.
 - **After a reset**, all Pico handles are closed. `NEW` and `CLEAR` lose the
   channel records, so `OPEN #` has to be idempotent.
+
+### 4b. Random access: `TAB` is the record pointer
+
+TOS writes `PRINT *#4;a$;AT p` and `INPUT *#4;a$;AT p`. Stock BASIC can't
+parse a trailing `AT p` on `PRINT #`. What it already has is **`TAB n` as an ordinary
+print item that sends a 16-bit number to the channel**:
+
+- HOME `$21AD–$21C1`: the `TAB` item evaluates its argument with FIND-INT2, so values
+  0–65535 are accepted and anything else is Report B.
+- It then does `RST 10` three times: `CHR$ 23`, the low byte, the high byte.
+- Those go to the *current channel's* output routine. On the screen channel they
+  mean "move to column n". On a disk channel the driver owns them, so they mean
+  "move to record n".
+
+So random access needs **no new statements and no parser changes**:
+
+```basic
+10 OPEN #4,"f:people.dat","u",40      : REM 40-byte records
+20 PRINT #4;TAB 7;n$;TAB 7;          : REM wrong: see below
+20 PRINT #4;TAB 7;n$                  : REM write record 7
+30 INPUT #4;TAB 7;a$                  : REM read record 7 back
+40 PRINT #4;TAB 3;n$( TO 20);p$( TO 20) : REM two fields, one record
+50 CLOSE #4
+```
+
+The rules:
+
+| Situation | Behaviour |
+|---|---|
+| Record numbering | **1-based**, like TOS and BASIC arrays. Record n starts at byte `(n-1) × reclen` |
+| No record length given | `reclen` = 1, so `TAB n` is "byte n" and a stream file can still be read at any byte. The 16-bit limit caps this at the first 64 KB. A fixed record length reaches further (65535 × reclen) |
+| `PRINT #4;TAB n;…` then end of statement | The items go into record n. The ending CR is **not stored**. It closes the record, and the rest is padded with spaces (text mode) or `CHR$ 0` (binary mode). Anything longer than `reclen` gives Report Q; nothing is silently cut off |
+| `PRINT` ending in `;` | The record stays open, and the next `PRINT #4` adds to it (as TOS allows). The next `TAB` or CR closes it |
+| `INPUT #4;TAB n;a$` | Stock `INPUT #` prints its prompt items to the same stream, so the `TAB` reaches the driver before the read. The driver then supplies exactly `reclen` bytes followed by a CR, so the file needs no line ends. `a$` is the whole fixed-width record, padding included, and you split fields with slices as in the TOS example (manual §5.5) |
+| No `TAB` | Sequential: the next record after the last one read or written. A plain loop of `INPUT #4;a$` walks the file |
+| Reading past the last record | Report 8, as tape does, so `ON ERR` can trap it |
+| Writing past the end | The file grows, and any records skipped over are filled with padding |
+| `INPUT #4;TAB 0;n` | **Record 0 is the header query.** It returns the record count as text, so `n` is the file's size in records. TOS had no way to ask for this, and without it, appending to a random file means guessing |
+| `PRINT #4;TAB 0;…` | Report Q |
+
+**Line 20's first version is the trap to document.** `TAB` is a seek, so a second
+`TAB` inside one `PRINT` moves to another record. It does not skip a field.
+Multi-field records put the fields next to each other, as in line 40.
+
+**Why not `MOVE #4 TO p`** (the earlier draft)? That needed its own statement,
+so you had to seek and read in two separate statements. `INPUT #4;TAB p;a$` does both in
+one, `TAB` is already how Sinclair BASIC says "position", and it costs no ROM
+parser code.
+
+**What still needs checking in the 2068 ROM** (on the Spectrum, the Interface 1
+microdrive shows both work):
+
+- that `INPUT #4;…;a$` from a non-K channel reads characters up to a CR (IN-CHAN
+  rather than the line editor), and
+- that `INPUT #4`'s prompt items go to stream 4's output routine and not to the
+  lower screen.
+
+A ZEsarUX run with a dummy channel record answers both before any driver is
+written.
+
+**Buffering.** The driver keeps one block (256 bytes) of the file in RAM per
+channel:
+
+- A `TAB` inside the current block costs nothing.
+- A `TAB` outside it writes back the block if it's dirty and fetches the new one.
+  That's one Pico round trip per seek.
+- Updates reach the card when a block is evicted or on `CLOSE #`. As in TOS (manual
+  Appendix B, `CLOSE #*`), **a reset before `CLOSE #` loses the unwritten changes**.
+- `reclen` is limited to 255, so a record always fits inside one buffer.
+
+**Open files.** A file can be open on only one stream at a time. A second `OPEN #`
+of the same file gives Report F. `CAT` marks open files, like TOS's `S` column
+(§2).
 
 ---
 
@@ -234,7 +304,7 @@ things.
   mean SD files, for people who never use tapes. That is a policy change for later,
   not a new syntax.
 
-### File format — **recommend the +3DOS header**
+### File format — the +3DOS header (decided)
 
 A program can't be a bare byte dump. `LOAD` needs to know:
 
@@ -280,10 +350,9 @@ container is the same. The header's issue/version bytes can mark a file as
   - Print control codes (`AT`, `TAB`, `INK` …) and their parameter bytes are
     dropped. The comma control becomes spaces up to the next 16-column tab stop.
 - **Binary mode** passes every byte through unchanged.
-- **Out of scope for now: loading a text listing as a program**, i.e. `MERGE` from `.txt`.
+- **Long deferred: loading a text listing as a program**, i.e. `MERGE` from `.txt`.
   That needs a tokeniser, which is zmakebas-sized work in MicroPython. The file
-  format doesn't rule it out. Worth doing later, because it would make editing BASIC
-  on a PC a round trip.
+  format doesn't rule it out. It isn't on the build order.
 
 ### What changes elsewhere
 
