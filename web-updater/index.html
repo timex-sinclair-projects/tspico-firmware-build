@@ -194,7 +194,8 @@
             <span>Update the TS-2068 ROM (boards coming from 1.1 or 1.5)
               <small>Firmware 2.0 needs the matching 2.0 ROM in the TS-Pico’s flash chip. The
                  page loads a small updater onto the 2068 and walks you through it. Some boards
-                 need the <strong>P10 jumper</strong> fitted so the chip can be written.</small></span></label>
+                 need the <strong>P10 jumper</strong> fitted so the chip can be written — leave it fitted
+                 afterwards too: writing DOCK images to the flash needs it.</small></span></label>
           <div class="hint" id="plan-hint" hidden></div>
           <div class="row" style="margin-top:12px;">
             <button id="btn-start" class="primary" disabled>Start</button>
@@ -216,7 +217,7 @@
           <div class="msg"></div>
           <div id="rom-steps" hidden>
             <ol>
-              <li>Fit the <strong>P10 jumper</strong> if your board has one.</li>
+              <li>Fit the <strong>P10 jumper</strong> if your board has one, and leave it on.</li>
               <li>Turn the TS-2068 on (or off and on).</li>
               <li>Type <code>OUT 244,3</code> and press <kbd>ENTER</kbd> — this switches to the
                   Spectrum ROM.</li>
@@ -245,7 +246,8 @@
     <div class="panel" id="done" hidden>
       <h2 style="color:var(--ok)">Done</h2>
       <p>Turn the TS-2068 off and on. It should start with the new ROM and firmware —
-         try <code>SAVE "tpi:dir"</code>. If you updated the ROM, you can remove the P10 jumper.</p>
+         try <code>SAVE "tpi:dir"</code>. Leave the P10 jumper fitted: it’s needed to put DOCK images in
+         the flash.</p>
     </div>
 
     <!-- Manual path -->
