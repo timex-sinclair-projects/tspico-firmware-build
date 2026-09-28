@@ -469,6 +469,7 @@ async function romUpdate() {
                 'Type OUT 244,3 first, then LOAD "".', 'warn'); break
             case 'updater':
                 writing = true
+                withdraw()                  // continuing now would interrupt it
                 status('The updater is running. Don’t turn anything off.')
                 break
             case 'status':
@@ -514,13 +515,17 @@ async function romUpdate() {
     // shows DONE -- offered only while the updater isn't writing, because
     // continuing interrupts the Pico, and the updater needs it until DONE.
     let offered = false
+    const withdraw = () => {
+        stage('rom').querySelector('.actions').replaceChildren()
+        offered = false
+    }
     const watch = setInterval(() => {
         if (!serial) {
             rejectDone(new Error('The Pico disconnected during the ROM update. Plug it back in and press ' +
                 'Start again (untick Erase if the ROM part finished).'))
             return
         }
-        if (!offered && !writing && Date.now() - lastEvent > 20000) {
+        if (!offered && !writing && Date.now() - lastEvent > 45000) {
             offered = true
             ask('rom', [
                 { label: 'The 2068 says DONE — continue', value: 'done' },
