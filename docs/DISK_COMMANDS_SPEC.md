@@ -186,18 +186,25 @@ Any other letter is Report J. So every form below depends on this work:
    just before the `$80` that ends `CHANS`, the way the Interface 1 builds `M` channels. The
    stream's `STRMS` entry points at it.
 2. **Output and input routines that are reachable with HOME paged in**, because
-   `RST 10` / INCH call them there. Put a small stub in the record that jumps to
-   the EXROM via the existing returning thunk (`LD HL,addr` / `JP $03FC`), so
-   the driver code sits with the rest of the module at `$3000`, not in RAM. The
-   design doc's plan of a RAM driver still works as a fallback if the thunk
-   can't carry `A` (the character) and the flags through intact.
-3. **OPEN and CLOSE hooks.**
+   `RST 10` / INCH call them there. A 9-byte stub per direction jumps to the
+   EXROM through the existing returning thunk
+   (`LD ($5DCD),HL` / `LD HL,addr` / `JP $03FC`). **Measured: `A` and the flags
+   survive both ways**, so the driver code sits with the rest of the module at
+   `$3000`, not in RAM.
+   - **The record must be inside `CHANS`**, inserted with MAKE-ROOM (`$12BB`).
+     Anywhere above the workspace, `INPUT` moves `CURCHL` out from under it.
+   - **Both bytes of its `STRMS` offset must be below `$80`**, because channel
+     select tests `D OR E`.
+
+   See design doc §6.1 and §10.8.
+3. **OPEN and CLOSE hooks. Both are mandatory**: stock `CLOSE #` on an unknown
+   letter jumps into its own table and resets the machine (measured).
    - At `$142A`: recognise `f:`/`d:` names, parse mode and record length, open the Pico
      handle, build the record and set `STRMS`.
    - At `$139F`: flush the buffer, close the handle, reclaim the record and zero
      `STRMS`.
-4. **A select-time entry for `F` in SELTAB, or proof that an unknown letter
-   there is harmless.**
+4. **Nothing needed in SELTAB.** Measured: an unknown letter misses the K/S/P
+   table at `$1293` and select just returns.
 5. **`NEW`, `CLEAR` and reset** rebuild `CHANS` and orphan our records. The Pico
    side has to close handles that are orphaned this way (§ reset rule below).
 
@@ -278,16 +285,15 @@ so you had to seek and read in two separate statements. `INPUT #4;TAB p;a$` does
 one, `TAB` is already how Sinclair BASIC says "position", and it costs no ROM
 parser code.
 
-**What still needs checking in the 2068 ROM** (on the Spectrum, the Interface 1
-microdrive shows both work):
+**Verified in ZEsarUX** (design doc §10.8), with a dummy `F` channel:
 
-- that `INPUT #4;…;a$` from a non-K channel reads characters up to a CR (IN-CHAN
-  rather than the line editor), and
-- that `INPUT #4`'s prompt items go to stream 4's output routine and not to the
-  lower screen.
+- `PRINT #4;TAB 7;"x"` hands the channel `17 07 00 78 0D`.
+- `INPUT #4;"P?";TAB 7;b$` sends `50 3F 17 07 00` to the channel's *output*
+  routine, then reads through its *input* routine up to CR.
 
-A ZEsarUX run with a dummy channel record answers both before any driver is
-written.
+So both the seek and the read happen in one statement, exactly as described
+above. `LIST #4` delivers tokens unexpanded, so text mode has to expand them
+itself (§4a).
 
 **Buffering.** The driver keeps one block (256 bytes) of the file in RAM per
 channel:

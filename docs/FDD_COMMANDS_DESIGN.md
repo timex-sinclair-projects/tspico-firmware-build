@@ -408,15 +408,43 @@ assignment) for a strictly worse result than the channel record, which gets all
 of it from stock ROM for free.
 
 **Placement constraint:** channel routines are called with **HOME paged in**, so
-they cannot live in the EXROM. Put the driver in RAM below `RAMTOP` — the FDD
-3000 does the same thing with the code it downloads to `$6880`. This is not a
-hardship: the TPI wire protocol from the Z80 side is `OUT ($0E),A` and a `BIT 6`
-poll of `$0F`. A few hundred bytes covers the driver and its buffers.
+the addresses in the record must be reachable from HOME. They don't have to *be*
+the driver, though: **a 9-byte RAM stub per direction, `LD ($5DCD),HL` / `LD HL,target`
+/ `JP $03FC`, reaches driver code in the EXROM and returns.** Measured in ZEsarUX
+(§10.8), `A` and the flags survive both ways, so `INPUT #` gets the character and
+carry correctly. The driver can therefore sit with the rest of the module at
+`$3000`. RAM holds only the stubs, the channel state and the buffers. (The
+earlier plan to put the whole driver in RAM below `RAMTOP`, as the FDD 3000
+does at `$6880`, is still available as a fallback.)
+
+**Where the record goes: inside `CHANS`, at an offset the ROM will route
+correctly** (§10.8). Two rules, both measured:
+
+1. **The record must lie between `CHANS` and `PROG`.** Insert it with MAKE-ROOM
+   (`$12BB`, BC bytes at HL = `(PROG)-1`), as the Interface 1 does. A record
+   anywhere above the workspace breaks the first time `INPUT` makes room:
+   MAKE-ROOM's pointer update (`$12CA`) shifts `CURCHL` along with every other
+   pointer above the insertion point. The channel pointer then ends up past the
+   record, and the input address reads as garbage.
+2. **Both bytes of the `STRMS` offset must be below `$80`.** Channel select
+   (`$1239–$1241`) does `LD A,D / OR E / CP $80` and sends anything ≥ `$80` down
+   the SYSCON path. That tests *high OR low*, not the high bit alone (CLOSE, at
+   `$13BF`, tests only the high byte). So `$0016–$007F`, `$0100–$017F`, `$0200–$027F`
+   and so on are usable; `$0080–$00FF` is not. The rule applies only to where a
+   record *starts*, so the driver pads before a record when necessary. Buffers
+   can sit anywhere inside the record.
 
 `OPEN #` already parses (§2), so the ROM-side change is at `$142A`: accept a new
 channel specifier (`"d"`, by analogy with Interface 1's `"m"`), allocate a
 channel record and buffer, issue `TPI:OPEN`, and wire the `STRMS` entry.
 `CLOSE #` at `$139F` flushes, issues `TPI:CLOSE`, and reclaims.
+
+**The `CLOSE #` hook is mandatory, not optional** (§10.8). Stock `CLOSE #` looks up
+the channel letter in its table at `$1407`. On a miss it jumps into the table's data
+bytes and the machine resets. So `CLOSE #4` on a disk stream without the hook
+crashes, where you might have expected a harmless no-op. Channel *select* is safe
+by contrast: an unknown letter misses the K/S/P table at `$1293` and just
+returns.
 
 **Do it via `CHANS`, not `SYSCON`.** The TS-2068 has a *second*, Timex-specific
 channel mechanism — `SYSCON` (`$5CBC`) — and it is the "proper" extension point
@@ -970,3 +998,39 @@ banked contexts, and are willing to implement the `$65D0` subfunction ABI.
 z80dasm -a -g 0 ROMs/GENUINE-2068-home.bin > /tmp/home.asm 2>/dev/null
 sed -n '/;1374/,/;139e/p; /;13d8/,/;1406/p; /;1488/,/;14c6/p' /tmp/home.asm
 ```
+
+### 10.8 Channel probe in ZEsarUX — what stock BASIC does with a custom channel
+
+Measured on 2026-09-28 against the ROM 2.0 disk build plus probe routines at
+EXROM `$3800–$384B` (a scratch image; not part of the build). The harness is
+`chan_probe.py` in the issue-#35 lab's `work/`. Two `F` channel records were
+inserted into `CHANS` with the ROM's own MAKE-ROOM. Their output routines log every
+byte to RAM, and their input routines feed scripted bytes with carry set. Stream 4's
+routines are plain RAM. Stream 5's are RAM stubs that go through the `$03FC` thunk to
+EXROM code.
+
+| Statement | Bytes the channel saw / result |
+|---|---|
+| `PRINT #4;"AB";TAB 7;"x"` | `41 42 17 07 00 78 0D`. `TAB` reaches the channel as `CHR$ 23` + 16-bit value |
+| `PRINT #4;TAB 300` | `17 2C 01 0D` (a trailing `;` drops the `0D`) |
+| `INPUT #4;a$` | Input routine called 6× for `HELLO` + CR. `a$ = "HELLO"` |
+| `INPUT #4;"P?";TAB 7;b$` | **Output** saw `50 3F 17 07 00` *before* the read. So the prompt items, including `TAB`, go to stream 4 first |
+| `INPUT #4;n` fed `42` + CR | `n = 42` (the text is evaluated, as from the keyboard) |
+| `LIST #4` | `20 20 31 30 F5 22 68 69 22 3B AD 35 0D`. **Tokens arrive unexpanded** |
+| `PRINT #5…` / `INPUT #5;c$` (via thunk) | Same bytes as stream 4. `c$ = "HELLO"` |
+| thunk registers | In: `A=55`/CC, `A=AA`/CS both arrive intact. Out: `A=5A`, CS returned intact |
+| `CLOSE #4` | **Machine resets** (CL_TAB miss at `$1407`, see §6.1) |
+
+Failures along the way that are now understood and designed around:
+
+- **A record in high RAM (`$DF40`/`$E000`)**
+  - `PRINT #` worked. `INPUT #` reset the machine, because MAKE-ROOM moved `CURCHL` by 3.
+  - A record at offset `$77C1` reset the machine on any use, because it took the SYSCON path (`$77|$C1` ≥ `$80`).
+- **A record inside `CHANS` at offset `$0086`** reset on `LIST #4`, for the same `D OR E` reason.
+
+**Harness note:** the lab's `zrcp.py` `cmd()` sleeps a fixed interval and then drains
+the socket. Under load a reply can arrive one command late, and a stale
+`read-memory` reply then poisons the address of the next write. `chan_probe.py`
+replaces `cmd()` with one that reads up to the `command>` prompt. `send-keys-ascii`
+does not reply until the keys are typed, so allow about 0.3 s per key.
+
