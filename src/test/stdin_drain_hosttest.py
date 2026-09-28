@@ -1,10 +1,11 @@
 """Host-side test for DRAIN_STDIN in TS/tspico_io.py -- CPython, no Pico.
 
-The bug (hardware, 2026-09-28, during the web-updater tests of PR #74): a
-TS-Pico running 2.0 went deaf on USB. The port still opened, but no
-number of Ctrl-Cs got a ">>> " back, and only a reset recovered it.
-Reproduced by sending the running firmware 600 bytes of ordinary text,
-then Ctrl-C: zero bytes back, every time.
+The bug (hardware, 2026-09-28): send a TS-Pico running 2.0 600 bytes
+of ordinary text, then Ctrl-C, and nothing comes back -- the port opens,
+but no number of Ctrl-Cs gets a ">>> ", and only a reset recovers it.
+(Found while chasing a similar-looking USB silence in the PR #74
+web-updater tests; that one turned out NOT to be this -- see
+docs/DEVELOPER_GUIDE.md.)
 
 Why, in MicroPython v1.20's rp2 port (ports/rp2/mphalport.c): Ctrl-C is
 spotted in tud_cdc_rx_cb, while it moves bytes from TinyUSB's 256-byte
