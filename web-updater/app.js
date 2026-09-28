@@ -47,6 +47,9 @@ setReporter((title, err) => log(`${title}: ${err && err.message ? err.message : 
 // State
 // ---------------------------------------------------------------------------
 const CHANNELS = ['release', 'main']
+// ?via=drive: always write through the RPI-RP2 drive, never WebUSB -- to test
+// that route, or when WebUSB half-works on a machine.
+const DRIVE_ONLY = new URLSearchParams(location.search).get('via') === 'drive'
 const PICO_VID = 0x2E8A
 const ROM_BLOCKS = { 1: 128, 0: 64 }        // updater.asm: slot 1 is 32K, slot 0 the low 16K
 const ROM_FAIL = {
@@ -315,10 +318,25 @@ async function readInstalled() {
 async function connect() {
     enable($('btn-connect'), false)
     try {
-        setStage('connect', 'active', 'Pick the TS-Pico in the browser’s port list…')
-        const t = new WebSerial()
-        await t.requestAccess()
-        serial = await openSerial(t.port)
+        // A Pico port this site already has permission for needs no picker.
+        const known = (await navigator.serial.getPorts())
+            .filter((p) => p.getInfo().usbVendorId === PICO_VID)
+        let port
+        if (known.length === 1) {
+            port = known[0]
+            setStage('connect', 'active', 'Opening the TS-Pico’s serial port…')
+        } else {
+            setStage('connect', 'active', 'Pick the TS-Pico in the browser’s port list…')
+            const t = new WebSerial()
+            await t.requestAccess()
+            port = t.port
+        }
+        try {
+            serial = await openSerial(port)
+        } catch (_e) {
+            await sleep(1500)               // just rebooted, or another tab just let go
+            serial = await openSerial(port)
+        }
         stageMsg('connect', 'Stopping the firmware and reading its version…')
         await enterRaw()
         installed = await readInstalled()
@@ -368,7 +386,7 @@ async function getBootsel(name) {
         stageMsg(name, 'Waiting for the RPI-RP2 drive…')
         if (await boot.waitPresent(20000)) return boot
     }
-    if (UsbBootsel.supported()) {
+    if (UsbBootsel.supported() && !DRIVE_ONLY) {
         const b = await UsbBootsel.find(3000)
         if (b) return b
     }
@@ -377,7 +395,7 @@ async function getBootsel(name) {
 }
 
 async function pickBootsel(name) {
-    const usb = UsbBootsel.supported()
+    const usb = UsbBootsel.supported() && !DRIVE_ONLY
     const drive = DriveBootsel.supported()
     for (;;) {
         const choices = []
@@ -693,7 +711,7 @@ async function init() {
         $('ch-' + c).addEventListener('change', () => loadChannel(c))
     }
     const how = []
-    if (UsbBootsel.supported()) how.push('USB (WebUSB)')
+    if (UsbBootsel.supported() && !DRIVE_ONLY) how.push('USB (WebUSB)')
     if (DriveBootsel.supported()) how.push('the RPI-RP2 drive')
     log(`This browser can write firmware via ${how.join(' or ') || 'nothing (use Do it by hand)'}.`)
 

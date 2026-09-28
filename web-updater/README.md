@@ -40,7 +40,8 @@ Every step can be rerun; a Pico left in BOOTSEL is always recoverable.
 | **RPI-RP2 drive** | `showDirectoryPicker()` on the drive (checked by its `INFO_UF2.TXT`), then the UF2 is written onto it, as a drag would. The Pico reboots on the last block, so a failing close/rename afterwards is expected; the drive disappearing is the success signal. The handle is by path, so it works again when the drive comes back. | Any desktop Chrome/Edge, no driver. |
 
 The page offers WebUSB first and falls back to the drive when the device
-can't be opened. The logic is in [flasher.js](flasher.js); a host test runs it
+can't be opened. `?via=drive` forces the drive route (for testing it, or when
+WebUSB misbehaves on a machine). The logic is in [flasher.js](flasher.js); a host test runs it
 against a fake PICOBOOT device with real UF2s:
 
 ```sh
