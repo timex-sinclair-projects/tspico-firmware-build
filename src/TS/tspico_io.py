@@ -1,5 +1,7 @@
 import gc
 import os
+import select
+import sys
 import time
 import utime
 
@@ -157,6 +159,47 @@ def RX_CAPTURE(MQ, raw, n, stall_ms):
                     return got
     if raw[n - 1] & PORT_0F:
         return -n
+    return n
+
+
+_stdin_ipoll = None           # set up on first DRAIN_STDIN: poll(0) on sys.stdin
+_stdin_readinto = None
+_stdin_byte = bytearray(1)
+
+
+def DRAIN_STDIN(MQ, limit=1024):
+    """Throw away text the host sent to the running firmware, so a later
+    Ctrl-C still reaches it. Returns the number of bytes dropped.
+
+    MicroPython v1.20 (rp2) sees Ctrl-C only while moving USB bytes into
+    its 512-byte stdin ring buffer (tud_cdc_rx_cb). The firmware never
+    reads stdin, so once 511 bytes of anything else have arrived -- a
+    tool writing before its Ctrl-C landed, a terminal echoing telemetry
+    back -- the buffer is full, every later byte waits in TinyUSB behind
+    it, and Ctrl-C is never looked at. The Pico runs on but USB is deaf
+    until a reset (hardware, 2026-09-28: 600 bytes, then no Ctrl-C ever
+    got through). Polling stdin moves the waiting bytes along, and that
+    is what spots a Ctrl-C: KeyboardInterrupt comes out of this call.
+
+    Run it from the idle loop's heartbeat only. It allocates nothing (the
+    bound methods are made once, ipoll reuses its tuple), and it stops at
+    the first byte from the Z80: a pre-header arrives 30 us a byte into a
+    4-deep FIFO.
+    """
+    global _stdin_ipoll, _stdin_readinto
+    if _stdin_ipoll is None:
+        p = select.poll()
+        p.register(sys.stdin, select.POLLIN)
+        _stdin_ipoll = p.ipoll
+        _stdin_readinto = sys.stdin.buffer.readinto
+    n = 0
+    while n < limit and not MQ.rx_fifo():
+        for _ in _stdin_ipoll(0):
+            break
+        else:
+            return n                        # nothing waiting
+        _stdin_readinto(_stdin_byte)
+        n += 1
     return n
 
 

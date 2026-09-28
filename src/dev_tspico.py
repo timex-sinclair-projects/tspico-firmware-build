@@ -363,6 +363,7 @@ from TS.tspico_io import (
     RX_BLOCK, RXB_ABORT, RXB_OK,         # printer bodies, ZX tpi:
     ZX_FLUSH_TX, ZX_ROOM, ZX_STALL_MS,   # ZX48 mode (issue #51 stage 6)
     MQX,                                 # fast MQ.exec (9.6 ms -> 18 us)
+    DRAIN_STDIN,                         # keep Ctrl-C reachable over USB
 )
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from array import array
@@ -5190,6 +5191,10 @@ def TS2068_IO():                                                         # Main 
                         except OSError:
                             pass
 
+                # Host text the firmware never reads fills MicroPython's
+                # stdin buffer, and then Ctrl-C can't get in (see
+                # DRAIN_STDIN). Keep it empty while idle.
+                DRAIN_STDIN(MQ)
                 led.value(0)
                 ts = time.ticks_us()
                 
@@ -5404,6 +5409,7 @@ def ZX48_IO(pre):                                                               
                     SAVE_LOG()
                     # log_entries = [] # SAVE does this
                     
+                DRAIN_STDIN(MQ)                                     # Ctrl-C stays reachable (see TS2068_IO)
                 led.value(0)
                 ts = time.ticks_us()
 
