@@ -81,8 +81,16 @@ class CardOS:
         return self.cwd
 
 
-def on_card(root, *path):
-    return os.path.exists(os.path.join(root, *path))
+def on_card(root, *path, exact=False):
+    """Is it there? Case-insensitive like FAT; exact=True also checks the case."""
+    cur = root
+    for part in path:
+        hits = [n for n in os.listdir(cur) if (n == part if exact else n.lower() == part.lower())] \
+            if os.path.isdir(cur) else []
+        if not hits:
+            return False
+        cur = os.path.join(cur, hits[0])
+    return True
 
 
 def build_card(root):
@@ -172,7 +180,8 @@ def test_copy(t, root):
     r = call(t, sent, C, "tpi:copy advent.tap")
     check(r[-1] == t._4_Q_Parameter, "one name only: Report Q")
     r = call(t, sent, C, "tpi:copy /games/manic.tap /full")
-    check(r[-1] == t._1_OK and on_card(root, "FULL", "MANIC.TAP"), "typed by hand with a space, absolute paths")
+    check(r[-1] == t._1_OK and on_card(root, "FULL", "MANIC.TAP", exact=True),
+          "typed by hand with a space, absolute paths; the copy keeps the stored name")
 
 
 def test_erase(t, root):

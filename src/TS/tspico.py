@@ -2163,7 +2163,12 @@ def DISK_COPY_WORK(a, b):                                                     # 
             return "Not found: %s" % a, _3_F_Invalid_file
         if dir_exists(src):
             return "Can't copy a directory", _4_Q_Parameter
-        jobs.append((src, dst + '/' + catalog.basename(src) if dst_is_dir else dst))
+        name = catalog.basename(src)
+        for item in os.ilistdir(catalog.parent(src)):                         # the name as stored, not as typed
+            if item[0].upper() == name.upper():
+                name = item[0]
+                break
+        jobs.append((src, dst + '/' + name if dst_is_dir else dst))
 
     rows = []
     touched = []
