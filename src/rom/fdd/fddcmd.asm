@@ -75,10 +75,10 @@ THUNK_HX        EQU $03FC          ; HOME: LD (5DCD),HL / LD HL,t / JP here = ca
 ; record R_PAD bytes in, so its STRMS offset has both bytes below $80 (channel
 ; select at $1239 tests D OR E). CH_ALLOC is a multiple of 256, so reclaiming
 ; one never changes the low byte of another's offset. The output and input
-; routines are fixed stubs in HOME ($149C/$14A2, build-rom.py), so a record
+; routines are fixed stubs in HOME ($14A0/$14A9, build-rom.py), so a record
 ; holds no addresses that move with it.
-R_OUT           EQU 0              ; output routine: HOME $149C -> CH_OUT
-R_IN            EQU 2              ; input routine: HOME $14A2 -> CH_IN
+R_OUT           EQU 0              ; output routine: HOME $14A0 -> CH_OUT
+R_IN            EQU 2              ; input routine: HOME $14A9 -> CH_IN
 R_LETTER        EQU 4              ; 'F'
 R_STRM          EQU 5              ; the stream number (the Pico's key)
 R_PAD           EQU 6              ; bytes before the record in its allocation
@@ -91,8 +91,8 @@ R_INBUF         EQU R_OUTBUF+OUTMAX
 INMAX           EQU 255
 REC_LEN         EQU R_INBUF+INMAX
 CH_ALLOC        EQU $200           ; REC_LEN + the largest pad (128) fits
-H_OUT_STUB      EQU $149C          ; HOME: LD HL,CH_OUT_VEC / JP 03FC
-H_IN_STUB       EQU $14A2          ; HOME: LD HL,CH_IN_VEC / JP 03FC
+H_OUT_STUB      EQU $14A0          ; HOME: DI / LD HL,CH_OUT_VEC / CALL 03FC / EI / RET
+H_IN_STUB       EQU $14A9          ; HOME: DI / LD HL,CH_IN_VEC / CALL 03FC / EI / RET
 H_MAKE_ROOM     EQU $12BB          ; HOME: BC bytes before (HL); Report 4
 H_RECLAIM       EQU $1750          ; HOME: remove BC bytes at HL
 H_CHAN_OPEN     EQU $1230          ; HOME: select stream A
@@ -102,7 +102,8 @@ PROG            EQU $5C53
 STREAM_N        EQU $5CCB          ; OPEN/CLOSE #: the stream ($140F)
 ERR_SP          EQU $5C3D
 BANK_SP         EQU $65CE          ; the RAM bank-call stack pointer
-H_TRAP          EQU $14A8          ; HOME: GUARDED's error trap
+H_TRAP          EQU $14B2          ; HOME: GUARDED's error trap
+BEEPER          EQU $2000          ; EXROM: JP to the relocated HOME BEEPER
 READ_DELAY      EQU 16             ; x 16 T-states between data-phase reads (~75 us)
 TOK_SCREEN      EQU $AA
 TOK_CODE        EQU $AF
@@ -134,13 +135,27 @@ F_HOOK_VEC:
 LOWER_VEC:
         jp      LOWER_LOOP         ; $3006: function $88 from the $2213 dispatch patch
 CH_OUT_VEC:
-        jp      G_OUT              ; $3009: HOME's output stub at $149C
+        jp      G_OUT              ; $3009: HOME's output stub at $14A0
 CH_IN_VEC:
-        jp      G_IN               ; $300C: HOME's input stub at $14A2
+        jp      G_IN               ; $300C: HOME's input stub at $14A9
 CH_OPEN_VEC:
         jp      G_OPEN             ; $300F: OPEN #'s $145E, via HOME $1488
 CH_CLOSE_VEC:
-        jp      G_CLOSE            ; $3012: CLOSE #'s $13A5, via HOME $1492
+        jp      G_CLOSE            ; $3012: CLOSE #'s $13A5, via HOME $1494
+BEEP_VEC:
+        jp      G_BEEP             ; $3015: HOME's BEEPER thunk ($03F3 -> $041C)
+
+;------------------------------------------------------------------------------
+; G_BEEP -- the key click and BEEP. The TS-Pico ROM moved BEEPER to EXROM
+; ($2000 -> $203F) behind HOME's $03F3 thunk; BEEPER ends in EI, so the switch
+; back to HOME ran with interrupts on (see GUARDED for why that can crash). The
+; editor clicks for every character, so INPUT # from a file ran that switch
+; hundreds of times a line. $03F3 now enters under DI and EIs back in HOME;
+; this puts DI back after BEEPER's EI.
+;------------------------------------------------------------------------------
+G_BEEP: call    BEEPER
+        di
+        ret
 
 ;------------------------------------------------------------------------------
 ; GUARDED -- every entry that comes through HOME's returning thunk ($03FC) runs
@@ -149,10 +164,20 @@ CH_CLOSE_VEC:
 ; that one, so each report raised inside the module (or in HOME code it calls)
 ; used to leave it 4-8 bytes lower -- about 16 errors and it overwrites the
 ; bank-switch code below it. Both ROMs' RST 8 end in SP := (ERR_SP), HOME
-; $1354, RET with HOME paged, so the trap is in HOME ($14A8, build-rom.py):
-; POP HL / LD (65CE),HL / POP HL / LD (ERR_SP),HL / LD SP,HL / RET -- the bank
-; stack as it was before the thunk, then on to the previous handler exactly as
-; RST 8 would have gone.
+; $1354, RET with HOME paged, so the trap is in HOME ($14B2, build-rom.py):
+; POP HL / LD (65CE),HL / POP HL / LD (ERR_SP),HL / LD SP,HL / EI / RET -- the
+; bank stack as it was before the thunk, interrupts back on (the HOME side of
+; every entry runs the thunk under DI, see below), then on to the previous
+; handler exactly as RST 8 would have gone.
+;
+; Interrupts: the 2068's bank switch (the RAM copy of EXROM $12BE/$134A) writes
+; port FFh and then F4h with interrupts enabled; between the two, chunk 0 can
+; be the empty DOCK bank, and an interrupt there runs RST 38 over $FF bytes
+; until the machine is wiped. Stock only switches a few times per command; a
+; channel does it for every character, which hit the window within a few
+; hundred characters in ZEsarUX. So every HOME stub and trampoline that enters
+; the module is DI / LD HL,vector / CALL 03FC / EI -- the whole round trip,
+; both switches, with interrupts off, as the stock tpi: flows already run.
 ;
 ; HL = the routine; A, F, BC and DE reach it, and it returns AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
@@ -874,8 +899,8 @@ STRMS_HL:
         ld      h,high STRMS
         ret
 
-; CH_CLOSE_HOOK -- HOME $13A5's CALL $13BE goes to $1492 (LD HL,CH_CLOSE_VEC /
-; CALL 03FC / RET C / JP 13BE). BC = the stream's offset (not 0), the stream
+; CH_CLOSE_HOOK -- HOME $13A5's CALL $13BE goes to $1494 (DI / LD HL,
+; CH_CLOSE_VEC / CALL 03FC / EI / RET C / JP 13BE). BC = the stream's offset (not 0), the stream
 ; is ($5CCB). Not an 'F' record: NC with HL = the STRMS entry, BC and A = B|C,
 ; for the stock $13BE. 'F': flush, tpi:chclose, reclaim the allocation, move
 ; every later offset down; C with HL = the STRMS entry, which $13A8 resets.

@@ -230,9 +230,10 @@ other letter runs off the end of its table and crashes, so the channel needs all
      another's offset.
    - On the 2068 one spare byte sits between the `$80` and `PROG`.
 2. **Output and input routines reachable with HOME paged in**, because `RST 10` / INCH call
-   them there. They are two fixed 6-byte stubs in HOME (`$149C`, `$14A2`: `LD HL,vector` /
-   `JP $03FC`, the returning thunk). Every `F` record points at the same two, so a record holds
-   no address that has to move with it. **Measured: `A` and the flags survive both ways.**
+   them there. They are two fixed 9-byte stubs in HOME (`$14A0`, `$14A9`: `DI` / `LD HL,vector` /
+   `CALL $03FC` (the returning thunk) / `EI` / `RET`). Every `F` record points at the same two,
+   so a record holds no address that has to move with it. **Measured: `A` and the flags survive
+   both ways.**
 3. **OPEN and CLOSE hooks.** Each is one redirected `CALL` into a 10-byte trampoline in
    `$1488–$14C6`, a remnant of a SYSCON open path that nothing references (the byte scans in
    design doc §10.8 settle the earlier doubt). The trampoline calls the module and, if it
@@ -252,7 +253,22 @@ other letter runs off the end of its table and crashes, so the channel needs all
    own stack at `($65CE)`, and an error unwinds the Z80 stack but not that one. Each report
    raised inside the module (`CAT`/`MOVE`/`ERASE`/`FORMAT` included) left it 4–8 bytes
    lower, and after about 16 errors it overwrote the bank-switch code. The module now runs
-   under an `ERR_SP` trap (HOME `$14A8`) that puts `($65CE)` back and passes the error on.
+   under an `ERR_SP` trap (HOME `$14B2`) that puts `($65CE)` back, re-enables interrupts and
+   passes the error on.
+7. **Interrupts off across every bank round trip.** The 2068's bank switch (Timex's code, the
+   RAM copy of EXROM `$12BE`/`$134A`) writes port `FFh` and then `F4h` with interrupts on. For
+   a few T-states between the two, chunk 0 can be the empty DOCK bank, and an interrupt there
+   runs `RST 38` over `$FF` bytes until memory is wiped. Stock runs its Pico traffic under `DI`
+   and switches only a few times per command. A channel switches twice per character, and in
+   ZEsarUX it hit the window within a few hundred characters. So every HOME entry into the
+   module (the stubs, both trampolines and the `$25D6` disk-keyword hook) is `DI` … `EI`
+   around the whole thunk.
+   - The key click is the other hot path. TS-Pico 2.0 moved BEEPER to EXROM behind HOME's
+     `$03F3` thunk, and BEEPER ends in `EI`, so its switch back ran with interrupts on. The
+     editor clicks once per character, including every character `INPUT #` reads from a file.
+     `$03F3` now runs under `DI` too (tail at `$041C`), and the module's `G_BEEP` turns
+     interrupts off again after BEEPER. In stock 2.0 this window exists for every keypress
+     and `BEEP`, just far less often.
 
 The 2068's own `SYSCON` extension table (design doc §10.7) is not the vehicle, because it is a
 banked-driver ABI.
