@@ -423,6 +423,66 @@ def test_native_open(t, root):
     shutil.rmtree(flash, ignore_errors=True)
 
 
+def test_channels(t, root):
+    print("OPEN # channels: tpi:chopen / chwr / chrd / chclose")
+    build_card(root)
+    sent = setup(t, root)
+    tx = []
+    t.CMD_PUT = lambda b: tx.append(b)
+    t.MQ_READY = lambda: tx.append("READY")
+    t.gc = types.SimpleNamespace(collect=lambda: None, mem_free=lambda: 0)
+    t.CHANNELS.close_all()
+
+    def cmd(handler, text, stream, par2=0):
+        pre = bytearray(10)
+        pre[3], pre[5], pre[6] = stream, par2 & 0xFF, par2 >> 8
+        del sent[:]
+        del tx[:]
+        handler(pre, "xxx" + text)
+        return sent[-1] if sent else None
+
+    r = cmd(t.CH_OPEN, "tpi:chopen w notes.txt", 4)
+    check(r[-1] == t._1_OK and on_card(root, "notes.txt"), "chopen w: created (%r)" % (r,))
+    cmd(t.CH_WRITE, "tpi:chwr " + (b"Hello\r" + bytes([0xF5]) + b"1\r").hex(), 4)
+    cmd(t.CH_WRITE, "tpi:chwr " + b"end\r".hex(), 4)
+    check(open(os.path.join(root, "notes.txt"), "rb").read() == b"Hello\nPRINT 1\nend\n",
+          "chwr x2: text translated and appended on the card")
+    r = cmd(t.CH_WRITE, "tpi:chwr zz", 4)
+    check(r[-1] == t._5_C_Nonsense, "chwr with bad hex: C")
+    cmd(t.CH_CLOSE, "tpi:chclose", 4)
+    r = cmd(t.CH_OPEN, "tpi:chopen r notes.txt", 5)
+    cmd(t.CH_READ, "tpi:chrd", 5, 6)
+    data = bytes(b"Hello\r"[:6])
+    x = 0
+    for b in data:
+        x ^= b
+    check(tx == [1, 6, "READY"] + list(data) + [x],
+          "chrd 6: status 1, count, READY, the bytes, their XOR (%r)" % (tx,))
+    got = b""
+    for _ in range(10):
+        cmd(t.CH_READ, "tpi:chrd", 5, 255)
+        if tx[0] != 1:
+            break
+        got += bytes(tx[3:3 + tx[1]])
+    check(got == b"PRINT 1\rend\r" and tx == [t._7_8_EOF, "READY"],
+          "then the rest, then status 7 (Report 8 End of file) (%r, %r)" % (got, tx))
+    cmd(t.CH_READ, "tpi:chrd", 9, 10)
+    check(tx == [t._10_J_Invalid_IO, "READY"], "chrd on a stream that isn't open: its status alone")
+    r = cmd(t.CH_OPEN, "tpi:chopen r nothere.txt", 6)
+    check(r[-1] == t._3_F_Invalid_file, "chopen r of a missing file: F")
+    r = cmd(t.CH_OPEN, "tpi:chopen w nodir/x.txt", 6)
+    check(r[-1] == t._3_F_Invalid_file, "chopen w into a missing dir: F")
+    r = cmd(t.CH_OPEN, "tpi:chopen w games", 6)
+    check(r[-1] == t._4_Q_Parameter, "chopen of a directory: Q")
+    r = cmd(t.CH_OPEN, "tpi:chopen x notes.txt", 6)
+    check(r[-1] == t._4_Q_Parameter, "chopen with a bad mode: Q")
+    r = cmd(t.CH_OPEN, "tpi:chopen wb data.bin", 7)
+    cmd(t.CH_WRITE, "tpi:chwr " + bytes(range(256))[:120].hex(), 7)
+    check(open(os.path.join(root, "data.bin"), "rb").read() == bytes(range(120)), "binary: bytes as sent")
+    r = cmd(t.CH_CLOSE, "tpi:chclose", 12)
+    check(r[-1] == t._1_OK, "chclose of a stream that isn't open: OK")
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -439,6 +499,7 @@ def main():
         test_format(t, root)
         test_cd_and_ren(t, root)
         test_native_open(t, root)
+        test_channels(t, root)
         t.PROMPT_EACH = real_prompt_each                          # test_erase stubs it
         t.SEND_MSG_PROMPT_YN = real_prompt_yn                     # test_native_open stubs it
         test_prompt_each(t)

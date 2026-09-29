@@ -98,6 +98,7 @@ jobs:
           python3 src/test/catalog_hosttest.py
           python3 src/test/disk_cmds_hosttest.py
           python3 src/test/native_hosttest.py
+          python3 src/test/channels_hosttest.py
           python3 src/test/sd_wedged_hosttest.py
           python3 src/test/sd_recover_hosttest.py
           python3 src/test/save_name_hosttest.py
@@ -137,6 +138,7 @@ jobs:
           cp src/TS/printer.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/printer.py
           cp src/TS/catalog.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/catalog.py
           cp src/TS/native.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/native.py
+          cp src/TS/channels.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/channels.py
 
           # Install our custom frozen-modules manifest in place of the
           # default rp2 manifest. Our manifest explicitly freezes the
