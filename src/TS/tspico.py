@@ -355,7 +355,7 @@ from TS.sdcard import *
 from TS.tspico_io import (
     patch, sel_bank, set_ctrl, set_dck,
     TS_IO_DUAL,                          # was: TS_IO (single-port)
-    LOAD_TS, LOAD_ZX, LOAD_ZX_C,
+    LOAD_TS, LOAD_SERVE, LOAD_ZX, LOAD_ZX_C,
     SAVE_TS, SAVE_ZX,
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
@@ -367,6 +367,7 @@ from TS.tspico_io import (
 )
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from TS import catalog
+from TS import native
 from array import array
 
 # ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
@@ -2419,6 +2420,128 @@ def DISK_REN_WORK(a, b):
     REFRESH_IF(catalog.parent(src), catalog.parent(dst))
     return "Renamed to %s" % catalog.public(dst), _1_OK
 
+
+# ─── Native SD files: SAVE / LOAD / VERIFY / MERGE "f:<path>" (spec §4a) ────
+# The fdd ROM catches an "f:" name before the stock SAVE/LOAD code, sends
+# tpi:fopen <path> with the operation, the statement's modifier token and its
+# session, shortens the name, and lets the stock code carry on. This arms
+# TSP.native for that session: SAVE_TS then writes the file instead of a .tap,
+# and LOAD_TS serves the one-shot tape built here. Both are in tspico_io.py.
+
+NATIVE_TAP = "/TMP/native.tap"
+MOD_CODE, MOD_SCREEN, MOD_DATA, MOD_LINE = 0xAF, 0xAA, 0xE4, 0xCA
+KIND = {native.T_PROGRAM: "a program", native.T_NUMARR: "an array",
+        native.T_CHARARR: "an array", native.T_CODE: "bytes"}
+
+
+def NATIVE_OPEN(pre, cmd):                                                     # tpi:fopen, from the fdd ROM
+
+    # tpi:fopen <path>   PMR1 = operation (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE)
+    #                           + 256 * the token after the name (CODE, SCREEN$,
+    #                           DATA, LINE) or 0
+    #                    PMR2 = the statement's session id
+
+    global TSP
+
+    par1, par2 = PARAMS(pre)
+    op, mod, session = par1 & 0xFF, par1 >> 8, par2
+    path = getArgs(cmd).strip()
+    TSP.native = None
+    TLM("NATIVE_OPEN enter", "op=%d mod=%02X session=%04X path=%r" % (op, mod, session, path))
+    if not path:
+        SEND_MSG("Name required", "", _3_F_Invalid_file)
+        return
+    if op == 0:
+        real, st = SD_CALL(NATIVE_SAVE_TARGET, path)
+        if st != _1_OK:
+            LOG(real, 1)
+            SEND_MSG(real, "", st)
+            return
+        real, exists = real
+        TSP.native = dict(op=0, path=real, session=session, refuse=False)
+        if exists:                                                             # TOS: "Supersede (Y/N)?"
+            ch = SEND_MSG_PROMPT_YN("Replace %s? (Y/N)"                        # lower screen: SCREEN$ must not save it
+                                    % shorten_filename(xstr(catalog.basename(real)), 16), lower=True)    # 31 + the key echo = one line
+            TSP.native["refuse"] = ch not in (89, 121)                         # SAVE_TS refuses it: Report D
+            return
+        SEND_MSG("Saving to %s" % catalog.public(real), "", _1_OK)
+        return
+    res, st = SD_CALL(NATIVE_LOAD_PREP, path, op, mod)
+    if st != _1_OK:
+        LOG(res, 1)
+        SEND_MSG(res, "", st)
+        return
+    TSP.native = dict(op=op, session=session, tap=NATIVE_TAP, totlen=res)
+    SEND_MSG("Loading %s" % path, "", _1_OK)
+
+
+def NATIVE_SAVE_TARGET(path):                                                  # (real path, exists?) for a SAVE
+
+    real = catalog.resolve(TSP.cur_path, path)
+    if real is None or real == catalog.ROOT:
+        return "Not allowed: %s" % path, _3_F_Invalid_file
+    base = catalog.basename(real)
+    if not base or any(c < ' ' or c > '~' or c in ':*?\\|"<>' for c in base):
+        return "Name not allowed: %s" % base, _3_F_Invalid_file
+    if dir_exists(real):
+        return "A directory: %s" % path, _4_Q_Parameter
+    if not dir_exists(catalog.parent(real)):
+        return "Not found: %s" % catalog.public(catalog.parent(real)), _3_F_Invalid_file
+    if TSP.f_name and TSP.f_name.upper() == real.upper():
+        return "File is mounted", _4_Q_Parameter
+    return (real, file_exists(real)), _1_OK
+
+
+def NATIVE_LOAD_PREP(path, op, mod):                                           # the one-shot tape; its length
+
+    real = catalog.resolve(TSP.cur_path, path)
+    if real is None or not file_exists(real):
+        return "Not found: %s" % path, _3_F_Invalid_file
+    size = os.stat(real)[6]
+    with open(real, "rb") as f:
+        head = f.read(native.HDR_LEN)
+        d = native.describe(head, size)
+        if d is None:
+            if mod == MOD_CODE:
+                d = native.headerless_code(size)                               # LOAD "f:x.bin" CODE a: the whole file
+            elif mod == MOD_SCREEN:
+                return "Not a screen: %s" % path, _4_Q_Parameter
+            else:
+                return "Not a TS-Pico file: %s" % path, _3_F_Invalid_file
+        typ, length, p1, p2, start = d
+        if op == 3 or mod in (0, MOD_LINE):
+            want = (native.T_PROGRAM,)
+        elif mod in (MOD_CODE, MOD_SCREEN):
+            want = (native.T_CODE,)
+        else:
+            want = (native.T_NUMARR, native.T_CHARARR)
+        if typ not in want:
+            return "%s holds %s" % (catalog.basename(real), KIND.get(typ, "data")), _4_Q_Parameter
+        if mod == MOD_SCREEN and length != native.SCREEN_LEN:
+            return "Not a screen: %s" % path, _4_Q_Parameter
+        hdr_blk = native.tap_block(0x00, native.tape_header(typ, native.tape_name(real), length, p1, p2))
+        f.seek(start)
+        n = length + 2
+        x = 0xFF
+        buf = bytearray(512)
+        with open(NATIVE_TAP, "wb") as out:                                    # Pico flash: LOAD_TS can't use the card
+            out.write(hdr_blk)
+            out.write(bytes([n & 0xFF, n >> 8, 0xFF]))
+            left = length
+            while left > 0:
+                k = f.readinto(buf)
+                if not k:
+                    break
+                k = min(k, left)
+                for i in range(k):
+                    x ^= buf[i]
+                out.write(buf[:k])
+                left -= k
+            if left:
+                return "Short file: %s" % path, _2_R_Tape_load
+            out.write(bytes([x]))
+    return len(hdr_blk) + n + 2, _1_OK
+
 def IDIR(pre, cmd):
 
     # SAVE "tpi:idir"   - Show an interactive dir list to pick a file to mount
@@ -4037,10 +4160,13 @@ def LOAD_TPI(name, only_tap=False):
     return "Error mounting file:", name, _4_Q_Parameter
 
 
-def SEND_MSG_PROMPT_YN(prompt, echo = True):
+def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
 
     # Prints prompt string, waits for a character and returns that char
     # Assumes MQ is active. This cannot be followed by another SEND_MSG* call.
+    # lower=True: on the lower screen (response function 0x88), so the prompt
+    # doesn't write over the picture. ONLY the fdd ROM has 0x88 -- pass it only
+    # for a command that ROM sent (tpi:fopen). Keep such a prompt to one line.
 
     global MQ
 
@@ -4060,9 +4186,10 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
     # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
     # ─────────────────────────────────────────────────────────────────────
     wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
-    wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+    wrt(0x88 if lower else 0x86)   # PRINT STRING WITH LOOP (0x88: lower screen) -- this IS the D-block status
     wrt(0x01)   # BASIC return code
-    wrt(0x0D)   # Start a new line
+    if not lower:
+        wrt(0x0D)   # Start a new line (the lower screen starts clear)
     MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
 
     while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
@@ -4091,6 +4218,8 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True):
                 wrt(89) # Y
             else:
                 wrt(ch)
+        if lower:
+            wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
         wrt(0x03) # End the string loop
         MQ_READY()
         # Could add an option to not wrt(0x03) and let the caller do that after
@@ -5040,6 +5169,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:ERASE": DISK_ERASE,
         "TPI:FORMAT": DISK_FORMAT,
         "TPI:REN": DISK_REN,
+        "TPI:FOPEN": NATIVE_OPEN,
         "TPI:FFW" : FWD,
         "TPI:HELP" : GETHELP,
         "TPI:IDIR" : IDIR,
@@ -5451,7 +5581,13 @@ def TS2068_IO():                                                         # Main 
                     # reached the card; log and fall through to the re-arm.
                     sd_gone = False
                     try:
-                        if pappend:
+                        if getattr(TSP, "native_saved", False):
+                            # SAVE "f:..." wrote a native file (SAVE_TS): the mount,
+                            # its position and append are untouched.
+                            TSP.native_saved = False
+                            TSP.f_name = pf_name
+                            LOG("Saved a native file; mount unchanged", 0)
+                        elif pappend:
                             # We will re-mount the updated tap from SD for the user to
                             # see the addition (other original content is the same)
                             if MOUNT_FILE(TSP.f_name, True):
@@ -5535,7 +5671,7 @@ def TS2068_IO():                                                         # Main 
 
                 while busy:
                     pass
-                MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
+                MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
                 # log_entries += new_logs
                 log_entries.append(new_logs) # for now
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array
@@ -5548,7 +5684,7 @@ def TS2068_IO():                                                         # Main 
 
                 while busy:
                     pass
-                MQ, TSP, new_logs = LOAD_TS(pre, MQ, TSP)
+                MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
                 # log_entries += new_logs
                 log_entries.append(new_logs) # for now
                 # log_entries.extend(new_logs) # when LOAD_TS returns an array

@@ -360,11 +360,61 @@ card. Neither is wrapped in a TAP, and neither is tied to what is mounted. TAPs
 are still how tapes are emulated, but they stop being the only way to store
 things.
 
+**Implemented** for `SAVE`/`LOAD`/`VERIFY`/`MERGE` (ROM `fddcmd.asm` v6 `F_HOOK`,
+firmware `NATIVE_OPEN` + `TS/native.py`, `SAVE_TS`/`LOAD_SERVE`). The text-file
+rows below need channels (§4) and are not built yet.
+
+### How it works
+
+The stock SAVE-ETC code has one runtime jump into `SESSION_SETUP` (EXROM `$01D2`),
+and it is patched to `F_HOOK`. Any name not starting `f:` (or `F:`) goes on as before. For
+`f:<path>` the module:
+
+1. makes the statement's session ID, as `SESSION_SETUP` would;
+2. sends `tpi:fopen <path>` by hand through the Pico Interface BIOS (`SYNC_WRITE`,
+   `TX_A`, `WF_NPH`, `C_END`). The BIOS returns to the caller, prints only what the
+   Pico sends, and never touches `CH_ADD`, so a `CODE a,b` after the name is left
+   for the stock code.
+   - PMR1 is the operation (T-ADDR: 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE) plus 256 × the
+     token after the name (`CODE`, `SCREEN$`, `DATA`, `LINE`).
+   - PMR2 is the session.
+   - An error status raises its report through `$1BF3`, exactly as for `tpi:` commands.
+3. shortens the name on the calculator stack: for SAVE, the path cut to 10 characters (the
+   header needs one, and the Pico ignores it); for LOAD, VERIFY and MERGE, `""`;
+4. continues into the stock body at `$01D5`, as `SESSION_SETUP`'s non-command exit does.
+
+On the Pico, `tpi:fopen` arms `TSP.native` for that session:
+
+- **SAVE:** `SAVE_TS` writes the header and data it receives to `<path>` as a
+  native file, instead of `<name>.tap`. The mount, its position and append are untouched.
+- **LOAD/VERIFY/MERGE:** the file becomes a one-shot two-block tape in `/TMP/native.tap`
+  (flash, because the loader can't use the card). `LOAD_SERVE` serves it by swapping
+  state in and out around the unchanged `LOAD_TS` on each call. After the data block,
+  the mounted tape carries on exactly where it was.
+
+**Prompts on the lower screen.** Response function `$86` (the Y/N "print string with
+loop") always prints on the main screen. For `SAVE "f:x" SCREEN$` that would put the
+prompt into the saved picture. The fdd ROM adds function `$88`, the same loop on stream `$FD`
+(the lower screen). It is implemented as `LOWER_LOOP`, reached from the dispatcher's last check at
+`$2213`, a duplicate `CP 86h` that could never match, now patched to `CP 87h`. The
+Pico sends `$88` only for `tpi:fopen`, which only this ROM sends. The shipping ROM has no
+`$88`, so other prompts (`ERASE "*.x"`, `tpi:rm`, …) stay on `$86` until the Pico can tell
+which ROM it is talking to.
+
+The type is checked when `tpi:fopen` arrives:
+
+- a program for a plain `LOAD`/`MERGE`;
+- bytes for `CODE`/`SCREEN$`;
+- an array for `DATA`.
+
+A mismatch is Report Q before anything loads, not a failed tape search. An arm whose
+session doesn't match the next SAVE or LOAD is stale and is dropped.
+
 ### Statements
 
 | Form | Meaning |
 |---|---|
-| `SAVE "f:foo.bas"` / `SAVE "f:foo.bas" LINE 10` | Write the program (and its variables) to `FOO.BAS`. If the file exists, ask `FOO.BAS exists. Replace (Y/N)?` |
+| `SAVE "f:foo.bas"` / `SAVE "f:foo.bas" LINE 10` | Write the program (and its variables) to `foo.bas`. If the file exists, ask `Replace foo.bas? (Y/N)` **on the lower screen**, so it can't end up in a `SCREEN$`. Y overwrites. N gives Report D, because the ROM can't see the answer, so the Pico refuses the SAVE header that follows |
 | `SAVE "f:pic.scr" SCREEN$` | Write the screen to `PIC.SCR` |
 | `SAVE "f:game.bin" CODE 32768,4000` | Write the bytes to `GAME.BIN` |
 | `SAVE "f:d.dat" DATA a()` | Write the array to `D.DAT` |
@@ -376,8 +426,9 @@ things.
   `.scr`, `.bin` and `.dat` are conventions, not rules. What a file contains is
   recorded in the file itself (see below), so `LOAD "f:x"` works whatever
   it's called. Loading a file as the wrong kind (`LOAD "f:pic.scr" CODE` is fine,
-  `LOAD "f:game.bin"` as a program is not) gives Report F. Tape gives the equivalent error
-  for the same mistake.
+  `LOAD "f:prog.bas" CODE` is not) gives Report Q. A file that is neither a
+  +3DOS file nor a raw screen gives Report F, except as `CODE`, where it loads whole
+  (at the statement's address, else 32768).
 - **Paths and `MOVE TO` apply**, so `LOAD "f:games/advent.bas"` works.
 - **`f:` stays required**, and plain `SAVE`/`LOAD` still mean the tape. Later,
   there could be a setting such as `SAVE "tpi:files on"` that makes plain `SAVE`/`LOAD`
@@ -406,7 +457,7 @@ the programme will use in RAM … plus 5 or 7 bytes for use of the system"
 |---|---|
 | Program, CODE, DATA | +3DOS header, then the raw bytes. **The type comes from the header, not the extension** |
 | `SCREEN$` | **Raw 6912 bytes, with no header.** Every emulator and graphics tool reads `.scr` in this form, and the length already tells you what it is |
-| CODE loaded from a headerless file | `LOAD "f:x.bin" CODE 32768` takes the address from the statement and loads the whole file. Without an address it gives Report Q. This lets you load binaries made on a PC |
+| CODE loaded from a headerless file | `LOAD "f:x.bin" CODE 32768` loads the whole file at the statement's address. Without one, it goes to 32768: the Pico can't see whether an address was given. This lets you load binaries made on a PC |
 | Text (`OPEN #` in text mode) | Plain bytes, see below |
 
 The firmware already builds tape headers, so writing a +3DOS header only means
@@ -448,8 +499,8 @@ container is the same. The header's issue/version bytes can mark a file as
     `.scr` and CODE, and replace-if-exists.
   - The ROM already sorts names by prefix in `SESSION_SETUP` (EXROM `$1A73`,
     `TPI:`/`NET:`). Adding `F:` there sends `f:` names down that path.
-- **Still to check:** whether `SAVE "f:x",1` (replace without asking) gets
-  past the stock `SAVE` syntax class. If it doesn't, you `ERASE` and then `SAVE`.
+- **Replace without asking** (`SAVE "f:x",1`) isn't built. A program can `ERASE` first
+  (silent), then `SAVE`.
 
 ---
 

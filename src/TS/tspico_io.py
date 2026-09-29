@@ -9,6 +9,7 @@ from rp2 import StateMachine, asm_pio, PIO
 from machine import Pin, freq, SPI
 
 from TS.sdcard import *
+from TS import native
 
 # ---------------------------------------------------------------------------
 # Module-level globals shared between LOAD_TS / SAVE_TS / WATCHDOG / etc.
@@ -1002,7 +1003,7 @@ def LOAD_TS(pre, MQ, TSP):
         LOG_ADD("WARNING: no file mounted in LOAD_TS — using nofile.tap",
                 1, TSP.LOG_LEVEL)
     else:
-        local_fname = "/TMP/temp.tap"
+        local_fname = getattr(TSP, "load_file", None) or "/TMP/temp.tap"   # native one-shot tape, else the mount
         arch = open(local_fname, "rb")
 
     # ------------------------------------------------------------------
@@ -1323,6 +1324,51 @@ def LOAD_TS(pre, MQ, TSP):
     dead = True
     return MQ, TSP, log_entries
 
+
+
+def LOAD_SERVE(pre, MQ, TSP):
+    """LOAD / VERIFY / MERGE: serve the mounted TAP -- or, when the fdd ROM has
+    armed a native file with tpi:fopen (TSP.native, see NATIVE_OPEN in
+    tspico.py), the one-shot tape made from it.
+
+    The one-shot is a separate file (/TMP/native.tap) with its own position.
+    Each call swaps it in, runs the unchanged LOAD_TS, and swaps the
+    mounted file's state back, so nothing else ever sees the swap and the
+    mount is exactly as it was afterwards. The pre-header's session (bytes 3-4)
+    must match the one tpi:fopen was given; any other LOAD drops a stale arm.
+    It is used up once the data block has been served, or once the search has
+    given up (Report 8)."""
+
+    nat = getattr(TSP, "native", None)
+    if not nat or nat.get("op", 0) == 0:
+        return LOAD_TS(pre, MQ, TSP)
+    if (pre[3] | (pre[4] << 8)) != nat["session"]:
+        TSP.native = None                                  # stale: that statement never loaded
+        return LOAD_TS(pre, MQ, TSP)
+
+    keep = (TSP.f_name, TSP.totlen, TSP.offset, TSP.tap_idx, getattr(TSP, "ld_start", -1),
+            getattr(TSP, "ld_wrapped", False), getattr(TSP, "ld_start_idx", 0))
+    TSP.f_name = nat["tap"]
+    TSP.totlen = nat["totlen"]
+    TSP.offset = nat.get("offset", 0)
+    TSP.tap_idx = nat.get("tap_idx", 0)
+    TSP.ld_start = nat.get("ld_start", -1)
+    TSP.ld_wrapped = nat.get("ld_wrapped", False)
+    TSP.ld_start_idx = nat.get("ld_start_idx", 0)
+    TSP.load_file = nat["tap"]
+    try:
+        MQ, TSP, log_entries = LOAD_TS(pre, MQ, TSP)
+    finally:
+        nat["offset"], nat["tap_idx"] = TSP.offset, TSP.tap_idx
+        nat["ld_start"], nat["ld_wrapped"] = TSP.ld_start, TSP.ld_wrapped
+        nat["ld_start_idx"] = getattr(TSP, "ld_start_idx", 0)
+        done = pre[0] == 0xFF or TSP.ld_start < 0
+        (TSP.f_name, TSP.totlen, TSP.offset, TSP.tap_idx, TSP.ld_start,
+         TSP.ld_wrapped, TSP.ld_start_idx) = keep
+        TSP.load_file = None
+        if done:
+            TSP.native = None
+    return MQ, TSP, log_entries
 
 # ZX48 mode's time limits. The Spectrum ROM reads a LOAD byte every ~43 us
 # and writes a SAVE byte every ~83 us, with ~1 ms pauses around a block's
@@ -1979,8 +2025,24 @@ def SAVE_TS(MQ, TSP, pre=None):
     # Skipped when appending: in that mode the target is the mounted TAP
     # (TSP.f_name) and the header's name is never used.
     # ------------------------------------------------------------------
+    # NATIVE SAVE: SAVE "f:<path>" through the fdd ROM armed TSP.native with
+    # tpi:fopen for this statement's session. The header's name is a stand-in
+    # then; the file is nat["path"]. A "Replace (Y/N)?" answered N refuses it
+    # here, before the data block (Report D). Any other SAVE drops a stale arm.
+    nat = getattr(TSP, "native", None)
+    native_save = None
+    if nat and nat.get("op") == 0:
+        TSP.native = None
+        if pre is not None and (pre[3] | (pre[4] << 8)) == nat["session"]:
+            native_save = nat
+    if native_save and native_save.get("refuse"):
+        dead = True
+        _fl = REFUSE_SAVE(MQ, 0x0B)          # -> Report D, the user said N
+        LOG_ADD("INFO: SAVE to %s not replaced" % native_save["path"], 0, TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries, False
+
     save_name = None
-    if not (TSP.f_name and TSP.append):
+    if not native_save and not (TSP.f_name and TSP.append):
         save_name, name_ok = SAVE_NAME(hdr)
         if not name_ok:
             TLM("SAVE_TS EXIT filename not allowed", "%r" % save_name)
@@ -2180,7 +2242,14 @@ def SAVE_TS(MQ, TSP, pre=None):
     # ============================================================
     # Determine target filename
     # ============================================================
-    if TSP.f_name and TSP.append:
+    if native_save:
+        filename = native_save["path"]
+        mode = "wb"
+        out, kind = native.to_file(hdr[3], hdr[14] | (hdr[15] << 8), hdr[16] | (hdr[17] << 8),
+                                   hdr[18] | (hdr[19] << 8), blk[3:-1])
+        hdr, blk = out, b""                  # written below as-is: one native file
+        TSP.native_saved = True              # the dispatcher: no mount changes, just refresh
+    elif TSP.f_name and TSP.append:
         filename = TSP.f_name
         mode = "ab"
     else:
@@ -2238,10 +2307,11 @@ def SAVE_TS(MQ, TSP, pre=None):
         LOG_ADD("ERROR: SAVE write FAILED for %s: %s" % (filename, _e),
                 2, TSP.LOG_LEVEL)
         TLM("SAVE_TS write FAILED", "%r: %s" % (filename, _e))
-        if mode == "wb":
+        if mode == "wb" and not native_save:
             # We advertised this name to the dispatcher, which would try to
             # mount it. Nothing landed, so take it back.
             TSP.f_name = ""
+        TSP.native_saved = False
     try:
         os.chdir(TSP.cur_path)
     except OSError as _e:

@@ -39,7 +39,8 @@ import load_ts_hosttest as L                                    # noqa: E402
 from save_name_hosttest import build_header, build_data         # noqa: E402
 
 READY, IDLE, RECOVERED = L.READY, L.IDLE, L.RECOVERED
-REPORT = {0x02: "R", 0x03: "F", 0x06: "6", 0x08: "A"}
+REPORT = {0x02: "R", 0x03: "F", 0x06: "6", 0x08: "A",
+          0x0B: "D"}   # 11 and up: $1BF3's chain falls through to $00F8, RST 8 0Ch -- Report D
 SESSION = 0x1234
 
 
@@ -113,7 +114,7 @@ def main():
     dat = bytes(build_data(payload, session=SESSION))
     pre = bytearray([0, 0, 0xFF, SESSION & 0xFF, SESSION >> 8, 0, 0, 0, 0, 0])
 
-    def save(**kw):
+    def save(native=None, f_name="", hdr=hdr, dat=dat, **kw):
         """Dispatcher side: pre-load staged, Y busy (the pre-header OUTs
         dropped it, and it no longer says READY for a SAVE), then SAVE_TS,
         then the dispatcher's re-arm, then let the Z80 finish."""
@@ -126,8 +127,8 @@ def main():
         io.kill = False
         io.dead = True
         io.busy = False
-        tsp = types.SimpleNamespace(f_name="", append=False, cur_path=d,
-                                    LOG_LEVEL=0, VERBOSE=False)
+        tsp = types.SimpleNamespace(f_name=f_name, append=False, cur_path=d,
+                                    LOG_LEVEL=0, VERBOSE=False, native=native)
         pio.run(z80_save(hdr, dat, **kw))
         out = io.SAVE_TS(pio, tsp, pre)
         saved = out[3]
@@ -197,6 +198,38 @@ def main():
         pre[3] ^= 0xFF
         check(r == "R" and not saved and not files and "session" in log,
               "refused with Report R before the data block (%s)" % r)
+
+        print("native SAVE \"f:...\" (armed by tpi:fopen)")
+        from TS import native as N
+        target = os.path.join(d, "prog.bas")
+        arm = lambda **k: dict(dict(op=0, path=target, session=SESSION, refuse=False), **k)
+        phdr = bytes(build_header(b"prog.bas", len(payload), hdtype=0, addr=10,
+                                  hdvars=len(payload), session=SESSION))
+        pio, r, saved, log, tsp, files = save(native=arm(), f_name="/sd/TAP/MOUNTED.TAP", hdr=phdr)
+        blob = open(target, "rb").read() if files else b""
+        check(r == "ok" and saved and files == ["prog.bas"],
+              "written to the armed path, not <name>.tap (%s, %s)" % (r, files))
+        check(N.parse_plus3(blob[:128]) == (0, len(payload), 10, len(payload)) and blob[128:] == payload,
+              "a +3DOS file: header (program, LINE 10, vars offset) + the payload")
+        check(tsp.f_name == "/sd/TAP/MOUNTED.TAP" and tsp.native is None and tsp.native_saved,
+              "the mount is untouched, the arm used up, the dispatcher told (native_saved)")
+        scr = bytes((i * 3) & 0xFF for i in range(6912))
+        shdr = bytes(build_header(b"pic", 6912, hdtype=3, addr=16384, session=SESSION))
+        sdat = bytes(build_data(scr, session=SESSION))
+        target = os.path.join(d, "pic.scr")
+        pio, r, saved, log, tsp, files = save(native=arm(path=target), hdr=shdr, dat=sdat)
+        blob = open(target, "rb").read() if files else b""
+        check(r == "ok" and blob == scr, "SCREEN$: the raw 6912 bytes, no header (%s, %d)" % (r, len(blob)))
+        target = os.path.join(d, "prog.bas")
+        pio, r, saved, log, tsp, files = save(native=arm(path=target, refuse=True), hdr=phdr)
+        check(r == "D" and not saved and not files and tsp.native is None,
+              "'Replace (Y/N)?' answered N: Report D before the data block, nothing written (%s)" % r)
+        pio, r, saved, log, tsp, files = save(native=arm(session=0x4321))
+        check(r == "ok" and files == ["savetest.tap"] and tsp.native is None,
+              "an arm for another session is stale: a normal .tap, the arm dropped (%s, %s)" % (r, files))
+        pio, r, saved, log, tsp, files = save(native=dict(op=1, session=SESSION, tap="x", totlen=1))
+        check(r == "ok" and files == ["savetest.tap"],
+              "a LOAD arm makes a SAVE neither native nor refused (%s)" % (files,))
 
         print("the data capture allocates nothing per byte")
         tree = ast.parse(body)

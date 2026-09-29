@@ -226,13 +226,23 @@ def main():
     tmp = tempfile.NamedTemporaryFile(suffix=".tap", delete=False)
     tmp.write(tap)
     tmp.close()
+    # The one-shot tape a native file becomes (LOAD "f:..."): other lengths
+    # than the mounted tape's, so a block served from the wrong tape fails
+    # the Z80's checksum instead of passing by accident.
+    from TS import native as N
+    ndata = bytes((i * 13 + 1) & 0xFF for i in range(777))
+    ntap = N.as_tap(N.T_PROGRAM, len(ndata), 10, len(ndata), ndata, "advent")
+    ntmp = tempfile.NamedTemporaryFile(suffix=".tap", delete=False)
+    ntmp.write(ntap)
+    ntmp.close()
     real_open = open
-    io.open = lambda path, mode="r": real_open(tmp.name if path == "/TMP/temp.tap" else path, mode)
+    io.open = lambda path, mode="r": real_open(
+        tmp.name if path == "/TMP/temp.tap" else ntmp.name if path == "/TMP/native.tap" else path, mode)
 
     tsp = types.SimpleNamespace(f_name="test.tap", totlen=len(tap), offset=0, tap_idx=0,
                                 LOG_LEVEL=0, ld_start=-1, ld_wrapped=False)
 
-    def load(pio, flag, length, **kw):
+    def load(pio, flag, length, serve=False, **kw):
         """The dispatcher's side: pre-load staged, READY after the pre-header,
         then LOAD_TS; the Z80 script runs alongside."""
         pio.tx = [0x01]
@@ -245,7 +255,7 @@ def main():
         io.busy = False
         pio.run(z80_load(flag, length, **kw))
         pre = bytearray([flag, 1, 0xFF, 0x34, 0x12, 0, 0x80, 0, 0, 0])
-        io.LOAD_TS(pre, pio, tsp)
+        (io.LOAD_SERVE if serve else io.LOAD_TS)(pre, pio, tsp)
         pio.finish()
         return pio.result, io.log_entries
 
@@ -367,12 +377,40 @@ def main():
         r1, _ = load(pio, 0xFF, len(data))
         check(r0 == r1 == "ok" and idle(pio), "header + data load as before (%s, %s)" % (r0, r1))
 
+        print("native one-shot tape (LOAD \"f:...\")")
+        tsp.native = None
+        r0, _ = load(pio, 0x00, len(header), serve=True)
+        mounted = (tsp.f_name, tsp.totlen, tsp.offset, tsp.tap_idx)
+        check(r0 == "ok" and tsp.offset == len(header) + 4,
+              "nothing armed: LOAD_SERVE is LOAD_TS on the mounted tape (%s)" % r0)
+        tsp.native = dict(op=1, session=0x1234, tap="/TMP/native.tap", totlen=len(ntap))
+        r1, _ = load(pio, 0x00, 17, serve=True)
+        check(r1 == "ok" and tsp.native is not None, "armed: the native header block is served (%s)" % r1)
+        check((tsp.f_name, tsp.totlen, tsp.offset, tsp.tap_idx) == mounted and tsp.load_file is None,
+              "  and the mounted tape's state is untouched between the blocks")
+        r2, _ = load(pio, 0xFF, len(ndata), serve=True)
+        check(r2 == "ok" and tsp.native is None and idle(pio),
+              "the native data block is served, then the arm is used up (%s)" % r2)
+        check((tsp.f_name, tsp.totlen, tsp.offset, tsp.tap_idx) == mounted,
+              "  the mounted tape carries on exactly where it was")
+        r3, _ = load(pio, 0xFF, len(data), serve=True)
+        check(r3 == "ok", "the next LOAD reads the mounted tape again (%s)" % r3)
+        tsp.native = dict(op=1, session=0x9999, tap="/TMP/native.tap", totlen=len(ntap))
+        r4, _ = load(pio, 0x00, len(header), serve=True)
+        check(r4 == "ok" and tsp.native is None,
+              "an arm for another session is stale: dropped, the mounted tape served (%s)" % r4)
+        tsp.native = dict(op=0, path="/sd/TAP/x", session=0x1234, refuse=False)
+        r5, _ = load(pio, 0xFF, len(data), serve=True)
+        check(r5 == "ok" and tsp.native is not None, "a SAVE arm doesn't touch a LOAD (%s)" % r5)
+        tsp.native = None
+
         check(pio.dropped == 0, "no RX overflow anywhere (%d)" % pio.dropped)
         print("  PASS  no put() into a full TX FIFO (FakePIO raises if one happens)")
     except PutWouldBlock as e:
         check(False, str(e))
     finally:
         os.unlink(tmp.name)
+        os.unlink(ntmp.name)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
