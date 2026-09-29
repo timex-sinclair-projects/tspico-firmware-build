@@ -434,12 +434,14 @@ def test_channels(t, root):
     t.CHANNELS.close_all()
 
     def cmd(handler, text, stream, par2=0):
+        """Returns ("st", status) for a bare-status reply (CH_REPLY), else tx."""
         pre = bytearray(10)
         pre[3], pre[5], pre[6] = stream, par2 & 0xFF, par2 >> 8
         del sent[:]
         del tx[:]
         handler(pre, "xxx" + text)
-        return sent[-1] if sent else None
+        check(not sent, "  %s: nothing printed (a bare status)" % text.split()[0]) if sent else None
+        return ("st", tx[0]) if len(tx) == 2 and tx[1] == "READY" else None
 
     r = cmd(t.CH_OPEN, "tpi:chopen w notes.txt", 4)
     check(r[-1] == t._1_OK and on_card(root, "notes.txt"), "chopen w: created (%r)" % (r,))

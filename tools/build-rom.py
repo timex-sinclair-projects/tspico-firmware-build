@@ -90,6 +90,42 @@ PATCHES = [
              "TPI command. Nothing external jumps into this region except the "
              "command fall-throughs; $2567 is untouched.",
     ),
+    dict(
+        name="channel trampolines, stubs and the error trap in the dead $1488-$14B1",
+        bank="home", addr=0x1488,
+        before="cd 74 13 30 e1 c1 0b 78 b1 20 db d5 eb cd b9 25 "
+               "eb 46 0e 88 23 23 5e 23 56 62 6b 3a cb 5c 5f 16 "
+               "00 d5 e5 c5 2a 65 5c 4e 2b 22",
+        after="21 0f 30 cd fc 03 d8 c3 65 14 "      # $1488 OPEN: EXROM, else $1465
+              "21 12 30 cd fc 03 d8 c3 be 13 "      # $1492 CLOSE: EXROM, else $13BE
+              "21 09 30 c3 fc 03 "                  # $149C an F record's output
+              "21 0c 30 c3 fc 03 "                  # $14A2 its input
+              "e1 22 ce 65 e1 22 3d 5c f9 c9",      # $14A8 GUARDED's error trap
+        note="$1488-$14C6 is an unreferenced remnant of a SYSCON open path (no "
+             "CALL/JP/LD/JR reaches it). The trampolines CALL the returning thunk "
+             "at $03FC and RET C when the module handled it; otherwise they go on "
+             "to the stock routine, the module having rebuilt HL. The stubs are "
+             "every 'F' record's out/in addresses, so records hold nothing that "
+             "moves. The trap puts the RAM bank stack ($65CE) back when a report "
+             "is raised inside a thunked module call, then goes on to the old "
+             "ERR_SP handler (fddcmd.asm GUARDED). Spec §4.",
+    ),
+    dict(
+        name="OPEN #: $145E CALL $1465 -> CALL $1488",
+        bank="home", addr=0x145E,
+        before="cd 65 14", after="cd 88 14",
+        note="$1465 is only called from here. HL = the STRMS entry, the spec string "
+             "on the calculator stack; C back from the module = DE is the offset "
+             "$1461 stores.",
+    ),
+    dict(
+        name="CLOSE #: $13A5 CALL $13BE -> CALL $1492",
+        bank="home", addr=0x13A5,
+        before="cd be 13", after="cd 92 14",
+        note="Stock CLOSE # on an unknown letter runs off the end of CL_TAB and "
+             "crashes; the module closes 'F' records itself and returns C, so $13A8 "
+             "only resets the STRMS entry.",
+    ),
 ]
 
 
@@ -128,6 +164,20 @@ ANCHORS = [
          bank="exrom", addr=0x21E3, bytes="cd c3 01 f5 cd 5f 04"),
     dict(name="HOME->EXROM returning thunk the $25D6 hook jumps to",
          bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
+    dict(name="H_MAKE_ROOM (OPEN # appends a record)",
+         bank="home", addr=0x12BB, bytes="e5 cd bb 1f e1 cd ca 12"),
+    dict(name="H_RECLAIM (CLOSE # removes it)",
+         bank="home", addr=0x1750, bytes="c5 78 2f 47 79 2f 4f 03"),
+    dict(name="H_CHAN_OPEN: select stream A; its D OR E >= $80 test sets the offset rule",
+         bank="home", addr=0x1230, bytes="87 c6 16 6f 26 5c 5e 23 56 7a b3 20 02 cf 17 fe 80"),
+    dict(name="OPEN/CLOSE # stream fetch: ($5CCB) = n",
+         bank="home", addr=0x140F, bytes="cd 1e 1f 32 cb 5c fe 10 38 02 cf 17"),
+    dict(name="OPEN #: $1461 stores DE at the STRMS entry after the $145E call",
+         bank="home", addr=0x1461, bytes="73 23 72 c9"),
+    dict(name="CLOSE #: $13A8 resets the STRMS entry after the $13A5 call",
+         bank="home", addr=0x13A8, bytes="01 00 00 11 e2 a3 eb 19"),
+    dict(name="RST 10 output: CURCHL's record, HL restored after (the stubs rely on it)",
+         bank="home", addr=0x11ED, bytes="d9 e5 2a 51 5c"),
 ]
 
 

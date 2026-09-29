@@ -212,46 +212,56 @@ the card is one mistyped line away from disaster. Formatting stays in the web up
 
 ## 4. `OPEN #` / `CLOSE #` — file channels (phase 3)
 
-**None of this works until we supply a real channel.** Stock `OPEN #` only knows
-K, S and P. The Technical Manual (§4.1) describes the lookup tables involved:
+**Stage 1 is implemented** (sequential text and binary files: `OPEN #n,"f:path"[,"mode"]`,
+`PRINT #`, `INPUT #`, `LIST #`, `INKEY$ #`, `CLOSE #`). Stage 2 (records, `TAB`, `u`) and
+stage 3 (`d:`) follow. Stock `OPEN #` only knows K, S and P, and stock `CLOSE #` on any
+other letter runs off the end of its table and crashes, so the channel needs all of this:
 
-- **SPEC_T** holds the OPEN routine for each device letter.
-- **CL_TAB** holds the CLOSE routine for each letter.
-- **SELTAB** holds a routine that runs every time a stream using that letter is selected.
+1. **A channel record in `CHANS`.** `OPEN #` inserts 512 bytes with MAKE-ROOM (`$12BB`) just
+   before the `$80` that ends `CHANS`, the way the Interface 1 builds `M` channels. The record
+   is the 5-byte header (output address, input address, letter `F`), then the stream number,
+   the pad, a 64-byte output buffer and a 255-byte input buffer. The stream's `STRMS` entry
+   points at it.
+   - **The record must be inside `CHANS`.** Anywhere above the workspace, `INPUT` moves
+     `CURCHL` out from under it.
+   - **Both bytes of its `STRMS` offset must be below `$80`**, because channel select
+     (`$1239`) tests `D OR E`. The record is padded into its 512 bytes to make that true, and
+     because 512 is a multiple of 256, closing one record never changes the low byte of
+     another's offset.
+   - On the 2068 one spare byte sits between the `$80` and `PROG`.
+2. **Output and input routines reachable with HOME paged in**, because `RST 10` / INCH call
+   them there. They are two fixed 6-byte stubs in HOME (`$149C`, `$14A2`: `LD HL,vector` /
+   `JP $03FC`, the returning thunk). Every `F` record points at the same two, so a record holds
+   no address that has to move with it. **Measured: `A` and the flags survive both ways.**
+3. **OPEN and CLOSE hooks.** Each is one redirected `CALL` into a 10-byte trampoline in
+   `$1488–$14C6`, a remnant of a SYSCON open path that nothing references (the byte scans in
+   design doc §10.8 settle the earlier doubt). The trampoline calls the module and, if it
+   returns NC, carries on to the stock routine.
+   - `OPEN #` at `$145E`. An `f:` name reads the optional `,"mode"` (the syntax pass skips
+     everything after the comma, so it is parsed at run time), sends `tpi:chopen <mode>
+     <path>` (PMR1 = stream), then builds the record. A Pico error raises its report and
+     builds nothing. K/S/P go to the stock `$1465`.
+   - `CLOSE #` at `$13A5`. An `F` record is flushed, `tpi:chclose` goes to the Pico, the
+     512 bytes are reclaimed, every later `STRMS` offset moves down, and if `CURCHL` was
+     the record, S is selected. Stock `$13A8` then resets the entry.
+4. **Nothing needed in SELTAB.** Measured: an unknown letter misses the K/S/P table at
+   `$1293` and select just returns.
+5. **`NEW` and reset** rebuild `CHANS` and orphan our records. `RUN` and `CLEAR` leave them.
+   The Pico forgets a stream's old entry whenever that stream is opened again.
+6. **An error trap around every module entry.** HOME's returning thunk (`$03FC`) keeps its
+   own stack at `($65CE)`, and an error unwinds the Z80 stack but not that one. Each report
+   raised inside the module (`CAT`/`MOVE`/`ERASE`/`FORMAT` included) left it 4–8 bytes
+   lower, and after about 16 errors it overwrote the bank-switch code. The module now runs
+   under an `ERR_SP` trap (HOME `$14A8`) that puts `($65CE)` back and passes the error on.
 
-Any other letter is Report J. So every form below depends on this work:
+The 2068's own `SYSCON` extension table (design doc §10.7) is not the vehicle, because it is a
+banked-driver ABI.
 
-1. **A channel record in `CHANS`.** It has the 5-byte header (output address,
-   input address, letter `F`), then our state: the Pico handle, mode, record length,
-   current record, and the 256-byte block buffer. It is inserted with MAKE-ROOM
-   just before the `$80` that ends `CHANS`, the way the Interface 1 builds `M` channels. The
-   stream's `STRMS` entry points at it.
-2. **Output and input routines that are reachable with HOME paged in**, because
-   `RST 10` / INCH call them there. A 9-byte stub per direction jumps to the
-   EXROM through the existing returning thunk
-   (`LD ($5DCD),HL` / `LD HL,addr` / `JP $03FC`). **Measured: `A` and the flags
-   survive both ways**, so the driver code sits with the rest of the module at
-   `$3000`, not in RAM.
-   - **The record must be inside `CHANS`**, inserted with MAKE-ROOM (`$12BB`).
-     Anywhere above the workspace, `INPUT` moves `CURCHL` out from under it.
-   - **Both bytes of its `STRMS` offset must be below `$80`**, because channel
-     select tests `D OR E`.
-
-   See design doc §6.1 and §10.8.
-3. **OPEN and CLOSE hooks. Both are mandatory**: stock `CLOSE #` on an unknown
-   letter jumps into its own table and resets the machine (measured).
-   - At `$142A`: recognise `f:`/`d:` names, parse mode and record length, open the Pico
-     handle, build the record and set `STRMS`.
-   - At `$139F`: flush the buffer, close the handle, reclaim the record and zero
-     `STRMS`.
-4. **Nothing needed in SELTAB.** Measured: an unknown letter misses the K/S/P
-   table at `$1293` and select just returns.
-5. **`NEW`, `CLEAR` and reset** rebuild `CHANS` and orphan our records. The Pico
-   side has to close handles that are orphaned this way (§ reset rule below).
-
-`SYSCON` (Timex's own extension table, design doc §10.7) is not the vehicle.
-It's a banked-driver ABI, and the open path that would consult it (`$1488–$14C6`) seems to have
-no callers in the HOME ROM. That's a static finding and still needs confirming.
+The stage 1 wire commands are `tpi:chopen`, `tpi:chwr <hex>` (at most 64 bytes, sent when
+the buffer fills and on `CLOSE`), `tpi:chrd` (PMR2 = up to 255 bytes; the answer is status 1,
+count, bytes, XOR, or status 7 at the end of the file, which becomes Report 8), and
+`tpi:chclose`. The Pico drops output to a read channel, which is where `INPUT #`'s prompt
+items go.
 
 Design doc §6 covers the buffering and the handshake timing. The statement
 surface this spec recommends is:
@@ -273,10 +283,12 @@ The design choices:
   string is simpler and is still a single string expression.
 - **Random access** uses `TAB` as the record pointer. See §4b. EOF shows up as Report 8 on
   `INPUT #`, as it does for tape reads today.
-- **Streams 4–15 only.** That's 12 at once. The practical limit is buffer RAM:
-  about 256 bytes per open channel.
-- **After a reset**, all Pico handles are closed. `NEW` and `CLEAR` lose the
-  channel records, so `OPEN #` has to be idempotent.
+- **Any stream 0–15**, as stock `OPEN #` allows. Streams 4–15 are the usual choice;
+  `OPEN #2,"f:log.txt","w"` redirects ordinary `PRINT` to a file until `CLOSE #2`.
+  The practical limit is RAM: 512 bytes per open channel.
+- **After `NEW` or a reset**, the records are gone. The Pico forgets a stream's old
+  entry when the stream is opened again, so `OPEN #` is idempotent. `CLEAR` and
+  `RUN` keep open channels.
 
 ### 4b. Random access: `TAB` is the record pointer
 

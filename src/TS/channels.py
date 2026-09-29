@@ -189,7 +189,7 @@ class Channels:
     def write(self, stream, data):
         ch = self._get(stream)
         if ch.mode == "r":
-            raise ChannelError("Opened for reading", "Q")
+            return                                   # INPUT #'s prompt items: dropped
         out = bytes(data) if ch.binary else ch.text_out.feed(data)
         if out:
             self.fs.write(ch.path, ch.pos, out, False)

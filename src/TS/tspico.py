@@ -2585,6 +2585,16 @@ CHANNELS = channels.Channels(SD_FS())
 CH_STATUS = {"F": _3_F_Invalid_file, "Q": _4_Q_Parameter, "O": _10_J_Invalid_IO}
 
 
+def CH_REPLY(st):                                                             # a bare status: never prints
+
+    """The channel driver runs inside PRINT # / INPUT #: a message printed now
+    would move the ROM's current channel to the screen mid-statement. So the
+    answer is the status byte alone, whatever VERBOSE says (C_END: 1 = ok)."""
+
+    CMD_PUT(st)
+    MQ_READY()
+
+
 def CH_CALL(fn, *args):                                                       # channel op with the SD active
 
     """(result, status): a ChannelError becomes its report, an SD error F."""
@@ -2606,7 +2616,7 @@ def CH_OPEN(pre, cmd):                                                        # 
     TLM("CH_OPEN", "stream=%d mode=%r path=%r" % (stream, mode, path))
     real = catalog.resolve(TSP.cur_path, path) if path else None
     if real is None or real == catalog.ROOT:
-        SEND_MSG("Not allowed: %s" % path, "", _3_F_Invalid_file)
+        CH_REPLY(_3_F_Invalid_file)
         return
 
     def op():
@@ -2616,7 +2626,9 @@ def CH_OPEN(pre, cmd):                                                        # 
             raise channels.ChannelError("Not found", "F")
         CHANNELS.open(stream, real, mode)
     msg, st = CH_CALL(op)
-    SEND_MSG(msg if st != _1_OK else "Opened #%d: %s" % (stream, catalog.public(real)), "", st)
+    if st != _1_OK:
+        LOG("OPEN #%d %s: %s" % (stream, path, msg), 1)
+    CH_REPLY(st)
 
 
 def CH_WRITE(pre, cmd):                                                       # tpi:chwr <hex>
@@ -2626,10 +2638,10 @@ def CH_WRITE(pre, cmd):                                                       # 
     try:
         data = bytes(int(hx[i:i + 2], 16) for i in range(0, len(hx), 2))
     except ValueError:
-        SEND_MSG("Bad data", "", _5_C_Nonsense)
+        CH_REPLY(_5_C_Nonsense)
         return
     msg, st = CH_CALL(CHANNELS.write, stream, data)
-    SEND_MSG(msg if st != _1_OK else "", "", st)
+    CH_REPLY(st)
 
 
 def CH_READ(pre, cmd):                                                        # tpi:chrd -- the data phase
@@ -2662,7 +2674,7 @@ def CH_READ(pre, cmd):                                                        # 
 def CH_CLOSE(pre, cmd):                                                       # tpi:chclose
 
     CHANNELS.close(PARAMS(pre)[0] & 0xFF)
-    SEND_MSG("", "", _1_OK)
+    CH_REPLY(_1_OK)
 
 def IDIR(pre, cmd):
 

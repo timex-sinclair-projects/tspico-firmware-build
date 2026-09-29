@@ -120,7 +120,9 @@ def main():
     check(err(lambda: ch.open(4, "/sd/TAP/nothere", "r")) == "F", "r of a missing file: F")
     check(err(lambda: ch.open(4, "/sd/TAP/x", "q")) == "Q", "a bad mode: Q")
     ch.open(4, "/sd/TAP/last.txt", "r")
-    check(err(lambda: ch.write(4, b"x")) == "Q", "writing a read channel: Q")
+    before = bytes(fs.files["/sd/TAP/last.txt"])
+    check(err(lambda: ch.write(4, b"P?")) is None and bytes(fs.files["/sd/TAP/last.txt"]) == before,
+          "output to a read channel (INPUT #'s prompt) is dropped")
     ch.open(4, "/sd/TAP/w.txt", "w")
     check(err(lambda: ch.read(4, 1)) == "Q", "reading a write channel: Q")
     ch.close(4)
