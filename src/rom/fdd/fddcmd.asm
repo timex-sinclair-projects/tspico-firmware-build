@@ -152,9 +152,31 @@ BEEP_VEC:
 ; editor clicks for every character, so INPUT # from a file ran that switch
 ; hundreds of times a line. $03F3 now enters under DI and EIs back in HOME;
 ; this puts DI back after BEEPER's EI.
+;
+; The editor clicks (HL = $00C8, $0A97) for every character it takes, whatever
+; the channel, so INPUT # from a file chattered through the speaker for every
+; byte read (the Spectrum did the same with microdrives). That click is skipped
+; when the current channel is an 'F' record; the keyboard, BEEP and the error
+; buzz ($1A90) are untouched.
 ;------------------------------------------------------------------------------
-G_BEEP: call    BEEPER
-        di
+G_BEEP: ld      a,h
+        and     a
+        jr      nz,.beep
+        ld      a,l
+        cp      $C8
+        jr      nz,.beep           ; not the editor's key click
+        push    hl
+        ld      hl,(CURCHL)
+        inc     hl
+        inc     hl
+        inc     hl
+        inc     hl
+        ld      a,(hl)             ; the channel letter
+        pop     hl
+        cp      'F'
+        jr      z,.quiet           ; INPUT # from a file
+.beep:  call    BEEPER
+.quiet: di
         ret
 
 ;------------------------------------------------------------------------------
