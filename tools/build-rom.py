@@ -146,6 +146,22 @@ PATCHES = [
              "$1461 stores.",
     ),
     dict(
+        name="OPEN # syntax: $1438 CALL $2569 -> CALL $14BD (parse ,mode[,reclen])",
+        bank="home", addr=0x1438,
+        before="cd 69 25", after="cd bd 14",
+        note="Stock OPEN # skipped everything after the spec's comma in the syntax "
+             "pass, which also skipped storing each number's hidden five-byte form, "
+             "so a record length (stage 2) couldn't be evaluated at run time (Report "
+             "C). $2569 is still called from its other callers.",
+    ),
+    dict(
+        name="OPEN # syntax trampoline in the dead $14BD-$14C5",
+        bank="home", addr=0x14BD,
+        before="cd d0 65 d1 7a c6 80 57 e1",
+        after="f3 21 18 30 cd fc 03 fb c9",          # DI / LD HL,3018 / CALL 03FC / EI / RET
+        note="The last 9 bytes of the unreferenced $1488-$14C6 block.",
+    ),
+    dict(
         name="CLOSE #: $13A5 CALL $13BE -> CALL $1494",
         bank="home", addr=0x13A5,
         before="cd be 13", after="cd 94 14",
