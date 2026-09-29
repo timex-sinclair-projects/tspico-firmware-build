@@ -507,6 +507,26 @@ match what the Z80 expects.
   Reproduced on hardware with 600 bytes (2026-09-28).
   `TS2068_IO` and `ZX48_IO` drain stdin at their idle heartbeat; see
   `src/test/stdin_drain_hosttest.py`.
+- **A reply the ROM answers straight away must say READY, not IDLE.**
+  `MQ_READY()` sets Y to `0xFF`, which is READY *and* IDLE. A 1.8b-style
+  ROM that sends its next command as soon as it has this one's answer
+  (the fdd channel driver: `CLOSE #` flushes, then sends `tpi:chclose`
+  at once) waits only for IDLE after its SYNC. If IDLE is already up while
+  `PROCESS_CMD`'s tail is still draining and logging, the tail's own IDLE
+  lets the pre-header go before the main loop is capturing. Only the
+  FIFO's 4 bytes survive: `Partial pre-header 4/10`, `RECOVERED`, Report T
+  (hardware, 2026-09-29). Channel handlers answer with `CH_READY()`
+  (`0xF7`, READY without IDLE), and the ROM waits for IDLE before its SYNC.
+- **ROM side: the 2068's bank switch is not interrupt-safe.** Timex's
+  switch routine (the RAM copy of EXROM `$12BE`/`$134A`) writes port `FFh`
+  and then `F4h` with interrupts enabled. Between the two, chunk 0 can be
+  the empty DOCK bank, and an interrupt there runs `RST 38` over `$FF`
+  until memory is wiped (`39 00` everywhere). Anything that crosses banks
+  often (the fdd channel driver crosses twice per character) must do so
+  under `DI`. The TS-Pico's relocated BEEPER (`$03F3` → EXROM) was the
+  other hot path: the editor clicks once per character, including every
+  character `INPUT #` reads from a file. See `src/rom/fdd/fddcmd.asm`
+  `GUARDED` / `G_BEEP` and `docs/DISK_COMMANDS_SPEC.md` §4.
 
 ---
 

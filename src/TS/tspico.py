@@ -368,6 +368,7 @@ from TS.tspico_io import (
 from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from TS import catalog
 from TS import native
+from TS import channels
 from array import array
 
 # ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
@@ -2541,6 +2542,152 @@ def NATIVE_LOAD_PREP(path, op, mod):                                           #
                 return "Short file: %s" % path, _2_R_Tape_load
             out.write(bytes([x]))
     return len(hdr_blk) + n + 2, _1_OK
+
+
+# ─── OPEN # channels, stage 1 (DISK_COMMANDS_SPEC.md §4) ────────────────────
+# The fdd ROM's channel driver sends these through the Pico Interface BIOS,
+# with the stream number in PMR1:
+#   tpi:chopen <mode> <path>   open ("r" / "w" / "a", + "b" for binary)
+#   tpi:chwr <hex>             write bytes (hex in the body: no data phase)
+#   tpi:chrd                   read up to PMR2 bytes -- a raw data phase:
+#                              status, count, the bytes, their XOR (see CH_READ)
+#   tpi:chclose                close (not an error if it isn't open)
+# No file stays open: the card is unmounted between commands. channels.py
+# keeps each stream's path and position and does the text translation.
+
+class SD_FS:
+    """channels.py's file access, on the SD card (active while it runs)."""
+
+    def exists(self, p):
+        return file_exists(p)
+
+    def size(self, p):
+        return os.stat(p)[6]
+
+    def read(self, p, pos, n):
+        with open(p, "rb") as f:
+            f.seek(pos)
+            return f.read(n)
+
+    def write(self, p, pos, data, truncate):
+        if truncate:
+            with open(p, "wb") as f:
+                f.write(data)
+            return
+        mode = "ab" if pos >= self.size(p) else "r+b"
+        with open(p, mode) as f:
+            if mode == "r+b":
+                f.seek(pos)
+            f.write(data)
+
+
+CHANNELS = channels.Channels(SD_FS())
+CH_STATUS = {"F": _3_F_Invalid_file, "Q": _4_Q_Parameter, "O": _10_J_Invalid_IO}
+
+
+def CH_READY():                                                               # ready, but not idle yet
+
+    """READY without IDLE (0F7h). The fdd ROM's channel driver can send its next
+    command the moment it has this one's answer -- CLOSE # flushes and closes
+    back to back -- and it waits for IDLE before its SYNC. Plain MQ_READY says
+    IDLE too, so that SYNC could land while PROCESS_CMD's tail was still
+    draining and logging: the tail's own IDLE then let the pre-header go with
+    nobody capturing it ("Partial pre-header 4/10", Report T; hardware,
+    2026-09-29). The tail's IDLE is the one that counts."""
+
+    MQ_STATUS(MQ, "mid")
+
+
+def CH_REPLY(st):                                                             # a bare status: never prints
+
+    """The channel driver runs inside PRINT # / INPUT #: a message printed now
+    would move the ROM's current channel to the screen mid-statement. So the
+    answer is the status byte alone, whatever VERBOSE says (C_END: 1 = ok)."""
+
+    CMD_PUT(st)
+    CH_READY()
+
+
+def CH_CALL(fn, *args):                                                       # channel op with the SD active
+
+    """(result, status): a ChannelError becomes its report, an SD error F."""
+
+    def run():
+        try:
+            return fn(*args), _1_OK
+        except channels.ChannelError as e:
+            return e.args[0], CH_STATUS.get(e.args[1], _4_Q_Parameter)
+    return SD_CALL(run)
+
+
+def CH_OPEN(pre, cmd):                                                        # tpi:chopen <mode> <path>
+
+    stream = PARAMS(pre)[0] & 0xFF
+    arg = getArgs(cmd).strip()
+    k = arg.find(' ')
+    mode, path = (arg[:k], arg[k + 1:].strip()) if k > 0 else ("r", arg)
+    TLM("CH_OPEN", "stream=%d mode=%r path=%r" % (stream, mode, path))
+    real = catalog.resolve(TSP.cur_path, path) if path else None
+    if real is None or real == catalog.ROOT:
+        CH_REPLY(_3_F_Invalid_file)
+        return
+
+    def op():
+        if dir_exists(real):
+            raise channels.ChannelError("A directory", "Q")
+        if not dir_exists(catalog.parent(real)):
+            raise channels.ChannelError("Not found", "F")
+        CHANNELS.open(stream, real, mode)
+    msg, st = CH_CALL(op)
+    if st != _1_OK:
+        LOG("OPEN #%d %s: %s" % (stream, path, msg), 1)
+    CH_REPLY(st)
+
+
+def CH_WRITE(pre, cmd):                                                       # tpi:chwr <hex>
+
+    stream = PARAMS(pre)[0] & 0xFF
+    hx = getArgs(cmd).strip()
+    try:
+        data = bytes(int(hx[i:i + 2], 16) for i in range(0, len(hx), 2))
+    except ValueError:
+        CH_REPLY(_5_C_Nonsense)
+        return
+    msg, st = CH_CALL(CHANNELS.write, stream, data)
+    CH_REPLY(st)
+
+
+def CH_READ(pre, cmd):                                                        # tpi:chrd -- the data phase
+
+    # The fdd ROM's driver reads, straight after the command body:
+    #   status (1 = data follows; 7 = end of file -> Report 8; others -> their
+    #   report), then for 1: the count n (1-255), n bytes, their XOR. It reads a
+    #   byte every ~70 us with no handshake, as LOAD does at ~50 us, so the
+    #   bytes are ready before READY and garbage is collected first.
+    par1, par2 = PARAMS(pre)
+    stream, n = par1 & 0xFF, max(1, min(255, par2 or 255))
+    data, st = CH_CALL(CHANNELS.read, stream, n)
+    wrt = CMD_PUT
+    if st != _1_OK or not data:
+        wrt(st if st != _1_OK else _7_8_EOF)
+        CH_READY()
+        return
+    gc.collect()
+    x = 0
+    for b in data:
+        x ^= b
+    wrt(1)
+    wrt(len(data))
+    CH_READY()                                                                # data in TX first, then READY
+    for b in data:
+        wrt(b)
+    wrt(x)
+
+
+def CH_CLOSE(pre, cmd):                                                       # tpi:chclose
+
+    CHANNELS.close(PARAMS(pre)[0] & 0xFF)
+    CH_REPLY(_1_OK)
 
 def IDIR(pre, cmd):
 
@@ -4950,7 +5097,11 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
             return
 
         try:
-            cmd = cmd[:long - 1].decode()
+            # Decode only the text: 'D' and the 16-bit length in front of it
+            # are binary, and a length of 128 or more isn't valid UTF-8 (a
+            # tpi:chwr of 60+ bytes, a 64-character path). "D.." keeps every
+            # handler's cmd[3:] / cmd[7:] offsets where they were.
+            cmd = "D.." + bytes(cmd[3:long - 1]).decode()
         except:
             LOG("Unrecognized string in PROCESS_CMD: FIFO Status:%d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 2)
             TLM("PROCESS_CMD decode FAILED — status sent, tail restores V6")
@@ -5170,6 +5321,10 @@ def TS2068_IO():                                                         # Main 
         "TPI:FORMAT": DISK_FORMAT,
         "TPI:REN": DISK_REN,
         "TPI:FOPEN": NATIVE_OPEN,
+        "TPI:CHOPEN": CH_OPEN,
+        "TPI:CHWR": CH_WRITE,
+        "TPI:CHRD": CH_READ,
+        "TPI:CHCLOSE": CH_CLOSE,
         "TPI:FFW" : FWD,
         "TPI:HELP" : GETHELP,
         "TPI:IDIR" : IDIR,

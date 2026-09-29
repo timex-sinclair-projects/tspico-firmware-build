@@ -67,6 +67,44 @@ READ_STATUS     EQU $02B9          ; EXROM: the response's status byte -> AF ($0
 OPEN_STREAM     EQU $0426          ; EXROM: open stream A ($04F1 opens $FE, the main screen)
 LOOP_BODY       EQU $21E6          ; EXROM: function $86's loop after $01C3 (PUSH AF; print/key...)
 STREAM_LOWER    EQU $FD            ; stream -3: K, the lower screen
+CURCHL          EQU $5C51          ; the current channel's record
+THUNK_HX        EQU $03FC          ; HOME: LD (5DCD),HL / LD HL,t / JP here = call EXROM t
+
+; --- a channel record in CHANS (spec §4; FDD_COMMANDS_DESIGN §6.1, §10.8) --------
+; Each OPEN # takes CH_ALLOC bytes just before CHANS' closing $80, with the
+; record R_PAD bytes in, so its STRMS offset has both bytes below $80 (channel
+; select at $1239 tests D OR E). CH_ALLOC is a multiple of 256, so reclaiming
+; one never changes the low byte of another's offset. The output and input
+; routines are fixed stubs in HOME ($14A0/$14A9, build-rom.py), so a record
+; holds no addresses that move with it.
+R_OUT           EQU 0              ; output routine: HOME $14A0 -> CH_OUT
+R_IN            EQU 2              ; input routine: HOME $14A9 -> CH_IN
+R_LETTER        EQU 4              ; 'F'
+R_STRM          EQU 5              ; the stream number (the Pico's key)
+R_PAD           EQU 6              ; bytes before the record in its allocation
+R_OUTN          EQU 7              ; bytes waiting in R_OUTBUF
+R_INN           EQU 8              ; bytes in R_INBUF
+R_INP           EQU 9              ; the next one to hand out
+R_OUTBUF        EQU 10
+OUTMAX          EQU 64             ; tpi:chwr sends them as hex: 9 + 128 < 256
+R_INBUF         EQU R_OUTBUF+OUTMAX
+INMAX           EQU 255
+REC_LEN         EQU R_INBUF+INMAX
+CH_ALLOC        EQU $200           ; REC_LEN + the largest pad (128) fits
+H_OUT_STUB      EQU $14A0          ; HOME: DI / LD HL,CH_OUT_VEC / CALL 03FC / EI / RET
+H_IN_STUB       EQU $14A9          ; HOME: DI / LD HL,CH_IN_VEC / CALL 03FC / EI / RET
+H_MAKE_ROOM     EQU $12BB          ; HOME: BC bytes before (HL); Report 4
+H_RECLAIM       EQU $1750          ; HOME: remove BC bytes at HL
+H_CHAN_OPEN     EQU $1230          ; HOME: select stream A
+STRMS           EQU $5C10          ; streams -3..15, two bytes each
+CHANS           EQU $5C4F
+PROG            EQU $5C53
+STREAM_N        EQU $5CCB          ; OPEN/CLOSE #: the stream ($140F)
+ERR_SP          EQU $5C3D
+BANK_SP         EQU $65CE          ; the RAM bank-call stack pointer
+H_TRAP          EQU $14B2          ; HOME: GUARDED's error trap
+BEEPER          EQU $2000          ; EXROM: JP to the relocated HOME BEEPER
+READ_DELAY      EQU 16             ; x 16 T-states between data-phase reads (~75 us)
 TOK_SCREEN      EQU $AA
 TOK_CODE        EQU $AF
 TOK_LINE        EQU $CA
@@ -91,14 +129,123 @@ TOK_ERASE       EQU $D2
 ; FDD_DISPATCH — entry for both the syntax-check and runtime pass. B = token.
 ;------------------------------------------------------------------------------
 FDD_DISPATCH:
-        jp      FDD_MAIN           ; $3000: the $25D6 disk-keyword hook
+        jp      G_MAIN             ; $3000: the $25D6 disk-keyword hook
 F_HOOK_VEC:
         jp      F_HOOK             ; $3003: the $01D2 SAVE/LOAD hook (build-rom.py)
 LOWER_VEC:
         jp      LOWER_LOOP         ; $3006: function $88 from the $2213 dispatch patch
+CH_OUT_VEC:
+        jp      G_OUT              ; $3009: HOME's output stub at $14A0
+CH_IN_VEC:
+        jp      G_IN               ; $300C: HOME's input stub at $14A9
+CH_OPEN_VEC:
+        jp      G_OPEN             ; $300F: OPEN #'s $145E, via HOME $1488
+CH_CLOSE_VEC:
+        jp      G_CLOSE            ; $3012: CLOSE #'s $13A5, via HOME $1494
+BEEP_VEC:
+        jp      G_BEEP             ; $3015: HOME's BEEPER thunk ($03F3 -> $041C)
+
+;------------------------------------------------------------------------------
+; G_BEEP -- the key click and BEEP. The TS-Pico ROM moved BEEPER to EXROM
+; ($2000 -> $203F) behind HOME's $03F3 thunk; BEEPER ends in EI, so the switch
+; back to HOME ran with interrupts on (see GUARDED for why that can crash). The
+; editor clicks for every character, so INPUT # from a file ran that switch
+; hundreds of times a line. $03F3 now enters under DI and EIs back in HOME;
+; this puts DI back after BEEPER's EI.
+;
+; The editor clicks (HL = $00C8, $0A97) for every character it takes, whatever
+; the channel, so INPUT # from a file chattered through the speaker for every
+; byte read (the Spectrum did the same with microdrives). That click is skipped
+; when the current channel is an 'F' record; the keyboard, BEEP and the error
+; buzz ($1A90) are untouched.
+;------------------------------------------------------------------------------
+G_BEEP: ld      a,h
+        and     a
+        jr      nz,.beep
+        ld      a,l
+        cp      $C8
+        jr      nz,.beep           ; not the editor's key click
+        push    hl
+        ld      hl,(CURCHL)
+        inc     hl
+        inc     hl
+        inc     hl
+        inc     hl
+        ld      a,(hl)             ; the channel letter
+        pop     hl
+        cp      'F'
+        jr      z,.quiet           ; INPUT # from a file
+.beep:  call    BEEPER
+.quiet: di
+        ret
+
+;------------------------------------------------------------------------------
+; GUARDED -- every entry that comes through HOME's returning thunk ($03FC) runs
+; under an error trap. The thunk pushes a frame on the RAM bank stack at
+; ($65CE) and pops it on the way back; an error unwinds the Z80 stack but never
+; that one, so each report raised inside the module (or in HOME code it calls)
+; used to leave it 4-8 bytes lower -- about 16 errors and it overwrites the
+; bank-switch code below it. Both ROMs' RST 8 end in SP := (ERR_SP), HOME
+; $1354, RET with HOME paged, so the trap is in HOME ($14B2, build-rom.py):
+; POP HL / LD (65CE),HL / POP HL / LD (ERR_SP),HL / LD SP,HL / EI / RET -- the
+; bank stack as it was before the thunk, interrupts back on (the HOME side of
+; every entry runs the thunk under DI, see below), then on to the previous
+; handler exactly as RST 8 would have gone.
+;
+; Interrupts: the 2068's bank switch (the RAM copy of EXROM $12BE/$134A) writes
+; port FFh and then F4h with interrupts enabled; between the two, chunk 0 can
+; be the empty DOCK bank, and an interrupt there runs RST 38 over $FF bytes
+; until the machine is wiped. Stock only switches a few times per command; a
+; channel does it for every character, which hit the window within a few
+; hundred characters in ZEsarUX. So every HOME stub and trampoline that enters
+; the module is DI / LD HL,vector / CALL 03FC / EI -- the whole round trip,
+; both switches, with interrupts off, as the stock tpi: flows already run.
+;
+; HL = the routine; A, F, BC and DE reach it, and it returns AF, BC, DE, HL.
+;------------------------------------------------------------------------------
+G_MAIN: ld      hl,FDD_MAIN
+        jr      GUARDED
+G_OUT:  ld      hl,CH_OUT
+        jr      GUARDED
+G_IN:   ld      hl,CH_IN
+        jr      GUARDED
+G_OPEN: ld      hl,CH_OPEN_HOOK
+        jr      GUARDED
+G_CLOSE:
+        ld      hl,CH_CLOSE_HOOK
+GUARDED:
+        push    hl
+        ld      hl,(ERR_SP)
+        ex      (sp),hl            ; [old ERR_SP]
+        push    hl
+        ld      hl,(BANK_SP)
+        inc     hl
+        inc     hl
+        inc     hl
+        inc     hl
+        ex      (sp),hl            ; [the bank stack before the thunk]
+        push    hl
+        ld      hl,H_TRAP
+        ex      (sp),hl            ; [the trap]
+        ld      (ERR_SP),sp
+        call    JP_HL
+        di                         ; the switch back to HOME must not be interrupted
+        inc     sp
+        inc     sp
+        inc     sp
+        inc     sp                 ; drop the trap and the bank stack value
+        ex      (sp),hl
+        ld      (ERR_SP),hl
+        pop     hl
+        ret
+
+JP_HL:  jp      (hl)
 
 FDD_MAIN:
         ld      iy,IY_SYSVARS      ; the bank call clobbers IY; HOME needs it
+        ei                         ; the $25D6 hook entered under DI; CAT's "Scroll?"
+                                   ;   and the Y/N prompts wait with HALT. GUARDED
+                                   ;   DIs again before the switch back
         ld      a,b
         cp      TOK_CAT
         jp      z,FDD_CAT
@@ -114,7 +261,7 @@ FDD_MAIN:
 
         db      "FDDCMD",0         ; signature — build.py verifies this
 FDD_VERSION:
-        db      7
+        db      8
 
 ;------------------------------------------------------------------------------
 ; FDD_CAT -- CAT [string]
@@ -613,6 +760,505 @@ LOWER_LOOP:
         jp      LOOP_BODY
 
 ;------------------------------------------------------------------------------
+; Channel driver (stage 1: sequential)                      (spec §4)
+;
+; OPEN #n,"f:path"[,"mode"] builds an 'F' record in CHANS and points stream n
+; at it; CLOSE #n flushes it, tells the Pico and takes the record out again.
+; Both come here from one-instruction HOME patches (a CALL redirected to a
+; trampoline in the dead $1488-$14C6) through the returning thunk at $03FC.
+;
+; CH_OUT and CH_IN are a record's output and input routines: RST 10 and INCH
+; call its HOME stubs, the stubs come here through the same thunk, and CURCHL
+; points at the record. Output is buffered and sent as tpi:chwr <hex>; input is
+; fetched 255 bytes at a time with tpi:chrd. At the end of the file CH_IN
+; returns NC NZ, which the ROM's WAIT-KEY ($11CF) turns into Report 8 by itself.
+;
+; Every exchange keeps CURCHL: the command goes out mid-statement (inside PRINT #
+; or INPUT #), and the Pico answers channel commands with a bare status that
+; prints nothing, but C_END could still open the screen for a message.
+;------------------------------------------------------------------------------
+
+; CH_OPEN_HOOK -- HOME $145E's CALL $1465 goes to $1488 (LD HL,CH_OPEN_VEC /
+; CALL 03FC / RET C / JP 1465). The stream is ($5CCB), the spec string is on
+; top of the calculator stack, and CH_ADD is on the ',' of a mode, if any (the
+; syntax pass skipped everything after it). Not "f:": NC, HL = the STRMS entry,
+; the stack untouched, for the stock $1465. "f:": C, DE = the new offset, HL =
+; the STRMS entry, which $1461 stores.
+CH_OPEN_HOOK:
+        ld      iy,IY_SYSVARS
+        call    PEEK_NAME          ; DE = text, BC = length
+        ld      a,b
+        and     a
+        jp      nz,STRMS_NC
+        ld      a,c
+        cp      3
+        jp      c,STRMS_NC         ; "f:" and at least one character
+        ld      a,(de)
+        and     $DF
+        cp      'F'
+        jp      nz,STRMS_NC
+        inc     de
+        ld      a,(de)
+        cp      ':'
+        jp      nz,STRMS_NC
+        ld      a,c
+        cp      MAX_ARG+3
+        jp      nc,TOO_LONG
+        ld      bc,CH_ALLOC+ROOM   ; the record and the command, or Report 4
+        call    HC_TEST_ROOM       ;   before the Pico hears of it
+        call    AT_END
+        jr      z,.dflt
+        cp      ','
+        jp      nz,NONSENSE
+        call    NEXT_CHAR
+        call    HC_EXPT_STR        ; the mode
+        call    AT_END
+        jp      nz,NONSENSE
+        call    POP_STR            ; DE = mode, BC = its length
+        ld      a,c
+        and     a
+        jr      z,.dflt            ; "": read
+        cp      4
+        jr      c,.mode
+        rst     8
+        db      $19                ; Q Parameter error
+.dflt:  ld      de,MODE_R
+        ld      bc,1
+.mode:  push    bc
+        push    de
+        ld      hl,CMD_CHOPEN      ; tpi:chopen <mode> <path>, built at STKEND
+        ld      de,(STKEND)
+        call    COPY_CSTR
+        pop     hl
+        pop     bc
+        ldir
+        ld      a,' '
+        ld      (de),a
+        inc     de
+        push    de
+        call    PEEK_NAME
+        inc     de
+        inc     de                 ; past "f:"
+        dec     bc
+        dec     bc
+        ex      de,hl
+        pop     de
+        ldir
+        xor     a
+        ld      (de),a
+        ld      hl,(STKEND)
+        ld      a,(STREAM_N)
+        ld      bc,0               ; no payload, PMR2 0
+        call    CH_SEND
+        call    CH_STATUS          ; F, Q ... raise their reports
+        ld      hl,(STKEND)        ; drop the spec, as $1465's STK_FETCH would
+        ld      de,-5
+        add     hl,de
+        ld      (STKEND),hl
+        ; the allocation goes where CHANS' $80 is; pad the record in so both
+        ; bytes of its offset (record - CHANS + 1) are below $80. On the 2068
+        ; one spare byte sits between that $80 and PROG.
+        ld      hl,(PROG)
+        dec     hl
+        ld      a,(hl)
+        cp      $80
+        jr      z,.end
+        dec     hl
+.end:   push    hl                 ; [start]
+        ld      de,(CHANS)
+        and     a
+        sbc     hl,de
+        inc     hl                 ; the offset with no pad
+        xor     a
+        bit     7,l
+        jr      z,.pad
+        sub     l                  ; 256 - L
+.pad:   pop     hl
+        push    af                 ; [pad]
+        push    hl                 ; [start]
+        dec     hl                 ; MAKE_ROOM opens the space AFTER (HL), so
+        ld      bc,CH_ALLOC        ;   the $80 moves up past the allocation
+        call    HC_MAKE_ROOM
+        pop     hl
+        push    hl
+        ld      d,h
+        ld      e,l
+        inc     de
+        ld      (hl),0
+        ld      bc,CH_ALLOC-1
+        ldir                       ; a clean allocation
+        pop     hl
+        pop     af
+        ld      e,a
+        ld      d,0
+        add     hl,de              ; HL = the record
+        push    hl
+        pop     ix
+        ld      (ix+R_OUT),low H_OUT_STUB
+        ld      (ix+R_OUT+1),high H_OUT_STUB
+        ld      (ix+R_IN),low H_IN_STUB
+        ld      (ix+R_IN+1),high H_IN_STUB
+        ld      (ix+R_LETTER),'F'
+        ld      (ix+R_PAD),a
+        ld      a,(STREAM_N)
+        ld      (ix+R_STRM),a
+        ld      de,(CHANS)
+        and     a
+        sbc     hl,de
+        inc     hl
+        ex      de,hl              ; DE = the offset
+        call    STRMS_HL
+        scf
+        ret
+
+STRMS_NC:
+        call    STRMS_HL
+        and     a
+        ret
+
+; STRMS_HL -- HL = stream ($5CCB)'s STRMS entry, $5C16 + 2n.
+STRMS_HL:
+        ld      a,(STREAM_N)
+        add     a,a
+        add     a,low (STRMS+6)
+        ld      l,a
+        ld      h,high STRMS
+        ret
+
+; CH_CLOSE_HOOK -- HOME $13A5's CALL $13BE goes to $1494 (DI / LD HL,
+; CH_CLOSE_VEC / CALL 03FC / EI / RET C / JP 13BE). BC = the stream's offset (not 0), the stream
+; is ($5CCB). Not an 'F' record: NC with HL = the STRMS entry, BC and A = B|C,
+; for the stock $13BE. 'F': flush, tpi:chclose, reclaim the allocation, move
+; every later offset down; C with HL = the STRMS entry, which $13A8 resets.
+CH_CLOSE_HOOK:
+        ld      iy,IY_SYSVARS
+        bit     7,b
+        jr      nz,.stock          ; SYSCON
+        ld      hl,(CHANS)
+        add     hl,bc
+        dec     hl
+        push    hl
+        pop     ix                 ; the record
+        ld      a,(ix+R_LETTER)
+        cp      'F'
+        jr      z,.ours
+.stock: call    STRMS_HL
+        ld      a,b
+        or      c                  ; NC
+        ret
+.ours:  push    bc                 ; [offset]
+        call    CH_FLUSH
+        ld      a,(ix+R_STRM)
+        ld      hl,CMD_CHCLOSE
+        ld      bc,0
+        call    CH_SEND
+        call    CH_STATUS
+        pop     bc
+        ld      e,(ix+R_PAD)
+        ld      d,0
+        push    ix
+        pop     hl
+        and     a
+        sbc     hl,de
+        push    hl                 ; [start]
+        ; every offset above ours moves down CH_ALLOC ($200): high byte - 2
+        ld      hl,STRMS
+        ld      a,19
+.fix:   ld      e,(hl)
+        inc     hl
+        ld      d,(hl)             ; DE = the entry, HL -> its high byte
+        bit     7,d
+        jr      nz,.next           ; SYSCON
+        push    hl
+        ld      h,b
+        ld      l,c
+        and     a
+        sbc     hl,de              ; C: the entry is above ours
+        pop     hl
+        jr      nc,.next
+        dec     (hl)
+        dec     (hl)
+.next:  inc     hl
+        dec     a
+        jr      nz,.fix
+        ; is the current channel this one? then it goes (POINTERS would leave
+        ; CURCHL CH_ALLOC below it, in someone else's bytes): select S after
+        pop     hl
+        push    hl
+        ld      de,(CURCHL)
+        ex      de,hl
+        and     a
+        sbc     hl,de              ; CURCHL - start
+        ld      a,0
+        jr      c,.keep
+        ld      a,h
+        cp      high CH_ALLOC
+        ld      a,0
+        jr      nc,.keep
+        inc     a
+.keep:  pop     hl
+        push    af
+        ld      bc,CH_ALLOC
+        call    HC_RECLAIM
+        pop     af
+        and     a
+        ld      a,2
+        call    nz,HC_CHAN_OPEN
+        call    STRMS_HL
+        scf
+        ret
+
+HC_MAKE_ROOM:
+        push    ix
+        exx
+        ld      hl,H_MAKE_ROOM
+        jp      CALL_HOME
+
+HC_RECLAIM:
+        push    ix
+        exx
+        ld      hl,H_RECLAIM
+        jp      CALL_HOME
+
+HC_CHAN_OPEN:
+        push    ix
+        exx
+        ld      hl,H_CHAN_OPEN
+        jp      CALL_HOME
+
+CH_OUT:
+        ld      iy,IY_SYSVARS
+        push    ix
+        ld      ix,(CURCHL)
+        ld      c,a
+        ld      a,(ix+R_OUTN)
+        push    ix
+        pop     hl
+        ld      de,R_OUTBUF
+        add     hl,de
+        ld      e,a
+        ld      d,0
+        add     hl,de
+        ld      (hl),c             ; into the buffer
+        inc     a
+        ld      (ix+R_OUTN),a
+        cp      OUTMAX
+        call    nc,CH_FLUSH
+        pop     ix
+        ret
+
+CH_IN:
+        ld      iy,IY_SYSVARS
+        push    ix
+        ld      ix,(CURCHL)
+.again: ld      a,(ix+R_INP)
+        cp      (ix+R_INN)
+        jr      c,.have
+        call    CH_FETCH           ; NZ: end of file
+        jr      z,.again
+        pop     ix
+        xor     a
+        inc     a                  ; NC NZ: WAIT-KEY gives Report 8
+        ret
+.have:  ld      e,a
+        inc     a
+        ld      (ix+R_INP),a
+        ld      d,0
+        push    ix
+        pop     hl
+        add     hl,de
+        ld      de,R_INBUF
+        add     hl,de
+        ld      a,(hl)
+        pop     ix
+        scf
+        ret
+
+; CH_FLUSH -- send what R_OUTBUF holds (IX = the record). Keeps CURCHL. The
+; count is cleared first: if the Pico refuses the bytes, they are dropped with
+; the report, and CLOSE # can still close the stream.
+CH_FLUSH:
+        ld      a,(ix+R_OUTN)
+        and     a
+        ret     z
+        ld      b,a                ; payload count
+        ld      (ix+R_OUTN),0
+        ld      c,0                ; PMR2
+        ld      a,(ix+R_STRM)
+        ld      hl,CMD_CHWR
+        call    CH_SEND
+        jp      CH_STATUS          ; C_END, reports on error
+
+; CH_FETCH -- refill R_INBUF from the Pico (IX = the record): Z when it has
+; bytes, NZ at the end of the file. The data phase: status, count, bytes, XOR.
+CH_FETCH:
+        ld      b,0                ; no payload
+        ld      c,INMAX            ; PMR2: how many
+        ld      a,(ix+R_STRM)
+        ld      hl,CMD_CHRD
+        call    CH_SEND
+        call    BIOS_WF_NPH
+        jp      c,WF_FAIL
+        call    BIOS_RX_A          ; status
+        cp      1
+        jr      z,.data
+        cp      7
+        jr      nz,.err
+        or      a                  ; end of file: NZ
+        ret
+.err:   dec     a
+        jp      STATUS_REPORT
+.data:  call    BIOS_RX_A          ; count, 1-255
+        ld      b,a
+        ld      (ix+R_INN),a
+        ld      (ix+R_INP),0
+        push    ix
+        pop     hl
+        ld      de,R_INBUF
+        add     hl,de
+        ld      d,0                ; running XOR
+.byte:  ld      e,READ_DELAY       ; pace like LOAD: the Pico feeds a 4-deep FIFO
+.dly:   dec     e
+        jr      nz,.dly
+        call    BIOS_RX_A
+        ld      (hl),a
+        inc     hl
+        xor     d
+        ld      d,a
+        djnz    .byte
+        ld      e,READ_DELAY
+.dly2:  dec     e
+        jr      nz,.dly2
+        call    BIOS_RX_A          ; the XOR
+        cp      d
+        jr      nz,.bad
+        xor     a                  ; Z: bytes to hand out
+        ret
+.bad:   rst     8
+        db      $1A                ; R Tape loading error: a starved FIFO
+
+; CH_STATUS -- C_END, keeping CURCHL; an error status raises its report.
+CH_STATUS:
+        ld      hl,(CURCHL)
+        push    hl
+        call    BIOS_C_END
+        pop     hl
+        ld      (CURCHL),hl
+        ret     nc
+        jp      STATUS_REPORT
+
+; CH_SEND -- the 'B' command <prefix HL>[hex of B bytes from IX+R_OUTBUF],
+; PMR1 = A (the stream), PMR2 = C, through the BIOS; stops after the body (the
+; caller reads the answer).
+CH_SEND:
+        push    af                 ; [stream]
+        push    hl
+        push    bc
+        call    STRLEN             ; A = prefix length
+        pop     bc
+        add     a,b
+        add     a,b                ; + 2 per payload byte
+        ld      e,a                ; E = command length (< 256)
+        pop     hl
+        pop     af
+        push    hl                 ; [prefix]
+        push    bc                 ; [count, PMR2]
+        push    af
+        ld      bc,0               ; wait (~1 s at most) for IDLE: the Pico
+.idle:  in      a,($0F)            ;   answers channel commands READY but not
+        and     $48                ;   IDLE until PROCESS_CMD's tail is done,
+        cp      $48                ;   and a SYNC sent before then is lost
+        jr      z,.sync            ;   with the pre-header behind it (T)
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.idle
+.sync:  pop     af
+        pop     bc
+        push    bc
+        push    af
+        ld      a,'B'
+        ld      d,a                ; D = running XOR
+        call    SYNC_WRITE
+        xor     a
+        call    TXX                ; T-ADDR 0: a command
+        ld      a,(BANK_SV)
+        call    TXX
+        pop     af
+        call    TXX                ; PMR1: the stream
+        xor     a
+        call    TXX
+        ld      a,c
+        call    TXX                ; PMR2
+        xor     a
+        call    TXX
+        ld      a,e
+        call    TXX                ; LEN
+        xor     a
+        call    TXX
+        ld      a,d
+        call    BIOS_TX_A
+        call    BIOS_RX_A          ; the preloaded status
+        call    BIOS_WF_NPH
+        jp      c,WF_FAIL
+        ld      a,'D'
+        ld      d,a
+        call    BIOS_TX_A
+        ld      a,e
+        call    TXX
+        xor     a
+        call    TXX
+        pop     bc
+        pop     hl
+        push    bc
+.pre:   ld      a,(hl)             ; the prefix
+        inc     hl
+        and     a
+        jr      z,.hex
+        call    TXX
+        jr      .pre
+.hex:   pop     bc
+        ld      a,b
+        and     a
+        jr      z,.end
+        push    de                 ; D is the running XOR
+        push    ix
+        pop     hl
+        ld      de,R_OUTBUF
+        add     hl,de
+        pop     de
+.hx:    ld      a,(hl)
+        inc     hl
+        push    af
+        rrca
+        rrca
+        rrca
+        rrca
+        call    HEXDIG
+        pop     af
+        call    HEXDIG
+        djnz    .hx
+.end:   ld      a,d
+        jp      BIOS_TX_A          ; the body's XOR
+
+HEXDIG: and     $0F
+        add     a,'0'
+        cp      '9'+1
+        jr      c,.d
+        add     a,'a'-'9'-1
+.d:     jp      TXX
+
+STRLEN: ld      c,0                ; A = length of the NUL-ended string at HL
+.l:     ld      a,(hl)
+        inc     hl
+        and     a
+        jr      z,.e
+        inc     c
+        jr      .l
+.e:     ld      a,c
+        ret
+
+;------------------------------------------------------------------------------
 ; TPI command prefixes (NUL-terminated).
 ;------------------------------------------------------------------------------
 CMD_DIR:     db "tpi:dir",0
@@ -623,6 +1269,11 @@ CMD_CD_BACK: db "tpi:cd -",0
 CMD_COPY:    db "tpi:copy ",0
 CMD_ERASE:   db "tpi:erase ",0
 CMD_FORMAT:  db "tpi:format ",0
+CMD_CHWR:    db "tpi:chwr ",0
+CMD_CHRD:    db "tpi:chrd",0
+CMD_CHCLOSE: db "tpi:chclose",0
+CMD_CHOPEN:  db "tpi:chopen ",0
+MODE_R:      db "r"
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE

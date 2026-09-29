@@ -88,6 +88,7 @@ jobs:
           cp src/TS/printer.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/printer.py
           cp src/TS/catalog.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/catalog.py
           cp src/TS/native.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/native.py
+          cp src/TS/channels.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/channels.py
           cp src/manifest.py         ${{ github.workspace }}/micropython/ports/rp2/boards/manifest.py
 
       - name: Build mpy-cross

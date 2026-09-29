@@ -331,6 +331,27 @@ def test_fail_cmd_clears_partial_response(t):
           "signalled Y=READY (execs=%r)" % (mq.execs,))
 
 
+def test_long_command_decodes(t):
+    """A command of 128+ bytes: its length byte is >= 0x80, which isn't valid
+    UTF-8. PROCESS_CMD decodes only the text, so the handler gets it whole
+    (tpi:chwr with 60+ bytes of hex, a 64-character path)."""
+    print("test_long_command_decodes")
+    text = b"tpi:long " + b"ab" * 70                  # 149 bytes
+    mq = FakeMQ(make_body(text))
+    fresh(t, mq)
+    seen = []
+
+    def long_(pre, cmd):
+        seen.append(cmd)
+        mq.put(0x01)
+
+    t.PROCESS_CMD(make_pre(text), {"TPI:LONG": long_}, {})
+    check(len(seen) == 1 and seen[0][3:] == text.decode() and len(seen[0]) == len(text) + 3,
+          "a 149-byte command reaches its handler whole, cmd[3:] = the text (%r)"
+          % (seen[0][:20] if seen else None,))
+    check(mq.tx_log == [0x01, 0x01], "and the pre-load chain is intact (%r)" % (mq.tx_log,))
+
+
 def main():
     install_fakes()
     import TS.tspico as t
@@ -349,7 +370,8 @@ def main():
                test_bad_checksum_reports_r,
                test_checksum_byte_is_consumed,
                test_body_read_timeout_writes_one_preload,
-               test_fail_cmd_clears_partial_response):
+               test_fail_cmd_clears_partial_response,
+               test_long_command_decodes):
         fn(t)
 
     print()
