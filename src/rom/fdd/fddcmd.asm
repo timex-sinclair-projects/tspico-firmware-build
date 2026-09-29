@@ -1186,10 +1186,12 @@ CH_SEND:
         ld      a,b
         and     a
         jr      z,.end
+        push    de                 ; D is the running XOR
         push    ix
         pop     hl
         ld      de,R_OUTBUF
         add     hl,de
+        pop     de
 .hx:    ld      a,(hl)
         inc     hl
         push    af
