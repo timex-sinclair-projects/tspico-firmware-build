@@ -1142,6 +1142,19 @@ CH_SEND:
         push    hl                 ; [prefix]
         push    bc                 ; [count, PMR2]
         push    af
+        ld      bc,0               ; wait (~1 s at most) for IDLE: the Pico
+.idle:  in      a,($0F)            ;   answers channel commands READY but not
+        and     $48                ;   IDLE until PROCESS_CMD's tail is done,
+        cp      $48                ;   and a SYNC sent before then is lost
+        jr      z,.sync            ;   with the pre-header behind it (T)
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.idle
+.sync:  pop     af
+        pop     bc
+        push    bc
+        push    af
         ld      a,'B'
         ld      d,a                ; D = running XOR
         call    SYNC_WRITE

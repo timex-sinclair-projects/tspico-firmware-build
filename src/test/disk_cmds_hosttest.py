@@ -429,7 +429,9 @@ def test_channels(t, root):
     sent = setup(t, root)
     tx = []
     t.CMD_PUT = lambda b: tx.append(b)
-    t.MQ_READY = lambda: tx.append("READY")
+    t.MQ_READY = lambda: tx.append("READY+IDLE")        # must not happen: see CH_READY
+    real_ch_ready = t.CH_READY
+    t.CH_READY = lambda: tx.append("READY")
     t.gc = types.SimpleNamespace(collect=lambda: None, mem_free=lambda: 0)
     t.CHANNELS.close_all()
 
@@ -483,6 +485,7 @@ def test_channels(t, root):
     check(open(os.path.join(root, "data.bin"), "rb").read() == bytes(range(120)), "binary: bytes as sent")
     r = cmd(t.CH_CLOSE, "tpi:chclose", 12)
     check(r[-1] == t._1_OK, "chclose of a stream that isn't open: OK")
+    t.CH_READY = real_ch_ready
 
 
 def main():

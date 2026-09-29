@@ -2585,6 +2585,19 @@ CHANNELS = channels.Channels(SD_FS())
 CH_STATUS = {"F": _3_F_Invalid_file, "Q": _4_Q_Parameter, "O": _10_J_Invalid_IO}
 
 
+def CH_READY():                                                               # ready, but not idle yet
+
+    """READY without IDLE (0F7h). The fdd ROM's channel driver can send its next
+    command the moment it has this one's answer -- CLOSE # flushes and closes
+    back to back -- and it waits for IDLE before its SYNC. Plain MQ_READY says
+    IDLE too, so that SYNC could land while PROCESS_CMD's tail was still
+    draining and logging: the tail's own IDLE then let the pre-header go with
+    nobody capturing it ("Partial pre-header 4/10", Report T; hardware,
+    2026-09-29). The tail's IDLE is the one that counts."""
+
+    MQ_STATUS(MQ, "mid")
+
+
 def CH_REPLY(st):                                                             # a bare status: never prints
 
     """The channel driver runs inside PRINT # / INPUT #: a message printed now
@@ -2592,7 +2605,7 @@ def CH_REPLY(st):                                                             # 
     answer is the status byte alone, whatever VERBOSE says (C_END: 1 = ok)."""
 
     CMD_PUT(st)
-    MQ_READY()
+    CH_READY()
 
 
 def CH_CALL(fn, *args):                                                       # channel op with the SD active
@@ -2657,7 +2670,7 @@ def CH_READ(pre, cmd):                                                        # 
     wrt = CMD_PUT
     if st != _1_OK or not data:
         wrt(st if st != _1_OK else _7_8_EOF)
-        MQ_READY()
+        CH_READY()
         return
     gc.collect()
     x = 0
@@ -2665,7 +2678,7 @@ def CH_READ(pre, cmd):                                                        # 
         x ^= b
     wrt(1)
     wrt(len(data))
-    MQ_READY()                                                                # data in TX first, then READY
+    CH_READY()                                                                # data in TX first, then READY
     for b in data:
         wrt(b)
     wrt(x)
