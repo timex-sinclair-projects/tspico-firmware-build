@@ -207,6 +207,7 @@ GUARDED:
         ex      (sp),hl            ; [the trap]
         ld      (ERR_SP),sp
         call    JP_HL
+        di                         ; the switch back to HOME must not be interrupted
         inc     sp
         inc     sp
         inc     sp
@@ -220,6 +221,9 @@ JP_HL:  jp      (hl)
 
 FDD_MAIN:
         ld      iy,IY_SYSVARS      ; the bank call clobbers IY; HOME needs it
+        ei                         ; the $25D6 hook entered under DI; CAT's "Scroll?"
+                                   ;   and the Y/N prompts wait with HALT. GUARDED
+                                   ;   DIs again before the switch back
         ld      a,b
         cp      TOK_CAT
         jp      z,FDD_CAT
