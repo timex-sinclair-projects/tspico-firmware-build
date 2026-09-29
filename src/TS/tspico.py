@@ -4218,6 +4218,8 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
                 wrt(89) # Y
             else:
                 wrt(ch)
+        if lower:
+            wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
         wrt(0x03) # End the string loop
         MQ_READY()
         # Could add an option to not wrt(0x03) and let the caller do that after

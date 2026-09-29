@@ -261,6 +261,23 @@ def test_prompt_each(t):
     got = run([ord("n")])
     check(got == [] and 0x03 not in tx, "lower-case n stops too (the ROM tests AND 5Fh)")
 
+    print("SEND_MSG_PROMPT_YN on the lower screen (function 0x88)")
+    def yn(k, lower):
+        del tx[:]
+        keys[:] = [k]
+        return t.SEND_MSG_PROMPT_YN("Replace x? (Y/N)", lower=lower)
+    got = yn(ord("y"), True)
+    check(got == ord("y") and tx[:3] == [0x88, 1, "READY"] and tx[3] == ord("R"),
+          "0x88, status, READY, then the prompt at once -- no leading new line (%r)" % tx[:4])
+    k = tx.index(0)
+    check(tx[k + 1:k + 5] == [ord("y"), 0x0D, 0x03, "READY"],
+          "after the key: its echo, a new line for the ROM's next message, 0x03, READY (%r)" % tx[k + 1:])
+    got = yn(ord("N"), True)
+    check(got == ord("N") and 0x0D not in tx[tx.index(0):] and 0x03 not in tx, "N: nothing after the key")
+    yn(ord("y"), False)
+    check(tx[:4] == [0x86, 1, 0x0D, "READY"] and 0x0D not in tx[tx.index(0):],
+          "main screen (0x86): the leading new line and echo as before, no extra one")
+
 
 def test_format(t, root):
     print("FORMAT  (tpi:format)")
@@ -414,6 +431,7 @@ def main():
     import TS.tspico as t
     t.TLM_ENABLED = False
     real_prompt_each = t.PROMPT_EACH
+    real_prompt_yn = t.SEND_MSG_PROMPT_YN
     root = tempfile.mkdtemp(prefix="disk_hosttest.")
     try:
         test_copy(t, root)
@@ -422,6 +440,7 @@ def main():
         test_cd_and_ren(t, root)
         test_native_open(t, root)
         t.PROMPT_EACH = real_prompt_each                          # test_erase stubs it
+        t.SEND_MSG_PROMPT_YN = real_prompt_yn                     # test_native_open stubs it
         test_prompt_each(t)
     finally:
         shutil.rmtree(root, ignore_errors=True)
