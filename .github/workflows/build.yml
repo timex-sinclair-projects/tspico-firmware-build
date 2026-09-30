@@ -115,6 +115,35 @@ jobs:
       - name: Check the flash manifest against the ROMs in the repo
         run: python3 tools/build-flash.py check flash/manifest.json
 
+      # The fdd ROM: disk commands, f: files and OPEN # channels, the future
+      # ROM 2.1. tools/build-rom.py assembles src/rom/fdd/fddcmd.asm and
+      # splices it onto the 2.0 ROM; --verify fails the build if any patch's
+      # "before" bytes or any anchor no longer match the base, or if anything
+      # outside the intended hunks changed. build/ is gitignored, so this
+      # artifact is the only place a branch's ROM can be downloaded from.
+      # sjasmplus has no Ubuntu package; v1.22.0 is the version the module is
+      # developed with, and it builds a byte-identical ROM.
+      - name: Install sjasmplus
+        run: |
+          git clone --depth 1 --branch v1.22.0 --recursive \
+            https://github.com/z00m128/sjasmplus "$RUNNER_TEMP/sjasmplus"
+          make -C "$RUNNER_TEMP/sjasmplus" -j"$(nproc)"
+          echo "$RUNNER_TEMP/sjasmplus" >> "$GITHUB_PATH"
+
+      - name: Build the fdd ROM (future 2.1)
+        run: python3 tools/build-rom.py --verify
+
+      - name: Upload the fdd ROM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-fdd-rom
+          path: |
+            build/TSPICO-fdd.ROM
+            build/TSPICO-fdd-home.bin
+            build/TSPICO-fdd-exrom.bin
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Clone MicroPython v1.20.0
         run: |
           git clone --depth 1 --branch v1.20.0 \
