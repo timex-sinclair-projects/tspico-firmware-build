@@ -177,7 +177,7 @@ jobs:
           cp src/config.ini    "${STAGE}/src/config.ini"
           cp src/words.txt     "${STAGE}/src/words.txt"
           cp src/assets/*.tap  "${STAGE}/src/assets/"
-          cp src/rom/*.ROM     "${STAGE}/src/rom/"
+          cp src/rom/TSPICO-21.ROM "${STAGE}/src/rom/"   # the slot-1 ROM only (flash/manifest.json)
 
           # SD card/: TAP files + help text the firmware reads from the
           # mounted SD card at runtime. Copy recursively so subfolders
@@ -198,8 +198,8 @@ jobs:
 
           1. **Pico firmware** — \`firmware.uf2\` at the zip root.
           2. **Pico flash filesystem** — everything inside \`src/\`.
-          3. **TS-2068 EXROM** — \`src/rom/*.ROM\` (programmed into the
-             expansion-board ROM chip).
+          3. **TS-2068 ROM** — \`src/rom/TSPICO-21.ROM\`, ROM 2.1 (flash
+             slot 1).
           4. **SD card** — everything inside the \`SD card/\` folder.
 
           All four sides must match for the protocol to work end-to-end.
@@ -224,11 +224,14 @@ jobs:
 
           (\`src/rom/\` does NOT go on the Pico — see step 3.)
 
-          ## 3. Flash the EXROM into the TS-2068
+          ## 3. Install the TS-2068 ROM
 
-          Program \`src/rom/*.ROM\` into the TS-2068 expansion-board ROM
-          chip using your ROM programmer of choice. The image is a raw
-          binary loaded at offset 0.
+          The web updater installs it for you. By hand: copy
+          \`src/rom/TSPICO-21.ROM\` to the SD card's \`TAP\` folder,
+          \`LOAD "tpi:TSPICO-21.ROM"\` then \`LOAD ""\`, and write it to
+          Flash slot 1 while the 2068 runs from another slot; or program it
+          into slot 1 of the flash chip (offset 0x8000) with a ROM
+          programmer. The image is a raw 32K binary.
 
           ## 4. Copy "SD card/" to the SD card
 

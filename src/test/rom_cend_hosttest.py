@@ -13,7 +13,8 @@ every outcome:
     RECOVERED (status FBh)  -> carry, A = 1Ch (T)
     ROM 2.0 on a timeout    -> carry, A = 02h (the ambiguity, for contrast)
 
-Needs build/TSPICO-fdd.ROM (python3 tools/build-rom.py). Run:
+Uses the committed slot-1 image, src/rom/TSPICO-21.ROM (CI checks it is
+what tools/build-rom.py builds). Run:
     python3 src/test/rom_cend_hosttest.py
 """
 
@@ -25,7 +26,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 from z80core import Z80                                          # noqa: E402
 
-FDD = os.path.join(REPO, "build", "TSPICO-fdd.ROM")
+FDD = os.path.join(REPO, "src", "rom", "TSPICO-21.ROM")
 BASE = os.path.join(REPO, "src", "rom", "TSPICO-SYNC.ROM")
 DONE = 0xFF00
 results = []
@@ -62,7 +63,7 @@ def run(rom, status, answer):
 
 def main():
     if not os.path.exists(FDD):
-        print("build/TSPICO-fdd.ROM missing: run python3 tools/build-rom.py first")
+        print("src/rom/TSPICO-21.ROM missing")
         return 1
     fdd = open(FDD, "rb").read()
     base = open(BASE, "rb").read()

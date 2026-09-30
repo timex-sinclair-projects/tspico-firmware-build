@@ -5,14 +5,18 @@ Z80 source for the native disk commands (`CAT`/`FORMAT`/`MOVE`/`ERASE`, and late
 [`docs/FDD_COMMANDS_DESIGN.md`](../../../docs/FDD_COMMANDS_DESIGN.md).
 
 - **`fddcmd.asm`** — the module, assembled at **`$3000`** and spliced into the
-  EXROM half of `src/rom/TSPICO-SYNC.ROM` (the shipping ROM 2.0). Today it is a skeleton: it establishes the
-  base address, the `FDD_DISPATCH` entry point the HOME-ROM hook will call, and
-  the signature the build verifies. The command handlers are stubs.
+  EXROM half of `src/rom/TSPICO-SYNC.ROM` (ROM 2.0). With the patches in
+  `tools/build-rom.py` this makes **ROM 2.1**, the release ROM: the disk
+  keywords, `f:` files, `OPEN #` channels, function `$88` and the BIOS C_END
+  fix. The result is committed as `src/rom/TSPICO-21.ROM`, the slot-1 image in
+  `flash/manifest.json`; CI fails if it differs from a fresh build.
 
 ## Build
 
 ```bash
 python3 tools/build-rom.py --verify      # -> build/TSPICO-fdd.ROM
+cp build/TSPICO-fdd.ROM src/rom/TSPICO-21.ROM   # after a change: refresh the slot-1 image
+python3 tools/build-flash.py check flash/manifest.json  # and fix slot 1's crc32 if it says so
 ```
 
 Requires **sjasmplus** (`brew install sjasmplus`). The build:
