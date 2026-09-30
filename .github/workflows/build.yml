@@ -22,13 +22,28 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # apt on the hosted runners sometimes hangs mid-download (four times
+      # on 2026-09-30); a normal install takes about a minute. Each attempt
+      # gets 4 minutes and a stuck one is retried, so a bad mirror costs
+      # minutes instead of blocking the job until GitHub's own limit.
       - name: Install build tools
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git build-essential cmake \
-            gcc-arm-none-eabi libnewlib-arm-none-eabi \
-            python3
+          for attempt in 1 2 3; do
+            if sudo timeout 240 apt-get update \
+               && sudo timeout 240 apt-get install -y \
+                    -o Acquire::Retries=3 -o Acquire::http::Timeout=30 \
+                    git build-essential cmake \
+                    gcc-arm-none-eabi libnewlib-arm-none-eabi \
+                    python3; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed or timed out; retrying"
+            sudo dpkg --configure -a || true   # finish anything a killed install left half-done
+            sleep 10
+          done
+          echo "::error::apt failed three times"
+          exit 1
 
       # Smoke-test the BASIC -> TAP toolchain on every push/PR. The .tap
       # outputs aren't committed (they're gitignored; see basic/README.md),
