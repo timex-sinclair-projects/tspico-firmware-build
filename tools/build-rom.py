@@ -169,6 +169,30 @@ PATCHES = [
              "crashes; the module closes 'F' records itself and returns C, so $13A8 "
              "only resets the STRMS entry.",
     ),
+    dict(
+        name="BIOS C_END: $184F JP $23CD -> JP $301B (C_END2)",
+        bank="exrom", addr=0x184F,
+        before="c3 cd 23", after="c3 1b 30",
+        note="ROM 2.0's C_END failed with A = 02h for a timeout AND for status 3 "
+             "(Report F), so callers reported a silent Pico as F. The module's "
+             "C_END2 ($301B, C_END_VEC) returns a timeout as 09h (J); status "
+             "errors, BREAK (0Ch) and a Pico reset (1Ch) come back as before. "
+             "WF_NPH ($184C) is unchanged.",
+    ),
+    dict(
+        name="version marker: HOME $0065 20h -> 21h (ROM 2.1)",
+        bank="home", addr=0x0065,
+        before="20", after="21",
+        note="PEEK 101 tells a program which ROM it has: 15h v1.1, 17h v1.7, "
+             "20h 2.0 (tspico-sync.asm), 21h this ROM, the disk commands' 2.1.",
+    ),
+    dict(
+        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0021h",
+        bank="exrom", addr=0x1852,
+        before="01 20 00 c9", after="01 21 00 c9",
+        note="The Pico Interface BIOS G_VERS ($1844 -> $1852) returns the same "
+             "version as HOME $0065.",
+    ),
 ]
 
 
@@ -197,6 +221,10 @@ ANCHORS = [
          bank="exrom", addr=0x1BF3, bytes="fb 3d ca 3e 1c 3d ca 39 1c"),
     dict(name="SYNC_WRITE",
          bank="exrom", addr=0x2300, bytes="f5 c5 3e 03 d3 0f cd 0e 23 c1 f1 c3 9d 22"),
+    dict(name="ROM 2.0 BIOS_C_END: CALL WF_NPH / RET C / JP C_END_TAIL ($227F)",
+         bank="exrom", addr=0x23CD, bytes="cd 9e 23 d8 c3 7f 22"),
+    dict(name="C_END_TAIL: C_END after its wait (C_END2 jumps here)",
+         bank="exrom", addr=0x227F, bytes="0e 0e cd 98 22 38 0e a7"),
     dict(name="Pico Interface BIOS table (TX_A, RX_A, C_END, WF_NPH)",
          bank="exrom", addr=0x1846, bytes="18 25 18 20 18 03 c3 9e 23 c3 cd 23"),
     dict(name="$86's pieces LOWER_LOOP reuses: READ_STATUS, OPEN_STREAM via $04F1, the loop",

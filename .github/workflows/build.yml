@@ -131,8 +131,11 @@ jobs:
           make -C "$RUNNER_TEMP/sjasmplus" -j"$(nproc)"
           echo "$RUNNER_TEMP/sjasmplus" >> "$GITHUB_PATH"
 
-      - name: Build the fdd ROM (future 2.1)
+      - name: Build the fdd ROM (ROM 2.1)
         run: python3 tools/build-rom.py --verify
+
+      - name: Test ROM 2.1's BIOS C_END in the Z80 interpreter
+        run: python3 src/test/rom_cend_hosttest.py
 
       - name: Upload the fdd ROM artifact
         uses: actions/upload-artifact@v4
