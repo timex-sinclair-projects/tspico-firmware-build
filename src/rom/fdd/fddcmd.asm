@@ -61,6 +61,8 @@ BIOS_TX_A       EQU $1846          ; Pico Interface BIOS: OUT (0Eh),A
 BIOS_RX_A       EQU $1848          ;   IN A,(0Eh)
 BIOS_C_END      EQU $184A          ;   status: NC ok, else C with A = status-1
 BIOS_WF_NPH     EQU $184C          ;   wait for the Pico: C with A = 02/0C/1C
+C_END_TAIL      EQU $227F          ; EXROM: C_END after its wait: read the status,
+                                   ;   run the response functions (v1.7's $2279 tail)
 BANK_SV         EQU $5DCF          ; pre-header byte 2
 MODE_SV         EQU $5DDB          ; SESSION_SETUP clears bits 7-4 for a plain name
 READ_STATUS     EQU $02B9          ; EXROM: the response's status byte -> AF ($01C3's first half)
@@ -149,6 +151,8 @@ BEEP_VEC:
         jp      G_BEEP             ; $3015: HOME's BEEPER thunk ($03F3 -> $041C)
 OPEN_SYN_VEC:
         jp      G_OSYN             ; $3018: OPEN #'s syntax pass after a comma, via HOME $14BD
+C_END_VEC:
+        jp      C_END2             ; $301B: the BIOS C_END entry ($184A -> $184F, build-rom.py)
 
 ;------------------------------------------------------------------------------
 ; G_BEEP -- the key click and BEEP. The TS-Pico ROM moved BEEPER to EXROM
@@ -714,7 +718,7 @@ SEND_FOPEN:
         call    BIOS_TX_A          ; the body's XOR
         call    BIOS_C_END
         ret     nc
-        jp      STATUS_REPORT      ; A = status-1: F, Q, R ... as for tpi: commands
+        jp      C_FAIL             ; A = status-1: F, Q, R ... as for tpi: commands
 
 ; TXX -- send A and fold it into the XOR in D.
 TXX:    push    af
@@ -741,6 +745,38 @@ WF_FAIL:                           ; the Pico didn't answer the pre-header
         db      $0C                ; D BREAK - CONT repeats
 .rst:   rst     8
         db      $1C                ; T TS-Pico reset, try again
+
+; C_FAIL -- after a C_END failure: A = status-1 (its report), or 0Ch BREAK / 1Ch
+; the Pico reset the transaction, which STATUS_REPORT would both call D.
+C_FAIL: cp      $0C
+        jr      z,WF_FAIL.brk
+        cp      $1C
+        jr      z,WF_FAIL.rst
+        jp      STATUS_REPORT
+
+;------------------------------------------------------------------------------
+; C_END2 -- the Pico Interface BIOS's C_END on ROM 2.1 (the table entry at
+; $184A reaches it through $184F, patched by build-rom.py).
+;
+; ROM 2.0's C_END ($23CD) failed with A = 02h both when the Pico never said
+; READY (a timeout, BIOS_WF_NPH's code) and for status 3 (A = status-1 = 02h,
+; Report F), so a caller couldn't tell a silent Pico from a bad file name --
+; and this module's callers reported a timeout as F. Here every failure comes
+; back ready for STATUS_REPORT or C_FAIL:
+;   an error status   A = status-1 (01h R, 02h F, ... 09h J, 0Ah and up D)
+;   timeout           A = 09h, J -- what the ROM's own commands report then
+;   BREAK             A = 0Ch (abort byte already sent; as before)
+;   Pico reset        A = 1Ch (as before)
+; 0Ch and 1Ch are never status-1 values: the firmware's highest status is 11.
+; Carry set on failure, clear for status 1 (A = 0), as the BIOS always did.
+;------------------------------------------------------------------------------
+C_END2: call    BIOS_WF_NPH
+        jp      nc,C_END_TAIL
+        cp      $02
+        scf
+        ret     nz                 ; 0Ch / 1Ch
+        ld      a,$09              ; the timeout: J, never F
+        ret                        ; (carry still set)
 
 FOPEN_TXT:   db "tpi:fopen "
 FOPEN_LEN    EQU $-FOPEN_TXT
@@ -1228,7 +1264,7 @@ CH_STATUS:
         pop     hl
         ld      (CURCHL),hl
         ret     nc
-        jp      STATUS_REPORT
+        jp      C_FAIL
 
 ; CH_SEND -- the 'B' command <prefix HL>[hex of B bytes from IX+R_OUTBUF],
 ; PMR1 = A (the stream), PMR2 = C, through the BIOS; stops after the body (the
