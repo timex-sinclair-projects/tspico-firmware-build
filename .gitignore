@@ -59,3 +59,7 @@ tools/zmakebas/*.o
 
 # sjasmplus listing from tools/build-rom.sh
 src/rom/patches/*.lst
+
+# docs/manual/examples: assembler output from the tests (make_tap.py rebuilds picoex.tap)
+/docs/manual/examples/*.bin
+/docs/manual/examples/*.sym

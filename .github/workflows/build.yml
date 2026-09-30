@@ -134,6 +134,14 @@ jobs:
           make -C "$RUNNER_TEMP/sjasmplus" -j"$(nproc)"
           echo "$RUNNER_TEMP/sjasmplus" >> "$GITHUB_PATH"
 
+      # The programmer's manual's examples (docs/manual/examples): the Z80
+      # routines run against a simulated Pico in z80core, and the example Pico
+      # commands through the real PROCESS_CMD. sjasmplus assembles the Z80 side.
+      - name: Test the programmer's manual examples
+        run: |
+          python3 docs/manual/examples/test_examples.py
+          python3 docs/manual/examples/test_extcmd_host.py
+
       - name: Build the fdd ROM (ROM 2.1)
         run: python3 tools/build-rom.py --verify
 
