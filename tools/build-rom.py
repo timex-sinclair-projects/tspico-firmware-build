@@ -180,6 +180,13 @@ PATCHES = [
              "WF_NPH ($184C) is unchanged.",
     ),
     dict(
+        name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.1\"",
+        bank="exrom", addr=0x1C7E,
+        before="76 32 2e 30", after="76 32 2e 31",
+        note="The copyright line at $1C6C (tspico-sync.asm) shown at start-up. "
+             "Same length, so nothing else moves.",
+    ),
+    dict(
         name="version marker: HOME $0065 20h -> 21h (ROM 2.1)",
         bank="home", addr=0x0065,
         before="20", after="21",
