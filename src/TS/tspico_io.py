@@ -1057,6 +1057,18 @@ def LOAD_TS(pre, MQ, TSP):
     # TAP file format (standard ZX/TS): each block is
     #   [len_lo][len_hi][block_type][content...][CRC byte]
     # where len = 1 + len(content) + 1 (i.e., includes type and CRC).
+    # ---- At the end of the tape: wrap, as the block-type search below does ----
+    # A LOAD can start exactly at the end: after a .ROM mount's updater has
+    # read its four blocks, or after any TAP's last block. Nothing read there
+    # is a block, and a zero length used to reach bytearray(-1) below: a
+    # MemoryError that killed the firmware (hardware, 2026-09-30: LOAD "" with
+    # FDDV14.ROM still mounted after the ROM update).
+    arch_len = arch.seek(0, 2)
+    if TSP.offset >= arch_len:
+        TSP.offset = 0
+        TSP.tap_idx = 0
+        TSP.ld_wrapped = True
+
     arch.seek(TSP.offset)
     blk_info = bytearray(3)
     arch.readinto(blk_info)
@@ -1088,6 +1100,20 @@ def LOAD_TS(pre, MQ, TSP):
         # hang rather than a fast spin. It was a visual debug aid, not a
         # protocol step; BLINK's real job is the watchdog's "something went
         # wrong" signal. The LED is already driven by the dispatcher.
+
+    # ---- A block that can't be one: Report R, not a crash ----
+    # Shorter than type + CRC, or running past the end of the file: a
+    # damaged TAP, or not a TAP at all.
+    if totbytes < 2 or TSP.offset + 2 + totbytes > arch_len:
+        LOG_ADD("ERROR: LOAD_TS: no TAP block at offset %d (length %d, file %d)"
+                % (TSP.offset, totbytes, arch_len), 2, TSP.LOG_LEVEL)
+        if arch is not _nofile_arch:
+            arch.close()
+        wrt = MQ.put
+        wrt(0x02)        # status 2 -> Report R "Tape loading error"
+        wrt(0x01)        # next-iter pre-load, so the next command works
+        MQX(MQ, "mov(y, invert(null))")          # Y -> READY
+        return MQ, TSP, log_entries
 
     # ---- Header-only: optionally patch the autorun byte ----
     # For non-autorun BASIC programs, the original Spectrum tape header

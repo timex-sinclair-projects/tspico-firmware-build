@@ -236,8 +236,8 @@ def main():
     ntmp.write(ntap)
     ntmp.close()
     real_open = open
-    io.open = lambda path, mode="r": real_open(
-        tmp.name if path == "/TMP/temp.tap" else ntmp.name if path == "/TMP/native.tap" else path, mode)
+    paths = {"/TMP/temp.tap": tmp.name, "/TMP/native.tap": ntmp.name}
+    io.open = lambda path, mode="r": real_open(paths.get(path, path), mode)
 
     tsp = types.SimpleNamespace(f_name="test.tap", totlen=len(tap), offset=0, tap_idx=0,
                                 LOG_LEVEL=0, ld_start=-1, ld_wrapped=False)
@@ -403,6 +403,29 @@ def main():
         r5, _ = load(pio, 0xFF, len(data), serve=True)
         check(r5 == "ok" and tsp.native is not None, "a SAVE arm doesn't touch a LOAD (%s)" % r5)
         tsp.native = None
+
+        print("the end of the tape, and blocks that can't be blocks (hardware, 2026-09-30)")
+        tsp.offset, tsp.tap_idx = len(tap), 2
+        r, _ = load(pio, 0x00, len(header))
+        check(r == "ok" and tsp.tap_idx == 1 and idle(pio),
+              "a LOAD that starts at the end of the tape rewinds and loads the header (%s)" % r)
+        for name, junk in (("a zero length", b"\x00\x00\x00" + bytes(40)),
+                           ("a length past the end of the file", b"\xff\x7f\x00" + bytes(40))):
+            bad = tempfile.NamedTemporaryFile(suffix=".tap", delete=False)
+            bad.write(junk)
+            bad.close()
+            paths["/TMP/temp.tap"] = bad.name
+            tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
+            r, log = load(pio, 0x00, 17)
+            # As on the no-match path: the Z80 reads the pre-load, echoes the
+            # flag and gets the error byte back (Report R); its echo leaves Y
+            # busy until the next command's SYNC, which the dispatcher resyncs.
+            check(r == "R" and pio.tx == [0x01] and "no TAP block" in log,
+                  "%s: Report R and the next command's pre-load -- not a MemoryError (%s %s)"
+                  % (name, r, pio.tx))
+            paths["/TMP/temp.tap"] = tmp.name
+            os.unlink(bad.name)
+        tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
 
         check(pio.dropped == 0, "no RX overflow anywhere (%d)" % pio.dropped)
         print("  PASS  no put() into a full TX FIFO (FakePIO raises if one happens)")
