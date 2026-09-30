@@ -108,6 +108,32 @@ def split_pair(arg):
     return a.strip(), b.strip()
 
 
+def select(items, pat):
+    """What CAT lists from a directory's os.ilistdir() items, in its order:
+    [(name, is_dir, size)] -- directories, then files, then (bare listing
+    only) the files DIR can't index. dirinfo.tap is never listed; dot names
+    only when the pattern starts with a dot. Shared by CAT and OPEN #n,"d:...".
+    """
+
+    dirs_l, files_l, other_l = [], [], []
+    for item in sorted(items, key=lambda it: it[0].lower()):
+        name = item[0]
+        if name == "dirinfo.tap":
+            continue
+        if pat is None:
+            if name[0] == '.':
+                continue
+        elif not match(name, pat) or (name[0] == '.' and pat[0] != '.'):
+            continue
+        if item[1] == 16384:
+            dirs_l.append((name, True, 0))
+        elif pat is None and name[-3:].upper() not in DIR_EXT:
+            other_l.append((name, False, item[3]))
+        else:
+            files_l.append((name, False, item[3]))
+    return dirs_l + files_l + other_l
+
+
 def basename(path):
     return path[path.rfind('/') + 1:]
 
