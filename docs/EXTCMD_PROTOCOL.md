@@ -1,319 +1,146 @@
-# Extension Command Protocol — Design Document
+# External Commands (`TPI:.XXX`)
 
-**Status: UNDER DEVELOPMENT — postponed beyond the current dual-port
-release. See "Decision pending" below.**
+External commands let you add a `tpi:` command to the TS-Pico without touching
+`tspico.py`, and try it without rebuilding the firmware. This document is the
+contract they follow. It matches `src/TS/extcmd.py` and
+`src/test/extcmd_hosttest.py`; the wire format is in
+[`PROTOCOL.md`](PROTOCOL.md) §5 and §11.
 
-This document captures the design space and proposed contract for
-user-extensible Pico-side TPI commands (the `TPI:.XXX` "extcmd"
-mechanism), as it applies to the dual-port PIO firmware. Written
-after testing exposed a structural incompatibility between the
-current extcmd implementation and the dual-port V6 pre-load chain.
+> Earlier versions of this document (status "UNDER DEVELOPMENT") described how
+> the dual-port pre-load chain broke the original examples, and asked what the
+> ROM does with unknown function codes. Both are settled: the examples were
+> rewritten to give one answer each, and the ROM's answer is in §4 below.
 
-This is a working document. The contract is not yet ratified — the
-team needs to discuss the open questions in §6 before any
-implementation lands.
+## 1. Where they live
 
-> **Source-code paths in this doc** (e.g. `TS/extcmd.py`) are
-> Python-package paths. The actual files in the repo live under `src/`
-> — `TS/extcmd.py` is at `src/TS/extcmd.py`.
+| File | Loaded | Use |
+|------|--------|-----|
+| `src/TS/extcmd.py` | frozen into the UF2, imported by `TS2068_IO()` | the shipped commands |
+| `/dev_extcmd.py` on the Pico's flash (repo: `src/dev_extcmd.py`) | **instead of** the frozen module, when present | trying commands without a rebuild; delete it to go back |
 
----
+Don't put a `/TS/extcmd.py` on the flash: a `/TS/` folder there shadows the
+whole frozen `TS` package. The repo keeps `src/dev_extcmd.py` identical to
+`src/TS/extcmd.py`; `src/test/dev_sync_hosttest.py` fails CI if they drift.
 
-## 1. What extcmd is for
+`SAVE "tpi:help"` lists the external commands that loaded.
 
-The TPI protocol reserves `TPI:.XXX` commands (note the leading dot)
-for user-extensible handlers. A user can write Python code in
-`TS/extcmd.py` (or `/dev_extcmd.py` for the dev override) that runs
-on the Pico when the 2068 issues a `SAVE "tpi:.something"` command,
-and that returns a result to the 2068.
-
-Two example handlers ship in the current `TS/extcmd.py`:
-
-- `FACTORIAL` (`TPI:.FACT`) — compute *n!* and return as a
-  type-length-value response.
-- `RND_WORD` (`TPI:.RNDW`) — read a random word from `/words.txt` on
-  Pico flash and return it as a stream of ASCII characters.
-
----
-
-## 2. What broke with the dual-port migration
-
-The original extcmd protocol was designed against the single-port
-firmware. In single-port, the Z80's `IN 14` reads consumed bytes from
-the same FIFO that carried protocol status and data, and there was no
-"pre-load for the next command's initial status." So a handler could
-write a stream of bytes terminated by `0x00`, BASIC could `IN 14`
-until it saw `0`, and everything would line up correctly.
-
-In dual-port (the V6 pattern), `PROCESS_CMD`'s tail writes a `0x01`
-into TX FIFO after every handler returns. This byte serves as the
-**initial status** for the *next* command's pre-header phase — when
-the Z80 sends a new `SAVE "tpi:..."`, its first `IN A,($0E)` reads
-that pre-load and sees `0x01` = OK. The next command can then proceed.
-
-This **V6 pre-load chain** is the load-bearing invariant for dual-port
-command flow. Without it, every command's pre-header phase would read
-`0x00` from empty TX and report J.
-
-The current extcmd implementation breaks this invariant:
+## 2. Shape of a command
 
 ```python
-# RND_WORD (current)
-def RND_WORD(MQ, TSP, pre, cmd):
-    MQ.put(0x01)                  # status byte (Z80 sees as "OK")
+def HANDLER(MQ, TSP, pre, cmd):
     ...
-    for el in word:
-        MQ.put(el)                # word characters (orphan bytes!)
-    return
+
+EXT_SA_FUNCT = {
+    "TPI:.NAME": HANDLER,
+}
 ```
 
-The Z80's SAVE statement reads the `0x01` status and considers the
-command done. The word characters are left in TX. Now if the BASIC
-program does an `IN 14` loop to read them (as Ryan's `picotest.tap`
-does), it reads:
+- **The key** is the command word, upper case, with its `TPI:`. The dispatcher
+  upper-cases what the 2068 sent and splits at the first space, so
+  `SAVE "tpi:.name args"` finds `"TPI:.NAME"`. The leading dot is a convention
+  that keeps external names clear of built-in ones; built-ins are looked up
+  first.
+- **`pre`** is the 10-byte pre-header: `tp.PARAMS(pre)` gives the two `CODE`
+  numbers.
+- **`cmd`** is `"D.."` + the command text; `tp.getArgs(cmd)` gives the text
+  after the command word, case kept.
+- **`TSP`** is the firmware's state (`TSP.cur_path`, `TSP.VERBOSE`,
+  `TSP.f_name`, ...).
+- **`MQ`** is the port state machine at the time of the call. SD card work
+  rebuilds it, so use the helpers below rather than `MQ` directly.
 
-1. The word characters → prints them
-2. **The V6 pre-load `0x01`** ← consumed!
-3. `0x00` from empty TX → terminates the loop
-
-The V6 pre-load is gone. The next `SAVE "tpi:..."` command's
-pre-header phase reads `0x00` → Report J. BASIC's error handler may
-recover, but Z80 has already aborted the command body — leaving
-`PROCESS_CMD` blocked on `MQ.get()` inside its body-read loop. The
-Pico effectively halts.
-
-This is **not a regression in the dual-port migration** — it's a
-structural mismatch between extcmd's single-port-era design and the
-dual-port V6 chain. Both Ryan's `RND_WORD` and Ricardo's older
-patterns have the same issue.
-
----
-
-## 3. The dual-port protocol contract for extcmd handlers
-
-Three constraints any new extcmd design must satisfy:
-
-### 3a. The V6 pre-load belongs to PROCESS_CMD, not the handler
-
-`PROCESS_CMD` writes `MQ.put(0x01)` as the last thing it does before
-returning. Handlers should NOT write a V6 pre-load themselves — they
-just write their response data and return.
-
-### 3b. The handler's response must have a known length
-
-BASIC has no out-of-band way to detect "no more bytes coming." If
-BASIC reads bytes "until it sees `0x00` from empty TX," it will
-consume the V6 pre-load that `PROCESS_CMD` writes after the handler
-returns. The handler must therefore frame its response so BASIC knows
-exactly how many bytes to read.
-
-### 3c. The status byte (first byte the Z80 reads) determines the
-       Z80-side protocol that follows
-
-This is per Gustavo's TPI v2.4 spec. The status byte is read by the
-2068's BASIC SAVE statement at the end of WAIT EXECUTION (byte 27 of
-the spec's exchange table on p.5). The Z80's response depends on
-which status code:
-
-| Status | Z80 behavior | Useful for |
-|---|---|---|
-| `0x01` | "OK, command done" — returns to BASIC immediately. | Status-only commands (no return data) |
-| `0x02–0x09` | BASIC error reports (R, F, Q, C, 6, 8, A, 9). | Signaling failure |
-| `0x0A–0x7F` | Various error reports (mostly mapped to J). | Signaling failure |
-| `0x81` | PRINT_STRING — Z80 reads chars until `0x00`, prints them. | Display-only output (no BASIC-side reading) |
-| `0x82–0x86` | Other ROM-defined function codes. | Specialized output |
-| `0x80, 0x87–0xFF` | **Behavior unverified — see §6.** Likely returns to BASIC; BASIC then does `IN 14` to read more. | Length-prefixed data return |
-
----
-
-## 4. Recommended response shapes
-
-Three response patterns cover all the use cases we've encountered:
-
-### 4a. Status-only response (no data return)
-
-For commands like `tpi:.nop` that just signal success/failure.
+Import the helpers from the firmware module that is running, as a module:
 
 ```python
-def MY_CMD(MQ, TSP, pre, cmd):
-    MQ.put(0x01)                  # OK (or 0x02-0x09 for an error)
-    return                        # PROCESS_CMD writes V6 pre-load
+try:
+    import dev_tspico as tp      # the dev override, if one is on the flash
+except ImportError:
+    import TS.tspico as tp       # the frozen firmware
 ```
 
-BASIC consumer:
+## 3. The contract
+
+1. **Exactly one answer.** A status, a message, scrolling text, a prompt, or
+   data (§4). Not zero (the 2068 waits ~20 s, then Report J) and not two (the
+   second is read by the next command in the wrong place).
+2. **Never write the `0x01` pre-load.** `PROCESS_CMD`'s tail writes it after
+   your handler returns, raises or is stopped by BREAK.
+3. **Queue with `tp.CMD_PUT(b)`**, not `MQ.put`: it waits while the 4-byte FIFO
+   is full and turns a BREAK into `CmdAbort`. Never catch `CmdAbort` (it is a
+   `BaseException` for that reason).
+4. **Data first, then READY.** Queue the first bytes, then `tp.MQ_READY()`,
+   then the rest. The helpers in §4 do this for you.
+5. **SD card work inside `tp.SD_CALL(fn, *args)`, before the answer.** The
+   card shares GPIO 2–4 with the data bus; `SD_CALL` switches the pins and
+   always gives them back. An `OSError` comes back as
+   `("SD card error", 3)`.
+6. **Errors are statuses** (§4). An exception that escapes becomes Report J.
+7. **No `print()` or logging in a loop that feeds the 2068.** Use `tp.LOG`
+   before or after.
+
+## 4. Answers
+
+| You want | Call | The 2068 |
+|----------|------|----------|
+| OK or an error | `tp.SEND_MSG(msg, "", st)` | reports `st`; shows `msg` only when VERBOSE is on |
+| OK or an error, never printed | `tp.CMD_PUT(st); tp.MQ_READY()` | reports `st` |
+| a message | `tp.SEND_MSG(msg, msg1, st, True)` | prints it (function `$81`) |
+| a long text | `tp.SEND_MSG2(text, st)` | prints it with "Scroll?" pages (`$86`) |
+| a yes/no | `key = tp.SEND_MSG_PROMPT_YN(prompt)` | asks; `key` is the answer. Send nothing after it. |
+| data | `tp.CMD_PUT(1); tp.CMD_PUT(n); tp.MQ_READY()`, then `n` bytes and their XOR | returns OK from the `SAVE`; the program reads the rest with `IN 14` (or machine code) |
+
+Statuses: 1 OK, 2 R, 3 F, 4 Q, 5 C, 6 6, 7 8 (end of file), 8 A, 9 9, 10 J,
+11 D; each becomes that BASIC report. **Define them in your own file**
+(`OK = 1`, `F_BAD_NAME = 3`, ...), as `TS/extcmd.py` does. `tspico.py`'s names
+(`_1_OK`, `_3_F_Invalid_file`, ...) are underscore `const()`s: MicroPython
+inlines them and never stores them on the module, so `tp._1_OK` works on a
+PC and raises `AttributeError` on the Pico (Report J). The first rewrite of
+`.fact` did exactly that; `src/test/extcmd_hosttest.py` now hands extcmd a
+`tp` without those names, as the Pico does.
+
+**Function codes.** A first byte of `$80` or more is a response function. The
+ROM handles `$81`–`$87` (and `$88` on ROM 2.1); **any other code is Report D**,
+and the bytes behind it are never read. So don't invent codes: a data answer
+starts with a status (1), which the ROM takes as OK, and the program reads the
+data after that.
+
+**Data format.** Use the `tpi:chrd` layout, `1, n, n bytes, XOR`, so the same
+2068 code reads every data answer: the programmer's manual's `GET_DATA`, or in
+BASIC:
 
 ```basic
-10 SAVE "tpi:.mycmd"
-20 REM SAVE statement consumed the status byte. BASIC continues.
-30 REM V6 pre-load is intact. Next command works.
+10 SAVE "tpi:.fact" CODE 20,0
+20 LET c=IN 14: LET m$=""
+30 FOR i=1 TO c: LET m$=m$+CHR$ IN 14: NEXT i
+40 LET x=IN 14: PRINT m$
 ```
 
-### 4b. Print-only response (just display text)
+A program that leaves bytes unread does no lasting harm on ROM 2.0 and later:
+the next command's SYNC clears them.
 
-For commands that produce human-readable output but BASIC doesn't
-need to capture the bytes — e.g., a help message.
+## 5. The examples
 
-```python
-def MY_CMD(MQ, TSP, pre, cmd):
-    msg = "Hello from Pico"
-    MQ.put(0x81)                  # PRINT_STRING function code
-    MQ.put(0x01)                  # status: no error
-    for c in msg:
-        MQ.put(ord(c))
-    MQ.put(0x00)                  # end-of-string terminator
-    return                        # PROCESS_CMD writes V6 pre-load
-```
+`src/TS/extcmd.py`:
 
-BASIC consumer:
+- **`.fact`** — `SAVE "tpi:.fact" CODE n,0` answers *n*! (0–32) as data:
+  `1, count, digits, XOR`. *n* > 32 answers status 6 (Report 6). Test program:
+  `SD card/TAP/test/factorial.tap` (source `basic/SD/TAP/test/factorial.bas`).
+- **`.rndw`** — `SAVE "tpi:.rndw"` prints a random word from `/words.txt` on
+  the flash (a forced `SEND_MSG`); no file: status 3 (F). Test program:
+  `RND WORDS.tap`.
 
-```basic
-10 SAVE "tpi:.mycmd"
-20 REM Word appears on screen via Z80 ROM's PRINT_STRING handler.
-30 REM V6 pre-load is intact. Next command works.
-```
+`src/test/extcmd_hosttest.py` runs both through the real `PROCESS_CMD` and
+checks every byte, including the single pre-load at the end.
 
-### 4c. Length-prefixed data response (return bytes to BASIC)
+## 6. Installing a command for a try
 
-For commands that return data the BASIC program needs to capture
-into a variable.
+1. Switch the TS-2068 off (the Pico runs from USB power).
+2. Copy your file to the Pico as `/dev_extcmd.py`:
+   `tools/pico-serial.py break`, then
+   `tools/pico-serial.py put path/to/dev_extcmd.py /dev_extcmd.py`, then
+   `tools/pico-serial.py softreset` (or use Thonny, then close it).
+3. Reseat the SD card if it doesn't mount, and switch the 2068 on.
+4. `SAVE "tpi:help"` should list your command.
 
-```python
-def MY_CMD(MQ, TSP, pre, cmd):
-    payload = b"some result data"
-
-    MQ.put(0x80)                  # custom function code (see §6)
-    MQ.put(len(payload))          # 1-byte length (0-255)
-    for b in payload:
-        MQ.put(b)
-    return                        # PROCESS_CMD writes V6 pre-load
-```
-
-BASIC consumer:
-
-```basic
-10 SAVE "tpi:.mycmd"
-20 REM SAVE consumed the 0x80 status byte (if the ROM treats it
-30 REM as a benign function code — see Open Questions §6).
-40 LET length = IN 14
-50 LET data$ = ""
-60 FOR i = 1 TO length
-70   LET data$ = data$ + CHR$ (IN 14)
-80 NEXT i
-90 PRINT data$
-100 REM Read EXACTLY `length` bytes. Stop. V6 pre-load preserved.
-```
-
-**Critical**: BASIC must read **exactly** `length` bytes. Do NOT use
-`IF c <> 0 THEN GO TO ...` patterns — those consume the V6 pre-load.
-
-For payloads longer than 255 bytes, extend the protocol with a
-2-byte length (LSB then MSB), or send length=0 to indicate "use the
-next 2 bytes as the real length." This is design space the team
-should agree on before implementing.
-
----
-
-## 5. Why Ryan's picotest IN-14 loop won't work
-
-Ryan's test program at `test-progs/picotest.tap` uses this pattern
-to consume external command output:
-
-```basic
-1186 LET c = IN 14
-1188 IF c < 32 THEN PRINT c
-1190 IF c >= 32 THEN PRINT c, CHR$ c
-1192 IF c <> 0 THEN GO TO 1186
-```
-
-This was correct for single-port firmware where there was no V6
-pre-load. In dual-port, it always reads one extra byte beyond the
-response — the V6 pre-load — and then sees `0` from empty TX. The
-V6 pre-load is gone, the next command halts.
-
-There's no clean handler-side fix for this pattern. The BASIC has to
-be updated to read a known-length response.
-
----
-
-## 6. Open questions for the team
-
-These need to be resolved before implementation.
-
-### Q1. What does the 2068 ROM do with status codes `0x80`, `0x87–0xFF`?
-
-The spec (p.5) documents `0x81–0x86` as ROM-defined function codes.
-The comment in current `extcmd.py` claims `128-199 = "normal" custom
-response, 200 = OK, 201+ = error conditions` — but this is
-Ryan/Ricardo's convention, not Gustavo's spec. The actual ROM
-behavior for these codes needs to be verified empirically:
-
-- Does the ROM dispatch them to a custom handler?
-- Does it return to BASIC immediately (so BASIC can `IN 14`)?
-- Does it raise an error report?
-
-If it errors, **§4c's length-prefixed pattern won't work as written**
-— we'd need to embed the data inside a `0x81 PRINT_STRING` response
-and have BASIC parse the bytes back out.
-
-### Q2. Should `PROCESS_CMD` strip the V6 pre-load for extcmd?
-
-An alternative to the contract above: `PROCESS_CMD` could omit the
-V6 pre-load for `EXT_SA_FUNCT` dispatches, and require EXT handlers
-to write their own V6 pre-load as the last byte of their response.
-
-Pros: handlers can build a response stream that ends with `0x01`,
-and a BASIC `IN 14` "read until 0" loop wouldn't consume any V6
-pre-load (because the handler's response stream ends with the V6
-byte, not a `0x00`).
-
-Cons: handlers that forget to write the V6 pre-load break the next
-command. The contract is more error-prone.
-
-Decision: probably keep V6 pre-load in `PROCESS_CMD` for consistency
-with SA_funct handlers. Worth confirming with the team.
-
-### Q3. Should `PROCESS_CMD` add a body-read timeout?
-
-Independent of the extcmd protocol, `PROCESS_CMD`'s body-read loop
-(`for l in rl: cmd[l] = MQ.get()`) blocks forever if the Z80 aborts
-the command mid-stream (which happens when J fires at the pre-header
-phase). A 1-second timeout would prevent the Pico from "halting"
-when a J cascade occurs, making the firmware more robust.
-
-This is independently useful and not specific to extcmd.
-
-### Q4. Should we keep `RND_WORD` / `FACTORIAL` as shipped examples?
-
-If the contract changes, both need rewriting to follow it. The team
-should decide whether to:
-
-a) Rewrite both as good examples of the new contract.
-b) Remove `RND_WORD` (the simpler one) and keep `FACTORIAL` only,
-   since its length-prefixed pattern more closely matches the
-   recommended approach.
-c) Mark extcmd as "under development" / "not for end-user use"
-   until the contract is ratified.
-
----
-
-## 7. Decision pending — feature postponed for current release
-
-For the current dual-port release (PR #3), **extcmd is being shipped
-as-is, with the known limitation that user-defined commands can hang
-the Pico if their BASIC consumer uses the "read until 0" pattern.**
-
-The path forward:
-
-1. Ship the current dual-port release (with this document calling
-   out the issue).
-2. Team discusses Q1–Q4 above and ratifies a contract.
-3. New UF2 build with refactored `TS/extcmd.py`, sample BASIC, and
-   updated docs.
-
-End users wanting to write extcmd handlers in the interim should:
-
-- Use `0x01` status-only responses (§4a) — these work cleanly.
-- Avoid commands that return data via `IN 14` loops until the
-  contract is ratified.
-- Or use `0x81` PRINT_STRING (§4b) for display-only output that
-  doesn't need BASIC-side capture.
+To make it permanent, move it into `src/TS/extcmd.py` (and copy that file over
+`src/dev_extcmd.py`), or turn it into a built-in (`PROTOCOL.md` §11).

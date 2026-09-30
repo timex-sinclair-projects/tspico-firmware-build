@@ -796,7 +796,7 @@ def END_MSG(MQ, verbose, msg, msg1, st: bytes):
     status + next-iter pre-load) per the V6 pattern. END_MSG would
     inject a THIRD status byte that gets orphaned in TX, then consumed
     by the next iteration's data-loop reads → CRC mismatch → "Report R
-    Tape Loading Error". See docs/PROTOCOL.md §7 pitfalls.
+    Tape Loading Error". See docs/PROTOCOL.md §13 pitfalls.
 
     This function is appropriate for simpler "result" responses (e.g.,
     verbose feedback strings printed to the TS-2068 screen via the

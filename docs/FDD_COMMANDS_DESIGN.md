@@ -320,7 +320,7 @@ Pico-side work in this phase is small: a few handlers in `SA_funct`, most of the
 thin wrappers over `DIR`, `RM`, `CD`, `TAPDIR`, `NEW_TAP`. Each must honour the
 V6 tail pre-load contract in `PROCESS_CMD` — handlers write their response and
 return; they do **not** write their own `0x01`. See
-[`EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md) §3a.
+[`EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md) §3.
 
 **Deliverable:** the hook mechanism is already proven in the emulator (§2), so the
 first end-to-end command instead proves the two things still unverified — the

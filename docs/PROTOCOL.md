@@ -1,311 +1,504 @@
-# TS-Pico TPI Protocol — Implementation Guide
+# TS-Pico TPI Protocol — Reference
 
-This document explains how the TS-Pico firmware implements Gustavo Pane's
-**TPI v2.4 protocol** (Timex Protocol Interface) — the byte-level handshake
-that lets a Timex Sinclair 2068 talk to a Raspberry Pi Pico over a
-parallel data bus.
+This is the byte-level reference for how a Timex Sinclair 2068 and the TS-Pico
+talk: the two I/O ports, the status byte, every kind of transaction, and the
+rules a firmware handler must follow. It describes **firmware 2.0 with ROM 2.0
+and ROM 2.1** (the disk-command ROM), as the code on `main` does it. Where an
+older document or the original spec says otherwise, this one follows the code.
 
-It's written for new developers who want to read or extend the firmware.
-You don't need to know PIO assembly or Z80 internals — we'll cover the
-parts you need as we go.
+> **New to all this?** Start with [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md), a
+> plain-language walk through the same ground. Come back here for the details.
 
-> **Source-code paths in this doc** (e.g. `TS/tspico_io.py`) are
-> Python-package paths. The actual files live under `src/` in the repo
-> — `TS/tspico_io.py` is at `src/TS/tspico_io.py`.
+> **Source paths** like `TS/tspico_io.py` are Python-package paths; the files
+> are under `src/` (`src/TS/tspico_io.py`). ROM addresses are written
+> `EXROM $xxxx` / `HOME $xxxx`; the ROM sources are
+> `src/rom/patches/tspico-sync.asm` (ROM 2.0) and `src/rom/fdd/fddcmd.asm` +
+> `tools/build-rom.py` (ROM 2.1).
 
-> **Looking for the design context first?** Read
-> [`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) — it explains the
-> protocol from the design side: what Gustavo built, why he modified
-> the Z80 ROM, what the high-level command flow looks like.
-> This document picks up where that one ends, focusing on the
-> Pico/firmware side.
-
-> The authoritative protocol spec is `TS-PICO-TPI-PROTOCOL-SPECS_2.3.pdf`
-> in the TS2068 reference library. This guide is the *engineering*
-> companion: how the protocol actually maps onto the RP2040's hardware
-> and our Python firmware.
+> **History.** The protocol is Gustavo Pane's TPI design
+> ([`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) tells that story). Since then
+> the Pico side moved from one shared FIFO to two ports ("dual-port",
+> [`DUAL_PORT_DEVELOPMENT.md`](DUAL_PORT_DEVELOPMENT.md)), the status port
+> became a real handshake (auto-busy, issue #14), and ROM 2.0 added SYNC,
+> BREAK abort and the IDLE/RECOVERED bits (issue #51).
 
 ---
 
-## 1. Why two ports?
+## 1. The two ports
 
-The TS-2068 uses two adjacent Z80 I/O port addresses:
+| Port  | Decimal | Z80 `IN` gives                                             | Z80 `OUT` does                                        |
+|-------|---------|------------------------------------------------------------|-------------------------------------------------------|
+| `$0E` | 14      | the next byte of the Pico's TX FIFO; **`$00` if it's empty** | puts the byte in the Pico's RX FIFO (9-bit word, bit 8 = 0) |
+| `$0F` | 15      | the **status byte** (PIO register Y); reading it takes nothing from any FIFO | also reaches the RX FIFO, as `0x100 \| value`. Firmware 2.0 treats **any** write here as SYNC / abort (§4.1) |
 
-| Port  | Decimal | Role                               |
-|-------|---------|------------------------------------|
-| `$0E` | 14      | **Data** port. Bytes flow here.    |
-| `$0F` | 15      | **Status** port. Bit 6 = "ready/continue". |
+Both FIFOs are **4 entries deep** and not joined (`TX_DEPTH`,
+`TS/tspico_io.py`). There is no `/WAIT` line: the Z80 is never held up. So:
 
-The Z80 ROM (Gustavo's modified EXROM) uses them like this:
+- a read of `$0E` with nothing queued quietly returns `$00`;
+- a byte the Z80 sends while RX is full is quietly lost (`push(noblock)`).
 
-```
-Z80 wants to send bytes to Pico  : OUT (0Eh), A    [writes A to bus, port 14]
-Z80 wants to read a byte         : IN  A, (0Eh)    [reads bus into A, port 14]
-Z80 wants to check Pico is ready : IN  A, (0Fh)    [reads port 15, checks BIT 6]
-```
+Everything below exists to keep both of those from happening.
 
-Bit 6 specifically? It's a quirk of the Z80 instruction set — `BIT 6,A`
-is a single fast instruction. The protocol could have used any bit, but
-bit 6 was free in the original design and stuck.
-
-**Why this is called "dual-port"** — earlier TS-Pico firmware (v1.5 and
-older) shared a *single* FIFO between both ports: every Z80 IN, on either
-port, drained the same FIFO. The Pico had to interleave status bytes
-(0x40, with bit 6 set) with data bytes in the right order. That worked
-but was timing-marginal — bus glitches during SD↔PIO transitions could
-cause "Report D / BREAK CONT repeats" errors.
-
-The dual-port architecture *separates* the two ports at the PIO layer:
-`$0E` reads come from the TX FIFO; `$0F` reads come from a hardware
-register (PIO scratch register Y) that's independent of the FIFO. The
-Pico controls the ready flag directly without consuming FIFO bytes.
-
----
+Earlier firmware (1.5 and before) served both ports from one FIFO and
+interleaved `0x40` "continue" bytes with the data. That is gone: `$0F` is a
+register, and a `0x40` in TX today is an orphan byte (§13).
 
 ## 2. The PIO state machine (`TS_IO_DUAL`)
 
-The Pico's RP2040 has a *Programmable I/O* (PIO) subsystem — small
-state machines that run independently of the CPU and can react to bus
-events in nanoseconds. We use one PIO state machine to handle every
-Z80 bus cycle on ports `$0E` and `$0F`.
+One PIO state machine at 30 MHz handles every Z80 I/O cycle on `$0E`/`$0F`:
+
+1. wait for `/PICOSEL` (GPIO 14) low;
+2. GPIO 11 high = the Z80 is writing: sample D0–D7 and A0, push the 9-bit word
+   to RX, then **set Y = 0 (busy)** — the *auto-busy* rule of §3.2;
+3. GPIO 11 low = the Z80 is reading: A0 = 0 (`$0E`) pulls a TX byte
+   (`pull(noblock)`, which falls back to X = 0 when TX is empty); A0 = 1
+   (`$0F`) drives Y;
+4. wait for `/PICOSEL` high, and loop.
+
+| GPIO | Role |
+|------|------|
+| 2–9  | D0–D7 (through the U6 buffer). **GPIO 2–4 double as the SD card's SPI pins**: while the card is active, the bus is parked. |
+| 10   | A0: `$0E` or `$0F` |
+| 11   | direction: 1 = Z80 OUT, 0 = Z80 IN |
+| 12   | U6 buffer enable (side-set, active low) |
+| 14   | `/PICOSEL` |
+
+Why `pull(noblock)`: a blocking pull would stall the state machine, not the
+Z80 (there's no `/WAIT`), and the SM would miss the next bus cycles. With
+`noblock` an unprepared Pico fails loudly and at once: `$00` is "no answer".
+
+## 3. The status byte
+
+### 3.1 Bits and values
+
+| Bit | Name | Meaning |
+|-----|------|---------|
+| 6 | READY | 1 = the Pico has its answer queued, or is ready for the next phase. The only bit ROMs up to 1.7 test. |
+| 3 | IDLE | 1 = no transaction is open (firmware 2.0) |
+| 2 | RECOVERED | **0** = the Pico gave up on a transaction by itself (active low). Cleared by the next SYNC. |
+| 7, 5, 4, 1, 0 | — | reserved |
+
+The firmware sets four values (`MQ_STATUS`, `MQ_READY`, `TS/tspico_io.py`):
+
+| Value | Name | Meaning |
+|-------|------|---------|
+| `$FF` | idle | READY + IDLE. Also what `MQ_READY()` sets, and what old firmware always showed, so no bit misfires on it. |
+| `$F7` | mid | READY, transaction still open. Before a command body is captured, and `CH_READY()` answers. |
+| `$FB` | recovered | READY + IDLE + RECOVERED (bit 2 low) |
+| `$00` | busy | set by the PIO after every Z80 OUT, or by `MQ_BUSY()` |
+
+Test RECOVERED only once READY is set: busy (`$00`) has bit 2 clear too.
+
+### 3.2 Auto-busy
+
+**Every Z80 OUT, to either port, makes the status read `$00` until Python says
+READY again.** The PIO does it (`mov(y, null)` at the end of its OUT path).
+
+- *Z80 side*: after any OUT, wait for READY before reading an answer.
+- *Pico side*: after the Z80's last OUT of a phase, **queue the answer first,
+  then say READY** (`MQ_READY()` or `MQ_STATUS`). The Z80 reads `$0E` the
+  moment it sees READY; an empty TX then reads as `$00`.
+
+This replaced the old "ready forever" model (Y set once at boot), in which a
+fast Z80 could read before the Pico had queued anything.
+
+### 3.3 Timing
+
+| What | Pace |
+|------|------|
+| Z80 OUTs inside a block (pre-header, body, SAVE data) | one every ~30 µs (43 µs in SAVE data), **no handshake** |
+| Z80 reads inside a block (LOAD data) | one every ~44–50 µs, **no handshake** |
+| `tpi:chrd` data phase (ROM 2.1 driver) | one every ~75 µs |
+| The Pico gives up on a half-received pre-header or body | after **1 s** of silence (`RX_CAPTURE(..., 1000)`, `BODY_READ_TIMEOUT_MS`) |
+| The Pico gives up on command output nobody reads | 10 min (`CMD_STALL_MS`); key waits: a day (`KEY_WAIT_MS`) |
+| The ROM's ready-wait | 226 polls through a debounced BREAK scan, **~19.9 s**, ≥ 88 ms per call |
+
+A Z80 program must never use `OTIR`/`INIR` to the Pico.
+
+## 4. Transactions
+
+### 4.1 SYNC (ROM 2.0 and firmware 2.0)
+
+ROM 2.0 opens **every** transaction with `OUT (0Fh),03h` and then waits up to
+~1 s for READY + IDLE before its first byte (`SYNC_WRITE` EXROM `$2300`,
+`SYNC_WAIT` `$230E`). The patched sites are the SAVE pre-header (`$189A`),
+every LOAD/VERIFY/MERGE block (`$1998`), `tpi:` commands (`$1BAA`), the LPRINT
+character (`$1651`) and COPY (`$16F6`).
+
+The Pico sees the `0x103` word in `RX_CAPTURE`, calls `MQ_TO_IDLE`, which
+**empties TX and RX and queues exactly one `0x01`**, and says idle. So a SYNC
+always leaves the link at TX = `[01]`, RX empty, status `$FF`, whatever state
+an earlier client left it in.
+
+- **BREAK** (CAPS SHIFT + SPACE) during a transaction: the ROM writes the same
+  `03h`, waits for READY + IDLE and raises Report D (`BRK_ABORT`). It checks in
+  every ready-wait, every 256 bytes of the SAVE/LOAD loops, and in the key waits
+  of functions `$82`, `$84`, `$86`. The Pico hears the `$0F` write in
+  `RX_CAPTURE`, `RX_BLOCK`, `TX_ROOM` and `CMD_PUT`/`CMD_KEY`/`CMD_DRAIN`
+  (`CmdAbort`), abandons the transaction and goes idle.
+- **RECOVERED**: if the ROM sees READY with bit 2 low, it raises the new
+  **Report T "TS-Pico reset, try again"** (ERR_NR `$1C`, `RD_STATUS`).
+- **Wait for IDLE before a SYNC** that follows a READY-not-IDLE answer
+  (§5.6): a SYNC sent while the Pico is still in `PROCESS_CMD`'s tail is lost
+  with the pre-header behind it (Report T). The ROM 2.1 channel driver does.
+
+ROM 2.0 **requires** firmware 2.0: older firmware reads the SYNC byte as the
+first pre-header byte and hangs or misaligns. ROMs up to 1.7 never write `$0F`,
+and firmware 2.0 still serves them.
+
+### 4.2 The pre-load byte
+
+Between transactions TX holds **exactly one `0x01`**. The ROM reads it straight
+after the tenth pre-header byte, **without waiting** (EXROM `$223E`), then
+waits for READY. It is queued at boot, by `PROCESS_CMD`'s tail after every
+command, by `LOAD_TS`/`SAVE_TS` at their ends, and by every SYNC.
+
+- None there: the Z80 reads `$00`, the ROM's internal "no answer" → **Report J**
+  on that command.
+- Two there: the second is read later as data → usually **Report R**.
+
+### 4.3 The pre-header and the dispatcher
+
+Every transaction starts with 10 bytes. Byte 0 picks the kind
+(`TS2068_IO`, `TS/tspico.py`):
+
+| pre[0] | pre[1] (TADDR) | What it is | Handler |
+|--------|----------------|------------|---------|
+| `$00` | 0 | SAVE header block (§6.2) | `SAVE_TS` |
+| `$00` / `$FF` | 1–3 | LOAD / VERIFY / MERGE block (§6.1) | `LOAD_SERVE` → `LOAD_TS` |
+| `$00` / `$FF` | ≥ 10 | headerless LOAD | `LOAD_SERVE` |
+| `'B'` `$42` | 4, 5, 6 | printer: COPY (4, 6), LPRINT character (5) (§8) | `PRINT_IO` |
+| `'B'` `$42` | 0 | `SAVE "tpi:..."` command (§5) | `PROCESS_CMD` → `SA_funct` / `EXT_SA_FUNCT` |
+| `'B'` `$42` | 1–3 | `LOAD "tpi:name"`: mount a file | `PROCESS_CMD` → `LOAD_TPI` |
+| `'A'` `$41` | — | vestigial; answers `01 01`. Don't use. | `PROCESS_ASM` |
+| anything else | — | "Unrecognized": both FIFOs drained, SM restarted, **no pre-load** (the next command without a SYNC gets J) | — |
+
+Two layouts share the byte positions:
+
+| Byte | Command (`'B'`) | LOAD/SAVE block (`$00`/`$FF`) |
+|------|-----------------|-------------------------------|
+| 0 | `'B'` | flag: `$00` header, `$FF` data |
+| 1 | TADDR (0 = SAVE, 1–3 = LOAD/VERIFY/MERGE) | TADDR |
+| 2 | bank (`$FF` = HOME); ignored for commands | bank |
+| 3–4 | PMR1: the first `CODE` number, LE | session id, LE |
+| 5–6 | PMR2: the second `CODE` number, LE | address (IX), LE |
+| 7–8 | length of the command text, LE | block length (DE), LE |
+| 9 | XOR of bytes 0–8 (**not checked** for commands) | XOR of bytes 0–8 |
+
+`PARAMS(pre)` returns `(pre[3] | pre[4] << 8, pre[5] | pre[6] << 8)`.
+
+## 5. Commands (`'B'`, TADDR 0)
+
+### 5.1 The exchange
 
 ```
-TS/tspico_io.py:
-  @asm_pio(...)
-  def TS_IO_DUAL():
-      ...
+Z80                                                   Pico
+[wait IDLE]                  (ROM 2.1 channel driver)
+OUT (0Fh),03h  SYNC --------------------------------> MQ_TO_IDLE: TX=[01], status FF
+wait READY+IDLE (<= ~1 s)
+OUT 'B', 0, FF, PMR1 lo/hi, PMR2 lo/hi, LEN lo/hi, XOR  RX_CAPTURE, 10 words
+IN  (0Eh) = 01  <---- the pre-load, read at once
+wait READY ........................................... PROCESS_CMD: status F7, capture body
+OUT 'D', LEN lo, LEN hi, text..., XOR --------------> check XOR, decode, dispatch
+wait READY ........................................... handler queues its answer, then READY
+IN  (0Eh) = the answer
+[function data, key exchange: §5.4]
+                                                      tail: wait TX empty, drain RX,
+                                                      queue 01, status FF (FB if abandoned)
 ```
 
-### What it does, in plain English
+### 5.2 The body
 
-For every Z80 I/O cycle on `$0E` or `$0F`:
+```
+'D' ($44), LEN lo, LEN hi, text[0..LEN-1], XOR
+```
 
-1. **Wait** for `/PICOSEL` (GPIO 14) to go LOW — that signals "Z80 is
-   talking to one of our ports right now".
-2. **Check** GPIO 11 (R/W select):
-   - HIGH → Z80 is *writing* (an OUT instruction). Sample the data lines
-     plus address bit 0 (A0), push 9 bits to the RX FIFO.
-   - LOW  → Z80 is *reading* (an IN instruction). Decode A0:
-     - **A0 = 0 → port `$0E`**: pull a byte from the TX FIFO (or 0x00 if
-       empty), drive it onto D0–D7.
-     - **A0 = 1 → port `$0F`**: copy scratch register Y onto D0–D7.
-       (FIFO is *not* touched.)
-3. **Wait** for `/PICOSEL` to go HIGH — Z80 is done.
-4. Loop back to step 1.
+The XOR covers `'D'` through the last text byte. **The Pico checks it**: a
+mismatch answers status 2 (Report R) and the handler doesn't run. The text
+must decode as UTF-8 (in practice ASCII; otherwise status 5, Report C) and
+start with the four characters `tpi:` in any case. The command word is the
+text up to the first space, upper-cased, `TPI:` included (the dictionary keys
+are `"TPI:DIR"` and so on); `getArgs(cmd)` returns the rest, case kept.
+Handlers receive `cmd = "D.." + text`.
 
-### Pin assignments
+From BASIC the ROM only sends names of 6–31 characters as commands (EXROM
+`$1A90`/`$1AFC`); the ROM 2.1 module enters past that gate
+(`SESSION_NAMED` `$1AAC`). A machine-code client has no gate: LEN is 16 bits.
 
-| GPIO | Role                                          |
-|------|-----------------------------------------------|
-| 2-9  | D0-D7 (data bus, bidirectional via U6 buffer) |
-| 10   | A0 (address bit 0 → distinguishes `$0E`/`$0F`)|
-| 11   | R/W select (1 = Z80 OUT, 0 = Z80 IN)          |
-| 12   | U6 buffer enable (sideset, active LOW)        |
-| 14   | `/PICOSEL` (active LOW = "Z80 is on our port")|
+The names `tpi:tape`, `tpi:sdcard`, `tpi:picopt` and `tpi:ts2040` never reach
+the Pico: the ROM handles them (they set TPMODE, `$5DDB` = 24027: bit 1
+LOAD/SAVE to the Pico, bit 0 printer to the Pico). Sent raw, they are
+"Unrecognized command".
 
-### Why `pull(noblock)` and not `pull(block)`?
+### 5.3 The answer: a status
 
-When the Z80 reads `$0E` and the TX FIFO is empty, the PIO has two
-choices:
+The ROM reads one byte, `AND A` (0 → its internal "no answer", Report J),
+`DEC A`, returns on 0 (status 1 = OK), otherwise runs the response functions
+(§5.4) and hands anything else to `STATUS_TO_REPORT` (EXROM `$1BF3`) with
+A = status − 1:
 
-- **`pull(block)`** would stall the state machine until Pico writes
-  a byte. Sounds great — Pico gets unlimited time. **But** the TS-Pico
-  hardware doesn't route the SM's stall to the Z80's `/WAIT` line. So
-  the Z80 isn't actually paused — it just reads garbage off the floating
-  bus while the SM sits there. Worse, subsequent bus cycles go undetected.
-- **`pull(noblock)`** doesn't stall. If the FIFO is empty, the byte
-  driven onto the bus is whatever the X register holds (which equals
-  the A0 bit, i.e. 0 for `$0E`). The Z80 reads `0x00`.
+| Status | A at `$1BF3` | Report | ERR_NR | Firmware constant |
+|--------|--------------|--------|--------|-------------------|
+| 0 | (internal 9) | J Invalid I/O device | `$12` | — (empty FIFO) |
+| 1 | 0 | OK | — | `_1_OK` |
+| 2 | 1 | R Tape loading error | `$1A` | `_2_R_Tape_load` |
+| 3 | 2 | F Invalid file name | `$0E` | `_3_F_Invalid_file` |
+| 4 | 3 | Q Parameter error | `$19` | `_4_Q_Parameter` |
+| 5 | 4 | C Nonsense in BASIC | `$0B` | `_5_C_Nonsense` |
+| 6 | 5 | 6 Number too big | `$05` | `_6_6_Num2Big` |
+| 7 | 6 | 8 End of file | `$07` | `_7_8_EOF` |
+| 8 | 7 | A Invalid argument | `$09` | `_8_A_Invalid_arg` |
+| 9 | 8 | 9 STOP statement | `$08` | `_9_9_STOP` |
+| 10 | 9 | J Invalid I/O device | `$12` | `_10_J_Invalid_IO` |
+| 11–127 | ≥ 10 | D BREAK - CONT repeats | `$0C` | `_11_D_Break` |
+| RECOVERED bit | — | T TS-Pico reset, try again (ROM 2.0) | `$1C` | — |
 
-`0x00` happens to be the Z80 ROM's "Invalid I/O Device" status code, so
-an unprepared Pico immediately and obviously fails. That's a feature: it
-forces the firmware to obey the protocol contract — keep the right
-bytes in the FIFO at the right time.
+### 5.4 The answer: a response function (status ≥ `$80`)
+
+A first byte of `$80` or more asks the 2068 to do something. The dispatch chain
+starts at EXROM `$026F` (and `$2194`) and compares A = code − 1. **Each function
+first reads one more byte, its own status** (`READ_STATUS_BYTE` `$02B9`), which
+becomes the command's result.
+
+| Code | Name | Bytes after the code | The 2068 | Firmware |
+|------|------|----------------------|----------|----------|
+| `$81` | PRINT STRING | status, text, `$00` | prints the text on the main screen (`$0274`) | `SEND_MSG` (when VERBOSE or forced) |
+| `$82` | PRINT STRING & RETURN KEY | status, text, `$00`; then the Z80 waits READY and OUTs one key | `$2198` | unused |
+| `$83` | PRINT CHARACTER | status, one character | `$21A8` | unused |
+| `$84` | RETURN KEY | status; the Z80 waits for a key, waits READY, OUTs it | `$21BE` | unused |
+| `$85` | GET STATUS | status; the Z80 OUTs a 2-bit mask (b0 keyboard, b1 aux) | `$21CB` | unused |
+| `$86` | PRINT STRING WITH LOOP | status, then pages: text, `$00` → the Z80 waits for a key, waits READY, OUTs the key; `N` ends the loop; any other key: it waits READY and prints the next page. `$03` ends the loop. | `$21E3` (loop `$21E7`, guard `$22A1`) | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
+| `$87` | (spec: "print n characters") | status | calls HOME `$08A6`, which clears the screen like CLS | unused |
+| `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | **ROM 2.1 only**: `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
+| `$80`, `$89`–`$FF` (and `$88` on ROM 2.0) | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
+
+Text rules (the ROM's `PRINT_STRING_FROM_PICO`, `$045F`/`$068E`/`$06F2`):
+
+- it reads each character **without a ready-wait**; `RST 10` is slow enough
+  that the Pico keeps ahead, provided the first bytes were queued before READY;
+- `$00` ends a string, and so does **any byte ≥ `$80`**; inside a `$86` loop,
+  `$03` ends the loop. `SEND_MSG2` maps bytes ≥ `$80` to `?` and `\*` to `$7F`
+  (©);
+- control codes 16–23 (INK … TAB) consume the bytes after them.
+
+Keys (`GET_KEY_AND_SEND` `$0471` → `SEND_KEY` `$1C40`): letters are sent **upper
+case**, after a ready-wait. The Pico compares with `78` (`N`) only, so a
+machine-code client must send upper case too. At a `SEND_MSG2` "Scroll?"
+prompt a digit also sets the page length (`1`–`9` lines, `0` = 10); any other
+key is a full page. ROM 2.0 puts a BREAK test in front of the key poll
+(`KEYWAIT`, patched at `$0479`).
+
+### 5.5 Mounting: `LOAD "tpi:name"` (TADDR 1–3)
+
+The same frames with pre-header byte 1 = 1, 2 or 3 and the text `tpi:` +
+name. `PROCESS_CMD` calls `LOAD_TPI(name)` instead of the command tables and
+answers with `SEND_MSG` (a status, or a message when VERBOSE is on).
+
+### 5.6 The tail, and READY vs IDLE
+
+When the handler returns (or raises), `PROCESS_CMD`'s `finally` waits (bounded)
+for TX to empty, drains RX, **queues the next `0x01`** and sets the status to
+idle (`$FF`), or recovered (`$FB`) if the Z80 stopped reading. A handler never
+writes that `0x01` itself.
+
+An answer that the ROM follows *immediately* with another command must say
+READY **without** IDLE: `CH_READY()` (`$F7`). Otherwise the Z80's next SYNC can
+arrive while the tail is still running (see §4.1). The channel commands answer
+this way; `CH_REPLY(st)` is a bare status with `CH_READY`, and never prints.
+
+## 6. LOAD and SAVE blocks
+
+### 6.1 LOAD / VERIFY / MERGE
+
+EXROM `$00FC` (the Spectrum's `LD_BYTES` entry, `JP 196Dh` here) takes this
+path when TPMODE bit 1 is set (`tpi:sdcard`); A = flag, carry = LOAD (clear =
+VERIFY), IX = destination, DE = length.
+
+```
+Z80                                                   Pico (LOAD_TS)
+SYNC (ROM 2.0)
+OUT flag, TADDR, BANK, SESSION lo/hi, IX lo/hi, DE lo/hi, XOR
+IN  status  (the pre-load; must be 1, else Report R)
+wait READY ........................................... queue the first bytes, then READY
+OUT flag          (echo 1, BEFORE the data)
+IN  flag, DE data bytes, CRC                          flag + content + CRC
+    (~47 us a byte, no handshake; H keeps a running XOR)
+OUT computed XOR  (echo 2)
+wait READY
+IN  final status  (1 = OK; >= $80 -> response functions) 01 (final) + 01 (next pre-load)
+```
+
+The first echo comes **before** the data loop (`$19DA: CALL 1924h`, `OUT H`),
+not after it as older documents say. The block CRC is the XOR of the flag and
+the content, **not** including the session bytes, so TPI blocks convert to TAP
+without recalculation. `LOAD_TS` writes its own final status and the next
+pre-load (two bytes); an abort path writes **one** (`REARM_AFTER_LOAD_ABORT`).
+
+### 6.2 SAVE
+
+EXROM `$0068` (`SA_BYTES`, `JP 1879h`), same TPMODE gate; A = flag, IX =
+source, DE = length.
+
+```
+Header (flag 00):                                     Pico (SAVE_TS)
+  SYNC; OUT 00, 0, BANK, SESSION lo/hi, IX lo/hi, DE lo/hi, XOR
+  IN pre-load (must be 1)
+  wait READY ......................................... status "mid" right before capture
+  OUT 00, SESSION lo/hi, 17 header bytes, CRC          RX_CAPTURE, 21 words
+  wait READY; IN mid-phase status                      01, or a refusal: 03 (F), 08 (A)
+~1 s pause (the ROM HALTs)
+Data (flag FF), NO pre-header:
+  OUT FF, SESSION lo/hi, DE bytes, CRC                  RX_BLOCK (length + 4)
+  wait READY; IN final status                          01, then the SD write, then the pre-load
+```
+
+Refuse a SAVE at the **mid-phase** status, never after the final status: by
+then the 2068 has printed `0 OK` and gone. A failed SD write after the final
+status can't be reported, by design (§13). `SAVE ""` and names over 10
+characters are refused by the ROM before anything is sent.
+
+## 7. The channel commands (ROM 2.1, firmware 2.0)
+
+`OPEN #`, `PRINT #`, `INPUT #` and `CLOSE #` on `f:` and `d:` streams become
+ordinary commands (client: `fddcmd.asm` `CH_SEND`/`CH_FETCH`/`CH_STATUS`;
+Pico: `CH_*` in `tspico.py`, logic in `TS/channels.py`). Any Z80 program can
+send them.
+
+| Text | PMR1 | PMR2 | Answer |
+|------|------|------|--------|
+| `tpi:chopen <mode> <path>` | stream (0–255, just a key) | record length (0 = a stream, 1–254) | bare status (`CH_REPLY`) |
+| `tpi:chopen r d:<pattern>` | stream | 0 | bare status; the channel reads a listing |
+| `tpi:chwr <hex>` | stream | 0 | bare status |
+| `tpi:chrd` | stream | bytes wanted (1–255; 0 = 255) | **data phase**, below |
+| `tpi:chclose` | stream | 0 | bare status (closing an unopened stream is fine) |
+
+Modes: `r`, `w`, `a`, `u`, each with an optional `b` (binary). Text mode turns
+2068 CR and keyword tokens into newlines and words on the card, and back.
+Binary passes bytes through — **except byte 23 (`$17`) in a write, which is
+always the TAB escape** `23, n lo, n hi` (seek to byte or record *n*, 1-based).
+TAB 0 is a query: the next read returns a count as text + CR (names in a
+listing, records in a record file, bytes otherwise). `tpi:chwr` sends its
+payload as hex because the command text must be text.
+
+The `tpi:chrd` data phase, straight after the command body (no C_END):
+
+```
+wait READY
+IN status        1 = data follows, 7 = end of file (Report 8), anything else: its report
+if 1:  IN n (1-255), n bytes, XOR of the n bytes (seed 0)
+       -- read ~75 us apart; the Pico queues 1 and n, says CH_READY, then streams
+```
+
+## 8. Printer transactions
+
+`'B'` with TADDR 5 carries one LPRINT/LLIST character in PMR1's low byte and
+no body: the Z80 reads the pre-load and waits for READY. TADDR 4/6 is COPY
+and has a body (`'D'`, length, screen data, XOR, checked) followed by a final
+status (1, or 2 = Report R). Every character is its own transaction, SYNC and
+all (`PRINT_IO`; output in `TS/printer.py`).
+
+## 9. The Pico Interface BIOS (EXROM `$1840`)
+
+A jump table for machine-code programs, stable across ROMs:
+
+| Entry | Name | Contract |
+|-------|------|----------|
+| `$1840` | G_MODE | BC = TPMODE (low nibble); AF kept |
+| `$1842` | S_MODE | TPMODE := A AND `0Fh`; AF kept |
+| `$1844` | G_VERS | BC = the interface version: `$0015` v1.1/1.5w, `$0017` v1.7, `$0020` ROM 2.0, `$0021` ROM 2.1 |
+| `$1846` | TX_A | `OUT (0Eh),A`; no wait, no BREAK check |
+| `$1848` | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
+| `$184A` | C_END | wait READY, read the answer, run the response functions. NC = status 1 (A = 0). C = failed, see below. |
+| `$184C` | WF_NPH | wait READY (~19.9 s). NC = ready (A, BC kept). C with A = `02h` timeout, `0Ch` BREAK (abort already sent, Pico idle), `1Ch` RECOVERED. Never raises a report. |
+
+C_END's failure codes:
+
+| | ROM 2.0 | ROM 2.1 |
+|---|---|---|
+| error status *s* | A = *s* − 1 | A = *s* − 1 |
+| timeout | A = `02h` — **the same as status 3 (F)** | A = `09h` (J) |
+| BREAK | `0Ch` | `0Ch` |
+| Pico reset (RECOVERED) | `1Ch` | `1Ch` |
+
+On ROM 2.0, call WF_NPH first and treat a C_END failure as A = status − 1.
+ROM 2.1 sends the table entry (`$184F`) to the module's `C_END2` (`$301B`), so a
+timeout is J. `0Ch` and `1Ch` never collide with a status: the firmware's
+highest is 11. Note that C_END runs the response functions, which can raise a
+report from inside (BREAK in a key wait, RECOVERED in the `$86` loop).
+
+Other fixed EXROM addresses (ROM 2.0/2.1): `SYNC_WRITE` `$2300`, `SYNC_WAIT`
+`$230E`, `STATUS_TO_REPORT` `$1BF3` (A = status − 1; never returns),
+`READ_STATUS` `$0655`, `SESSION_SETUP` `$1A73`, `SESSION_NAMED` `$1AAC`.
+**`$2003`, `$2006` and `$2027`–`$203C` are `JP self` padding: calling one hangs.**
+
+A RAM program reaches the EXROM through HOME `$03FC` (HL = target; A, F, BC,
+DE in and out; **IX not kept**; an HL argument goes in `$5DCD`), with
+interrupts off around the call (§13, the bank-switch pitfall). A report raised inside the
+EXROM leaks four bytes of the bank-switch stack at `($65CE)` each time; ROM
+2.1's `GUARDED` traps ERR_SP for that. See the programmer's manual for worked
+examples; most programs are better off driving the ports directly.
+
+## 10. ZX48 mode
+
+After `tpi:zx48` the Pico serves the customised Spectrum ROM (flash slot 0) and
+speaks its protocol: no status port, no pre-header, no echo. `'L'` → flag +
+content + CRC; `'S'` → a block; `'T'` (ZX v3 ROM) → `LOAD "tpi:name"`. The V6
+pre-load chain does not apply (§13). The 2068 leaves ZX48 mode with
+`OUT 244,0` then `OUT 14,14`.
+
+## 11. Writing a command handler
+
+A built-in handler is `def NAME(pre, cmd)` in `TS/tspico.py`, registered in
+`SA_funct` inside `TS2068_IO()` as `"TPI:NAME": NAME`. An external one is
+`def NAME(MQ, TSP, pre, cmd)` in `TS/extcmd.py` (or `/dev_extcmd.py` on the
+flash), registered in its `EXT_SA_FUNCT` as `"TPI:.NAME"`. Either way:
+
+1. **Give exactly one answer.** Pick one:
+   - a status: `SEND_MSG(msg, "", st)` (a message only when VERBOSE is on), or
+     `CMD_PUT(st); MQ_READY()`; mid-statement commands use `CH_REPLY(st)`;
+   - a message: `SEND_MSG(msg, msg1, st, True)` (`$81`);
+   - scrolling text: `SEND_MSG2(text, st)` (`$86`);
+   - a yes/no: `SEND_MSG_PROMPT_YN(prompt)` returns the key, and nothing more
+     may be sent after it;
+   - data your client reads: `CMD_PUT` the first bytes, **then** `MQ_READY()`
+     (or `CH_READY()`), then the rest. Say how long it is up front and end
+     with a checksum; `1, n, n bytes, XOR` is the `tpi:chrd` format, which the
+     programmer's manual's `GET_DATA` and a BASIC `IN 14` loop both read.
+     Never start data with a byte ≥ `$80` if the ROM might read it.
+2. **Never write the `0x01` pre-load**; the tail does.
+3. **Use `CMD_PUT`/`CMD_KEY`/`CMD_DRAIN`**, not `MQ.put`/`MQ.get`: they wait
+   while TX is full, listen for BREAK, and turn it into `CmdAbort` (a
+   `BaseException`: don't catch it).
+4. **SD work inside `SD_CALL(fn, *args)`**, before the answer: GPIO 2–4 are
+   D0–D2, and `SD_CALL` gives the pins back even when `fn` fails.
+5. **Errors are statuses.** Catch what you expect and answer F, Q, A…; anything
+   that escapes becomes J (`FAIL_CMD`), and the tail still runs.
+6. **In an external command, define the status numbers yourself.** The
+   `_1_OK`-style names are underscore `const()`s, inlined by MicroPython:
+   they are not attributes of `TS.tspico` on the Pico (`AttributeError`,
+   Report J), though they are on a PC.
+
+`src/test/process_cmd_hosttest.py` shows how to run a handler through the real
+`PROCESS_CMD` on a PC and check its bytes; `src/test/extcmd_hosttest.py` does it
+for the example external commands.
+
+## 12. Debugging
+
+- **Host tests** (`src/test/*_hosttest.py`, run by CI) cover the dispatcher,
+  SYNC, LOAD/SAVE, the channels, the ROM patches and the Z80 updater.
+- **Watch the Pico**: `tools/pico-serial.py watch` shows the `[TLM ...]`
+  telemetry (`TLM_ENABLED` is on in `main.py`) without disturbing it.
+- **Protocol observers** (`src/test/protocol_observer_*.py`,
+  `_harness_template.py`): standalone bus harnesses that capture every byte
+  with timestamps. Capture first, decide after — never per-byte Python work in
+  the capture loop (`src/CLAUDE.md`, "the two-phase capture rule").
 
 ---
 
-## 3. The "ready forever" architecture
+## 13. Pitfalls
 
-The simplest mental model for the firmware:
+Each of these was a real bug. Most show up one command *after* the mistake.
 
-> **Y is set to `0xFFFFFFFF` once at boot, and never changed.**
-
-That means port `$0F` always returns `0xFF` (all bits set, including
-bit 6). Whenever the Z80 polls `$0F`, it sees "ready" instantly and
-moves on.
-
-Since we never make Z80 wait via the status flag, all flow control
-happens via the data port:
-
-- **TX FIFO depth (4 bytes deep)** + **Z80's read rate (~47µs/byte)** =
-  Pico has plenty of time to fill in the next byte before the FIFO
-  empties. `MQ.put()` blocks when full, so `for b in content: MQ.put(b)`
-  paces itself.
-- **Pre-loaded status byte**: before each command-response cycle, a
-  `0x01` "OK" status byte is sitting in the TX FIFO ready for the Z80
-  to read. The chain of `0x01`s is maintained by every handler writing
-  one at the end of its response (see §5).
-
-You'll see comments in `MQ_BUSY()` and `MQ_READY()` referring to the old
-"set Y=0 to make Z80 wait" pattern. Those helpers exist for legacy
-paths (SD card transitions, etc.) but in the LOAD/data-block path we
-never use them. The Z80 ROM has a long timeout (~20 seconds) on `$0F`
-polling, so even if a future handler did set Y=0 briefly for slow work,
-the protocol would still succeed.
-
----
-
-## 4. The byte sequence of one LVM LOAD
-
-This is what actually happens on the wire when you type `LOAD ""` on
-the TS-2068. Times are approximate.
-
-```
-Time  | Direction  | Bytes / what's happening
-------|------------|-----------------------------------------------------
- t=0  | Z80 → Pico | 10-byte pre-header on $0E (one OUT every ~30µs):
-      |            |   [0] block_type    (0x00 header / 0xFF data)
-      |            |   [1] TADDR         (1 = LOAD)
-      |            |   [2] BANK          (0xFF = HOME)
-      |            |   [3,4] SESSION_ID  (LE 16-bit)
-      |            |   [5,6] MEMORY_ADDR (LE 16-bit)
-      |            |   [7,8] BLOCK_LEN   (LE 16-bit, BASIC's view)
-      |            |   [9]   CRC         (XOR of pre[0..8])
-      |            |
-+~290µs           | Z80 → Pico | Done. Z80 reads $0E for status.
-                  |            | TX FIFO had 0x01 pre-loaded → Z80 reads
-                  |            | 0x01 = "OK".
-                  |            |
-+~300µs | Pico's main loop sees rx_fifo > 0, drains pre[].
-        | Dispatches to LOAD_TS().
-        |
-        | LOAD_TS opens /TMP/temp.tap at TSP.offset, reads
-        | the 3-byte block prefix [len_lo, len_hi, type].
-        | Validates type matches pre[0]. Reads content.
-        |
-        | LOAD_TS streams to TX FIFO:
-        |    block_type, content[0], content[1], ..., CRC
-        | (For a header: 19 bytes; for the data block: blk_len bytes.)
-        |
-+...    | Z80 → Pico | Z80 has been polling $0F (always reads 0xFF=ready)
-                     | and now reads $0E for the data sequence:
-                     |   - block_type (used to seed CRC accumulator)
-                     |   - content bytes (stored at IX into RAM)
-                     |   - file CRC byte (verified against accumulator)
-                     | Z80 reads at ~47µs/byte.
-                     |
-+...    | Z80 → Pico | After data loop, Z80 OUTs:
-                     |   - block_type ack (echoes its expected type)
-                     |   - its own computed CRC (for verification)
-                     |
-+...    | LOAD_TS drains the two echo bytes via MQ.get().
-        | Then writes:
-        |   MQ.put(0x01)   ← Z80 reads as "final status OK"
-        |   MQ.put(0x01)   ← stays in FIFO for the NEXT command's
-        |                    initial status read
-        | LOAD_TS returns. Main loop resumes.
-        |
-        | If this was the header block, BASIC now displays
-        | "Bytes: <name>" and issues a NEW pre-header for the
-        | data block. The cycle repeats from t=0.
-```
-
-Key takeaways:
-
-- The Z80's first `$0E` read happens in **microseconds**, not after
-  the Pico has had time to drain the pre-header. So the Pico must have
-  the status byte in the FIFO **before** the LOAD command is issued.
-  We achieve that with the chained pre-load (each handler writes the
-  next `0x01` before returning).
-- Inside the data loop, Pico writes much faster than Z80 reads. The
-  4-deep FIFO + `MQ.put` blocking gives natural backpressure.
-- The Z80 echoes its work (ack + CRC) so Pico can verify the transfer
-  completed correctly.
-
----
-
-## 5. Writing a new command handler
-
-If you want to add a handler (for a new TPI command, etc.), follow this
-template:
-
-```python
-def MY_HANDLER(pre, MQ, TSP):
-    """Handler for some Z80 command type."""
-    log_entries = ""
-
-    # 1. (optional) Read what Z80 is asking for
-    #    e.g., from pre[1..9], TSP.f_name, etc.
-
-    # 2. Prepare the response data
-    #    e.g., open a file, format a string, etc.
-
-    # 3. Stream the response to TX FIFO
-    for byte in response_bytes:
-        MQ.put(byte)         # blocks if FIFO full — paced by Z80 reads
-
-    # 4. Drain any echo bytes the Z80 sends back
-    #    (depends on protocol — LOAD echoes 2 bytes, others may differ)
-    echo = MQ.get() & 0xFF
-
-    # 5. Final status + next-iteration pre-load — REQUIRED
-    MQ.put(0x01)             # final status the Z80 will read
-    MQ.put(0x01)             # pre-load for the NEXT command's status
-
-    return MQ, TSP, log_entries
-```
-
-The two `MQ.put(0x01)` writes at the end are non-negotiable. Without
-them, the next command will see `0x00` for status (FIFO empty) and
-fail with "Report J - Invalid I/O Device".
-
-If your handler does *slow* work (SD card I/O, large file reads), and
-you want Z80 to clearly see "Pico is busy, please wait" rather than
-silently waiting on $0E reads, you can briefly set Y=0:
-
-```python
-MQ_BUSY()        # Y = 0, port $0F bit 6 clear, Z80 polls and waits
-do_slow_work()
-MQ_READY()       # Y = 0xFFFFFFFF restored
-# ...continue with response...
-```
-
-The Z80 ROM has a ~20-second timeout on `$0F` polling, so this is safe
-for any reasonable amount of work. For LVM LOAD specifically, we don't
-bother — Pico is always fast enough relative to Z80's read rate.
-
----
-
-## 6. Debugging: protocol observers
-
-The repo includes test harnesses in `test/protocol_observer_v*.py`:
-
-- `protocol_observer_silent.py` — does nothing but log every Z80 OUT
-  to a buffer. Useful for seeing the raw pre-header without any Pico
-  response interfering.
-- `protocol_observer_v3.py` — captures pre-header + writes a status
-  response. Demonstrates the timing constraint (Pico's reaction in
-  Python is too slow if you don't pre-load).
-- `protocol_observer_v4.py` — pre-loads `0x01` and observes the full
-  transaction including Z80's echo bytes.
-- `protocol_observer_v5.py` — sends a real header response from
-  `/sd/TAP/pt.tap`. The TS-2068 should display "Program: <name>"
-  (or similar) if the protocol is working.
-- `protocol_observer_v6.py` — handles **both** the header and data
-  block, completing a full LOAD. The TS-2068 actually loads and runs
-  the program.
-
-These were used to develop and verify the dual-port architecture. They
-print buffered logs (no live prints during the protocol — those would
-inject ms-scale delays and break timing) and dump them on `Ctrl-C`.
-
-If you're adding a new protocol path, **start by writing an observer**.
-Capture what the Z80 actually does, then iterate until your responses
-match what the Z80 expects.
-
----
-
-## 7. Pitfalls
 
 - **Don't `print()` during a protocol exchange.** USB serial prints
   take 5-10 ms, and the PIO RX FIFO is only 4 bytes deep. A print mid-
@@ -314,12 +507,10 @@ match what the Z80 expects.
   response.** Any byte put there ends up *before* the response in the
   FIFO and shifts the data stream by one byte. Z80's CRC will mismatch
   and you'll see "Report R - Tape Loading Error".
-- **Don't toggle Y to BUSY mid-data-block.** The Z80's $0F polling is
-  not the bottleneck — its $0E read rate is. Setting Y=BUSY won't speed
-  anything up and may confuse future readers of the code.
-- **If `LOAD_TS` returns without writing the trailing two `0x01`s, the
-  next LOAD will hang or fail with Report J.** The pre-load chain is
-  load-bearing; honor it in any new handler.
+- **If `LOAD_TS` returns without writing its trailing two `0x01`s (final
+  status + next pre-load), the next LOAD fails with Report J.** The
+  pre-load chain is load-bearing. (Command handlers are different: they
+  write their one answer and `PROCESS_CMD`'s tail writes the pre-load.)
 - **An early return re-arms too — and with ONE `0x01`, not two.**
   `LOAD_TS`'s abort paths skip the V6 chain by construction, and the
   watchdog has just drained both FIFOs, so TX comes back empty and Y is
@@ -529,37 +720,62 @@ match what the Z80 expects.
   `GUARDED` / `G_BEEP` and `docs/DISK_COMMANDS_SPEC.md` §4.
 
 ---
-
-## 8. Where to look in the source
-
-| File                       | What's in it                            |
-|----------------------------|-----------------------------------------|
-| `TS/tspico_io.py`      | PIO programs (`TS_IO_DUAL`, `set_ctrl`, |
-|                            | `sel_bank`, etc.); LVM handlers (LOAD_TS, |
-|                            | SAVE_TS); helper utilities (LOG_ADD,    |
-|                            | END_MSG, ABORT_TX).                     |
-| `TS/tspico.py`         | Main I/O dispatch loop (`TS2068_IO`),   |
-|                            | high-level commands (DIR, CD, etc.),    |
-|                            | configuration (`PICO_STATUS`).          |
-| `TS/sdcard.py`         | SD card driver (SPI).                   |
-| `TS/extcmd.py`         | User-extensible command dictionary.     |
-| `test/protocol_observer_*` | Bus-level test harnesses — see §6.      |
-| `manifest.py`              | MicroPython freeze manifest. Adding new |
-|                            | files to `TS/` requires updating    |
-|                            | this so they get baked into the UF2.    |
+- **Don't write `0x40`.** It was the single-port "continue" byte. Port
+  `$0F` is a register now; a `0x40` in TX is read as data (§1).
+- **One answer per command, including external commands.** The two example
+  commands that shipped in `TS/extcmd.py` with firmware 2.0 and earlier broke
+  this:
+  `.rndw` answered `0x01` and then sent the word as extra bytes, `.fact` sent
+  a message and then more bytes with a blocking `MQ.put`. The extra bytes are
+  orphans; from BASIC they happened to be read by `IN 14`, and the next
+  command's SYNC now clears what's left, but on older ROMs they became the
+  next command's status. `src/test/extcmd_hosttest.py` checks the fixed ones.
+- **C_END's `A = 02h` is ambiguous on ROM 2.0** (timeout, or status 3 =
+  Report F). Call WF_NPH first, or use ROM 2.1, where a timeout is `09h` (§9).
+- **Function `$88` exists only on ROM 2.1.** On ROM 2.0 it is Report D with
+  the rest of the answer unread. The firmware sends it only after
+  `tpi:fopen`, which only ROM 2.1 sends.
+- **Send `N` in upper case to end a `$86` loop.** The Pico compares with 78;
+  the ROM upper-cases letters, a machine-code client must too.
+- **Byte 23 in a channel write is always a TAB**, in binary mode too (§7).
+  Binary data containing `$17` can't go through `tpi:chwr`.
+- **Underscore constants don't cross modules on the Pico.** `_1_OK`,
+  `_6_6_Num2Big` and friends are `const()`s with a leading underscore, which
+  MicroPython substitutes at compile time and never stores on the module.
+  `tp._6_6_Num2Big` from `TS/extcmd.py` worked under CPython and raised
+  `AttributeError` on hardware, so `SAVE "tpi:.fact" CODE 33,0` gave J instead
+  of 6. Host tests that run under CPython won't see it unless they hide those
+  names, as `src/test/extcmd_hosttest.py` does.
+- **The development copies must match.** `src/dev_tspico.py` and
+  `src/dev_extcmd.py` replace the frozen modules when copied to the Pico.
+  `src/test/dev_sync_hosttest.py` fails CI when they drift from
+  `src/TS/tspico.py` / `src/TS/extcmd.py`; refresh them with `cp`.
 
 ---
 
-## 9. Further reading
+## 14. Where to look in the source
 
-- **Gustavo's spec**: `TS-PICO-TPI-PROTOCOL-SPECS_2.3.pdf` (in the
-  TS2068 reference library). Authoritative byte-level documentation.
-- **Z80 ROM disassembly**: `gus-exrom.asm` (in the TS2068 reference
-  library). The actual machine code that runs on the TS-2068. Search
-  for `sub_1a54h` (the WF_NPH polling loop), `sub_2298h` (IN $0E),
-  `sub_229dh` (OUT $0E), `l196dh` (LOAD entry point).
-- **MicroPython rp2 module**:
-  https://docs.micropython.org/en/latest/library/rp2.html
-- **RP2040 PIO reference**:
-  https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf
-  (Chapter 3 — PIO).
+| File | What's in it |
+|------|--------------|
+| `TS/tspico_io.py` | the PIO programs (`TS_IO_DUAL`, `set_ctrl`, `sel_bank`), `MQ_STATUS`/`MQ_TO_IDLE`/`RX_CAPTURE`/`RX_BLOCK`/`TX_ROOM`/`MQX`, `LOAD_TS`, `SAVE_TS`, the ZX48 handlers |
+| `TS/tspico.py` | the dispatcher (`TS2068_IO`), `PROCESS_CMD`, every built-in command (`SA_funct`), `SEND_MSG`/`SEND_MSG2`/`CMD_PUT`/`CH_READY`/`SD_CALL`, `PRINT_IO`, `PICO_STATUS` |
+| `TS/channels.py`, `TS/catalog.py`, `TS/native.py` | channel, listing/path and `f:` file logic (pure Python, host-tested) |
+| `TS/extcmd.py` | the external-command table and its examples |
+| `rom/patches/tspico-sync.asm` | ROM 2.0: SYNC, BREAK abort, RECOVERED/Report T, the BIOS wait |
+| `rom/fdd/fddcmd.asm`, `tools/build-rom.py` | ROM 2.1: disk commands, `f:`/`d:` channels, function `$88`, `C_END2` |
+| `test/` | host tests and bus harnesses |
+| `manifest.py` | the MicroPython freeze list: a new `TS/` module must be added here |
+
+## 15. Further reading
+
+- [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md) — the same protocol, explained
+  from the beginning.
+- [`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) — the original design, and why
+  the ROM was modified. Historical: where it differs, this document wins.
+- [`EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md) — external commands.
+- [`DISK_COMMANDS_SPEC.md`](DISK_COMMANDS_SPEC.md) — ROM 2.1's commands and
+  channels, from the BASIC side.
+- [`rom-analysis/`](rom-analysis/) — the ROM disassemblies, memory map and
+  error-trapping notes.
+- MicroPython rp2: https://docs.micropython.org/en/latest/library/rp2.html;
+  RP2040 datasheet, chapter 3 (PIO).

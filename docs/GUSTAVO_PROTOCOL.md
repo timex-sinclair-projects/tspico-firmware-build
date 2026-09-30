@@ -11,6 +11,32 @@ the Pico does to honor the protocol).
 > to **Gustavo Pane** ([panegustavo@yahoo.com.ar](mailto:panegustavo@yahoo.com.ar)).
 > This project's firmware is one implementation of his spec.
 
+> **Read this as history.** It describes the design as Gustavo built it, and
+> the Z80 side as of the 1.x ROMs. Today's behaviour (firmware 2.0, ROM 2.0
+> and 2.1) is in [`PROTOCOL.md`](PROTOCOL.md), with a plain-language version in
+> [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md); where they differ from this
+> document, they are right. The differences:
+>
+> - **§4, §7:** there is no `0x40` "continue" byte. Port `$0F` is a status
+>   register: READY (bit 6), IDLE (bit 3) and RECOVERED (bit 2, active low).
+>   Every Z80 OUT sets it busy until the Pico says READY again ("auto-busy"),
+>   which replaced the "ready forever" model. ROM 2.0 starts every
+>   transaction with a SYNC (`OUT (0Fh),03h`). (`PROTOCOL.md` §3, §4.1)
+> - **§4:** the pre-header table is the LOAD/SAVE layout. A command (`'B'`)
+>   carries its two `CODE` numbers in bytes 3–6 and the text length in 7–8.
+>   (`PROTOCOL.md` §4.3)
+> - **§8:** status 10 is J, but 11 and up are **D**, not J. The function codes
+>   continue past `$86`: `$87`, and `$88` (`$86` on the lower screen, ROM 2.1).
+>   An unknown code is Report D. ROM 2.0 adds Report **T** (the RECOVERED
+>   bit). (`PROTOCOL.md` §5.3, §5.4)
+> - **§9:** `WF_NPH`'s 226 polls each run a debounced BREAK check of about
+>   88 ms, so the wait is ~19.9 s with no hidden outer loop. In ROM 2.0 the
+>   BIOS `WF_NPH` fails with `02h` timeout, `0Ch` BREAK or `1Ch` RECOVERED.
+>   (`PROTOCOL.md` §9)
+> - **§10:** the Z80's first echo (the flag) goes **before** the data loop,
+>   not after it. (`PROTOCOL.md` §6.1)
+> - **§12:** `PROCESS_ASM` is a vestigial stub; don't use block type `'A'`.
+
 ---
 
 ## 1. The problem Gustavo solved
