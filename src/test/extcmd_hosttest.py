@@ -32,6 +32,13 @@ def main():
     h.install_fakes()
     sys.modules["dev_tspico"] = None          # src/dev_tspico.py is on the path here:
     import TS.tspico as t                     # make extcmd use the module under test
+    # MicroPython inlines underscore const()s and never stores them on the
+    # module, so tspico's _1_OK etc. are NOT attributes on the Pico. Remove
+    # them here too, or a handler using them passes on a PC and fails on the
+    # Pico with AttributeError (Report J) -- which happened.
+    import re
+    for name in [n for n in dir(t) if re.match(r"_[0-9]+_", n)]:
+        delattr(t, name)
     import TS.extcmd as x
     t.TLM_ENABLED = False
     ft = h.FakeTime()
@@ -51,7 +58,7 @@ def main():
         h.check(log == [1, len(d)] + list(d) + [xo, 1],
                 "%d! : 1, count, digits, XOR, then one pre-load" % n)
     log = send(t, ext, "tpi:.fact", 33)
-    h.check(log == [t._6_6_Num2Big, 1], "33: status 6 (Report 6), then one pre-load (%r)" % log)
+    h.check(log == [6, 1], "33: status 6 (Report 6), then one pre-load (%r)" % log)
 
     print("tpi:.rndw")
     x.WORDS = os.path.join(os.path.dirname(HERE), "words.txt")
@@ -63,7 +70,7 @@ def main():
         h.check(ok and word in words, "81h message with a real word (%r), then one pre-load" % word)
     x.WORDS = "/nonexistent/words.txt"
     log = send(t, ext, "tpi:.rndw")
-    h.check(log == [t._3_F_Invalid_file, 1], "no words.txt: status 3 (F), then one pre-load (%r)" % log)
+    h.check(log == [3, 1], "no words.txt: status 3 (F), then one pre-load (%r)" % log)
 
     print()
     print("%d FAILED" % len(h.FAILURES) if h.FAILURES else "ALL PASS")

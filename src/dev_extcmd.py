@@ -44,12 +44,19 @@ try:
 except ImportError:
     import TS.tspico as tp
 
+# Status codes. tspico's _1_OK etc. are underscore const()s, which MicroPython
+# inlines and never stores on the module: they work on a PC and raise
+# AttributeError on the Pico. So handlers keep their own.
+OK = 1                                          # 0 OK
+F_BAD_NAME = 3                                  # F Invalid file name
+NUM_TOO_BIG = 6                                 # 6 Number too big
+
 
 def FACTORIAL(MQ, TSP, pre, cmd):
     """n! as a data answer: 1, count, digits, XOR -- the tpi:chrd format."""
     n, _ = tp.PARAMS(pre)
     if n > 32:                                  # 33! has 37 digits: keep it short
-        tp.CMD_PUT(tp._6_6_Num2Big)             # Report 6 Number too big
+        tp.CMD_PUT(NUM_TOO_BIG)                 # Report 6 Number too big
         tp.MQ_READY()
         return
     digits = str(math.factorial(n)).encode()
@@ -77,9 +84,9 @@ def RND_WORD(MQ, TSP, pre, cmd):
             f.readline()                        # skip the (likely partial) line
             word = f.readline().strip().decode() or "the"
     except OSError:
-        tp.SEND_MSG("No %s on the Pico" % WORDS, "", tp._3_F_Invalid_file)
+        tp.SEND_MSG("No %s on the Pico" % WORDS, "", F_BAD_NAME)
         return
-    tp.SEND_MSG(word, "", tp._1_OK, True)
+    tp.SEND_MSG(word, "", OK, True)
 
 
 EXT_SA_FUNCT = {
