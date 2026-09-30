@@ -9,8 +9,12 @@ the hard way.
 
 1. **Read the docs in this order**:
    - [`README.md`](README.md) — what this project is and how to flash it
-   - [`docs/GUSTAVO_PROTOCOL.md`](docs/GUSTAVO_PROTOCOL.md) — protocol design
-   - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — firmware implementation
+   - [`docs/PROTOCOL_GUIDE.md`](docs/PROTOCOL_GUIDE.md) — the protocol in
+     plain language
+   - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the byte-level reference
+     (firmware 2.0, ROM 2.0/2.1), with the pitfalls list
+   - [`docs/GUSTAVO_PROTOCOL.md`](docs/GUSTAVO_PROTOCOL.md) — the original
+     design, as history (its opening note lists what has changed)
    - [`docs/DUAL_PORT_DEVELOPMENT.md`](docs/DUAL_PORT_DEVELOPMENT.md) —
      how the current code came to be, including all the wrong turns
 2. **When investigating any wire-level bug, write a test harness first**.
@@ -92,8 +96,10 @@ The harness template enforces a two-phase pattern:
   and analysis go. You have a 2.8ms `WAIT EXECUTION` budget here per
   spec — ample for any reasonable Python work.
 
-Production's `TS2068_IO()` (lines 4060-4061 of `TS/tspico.py`) is the
-canonical example: `for i in r1: pre[i] = MQ.get()`. Match it.
+Production's `RX_CAPTURE()` in `TS/tspico_io.py` (which `TS2068_IO()`
+uses for every pre-header) is the canonical example: its loop only tests
+the FIFO, gets and stores; the 1 s stall clock and the SYNC test run only
+while the FIFO is empty. Match it.
 
 ### Examples to study before writing your own
 
@@ -159,7 +165,7 @@ historically caused regressions:
    resolve the issue?" Don't open a PR until they say yes.
 7. **Open the PR.** GitHub's diff view automatically shows only the
    changes — no need to do anything special; that's the default.
-8. **Document the gotcha** — `docs/PROTOCOL.md` §7 has a "pitfalls"
+8. **Document the gotcha** — `docs/PROTOCOL.md` §13 has a "pitfalls"
    list. If your debugging found a non-obvious trap, add it. Future
    contributors will thank you.
 9. **Keep the harness in `src/test/`** — even if it's purpose-built for
@@ -422,7 +428,7 @@ If you are an AI assistant working on this repo:
 - **Reference real artifacts.** When you say "see V6 for this pattern,"
   link or quote the actual code. Don't paraphrase from memory.
 - **Add to the pitfalls list.** If you found a new gotcha, add it to
-  `docs/PROTOCOL.md` §7. Even if it seems obvious in retrospect, it
+  `docs/PROTOCOL.md` §13. Even if it seems obvious in retrospect, it
   wasn't obvious before someone hit it.
 - **Trust the empirical evidence over the spec.** The TPI spec PDF is
   Gustavo's design intent; the real ROM is what's running. When they

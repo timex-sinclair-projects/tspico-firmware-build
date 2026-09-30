@@ -12,6 +12,11 @@ listed at the bottom and are the most useful part of this file.
 Addresses are EXROM offsets unless marked HOME. All are identical in v1.1 and
 v1.5w except where noted.
 
+> **Scope: the 1.1 and 1.5w ROMs.** ROM 2.0 added SYNC, BREAK abort, the IDLE
+> and RECOVERED status bits and Report T; ROM 2.1 added the disk commands,
+> function `$88` and a C_END that reports a timeout as J. For those, see
+> [`PROTOCOL.md`](../PROTOCOL.md), which describes the current ROMs.
+
 ## Ports
 
 Exactly two ports beyond the genuine TS2068 set. Neither appears in the genuine EXROM.
@@ -320,15 +325,18 @@ A `JR`/`JP` table, for HOME and user code — **zero EXROM-internal references**
 | `0x1844` | `G_VERS` | `0x1852` | version → `BC = 0x0015` |
 | `0x1846` | `TX_A` | `0x186D` → `JP 229D` | send byte |
 | `0x1848` | `RX_A` | `0x186A` → `JP 2298` | receive byte |
-| `0x184A` | `C_END` | `0x184F` | end command |
+| `0x184A` | `C_END` | `JR 0x184F` → `JP 2279` | wait + read status (end command) |
 | `0x184C` | `WF_NPH` | `JP 1A54` | wait for ready |
-| `0x184E` | `EWAIT` | `JP 2279` | wait + read status |
+
+(`0x184E` is the last byte of `WF_NPH`'s `JP`, not a ninth entry. ROM 2.0 points
+`0x184F` at `JP 23CD` and ROM 2.1 at `JP 301B`; see `PROTOCOL.md` §9.)
 
 **`0x184C` is the only route by which `WAIT_PICO_READY`'s `A=02h` timeout code is
 observable** — every internal caller discards it.
 
 **Both v1.1 and v1.5w report BIOS version `0x0015`**, so the version byte **cannot**
-distinguish them. Use the md5, or the byte at `0x21F5` (`e7` = v1.1, `a1` = v1.5w).
+distinguish them. (Later ROMs do: v1.7 `0x0017`, 2.0 `0x0020`, 2.1 `0x0021`, and
+the same value at HOME `0x0065`.) Use the md5, or the byte at `0x21F5` (`e7` = v1.1, `a1` = v1.5w).
 
 ## Block types and TADDR
 

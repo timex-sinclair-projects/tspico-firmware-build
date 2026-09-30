@@ -308,7 +308,7 @@ standard TAP files (just strip session bytes). Once we updated the
 observer's CRC verifier to skip bytes [1]/[2], everything matched.
 
 This revealed a non-obvious protocol detail that's documented in
-`PROTOCOL.md §6` and `GUSTAVO_PROTOCOL.md §6`. Anyone implementing a
+`PROTOCOL.md §6.1` and `GUSTAVO_PROTOCOL.md §6`. Anyone implementing a
 new SAVE handler has to remember it.
 
 ### 5i. `test/make_test_tap.py` — TAP file generator
@@ -565,7 +565,7 @@ no way to "speculatively" load TX. If you put more bytes than the Z80
 will consume in the current transaction, the leftovers corrupt the
 next one.
 
-`PROTOCOL.md §7` documents these three pitfalls (and a few related
+`PROTOCOL.md §13` documents these three pitfalls (and a few related
 ones) so future contributors don't repeat them.
 
 ## 9. Repo cleanup and audit

@@ -242,7 +242,7 @@ check on every line of new firmware code:
 > between draining the pre-header and writing the response.
 
 This is the same rule as the existing "don't `print()` during a
-protocol exchange" pitfall ([`PROTOCOL.md`](PROTOCOL.md) §7), for the
+protocol exchange" pitfall ([`PROTOCOL.md`](PROTOCOL.md) §13), for the
 same reason: the PIO RX FIFO is 4 bytes deep and the Z80 OUTs every
 ~30 µs. The Z80's `$0F` poll timeout is ~20 s
 ([`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) §7), which is an enormous

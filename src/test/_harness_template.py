@@ -23,8 +23,10 @@ unaware and keeps going. You see a truncated capture and chase a ghost.
 This bit us in `protocol_observer_crc.py` when we did per-byte CRC math
 inside a callback. The harness saw 9 of 10 pre-header bytes; the
 "missing" 10th byte wasn't missing on the wire — it was a FIFO overflow
-caused by per-byte Python work. Production's `TS2068_IO()` (lines
-4060-4061 in `TS/tspico.py`) does NO per-byte work — it's just:
+caused by per-byte Python work. Production's pre-header capture,
+`RX_CAPTURE()` in `TS/tspico_io.py` (called from `TS2068_IO()`), does
+NO per-byte work beyond test-the-FIFO / get / store -- the simplest
+form of that is:
 
     for i in r1:
         pre[i] = MQ.get()      # tight blocking read of N bytes
@@ -148,9 +150,10 @@ MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000,
                   sideset_base=Pin(12, Pin.OUT))
 MQ.active(1)
 
-# Y = 0xFFFFFFFF means port $0F always returns 0xFF (D6=1=ready). The
-# Z80's WF_NPH polling loop will see "ready" instantly. This is the
-# "ready forever" pattern — see docs/PROTOCOL.md §3.
+# Y = 0xFFFFFFFF: port $0F reads 0xFF (READY + IDLE). The PIO drops Y to 0
+# on every Z80 OUT ("auto-busy", docs/PROTOCOL.md §3.2), so a harness that
+# answers the Z80 must queue its answer and then set READY again, as
+# production's MQ_READY() does.
 MQ.exec("mov(y, invert(null))")
 print("[SETUP] MQ active, Y=READY")
 
@@ -278,7 +281,7 @@ try:
 
         # ====================================================================
         # PHASE 1 — tight blocking burst read. NOTHING ELSE IN HERE.
-        # Matches production TS2068_IO() lines 4060-4061 verbatim.
+        # The same rule as production's RX_CAPTURE() (TS/tspico_io.py).
         # ====================================================================
         if total_bytes + BURST_LEN > CAP:
             # Buffer would overflow — stop capturing.
