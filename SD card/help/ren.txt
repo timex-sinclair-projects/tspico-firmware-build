@@ -1,6 +1,5 @@
 TS-Pico Command              REN
 --------------------------------
-SAVE "tpi:ren old|new"
 SAVE "tpi:ren old new"
 
 Renames a file or directory. If
