@@ -561,7 +561,15 @@ async function romUpdate() {
     if (how === 'stop') throw new Stop()
     setStage('rom', 'done', slot1Done || how === 'done' ? 'TS-2068 ROM updated.' : 'Done.')
 
-    // Back to BOOTSEL for the real firmware.
+    // Back to BOOTSEL for the real firmware -- a hard reset of the Pico, so with
+    // the 2068 off: a reset while the 2068 runs leaves the SD card unreadable
+    // until it loses power, and the ROM chip is live under a running 2068.
+    stageMsg('firmware', 'Switch the TS-2068 off now. The USB cable keeps the Pico powered, and ' +
+        'the Pico is about to restart.')
+    if (await ask('firmware', [
+        { label: 'The 2068 is off — continue', value: 'go' },
+        { label: 'Stop', value: 'stop' },
+    ]) === 'stop') throw new Stop()
     stageMsg('firmware', 'Rebooting the Pico into BOOTSEL mode…')
     await execNoReply('import machine\nmachine.bootloader()')
     boot = await getBootsel('firmware')
