@@ -2,8 +2,14 @@ TS-Pico Command           PICOPT
 --------------------------------
 SAVE "tpi:picopt"
 
-Switch printing to go to the
-TS-Pico. This functionality does
-nothing currently.
+Send LPRINT, LLIST and COPY to
+the TS-Pico's virtual printer
+instead of a real printer. Text
+goes to /VLPRINT/PRNnnnn.TXT on
+the SD card, COPY pictures to
+/VSCREEN/SCRnnnn.BMP.
+Printer commands: opprint,
+clprint, autolf, noautolf,
+autopg, noautopg, prnsz, bmp.
 
-See also: ts2040
+See also: ts2040, lprint, copy

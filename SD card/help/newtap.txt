@@ -5,6 +5,9 @@ SAVE"tpi:newtap <name>[.tap]"
 Create and mount a new .tap file
 with the given name and turn on
 append mode. The .tap extension
-is added if not given.
+is added if not given. A file
+of that name already there is
+left alone: the answer is F.
 
 See also: ffw, rew, load, tapdir
+          format

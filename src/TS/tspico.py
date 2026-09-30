@@ -2,7 +2,6 @@
 # DATE: 2026/04/15              #
 # FIRMWARE VERSION: 1.5         #
 # ROM: 1.5W                     #
-# DEPENDS: tspico_upgrade.py    #
 #################################
 
 #############
@@ -353,7 +352,7 @@ from TS.sdcard import *
 # See docs/DUAL_PORT_DEVELOPMENT.md §7 for the full migration narrative.
 # ───────────────────────────────────────────────────────────────────────
 from TS.tspico_io import (
-    patch, sel_bank, set_ctrl, set_dck,
+    sel_bank, set_ctrl, set_dck,
     TS_IO_DUAL,                          # was: TS_IO (single-port)
     LOAD_TS, LOAD_SERVE, LOAD_ZX, LOAD_ZX_C,
     SAVE_TS, SAVE_ZX,
@@ -3069,25 +3068,24 @@ def NEW_TAP(pre, cmd):
         return
     filename = "%s/%s.tap" % (TSP.cur_path, clean_fname)
 
-    # Make new empty .tap file
-    ACTIVATE_SD()
-    try:
+    # Make new empty .tap file -- never over an existing one (FORMAT refuses too)
+    def make():
+        if file_exists(filename) or dir_exists(filename):
+            return "File exists: ", _3_F_Invalid_file
         with open(filename, "w") as newfile:
             pass
-        LOG("New empty file:%s" % filename, 0)
         os.chdir(TSP.cur_path)
         DIR_FILES()
-        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
-        DEACTIVATE_SD()
-        ACTIVATE_MQ()
-    except:
-        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
-        DEACTIVATE_SD()
-        ACTIVATE_MQ()
-        msg = "Can't create new file: "
-        LOG(msg + filename, 2)
-        SEND_MSG(msg, filename, _4_Q_Parameter)
+        return "", _1_OK
+
+    msg, st = SD_CALL(make)
+    if st != _1_OK:
+        if msg == "SD card error":
+            msg = "Can't create new file: "
+        LOG(msg + filename, 1)
+        SEND_MSG(msg, "%s.tap" % clean_fname, st)
         return
+    LOG("New empty file:%s" % filename, 0)
 
     if not MOUNT_FILE(filename):
         msg = "Failed to mount new .tap file: "
@@ -3677,14 +3675,23 @@ def GETHELP(pre, cmd):                                                 # Shows T
         M.append('"tpi:path"[CODE 1,0]')
         M.append('"tpi:rew"[CODE 0/1/2/3,n]')
         M.append('"tpi:rm <name>"[CODE 255,0]')
-        M.append('"tpi:rompatch"')
         M.append('"tpi:tapdir"[CODE 0/1,n]')
         M.append('"tpi:tape"    <=>   "tpi:sdcard"')
         M.append('"tpi:ts2040"  <=>   "tpi:picopt"')
-        M.append('"tpi:upgrade"')
         M.append('"tpi:verbose"[CODE 1,0/1]')
         M.append('"tpi:verbose on/off"')
         M.append('"tpi:zx48"[CODE 0/1,0/1/2/n]')
+        M.append('SAVE commands: [ ]-> optional')
+        M.append('================================')
+        M.append('"tpi:copy <from> <to>"')
+        M.append('"tpi:erase <name or pattern>"')
+        M.append('"tpi:format <name.tap or dir/>"')
+        M.append('"tpi:ren <old> <new>"')
+        M.append('"tpi:opprint"  "tpi:clprint"')
+        M.append('"tpi:autolf"   "tpi:noautolf"')
+        M.append('"tpi:autopg"   "tpi:noautopg"')
+        M.append('"tpi:prnsz"[CODE cols,lines]')
+        M.append('"tpi:bmp"[CODE width,height]')
         M.append('')
         M.append('"tpi:help ?" to list help topics')
         M.append('from /help folder on the SD card')
@@ -3885,10 +3892,14 @@ def LOAD_CONFIG():
         LOG("Incorrect initial ROM_SM value. Using default value of %d instead" % default_values["ROM_SM"], 2)
 
     return_ROM_SLOT = -1
-    if init_values["ROM_SLOT"] != default_values["ROM_SLOT"]:           # If we started with a non-default ROM slot, we use it on this run,
-                                                                        # but reverse back to default hard-wired 1 for next boot (after power-cycle the Pico)
-        return_ROM_SLOT = init_values["ROM_SLOT"]                                                                       
+    boot_mem = init_values["ROM_SM"] & 3                                # tpi:boot's MEM: 1 SRAM, 2 flash (the default)
+    if init_values["ROM_SLOT"] != default_values["ROM_SLOT"] or boot_mem != 2:
+                                                                        # If we started with a non-default boot slot, we use it on this run,
+                                                                        # but reverse back to default hard-wired flash slot 1 for next boot
+        return_ROM_SLOT = init_values["ROM_SLOT"]
+        return_ROM_SM = init_values["ROM_SM"]
         init_values["ROM_SLOT"] = default_values["ROM_SLOT"]
+        init_values["ROM_SM"] = (init_values["ROM_SM"] & 12) + 2
         defaulted = True
 
     if defaulted: # Save config
@@ -3901,6 +3912,7 @@ def LOAD_CONFIG():
         
         if return_ROM_SLOT >= 0:
             init_values["ROM_SLOT"] = return_ROM_SLOT
+            init_values["ROM_SM"] = return_ROM_SM
             
     SAVE_LOG()
     
@@ -4050,9 +4062,9 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         mem, page = getBoot()
         SEND_MSG("BOOT is MEM=%d, PAGE=%d" % (mem, page), "", _1_OK, True)
 
-    elif (par1 == 0 or par1 > 3 or par2 > 15):
+    elif (par1 == 0 or par1 > 2 or par2 > 15):
         msg = "Wrong values, %s" % new
-        SEND_MSG(msg, "OK values: MEM=1..3, PAGE=0..15", _8_A_Invalid_arg)
+        SEND_MSG(msg, "OK values: MEM=1..2, PAGE=0..15", _8_A_Invalid_arg)
         LOG("BOOT: %s. Command ignored" % msg, 1) 
     else:            
         val1 = TSP.ROM_SM & 12
@@ -4064,7 +4076,8 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         with open("config.ini", "r") as f:                                                    # As sometimes this change can hang the machine,
             init_values = json.load(f)                                                        # we modify the init values for next startup
                                                                                               # so changes will take effect next reboot
-        init_values["ROM_SLOT"] = par2
+        init_values["ROM_SLOT"] = par2                                                        # both halves of the boot setting: LOAD_CONFIG
+        init_values["ROM_SM"] = (init_values.get("ROM_SM", 10) & 12) + par1                   # uses them once, then puts back flash slot 1
         
         with open("config.ini", "w") as f:
             json.dump(init_values, f)
@@ -4296,23 +4309,6 @@ def REW(pre, cmd):                                                              
     return
 
     
-def ROMPATCH(pre, cmd):                                                                                      # Patch for system ROM
-    
-    global TSP
-    global led
-    
-    # was /TS/rompatch.tap; moved to /assets/ during dual-port migration
-    # to avoid being shadowed by the frozen TS/ package.
-    TLM("ROMPATCH enter")
-    if MOUNT_FILE("/assets/rompatch.tap"):
-        # ACTIVATE_MQ()
-        SEND_MSG("System prepared to patch ROM.", 'Use LOAD "" to start.', _1_OK)
-    else:
-        SEND_MSG("Failed to mount rompatch.tap", "", _2_R_Tape_load)
-
-    return
-
-
 def ResolveIndexName(name):
 
     # name, found = ResolveIndexName(name)
@@ -4445,141 +4441,67 @@ def BAD_ARG(command, arg):
 
 
 def RM(pre, cmd):
-    
-    # Remove a named file or directory (combine RM and RMDIR, act based on type)
-    # Assumes file/dir to remove is in TSP.cur_path
-    # SAVE "tpi:rm <name>"            - Remove file or empty folder
-    # SAVE "tpi:rm <name>" CODE 255,0 - Bypass confirmation prompt
 
-    global TSP
-    global dirs_upper
-    global files_upper
-    global alldirs
-    
+    # Remove a file or an empty folder (the type decides which).
+    # SAVE "tpi:rm <name>"            - Remove it, after a Y/N prompt
+    # SAVE "tpi:rm <name>" CODE 255,0 - Remove it without asking
+    # <name> is any file or folder: a name in the current folder, a path
+    # (relative, or from / = the card's TAP folder), or a number from the
+    # listing. The mounted file can't be removed: tpi:close it first.
+
     TLM("RM enter")
-    name = cmd[10:]
-    status = _1_OK
-    message = ""
-    sent = False
     par1, par2 = PARAMS(pre)
-
-    name, idx = ResolveIndexName(name)
-    uname = name.upper()
-    adir  = uname in dirs_upper
-    afile = uname in files_upper
-
+    name = getArgs(cmd).strip()
+    if name:
+        name, idx = ResolveIndexName(name)
     if not name:
         message = "RM: Filename required"
-        status = _8_A_Invalid_arg
         LOG(message, 2)
+        SEND_MSG(message, "", _8_A_Invalid_arg)
+        return
+    if (par1, par2) not in ((0, 0), (255, 0)):
+        message = BAD_CODE("RM", par1, par2)
+        LOG(message, 2)
+        SEND_MSG(message, "", _8_A_Invalid_arg)
+        return
 
-    elif not adir and not afile:
+    kind, st = SD_CALL(RM_CHECK, name)
+    if st != _1_OK:                                                           # kind is the message
+        LOG(kind, 1)
+        SEND_MSG(kind, "", st)
+        return
+    arg = name.rstrip('/') + ('/' if kind == "dir" else "")
 
-        message = "RM: File not found: "
-        status = _3_F_Invalid_file
-        LOG(message + name, 2)
-
-    else:
-
-        if par1 == 0 and par2 == 0:
-
-            sent = True
-            ch = SEND_MSG_PROMPT_YN('Remove "%s" (y/N)?' % name)
-            if ch != 89: # 89='Y'
-                LOG("%s not removed from %s" % (name, TSP.cur_path), 0)
-                return
-
-        elif par1 != 255 or par2 != 0:
-            message = BAD_CODE("RM", par1, par2)
-            LOG(message, 2)
-            SEND_MSG(message, "", _8_A_Invalid_arg)
+    if par1 == 0:
+        ch = SEND_MSG_PROMPT_YN('Remove "%s" (y/N)?' % name)                  # the prompt is the answer:
+        if ch != 89: # 89='Y'                                                 # the rest only reaches the log
+            LOG("%s not removed from %s" % (name, TSP.cur_path), 0)
             return
-            
-        ACTIVATE_SD()
-        os.chdir(TSP.cur_path)
+        message, st = SD_CALL(DISK_ERASE_ONE, arg)
+        LOG("RM: " + message, 0 if st == _1_OK else 2)
+        return
 
-        if adir:
-            kind = "dir"
-            # Remove a dirinfo.tap if it exists since it is not visible to the user
-            # and prevents os.rmdir from working. We could later add a CODE 255,255
-            # option to force removal of a non-empty dir and call REMOVE_DIR.
-            try:
-                os.remove(name + "/dirinfo.tap")
-            except:
-                pass
-        else:
-            kind = "file"
+    message, st = SD_CALL(DISK_ERASE_ONE, arg)
+    LOG("RM: " + message, 0 if st == _1_OK else 2)
+    SEND_MSG(message, "", st)
 
-        try:
-            if adir:
-                os.rmdir(name)
-                # Update alldirs w/o calling GET_DIRS()
-                try:
-                    alldirs.remove("%s/%s" % (TSP.cur_path[3:], name))
-                except:
-                    pass
-            else:
-                os.remove(name)
-            DIR_FILES() # Update local files list
-            # gc.collect()
-            message = "Removed %s: " % kind
-            LOG(message + name, 0)
 
-        except OSError:
+def RM_CHECK(name):                                                           # RM, before it asks: SD active
 
-            message = "OS error removing: "
-            status = _4_Q_Parameter
-            LOG(message + name, 2)
+    """("file" or "dir", OK), or (message, status) if RM can't remove name."""
 
-        # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────────────────
-        DEACTIVATE_SD()
-        ACTIVATE_MQ()
-
-    if not sent:
-        SEND_MSG(message, name, status)
-    
-    return 
-                
-
-def SYS_CMD(pre, cmd):                                                                                      # Various system cmds
-    
-    global led
-    global patch
-    
-    TLM("SYS_CMD enter")
-    par1, par2 = PARAMS(pre)
-    
-    if par1 == 1 and par2 == 0:                                                                           # CODE 1,0 -> Retrieve ROM patch from firmware
-        SEND_MSG("SYS CMD finished OK", "", _1_OK)
-        LOG("Received SYS CMD 1,0 - Patch update", 0)
-        
-        led.value(1)
-
-        for i in patch:
-            MQ.put(i)
-            
-        with open("/config.ini", "r") as f:
-            init_values = json.load(f)
-
-        init_values["ROM_VERSION"] = "1.2"
-        
-        with open("/config.ini", "w") as f:
-            json.dump(init_values, f)
-            
-        led.value(0)
-        
-    else:
-        SEND_MSG("Error! Undefined SYS CMD", "", _5_C_Nonsense)
-        LOG("Wrong syntax SYS CMD", 2)
-        SAVE_LOG()
-        
-        while True:
-            BLINK_ERROR()
-        
-    led.value(0)
-    UNMOUNT(pre, cmd)
-    
-    return
+    real = catalog.resolve(TSP.cur_path, name.rstrip('/'))
+    if real is None or real == catalog.ROOT:
+        return "RM: Not found: %s" % name, _3_F_Invalid_file
+    if dir_exists(real):
+        if catalog.within(TSP.cur_path, real):
+            return "RM: Can't remove the current directory", _4_Q_Parameter
+        return "dir", _1_OK
+    if not file_exists(real):
+        return "RM: Not found: %s" % name, _3_F_Invalid_file
+    if TSP.f_name and TSP.f_name.upper() == real.upper():
+        return "RM: File is mounted; tpi:close it first", _4_Q_Parameter
+    return "file", _1_OK
 
 
 def UNMOUNT(pre, cmd):                                                                                       # Unmount currently mounted file 
@@ -4602,13 +4524,6 @@ def UNMOUNT(pre, cmd):                                                          
         pass
     
     return 
-
-
-def UPGRADE(pre, cmd):
-    """Wrapper that lazily imports and calls the upgrade module to save memory."""
-    global TSP
-    from TS.tspico_upgrade import UPGRADE as _UPGRADE
-    _UPGRADE(pre, cmd)
 
 
 def VERB_TOGGLE(pre, cmd):                                                                               # Toggle commands verbosity ON/OFF 
@@ -5394,12 +5309,9 @@ def TS2068_IO():                                                         # Main 
         "TPI:NOP" : NOP,                                                                      # This is to test Ryan's new Commander
         "TPI:PATH" : PATH,
         "TPI:REW" : REW,
-        "TPI:ROMPATCH" : ROMPATCH,
         "TPI:RM" : RM, # dir or file
-        "TPI:SYS" : SYS_CMD,
         "TPI:NEWTAP" : NEW_TAP,
         "TPI:TAPDIR" : TAPDIR,
-        "TPI:UPGRADE" : UPGRADE,
         "TPI:VERBOSE" : VERB_TOGGLE, 
         "TPI:ZX48" : ZX48,
         "TPI:AUTOLF" : PRN_FLAG,

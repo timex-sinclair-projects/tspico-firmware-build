@@ -109,11 +109,10 @@ TS-2068 EXROM chip, and the SD card you plug into the TS-Pico:
 4. **Copy `src/main.py`, `src/config.ini`, and `src/words.txt`** to
    the Pico's root via Thonny.
 
-5. **Create `/assets/` folder** on the Pico, then copy the four .tap
-   files from `src/assets/` into it:
+5. **Create `/assets/` folder** on the Pico, then copy the three .tap
+   files from `src/assets/` into it (`tools/build-basic.sh` builds them):
    - `dckupdate.tap`
    - `nofile.tap`
-   - `rompatch.tap`
    - `romupdate.tap`
 
 6. **Program the EXROM image** (`src/rom/*.ROM`) into the TS-2068
@@ -196,7 +195,8 @@ All files under `TS/` plus only the rp2-port stdlib bits we actually use:
 - `rp2.py` — wraps the C `_rp2` module; provides `asm_pio`, `StateMachine`, etc.
 - `TS/__init__.py` (package marker)
 - `TS/tspico.py`, `TS/tspico_io.py`, `TS/sdcard.py`, `TS/extcmd.py`,
-  `TS/help.py` (TS-Pico modules)
+  `TS/printer.py`, `TS/catalog.py`, `TS/native.py`, `TS/channels.py`
+  (TS-Pico modules)
 
 The default rp2 manifest also freezes `uasyncio`, `onewire`, `ds18x20`,
 `dht`, and `neopixel` — drivers for peripherals the TS-Pico doesn't have.

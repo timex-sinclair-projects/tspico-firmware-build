@@ -2,9 +2,15 @@ TS-Pico Command               RM
 --------------------------------
 SAVE "tpi:rm <name>"[CODE 255,0]
 
-Removes a directory or file in
-the current folder (see path).
-CODE 255,0 bypasses confirmation
-  SAVE "tpi:rm foo"
+Removes a file of any type, or
+an empty folder. <name> is in
+the current folder (see path),
+a path, or a number from the
+tpi:dir listing. Asks first;
+CODE 255,0 skips the question.
+  SAVE "tpi:rm notes.txt"
+  SAVE "tpi:rm GAMES/old.tap"
+The mounted file can't be
+removed (Q): tpi:close first.
 
-See also: md
+See also: md, erase, close

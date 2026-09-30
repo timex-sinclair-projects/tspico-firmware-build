@@ -134,7 +134,7 @@
  1950 REM 5: Description of command
  1960 REM 6: Description of result
  1970 REM 7: Error code expected: "0".."9","A".."R"
- 2000 DATA 83: REM Total number of tests (not critical if this is wrong)
+ 2000 DATA 82: REM Total number of tests (not critical if this is wrong)
 # Initial setup: loglevel/verbose
 DATA 2,"tpi:loglevel",0,0,"Show loglevel","LOG level set to the     default","0"
 DATA 2,"tpi:verbose off",0,0,"Set verbose off","No message, but verbose  is off (for next test)","0"
@@ -230,8 +230,7 @@ DATA 2,"tpi:sdcard",-1,24027,"Switch SAVE/LOAD to use the SD  card","PEEK 24027=
 #       01234567890123456789012345678901        Expect:789012345678901234567890101234567890123456789012345678901
 #DATA 2,"tpi:zx48",0,0,"Set TS-Pico for Spectrum mode","TS-Pico stops responding until OUT 14,14 (next test)","0"
 #DATA 4,"out",14,14,"Re-enable TS-Pico from Spectrum mode","TS-Pico should respond to tpi: commands again","0"
-# rompatch/dck load/rom load
-DATA 2,"tpi:rompatch",0,0,"Mount rompatch.tap for patching the ROM","Should tell you to do a  LOAD """"","0"
+# dck load/rom load
 DATA 1,"tpi:test.dck",0,0,"Mount a .dck file","test.dck mounted (LOADing not tested here)","0"
 DATA 1,"tpi:test.rom",0,0,"Mount a .rom file","test.rom mounted (LOADing not tested here)","0"
 DATA 1,"tpi:test.bin",0,0,"Mount a .bin file","test.bin mounted (LOADing not tested here)","0"
@@ -274,7 +273,6 @@ DATA 0
 #     - CODE 1,n - Set to SRAM slot n
 #     - CODE 2,n - Set to Flash slot n
 #     - "tpi:memboot" is still aliased to "tpi:boot"
-# * "tpi:upgrade"
 # * "tpi:zx48" - Prepare the pico for ZX Spectrum mode. Prints instructions.
 #     - CODE *,1 - Force the normal tape loader routine
 #     - CODE *,2 - Force the compatible tape loader routine

@@ -2,8 +2,12 @@ TS-Pico Command             TAPE
 --------------------------------
 SAVE "tpi:tape"
 
-Switch saving (names without
-"tpi:" prefix) to cassette tape
-(the default).
+Switch LOAD and SAVE (names
+without a "tpi:" prefix) to the
+cassette recorder. SAVE
+"tpi:sdcard" switches back to
+the TS-Pico, the setting at
+switch-on. PEEK 24027 shows it:
+bit 1 set = TS-Pico.
 
 See also: sdcard

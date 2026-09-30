@@ -2,9 +2,11 @@ TS-Pico Command           SDCARD
 --------------------------------
 SAVE "tpi:sdcard"
 
-Switch saves without a "tpi:"
-prefix in the name to save to a
-.tap file on the SD card rather
-than the tape port.
+Switch LOAD and SAVE (names
+without a "tpi:" prefix) to the
+TS-Pico: the mounted .tap file,
+or a new file on the SD card.
+This is the setting at
+switch-on.
 
 See also: tape

@@ -14,5 +14,6 @@ Set the level to n:
   1 = Warnings
   2 = Errors (the default)
   3 = Critical
+  4 = Special messages only
 
-See also: config, getlog
+See also: config, log

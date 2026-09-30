@@ -9,7 +9,13 @@ CODE 0,1: Shows previous setting
 CODE 0,2: Swaps with previous
 CODE 1,n: Set as slot n of SRAM
 CODE 2,n: Set as slot n of flash
-The config.ini setting is
-DCK_SLOT, with the default of 0.
+The change lasts until the Pico
+restarts. The slot it starts
+with is DCK_SLOT in config.ini
+(default 0, the Spectrum ROM in
+flash, which ZX48 mode uses).
+A slot the 2068 booted from
+can't be written by the ROM or
+DCK loader: boot another first.
 
 See also: boot, config, dck

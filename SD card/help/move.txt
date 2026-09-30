@@ -18,6 +18,6 @@ Copies every match into the
 directory, listing each one.
 
 Names can be string expressions.
-Rename: SAVE "tpi:ren old|new"
+Rename: SAVE "tpi:ren old new"
 
 See also: cat, erase, cd, ren

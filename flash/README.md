@@ -80,9 +80,7 @@ to restore it.
   `romupdate.tap`, which erases and writes the slot you pick. It does *not*
   set the boot slot — and `tpi:boot` is a one-shot override that `LOAD_CONFIG`
   resets to 1 on the next power-up, so a permanent change means writing slot 1
-  itself. (`rompatch.tap` is unrelated: it applies a fixed 12K v1.2-era payload
-  baked into the firmware and stamps `ROM_VERSION = 1.2`. Don't use it to
-  upgrade to 1.5+.)
+  itself.
 - **You can't update the slot you booted from.** The Z80 erases the slot it's
   writing, so it would erase the ROM it's running on, and both machines hang
   with the slot half-written. With a `.ROM`/`.BIN`/`.DCK` mounted, the firmware
