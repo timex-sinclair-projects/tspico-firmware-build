@@ -89,10 +89,14 @@ except ImportError:
 | a yes/no | `key = tp.SEND_MSG_PROMPT_YN(prompt)` | asks; `key` is the answer. Send nothing after it. |
 | data | `tp.CMD_PUT(1); tp.CMD_PUT(n); tp.MQ_READY()`, then `n` bytes and their XOR | returns OK from the `SAVE`; the program reads the rest with `IN 14` (or machine code) |
 
-Statuses: `tp._1_OK`, `_2_R_Tape_load`, `_3_F_Invalid_file`,
-`_4_Q_Parameter`, `_5_C_Nonsense`, `_6_6_Num2Big`, `_7_8_EOF`,
-`_8_A_Invalid_arg`, `_9_9_STOP`, `_10_J_Invalid_IO`, `_11_D_Break`. They
-become the BASIC report of the same letter.
+Statuses: 1 OK, 2 R, 3 F, 4 Q, 5 C, 6 6, 7 8 (end of file), 8 A, 9 9, 10 J,
+11 D; each becomes that BASIC report. **Define them in your own file**
+(`OK = 1`, `F_BAD_NAME = 3`, ...), as `TS/extcmd.py` does. `tspico.py`'s names
+(`_1_OK`, `_3_F_Invalid_file`, ...) are underscore `const()`s: MicroPython
+inlines them and never stores them on the module, so `tp._1_OK` works on a
+PC and raises `AttributeError` on the Pico (Report J). The first rewrite of
+`.fact` did exactly that; `src/test/extcmd_hosttest.py` now hands extcmd a
+`tp` without those names, as the Pico does.
 
 **Function codes.** A first byte of `$80` or more is a response function. The
 ROM handles `$81`–`$87` (and `$88` on ROM 2.1); **any other code is Report D**,

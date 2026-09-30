@@ -266,11 +266,17 @@ flash, which you can change without rebuilding the firmware. A command there
 is a function and a line in a table:
 
 ```python
+OK = 1                  # the status for "0 OK"
+
 def HELLO(MQ, TSP, pre, cmd):
-    tp.SEND_MSG("Hello from the TS-Pico!", "", tp._1_OK, True)
+    tp.SEND_MSG("Hello from the TS-Pico!", "", OK, True)
 
 EXT_SA_FUNCT = {"TPI:.HELLO": HELLO}
 ```
+
+(`tp` is the running firmware module. Its own names for the statuses, like
+`_1_OK`, can't be used from another file on the Pico, so a command file
+defines the ones it needs.)
 
 and `SAVE "tpi:.hello"` runs it. There is one rule that matters more than any
 other:
@@ -286,7 +292,7 @@ Here's the right way and the wrong way to send back a word:
 
 ```python
 # Right: one answer, a message the ROM prints.
-tp.SEND_MSG(word, "", tp._1_OK, True)
+tp.SEND_MSG(word, "", OK, True)
 
 # Wrong: "OK" is one answer; the word is a second one nobody asked for.
 MQ.put(1)

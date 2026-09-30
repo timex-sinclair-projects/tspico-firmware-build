@@ -473,6 +473,10 @@ flash), registered in its `EXT_SA_FUNCT` as `"TPI:.NAME"`. Either way:
    D0–D2, and `SD_CALL` gives the pins back even when `fn` fails.
 5. **Errors are statuses.** Catch what you expect and answer F, Q, A…; anything
    that escapes becomes J (`FAIL_CMD`), and the tail still runs.
+6. **In an external command, define the status numbers yourself.** The
+   `_1_OK`-style names are underscore `const()`s, inlined by MicroPython:
+   they are not attributes of `TS.tspico` on the Pico (`AttributeError`,
+   Report J), though they are on a PC.
 
 `src/test/process_cmd_hosttest.py` shows how to run a handler through the real
 `PROCESS_CMD` on a PC and check its bytes; `src/test/extcmd_hosttest.py` does it
@@ -735,6 +739,13 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   the ROM upper-cases letters, a machine-code client must too.
 - **Byte 23 in a channel write is always a TAB**, in binary mode too (§7).
   Binary data containing `$17` can't go through `tpi:chwr`.
+- **Underscore constants don't cross modules on the Pico.** `_1_OK`,
+  `_6_6_Num2Big` and friends are `const()`s with a leading underscore, which
+  MicroPython substitutes at compile time and never stores on the module.
+  `tp._6_6_Num2Big` from `TS/extcmd.py` worked under CPython and raised
+  `AttributeError` on hardware, so `SAVE "tpi:.fact" CODE 33,0` gave J instead
+  of 6. Host tests that run under CPython won't see it unless they hide those
+  names, as `src/test/extcmd_hosttest.py` does.
 - **The development copies must match.** `src/dev_tspico.py` and
   `src/dev_extcmd.py` replace the frozen modules when copied to the Pico.
   `src/test/dev_sync_hosttest.py` fails CI when they drift from
