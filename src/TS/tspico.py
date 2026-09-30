@@ -2023,23 +2023,7 @@ def CATALOG_TEXT(arg):                                                          
     else:
         if not is_dir:
             return "Not a directory: %s" % where, _3_F_Invalid_file
-        dirs_l, files_l, other_l = [], [], []
-        for item in sorted(os.ilistdir(real), key=lambda it: it[0].lower()):
-            name = item[0]
-            if name == "dirinfo.tap":
-                continue
-            if pat is None:
-                if name[0] == '.':
-                    continue
-            elif not catalog.match(name, pat) or (name[0] == '.' and pat[0] != '.'):
-                continue
-            if item[1] == 16384:
-                dirs_l.append((name, True, 0))
-            elif pat is None and name[-3:].upper() not in catalog.DIR_EXT:
-                other_l.append((name, False, item[3]))                          # like DIR: after the indexable ones
-            else:
-                files_l.append((name, False, item[3]))
-        entries = dirs_l + files_l + other_l
+        entries = catalog.select(os.ilistdir(real), pat)                        # dirs, files, then DIR's unindexed
         if not entries:
             return ("No match for %s" % pat) if pat else ("Directory is empty"), _3_F_Invalid_file
         path = catalog.public(real)
@@ -2620,6 +2604,26 @@ def CH_CALL(fn, *args):                                                       # 
     return SD_CALL(run)
 
 
+def DIR_NAMES(arg):                                                           # OPEN #n,"d:arg": the names, SD active
+
+    """The names CAT "arg" would list, one per entry, a directory's with '/'.
+    A single file names itself; a directory that isn't there is F."""
+
+    where, pat = catalog.split_arg(arg)
+    real = catalog.resolve(TSP.cur_path, where)
+    try:
+        is_dir = real is not None and os.stat(real)[0] & 0x4000
+    except OSError:
+        real = None
+    if real is None:
+        raise channels.ChannelError("Not found", "F")
+    if not is_dir:
+        if pat is not None:
+            raise channels.ChannelError("Not a directory", "F")
+        return [catalog.basename(real)]
+    return [n + ("/" if d else "") for n, d, _ in catalog.select(os.ilistdir(real), pat)]
+
+
 def CH_OPEN(pre, cmd):                                                        # tpi:chopen <mode> <path>
 
     stream, reclen = PARAMS(pre)                                              # PMR2: record length, 0 = a stream
@@ -2628,6 +2632,16 @@ def CH_OPEN(pre, cmd):                                                        # 
     k = arg.find(' ')
     mode, path = (arg[:k], arg[k + 1:].strip()) if k > 0 else ("r", arg)
     TLM("CH_OPEN", "stream=%d mode=%r path=%r reclen=%d" % (stream, mode, path, reclen))
+    if path[:2].lower() == "d:":                                              # stage 3: a directory listing
+        def op():
+            if mode.lower() != "r" or reclen:
+                raise channels.ChannelError("d: is read-only, no record length", "Q")
+            CHANNELS.open_list(stream, DIR_NAMES(path[2:].strip()))
+        msg, st = CH_CALL(op)
+        if st != _1_OK:
+            LOG("OPEN #%d %s: %s" % (stream, path, msg), 1)
+        CH_REPLY(st)
+        return
     real = catalog.resolve(TSP.cur_path, path) if path else None
     if real is None or real == catalog.ROOT:
         CH_REPLY(_3_F_Invalid_file)

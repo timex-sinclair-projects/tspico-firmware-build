@@ -291,6 +291,20 @@ surface this spec recommends is:
 | `OPEN #4,"d:*.tap"` | Read a directory listing as a stream, one name per `INPUT #4`, ending with Report 8. TOS couldn't do this. It lets menu and loader programs build their lists without screen-scraping `CAT` |
 | `CLOSE #4` | Flush and close. `CLOSE #` on a stream that isn't open is a no-op, as on stock |
 
+**Stage 3 (`d:`) is implemented.**
+- `OPEN #n,"d:[path/][pattern]"` lists what `CAT` with the same argument would: directories
+  first, each ending in `/`, then files. Patterns and hidden-file rules come from the
+  same code (`catalog.select`).
+- `INPUT #n;a$` returns one name per line, and Report 8 after the last.
+  `INPUT #n;TAB 0;k` returns the number of names.
+- A missing directory is Report F at `OPEN`. A pattern that matches nothing opens
+  normally, and its first read gives Report 8.
+- A mode other than `r`, or a record length, is Report Q.
+- The ROM sends the name with its `d:` intact (FAT names can't contain `:`), and the
+  Pico builds the listing in memory when the stream is opened.
+
+Test program: `basic/SD/TAP/test/chtest4.bas`.
+
 The design choices:
 
 - **The `f:` prefix.** Stock `OPEN #` accepts only one-letter channel names (K/S/P). A

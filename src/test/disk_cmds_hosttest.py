@@ -490,6 +490,33 @@ def test_channels(t, root):
           "chopen u with PMR2 = 6: TAB 2 writes record 2, padded (stage 2)")
     r = cmd(t.CH_OPEN, "tpi:chopen u recs.dat", 8, 255)
     check(r[-1] == t._4_Q_Parameter, "a record length over 254: Q")
+
+    def listing(spec):
+        """chopen r d:spec, then everything chrd serves: (status, text)."""
+        r = cmd(t.CH_OPEN, "tpi:chopen r " + spec, 9)
+        if r[-1] != t._1_OK:
+            return r[-1], None
+        got = b""
+        while True:
+            cmd(t.CH_READ, "tpi:chrd", 9, 255)
+            if tx[0] != 1:
+                return tx[0], got.decode()
+            got += bytes(tx[3:3 + tx[1]])
+    st, got = listing("d:")
+    check(st == t._7_8_EOF and got.split("\r")[:4] == ["EMPTY/", "FULL/", "GAMES/", "ADVENT.TAP"],
+          "d: -- dirs first with '/', then files, one a line, then end of file (%r)" % got)
+    st, got = listing("d:*.bak")
+    check(got == "KEEP.BAK\rNOTES.BAK\rOLD.BAK\r", "d:*.bak: the names CAT \"*.bak\" lists (%r)" % got)
+    st, got = listing("d:games/*")
+    check(got == "ARCADE/\rMANIC.TAP\r", "d:games/* -- a subdirectory's (%r)" % got)
+    st, got = listing("d:*.zzz")
+    check(st == t._7_8_EOF and got == "", "no match: opens, the first read is end of file")
+    r = cmd(t.CH_OPEN, "tpi:chopen r d:nothere/*", 9)
+    check(r[-1] == t._3_F_Invalid_file, "d: of a missing directory: F")
+    r = cmd(t.CH_OPEN, "tpi:chopen w d:", 9)
+    check(r[-1] == t._4_Q_Parameter, "d: with mode w: Q")
+    r = cmd(t.CH_OPEN, "tpi:chopen r d:", 9, 10)
+    check(r[-1] == t._4_Q_Parameter, "d: with a record length: Q")
     r = cmd(t.CH_CLOSE, "tpi:chclose", 12)
     check(r[-1] == t._1_OK, "chclose of a stream that isn't open: OK")
     t.CH_READY = real_ch_ready

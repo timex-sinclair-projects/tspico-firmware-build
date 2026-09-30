@@ -13,6 +13,8 @@
 # fills one record (a CR closes it and pads the rest), a read returns exactly one
 # record and a CR, and TAB 0 asks for the record count. Without one it is a
 # stream: TAB n is byte n.
+# Stage 3 (spec §4): OPEN #n,"d:pattern" is a directory listing, held in memory:
+# one name per line (a directory's ends in '/'), TAB 0 the number of names.
 #
 # The card is unmounted between commands (its pins are shared with the 2068
 # link), so no file stays open: every operation opens the file, seeks to the
@@ -151,6 +153,8 @@ class Channel:
         self.tab = None                              # TAB bytes still to come: a list
         self.fill = None                             # bytes in the open record, None: none open
         self.query = False                           # TAB 0: the next read is the count
+        self.mem = None                              # a listing (d:): the bytes, not a file
+        self.count = None                            # ... and how many names
 
     def pad(self):
         return b"\0" if self.binary else b" "
@@ -201,6 +205,21 @@ class Channels:
                 self.fs.write(path, 0, b"", True)
             pos = self.fs.size(path) if m == "a" and exists else 0
         self.table[stream] = Channel(path, m, binary, pos, reclen)
+
+    def open_list(self, stream, names):
+        """OPEN #n,"d:...": a read-only channel over a directory listing."""
+
+        self.table.pop(stream, None)
+        ch = Channel(None, "r", False, 0, 0)
+        ch.mem = "".join(n + "\n" for n in names).encode()
+        ch.count = len(names)
+        self.table[stream] = ch
+
+    def _size(self, ch):
+        return len(ch.mem) if ch.mem is not None else self.fs.size(ch.path)
+
+    def _raw(self, ch, pos, n):
+        return ch.mem[pos:pos + n] if ch.mem is not None else self.fs.read(ch.path, pos, n)
 
     def _get(self, stream):
         ch = self.table.get(stream)
@@ -294,9 +313,11 @@ class Channels:
         ch = self._get(stream)
         if ch.mode not in ("r", "u"):
             raise ChannelError("Opened for writing", "Q")
-        size = self.fs.size(ch.path)
+        size = self._size(ch)
         if ch.query:
             ch.query = False
+            if ch.count is not None:
+                return b"%d\r" % ch.count           # a listing: how many names
             r = ch.reclen or 1
             return b"%d\r" % ((size + r - 1) // r)
         if ch.reclen:
@@ -308,7 +329,7 @@ class Channels:
             ch.pos += ch.reclen
             return (raw if ch.binary else TextIn().feed(raw)) + b"\r"
         if ch.binary:
-            data = self.fs.read(ch.path, ch.pos, min(n, max(0, size - ch.pos)))
+            data = self._raw(ch, ch.pos, min(n, max(0, size - ch.pos)))
             ch.pos += len(data)
             return data
         while True:
@@ -317,7 +338,7 @@ class Channels:
                     ch.eof_cr = True
                     return b"\r"                     # finish a last line that has no newline
                 return b""
-            raw = self.fs.read(ch.path, ch.pos, min(n, size - ch.pos))
+            raw = self._raw(ch, ch.pos, min(n, size - ch.pos))
             if not raw:
                 return b""
             if ch.mode == "u":

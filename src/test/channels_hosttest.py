@@ -137,6 +137,7 @@ def main():
     check(ch.table == {}, "close_all")
 
     stage2(err)
+    stage3(err)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
@@ -212,6 +213,28 @@ def stage2(err):
     t.write(3, bytes([15]))
     t.write(3, bytes([0]))
     check(t.read(3, 255) == b"TWO\r", "TAB 15 sent one byte per chunk")
+
+
+def stage3(err):
+    print("stage 3: d: listings")
+    ch = C.Channels(MemFS())
+    ch.open_list(4, ["GAMES/", "adv.tap", "ch\u00e9.bas"])
+    got = b""
+    while True:
+        d = ch.read(4, 7)
+        if not d:
+            break
+        got += d
+    check(got == b"GAMES/\radv.tap\rch?.bas\r", "one name a line, a dir's with '/', non-ASCII as '?' (%r)" % got)
+    check(ch.read(4, 255) == b"", "then end of file (Report 8)")
+    ch.write(4, tab(0))
+    check(ch.read(4, 255) == b"3\r", "TAB 0: the number of names")
+    ch.write(4, tab(8) + b"P?")
+    check(ch.read(4, 255) == b"adv.tap\rch?.bas\r", "TAB 8: from the second name; prompt text dropped")
+    ch.open_list(5, [])
+    check(ch.read(5, 255) == b"", "no names: the first read is end of file")
+    ch.write(5, tab(0))
+    check(ch.read(5, 255) == b"0\r", "  and TAB 0 says 0")
 
 
 if __name__ == "__main__":

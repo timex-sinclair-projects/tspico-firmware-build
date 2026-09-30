@@ -798,17 +798,23 @@ CH_OPEN_HOOK:
         and     a
         jp      nz,STRMS_NC
         ld      a,c
-        cp      3
-        jp      c,STRMS_NC         ; "f:" and at least one character
-        ld      a,(de)
-        and     $DF
-        cp      'F'
-        jp      nz,STRMS_NC
+        cp      2
+        jp      c,STRMS_NC
         inc     de
         ld      a,(de)
+        dec     de
         cp      ':'
         jp      nz,STRMS_NC
+        ld      a,(de)
+        and     $DF
+        cp      'D'                ; "d:[pattern]" (stage 3): a directory listing
+        jr      z,.ours
+        cp      'F'
+        jp      nz,STRMS_NC
         ld      a,c
+        cp      3
+        jp      c,STRMS_NC         ; "f:" and at least one character
+.ours:  ld      a,c
         cp      MAX_ARG+3
         jp      nc,TOO_LONG
         ld      bc,CH_ALLOC+ROOM   ; the record and the command, or Report 4
@@ -854,13 +860,21 @@ CH_OPEN_HOOK:
         inc     de
         push    de
         call    PEEK_NAME
+        ld      a,(de)
+        and     $DF
+        cp      'D'
+        jr      z,.keep            ; "d:..." goes as it is: the Pico lists it
         inc     de
         inc     de                 ; past "f:"
         dec     bc
         dec     bc
-        ex      de,hl
+.keep:  ex      de,hl
         pop     de
+        ld      a,b
+        or      c
+        jr      z,.none            ; LDIR with BC = 0 would copy 64K
         ldir
+.none:
         xor     a
         ld      (de),a
         pop     bc
