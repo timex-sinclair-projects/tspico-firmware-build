@@ -234,3 +234,38 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 **For quick `tspico.py` / `extcmd.py` tweaks** that don't need a UF2
 rebuild, use the `/dev_tspico.py` / `/dev_extcmd.py` override pattern
 described above — far faster iteration loop.
+
+## License
+
+**Code: [MIT](LICENSE).** The firmware (`src/`), the tools (`tools/`), the web
+updater (`web-updater/`), the BASIC programs (`basic/`), the CI workflows, the
+site's code and templates, and the TS-Pico team's own ROM patches and module
+(`src/rom/patches/`, `src/rom/fdd/`, `tools/build-rom.py`).
+
+**Documentation: [CC BY 4.0](LICENSE-docs.txt).** The documents in `docs/`, the
+help files in `SD card/help/`, the site's text, and the README and other
+Markdown files. You may share and adapt them, with credit to the TS-Pico team.
+
+**Not covered by either licence**, and remaining the property of their owners:
+
+- **ROM images** (`src/rom/*.ROM`, `src/rom/*.BIN`, `ROMs/`). The TS-Pico ROMs
+  are the Timex Computer Corporation TS-2068 ROM with the team's changes, and
+  the ZX Spectrum ROMs are Sinclair Research (now Amstrad) code with the
+  team's changes. Only the changes are ours; the MIT licence covers the
+  sources that make them, not the images.
+- **Disassemblies of Timex's ROM** (`docs/rom-analysis/disasm/genuine-2068-*`).
+- **`docs/ZEBRA_FDD_TOS_MANUAL.md`**, a transcription of the Zebra Systems FDD
+  manual.
+- **Gustavo Pane's specification documents** (`docs/LOW-LEVEL-PROTOCOL-V5.TXT`,
+  `docs/TS-PICO_FILE_SYSTEM-SPECS-BETA-PRE-RELEASE-V25.pdf`), © Gustavo Pane.
+- **Photographs and illustrations** in `site/assets/img/`, © their creators.
+- **Third-party code, under its own licence:** `web-updater/vendor/`
+  (ViperIDE, MIT, © Volodymyr Shymanskyy; Pico⚡Flash, MIT, © Piers
+  Finlayson), `tools/zmakebas/` (public domain, Russell Marks) and
+  `web-updater/flash_nuke.uf2` (Raspberry Pi, BSD-3-Clause).
+
+**The TS-Pico team:** Ricardo Calcagno, Gustavo Pane, Jeff Burrell, Ryan Gray,
+Tim H and David Anderson. The board design is in
+[jburrell7/TSPICO](https://github.com/jburrell7/TSPICO).
+
+Thanks to Paul Anderson, David Green and Adam Trionfo for beta testing.
