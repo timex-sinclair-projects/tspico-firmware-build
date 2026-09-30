@@ -253,6 +253,31 @@ def test_sd_call(t):
           "card in but failing: SD card error, F (as before)")
 
 
+def test_info(t):
+    print("tpi:info looks at the card")
+    sent = []
+    t.SEND_MSG2 = lambda msg, st, *a: sent.append(msg)
+    t.os = types.SimpleNamespace(statvfs=lambda p: (4096, 4096, 256, 128, 128, 0, 0, 0, 0, 255))
+    t.gc = types.SimpleNamespace(mem_free=lambda: 100000, collect=lambda: None)
+    t.lista = "x" * 32 + "SD: 7.4453GB; free: 7.2109GB    "
+    t.files = []
+
+    def probe(*a):                       # the card was taken out after the last command
+        t.TSP.sd_present = False
+        return False
+    t.SD_PROBE = probe
+    t.TSP = tsp(sd_present=True, FW_VERSION="2.1", ROM_VERSION="2.1", ROM_SM=10, bank_sm=1,
+                LOG_LEVEL=2)
+    t.GETINFO(bytearray(10), "D..tpi:info")
+    check(sent and ">SD card: none" in sent[-1] and "7.4453GB" not in sent[-1],
+          "card pulled since the last command: info says none, not the old card")
+
+    t.SD_PROBE = lambda *a: True
+    t.TSP.sd_present = True
+    t.GETINFO(bytearray(10), "D..tpi:info")
+    check("SD: 7.4453GB" in sent[-1], "card in: its space shown")
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -284,6 +309,7 @@ def main():
         t.LOG = lambda msg, level: logs.append((level, msg))
         test_gate(t)
         test_sd_call(t)
+        test_info(t)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     ok = all(results)

@@ -3893,7 +3893,13 @@ def GETINFO(pre, cmd):                                                 # Shows T
     
     cop = chr(127)
     nl = chr(13)
-    
+
+    # Report the card as it is now, not as the last command left it: a card
+    # taken out since then would still show. One mount (~0.2 s; a card that
+    # has just been pulled costs the 5 tries once). A different card is read
+    # afresh on the way, so the space line below is the new card's.
+    SD_PROBE()
+
     fl_block = os.statvfs("")[0]
     fl_tot = os.statvfs("")[2]
     fl_free = os.statvfs("")[3]
