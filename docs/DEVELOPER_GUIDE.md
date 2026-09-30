@@ -199,6 +199,26 @@ If the card still won't mount -- seen once, a card that held MISO low
 then power up. With USB connected, switching only the 2068 off and on
 does not power-cycle the TS-Pico or the card.
 
+**A hard reset of the Pico reliably leaves the card like this** (reproduced
+2026-09-30, on the released 2.0 firmware as well as later builds). Every UF2
+flash is a hard reset, because it reboots through the bootloader, and so is
+`machine.reset()`. A soft reboot (Ctrl-D) does not cause it. Afterwards,
+with the card selected, it holds MISO low indefinitely: CMD0 at 100 or 400
+kHz gets no reply, and the `_recover()` sequence above doesn't reach it.
+The cause is not yet known. The 4K7 pull-up on nCS should keep the card
+deselected through the reset, and driving nCS and U6 off as `main.py`'s
+very first lines did not prevent it.
+
+**To clear it, do either of these:**
+
+- **Reseat the SD card** (pull it out and push it back in). This
+  power-cycles the card by itself; the Pico and the 2068 can stay on, and
+  the next `ACTIVATE_SD` mounts.
+- **Power-cycle the whole TS-Pico**: unplug the USB cable *and* switch the
+  2068 off, then power up.
+
+So after flashing a UF2, reseat the card or power-cycle before using it.
+
 A card can also mount and then fail its first write. `activity.log` then
 shows
 
