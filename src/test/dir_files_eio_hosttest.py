@@ -177,13 +177,16 @@ def test_boot(t, logs):
     t.BLINK_ERROR = bricked
     t.LOAD_CONFIG = lambda: {}
     t.PICO_STATUS = lambda _v: types.SimpleNamespace(
-        cur_path="/sd/TAP", LOG_LEVEL=0, ROM_SM=0, bank_sm=0)
+        cur_path="/sd/TAP", LOG_LEVEL=0, ROM_SM=0, bank_sm=0, f_name="", append=False,
+        sd_present=False, sd_cid=None, sd_listing_ok=False, save_no_card=False)
     t.StateMachine = lambda *a, **k: types.SimpleNamespace(
         active=lambda *x: None, put=lambda *x: None)
     t._thread = types.SimpleNamespace(start_new_thread=lambda *a: None)
     t.gc = types.SimpleNamespace(mem_free=lambda: 0, collect=lambda: None)
     t.REMOVE_DIR = lambda d: None
-    t.ACTIVATE_SD = lambda *a, **k: None
+    # A card mounts: the real first-card setup (SD_REVALIDATE -> DIR_FILES,
+    # the code under test here) runs against the fake filesystem.
+    t.ACTIVATE_SD = lambda *a, **k: t.SD_NOTE_CARD(1)
     t.GET_DIRS = lambda *a, **k: ["/TAP"]
     t.ACTIVATE_MQ = activate_mq
     t.MQ_READY = lambda: None

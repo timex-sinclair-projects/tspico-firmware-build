@@ -39,7 +39,7 @@ import load_ts_hosttest as L                                    # noqa: E402
 from save_name_hosttest import build_header, build_data         # noqa: E402
 
 READY, IDLE, RECOVERED = L.READY, L.IDLE, L.RECOVERED
-REPORT = {0x02: "R", 0x03: "F", 0x06: "6", 0x08: "A",
+REPORT = {0x02: "R", 0x03: "F", 0x06: "6", 0x08: "A", 0x0A: "J",
           0x0B: "D"}   # 11 and up: $1BF3's chain falls through to $00F8, RST 8 0Ch -- Report D
 SESSION = 0x1234
 
@@ -114,7 +114,7 @@ def main():
     dat = bytes(build_data(payload, session=SESSION))
     pre = bytearray([0, 0, 0xFF, SESSION & 0xFF, SESSION >> 8, 0, 0, 0, 0, 0])
 
-    def save(native=None, f_name="", hdr=hdr, dat=dat, **kw):
+    def save(native=None, f_name="", hdr=hdr, dat=dat, no_card=False, **kw):
         """Dispatcher side: pre-load staged, Y busy (the pre-header OUTs
         dropped it, and it no longer says READY for a SAVE), then SAVE_TS,
         then the dispatcher's re-arm, then let the Z80 finish."""
@@ -128,7 +128,8 @@ def main():
         io.dead = True
         io.busy = False
         tsp = types.SimpleNamespace(f_name=f_name, append=False, cur_path=d,
-                                    LOG_LEVEL=0, VERBOSE=False, native=native)
+                                    LOG_LEVEL=0, VERBOSE=False, native=native,
+                                    save_no_card=no_card)
         pio.run(z80_save(hdr, dat, **kw))
         out = io.SAVE_TS(pio, tsp, pre)
         saved = out[3]
@@ -191,6 +192,13 @@ def main():
         check(r == "R" and not saved and not files,
               "final status 02 -> Report R, nothing written (%s, %s)" % (r, files))
         check("parity" in log, "logged: %r" % log.strip().splitlines()[-1:])
+
+        print("no SD card (the dispatcher's card check failed)")
+        pio, r, saved, log, tsp, files = save(no_card=True)
+        check(r == "J" and not saved and not files,
+              "refused with Report J at the header, nothing written (%s, %s)" % (r, files))
+        check("no SD card" in log and "drained 0" in log,
+              "logged, and the Z80 sent no data block: %r" % log.strip().splitlines()[-1:])
 
         print("session mismatch between pre-header and header block")
         pre[3] ^= 0xFF

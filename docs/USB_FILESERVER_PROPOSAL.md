@@ -93,7 +93,8 @@ are all already solved.
 2. **Making the ~10 SD-touching commands backend-agnostic** without
    destabilising them. Mechanical, but it's ~8 `ACTIVATE_SD()`
    callsites plus `ENA_SD()` in `SAVE_TS`.
-3. **Booting with no SD card at all.** Today, a failed SD mount drops
+3. **Booting with no SD card at all.** *(Done, #43: the Pico now boots
+   and runs without a card.)* A failed SD mount used to drop
    into an infinite `BLINK_ERROR()` loop
    ([tspico.py:776-783](../src/TS/tspico.py:776)), and so does a failed
    `os.chdir(TSP.cur_path)` ([tspico.py:4295](../src/TS/tspico.py:4295)).

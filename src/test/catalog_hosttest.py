@@ -199,8 +199,18 @@ def test_dir(t, root):
         return sent[-1] if sent else None
 
     r = run("tpi:dir")
-    check(r == ("MSG2", "CACHED-LISTA", t._1_OK) and sd == [],
-          "bare tpi:dir: the cached listing, no SD access")
+    check(r == ("MSG2", "CACHED-LISTA", t._1_OK) and sd == ["sd", "off", "mq"],
+          "bare tpi:dir: looks at the card once (a swap or a pulled card shows), "
+          "then the cached listing (%r)" % sd)
+
+    def no_card(*a, **k):
+        sd.append("sd")
+        raise OSError(19, "no SD card")
+    t.ACTIVATE_SD = no_card
+    r = run("tpi:dir")
+    check(r == ("MSG", t.NO_CARD_MSG, t._10_J_Invalid_IO),
+          "bare tpi:dir, card taken out: the no-card answer, not the old card's files")
+    t.ACTIVATE_SD = lambda *a, **k: sd.append("sd")
 
     r = run("tpi:dir *.tap")
     check(r[0] == "MSG2" and r[2] == t._1_OK, "tpi:dir *.tap: OK")

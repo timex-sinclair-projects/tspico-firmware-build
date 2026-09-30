@@ -118,6 +118,7 @@ jobs:
           python3 src/test/native_hosttest.py
           python3 src/test/channels_hosttest.py
           python3 src/test/sd_wedged_hosttest.py
+          python3 src/test/sd_state_hosttest.py
           python3 src/test/sd_recover_hosttest.py
           python3 src/test/save_name_hosttest.py
           python3 src/test/zx48_hosttest.py
