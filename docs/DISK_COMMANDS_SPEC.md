@@ -308,6 +308,31 @@ The design choices:
 
 ### 4b. Random access: `TAB` is the record pointer
 
+**Stage 2 is implemented** as described below, with these decisions made along the way:
+
+- **Record file or stream.** A channel opened with a record length (`OPEN #4,"f:x","u",40`)
+  is a record file: 1–254 bytes a record, so a record and its CR fit in one read. Without
+  one it is a stream, as in stage 1, and `TAB n` means byte n. Stage 1 programs are
+  unchanged.
+- **Mode `u`** reads and writes and creates a missing file. Reads on a `u` stream stop at
+  each line end, so a `PRINT #` after an `INPUT #` writes just after that line.
+- **Syntax.** Stock `OPEN #` skipped everything after the comma in the syntax pass,
+  which also skipped storing the hidden form of each number, so a record length
+  couldn't be evaluated. `$1438` now checks `,"mode"[,length]` properly, and extra
+  arguments to a K/S/P `OPEN #` are now a syntax error rather than a runtime Report C.
+- **Order on the wire.**
+  - The ROM sends any printed bytes before it asks for more input, so the `TAB` in
+    `INPUT #4;TAB 7;a$` reaches the Pico first.
+  - A `TAB` discards whatever was read ahead.
+  - On a record file each CR is sent at once, so Report Q comes from the `PRINT` that
+    made the record too long.
+- **Byte 23 is always `TAB`**, in binary files too, as it is on the screen. A binary
+  file can't hold a raw 23 written with `PRINT #`.
+- **The prompt on a `u` channel.** Text in `INPUT #`'s prompt is written to the file on
+  a `u` channel; only `TAB` belongs there. On an `r` channel it is dropped.
+
+Test program: `basic/SD/TAP/test/chtest3.bas`.
+
 TOS writes `PRINT *#4;a$;AT p` and `INPUT *#4;a$;AT p`. Stock BASIC can't
 parse a trailing `AT p` on `PRINT #`. What it already has is **`TAB n` as an ordinary
 print item that sends a 16-bit number to the channel**:

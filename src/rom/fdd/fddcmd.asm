@@ -85,7 +85,8 @@ R_PAD           EQU 6              ; bytes before the record in its allocation
 R_OUTN          EQU 7              ; bytes waiting in R_OUTBUF
 R_INN           EQU 8              ; bytes in R_INBUF
 R_INP           EQU 9              ; the next one to hand out
-R_OUTBUF        EQU 10
+R_FLAGS         EQU 10             ; bit 0: a record file (OPEN # gave a length)
+R_OUTBUF        EQU 11
 OUTMAX          EQU 64             ; tpi:chwr sends them as hex: 9 + 128 < 256
 R_INBUF         EQU R_OUTBUF+OUTMAX
 INMAX           EQU 255
@@ -100,6 +101,8 @@ STRMS           EQU $5C10          ; streams -3..15, two bytes each
 CHANS           EQU $5C4F
 PROG            EQU $5C53
 STREAM_N        EQU $5CCB          ; OPEN/CLOSE #: the stream ($140F)
+H_EXPT_1NUM     EQU $1BE5          ; HOME: syntax class $06 -- a numeric expression
+H_FIND_INT2     EQU $1F23          ; HOME: the number on the stack -> BC, Report B
 ERR_SP          EQU $5C3D
 BANK_SP         EQU $65CE          ; the RAM bank-call stack pointer
 H_TRAP          EQU $14B2          ; HOME: GUARDED's error trap
@@ -144,6 +147,8 @@ CH_CLOSE_VEC:
         jp      G_CLOSE            ; $3012: CLOSE #'s $13A5, via HOME $1494
 BEEP_VEC:
         jp      G_BEEP             ; $3015: HOME's BEEPER thunk ($03F3 -> $041C)
+OPEN_SYN_VEC:
+        jp      G_OSYN             ; $3018: OPEN #'s syntax pass after a comma, via HOME $14BD
 
 ;------------------------------------------------------------------------------
 ; G_BEEP -- the key click and BEEP. The TS-Pico ROM moved BEEPER to EXROM
@@ -210,6 +215,8 @@ G_OUT:  ld      hl,CH_OUT
 G_IN:   ld      hl,CH_IN
         jr      GUARDED
 G_OPEN: ld      hl,CH_OPEN_HOOK
+        jr      GUARDED
+G_OSYN: ld      hl,OPEN_SYNTAX
         jr      GUARDED
 G_CLOSE:
         ld      hl,CH_CLOSE_HOOK
@@ -806,12 +813,21 @@ CH_OPEN_HOOK:
         jp      nc,TOO_LONG
         ld      bc,CH_ALLOC+ROOM   ; the record and the command, or Report 4
         call    HC_TEST_ROOM       ;   before the Pico hears of it
+        ld      bc,0               ; no record length: a stream
         call    AT_END
-        jr      z,.dflt
+        jr      z,.dflt0
         cp      ','
         jp      nz,NONSENSE
         call    NEXT_CHAR
         call    HC_EXPT_STR        ; the mode
+        call    SKIP_SPACES
+        ld      bc,0
+        cp      ','
+        jr      nz,.nolen
+        call    NEXT_CHAR
+        call    HC_EXPT_1NUM       ; ,reclen (stage 2): a record file
+        call    HC_FIND_INT2       ; BC
+.nolen: push    bc                 ; [reclen]
         call    AT_END
         jp      nz,NONSENSE
         call    POP_STR            ; DE = mode, BC = its length
@@ -822,6 +838,7 @@ CH_OPEN_HOOK:
         jr      c,.mode
         rst     8
         db      $19                ; Q Parameter error
+.dflt0: push    bc                 ; [reclen = 0]
 .dflt:  ld      de,MODE_R
         ld      bc,1
 .mode:  push    bc
@@ -846,9 +863,15 @@ CH_OPEN_HOOK:
         ldir
         xor     a
         ld      (de),a
+        pop     bc
+        push    bc                 ; the record length
+        ld      a,b
+        and     a
+        jr      z,.len
+        ld      c,$FF              ; over 255: the Pico says Q
+.len:   ld      b,0                ; no payload, PMR2 = the record length
         ld      hl,(STKEND)
         ld      a,(STREAM_N)
-        ld      bc,0               ; no payload, PMR2 0
         call    CH_SEND
         call    CH_STATUS          ; F, Q ... raise their reports
         ld      hl,(STKEND)        ; drop the spec, as $1465's STK_FETCH would
@@ -902,6 +925,12 @@ CH_OPEN_HOOK:
         ld      (ix+R_PAD),a
         ld      a,(STREAM_N)
         ld      (ix+R_STRM),a
+        pop     bc                 ; the record length
+        ld      a,b
+        or      c
+        jr      z,.strm
+        ld      (ix+R_FLAGS),1
+.strm:
         ld      de,(CHANS)
         and     a
         sbc     hl,de
@@ -910,6 +939,23 @@ CH_OPEN_HOOK:
         call    STRMS_HL
         scf
         ret
+
+; OPEN_SYNTAX -- stock OPEN #'s syntax pass skipped everything after the
+; spec's comma ($1438 CALL $2569). That also skipped storing the hidden five-byte
+; form of each number, so a number there (the record length) could not be
+; evaluated at run time. $1438 now comes here (HOME $14BD) with CH_ADD on the
+; ',': a string (the mode), then optionally ',' and a numeric expression; $143B's
+; CHECK_END then wants the end of the statement. A K/S/P OPEN # with extra
+; arguments is still Report C, now as a syntax error.
+OPEN_SYNTAX:
+        ld      iy,IY_SYSVARS
+        call    NEXT_CHAR
+        call    HC_EXPT_STR        ; the mode
+        call    SKIP_SPACES
+        cp      ','
+        ret     nz
+        call    NEXT_CHAR
+        jp      HC_EXPT_1NUM       ; the record length
 
 STRMS_NC:
         call    STRMS_HL
@@ -1008,6 +1054,18 @@ CH_CLOSE_HOOK:
         scf
         ret
 
+HC_EXPT_1NUM:
+        push    ix
+        exx
+        ld      hl,H_EXPT_1NUM
+        jp      CALL_HOME
+
+HC_FIND_INT2:
+        push    ix
+        exx
+        ld      hl,H_FIND_INT2
+        jp      CALL_HOME
+
 HC_MAKE_ROOM:
         push    ix
         exx
@@ -1031,7 +1089,11 @@ CH_OUT:
         push    ix
         ld      ix,(CURCHL)
         ld      c,a
-        ld      a,(ix+R_OUTN)
+        cp      23                 ; TAB (stage 2): a seek, so what was read
+        jr      nz,.put            ;   ahead is no longer next
+        ld      (ix+R_INN),0
+        ld      (ix+R_INP),0
+.put:   ld      a,(ix+R_OUTN)
         push    ix
         pop     hl
         ld      de,R_OUTBUF
@@ -1043,8 +1105,14 @@ CH_OUT:
         inc     a
         ld      (ix+R_OUTN),a
         cp      OUTMAX
-        call    nc,CH_FLUSH
-        pop     ix
+        jr      nc,.send
+        ld      a,c                ; a record file sends at each CR, so a
+        cp      13                 ;   record that is too long is Report Q
+        jr      nz,.done           ;   on the PRINT that made it
+        bit     0,(ix+R_FLAGS)
+        jr      z,.done
+.send:  call    CH_FLUSH
+.done:  pop     ix
         ret
 
 CH_IN:
@@ -1054,6 +1122,7 @@ CH_IN:
 .again: ld      a,(ix+R_INP)
         cp      (ix+R_INN)
         jr      c,.have
+        call    CH_FLUSH           ; what was printed first (INPUT #4;TAB n: the seek)
         call    CH_FETCH           ; NZ: end of file
         jr      z,.again
         pop     ix

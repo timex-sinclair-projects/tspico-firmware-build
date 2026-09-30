@@ -481,8 +481,15 @@ def test_channels(t, root):
     r = cmd(t.CH_OPEN, "tpi:chopen x notes.txt", 6)
     check(r[-1] == t._4_Q_Parameter, "chopen with a bad mode: Q")
     r = cmd(t.CH_OPEN, "tpi:chopen wb data.bin", 7)
-    cmd(t.CH_WRITE, "tpi:chwr " + bytes(range(256))[:120].hex(), 7)
-    check(open(os.path.join(root, "data.bin"), "rb").read() == bytes(range(120)), "binary: bytes as sent")
+    data = bytes(b for b in range(121) if b != 23)            # 23 is TAB
+    cmd(t.CH_WRITE, "tpi:chwr " + data.hex(), 7)
+    check(open(os.path.join(root, "data.bin"), "rb").read() == data, "binary: bytes as sent")
+    r = cmd(t.CH_OPEN, "tpi:chopen u recs.dat", 8, 6)          # PMR2: the record length
+    cmd(t.CH_WRITE, "tpi:chwr " + (bytes([23, 2, 0]) + b"two\r").hex(), 8)
+    check(open(os.path.join(root, "recs.dat"), "rb").read() == b"      two   ",
+          "chopen u with PMR2 = 6: TAB 2 writes record 2, padded (stage 2)")
+    r = cmd(t.CH_OPEN, "tpi:chopen u recs.dat", 8, 255)
+    check(r[-1] == t._4_Q_Parameter, "a record length over 254: Q")
     r = cmd(t.CH_CLOSE, "tpi:chclose", 12)
     check(r[-1] == t._1_OK, "chclose of a stream that isn't open: OK")
     t.CH_READY = real_ch_ready

@@ -1,9 +1,18 @@
 # channels.py -- the Pico side of OPEN #n,"f:name" channels (DISK_COMMANDS_SPEC.md §4).
 #
-# Stage 1: sequential text and binary files. The fdd ROM's channel driver sends
-# what BASIC prints to the stream (raw 2068 bytes: tokens, control codes, CR)
-# and asks for bytes when BASIC reads it (INPUT #, INKEY$ #). This module keeps
-# one entry per stream and does the text translation both ways.
+# The fdd ROM's channel driver sends what BASIC prints to the stream (raw 2068
+# bytes: tokens, control codes, CR) and asks for bytes when BASIC reads it
+# (INPUT #, INKEY$ #). This module keeps one entry per stream and does the text
+# translation both ways.
+#
+# Stage 1: sequential text and binary files (modes r, w, a).
+# Stage 2 (spec §4b): TAB is the position. PRINT #4;TAB n reaches the channel as
+# 23, n low, n high, and so does INPUT #4;TAB n;a$ (INPUT prints its prompt items
+# to the stream) just before it reads. Mode u reads and writes. A channel opened
+# with a record length is a record file: TAB n is record n (1-based), a PRINT
+# fills one record (a CR closes it and pads the rest), a read returns exactly one
+# record and a CR, and TAB 0 asks for the record count. Without one it is a
+# stream: TAB n is byte n.
 #
 # The card is unmounted between commands (its pins are shared with the 2068
 # link), so no file stays open: every operation opens the file, seeks to the
@@ -129,29 +138,39 @@ class TextIn:
 
 
 class Channel:
-    def __init__(self, path, mode, binary, pos):
+    def __init__(self, path, mode, binary, pos, reclen):
         self.path = path
-        self.mode = mode                             # 'r', 'w' or 'a'
+        self.mode = mode                             # 'r', 'w', 'a' or 'u'
         self.binary = binary
         self.pos = pos                               # the next byte of the file
+        self.reclen = reclen                         # 0: a stream; else record length
         self.text_out = TextOut()
         self.text_in = TextIn()
         self.eof_cr = False                          # a last line without a newline got its CR
         self.last_raw = 10
+        self.tab = None                              # TAB bytes still to come: a list
+        self.fill = None                             # bytes in the open record, None: none open
+        self.query = False                           # TAB 0: the next read is the count
+
+    def pad(self):
+        return b"\0" if self.binary else b" "
 
 
 class ChannelError(Exception):
     """(message, status) -- status is the firmware's report code name."""
 
 
+MAX_RECLEN = 254                                     # a record and its CR in one 255-byte read
+
+
 def parse_mode(m):
-    """"r", "w", "a" with an optional "b" (binary): (mode, binary)."""
+    """"r", "w", "a" or "u" with an optional "b" (binary): (mode, binary)."""
 
     m = (m or "r").lower()
     binary = "b" in m
     m = m.replace("b", "")
-    if m not in ("r", "w", "a"):
-        raise ChannelError("Mode must be r, w or a (+b)", "Q")
+    if m not in ("r", "w", "a", "u"):
+        raise ChannelError("Mode must be r, w, a or u (+b)", "Q")
     return m, binary
 
 
@@ -164,8 +183,10 @@ class Channels:
         self.fs = fs
         self.table = {}
 
-    def open(self, stream, path, mode):
+    def open(self, stream, path, mode, reclen=0):
         m, binary = parse_mode(mode)
+        if reclen < 0 or reclen > MAX_RECLEN:
+            raise ChannelError("Record length 1-%d" % MAX_RECLEN, "Q")
         self.table.pop(stream, None)                 # a stale entry (NEW, reset) goes
         if m == "r":
             if not self.fs.exists(path):
@@ -175,10 +196,11 @@ class Channels:
             self.fs.write(path, 0, b"", True)
             pos = 0
         else:
-            pos = self.fs.size(path) if self.fs.exists(path) else 0
-            if pos == 0:
+            exists = self.fs.exists(path)
+            if not exists:
                 self.fs.write(path, 0, b"", True)
-        self.table[stream] = Channel(path, m, binary, pos)
+            pos = self.fs.size(path) if m == "a" and exists else 0
+        self.table[stream] = Channel(path, m, binary, pos, reclen)
 
     def _get(self, stream):
         ch = self.table.get(stream)
@@ -186,22 +208,105 @@ class Channels:
             raise ChannelError("Stream not open", "O")
         return ch
 
-    def write(self, stream, data):
-        ch = self._get(stream)
+    def _put(self, ch, pos, data):
+        """Write data at pos; a gap past the end is filled with padding."""
+
+        size = self.fs.size(ch.path)
+        if pos > size:
+            data = ch.pad() * (pos - size) + data
+            pos = size
+        self.fs.write(ch.path, pos, data, False)
+
+    def _end_record(self, ch):
+        """Close an open record: pad it to its length, move to the next one."""
+
+        if ch.fill is not None:
+            if ch.fill < ch.reclen:
+                self._put(ch, ch.pos + ch.fill, ch.pad() * (ch.reclen - ch.fill))
+            ch.pos += ch.reclen
+            ch.fill = None
+
+    def _seek(self, ch, n):
+        if ch.reclen:
+            self._end_record(ch)
+        if n == 0:
+            ch.query = True                          # INPUT #4;TAB 0;n: the count
+            return
+        ch.query = False
+        ch.pos = (n - 1) * (ch.reclen or 1)
+        ch.text_in = TextIn()
+        ch.eof_cr = False
+        ch.last_raw = 10
+
+    def _data(self, ch, data):
+        """Bytes to store (no TAB in them) at the channel's position."""
+
         if ch.mode == "r":
             return                                   # INPUT #'s prompt items: dropped
-        out = bytes(data) if ch.binary else ch.text_out.feed(data)
-        if out:
-            self.fs.write(ch.path, ch.pos, out, False)
-            ch.pos += len(out)
+        if ch.query:
+            raise ChannelError("TAB 0 is only for reading", "Q")
+        if not ch.reclen:
+            out = bytes(data) if ch.binary else ch.text_out.feed(data)
+            if out:
+                self._put(ch, ch.pos, out)
+                ch.pos += len(out)
+            return
+        for part in _split_cr(data):
+            if part == b"\r":
+                if ch.fill is None:
+                    ch.fill = 0                      # PRINT #4;TAB n with no items: blank
+                self._end_record(ch)
+                continue
+            out = part if ch.binary else ch.text_out.feed(part)
+            if not out:
+                continue
+            fill = ch.fill or 0
+            if fill + len(out) > ch.reclen:
+                raise ChannelError("Longer than the record", "Q")
+            self._put(ch, ch.pos + fill, out)
+            ch.fill = fill + len(out)
+
+    def write(self, stream, data):
+        """What BASIC printed to the stream: data, and TAB as 23, low, high."""
+
+        ch = self._get(stream)
+        run = bytearray()
+        for b in data:
+            if ch.tab is not None:
+                ch.tab.append(b)
+                if len(ch.tab) == 2:
+                    n = ch.tab[0] | ch.tab[1] << 8
+                    ch.tab = None
+                    self._seek(ch, n)
+            elif b == 23:
+                if run:
+                    self._data(ch, run)
+                    run = bytearray()
+                ch.tab = []
+            else:
+                run.append(b)
+        if run:
+            self._data(ch, run)
 
     def read(self, stream, n):
         """Up to n bytes for the 2068, or b"" at the end of the file."""
 
         ch = self._get(stream)
-        if ch.mode != "r":
+        if ch.mode not in ("r", "u"):
             raise ChannelError("Opened for writing", "Q")
         size = self.fs.size(ch.path)
+        if ch.query:
+            ch.query = False
+            r = ch.reclen or 1
+            return b"%d\r" % ((size + r - 1) // r)
+        if ch.reclen:
+            self._end_record(ch)
+            if ch.pos >= size:
+                return b""
+            raw = self.fs.read(ch.path, ch.pos, ch.reclen)
+            raw = raw + ch.pad() * (ch.reclen - len(raw))
+            ch.pos += ch.reclen
+            return (raw if ch.binary else TextIn().feed(raw)) + b"\r"
         if ch.binary:
             data = self.fs.read(ch.path, ch.pos, min(n, max(0, size - ch.pos)))
             ch.pos += len(data)
@@ -215,6 +320,8 @@ class Channels:
             raw = self.fs.read(ch.path, ch.pos, min(n, size - ch.pos))
             if not raw:
                 return b""
+            if ch.mode == "u":
+                raw = _one_line(raw)                 # so a write after INPUT lands right after it
             ch.pos += len(raw)
             ch.last_raw = raw[-1]
             out = ch.text_in.feed(raw)               # never longer than raw
@@ -224,7 +331,38 @@ class Channels:
     def close(self, stream):
         """Close it; closing a stream that isn't open is not an error."""
 
-        self.table.pop(stream, None)
+        ch = self.table.pop(stream, None)
+        if ch is not None and ch.reclen:
+            self._end_record(ch)                     # PRINT #4;...; left one open
 
     def close_all(self):
         self.table.clear()
+
+
+def _split_cr(data):
+    """data split around its CRs: [b"ab", b"\r", b"c"]."""
+
+    out = []
+    start = 0
+    for i in range(len(data)):
+        if data[i] == 13:
+            if i > start:
+                out.append(bytes(data[start:i]))
+            out.append(b"\r")
+            start = i + 1
+    if start < len(data):
+        out.append(bytes(data[start:]))
+    return out
+
+
+def _one_line(raw):
+    """raw up to and including its first line end (CR, LF or CRLF)."""
+
+    for i in range(len(raw)):
+        if raw[i] == 10:
+            return raw[:i + 1]
+        if raw[i] == 13:
+            if i + 1 < len(raw) and raw[i + 1] == 10:
+                return raw[:i + 2]
+            return raw[:i + 1]
+    return raw

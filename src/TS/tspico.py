@@ -2622,11 +2622,12 @@ def CH_CALL(fn, *args):                                                       # 
 
 def CH_OPEN(pre, cmd):                                                        # tpi:chopen <mode> <path>
 
-    stream = PARAMS(pre)[0] & 0xFF
+    stream, reclen = PARAMS(pre)                                              # PMR2: record length, 0 = a stream
+    stream &= 0xFF
     arg = getArgs(cmd).strip()
     k = arg.find(' ')
     mode, path = (arg[:k], arg[k + 1:].strip()) if k > 0 else ("r", arg)
-    TLM("CH_OPEN", "stream=%d mode=%r path=%r" % (stream, mode, path))
+    TLM("CH_OPEN", "stream=%d mode=%r path=%r reclen=%d" % (stream, mode, path, reclen))
     real = catalog.resolve(TSP.cur_path, path) if path else None
     if real is None or real == catalog.ROOT:
         CH_REPLY(_3_F_Invalid_file)
@@ -2637,7 +2638,7 @@ def CH_OPEN(pre, cmd):                                                        # 
             raise channels.ChannelError("A directory", "Q")
         if not dir_exists(catalog.parent(real)):
             raise channels.ChannelError("Not found", "F")
-        CHANNELS.open(stream, real, mode)
+        CHANNELS.open(stream, real, mode, reclen)
     msg, st = CH_CALL(op)
     if st != _1_OK:
         LOG("OPEN #%d %s: %s" % (stream, path, msg), 1)
