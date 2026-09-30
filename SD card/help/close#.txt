@@ -2,6 +2,10 @@ BASIC Command             CLOSE#
 --------------------------------
 CLOSE# s
 
-Close stream number s.
+Close stream number s. For a
+TS-Pico "f:" stream this also
+finishes the file on the SD
+card, so close files before the
+program ends.
 
 See also: OPEN#, streams

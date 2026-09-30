@@ -84,7 +84,6 @@ jobs:
           cp src/TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
           cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
           cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
-          cp src/TS/help.py          ${{ github.workspace }}/micropython/ports/rp2/modules/TS/help.py
           cp src/TS/printer.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/printer.py
           cp src/TS/catalog.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/catalog.py
           cp src/TS/native.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/native.py

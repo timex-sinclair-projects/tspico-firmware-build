@@ -141,8 +141,8 @@ jobs:
             git archive "${{ steps.rel.outputs.tag }}" src basic tools 2>/dev/null | tar -x -C _rel/tree \
               || git archive "${{ steps.rel.outputs.tag }}" src | tar -x -C _rel/tree
             # nofile/romupdate/dckupdate.tap are generated (gitignored), so an
-            # archive of src/ alone ships only the committed rompatch.tap. Build
-            # them from the same commit. Tags from before build-basic.sh (#34)
+            # archive of src/ alone has none of them. Build them from the same
+            # commit. Tags from before build-basic.sh (#34)
             # still committed their TAPs, so there is nothing to build.
             if [ -x _rel/tree/tools/build-basic.sh ]; then
               ./_rel/tree/tools/build-basic.sh

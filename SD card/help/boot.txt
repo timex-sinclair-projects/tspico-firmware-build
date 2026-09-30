@@ -1,17 +1,21 @@
 TS-Pico Command             BOOT
 --------------------------------
-SAVE "tpi:boot"[CODE 1/2,n]
+SAVE "tpi:boot"[CODE mem,n]
 
 Shows or sets the SRAM or flash
-slot mapped to be the boot ROM
-location (default is 2,1).
+slot the 2068 boots its ROM from
+(the default is 2,1).
 No CODE: Shows the setting
-CODE 1,n: Set to slot n of SRAM
-CODE 2,n: Set to slot n of flash
-The config.ini setting is
-ROM_SLOT, with the default of 1.
-If you set this to another value
-it will take effect once and is
-reset in the ini file back to 1.
+CODE 1,n: SRAM slot n (0-15)
+CODE 2,n: Flash slot n (0-15)
+The change is immediate: reset
+the 2068 (or NEW) to boot it.
+It is also saved in config.ini
+(ROM_SLOT, ROM_SM) for the next
+Pico start ONLY; after that the
+Pico goes back to flash slot 1.
+SRAM is lost when the power is
+off, so boot SRAM only after
+loading it this session.
 
-See also: config, dock
+See also: config, dock, roms

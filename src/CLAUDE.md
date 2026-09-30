@@ -330,7 +330,11 @@ are relative to that. This file (`src/CLAUDE.md`) also lives there.
   the Pico as `/dev_tspico.py` (or `/dev_tspico.mpy`); if present,
   `main.py` will use it instead of the frozen `TS.tspico`. Useful for
   iterating on `tspico.py` without rebuilds. (The override trick only
-  works for `tspico.py`.)
+  works for `tspico.py`; `src/dev_extcmd.py` does the same for
+  `TS/extcmd.py`.) **Both copies are kept identical to their sources:**
+  `src/test/dev_sync_hosttest.py` fails CI when they drift, so after editing
+  `src/TS/tspico.py` or `src/TS/extcmd.py` run
+  `cp src/TS/tspico.py src/dev_tspico.py` (and the same for extcmd).
 - **`src/test/`** — bus-level test harnesses (this guide).
 - **`docs/`** at the repo root — three layers: protocol design,
   firmware implementation, development history.

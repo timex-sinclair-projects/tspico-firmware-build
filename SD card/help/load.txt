@@ -1,13 +1,16 @@
 TS-Pico Command             LOAD
 --------------------------------
   LOAD "tpi:filename.ext"
-Mount the named file.
+Mount the named file from the
+current folder.
 
   LOAD "tpi:nnn"
 Mount a file by its index number
 nnn. The file index numbers
 appear to the left of the name
-in a tpi:dir listing.
+in a tpi:dir listing. Only the
+listed types (.tap, .dck, .rom,
+.bin) can be mounted this way.
 
 See also: close, dir, tapdir,   newtap
 

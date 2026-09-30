@@ -159,36 +159,26 @@ working example.
 
 ## Migrating existing committed TAPs
 
-Several BASIC programs predate this pipeline and are still committed as binary
-`.tap` files. zmakebas is **one-way** — it can't recover source from a `.tap` —
-so each stays committed until its original `.bas` source is added here.
+Every BASIC program the firmware and the SD card image need is now built from
+source here: `src/assets/` (`nofile`, `romupdate`, `dckupdate`) and the test
+programs, the last two of which (`factorial`, `RND WORDS`) were rewritten for
+the fixed `tpi:.fact` / `tpi:.rndw` examples. (`rompatch.tap`, a v1.2-era ROM
+patch, was retired with `tpi:rompatch`.) zmakebas is **one-way** -- it can't
+recover source from a `.tap` -- so if another committed binary turns up, keep
+it until its source is added.
 
-Add each program's source at the path the convention maps to its committed TAP:
+To migrate one:
 
-| Add source at | Builds to (the committed TAP it replaces) |
-|---|---|
-| `basic/assets/rompatch.bas`        | `src/assets/rompatch.tap`      |
-| `basic/SD/TAP/test/factorial.bas`  | `SD card/TAP/test/factorial.tap` |
-| `basic/SD/TAP/test/RND WORDS.bas`  | `SD card/TAP/test/RND WORDS.tap` |
-
-`rompatch.tap` is the last of the `src/assets/` set still committed as a
-binary; `nofile`, `romupdate` and `dckupdate` are now built from source here.
-
-To migrate one (do this **per program**, as its source lands):
-
-1. Add the `.bas` at the mapped path above, with a `#! zmakebas` directive for
+1. Add the `.bas` at the path that maps to its `.tap`, with a `#! zmakebas` directive for
    its options (autostart line, `-n` name, etc.).
 2. Build and confirm the generated `.tap` loads correctly — compare against the
    old committed one before deleting it.
 3. Stop tracking the binary and let the build own it:
 
    ```sh
-   git rm --cached "src/assets/rompatch.tap"        # untrack, keep on disk
-   echo "/src/assets/rompatch.tap" >> .gitignore    # ignore the now-generated file
+   git rm --cached "SD card/TAP/test/factorial.tap"        # untrack, keep on disk
+   echo "/SD card/TAP/test/factorial.tap" >> .gitignore    # ignore the now-generated file
    ```
-
-   Once `rompatch` lands too, a single `/src/assets/*.tap` line can replace
-   the per-file entries in `.gitignore`.
 
 Until a program is migrated this way, leave its committed `.tap` in place — the
 firmware build needs it.

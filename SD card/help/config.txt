@@ -7,17 +7,20 @@ Thonny Python development
 application. It is a JSON format
 file of key/value pairs:
 
-  {"ROM_VERSION": "1.4", 
-   "LOG_LEVEL": 2, 
-   "FW_VERSION": "1.4", 
-   "ZX_TAPE_COMPAT": false, 
-   "DCK_SLOT": 0, 
-   "ROM_SM": 10, 
-   "ROM_SLOT": 1, 
+  {"ROM_VERSION": "2.0",
+   "LOG_LEVEL": 2,
+   "FW_VERSION": "2.0",
+   "ZX_TAPE_COMPAT": false,
+   "DCK_SLOT": 0,
+   "ROM_SM": 10,
+   "ROM_SLOT": 1,
    "VERBOSE": false}
 
 LOG_LEVEL: See help for loglevel
 ZX_TAPE_COMPAT: See ZX48
 DCK_SLOT: See dock
 ROM_SLOT: See boot
+ROM_SM: memory types, 4 bits:
+  DOCK*4 + BOOT, each 1 = SRAM,
+  2 = flash (10 = both flash)
 VERBOSE: See verbose

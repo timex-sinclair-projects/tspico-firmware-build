@@ -1,121 +1,87 @@
-"""User-extensible TPI command handlers.
+"""External TPI commands: add your own without touching tspico.py.
 
-To add a new TPI:.SOMECMD command, write a function here following the
-pattern below and add it to EXT_SA_FUNCT at the bottom.
+Each entry in EXT_SA_FUNCT maps a command word -- upper case, with its
+"TPI:" and, by convention, a leading dot -- to a handler:
 
-Each handler is called by PROCESS_CMD (in tspico.py) when the Z80 has
-issued a "TPI:.XXX" BASIC command. PROCESS_CMD has already drained the
-pre-header and command body; your handler just produces the response.
+    def HANDLER(MQ, TSP, pre, cmd):
 
-PROTOCOL CONTRACT (see docs/PROTOCOL.md for full details):
-    - You DO NOT need to write a "next-iter pre-load" 0x01 at the end —
-      PROCESS_CMD's tail does that for you after your handler returns.
-    - You SHOULD NOT write a 0x40 byte for $0F continue — port $0F is
-      decoupled from the FIFO in dual-port; the Y register handles it,
-      and a 0x40 in TX would orphan and corrupt subsequent reads.
-    - Z80 expects ONE response status byte (0x01 = OK, 2-9 = error
-      reports). For verbose / multi-byte responses, use a function code
-      (0x80-0xFF) as your "status" — see SEND_MSG / SEND_MSG2 for how.
+called by PROCESS_CMD (tspico.py) after it has read and checked the command.
+`pre` is the 10-byte pre-header (PARAMS(pre) gives the CODE numbers), `cmd`
+is "D.." + the command text (getArgs(cmd) gives the text after the command
+word). `MQ` is the port state machine at the time of the call; use the
+helpers below instead, because SD card work replaces it.
+
+THE CONTRACT (docs/PROTOCOL.md):
+  * give exactly ONE answer: a status byte, a message (SEND_MSG with force,
+    function 81h), scrolling text (SEND_MSG2, 86h), or data in a format your
+    2068 program reads -- and put the first bytes in the FIFO BEFORE saying
+    READY (MQ_READY);
+  * never write the 01h "pre-load" at the end: PROCESS_CMD's tail does;
+  * queue bytes with CMD_PUT, which waits while the FIFO is full and turns a
+    BREAK into CmdAbort (never catch that);
+  * do SD card work inside SD_CALL, before the answer.
+
+/dev_extcmd.py on the Pico's flash, if present, is loaded instead of this
+module, so commands can be tried without rebuilding the UF2. The repo keeps
+src/dev_extcmd.py identical to this file (src/test/dev_sync_hosttest.py).
+
+The two examples:
+    SAVE "tpi:.fact" CODE n,0   n! (n = 0..32) as a data answer: status 1,
+                                count, digits, XOR of the digits; BASIC reads
+                                it with IN 14 after the SAVE. n > 32: Report 6.
+    SAVE "tpi:.rndw"            a random word from /words.txt on the flash,
+                                printed by the ROM (a message answer).
 """
 
-from random import randint
 import math
-from rp2 import StateMachine        # for the MQ: annotations below
+from random import randint
 
-from TS.sdcard import *
-
-# ─── DUAL-PORT MIGRATION: portable import for tspico helpers ──────────────
-# The previous line was `from tspico import ACTIVATE_MQ, ACTIVATE_SD, ...`
-# which imported from a bare `tspico` module that doesn't exist in either
-# current layout:
-#   - Production: helpers live in TS.tspico (frozen).
-#   - Dev override: helpers live in dev_tspico (root-level .mpy/.py).
-# So `from tspico import ...` raised ImportError silently, the importing
-# dev_tspico.py / TS.tspico fell into its `except` branch, EXT_SA_FUNCT
-# came back empty, and every TPI:.SOMECMD got "Unrecognized command".
-#
-# The try/except chain below makes this module portable: it picks up
-# the dev override if it's loaded, otherwise falls back to the frozen
-# module. Same handler code works in both modes.
-# ──────────────────────────────────────────────────────────────────────────
+# The helpers live in the firmware module that is running: /dev_tspico if
+# there is one on flash, otherwise the frozen TS.tspico. Import the module,
+# not the names, so its MQ (rebuilt after SD card work) is always the live one.
 try:
-    from dev_tspico import ACTIVATE_MQ, ACTIVATE_SD, SEND_MSG, SEND_MSG2
+    import dev_tspico as tp
 except ImportError:
-    from TS.tspico import ACTIVATE_MQ, ACTIVATE_SD, SEND_MSG, SEND_MSG2
+    import TS.tspico as tp
 
 
-def FACTORIAL(MQ: StateMachine, TSP, pre, cmd):
-    """Compute n! and return as a TLV (type-length-value) response.
-
-    Demonstrates a custom user-defined function-code response format.
-    Note: the Z80 ROM has to know how to interpret type_res values in
-    the 128-199 range — that's outside the standard protocol.
-    """
-    wrt = MQ.put
-
-    type_res = 128       # 128-199 = "normal" custom response
-                         # 200     = OK
-                         # 201+    = error conditions
-    length = 0
-
-    # Send an interim message to the user while we compute (verbose only).
-    SEND_MSG("Calculating Factorial...", "", 1)
-
-    par1 = (pre[4] * 256) + pre[3]
-
-    if par1 >= 33:
-        # TS-2068 can't safely handle factorial values over 33!
-        type_res = 210
-        msg = "Number too big!"
-    else:
-        msg = str(math.factorial(par1))
-
-    length = len(msg)
-
-    # Send the result as a Type-Length-Value triple.
-    MQ.put(type_res)
-    MQ.put(length)
-    for el in msg:
-        MQ.put(el)
-
-    return
+def FACTORIAL(MQ, TSP, pre, cmd):
+    """n! as a data answer: 1, count, digits, XOR -- the tpi:chrd format."""
+    n, _ = tp.PARAMS(pre)
+    if n > 32:                                  # 33! has 37 digits: keep it short
+        tp.CMD_PUT(tp._6_6_Num2Big)             # Report 6 Number too big
+        tp.MQ_READY()
+        return
+    digits = str(math.factorial(n)).encode()
+    x = 0
+    for b in digits:
+        x ^= b
+    tp.CMD_PUT(1)                               # status: data follows
+    tp.CMD_PUT(len(digits))                     # the count
+    tp.MQ_READY()                               # data in the FIFO first, then READY
+    for b in digits:
+        tp.CMD_PUT(b)                           # waits while the FIFO is full
+    tp.CMD_PUT(x)
 
 
-def RND_WORD(MQ: StateMachine, TSP, pre, cmd):
-    """Pick a random word from /words.txt and send it back.
-
-    Demonstrates the simplest response shape: one status byte, then a
-    stream of ASCII characters. The Z80 ROM will need a corresponding
-    handler for whatever response code we send.
-    """
-    # Status byte (Z80 reads this first as the command result).
-    # Dual-port: no wrt(0x40) — port $0F continue is handled by the Y
-    # register, which is at READY for the whole session. Writing 0x40
-    # here would leave an orphan byte in TX FIFO that corrupts
-    # subsequent reads.
-    MQ.put(0x01)
-
-    buf = bytearray(10)
-
-    # Pick a random byte offset into the word list. 85878 is the
-    # position of the last word in /words.txt.
-    offset = randint(1, 85878)
-
-    with open("/words.txt", "r") as f_in:
-        f_in.seek(offset)
-        f_in.readline()           # discard first (likely incomplete) word
-        buf = f_in.readline()     # next whole word
-        buf = buf[:-2]            # strip trailing \r\n
-
-    for el in buf:
-        MQ.put(el)
-
-    return
+WORDS = "/words.txt"                            # one word a line, CR LF
 
 
-# Register your handlers here. The dictionary key is the EXACT command
-# string the user types after "LOAD" or "SAVE" on the TS-2068, e.g.:
-#     SAVE "TPI:.FACT", CODE 5, 0
+def RND_WORD(MQ, TSP, pre, cmd):
+    """A random word from /words.txt, as a message the ROM prints."""
+    try:
+        with open(WORDS, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(randint(0, max(0, size - 64)))
+            f.readline()                        # skip the (likely partial) line
+            word = f.readline().strip().decode() or "the"
+    except OSError:
+        tp.SEND_MSG("No %s on the Pico" % WORDS, "", tp._3_F_Invalid_file)
+        return
+    tp.SEND_MSG(word, "", tp._1_OK, True)
+
+
 EXT_SA_FUNCT = {
     "TPI:.FACT": FACTORIAL,
     "TPI:.RNDW": RND_WORD,

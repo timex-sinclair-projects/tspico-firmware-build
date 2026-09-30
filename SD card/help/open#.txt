@@ -5,4 +5,19 @@ OPEN# s,"c"
 Open channel "c" as stream
 number s.
 
-See also: CLOSE#, streams
+TS-Pico (ROM 2.1) adds two:
+  OPEN #s,"f:name"[,"m"[,n]]
+A file on the SD card. The mode
+m is r (read, the default), w
+(write), a (append) or u (read
+and write), with b for binary:
+  OPEN #5,"f:log.txt","a"
+  OPEN #6,"f:recs.dat","u",32
+n makes a file of n-byte
+records; TAB n goes to record
+n (or byte n without records).
+  OPEN #7,"d:*.tap"
+A folder listing, one name a
+line, read with INPUT #.
+
+See also: CLOSE#, streams, cat

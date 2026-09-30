@@ -2,10 +2,12 @@ TS-Pico Command             ZX48
 --------------------------------
 Switch TS-Pico to Spectrum mode.
 Shows more help when invoked.
-Mount a tap file to use in
-Spectrum mode before giving this
-command since TS-Pico commands
-are not available in that mode.
+Mount a tap file first if you
+want LOAD "" in Spectrum mode.
+With the ZX v3 ROM, LOAD "tpi:
+name" mounts a .tap there too;
+other tpi: commands wait until
+you return to the 2068.
 
   SAVE "tpi:zx48"
   SAVE "tpi:zx48"CODE *,0
@@ -21,10 +23,13 @@ default buffer size.
 
   SAVE "tpi:zx48"CODE *,n
 Where n>=16384, use compatible
-LOAD with the given buffer size. 
+LOAD with the given buffer size.
 See ZX_TAPE_COMPAT in config.ini
 
   SAVE "tpi:zx48"CODE 1,*
 Don't display the help message.
+
+To leave Spectrum mode from the
+2068, OUT 244,0 then OUT 14,14.
 
 See also: OUT, config

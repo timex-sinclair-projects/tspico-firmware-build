@@ -442,13 +442,13 @@
   488 IF oe THEN ON ERR RESET 
 #  490 PRINT "TS-Pico is disabled in Spectrum"
 #  491 PRINT "mode until you reset it or use:"
-#  492 PRINT "OUT 10,100 and then OUT 244,0."
+#  492 PRINT "OUT 244,0 and then OUT 14,14."
   493 IF m>0 THEN PRINT '"Use LOAD """" in Spectrum mode to load from the mounted file:"''m$
 #  493 IF m>0 THEN PRINT '"Use LOAD """" to load from the    mounted file:"''m$
 #            01234567890123456789012345678901 01234567890123456789012345678901
   494 INPUT "Start the Spectrum ROM now with OUT 244,3 [you may need to also press TS-Reset] (y/N)?";k$
   496 IF k$="y" THEN OUT 244,3
-  498 OUT 10,100: GO TO 2008
+  498 OUT 14,14: GO TO 2008
 # Switch running from AROS to BASIC and exit
 ## We could use the Toolkit method to stash these vars and restore regular BASIC vars for the BASIC system, but that would need MC
   500 REM Switch running from AROS to BASIC
