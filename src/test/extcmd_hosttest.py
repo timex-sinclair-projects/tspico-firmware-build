@@ -12,6 +12,7 @@ Run:  python3 src/test/extcmd_hosttest.py
 import math
 import os
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -32,13 +33,15 @@ def main():
     h.install_fakes()
     sys.modules["dev_tspico"] = None          # src/dev_tspico.py is on the path here:
     import TS.tspico as t                     # make extcmd use the module under test
-    # MicroPython inlines underscore const()s and never stores them on the
-    # module, so tspico's _1_OK etc. are NOT attributes on the Pico. Remove
-    # them here too, or a handler using them passes on a PC and fails on the
-    # Pico with AttributeError (Report J) -- which happened.
+    # extcmd imports the running firmware module as `tp`. On the Pico,
+    # tspico's underscore const()s (_1_OK ...) are inlined and are NOT module
+    # attributes, so hand extcmd a stand-in without them: a handler that uses
+    # them passes on a PC and fails on the Pico with AttributeError (Report J)
+    # -- which happened with .fact.
     import re
-    for name in [n for n in dir(t) if re.match(r"_[0-9]+_", n)]:
-        delattr(t, name)
+    tp = types.ModuleType("dev_tspico")
+    tp.__dict__.update({k: v for k, v in vars(t).items() if not re.match(r"_[0-9]+_", k)})
+    sys.modules["dev_tspico"] = tp
     import TS.extcmd as x
     t.TLM_ENABLED = False
     ft = h.FakeTime()
