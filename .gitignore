@@ -62,3 +62,7 @@ src/rom/patches/*.lst
 
 # Claude Code local settings (per machine: permission lists, local paths)
 .claude/settings.local*.json
+
+# docs/manual/examples: assembler output from the tests (make_tap.py rebuilds picoex.tap)
+/docs/manual/examples/*.bin
+/docs/manual/examples/*.sym
