@@ -169,6 +169,20 @@ PATCHES = [
              "crashes; the module closes 'F' records itself and returns C, so $13A8 "
              "only resets the STRMS entry.",
     ),
+    dict(
+        name="version marker: HOME $0065 20h -> 21h (ROM 2.1)",
+        bank="home", addr=0x0065,
+        before="20", after="21",
+        note="PEEK 101 tells a program which ROM it has: 15h v1.1, 17h v1.7, "
+             "20h 2.0 (tspico-sync.asm), 21h this ROM, the disk commands' 2.1.",
+    ),
+    dict(
+        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0021h",
+        bank="exrom", addr=0x1852,
+        before="01 20 00 c9", after="01 21 00 c9",
+        note="The Pico Interface BIOS G_VERS ($1844 -> $1852) returns the same "
+             "version as HOME $0065.",
+    ),
 ]
 
 
