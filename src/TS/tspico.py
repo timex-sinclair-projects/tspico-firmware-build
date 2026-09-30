@@ -414,6 +414,21 @@ sd_active = False
 # back to it. One level, like cd -.
 prev_path = None
 
+# The caches DIR_FILES / GET_DIRS fill for the current card. Empty until a card
+# has been read: with no card at boot they stay so, and the commands that list
+# or index them are refused until a card is in (SD_NEEDED).
+files = []
+files_upper = []
+dirs = []
+dirs_upper = []
+lista = ""
+alldirs = []
+
+# What a command that needs the card answers when there is none: always
+# shown (SEND_MSG forces it), with Report J -- "Invalid I/O device" is the
+# report that means the device isn't there.
+NO_CARD_MSG = "No SD card. Insert one and try again."
+
 # Status codes returned to the 2068 - each maps to a BASIC error
 _1_OK = const(1)
 _2_R_Tape_load = const(2)
@@ -583,6 +598,13 @@ class PICO_STATUS():                                                            
             self.ZX_TAPE_COMPAT = False
 
         self.bank_sm = (self.DCK_SLOT * 16) + self.ROM_SLOT                    # bit pattern to store slot of DCK/ROM. 4 bits each. Default 0001 0000
+        # The SD card, as the last mount found it (ACTIVATE_SD / SD_NOTE_CARD).
+        # sd_cid is the card's CID register (maker, product, serial number):
+        # a different value on a later mount means a different card.
+        self.sd_present = False
+        self.sd_cid = None
+        self.save_no_card = False                                               # the dispatcher's card check for this SAVE failed
+        self.sd_listing_ok = False                                              # DIR_FILES read the current folder without errors
         self.dck_prev_slot = self.DCK_SLOT
         self.dck_prev_mem  = 2
 
@@ -879,12 +901,27 @@ def MQ_BUSY():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def ACTIVATE_SD():                                                                              # Enable SD-Card access SM, after TX/RX operation
+def ACTIVATE_SD(tries=None):                                                                    # Enable SD-Card access SM, after TX/RX operation
+
+    """Mount the SD card on /sd and hand GPIO 2-4 to SPI. Returns the SPI.
+
+    tries: mount attempts, 0.5 s apart. Default: 5 while the card is believed
+    present (a cold card can refuse to start and be fine seconds later), 1
+    once it is known to be missing -- with no card each attempt gives up
+    after ~0.5 s, and every command would otherwise stall ~5 s.
+
+    Every mount goes through here, so this is where the card's state is
+    kept: on success SD_NOTE_CARD records it and, when the card has just come
+    back or is a different card, repairs the state that belonged to the old
+    one. On failure TSP.sd_present goes False and OSError(19) is raised.
+    """
 
     global MQ
     global sd_active
 
     TLM("ACTIVATE_SD enter")
+    if tries is None:
+        tries = 5 if TSP.sd_present else 1
     MQ = StateMachine(0, NULL_SM, freq=15_000_000)
     MQ.active(1)
     MQ.active(0)
@@ -905,7 +942,8 @@ def ACTIVATE_SD():                                                              
     # /activity.log if logging itself is working, and the console used to
     # show nothing but "FAILED".
     err = None
-    for attempt in range(1, 6):
+    spi = sd = None
+    for attempt in range(1, tries + 1):
         try:
             spi = SPI(0, sck=D0, mosi=D1, miso=D2)
             sd = SDCard(spi, U3_CS)
@@ -920,24 +958,113 @@ def ACTIVATE_SD():                                                              
             TLM("ACTIVATE_SD exit", "SD mounted at /sd (attempt %d)" % attempt)
             if attempt > 1:
                 LOG("SD card mounted on attempt %d (before that: %s)" % (attempt, err), 1)
-            return spi
+            break
         except Exception as e:
             err = e
-            print("[ACTIVATE_SD] attempt %d/5 failed: %r" % (attempt, e))
-            time.sleep_ms(500)
+            sd = None
+            print("[ACTIVATE_SD] attempt %d/%d failed: %r" % (attempt, tries, e))
+            if attempt < tries:
+                time.sleep_ms(500)
+
+    if sd is not None:
+        SD_NOTE_CARD(getattr(sd, "CID", 0))                                    # may repair state; raises if it can't
+        return spi
 
     # Raise rather than loop in BLINK_ERROR. This runs inside commands
     # (CD, MD, RM, NEWTAP, HELP, every MOUNT_FILE), and a card that wedges
     # mid-session -- often right after a failed write -- used to brick the
     # TS-Pico until power-cycle. Raised, it becomes that one command
     # failing: PROCESS_CMD's handler catches it and FAIL_CMD re-arms the
-    # bus (sd_active is still True). The boot call in TS2068_IO catches it
-    # and keeps the old blink loop, since there is no card to work with.
-    TLM("ACTIVATE_SD FAILED after 5 attempts", repr(err))
-    LOG(f"Mounting SD Card failed in ACTIVATE_SD after 5 attempts! {err}", 2)
-    SAVE_LOG()
-    raise OSError(19, "SD card mount failed after 5 attempts: %s" % err)
+    # bus (sd_active is still True). At boot TS2068_IO carries on without a
+    # card, and the next command that needs one tries again.
+    if TSP.sd_present:                                                        # it was there: an error
+        LOG(f"Mounting SD Card failed in ACTIVATE_SD after {tries} attempts! {err}", 2)
+        SAVE_LOG()
+    elif TSP.sd_cid is None:                                                  # none since power-on
+        LOG("SD card: not found (%s)" % err, 1)
+    TSP.sd_present = False
+    TLM("ACTIVATE_SD FAILED after %d attempt(s)" % tries, repr(err))
+    raise OSError(19, "SD card mount failed after %d attempts: %s" % (tries, err))
 
+
+def SD_NOTE_CARD(cid):                                                         # ACTIVATE_SD: a card mounted
+
+    """Record the mounted card. When it has just come back (or is the first
+    card of the session) or is a different card, bring the state that
+    assumed the old card up to date (SD_REVALIDATE). The card is mounted."""
+
+    first = TSP.sd_cid is None
+    back = not TSP.sd_present
+    changed = not first and cid != TSP.sd_cid
+    TSP.sd_present = True
+    TSP.sd_cid = cid
+    if back or changed:
+        if changed:
+            LOG("SD card: a different card is in", 1)
+        elif not first:
+            LOG("SD card: back in", 0)
+        SD_REVALIDATE(changed)
+
+
+def SD_REVALIDATE(changed):                                                    # the card is new or back: fix the state
+
+    """Bring everything that belongs to the card up to date. Runs with the
+    card mounted, the first time one is seen and whenever it comes back:
+
+      * no TAP folder (a freshly formatted card): make it;
+      * the current folder: kept if the card has it, else the top (/TAP);
+      * the mounted file: kept if the card has it, else unmounted;
+      * a DIFFERENT card: append goes off (a save must never land in the
+        other card's file), and open channels and the printer capture are
+        dropped -- their files were on the other card;
+      * the directory caches are rebuilt.
+
+    If there is no TAP folder and one can't be made (a write-protected card),
+    the card counts as missing: TSP.sd_present goes False and OSError(19) is
+    raised."""
+
+    global alldirs, prev_path, prn_path
+
+    root = catalog.ROOT
+    if not dir_exists(root):
+        try:
+            os.mkdir(root)
+            LOG("SD card had no TAP folder: made one", 1)
+        except OSError as e:
+            TSP.sd_present = False
+            LOG("SD card has no TAP folder and one can't be made: %s" % e, 2)
+            raise OSError(19, "SD card has no TAP folder")
+    if not dir_exists(TSP.cur_path):
+        TSP.cur_path = root
+    if prev_path and not dir_exists(prev_path):
+        prev_path = None
+    if TSP.f_name and TSP.f_name.startswith("/sd/") and not file_exists(TSP.f_name):
+        LOG("SD card: %s isn't on this card; unmounted" % TSP.f_name, 1)
+        FORGET_MOUNT()
+    if changed:
+        TSP.append = False
+        CHANNELS.close_all()
+        prn_path = None
+    os.chdir(TSP.cur_path)
+    TSP.sd_listing_ok = DIR_FILES()
+    alldirs = GET_DIRS()
+
+
+def SD_PROBE(tries=None):                                                      # is there a card? (bus left with the MQ)
+
+    """Mount and unmount the card, and give the bus back to the MQ (Y stays
+    BUSY). True if a card is in; a card that has come back, or is a
+    different one, is brought up to date on the way (SD_NOTE_CARD)."""
+
+    ok = True
+    try:
+        ACTIVATE_SD(tries)
+    except OSError:
+        ok = False
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+    return ok
 
 def BLINK_ERROR():                                                             # An onboard LED-blinking routine. This for an error condition. Interval is fixed
 
@@ -1597,6 +1724,9 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
 
     wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
 
+    if msg is NO_CARD_MSG:                                                    # the one error everyone must see
+        forceDisplay = True
+
     # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
     # The two `wrt(0x40)` "Read continue flag" writes in the single-port
     # version have been removed. The continue flag now lives on $0F via
@@ -1913,7 +2043,13 @@ def DIR(pre, cmd):                                                              
         return
 
     if par1 == 0:
-        # Regular listing
+        # Regular listing. It is the one made when this card and folder were
+        # last read, so look at the card first (one mount, ~0.2 s): a
+        # different card is read afresh (SD_NOTE_CARD), and a card that has
+        # been taken out gets the no-card answer instead of its old files.
+        if not SD_PROBE():
+            NO_CARD_REPLY("TPI:DIR")
+            return
         TLM("DIR par1=0 — regular listing via SEND_MSG2")
         led.value(1)
         SEND_MSG2(lista, 1, False)
@@ -2049,15 +2185,52 @@ def SD_CALL(fn, *args):                                                       # 
     """Run fn(*args) with the SD card active and always give the pins back to
     the MQ. An SD error becomes ("SD card error", Report F)."""
 
-    ACTIVATE_SD()
     try:
+        ACTIVATE_SD()
         return fn(*args)
     except OSError as e:
+        if not TSP.sd_present:                                                # the mount failed: no card
+            return NO_CARD_MSG, _10_J_Invalid_IO
         LOG("SD card error: %s" % e, 2)
         return "SD card error", _3_F_Invalid_file
     finally:
         DEACTIVATE_SD()
         ACTIVATE_MQ()
+
+
+# Commands that work without the SD card. Everything else in SA_funct needs
+# it, and so do LOAD "tpi:name" (mount) and tpi:help <topic> (the help files
+# are on the card). External commands decide for themselves.
+SD_FREE = frozenset((
+    "TPI:INFO", "TPI:VERBOSE", "TPI:LOGLEVEL", "TPI:LOG", "TPI:BOOT", "TPI:MEMBOOT",
+    "TPI:DOCK", "TPI:MEMDOCK", "TPI:ZX48", "TPI:NOP", "TPI:PATH", "TPI:CLOSE",
+    "TPI:TAPDIR", "TPI:FFW", "TPI:REW", "TPI:APPEND", "TPI:BLKRCV", "TPI:CHCLOSE",
+    "TPI:AUTOLF", "TPI:NOAUTOLF", "TPI:AUTOPG", "TPI:NOAUTOPG", "TPI:BMP", "TPI:PRNSZ",
+    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST",
+    "TPI:MEMINFO", "TPI:STOP"))
+
+# Commands the fdd ROM sends in the middle of a BASIC statement (OPEN #,
+# PRINT #, INPUT #, SAVE/LOAD "f:"): a printed message would move the ROM's
+# current channel, so these get the bare status (CH_REPLY does the same).
+SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:FOPEN"))
+
+
+def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct):                        # does this command need the card?
+
+    if load_cmd:
+        return True                                                           # LOAD "tpi:name": mount a file
+    if cmd_word == "TPI:HELP":
+        return cmd_exec.strip() != cmd_word                                   # a topic is a file on the card
+    return cmd_word in SA_funct and cmd_word not in SD_FREE
+
+
+def NO_CARD_REPLY(cmd_word):                                                  # the command's answer: no card
+
+    LOG("%s: no SD card" % cmd_word, 1)
+    if cmd_word in SD_QUIET:
+        CH_REPLY(_10_J_Invalid_IO)
+    else:
+        SEND_MSG(NO_CARD_MSG, "", _10_J_Invalid_IO, True)
 
 
 def REFRESH_IF(*dirs):                                                        # DIR_FILES if any dir is the current one
@@ -3736,7 +3909,10 @@ def GETINFO(pre, cmd):                                                 # Shows T
     M.append(">Board Rev.: V2.2; Log level:%d\r" % TSP.LOG_LEVEL)
     M.append(">Pico Free RAM: %06.2fkB\r" % (gc.mem_free() >> 10))
     M.append(">Flash: %02.2fMB; free: %02.2fMB\r" % (fl_tot, fl_free))
-    M.append(">%s\r" % lista[32:63]) # sd_stat
+    if TSP.sd_present:
+        M.append(">%s\r" % lista[32:63]) # sd_stat
+    else:
+        M.append(">SD card: none\r")
     mem, page = getBoot()
     M.append(">Boot: %d,%d" % (mem, page))
     mem, page = getDock()
@@ -4507,24 +4683,30 @@ def RM_CHECK(name):                                                           # 
 
 def UNMOUNT(pre, cmd):                                                                                       # Unmount currently mounted file 
     
-    global TSP
-    
     TLM("UNMOUNT enter")
     SEND_MSG("Unmounting file. ", "", _1_OK)
-    
+    FORGET_MOUNT()
+
+    return
+
+
+def FORGET_MOUNT():                                                            # no file mounted (UNMOUNT, a card without it)
+
+    """Forget the mounted file and its flash copy. Sends nothing."""
+
     TSP.f_name = ""
     TSP.offset_tbl = []
     TSP.offset = 0
     TSP.tap_idx = 0
     TSP.append = False
-    
-    try:
-        os.remove("/TMP/temp.bin")    
-        os.remove("/TMP/temp.tap")    
-    except:
-        pass
-    
-    return 
+
+    for tmp in ("/TMP/temp.bin", "/TMP/temp.tap"):                           # each on its own: one missing
+        try:                                                                  # mustn't keep the other
+            os.remove(tmp)
+        except OSError:
+            pass
+
+    return
 
 
 def VERB_TOGGLE(pre, cmd):                                                                               # Toggle commands verbosity ON/OFF 
@@ -5090,20 +5272,26 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
 
         # gc.collect()
 
-        if load_cmd:                                                                                    # Is it a "LOAD:tpi:..." command.....?
+        # Split command word from any arguments
+        sp = cmd_exec.find(' ')
+        if sp >= 0:
+            cmd_word = cmd_exec[:sp]
+        else:
+            cmd_word = cmd_exec
+
+        # No card: a command that needs one gets told so, once, clearly. The
+        # card is looked for again first (one quick try), so putting one in
+        # is all it takes; one that has come back is set up on the way.
+        if SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct) and not TSP.sd_present \
+                and not SD_PROBE():
+            NO_CARD_REPLY(cmd_word)
+
+        elif load_cmd:                                                                                  # Is it a "LOAD:tpi:..." command.....?
 
             msg, rest_cmd, status = LOAD_TPI(rest_cmd)
             SEND_MSG(msg, rest_cmd, status)
 
         else:                                                                                                 # ...or it's a "SAVE:tpi:..." command
-            # Split command word from any arguments
-            sp = cmd_exec.find(' ')
-            if sp >= 0:
-                cmd_word = cmd_exec[:sp]
-                # cmd_args = cmd[sp+4:]
-            else:
-                cmd_word = cmd_exec
-                # cmd_args = ""
 
             TLM("PROCESS_CMD SAVE branch", "cmd_word=%r in_SA_funct=%s in_EXT=%s" % (
                 cmd_word, cmd_word in SA_funct, cmd_word in EXT_SA_FUNCT))
@@ -5369,39 +5557,25 @@ def TS2068_IO():                                                         # Main 
     # gc.collect()
     # LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
+    # The card. ACTIVATE_SD's first successful mount sets everything up
+    # (SD_REVALIDATE: makes /TAP on a blank card, reads the folder, builds
+    # the directory list). No card, or one that can't be used, is not the end
+    # of the boot any more: the TS-Pico runs without one -- LOAD "" still has
+    # the flash assets, commands that need a card say so -- and the next
+    # command that needs one looks again. The LED double-blinks meanwhile.
     try:
-        ACTIVATE_SD()
-    except OSError:
-        while True:                                                    # no card at boot: nothing to serve (logged by ACTIVATE_SD)
-            BLINK_ERROR()
-    
+        ACTIVATE_SD(tries=5)                                           # a cold card can take a few tries
+    except OSError as e:
+        TSP.sd_present = False
+        LOG("Starting without an SD card: %s" % e, 1)
+
     dead = True
-    
+
     while busy:
         pass
 
-    LOG("After ACTIVATE_SD, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
-    gc.collect()
-    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
-    alldirs = GET_DIRS()
-    LOG("After GET_DIRS, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
-    gc.collect()
-    LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
-
-    try:
-        os.chdir(TSP.cur_path)
-    except:
-        LOG("Cannot mount /TAP directory; aborting.", 3)
-        SAVE_LOG()
-        
-        while True:
-            BLINK_ERROR()
-
-    # A card that mounts but then fails a read or write (EIO) must not stop
-    # the boot: DIR_FILES logs the ERROR and returns False, and we carry on
-    # into the dispatcher so the 2068 still has LOAD from the flash assets.
-    sd_ok = DIR_FILES()
-    LOG("After DIR_FILES, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+    sd_ok = TSP.sd_present and TSP.sd_listing_ok
+    LOG("After the SD card setup, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
     LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
@@ -5453,8 +5627,10 @@ def TS2068_IO():                                                         # Main 
 
     if sd_ok:
         LOG("SD Card initialized and mounted OK", 0)
-    else:
+    elif TSP.sd_present:
         LOG("SD card mounted but failing; continuing without a directory listing", 1)
+    else:
+        LOG("No SD card; commands that need one will say so", 1)
     SAVE_LOG()
 
     wrt = MQ.put
@@ -5641,6 +5817,16 @@ def TS2068_IO():                                                         # Main 
                 while busy:
                     pass
                 
+                # The card first, before SAVE_TS says READY for the header: a
+                # SAVE with no card (or one pulled since the last command) is
+                # refused at the header, before the 2068 sends any data, and the
+                # program stays in its memory. Without this the save said "0 OK"
+                # and the write failed after it, silently. The Z80 is waiting
+                # for READY (Y BUSY) meanwhile; one mount costs ~0.1-0.3 s.
+                TSP.save_no_card = not SD_PROBE()
+                if TSP.save_no_card:
+                    LOG("SAVE: no SD card; refused", 1)
+
                 # Save some state for possible restoration
                 pf_name = TSP.f_name
                 pappend = TSP.append
@@ -5648,6 +5834,7 @@ def TS2068_IO():                                                         # Main 
                 # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
                 MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP, pre)
+                TSP.save_no_card = False
                 # log_entries += new_logs
                 # log_entries.extend(new_logs) # For when SAVE_TS returns an array
                 log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
@@ -5886,9 +6073,15 @@ def TS2068_IO():                                                         # Main 
             # blinking" was this — caught via Ctrl-C in Thonny
             # showing the stuck line at the continue below.
             # ────────────────────────────────────────────────────────
-            if time.ticks_diff(time.ticks_us(), ts) < 2_000_000:
+            # Heartbeat: one 0.1 s flash every 2 s; with no SD card, two.
+            _hb = time.ticks_diff(time.ticks_us(), ts)
+            if _hb < 2_000_000:
                 continue
-            elif time.ticks_diff(time.ticks_us(), ts) < 2_100_000:
+            elif _hb < 2_100_000:
+                led.value(1)
+            elif not TSP.sd_present and _hb < 2_250_000:
+                led.value(0)
+            elif not TSP.sd_present and _hb < 2_350_000:
                 led.value(1)
             else:
                 if log_entries:
@@ -6141,9 +6334,15 @@ def ZX48_IO(pre):                                                               
         else:
             # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap (same
             # fix as TS2068_IO's main idle loop) ─────────────────────────
-            if time.ticks_diff(time.ticks_us(), ts) < 2_000_000:
+            # Heartbeat: one 0.1 s flash every 2 s; with no SD card, two.
+            _hb = time.ticks_diff(time.ticks_us(), ts)
+            if _hb < 2_000_000:
                 continue
-            elif time.ticks_diff(time.ticks_us(), ts) < 2_100_000:
+            elif _hb < 2_100_000:
+                led.value(1)
+            elif not TSP.sd_present and _hb < 2_250_000:
+                led.value(0)
+            elif not TSP.sd_present and _hb < 2_350_000:
                 led.value(1)
             else:
 

@@ -61,6 +61,8 @@ def main():
                 raise OSError(19, "no SD card")
             return object()
         t.SDCard = sdcard
+        t.TSP = types.SimpleNamespace(LOG_LEVEL=0, sd_present=True, sd_cid=0,
+                                      sd_listing_ok=True)   # a card was in: 5 tries
         t.os = types.SimpleNamespace(mount=lambda sd, p: state.__setitem__("mounted", state["mounted"] + 1))
         del logs[:]
         out = io.StringIO()

@@ -88,7 +88,7 @@ as `CAT "<arg>"`**. There is one implementation, in the firmware.
 
 | Form | Sends | Meaning |
 |---|---|---|
-| `CAT` | `tpi:dir` | The current directory: the cached listing, unchanged |
+| `CAT` | `tpi:dir` | The current directory: the cached listing, after one quick look at the card (a swapped card is read afresh; no card gives "No SD card") |
 | `CAT "games"` | `tpi:dir games` | Another directory, without changing into it |
 | `CAT "*.tap"`, `CAT "games/b*"` | `tpi:dir *.tap` | The matching entries. `*` matches any run, `?` one character, case-insensitive, last path component only |
 | `CAT "name.tap"` | `tpi:dir name.tap` | The blocks inside that TAP. It doesn't have to be mounted |

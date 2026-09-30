@@ -208,7 +208,7 @@ takes its power from the 2068.
 | Steady on | Busy with a command, a SAVE or a listing |
 | Flickering | Copying a file you've just mounted |
 | A burst of fast blinks | Something went wrong, for example a file that wouldn't mount |
-| Fast blinking that never stops | It couldn't use the SD card at switch-on (see 2.6) |
+| Two short flashes every couple of seconds | Running without an SD card (see 2.6) |
 
 **The jumpers.**
 
@@ -273,13 +273,32 @@ How about that? Your TS-Pico is working. Plain `CAT` does the same thing.
 
 ## 2.6 If the SD card isn't found
 
-Once in a while, the TS-Pico starts up but can't read the SD card. You'll notice it when
-`SAVE "tpi:dir"` reports an error instead of showing a listing, or when the LED keeps blinking
-fast. Don't worry: this is almost always quick to fix.
+The TS-Pico keeps running without an SD card. You'll know there isn't one because the LED
+gives **two** short flashes every couple of seconds instead of one, and any command that needs
+the card says so:
 
-1. **Take the SD card out and push it back in.** That's usually all it takes. Pulling the card
-   out switches it off, and it wakes up fresh when you put it back.
-2. **Type `SAVE "tpi:dir"` again.** You should see your directory listing.
+```
+No SD card. Insert one and try again.
+J Invalid I/O device, 0:1
+```
+
+Commands that don't need the card, such as `SAVE "tpi:info"`, keep working, and so does
+`LOAD ""` from a TAP you mounted earlier. A `SAVE` is refused before anything is sent, so your
+program is still in memory: put a card in and SAVE again.
+
+1. **Put the card in, or take it out and push it back in.** Pulling the card out switches it
+   off, and it wakes up fresh when you put it back.
+2. **Type the command again.** The TS-Pico looks for the card every time, so there's nothing
+   else to do. You should see your directory listing.
+
+A freshly formatted card works too: the TS-Pico makes the `TAP` folder on it.
+
+**Swapping cards.** You can change cards while the 2068 is on. The next command that reads the
+card (a `CAT` or `SAVE "tpi:dir"` will do) notices it's a different card and reads it
+afresh. You stay in the same folder if the new card has it, and the mounted TAP stays mounted
+if the new card has that file too; otherwise you're back at the top, with nothing mounted.
+Append is switched off, so a SAVE can't land in a file on the other card, and any files open
+with `OPEN #` are closed.
 
 If the card still isn't found, give the whole system a fresh start:
 
@@ -293,19 +312,18 @@ stays powered through the restart and can be left waiting for something that nev
 only recovers once it loses power. Taking the card out, or switching everything off, does
 exactly that.
 
-If the LED blinks fast forever at switch-on, the TS-Pico couldn't use the card at all, or the
-card has no `TAP` folder. The 2068 still starts, but no TS-Pico commands will work until you
-fix the card and switch on again.
+If a card still isn't found after that, try it in a computer: it may need formatting (FAT32),
+or it may be write-protected, in which case the TS-Pico can't make its `TAP` folder.
 
 ## 2.7 Summary
 
 1. Switch the 2068 off before connecting anything, and remove the BUSISO jumper for the
    TS-Pico's slot on an expansion bus.
 2. Keep the P10 jumper fitted.
-3. The SD card needs a top-level `TAP` folder.
+3. Your files live in the SD card's `TAP` folder; the TS-Pico makes it on a blank card.
 4. A short LED flash every couple of seconds means all is well.
-5. If the SD card isn't found, reseat it; if that doesn't do it, switch off with the USB
-   unplugged.
+5. Two LED flashes mean there's no SD card. Put one in, or reseat it, and type the command
+   again; if that doesn't do it, switch off with the USB unplugged.
 
 ---
 
@@ -343,8 +361,9 @@ path. `SAVE "tpi:dir games"`, `SAVE "tpi:dir *.tap"` and so on give the same lis
 as the whole name fits in 31 characters.
 
 > **By the way:** `SAVE "tpi:dir"` shows the listing the TS-Pico made when you last entered
-> the folder. If you swap SD cards or add files from a computer, go into another folder and
-> back again to see the new contents.
+> the folder. It checks the card first, so after swapping cards you see the new card. If you
+> add files to the same card from a computer, go into another folder and back again to see
+> them.
 
 ## 3.2 Folders: CD, MOVE TO and PATH
 
@@ -1429,7 +1448,7 @@ to mount one, **B** for the previous page, **N** to quit, or any other key for t
 ### info
 
 `SAVE "tpi:info"` shows the TS-Pico's status: firmware and ROM versions, free memory, Flash and
-SD card space, the BOOT and DOCK slots, append and verbose, the mounted file and tape position,
+SD card space (or `SD card: none`), the BOOT and DOCK slots, append and verbose, the mounted file and tape position,
 the current folder and how many files are in it.
 
 ### log
@@ -1571,8 +1590,9 @@ things it couldn't show on the screen, look in its log: `SAVE "tpi:log" CODE 0,1
 
 **J Invalid I/O device on every command.** The TS-Pico isn't answering.
 
-1. Look at the LED. A short flash every couple of seconds means the TS-Pico is running; fast
-   blinking that never stops means it couldn't use the SD card at switch-on (see 2.6).
+1. Look at the LED. A short flash every couple of seconds means the TS-Pico is running; two
+   flashes mean it's running without an SD card (see 2.6). If commands that need the card
+   are the only ones failing, you'll see "No SD card" first.
 2. If a computer is connected by USB, close Thonny or any other program using the Pico's serial
    port. Connecting one interrupts the TS-Pico.
 3. The firmware and the ROM must come from the same release. An older firmware doesn't

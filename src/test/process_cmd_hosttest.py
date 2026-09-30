@@ -184,7 +184,8 @@ def fresh(mod, mq):
     mod.MQ = mq
     mod.TSP = types.SimpleNamespace(
         zx48=False, f_name="", append=False, cur_path="/sd/TAP",
-        VERBOSE=False, LOG_LEVEL=2, offset=0, offset_tbl=[], tap_idx=0)
+        VERBOSE=False, LOG_LEVEL=2, offset=0, offset_tbl=[], tap_idx=0,
+        sd_present=True, sd_cid=1, sd_listing_ok=True, save_no_card=False)
     mod.log_entries = []
     mod.log_to_serial = False
     mod.files = []

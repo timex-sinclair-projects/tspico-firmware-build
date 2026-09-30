@@ -2027,6 +2027,16 @@ def SAVE_TS(MQ, TSP, pre=None):
         TLM("SAVE_TS CRC refusal drained", "%d residual byte(s)" % _fl)
         return MQ, TSP, log_entries, False
 
+    # NO SD CARD. The dispatcher looked for the card before this SAVE began
+    # (SD_PROBE) and found none: refuse here, at the header, so the 2068 stops
+    # before sending the data block and keeps the program -- Report J, "Invalid
+    # I/O device". Put a card in and SAVE again.
+    if getattr(TSP, "save_no_card", False):
+        dead = True
+        _fl = REFUSE_SAVE(MQ, 0x0A)          # -> Report J
+        LOG_ADD("SAVE refused: no SD card, drained %d byte(s)" % _fl, 1, TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries, False
+
     # ------------------------------------------------------------------
     # FILENAME GUARD. The 10-byte ZX name is already in hand (hdr[4:14]),
     # so judge it HERE -- at the post-header status read -- rather than

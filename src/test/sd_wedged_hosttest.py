@@ -16,7 +16,9 @@ MOUNT_FILE). It now raises OSError instead, and:
   * the dispatcher's post-SAVE remount (not under PROCESS_CMD) logs and
     re-arms instead of ending TS2068_IO, and doesn't spend another five
     attempts on the directory refresh;
-  * boot, with no card at all, keeps the old blink loop.
+  * boot, with no card at all, carries on into the dispatcher without one
+    (it used to end in the blink loop): TSP.sd_present stays False and the
+    commands that need a card are refused (sd_state_hosttest.py).
 
 Runs the REAL TS.tspico ACTIVATE_SD / DEACTIVATE_SD / ACTIVATE_MQ /
 MQ_READY / FAIL_CMD / PROCESS_CMD / MDIR / MOUNT_FILE / TS2068_IO; only
@@ -147,6 +149,7 @@ def test_activate_sd(t):
     print("ACTIVATE_SD, card wedged")
     env = install(t)
     env.card.wedged = True
+    t.TSP = types.SimpleNamespace(LOG_LEVEL=0, sd_present=True, sd_cid=0, sd_listing_ok=True, save_no_card=False)           # a card was in
     try:
         t.ACTIVATE_SD()
         outcome = "returned"
@@ -170,7 +173,8 @@ def run_cmd(t, env, text, load_cmd=0):
     bus.rx = list(P.make_body(text))
     t.TSP = types.SimpleNamespace(
         zx48=False, f_name="", append=False, cur_path="/sd/TAP",
-        VERBOSE=False, LOG_LEVEL=0, offset=0, offset_tbl=[], tap_idx=0)
+        VERBOSE=False, LOG_LEVEL=0, offset=0, offset_tbl=[], tap_idx=0,
+        sd_present=True, sd_cid=0, sd_listing_ok=True, save_no_card=False)
     t.files = ["GAME.TAP"]
     t.files_upper = ["GAME.TAP"]
     t.alldirs = []
@@ -223,7 +227,8 @@ def boot_fakes(t, env, inject_pre):
     t.PICO_STATUS = lambda _v: types.SimpleNamespace(
         cur_path="/sd/TAP", LOG_LEVEL=0, ROM_SM=0, bank_sm=0, f_name="",
         append=False, tap_idx=0, offset=0, offset_tbl=[], zx48=False,
-        VERBOSE=False)
+        VERBOSE=False, sd_present=False, sd_cid=None, sd_listing_ok=False,
+        save_no_card=False)
     t._thread = types.SimpleNamespace(start_new_thread=lambda *a: None)
     t.gc = types.SimpleNamespace(mem_free=lambda: 0, collect=lambda: None)
     t.REMOVE_DIR = lambda d: None
@@ -233,19 +238,31 @@ def boot_fakes(t, env, inject_pre):
     t.busy = False
 
 
+class Booted(Exception):
+    """TS2068_IO finished its boot and logged 'TS Pico initialized OK'."""
+
+
 def test_boot_no_card(t):
     print("TS2068_IO boot, no card at all")
     env = install(t)
     env.card.wedged = True
-    boot_fakes(t, env, lambda: None)
+
+    def booted():
+        raise Booted()
+    boot_fakes(t, env, booted)
     try:
         t.TS2068_IO()
         outcome = "returned"
+    except Booted:
+        outcome = "reached the dispatcher"
     except Bricked:
         outcome = "bricked"
     except BaseException as e:                 # noqa: BLE001
         outcome = "raised %r" % e
-    check(outcome == "bricked", "boot still ends in the blink loop (%s)" % outcome)
+    check(outcome == "reached the dispatcher" and env.blinks == 0,
+          "boot carries on without a card, no blink loop (%s)" % outcome)
+    check(t.TSP.sd_present is False, "TSP.sd_present is False")
+    check(env.card.attempts == 5, "boot gave a cold card 5 tries (%d)" % env.card.attempts)
 
 
 def test_save_remount(t):

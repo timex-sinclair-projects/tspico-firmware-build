@@ -1,6 +1,55 @@
 # SD Card Robustness — Graceful Degradation & Remount
 
-**Status: PROPOSAL — not started, no code written.** Tracker: [#43](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/43).
+**Status: DONE (2.1 firmware).** Tracker: [#43](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/43).
+This is the original proposal; §0 says what was built and how each open
+question was answered. The rest is kept as the reasoning behind it.
+
+## 0. What was built
+
+- **§2a, the `try/finally` on dispatch**, landed earlier as #42.
+- **The card is a state.** `TSP.sd_present` and `TSP.sd_cid` (the card's CID:
+  maker, product, serial number) are kept by `ACTIVATE_SD`, which every mount
+  goes through. Once the card is known to be missing it tries once (~0.5 s),
+  not five times (~5 s), so a command without a card answers quickly.
+- **No brick at boot.** With no card, or a card whose `TAP` folder can't be
+  made, the Pico carries on into the dispatcher. `LOAD ""` still serves the
+  flash assets and an already-mounted TAP. The idle LED flashes twice instead
+  of once (both heartbeats, TS-2068 and ZX48), and `tpi:info` shows
+  `SD card: none`.
+- **A blank card works:** `SD_REVALIDATE` makes `/TAP` on it.
+- **Commands fail cleanly** (§2c, Q1). A command that needs the card, with
+  none in, looks once more (`SD_PROBE`) and answers "No SD card. Insert one
+  and try again." -- always shown, VERBOSE or not -- with **Report J**
+  (Invalid I/O device). Commands the fdd ROM sends mid-statement
+  (`chopen`/`chwr`/`chrd`/`fopen`) get a bare J. `SD_FREE` in `tspico.py`
+  lists the commands that don't need the card; external commands decide for
+  themselves; `SD_CALL` answers J and the message too.
+- **No `tpi:remount`** (Q2, Q4). Every command that needs the card looks for
+  it, so putting a card in is all it takes. Nothing probes in the idle loop,
+  because the SD pins are the data bus.
+- **Card swaps** (the 8/4 discussion, §2d). A CID that differs from the last
+  mount means a different card. `SD_REVALIDATE` keeps the current folder and
+  the mounted file if the new card has them (else the top, and unmounted),
+  turns append off, drops open channels and the printer capture, and rebuilds
+  the caches. A plain `tpi:dir`/`CAT` looks at the card first, so a swap, or a
+  pulled card, shows at once instead of the old card's listing.
+- **SAVE: policy A** (§3, Q3). The dispatcher looks at the card before
+  `SAVE_TS` answers the pre-header; with none, `SAVE_TS` refuses at the header
+  with Report J, before the data block. The program stays in the 2068's
+  memory, so policy A loses nothing and there is no dirty-`/TMP` state. It
+  also fixes a card pulled since the last command, which used to give "0 OK"
+  and a silently failed write.
+- **Q5:** the LED pattern, plus the message from the first command that needs
+  the card.
+
+Tests: `src/test/sd_state_hosttest.py` (attempt counts, the same and a
+different card, a blank card, the command gate, `SD_CALL`),
+`save_ts_hosttest.py` (the SAVE refusal against the ROM's byte sequence),
+`sd_wedged_hosttest.py` (boot with no card) and `catalog_hosttest.py` (the
+`tpi:dir` card check).
+
+Not covered: ZX48 mode's SAVE (`SAVE_ZX`). The ZX v3 ROM has no way to refuse
+a SAVE, so a SAVE there without a card still fails after the fact.
 
 Today the TS-Pico treats "no SD card" as a fatal condition and stops.
 It should treat it as a *state*: note it, keep running, fail the
