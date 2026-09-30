@@ -462,10 +462,11 @@ TLM_ENABLED = False
 # before TLM is enabled.
 BUILD_VERSION = "2026-05-27-J (inline-wrt SEND_MSG2 + suppress_scroll<500)"
 
-# The TS-Pico version: the firmware and its TS-2068 ROM (src/rom/TSPICO-SYNC.ROM,
-# flash slot 1) share one number from 2.0 on. tpi:info reports this, not the
-# FW_VERSION an older config.ini may still hold.
-FW_VERSION = "2.0"
+# The TS-Pico version: the firmware and its TS-2068 ROM share one number from
+# 2.0 on. 2.1 is the release ROM: the disk-command build from tools/build-rom.py
+# (PEEK 101 = 21h). tpi:info reports this, not the FW_VERSION an older
+# config.ini may still hold.
+FW_VERSION = "2.1"
 # Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
 # when loaded via the dev override __name__ == "dev_tspico". This file is
 # kept byte-identical between the two locations so the stamp prints the
