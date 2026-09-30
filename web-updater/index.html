@@ -194,10 +194,10 @@
           <label class="choice"><input type="checkbox" id="opt-wipe" checked>
             <span>Erase the Pico first
               <small>Wipes the Pico’s firmware and files for a clean start. Recommended, and
-                 required when coming from 1.1 or 1.5 — leftover files (like an old
+                 required when coming from 1.1 — leftover files (like an old
                  <code>/TS/</code> folder) stop the new firmware from booting.</small></span></label>
           <label class="choice"><input type="checkbox" id="opt-rom">
-            <span>Update the TS-2068 ROM (boards coming from 1.1 or 1.5)
+            <span>Update the TS-2068 ROM (boards coming from 1.1)
               <small>The firmware needs its matching ROM in the TS-Pico’s flash chip. The
                  page loads a small updater onto the 2068 and walks you through it. Some boards
                  need the <strong>P10 jumper</strong> fitted so the chip can be written — leave it fitted
@@ -270,7 +270,7 @@
         <ol class="steps">
           <li><a href="flash_nuke.uf2" download="flash_nuke.uf2">flash_nuke.uf2</a> — erases the
               Pico; it comes back as RPI-RP2 by itself.</li>
-          <li>From 1.1 / 1.5 only: <a id="dl-upgrade" class="disabled" download="upgrade.uf2">upgrade.uf2</a>
+          <li>From 1.1 only: <a id="dl-upgrade" class="disabled" download="upgrade.uf2">upgrade.uf2</a>
               — then turn the 2068 on, type <code>OUT 244,3</code> and <code>LOAD ""</code>, wait for
               DONE, and switch the 2068 off again.</li>
           <li><a id="dl-uf2" class="disabled" download="firmware.uf2">firmware.uf2</a>
