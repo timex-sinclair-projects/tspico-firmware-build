@@ -246,9 +246,9 @@ def main():
     base[0:0x8000] = rom("ROMs", "TSPICO-ZX48-V2.BIN") + bytes(0x4000)
     base[0x8000:0x10000] = rom("ROMs", "TSPICO-15w-home") + rom("ROMs", "TSPICO-15w-exrom")
     base = bytes(base)
-    rom17 = open(os.path.join(REPO, "src", "rom", "TSPICO-SYNC.ROM"), "rb").read()   # ROM 2.0
+    rom21 = open(os.path.join(REPO, "src", "rom", "TSPICO-21.ROM"), "rb").read()     # ROM 2.1
     zx3 = open(os.path.join(REPO, "src", "rom", "TSPICO-ZX48-V3.BIN"), "rb").read()
-    images = {1: rom17, 0: zx3}
+    images = {1: rom21, 0: zx3}
 
     def untouched_except(fl, lo, hi):
         return fl.m[:lo] == base[:lo] and fl.m[hi:] == base[hi:]
@@ -266,7 +266,7 @@ def main():
     r = run(base, images)
     fl, pico = r["flash"], r["pico"]
     check(r["end"] == "halt" and not r["cpu"].iff, "ends halted with interrupts off (%s)" % r["end"])
-    check(bytes(fl.m[0x8000:0x10000]) == rom17, "slot 1 holds the TS-2068 ROM (crc32 %08X)"
+    check(bytes(fl.m[0x8000:0x10000]) == rom21, "slot 1 holds the TS-2068 ROM (crc32 %08X)"
           % zlib.crc32(bytes(fl.m[0x8000:0x10000])))
     check(bytes(fl.m[0:0x4000]) == zx3, "slot 0's lower 16K holds ZX v3")
     check(fl.m[0x4000:0x8000] == base[0x4000:0x8000] and fl.m[0x10000:] == base[0x10000:],
@@ -299,7 +299,7 @@ def main():
 
     print("the Pico's data comes in wrong")
     r = run(base, images, bad_xor=3)
-    check(r["end"] == "halt" and bytes(r["flash"].m[0x8000:0x10000]) == rom17,
+    check(r["end"] == "halt" and bytes(r["flash"].m[0x8000:0x10000]) == rom21,
           "three bad XORs: retried, and the update completes")
     r = run(base, images, bad_xor=10 ** 6)
     check(r["end"] == "basic" and r["pico"].statuses[-1] == ("X", 3)
@@ -314,7 +314,7 @@ def main():
         return i
 
     print("a byte that won't program in slot 1")
-    r = run(base, images, stuck={0x8000 + stuck_at(rom17, 0x123): 0x01})
+    r = run(base, images, stuck={0x8000 + stuck_at(rom21, 0x123): 0x01})
     check(r["end"] == "basic" and r["pico"].statuses[-1] == ("X", 4)
           and len([e for e in r["flash"].log if e == ("erase", 0x8000)]) == 2,
           "erased and tried again, then X 4 and back to BASIC")
@@ -323,7 +323,7 @@ def main():
     print("a byte that won't program in slot 0")
     r = run(base, images, stuck={stuck_at(zx3, 0x123): 0x01})
     check(r["end"] == "halt" and r["pico"].statuses[-1] == ("X", 4)
-          and bytes(r["flash"].m[0x8000:0x10000]) == rom17,
+          and bytes(r["flash"].m[0x8000:0x10000]) == rom21,
           "X 4 and it stops (no ROM to go back to); slot 1 is already new")
     check("finish on" in screen_text(r["ram"], 21), "the screen says %r" % screen_text(r["ram"], 21))
 

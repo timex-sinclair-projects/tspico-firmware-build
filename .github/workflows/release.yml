@@ -177,7 +177,7 @@ jobs:
           cp src/config.ini    "${STAGE}/src/config.ini"
           cp src/words.txt     "${STAGE}/src/words.txt"
           cp src/assets/*.tap  "${STAGE}/src/assets/"
-          cp src/rom/*.ROM     "${STAGE}/src/rom/"
+          cp src/rom/TSPICO-21.ROM "${STAGE}/src/rom/"   # the slot-1 ROM only (flash/manifest.json)
 
           # SD card/: TAP files + help text the firmware reads from the
           # mounted SD card at runtime. Copy recursively so subfolders
@@ -198,8 +198,8 @@ jobs:
 
           1. **Pico firmware** — \`firmware.uf2\` at the zip root.
           2. **Pico flash filesystem** — everything inside \`src/\`.
-          3. **TS-2068 EXROM** — \`src/rom/*.ROM\` (programmed into the
-             expansion-board ROM chip).
+          3. **TS-2068 ROM** — \`src/rom/TSPICO-21.ROM\`, ROM 2.1 (flash
+             slot 1).
           4. **SD card** — everything inside the \`SD card/\` folder.
 
           All four sides must match for the protocol to work end-to-end.
@@ -224,11 +224,14 @@ jobs:
 
           (\`src/rom/\` does NOT go on the Pico — see step 3.)
 
-          ## 3. Flash the EXROM into the TS-2068
+          ## 3. Install the TS-2068 ROM
 
-          Program \`src/rom/*.ROM\` into the TS-2068 expansion-board ROM
-          chip using your ROM programmer of choice. The image is a raw
-          binary loaded at offset 0.
+          The web updater installs it for you. By hand: copy
+          \`src/rom/TSPICO-21.ROM\` to the SD card's \`TAP\` folder,
+          \`LOAD "tpi:TSPICO-21.ROM"\` then \`LOAD ""\`, and write it to
+          Flash slot 1 while the 2068 runs from another slot; or program it
+          into slot 1 of the flash chip (offset 0x8000) with a ROM
+          programmer. The image is a raw 32K binary.
 
           ## 4. Copy "SD card/" to the SD card
 
@@ -307,7 +310,7 @@ jobs:
           # image when the build-flash step produced one (see the step above).
           # pages.yml publishes firmware.uf2 and upgrade.uf2 to the updater.
           ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)"
-                   "${RUNNER_TEMP}/upgrade.uf2#upgrade.uf2 (ROM updater for boards coming from 1.1/1.5)" )
+                   "${RUNNER_TEMP}/upgrade.uf2#upgrade.uf2 (ROM updater for boards coming from 1.1)" )
           if [ -n "${FLASH_ROM:-}" ] && [ -f "${FLASH_ROM}" ]; then
             ASSETS+=( "${FLASH_ROM}#${FLASH_ROM} (512K flash image, for a chip programmer)" )
           fi
@@ -318,16 +321,27 @@ jobs:
           #   - release exists  → upload assets to it (--clobber replaces
           #     any same-named assets), leaving the existing title/notes
           #     untouched.
-          #   - release absent  → create it fresh with auto-generated
-          #     notes and the workflow's standard title.
+          #   - release absent  → create it fresh with the workflow's standard
+          #     title, and the notes in .github/release-notes/<tag>.md if that
+          #     file exists at the tag (auto-generated notes otherwise).
+          #     Prefer the file: creating the release is what fires pages.yml,
+          #     so pre-creating it by hand for custom notes would publish the
+          #     updater payload before these assets are attached.
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists — uploading assets to it."
             gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           else
-            echo "Release ${TAG} does not exist — creating it."
+            NOTES_FILE=".github/release-notes/${TAG}.md"
+            if [ -f "${NOTES_FILE}" ]; then
+              echo "Release ${TAG} does not exist — creating it with ${NOTES_FILE}."
+              NOTES=( --notes-file "${NOTES_FILE}" )
+            else
+              echo "Release ${TAG} does not exist — creating it with generated notes."
+              NOTES=( --generate-notes )
+            fi
             gh release create "${TAG}" "${ASSETS[@]}" \
               --title "TS-Pico Firmware ${TAG}" \
-              --generate-notes
+              "${NOTES[@]}"
           fi
 
       # ──────────────────────────────────────────────────────────────────

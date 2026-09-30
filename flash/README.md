@@ -9,7 +9,7 @@ cartridge slot numbers step by 2.
 | Slot | Offset | Kind | Contents | Source |
 |---|---|---|---|---|
 | 0 | `0x000000` | ROM/DCK | TS-Pico ZX Spectrum ROM v3 | [`src/rom/TSPICO-ZX48-V3.BIN`](../src/rom/TSPICO-ZX48-V3.BIN) (built from v2 by `tools/build-rom.sh`; v2's LOAD/SAVE are broken, see [`PATCH_ZX48_HANDSHAKE.md`](../docs/rom-analysis/PATCH_ZX48_HANDSHAKE.md)) |
-| 1 | `0x008000` | ROM | TS-Pico TS-2068 ROM 2.0 | [`src/rom/TSPICO-SYNC.ROM`](../src/rom/TSPICO-SYNC.ROM) (v1.7, `src/rom/TSPICO.ROM`, plus `src/rom/patches/tspico-sync.asm`) |
+| 1 | `0x008000` | ROM | TS-Pico TS-2068 ROM 2.1 | [`src/rom/TSPICO-21.ROM`](../src/rom/TSPICO-21.ROM): `tools/build-rom.py` output (ROM 2.0, [`src/rom/TSPICO-SYNC.ROM`](../src/rom/TSPICO-SYNC.ROM), plus the disk-command module `src/rom/fdd/` and its patches). CI checks the committed file matches a fresh build. |
 | 2 | `0x010000` | ROM/DCK | ZX Diagnostics v0.37 | base image |
 | 3 | `0x018000` | ROM | Rodolfo Guerra's TK90/95 ROM | base image |
 | 4–7 | `0x020000` | — | spare | — |
@@ -44,7 +44,7 @@ test ROM on a board alongside the shipping ones:
 ```bash
 # shipping image plus a test ROM in spare slot 4 (select it with ROM_SLOT=4)
 ./tools/build-flash.py build flash/manifest.json --base Pico-v15w.rom \
-    --slot 4=src/rom/TSPICO-SYNC.ROM --out Pico-test.rom
+    --slot 4=build/TSPICO-fdd.ROM --out Pico-test.rom
 ```
 
 A spare slot takes one 32K image, zero-padded if shorter. The build refuses —

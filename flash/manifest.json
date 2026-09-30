@@ -15,9 +15,9 @@
       "slot": 1,
       "kind": "ROM",
       "size": 32768,
-      "name": "TS-Pico TS-2068 ROM 2.0",
-      "file": "../src/rom/TSPICO-SYNC.ROM",
-      "crc32": "56BD89A4"
+      "name": "TS-Pico TS-2068 ROM 2.1",
+      "file": "../src/rom/TSPICO-21.ROM",
+      "crc32": "E813BF90"
     },
     {
       "slot": 2,
