@@ -1801,7 +1801,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     s = len(scroll) + 6
     n = len(msg)
 
-    # ─── Inline-wrt SEND_MSG2 + suppress_scroll for short messages ────────
+    # ─── Inline-wrt SEND_MSG2 ──────────────────────────────────────────────
     # Confirmed by regression test: the buffer-prebuild + preload-then-
     # MQ_READY refactor caused `tpi:help border` to consistently fail,
     # even though both patterns place the same 4 header bytes in TX at
@@ -1809,14 +1809,12 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     # go directly to TX as the per-char loop produces them) handles
     # border correctly, so we're back to that.
     #
-    # We keep suppress_scroll for short messages (<500 chars) so that
-    # picotest's auto-runner doesn't hang on the "Scroll? (Y/n)" prompt
-    # — there's no user to press a key, and the 2068 ROM's $86 handler
-    # doesn't reliably auto-N for short outputs. For long outputs that
-    # would overflow the screen, the prompt still fires.
+    # The "Scroll? (Y/n)" prompt is gated on the line count alone (l == ll
+    # below), so output that fits on one screen never prompts. An earlier
+    # character threshold (no prompt under 500 chars) is gone: it changed
+    # nothing for one-screen output and suppressed the prompt exactly when
+    # it was needed, for many short lines (e.g. a long directory listing).
     # ─────────────────────────────────────────────────────────────────────
-    SCROLL_THRESHOLD = 500
-    suppress_scroll = (n < SCROLL_THRESHOLD)
 
     wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
 
@@ -1920,7 +1918,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                         i += 1
                 wrt(0x0D)
 
-            if not suppress_scroll and l == ll and (not new_rom or n > i + 34):
+            if l == ll and (not new_rom or n > i + 34):
                 # Scroll-prompt path (inline-wrt style).
                 l = 0
                 if not new_rom and i == n - 1:
