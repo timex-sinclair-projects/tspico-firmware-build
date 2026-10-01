@@ -346,6 +346,53 @@ push and uploads `dev_tspico.mpy` as an artifact next to the UF2. So
 if you push your branch, you can download a built `.mpy` from the
 Actions tab instead of running `mpy-cross` locally.
 
+### The upgrade UF2 is a second build of `tspico_io.py`
+
+CI builds two UF2s from this repo, not one:
+
+| UF2 | Freeze manifest | What it's for |
+|---|---|---|
+| `firmware.uf2` (`tspico-firmware-uf2`) | `src/manifest.py` | the TS-Pico firmware |
+| `upgrade.uf2` (`tspico-upgrade-uf2`) | `src/upgrade/manifest.py` | the web updater's ROM step: it serves the updater tape and writes ROM 2.x to flash slot 1 and ZX ROM v3 to slot 0 |
+
+The upgrade UF2 runs its own frozen `main.py` (`src/upgrade/main.py`) and
+reuses the bus code in `src/TS/tspico_io.py`. It freezes only the modules
+that code needs, which today are `TS/__init__.py`, `TS/tspico_io.py`,
+`TS/sdcard.py` and `TS/native.py`. Anything those import when they load
+has to be in that list too.
+
+**So editing `tspico_io.py` can break the ROM updater.** If you add a
+module-level import of another `TS` module to it, you must also:
+
+1. add a `freeze()` line for the new module to `src/upgrade/manifest.py`;
+2. add the file to the `cp ... $M/modules-upgrade/TS/` line in **both**
+   `.github/workflows/build.yml` and `.github/workflows/release.yml`.
+
+Otherwise the upgrade UF2 dies at boot with `ImportError` before it has
+selected a ROM. The 2068 gives a high beep at power-on, and the web
+updater's ROM update can't start. That is what happened from #82, which
+added `from TS import native`, until it was found on hardware on
+2026-10-01. Nothing in the normal firmware shows the problem, because the
+normal firmware has every module.
+
+`src/test/upgrade_hosttest.py` now checks both steps:
+- every module-level import in the frozen files is itself frozen;
+- both workflows copy exactly the frozen `TS` files.
+
+An import inside a function isn't checked, and it's safe as long as the
+upgrade code never calls that function. `SAVE_TS`'s
+`from TS.tspico import TLM` is the example.
+
+**To see why an upgrade UF2 isn't working,** connect to its serial port and
+press Ctrl-D (`python3 tools/pico-serial.py softreset`). Its `main.py` runs
+again and prints any traceback.
+
+**To run the upgrade UF2 by hand without wiping the Pico,** rename
+`/main.py` first, for example to `/main.bak`. A `main.py` on the filesystem
+takes priority over the frozen one. The web updater avoids this by erasing
+the whole flash first. Put the file back after flashing the normal firmware
+again.
+
 ---
 
 ## 6. The dev-override pattern

@@ -22,11 +22,18 @@ What it pins:
   * the updater's 'I' stops the tape; its 'R's get the manifest's ROMs; the
     flash ends up with the TS-2068 ROM in slot 1 and ZX v3 in slot 0;
   * the web page's lines: waiting, tape, updater, status P/E/W/V... D;
-  * a failure (P10 not fitted): X 2, the tape re-armed, LOAD "" works again.
+  * a failure (P10 not fitted): X 2, the tape re-armed, LOAD "" works again;
+  * the upgrade UF2 is self-contained: every TS / upgrade module that its
+    frozen modules import is frozen too (src/upgrade/manifest.py) and staged
+    by both workflows. The rest of this test imports the modules from the
+    full source tree, so it can't see a module that is missing from the
+    UF2 -- which is how #82's `from TS import native` in tspico_io shipped
+    an upgrade UF2 that died with ImportError at boot.
 
 Run:  python3 src/test/upgrade_hosttest.py
 """
 
+import ast
 import contextlib
 import importlib.util
 import io
@@ -231,7 +238,56 @@ def attach_cpu(bus, code, flash_image, we=True):
     return flash, st
 
 
+def check_frozen_closure():
+    """The upgrade UF2 has only what src/upgrade/manifest.py freezes. Every
+    import of a TS.* / upgrade* module in those files must resolve to another
+    frozen file, and CI must stage each frozen TS file (build.yml and
+    release.yml copy them into ports/rp2/modules-upgrade/TS/)."""
+
+    print("the upgrade UF2's frozen modules import only each other")
+    import re
+    man = open(os.path.join(SRC, "upgrade", "manifest.py")).read()
+    files = re.findall(r'freeze\("\$\(PORT_DIR\)/modules-upgrade", "([^"]+)"\)', man)
+    mods = {f[:-3].replace("/", ".").replace(".__init__", "") for f in files}
+    ours = lambda m: m == "TS" or m.startswith("TS.") or m.startswith("upgrade")
+    for f in files:
+        if f == "upgrade_data.py":
+            continue                                    # generated: data only
+        path = os.path.join(SRC, f) if f.startswith("TS/") else os.path.join(SRC, "upgrade", f)
+        tree = ast.parse(open(path).read())
+        need = set()
+        # Only imports that run when the module is imported: walk everything
+        # except function bodies. A lazy import inside a function (tspico_io's
+        # SAVE_TS does `from TS.tspico import TLM`) only runs if the upgrade
+        # code calls that function, which it doesn't; the import that killed
+        # the boot was a module-level one.
+        todo = list(tree.body)
+        nodes = []
+        while todo:
+            node = todo.pop()
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            nodes.append(node)
+            todo.extend(ast.iter_child_nodes(node))
+        for node in nodes:
+            if isinstance(node, ast.Import):
+                need |= {a.name for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                need.add(node.module)
+                if node.module == "TS":                 # from TS import native
+                    need |= {"TS." + a.name for a in node.names}
+        missing = sorted(m for m in need if ours(m) and m not in mods)
+        check(not missing, "%s: everything it imports is frozen (missing: %s)" % (f, missing or "none"))
+    for wf in ("build.yml", "release.yml"):
+        y = open(os.path.join(REPO, ".github", "workflows", wf)).read()
+        line = [l for l in y.splitlines() if "modules-upgrade/TS/" in l and l.strip().startswith("cp ")]
+        staged = set(re.findall(r"src/(TS/\w+\.py)", line[0])) if len(line) == 1 else set()
+        want = {f for f in files if f.startswith("TS/")}
+        check(staged == want, "%s stages exactly the frozen TS files (%s)" % (wf, sorted(staged ^ want) or "ok"))
+
+
 def main():
+    check_frozen_closure()
     install_fakes()
     sys.path.insert(0, SRC)
     sys.path.insert(0, os.path.join(SRC, "upgrade"))

@@ -134,7 +134,7 @@ jobs:
           python3 tools/build-upgrade.py "$RUNNER_TEMP/upgrade"
           M=${{ github.workspace }}/micropython/ports/rp2
           mkdir -p $M/modules-upgrade/TS
-          cp src/TS/__init__.py src/TS/tspico_io.py src/TS/sdcard.py $M/modules-upgrade/TS/
+          cp src/TS/__init__.py src/TS/tspico_io.py src/TS/sdcard.py src/TS/native.py $M/modules-upgrade/TS/
           cp src/upgrade/upgrade.py src/upgrade/main.py "$RUNNER_TEMP/upgrade/upgrade_data.py" $M/modules-upgrade/
           cp src/upgrade/manifest.py $M/boards/manifest_upgrade.py
           cd $M

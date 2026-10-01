@@ -29,6 +29,14 @@ anything it ignored.
 
 `data` is the generated upgrade_data module: TAPE (the updater .tap), IMG1
 (the TS-2068 ROM for slot 1, 32K) and IMG0 (the ZX ROM for slot 0, 16K).
+
+This UF2 has only the modules src/upgrade/manifest.py freezes. It imports
+TS.tspico_io, which is shared with the TS-Pico firmware, so whatever
+tspico_io imports when it loads has to be frozen here too. #82's
+`from TS import native` wasn't, and until 2026-10-01 this UF2 died at boot
+with ImportError. src/test/upgrade_hosttest.py now checks this, and
+docs/DEVELOPER_GUIDE.md ("The upgrade UF2 is a second build of
+tspico_io.py") has the rules.
 """
 import gc
 import json
