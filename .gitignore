@@ -19,6 +19,10 @@
 # fresh clone unable to run either. See docs/rom-analysis/README.md.
 !ROMs/*.bin
 
+# The MicroPython tree the build clones into the workspace root
+# (.github/workflows/*.yml, and the same steps run by hand).
+/micropython/
+
 # Build stamp written by tools/gen-buildinfo.py before the frozen
 # modules are staged. Generated from git, never committed.
 /src/TS/buildinfo.py
