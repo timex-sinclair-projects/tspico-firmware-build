@@ -16,7 +16,12 @@ What it pins:
   * BREAK in the ready-wait before the data: same, "read 0-4 bytes";
   * the Z80 going silent mid-block: RECOVERED (FB) after the stall, no hang;
   * no watchdog: LOAD_TS starts no thread; a stale kill reads as a stall;
-  * a v1.7 LOAD, which never writes 0Fh, behaves exactly as before.
+  * a v1.7 LOAD, which never writes 0Fh, behaves exactly as before;
+  * a BASIC header reaches the Z80 byte for byte as it is on the tape --
+    "no autorun" (line >= 32768) included. The ROM itself skips the autorun
+    for those (EXROM 06C3: AND 0C0h), so LOAD_TS no longer rewrites them;
+    its old rewrite also broke the CRC of any header whose high byte wasn't
+    exactly 80h (Report R).
 
 Run:  python3 src/test/load_ts_hosttest.py
 """
@@ -156,7 +161,7 @@ def ready_wait():
     return None
 
 
-def z80_load(flag, length, break_at=None, stop_at=None, on_byte=None):
+def z80_load(flag, length, break_at=None, stop_at=None, on_byte=None, seen=None):
     """The EXROM after the dispatcher has taken the pre-header: 19C7 status
     read (no wait), 19D4 ready-wait, 1924 echo, the data loop with the 1.8b
     BREAK check every 256 bytes, CRC, 1A02 echo, 1A05 ready-wait, status."""
@@ -185,6 +190,8 @@ def z80_load(flag, length, break_at=None, stop_at=None, on_byte=None):
         if on_byte is not None and i == on_byte[0]:
             yield ("call", on_byte[1])
         b = yield ("in",)
+        if seen is not None:
+            seen.append(b)
         parity ^= b
     crc = yield ("in",)
     if crc != parity:
@@ -403,6 +410,26 @@ def main():
         r5, _ = load(pio, 0xFF, len(data), serve=True)
         check(r5 == "ok" and tsp.native is not None, "a SAVE arm doesn't touch a LOAD (%s)" % r5)
         tsp.native = None
+
+        print("BASIC headers reach the Z80 exactly as on the tape (autorun patch removed)")
+        saved_tap, saved_len = paths["/TMP/temp.tap"], tsp.totlen
+        for name, hi, lo in (("saved without LINE (80h, as the 2068 ROM writes it)", 0x80, 0x00),
+                             ("no autorun written as FFFFh (some tape tools)", 0xFF, 0xFF),
+                             ("LINE 10 (a real autorun)", 0x00, 0x0A)):
+            basic = bytes([0]) + b"autorun   " + bytes([10, 0, lo, hi, 10, 0])
+            btap = tempfile.NamedTemporaryFile(suffix=".tap", delete=False)
+            btap.write(tap_block(0x00, basic))
+            btap.close()
+            paths["/TMP/temp.tap"] = btap.name
+            tsp.totlen = len(tap_block(0x00, basic))
+            tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
+            seen = []
+            r, _ = load(pio, 0x00, len(basic), seen=seen)
+            check(r == "ok" and bytes(seen) == basic,
+                  "%s: CRC good, header unchanged (%s, autorun bytes %s)"
+                  % (name, r, bytes(seen[13:15]).hex() if len(seen) >= 15 else seen))
+        paths["/TMP/temp.tap"], tsp.totlen = saved_tap, saved_len
+        tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
 
         print("the end of the tape, and blocks that can't be blocks (hardware, 2026-09-30)")
         tsp.offset, tsp.tap_idx = len(tap), 2

@@ -25,7 +25,11 @@ Plugging USB into a Pico the 2068 is already powering does not reset it.
 machine.bootloader(), which reboots the RP2040 into BOOTSEL (the RPI-RP2
 drive), then copies the UF2 and waits for the Pico to reboot into it. If
 RPI-RP2 is already mounted it just copies. With --branch/--run it downloads
-the `tspico-firmware-uf2` artifact from a successful CI run via `gh`.
+the `tspico-firmware-uf2` artifact (`--upgrade`: `tspico-upgrade-uf2`) from a
+successful build.yml run via `gh`. `--branch B` takes the run for B's CURRENT
+head commit on GitHub, so it never flashes an older build; `--run N` refuses
+anything that isn't a finished, successful firmware build (a Pages deploy run
+on the same commit has an id that looks just the same).
 
 `put` and `get` move files over the REPL (base64, so any content), with the
 firmware stopped at `>>>` -- `break` first.
@@ -278,22 +282,74 @@ def rp2_drive():
     return None
 
 
+BUILD_WORKFLOW = "build.yml"                 # the workflow that makes the UF2s
+BUILD_WORKFLOW_NAME = "Build TS-Pico Firmware"   # its `name:`, as gh reports it
+
+
+def gh_json(*args):
+    return json.loads(subprocess.run(["gh"] + list(args), capture_output=True,
+                                     text=True, check=True).stdout)
+
+
+def branch_head(branch):
+    """The commit the branch points at on GitHub right now."""
+    sha = subprocess.run(["gh", "api", "repos/{owner}/{repo}/commits/" + branch, "--jq", ".sha"],
+                         capture_output=True, text=True)
+    if sha.returncode != 0 or not sha.stdout.strip():
+        sys.exit("can't find branch %r on GitHub: %s" % (branch, sha.stderr.strip()))
+    return sha.stdout.strip()
+
+
+def ci_run_for_branch(branch):
+    """The build.yml run for the branch's CURRENT head commit.
+
+    Not `gh run list --branch B --limit 1`: on 2026-10-01 that returned a
+    months-old run first for `main`, and `flash --branch main` put a build
+    from #70 on the Pico instead of the one just merged. Runs are found by
+    the head commit instead, so what gets flashed is always the code the
+    branch has now -- or nothing, with a message saying why.
+    """
+    sha = branch_head(branch)
+    runs = gh_json("run", "list", "--commit", sha, "--workflow", BUILD_WORKFLOW,
+                   "--json", "databaseId,status,conclusion,headSha,createdAt")
+    if not runs:
+        sys.exit("no %s run for %s (%s) yet -- has CI started? Or pass --run"
+                 % (BUILD_WORKFLOW, branch, sha[:7]))
+    runs.sort(key=lambda r: r["createdAt"], reverse=True)
+    ok = [r for r in runs if r["status"] == "completed" and r["conclusion"] == "success"]
+    if not ok:
+        r = runs[0]
+        sys.exit("the %s run for %s (%s) is %s/%s -- wait for it, or pass --run"
+                 % (BUILD_WORKFLOW, branch, sha[:7], r["status"], r["conclusion"] or "-"))
+    return ok[0]
+
+
+def check_run(run_id):
+    """A --run id must be a finished, successful FIRMWARE build. Other
+    workflows (Pages, release) run on the same commits and have ids that
+    look just the same -- an easy one to mix up, and their artifacts don't
+    include the UF2s."""
+    r = gh_json("run", "view", str(run_id), "--json",
+                "workflowName,status,conclusion,headSha,headBranch")
+    if r["workflowName"] != BUILD_WORKFLOW_NAME:
+        sys.exit("run %s is %r, not the firmware build (%r)"
+                 % (run_id, r["workflowName"], BUILD_WORKFLOW_NAME))
+    if r["status"] != "completed" or r["conclusion"] != "success":
+        sys.exit("run %s is %s/%s -- only a successful build can be flashed"
+                 % (run_id, r["status"], r["conclusion"] or "-"))
+    return r
+
+
 def ci_uf2(branch, run_id, dest, artifact="tspico-firmware-uf2"):
     """Download a UF2 artifact (tspico-firmware-uf2, or tspico-upgrade-uf2
     for the upgrade firmware); return the .uf2 path."""
     if run_id is None:
-        runs = json.loads(subprocess.run(
-            ["gh", "run", "list", "--branch", branch, "--workflow", "build.yml",
-             "--limit", "1", "--json", "databaseId,status,conclusion,headSha"],
-            capture_output=True, text=True, check=True).stdout)
-        if not runs:
-            sys.exit("no CI run found for branch %r" % branch)
-        r = runs[0]
+        r = ci_run_for_branch(branch)
         run_id = r["databaseId"]
-        if r["status"] != "completed" or r["conclusion"] != "success":
-            sys.exit("latest CI run %s for %r is %s/%s -- wait for it or pass --run"
-                     % (run_id, branch, r["status"], r["conclusion"] or "-"))
-        print("CI run %s (%s)" % (run_id, r["headSha"][:7]))
+    else:
+        r = check_run(run_id)
+    print("CI run %s (%s%s)" % (run_id, r["headSha"][:7],
+                                ", " + r["headBranch"] if r.get("headBranch") else ""))
     subprocess.run(["gh", "run", "download", str(run_id), "-n", artifact,
                     "-D", dest], check=True)
     found = glob.glob(os.path.join(dest, "**", "*.uf2"), recursive=True)
@@ -395,7 +451,7 @@ def main():
 
     f = sub.add_parser("flash", help="put the Pico in BOOTSEL and copy a UF2")
     f.add_argument("uf2", nargs="?", help="local .uf2 file")
-    f.add_argument("--branch", help="latest successful CI build of this branch")
+    f.add_argument("--branch", help="the CI build of this branch's current head commit")
     f.add_argument("--run", help="a specific CI run id")
     f.add_argument("--upgrade", action="store_true",
                    help="the upgrade UF2 (src/upgrade/) instead of the firmware")

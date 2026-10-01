@@ -713,7 +713,7 @@ def test_load_search_is_bounded(tio):
     with tempfile.TemporaryDirectory() as d:
         # A three-header tape. Every request asks for a header (pre[0]=0x00)
         # and the Z80 never accepts one, so this is the runaway case.
-        # Real 17-byte tape headers, so LOAD_TS's autorun-patch path is
+        # Real 17-byte tape headers, so LOAD_TS's header path is
         # exercised rather than running off the end of a stub block.
         def hdr17(name, htype=0):
             h = bytearray(17)

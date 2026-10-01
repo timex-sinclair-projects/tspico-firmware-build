@@ -391,8 +391,12 @@ python3 tools/pico-serial.py softreset                  # Ctrl-D -> main.py agai
 - **`flash` needs no buttons.** It drops to the REPL and calls
   `machine.bootloader()`, which reboots the RP2040 into BOOTSEL; then it
   copies the UF2 and waits for the reboot (~10 s). With `--branch` it
-  takes the `tspico-firmware-uf2` artifact from that branch's latest CI
-  run, and refuses one that hasn't finished or didn't pass. (By hand:
+  takes the `tspico-firmware-uf2` artifact from the build.yml run for that
+  branch's *current head commit*, and refuses one that hasn't finished or
+  didn't pass. `--run N` refuses anything but a successful firmware build:
+  a Pages deploy run on the same commit has an id just like it. (Before
+  2026-10-01 `--branch main` could flash a months-old build, because
+  `gh run list --branch` doesn't return the newest run first for `main`.) (By hand:
   hold BOOTSEL, tap the TS-Pico's reset button, release BOOTSEL.)
 - **`break` stops the firmware** -- the 2068 has no TS-Pico until
   `softreset` or a power cycle. Only send it when the Pico is idle, never
