@@ -1880,12 +1880,20 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
     TLM("SEND_MSG2 enter", "msg_len=%d st=%d expand=%s rom_ver=%s" % (
         len(msg), st, expandKeywords, TSP.ROM_VERSION))
 
-    if TSP.ROM_VERSION == "1.0":
-        new_rom = False
-        end_char = 0x00
-    else:
-        new_rom = True
-        end_char = 0x03
+    # ─── No old-ROM ("1.0") branch any more ────────────────────────────────
+    # SEND_MSG2 used to switch protocols on TSP.ROM_VERSION: "1.0" meant a
+    # pre-1.2 ROM whose 0x86 handler had no 0x03 end-of-loop byte, so pages
+    # ended in 0x00, every page prompted, the last one said "--- End of list
+    # (N to exit) ---" and a CR replaced the erase sequence. But ROM_VERSION
+    # is not detected from the ROM: it is a string in config.ini. Every ROM
+    # this firmware can run with (1.5w, 2.0, 2.1) ends the loop on 0x03
+    # (EXROM 06F5, CP 03h), so a stale "1.0" left in an old config.ini
+    # paired the old protocol with a new ROM, and multi-page listings broke
+    # (no 0x03, so the 2068 never left the loop). Removed by the 2026-09-30
+    # audit; cmd_io_hosttest.py runs a listing with ROM_VERSION "1.0" to
+    # show it is ignored now. ROM_VERSION is still shown by tpi:info.
+    # ─────────────────────────────────────────────────────────────────────
+    end_char = 0x03                                    # end of the 0x86 loop
 
     scroll = "Scroll? (Y/n)"
 
@@ -1922,9 +1930,6 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
         MQ.get()
 
     TLM("SEND_MSG2 inline-wrt start", "header+MQ_READY done")
-
-    if not new_rom:
-        wrt(0x0D)   # Another newline for old ROM
 
     c = 0       # char count
     l = 0       # line count
@@ -1971,10 +1976,19 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 ch = 63
                 c += 1
             elif expandKeywords:
+                # The 2068 prints codes 124 and 126 as keywords, so the column
+                # counter must advance by the printed width. 124 is STICK and
+                # 126 is FREE: the ROM's keyword table runs ... DELETE, ON ERR
+                # (123), STICK (124), SOUND (125), FREE (126), RESET (127)
+                # (docs/rom-analysis/ERROR_TRAPPING.md; xchr() agrees). With
+                # their spaces that is " STICK " = 7 and " FREE " = 6. These two
+                # widths were swapped until the 2026-09-30 audit (Ryan's
+                # comments had 124 as FREE), so each one in a listing put the
+                # line count a column out.
                 if ch == 124:
-                    c += 6
+                    c += 7                               # " STICK "
                 elif ch == 126:
-                    c += 7
+                    c += 6                               # " FREE "
                 else:
                     c += 1
             else:
@@ -1991,37 +2005,44 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
 
         wrt(ch)
 
-        if c == 32:
+        # ─── A line is full at column 32 -- or past it ─────────────────────
+        # This used to be `if c == 32:`. A keyword is 6 or 7 columns wide, so
+        # one that starts at column 26-31 takes c from below 32 to above it
+        # without ever equalling 32: that line was never counted, c was never
+        # reset, and the rest of the message got no Scroll? prompt at all. The
+        # ROM wraps the keyword onto the next line itself, so for c > 32 the
+        # line is counted and the overflow carried over, and no CR is written
+        # (the print position is already on the next line). Found together
+        # with the width fix above (2026-09-30 audit).
+        if c >= 32:
 
             l += 1
-            c = 0
 
-            if ch == 0x0D:
-                if i == 0 or (i == 1 and msg[1] == '\n'):
-                    l -= 1
+            if c > 32:
+                c -= 32                              # the part of the keyword that wrapped
             else:
-                if i + 1 < n:
-                    if msg[i+1] == '\r':
-                        if i + 2 < n and msg[i+2] == '\n':
-                            i += 1
-                        i += 1
-                    elif msg[i+1] == '\n':
-                        i += 1
-                wrt(0x0D)
+                c = 0
 
-            if l == ll and (not new_rom or n > i + 34):
+                if ch == 0x0D:
+                    if i == 0 or (i == 1 and msg[1] == '\n'):
+                        l -= 1
+                else:
+                    if i + 1 < n:
+                        if msg[i+1] == '\r':
+                            if i + 2 < n and msg[i+2] == '\n':
+                                i += 1
+                            i += 1
+                        elif msg[i+1] == '\n':
+                            i += 1
+                    wrt(0x0D)
+
+            if l == ll and n > i + 34:
                 # Scroll-prompt path (inline-wrt style).
                 l = 0
-                if not new_rom and i == n - 1:
-                    scroll_str = "--- End of list (N to exit) ---"
-                else:
-                    scroll_str = scroll
-                    for m in "(%2d%%) " % ((i * 100) // n):
-                        wrt(ord(m))
-                for m in scroll_str:
+                for m in "(%2d%%) " % ((i * 100) // n):
                     wrt(ord(m))
-                if not new_rom:
-                    wrt(13)
+                for m in scroll:
+                    wrt(ord(m))
                 wrt(0x00)       # end of this page
                 # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ─
                 # When the Z80 sends the keypress (its OUT $0E for the
@@ -2052,16 +2073,12 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                 # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
                 # READY-before-data here (READY landed ~9.6 ms late); with MQX the
                 # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
-                if new_rom:
-                    for _eb in range(s):
-                        wrt(0x08)
-                        wrt(0x20)
-                        wrt(0x08)
-                        if not _eb:
-                            MQ_READY()
-                else:
-                    wrt(0x0D)
-                    MQ_READY()
+                for _eb in range(s):
+                    wrt(0x08)
+                    wrt(0x20)
+                    wrt(0x08)
+                    if not _eb:
+                        MQ_READY()
 
     wrt(end_char)
     TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
@@ -3429,9 +3446,9 @@ def xchr(m):
     ch = ord(m)
     if ch < 32 or ch > 127:
         return '?' # Replace control code or high-ASCII
-    elif ch == 124: # tilde
+    elif ch == 124: # '|' prints as the STICK keyword on the 2068
         return ' STICK '
-    elif ch == 126: # vert. bar
+    elif ch == 126: # '~' prints as the FREE keyword
         return ' FREE '
     else:
         return m
