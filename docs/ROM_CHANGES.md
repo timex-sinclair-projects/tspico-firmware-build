@@ -18,7 +18,7 @@ sources are listed [at the end](#sources).
 |---|---|---|
 | **v1.7** | `src/rom/TSPICO.ROM`, crc 09D4CA63 | Gustavo's ROM, the base for everything here. The only public release before this was v1.1. |
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
-| **2.1** | `src/rom/TSPICO-21.ROM`, crc E813BF90 | 2.0 plus 18 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. This is the release ROM and the slot-1 image. |
+| **2.1** | `src/rom/TSPICO-21.ROM`, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 
 From 2.0 on, the ROM and the firmware share one version number. ROM 2.0 and
