@@ -191,6 +191,21 @@ jobs:
           git clone --depth 1 --branch v1.20.0 \
             https://github.com/micropython/micropython.git ${{ github.workspace }}/micropython
 
+      # The build stamp the firmware reports (boot line, tpi:info, the
+      # LOAD_CONFIG TLM). Generated from git so it cannot rot the way the
+      # hand-written literal did. No timestamp, so the same commit builds
+      # byte-identically. Also checks the two copies of tspico.py have not
+      # drifted -- build.yml has always said they are kept identical, but
+      # nothing enforced it until now.
+      - name: Generate the build stamp
+        run: |
+          if ! cmp -s src/TS/tspico.py src/dev_tspico.py; then
+            echo "::error::src/dev_tspico.py has drifted from src/TS/tspico.py"
+            diff src/TS/tspico.py src/dev_tspico.py | head -40 || true
+            exit 1
+          fi
+          python3 tools/gen-buildinfo.py
+
       - name: Stage frozen modules
         run: |
           # NOTE: main.py is NOT frozen — it must live on the Pico's flash
@@ -202,6 +217,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/micropython/ports/rp2/modules/TS
           cp src/TS/__init__.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/__init__.py
           cp src/TS/tspico.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico.py
+          cp src/TS/buildinfo.py    ${{ github.workspace }}/micropython/ports/rp2/modules/TS/buildinfo.py
           cp src/TS/tspico_io.py     ${{ github.workspace }}/micropython/ports/rp2/modules/TS/tspico_io.py
           cp src/TS/sdcard.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/sdcard.py
           cp src/TS/extcmd.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/extcmd.py
