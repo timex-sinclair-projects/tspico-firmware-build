@@ -179,7 +179,12 @@ def main():
                                           "Change to dir", "Changing to: "))
         def ask(pre, cmd):
             menu_result.append(t.SEND_MSG_PROMPT_YN("Sure? "))
-        return {"TPI:SHORT": short, "TPI:LIST": listing, "TPI:MENU": menu, "TPI:ASK": ask}
+        def keywords(pre, cmd):
+            t.SEND_MSG2(kw_text[0], t._1_OK)
+        return {"TPI:SHORT": short, "TPI:LIST": listing, "TPI:MENU": menu, "TPI:ASK": ask,
+                "TPI:KW": keywords}
+
+    kw_text = [""]
 
     menu_result = []
 
@@ -195,10 +200,10 @@ def main():
         pio.finish()
         return pio, (pio.result or ("no result",))
 
-    def run(text, **kw):
+    def run(text, rom="1.7", **kw):
         pio = PIO()
         P.fresh(t, pio)
-        t.TSP.ROM_VERSION = "1.7"
+        t.TSP.ROM_VERSION = rom
         pio.tx = [0x01]                         # the previous command's pre-load
         pio.y = 0                               # pre-header OUTs dropped it
         tio.kill = False
@@ -223,6 +228,26 @@ def main():
         pio, r = run(b"tpi:list", keys=(ord("N"),))
         check(r[0] == "N" and len(r) > 1 and r[1] == 1 and idle(pio),
               "N at the first prompt stops it, back to idle (%s)" % (r[0],))
+
+        print("ROM_VERSION is not a protocol switch (audit 2026-09-30)")
+        pio, r = run(b"tpi:list", rom="1.0")
+        check(r[0] == "ok" and len(r) > 2 and r[1] >= 2 and b"line 60" in r[2] and idle(pio),
+              "a stale \"1.0\" in config.ini: the same listing, same prompts, ends on 03 (%s)" % (r[:2],))
+
+        print("keyword widths: | is STICK (7), ~ is FREE (6)")
+        kw_text[0] = "xxxx||||" * 3
+        pio, r = run(b"tpi:kw")
+        check(r[0] == "ok" and len(r) > 2 and r[2] == b"\r\r" + b"xxxx||||\r" * 3,       # \r\r: SEND_MSG2's opening blank line
+              "4 + 4x7 = 32 columns: a line break after each group (%r)" % (r[2:] or r,))
+        kw_text[0] = "xx~~~~~" * 2
+        pio, r = run(b"tpi:kw")
+        check(r[0] == "ok" and len(r) > 2 and r[2] == b"\r\r" + b"xx~~~~~\r" * 2,
+              "2 + 5x6 = 32 columns: a line break after each group (%r)" % (r[2:] or r,))
+        kw_text[0] = "".join("%02d .......................|\r" % i for i in range(1, 31))  # 26 + 7 = 33
+        pio, r = run(b"tpi:kw")
+        check(r[0] == "ok" and len(r) > 1 and r[1] == 2,
+              "26 chars + STICK straddles column 32: every line is two on screen, so 60 lines"
+              " prompt twice (%s prompts)" % (r[1] if len(r) > 1 else r,))
 
         print("BREAK at a Scroll? prompt (1.8b KEYWAIT)")
         pio, r = run(b"tpi:list", break_at_prompt=2)
