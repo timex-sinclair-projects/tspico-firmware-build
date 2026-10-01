@@ -350,11 +350,33 @@ class Channels:
                 return out
 
     def close(self, stream):
-        """Close it; closing a stream that isn't open is not an error."""
+        """Close it; closing a stream that isn't open is not an error.
 
-        ch = self.table.pop(stream, None)
+        The stream leaves the table only AFTER any padding is written. If the
+        write raises (no card, an SD error) the stream stays open: the fdd
+        ROM's CLOSE # stops with the error before it frees its own side of
+        the channel (CH_CLOSE_HOOK -> CH_STATUS -> C_FAIL in fddcmd.asm), so
+        BASIC still has the stream open too, and CLOSE # can simply be tried
+        again once the card is back."""
+
+        ch = self.table.get(stream)
         if ch is not None and ch.reclen:
             self._end_record(ch)                     # PRINT #4;...; left one open
+        self.table.pop(stream, None)
+
+    def close_writes(self, stream):
+        """Will close(stream) write to the file?
+
+        Only when the stream has a record length and a record is part-written
+        (PRINT #4;TAB n;"ab"; -- the trailing ';' leaves it open): close()
+        then pads that record to its full length on the card. Every other
+        close is bookkeeping only. The firmware asks first because the card
+        is unmounted between commands and mounting it costs ~0.1-0.3 s, or
+        fails with no card in -- and CLOSE # of anything else must work
+        without one."""
+
+        ch = self.table.get(stream)
+        return ch is not None and bool(ch.reclen) and ch.fill is not None
 
     def close_all(self):
         self.table.clear()

@@ -634,17 +634,24 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   the file.
 - **`END_MSG()` has no callers and should keep it that way.** It is
   retained as documented context for the trap above, not as an API.
-- **There are two `busy` flags, not one.** `tspico.py` imports named
-  symbols from `tspico_io` and `busy` is not among them, so its
-  `global busy` binds a *different* module-level variable — the one its
-  own `SAVE_LOG` / `BLINK_LED` / `CHK_STATUS` threads set. A
-  `while busy:` in `tspico.py` does **not** wait for the LVM watchdog,
-  however much it reads like it does. Core1 is one resource, so anything
-  deciding whether it can spawn must consult both: its own `busy` and
-  `CORE1_BUSY()`. The three `while busy:` waits in the main LVM loop are
-  subject to this and are deliberately unchanged — they are unbounded
-  spins, so making them wait on something that can actually be True
-  would turn a no-op into a potential hang.
+- **`busy` is set by another core: never wait on it unbounded, and always
+  clear it in a `finally`.** `tspico.py`'s `busy` means "core1 is writing
+  the log to flash" (`SAVE_LOG`; `BLINK_LED` uses it during boot only).
+  `tspico_io` has its own, unrelated `busy` left from the removed watchdog;
+  `tspico.py` doesn't import it. Before the 2026-09-30 audit `SAVE_LOG`
+  cleared the flag only when its write succeeded, so a full flash left it
+  True for good and every `while busy: pass` -- `COPY_FILE` (every
+  `LOAD "tpi:file"`), and the main loop's SAVE and LOAD branches -- hung
+  the Pico. Wait with `WAIT_CORE1(limit_ms, who)`, which gives up and logs;
+  set `busy = True` on core0 *before* `start_new_thread`, so there is no
+  window in which a transfer sees core1 idle as the write begins.
+- **A bare `except:` swallows BREAK.** `CmdAbort` (#51) is a
+  `BaseException` so that `except Exception:` lets it through to
+  `PROCESS_CMD`; a bare `except:` catches it anyway. Any handler that wraps
+  `SEND_MSG2`, `ListMenu`, `CMD_KEY` or another Z80 exchange must catch
+  `Exception` (or narrower), or keep the exchange outside the `try`.
+  `GETLOG` had this until the audit: BREAK at its Scroll? prompt was
+  answered with "Log file too large".
 - **ZX48 mode is a different protocol — don't apply the V6 chain to
   it.** The customised Spectrum ROM in flash slot 0 has no status port,
   no pre-header and no echo phase: after `'L'` it reads exactly

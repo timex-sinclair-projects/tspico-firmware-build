@@ -786,30 +786,54 @@ def ENA_MQ_DUAL(MQ):
     return MQ
 
 
-def ENA_SD():
-    """Mount the SD card on /sd. Used by SAVE_TS to write the captured TAP.
+def ENA_SD(log_level=0):
+    """Mount the SD card on /sd. Used by SAVE_TS and SAVE_ZX to write the
+    captured TAP. Returns the SPI object, or -99 if the mount failed.
 
     Note: this leaves the GPIO pins claimed by SPI; the caller is
     responsible for unmounting (or letting MOUNT_FILE / DEACTIVATE_SD
     handle it later in the dispatcher). New code should prefer the
     explicit ACTIVATE_SD / DEACTIVATE_SD pair in tspico.py.
+
+    log_level is the caller's TSP.LOG_LEVEL, for the error entry below.
     """
-    
+
     U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
     D0          = Pin(2,  Pin.IN)
     D1          = Pin(3,  Pin.IN)
     D2          = Pin(4,  Pin.IN)
 
     spi = SPI(0, sck=D0, mosi=D1, miso=D2)
-    sd = SDCard(spi, U3_CS)
 
+    # ─── A failed mount is logged and NOT raised -- on purpose ─────────────
+    # What this guard is for: carry on when the mount fails, and let the
+    # caller's own write fail if there really is no card. Both callers wrap
+    # ENA_SD() and the open()/write() after it in `try ... except Exception`,
+    # log "SAVE write FAILED ..." and keep the dispatcher alive (SAVE_TS can't
+    # report it to the 2068 any more: its final status went out before the
+    # pin grab, see the RACE FIX comment there). Not raising also covers a
+    # /sd that is somehow still mounted: os.mount() then fails with EPERM,
+    # but the write still works on the existing mount, as it always has.
+    #
+    # What was broken: the log call used TSP.LOG_LEVEL, and there is no TSP
+    # in this module -- every other function here gets TSP as a parameter;
+    # ENA_SD never did. So the error path raised NameError instead of logging
+    # and returning -99. The callers caught that as the write failure and
+    # logged "name 'TSP' isn't defined", which hid the real cause (the
+    # mount error). The `except:` was also bare, so it would have swallowed
+    # KeyboardInterrupt (Ctrl-C from the host) as well. Now the caller
+    # passes its log level in, the real error is logged, and only Exception
+    # is caught. Found by the 2026-09-30 audit; see audit_fixes_hosttest.py.
+    # SDCard() is inside the try because it talks to the card (init_card)
+    # and is where a missing card actually fails -- before os.mount runs.
+    # ─────────────────────────────────────────────────────────────────────
     try:
+        sd = SDCard(spi, U3_CS)
         os.mount(sd, "/sd")
-    except:
-        LOG_ADD("ERROR: Mounting SD Card failed in ENA_SD!", 2, TSP.LOG_LEVEL)
+    except Exception as e:
+        LOG_ADD("ERROR: Mounting SD Card failed in ENA_SD: %r" % (e,), 2, log_level)
         spi = -99
-        pass
-    
+
     return spi
 
 
@@ -2360,7 +2384,7 @@ def SAVE_TS(MQ, TSP, pre=None):
     # open(); unguarded that reaches main.py and drops the Pico to a REPL.
     saved = True
     try:
-        ENA_SD()
+        ENA_SD(TSP.LOG_LEVEL)
         with open(filename, mode) as f1:
             f1.write(hdr)
             f1.write(blk)
@@ -2497,7 +2521,7 @@ def SAVE_ZX(MQ, TSP):
     filename = TSP.cur_path + "/" + name + ".tap"
     saved = False
     try:
-        ENA_SD()
+        ENA_SD(TSP.LOG_LEVEL)
         with open(filename, "wb") as f1:
             f1.write(hdr)
             f1.write(blk)
