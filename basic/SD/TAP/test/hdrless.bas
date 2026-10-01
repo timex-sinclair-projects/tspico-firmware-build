@@ -88,11 +88,15 @@
   112 PRINT ''"Do a LOAD and BREAK out of it"'"first? y, or Enter to skip:"
   114 INPUT LINE c$
   116 IF c$<>"y" AND c$<>"Y" THEN GO TO 130
-  118 PRINT ''"Press BREAK (SPACE) during"'"this LOAD."
+# A name that cannot match, so this only ever searches -- LOAD "" could load
+# a program off the mounted tape instead. Aborting the search rewinds the read
+# pointer to where it began (REWIND_ABORTED_SEARCH), so the block you picked
+# above is still the one that gets served.
+  118 PRINT ''"Press BREAK (SPACE) during"'"this search."
   120 LET er=0: ON ERR GO TO 900
-  122 LOAD ""
+  122 LOAD "zzzzzzzz"
   124 ON ERR RESET 
-  126 PRINT ''"That LOAD reported ";e$(er+1)
+  126 PRINT ''"That search reported ";e$(er+1)
   128 INPUT "Enter to go on:";LINE c$
 # Poke the two operands into the stub and call it.
   130 POKE mc+7,dest-256*INT (dest/256): POKE mc+8,INT (dest/256)
