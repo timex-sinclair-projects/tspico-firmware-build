@@ -265,6 +265,7 @@ Two payload trees:
 │   ├── PROTOCOL_V2_PROPOSAL.md    # Future-revision design sketch
 │   ├── LOW-LEVEL-PROTOCOL-V5.TXT  # Gustavo's authoritative wire spec
 │   ├── OPEN_QUESTIONS.md          # Live design questions
+│   ├── AUDIT-2026-09-30.md        # Assumption audit: what is still open
 │   └── DEVELOPER_GUIDE.md         # ← this file
 ├── archive/                       # Historical reference material
 ├── SD card/                       # Goes on the user's SD card
@@ -760,6 +761,10 @@ If yes, delete it (§5 — the shadowing trap).
 ## 12. Where to look next
 
 - The current open design questions: [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md).
+- The 2026-09-30 assumption audit, and which of its items are still
+  open: [`AUDIT-2026-09-30.md`](AUDIT-2026-09-30.md). Read its Status
+  section first — most items are fixed and merged, and it names the one
+  branch still waiting on a hardware run.
 - The protocol v2 sketch: [`PROTOCOL_V2_PROPOSAL.md`](PROTOCOL_V2_PROPOSAL.md).
   Read this when thinking about a non-incremental change to the wire
   protocol.
