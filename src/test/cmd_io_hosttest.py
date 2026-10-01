@@ -23,7 +23,11 @@ What it pins:
 Run:  python3 src/test/cmd_io_hosttest.py
 """
 
+import builtins
 import os
+import re
+import types
+import tempfile
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -127,6 +131,35 @@ def z80_cmd(body, keys=(), break_at_prompt=None, stop_after=None, body_break_at=
         if c == 0x03:                           # end of message
             return ("ok", prompts, bytes(text))
         text.append(c)
+
+
+def z80_blkrcv(body, read_n=0, break_first=False):
+    """romupdate.bas: SAVE "tpi:blkrcv" (status), then -- after its PRINTs and
+    the erase -- the DI write loop reads read_n bytes blind. break_first: the
+    user BREAKs before the USR, so nothing is ever read (1.8b/2.x ROMs write
+    0Fh for BREAK, and the next command's SYNC does the same)."""
+    st = yield ("in",)
+    if st != 0x01:
+        return ("st%02X" % (st or 0),)
+    r = yield from L.ready_wait()
+    if r:
+        return (r,)
+    for b in body:
+        yield L.out(0x0E, b)
+    r = yield from L.ready_wait()
+    if r:
+        return (r,)
+    code = yield ("in",)
+    if code != 0x01:
+        return ("st%02X" % code,)
+    if break_first:
+        yield L.out(0x0F, 0x03)
+        yield ("wait", READY | IDLE, 3000)
+        return ("D",)
+    data = bytearray()
+    for _ in range(read_n):
+        data.append((yield ("in",)))
+    return ("ok", bytes(data))
 
 
 def z80_menu(body, key):
@@ -249,6 +282,44 @@ def main():
               "26 chars + STICK straddles column 32: every line is two on screen, so 60 lines"
               " prompt twice (%s prompts)" % (r[1] if len(r) > 1 else r,))
 
+        print("tpi:blkrcv: the ROM-update stream (audit 2026-09-30)")
+        image = bytes((i * 37 + 11) & 0xFF for i in range(1000))
+        real_open, real_os = getattr(t, "open", builtins.open), t.os
+
+        def blkrcv_run(script):
+            pio = PIO()
+            P.fresh(t, pio)
+            t.TSP.ROM_VERSION = "2.1"
+            t.TSP.f_name = "/sd/TAP/NEW.ROM"
+            t.getDock = lambda: (2, 4)
+            t.BOOT_SLOT_CLASH = lambda *a: None
+            t.BLINK_ERROR = lambda *a: None
+            t.led = types.SimpleNamespace(value=lambda *a: None)
+            img = tempfile.NamedTemporaryFile(suffix=".bin", delete=False)
+            img.write(image)
+            img.close()
+            t.open = lambda path, mode="r": real_open(img.name if path == "/TMP/temp.bin" else path, mode)
+            t.os = types.SimpleNamespace(stat=lambda path: (0,) * 6 + (len(image),))
+            pio.tx = [0x01]
+            pio.y = 0
+            tio.kill = False
+            pio.run(script)
+            try:
+                t.PROCESS_CMD(P.make_pre(b"tpi:blkrcv"), {"TPI:BLKRCV": t.BLKRCV}, {})
+            finally:
+                t.open, t.os = real_open, real_os
+            pio.finish()
+            return pio, (pio.result or ("no result",))
+
+        pio, r = blkrcv_run(z80_blkrcv(P.make_body(b"tpi:blkrcv"), read_n=len(image)))
+        check(r[0] == "ok" and len(r) > 1 and r[1] == image and idle(pio),
+              "the updater's blind read loop gets all %d bytes, in order; back to idle (%s)"
+              % (len(image), r[0]))
+        pio, r = blkrcv_run(z80_blkrcv(P.make_body(b"tpi:blkrcv"), break_first=True))
+        check(r[0] == "D" and not pio.blocked and idle(pio),
+              "BREAK before the write loop starts: Report D, back to idle, no put() into a"
+              " full FIFO (blocked=%s, %s)" % (pio.blocked, r[0]))
+
         print("BREAK at a Scroll? prompt (1.8b KEYWAIT)")
         pio, r = run(b"tpi:list", break_at_prompt=2)
         check(r[0] == "D" and idle(pio),
@@ -289,12 +360,25 @@ def main():
         bad = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Attribute)]
         check(not bad, "RX_CAPTURE stores no bound methods (%s)" % bad)
 
+        print("unknown pre-headers go back to a known state (audit 2026-09-30)")
+        for name in ("TS/tspico.py", "dev_tspico.py"):
+            src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
+            loop = src[src.index("def TS2068_IO("):src.index("def ZX48_IO(")]
+            i = loop.index('LOG("Unrecognized command! " + str(list(pre)), 1)')
+            branch = loop[i:loop.index("\n        else:", i)]
+            check("MQ_TO_IDLE(MQ, recovered=True)" in branch and "MQ.active(0)" not in branch
+                  and "BLINK_ERROR()" not in branch,
+                  "%s: an unrecognised pre-header -> MQ_TO_IDLE (one 0x01 staged), no SM restart"
+                  " or 1 s blink" % name)
+            check(not re.search(r"^\s*elif pre\[0\] == 65:", loop, re.M) and "def PROCESS_ASM(" not in src,
+                  "%s: no 'A' (41h) branch: it falls into the unrecognised path" % name)
+
         print("READY for a command comes from PROCESS_CMD")
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
-            i = src.index("if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)")
+            i = src.index("if pre[0] not in (0, 255, 66):")
             cond = src[i:src.index("MQ_READY()", i)]
-            check("and pre[0] != 66" in cond,
+            check("66" in cond,
                   "%s: the dispatcher skips READY for all 42h traffic (commands, printer)" % name)
             i = src.index("got = RX_CAPTURE(MQ, pre_raw, 10, 1000)")
             sync = src[i:src.index("if got != 10:", i)]

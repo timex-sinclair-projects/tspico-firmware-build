@@ -3605,7 +3605,7 @@ def APPEND(pre, cmd):                                                           
 
 
 def BLKRCV(pre, cmd):                                                                                  # 'Internal' command to send block to be written to Flash
-    
+
     global MQ
     global TSP
     global led
@@ -3614,9 +3614,9 @@ def BLKRCV(pre, cmd):                                                           
     _BUFSZ = 256
     buf = bytearray(_BUFSZ)
     mv = memoryview(buf)  # Faster indexing than bytearray
-    
+
     wrt = MQ.put
-    
+
     status = _1_OK
 
     # The Z80 erases and writes the DOCK slot as soon as this returns OK.
@@ -3629,77 +3629,97 @@ def BLKRCV(pre, cmd):                                                           
         SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
         return
 
+    # ─── How the stream is read, and the one window where it can hang ──────
+    # romupdate.bas / dckupdate.bas run `SAVE "tpi:blkrcv"` (line 280), then
+    # PRINT, erase the slot (USR 32800/32600), and only THEN start the write
+    # loop (USR 32870/32670). That loop runs with interrupts off and reads
+    # port 0Eh blind -- no ready check -- a byte every ~33 us (117 T-states:
+    # flash unlock + program, IN A,(0Eh), LD (HL),A, count) until done.
+    #
+    # So the stream is queued long before anything reads it. If BASIC never
+    # gets to the USR -- BREAK during the PRINTs or the erase, or an error --
+    # nothing ever reads it, and a plain MQ.put() on the full FIFO blocked
+    # for ever: the Pico deaf even to the next command's SYNC, until a power
+    # cycle. (2026-09-30 audit; #69 had moved every other output path to
+    # CMD_PUT but not this one.)
+    #
+    # Fix: the first GATE bytes go through CMD_PUT, which waits for room
+    # without blocking -- bounded, and raising CmdAbort on a port-0Fh write
+    # (BREAK, or the next command's SYNC), so PROCESS_CMD tidies up and the
+    # Pico stays alive. Once GATE bytes are in, the Z80 has consumed some of
+    # them, i.e. its DI write loop is running and will read to the end on its
+    # own; from there it is the same fast MQ.put() stream as always. The
+    # per-byte loop is deliberately untouched: it has to keep up with a
+    # reader that never waits, and CMD_PUT's extra check on every byte would
+    # eat into that 33 us. (A reset in the middle of the write loop still
+    # leaves the Pico in put() -- but that also leaves the slot half-written,
+    # which needs the user's attention and a power cycle anyway.)
+    # ──────────────────────────────────────────────────────────────────────
+    GATE = 8                                # > the 4-deep FIFO + the status byte
+
+    def stream(f, total):
+        """Send `total` bytes of file f (from its current position)."""
+        gate = GATE
+        left = total
+        while left > 0:
+            n = f.readinto(buf if left >= _BUFSZ else mv[:left])
+            if not n:
+                break
+            i = 0
+            while gate and i < n:           # until the Z80 is demonstrably reading
+                CMD_PUT(mv[i])
+                i += 1
+                gate -= 1
+            for j in range(i, n):           # the fast path, exactly as before
+                wrt(mv[j])
+            left -= n
+
     led.value(1)
+    try:
+        if TSP.f_name[-4:].upper() == ".DCK":
 
-    if TSP.f_name[-4:].upper() == ".DCK":
+            # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
+            wrt(status)
+            MQ_READY()
 
-        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
-        wrt(status)
-        MQ_READY()
+            try:
+                with open("/TMP/temp.bin", "rb") as file:
+                    stream(file, 65536)     # DCK_IMAGE always writes the full 64K
+            except Exception as e:
+                print(f"ERROR! {e}")
+                return
 
-        try:
-            
-            with open("/TMP/temp.bin", "rb") as file:
-                
-                r = range(65536 // _BUFSZ)
-                for i in r:
-                    n = file.readinto(buf)
-                    for i in range(n):
-                        wrt(mv[i])
-        
-        except Exception as e:
-            print(f"ERROR! {e}")
-            return
-        
-    elif TSP.f_name[-4:].upper() in [".BIN", ".ROM"]:
-        
-        file_len = os.stat("/TMP/temp.bin")[6]
-        send_len = file_len
-        
-        par1, par2 = PARAMS(pre)
-        
-        if ((par1 + par2) > file_len):
-            status = _3_F_Invalid_file
-            BLINK_ERROR()
-        
-        # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
-        wrt(status)
-        MQ_READY()
+        elif TSP.f_name[-4:].upper() in [".BIN", ".ROM"]:
 
-        if (status == _1_OK):
-            
-            rd_offset = par2
-            
-            if (par1 != 0):
-                send_len = par1
-            else:            
-                send_len = file_len - rd_offset
-            
-            num_blk = send_len // _BUFSZ
-                             
-            with open("/TMP/temp.bin", "rb") as file:
-                file.seek(rd_offset)
-                
-                for i in range(num_blk):
-                    n = file.readinto(buf)
-                
-                    for i in range(n):
-                        wrt(mv[i])
-                            
-                n = file.readinto(buf, send_len % _BUFSZ)
-                
-                for i in range(n):
-                    wrt(mv[i])
-                            
-            del buf
-            del mv
-            
-            # gc.collect()
-            
-        led.value(0)
-    
+            file_len = os.stat("/TMP/temp.bin")[6]
+            send_len = file_len
+
+            par1, par2 = PARAMS(pre)
+
+            if ((par1 + par2) > file_len):
+                status = _3_F_Invalid_file
+                BLINK_ERROR()
+
+            # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
+            wrt(status)
+            MQ_READY()
+
+            if (status == _1_OK):
+
+                rd_offset = par2
+
+                if (par1 != 0):
+                    send_len = par1
+                else:
+                    send_len = file_len - rd_offset
+
+                with open("/TMP/temp.bin", "rb") as file:
+                    file.seek(rd_offset)
+                    stream(file, send_len)
+    finally:
+        led.value(0)                        # also on the .DCK path, which used to leave it lit
+
     return
-
 
 def ChangeDir(potential_new_path, SDactive = False):
 
@@ -5271,47 +5291,6 @@ def PRN_BMP(pre, cmd):
         bmp_size = (x, y)
     SEND_MSG("COPY picture: %dx%d" % bmp_size, "", _1_OK)
 
-def PROCESS_ASM(pre):                                                                 # Processes AU (Assembler) commands sent by the TS
-
-    global MQ
-
-    cmd = pre[:5].decode()
-    wrt = MQ.put
-
-    # ─── DUAL-PORT MIGRATION: leading wrt(0x40) REMOVED ───────────────
-    # Was the single-port "continue flag" byte indicating Pico is ready
-    # to receive the command body. In dual-port the Z80 polls $0F (Y
-    # register, kept at READY all session) for ready and reads $0E for
-    # data — so the 0x40 in TX served no purpose and would have been
-    # read by the Z80 as an unexpected data byte.
-    # ──────────────────────────────────────────────────────────────────
-
-    print(pre)
-    print(cmd)
-
-    par3 = int(pre[8])
-    par4 = int(pre[9])
-
-    print(par3, par4)
-
-    # ─── DUAL-PORT MIGRATION: V6 tail (final status + pre-load) ───────
-    # Was:  wrt(0x40); wrt(0x01)   (0x40 = continue flag, 0x01 = status)
-    # Now:  wrt(0x01); wrt(0x01)
-    #   - First 0x01: final status response for THIS command (Z80 reads
-    #     as "0 OK" via $0E).
-    #   - Second 0x01: pre-load for the NEXT command's initial status.
-    #     This is the V6 chain that keeps back-to-back commands working
-    #     without re-arming status in the main dispatcher.
-    # The continue flag has moved off the FIFO entirely — Y register
-    # stays at READY so $0F always answers ready.
-    # ──────────────────────────────────────────────────────────────────
-    wrt(0x01)        # final status — Z80 reads as "0 OK"
-    wrt(0x01)        # pre-load for next command's initial status
-    MQ_READY()       # #14: Y was dropped by Z80's command-body OUTs; restore
-
-    return
-
-
 def FAIL_CMD(status):
     """Put TX into a known state and hand the Z80 exactly one status byte.
 
@@ -6052,8 +6031,19 @@ def TS2068_IO():                                                         # Main 
                 PRINT_FLUSH()
                 if _unread:
                     MQ.put(0x01)
-            if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10) \
-                    and pre[0] != 66:   # commands, printer: the handler says it
+            # ─── No early READY for ANY LOAD/SAVE pre-header ───────────────
+            # LOAD_TS / SAVE_TS raise READY themselves once the first bytes
+            # are queued (#64): READY before that lets the Z80 read an empty
+            # TX as 00 -- Report R, seen on hardware after a BREAK. This test
+            # used to be `not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)`,
+            # Ryan's "for simplicity" split of LOAD by pre[1] (TADDR). A
+            # headerless LOAD -- machine code calling LD-BYTES, with whatever
+            # TADDR held, often >= 10 -- fell outside it and still got the
+            # early READY, though it goes to the very same LOAD_SERVE. Now
+            # every flag-00/FF pre-header is left to its handler, as are
+            # commands and the printer (42h). (2026-09-30 audit.)
+            # ──────────────────────────────────────────────────────────────
+            if pre[0] not in (0, 255, 66):   # LOAD/SAVE, commands, printer: the handler says READY
                 MQ_READY()
 
             # Snapshot pre[] for any later TLM that wants to print it.
@@ -6284,35 +6274,40 @@ def TS2068_IO():                                                         # Main 
                 if TSP.zx48:
                     ZX48_IO(pre)
                     
-            elif pre[0] == 65:
-                LOG('Starting "A" COMMAND', 0)
-                
-                PROCESS_ASM(pre)
-                DIR_FILES()
-                
+            # ─── No 'A' (41h) branch any more ──────────────────────────────
+            # There was one: `elif pre[0] == 65:` ran PROCESS_ASM(pre) then
+            # DIR_FILES(), a placeholder for an "assembler command" block in
+            # Gustavo's design. No ROM sends 41h -- the EXROM's pre-header
+            # builder only does LD A,42h (docs/rom-analysis/
+            # PROTOCOL_FROM_ROM.md) -- and PROTOCOL.md calls it vestigial. If
+            # line noise ever produced one, the stub queued two bytes on top
+            # of the staged pre-load (an orphan byte for the next command) and
+            # listed the folder with /sd unmounted. A 41h now lands in the
+            # unrecognised branch below like any other unknown pre-header.
+            # Removed by the 2026-09-30 audit, with PROCESS_ASM.
+            # ──────────────────────────────────────────────────────────────
             else:
                 try:
                     LOG("Unrecognized command! " + str(list(pre)), 1)
                 except:
                     LOG("Unrecognized command! Cannot get pre[] data", 1)
 
-                # ─── DUAL-PORT MIGRATION: inline FIFO drains ──────────────
-                # Replaces EMPTY_RX_FIFO() / EMPTY_TX_FIFO() (single-port
-                # helpers being retired). The behavior is identical; just
-                # inlined so the handler is self-contained.
-                # ──────────────────────────────────────────────────────────
-                while MQ.rx_fifo() != 0:
-                    MQ.get()
-                while MQ.tx_fifo() != 0:
-                    MQX(MQ, "pull (noblock)")
-                    MQX(MQ, "mov (osr, null)")
-                MQ.active(0)
-                utime.sleep(.01)
-                MQ.active(1)
-
-                BLINK_ERROR()
-
-                LOG("Cleared TX/RX FIFO after unrecognized cmd: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
+                # ─── Back to a known state, WITH the pre-load staged ─────────
+                # This branch used to drain both FIFOs, restart the state
+                # machine and blink the LED for a second. That is Ryan's
+                # single-port recovery: his loop wrote a fresh 0x01 status at
+                # the top of every pass, so throwing TX away was safe. In the
+                # dual-port V6 chain the 0x01 the next command reads is staged
+                # ONCE, by whoever ran last -- so the drain left none, and the
+                # next command on a ROM without SYNC read 00: Report J
+                # (PROTOCOL.md 4.3 described exactly this). The 1 s BLINK_ERROR
+                # also blocked while the Z80 could already be sending its next
+                # pre-header. MQ_TO_IDLE (#51) is the bounded, standard way
+                # back: empty FIFOs, exactly one 0x01 staged, status RECOVERED
+                # -- the same as the partial-pre-header path above.
+                # (2026-09-30 audit.)
+                # ──────────────────────────────────────────────────────────────
+                MQ_TO_IDLE(MQ, recovered=True)
 
             # ─── DUAL-PORT MIGRATION: bottom-of-loop drains REMOVED ───────
             # Ryan's original code had defensive drains here ("clean up

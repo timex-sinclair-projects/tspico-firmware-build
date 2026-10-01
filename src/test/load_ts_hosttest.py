@@ -280,8 +280,10 @@ def main():
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
             body = src[src.index("got = RX_CAPTURE(MQ, pre_raw, 10, 1000)"):src.index("_pre_snapshot = list(pre)")]
-            check("if not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10" in body and "MQ_READY()" in body,
-                  "%s: the dispatcher skips READY after a LOAD pre-header (LOAD_TS says it)" % name)
+            i = body.index("if pre[0] not in (0, 255, 66):")
+            check("MQ_READY()" in body and "pre[1] < 10" not in body[i:body.index("MQ_READY()", i)],
+                  "%s: the dispatcher skips READY after EVERY LOAD pre-header, headerless too"
+                  " (LOAD_TS says it)" % name)
 
         print("normal LOAD (header, then data)")
         r, _ = load(pio, 0x00, len(header) + 0)
