@@ -1082,7 +1082,8 @@ def BLINK_ERROR():                                                             #
 
 
 def BLINK_LED(pause):                                                           # Another routine that ...well...blinks the onboard LED!
-                                                                                # Used by the COPY_FILE routine
+                                                                                # Runs on core1 during boot only (TS2068_IO starts it and
+                                                                                # stops it with `dead = True`). COPY_FILE once used it too.
     global dead
     global busy
     global led
@@ -1105,12 +1106,31 @@ def BLINK_LED(pause):                                                           
 
 def COPY_FILE(src_file, dst_file):                                                          # Copy the large .TAP file to Pico's internal flash
                                                                                              # best compatibility and performance
-    global dead
-    global busy
     global led
-    
-    dead = False
-    
+
+    # ─── No dead/busy handshake here any more ──────────────────────────────
+    # This function used to set `dead = False` on entry, `dead = True` at the
+    # end, and then spin on `while busy: pass`. That was a handshake with a
+    # thread on core1 -- BLINK_LED or Ryan's CHK_STATUS watchdog -- which
+    # blinked the LED during the copy: `dead = True` told it to stop, and
+    # `while busy` waited for it to finish. Nothing starts such a thread
+    # here any more (the LED is toggled inline below, and the watchdog was
+    # removed in issue #51), so the handshake had nothing to talk to.
+    #
+    # What it did still do was wait on the ONE remaining user of `busy`,
+    # SAVE_LOG on core1 -- and before the 2026-09-30 audit a SAVE_LOG whose
+    # flash write failed left `busy` True for ever, so every LOAD "tpi:file"
+    # mount then hung the Pico right here. The wait also never protected the
+    # copy itself: it ran AFTER the copy had finished.
+    #
+    # Instead, wait (bounded) BEFORE writing to flash, so the copy doesn't
+    # overlap a log write -- both cores stop while a flash sector is
+    # programmed, and two writers to the flash filesystem from two cores is
+    # asking for trouble. 3 s is far more than a log write takes, and well
+    # inside the ~20 s the Z80 waits for a command's reply.
+    # ─────────────────────────────────────────────────────────────────────
+    WAIT_CORE1(3000, "COPY_FILE")
+
     try:
         buf = bytearray(512)
     except:
@@ -1137,14 +1157,10 @@ def COPY_FILE(src_file, dst_file):                                              
         return False
     finally:
         led.value(0)
-    dead = True
-    
-    del buf                                                                             # OPTIMIZATION - CHECK!       
+
+    del buf                                                                             # OPTIMIZATION - CHECK!
     gc.collect()
-    
-    while busy:
-        pass
-    
+
     return True
 
 
@@ -1422,8 +1438,28 @@ def LOG(msg, level):                                                            
     if log_to_serial:                                                                    # If enabled, send log msg to console instead of logfile
         print(m)
     
-    if TSP.LOG_LEVEL:                                                                    # TSP is not initialized at startup, so this check is required
-        if level < TSP.LOG_LEVEL:
+    # ─── LOG must work before TSP exists ──────────────────────────────────
+    # TSP (the PICO_STATUS object holding LOG_LEVEL) is created in TS2068_IO
+    # only AFTER LOAD_CONFIG has read config.ini -- and LOAD_CONFIG itself
+    # calls LOG when config.ini is missing or unreadable, or holds a bad
+    # ROM_SM. So LOG has to cope with TSP not existing yet.
+    #
+    # The old guard, `if TSP.LOG_LEVEL:`, was meant to do exactly that (its
+    # comment said "TSP is not initialized at startup, so this check is
+    # required"), but it reads TSP to make the check, so it raised NameError
+    # instead. The result: a missing or corrupt config.ini -- e.g. a power
+    # cut while LOAD_CONFIG rewrites it, which it does on every boot from a
+    # non-default slot -- crashed the boot, and the TS-Pico never came up.
+    # Found by the 2026-09-30 audit; see src/test/audit_fixes_hosttest.py.
+    #
+    # globals().get() looks TSP up without raising. Until it exists there is
+    # no log level to filter by, so every message is kept: these are the few
+    # boot messages that explain why the defaults were used, which is what
+    # someone reading /activity.log after a bad boot needs to see.
+    # ─────────────────────────────────────────────────────────────────────
+    tsp = globals().get("TSP")
+    if tsp is not None and tsp.LOG_LEVEL:                                                # LOG_LEVEL 0 = keep everything
+        if level < tsp.LOG_LEVEL:
             return
     
     log_entries.append("[%d]%s\n" % (time.ticks_us(), m))                                    # on Pico W, timestamp can be replaced by local time provided by ntp
@@ -1678,22 +1714,77 @@ def PARAMS(pre):
 
 
 def SAVE_LOG():                                                                         # Saves log_entries to the 'activity.log' file in flash
-    
+
+    # ─── Why `busy` exists, and why it is cleared in a `finally` ──────────
+    # The idle loop runs SAVE_LOG on core1 (_thread.start_new_thread). Writing
+    # to the Pico's flash stops BOTH cores while a sector is programmed, so a
+    # log write must not overlap a LOAD or SAVE block, or the pre-header burst
+    # after a SYNC: the Z80 keeps clocking bytes out and the 4-deep PIO FIFO
+    # overflows. `busy` is how core0 knows a write is in progress; the main
+    # loop waits for it to clear (WAIT_CORE1) before it starts a transfer.
+    #
+    # It used to be cleared only on the success path. If the write raised --
+    # flash full, a filesystem error -- the thread died with `busy` still True,
+    # and every `while busy: pass` waiting on it spun for ever: the next
+    # LOAD "tpi:file" (COPY_FILE), SAVE or LOAD hung the Pico until a power
+    # cycle, and the idle loop never tried to save the log again (it only
+    # starts SAVE_LOG when `not busy`). Found by the 2026-09-30 audit;
+    # reproduced in src/test/audit_fixes_hosttest.py. The `finally` makes
+    # "busy is False once SAVE_LOG has finished" true on every path.
+    #
+    # `busy = True` is ALSO set by the idle loop just before it starts this
+    # thread (see there); setting it again here covers the synchronous calls
+    # from LOAD_CONFIG.
+    # ─────────────────────────────────────────────────────────────────────
+
     global busy
     global log_entries
-    
+
     busy = True
-    
-    with open("/activity.log", "a") as logfile:
-        for e in log_entries:
-            logfile.write(e)
-        # writelines doesn't add newlines, but our log strings already have them.
-        
-    log_entries = []
-    
-    busy = False
+
+    try:
+        with open("/activity.log", "a") as logfile:
+            for e in log_entries:
+                logfile.write(e)
+            # writelines doesn't add newlines, but our log strings already have them.
+    finally:
+        # The entries are dropped even when the write failed. Keeping them
+        # would mean retrying a write that will most likely fail again (a
+        # full flash stays full) while log_entries grows without limit in
+        # the Pico's ~150 KB heap -- the log is not worth running out of
+        # memory for. The error itself can't be logged: that is the log.
+        log_entries = []
+        busy = False
 
     return
+
+
+def WAIT_CORE1(limit_ms, who):                                                          # bounded wait for a SAVE_LOG on core1
+
+    """Wait until core1 has finished writing the log (`busy` is False), but
+    for at most limit_ms. True if core1 is idle, False if we gave up.
+
+    Why wait at all: a flash write stops both cores (see SAVE_LOG), so a
+    transfer that starts while one is in progress can lose bytes mid-block.
+    Why bounded: `busy` is set and cleared by another core, and the old
+    unbounded `while busy: pass` turned any way of it staying True into a
+    hang that only a power cycle cleared. Giving up costs, at worst, one
+    transfer that overlaps a write -- recoverable, and the 2068 reports it
+    -- while waiting for ever costs the whole session.
+
+    The limit is chosen by the caller from what the Z80 tolerates at that
+    point. A normal log write takes a few tens of ms, so any limit here is
+    many times what a healthy write needs.
+    """
+
+    if not busy:
+        return True
+    t = time.ticks_ms()
+    while busy:
+        if time.ticks_diff(time.ticks_ms(), t) >= limit_ms:
+            LOG("%s: gave up waiting %d ms for the log write on core1" % (who, limit_ms), 2)
+            return False
+    return True
 
 
 def CLEAR_LOG():                                                                         # Clear log_entries and the 'activity.log' file in flash
@@ -2874,8 +2965,44 @@ def CH_READ(pre, cmd):                                                        # 
 
 def CH_CLOSE(pre, cmd):                                                       # tpi:chclose
 
-    CHANNELS.close(PARAMS(pre)[0] & 0xFF)
-    CH_REPLY(_1_OK)
+    # ─── Why CLOSE # sometimes needs the card, and sometimes doesn't ───────
+    # When OPEN # channels arrived (#83), closing a stream only dropped it
+    # from the table, so CH_CLOSE called CHANNELS.close() directly and
+    # TPI:CHCLOSE was listed in SD_FREE (commands that never touch the card).
+    #
+    # Record files (#84) changed that: close() now PADS a part-written record
+    # to its full length -- PRINT #4;TAB 2;"ab"; then CLOSE #4 -- and that is
+    # a write to the file on the card. But the card is unmounted between
+    # commands (DEACTIVATE_SD), and nothing here mounted it, so the padding
+    # was written to a card that wasn't there: on hardware an OSError, the
+    # 2068 got Report J, and the record stayed short. Found by the 2026-09-30
+    # audit; see src/test/audit_fixes_hosttest.py.
+    #
+    # So: when close() is going to write, run it through CH_CALL, which
+    # mounts the card, gives the pins back to the MQ afterwards, and turns a
+    # missing card or an SD error into the right status. Otherwise close
+    # without the card, as before -- CLOSE # of a read stream, or of a write
+    # stream with nothing pending, must keep working with no card in. That
+    # is also why TPI:CHCLOSE stays in SD_FREE: the dispatcher must not
+    # refuse it up front just because the card is missing.
+    # ─────────────────────────────────────────────────────────────────────
+    stream = PARAMS(pre)[0] & 0xFF
+    if not CHANNELS.close_writes(stream):
+        CHANNELS.close(stream)                                                # bookkeeping only: no card needed
+        CH_REPLY(_1_OK)
+        return
+    msg, st = CH_CALL(CHANNELS.close, stream)
+    if st != _1_OK:
+        # The padding couldn't be written (no card, or an SD error). The
+        # stream stays open here, and that is deliberate: on an error status
+        # the fdd ROM's CLOSE # reports it and stops BEFORE freeing its own
+        # side of the channel (CH_CLOSE_HOOK -> CH_STATUS -> C_FAIL in
+        # src/rom/fdd/fddcmd.asm), so BASIC still has the stream open as
+        # well. Both sides agree, and CLOSE # can be repeated once the card
+        # is back in, writing the padding then. (Channels.close only drops
+        # the stream after the write succeeded.)
+        LOG("CLOSE #%d: %s" % (stream, msg), 1)
+    CH_REPLY(st)
 
 def IDIR(pre, cmd):
 
@@ -3522,7 +3649,6 @@ def ChangeDir(potential_new_path, SDactive = False):
     status = _1_OK
     if not SDactive:
         ACTIVATE_SD()
-    npath = "%s/%s" % (TSP.cur_path, potential_new_path)
     global prev_path
     old_path = TSP.cur_path
 
@@ -3533,15 +3659,24 @@ def ChangeDir(potential_new_path, SDactive = False):
             new_path = TSP.cur_path
             status = _3_F_Invalid_file
 
-    elif potential_new_path == ".." and TSP.cur_path.count("/") > 2:
-        # remove the last element from the current path
-        # unless the last element is TAP
-        #print("attempt to move up one directory")
-        path_list = list(TSP.cur_path.split("/"))       # convert current path to a list
-        path_list.pop(0)  # remove the first element, which is blank
-        path_list.pop()   # remove the last element
-        new_path = "/".join(path_list)
-        
+    # ─── ".." below the root is left to catalog.resolve() ──────────────────
+    # There used to be a branch here, from before catalog.resolve() existed
+    # (#79), that handled ".." by hand: split cur_path on "/", drop the first
+    # (empty) element and the last one, and join the rest. Dropping the empty
+    # first element also dropped the leading "/", so from /sd/TAP/GAMES it
+    # produced "sd/TAP" -- a RELATIVE path. os.chdir("sd/TAP") only lands in
+    # the right place when MicroPython's current directory is the VFS root
+    # "/", which is true only because DEACTIVATE_SD unmounts /sd between
+    # commands; whenever the current directory was inside /sd (e.g. just after
+    # SD_REVALIDATE chdir'd there), "cd .." failed with Report Q. This
+    # branch ran BEFORE the catalog.resolve() branch below and so hid it,
+    # even though resolve() handles ".." correctly and absolutely. Removed
+    # by the 2026-09-30 audit; see src/test/audit_fixes_hosttest.py.
+    #
+    # ".." AT the root is still handled by the next branch: resolve() returns
+    # None for a path that would climb above /sd/TAP, and "cd .." at the top
+    # has always meant "stay at the top", not an error.
+    # ─────────────────────────────────────────────────────────────────────
     elif (potential_new_path == ".." and TSP.cur_path.count("/") == 2) or potential_new_path == "/" or potential_new_path.lower() == "/tap":
         new_path = "/sd/TAP"
         
@@ -3552,9 +3687,17 @@ def ChangeDir(potential_new_path, SDactive = False):
             dir_exists(catalog.resolve(TSP.cur_path, potential_new_path)):             # "a/b", "../x", "/games", normalised
         new_path = catalog.resolve(TSP.cur_path, potential_new_path)
 
-    elif dir_exists(npath):
-        new_path = npath
-        
+    # ─── No raw "cur_path + / + arg" fallback any more ─────────────────────
+    # A last branch used to try the plain concatenation
+    # "%s/%s" % (TSP.cur_path, arg) -- before #79 that was how any relative
+    # name was found. Since catalog.resolve() handles every relative name,
+    # the fallback was reached in exactly one case: resolve() had returned
+    # None because the path climbs ABOVE /sd/TAP ("cd ../.." from one level
+    # down). The fallback then chdir'd to "/sd/TAP/GAMES/../.." and left the
+    # card root, which resolve() exists to prevent. Without it, such a path
+    # is Report F like any other directory that can't be reached -- the same
+    # answer CAT gives for it. Removed by the 2026-09-30 audit.
+    # ─────────────────────────────────────────────────────────────────────
     else:
         # no changes bc it doesn't meet any of the tests above
         new_path = TSP.cur_path
@@ -4014,25 +4157,50 @@ def GETLOG(pre, cmd):                                                 # Shows th
     else:    
         len_read = len_file
 
+    # ─── Read first, then show -- and only the read is guarded ────────────
+    # The whole requested part of the log is read into one buffer, and the
+    # log is only trimmed to 64 KB at boot, so it can outgrow the heap during
+    # a long session. Ryan wrapped this in a try/except for exactly that
+    # ("in case the file is too large to allocate the buffer").
+    #
+    # That `except:` was bare, and SEND_MSG2 sat inside the try. Since #51,
+    # BREAK at SEND_MSG2's "Scroll?" prompt raises CmdAbort -- deliberately a
+    # BaseException, so that a handler's `except Exception:` can NOT swallow
+    # it; PROCESS_CMD must see it to stop talking to a Z80 that has left the
+    # command. A bare `except:` catches BaseException too, so GETLOG ate the
+    # BREAK and then sent "Log file too large" to a 2068 that had stopped
+    # listening. Found by the 2026-09-30 audit; see audit_fixes_hosttest.py.
+    #
+    # Now the try covers only reading the file (MemoryError for a log too big
+    # to hold; OSError or a decode error for a damaged one), catches only
+    # Exception, and SEND_MSG2 runs outside it, so CmdAbort propagates. The
+    # finally turns the LED off on every path, including a BREAK.
+    # ─────────────────────────────────────────────────────────────────────
     try:
-        msg = bytearray(len_read)
+        try:
+            buf = bytearray(len_read)
+            with open(log_fname, "r") as logfile:
+                if file_seek:
+                    logfile.seek(file_seek)
+                logfile.readinto(buf)
+            text = buf.decode('utf-8')                                # Convert bytes to string
+        except MemoryError:
+            text = None
+            msg = "Log file too large"
+        except Exception as e:                                        # OSError, UnicodeError: a damaged log
+            text = None
+            msg = "Couldn't read the log file"
+            LOG("GETLOG: %s" % e, 2)
+        buf = None                                                    # free it before SEND_MSG2 builds its output
 
-        with open(log_fname, "r") as logfile:
-            
-            if file_seek:
-                logfile.seek(file_seek)
-                
-            logfile.readinto(msg)
+        if text is None:
+            LOG(msg, 2)
+            SEND_MSG(msg, "", _4_Q_Parameter)
+        else:
+            SEND_MSG2(text, 1)                                        # CmdAbort (BREAK) passes straight through
+    finally:
+        led.value(0)
 
-        SEND_MSG2(msg.decode('utf-8'), 1) # Convert bytes to string
-
-    except:
-        msg = "Log file too large"
-        LOG(msg, 2)
-        SEND_MSG(msg, "", _4_Q_Parameter)
-
-    led.value(0)
-    
     return
 
 
@@ -5575,8 +5743,12 @@ def TS2068_IO():                                                         # Main 
         TSP.sd_present = False
         LOG("Starting without an SD card: %s" % e, 1)
 
-    dead = True
+    dead = True                                                        # tells BLINK_LED (core1) to stop
 
+    # Wait for BLINK_LED to finish before core1 is used for anything else.
+    # Unlike the waits on SAVE_LOG further down, this one is safe unbounded:
+    # BLINK_LED only sleeps and toggles the LED, it can't raise, and it sets
+    # `busy = False` within one blink period (0.9 s) of seeing `dead`.
     while busy:
         pass
 
@@ -5819,10 +5991,14 @@ def TS2068_IO():                                                         # Main 
                 LOG("Starting SAVE TS", 0)
                 
                 led.value(1)
-                
-                while busy:
-                    pass
-                
+
+                # Don't start a SAVE while core1 is writing the log to flash:
+                # the flash write stops both cores, and the header and data
+                # blocks that follow arrive with no flow control. Bounded --
+                # see WAIT_CORE1 for why this is no longer `while busy: pass`.
+                # The Z80 waits ~20 s for READY here, so 3 s is safe.
+                WAIT_CORE1(3000, "SAVE")
+
                 # The card first, before SAVE_TS says READY for the header: a
                 # SAVE with no card (or one pulled since the last command) is
                 # refused at the header, before the 2068 sends any data, and the
@@ -5985,8 +6161,11 @@ def TS2068_IO():                                                         # Main 
                     _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
                 LOG("Starting TS LVM", 0)
 
-                while busy:
-                    pass
+                # Same reason as SAVE above: a log write on core1 would stop
+                # both cores while LOAD_TS streams a block the Z80 reads with
+                # no handshake (a byte every ~50 us). Bounded; the Z80 waits
+                # ~20 s for READY at this point.
+                WAIT_CORE1(3000, "LOAD")
                 MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
                 # log_entries += new_logs
                 log_entries.append(new_logs) # for now
@@ -5998,8 +6177,7 @@ def TS2068_IO():                                                         # Main 
                     _pre_snapshot, TSP.tap_idx, TSP.offset))
                 LOG("Starting TS LVM - Headerless LOAD", 0)
 
-                while busy:
-                    pass
+                WAIT_CORE1(3000, "headerless LOAD")                     # as for LOAD above
                 MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
                 # log_entries += new_logs
                 log_entries.append(new_logs) # for now
@@ -6127,10 +6305,20 @@ def TS2068_IO():                                                         # Main 
                         # on core1 can do its own gc.collect if memory
                         # pressure becomes an issue inside the thread.
                         # ──────────────────────────────────────────────────
+                        # `busy` goes True HERE, on core0, before the thread
+                        # starts -- not only inside SAVE_LOG. Otherwise there
+                        # is a window between start_new_thread returning and
+                        # core1 reaching SAVE_LOG's first line in which `busy`
+                        # is still False: a SAVE or LOAD that arrived in that
+                        # window would see core1 idle and start its transfer
+                        # just as the flash write begins. If the thread can't
+                        # be started (core1 still in use), nothing will clear
+                        # `busy` for us, so we clear it ourselves.
+                        busy = True
                         try:
                             _thread.start_new_thread(SAVE_LOG, ())
                         except OSError:
-                            pass
+                            busy = False
 
                 # Host text the firmware never reads fills MicroPython's
                 # stdin buffer, and then Ctrl-C can't get in (see
