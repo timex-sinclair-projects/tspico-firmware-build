@@ -1860,7 +1860,10 @@ Everything in Chapter 11 applies, plus:
    9.6 ms on MicroPython 1.20.
 7. **Any idle loop you add must call `DRAIN_STDIN(MQ)`**, so Ctrl-C from the USB console can
    still reach the firmware.
-8. **Don't start threads on core 1** without the same guards as `START_WATCHDOG`.
+8. **Don't start threads on core 1** unguarded: set `busy` first, wrap the spawn in
+   `try/except OSError` and clear `busy` yourself if it fails, the way the idle loop
+   spawns `SAVE_LOG`. An uncaught "core1 in use" reaches `main.py` and drops the Pico
+   to a REPL.
 
 ---
 

@@ -332,7 +332,7 @@ The first echo comes **before** the data loop (`$19DA: CALL 1924h`, `OUT H`),
 not after it as older documents say. The block CRC is the XOR of the flag and
 the content, **not** including the session bytes, so TPI blocks convert to TAP
 without recalculation. `LOAD_TS` writes its own final status and the next
-pre-load (two bytes); an abort path writes **one** (`REARM_AFTER_LOAD_ABORT`).
+pre-load (two bytes); its abort path writes **one** (`MQ_TO_IDLE`).
 
 ### 6.2 SAVE
 
@@ -512,22 +512,20 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   pre-load chain is load-bearing. (Command handlers are different: they
   write their one answer and `PROCESS_CMD`'s tail writes the pre-load.)
 - **An early return re-arms too — and with ONE `0x01`, not two.**
-  `LOAD_TS`'s abort paths skip the V6 chain by construction, and the
-  watchdog has just drained both FIFOs, so TX comes back empty and Y is
-  left wherever the partial Z80 OUTs dropped it. That is the rule above
-  firing on an error path: the next command's status read finds nothing
-  and gets Report J. `REARM_AFTER_LOAD_ABORT()` writes the one pre-load
-  byte and restores Y, *after* `ABORT_TX` (anything staged before it is
-  eaten by the watchdog's `pull(noblock)` cleanup loop). One byte,
-  because the pair on the normal path exists only so the Z80 can consume
-  the first as this transaction's final status — after an abort it has
-  already reported and gone, and a second byte would be read as the
-  first byte of the next response: the one-byte shift that surfaces as
-  Report R. `SAVE_TS` is exempt only because the dispatcher calls
-  `ACTIVATE_MQ()` after it and re-arms with its own `MQ.put(0x01)`;
-  **nothing runs after `LOAD_TS` returns.** Found via VERIFY, which
-  makes the Z80 abandon the transfer mid-block as soon as the comparison
-  fails — the R is correct, the J on everything after it was not.
+  `LOAD_TS`'s abort path skips the V6 chain by construction, so TX is
+  left empty and Y wherever the partial Z80 OUTs dropped it. That is the
+  rule above firing on an error path: the next command's status read
+  finds nothing and gets Report J. So the path ends in
+  `MQ_TO_IDLE(MQ, recovered=...)` — the one way back to idle (issue
+  #51) — which drains both FIFOs, stages exactly one `0x01` and sets Y.
+  One byte, because the pair on the normal path exists only so the Z80
+  can consume the first as this transaction's final status: after an
+  abort it has already reported and gone, and a second byte would be
+  read as the first byte of the next response, the one-byte shift that
+  surfaces as Report R. **Nothing runs after `LOAD_TS` returns**, so it
+  has to re-arm itself. Found via VERIFY, which makes the Z80 abandon
+  the transfer mid-block as soon as the comparison fails — the R is
+  correct, the J on everything after it was not.
 - **Don't pre-load `0x01` inside `ACTIVATE_MQ()`.** It's tempting (the
   pre-load chain expects a status byte ready in TX after the SM is
   re-activated), but `ACTIVATE_MQ` is called both at boot AND mid-
@@ -595,23 +593,27 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   status — "0 OK" on screen for a save that never wrote a file. Refuse at
   the post-header status read via `REFUSE_SAVE()` instead.
 - **Never call `_thread.start_new_thread()` unguarded.** If core1 is
-  still finishing a previous watchdog's cleanup — which ends with a ~1
-  second `BLINK()` — the call raises `OSError` "core1 in use". Nothing up
+  already in use the call raises `OSError` "core1 in use", and nothing up
   the stack catches it: it leaves `TS2068_IO` and reaches `main.py`,
   which has no try/except either, so the Pico drops to a REPL and the
-  user sees "locked up, LED stopped blinking". Use `START_WATCHDOG()`,
-  which logs and runs the transaction unguarded rather than taking the
-  dispatcher down. Don't "fix" a failed spawn by retrying with a sleep —
-  a few ms of sleep with the Z80 streaming into a 4-deep RX FIFO trades a
-  rare hang for routine corruption.
-- **After the watchdog fires, wait for core1 before touching the SM.**
-  Its cleanup does `MQ.active(0)` → `BLINK()` → `MQ.active(1)`, and BLINK
-  blocks for ~1 second. A handler that returns as soon as it sees `kill`
-  lets core0 race into the dispatcher's `ACTIVATE_MQ()` and status
-  pre-load while core1 is still bouncing the same hardware state machine.
-  Call `ABORT_TX()`, which sets `dead` and waits. And don't stage status
-  bytes before it — the watchdog is pumping `pull(noblock)` through TX the
-  whole time it waits, so they are discarded.
+  user sees "locked up, LED stopped blinking". Core1 is not idle by
+  default — `BLINK_LED` is spawned at boot and runs for the life of the
+  board, and the idle loop spawns `SAVE_LOG`. The one spawn on a live
+  path, `SAVE_LOG`, sets `busy` first and then wraps the spawn in
+  `try/except OSError`, clearing `busy` itself on failure, because
+  nothing else will. Don't "fix" a failed spawn by retrying with a sleep
+  — a few ms of sleep with the Z80 streaming into a 4-deep RX FIFO
+  trades a rare hang for routine corruption.
+- **Wait for core1 before starting a transfer.** Writing to the Pico's
+  flash stops *both* cores while a sector is programmed, so a `SAVE_LOG`
+  on core1 must not overlap a LOAD or SAVE block, or the pre-header
+  burst after a SYNC: the Z80 keeps clocking bytes out and the 4-deep
+  PIO FIFO overflows. `busy` is how core0 knows a write is in progress;
+  wait on it with `WAIT_CORE1(limit_ms, who)`, which is **bounded** — an
+  unbounded `while busy: pass` turns any way of `busy` staying True into
+  a hang that needs a power cycle. `SAVE_LOG` clears `busy` in a
+  `finally` so that every path, including a failed write, ends with it
+  False.
 - **Don't announce READY and then go do SD work.** `ACTIVATE_SD()` grabs
   GPIO 2-4 for SPI, and GPIO 2 is D0. Any `$0E` or `$0F` cycle that lands
   after the grab reads corrupted data — this is the pin-grab race #40
