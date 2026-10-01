@@ -59,6 +59,12 @@ class Rec:
     def put(self, b):
         self.puts.append(b)
 
+    def tx_fifo(self):
+        return 0            # a recorder never fills up (BLKRCV's first bytes use CMD_PUT)
+
+    def rx_fifo(self):
+        return 0
+
 
 def pre_for(par1, par2):
     """A pre-header carrying CODE par1,par2 (PARAMS reads bytes 3..6)."""
