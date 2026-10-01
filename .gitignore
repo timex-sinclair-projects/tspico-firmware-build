@@ -43,6 +43,10 @@ tools/zmakebas/*.o
 /SD card/TAP/test/picotest1.tap
 /SD card/TAP/test/picotest2.tap
 /SD card/TAP/test/hdrless.tap
+/SD card/TAP/test/chtest1.tap
+/SD card/TAP/test/chtest2.tap
+/SD card/TAP/test/chtest3.tap
+/SD card/TAP/test/chtest4.tap
 /SD card/TAP/picotest-s.tap
 /SD card/TAP/test/factorial.tap
 /SD card/TAP/test/RND WORDS.tap

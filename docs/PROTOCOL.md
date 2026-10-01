@@ -170,8 +170,7 @@ Every transaction starts with 10 bytes. Byte 0 picks the kind
 | `'B'` `$42` | 4, 5, 6 | printer: COPY (4, 6), LPRINT character (5) (§8) | `PRINT_IO` |
 | `'B'` `$42` | 0 | `SAVE "tpi:..."` command (§5) | `PROCESS_CMD` → `SA_funct` / `EXT_SA_FUNCT` |
 | `'B'` `$42` | 1–3 | `LOAD "tpi:name"`: mount a file | `PROCESS_CMD` → `LOAD_TPI` |
-| `'A'` `$41` | — | vestigial; answers `01 01`. Don't use. | `PROCESS_ASM` |
-| anything else | — | "Unrecognized": both FIFOs drained, SM restarted, **no pre-load** (the next command without a SYNC gets J) | — |
+| anything else (incl. `'A'` `$41`) | — | "Unrecognized": `MQ_TO_IDLE(recovered=True)` — FIFOs emptied, **one `0x01` staged**, status RECOVERED | — |
 
 Two layouts share the byte positions:
 
