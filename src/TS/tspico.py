@@ -471,11 +471,25 @@ _11_D_Break = const(11)
 # ─────────────────────────────────────────────────────────────────────────
 TLM_ENABLED = False
 
-# Build version stamp — bumped on each mpy rebuild so we can confirm
-# at a glance which build is actually loaded on the Pico. Logged at
-# LOAD_CONFIG entry and via __init__-time print so it appears even
-# before TLM is enabled.
-BUILD_VERSION = "2026-05-27-J (inline-wrt SEND_MSG2 + suppress_scroll<500)"
+# Build stamp — which build is actually on the Pico. Logged at LOAD_CONFIG
+# entry, printed at import so it lands before TLM is enabled, and shown by
+# tpi:info so it is readable from the 2068 as well as over USB.
+#
+# Generated, not hand-written: tools/gen-buildinfo.py writes TS/buildinfo.py
+# from git before the frozen modules are staged, and manifest.py freezes it.
+# It used to be a literal, which rotted -- it read "2026-05-27-J (inline-wrt
+# SEND_MSG2 + suppress_scroll<500)" long after #104 and #106 had reworked both
+# of those, so it described behaviour the firmware no longer had. A stamp has
+# to come from the build or it will lie.
+#
+# Guarded, because a hand build that skips the generator must still run; it
+# then reports "unknown". FW_VERSION below is the release number and is
+# maintained by hand on purpose -- this is the commit underneath it.
+try:
+    from TS.buildinfo import COMMIT, BRANCH, DIRTY
+    BUILD_VERSION = "%s%s (%s)" % (COMMIT, "+dirty" if DIRTY else "", BRANCH)
+except ImportError:
+    BUILD_VERSION = "unknown (no buildinfo)"
 
 # The TS-Pico version: the firmware and its TS-2068 ROM share one number from
 # 2.0 on. 2.1 is the release ROM: the disk-command build from tools/build-rom.py
@@ -4136,6 +4150,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
     M.append("--------------------------------")
     M.append(">FW Rev.:%s; uPython: 1.20.0\r" % TSP.FW_VERSION)
     M.append(">Default ROM version: %s\r" % TSP.ROM_VERSION)
+    M.append(">Build: %-24.24s\r" % BUILD_VERSION)   # 8 + 24 = the 32-col line
     M.append(">Board Rev.: V2.2; Log level:%d\r" % TSP.LOG_LEVEL)
     M.append(">Pico Free RAM: %06.2fkB\r" % (gc.mem_free() >> 10))
     M.append(">Flash: %02.2fMB; free: %02.2fMB\r" % (fl_tot, fl_free))

@@ -152,7 +152,7 @@ INFO: SD Card initialized and mounted OK
 If `dev_tspico.mpy` (or `.py`) is present at root you'll also see:
 
 ```
-[__main__] BUILD_VERSION = <version string>
+[__main__] BUILD_VERSION = 654d3db (main)
 [DEV] Using /dev_tspico.py override
 ```
 
@@ -682,9 +682,17 @@ Check the boot log:
   upload `dev_tspico.mpy` to the Pico's root, or you forgot to flash
   the UF2 you built from your branch.
 
-The `BUILD_VERSION` print near the top of `dev_tspico.py` exists for
-exactly this — bump it when you edit, and you'll see at a glance
-whether your edit is the one running.
+The `BUILD_VERSION` print near the top tells you which **UF2** is on the
+board: `tools/gen-buildinfo.py` writes it from git at build time, so it
+reads e.g. `654d3db (main)`, with `+dirty` when the tree it was built from
+had uncommitted changes. There is nothing to bump by hand — it used to be a
+literal and it rotted, describing behaviour the firmware no longer had.
+
+For "is *my edit* the one running", read the `[DEV]` line, not this one: a
+dev override is a `.py` on the Pico's flash, while `buildinfo` is frozen
+into the UF2 underneath it, so editing the override does not change the
+stamp. `tpi:info` shows the same string on a `>Build:` line, which is the
+way to read it from the 2068 with no USB console.
 
 ### "Pico hangs / LED stops blinking"
 
