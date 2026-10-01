@@ -341,6 +341,15 @@ are relative to that. This file (`src/CLAUDE.md`) also lives there.
   `src/test/dev_sync_hosttest.py` fails CI when they drift, so after editing
   `src/TS/tspico.py` or `src/TS/extcmd.py` run
   `cp src/TS/tspico.py src/dev_tspico.py` (and the same for extcmd).
+- **`src/TS/tspico_io.py` is also built into the upgrade UF2**
+  (`src/upgrade/manifest.py`, the web updater's ROM step), which freezes
+  only `TS/__init__`, `tspico_io`, `sdcard` and `native`. A new module-level
+  `TS` import in `tspico_io.py` must be added to that manifest **and** to the
+  `modules-upgrade/TS/` copy line in both `build.yml` and `release.yml`.
+  Otherwise the upgrade UF2 dies at boot with ImportError and the 2068 just
+  beeps; that shipped from #82 until 2026-10-01. `src/test/upgrade_hosttest.py`
+  checks it. Details: `docs/DEVELOPER_GUIDE.md`, "The upgrade UF2 is a second
+  build of tspico_io.py".
 - **`src/test/`** — bus-level test harnesses (this guide).
 - **`docs/`** at the repo root — three layers: protocol design,
   firmware implementation, development history.

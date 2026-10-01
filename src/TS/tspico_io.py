@@ -11,6 +11,33 @@ from machine import Pin, freq, SPI
 from TS.sdcard import *
 from TS import native
 
+# ─── READ THIS BEFORE ADDING AN IMPORT TO THIS FILE ─────────────────────────
+# tspico_io.py is built into TWO firmwares, not one:
+#
+#   * the TS-Pico firmware (src/manifest.py), which has every TS module, and
+#   * the UPGRADE firmware (src/upgrade/manifest.py) -- the UF2 the web
+#     updater writes to put a new ROM in flash slots 0 and 1. It freezes only
+#     the few modules it needs: TS/__init__, tspico_io, sdcard and native.
+#
+# A module-level import added here that the upgrade firmware doesn't have
+# makes the upgrade UF2 die at boot with ImportError, before it has selected
+# a ROM: the 2068 just beeps, and nobody can update their ROM. That happened
+# from #82 (`from TS import native`) until it was caught on hardware on
+# 2026-10-01. So a new module-level `from TS ...` / `import TS....` here
+# needs ALL of:
+#
+#   1. a freeze() line in src/upgrade/manifest.py;
+#   2. the file added to the `cp ... $M/modules-upgrade/TS/` line in BOTH
+#      .github/workflows/build.yml and .github/workflows/release.yml;
+#   3. no imports of its own beyond what the upgrade firmware has.
+#
+# src/test/upgrade_hosttest.py checks 1 and 2 and fails CI if they're
+# missing. An import inside a function (like SAVE_TS's lazy
+# `from TS.tspico import TLM`) is fine, as long as the upgrade code never
+# calls that function. See docs/DEVELOPER_GUIDE.md, "The upgrade UF2 is a
+# second build of tspico_io.py".
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ---------------------------------------------------------------------------
 # Module-level globals shared between LOAD_TS / SAVE_TS / WATCHDOG / etc.
 #
