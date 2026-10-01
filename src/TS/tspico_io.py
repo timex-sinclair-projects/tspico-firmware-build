@@ -1165,19 +1165,37 @@ def LOAD_TS(pre, MQ, TSP):
         MQX(MQ, "mov(y, invert(null))")          # Y -> READY
         return MQ, TSP, log_entries
 
-    # ---- Header-only: optionally patch the autorun byte ----
-    # For non-autorun BASIC programs, the original Spectrum tape header
-    # has hdvars high byte ≥ 0x80 indicating an autorun line. Some
-    # programs were tape-saved with autorun enabled but don't actually
-    # have an autorun line; loading them on TS-2068 hits "Report L".
-    # This patches the autorun-line bytes back to a safe value.
+    # ---- Header block: read it whole, then serve it exactly as on the tape ----
+    # (A header is ~20 bytes, so it is buffered and streamed from memory
+    # below; data blocks are streamed straight from the file.)
+    #
+    # There used to be an "autorun patch" here, inherited from the v1.5
+    # firmware (src/test/lvm_test.py: "v1.5 does this for non-autorun
+    # progs"). For a BASIC header whose autorun line was 32768 or more --
+    # the tape convention for "no autorun" -- it rewrote the line's high
+    # byte to 28h, i.e. autorun at line 10240-10495. Its comment said such
+    # tapes hit "Report L" on the 2068. It was removed on 2026-10-01 because:
+    #
+    #   * The ROM already handles "no autorun". The 2068's LOAD (EXROM 06C3:
+    #     LD H,(IX+0Eh) / AND 0C0h / JR NZ) skips the autorun whenever either
+    #     top bit of the line is set -- the same test as the Spectrum. Those
+    #     bytes are identical in the genuine 2068 EXROM and in TS-Pico ROMs
+    #     1.1, 1.5w, 2.0 and 2.1, and the 2068's own SAVE without LINE
+    #     writes exactly 80h there (EXROM 0450). No ROM we have needs it.
+    #   * The patch turned every non-autorun program into one that autoruns
+    #     to a line that can't exist (BASIC lines stop at 9999).
+    #   * Its CRC fix-up, `crc ^ 0x80 ^ new`, is only right when the old
+    #     byte was exactly 80h. A header with 81h-FFh there (some tape tools
+    #     write FFFFh for "no autorun") reached the Z80 with a bad checksum:
+    #     Report R. load_ts_hosttest.py pins both cases.
+    #
+    # If a real tape ever turns up that the 2068 mis-loads without it, that
+    # is a finding about that tape: record which one, and what the 2068
+    # does, before putting anything back here.
     hdr = None
     if blk_info[2] == 0x00:                          # header block
         hdr = bytearray(totbytes - 1)
         arch.readinto(hdr)
-        if hdr[0] == 0x00 and hdr[14] >= 0x80:       # BASIC w/ autorun bit set
-            hdr[14] = 0x28
-            hdr[17] = hdr[17] ^ 0x80 ^ hdr[14]       # fix CRC after the patch
 
     # ---- Collect garbage NOW, while the Z80 waits for READY ----
     # Issue #51: once READY is up the Z80 reads a byte every 50 us with no
