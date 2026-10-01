@@ -22,6 +22,16 @@ stopped being true later. Every case below FAILS on the code before the fix
      tspico_io has no TSP: it raised NameError instead of logging the mount
      error and returning -99.
 
+Batch A (2026-10-01; the SD-card-ID fix is pinned in sd_state_hosttest.py):
+
+  8. MOUNT_FILE decoded the first 7 raw TAP bytes as UTF-8 to look for
+     "ZXTape!", so a TAP starting with a headerless block raised.
+  9. LOAD "tpi:-1" mounted the last file (negative index).
+ 10. tpi:info raised IndexError (Report J) on a TAP that ends with a header.
+ 11. LOAD_CONFIG let through ROM_SM values tpi:boot/tpi:dock never set, and a
+     non-number crashed the boot.
+ 12. SEND_MSG sent a non-ASCII character as several UTF-8 bytes >= 80h.
+
 NOTE ON SCOPE: control flow only, on CPython with the usual fakes. None of
 this observes the Z80 bus; see src/CLAUDE.md.
 
@@ -363,6 +373,127 @@ def test_ena_sd():
     io.SDCard, io.os, io.log_entries, io.time = real
 
 
+# ---------------------------------------------------------------------------
+# Batch A (2026-10-01)
+# ---------------------------------------------------------------------------
+
+def card_with_tmp(t, root):
+    """disk_cmds_hosttest's card, with /TMP (the Pico's flash) in a temp dir."""
+    tmp = tempfile.mkdtemp(prefix="audit_tmp.")
+
+    class CardTmp(D.CardOS):
+        def real(self, p):
+            if p.startswith("/TMP/"):
+                return os.path.join(tmp, p[5:])
+            return D.CardOS.real(self, p)
+    cos = CardTmp(root)
+    t.os = cos
+    t.open = lambda p, mode="r": open(cos.real(p), mode)
+    return cos
+
+
+def test_mount_bytes(t, root):
+    print("8. MOUNT_FILE: TAP signature compared as bytes")
+    D.build_card(root)
+    D.setup(t, root)
+    card_with_tmp(t, root)
+    t.MOUNT_FILE, t.COPY_FILE = REAL["MOUNT_FILE"], REAL["COPY_FILE"]
+    t.time = P.FakeTime()
+    t.busy = False
+    t.TSP.offset, t.TSP.tap_idx, t.TSP.append = 0, 0, False
+    t.BLINK_ERROR = lambda *a: None
+    logs = []
+    t.LOG = lambda m, l: logs.append((l, m))
+    for name, data, want, what in (
+            ("HDRLESS.TAP", bytes([5, 0, 0xFF, 1, 2, 3, 0xFD]), True,
+             "first block headerless (FFh at byte 2): mounts"),
+            ("NAME80.TAP", bytes([19, 0, 0, 0]) + b"caf\xe9      " + bytes(7), True,
+             "header name byte >= 80h: mounts"),
+            ("GAMETZX.TAP", b"ZXTape!\x1a\x01\x14\x30\x00", False,
+             "a TZX: refused, and the message says TZX")):
+        open(os.path.join(root, name), "wb").write(data)
+        del logs[:]
+        try:
+            r = t.MOUNT_FILE("/sd/TAP/" + name)
+        except Exception as e:                                  # noqa: BLE001
+            r = e
+        ok = r is want
+        if not want:
+            ok = ok and any("TZX" in m for _, m in logs)
+        check(ok, "%s (%r)" % (what, r))
+    t.LOG = lambda *a: None
+
+
+def test_index(t):
+    print("9. LOAD \"tpi:nnn\": only 0..n-1 is an index")
+    t.files = ["A.TAP", "B.TAP"]
+    check(t.ResolveIndexName("1") == ("B.TAP", 1), "1 -> the second file")
+    check(t.ResolveIndexName("-1") == ("-1", -1), "-1 is not an index (%r)" % (t.ResolveIndexName("-1"),))
+    check(t.ResolveIndexName("2") == ("2", -1), "past the end: not an index")
+    check(t.ResolveIndexName("game") == ("game", -1), "a name stays a name")
+
+
+def test_getinfo(t, root):
+    print("10. tpi:info on a TAP that ends with a header")
+    D.setup(t, root)
+    shown = []
+    t.SEND_MSG2 = lambda msg, st, exp=True: shown.append(msg)
+    t.SD_PROBE = lambda *a: True
+    t.os = types.SimpleNamespace(statvfs=lambda p: (4096, 4096, 352, 300))
+    t.gc = types.SimpleNamespace(mem_free=lambda: 100000, collect=lambda: None)
+    t.lista = " " * 64
+    t.TSP = types.SimpleNamespace(
+        FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2, sd_present=True, ROM_SM=10, bank_sm=1,
+        append=False, VERBOSE=False, f_name="/sd/TAP/CUT.TAP", cur_path="/sd/TAP",
+        offset_tbl=[[0, 21, " Y", "Program: first"], [21, 10, " N", "10"],
+                    [31, 21, " Y", "Program: cut"]],
+        tap_idx=2)
+    try:
+        t.GETINFO(bytearray(10), "D..tpi:info")
+        ok = bool(shown) and "Program: cut:no data" in shown[-1]
+        got = shown[-1].split(">Block:")[1].split("\r")[0] if shown else shown
+    except Exception as e:                                      # noqa: BLE001
+        ok, got = False, e
+    check(ok, "the last block is a header: shown with 'no data', no IndexError (%r)" % (got,))
+
+
+def test_rom_sm(t, root):
+    print("11. LOAD_CONFIG: ROM_SM is 5, 6, 9 or 10")
+    t.time = P.FakeTime()
+    t.log_entries = []
+    t.LOG = REAL["LOG"]
+    t.SAVE_LOG = lambda: None
+    cfg = os.path.join(root, "config.ini")
+    t.open = lambda p, mode="r": open(cfg if p == "config.ini" else p, mode)
+    import json
+    for value, want in ((10, 10), (9, 9), (6, 6), (5, 5), (7, 10), (11, 10), (15, 10),
+                        (99, 10), ("10", 10), (None, 10)):
+        with open(cfg, "w") as f:
+            json.dump({"ROM_SM": value}, f)
+        try:
+            got = t.LOAD_CONFIG()["ROM_SM"]
+        except Exception as e:                                  # noqa: BLE001
+            got = e
+        check(got == want, "ROM_SM %r -> %r (%r)" % (value, want, got))
+    t.open = builtins.open
+    t.LOG = lambda *a: None
+
+
+def test_send_msg_bytes(t):
+    print("12. SEND_MSG: one byte per character, '?' for anything not printable ASCII")
+    sent = []
+    t.CMD_PUT = lambda b: sent.append(b)
+    t.MQ_READY = lambda: None
+    t.CMD_DRAIN = lambda: None
+    t.TSP = types.SimpleNamespace(VERBOSE=True)
+    REAL["SEND_MSG"]("Copied caf\u00e9~", "x\x00y", t._1_OK)
+    body = sent[3:]
+    check(all(isinstance(b, int) and 0 <= b < 256 for b in sent),
+          "every write is one byte (an int), never a str (%r)" % sent[:6])
+    check(body == list(b"Copied caf?~") + [0x0D] + list(b"x?y") + [0x00],
+          "\u00e9 -> '?', ~ kept (prints as FREE), 00h in the text -> '?' (%r)" % bytes(body))
+
+
 REAL = {}
 
 
@@ -374,6 +505,7 @@ def main():
     import TS.tspico as t
     t.TLM_ENABLED = False
     REAL["LOG"], REAL["SAVE_LOG"] = t.LOG, t.SAVE_LOG
+    REAL["MOUNT_FILE"], REAL["COPY_FILE"], REAL["SEND_MSG"] = t.MOUNT_FILE, t.COPY_FILE, t.SEND_MSG
     root = tempfile.mkdtemp(prefix="audit_hosttest.")
     try:
         test_busy(t, root)
@@ -382,6 +514,11 @@ def main():
         test_cd(t, root)
         test_getlog(t, root)
         test_ena_sd()
+        test_mount_bytes(t, root)
+        test_index(t)
+        test_getinfo(t, root)
+        test_rom_sm(t, root)
+        test_send_msg_bytes(t)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     ok = all(results)

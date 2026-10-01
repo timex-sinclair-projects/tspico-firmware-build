@@ -95,6 +95,20 @@ def test_attempts(t):
     t.ACTIVATE_SD()
     check(seen == [True] and t.TSP.sd_cid == 8, "a different card (CID changed): set up as new (%r)" % seen)
 
+    # The driver gives CID 0 when it can't read the CID (CMD10 failed).
+    del seen[:]
+    state["cid"] = 0
+    t.ACTIVATE_SD()
+    check(seen == [] and t.TSP.sd_cid == 8,
+          "CID unreadable (0) on the same card: not a swap, known CID kept (%r, %r)"
+          % (seen, t.TSP.sd_cid))
+    state["cid"] = 8
+    t.ACTIVATE_SD()
+    check(seen == [], "CID readable again, same card: still nothing to do (%r)" % seen)
+    state["cid"] = 9
+    t.ACTIVATE_SD()
+    check(seen == [True] and t.TSP.sd_cid == 9, "then a real change is still seen (%r)" % seen)
+
 
 class Card(D.CardOS):
     """CardOS plus the Pico's own flash for /TMP (FORGET_MOUNT's copies)."""

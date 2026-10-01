@@ -993,11 +993,24 @@ def SD_NOTE_CARD(cid):                                                         #
     card of the session) or is a different card, bring the state that
     assumed the old card up to date (SD_REVALIDATE). The card is mounted."""
 
+    # ─── A CID of 0 means "couldn't read it", not "a different card" ──────
+    # The driver (sdcard.py) sets CID = 0 when CMD10 fails. That fallback is
+    # Ryan's, from when the CID was only informational. Since #101 the CID is
+    # the card's identity, and a change in it makes SD_REVALIDATE drop
+    # append mode, close every OPEN # channel and the printer capture. So one
+    # failed CMD10 on the same card looked like a card swap, and two cards
+    # that both failed looked like the same card. Now 0 is "unknown": it
+    # never counts as a change, and it doesn't replace a CID we know. (Found
+    # by the 2026-09-30 audit.) A real swap with an unreadable CID still
+    # comes through the back/away path when the card was seen to be out.
+    # ─────────────────────────────────────────────────────────────────────
     first = TSP.sd_cid is None
     back = not TSP.sd_present
-    changed = not first and cid != TSP.sd_cid
+    known = cid != 0
+    changed = known and TSP.sd_cid not in (None, 0) and cid != TSP.sd_cid
     TSP.sd_present = True
-    TSP.sd_cid = cid
+    if known or first:
+        TSP.sd_cid = cid
     if back or changed:
         if changed:
             LOG("SD card: a different card is in", 1)
@@ -1568,13 +1581,26 @@ def MOUNT_FILE(f_name, remounting=False):                                       
         if s[6] != 0: # An empty .tap is OK, otherwise check it
             with open(f_name, "rb") as f_check:
                 
+                # ─── Compare bytes, not decoded text ───────────────────────────
+                # The first 7 bytes are raw TAP data. They used to be compared
+                # with `file_type.decode() == "ZXTape!"`, and .decode() raises
+                # UnicodeError on bytes that aren't valid UTF-8 -- e.g. a TAP
+                # whose first block is headerless (flag FFh at byte 2), or a
+                # header name with a byte >= 80h -- so mounting such a TAP
+                # failed with an exception instead of mounting. A TZX file
+                # starts with the ASCII signature "ZXTape!", so comparing the
+                # bytes needs no decoding at all. The "non-standard first block"
+                # note is now an elif: a TZX's first byte ('Z' = 5Ah) is > 19 as
+                # well, and that used to overwrite the TZX error message.
+                # (2026-09-30 audit.)
+                # ─────────────────────────────────────────────────────────────
                 file_type = f_check.read(7)
-                if file_type.decode() == "ZXTape!":
+                if file_type == b"ZXTape!":
                     msg = "Wrong file type while mounting: %s. It's a TZX file" % f_name
                     err_level = 2
-                    
-                if ((int(file_type[0]) > 19)):
-                    msg = "Non-standard first block while mounting file %s. Expected 19, read %d" % (f_name, int(file_type[0]))
+
+                elif file_type[0] > 19:                                    # informational only
+                    msg = "Non-standard first block while mounting file %s. Expected 19, read %d" % (f_name, file_type[0])
                 
         if err_level < 2:    
             if not COPY_FILE(f_name, "/TMP/temp.tap"):
@@ -1808,6 +1834,26 @@ def CLEAR_LOG():                                                                
     return ok
 
 
+def MSG_BYTE(m):                                                                         # one character of SEND_MSG text -> one byte
+
+    """The byte to send for one character of a SEND_MSG message: printable
+    ASCII as is, anything else as '?'.
+
+    Why: SEND_MSG used to pass each character straight to MQ.put(). Since #79
+    its messages carry raw names from the card ("Copied %s", "Erased %s"),
+    and a name can have non-ASCII characters. MicroPython's put() takes a
+    str as a buffer, so 'é' went out as TWO bytes (C3 A9, its UTF-8). Both
+    are >= 80h, which ends the ROM's string early (the 0x81 reader stops on
+    any byte >= 80h: EXROM 068E, CP 80h) -- and CMD_PUT only made room for
+    one word, so a two-word put into a FIFO with one slot left blocked.
+    SEND_MSG2 has always replaced these with '?'; this makes SEND_MSG agree.
+    Control codes are replaced too: 00h would end the string, and none of
+    SEND_MSG's messages use them. (2026-09-30 audit.)"""
+
+    o = m if isinstance(m, int) else ord(m)
+    return o if 32 <= o <= 127 else 0x3F
+
+
 def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s)
                                                                                                 # back to the TS, once a command is finished
     global MQ
@@ -1846,11 +1892,11 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
         wrt(0x0D)               # Start with a newline
         MQ_READY()              # Z80 starts reading the 3-byte header
         for m in msg:           # Write message (paced by Z80 reads)
-            wrt(m) # Will let ~ and | pass as FREE and STICK
+            wrt(MSG_BYTE(m))    # ~ and | still pass, as FREE and STICK
         if msg1:                # Write msg1
             wrt(0x0D)
             for m in msg1:
-                wrt(m)
+                wrt(MSG_BYTE(m))
         wrt(0x00)               # End of string
 
     else:
@@ -4091,10 +4137,16 @@ def GETINFO(pre, cmd):                                                 # Shows T
         if isTapMounted():
             i = TSP.tap_idx
             M.append(">Block:%02d" % i)
-            if TSP.offset_tbl:
+            # A header is shown with the size of the data block after it,
+            # offset_tbl[i+1]. A TAP can END with a header -- an append cut
+            # short, or a header-only file -- and offset_tbl[i+1] then raised
+            # IndexError, so tpi:info gave Report J instead of the status.
+            # (2026-09-30 audit.) The tap_idx bound is belt and braces.
+            if 0 <= i < len(TSP.offset_tbl):
                 blk = TSP.offset_tbl[i]
                 if blk[2] == " Y":
-                    M.append(":%s:%s" % (blk[3], TSP.offset_tbl[i+1][3]))
+                    nxt = TSP.offset_tbl[i+1][3] if i + 1 < len(TSP.offset_tbl) else "no data"
+                    M.append(":%s:%s" % (blk[3], nxt))
                 else:
                     M.append(":Data block:%s" % blk[3])
             else:
@@ -4253,9 +4305,21 @@ def LOAD_CONFIG():
             init_values[key] = default_values[key]
             defaulted = True
         
-    if (init_values["ROM_SM"] <= 4) or (init_values["ROM_SM"] in [8, 12]):
+    # ─── ROM_SM: only the four combinations tpi:boot / tpi:dock can set ────
+    # ROM_SM = dock MEM * 4 + boot MEM, and both commands accept MEM 1 (SRAM)
+    # or 2 (flash) only -- MEM 3 was refused by #91 -- so the valid values are
+    # 5, 6, 9 and 10. The old test (<= 4, or 8 or 12) let through 7, 11, 13,
+    # 14, 15 and anything over 15, and they were used for the current boot.
+    # A value that isn't a number at all (e.g. "10" in quotes, from a
+    # hand-edited config.ini) made the `<=` raise TypeError and stopped the
+    # boot. `in` never raises, so anything else now falls back to the
+    # default. (2026-09-30 audit.)
+    # ─────────────────────────────────────────────────────────────────────
+    if init_values["ROM_SM"] not in (5, 6, 9, 10):
+        LOG("Incorrect initial ROM_SM value %r. Using default value of %d instead"
+            % (init_values["ROM_SM"], default_values["ROM_SM"]), 2)
         init_values["ROM_SM"] = default_values["ROM_SM"]
-        LOG("Incorrect initial ROM_SM value. Using default value of %d instead" % default_values["ROM_SM"], 2)
+        defaulted = True                                                # write the good value back
 
     return_ROM_SLOT = -1
     boot_mem = init_values["ROM_SM"] & 3                                # tpi:boot's MEM: 1 SRAM, 2 flash (the default)
@@ -4685,11 +4749,14 @@ def ResolveIndexName(name):
     global TSP
     global files
 
+    # `0 <= index`: Python indexes from the end with a negative number, so
+    # LOAD "tpi:-1" used to mount the LAST file in the folder (files[-1])
+    # instead of saying there's no such file. (2026-09-30 audit.)
     try:
         index = int(name)
-        if index < len(files):
+        if 0 <= index < len(files):
             return files[index], index
-    except:
+    except ValueError:
         pass
 
     return name, -1

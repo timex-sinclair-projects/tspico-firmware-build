@@ -307,7 +307,10 @@ class SDCard:
             self.CID = int.from_bytes(
                 cid, "big"
             )
-        except:
+        except Exception:
+            # 0 = unknown. tspico.SD_NOTE_CARD treats it that way, never as a
+            # different card (it identifies the card by this CID since #101).
+            # Exception, not a bare except, so Ctrl-C from the host still works.
             self.CIDBYTES = bytearray(16)
             self.CID = 0
 
