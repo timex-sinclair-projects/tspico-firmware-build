@@ -102,7 +102,7 @@ def main():
     sys.path.insert(0, SRC)
     import TS.tspico_io as io
     io.time = FakeTime()
-    io.ENA_SD = lambda: None
+    io.ENA_SD = lambda *a: None
 
     d = tempfile.mkdtemp()
     real_chdir = os.chdir

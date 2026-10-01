@@ -283,7 +283,7 @@ def test_accepts_good_name(tio):
         MQ = FakeMQ(bytes(hdr) + bytes(dat), z80_reads=True)
         TSP = FakeTSP(d)
 
-        tio.ENA_SD = lambda: None                 # no SPI/SD on the host
+        tio.ENA_SD = lambda *a: None                 # no SPI/SD on the host
         saved_chdir, os.chdir = os.chdir, lambda p: None
         try:
             tio.SAVE_TS(MQ, TSP)
@@ -312,7 +312,7 @@ def test_empty_name_is_legal(tio):
         MQ = FakeMQ(bytes(build_header(b"", len(payload)))
                     + bytes(build_data(payload)), z80_reads=True)
         TSP = FakeTSP(d)
-        tio.ENA_SD = lambda: None
+        tio.ENA_SD = lambda *a: None
         saved_chdir, os.chdir = os.chdir, lambda p: None
         try:
             tio.SAVE_TS(MQ, TSP)
@@ -333,7 +333,7 @@ def test_append_ignores_header_name(tio):
         MQ = FakeMQ(bytes(build_header(b"bad file", len(payload)))
                     + bytes(build_data(payload)), z80_reads=True)
         TSP = FakeTSP(d, f_name=target, append=True)
-        tio.ENA_SD = lambda: None
+        tio.ENA_SD = lambda *a: None
         saved_chdir, os.chdir = os.chdir, lambda p: None
         try:
             tio.SAVE_TS(MQ, TSP)
@@ -468,7 +468,7 @@ def test_watchdog_spawn_failure_survives(tio):
         real = _thread.start_new_thread
         _thread.start_new_thread = lambda fn, args: (_ for _ in ()).throw(
             OSError("core1 in use"))
-        tio.ENA_SD = lambda: None
+        tio.ENA_SD = lambda *a: None
         saved_chdir, os.chdir = os.chdir, lambda p: None
         try:
             raised = None
@@ -503,7 +503,7 @@ def test_kill_flag_cleared_on_core0(tio):
         TSP = FakeTSP(d)
 
         tio.kill = True               # left over from a previous abort
-        tio.ENA_SD = lambda: None
+        tio.ENA_SD = lambda *a: None
         saved_chdir, os.chdir = os.chdir, lambda p: None
         try:
             tio.SAVE_TS(MQ, TSP)
@@ -532,7 +532,7 @@ def test_sd_write_failure_survives(tio):
                     + bytes(build_data(payload)), z80_reads=True)
         TSP = FakeTSP(d)
 
-        def boom():
+        def boom(*a):
             raise OSError(5, "no SD card")
         tio.ENA_SD = boom
         saved_chdir, os.chdir = os.chdir, lambda p: None
@@ -603,7 +603,7 @@ def test_saved_flag(tio):
         MQ = FakeMQ(bytes(build_header(b"test", len(payload)))
                     + bytes(build_data(payload)), z80_reads=True)
         TSP = FakeTSP(d)
-        tio.ENA_SD = lambda: None
+        tio.ENA_SD = lambda *a: None
         saved_chdir, os.chdir = os.chdir, lambda p: None
         try:
             r = tio.SAVE_TS(MQ, TSP)
@@ -625,7 +625,7 @@ def test_saved_flag(tio):
         # `"sd" not in os.listdir("/")` test would have said save_aborted
         # = False, i.e. "we saved" -- but the write itself fails.
         mounted = {"sd": True}
-        tio.ENA_SD = lambda: None
+        tio.ENA_SD = lambda *a: None
         real_open = tio.open if hasattr(tio, "open") else open
         import builtins
         real_bopen = builtins.open
@@ -661,7 +661,7 @@ def test_saved_flag(tio):
         MQ = FakeMQ(bytes(build_header(b"whatever", len(payload)))
                     + bytes(build_data(payload)), z80_reads=True)
         TSP = FakeTSP(d, f_name=target, append=True)
-        tio.ENA_SD = lambda: None
+        tio.ENA_SD = lambda *a: None
         saved_chdir, os.chdir = os.chdir, lambda p: None
         try:
             r = tio.SAVE_TS(MQ, TSP)

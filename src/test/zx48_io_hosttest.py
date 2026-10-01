@@ -136,7 +136,7 @@ def main():
     sys.path.insert(0, SRC)
     import TS.tspico_io as io
     io.time = FakeTime()
-    io.ENA_SD = lambda: None
+    io.ENA_SD = lambda *a: None
     io.ENA_MQ_DUAL = lambda MQ: MQ          # the SM survives the SD write here
 
     d = tempfile.mkdtemp()

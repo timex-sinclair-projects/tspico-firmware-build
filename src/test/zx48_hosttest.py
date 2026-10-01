@@ -332,7 +332,7 @@ def main():
     sys.path.insert(0, SRC)
     import TS.tspico_io as tio
 
-    tio.ENA_SD = lambda: None                         # no SD hardware here
+    tio.ENA_SD = lambda *a: None                         # no SD hardware here
     os.umount = lambda p: None                        # ditto
 
     tmp = tempfile.mkdtemp(prefix="zx48-")

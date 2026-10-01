@@ -18,6 +18,9 @@ stopped being true later. Every case below FAILS on the code before the fix
      path -- which it does only for paths that climb above /sd/TAP -- so
      tpi:cd ../.. could leave the card root.
   6. GETLOG's bare `except:` swallowed CmdAbort (BREAK at the Scroll? prompt).
+  7. tspico_io.ENA_SD's mount-failure path logged through TSP.LOG_LEVEL, but
+     tspico_io has no TSP: it raised NameError instead of logging the mount
+     error and returning -99.
 
 NOTE ON SCOPE: control flow only, on CPython with the usual fakes. None of
 this observes the Z80 bus; see src/CLAUDE.md.
@@ -310,6 +313,56 @@ def test_getlog(t, root):
           "a log too big for memory still says so, with Q (%r)" % (sent,))
 
 
+# ---------------------------------------------------------------------------
+# 7. ENA_SD's mount-failure path
+# ---------------------------------------------------------------------------
+
+def test_ena_sd():
+    print("7. tspico_io.ENA_SD: a failed mount is logged and returns -99")
+    import TS.tspico_io as io
+    real = io.SDCard, io.os, io.log_entries, io.time
+    io.time = P.FakeTime()                                      # LOG_ADD timestamps with ticks_us
+
+    def no_card(spi, cs):
+        raise OSError(19, "ENODEV")                             # init_card: no card
+    io.SDCard = no_card
+    io.log_entries = ""                                         # tspico_io's log is one string
+    try:
+        r = io.ENA_SD(2)
+        ok = r == -99 and "Mounting SD Card failed" in io.log_entries \
+            and "ENODEV" in io.log_entries
+        got = (r, io.log_entries)
+    except Exception as e:                                      # noqa: BLE001
+        ok, got = False, e
+    check(ok, "no card: logs the real error and returns -99 (%r)" % (got,))
+
+    # /sd already mounted: os.mount raises EPERM, and the write still has to
+    # be able to go ahead on the existing mount -- so ENA_SD must not raise.
+    io.SDCard = lambda spi, cs: object()
+
+    def eperm(dev, path):
+        raise OSError(1, "EPERM")
+    io.os = types.SimpleNamespace(mount=eperm)
+    io.log_entries = ""
+    try:
+        r = io.ENA_SD(2)
+        got = r
+    except Exception as e:                                      # noqa: BLE001
+        got = e
+    check(got == -99, "mount refused (already mounted): returns -99, doesn't raise (%r)" % (got,))
+
+    def ctrl_c(spi, cs):
+        raise KeyboardInterrupt
+    io.SDCard = ctrl_c
+    try:
+        io.ENA_SD(2)
+        got = "swallowed"
+    except KeyboardInterrupt:
+        got = True
+    check(got is True, "Ctrl-C from the host is not swallowed (%r)" % (got,))
+    io.SDCard, io.os, io.log_entries, io.time = real
+
+
 REAL = {}
 
 
@@ -328,6 +381,7 @@ def main():
         test_ch_close(t, root)
         test_cd(t, root)
         test_getlog(t, root)
+        test_ena_sd()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     ok = all(results)
