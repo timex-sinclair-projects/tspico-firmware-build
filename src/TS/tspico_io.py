@@ -786,17 +786,43 @@ def ENA_MQ_DUAL(MQ):
     return MQ
 
 
+# ─── SD_MOUNT: the firmware's own mount, for the two SAVE writes ─────────
+# tspico.py sets this to SAVE_MOUNT, which unmounts any stale /sd and goes
+# through ACTIVATE_SD: up to 5 attempts 0.5 s apart while the card is
+# believed present, and SD_NOTE_CARD's bookkeeping (a card that has come
+# back or been swapped repairs the folder, the mount, append mode, the
+# channels and the printer capture). Raises OSError when there is no card.
+#
+# Before this, SAVE_TS and SAVE_ZX were the last two callers of the bare
+# mount below: ONE os.mount, none of the bookkeeping. Their final status
+# has already gone out when they mount (#40), so a card that only came up
+# on a second attempt meant "0 OK" on the 2068 and a file that was never
+# written (2026-09-30 audit, §2 #21). tspico_io can't import tspico (it is
+# imported BY it, and the upgrade UF2 freezes tspico_io without it), hence
+# a hook. None -- the harnesses and host tests that load this module on its
+# own -- keeps the old single mount.
+# ─────────────────────────────────────────────────────────────────────────
+SD_MOUNT = None
+
+
 def ENA_SD(log_level=0):
     """Mount the SD card on /sd. Used by SAVE_TS and SAVE_ZX to write the
-    captured TAP. Returns the SPI object, or -99 if the mount failed.
+    captured TAP.
+
+    With SD_MOUNT set (the firmware), that does the mount: retried, the
+    card's state kept, OSError raised on failure. Both callers catch it as
+    the write failure. Without it, one bare mount: returns the SPI object,
+    or -99 if the mount failed.
 
     Note: this leaves the GPIO pins claimed by SPI; the caller is
     responsible for unmounting (or letting MOUNT_FILE / DEACTIVATE_SD
-    handle it later in the dispatcher). New code should prefer the
-    explicit ACTIVATE_SD / DEACTIVATE_SD pair in tspico.py.
+    handle it later in the dispatcher).
 
     log_level is the caller's TSP.LOG_LEVEL, for the error entry below.
     """
+
+    if SD_MOUNT is not None:
+        return SD_MOUNT()
 
     U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
     D0          = Pin(2,  Pin.IN)
@@ -2403,6 +2429,12 @@ def SAVE_TS(MQ, TSP, pre=None):
     saved = True
     try:
         ENA_SD(TSP.LOG_LEVEL)
+        if mode == "ab" and not TSP.append:
+            # The mount found a different card (SD_NOTE_CARD -> SD_REVALIDATE
+            # turned append off): the card was swapped during the transfer.
+            # TSP.f_name belongs to the other card; never append to a file of
+            # the same name on this one.
+            raise OSError(19, "a different SD card is in; not appending to %s" % filename)
         with open(filename, mode) as f1:
             f1.write(hdr)
             f1.write(blk)
@@ -2536,14 +2568,28 @@ def SAVE_ZX(MQ, TSP):
     blk[0] = (n + 2) & 0xFF
     blk[1] = (n + 2) >> 8
 
-    filename = TSP.cur_path + "/" + name + ".tap"
+    filename = name + ".tap"
     saved = False
     try:
         ENA_SD(TSP.LOG_LEVEL)
+        # After the mount, not before: ZX48 mode has no card check ahead of
+        # the SAVE (the 2068 dispatcher's SD_PROBE), so this mount is where a
+        # returned or swapped card is noticed, and SD_REVALIDATE may move
+        # TSP.cur_path to /TAP if this card doesn't have the old folder.
+        filename = TSP.cur_path + "/" + filename
         with open(filename, "wb") as f1:
             f1.write(hdr)
             f1.write(blk)
         saved = True
+        # The folder's listing (CAT, and the names LOAD "tpi:..." matches) is
+        # now missing this file. Re-reading it here, with the card still
+        # mounted, would keep the bus off the PIO for the length of a
+        # directory scan while the Spectrum may already be sending its next
+        # 'L' or 'S'. tspico re-reads it at the next point that uses it and
+        # where the Z80 is waiting for READY: a tpi: command (PROCESS_CMD) or
+        # a ZX LOAD "tpi:..." (ZX_TPI). Found on hardware 2026-10-02: a ZX
+        # SAVE "q" was on the card, but CAT didn't list it until tpi:cd.
+        TSP.listing_stale = True
     except Exception as e:
         LOG_ADD("ERROR: ZX SAVE: writing %s failed: %r" % (filename, e), 2, TSP.LOG_LEVEL)
     try:

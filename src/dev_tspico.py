@@ -368,6 +368,7 @@ from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from TS import catalog
 from TS import native
 from TS import channels
+from TS import tspico_io                                                # SD_MOUNT: set below SAVE_MOUNT
 from array import array
 
 # ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
@@ -619,6 +620,7 @@ class PICO_STATUS():                                                            
         self.sd_cid = None
         self.save_no_card = False                                               # the dispatcher's card check for this SAVE failed
         self.sd_listing_ok = False                                              # DIR_FILES read the current folder without errors
+        self.listing_stale = False                                              # a ZX48 SAVE wrote into the folder: REFRESH_LISTING
         self.dck_prev_slot = self.DCK_SLOT
         self.dck_prev_mem  = 2
 
@@ -1001,6 +1003,25 @@ def ACTIVATE_SD(tries=None):                                                    
     raise OSError(19, "SD card mount failed after %d attempts: %s" % (tries, err))
 
 
+def SAVE_MOUNT():                                                               # tspico_io.SD_MOUNT: the SAVE writes' mount
+
+    """Mount the card for SAVE_TS / SAVE_ZX's write, through ACTIVATE_SD:
+    retried, and the card's state kept. Raises OSError if it can't.
+
+    Unmounts first: ENA_SD's bare mount carried on over a /sd left mounted
+    (os.mount gives EPERM, the write used the old mount), and ACTIVATE_SD
+    would count that EPERM as a missing card."""
+
+    try:
+        os.umount("/sd")
+    except OSError:
+        pass
+    return ACTIVATE_SD()
+
+
+tspico_io.SD_MOUNT = SAVE_MOUNT                                                 # 2026-09-30 audit, §2 #21
+
+
 def SD_NOTE_CARD(cid):                                                         # ACTIVATE_SD: a card mounted
 
     """Record the mounted card. When it has just come back (or is the first
@@ -1075,6 +1096,27 @@ def SD_REVALIDATE(changed):                                                    #
     os.chdir(TSP.cur_path)
     TSP.sd_listing_ok = DIR_FILES()
     alldirs = GET_DIRS()
+
+
+def REFRESH_LISTING():                                                         # re-read the folder after a ZX48 SAVE
+
+    """Re-read the current folder's listing (files, lista) because a ZX48
+    SAVE wrote a file into it (TSP.listing_stale, set by SAVE_ZX). Called
+    where the Z80 is waiting for READY: the start of PROCESS_CMD, and
+    ZX_TPI before it matches a name. With no card it does nothing -- the
+    command's own card check answers. Leaves the bus with the MQ (Y BUSY),
+    as every SD step inside a command does."""
+
+    TSP.listing_stale = False
+    try:
+        ACTIVATE_SD()
+        os.chdir(TSP.cur_path)
+        TSP.sd_listing_ok = DIR_FILES()
+    except OSError:
+        pass
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
 
 
 def SD_PROBE(tries=None):                                                      # is there a card? (bus left with the MQ)
@@ -5499,6 +5541,9 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
             FAIL_CMD(_2_R_Tape_load)
             return
 
+        if getattr(TSP, "listing_stale", False):                               # a ZX48 SAVE added a file
+            REFRESH_LISTING()
+
         try:
             # Decode only the text: 'D' and the 16-bit length in front of it
             # are binary, and a length of 128 or more isn't valid UTF-8 (a
@@ -6456,6 +6501,8 @@ def ZX_TPI():
     if hdr[0] != 1:
         msg, rest, st = 'Only LOAD "tpi:..." works in ZX48 mode', "", _4_Q_Parameter
     else:
+        if getattr(TSP, "listing_stale", False):        # a ZX SAVE added a file: LOAD_TPI matches names in it
+            REFRESH_LISTING()
         msg, rest, st = LOAD_TPI(rest, only_tap=True)   # may use the SD card: MQ is rebuilt
     text = (msg.strip() + " " + rest).strip().encode()[:200]
     LOG("ZX48 tpi: %s" % text.decode(), 0 if st == _1_OK else 2)
