@@ -917,6 +917,21 @@ def MQ_BUSY():
 # ─────────────────────────────────────────────────────────────────────────
 
 
+# ─── SD_TRY_MS: no new mount attempt once this long has gone ─────────────
+# ACTIVATE_SD runs inside commands, while the 2068 waits ~19.9 s for READY.
+# An empty slot fails an attempt in ~0.5 s (CMD0's 500 ms), so five tries
+# fit in ~5 s -- the five are for a cold card that refuses at first. But a
+# card that is in and not answering can hold MISO low: the driver's
+# _recover() then waits out three 1 s busy timeouts before CMD0, ~4 s an
+# attempt, and five of them (20 s, seen on hardware 2026-10-02 after a
+# reflash) ran past the 2068's wait. It reported J, and the Pico went on
+# to answer a command nobody was reading. With this budget the worst case
+# is two such attempts, ~8.5 s; a fast-failing cold card still gets all
+# five.
+# ─────────────────────────────────────────────────────────────────────────
+SD_TRY_MS = 6000
+
+
 def ACTIVATE_SD(tries=None):                                                                    # Enable SD-Card access SM, after TX/RX operation
 
     """Mount the SD card on /sd and hand GPIO 2-4 to SPI. Returns the SPI.
@@ -924,7 +939,8 @@ def ACTIVATE_SD(tries=None):                                                    
     tries: mount attempts, 0.5 s apart. Default: 5 while the card is believed
     present (a cold card can refuse to start and be fine seconds later), 1
     once it is known to be missing -- with no card each attempt gives up
-    after ~0.5 s, and every command would otherwise stall ~5 s.
+    after ~0.5 s, and every command would otherwise stall ~5 s. No attempt
+    starts once SD_TRY_MS has gone, whatever `tries` says.
 
     Every mount goes through here, so this is where the card's state is
     kept: on success SD_NOTE_CARD records it and, when the card has just come
@@ -959,7 +975,14 @@ def ACTIVATE_SD(tries=None):                                                    
     # show nothing but "FAILED".
     err = None
     spi = sd = None
+    t_start = time.ticks_ms()
+    attempt = 0
     for attempt in range(1, tries + 1):
+        if attempt > 1 and time.ticks_diff(time.ticks_ms(), t_start) >= SD_TRY_MS:
+            attempt -= 1                                                       # the ones actually made
+            print("[ACTIVATE_SD] giving up: %d ms on %d attempt(s)" % (
+                time.ticks_diff(time.ticks_ms(), t_start), attempt))
+            break
         try:
             spi = SPI(0, sck=D0, mosi=D1, miso=D2)
             sd = SDCard(spi, U3_CS)
@@ -994,13 +1017,13 @@ def ACTIVATE_SD(tries=None):                                                    
     # bus (sd_active is still True). At boot TS2068_IO carries on without a
     # card, and the next command that needs one tries again.
     if TSP.sd_present:                                                        # it was there: an error
-        LOG(f"Mounting SD Card failed in ACTIVATE_SD after {tries} attempts! {err}", 2)
+        LOG(f"Mounting SD Card failed in ACTIVATE_SD after {attempt} attempts! {err}", 2)
         SAVE_LOG()
     elif TSP.sd_cid is None:                                                  # none since power-on
         LOG("SD card: not found (%s)" % err, 1)
     TSP.sd_present = False
-    TLM("ACTIVATE_SD FAILED after %d attempt(s)" % tries, repr(err))
-    raise OSError(19, "SD card mount failed after %d attempts: %s" % (tries, err))
+    TLM("ACTIVATE_SD FAILED after %d attempt(s)" % attempt, repr(err))
+    raise OSError(19, "SD card mount failed after %d attempts: %s" % (attempt, err))
 
 
 def SAVE_MOUNT():                                                               # tspico_io.SD_MOUNT: the SAVE writes' mount

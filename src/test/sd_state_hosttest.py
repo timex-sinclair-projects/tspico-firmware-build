@@ -109,6 +109,62 @@ def test_attempts(t):
     t.ACTIVATE_SD()
     check(seen == [True] and t.TSP.sd_cid == 9, "then a real change is still seen (%r)" % seen)
 
+    # SD_TRY_MS: a card that is in but not answering takes ~4 s an attempt
+    # (the driver's _recover waits out three 1 s busy timeouts, then CMD0's
+    # 500 ms). Five of those ran past the 2068's ~19.9 s READY wait.
+    print("ACTIVATE_SD: no new attempt once SD_TRY_MS has gone")
+
+    class Clock:
+        ms = 0
+        def ticks_ms(self):
+            return self.ms
+        ticks_us = ticks_ms
+        ticks_diff = staticmethod(lambda a, b: a - b)
+        def sleep_ms(self, n):
+            self.ms += n
+        def sleep(self, s):
+            self.ms += int(s * 1000)
+    real_time = t.time
+    t.time = clock = Clock()
+    try:
+        for per, want, what in ((4000, 2, "not answering (~4 s an attempt): 2 attempts"),
+                                (500, 5, "empty slot or cold card (~0.5 s an attempt): all 5")):
+            state["n"], state["card"] = 0, False
+            t.TSP = tsp(sd_present=True, sd_cid=9)
+
+            def slow(spi, cs, per=per):
+                state["n"] += 1
+                clock.ms += per
+                raise OSError(19, "no SD card")
+            t.SDCard = slow
+            clock.ms = 0
+            try:
+                t.ACTIVATE_SD()
+                msg = "mounted?"
+            except OSError as e:
+                msg = str(e)
+            check(state["n"] == want and "after %d attempts" % want in msg
+                  and clock.ms < 10000,
+                  "%s, %d ms, under the 2068's ~19.9 s (%d, %r)" % (what, clock.ms, state["n"], msg))
+
+        state["n"] = 0
+        t.TSP = tsp(sd_present=True, sd_cid=9)
+        calls = []
+
+        def late(spi, cs):
+            state["n"] += 1
+            clock.ms += 4000 if state["n"] == 1 else 500
+            if state["n"] < 2:
+                raise OSError(19, "not ready")
+            return types.SimpleNamespace(CID=9)
+        t.SDCard = late
+        clock.ms = 0
+        t.ACTIVATE_SD()
+        check(state["n"] == 2 and t.TSP.sd_present,
+              "a slow first attempt, then the card answers: mounted on attempt 2")
+    finally:
+        t.time = real_time
+
 
 class Card(D.CardOS):
     """CardOS plus the Pico's own flash for /TMP (FORGET_MOUNT's copies)."""
