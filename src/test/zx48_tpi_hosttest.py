@@ -23,6 +23,7 @@ Run:  python3 src/test/zx48_tpi_hosttest.py
 
 import os
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.dirname(HERE)
@@ -78,10 +79,11 @@ def main():
         return ok_mount[0]
     t.MOUNT_FILE = mount
 
-    def run(name, **kw):
+    def run(name, stale=False, **kw):
         P.fresh(t, pio)
         t.files = ["Manic.tap", "Jetpac.TAP", "zx.rom"]
         t.files_upper = [f.upper() for f in t.files]
+        t.TSP.listing_stale = stale
         pio.tx, pio.rx, pio.y = [], [], 0            # the 'T' dropped READY
         pio.tx_at_ready = []
         del mounted[:]
@@ -118,6 +120,63 @@ def main():
         r, _ = run("manic.tap")
         ok_mount[0] = True
         check(r == (0x19, b"Error mounting file: manic.tap"), "a failed mount: Q (%r)" % (r,))
+
+        print("a file a ZX SAVE has just written (the listing is stale)")
+        # SAVE_ZX sets TSP.listing_stale instead of re-reading the folder
+        # while the Spectrum may already be sending; ZX_TPI re-reads it
+        # before matching the name. Found on hardware 2026-10-02.
+        real = {n: getattr(t, n) for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ", "DIR_FILES", "os")}
+        steps = []
+
+        def dir_files():
+            steps.append("DIR_FILES")
+            t.files = ["Manic.tap", "Jetpac.TAP", "zx.rom", "q.tap"]
+            t.files_upper = [f.upper() for f in t.files]
+            return True
+        t.ACTIVATE_SD = lambda *a: steps.append("ACTIVATE_SD")
+        t.DEACTIVATE_SD = lambda: steps.append("DEACTIVATE_SD")
+        t.ACTIVATE_MQ = lambda *a: (steps.append("ACTIVATE_MQ"), setattr(t, "MQ", pio))
+        t.DIR_FILES = dir_files
+        t.os = types.SimpleNamespace(chdir=lambda p: steps.append("chdir " + p))
+        try:
+            r, nxt = run("q.tap", stale=True)
+            check(r[0] == 0xFF and mounted == ["/sd/TAP/q.tap"],
+                  "the just-saved file is found and mounted (%r, %s)" % (r, mounted))
+            check(steps == ["ACTIVATE_SD", "chdir /sd/TAP", "DIR_FILES", "DEACTIVATE_SD", "ACTIVATE_MQ"]
+                  and not t.TSP.listing_stale,
+                  "re-read once, bus handed back, flag cleared (%s)" % steps)
+            del steps[:]
+            r, nxt = run("q.tap")
+            check(not steps and r[0] == 0x0E, "not stale: no re-read (and q.tap isn't listed) (%r)" % (r,))
+
+            def no_card(*a):
+                raise OSError(19, "no SD card")
+            t.ACTIVATE_SD = no_card
+            del steps[:]
+            r, nxt = run("manic.tap", stale=True)
+            check(r[0] == 0xFF and steps == ["DEACTIVATE_SD", "ACTIVATE_MQ"],
+                  "no card for the re-read: carries on with the old listing, bus handed back (%s)" % steps)
+        finally:
+            for n, v in real.items():
+                setattr(t, n, v)
+
+        print("the next 2068 command re-reads a stale listing first")
+        seen = []
+        real = {n: getattr(t, n) for n in ("REFRESH_LISTING",)}
+        t.REFRESH_LISTING = lambda: (seen.append("refresh"), setattr(t.TSP, "listing_stale", False))
+        try:
+            for stale in (True, False):
+                del seen[:]
+                text = b"tpi:dir"
+                mq = P.FakeMQ(P.make_body(text))
+                P.fresh(t, mq)
+                t.TSP.listing_stale = stale
+                t.PROCESS_CMD(P.make_pre(text), {"TPI:DIR": lambda pre, cmd: seen.append("DIR")}, {})
+                want = ["refresh", "DIR"] if stale else ["DIR"]
+                check(seen == want, "stale=%s: %s (%s)" % (stale, " then ".join(want), seen))
+        finally:
+            for n, v in real.items():
+                setattr(t, n, v)
 
         print("the name stops half-way")
         r, nxt = run("manic.tap", stop_at=5)

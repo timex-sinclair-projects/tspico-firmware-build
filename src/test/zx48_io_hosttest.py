@@ -245,6 +245,9 @@ def main():
         want = tap_block(0x00, header("saved", len(payload))) + tap_block(0xFF, payload)
         check(r == "ok" and os.path.exists(f) and real_open(f, "rb").read() == want,
               "saved.tap is the right TAP (%s)" % r)
+        check(getattr(tsp, "listing_stale", False),
+              "the folder's listing is marked stale, for the next command to re-read")
+        tsp.listing_stale = False
 
         for what, kw, z80 in (
                 ("the header block stops", dict(hdr_stop_at=9), None),
@@ -254,8 +257,9 @@ def main():
             if os.path.exists(f):
                 os.remove(f)
             r, log = session(z80_save("saved", payload, **kw))
-            check(not os.path.exists(f) and "nothing saved" in log and (z80 is None or r == z80),
-                  "%s: nothing written (Z80: %s; %r)" % (what, r, log.strip().splitlines()[-1:]))
+            check(not os.path.exists(f) and "nothing saved" in log and (z80 is None or r == z80)
+                  and not getattr(tsp, "listing_stale", False),
+                  "%s: nothing written, listing not marked (Z80: %s; %r)" % (what, r, log.strip().splitlines()[-1:]))
 
         print("SAVE: the folder is decided after the mount (§2 #21)")
         # ZX48 mode has no card check before a SAVE, so the write's mount is

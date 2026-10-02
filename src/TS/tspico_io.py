@@ -2581,6 +2581,15 @@ def SAVE_ZX(MQ, TSP):
             f1.write(hdr)
             f1.write(blk)
         saved = True
+        # The folder's listing (CAT, and the names LOAD "tpi:..." matches) is
+        # now missing this file. Re-reading it here, with the card still
+        # mounted, would keep the bus off the PIO for the length of a
+        # directory scan while the Spectrum may already be sending its next
+        # 'L' or 'S'. tspico re-reads it at the next point that uses it and
+        # where the Z80 is waiting for READY: a tpi: command (PROCESS_CMD) or
+        # a ZX LOAD "tpi:..." (ZX_TPI). Found on hardware 2026-10-02: a ZX
+        # SAVE "q" was on the card, but CAT didn't list it until tpi:cd.
+        TSP.listing_stale = True
     except Exception as e:
         LOG_ADD("ERROR: ZX SAVE: writing %s failed: %r" % (filename, e), 2, TSP.LOG_LEVEL)
     try:
