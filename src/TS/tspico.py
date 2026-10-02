@@ -6615,13 +6615,24 @@ def ZX_TPI():
         MQ.put(out[i])
         i += 1
     MQX(MQ, "mov(y, invert(null))")         # READY: the reply is waiting
-    while i < len(out):
-        w = ZX_ROOM(MQ, ZX_STALL_MS)
-        if w != -1:
-            ZX_FLUSH_TX(MQ)
-            LOG("ZX tpi: reply stopped at byte %d of %d" % (i, len(out)), 2)
-            return w if w >= 0 else -1
-        MQ.put(out[i])
+    # The ROM reads the rest blind, one byte every ~45 us (TPI_DLY), so this
+    # loop has to stay ahead of it. ZX_ROOM only when the FIFO is full, as
+    # LOAD_ZX does: calling it for every byte cost ~20 us a byte on
+    # MicroPython v1.20 but ~49 us on v1.29 (function calls and ticks_ms got
+    # slower), so on v1.29 the FIFO ran dry and the mount message came out
+    # garbled (hardware, 2026-10-02; src/test/mp_timing_bench.py). This
+    # shape is ~9 us a byte on both.
+    txf = MQ.tx_fifo
+    put = MQ.put
+    n = len(out)
+    while i < n:
+        if txf() >= TX_DEPTH:
+            w = ZX_ROOM(MQ, ZX_STALL_MS)
+            if w != -1:
+                ZX_FLUSH_TX(MQ)
+                LOG("ZX tpi: reply stopped at byte %d of %d" % (i, n), 2)
+                return w if w >= 0 else -1
+        put(out[i])
         i += 1
     return -1
 

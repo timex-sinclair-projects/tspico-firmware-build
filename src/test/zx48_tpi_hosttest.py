@@ -103,6 +103,26 @@ def main():
               "status, length and the first message bytes were in TX before READY (%s)" % at)
         check(not pio.tx and pio.dropped == 0, "TX empty afterwards, nothing dropped")
 
+        print("the reply loop calls ZX_ROOM only when TX is full")
+        # On MicroPython v1.29 a ZX_ROOM call for every byte cost ~49 us, more
+        # than the ROM's ~45 us a byte, and the message came out garbled.
+        # (The fake Z80 reads a byte on every FIFO query, so asking the FIFO
+        # again from in here would change what we measure: count calls.)
+        calls = []
+        real_room = t.ZX_ROOM
+
+        def counting_room(mq, ms):
+            calls.append(1)
+            return real_room(mq, ms)
+        t.ZX_ROOM = counting_room
+        try:
+            r, nxt = run("MANIC.TAP")
+        finally:
+            t.ZX_ROOM = real_room
+        n = 2 + len(r[1])
+        check(r[0] == 0xFF and len(calls) * 4 < n,
+              "ZX_ROOM only when TX is full, not per byte (%d calls for a %d-byte reply)" % (len(calls), n))
+
         print('LOAD "tpi:1" -- a number from the listing')
         r, _ = run("1")
         check(r[0] == 0xFF and mounted == ["/sd/TAP/Jetpac.TAP"], "mounted Jetpac.TAP (%r)" % (r,))
