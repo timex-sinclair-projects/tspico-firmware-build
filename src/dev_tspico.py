@@ -4150,7 +4150,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
     fl_tot = (fl_tot * fl_block) / 1_048_576
     
     M     = ["  * TS-Pico interface status *", nl]
-    M.append(" %s 2023, 2024 TS Pico Dev Team\r" % cop)
+    M.append(" %s 2023-2026 TS Pico Dev Team\r" % cop)
     M.append("--------------------------------")
     M.append(">FW Rev.:%s; uPython: 1.20.0\r" % TSP.FW_VERSION)
     M.append(">Default ROM version: %s\r" % TSP.ROM_VERSION)
