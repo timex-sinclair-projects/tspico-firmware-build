@@ -637,7 +637,12 @@ class PICO_STATUS():                                                            
         self.sd_listing_ok = False                                              # DIR_FILES read the current folder without errors
         self.listing_stale = False                                              # a ZX48 SAVE wrote into the folder: REFRESH_LISTING
         self.dck_prev_slot = self.DCK_SLOT
-        self.dck_prev_mem  = 2
+        # tpi:dock's "previous setting" starts as the setting itself. It was
+        # always 2 (flash), but config.ini can put the DOCK in SRAM (ROM_SM
+        # bits 2-3 = 1, as getDock reads them): then CODE 0,1 named the wrong
+        # memory and CODE 0,2 swapped to a flash slot nobody had chosen.
+        # (2026-09-30 audit, §2 #19.)
+        self.dck_prev_mem  = (self.ROM_SM >> 2) & 3
 
 
 # ─── DUAL-PORT MIGRATION: new helper DEACTIVATE_SD ─────────────────────
