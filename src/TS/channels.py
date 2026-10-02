@@ -95,10 +95,24 @@ class TextOut:
         return bytes(out)
 
 
+# Text from a Mac or a PC is UTF-8 or (older files) Latin-1. One byte >= 80h
+# that isn't the start of a valid UTF-8 sequence is read as Latin-1.
+LATIN1 = {0xA3: POUND, 0xA9: 127}                    # pound; (c) -> 127, the 2068's (c)
+UTF8 = {"£".encode(): POUND, "©".encode(): 127}
+
+
 class TextIn:
-    """Text-file bytes -> 2068 input bytes: CR, LF or CRLF -> CR (13), pound
-    -> 96, ASCII 32-122 as-is, anything else '?'. Stateful across chunks for a
-    CRLF split between them and for UTF-8 sequences."""
+    """Text-file bytes -> 2068 input bytes: CR, LF or CRLF -> CR (13); TAB ->
+    space; ASCII 32-127 as-is (123-127 are the 2068's ON ERR, STICK, SOUND,
+    FREE and (c) when printed, but the bytes reach the program unchanged, so
+    it can look for CHR$ 124); pound and (c) -> 96 and 127, from UTF-8 or
+    Latin-1; anything else >= 80h -> '?'; other control bytes dropped.
+
+    Stateful across chunks for a CRLF split between them and for a UTF-8
+    sequence cut at the end of one. A byte >= 80h that doesn't start a valid
+    UTF-8 sequence is one Latin-1 character: it used to be taken as the lead
+    of a sequence and swallowed the characters after it (b'x\xa3yz' read as
+    "x?z"), and 123-127 were dropped. (2026-09-30 audit, §2 #20.)"""
 
     def __init__(self):
         self.cr = False
@@ -122,21 +136,45 @@ class TextIn:
             if b == 13:
                 out.append(13)
                 self.cr = True
-            elif 32 <= b < 123:
+            elif 32 <= b < 128:
                 out.append(b)
-            elif b >= 0x80:                          # a UTF-8 sequence: whole, or keep for later
-                k = 2 if b < 0xE0 else 3 if b < 0xF0 else 4
-                if i + k > n:
+            elif b >= 0x80:
+                k = utf8_len(data, i)
+                if k < 0:                            # a sequence cut off at the end: keep it
                     self.pend = data[i:]
                     break
-                out.append(POUND if data[i:i + k] == "£".encode() else 63)
-                i += k
-                continue
+                if k:
+                    out.append(UTF8.get(data[i:i + k], 63))
+                    i += k
+                    continue
+                out.append(LATIN1.get(b, 63))        # not UTF-8: one Latin-1 byte
             elif b == 9:
                 out.append(32)
             # other control bytes: dropped
             i += 1
         return bytes(out)
+
+
+def utf8_len(data, i):
+    """The length of the UTF-8 sequence starting at data[i] (a byte >= 80h):
+    2-4 if it is one, -1 if it is valid so far but cut off by the end of
+    data, 0 if it isn't UTF-8."""
+
+    b = data[i]
+    if 0xC2 <= b < 0xE0:
+        k = 2
+    elif 0xE0 <= b < 0xF0:
+        k = 3
+    elif 0xF0 <= b < 0xF5:
+        k = 4
+    else:
+        return 0                                     # a continuation byte, or never a lead
+    for j in range(1, k):
+        if i + j >= len(data):
+            return -1
+        if data[i + j] & 0xC0 != 0x80:
+            return 0
+    return k
 
 
 class Channel:

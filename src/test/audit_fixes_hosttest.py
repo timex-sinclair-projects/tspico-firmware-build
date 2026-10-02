@@ -589,6 +589,40 @@ def test_send_msg_bytes(t):
           "CR (0Dh) kept as the ROM's new line; other control codes -> '?' (%r)" % bytes(body))
 
 
+def test_dock_prev(t):
+    print("§2 #19. tpi:dock's previous setting starts as the DOCK's own memory")
+    for rom_sm, want in ((10, 2), (9, 2), (6, 1), (5, 1)):
+        tsp = t.PICO_STATUS({"ROM_SM": rom_sm, "DCK_SLOT": 3, "ROM_SLOT": 1, "LOG_LEVEL": 2})
+        check(tsp.dck_prev_mem == want and tsp.dck_prev_slot == 3,
+              "ROM_SM %d (DOCK in %s): previous = MEM %d, PAGE 3 (%d, %d)"
+              % (rom_sm, "SRAM" if want == 1 else "flash", want, tsp.dck_prev_mem, tsp.dck_prev_slot))
+    sent = []
+    t.TSP = t.PICO_STATUS({"ROM_SM": 6, "DCK_SLOT": 3, "ROM_SLOT": 1, "LOG_LEVEL": 2})
+    t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(msg1)
+    pre = bytearray(10)
+    pre[3], pre[5] = 0, 1                                       # CODE 0,1: the previous setting
+    t.MEMDOCK(pre, "D..tpi:dock")
+    check(sent and "MEM=1, PAGE=3" in sent[-1], "CODE 0,1 names SRAM page 3 (%r)" % sent)
+
+
+def test_text_in():
+    print("§2 #20. Text read through OPEN #: no byte dropped or swallowed")
+    from TS.channels import TextIn
+
+    def read(*chunks):
+        t = TextIn()
+        return b"".join(t.feed(c) for c in chunks)
+    check(read(b"a{b|c}d~e\x7f\r") == b"a{b|c}d~e\x7f\r",
+          "123-127 reach the program as they are (were dropped)")
+    check(read(b"x\xa3yz\r") == b"x`yz\r",
+          "Latin-1 pound: the 2068's pound, and the y after it kept (read 'x?z')")
+    check(read("\u00a3\u00a9\u00e9\r".encode()) == b"`\x7f?\r",
+          "UTF-8 pound and (c) map to the 2068's; others are '?'")
+    check(read(b"x\xc2", b"\xa9y\r") == b"x\x7fy\r", "a UTF-8 sequence split between chunks")
+    check(read(b"\xc2", b"z\r") == b"?z\r", "a broken sequence is one '?', the next byte kept")
+    check(read(b"a\xa9\xff\r") == b"a\x7f?\r", "Latin-1 (c), and a byte that is neither")
+
+
 REAL = {}
 
 
@@ -616,6 +650,8 @@ def main():
         test_getinfo(t, root)
         test_rom_sm(t, root)
         test_send_msg_bytes(t)
+        test_dock_prev(t)
+        test_text_in()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     ok = all(results)
