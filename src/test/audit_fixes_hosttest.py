@@ -581,6 +581,11 @@ def test_send_msg_bytes(t):
           "every write is one byte (an int), never a str (%r)" % sent[:6])
     check(body == list(b"Copied caf?~") + [0x0D] + list(b"x?y") + [0x00],
           "\u00e9 -> '?', ~ kept (prints as FREE), 00h in the text -> '?' (%r)" % bytes(body))
+    del sent[:]
+    REAL["SEND_MSG"]("\rOne\rtwo" + chr(13) + "three\t", "", t._1_OK)
+    body = sent[3:]
+    check(body == list(b"\rOne\rtwo\rthree?") + [0x00],
+          "CR (0Dh) kept as the ROM's new line; other control codes -> '?' (%r)" % bytes(body))
 
 
 REAL = {}

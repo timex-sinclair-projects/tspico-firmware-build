@@ -1903,11 +1903,15 @@ def MSG_BYTE(m):                                                                
     any byte >= 80h: EXROM 068E, CP 80h) -- and CMD_PUT only made room for
     one word, so a two-word put into a FIFO with one slot left blocked.
     SEND_MSG2 has always replaced these with '?'; this makes SEND_MSG agree.
-    Control codes are replaced too: 00h would end the string, and none of
-    SEND_MSG's messages use them. (2026-09-30 audit.)"""
+    Control codes are replaced too (00h would end the string), except
+    0Dh: the ROM prints it as a new line, SEND_MSG itself sends one
+    between msg and msg1, and messages build their lines with chr(13) --
+    tpi:zx48, tpi:info and the romupdate refusal among them. Replacing it
+    (#107) printed every one of those line breaks as '?'. (2026-09-30
+    audit.)"""
 
     o = m if isinstance(m, int) else ord(m)
-    return o if 32 <= o <= 127 else 0x3F
+    return o if 32 <= o <= 127 or o == 0x0D else 0x3F
 
 
 def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s)
@@ -4188,7 +4192,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
     fl_tot = (fl_tot * fl_block) / 1_048_576
     
     M     = ["  * TS-Pico interface status *", nl]
-    M.append(" %s 2023, 2024 TS Pico Dev Team\r" % cop)
+    M.append(" %s 2023-2026 TS Pico Dev Team\r" % cop)
     M.append("--------------------------------")
     M.append(">FW Rev.:%s; uPython: 1.20.0\r" % TSP.FW_VERSION)
     M.append(">Default ROM version: %s\r" % TSP.ROM_VERSION)
@@ -5133,11 +5137,15 @@ def ZX48(pre, cmd):                                                           # 
     else:
         M.append('(Normal tape load mode)')
     M.append(nl)
-    M.append('Use "OUT 244,3" to switch to the')
-    M.append('Spectrum ROM. To return to Timex')
-    M.append('mode, do OUT 244,0 then OUT 14,14')
-    M.append('to exit ZX48 mode and resume normal')
-    M.append('TS-Pico operation.')
+    # One line each, with its own CR: the 2068's screen is 32 columns, and
+    # these used to be joined with no separator, relying on every piece
+    # being exactly 32 characters. Two weren't ("OUT 14,14to exit").
+    M.append(nl.join((
+        'Use OUT 244,3 to switch to the',
+        'Spectrum ROM. To return to Timex',
+        'mode, use OUT 244,0 then',
+        'OUT 14,14 to exit ZX48 mode and',
+        'resume normal TS-Pico operation.')))
     M.append(nl)
     msg = "".join(M)
 
