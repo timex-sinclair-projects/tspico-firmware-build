@@ -112,7 +112,7 @@ def setup(t, root):
     t.open = lambda p, mode="r": open(cos.real(p), mode)
     for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ"):
         setattr(t, n, lambda *a, **k: None)
-    t.SEND_MSG2 = lambda msg, st, exp=True: sent.append(("MSG2", msg, st))
+    t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: sent.append(("MSG2", msg, st))
     t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(("MSG", msg, msg1, st))
     t.led = types.SimpleNamespace(value=lambda *a: None, toggle=lambda: None)
     t.LOG = lambda *a: None

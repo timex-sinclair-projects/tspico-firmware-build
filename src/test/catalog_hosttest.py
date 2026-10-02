@@ -99,8 +99,11 @@ def test_catalog(c):
     check(c.split_arg("games") == ("games", None), "split: plain name")
     check(c.split_arg(" games/x.tap ") == ("games/x.tap", None), "split: strips spaces")
 
-    check(c.size_text(900) == "900 B" and c.size_text(48213) == "47.00 kB",
-          "size column matches LIST_DIR_FILES")
+    sizes = [(900, "900 B"), (1023, "1023 B"), (2560, "2.5 kB"), (48213, "47 kB"), (48900, "48 kB"),
+             (16384, "16 kB"), (1_258_291, "1.2 MB"), (4_294_967_295, "4096.0 MB")]
+    got = [(n, c.size_text(n)) for n, _ in sizes]
+    check(got == sizes, "size column: B, kB with one decimal below 10, whole kB, MB (%r)" % got)
+    check(all(len(c.size_text(n)) <= 10 for n, _ in sizes), "every size fits the 10-character column")
 
     tbl = c.tap_table(io.BytesIO(TAP))
     check(len(tbl) == 5, "tap_table: five blocks (%d)" % len(tbl))
@@ -182,8 +185,9 @@ def test_dir(t, root):
     t.ACTIVATE_SD = lambda *a, **k: sd.append("sd")
     t.DEACTIVATE_SD = lambda *a, **k: sd.append("off")
     t.ACTIVATE_MQ = lambda *a, **k: sd.append("mq")
-    t.SEND_MSG2 = lambda msg, st, exp=True: sent.append(("MSG2", msg, st))
+    t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: sent.append(("MSG2", msg, st))
     t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(("MSG", msg, st))
+    t.CAT_COLOUR = lambda text: text           # the plain listing; its colours: screen_colour_hosttest
     t.led = types.SimpleNamespace(value=lambda *a: None)
     t.LOG = lambda *a: None
     t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", f_name="", offset_tbl=[], tap_idx=0,

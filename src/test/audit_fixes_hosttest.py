@@ -48,6 +48,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import re
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -321,7 +322,7 @@ def test_getlog(t, root):
     t.open = lambda p, mode="r": NoRoom()
     del sent[:]
     shown = []
-    t.SEND_MSG2 = lambda msg, st, exp=True: shown.append(msg)
+    t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: shown.append(msg)
     t.GETLOG(bytearray(10), "D..tpi:log")
     check(sent == [("Log file too large", t._4_Q_Parameter)] and not shown,
           "a log too big for memory still says so, with Q (%r)" % (sent,))
@@ -526,7 +527,7 @@ def test_getinfo(t, root):
     print("10. tpi:info on a TAP that ends with a header")
     D.setup(t, root)
     shown = []
-    t.SEND_MSG2 = lambda msg, st, exp=True: shown.append(msg)
+    t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: shown.append(msg)
     t.SD_PROBE = lambda *a: True
     t.os = types.SimpleNamespace(statvfs=lambda p: (4096, 4096, 352, 300))
     t.gc = types.SimpleNamespace(mem_free=lambda: 100000, collect=lambda: None)
@@ -540,7 +541,7 @@ def test_getinfo(t, root):
     try:
         t.GETINFO(bytearray(10), "D..tpi:info")
         ok = bool(shown) and "Program: cut:no data" in shown[-1]
-        got = shown[-1].split(">Block:")[1].split("\r")[0] if shown else shown
+        got = re.sub("[\x10\x11].", "", shown[-1]).split("Block")[1].split("\r")[0] if shown else shown
     except Exception as e:                                      # noqa: BLE001
         ok, got = False, e
     check(ok, "the last block is a header: shown with 'no data', no IndexError (%r)" % (got,))

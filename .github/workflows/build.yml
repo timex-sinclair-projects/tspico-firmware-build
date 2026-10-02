@@ -130,6 +130,7 @@ jobs:
           python3 src/test/stdin_drain_hosttest.py
           python3 src/test/boot_slot_guard_hosttest.py
           python3 src/test/audit_fixes_hosttest.py
+          python3 src/test/screen_colour_hosttest.py
       # Fails the build if a ROM in flash/manifest.json changed without its
       # crc32 being updated -- i.e. nobody would notice that the next 512K
       # image ships a different ROM than the manifest claims.
