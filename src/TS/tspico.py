@@ -5095,11 +5095,15 @@ def ZX48(pre, cmd):                                                           # 
     else:
         M.append('(Normal tape load mode)')
     M.append(nl)
-    M.append('Use "OUT 244,3" to switch to the')
-    M.append('Spectrum ROM. To return to Timex')
-    M.append('mode, do OUT 244,0 then OUT 14,14')
-    M.append('to exit ZX48 mode and resume normal')
-    M.append('TS-Pico operation.')
+    # One line each, with its own CR: the 2068's screen is 32 columns, and
+    # these used to be joined with no separator, relying on every piece
+    # being exactly 32 characters. Two weren't ("OUT 14,14to exit").
+    M.append(nl.join((
+        'Use OUT 244,3 to switch to the',
+        'Spectrum ROM. To return to Timex',
+        'mode, use OUT 244,0 then',
+        'OUT 14,14 to exit ZX48 mode and',
+        'resume normal TS-Pico operation.')))
     M.append(nl)
     msg = "".join(M)
 
