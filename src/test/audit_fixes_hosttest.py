@@ -21,6 +21,10 @@ stopped being true later. Every case below FAILS on the code before the fix
   7. tspico_io.ENA_SD's mount-failure path logged through TSP.LOG_LEVEL, but
      tspico_io has no TSP: it raised NameError instead of logging the mount
      error and returning -99.
+ 21. (§2 #21) SAVE_TS and SAVE_ZX mounted with ENA_SD's single bare
+     os.mount, after the 2068 already had "0 OK": a card that came up on a
+     second attempt lost the file, and a returned or swapped card skipped
+     SD_NOTE_CARD. Their mount now goes through ACTIVATE_SD (SD_MOUNT hook).
 
 Batch A (2026-10-01; the SD-card-ID fix is pinned in sd_state_hosttest.py):
 
@@ -330,7 +334,8 @@ def test_getlog(t, root):
 def test_ena_sd():
     print("7. tspico_io.ENA_SD: a failed mount is logged and returns -99")
     import TS.tspico_io as io
-    real = io.SDCard, io.os, io.log_entries, io.time
+    real = io.SDCard, io.os, io.log_entries, io.time, io.SD_MOUNT
+    io.SD_MOUNT = None                                          # the bare mount: tspico_io on its own
     io.time = P.FakeTime()                                      # LOG_ADD timestamps with ticks_us
 
     def no_card(spi, cs):
@@ -370,7 +375,91 @@ def test_ena_sd():
     except KeyboardInterrupt:
         got = True
     check(got is True, "Ctrl-C from the host is not swallowed (%r)" % (got,))
-    io.SDCard, io.os, io.log_entries, io.time = real
+    io.SDCard, io.os, io.log_entries, io.time, io.SD_MOUNT = real
+
+
+# ---------------------------------------------------------------------------
+# §2 #21. The SAVE writes mount through ACTIVATE_SD
+# ---------------------------------------------------------------------------
+
+def test_save_mount(t):
+    print("21. SAVE_TS / SAVE_ZX: the write's mount goes through ACTIVATE_SD")
+    import TS.tspico_io as io
+    names = ("SDCard", "SPI", "StateMachine", "os", "time", "SAVE_LOG", "SD_REVALIDATE", "TSP", "LOG",
+             "ACTIVATE_SD")
+    real = {n: getattr(t, n) for n in names}
+    t.ACTIVATE_SD = REAL["ACTIVATE_SD"]                         # earlier tests stub it
+    check(io.SD_MOUNT is t.SAVE_MOUNT, "tspico sets tspico_io.SD_MOUNT to SAVE_MOUNT")
+
+    state = {"fail": 0, "tries": 0, "cid": 7}
+    calls = []
+
+    def sdcard(spi, cs):
+        state["tries"] += 1
+        if state["fail"]:
+            state["fail"] -= 1
+            raise OSError(19, "card not ready")
+        return types.SimpleNamespace(CID=state["cid"])
+
+    def umount(p):
+        calls.append("umount")
+        if "mounted" not in calls:
+            raise OSError(22, "EINVAL")                     # MicroPython: nothing mounted there
+
+    def mount(sd, p):
+        calls.append("mount")
+        calls.append("mounted")
+
+    t.SDCard = sdcard
+    t.SPI = lambda *a, **k: object()
+    t.StateMachine = lambda *a, **k: types.SimpleNamespace(active=lambda *x: None)
+    t.os = types.SimpleNamespace(mount=mount, umount=umount)
+    t.time = P.FakeTime()
+    t.SAVE_LOG = lambda: None
+    t.LOG = lambda *a: None
+    revalidated = []
+    t.SD_REVALIDATE = lambda changed: revalidated.append(changed)
+    t.TSP = types.SimpleNamespace(sd_present=True, sd_cid=7, LOG_LEVEL=2)
+    try:
+        state["fail"] = 1
+        try:
+            io.ENA_SD(2)
+            got = "mounted"
+        except Exception as e:                                  # noqa: BLE001
+            got = e
+        check(got == "mounted" and state["tries"] == 2 and t.TSP.sd_present,
+              "a card that is only ready on the second attempt: mounted, no error (%r, %d tries)"
+              % (got, state["tries"]))
+        check(calls[:2] == ["umount", "mount"],
+              "SAVE_MOUNT unmounts first (a stale /sd would be EPERM to ACTIVATE_SD) (%r)" % calls)
+
+        del calls[:]
+        calls.append("mounted")                             # /sd left mounted
+        state["tries"] = 0
+        io.ENA_SD(2)
+        check(calls == ["mounted", "umount", "mount", "mounted"] and state["tries"] == 1,
+              "a /sd left mounted is unmounted, then mounted again on the first try (%r)" % calls)
+
+        state["tries"], state["fail"] = 0, 99
+        try:
+            io.ENA_SD(2)
+            got = None
+        except OSError as e:
+            got = e.args[0]
+        check(got == 19 and state["tries"] == 5 and t.TSP.sd_present is False,
+              "no card: 5 tries, then OSError(19) for the SAVE to catch, sd_present False (%r, %d)"
+              % (got, state["tries"]))
+
+        state["fail"], state["cid"] = 0, 8
+        t.TSP.sd_present = True
+        del revalidated[:]
+        io.ENA_SD(2)
+        check(revalidated == [True] and t.TSP.sd_cid == 8,
+              "a different card: SD_NOTE_CARD sets it up as new (append off, channels closed) (%r)"
+              % revalidated)
+    finally:
+        for n, v in real.items():
+            setattr(t, n, v)
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +595,7 @@ def main():
     t.TLM_ENABLED = False
     REAL["LOG"], REAL["SAVE_LOG"] = t.LOG, t.SAVE_LOG
     REAL["MOUNT_FILE"], REAL["COPY_FILE"], REAL["SEND_MSG"] = t.MOUNT_FILE, t.COPY_FILE, t.SEND_MSG
+    REAL["ACTIVATE_SD"] = t.ACTIVATE_SD
     root = tempfile.mkdtemp(prefix="audit_hosttest.")
     try:
         test_busy(t, root)
@@ -514,6 +604,7 @@ def main():
         test_cd(t, root)
         test_getlog(t, root)
         test_ena_sd()
+        test_save_mount(t)
         test_mount_bytes(t, root)
         test_index(t)
         test_getinfo(t, root)

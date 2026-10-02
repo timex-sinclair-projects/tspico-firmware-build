@@ -257,6 +257,24 @@ def main():
             check(not os.path.exists(f) and "nothing saved" in log and (z80 is None or r == z80),
                   "%s: nothing written (Z80: %s; %r)" % (what, r, log.strip().splitlines()[-1:]))
 
+        print("SAVE: the folder is decided after the mount (§2 #21)")
+        # ZX48 mode has no card check before a SAVE, so the write's mount is
+        # where a returned or different card is set up -- and SD_REVALIDATE
+        # moves cur_path to the top folder when this card lacks the old one.
+        top = tempfile.mkdtemp()
+        tsp.cur_path = os.path.join(d, "GONE")
+
+        def card_back(*a):
+            tsp.cur_path = top
+        io.ENA_SD = card_back
+        r, log = session(z80_save("moved", payload))
+        check(os.path.exists(os.path.join(top, "moved.tap")) and "wrote" in log,
+              "written into the folder the mount left (%r)" % log.strip().splitlines()[-1:])
+        os.remove(os.path.join(top, "moved.tap"))
+        os.rmdir(top)
+        io.ENA_SD = lambda *a: None
+        tsp.cur_path = d
+
         r, log = session(z80_save("a/b", payload))
         check(not os.path.exists(os.path.join(d, "a")) and not os.path.exists(os.path.join(d, "b.tap"))
               and "file name" in log,

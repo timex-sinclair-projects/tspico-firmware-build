@@ -114,7 +114,7 @@ def main():
     dat = bytes(build_data(payload, session=SESSION))
     pre = bytearray([0, 0, 0xFF, SESSION & 0xFF, SESSION >> 8, 0, 0, 0, 0, 0])
 
-    def save(native=None, f_name="", hdr=hdr, dat=dat, no_card=False, **kw):
+    def save(native=None, f_name="", hdr=hdr, dat=dat, no_card=False, append=False, **kw):
         """Dispatcher side: pre-load staged, Y busy (the pre-header OUTs
         dropped it, and it no longer says READY for a SAVE), then SAVE_TS,
         then the dispatcher's re-arm, then let the Z80 finish."""
@@ -127,7 +127,7 @@ def main():
         io.kill = False
         io.dead = True
         io.busy = False
-        tsp = types.SimpleNamespace(f_name=f_name, append=False, cur_path=d,
+        tsp = types.SimpleNamespace(f_name=f_name, append=append, cur_path=d,
                                     LOG_LEVEL=0, VERBOSE=False, native=native,
                                     save_no_card=no_card)
         pio.run(z80_save(hdr, dat, **kw))
@@ -199,6 +199,52 @@ def main():
               "refused with Report J at the header, nothing written (%s, %s)" % (r, files))
         check("no SD card" in log and "drained 0" in log,
               "logged, and the Z80 sent no data block: %r" % log.strip().splitlines()[-1:])
+
+        print("the write's mount fails (no card after the transfer; §2 #21)")
+        # The 2068 already has "0 OK" (the final status goes out before the
+        # SD grabs GPIO 2-4, #40), so this can only be logged and retracted.
+        def no_mount(*a):
+            raise OSError(19, "SD card mount failed after 5 attempts")
+        io.ENA_SD = no_mount
+        pio, r, saved, log, tsp, files = save()
+        check(r == "ok" and not saved and not files and tsp.f_name == "",
+              "logged as a failed write; the name isn't left for the dispatcher to mount (%s, %r)"
+              % (saved, tsp.f_name))
+        check("SAVE write FAILED" in log and "after 5 attempts" in log,
+              "the log says why: %r" % log.strip().splitlines()[-1:])
+
+        print("append mode, and the mount finds a different card (§2 #21)")
+        other = tempfile.mkdtemp()
+        old = os.path.join(other, "OLD.TAP")
+        with open(old, "wb") as f:
+            f.write(b"old card")
+
+        def swapped(*a):
+            swapped.tsp.append = False                  # what SD_NOTE_CARD -> SD_REVALIDATE does
+        io.ENA_SD = swapped
+        real_ns = types.SimpleNamespace
+
+        def capture(**k):
+            ns = real_ns(**k)
+            if "save_no_card" in k:
+                swapped.tsp = ns
+            return ns
+        types.SimpleNamespace = capture
+        try:
+            pio, r, saved, log, tsp, files = save(f_name=old, append=True)
+        finally:
+            types.SimpleNamespace = real_ns
+        check(not saved and open(old, "rb").read() == b"old card" and not files,
+              "nothing appended to the other card's file (%s, %r)" % (saved, open(old, "rb").read()[:12]))
+        check("different SD card" in log, "logged: %r" % log.strip().splitlines()[-1:])
+
+        io.ENA_SD = lambda *a: None                     # the same card: append works as before
+        pio, r, saved, log, tsp, files = save(f_name=old, append=True)
+        check(saved and open(old, "rb").read().startswith(b"old card")
+              and len(open(old, "rb").read()) == 8 + 21 + len(payload) + 4,
+              "same card: the SAVE is appended (%d bytes)" % len(open(old, "rb").read()))
+        os.remove(old)
+        os.rmdir(other)
 
         print("session mismatch between pre-header and header block")
         pre[3] ^= 0xFF

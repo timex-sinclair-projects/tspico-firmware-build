@@ -368,6 +368,7 @@ from TS.printer import TextCapture, next_name, write_bmp, VLPRINT, VSCREEN
 from TS import catalog
 from TS import native
 from TS import channels
+from TS import tspico_io                                                # SD_MOUNT: set below SAVE_MOUNT
 from array import array
 
 # ─── Virtual printer: LPRINT / LLIST -> .TXT, COPY -> .BMP ──────────────
@@ -999,6 +1000,25 @@ def ACTIVATE_SD(tries=None):                                                    
     TSP.sd_present = False
     TLM("ACTIVATE_SD FAILED after %d attempt(s)" % tries, repr(err))
     raise OSError(19, "SD card mount failed after %d attempts: %s" % (tries, err))
+
+
+def SAVE_MOUNT():                                                               # tspico_io.SD_MOUNT: the SAVE writes' mount
+
+    """Mount the card for SAVE_TS / SAVE_ZX's write, through ACTIVATE_SD:
+    retried, and the card's state kept. Raises OSError if it can't.
+
+    Unmounts first: ENA_SD's bare mount carried on over a /sd left mounted
+    (os.mount gives EPERM, the write used the old mount), and ACTIVATE_SD
+    would count that EPERM as a missing card."""
+
+    try:
+        os.umount("/sd")
+    except OSError:
+        pass
+    return ACTIVATE_SD()
+
+
+tspico_io.SD_MOUNT = SAVE_MOUNT                                                 # 2026-09-30 audit, §2 #21
 
 
 def SD_NOTE_CARD(cid):                                                         # ACTIVATE_SD: a card mounted
