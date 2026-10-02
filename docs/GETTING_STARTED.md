@@ -33,14 +33,14 @@ Background reading (in order, when you're ready):
 |---|---|---|
 | `gh` CLI | PRs, issues, release artifacts | both |
 | Thonny | Editor / file-transfer to the Pico over USB | both |
-| `mpy-cross` v1.20.* | Pre-compile `src/dev_tspico.py` to `.mpy` | both |
+| `mpy-cross` v1.29.* | Pre-compile `src/dev_tspico.py` to `.mpy` | both |
 | Claude Code | AI-assisted editing | Claude path only |
 
 ### macOS
 
 ```bash
 brew install gh thonny
-pip3 install --user mpy-cross==1.20.*
+pip3 install --user mpy-cross==1.29.*
 ```
 
 ### Windows
@@ -60,7 +60,7 @@ winget install AivarAnnamaa.Thonny
 Microsoft Store), then:
 
 ```powershell
-pip install --user mpy-cross==1.20.*
+pip install --user mpy-cross==1.29.*
 ```
 
 If `mpy-cross` isn't on your PATH after install, you'll find it
@@ -82,7 +82,7 @@ sudo pacman -S github-cli thonny python-pip
 Then in any shell:
 
 ```bash
-pip install --user mpy-cross==1.20.*
+pip install --user mpy-cross==1.29.*
 ```
 
 If `~/.local/bin` isn't on your PATH, add it (`build-dev-mpy.sh`
@@ -96,7 +96,7 @@ gh auth login    # GitHub.com → HTTPS → browser-based
 
 # Verify
 gh repo view timex-sinclair-projects/tspico-firmware-build
-mpy-cross --version    # should report mpy v6.1 for MP 1.20.0
+mpy-cross --version    # should report mpy v6.3 for MP 1.29.0
 ```
 
 ### Claude Code (if you're using the AI-assisted path)

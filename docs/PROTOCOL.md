@@ -698,7 +698,7 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   the body-read timeout does, must stay OUTSIDE the `try`, or the
   `finally` hands it a second one.
 - **Any idle loop you add must call `DRAIN_STDIN(MQ)`.** The firmware
-  never reads stdin, and MicroPython v1.20 only notices Ctrl-C while
+  never reads stdin, and MicroPython (v1.20, and v1.29) only notices Ctrl-C while
   moving USB bytes into its 512-byte stdin buffer. Once 511 bytes of
   any other text arrive (a tool writing before its Ctrl-C landed, a
   terminal echoing telemetry back), the buffer is full and no Ctrl-C

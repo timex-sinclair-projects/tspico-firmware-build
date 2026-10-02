@@ -187,9 +187,9 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Clone MicroPython v1.20.0
+      - name: Clone MicroPython v1.29.0
         run: |
-          git clone --depth 1 --branch v1.20.0 \
+          git clone --depth 1 --branch v1.29.0 \
             https://github.com/micropython/micropython.git ${{ github.workspace }}/micropython
 
       # The build stamp the firmware reports (boot line, tpi:info, the
@@ -255,8 +255,8 @@ jobs:
       - name: Show build output
         working-directory: ${{ github.workspace }}/micropython/ports/rp2
         run: |
-          echo "=== build-PICO directory ==="
-          ls -la build-PICO/ 2>/dev/null || echo "(no build-PICO dir)"
+          echo "=== build-RPI_PICO directory ==="
+          ls -la build-RPI_PICO/ 2>/dev/null || echo "(no build-RPI_PICO dir)"
           echo ""
           echo "=== firmware.uf2 location(s) ==="
           find . -name "firmware.uf2" -ls 2>/dev/null
@@ -268,7 +268,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tspico-firmware-uf2
-          path: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
+          path: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
           retention-days: 30
 
       # The upgrade UF2: a separate firmware the web updater writes first, for
@@ -306,7 +306,7 @@ jobs:
       - name: Test the web updater's flasher with the built UF2s
         run: |
           node web-updater/test/flasher.test.mjs \
-            ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2 \
+            ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2 \
             ${{ github.workspace }}/micropython/ports/rp2/build-UPGRADE/firmware.uf2
 
       # The Pico's MicroPython parser is RAM-hungry. Once dev_tspico.py
@@ -346,6 +346,6 @@ jobs:
         with:
           name: build-logs
           path: |
-            ${{ github.workspace }}/micropython/ports/rp2/build-PICO/CMakeFiles/CMakeOutput.log
-            ${{ github.workspace }}/micropython/ports/rp2/build-PICO/CMakeFiles/CMakeError.log
+            ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeOutput.log
+            ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeError.log
           retention-days: 7

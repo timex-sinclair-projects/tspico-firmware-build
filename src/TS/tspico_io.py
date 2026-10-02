@@ -199,8 +199,9 @@ def DRAIN_STDIN(MQ, limit=1024):
     """Throw away text the host sent to the running firmware, so a later
     Ctrl-C still reaches it. Returns the number of bytes dropped.
 
-    MicroPython v1.20 (rp2) sees Ctrl-C only while moving USB bytes into
-    its 512-byte stdin ring buffer (tud_cdc_rx_cb). The firmware never
+    MicroPython (rp2; v1.20, and still v1.29 in shared/tinyusb/
+    mp_usbd_cdc.c) sees Ctrl-C only while moving USB bytes into its
+    512-byte stdin ring buffer (tud_cdc_rx_cb). The firmware never
     reads stdin, so once 511 bytes of anything else have arrived -- a
     tool writing before its Ctrl-C landed, a terminal echoing telemetry
     back -- the buffer is full, every later byte waits in TinyUSB behind
