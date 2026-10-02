@@ -40,6 +40,13 @@ try:
 except ImportError:
     from TS.tspico import TS2068_IO
     print("[DEV] Using frozen TS.tspico (TLM=%s)" % TS.tspico.TLM_ENABLED)
+except ValueError as e:
+    # A /dev_tspico.mpy compiled for another MicroPython: "incompatible .mpy
+    # file". Every MicroPython upgrade changes the bytecode version (v1.20
+    # wrote mpy 6.1), and before this a leftover override stopped main.py
+    # before the TS-Pico started. Run the frozen firmware instead.
+    from TS.tspico import TS2068_IO
+    print("[DEV] /dev_tspico ignored (%s); using frozen TS.tspico" % e)
 
 U6_EN = Pin(12, Pin.OUT, Pin.PULL_UP)
 WAIT = Pin(14, Pin.OUT, Pin.PULL_DOWN)

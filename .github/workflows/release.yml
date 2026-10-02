@@ -80,9 +80,9 @@ jobs:
           echo "::error::apt failed three times"
           exit 1
 
-      - name: Clone MicroPython v1.20.0
+      - name: Clone MicroPython v1.29.0
         run: |
-          git clone --depth 1 --branch v1.20.0 \
+          git clone --depth 1 --branch v1.29.0 \
             https://github.com/micropython/micropython.git ${{ github.workspace }}/micropython
 
       # ──────────────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ jobs:
           mkdir -p "${STAGE}/SD card/TAP"
           mkdir -p "${STAGE}/SD card/help"
 
-          UF2_SRC="${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2"
+          UF2_SRC="${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2"
 
           # Top-level firmware UF2.
           cp "${UF2_SRC}" "${STAGE}/firmware.uf2"
@@ -352,7 +352,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
-          UF2: ${{ github.workspace }}/micropython/ports/rp2/build-PICO/firmware.uf2
+          UF2: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
           FLASH_ROM: ${{ steps.flash.outputs.rom }}
         run: |
           # Assets: bundle + raw UF2 + the upgrade UF2, plus the 512K flash
