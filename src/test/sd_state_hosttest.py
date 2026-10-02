@@ -23,6 +23,7 @@ Run:  python3 src/test/sd_state_hosttest.py
 """
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -329,7 +330,8 @@ def test_info(t):
     t.SEND_MSG2 = lambda msg, st, *a: sent.append(msg)
     t.os = types.SimpleNamespace(statvfs=lambda p: (4096, 4096, 256, 128, 128, 0, 0, 0, 0, 255))
     t.gc = types.SimpleNamespace(mem_free=lambda: 100000, collect=lambda: None)
-    t.lista = "x" * 32 + "SD: 7.4453GB; free: 7.2109GB    "
+    t.sd_space = (8_000_000_000, 7_750_000_000)                 # what the last listing read
+    plain = lambda m: re.sub("[\x10\x11].", "", m)                # without the colour codes
     t.files = []
 
     def probe(*a):                       # the card was taken out after the last command
@@ -339,13 +341,13 @@ def test_info(t):
     t.TSP = tsp(sd_present=True, FW_VERSION="2.1", ROM_VERSION="2.1", ROM_SM=10, bank_sm=1,
                 LOG_LEVEL=2)
     t.GETINFO(bytearray(10), "D..tpi:info")
-    check(sent and ">SD card: none" in sent[-1] and "7.4453GB" not in sent[-1],
+    check(sent and re.search(r"SD card +none", plain(sent[-1])) and "7.5 GB" not in plain(sent[-1]),
           "card pulled since the last command: info says none, not the old card")
 
     t.SD_PROBE = lambda *a: True
     t.TSP.sd_present = True
     t.GETINFO(bytearray(10), "D..tpi:info")
-    check("SD: 7.4453GB" in sent[-1], "card in: its space shown")
+    check(re.search(r"SD card +7\.5 GB, 7\.2 GB free", plain(sent[-1])), "card in: its space shown")
 
 
 def main():

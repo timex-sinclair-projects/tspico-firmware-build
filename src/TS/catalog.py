@@ -157,6 +157,31 @@ def size_text(size):
     return "%d B" % size
 
 
+def space_pair(total, free):
+    """("240 MB", "236 MB") for a card or flash of `total` bytes with `free`
+    left. The unit comes from the total, so both read alike: kB below 1 MB,
+    MB with one decimal below 10 MB, whole MB below 1 GB, GB with one
+    decimal above (the board takes cards up to 16 GB). The CAT header used
+    to give GB to four places whatever the size, so the 256 MB cards the
+    boards ship with read "SD: 0.2346GB"."""
+
+    if total >= 1 << 30:
+        div, fmt, unit = 1 << 30, "%.1f", "GB"
+    elif total >= 10 << 20:
+        div, fmt, unit = 1 << 20, "%d", "MB"
+    elif total >= 1 << 20:
+        div, fmt, unit = 1 << 20, "%.1f", "MB"
+    else:
+        div, fmt, unit = 1 << 10, "%d", "kB"
+
+    def one(n):
+        v = n / div
+        if fmt == "%d":
+            v = int(v + 0.5)
+        return (fmt % v) + " " + unit
+    return one(total), one(free)
+
+
 def counts(nf, nd):
     """ "3 files, 1 dir" """
 

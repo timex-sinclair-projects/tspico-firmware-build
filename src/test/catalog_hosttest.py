@@ -182,8 +182,9 @@ def test_dir(t, root):
     t.ACTIVATE_SD = lambda *a, **k: sd.append("sd")
     t.DEACTIVATE_SD = lambda *a, **k: sd.append("off")
     t.ACTIVATE_MQ = lambda *a, **k: sd.append("mq")
-    t.SEND_MSG2 = lambda msg, st, exp=True: sent.append(("MSG2", msg, st))
+    t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: sent.append(("MSG2", msg, st))
     t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(("MSG", msg, st))
+    t.CAT_COLOUR = lambda text: text           # the plain listing; its colours: screen_colour_hosttest
     t.led = types.SimpleNamespace(value=lambda *a: None)
     t.LOG = lambda *a: None
     t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", f_name="", offset_tbl=[], tap_idx=0,

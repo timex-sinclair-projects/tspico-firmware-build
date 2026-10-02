@@ -318,6 +318,7 @@ import _thread
 import time
 import gc
 import os
+import sys
 import json
 
 from micropython import const
@@ -424,6 +425,20 @@ dirs = []
 dirs_upper = []
 lista = ""
 alldirs = []
+sd_space = None                                                                # (total, free) bytes, as the last listing read them
+
+# ─── Colour in SEND_MSG2 (the CAT listing and tpi:info, 2026-10-02) ─────
+# The 2068 prints INK (10h) and PAPER (11h) followed by a value. The ROM's
+# string reader stops on 00h and 03h, so values 0 (black) and 3 (magenta)
+# can't be sent, nor any 0 that would switch INVERSE, BRIGHT or FLASH off.
+# What is used: colours 1, 2, 4-7; 8 ("transparent": the colour already on
+# screen, i.e. the user's own colours on a fresh line) to go back to normal;
+# and INK 9 ("contrast": black or white to suit the paper). Only messages
+# sent with SEND_MSG2(..., colour=True) keep these; in any other text they
+# are dropped, as before.
+INK_ = "\x10"
+PAPER_ = "\x11"
+NORMAL_ = PAPER_ + "\x08" + INK_ + "\x08"
 
 # What a command that needs the card answers when there is none: always
 # shown (SEND_MSG forces it), with Report J -- "Invalid I/O device" is the
@@ -1350,6 +1365,42 @@ def DIR_HEADER(sd_stat, path=None):                                             
     return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (path, sd_stat[:32])
 
 
+def CAT_COLOUR(text):                                                         # a plain listing -> the coloured one
+
+    """The listing as CAT shows it (chosen 2026-10-02): the path and the
+    card line on a blue bar, the column titles on cyan, the dashed line
+    gone, folders in blue with "folder" for their size, and each index
+    number on a cyan chip. `text` is DIR_HEADER's four 32-character rows
+    and then 32-character entry rows, as DIR_FILES and CATALOG_TEXT build
+    them (and as dirinfo and tpi:info's tests read them: those keep the
+    plain text). Anything else -- a TAP's block list, "Directory is empty"
+    -- goes through as it is. Send the result with SEND_MSG2(colour=True).
+
+    Every row starts by setting its own colours, so a "Scroll?" prompt in
+    the middle changes nothing, and none ends with a code between its 32nd
+    character and the next row (SEND_MSG2 would then not see the line's
+    end)."""
+
+    if not text.startswith("Path:") or len(text) < 128:
+        return text
+    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
+           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
+    rest = text[128:]                                                      # [96:128] is the dashes
+    while len(rest) >= 32:
+        row = rest[:32]
+        if row[0] == "<":
+            out.append(NORMAL_ + INK_ + "\x01" + row[:22] + "%10s" % "folder")
+        elif row[:3].isdigit() and row[3] == " ":
+            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + NORMAL_ + row[3:])
+        elif row[:4] == "    ":
+            out.append(NORMAL_ + row)
+        else:
+            break
+        rest = rest[32:]
+    out.append(NORMAL_ + rest)
+    return "".join(out)
+
+
 def DIR_FILES():                                                                             # Get all files and directories from current path
     """
     Rebuild files[], lista and dirinfo.tap for the current directory.
@@ -1369,6 +1420,7 @@ def DIR_FILES():                                                                
     global files
     global dirs
     global lista
+    global sd_space
     global files_upper
     global dirs_upper
 
@@ -1382,7 +1434,8 @@ def DIR_FILES():                                                                
     dirs = []
     files_upper = []
     dirs_upper = []
-    lista = DIR_HEADER("SD: card error") + "SD card error; power cycle\r"   # same layout: GETINFO reads lista[32:63]
+    sd_space = None
+    lista = DIR_HEADER("SD: card error") + "SD card error; power cycle\r"
 
     try:
         os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage
@@ -1397,6 +1450,7 @@ def LIST_DIR_FILES():                                                           
     global files
     global dirs
     global lista
+    global sd_space
     global files_upper
     global dirs_upper
     
@@ -1486,9 +1540,8 @@ def LIST_DIR_FILES():                                                           
     sd_block = os.statvfs("")[0]
     sd_tot   = os.statvfs("")[2]
     sd_free  = os.statvfs("")[3]
-    sd_free  = (sd_free * sd_block) / 1_073_741_824
-    sd_tot   = (sd_tot  * sd_block) / 1_073_741_824
-    sd_stat  = "SD: %02.4fGB; free: %02.4fGB" % (sd_tot, sd_free)
+    sd_space = (sd_tot * sd_block, sd_free * sd_block)
+    sd_stat  = "SD: %s; free: %s" % catalog.space_pair(*sd_space)
 
     header = DIR_HEADER(sd_stat)
     
@@ -1995,7 +2048,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     return
 
 
-def SEND_MSG2(msg, st: bytes, expandKeywords = True):                                         # Sends a SCROLLING status message back to the TS,
+def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):                                         # Sends a SCROLLING status message back to the TS,
                                                                                               # once a command is finished
     # msg: a string of the message (no bytearrays)
     # st:  report status
@@ -2092,6 +2145,13 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True):                           
                     continue
 
             elif ch >= 0x10 and ch <= 0x15:
+                # INK/PAPER and a value the ROM can take: kept, zero width,
+                # in a message built with colour codes (see INK_). Any other
+                # attribute code, and every one in other text, is dropped
+                # with its value byte.
+                if colour and ch <= 0x11 and i + 1 < n and ord(msg[i+1]) in (1, 2, 4, 5, 6, 7, 8, 9):
+                    wrt(ch)
+                    wrt(ord(msg[i+1]))
                 i += 1
                 continue
 
@@ -2287,7 +2347,7 @@ def DIR(pre, cmd):                                                              
             return
         TLM("DIR par1=0 — regular listing via SEND_MSG2")
         led.value(1)
-        SEND_MSG2(lista, 1, False)
+        SEND_MSG2(CAT_COLOUR(lista), 1, False, True)
         TLM("DIR SEND_MSG2 returned")
         led.value(0)
 
@@ -2346,7 +2406,7 @@ def CATALOG(arg):                                                               
         DEACTIVATE_SD()
         ACTIVATE_MQ()
     if st == _1_OK:
-        SEND_MSG2(msg, _1_OK, False)
+        SEND_MSG2(CAT_COLOUR(msg), _1_OK, False, True)
     else:
         LOG(msg, 1)
         SEND_MSG(msg, arg, st)
@@ -3940,7 +4000,7 @@ def CDIR(pre, cmd):                                                             
 
     if status == 1 and par1 == 1 and par2 <= 2:
         if par2 == 0:
-            SEND_MSG2(lista, _1_OK, False)
+            SEND_MSG2(CAT_COLOUR(lista), _1_OK, False, True)
         else:
             pre = 10 * [0]
             if par2 == 1:
@@ -4211,36 +4271,44 @@ def GETINFO(pre, cmd):                                                 # Shows T
     fl_tot = os.statvfs("")[2]
     fl_free = os.statvfs("")[3]
 
-    fl_free = (fl_free * fl_block) / 1_048_576
-    fl_tot = (fl_tot * fl_block) / 1_048_576
+    fl_free = fl_free * fl_block
+    fl_tot = fl_tot * fl_block
     
-    M     = ["  * TS-Pico interface status *", nl]
-    M.append(" %s 2023-2026 TS Pico Dev Team\r" % cop)
-    M.append("--------------------------------")
-    M.append(">FW Rev.:%s; uPython: 1.20.0\r" % TSP.FW_VERSION)
-    M.append(">Default ROM version: %s\r" % TSP.ROM_VERSION)
-    M.append(">Build: %-24.24s\r" % BUILD_VERSION)   # 8 + 24 = the 32-col line
-    M.append(">Board Rev.: V2.2; Log level:%d\r" % TSP.LOG_LEVEL)
-    M.append(">Pico Free RAM: %06.2fkB\r" % (gc.mem_free() >> 10))
-    M.append(">Flash: %02.2fMB; free: %02.2fMB\r" % (fl_tot, fl_free))
-    if TSP.sd_present:
-        M.append(">%s\r" % lista[32:63]) # sd_stat
+    # The screen (chosen 2026-10-02 from the colour proposals): a cyan
+    # " TS-Pico " badge on a blue strip, labels in blue, values in the
+    # screen's own colours. The strip and whatever is missing (no card,
+    # nothing mounted) turn red. Colour codes: see SEND_MSG2's `colour`.
+    missing = not TSP.sd_present or not TSP.f_name
+    bar = PAPER_ + "\x05" + INK_ + "\x09" + " TS-Pico " + PAPER_ + ("\x02" if missing else "\x01") + INK_ + "\x07"
+    lab = lambda t: INK_ + "\x01" + "%-10s" % t + INK_ + "\x08"
+    warn = INK_ + "\x02" + "none" + INK_ + "\x08"
+    M     = [bar + "%-23s" % " interface status"]                  # 9 + 23: SEND_MSG2 ends the line
+    M.append(NORMAL_ + INK_ + "\x01" + " %s 2023-2026 TS Pico Dev Team" % cop + INK_ + "\x08" + nl + nl)
+    M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + INK_ + "\x01" + "uPython " + INK_ + "\x08"
+             + ".".join(str(v) for v in sys.implementation.version[:3]) + nl)
+    M.append(lab("ROM") + "%s" % TSP.ROM_VERSION + nl)
+    M.append(lab("Build") + "%-.22s" % BUILD_VERSION + nl)            # 10 + 22: the 32-col line
+    M.append(lab("Board") + "V2.2  " + INK_ + "\x01" + "Log level " + INK_ + "\x08" + "%d" % TSP.LOG_LEVEL + nl)
+    M.append(lab("Free RAM") + "%d kB" % (gc.mem_free() >> 10) + nl)
+    M.append(lab("Flash") + "%s, %s free" % catalog.space_pair(fl_tot, fl_free) + nl)
+    if TSP.sd_present and sd_space:
+        M.append(lab("SD card") + "%s, %s free" % catalog.space_pair(*sd_space) + nl)
     else:
-        M.append(">SD card: none\r")
+        M.append(lab("SD card") + warn + nl)
     mem, page = getBoot()
-    M.append(">Boot: %d,%d" % (mem, page))
+    M.append(lab("Boot") + "%-6s" % ("%d,%d" % (mem, page)))
     mem, page = getDock()
-    M.append(";     Dock: %d,%d\r" % (mem, page))
-    M.append(">Append: %s; Verbose: %s\r" % (str(TSP.append), str(TSP.VERBOSE)))
-    M.append(">Mounted file: ")
-    
+    M.append(INK_ + "\x01" + "Dock " + INK_ + "\x08" + "%d,%d" % (mem, page) + nl)
+    M.append(lab("Append") + "%-6s" % ("on" if TSP.append else "off")
+             + INK_ + "\x01" + "Verbose " + INK_ + "\x08" + ("on" if TSP.VERBOSE else "off") + nl)
+
     if not TSP.f_name:
-        M.append("%s\r" % "none")
+        M.append(lab("Mounted") + warn + nl)
     else:
-        M.append("%s\r" % public_fname())
+        M.append(lab("Mounted") + "%s" % public_fname() + nl)
         if isTapMounted():
             i = TSP.tap_idx
-            M.append(">Block:%02d" % i)
+            M.append(lab("Block") + "%02d" % i)
             # A header is shown with the size of the data block after it,
             # offset_tbl[i+1]. A TAP can END with a header -- an append cut
             # short, or a header-only file -- and offset_tbl[i+1] then raised
@@ -4256,11 +4324,11 @@ def GETINFO(pre, cmd):                                                 # Shows T
             else:
                 M.append(":<empty>")
             M.append(nl)
-    
-    M.append(">Current path: %s\r" % public_path())
-    M.append(">Files in dir: %d\r" % len(files))
+
+    M.append(lab("Path") + "%s" % public_path() + nl)
+    M.append(lab("Files") + "%d" % len(files) + nl)
     msg = "".join(M)
-    SEND_MSG2(msg, _1_OK)
+    SEND_MSG2(msg, _1_OK, True, True)
 
     return
 
