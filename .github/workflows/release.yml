@@ -300,30 +300,48 @@ jobs:
           echo "ZIP_NAME=${ZIP}" >> "$GITHUB_ENV"
 
       # ──────────────────────────────────────────────────────────────────
-      # 512K flash image (optional asset).
+      # 512K flash image (Pico-<tag>.rom).
       #
       # tools/build-flash.py lays the slots we own -- the TS-Pico ZX
       # Spectrum ROM (slot 0) and the TS-2068 ROM (slot 1) -- into a full
       # flash image. The remaining slots are third-party images we do not
       # vendor in this repo (ZX Diagnostics, Rodolfo Guerra's TK90/95 ROM,
-      # the four DCK cartridges), so they are copied from a known-good base
-      # image fetched from the FLASH_BASE_URL repo variable.
+      # the DCK cartridges), so they are copied from a known-good base
+      # image. Where that comes from, first match wins:
       #
-      # If FLASH_BASE_URL is unset the step is skipped and the release
-      # simply carries no flash image -- it never publishes a partial one.
+      #   1. the FLASH_BASE_URL repo variable, if set (an override);
+      #   2. the first asset of the DRAFT release tagged `flash-base` in
+      #      this repo. A draft's assets aren't public, but this job's
+      #      GITHUB_TOKEN can read them. Drafts can't be looked up by tag,
+      #      so we list the releases and pick it out. Never publish it.
+      #
+      # With neither, the step is skipped and the release simply carries
+      # no flash image -- it never publishes a partial one. See
+      # flash/README.md.
       # ──────────────────────────────────────────────────────────────────
-      - name: Build 512K flash image (if a base image is configured)
+      - name: Build 512K flash image
         id: flash
         env:
           FLASH_BASE_URL: ${{ vars.FLASH_BASE_URL }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           python3 tools/build-flash.py check flash/manifest.json
-          if [ -z "${FLASH_BASE_URL}" ]; then
-            echo "FLASH_BASE_URL not set - skipping the 512K flash image."
-            exit 0
+          if [ -n "${FLASH_BASE_URL}" ]; then
+            echo "Base image: FLASH_BASE_URL"
+            curl -fsSL "${FLASH_BASE_URL}" -o base.rom
+          else
+            ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+                    --jq '.[] | select(.draft and .tag_name=="flash-base") | .assets[0].id' \
+                  | head -n1)" || ID=""
+            if [ -z "${ID}" ] || [ "${ID}" = "null" ]; then
+              echo "::warning::No FLASH_BASE_URL and no flash-base draft release - skipping the 512K flash image."
+              exit 0
+            fi
+            echo "Base image: flash-base draft release, asset ${ID}"
+            gh api -H "Accept: application/octet-stream" \
+                "repos/${GITHUB_REPOSITORY}/releases/assets/${ID}" > base.rom
           fi
-          curl -fsSL "${FLASH_BASE_URL}" -o base.rom
           OUT="Pico-${TAG}.rom"
           python3 tools/build-flash.py build flash/manifest.json \
                   --base base.rom --out "${OUT}"

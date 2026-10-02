@@ -59,13 +59,28 @@ ignores whatever you put in a spare one.
 Six of the eight populated slots are other people's work: ZX Diagnostics
 (Brendan Alford, GPL), Rodolfo Guerra's TK90/95 ROM, and four DCK cartridges.
 Rather than commit them to a public repo, the build copies them out of a
-known-good 512K image supplied at build time. Release CI fetches that image
-from the `FLASH_BASE_URL` repo variable; if it isn't set, the release simply
-carries no flash image.
+known-good 512K image supplied at build time.
 
-**Open decision:** if we'd rather vendor those blobs (simpler builds, no
-external dependency), that's a licensing call, not a technical one — the
-manifest supports both: give a slot a `file` instead of `from_base`.
+Release CI (`.github/workflows/release.yml`, step "Build 512K flash image")
+gets that image from, in order:
+
+1. **The `FLASH_BASE_URL` repo variable**, if set. It's an override and is
+   normally left unset.
+2. **The draft release tagged `flash-base`** in this repo, whose one asset is
+   `Pico-v15w.rom`. A draft's assets aren't public, but the release job's
+   `GITHUB_TOKEN` can read them. Leave it a draft: publishing it would expose
+   the base image on its own and make it the "latest" release. To replace the
+   base, delete the old asset from the draft and upload the new one.
+
+With neither, the step is skipped and the release carries no flash image. It
+never publishes a partial one. With a base, the release gets `Pico-<tag>.rom`,
+built and then checked with `verify`.
+
+**Decided (2026-09-28):** the released `Pico-<tag>.rom` may include the
+third-party slots. The repo still doesn't vendor them as separate files; they
+reach the release only inside the assembled image. If we ever want to vendor
+them instead, the manifest supports it: give a slot a `file` instead of
+`from_base`.
 
 **Also open:** Pinball is listed at slot 8 but the whole 64K is `0x00` in
 `Pico-v15w.rom`, so the current image ships three cartridges, not four. Its
