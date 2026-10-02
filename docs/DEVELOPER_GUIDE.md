@@ -72,12 +72,15 @@ that the Pico's parser runs out of memory trying to load it as plain
 Python.
 
 The version must match the MicroPython on the Pico (currently
-**v1.20.0**):
+**v1.29.0**; it was v1.20.0 until 2026-10):
 
 ```bash
-pip install --user mpy-cross==1.20.*
-mpy-cross --version    # should report mpy-cross 6.1 / mpy 6.1
+pip install --user mpy-cross==1.29.*
+mpy-cross --version    # should report mpy v6.3 (v1.20 wrote 6.1)
 ```
+
+A `.mpy` built for another MicroPython won't load ("incompatible .mpy
+file"); `main.py` then says so and runs the frozen firmware instead.
 
 If you'd rather use the `mpy-cross` produced by the CI's own
 MicroPython build, the [`build-dev-mpy.sh`](../build-dev-mpy.sh)
@@ -106,7 +109,7 @@ three ways to get one:
    the [Actions tab](https://github.com/timex-sinclair-projects/tspico-firmware-build/actions),
    pick a run, download the `firmware-uf2` artifact. Use this when
    testing someone's PR before merge.
-3. **Build locally** — clone MicroPython v1.20.0 and run the same
+3. **Build locally** — clone MicroPython v1.29.0 and run the same
    commands that `.github/workflows/build.yml` runs. Rarely needed
    unless you're debugging the build itself.
 

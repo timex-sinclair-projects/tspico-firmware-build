@@ -15,8 +15,8 @@
 # root, from src/, or anywhere else.
 #
 # Setup (one-time):
-#   pip install --user mpy-cross==1.20.*  # match the UF2's MicroPython version
-#                                          # (mpy v6.1 bytecode for MP 1.20.0)
+#   pip install --user mpy-cross==1.29.*  # match the UF2's MicroPython version
+#                                          # (mpy v6.3 bytecode for MP 1.29.0)
 #
 # After build: upload <name>.mpy to the Pico's flash root via Thonny. Python's
 # import system picks up .mpy in preference to .py, so main.py's
@@ -34,7 +34,7 @@ if ! command -v mpy-cross >/dev/null 2>&1; then
         MPYC="$HOME/.local/bin/mpy-cross"
     else
         echo "error: mpy-cross not found. install with:" >&2
-        echo "    pip install --user mpy-cross==1.20.*" >&2
+        echo "    pip install --user mpy-cross==1.29.*" >&2
         exit 1
     fi
 else

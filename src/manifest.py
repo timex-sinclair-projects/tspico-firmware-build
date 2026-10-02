@@ -1,6 +1,6 @@
 # MicroPython freeze manifest for the TS-Pico firmware build.
 #
-# This file replaces ports/rp2/boards/manifest.py in v1.20.0. The default
+# This file replaces ports/rp2/boards/manifest.py (MicroPython v1.29.0). The default
 # rp2 manifest freezes rp2.py, _boot.py, _boot_fat.py PLUS a bunch of
 # peripheral drivers (onewire, ds18x20, dht, neopixel, uasyncio) for
 # stock Raspberry Pi Pico use. The TS-Pico hardware doesn't have any of

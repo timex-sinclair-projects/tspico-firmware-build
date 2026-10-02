@@ -808,7 +808,8 @@ def MQ_READY():
     """
     # invert(null) is the documented MicroPython PIO syntax for ~0.
     # The tilde form `~null` does NOT parse correctly via runtime
-    # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test.
+    # sm.exec() in MicroPython v1.20.0 — confirmed by REPL test. Nor in
+    # v1.29: rp2.py's `null` is a plain number there too.
     MQX(MQ, "mov(y, invert(null))")
 
 
