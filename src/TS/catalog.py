@@ -150,11 +150,23 @@ def within(path, top):
 
 
 def size_text(size):
-    """Size column, exactly as LIST_DIR_FILES has always shown it."""
+    """A file's size for the listing's 10-character column: "52 B",
+    "2.5 kB", "47 kB", "1.2 MB" (1 kB = 1024 bytes). Whole kB from 10 kB,
+    one decimal below 10 kB and from 1 MB.
 
-    if size >= 1024:
-        return "%.2f kB" % (size >> 10)
-    return "%d B" % size
+    It used to be "%.2f kB" % (size >> 10): the shift dropped the fraction
+    first, so every size read ".00 kB" (2026-09-30 audit, §4; changed
+    2026-10-02). The Commander reads only the index and the name from
+    dirinfo.tap's rows (tc, lines 71 and 1114), so the size text is free to
+    change within its column."""
+
+    if size < 1024:
+        return "%d B" % size
+    if size < 10 << 10:
+        return "%.1f kB" % (size / 1024)
+    if size < 1 << 20:
+        return "%d kB" % int(size / 1024 + 0.5)
+    return "%.1f MB" % (size / (1 << 20))
 
 
 def space_pair(total, free):

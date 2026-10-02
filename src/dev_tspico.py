@@ -1514,12 +1514,7 @@ def LIST_DIR_FILES():                                                           
             files.append(archs[0])
             files_upper.append(archs[0].upper())
             
-            size = int(archs[3])
-            if size >= 1024:
-                size = size >> 10
-                size_txt = "%.2f kB" % size
-            else:
-                size_txt = "%d B" % size
+            size_txt = catalog.size_text(int(archs[3]))
 
             nom = "%03d %-18s%10s" % (i, shorten_filename(archs[0].replace("~", "?"), 18), size_txt)
             L.append(nom)
@@ -4276,9 +4271,10 @@ def GETINFO(pre, cmd):                                                 # Shows T
     
     # The screen (chosen 2026-10-02 from the colour proposals): a cyan
     # " TS-Pico " badge on a blue strip, labels in blue, values in the
-    # screen's own colours. The strip and whatever is missing (no card,
-    # nothing mounted) turn red. Colour codes: see SEND_MSG2's `colour`.
-    missing = not TSP.sd_present or not TSP.f_name
+    # screen's own colours. With no SD card the strip and the card's "none"
+    # turn red; nothing mounted is normal, not a warning. Colour codes: see
+    # SEND_MSG2's `colour`.
+    missing = not TSP.sd_present                                       # a TAP not mounted isn't an error
     bar = PAPER_ + "\x05" + INK_ + "\x09" + " TS-Pico " + PAPER_ + ("\x02" if missing else "\x01") + INK_ + "\x07"
     lab = lambda t: INK_ + "\x01" + "%-10s" % t + INK_ + "\x08"
     warn = INK_ + "\x02" + "none" + INK_ + "\x08"
@@ -4303,7 +4299,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
              + INK_ + "\x01" + "Verbose " + INK_ + "\x08" + ("on" if TSP.VERBOSE else "off") + nl)
 
     if not TSP.f_name:
-        M.append(lab("Mounted") + warn + nl)
+        M.append(lab("Mounted") + "none" + nl)
     else:
         M.append(lab("Mounted") + "%s" % public_fname() + nl)
         if isTapMounted():

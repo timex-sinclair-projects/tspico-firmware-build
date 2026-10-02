@@ -11,8 +11,8 @@ SD sizes in units that fit the card (2026-10-02).
   * CAT_COLOUR: blue bar over the path and card line, cyan column titles,
     the dashed line gone, folders in blue as "folder", index numbers on
     cyan chips; any other text goes through unchanged.
-  * GETINFO: the cyan badge on a blue strip; the strip and the missing
-    values turn red when there's no card or nothing mounted.
+  * GETINFO: the cyan badge on a blue strip; with no SD card the strip
+    and the card's "none" turn red. Nothing mounted is not a warning.
 
 Run:  python3 src/test/screen_colour_hosttest.py
 """
@@ -172,12 +172,13 @@ def test_info(t):
 
     msg, _ = run(False, False)
     lines = screen(msg)
-    check(codes(msg)[2] == (0x11, 2), "no card, nothing mounted: the strip is red (%r)" % (codes(msg)[2],))
+    check(codes(msg)[2] == (0x11, 2), "no SD card: the strip is red (%r)" % (codes(msg)[2],))
     check("SD card   none" in lines and "Mounted   none" in lines, "both say none")
-    check(msg.count("\x10\x02none") == 2, "each 'none' in red ink")
+    check(msg.count("\x10\x02none") == 1 and "\x10\x02none" + "\x10\x08" + "\r" in msg.split("SD card")[1][:40],
+          "only the card's none is red: nothing mounted is not a warning")
     msg, _ = run(True, False)
-    check(codes(msg)[2] == (0x11, 2) and msg.count("\x10\x02none") == 1,
-          "nothing mounted alone: red strip, one red none")
+    check(codes(msg)[2] == (0x11, 1) and "\x10\x02" not in msg,
+          "card in, nothing mounted: blue strip, no red")
 
 
 def main():
