@@ -64,7 +64,7 @@ let manifest = null
 let serial = null        // WebSerial transport, open
 let raw = null           // MpRawMode, while in the raw REPL
 let boot = null          // UsbBootsel | DriveBootsel, while the Pico is in BOOTSEL
-let installed = null     // { fw, from1x } once read
+let installed = null     // { fw, from1x, mp } once read
 let running = false
 
 // ---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ async function readInstalled() {
         fw = 'unknown (no firmware running, no config.ini)'
         major = null
     }
-    return { fw, from1x: major !== null && major < 2 }
+    return { fw, from1x: major !== null && major < 2, mp: info.release || null }
 }
 
 async function connect() {
@@ -631,6 +631,51 @@ function flatten(nodes, map) {
 // ---------------------------------------------------------------------------
 // The run
 // ---------------------------------------------------------------------------
+/** "1.29.0" -> [1, 29, 0]; compare two such. */
+function verCmp(a, b) {
+    const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number)
+    for (let i = 0; i < 3; i++) {
+        const d = (pa[i] || 0) - (pb[i] || 0)
+        if (d) return d
+    }
+    return 0
+}
+
+/** The MicroPython release in a UF2 ("1.20.0"), or null: for a channel whose
+ *  manifest predates mp_version. The version string sits in the image; UF2
+ *  blocks carry 256 bytes each, so join their payloads before searching. */
+function uf2MicroPython(bytes) {
+    const n = Math.floor(bytes.length / 512)
+    const pay = new Uint8Array(n * 256)
+    for (let i = 0; i < n; i++) pay.set(bytes.subarray(i * 512 + 32, i * 512 + 32 + 256), i * 256)
+    const text = new TextDecoder('latin1').decode(pay)
+    const m = /MicroPython v(\d+\.\d+\.\d+)/.exec(text)
+    return m ? m[1] : null
+}
+
+/** Before installing an older MicroPython than the Pico runs: say what
+ *  happens and ask. A newer MicroPython (v1.29, from firmware 2.x on main)
+ *  writes the Pico's filesystem in a format an older one (v1.20, the 2.1
+ *  release and before) can't read, and the older one's first boot then
+ *  formats the flash. The files step writes this channel's files back, but
+ *  anything else -- the activity log, files the user added -- is gone, and
+ *  "keep what's on the Pico" can't be honoured. */
+async function downgradeOk(wipe) {
+    if (!installed || !installed.mp) return true
+    let target = manifest.mp_version
+    if (!target) {
+        try { target = uf2MicroPython(await fetchBytes(`${channel}/${manifest.uf2}`)) } catch (_e) { target = null }
+    }
+    if (!target || verCmp(target, installed.mp) >= 0) return true
+    log(`MicroPython downgrade: the Pico has v${installed.mp}, this firmware is built on v${target}.`, 'warn')
+    return confirm(`This Pico runs MicroPython v${installed.mp}; firmware ${manifest.fw_version} is ` +
+        `built on v${target}, an older one. That older MicroPython can't read the newer one's ` +
+        `filesystem, so its first boot erases the Pico's files — the activity log and anything ` +
+        `you added included. The updater then writes this firmware's own files again.` +
+        (wipe ? '' : '\n\n“Keep what’s on the Pico” can’t be honoured for this install.') +
+        '\n\nContinue?')
+}
+
 async function start() {
     if (running || !manifest || !manifest.uf2) return
     const wipe = $('opt-wipe').checked
@@ -640,6 +685,7 @@ async function start() {
     if (wipe && !confirm('This erases everything on the Pico — firmware and files — and installs ' +
         `firmware ${manifest.fw_version}. Nothing on the TS-2068, SD card or EXROM is touched` +
         (rom ? ' except the ROM update you asked for.' : '.') + '\n\nContinue?')) return
+    if (!(await downgradeOk(wipe))) return
 
     running = true
     setRunning(true)

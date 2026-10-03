@@ -99,6 +99,14 @@ TS-2068 EXROM chip, and the SD card you plug into the TS-Pico:
    `firmware.uf2` (from the latest GitHub Release, or the per-branch
    Actions artifact) onto the `RPI-RP2` drive.
 
+   **Going back to an older MicroPython erases the Pico's files.** Builds
+   from `main` run MicroPython v1.29; the v2.1 release and everything before
+   it run v1.20. v1.29 writes the Pico's filesystem in a format v1.20 can't
+   read, so a v1.20 UF2 dragged over a v1.29 board formats the flash on its
+   first boot: `main.py`, `config.ini`, `words.txt`, `assets/` and the log
+   are gone, and the Pico sits at the REPL until they're copied back. Copy
+   off anything you want first. (The web updater warns before doing this.)
+
 2. **Connect via Thonny.** You should be at a bare REPL.
 
 3. **Quick verify** at the REPL:
