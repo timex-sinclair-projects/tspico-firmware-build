@@ -1192,6 +1192,51 @@ def SD_REVALIDATE(changed):                                                    #
     alldirs = GET_DIRS()
 
 
+def LISTING_SIG(entries):                                                     # the folder's names, types and sizes, as one number
+
+    """A fingerprint of a folder listing (os.ilistdir's entries, in
+    LIST_DIR_FILES' order): name, type and size of each. Two listings with
+    the same fingerprint list the same files."""
+    return hash(tuple((e[0], e[1], e[3] if len(e) > 3 else 0) for e in entries))
+
+
+def LISTING_FRESHEN():                                                        # re-read the folder if the card's copy changed
+
+    """The card is mounted. Re-read the current folder (DIR_FILES: files,
+    lista, dirinfo.tap) if what is on the card no longer matches the last
+    listing. The Pico only noticed a card being swapped when a command found
+    it missing or a different card; the SAME card, taken out, given a file
+    on a Mac and put back between two commands, kept the old listing -- CAT
+    didn't show the file and LOAD "tpi:" couldn't find it until a reboot
+    (hardware, 2026-10-03). Reading the folder is cheap; rebuilding the
+    listing (dirinfo.tap, free space) happens only when it changed."""
+    try:
+        os.chdir(TSP.cur_path)
+        sig = LISTING_SIG(sorted(os.ilistdir(), key=lambda fname: fname[0].lower()))
+    except OSError:
+        return
+    if sig != getattr(TSP, "listing_sig", None):
+        LOG("The folder changed on the card: re-reading it", 0)
+        TSP.sd_listing_ok = DIR_FILES()
+
+
+def LISTING_CHECK():                                                         # mount, LISTING_FRESHEN, give the bus back
+
+    """Mount the card, bring the listing up to date if the folder changed
+    (LISTING_FRESHEN), and hand the bus back to the MQ (Y BUSY). False if
+    there is no card."""
+    ok = True
+    try:
+        ACTIVATE_SD()
+        LISTING_FRESHEN()
+    except OSError:
+        ok = False
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+    return ok
+
+
 def REFRESH_LISTING():                                                         # re-read the folder after a ZX48 SAVE
 
     """Re-read the current folder's listing (files, lista) because a ZX48
@@ -1568,6 +1613,7 @@ def LIST_DIR_FILES():                                                           
         listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
     else:
         listing = [item for item in os.ilistdir()]
+    TSP.listing_sig = LISTING_SIG(listing)                                    # what LISTING_FRESHEN compares
     
     nom = bytearray(32)
     
@@ -1575,7 +1621,7 @@ def LIST_DIR_FILES():                                                           
         if archs[1] == 16384:
             dirs.append(archs[0])
             dirs_upper.append(archs[0].upper())
-            nom = shorten_filename(archs[0].replace("~", "?"), 20)
+            nom = shorten_filename(catalog.screen_name(archs[0]), 20)
             dirinfo.append("%-32s" %  nom)
             L.append("<%-21s       0 B" % (nom + ">"))
 
@@ -1591,7 +1637,7 @@ def LIST_DIR_FILES():                                                           
             
             size_txt = catalog.size_text(int(archs[3]))
 
-            nom = "%03d %-18s%10s" % (i, shorten_filename(archs[0].replace("~", "?"), 18), size_txt)
+            nom = "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(archs[0]), 18), size_txt)
             L.append(nom)
             dirinfo.append(nom)
 
@@ -1602,7 +1648,7 @@ def LIST_DIR_FILES():                                                           
     for archs in listing:
         if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
                 and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
-            L.append("    %-18s%10s" % (shorten_filename(archs[0].replace("~", "?"), 18),
+            L.append("    %-18s%10s" % (shorten_filename(catalog.screen_name(archs[0]), 18),
                                         catalog.size_text(int(archs[3]))))
     
     del listing
@@ -2416,9 +2462,10 @@ def DIR(pre, cmd):                                                              
     if par1 == 0:
         # Regular listing. It is the one made when this card and folder were
         # last read, so look at the card first (one mount, ~0.2 s): a
-        # different card is read afresh (SD_NOTE_CARD), and a card that has
-        # been taken out gets the no-card answer instead of its old files.
-        if not SD_PROBE():
+        # different card is read afresh (SD_NOTE_CARD), a card that has
+        # been taken out gets the no-card answer instead of its old files,
+        # and a folder that changed on the card is re-read (LISTING_FRESHEN).
+        if not LISTING_CHECK():
             NO_CARD_REPLY("TPI:DIR")
             return
         TLM("DIR par1=0 — regular listing via SEND_MSG2")
@@ -3735,16 +3782,11 @@ def file_exists(filename):                                                      
     
 
 def xchr(m):
-    """Expand or replace character"""
-    ch = ord(m)
-    if ch < 32 or ch > 127:
-        return '?' # Replace control code or high-ASCII
-    elif ch == 124: # '|' prints as the STICK keyword on the 2068
-        return ' STICK '
-    elif ch == 126: # '~' prints as the FREE keyword
-        return ' FREE '
-    else:
-        return m
+    """A character of a Mac/PC name as the 2068 shows it: '?' for any it
+    can't print as itself or type back (catalog.screen_name). | and ~ used
+    to become " STICK " / " FREE " -- what the 2068 prints for them, but
+    nothing anyone could type into LOAD "tpi:..."."""
+    return catalog.screen_name(m)
 
 
 def xstr(s):
@@ -4310,7 +4352,11 @@ def GETHELP(pre, cmd):                                                 # Shows T
                 if file_exists(hname):
                     try:
                         with open(hname, 'rt') as help:
-                            msg = help.read()
+                            # Written on a Mac/PC: what the 2068 can't print
+                            # as itself (| ~ { } ...) shows as '?' -- but keep
+                            # line ends and \* (SEND_MSG2's (c)).
+                            msg = "".join(c if c in "\r\n" else catalog.screen_name(c)
+                                          for c in help.read())
                     except:
                         msg = "Failed to read help file: %s" % hname
                         st = _2_R_Tape_load
@@ -5094,7 +5140,7 @@ def ResolveIndexName(name):
     return name, -1
 
 
-def LOAD_TPI(name, only_tap=False):
+def LOAD_TPI(name, only_tap=False, fresh=False):
     """LOAD "tpi:<name>": mount a file from the current folder. Returns
     (msg, name, status) for SEND_MSG -- or, in ZX48 mode, ZX_TPI.
 
@@ -5112,6 +5158,22 @@ def LOAD_TPI(name, only_tap=False):
     name, idx = ResolveIndexName(name)
     if idx < 0 and name.upper() in files_upper:                                 # Is name a valid file?
         idx = files_upper.index(name.upper())
+    if idx < 0 and catalog.has_wild(name):
+        # The name as CAT showed it: '?' for a character the 2068 can't type
+        # (catalog.screen_name), '*' for any run. Exactly one match mounts
+        # it; several say so and point at the number.
+        hits = [i for i, f in enumerate(files) if catalog.match_shown(f, name)]
+        if len(hits) == 1:
+            idx = hits[0]
+        elif hits:
+            msg = "%d files match: " % len(hits)
+            LOG(msg + name, 1)
+            return msg, name + chr(13) + 'Use LOAD "tpi:" with its number.', _3_F_Invalid_file
+    if idx < 0 and not fresh:
+        # Not in the listing: the folder may have changed on the card since
+        # (LISTING_FRESHEN). Look once more before saying it isn't there.
+        LISTING_CHECK()
+        return LOAD_TPI(name, only_tap, True)
     if idx < 0:
         msg = "File does not exist: "
         LOG(msg + name, 2)
@@ -5841,7 +5903,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         elif load_cmd:                                                                                  # Is it a "LOAD:tpi:..." command.....?
 
             msg, rest_cmd, status = LOAD_TPI(rest_cmd)
-            SEND_MSG(msg, rest_cmd, status)
+            SEND_MSG(msg, rest_cmd, status, " files match: " in msg)   # that one says what to do: always show it
 
         else:                                                                                                 # ...or it's a "SAVE:tpi:..." command
 
