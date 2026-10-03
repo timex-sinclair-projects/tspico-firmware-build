@@ -278,7 +278,8 @@ gives **two** short flashes every couple of seconds instead of one, and any comm
 the card says so:
 
 ```
-No SD card. Insert one and try again.
+No SD card. Insert one and
+try again.
 J Invalid I/O device, 0:1
 ```
 
