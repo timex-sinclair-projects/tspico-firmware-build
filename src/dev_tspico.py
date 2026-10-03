@@ -727,6 +727,11 @@ def ACTIVATE_MQ():                                                              
                       sideset_base=Pin(12, Pin.OUT))
 
     MQ.active(1)                                                              # (an unused ready=False path, SM built but not started, was removed: audit §3)
+    # A new StateMachine doesn't clear Y: it keeps whatever the last program
+    # on state machine 0 left there, so "BUSY" below was never guaranteed --
+    # a READY left over would let the Z80 read an empty TX as 00. Say it
+    # (audit §4; ~18 us).
+    MQ_BUSY()
     # ─── DUAL-PORT MIGRATION: Y stays at BUSY here ──────────────────
     # We INTENTIONALLY do NOT set Y=READY in this function. Caller
     # MUST load any response bytes into TX and then call MQ_READY()
@@ -5870,15 +5875,18 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         # helpers being retired in stage 7). Behavior is identical.
         # ──────────────────────────────────────────────────────────────────
         TLM("PROCESS_CMD draining tx_fifo at exit")
+        # Bounded by time, not by a loop count whose length depended on the
+        # MicroPython version (audit §4): 3 s for the Z80 to read the tail.
         drain_tx = 0
+        _t0 = time.ticks_ms()
         while MQ.tx_fifo() != 0:
             drain_tx += 1
-            if drain_tx > 1000000:
+            if time.ticks_diff(time.ticks_ms(), _t0) >= 3000:
                 TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
                 break
 
         drain_rx = 0
-        while MQ.rx_fifo() != 0:
+        while MQ.rx_fifo() != 0 and drain_rx < 64:  # a Z80 that keeps writing can't hold it here
             MQ.get()
             drain_rx += 1
 
@@ -6116,6 +6124,33 @@ def TS2068_IO():                                                         # Main 
     DEACTIVATE_SD()
     ACTIVATE_MQ()
 
+    # ─── Boot-noise flush (Ryan's diagnostic loop, kept) ──────────────────
+    # BEFORE the boot pre-load and READY (2026-10-03, audit §4): it used to
+    # run after them, ~0.5 s into a window in which the 2068 may already be
+    # sending its first command -- which this would have eaten. With Y still
+    # BUSY, the Z80 waits; only noise can arrive.
+    # The Z80 may emit stray bytes during its own power-on reset / boot
+    # window. We drain anything sitting in RX FIFO so the first "real"
+    # protocol byte isn't preceded by garbage. Per-byte LOG kept for
+    # diagnostic value — useful when chasing power-sequence weirdness.
+    # ─────────────────────────────────────────────────────────────────────
+    LOG("Boot noise flush: starting", 0)
+    boot_garbage = []
+    empty_start = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), empty_start) < 500:
+        if MQ.rx_fifo() != 0:
+            b = MQ.get()
+            boot_garbage.append(b)
+            LOG("Boot noise: got byte " + str(b) + " (total: " + str(len(boot_garbage)) + ")", 0)
+            empty_start = time.ticks_ms()  # Reset timer when we get data
+        time.sleep_ms(10)
+    LOG("Boot noise flush: done, FIFO empty for 500ms", 0)
+    if boot_garbage:
+        LOG("Flushed " + str(len(boot_garbage)) + " bytes of boot noise: " + str(boot_garbage), 0)
+    else:
+        LOG("No boot noise detected", 0)
+    # SAVE_LOG()
+
     # ─── DUAL-PORT MIGRATION: boot-time status pre-load + explicit ready ──
     # Pre-load a single 0x01 status byte into TX FIFO. The very first Z80
     # command will read this from $0E as its initial OK status. Every
@@ -6135,6 +6170,7 @@ def TS2068_IO():                                                         # Main 
     # succeed and it can read the pre-loaded 0x01 from $0E. The order is
     # non-negotiable: put-then-ready, never ready-then-put.
     # ─────────────────────────────────────────────────────────────────────
+
     MQ.put(0x01)
     MQ_READY()
 
@@ -6162,28 +6198,6 @@ def TS2068_IO():                                                         # Main 
 
     wrt = MQ.put
 
-    # ─── Boot-noise flush (Ryan's diagnostic loop, kept) ──────────────────
-    # The Z80 may emit stray bytes during its own power-on reset / boot
-    # window. We drain anything sitting in RX FIFO so the first "real"
-    # protocol byte isn't preceded by garbage. Per-byte LOG kept for
-    # diagnostic value — useful when chasing power-sequence weirdness.
-    # ─────────────────────────────────────────────────────────────────────
-    LOG("Boot noise flush: starting", 0)
-    boot_garbage = []
-    empty_start = time.ticks_ms()
-    while time.ticks_diff(time.ticks_ms(), empty_start) < 500:
-        if MQ.rx_fifo() != 0:
-            b = MQ.get()
-            boot_garbage.append(b)
-            LOG("Boot noise: got byte " + str(b) + " (total: " + str(len(boot_garbage)) + ")", 0)
-            empty_start = time.ticks_ms()  # Reset timer when we get data
-        time.sleep_ms(10)
-    LOG("Boot noise flush: done, FIFO empty for 500ms", 0)
-    if boot_garbage:
-        LOG("Flushed " + str(len(boot_garbage)) + " bytes of boot noise: " + str(boot_garbage), 0)
-    else:
-        LOG("No boot noise detected", 0)
-    # SAVE_LOG()
 
     LOG("Before main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
