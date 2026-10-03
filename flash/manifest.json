@@ -7,9 +7,9 @@
       "slot": 0,
       "kind": "ROM/DCK",
       "size": 32768,
-      "name": "TS-Pico ZX Spectrum ROM v3",
-      "file": "../src/rom/TSPICO-ZX48-V3.BIN",
-      "crc32": "B3CEDA00"
+      "name": "TS-Pico ZX Spectrum ROM v4",
+      "file": "../src/rom/TSPICO-ZX48-V4.BIN",
+      "crc32": "083655BF"
     },
     {
       "slot": 1,

@@ -247,7 +247,7 @@ def main():
     base[0x8000:0x10000] = rom("ROMs", "TSPICO-15w-home") + rom("ROMs", "TSPICO-15w-exrom")
     base = bytes(base)
     rom21 = open(os.path.join(REPO, "src", "rom", "TSPICO-21.ROM"), "rb").read()     # ROM 2.1
-    zx3 = open(os.path.join(REPO, "src", "rom", "TSPICO-ZX48-V3.BIN"), "rb").read()
+    zx3 = open(os.path.join(REPO, "src", "rom", "TSPICO-ZX48-V4.BIN"), "rb").read()   # slot 0: ZX v4 (#133)
     images = {1: rom21, 0: zx3}
 
     def untouched_except(fl, lo, hi):
@@ -268,7 +268,7 @@ def main():
     check(r["end"] == "halt" and not r["cpu"].iff, "ends halted with interrupts off (%s)" % r["end"])
     check(bytes(fl.m[0x8000:0x10000]) == rom21, "slot 1 holds the TS-2068 ROM (crc32 %08X)"
           % zlib.crc32(bytes(fl.m[0x8000:0x10000])))
-    check(bytes(fl.m[0:0x4000]) == zx3, "slot 0's lower 16K holds ZX v3")
+    check(bytes(fl.m[0:0x4000]) == zx3, "slot 0's lower 16K holds ZX v4")
     check(fl.m[0x4000:0x8000] == base[0x4000:0x8000] and fl.m[0x10000:] == base[0x10000:],
           "slot 0's upper half and every other slot are untouched")
     check([e for e in fl.log if e[0] == "erase"] ==
