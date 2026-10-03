@@ -1074,10 +1074,25 @@ def LOAD_TS(pre, MQ, TSP):
     # If a real tape ever turns up that the 2068 mis-loads without it, that
     # is a finding about that tape: record which one, and what the 2068
     # does, before putting anything back here.
-    hdr = None
+    # The block goes out of RAM, read whole here while the Z80 waits for
+    # READY: no file access once it streams. A LittleFS read can stall for a
+    # few hundred us (a cache refill, a block boundary), longer than the
+    # 4-deep TX FIFO covers at the Z80's ~47 us a byte -- "TX ran dry" 17
+    # times in a 35795-byte block, read a chunk at a time, and the 2068 then
+    # failed the LOAD (hardware, 2026-10-03). v1.29 has ~180 KB free; a block
+    # the heap can't hold still streams from the file, a chunk at a time.
+    hdr = None                                       # the block, in RAM
     if blk_info[2] == 0x00:                          # header block
         hdr = bytearray(totbytes - 1)
         arch.readinto(hdr)
+    else:
+        try:
+            gc.collect()
+            hdr = bytearray(totbytes - 1)
+            arch.readinto(hdr)
+        except MemoryError:
+            hdr = None
+            arch.seek(TSP.offset + 3)                # back to the content for the file path
 
     # ---- Collect garbage NOW, while the Z80 waits for READY ----
     # Issue #51: once READY is up the Z80 reads a byte every 50 us with no
@@ -1150,7 +1165,7 @@ def LOAD_TS(pre, MQ, TSP):
     prof = array("I", bytes(4 * ((totbytes >> 10) + 1)))
 
     if hdr is not None:
-        # Header block: stream from the in-memory buffer (already loaded).
+        # Stream from RAM (the block, read whole above).
         for b in hdr:
             n = txf()
             if n >= TX_DEPTH:
@@ -1541,7 +1556,16 @@ def LOAD_ZX(MQ, TSP):
     put = MQ.put
     txf = MQ.tx_fifo
     rd = arch.readinto
-    buf = _LOAD_BUF     # a chunk at a time, as LOAD_TS (LOAD_CHUNK)
+    buf = _LOAD_BUF     # a chunk at a time, as LOAD_TS (LOAD_CHUNK), if not in RAM
+    # The whole block into RAM first, as LOAD_TS does: no file access once
+    # the ROM reads blind (ZX LOAD logged "TX ran dry" 9-10 times a block,
+    # hardware 2026-10-02/03). A block the heap can't hold uses the file.
+    whole = None
+    try:
+        whole = bytearray(totbytes - 1)
+        rd(whole)
+    except MemoryError:
+        whole = None
     nxt = -1
     sent = 1
     dry = 0             # times TX ran empty mid-block: the Z80 may have read 0x00
@@ -1551,7 +1575,19 @@ def LOAD_ZX(MQ, TSP):
     MQX(MQ, "mov(y, invert(null))")         # READY
 
     # totbytes counts flag + content + CRC; the flag is already queued.
-    left = totbytes - 1
+    if whole is not None:
+        for b in whole:
+            n = txf()
+            if n >= TX_DEPTH:
+                primed = True
+                nxt = ZX_ROOM(MQ, ZX_STALL_MS)
+                if nxt != -1:
+                    break
+            elif not n and primed:
+                dry += 1
+            put(b)
+            sent += 1
+    left = 0 if whole is not None else totbytes - 1
     while left and nxt == -1:
         got = rd(buf) if left >= LOAD_CHUNK else rd(_LOAD_MV[:left])
         if not got:
