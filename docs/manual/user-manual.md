@@ -11,6 +11,10 @@
 
 ---
 
+> The screen pictures in this manual are drawn by `tools/render_screens.py` from what the
+> TS-Pico firmware actually sends, using the 2068's own character set. They show exactly what
+> the TS-Pico prints; where on the screen it starts depends on what was there before.
+
 ## Contents
 
 1. Meet the TS-Pico
@@ -361,6 +365,11 @@ CAT ""               : REM the blocks inside the mounted TAP
 path. `SAVE "tpi:dir games"`, `SAVE "tpi:dir *.tap"` and so on give the same listings, as long
 as the whole name fits in 31 characters.
 
+![CAT: the path and card on a blue bar, folders in blue, each file's number on a cyan chip](images/cat.png)
+
+*`CAT` on a card with three folders and eight files. `{game}.tap` and `jet~1.tap` appear as
+`?game?.tap` and `jet?1.tap`; see below.*
+
 > **By the way:** `SAVE "tpi:dir"` checks the card before it lists the folder. After you swap
 > cards you see the new card, and if you take the card out, add files from a computer and put
 > it back, the new files are there too. No restart needed.
@@ -413,6 +422,10 @@ folders here as a numbered menu. Press a digit **0**-**9**, or **Q W E R T Y** f
 10 to 15, to go into one; **B** goes back a page, any other key goes forward, and **N**
 quits. `SAVE "tpi:cd" CODE 0,1` lists every folder on the card instead.
 
+![The tpi:cd menu: each folder with a digit to press, and the prompt at the bottom](images/cd-menu.png)
+
+*The `SAVE "tpi:cd"` menu, waiting for a key.*
+
 **Making a folder:**
 
 ```basic
@@ -454,7 +467,9 @@ LOAD "tpi:12"
   `?` stands only for a character the 2068 can't show, so it won't pick `(game).tap` by
   mistake. A `*` stands for any run of characters: `LOAD "tpi:fro*"` mounts `frogger.tap` if
   it's the only match. When several files match, the TS-Pico says how many and asks you to use
-  the file's number instead.
+  the file's number instead:
+
+  ![LOAD "tpi:*.tap" with several matches: the count, and Report F](images/load-several-match.png)
 
 **Picking a file from a list.** `SAVE "tpi:idir"` shows the mountable files as a menu, using
 the same keys as `tpi:cd`, and mounts the one you pick.
@@ -468,14 +483,9 @@ SAVE "tpi:tapdir"
 CAT ""               : REM the same
 ```
 
-```
-File:/TAP/frogger.tap
-Pointer at block: 00, Append:off
-Blk  Start   Len  Hdr?  Desc.
---------------------------------
->00      0     19  Y  FROGGER
- 01     21   6914  N  Program
-```
+![CAT "": the file and tape pointer on a blue bar; headers in blue; the next block on a yellow row](images/tapdir.png)
+
+*`CAT ""` with `Manic.tap` mounted and the tape pointer at block 02.*
 
 Each program on a tape is two blocks: a short **header** (`Y` in the Hdr? column) carrying its
 name, and the data itself, described by its type. The `>` marks the **tape pointer**, the block
@@ -1180,15 +1190,7 @@ modified so that its LOAD and SAVE use the SD card.
    SAVE "tpi:zx48"
    ```
 
-   ```
-   Changing TS-Pico to ZX48 mode.
-   (Normal tape load mode)
-   Use "OUT 244,3" to switch to the
-   Spectrum ROM. To return to Timex
-   mode, do OUT 244,0 then OUT 14,14
-   to exit ZX48 mode and resume normal
-   TS-Pico operation.
-   ```
+   ![The message SAVE "tpi:zx48" prints](images/zx48-switch.png)
 
 3. Type `OUT 244,3`. You're now at the Spectrum's © 1982 Sinclair Research screen.
 
@@ -1202,6 +1204,8 @@ modified so that its LOAD and SAVE use the SD card.
   one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too. This needs version 4 of the
   TS-Pico Spectrum ROM: its copyright screen ends `TS-Pico ZX v4`. Version 3 answers
   `SAVE "tpi:dir" needs ZX ROM v4`.
+
+  ![SAVE "tpi:dir" on the Spectrum: the same listing as CAT on the 2068](images/zx48-dir.png)
 - Other `tpi:` commands aren't available, and give **Q Parameter error**.
 
 **If a game won't load.** Some Spectrum programs use tricky loading routines. Try the
@@ -1470,6 +1474,10 @@ to mount one, **B** for the previous page, **N** to quit, or any other key for t
 `SAVE "tpi:info"` shows the TS-Pico's status: firmware and ROM versions, free memory, Flash and
 SD card space (or `SD card: none`), the BOOT and DOCK slots, append and verbose, the mounted file and tape position,
 the current folder and how many files are in it.
+
+![tpi:info: a cyan TS-Pico badge on a blue strip, then the status lines](images/info.png)
+
+With no SD card, the strip and the card's `none` turn red.
 
 ### log
 
