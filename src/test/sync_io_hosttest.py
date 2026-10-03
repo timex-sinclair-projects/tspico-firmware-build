@@ -185,14 +185,18 @@ def main():
 
         def config(self, read, write, count, ctrl, trigger):
             self.mq, self.buf, self.n, self.i, self.on = read, write, count, 0, bool(trigger)
+            self.stopped = False
 
         def active(self, v=None):
             if v is not None:
                 self.on = bool(v)
-            return self.on
+                self.stopped = not v        # as on hardware: a stopped channel's
+            return self.on                  # count no longer says how far it got
 
         @property
         def count(self):
+            if self.stopped:
+                return 0
             while self.on and self.i < self.n and self.mq.rx:
                 self.buf[self.i] = self.mq.rx.pop(0)
                 self.i += 1

@@ -235,10 +235,13 @@ class RxDMA:
         return self.n - self.d.count if self.armed else 0
 
     def stop(self):
-        """Stop the channel; the words it took."""
+        """Stop the channel. Its count is read BEFORE: once stopped, the
+        count no longer says how far it got (hardware, 2026-10-03: a lone
+        SYNC came back as -10, all ten words, instead of -1)."""
+        g = self.n - self.d.count
         self.d.active(0)
         self.armed = False
-        return self.n - self.d.count
+        return g
 
     def take(self, stall_ms):
         """Wait for the rest of the burst. Returns as RX_CAPTURE: n, k for k
@@ -451,9 +454,9 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
             elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
                 why = 3
                 break
+        sent = n - d.count              # before stopping: see RxDMA.stop
         if why:
             d.active(0)
-        sent = n - d.count
     finally:
         d.close()
     return why, sent, word

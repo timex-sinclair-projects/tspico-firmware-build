@@ -4855,6 +4855,8 @@ def BOOT_SLOT_CLASH(mem, page, f_name):
     with the slot half-written. A .ROM/.BIN writes page `page`; a 64K .DCK
     writes `page` and `page`+1."""
 
+    if not isinstance(f_name, str):         # nothing mounted: TSP.f_name is []
+        return None                         # (MEMDOCK raised here -> Report J)
     ext = f_name[-4:].upper()
     if ext not in (".ROM", ".BIN", ".DCK"):
         return None
