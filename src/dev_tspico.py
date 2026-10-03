@@ -3906,8 +3906,11 @@ def BLKRCV(pre, cmd):                                                           
                 if r is None:
                     for j in range(k, got):
                         wrt(mvd[j])
-                elif r[0]:
-                    raise CmdAbort(r[0])
+                else:
+                    TLM("BLKRCV streamed by DMA", "why=%d sent=%d of %d echo=%s rx=%d" % (
+                        r[0], r[1], got - k, bytes(_CMD_ECHO).hex(), MQ.rx_fifo()))
+                    if r[0]:
+                        raise CmdAbort(r[0])
             return
         gate = GATE
         left = total
@@ -5708,7 +5711,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     if got != long:
         MQ_TO_IDLE(MQ, status=False)            # empty FIFOs, one pre-load
         TLM("PROCESS_CMD body %s" % ("aborted (0Fh)" if got < 0 else "timeout"),
-            "got=%d of %d" % (got, long))
+            "got=%d of %d: %s" % (got, long, " ".join("%03X" % raw[i] for i in range(abs(got)))))
         LOG("PROCESS_CMD body %s at byte %d/%d" % (
             "aborted by BREAK/SYNC" if got < 0 else "read timeout",
             -got - 1 if got < 0 else got, long), 1 if got < 0 else 2)
@@ -6264,6 +6267,8 @@ def TS2068_IO():                                                         # Main 
                         # straight back to the capture -- nothing slow after IDLE,
                         # the pre-header follows within microseconds.
                         MQ_TO_IDLE(MQ, status=False)
+                        TLM("Pre-header: 0Fh write", "%s" % " ".join(
+                            "%03X" % pre_raw[i] for i in range(-got)))
                         if got != -1:
                             LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
                         # A log write on core1 (SAVE_LOG) stops BOTH cores while it
