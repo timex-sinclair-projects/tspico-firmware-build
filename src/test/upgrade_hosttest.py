@@ -20,7 +20,7 @@ What it pins:
   * the tape reaches the Spectrum ROM whole, blocks in order, as the loader
     and the updater's CODE block (at 6000h);
   * the updater's 'I' stops the tape; its 'R's get the manifest's ROMs; the
-    flash ends up with the TS-2068 ROM in slot 1 and ZX v3 in slot 0;
+    flash ends up with the TS-2068 ROM in slot 1 and ZX v4 in slot 0;
   * the web page's lines: waiting, tape, updater, status P/E/W/V... D;
   * a failure (P10 not fitted): X 2, the tape re-armed, LOAD "" works again;
   * the upgrade UF2 is self-contained: every TS / upgrade module that its
@@ -341,7 +341,7 @@ def main():
     fl = box["flash"]
     check(end == "halt" and bytes(fl.m[0x8000:0x10000]) == data.IMG1
           and bytes(fl.m[0:0x4000]) == data.IMG0,
-          "slot 1 = the manifest's TS-2068 ROM, slot 0 = ZX v3 (%s)" % end)
+          "slot 1 = the manifest's TS-2068 ROM, slot 0 = ZX v4 (%s)" % end)
     check(fl.m[0x4000:0x8000] == base[0x4000:0x8000] and fl.m[0x10000:] == base[0x10000:],
           "nothing else in the flash changed")
     ev = [l["event"] for l in lines]
@@ -350,7 +350,7 @@ def main():
           and len([s for s in st if s[0] == "W"]) == 192,
           "web page lines: waiting, tape, updater, P 1 ... 192 W ... D (%s ...)" % ev[:4])
 
-    print("a board that already has ZX v3 in slot 0 (it waits for READY after 'L')")
+    print("a board that already has ZX v3/v4 in slot 0 (it waits for READY after 'L')")
     end, box, lines, bus = session(v3=True)
     tape = box.get("tape") or []
     check(len(tape) == 4 and all(ok for _, _, ok in tape) and end == "halt"

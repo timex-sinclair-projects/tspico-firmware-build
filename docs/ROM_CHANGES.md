@@ -20,7 +20,7 @@ sources are listed [at the end](#sources).
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
 | **2.1** | `src/rom/TSPICO-21.ROM`, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
-| **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Not yet in flash slot 0. |
+| **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
 From 2.0 on, the ROM and the firmware share one version number. ROM 2.0 and
 later need firmware that understands the SYNC byte. Older firmware reads it as

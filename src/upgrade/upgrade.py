@@ -11,7 +11,7 @@ talk to the current firmware. It does two things:
    handshake -- 'L', a fixed ~0.94 ms, then it reads -- so TX always holds
    the tape as one stream (tspico_io's TAPE_STREAM_OF / ZX_ARM /
    ZX_STREAM, proven on a v15w board). READY goes up at each 'L' too, so a
-   board that already has ZX v3 in slot 0 (which waits for it) can run the
+   board that already has ZX v3 or v4 in slot 0 (which wait for it) can run the
    upgrade again. (ZX v2 can't: its WAIT_RDY bug breaks every LOAD.)
 
 2. Answer the updater (src/upgrade/updater.asm) once it runs. Its requests
@@ -107,7 +107,7 @@ def serve(MQ, data):
         if not w & PORT_0F:
             if w == 0x4C:                   # the Spectrum ROM's LD-BYTES
                 # Its bytes are already queued. The original ROM just reads;
-                # ZX v3 (a board upgraded before) polls READY first -- raise it.
+                # ZX v3/v4 (a board upgraded before) polls READY first -- raise it.
                 MQX(MQ, "mov(y, invert(null))")
                 if service:                 # a reset, and LOAD "" again
                     service = False
