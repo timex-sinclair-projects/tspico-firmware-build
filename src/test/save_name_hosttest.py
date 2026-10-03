@@ -345,31 +345,6 @@ def test_append_ignores_header_name(tio):
               "appended block landed (size %d)" % os.path.getsize(target))
 
 
-def test_end_msg_would_have_overflowed(tio):
-    """Document WHY the old path wedged, so nobody reintroduces it.
-
-    END_MSG in verbose mode writes 0x81, status, 0x0D, the message, and a
-    NUL terminator. Against a Z80 that has stopped reading, that overruns
-    the 4-deep TX FIFO almost immediately.
-    """
-    print("test_end_msg_would_have_overflowed: the old reporting path")
-    MQ = FakeMQ(z80_reads=False)
-    msg = 'ERROR: Filename "bad file" not allowed'
-    try:
-        tio.END_MSG(MQ, True, msg, [], 3)
-        overflowed = False
-    except FifoOverflow:
-        overflowed = True
-    check(overflowed,
-          "END_MSG(verbose) overruns the %d-deep TX FIFO (tried %d bytes)"
-          % (TX_FIFO_DEPTH, len(MQ.written)))
-    check(len(msg) + 4 > TX_FIFO_DEPTH,
-          "the message alone is %d bytes vs a %d-byte FIFO"
-          % (len(msg) + 4, TX_FIFO_DEPTH))
-
-
-
-
 def test_bad_crc_refuses(tio):
     """A corrupt header must NOT be answered with "OK".
 
@@ -485,34 +460,6 @@ def test_watchdog_spawn_failure_survives(tio):
                   "clean" if raised is None else repr(raised)))
         check(os.listdir(d) == ["test.tap"],
               "still completed the save, got %r" % (os.listdir(d),))
-
-
-def test_kill_flag_cleared_on_core0(tio):
-    """A stale kill flag must not abort the next transaction.
-
-    WATCHDOG clears `kill`, but on core1 -- while the drain loop that
-    reads it runs on core0 and starts immediately after the spawn.
-    START_WATCHDOG clears it on the spawning core instead, which closes
-    the window rather than documenting it.
-    """
-    print("test_kill_flag_cleared_on_core0: stale kill does not abort")
-    with tempfile.TemporaryDirectory() as d:
-        payload = bytes(range(32))
-        MQ = FakeMQ(bytes(build_header(b"test", len(payload)))
-                    + bytes(build_data(payload)), z80_reads=True)
-        TSP = FakeTSP(d)
-
-        tio.kill = True               # left over from a previous abort
-        tio.ENA_SD = lambda *a: None
-        saved_chdir, os.chdir = os.chdir, lambda p: None
-        try:
-            tio.SAVE_TS(MQ, TSP)
-        finally:
-            os.chdir = saved_chdir
-            tio.kill = False
-
-        check(os.listdir(d) == ["test.tap"],
-              "completed despite a stale kill flag, got %r" % (os.listdir(d),))
 
 
 def test_sd_write_failure_survives(tio):
@@ -952,11 +899,9 @@ def main():
     test_accepts_good_name(tio)
     test_empty_name_is_legal(tio)
     test_append_ignores_header_name(tio)
-    test_end_msg_would_have_overflowed(tio)
     test_bad_crc_refuses(tio)
     test_no_memory_refuses(tio)
     test_watchdog_spawn_failure_survives(tio)
-    test_kill_flag_cleared_on_core0(tio)
     test_sd_write_failure_survives(tio)
     test_no_unguarded_thread_spawns(tio)
     test_end_msg_has_no_callers(tio)

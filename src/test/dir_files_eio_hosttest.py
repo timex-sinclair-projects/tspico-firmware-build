@@ -49,12 +49,14 @@ class FakeOS:
         self.fail_on = fail_on
         self.files = {"GAME.TAP": 1234, "NOTES.TXT": 12, ".hidden": 1, "dirinfo.tap": 64}
         self.written = {}
+        self.removed = []
 
     def _maybe_fail(self, op):
         if op == self.fail_on:
             raise EIO
 
     def remove(self, name):
+        self.removed.append(name)
         self._maybe_fail("remove")
         if name not in self.files:
             raise OSError(2, "ENOENT")
@@ -129,6 +131,8 @@ def test_dir_files(t, logs):
     check(L.find("000 GAME.TAP") >= 0 and L.find("    NOTES.TXT") > L.find("000 GAME.TAP"),
           "healthy card: other files listed after the indexed ones, unnumbered")
     check(".hidden" not in t.lista and "dirinfo" not in t.lista[128:], "healthy card: no dotfiles, no dirinfo.tap")
+    check("dirinfo.tap" not in fos.removed,
+          "healthy card: the old dirinfo.tap is left out by name, not deleted first (%r)" % fos.removed)
     check(len(t.lista) % 32 == 0, "healthy card: whole 32-column rows")
     check("dirinfo.tap" in fos.files and fos.files["dirinfo.tap"] > 0,
           "healthy card: dirinfo.tap written")

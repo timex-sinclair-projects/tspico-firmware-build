@@ -572,9 +572,6 @@ class PICO_STATUS():                                                            
     
     def __init__(self, init_values):                                            # init_values is a dictionary read at startup; read below
                                                                                 # The variables that define current status of the TS-Pico are:
-        err_msg = "d"                                                                                
-        err_st = 10
-        
         self.append = False                                                     # whether or not append new SAVEd file to currently mounted TAP file
         self.bank_sm = 0                                                        # initial value for the BANK StateMachine
         self.cur_path = "/sd/TAP"                                               # string holding the current path
@@ -694,11 +691,10 @@ def DEACTIVATE_SD():
 #      RP2040 PIO can run up to half the CPU clock (135 MHz at our
 #      270 MHz setting) so 30 MHz is conservative.
 #
-#   3. Y = READY after activation
-#      The new line `MQX(MQ, "mov(y, invert(null))")` sets Y to
-#      0xFFFFFFFF so $0F reads always have bit 6 set (= ready).
-#      We keep Y at READY for the entire session; the protocol's
-#      natural pacing via TX FIFO depth handles flow control.
+#   3. Y stays BUSY after activation (it was set READY here at first)
+#      The caller loads its reply into TX and then calls MQ_READY():
+#      see the note in the body for the Report J race that READY-on-
+#      activation caused.
 #
 #   4. SD teardown REMOVED
 #      The old `while True: try: os.umount; except: break` loop and
@@ -716,53 +712,46 @@ def DEACTIVATE_SD():
 #      gets misread later in the protocol (the orphan-byte family).
 #      Boot-time pre-load goes in TS2068_IO() instead, ONCE.
 #      (This was "Bug 1" in docs/DUAL_PORT_DEVELOPMENT.md §8.)
-#
-# The `ready=True` parameter is for the rare path that needs to
-# create the SM but defer activation (currently unused but kept for
-# parity with our reference implementation).
 # ───────────────────────────────────────────────────────────────────────
-def ACTIVATE_MQ(ready=True):                                                                      # Re-enable TX/RX SM, after a SDCard access (DUAL-PORT)
+def ACTIVATE_MQ():                                                                                # Re-enable TX/RX SM, after a SDCard access (DUAL-PORT)
 
     global MQ
     global sd_active
 
-    TLM("ACTIVATE_MQ enter", "ready=%s" % ready)
+    TLM("ACTIVATE_MQ enter")
     sd_active = False
     MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
 
-    if ready:
-        MQ.active(1)
-        # ─── DUAL-PORT MIGRATION: Y stays at BUSY here ──────────────────
-        # We INTENTIONALLY do NOT set Y=READY in this function. Caller
-        # MUST load any response bytes into TX and then call MQ_READY()
-        # to signal ready, in that order.
-        #
-        # The old behavior was:
-        #     MQX(MQ, "mov(y, invert(null))")    # Y=READY immediately
-        # which created a race: between this exec and the caller's
-        # response-byte load, the Z80 (which has been polling $0F
-        # throughout any preceding SD operation) sees ready, immediately
-        # reads $0E, finds TX empty, gets 0x00 → Report J.
-        #
-        # The race was theoretical for handlers that respond instantly
-        # (TPI:DIR, etc.) but became reliably reproducible for handlers
-        # that do SD round-trips before responding (TPI:MD, TPI:RM,
-        # MOUNT_FILE, NEW_TAP, GETHELP, ...). The 575ms SD window is
-        # plenty of time for the Z80 to win the race against our
-        # Python code path to SEND_MSG.
-        #
-        # Now: SM is active, Y=0 (BUSY), TX is empty. Caller does:
-        #     ACTIVATE_MQ()
-        #     # load response bytes via SEND_MSG() or MQ.put(...)
-        #     MQ_READY()   # (or SEND_MSG calls this internally)
-        # Z80 sees BUSY on $0F until we're ready; protocol races
-        # eliminated.
-        # ────────────────────────────────────────────────────────────────
-        TLM("ACTIVATE_MQ exit", "SM active, Y=BUSY (TX FIFO empty)")
-    else:
-        TLM("ACTIVATE_MQ exit", "SM created but NOT active")
+    MQ.active(1)                                                              # (an unused ready=False path, SM built but not started, was removed: audit §3)
+    # ─── DUAL-PORT MIGRATION: Y stays at BUSY here ──────────────────
+    # We INTENTIONALLY do NOT set Y=READY in this function. Caller
+    # MUST load any response bytes into TX and then call MQ_READY()
+    # to signal ready, in that order.
+    #
+    # The old behavior was:
+    #     MQX(MQ, "mov(y, invert(null))")    # Y=READY immediately
+    # which created a race: between this exec and the caller's
+    # response-byte load, the Z80 (which has been polling $0F
+    # throughout any preceding SD operation) sees ready, immediately
+    # reads $0E, finds TX empty, gets 0x00 → Report J.
+    #
+    # The race was theoretical for handlers that respond instantly
+    # (TPI:DIR, etc.) but became reliably reproducible for handlers
+    # that do SD round-trips before responding (TPI:MD, TPI:RM,
+    # MOUNT_FILE, NEW_TAP, GETHELP, ...). The 575ms SD window is
+    # plenty of time for the Z80 to win the race against our
+    # Python code path to SEND_MSG.
+    #
+    # Now: SM is active, Y=0 (BUSY), TX is empty. Caller does:
+    #     ACTIVATE_MQ()
+    #     # load response bytes via SEND_MSG() or MQ.put(...)
+    #     MQ_READY()   # (or SEND_MSG calls this internally)
+    # Z80 sees BUSY on $0F until we're ready; protocol races
+    # eliminated.
+    # ────────────────────────────────────────────────────────────────
+    TLM("ACTIVATE_MQ exit", "SM active, Y=BUSY (TX FIFO empty)")
 
     return
 
@@ -904,12 +893,10 @@ def CMD_FLUSH():
 def MQ_BUSY():
     """Signal 'not ready' to Z80 — bit 6 clear on $0F reads (Y = 0).
 
-    With the issue-#14 PIO auto-busy, MQ_BUSY is rarely needed
-    explicitly — the PIO drops Y to 0 on every Z80 OUT. Kept for:
-      - ACTIVATE_MQ initialization (ensures known state at boot).
-      - Code paths that want to assert BUSY without an inbound write
-        (e.g., signalling an aborted exchange or a long-pause
-        background operation).
+    With the issue-#14 PIO auto-busy it isn't needed: the PIO drops Y to
+    0 on every Z80 OUT, and nothing calls this today. Kept for a path that
+    must assert BUSY without an inbound write -- and for the open audit
+    question (§4) of whether a fresh state machine's Y is reliably 0.
     """
     MQX(MQ, "set(y, 0)")
 
@@ -1479,21 +1466,11 @@ def LIST_DIR_FILES():                                                           
     
     ordered = True                                                                            # In the future, this could be controlled by an option
 
-    # ─── DUAL-PORT MIGRATION: remove stale dirinfo.tap before listing ─────
-    # dirinfo.tap is a synthetic TAP file DIR_FILES writes at the end of
-    # this function (containing the directory listing in a format the 2068
-    # can LOAD). Without removing the PREVIOUS one before listing the
-    # directory, os.ilistdir() picks it up and adds it to the files[] and
-    # lista listings sent to the 2068. End-user sees dirinfo.tap as if it
-    # were a real file they put there. (Was uncommented in production
-    # TS/tspico.py line 758-761; was commented out in Ryan's version,
-    # causing the visibility bug reported during picotest's directory
-    # listing tests.)
-    # ─────────────────────────────────────────────────────────────────────
-    try:
-        os.remove("dirinfo.tap")
-    except:
-        pass
+    # dirinfo.tap is the synthetic TAP this function writes at the end (the
+    # listing in a form the Commander LOADs). It is left out of the listing
+    # by name below. It used to be deleted here first, a FAT write on every
+    # listing -- the write #62 traced field EIO errors to. (2026-09-30
+    # audit, §3.)
 
     if ordered:
         listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
@@ -1515,7 +1492,7 @@ def LIST_DIR_FILES():                                                           
     
     for archs in listing:
         if archs[1] == 32768:
-            if (archs[0][-3:].upper() not in ext) or (archs[0][0] in starts):
+            if (archs[0][-3:].upper() not in ext) or (archs[0][0] in starts) or archs[0] == "dirinfo.tap":
                 continue
             files.append(archs[0])
             files_upper.append(archs[0].upper())
@@ -1624,10 +1601,10 @@ def MOUNT_FILE(f_name, remounting=False):                                       
     
     global TSP
     global led
-    
-    U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
-    U3_CS.value(1)
-    
+
+    # (It used to set U3_CS high here; DEACTIVATE_SD and the SD driver's
+    # init_card already leave the card deselected.)
+
     # Save info in case of remount
     offset = TSP.offset
     idx    = TSP.tap_idx
@@ -2008,11 +1985,11 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     # the TX FIFO would have been consumed by the Z80's $0E read as if
     # it were data — orphaning the rest of the response by one byte.
     #
-    # `MQ_READY()` is called after the data is loaded as belt-and-
-    # suspenders: in case any prior code path left Y at BUSY, this
-    # guarantees $0F answers ready by the time the Z80 polls. With
-    # current dual-port handlers Y stays at READY always, so MQ_READY()
-    # here is functionally redundant but kept for self-documentation.
+    # `MQ_READY()` after the data is loaded is REQUIRED: the PIO drops Y to
+    # BUSY on every Z80 OUT (#14), so after the command's body Y is BUSY,
+    # and without this the Z80 never sees READY and gives Report J. (It
+    # was once described here as redundant; the 2026-09-30 audit tried
+    # removing it.)
     # ─────────────────────────────────────────────────────────────────────
     if TSP.VERBOSE or forceDisplay:
 
@@ -3260,13 +3237,12 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen):
     letters = "0123456789QWERTY"
 
     # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
-    # Removed leading EMPTY_RX_FIFO() — at this point the Z80 hasn't been
-    # told to read yet, so RX has nothing in it. We drain RX AFTER setting
-    # ready (Z80 may then dump stale keystrokes from prior input).
-    #
-    # Removed wrt(0x40) "Read continue" from start of every loop iteration
-    # — the continue flag now lives on $0F via Y register (kept at READY
-    # for the entire session by MQ_READY() below).
+    # Removed wrt(0x40) "Read continue" from the start of every loop
+    # iteration -- the continue flag lives on $0F (the Y register) now.
+    # Order (#70): stale keystrokes are drained BEFORE anything is said;
+    # each reply goes into TX first, and only then MQ_READY -- see below.
+    # (This note used to say the opposite: drain after READY, and Y kept
+    # READY all session. 2026-09-30 audit, §3.)
     # ─────────────────────────────────────────────────────────────────────
     wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
     Init = True
@@ -5922,14 +5898,11 @@ def TS2068_IO():                                                         # Main 
     # gc.collect()
     # LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
-    # ─── DUAL-PORT MIGRATION: prefer dev_extcmd override if present ──────
-    # The frozen TS/extcmd.py has a `from tspico import ...` line that
-    # fails on the current module layout (helpers live in TS.tspico or
-    # dev_tspico, not bare `tspico`). The fix lives in TS/extcmd.py on
-    # this branch but needs a UF2 rebuild to take effect, since
-    # TS/extcmd.py is frozen. The parallel /dev_extcmd.py on flash root
-    # provides a dev-mode override (same pattern as dev_tspico.py
-    # shadowing TS.tspico). Try the override first.
+    # ─── Prefer the dev_extcmd override if present ──────────────────────
+    # TS/extcmd.py is frozen into the UF2. A /dev_extcmd.py on the flash
+    # root overrides it without a rebuild, the same way /dev_tspico.py
+    # shadows TS.tspico: handy for trying out a new extension command.
+    # Try the override first.
     # ─────────────────────────────────────────────────────────────────────
     try:
         from dev_extcmd import EXT_SA_FUNCT
@@ -6799,7 +6772,12 @@ def ZX48_IO(pre):                                                               
                 led.value(0)
                 ts = time.ticks_us()
 
-    # Debug - Ricardo 21 Aug 2025 for returning from Spectrum mode problem
+    # Leaving ZX48 mode with bytes still in TX: a ZX LOAD that stopped before
+    # the end of what was queued (the ROM asked for fewer bytes than the
+    # block holds, or the user broke in). Seen on hardware 2026-10-02 (tx=4
+    # at the exit). Empty it, or the 2068 ROM's next status read would get
+    # one of them. (Ricardo's fix, 21 Aug 2025; the audit thought it
+    # obsolete after #52, but that only fixed one cause.)
     if MQ.tx_fifo() != 0:
         print("MQ FIFO: ", MQ.tx_fifo())
         LOG("TX FIFO not empty after ZX mode. Trying to force cleanup", 1)

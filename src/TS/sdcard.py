@@ -1,5 +1,6 @@
 # from https://github.com/mendenm
-# with some tweaks to hold off initializing the card
+# with TS-Pico changes: CMD0 retries, _recover() for a card left
+# mid-transfer, bounded busy waits, and the CID kept as the card's identity
 #
 # MicroPython driver for SD cards using SPI bus.
 #

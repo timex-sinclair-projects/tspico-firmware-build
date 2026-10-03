@@ -15,7 +15,7 @@ What it pins:
     then raises Report D -- and the next LOAD works first time;
   * BREAK in the ready-wait before the data: same, "read 0-4 bytes";
   * the Z80 going silent mid-block: RECOVERED (FB) after the stall, no hang;
-  * no watchdog: LOAD_TS starts no thread; a stale kill reads as a stall;
+  * no watchdog: LOAD_TS starts no thread;
   * a v1.7 LOAD, which never writes 0Fh, behaves exactly as before;
   * a BASIC header reaches the Z80 byte for byte as it is on the tape --
     "no autorun" (line >= 32768) included. The ROM itself skips the autorun
@@ -257,7 +257,6 @@ def main():
         pio.rx = []        # dispatcher no longer says READY for a LOAD
         pio.tx_at_ready = []
         io.log_entries = ""
-        io.kill = False
         io.dead = True
         io.busy = False
         pio.run(z80_load(flag, length, **kw))
@@ -335,12 +334,9 @@ def main():
         tsp.offset, tsp.tap_idx = 0, 0
         load(pio, 0x00, len(header))
 
-        def fire():
-            io.kill = True                      # a stale kill from ZX48 mode
-        r, log = load(pio, 0xFF, len(data), stop_at=2000, on_byte=(1999, fire))
-        io.kill = False
+        r, log = load(pio, 0xFF, len(data), stop_at=2000)
         check(idle(pio, 0xFB) and "stalled -> RECOVERED" in log,
-              "a stale watchdog kill is treated as a stall: RECOVERED, one pre-load")
+              "the Z80 stops reading mid-block: a stall, RECOVERED, one pre-load")
         tsp.offset, tsp.tap_idx = 0, 0
 
         print("no allocation while the Z80 streams (R at 15772 of 16096, 2026-09-26)")
