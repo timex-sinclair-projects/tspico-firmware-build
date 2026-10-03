@@ -148,6 +148,53 @@ class FakePIO:
             self.pump()
 
 
+class FakeDMA:
+    """rp2.DMA streaming bytes into FakePIO's TX FIFO, paced by its room --
+    the "TX not full" DREQ. It moves whenever LOAD_TS looks at it (and at
+    the trigger), which is when a real channel would have moved anyway."""
+
+    made = []
+
+    def __init__(self):
+        self.buf, self.pio, self.i, self.n, self.on = None, None, 0, 0, False
+        FakeDMA.made.append(self)
+
+    def pack_ctrl(self, **kw):
+        assert kw.get("size") == 0 and kw.get("inc_read") and not kw.get("inc_write"), kw
+        assert kw.get("treq_sel") == 0, kw              # PIO0 SM0's TX DREQ
+        return 1
+
+    def config(self, read, write, count, ctrl, trigger):
+        self.buf, self.pio, self.i, self.n = read, write, 0, count
+        self.on = bool(trigger)
+        self._move()
+
+    def _move(self):
+        while self.on and self.i < self.n and len(self.pio.tx) < 4:
+            self.pio.tx.append(self.buf[self.i])
+            self.i += 1
+            self.pio.pump()
+        if self.i >= self.n:
+            self.on = False
+
+    def active(self, v=None):
+        if v is not None:
+            self.on = bool(v)
+            return None
+        self.pio.pump()
+        self._move()
+        return self.on
+
+    @property
+    def count(self):
+        self._move()
+        return self.n - self.i
+
+    def close(self):
+        self.on = False
+        self.closed = True
+
+
 def out(port, v):
     return ("out", port, v)
 
@@ -455,6 +502,53 @@ def main():
             paths["/TMP/temp.tap"] = tmp.name
             os.unlink(bad.name)
         tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
+
+        print("by DMA (rp2.DMA, MicroPython v1.22+): the same LOADs")
+        io._DMA = FakeDMA
+        FakeDMA.made.clear()
+        tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
+        r0, _ = load(pio, 0x00, len(header))
+        first = pio.tx_at_ready[0] if pio.tx_at_ready else None
+        r1, log = load(pio, 0xFF, len(data))
+        check(r0 == r1 == "ok" and idle(pio) and len(FakeDMA.made) == 2,
+              "header + data load, each block by its own channel (%s, %s, %d)"
+              % (r0, r1, len(FakeDMA.made)))
+        check(first and first[0] == 0x00 and len(first) == 4,
+              "  READY once TX is full: the flag + 3 bytes waiting (%s)" % first)
+        check(all(getattr(d, "closed", False) for d in FakeDMA.made),
+              "  every channel closed afterwards (they are a shared resource)")
+        load(pio, 0x00, len(header))
+        off = tsp.offset
+        r, log = load(pio, 0xFF, len(data), break_at=1000)
+        check(r == "D" and idle(pio) and "stopped by BREAK" in log and tsp.offset == off,
+              "BREAK mid-block: heard while the DMA runs, Report D, idle (%s)" % r)
+        check(FakeDMA.made[-1].i < len(data), "  the channel was stopped part way (%d of %d)"
+              % (FakeDMA.made[-1].i, len(data) + 1))
+        r1, _ = load(pio, 0x00, len(header))
+        r2, _ = load(pio, 0xFF, len(data))
+        check(r1 == r2 == "ok", "  and the next LOAD works first time (%s, %s)" % (r1, r2))
+        load(pio, 0x00, len(header))
+        r, log = load(pio, 0xFF, len(data), stop_at=1500)
+        check(idle(pio, 0xFB) and "stalled -> RECOVERED" in log,
+              "the Z80 goes silent mid-block: the stall is seen, RECOVERED, no hang")
+        tsp.offset, tsp.tap_idx = 0, 0
+        load(pio, 0x00, len(header))
+        pio.z80_every = 3
+        seen = []
+        r, log = load(pio, 0xFF, len(data), seen=seen)
+        pio.z80_every = 1
+        check(r == "ok" and bytes(seen) == data and "ran dry" not in log,
+              "a slow Z80 gets every byte, in order (%s)" % r)
+
+        def no_channel():
+            raise OSError("no free DMA channel")
+        io._DMA = no_channel
+        tsp.offset, tsp.tap_idx = 0, 0
+        r0, _ = load(pio, 0x00, len(header))
+        r1, _ = load(pio, 0xFF, len(data))
+        check(r0 == r1 == "ok", "no free channel: the Python loop, as before (%s, %s)" % (r0, r1))
+        io._DMA = None
+        tsp.offset, tsp.tap_idx = 0, 0
 
         check(pio.dropped == 0, "no RX overflow anywhere (%d)" % pio.dropped)
         print("  PASS  no put() into a full TX FIFO (FakePIO raises if one happens)")

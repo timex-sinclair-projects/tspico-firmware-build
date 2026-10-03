@@ -6,6 +6,10 @@ import time
 import utime
 
 from rp2 import StateMachine, asm_pio, PIO
+try:
+    from rp2 import DMA as _DMA        # MicroPython v1.22+: the LOAD stream by DMA (STREAM_DMA)
+except ImportError:                    # v1.20, or the host tests' fake rp2: by hand
+    _DMA = None
 from machine import Pin, freq, SPI
 
 from TS.sdcard import *
@@ -189,6 +193,87 @@ def RX_CAPTURE(MQ, raw, n, stall_ms):
     return n
 
 
+class RxDMA:
+    """The pre-header, caught by DMA. While the dispatcher is idle a DMA
+    channel stands armed on the bus state machine's RX FIFO (DREQ 4: PIO0,
+    state machine 0, RX), and every word the Z80 writes goes straight into
+    raw, an array('I') of n -- whatever core0 is doing.
+
+    Why (hardware, 2026-10-02, MicroPython v1.29): the first command after
+    a 2068 power-on gave Report T. Its pre-header arrived with one byte
+    missing from the middle (42 00 FF 00 00 00 07 00 BA): core0 had paused
+    for longer than the 4-deep FIFO lasts at the Z80's ~30 us a byte, and
+    TS_IO_DUAL's `push noblock` dropped one. A GC, a USB interrupt or a
+    flash write (SAVE_LOG on core1 stops both cores) can each do that.
+    src/test/dma_rx_harness.py: polling lost 400-13979 words under those
+    stalls, the DMA channel none.
+
+    One channel, claimed at boot and kept: arm() when idle, waiting() is
+    the idle loop's "has the Z80 started?", take() finishes the capture
+    with RX_CAPTURE's contract. The channel is never running outside the
+    idle loop -- take() always leaves it stopped -- so every handler reads
+    RX by hand, as before.
+    """
+
+    def __init__(self, raw):
+        self.d = _DMA()
+        self.raw = raw
+        self.n = len(raw)
+        self.ctrl = self.d.pack_ctrl(size=2, inc_read=False, inc_write=True, treq_sel=4)
+        self.armed = False
+
+    def arm(self, MQ):
+        if not self.armed:
+            self.d.config(read=MQ, write=self.raw, count=self.n, ctrl=self.ctrl, trigger=True)
+            self.armed = True
+
+    def waiting(self):
+        """Words the Z80 has written since arm(): 0 while it is quiet."""
+        return self.n - self.d.count if self.armed else 0
+
+    def stop(self):
+        """Stop the channel; the words it took."""
+        self.d.active(0)
+        self.armed = False
+        return self.n - self.d.count
+
+    def take(self, stall_ms):
+        """Wait for the rest of the burst. Returns as RX_CAPTURE: n, k for k
+        words then stall_ms of silence, -k when word k-1 was a write to
+        port 0Fh (the Z80 now waits for READY + IDLE). Leaves the channel
+        stopped; arm() again when idle. Allocates nothing."""
+        n = self.n
+        raw = self.raw
+        last = -1
+        t0 = 0
+        while True:
+            g = n - self.d.count
+            if g >= n:
+                self.armed = False          # all n taken: the channel is done
+                break
+            if g != last:
+                if g and raw[g - 1] & PORT_0F:
+                    return -self.stop()     # nothing follows a 0Fh write
+                last = g
+                t0 = time.ticks_ms()
+            elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                return self.stop()
+        if raw[n - 1] & PORT_0F:
+            return -n
+        return n
+
+
+def RX_DMA(raw):
+    """An RxDMA for raw, or None (no rp2.DMA, or no free channel): the
+    dispatcher then polls with RX_CAPTURE, as before."""
+    if _DMA is None:
+        return None
+    try:
+        return RxDMA(raw)
+    except Exception:
+        return None
+
+
 _stdin_ipoll = None           # set up on first DRAIN_STDIN: poll(0) on sys.stdin
 _stdin_readinto = None
 _stdin_byte = bytearray(1)
@@ -302,6 +387,73 @@ def ECHO_KEEP(echo, w):
     if n < 2:
         echo[n + 1] = w & 0xFF
         echo[0] = n + 1
+
+
+def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
+    """Send buf (bytes) to the Z80 through the bus state machine's TX FIFO
+    by DMA, and say READY once it is moving if `ready`. Returns (why, sent, word), or None when DMA
+    isn't available -- the caller then streams by hand, as before.
+
+      why 0  all of buf went into the FIFO (the Z80 reads the last few
+             after this returns, as with the hand loop)
+          1  a write to port 0Fh: BREAK, or a SYNC after a 2068 reset
+          3  the Z80 stopped reading for stall_ms (TX_ROOM's codes)
+          4  echo is None (ZX48 mode) and the Z80 wrote a word -- any word,
+             0Fh included, as ZX_ROOM: in `word`, for ZX48_IO to dispatch
+      sent   bytes of buf the DMA moved (it is stopped when why != 0)
+
+    Why DMA (hardware, 2026-10-03): the ROMs read a LOAD block blind, a byte
+    every ~47 us, from a 4-deep FIFO -- ~190 us of slack. A GC, a USB
+    interrupt or a flash write can be longer, and the FIFO runs dry; the
+    DMA channel feeds it in hardware, paced by the state machine's "TX not
+    full" request (DREQ 0: PIO0, state machine 0), whatever core0 is doing.
+    src/test/dma_tx_harness.py: 0 dry reads under every stall, against
+    104-1498 for a Python loop. It writes bytes; the FIFO register repeats
+    a byte write across the word, and TS_IO_DUAL outputs bits 0-7.
+
+    Meanwhile core0 only listens: the Z80's echo bytes go into echo (as
+    TX_ROOM keeps them), a port-0Fh write or a stall ends it."""
+    if _DMA is None:
+        return None
+    try:
+        d = _DMA()
+    except Exception:                  # no free channel: by hand
+        return None
+    n = len(buf)
+    why = 0
+    word = -1
+    try:
+        d.config(read=buf, write=MQ, count=n,
+                 ctrl=d.pack_ctrl(size=0, inc_read=True, inc_write=False, treq_sel=0),
+                 trigger=True)
+        if ready:
+            MQX(MQ, "mov(y, invert(null))")            # READY: the FIFO is full by now
+        last = n
+        t0 = time.ticks_ms()
+        while d.active():
+            if MQ.rx_fifo():
+                w = MQ.get()
+                if echo is None:
+                    why = 4
+                    word = w
+                    break
+                if w & PORT_0F:
+                    why = 1
+                    break
+                ECHO_KEEP(echo, w)
+            c = d.count
+            if c != last:
+                last = c
+                t0 = time.ticks_ms()
+            elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                why = 3
+                break
+        if why:
+            d.active(0)
+        sent = n - d.count
+    finally:
+        d.close()
+    return why, sent, word
 
 
 def RX_WORD(MQ, stall_ms):
@@ -1164,7 +1316,16 @@ def LOAD_TS(pre, MQ, TSP):
     # 1024th byte queued. One AND per byte; the clock is read 1/1024 bytes.
     prof = array("I", bytes(4 * ((totbytes >> 10) + 1)))
 
+    r = None
     if hdr is not None:
+        # By DMA where there is one (v1.29): immune to core0's pauses.
+        r = STREAM_DMA(MQ, hdr, echo, 3000, True)
+    if r is not None:
+        primed = True
+        t_ready = time.ticks_ms()
+        why = r[0]
+        sent += r[1]
+    elif hdr is not None:
         # Stream from RAM (the block, read whole above).
         for b in hdr:
             n = txf()
@@ -1575,7 +1736,16 @@ def LOAD_ZX(MQ, TSP):
     MQX(MQ, "mov(y, invert(null))")         # READY
 
     # totbytes counts flag + content + CRC; the flag is already queued.
+    r = None
     if whole is not None:
+        r = STREAM_DMA(MQ, whole, None, ZX_STALL_MS, False)  # see LOAD_TS
+    if r is not None:
+        sent += r[1]
+        if r[0] == 4:
+            nxt = r[2]
+        elif r[0]:
+            nxt = -2
+    elif whole is not None:
         for b in whole:
             n = txf()
             if n >= TX_DEPTH:
