@@ -282,6 +282,17 @@ def main():
               "26 chars + STICK straddles column 32: every line is two on screen, so 60 lines"
               " prompt twice (%s prompts)" % (r[1] if len(r) > 1 else r,))
 
+        print("a page that ends with short lines still prompts (audit §4, n > i + 34)")
+        kw_text[0] = "".join("%02d a long line of help text....\r" % i for i in range(1, 22)) + "x\r" * 12
+        pio, r = run(b"tpi:kw")
+        check(r[0] == "ok" and len(r) > 1 and r[1] == 1,
+              "21 lines, then 12 one-character lines (24 characters): a prompt, not 33 lines in a"
+              " row (%s prompts)" % (r[1] if len(r) > 1 else r,))
+        kw_text[0] = "".join("%02d a long line of help text....\r" % i for i in range(1, 22)) + "the end"
+        pio, r = run(b"tpi:kw")
+        check(r[0] == "ok" and len(r) > 1 and r[1] == 0,
+              "21 lines and a short last one: no prompt just for that (%s prompts)" % (r[1] if len(r) > 1 else r,))
+
         print("tpi:blkrcv: the ROM-update stream (audit 2026-09-30)")
         image = bytes((i * 37 + 11) & 0xFF for i in range(1000))
         real_open, real_os = getattr(t, "open", builtins.open), t.os

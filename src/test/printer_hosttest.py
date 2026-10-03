@@ -155,10 +155,17 @@ def main():
     scr_set(hr, 0, 0, 0)                        # byte column 0 -> x 0-7
     scr_set(hr, 0x2000, 0, 0)                   # byte column 0 of 6000h -> x 8-15
     f = io.BytesIO()
-    w, h = P.write_bmp(f, hr, 3, (1 << 3) | 7, 1, 1)
+    w, h = P.write_bmp(f, hr, 3, 0x16, 1, 1)            # the ROM's byte for choice 1
     _, _, p = read_bmp(f.getvalue())
-    check((w, h) == (512, 192) and p(0, 0) == 7 and p(1, 0) == 1 and p(8, 0) == 7 and p(9, 0) == 1,
-          "mode 3 hi-res: 512 wide, columns alternate 4000h / 6000h, colours from the pre-header")
+    check((w, h) == (512, 192) and p(0, 0) == 1 and p(1, 0) == 6 and p(8, 0) == 1 and p(9, 0) == 6,
+          "mode 3 hi-res: 512 wide, columns alternate 4000h / 6000h; byte 16h is blue on yellow")
+    tv = ["black on white", "blue on yellow", "red on cyan", "magenta on green",
+          "green on magenta", "cyan on red", "yellow on blue", "white on black"]
+    names = ["black", "blue", "red", "magenta", "green", "cyan", "yellow", "white"]
+    got = ["%s on %s" % (names[i], names[pp]) for i, pp in
+           (P.hires_ink_paper(b) for b in (0x07, 0x16, 0x43, 0x52, 0x25, 0x34, 0x61, 0x70))]
+    check(got == tv, "the 2.1 ROM's eight colour bytes give what the TV showed (hardware"
+          " 2026-10-03, hirescopy.tap): %s" % got)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))

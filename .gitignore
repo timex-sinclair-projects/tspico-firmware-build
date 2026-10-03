@@ -57,6 +57,7 @@ tools/zmakebas/*.o
 /SD card/TAP/picotest-s.tap
 /SD card/TAP/test/factorial.tap
 /SD card/TAP/test/RND WORDS.tap
+/SD card/TAP/test/hirescopy.tap
 
 # Staging dir the CI 'Stage generated .tap files' step builds before
 # uploading them as the basic-taps artifact. Only appears if that step is

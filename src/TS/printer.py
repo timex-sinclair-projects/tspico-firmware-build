@@ -149,6 +149,25 @@ def screen_size(mode):
     return (512, 192) if mode == 3 else (256, 192)
 
 
+# The 2.1 ROM's COPY (EXROM 16F3h) reads port FFh and, in 64-column mode,
+# sends the colour choice k (bits 3-5) not as k but as table[k], from
+# EXROM 16EBh. On the screen, choice k is ink k on paper 7-k (the 2068
+# makes the paper the complement): black on white, blue on yellow, red on
+# cyan, ... white on black (hardware, 2026-10-03, the eight COPYs of
+# basic/SD/TAP/test/hirescopy.bas against the TV). Its bytes hold two
+# colours a nibble each, but with red and green swapped in the middle four,
+# so they can't be read as colour numbers: look k up instead.
+HIRES_K = {0x07: 0, 0x16: 1, 0x43: 2, 0x52: 3, 0x25: 4, 0x34: 5, 0x61: 6, 0x70: 7}
+
+
+def hires_ink_paper(c):
+    """(ink, paper) of a 64-column COPY from its pre-header colour byte."""
+    k = HIRES_K.get(c)
+    if k is None:                       # not the 2.1 ROM's table: a nibble each
+        return (c >> 4) & 7, c & 7
+    return k, 7 - k
+
+
 def row_colours(scr, mode, y, hires_colour, out):
     """Colour indices (0-15) for pixel row y into out (a bytearray of the
     picture width). scr is the COPY body.
@@ -156,12 +175,11 @@ def row_colours(scr, mode, y, hires_colour, out):
       mode 1  second screen at 6000h, attributes 7800h
       mode 2  hi-colour: bitmap 4000h, one attribute per pixel row at 6000h
       mode 3  hi-res 512x192: byte columns alternate 4000h / 6000h, two
-              colours from the COPY pre-header's colour byte
+              colours from the COPY pre-header's colour byte (hires_ink_paper)
     """
     pa = _pix_addr(y)
     if mode == 3:
-        ink = hires_colour & 7
-        paper = (hires_colour >> 3) & 7
+        ink, paper = hires_ink_paper(hires_colour)
         x = 0
         for col in range(32):
             for base in (0, 0x2000):
