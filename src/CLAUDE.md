@@ -356,11 +356,12 @@ are relative to that. This file (`src/CLAUDE.md`) also lives there.
 
 ## Telemetry
 
-Set `TLM_ENABLED = False` in `/main.py` (line near top, after
-`import TS.tspico`) to silence all `TLM()` and `TLM_RESET()` calls.
-Default is `True` for development. Diagnostic prints over USB serial
-take ~5-10ms each — long enough to disrupt protocol timing if they
-fire in a hot path.
+`"TELEMETRY": true` in the Pico's `/config.ini` turns on every `TLM()`
+and `TLM_RESET()` trace over USB serial; `main.py` reads it at boot.
+Releases ship `false` (2026-09-30 audit, §4), so **a development board
+needs it set** before `pico-serial.py watch` shows anything. Diagnostic
+prints take ~5-10ms each — long enough to disrupt protocol timing if
+they fire in a hot path.
 
 ## Talking to the Pico directly
 
@@ -384,8 +385,8 @@ python3 tools/pico-serial.py softreset                  # Ctrl-D -> main.py agai
 - **`watch` is always safe.** It opens the port read-only and never
   writes, so it can't disturb the firmware; it reattaches if the Pico is
   unplugged. Run it in the background (it's a long-lived process) before
-  the user types a command. `main.py` sets `TLM_ENABLED = True`, so every
-  command prints its trace. Plugging USB into a Pico the 2068 is already
+  the user types a command. With `"TELEMETRY": true` in `/config.ini`
+  every command prints its trace (releases ship it off). Plugging USB into a Pico the 2068 is already
   powering does not reset it, and the 2068 boots fine with the Pico
   already powered from USB.
 - **`flash` needs no buttons.** It drops to the REPL and calls

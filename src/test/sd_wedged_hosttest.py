@@ -38,15 +38,15 @@ import process_cmd_hosttest as P                                # noqa: E402
 READY = "mov(y, invert(null))"
 
 
-class Bricked(Exception):
+class Bricked(BaseException):
     """Something reached BLINK_ERROR."""
 
 
-class LoopDone(Exception):
+class LoopDone(BaseException):
     """The dispatcher came back round to poll a bus SM we've finished with."""
 
 
-class ReachedDispatcher(Exception):
+class ReachedDispatcher(BaseException):
     pass
 
 
@@ -238,7 +238,7 @@ def boot_fakes(t, env, inject_pre):
     t.busy = False
 
 
-class Booted(Exception):
+class Booted(BaseException):
     """TS2068_IO finished its boot and logged 'TS Pico initialized OK'."""
 
 
@@ -302,6 +302,79 @@ def test_save_remount(t):
     check(t.sd_active is False, "sd_active cleared")
 
 
+def test_service_restart(t):
+    print("An unexpected error restarts the service loop, not the ROM lines (audit §4)")
+    env = install(t)
+
+    def inject_pre():
+        t.MQ.rx = [0] * 10                     # a SAVE pre-header
+
+    calls = []
+
+    def save_ts(mq, tsp, pre=None):
+        calls.append(1)
+        env.stop_new_bus = True                # the rebuilt bus ends the test once idle
+        raise RuntimeError("boom")
+
+    boot_fakes(t, env, inject_pre)
+    t.SAVE_TS = save_ts
+    idled = []
+    real_idle = t.MQ_TO_IDLE
+
+    def record_idle(mq, **k):
+        idled.append((mq, k))
+        return real_idle(mq, **k)
+    t.MQ_TO_IDLE = record_idle
+    try:
+        t.TS2068_IO()
+        outcome = "returned"
+    except LoopDone:
+        outcome = "back at the top of the loop"
+    except BaseException as e:                 # noqa: BLE001
+        outcome = "raised %r" % e
+    finally:
+        t.MQ_TO_IDLE = real_idle
+    progs = [sm.prog for sm in env.sms]
+    check(outcome == "back at the top of the loop" and len(calls) == 1,
+          "one failure: the loop restarts and waits for the next command (%s)" % outcome)
+    check(progs.count("set_ctrl") == 1 and progs.count("sel_bank") == 1,
+          "the ROM and bank state machines were built once, at boot, never again (%r)" % progs)
+    live = bus_sms(env)[-1]
+    check(t.MQ is live and idled and idled[-1][0] is live and idled[-1][1] == {"recovered": True},
+          "a new bus SM, put back to idle with RECOVERED (MQ_TO_IDLE stages the one 0x01) (%r)"
+          % [k for _, k in idled])
+    check(any("restarting the service loop (1 in the last minute)" in m and lvl == 2 for lvl, m in env.logs),
+          "logged as an error")
+
+    print("Three failures within a minute: give up, as before")
+    env = install(t)
+    calls = []
+    real_idle = t.MQ_TO_IDLE
+
+    def idle_then_save(mq, **k):               # the restart empties the FIFOs: then the
+        real_idle(mq, **k)                     # 2068's next command, another SAVE, arrives
+        mq.rx = [0] * 10
+
+    def save_ts_always(mq, tsp, pre=None):
+        calls.append(1)
+        raise RuntimeError("boom %d" % len(calls))
+
+    boot_fakes(t, env, inject_pre)
+    t.SAVE_TS = save_ts_always
+    t.MQ_TO_IDLE = idle_then_save
+    try:
+        t.TS2068_IO()
+        outcome = "returned"
+    except RuntimeError as e:
+        outcome = "raised %s" % e
+    except BaseException as e:                 # noqa: BLE001
+        outcome = "raised %r" % e
+    finally:
+        t.MQ_TO_IDLE = real_idle
+    check(outcome == "raised boom 3" and len(calls) == 3,
+          "the third failure goes out to main.py (%s, %d calls)" % (outcome, len(calls)))
+
+
 def main():
     P.install_fakes()
     # TS2068_IO's boot imports the extension commands. The real dev_extcmd
@@ -321,6 +394,7 @@ def main():
     test_process_cmd(t)
     test_boot_no_card(t)
     test_save_remount(t)
+    test_service_restart(t)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))

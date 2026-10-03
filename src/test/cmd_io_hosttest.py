@@ -365,7 +365,8 @@ def main():
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
             loop = src[src.index("def TS2068_IO("):src.index("def ZX48_IO(")]
             i = loop.index('LOG("Unrecognized command! " + str(list(pre)), 1)')
-            branch = loop[i:loop.index("\n        else:", i)]
+            # the branch ends at the next else: at its own depth (whatever the indent)
+            branch = loop[i:i + re.search(r"\n {8,}else:", loop[i:]).start()]
             check("MQ_TO_IDLE(MQ, recovered=True)" in branch and "MQ.active(0)" not in branch
                   and "BLINK_ERROR()" not in branch,
                   "%s: an unrecognised pre-header -> MQ_TO_IDLE (one 0x01 staged), no SM restart"
