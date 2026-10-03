@@ -9,11 +9,14 @@
 #
 # What we DO need from the default rp2 manifest:
 #   _boot.py     — runs at startup to mount the LittleFS filesystem
-#   _boot_fat.py — FAT filesystem support (used by SD card)
 #   rp2.py       — wraps the C-level _rp2 module; provides asm_pio,
 #                  PIOASMEmit, StateMachine constructor, etc.
+# (Not _boot_fat.py: it was frozen "for the SD card", but it isn't SD
+# support -- it mounts the Pico's own flash as FAT, formatting it if it
+# isn't, and main.c runs it only in a build with USB mass storage, which
+# this isn't. 2026-09-30 audit, §3.)
 #
-# What we ADD on top: the TS package — five modules that hold the
+# What we ADD on top: the TS package — the modules that hold the
 # protocol implementation and command handlers. See docs/PROTOCOL.md
 # for what each one does.
 #
@@ -23,7 +26,6 @@
 
 # Default rp2 port Python modules that the firmware needs at runtime.
 freeze("$(PORT_DIR)/modules", "_boot.py")
-freeze("$(PORT_DIR)/modules", "_boot_fat.py")
 freeze("$(PORT_DIR)/modules", "rp2.py")
 
 # Our TS package — the actual TS-Pico firmware.

@@ -703,8 +703,8 @@ class Harness:
         # at 2247h before it sends the 'D' body -- so say READY first.
         link.set_status(ST_MID)
         # Body = 'D', len lo, len hi, text, XOR of all of those (ROM 224Dh-
-        # 2274h). Production reads len+3 and leaves the checksum byte for
-        # SEND_MSG2's RX flush; read it here, or its late arrival drops the
+        # 2274h). Production reads all of it, checksum included, and checks
+        # the XOR (#64); read it here too, or its late arrival drops the
         # status back to busy after we have said READY.
         n = self.pre[7] + 256 * self.pre[8]
         body = array("H", [0] * (n + 4))

@@ -295,8 +295,8 @@ shape are documented in `docs/DUAL_PORT_DEVELOPMENT.md` §8.
 - **`Report R - Tape Loading Error`** during data block of a LOAD that
   succeeded at the header phase ("Bytes:" displayed first) → there's a
   stray byte in TX between iterations that shifted the data block by
-  one byte. Usual culprits: an extra `END_MSG()` call after a V6-pattern
-  handler tail, or a stale `wrt(0x40)` left from single-port days.
+  one byte. Usual culprits: an extra status write after a V6-pattern
+  handler tail (the removed `END_MSG()` helper was the classic one), or a stale `wrt(0x40)` left from single-port days.
 
 - **`Report J` after a long delay (~3-5 seconds)** → handler was stuck
   on `MQ.put` (TX full, Z80 not reading) or `MQ.get` (RX empty, Z80 not
@@ -310,10 +310,10 @@ shape are documented in `docs/DUAL_PORT_DEVELOPMENT.md` §8.
   port continue flag; in dual-port that role is played by the Y
   register. A 0x40 in TX is an orphan byte that will corrupt the next
   read.
-- `END_MSG()` at the end of LVM handlers (LOAD_TS, SAVE_TS) that already
-  do the V6 final-status-and-pre-load chain. END_MSG writes its own
-  status byte — adding it after the V6 writes injects a third one that
-  becomes an orphan.
+- An extra status write at the end of LVM handlers (LOAD_TS, SAVE_TS),
+  which already do the V6 final-status-and-pre-load chain. A third status
+  byte after the V6 writes becomes an orphan. (The old `END_MSG()` helper
+  did exactly this; it was removed by the 2026-09-30 audit.)
 - Pre-loading status bytes inside `ACTIVATE_MQ()`. That function is
   called both at boot AND mid-command (after SD operations); a pre-
   load there pollutes the TX FIFO during the second case. Boot-time

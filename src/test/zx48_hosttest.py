@@ -296,8 +296,8 @@ def test_save_zx_roundtrip(tio, tmpdir):
     if new_sms:
         ok &= check(tio.TS_IO_DUAL in new_sms[0]["args"],
                     "rebuilt it with TS_IO_DUAL (not the single-port TS_IO)")
-        ok &= check(tio.TS_IO not in new_sms[0]["args"],
-                    "did not fall back to the single-port TS_IO program")
+        ok &= check(not hasattr(tio, "TS_IO") and not hasattr(tio, "ENA_MQ"),
+                    "the single-port TS_IO program and ENA_MQ are gone (audit §3)")
         ok &= check(new_sms[0]["freq"] == 30_000_000,
                     "at 30 MHz (not the single-port 15 MHz)")
     return ok

@@ -39,20 +39,10 @@ from TS import native
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ---------------------------------------------------------------------------
-# Module-level globals shared between LOAD_TS / SAVE_TS / WATCHDOG / etc.
-#
-# These get initialized inside the various functions via `global` declarations,
-# but the FIRST reference to (e.g.) `kill` inside the streaming loop of
-# LOAD_TS happens RIGHT AFTER spawning the watchdog thread — and there's no
-# guarantee the watchdog has run its `kill = False` line yet on core1. Without
-# these module-level defaults, that first reference raises NameError.
-#
-# Initialize them here so the race is impossible:
+# Module-level state. (The core1 watchdog's kill / busy / dead flags went with
+# it in issue #51; the last of them were removed by the 2026-09-30 audit, §3.)
 # ---------------------------------------------------------------------------
 
-kill = False        # set by the core1 WATCHDOG, removed in issue #51; stays False
-busy = False        # was the core1 watchdog's flag; stays False
-dead = True         # True = no transaction in progress; False = active
 log_entries = ""    # log messages collected during a transaction
 
 # Cached "no file mounted" fallback handle.
@@ -266,10 +256,9 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
         0   there is room
         1   a write to port 0Fh -- BREAK, or a new command's SYNC after a
             2068 reset. The Z80 has stopped reading and waits for IDLE.
-        2   the watchdog fired
-        3   TX stayed full for stall_ms: the Z80 has gone away. Bounded on
-            its own, because START_WATCHDOG can fail ("core1 busy") and a
-            wait that only the watchdog can end would then never end.
+        3   TX stayed full for stall_ms: the Z80 has gone away.
+
+    (2 was "the watchdog fired"; the core1 watchdog was removed in #51.)
 
     Data bytes the Z80 writes meanwhile (the block-type echo it sends just
     before its data loop) are kept in echo, a bytearray(3) of [count, byte,
@@ -291,8 +280,6 @@ def TX_ROOM(MQ, echo, stall_ms=3000):
             if w & PORT_0F:
                 return 1
             ECHO_KEEP(echo, w)
-        elif kill:
-            return 2
         elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
             return 3
     return 0
@@ -322,7 +309,6 @@ def RX_WORD(MQ, stall_ms):
 # RX_BLOCK's result codes
 RXB_OK = const(0)       # all n bytes arrived
 RXB_ABORT = const(1)    # a write to port 0Fh (BREAK / SYNC); the Z80 waits for IDLE
-RXB_KILL = const(2)     # the watchdog fired
 RXB_STALL = const(3)    # silence: first_ms before the first byte, stall_ms after
 
 
@@ -356,8 +342,6 @@ def RX_BLOCK(MQ, buf, n, first_ms, stall_ms):
                 return RXB_ABORT, got
             t0 = time.ticks_ms()
             while not rx():
-                if kill:
-                    return RXB_KILL, got
                 if time.ticks_diff(time.ticks_ms(), t0) >= limit:
                     return RXB_STALL, got
             limit = stall_ms
@@ -477,27 +461,6 @@ def set_dck():
     label("pass")
     wait (1, gpio, 13)
     wrap()
-
-
-@asm_pio(                                # This routine adapted from https://github.com/keyvin/docnotes/blob/master/z80/Python/z80io.py
-    sideset_init=(PIO.OUT_HIGH),
-    out_init=(PIO.OUT_LOW,) * 8, 
-    out_shiftdir=PIO.SHIFT_RIGHT,
-    in_shiftdir=PIO.SHIFT_LEFT,
-    )
-def TS_IO():
-    wait (0, gpio, 14)      .side(1)     # We first wait for GPIO14=/PICOSEL to be low, then
-    jmp(pin, "rd")          .side(1)     # ...if GPIO11=1 then it's a READ
-    pull(noblock)           .side(0)
-    out(pins, 8)            .side(0)     # if not, simply send all 8 bits
-    jmp("fin")              .side(0)     # and JUMP to the end of the PIO program
-    label("rd")                          # If it's a WRite, ...
-    nop()                   .side(0)
-    in_(pins, 9)            .side(0) [2] # we sample D0..D7 and A0. Notice the extra 2 cycles for sync
-    push(noblock)           .side(0)
-    label("fin")
-    wait (1, gpio, 14)      .side(0)
-    mov(null, osr)          .side(1)
 
 
 @asm_pio(
@@ -716,55 +679,7 @@ def REWIND_ABORTED_SEARCH(TSP):
 def ENA_MQ_DUAL(MQ):
     """Re-create and activate the dual-port TS_IO_DUAL state machine.
 
-    The dual-port counterpart of ENA_MQ() above, and the one ZX48-mode
-    handlers must use. Needed after ENA_SD(), which re-claims GPIO 2-4
-    for SPI: the SM has to be rebuilt on the way back to the bus.
-
-    In TS-2068 mode the main dispatcher does this via ACTIVATE_MQ() in
-    tspico.py, but ZX48_IO never calls back into the dispatcher between
-    transactions, so a ZX handler that touches the SD card has to
-    restore the bus itself.
-
-    Leaves Y = READY: the PIO drops Y to 0 on every Z80 OUT (issue #14
-    auto-busy), and a fresh SM starts with Y undefined.
-    """
-    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
-                      in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
-                      sideset_base=Pin(12, Pin.OUT))
-
-    MQ.active(0)
-    utime.sleep(0.01)
-    MQ.active(1)
-    MQX(MQ, "mov(y, invert(null))")
-
-    return MQ
-
-
-def ENA_MQ(MQ):
-    """Re-create and activate the (legacy single-port) TS_IO state machine.
-
-    NOTE: This is the OLD single-port version using `TS_IO` at 15MHz.
-
-    *** UNUSED as of the 2026-09 ZX48 migration — do not call it. ***
-    SAVE_ZX was its last caller; on the dual-port bus it silently
-    replaced the session's SM with one that doesn't decode $0E from $0F.
-    Use ENA_MQ_DUAL() below, or ACTIVATE_MQ() in tspico.py. Kept only so
-    the single-port program has a working reference implementation.
-    """
-    MQ = StateMachine(0, TS_IO, freq=15_000_000, out_base=Pin(2, Pin.OUT),
-                      in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
-                      sideset_base=Pin(12, Pin.OUT))
-
-    MQ.active(1)
-
-    return MQ
-
-
-def ENA_MQ_DUAL(MQ):
-    """Re-create and activate the dual-port TS_IO_DUAL state machine.
-
-    The dual-port counterpart of ENA_MQ() above, and the one ZX48-mode
-    handlers must use. Needed after ENA_SD(), which re-claims GPIO 2-4
+    The bus state machine, rebuilt: what ZX48-mode handlers must use. Needed after ENA_SD(), which re-claims GPIO 2-4
     for SPI: the SM has to be rebuilt on the way back to the bus.
 
     In TS-2068 mode the main dispatcher does this via ACTIVATE_MQ() in
@@ -864,75 +779,6 @@ def ENA_SD(log_level=0):
     return spi
 
 
-def END_MSG(MQ, verbose, msg, msg1, st: bytes):
-    """Send a single status response (optionally with a verbose string)
-    back to the Z80, then wait for the FIFO to drain.
-
-    !!!  WARNING — DO NOT call this from LOAD_TS or SAVE_TS  !!!
-    Those handlers already write their own MQ.put(0x01) × 2 (final
-    status + next-iter pre-load) per the V6 pattern. END_MSG would
-    inject a THIRD status byte that gets orphaned in TX, then consumed
-    by the next iteration's data-loop reads → CRC mismatch → "Report R
-    Tape Loading Error". See docs/PROTOCOL.md §13 pitfalls.
-
-    This function is appropriate for simpler "result" responses (e.g.,
-    verbose feedback strings printed to the TS-2068 screen via the
-    PRINT_STRING directive 0x81) where the protocol doesn't already
-    chain a pre-load.
-
-    Layout depending on `verbose`:
-        VERBOSE = True (TS-2068 will display the message on screen):
-            byte 0 = 0x81 (PRINT_STRING function code; this byte
-                            simultaneously serves as the "final status"
-                            from Z80's POV — values >= 0x80 are
-                            interpreted as function codes, not errors)
-            byte 1 = `st`  (return code: 1 = OK, else error code)
-            byte 2 = 0x0D  (newline)
-            bytes 3.. = `msg` ASCII characters
-            optional 0x0D + `msg1` ASCII characters
-            terminator = 0x00
-
-        VERBOSE = False (silent OK):
-            byte 0 = `st`  (just the status code)
-
-    Args:
-        MQ:      TS_IO_DUAL state machine.
-        verbose: TSP.VERBOSE — whether to send the message text.
-        msg:     primary message string (ignored if verbose=False).
-        msg1:    optional secondary message string (e.g., a filename).
-        st:      status byte (1 = OK, 2-9 = various Z80 BASIC reports).
-
-    Blocks until the Z80 has drained every byte from TX FIFO.
-    """
-    wrt = MQ.put
-
-    if verbose:
-        # Verbose response: tells Z80 BASIC ROM "print the following
-        # string on screen, then handle the trailing return code".
-        wrt(0x81)               # PRINT_STRING function code (>=0x80 means
-                                # "extended response — read more bytes")
-        wrt(st)                 # actual return code (used after string is shown)
-        wrt(0x0D)               # leading newline so message starts on its own line
-        for m in msg:
-            wrt(m)              # primary message text
-        if msg1:
-            wrt(0x0D)           # second-line separator
-            for m in msg1:
-                wrt(m)
-        wrt(0x00)               # NULL terminator — tells Z80 ROM "string done"
-    else:
-        # Silent response: just one status byte.
-        wrt(st)
-
-    # Block until Z80 has drained every byte we put. This guarantees
-    # the response has been fully consumed before our caller returns
-    # (and possibly disturbs the FIFO state).
-    while(MQ.tx_fifo() != 0):
-        pass
-
-    return
-
-
 def LOG_ADD(msg, level, log_level):
     """Buffer a timestamped log entry for later writing to /activity.log.
 
@@ -980,9 +826,10 @@ def LOAD_TS(pre, MQ, TSP):
              - Y is already 0xFFFFFFFF (READY) — Z80's $0F polls succeed.
           2. Data block response
              - Stream block_type + (blk_len-1) content bytes to TX.
-             - Z80 reads them from $0E in a tight loop (~47µs/byte). Pico's
-               MQ.put() blocks when the 4-deep FIFO fills, so streaming
-               paces itself naturally.
+             - Z80 reads them from $0E in a tight loop (~47µs/byte). The
+               Pico keeps the 4-deep FIFO topped up; when it is full,
+               TX_ROOM waits for room -- bounded, and listening for BREAK
+               -- instead of a blocking MQ.put() (#51).
              - The flag/type byte is the FIRST byte Z80 reads in the data
                loop — Z80's CRC accumulator starts at block_type and XORs
                every byte read, so by the end the accumulator equals the
@@ -1028,7 +875,6 @@ def LOAD_TS(pre, MQ, TSP):
         and shown to the user later. MQ and TSP are returned for
         consistency with the dispatcher's expected calling convention.
     """
-    global dead, kill, busy
     global log_entries
     log_entries = ""
 
@@ -1252,8 +1098,8 @@ def LOAD_TS(pre, MQ, TSP):
     # ============================================================
     # Z80's data loop reads `flag + content + CRC` = `totbytes` bytes
     # via $0E. The flag (block_type) is the first byte and seeds Z80's
-    # running CRC accumulator. MQ.put() blocks if FIFO is full, paced
-    # by Z80 reads — no manual synchronization needed.
+    # running CRC accumulator. When the FIFO is full the loop below waits
+    # in TX_ROOM (bounded, listening for BREAK), paced by the Z80's reads.
     wrt(blk_info[2])                                  # block_type / flag
 
     # Helper: close `arch` ONLY if it was opened locally for this call
@@ -1374,8 +1220,7 @@ def LOAD_TS(pre, MQ, TSP):
                 % (dry, dry_at, totbytes), 2, TSP.LOG_LEVEL)
 
     if why:
-        # BREAK (1) or silence (3; 2 would be a stale watchdog `kill` from
-        # ZX48 mode -- treated as silence). Bytes the Z80 had actually read
+        # BREAK (1) or silence (3). Bytes the Z80 had actually read
         # = queued minus what's still in TX; 0-4 means it was still in the
         # ready-wait before the data. Then: the search rewound if one was
         # in progress, and straight back to idle -- the 1.8b ROM is waiting
@@ -1429,9 +1274,10 @@ def LOAD_TS(pre, MQ, TSP):
             TSP.tap_idx = 0
             TSP.offset  = 0
 
-    # NOTE: do NOT call END_MSG() here. The two wrt(0x01) writes above
+    # NOTE: write no other status here (the old END_MSG helper did, and
+    # was removed by the 2026-09-30 audit). The two wrt(0x01) writes above
     # already provided the final status and the next-iter pre-load.
-    # END_MSG would inject an EXTRA 0x01 status into TX, which the Z80
+    # Another would inject an EXTRA 0x01 status into TX, which the Z80
     # consumes as the first byte of the NEXT iteration's data-loop read
     # (where it expects the block_type 0xFF). The CRC accumulator gets
     # offset by one byte from the start, every subsequent byte XORs into
@@ -1442,7 +1288,6 @@ def LOAD_TS(pre, MQ, TSP):
     # making the verbose directive the final response instead of an
     # additional 0x01).
 
-    dead = True
     return MQ, TSP, log_entries
 
 
@@ -1927,7 +1772,7 @@ def REFUSE_SAVE(MQ, status, quiet_ms=500):
         0x06 -> Report 6, number too big      (data block won't fit in RAM)
         0x08 -> Report A, invalid argument    (empty program, BLEN=0)
 
-    Caller is responsible for `dead = True` and for returning.
+    Caller is responsible for returning.
     """
     MQ.put(status)
     MQX(MQ, "mov(y, invert(null))")   # Y -> READY so the Z80 reads our status
@@ -1940,7 +1785,8 @@ def DRAIN_REFUSED_SAVE(MQ, quiet_ms=500):
     Refusing works by writing an error status where the Z80 expects the
     mid-phase 0x01: its STATUS_TO_REPORT path RST-8's, shows the BASIC
     report and aborts BEFORE sending the data block. When that lands no
-    data arrives at all and this returns 0 almost immediately.
+    data arrives at all, and this returns 0 once quiet_ms (500 ms) has
+    passed with nothing in RX.
 
     This is the safety net for when it doesn't land -- the Z80 sends the
     data block anyway, and those bytes would otherwise sit in RX and be
@@ -2047,13 +1893,11 @@ def SAVE_TS(MQ, TSP, pre=None):
         ENA_SD (card pulled, disk full), where /sd is mounted, no file
         exists, and the dispatcher would go on to mount a ghost.
     """
-    global busy, dead, kill
     global log_entries
     log_entries = ""
 
     from TS.tspico import TLM         # lazy import: tspico imports SAVE_TS, so a
                                       # module-level import here would be circular
-    dead = False
     wrt = MQ.put
     TSP.save_recovered = False
     gc.collect()
@@ -2068,7 +1912,6 @@ def SAVE_TS(MQ, TSP, pre=None):
     MQ_STATUS(MQ, "mid")
     got = RX_CAPTURE(MQ, raw, 21, 1000)
     if got != 21:
-        dead = True
         if got < 0:
             LOG_ADD("INFO: SAVE stopped by BREAK in the header block "
                     "(%d of 21 bytes); nothing written." % (-got - 1),
@@ -2089,7 +1932,6 @@ def SAVE_TS(MQ, TSP, pre=None):
     # or stray byte), so nothing after this can be trusted. 0000 means the
     # SAVE didn't come from BASIC and carries no session.
     if pre is not None and (pre[3] or pre[4]) and (hdr[1] != pre[3] or hdr[2] != pre[4]):
-        dead = True
         _fl = REFUSE_SAVE(MQ, 0x02)          # -> Report R
         LOG_ADD("ERROR: SAVE refused: header session %02X%02X, pre-header "
                 "%02X%02X; drained %d" % (hdr[2], hdr[1], pre[4], pre[3], _fl),
@@ -2116,7 +1958,6 @@ def SAVE_TS(MQ, TSP, pre=None):
         # bytes as the next pre-header -- and the second 0x01 became the
         # final status, so the 2068 printed "0 OK" for a save that never
         # wrote a file.
-        dead = True
         _fl = REFUSE_SAVE(MQ, 0x02)      # -> Report R "Tape loading error"
         LOG_ADD("SAVE refused: bad header CRC, drained %d byte(s)" % _fl,
                 2, TSP.LOG_LEVEL)
@@ -2128,7 +1969,6 @@ def SAVE_TS(MQ, TSP, pre=None):
     # before sending the data block and keeps the program -- Report J, "Invalid
     # I/O device". Put a card in and SAVE again.
     if getattr(TSP, "save_no_card", False):
-        dead = True
         _fl = REFUSE_SAVE(MQ, 0x0A)          # -> Report J
         LOG_ADD("SAVE refused: no SD card, drained %d byte(s)" % _fl, 1, TSP.LOG_LEVEL)
         return MQ, TSP, log_entries, False
@@ -2167,7 +2007,6 @@ def SAVE_TS(MQ, TSP, pre=None):
         if pre is not None and (pre[3] | (pre[4] << 8)) == nat["session"]:
             native_save = nat
     if native_save and native_save.get("refuse"):
-        dead = True
         _fl = REFUSE_SAVE(MQ, 0x0B)          # -> Report D, the user said N
         LOG_ADD("INFO: SAVE to %s not replaced" % native_save["path"], 0, TSP.LOG_LEVEL)
         return MQ, TSP, log_entries, False
@@ -2177,7 +2016,6 @@ def SAVE_TS(MQ, TSP, pre=None):
         save_name, name_ok = SAVE_NAME(hdr)
         if not name_ok:
             TLM("SAVE_TS EXIT filename not allowed", "%r" % save_name)
-            dead = True
             _fl = REFUSE_SAVE(MQ, 0x03)      # -> Report F "Invalid file name"
             LOG_ADD('ERROR: SAVE refused: filename "%s" not allowed, '
                     "drained %d byte(s)" % (save_name, _fl), 2, TSP.LOG_LEVEL)
@@ -2201,7 +2039,6 @@ def SAVE_TS(MQ, TSP, pre=None):
     # ------------------------------------------------------------------
     if blen == 0:
         TLM("SAVE_TS EXIT empty (BLEN=0), refusing")
-        dead = True
         _fl = REFUSE_SAVE(MQ, 0x08)      # -> Report A "Invalid argument"
         LOG_ADD("SAVE refused: empty program (BLEN=0), drained %d flood bytes"
                 % _fl, 2, TSP.LOG_LEVEL)
@@ -2228,7 +2065,6 @@ def SAVE_TS(MQ, TSP, pre=None):
             blk = bytearray(long)
         except MemoryError:
             TLM("SAVE_TS EXIT no memory", "need %d bytes" % long)
-            dead = True
             _fl = REFUSE_SAVE(MQ, 0x06)  # -> Report 6 "Number too big"
             LOG_ADD("SAVE refused: cannot allocate %d bytes, drained %d"
                     % (long, _fl), 2, TSP.LOG_LEVEL)
@@ -2269,7 +2105,6 @@ def SAVE_TS(MQ, TSP, pre=None):
         # byte is harmless -- the dispatcher's ACTIVATE_MQ discards it. If
         # it was merely slow, claiming OK meant it went on to stream a data
         # block into a returned handler, jamming RX for the next command.
-        dead = True
         _fl = REFUSE_SAVE(MQ, 0x02)  # -> Report R "Tape loading error"
         LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s), drained %d"
                 % _fl, 2, TSP.LOG_LEVEL)
@@ -2280,10 +2115,7 @@ def SAVE_TS(MQ, TSP, pre=None):
         # the Z80 went silent mid-block. The partial SAVE is discarded --
         # nothing is written to SD or flash. The Z80 is waiting for READY +
         # IDLE (BREAK) or has gone (stall); the dispatcher's re-arm after we
-        # return is the way back, with RECOVERED for a stall. (A stale
-        # watchdog `kill` from ZX48 mode would read as RXB_KILL: treated
-        # as a stall here too.)
-        dead = True
+        # return is the way back, with RECOVERED for a stall.
         if why == RXB_ABORT:
             LOG_ADD("INFO: SAVE stopped by BREAK after the Z80 sent %d of %d "
                     "bytes; nothing written." % (max(0, got - 1), long),
@@ -2317,7 +2149,6 @@ def SAVE_TS(MQ, TSP, pre=None):
         wrt(0x02)    # final status -> Report R
         wrt(0x01)    # next command's pre-load
         MQ_STATUS(MQ, "idle")
-        dead = True
         # Wait (bounded) for the Z80 to READ the 02 before returning: the
         # dispatcher's ACTIVATE_MQ rebuilds the SM, which throws an unread
         # TX FIFO away and stages its own 0x01 -- and the Z80 would print
@@ -2344,7 +2175,6 @@ def SAVE_TS(MQ, TSP, pre=None):
                      # back the GPIO 2-4 pin-grab race that #40 fixed.
     MQX(MQ, "mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from data phase)
 
-    dead = True
     totbytes = len(hdr) + long
     TLM("SAVE_TS final status sent", "%d bytes total, Y=READY" % totbytes)
 
@@ -2393,10 +2223,10 @@ def SAVE_TS(MQ, TSP, pre=None):
         mode = "wb"
         TSP.f_name = filename
 
-    # NOTE: do NOT call END_MSG() here either, for the same reason as in
+    # NOTE: write no other status here either, for the same reason as in
     # LOAD_TS. The two wrt(0x01) writes earlier already handled the final
-    # status + next-iter pre-load chain. An extra END_MSG would orphan a
-    # status byte in TX that corrupts the next transaction.
+    # status + next-iter pre-load chain. Another would orphan a status byte
+    # in TX that corrupts the next transaction.
 
     # ============================================================
     # Write the TAP to SD card. ENA_SD() switches GPIO 2-4 from PIO
