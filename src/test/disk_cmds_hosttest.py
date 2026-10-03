@@ -243,6 +243,22 @@ def test_prompt_each(t):
     t.CMD_KEY = lambda: keys.pop(0)
     t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
 
+    def nr(seq):
+        """The bytes alone (READY's exact place is CMD_SEND's business)."""
+        return [b for b in seq if b != "READY"]
+
+    def ready_after_data(seq):
+        """Every READY has at least one byte queued since the last key."""
+        since = 0
+        for b in seq:
+            if b == "READY":
+                if not since:
+                    return False
+                since = 0
+            elif b != "DRAIN":
+                since += 1
+        return True
+
     def run(k, prompts=("A?", "B?", "C?")):
         del tx[:]
         keys[:] = k
@@ -254,7 +270,8 @@ def test_prompt_each(t):
             ord("Y"), "READY", 0x0D, ord("B"), ord("?"), 0,
             ord(" "), "READY", 0x0D, ord("C"), ord("?"), 0,
             ord("y"), 0x03, "READY", "DRAIN"]
-    check(tx == want, "0x86, 1, then echo-READY-prompt-0 per key, echo 0x03 READY at the end")
+    check(nr(tx) == nr(want) and tx.count("READY") == 4 and ready_after_data(tx) and tx[-2:] == ["READY", "DRAIN"],
+          "0x86, 1, then echo-prompt-0 per key, echo 0x03 at the end; a READY per page, after its data")
     got = run([ord("Y"), ord("N")])
     check(got == [0] and tx[-1] == "READY" and 0x03 not in tx,
           "N: stops there, no 0x03 (the ROM already left its loop)")
@@ -267,15 +284,15 @@ def test_prompt_each(t):
         keys[:] = [k]
         return t.SEND_MSG_PROMPT_YN("Replace x? (Y/N)", lower=lower)
     got = yn(ord("y"), True)
-    check(got == ord("y") and tx[:3] == [0x88, 1, "READY"] and tx[3] == ord("R"),
-          "0x88, status, READY, then the prompt at once -- no leading new line (%r)" % tx[:4])
+    check(got == ord("y") and nr(tx)[:3] == [0x88, 1, ord("R")] and ready_after_data(tx),
+          "0x88, status, then the prompt at once -- no leading new line; READY after data (%r)" % tx[:5])
     k = tx.index(0)
-    check(tx[k + 1:k + 5] == [ord("y"), 0x0D, 0x03, "READY"],
+    check(tx[k + 1:k + 5] == [ord("y"), 0x0D, 0x03, "READY"],  # (3 bytes: all in TX, then READY)
           "after the key: its echo, a new line for the ROM's next message, 0x03, READY (%r)" % tx[k + 1:])
     got = yn(ord("N"), True)
     check(got == ord("N") and 0x0D not in tx[tx.index(0):] and 0x03 not in tx, "N: nothing after the key")
     yn(ord("y"), False)
-    check(tx[:4] == [0x86, 1, 0x0D, "READY"] and 0x0D not in tx[tx.index(0):],
+    check(nr(tx)[:3] == [0x86, 1, 0x0D] and ready_after_data(tx) and 0x0D not in tx[tx.index(0):],
           "main screen (0x86): the leading new line and echo as before, no extra one")
 
 
