@@ -181,6 +181,67 @@ def test_info(t):
           "card in, nothing mounted: blue strip, no red")
 
 
+def test_tapdir(t):
+    print("CAT \"\" (TAPDIR_COLOUR)")
+    head = ("File:%-27s" % "/GAMES/manic.tap") + "Pointer at block: 02, Append:off"
+    blocks = [[0, 19, " Y", "manic     "], [21, 1236, " N", "Program"],
+              [1259, 19, " Y", "manicscr  "], [1280, 6914, " N", "Code block"]]
+    rows = [(">" if i == 2 else " ") + "%02d %6s  %5s %s  %-10s" % (i, e[0], e[1], e[2], e[3])
+            for i, e in enumerate(blocks)]
+    text = head + "Blk  Start   Len  Hdr?  Desc.   " + "-" * 32 + "".join(rows)
+    out = t.TAPDIR_COLOUR(text, False)
+    lines = screen(out)
+    check(lines[:3] == [head[:32], head[32:], "Blk  Start   Len  Hdr?  Desc.   "] and len(lines) == 3 + 4,
+          "header on two bar lines and the titles; the dashed line gone (%r)" % lines[:4])
+    check(lines[3:] == rows, "block rows unchanged as text")
+    cs = codes(out)
+    check(cs[:4] == [(0x11, 1), (0x10, 7), (0x11, 5), (0x10, 9)], "blue bar, cyan titles (%r)" % cs[:4])
+    i = out.index(rows[2])
+    check(out[i - 4:i] == "\x11\x06\x10\x09", "the block LOAD reads next is on a yellow row")
+    i0 = out.index(rows[0][3:])
+    check(out[i0 - 2:i0] == "\x10\x01" and out[out.index(rows[1][3:]) - 2:out.index(rows[1][3:])] == "\x10\x08",
+          "headers in blue, data in the screen's ink")
+    check(all(v not in (0, 3) for _, v in cs), "no value the ROM can't take")
+    hrows = [" 00 Program       1236 manic     ", ">02 Code block    6914 manicscr  "]
+    hrows = [r[:32] for r in hrows]
+    out = t.TAPDIR_COLOUR(head + "Blk Type         Len  Name      " + "-" * 32 + "".join(hrows), True)
+    check(screen(out)[3:] == hrows and "\x11\x06\x10\x09" + hrows[1] in out, "the CODE 1 view: same rules")
+    empty = head + "Blk  Start   Len  Hdr?  Desc.   " + "-" * 32 + "<empty file>\r"
+    check(screen(t.TAPDIR_COLOUR(empty, False))[3] == "<empty file>", "an empty file still says so")
+    check(t.TAPDIR_COLOUR(" --  No .TAP file mounted!  --  ", False) == " --  No .TAP file mounted!  --  ",
+          "nothing mounted: plain")
+
+
+def test_listmenu(t):
+    print("The tpi:cd menu (ListMenu)")
+    out = []
+    t.CMD_PUT = lambda b: out.append(b if isinstance(b, int) else ord(b))
+    t.MQ_READY = lambda: None
+    t.CMD_DRAIN = lambda: None
+    t.CMD_KEY = lambda: 78                                       # N: quit at the first prompt
+    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
+    t.ListMenu(["GAMES", "UTILS"], "Path:/", "  Directory Name", "  " + "-" * 30,
+               "Change to dir", "Changing dir to: ", True)
+    text = "".join(chr(b) for b in out[2:])                      # past 86h and the status
+    lines = screen(text.split("\x00")[0])
+    check(lines[2] == "Path:/".ljust(32) and lines[3].startswith("  Directory Name") and lines[3].endswith("1 of 1"),
+          "the path on the bar line, the titles with the page (%r)" % lines[2:4])
+    check(lines[4] == "0 GAMES" and "-" * 30 not in text, "rows follow the titles; no dashed line (%r)" % lines[4:6])
+    check("\x11\x05\x10\x090" + t.NORMAL_ in text, "the choice letter on a cyan chip")
+    check("\x10\x01GAMES\x10\x08" in text, "a folder in blue")
+    check(all(v not in (0, 3) for _, v in codes(text)), "no value the ROM can't take")
+
+
+def test_polish(t):
+    print("Small polish (v1.29 hardware pass)")
+    check(all(len(l) <= 32 for l in t.NO_CARD_MSG.split("\r")),
+          "the no-card message breaks before 'try again', not mid-word (%r)" % t.NO_CARD_MSG)
+    for stamp, want in (("b7a2e91 (main)", "b7a2e91 (main)"),
+                        ("650565f (micropython-1-29)", "650565f (micropytho..)"),
+                        ("unknown", "unknown")):
+        check(t.BUILD_FIT(stamp, 22) == want, "Build line %r -> %r" % (stamp, t.BUILD_FIT(stamp, 22)))
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -194,6 +255,9 @@ def main():
     test_send_msg2(t)
     test_cat_colour(t)
     test_info(t)
+    test_tapdir(t)
+    test_listmenu(t)
+    test_polish(t)
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
     return 0 if ok else 1

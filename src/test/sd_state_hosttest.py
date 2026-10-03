@@ -11,7 +11,7 @@ The SD card is a state now, not a condition for running (issue #43):
     and the mounted file are kept if the card has them; a different card
     turns append off and drops open channels.
   * A command that needs the card, with none in, looks once more and then
-    answers "No SD card. Insert one and try again." (always shown) with
+    answers "No SD card. Insert one and / try again." (always shown) with
     Report J; channel commands get a bare J. Commands that don't need the
     card run as before.
   * SD_CALL answers J and that message when the card is missing.
