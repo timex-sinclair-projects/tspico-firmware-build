@@ -156,7 +156,7 @@ def MQ_STATUS(MQ, st):
         MQX(MQ, "mov(y, invert(y))")
 
 
-def RX_CAPTURE(MQ, raw, n, stall_ms):
+def RX_CAPTURE(MQ, raw, n, stall_ms, ready=None):
     """Take a burst of n words from the Z80 into raw, an array('H') (the
     words are 9-bit). Returns:
 
@@ -176,6 +176,10 @@ def RX_CAPTURE(MQ, raw, n, stall_ms):
     # 4-deep FIFO overflows and bytes go missing from the middle of the
     # pre-header ("Partial pre-header 8/10" -> RECOVERED -> Report T,
     # hardware 2026-09-27). Direct calls allocate nothing.
+    if _ring is not None:                   # by DMA (RX_RING): the same results
+        code, got = RX_RING(_ring, MQ, raw, True, n, stall_ms, stall_ms, -1, ready)
+        return -got if code == RXB_ABORT else got
+    SAY_READY(MQ, ready)                    # (ready: see RX_RING)
     got = 0
     while got < n:
         if MQ.rx_fifo():
@@ -232,10 +236,13 @@ class RxDMA:
         return self.n - self.d.count if self.armed else 0
 
     def stop(self):
-        """Stop the channel; the words it took."""
+        """Stop the channel. Its count is read BEFORE: once stopped, the
+        count no longer says how far it got (hardware, 2026-10-03: a lone
+        SYNC came back as -10, all ten words, instead of -1)."""
+        g = self.n - self.d.count
         self.d.active(0)
         self.armed = False
-        return self.n - self.d.count
+        return g
 
     def take(self, stall_ms):
         """Wait for the rest of the burst. Returns as RX_CAPTURE: n, k for k
@@ -389,9 +396,11 @@ def ECHO_KEEP(echo, w):
         echo[0] = n + 1
 
 
-def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
+def STREAM_DMA(MQ, buf, echo, stall_ms, ready, first_ms=0):
     """Send buf (bytes) to the Z80 through the bus state machine's TX FIFO
-    by DMA, and say READY once it is moving if `ready`. Returns (why, sent, word), or None when DMA
+    by DMA, and say READY once it is moving: `ready` True for READY + IDLE,
+    a function (CH_READY, MQ_READY) to say it some other way, False when
+    the caller already has -- and the Z80 isn't reading yet. Returns (why, sent, word), or None when DMA
     isn't available -- the caller then streams by hand, as before.
 
       why 0  all of buf went into the FIFO (the Z80 reads the last few
@@ -412,7 +421,15 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
     a byte write across the word, and TS_IO_DUAL outputs bits 0-7.
 
     Meanwhile core0 only listens: the Z80's echo bytes go into echo (as
-    TX_ROOM keeps them), a port-0Fh write or a stall ends it."""
+    TX_ROOM keeps them), a port-0Fh write or a stall ends it. first_ms, if
+    given, is the stall limit until the Z80 has taken more than the first
+    FIFO-full (romupdate erases the slot for seconds before it reads).
+
+    The channel MUST be running before the Z80 starts reading blind:
+    setting it up takes a few hundred us on v1.29 -- ten of romupdate's
+    33 us reads -- so never start this behind a READY the Z80 is already
+    acting on. Say READY through `ready` instead (hardware, 2026-10-03: ten
+    empty reads at the start of a romupdate put 00s into the flash)."""
     if _DMA is None:
         return None
     try:
@@ -426,9 +443,12 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
         d.config(read=buf, write=MQ, count=n,
                  ctrl=d.pack_ctrl(size=0, inc_read=True, inc_write=False, treq_sel=0),
                  trigger=True)
-        if ready:
+        if ready is True:
             MQX(MQ, "mov(y, invert(null))")            # READY: the FIFO is full by now
+        elif ready:
+            ready()
         last = n
+        limit = first_ms or stall_ms
         t0 = time.ticks_ms()
         while d.active():
             if MQ.rx_fifo():
@@ -445,12 +465,14 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
             if c != last:
                 last = c
                 t0 = time.ticks_ms()
-            elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                if n - c > 2 * TX_DEPTH:
+                    limit = stall_ms                    # the Z80 is reading now
+            elif time.ticks_diff(time.ticks_ms(), t0) >= limit:
                 why = 3
                 break
+        sent = n - d.count              # before stopping: see RxDMA.stop
         if why:
             d.active(0)
-        sent = n - d.count
     finally:
         d.close()
     return why, sent, word
@@ -473,7 +495,113 @@ RXB_ABORT = const(1)    # a write to port 0Fh (BREAK / SYNC); the Z80 waits for 
 RXB_STALL = const(3)    # silence: first_ms before the first byte, stall_ms after
 
 
-def RX_BLOCK(MQ, buf, n, first_ms, stall_ms):
+# ─── Receive by DMA: a ring buffer behind the RX FIFO ─────────────────────
+# The Z80 writes a SAVE block, a command body or a printer body ~30-43 us a
+# byte with no handshake, into a 4-deep RX FIFO: ~120-170 us of slack, and a
+# GC, a USB interrupt or a flash write on v1.29 is longer (dma_rx_harness:
+# polling lost 400-13979 words under those stalls, DMA none). So while
+# RX_BLOCK / RX_CAPTURE run, a DMA channel paced by the RX DREQ (4: PIO0,
+# state machine 0) drains the FIFO into a 1024-word ring in RAM -- ~44 ms of
+# slack instead of ~0.15 ms -- and core0 copies the words out of the ring at
+# its own pace. The channel and the ring are made once, at import: never
+# an allocation on the time-critical path. Without rp2.DMA (v1.20, the host
+# tests) both fall back to polling the FIFO, as before.
+_RING_BITS = const(12)              # the ring: 4096 bytes, 1024 words, 4096-aligned
+_RING_WORDS = const(1024)
+
+
+def _RING_SETUP():
+    """(channel, ring address, ctrl, the memory kept alive, mem32), or None."""
+    if _DMA is None or _mem32 is None:
+        return None
+    try:
+        import uctypes
+        mem = bytearray(2 << _RING_BITS)
+        base = uctypes.addressof(mem)
+        addr = base + ((-base) & ((1 << _RING_BITS) - 1))
+        d = _DMA()
+        ctrl = d.pack_ctrl(size=2, inc_read=False, inc_write=True,
+                           ring_size=_RING_BITS, ring_sel=True, treq_sel=4)
+        return d, addr, ctrl, mem, _mem32
+    except Exception:
+        return None
+
+
+_ring = _RING_SETUP()
+
+
+def SAY_READY(MQ, ready):
+    """READY for a receive: "ready" (READY + IDLE), "mid" (READY with the
+    transaction open), None: nothing."""
+    if ready == "mid":
+        MQ_STATUS(MQ, "mid")
+    elif ready:
+        MQX(MQ, "mov(y, invert(null))")
+
+
+def RX_RING(ring, MQ, out, wide, n, first_ms, stall_ms, len_at=-1, ready=None):
+    """Take n words from the Z80 by DMA into out: the 9-bit words if wide (an
+    array), else their low bytes (a bytearray). Returns (code, words taken),
+    code one of RXB_*, exactly as RX_BLOCK. Leaves the channel stopped; words
+    the Z80 sends after the n (or after a stop) stay in the FIFO.
+
+    len_at >= 0: word len_at is a length, and the burst ends that many words
+    after it (n is then the most it can be). One run for a header and what
+    follows it: two runs back to back lose the bytes the Z80 sends while
+    the second is being set up (hardware, 2026-10-03: a ZX tpi: name lost 3
+    of 13 bytes, Report J).
+
+    ready: what to tell the Z80 once the channel is running -- "ready"
+    (READY + IDLE) or "mid" (READY, transaction open) -- or None if the
+    caller already has. The Z80 sends the moment it sees READY, and setting
+    the channel up takes long enough to lose bytes behind it (a ZX tpi:
+    name lost 1 of 15, hardware 2026-10-03): channel first, then READY."""
+    d, addr, ctrl, _, m32 = ring
+    if n <= 0:
+        SAY_READY(MQ, ready)
+        return RXB_OK, 0
+    total = n                               # what the channel is set for
+    d.config(read=MQ, write=addr, count=total, ctrl=ctrl, trigger=True)
+    SAY_READY(MQ, ready)
+    mask = _RING_WORDS - 1
+    got = 0
+    w = 0
+    limit = first_ms
+    code = RXB_OK
+    t0 = time.ticks_ms()
+    try:
+        while got < n:
+            pos = total - d.count
+            if pos > n:
+                pos = n
+            if pos > got:
+                if pos - got > _RING_WORDS:     # core0 was away ~44 ms: words overwritten
+                    code = RXB_STALL
+                    break
+                while got < pos:
+                    w = m32[addr + ((got & mask) << 2)] & 0x1FF
+                    out[got] = w if wide else w & 0xFF
+                    got += 1
+                    if got == len_at + 1:       # the length: now n is known
+                        n = min(n, got + (w & 0xFF))
+                        if pos > n:
+                            pos = n
+                limit = stall_ms
+                t0 = time.ticks_ms()
+            elif w & PORT_0F:                   # nothing follows a 0Fh write
+                code = RXB_ABORT
+                break
+            elif time.ticks_diff(time.ticks_ms(), t0) >= limit:
+                code = RXB_STALL
+                break
+    finally:
+        d.active(0)
+    if code == RXB_OK and w & PORT_0F:
+        code = RXB_ABORT
+    return code, got
+
+
+def RX_BLOCK(MQ, buf, n, first_ms, stall_ms, ready=None):
     """Take a SAVE data block of n bytes from the Z80 into buf (a bytearray).
     Returns (code, words taken), code one of RXB_*.
 
@@ -487,7 +615,12 @@ def RX_BLOCK(MQ, buf, n, first_ms, stall_ms):
     Allocation-free per byte: the bound methods are taken ONCE per call.
     Storing one per byte (as TX_ROOM once did) allocates 16 bytes each time,
     and the GCs that follow freeze the Pico mid-block -- see alloc_probe.py.
+
+    By DMA where there is one (RX_RING); this polling loop otherwise.
     """
+    if _ring is not None:
+        return RX_RING(_ring, MQ, buf, False, n, first_ms, stall_ms, -1, ready)
+    SAY_READY(MQ, ready)                    # (ready: see RX_RING)
     rx = MQ.rx_fifo
     get = MQ.get
     got = 0
@@ -1733,12 +1866,13 @@ def LOAD_ZX(MQ, TSP):
     primed = False      # TX has been full once; only then does empty mean late
 
     put(blk_info[2])                        # the flag
-    MQX(MQ, "mov(y, invert(null))")         # READY
 
     # totbytes counts flag + content + CRC; the flag is already queued.
     r = None
-    if whole is not None:
-        r = STREAM_DMA(MQ, whole, None, ZX_STALL_MS, False)  # see LOAD_TS
+    if whole is not None:                   # by DMA, READY once it runs (see LOAD_TS)
+        r = STREAM_DMA(MQ, whole, None, ZX_STALL_MS, True)
+    if r is None:
+        MQX(MQ, "mov(y, invert(null))")     # READY
     if r is not None:
         sent += r[1]
         if r[0] == 4:
@@ -2140,8 +2274,7 @@ def SAVE_TS(MQ, TSP, pre=None):
     # READY here, not in the dispatcher: the Z80 sends all 21 bytes the
     # moment it sees it, and nothing may run between this and the capture.
     raw = _SAVE_HDR_RAW
-    MQ_STATUS(MQ, "mid")
-    got = RX_CAPTURE(MQ, raw, 21, 1000)
+    got = RX_CAPTURE(MQ, raw, 21, 1000, "mid")      # READY once it is listening
     if got != 21:
         if got < 0:
             LOG_ADD("INFO: SAVE stopped by BREAK in the header block "
@@ -2327,7 +2460,7 @@ def SAVE_TS(MQ, TSP, pre=None):
     # The Z80 can take up to ~1 s to start the data block after reading the
     # status (it does internal processing), so the first byte gets 1 s;
     # after that, 1 s of silence mid-block means it has gone.
-    why, got = RX_BLOCK(MQ, blk, long, 1000, 1000)
+    why, got = RX_BLOCK(MQ, blk, long, 1000, 1000, "mid")
 
     if why == RXB_STALL and got == 0:
         TLM("SAVE_TS EXIT no data after 1s")
@@ -2593,8 +2726,7 @@ def SAVE_ZX(MQ, TSP):
 
     # READY: we are here and listening. The Z80's 'S' dropped Y (PIO
     # auto-busy), and the ZX v2 ROM polls $0F before sending.
-    MQX(MQ, "mov(y, invert(null))")
-    code, got = RX_BLOCK(MQ, hdr, 21, ZX_STALL_MS, ZX_STALL_MS)
+    code, got = RX_BLOCK(MQ, hdr, 21, ZX_STALL_MS, ZX_STALL_MS, "ready")
     if code != RXB_OK:
         return fail("the header block stopped after %d of 21 bytes" % got, False)
     if hdr[0] != 17 or hdr[1] != 0 or hdr[2] != 0 or _xor(hdr, 2, 21):
@@ -2613,9 +2745,8 @@ def SAVE_ZX(MQ, TSP):
         LOG_ADD("ERROR: ZX SAVE: no data block after the header (%s); nothing saved."
                 % ("silence" if w < 0 else "got 0x%02X" % (w & 0xFF)), 2, TSP.LOG_LEVEL)
         return MQ, TSP, log_entries, w
-    MQX(MQ, "mov(y, invert(null))")   # READY again for the data block's poll
-
-    code, got = RX_BLOCK(MQ, blk, n + 4, ZX_STALL_MS, ZX_STALL_MS)
+    # READY again for the data block's poll -- once RX_BLOCK is listening.
+    code, got = RX_BLOCK(MQ, blk, n + 4, ZX_STALL_MS, ZX_STALL_MS, "ready")
     if code != RXB_OK:
         return fail("the data block stopped after %d of %d bytes" % (got, n + 4), False)
     if blk[0] + 256 * blk[1] != n or _xor(blk, 2, n + 4):

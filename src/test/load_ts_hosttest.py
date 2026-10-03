@@ -180,6 +180,7 @@ class FakeDMA:
     def active(self, v=None):
         if v is not None:
             self.on = bool(v)
+            self.stopped = not v            # as on hardware: count is meaningless after
             return None
         self.pio.pump()
         self._move()
@@ -187,6 +188,8 @@ class FakeDMA:
 
     @property
     def count(self):
+        if getattr(self, "stopped", False):
+            return 0
         self._move()
         return self.n - self.i
 
@@ -524,6 +527,8 @@ def main():
               "BREAK mid-block: heard while the DMA runs, Report D, idle (%s)" % r)
         check(FakeDMA.made[-1].i < len(data), "  the channel was stopped part way (%d of %d)"
               % (FakeDMA.made[-1].i, len(data) + 1))
+        read = int(log.split("read ")[1].split(" of")[0]) if "read " in log else -1
+        check(0 < read < len(data), "  the log's byte count is where it stopped, not the whole block (%d)" % read)
         r1, _ = load(pio, 0x00, len(header))
         r2, _ = load(pio, 0xFF, len(data))
         check(r1 == r2 == "ok", "  and the next LOAD works first time (%s, %s)" % (r1, r2))

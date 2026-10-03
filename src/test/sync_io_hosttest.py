@@ -185,14 +185,18 @@ def main():
 
         def config(self, read, write, count, ctrl, trigger):
             self.mq, self.buf, self.n, self.i, self.on = read, write, count, 0, bool(trigger)
+            self.stopped = False
 
         def active(self, v=None):
             if v is not None:
                 self.on = bool(v)
-            return self.on
+                self.stopped = not v        # as on hardware: a stopped channel's
+            return self.on                  # count no longer says how far it got
 
         @property
         def count(self):
+            if self.stopped:
+                return 0
             while self.on and self.i < self.n and self.mq.rx:
                 self.buf[self.i] = self.mq.rx.pop(0)
                 self.i += 1
@@ -251,6 +255,93 @@ def main():
            or (isinstance(n, ast.Assign) and isinstance(n.value, ast.Attribute)
                and n.value.attr in ("get", "rx_fifo", "active", "stop", "ticks_ms"))]
     check(not bad, "take() builds nothing and stores no bound methods (%s)" % bad)
+
+    print("RX_RING (RX_BLOCK / RX_CAPTURE by DMA, v1.29)")
+
+    class FakeRing:
+        """A DMA channel writing RX words into a 1024-word ring at ADDR."""
+        ADDR = 0x20010000
+
+        def __init__(self):
+            self.mem = {}
+            self.on = False
+            self.burst = 4          # words the Z80 writes between two looks from core0
+
+        def config(self, read, write, count, ctrl, trigger):
+            assert write == self.ADDR and ctrl == "ring"
+            self.mq, self.n, self.i, self.on = read, count, 0, bool(trigger)
+
+        def active(self, v=None):
+            if v is not None:
+                self.on = bool(v)
+            return self.on
+
+        @property
+        def count(self):
+            k = self.burst
+            while self.on and self.i < self.n and self.mq.rx and k:
+                k -= 1
+                self.mem[self.ADDR + ((self.i & 1023) << 2)] = self.mq.rx.pop(0)
+                self.i += 1
+            if self.i >= self.n:
+                self.on = False
+            return self.n - self.i
+
+    ch = FakeRing()
+    ring = (ch, FakeRing.ADDR, "ring", None, ch.mem)
+    blk = bytearray(3000)
+    data = [(i * 7) & 0xFF for i in range(3000)]
+    mq = FakeMQ(rx=data)
+    code, got = io.RX_RING(ring, mq, blk, False, 3000, 1000, 1000)
+    check(code == io.RXB_OK and got == 3000 and list(blk) == data and not ch.on,
+          "a 3000-byte block through the 1024-word ring: every byte, in order, channel stopped")
+    mq = FakeMQ(rx=data[:500] + [0x103])
+    code, got = io.RX_RING(ring, mq, blk, False, 3000, 1000, 1000)
+    check(code == io.RXB_ABORT and got == 501, "BREAK mid-block: RXB_ABORT after 501 words (%d)" % got)
+    t0 = io.time.ms
+    mq = FakeMQ(rx=data[:700])
+    code, got = io.RX_RING(ring, mq, blk, False, 3000, 1000, 1000)
+    check(code == io.RXB_STALL and got == 700 and io.time.ms - t0 >= 1000,
+          "the Z80 stops: RXB_STALL after stall_ms, 700 taken")
+    mq = FakeMQ(rx=data + data)
+    ch.burst = 6000                                      # all at once: core0 away ~260 ms
+    code, got = io.RX_RING(ring, mq, bytearray(6000), False, 6000, 1000, 1000)
+    ch.burst = 4
+    check(code == io.RXB_STALL and got == 0,
+          "more than the ring holds before core0 looks: refused, not silently wrong")
+    raw = array("H", [0] * 10)
+    mq = FakeMQ(rx=pre + [0x41])
+    code, got = io.RX_RING(ring, mq, raw, True, 10, 1000, 1000)
+    check(code == io.RXB_OK and list(raw) == pre and mq.rx == [0x41],
+          "wide (RX_CAPTURE): 9-bit words kept; the word after the n stays in the FIFO")
+    name = b"AutoLyzer.tap"
+    # (The ZX ROM sends nothing more until READY, so nothing follows here.)
+    mq = FakeMQ(rx=[1, len(name)] + list(name))
+    both = bytearray(257)
+    t0 = io.time.ms
+    code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1)
+    check(code == io.RXB_OK and got == 2 + len(name) and bytes(both[2:got]) == name
+          and io.time.ms - t0 < 100 and not ch.on,
+          "len_at=1 (ZX tpi: op, length, name in one run): 2 + 13 words, done at once (%d)" % got)
+    mq = FakeMQ(rx=[1, 0])
+    t0 = io.time.ms
+    code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1)
+    check(code == io.RXB_OK and got == 2 and io.time.ms - t0 < 100, "len_at with a length of 0: 2 words")
+    seen = []
+    mq = FakeMQ(rx=[1, 2, 0x41, 0x42])
+    real_exec = mq.exec
+    mq.exec = lambda instr: (seen.append(ch.on), real_exec(instr))
+    io.MQX, saved_mqx = (lambda m, instr: m.exec(instr)), io.MQX
+    code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1, "ready")
+    io.MQX = saved_mqx
+    check(code == io.RXB_OK and seen and all(seen) and mq.status() == 0xFF,
+          "ready='ready': READY is said with the channel already running (%s)" % seen)
+    io._ring = ring
+    mq = FakeMQ(rx=pre[:3] + [0x103])
+    check(io.RX_CAPTURE(mq, raw, 10, 1000) == -4, "RX_CAPTURE by ring: a SYNC after 3 words gives -4")
+    mq = FakeMQ(rx=data[:100])
+    check(io.RX_BLOCK(mq, blk, 100, 1000, 1000) == (io.RXB_OK, 100), "RX_BLOCK by ring: 100 bytes")
+    io._ring = None
 
     print("MQ_STATUS")
     for st, want in (("idle", 0xFF), ("mid", 0xF7), ("recovered", 0xFB)):

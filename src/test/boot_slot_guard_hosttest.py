@@ -103,6 +103,14 @@ def blkrcv(t, sent):
     return sent[-1] if sent else None
 
 
+def test_nothing_mounted(t, image):
+    print("nothing mounted (TSP.f_name is [] after boot; hardware 2026-10-03: Report J)")
+    sent = setup(t, (2, 1), (2, 4), [], image)
+    r = memdock(t, sent, 2, 0)
+    check(r[2] == t._1_OK and t.getDock() == (2, 0),
+          "tpi:memdock CODE 2,0 with no file mounted: OK, DOCK moved (%r)" % (r,))
+
+
 def test_rom(t, image):
     print(".ROM mounted, booted from Flash slot 4 (the 2026-09-28 incident)")
     sent = setup(t, (2, 4), (2, 0), "/sd/TAP/TEST.ROM", image)
@@ -184,6 +192,7 @@ def main():
     with os.fdopen(fd, "wb") as f:
         f.write(bytes(range(256)) * 3 + b"tail")               # not a multiple of 256
     try:
+        test_nothing_mounted(t, image)
         test_rom(t, image)
         test_sram_boot(t, image)
         test_dck(t, image)
