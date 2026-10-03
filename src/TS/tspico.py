@@ -6275,9 +6275,9 @@ def TS2068_IO():                                                         # Main 
                         # straight back to the capture -- nothing slow after IDLE,
                         # the pre-header follows within microseconds.
                         MQ_TO_IDLE(MQ, status=False)
-                        TLM("Pre-header: 0Fh write", "%s" % " ".join(
-                            "%03X" % pre_raw[i] for i in range(-got)))
-                        if got != -1:
+                        if got != -1:               # a lone SYNC is every command: not logged
+                            TLM("Pre-header: 0Fh write", "%s" % " ".join(
+                                "%03X" % pre_raw[i] for i in range(-got)))
                             LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
                         # A log write on core1 (SAVE_LOG) stops BOTH cores while it
                         # programs flash, and the Z80 sends its pre-header the moment
