@@ -6,6 +6,10 @@ import time
 import utime
 
 from rp2 import StateMachine, asm_pio, PIO
+try:
+    from rp2 import DMA as _DMA        # MicroPython v1.22+: the LOAD stream by DMA (STREAM_DMA)
+except ImportError:                    # v1.20, or the host tests' fake rp2: by hand
+    _DMA = None
 from machine import Pin, freq, SPI
 
 from TS.sdcard import *
@@ -302,6 +306,73 @@ def ECHO_KEEP(echo, w):
     if n < 2:
         echo[n + 1] = w & 0xFF
         echo[0] = n + 1
+
+
+def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
+    """Send buf (bytes) to the Z80 through the bus state machine's TX FIFO
+    by DMA, and say READY once it is moving if `ready`. Returns (why, sent, word), or None when DMA
+    isn't available -- the caller then streams by hand, as before.
+
+      why 0  all of buf went into the FIFO (the Z80 reads the last few
+             after this returns, as with the hand loop)
+          1  a write to port 0Fh: BREAK, or a SYNC after a 2068 reset
+          3  the Z80 stopped reading for stall_ms (TX_ROOM's codes)
+          4  echo is None (ZX48 mode) and the Z80 wrote a word -- any word,
+             0Fh included, as ZX_ROOM: in `word`, for ZX48_IO to dispatch
+      sent   bytes of buf the DMA moved (it is stopped when why != 0)
+
+    Why DMA (hardware, 2026-10-03): the ROMs read a LOAD block blind, a byte
+    every ~47 us, from a 4-deep FIFO -- ~190 us of slack. A GC, a USB
+    interrupt or a flash write can be longer, and the FIFO runs dry; the
+    DMA channel feeds it in hardware, paced by the state machine's "TX not
+    full" request (DREQ 0: PIO0, state machine 0), whatever core0 is doing.
+    src/test/dma_tx_harness.py: 0 dry reads under every stall, against
+    104-1498 for a Python loop. It writes bytes; the FIFO register repeats
+    a byte write across the word, and TS_IO_DUAL outputs bits 0-7.
+
+    Meanwhile core0 only listens: the Z80's echo bytes go into echo (as
+    TX_ROOM keeps them), a port-0Fh write or a stall ends it."""
+    if _DMA is None:
+        return None
+    try:
+        d = _DMA()
+    except Exception:                  # no free channel: by hand
+        return None
+    n = len(buf)
+    why = 0
+    word = -1
+    try:
+        d.config(read=buf, write=MQ, count=n,
+                 ctrl=d.pack_ctrl(size=0, inc_read=True, inc_write=False, treq_sel=0),
+                 trigger=True)
+        if ready:
+            MQX(MQ, "mov(y, invert(null))")            # READY: the FIFO is full by now
+        last = n
+        t0 = time.ticks_ms()
+        while d.active():
+            if MQ.rx_fifo():
+                w = MQ.get()
+                if echo is None:
+                    why = 4
+                    word = w
+                    break
+                if w & PORT_0F:
+                    why = 1
+                    break
+                ECHO_KEEP(echo, w)
+            c = d.count
+            if c != last:
+                last = c
+                t0 = time.ticks_ms()
+            elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                why = 3
+                break
+        if why:
+            d.active(0)
+        sent = n - d.count
+    finally:
+        d.close()
+    return why, sent, word
 
 
 def RX_WORD(MQ, stall_ms):
@@ -1164,7 +1235,16 @@ def LOAD_TS(pre, MQ, TSP):
     # 1024th byte queued. One AND per byte; the clock is read 1/1024 bytes.
     prof = array("I", bytes(4 * ((totbytes >> 10) + 1)))
 
+    r = None
     if hdr is not None:
+        # By DMA where there is one (v1.29): immune to core0's pauses.
+        r = STREAM_DMA(MQ, hdr, echo, 3000, True)
+    if r is not None:
+        primed = True
+        t_ready = time.ticks_ms()
+        why = r[0]
+        sent += r[1]
+    elif hdr is not None:
         # Stream from RAM (the block, read whole above).
         for b in hdr:
             n = txf()
@@ -1575,7 +1655,16 @@ def LOAD_ZX(MQ, TSP):
     MQX(MQ, "mov(y, invert(null))")         # READY
 
     # totbytes counts flag + content + CRC; the flag is already queued.
+    r = None
     if whole is not None:
+        r = STREAM_DMA(MQ, whole, None, ZX_STALL_MS, False)  # see LOAD_TS
+    if r is not None:
+        sent += r[1]
+        if r[0] == 4:
+            nxt = r[2]
+        elif r[0]:
+            nxt = -2
+    elif whole is not None:
         for b in whole:
             n = txf()
             if n >= TX_DEPTH:
