@@ -327,6 +327,15 @@ def main():
     t0 = io.time.ms
     code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1)
     check(code == io.RXB_OK and got == 2 and io.time.ms - t0 < 100, "len_at with a length of 0: 2 words")
+    seen = []
+    mq = FakeMQ(rx=[1, 2, 0x41, 0x42])
+    real_exec = mq.exec
+    mq.exec = lambda instr: (seen.append(ch.on), real_exec(instr))
+    io.MQX, saved_mqx = (lambda m, instr: m.exec(instr)), io.MQX
+    code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1, "ready")
+    io.MQX = saved_mqx
+    check(code == io.RXB_OK and seen and all(seen) and mq.status() == 0xFF,
+          "ready='ready': READY is said with the channel already running (%s)" % seen)
     io._ring = ring
     mq = FakeMQ(rx=pre[:3] + [0x103])
     check(io.RX_CAPTURE(mq, raw, 10, 1000) == -4, "RX_CAPTURE by ring: a SYNC after 3 words gives -4")

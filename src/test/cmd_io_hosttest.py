@@ -392,9 +392,9 @@ def main():
             check(not walks, "%s: no heap walk (gc.collect / gc.mem_free) on every SYNC / transaction %s"
                   % (name, [code[k] for k in walks]))
             pc = src[src.index("def PROCESS_CMD("):src.index("def TS2068_IO(")]
-            a = pc.index('MQ_STATUS(MQ, "mid")')
-            check(pc[a:].split("\n")[1].strip().startswith("got = RX_CAPTURE(MQ, raw, long,"),
-                  "%s: PROCESS_CMD says READY straight before the body capture" % name)
+            check('got = RX_CAPTURE(MQ, raw, long, BODY_READ_TIMEOUT_MS, "mid")' in pc
+                  and 'MQ_STATUS(MQ, "mid")\n    got = RX_CAPTURE' not in pc,
+                  "%s: PROCESS_CMD's body capture says READY itself, once it is listening" % name)
             for fn in ("SEND_MSG", "SEND_MSG2", "ListMenu", "SEND_MSG_PROMPT_YN"):
                 body = src[src.index("def %s(" % fn):]
                 body = body[:body.index("\ndef ", 5)]

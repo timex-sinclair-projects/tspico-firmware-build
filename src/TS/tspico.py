@@ -5478,8 +5478,7 @@ def PRINT_IO(pre):
     ok = True
     if n:
         body = bytearray(n + 4)
-        MQ_STATUS(MQ, "mid")
-        why, got = RX_BLOCK(MQ, body, n + 4, 1000, 1000)
+        why, got = RX_BLOCK(MQ, body, n + 4, 1000, 1000, "mid")    # READY once listening
         if why:
             MQ_TO_IDLE(MQ, recovered=(why != RXB_ABORT))
             LOG("Printer body %s after %d of %d bytes" % (
@@ -5714,8 +5713,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     # and the dispatcher said it before its own logging. RX_CAPTURE ends on
     # a port-0Fh write (BREAK / SYNC) or on silence instead of hanging.
     raw = array("H", bytes(2 * long))
-    MQ_STATUS(MQ, "mid")
-    got = RX_CAPTURE(MQ, raw, long, BODY_READ_TIMEOUT_MS)
+    got = RX_CAPTURE(MQ, raw, long, BODY_READ_TIMEOUT_MS, "mid")   # READY once listening
     if got != long:
         MQ_TO_IDLE(MQ, status=False)            # empty FIFOs, one pre-load
         TLM("PROCESS_CMD body %s" % ("aborted (0Fh)" if got < 0 else "timeout"),
@@ -6769,17 +6767,17 @@ def ZX_TPI():
     hdr = bytearray(2)
     name = bytearray(255)
     gc.collect()                            # before READY: the name streams with no handshake
-    MQX(MQ, "mov(y, invert(null))")         # READY: listening
     if tspico_io._ring is not None:
         # By DMA: op, length and name in ONE run (RX_RING's len_at), not two
         # -- the name's first bytes overflowed the FIFO while a second run was
         # set up (Report J, hardware 2026-10-03).
         both = bytearray(257)
         code, got = tspico_io.RX_RING(tspico_io._ring, MQ, both, False, 257,
-                                      ZX_STALL_MS, ZX_STALL_MS, 1)
+                                      ZX_STALL_MS, ZX_STALL_MS, 1, "ready")
         hdr[:] = both[:2]
         name[:] = both[2:]
     else:
+        MQX(MQ, "mov(y, invert(null))")     # READY: listening
         code, got = RX_BLOCK(MQ, hdr, 2, ZX_STALL_MS, ZX_STALL_MS)
         if code == RXB_OK:
             code, got = RX_BLOCK(MQ, name, hdr[1], ZX_STALL_MS, ZX_STALL_MS)

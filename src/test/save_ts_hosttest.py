@@ -155,9 +155,8 @@ def main():
         print("READY: SAVE_TS raises it, right before the header capture")
         body = open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read().replace("\r", "")
         sv = body[body.index("def SAVE_TS("):body.index("def SAVE_ZX(")]
-        a = sv.index('MQ_STATUS(MQ, "mid")')
-        check(sv[a:sv.index("\n", sv.index("\n", a) + 1)].strip().endswith("got = RX_CAPTURE(MQ, raw, 21, 1000)"),
-              "MQ_STATUS(mid) is immediately followed by the header capture")
+        check('got = RX_CAPTURE(MQ, raw, 21, 1000, "mid")' in sv,
+              "the header capture says READY (mid) itself, once it is listening")
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
             i = src.index("if pre[0] not in (0, 255, 66):")
