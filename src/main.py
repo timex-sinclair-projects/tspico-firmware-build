@@ -4,9 +4,11 @@ from gc import mem_free, collect
 from machine import freq, Pin
 
 # ---------------- TELEMETRY SWITCH ----------------
-# Edit this single line to control firmware-wide diagnostic prints.
-# True  = full TLM event logging on USB serial (useful for development)
-# False = silent (recommended for production / end-user installs)
+# "TELEMETRY" in /config.ini: true = full TLM event logging on USB serial
+# (development boards, tools/pico-serial.py watch); false or missing =
+# silent, which releases ship (2026-09-30 audit, §4: main.py used to force
+# it on for everyone). Read here, before TS2068_IO, so the first events of
+# boot already follow it.
 #
 # We import the TS.tspico module here (BEFORE pulling TS2068_IO out of
 # it) so we can poke the flag onto the module object directly. Setting
@@ -20,7 +22,18 @@ from machine import freq, Pin
 #       import dev_tspico                 # if using the dev override
 #       dev_tspico.TLM_ENABLED = True
 import TS.tspico
-TS.tspico.TLM_ENABLED = True
+
+
+def _telemetry():
+    try:
+        import json
+        with open("/config.ini") as f:
+            return json.load(f).get("TELEMETRY") is True
+    except Exception:
+        return False
+
+
+TS.tspico.TLM_ENABLED = _telemetry()
 
 # Dev override: if /dev_tspico.{py,mpy} is present on flash, use that
 # instead of the frozen TS.tspico. Lets you iterate on a single file

@@ -1428,7 +1428,7 @@ def DIR_FILES():                                                                
     files_upper = []
     dirs_upper = []
     sd_space = None
-    lista = DIR_HEADER("SD: card error") + "SD card error; power cycle\r"
+    lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
 
     try:
         os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage
@@ -4447,6 +4447,7 @@ def LOAD_CONFIG():
     default_values["LOG_LEVEL"] = 2                            # Only log errors and up
     default_values["VERBOSE"] = False                          # Disable verbosity on commands
     default_values["ZX_TAPE_COMPAT"] = False                   # Use regular tape load routine in zx48 mode
+    default_values["TELEMETRY"] = False                        # TLM over USB serial (main.py reads it; developers set true)
     default_values["FW_VERSION"] = FW_VERSION
     default_values["ROM_VERSION"] = FW_VERSION                 # the ROM this firmware ships with
     # Fill any missing values with the default
@@ -6046,497 +6047,535 @@ def TS2068_IO():                                                         # Main 
 
     ts = time.ticks_us()                                                                           # ts -> timestamp
     
-    while True:                                                                                    # main execution loop
+    # ─── The service loop, restarted after an unexpected error ──────────
+    # David, 2026-10-02: after a crash the 2068 should get its TS-Pico back.
+    # Not machine.reset(): that releases the pins that select the 2068's
+    # ROM bank, and a running 2068 would crash. Not TS2068_IO() again
+    # either: that rebuilds the ROM / BANK state machines and re-reads
+    # config.ini, whose one-shot tpi:boot could switch the ROM slot under
+    # the running 2068. Only the bus link is reset here -- the ROM and bank
+    # lines are never touched -- with RECOVERED staged, so the 2068's next
+    # command gets "T TS-Pico reset, try again". Three failures within a
+    # minute: give up and let main.py log it and stop, as before.
+    # BaseExceptions (Ctrl-C from the host, CmdAbort) pass straight through.
+    # (2026-09-30 audit, §4.)
+    # ─────────────────────────────────────────────────────────────────────
+    failures = []
+    while True:
+        try:
+            while True:                                                                                    # main execution loop
 
-        if (MQ.rx_fifo()) != 0:
+                if (MQ.rx_fifo()) != 0:
 
-            ts = time.ticks_us()                                                                   # reset timestamp
+                    ts = time.ticks_us()                                                                   # reset timestamp
 
-            # ─── DUAL-PORT MIGRATION: tight blocking pre-header read ─────
-            # Replaces Ryan's earlier "count up to 30,000 polls" read loop
-            # with a production-tight blocking burst: ten back-to-back
-            # MQ.get() calls and NOTHING in between.
-            #
-            # Why so strict: the PIO RX FIFO is only 4 entries deep, and
-            # the Z80 OUTs bytes at ~30 us each. Any Python work between
-            # successive gets (conditionals, counters, polling-fifo) risks
-            # letting the FIFO overflow, at which point PIO push(noblock)
-            # silently drops bytes. The Z80 doesn't know; the dispatcher
-            # sees a truncated pre-header and dispatches to the wrong
-            # branch (or no branch at all -> Report J).
-            #
-            # Also removed: the per-iteration `wrt(0x01)` that used to
-            # live right above this read. In the dual-port V6 chain, the
-            # status byte for THIS command was already pre-loaded into
-            # TX by the PREVIOUS command's tail (or by the boot pre-load
-            # for the very first command). Adding another wrt(0x01) here
-            # would inject a stray byte that gets misread later in the
-            # protocol (orphan-byte family of bugs).
-            # ────────────────────────────────────────────────────────────
-            # ─── Issue #51: SYNC and a bounded, tight capture ────────────
-            # Still a tight burst read (the rule above stands), but into a
-            # 9-bit word array, and it can't block forever:
-            #
-            #  * The 1.8b ROM opens every command with OUT (0Fh),03h (SYNC)
-            #    and then waits for READY + IDLE before sending the pre-
-            #    header. That write arrives as 0x103. Old code stored it as
-            #    pre[0] and then blocked for ten bytes that were never coming.
-            #  * A half-sent pre-header used to hang here for good (the
-            #    main-loop case in docs/OPEN_QUESTIONS.md); now it's a 1 s
-            #    stall and a RECOVERED status.
-            #
-            # ROMs up to v1.7 never write 0Fh: for them only the stall path
-            # is new.
-            # ────────────────────────────────────────────────────────────
-            got = RX_CAPTURE(MQ, pre_raw, 10, 1000)
-            if got < 0:
-                # A write to 0Fh, with the Z80 now held until we say IDLE:
-                # SYNC, a BREAK abort that landed after its transaction had
-                # finished, or a SYNC right behind a half-sent pre-header
-                # (2068 reset). Reset, do any slow work NOW, then IDLE and
-                # straight back to the capture -- nothing slow after IDLE,
-                # the pre-header follows within microseconds.
-                MQ_TO_IDLE(MQ, status=False)
-                if got != -1:
-                    LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
-                # A log write on core1 (SAVE_LOG) stops BOTH cores while it
-                # programs flash, and the Z80 sends its pre-header the moment
-                # we say IDLE: a freeze mid-burst lost bytes (hardware,
-                # 2026-09-27: "Partial pre-header 8/10" -> RECOVERED -> Report
-                # T in Commander). The Z80 waits up to ~1 s for IDLE after a
-                # SYNC, so let the write finish first (bounded).
-                _t = time.ticks_ms()
-                while busy and time.ticks_diff(time.ticks_ms(), _t) < 800:
-                    pass
-                # (No gc.collect() here: 4.6 ms on every SYNC -- every LPRINT
-                # character -- and not needed: RX_CAPTURE allocates nothing,
-                # so no GC can start during the pre-header burst.)
-                MQ_STATUS(MQ, "idle")
-                continue
-            if got != 10:
-                # Part of a pre-header, then a second of silence: a 2068
-                # reset, a lost byte, or noise. Don't guess at a command.
-                LOG("Partial pre-header %d/10: %s -- RECOVERED" % (
-                    got, " ".join("%03X" % pre_raw[i] for i in range(got))), 2)
-                MQ_TO_IDLE(MQ, recovered=True)
-                continue
-            for i in r1:
-                pre[i] = pre_raw[i]
+                    # ─── DUAL-PORT MIGRATION: tight blocking pre-header read ─────
+                    # Replaces Ryan's earlier "count up to 30,000 polls" read loop
+                    # with a production-tight blocking burst: ten back-to-back
+                    # MQ.get() calls and NOTHING in between.
+                    #
+                    # Why so strict: the PIO RX FIFO is only 4 entries deep, and
+                    # the Z80 OUTs bytes at ~30 us each. Any Python work between
+                    # successive gets (conditionals, counters, polling-fifo) risks
+                    # letting the FIFO overflow, at which point PIO push(noblock)
+                    # silently drops bytes. The Z80 doesn't know; the dispatcher
+                    # sees a truncated pre-header and dispatches to the wrong
+                    # branch (or no branch at all -> Report J).
+                    #
+                    # Also removed: the per-iteration `wrt(0x01)` that used to
+                    # live right above this read. In the dual-port V6 chain, the
+                    # status byte for THIS command was already pre-loaded into
+                    # TX by the PREVIOUS command's tail (or by the boot pre-load
+                    # for the very first command). Adding another wrt(0x01) here
+                    # would inject a stray byte that gets misread later in the
+                    # protocol (orphan-byte family of bugs).
+                    # ────────────────────────────────────────────────────────────
+                    # ─── Issue #51: SYNC and a bounded, tight capture ────────────
+                    # Still a tight burst read (the rule above stands), but into a
+                    # 9-bit word array, and it can't block forever:
+                    #
+                    #  * The 1.8b ROM opens every command with OUT (0Fh),03h (SYNC)
+                    #    and then waits for READY + IDLE before sending the pre-
+                    #    header. That write arrives as 0x103. Old code stored it as
+                    #    pre[0] and then blocked for ten bytes that were never coming.
+                    #  * A half-sent pre-header used to hang here for good (the
+                    #    main-loop case in docs/OPEN_QUESTIONS.md); now it's a 1 s
+                    #    stall and a RECOVERED status.
+                    #
+                    # ROMs up to v1.7 never write 0Fh: for them only the stall path
+                    # is new.
+                    # ────────────────────────────────────────────────────────────
+                    got = RX_CAPTURE(MQ, pre_raw, 10, 1000)
+                    if got < 0:
+                        # A write to 0Fh, with the Z80 now held until we say IDLE:
+                        # SYNC, a BREAK abort that landed after its transaction had
+                        # finished, or a SYNC right behind a half-sent pre-header
+                        # (2068 reset). Reset, do any slow work NOW, then IDLE and
+                        # straight back to the capture -- nothing slow after IDLE,
+                        # the pre-header follows within microseconds.
+                        MQ_TO_IDLE(MQ, status=False)
+                        if got != -1:
+                            LOG("0Fh write after %d pre-header byte(s) -- resynced" % (-got - 1), 1)
+                        # A log write on core1 (SAVE_LOG) stops BOTH cores while it
+                        # programs flash, and the Z80 sends its pre-header the moment
+                        # we say IDLE: a freeze mid-burst lost bytes (hardware,
+                        # 2026-09-27: "Partial pre-header 8/10" -> RECOVERED -> Report
+                        # T in Commander). The Z80 waits up to ~1 s for IDLE after a
+                        # SYNC, so let the write finish first (bounded).
+                        _t = time.ticks_ms()
+                        while busy and time.ticks_diff(time.ticks_ms(), _t) < 800:
+                            pass
+                        # (No gc.collect() here: 4.6 ms on every SYNC -- every LPRINT
+                        # character -- and not needed: RX_CAPTURE allocates nothing,
+                        # so no GC can start during the pre-header burst.)
+                        MQ_STATUS(MQ, "idle")
+                        continue
+                    if got != 10:
+                        # Part of a pre-header, then a second of silence: a 2068
+                        # reset, a lost byte, or noise. Don't guess at a command.
+                        LOG("Partial pre-header %d/10: %s -- RECOVERED" % (
+                            got, " ".join("%03X" % pre_raw[i] for i in range(got))), 2)
+                        MQ_TO_IDLE(MQ, recovered=True)
+                        continue
+                    for i in r1:
+                        pre[i] = pre_raw[i]
 
-            # ─── Issue #14: signal READY before Z80's status-read poll ────
-            # The PIO drops Y to 0 on every Z80 OUT (per the issue-#14
-            # `mov(y, null)` in TS_IO_DUAL's z80_out path). By the time
-            # this for-loop finishes, Y has been dropped 10 times and is
-            # currently BUSY. The Z80 has finished its pre-header OUTs
-            # and is now in WAIT EXECUTION polling $0F bit 6, expecting
-            # to read the V6 pre-load 0x01 (already sitting in TX from
-            # the previous command's tail, or from the boot pre-load
-            # for the very first command). Without an explicit MQ_READY
-            # here the Z80 polls $0F for ~700ms with bit 6 = 0, times
-            # out → Report J → aborts before sending the command body.
-            # The pre-load byte sits in TX never to be read.
-            #
-            # EXCEPT for LOAD (issue #51): LOAD_TS says READY itself, once
-            # the block's first bytes are queued. The ROM reads the pre-load
-            # status with no wait, then waits for READY and reads the flag
-            # at once -- READY here, before LOAD_TS has queued anything,
-            # raced LOAD_TS's start (TLM print, watchdog thread, file seek,
-            # any gc) against the ROM's ~88 ms poll. Losing it hands the ROM
-            # 0x00 from an empty TX for the flag: Report R, the ROM stops
-            # reading, and the Pico waits on a full TX for the watchdog.
-            # Seen on hardware after a BREAK. The ROM's ready-wait allows
-            # ~20 s, so saying READY later costs nothing.
-            #
-            # And SAVE (stage 3): the Z80 streams the 21-byte header block,
-            # ~43 us a byte into a 4-deep RX FIFO, the moment it sees READY
-            # -- while this loop was still logging and SAVE_TS was still in
-            # its TLM print and gc.collect(). SAVE_TS says READY straight
-            # before its capture loop.
-            # ──────────────────────────────────────────────────────────────
-            # Printer text still in RAM: put it on the SD card now, while this
-            # command's Z80 is parked in its READY wait (it read its pre-load
-            # status straight after the pre-header; give it a moment, and put
-            # the status back if the SD access wiped it unread).
-            if PRT.buf and not (pre[0] == 66 and pre[1] in (4, 5, 6)):
-                _t = time.ticks_ms()
-                while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), _t) < 50:
-                    pass
-                _unread = MQ.tx_fifo()
-                PRINT_FLUSH()
-                if _unread:
-                    MQ.put(0x01)
-            # ─── No early READY for ANY LOAD/SAVE pre-header ───────────────
-            # LOAD_TS / SAVE_TS raise READY themselves once the first bytes
-            # are queued (#64): READY before that lets the Z80 read an empty
-            # TX as 00 -- Report R, seen on hardware after a BREAK. This test
-            # used to be `not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)`,
-            # Ryan's "for simplicity" split of LOAD by pre[1] (TADDR). A
-            # headerless LOAD -- machine code calling LD-BYTES, with whatever
-            # TADDR held, often >= 10 -- fell outside it and still got the
-            # early READY, though it goes to the very same LOAD_SERVE. Now
-            # every flag-00/FF pre-header is left to its handler, as are
-            # commands and the printer (42h). (2026-09-30 audit.)
-            # ──────────────────────────────────────────────────────────────
-            if pre[0] not in (0, 255, 66):   # LOAD/SAVE, commands, printer: the handler says READY
-                MQ_READY()
+                    # ─── Issue #14: signal READY before Z80's status-read poll ────
+                    # The PIO drops Y to 0 on every Z80 OUT (per the issue-#14
+                    # `mov(y, null)` in TS_IO_DUAL's z80_out path). By the time
+                    # this for-loop finishes, Y has been dropped 10 times and is
+                    # currently BUSY. The Z80 has finished its pre-header OUTs
+                    # and is now in WAIT EXECUTION polling $0F bit 6, expecting
+                    # to read the V6 pre-load 0x01 (already sitting in TX from
+                    # the previous command's tail, or from the boot pre-load
+                    # for the very first command). Without an explicit MQ_READY
+                    # here the Z80 polls $0F for ~700ms with bit 6 = 0, times
+                    # out → Report J → aborts before sending the command body.
+                    # The pre-load byte sits in TX never to be read.
+                    #
+                    # EXCEPT for LOAD (issue #51): LOAD_TS says READY itself, once
+                    # the block's first bytes are queued. The ROM reads the pre-load
+                    # status with no wait, then waits for READY and reads the flag
+                    # at once -- READY here, before LOAD_TS has queued anything,
+                    # raced LOAD_TS's start (TLM print, watchdog thread, file seek,
+                    # any gc) against the ROM's ~88 ms poll. Losing it hands the ROM
+                    # 0x00 from an empty TX for the flag: Report R, the ROM stops
+                    # reading, and the Pico waits on a full TX for the watchdog.
+                    # Seen on hardware after a BREAK. The ROM's ready-wait allows
+                    # ~20 s, so saying READY later costs nothing.
+                    #
+                    # And SAVE (stage 3): the Z80 streams the 21-byte header block,
+                    # ~43 us a byte into a 4-deep RX FIFO, the moment it sees READY
+                    # -- while this loop was still logging and SAVE_TS was still in
+                    # its TLM print and gc.collect(). SAVE_TS says READY straight
+                    # before its capture loop.
+                    # ──────────────────────────────────────────────────────────────
+                    # Printer text still in RAM: put it on the SD card now, while this
+                    # command's Z80 is parked in its READY wait (it read its pre-load
+                    # status straight after the pre-header; give it a moment, and put
+                    # the status back if the SD access wiped it unread).
+                    if PRT.buf and not (pre[0] == 66 and pre[1] in (4, 5, 6)):
+                        _t = time.ticks_ms()
+                        while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), _t) < 50:
+                            pass
+                        _unread = MQ.tx_fifo()
+                        PRINT_FLUSH()
+                        if _unread:
+                            MQ.put(0x01)
+                    # ─── No early READY for ANY LOAD/SAVE pre-header ───────────────
+                    # LOAD_TS / SAVE_TS raise READY themselves once the first bytes
+                    # are queued (#64): READY before that lets the Z80 read an empty
+                    # TX as 00 -- Report R, seen on hardware after a BREAK. This test
+                    # used to be `not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)`,
+                    # Ryan's "for simplicity" split of LOAD by pre[1] (TADDR). A
+                    # headerless LOAD -- machine code calling LD-BYTES, with whatever
+                    # TADDR held, often >= 10 -- fell outside it and still got the
+                    # early READY, though it goes to the very same LOAD_SERVE. Now
+                    # every flag-00/FF pre-header is left to its handler, as are
+                    # commands and the printer (42h). (2026-09-30 audit.)
+                    # ──────────────────────────────────────────────────────────────
+                    if pre[0] not in (0, 255, 66):   # LOAD/SAVE, commands, printer: the handler says READY
+                        MQ_READY()
 
-            # Snapshot pre[] for any later TLM that wants to print it.
-            # Cheap when TLM_ENABLED=False (the TLM() calls below no-op
-            # and this list construction is the only residual overhead;
-            # ~10us at most, well outside the hot RX-drain path).
-            _pre_snapshot = list(pre)
-                                                                                                      # pre(header)[0] is a command
-            # gc.collect()
-            # gc.mem_free() walks the whole heap: 3.1 ms on the Pico, paid on
-            # every transaction -- every LPRINT / LLIST character -- for a
-            # line only kept at LOG_LEVEL 0. Only then.
-            if TSP.LOG_LEVEL == 0:
-                LOG("Top of main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
+                    # Snapshot pre[] for any later TLM that wants to print it.
+                    # Cheap when TLM_ENABLED=False (the TLM() calls below no-op
+                    # and this list construction is the only residual overhead;
+                    # ~10us at most, well outside the hot RX-drain path).
+                    _pre_snapshot = list(pre)
+                                                                                                              # pre(header)[0] is a command
+                    # gc.collect()
+                    # gc.mem_free() walks the whole heap: 3.1 ms on the Pico, paid on
+                    # every transaction -- every LPRINT / LLIST character -- for a
+                    # line only kept at LOG_LEVEL 0. Only then.
+                    if TSP.LOG_LEVEL == 0:
+                        LOG("Top of main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
-            if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
-                LOG("Starting SAVE TS", 0)
+                    if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
+                        LOG("Starting SAVE TS", 0)
                 
-                led.value(1)
+                        led.value(1)
 
-                # Don't start a SAVE while core1 is writing the log to flash:
-                # the flash write stops both cores, and the header and data
-                # blocks that follow arrive with no flow control. Bounded --
-                # see WAIT_CORE1 for why this is no longer `while busy: pass`.
-                # The Z80 waits ~20 s for READY here, so 3 s is safe.
-                WAIT_CORE1(3000, "SAVE")
+                        # Don't start a SAVE while core1 is writing the log to flash:
+                        # the flash write stops both cores, and the header and data
+                        # blocks that follow arrive with no flow control. Bounded --
+                        # see WAIT_CORE1 for why this is no longer `while busy: pass`.
+                        # The Z80 waits ~20 s for READY here, so 3 s is safe.
+                        WAIT_CORE1(3000, "SAVE")
 
-                # The card first, before SAVE_TS says READY for the header: a
-                # SAVE with no card (or one pulled since the last command) is
-                # refused at the header, before the 2068 sends any data, and the
-                # program stays in its memory. Without this the save said "0 OK"
-                # and the write failed after it, silently. The Z80 is waiting
-                # for READY (Y BUSY) meanwhile; one mount costs ~0.1-0.3 s.
-                TSP.save_no_card = not SD_PROBE()
-                if TSP.save_no_card:
-                    LOG("SAVE: no SD card; refused", 1)
+                        # The card first, before SAVE_TS says READY for the header: a
+                        # SAVE with no card (or one pulled since the last command) is
+                        # refused at the header, before the 2068 sends any data, and the
+                        # program stays in its memory. Without this the save said "0 OK"
+                        # and the write failed after it, silently. The Z80 is waiting
+                        # for READY (Y BUSY) meanwhile; one mount costs ~0.1-0.3 s.
+                        TSP.save_no_card = not SD_PROBE()
+                        if TSP.save_no_card:
+                            LOG("SAVE: no SD card; refused", 1)
 
-                # Save some state for possible restoration
-                pf_name = TSP.f_name
-                pappend = TSP.append
-                pidx = TSP.tap_idx
-                # SAVE_TS changes TSP.f_name to the new file name if append is False 
+                        # Save some state for possible restoration
+                        pf_name = TSP.f_name
+                        pappend = TSP.append
+                        pidx = TSP.tap_idx
+                        # SAVE_TS changes TSP.f_name to the new file name if append is False 
 
-                MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP, pre)
-                TSP.save_no_card = False
-                # log_entries += new_logs
-                # log_entries.extend(new_logs) # For when SAVE_TS returns an array
-                log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
-                # `saved` comes straight from SAVE_TS: True only if a .tap
-                # actually reached the card. This used to be
-                #     save_aborted = "sd" not in os.listdir("/")
-                # i.e. reading the mount table to guess whether a file had
-                # been written. That guess is right for the refusal paths
-                # only by accident (they return before ENA_SD, so /sd is
-                # still unmounted), and it is WRONG for the case that
-                # matters most: a write that fails after ENA_SD -- card
-                # pulled, disk full -- where /sd IS mounted, no file exists,
-                # and the block below would go on to mount a ghost.
+                        MQ, TSP, new_logs, saved = SAVE_TS(MQ, TSP, pre)
+                        TSP.save_no_card = False
+                        # log_entries += new_logs
+                        # log_entries.extend(new_logs) # For when SAVE_TS returns an array
+                        log_entries.append(new_logs) # For when SAVE_TS returns as one string as now
+                        # `saved` comes straight from SAVE_TS: True only if a .tap
+                        # actually reached the card. This used to be
+                        #     save_aborted = "sd" not in os.listdir("/")
+                        # i.e. reading the mount table to guess whether a file had
+                        # been written. That guess is right for the refusal paths
+                        # only by accident (they return before ENA_SD, so /sd is
+                        # still unmounted), and it is WRONG for the case that
+                        # matters most: a write that fails after ENA_SD -- card
+                        # pulled, disk full -- where /sd IS mounted, no file exists,
+                        # and the block below would go on to mount a ghost.
 
-                # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
-                # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
-                # unmounts it, so we do it here. See stage-3 comments
-                # on ACTIVATE_MQ for the rationale.
-                # ──────────────────────────────────────────────────────────
-                DEACTIVATE_SD()
+                        # ─── DUAL-PORT MIGRATION: explicit SD-teardown ────────────
+                        # SAVE_TS may leave /sd mounted; ACTIVATE_MQ no longer
+                        # unmounts it, so we do it here. See stage-3 comments
+                        # on ACTIVATE_MQ for the rationale.
+                        # ──────────────────────────────────────────────────────────
+                        DEACTIVATE_SD()
 
-                # ─── ARM EXACTLY ONCE, AFTER ALL SD WORK ──────────────────
-                # This used to do ACTIVATE_MQ() + MQ.put(0x01) + MQ_READY()
-                # RIGHT HERE, and then fall into the `saved`
-                # block below, which calls MOUNT_FILE (-> ACTIVATE_SD) and
-                # ACTIVATE_SD + DIR_FILES before arming a SECOND time.
-                #
-                # That told the 2068 "ready, status waiting" and then spent
-                # hundreds of milliseconds on the SD card. ACTIVATE_SD grabs
-                # GPIO 2-4 for SPI -- the same pins the PIO drives D0-D2 on
-                # -- so it is exactly the pin-grab race #40 fixed inside
-                # SAVE_TS, reintroduced one level up. And the second
-                # ACTIVATE_MQ() builds a fresh StateMachine, so a next
-                # command that started during that window had the SM torn
-                # down underneath it mid-transaction.
-                #
-                # The 2068 prints "0 OK" and returns to the prompt while we
-                # are still doing this work, so the window is genuinely
-                # reachable by a fast typist or a running program.
-                #
-                # Now: all SD work first, then arm once at the bottom. Y
-                # stays BUSY throughout, which is precisely what $0F is for.
-                # ──────────────────────────────────────────────────────────
-                if saved:
+                        # ─── ARM EXACTLY ONCE, AFTER ALL SD WORK ──────────────────
+                        # This used to do ACTIVATE_MQ() + MQ.put(0x01) + MQ_READY()
+                        # RIGHT HERE, and then fall into the `saved`
+                        # block below, which calls MOUNT_FILE (-> ACTIVATE_SD) and
+                        # ACTIVATE_SD + DIR_FILES before arming a SECOND time.
+                        #
+                        # That told the 2068 "ready, status waiting" and then spent
+                        # hundreds of milliseconds on the SD card. ACTIVATE_SD grabs
+                        # GPIO 2-4 for SPI -- the same pins the PIO drives D0-D2 on
+                        # -- so it is exactly the pin-grab race #40 fixed inside
+                        # SAVE_TS, reintroduced one level up. And the second
+                        # ACTIVATE_MQ() builds a fresh StateMachine, so a next
+                        # command that started during that window had the SM torn
+                        # down underneath it mid-transaction.
+                        #
+                        # The 2068 prints "0 OK" and returns to the prompt while we
+                        # are still doing this work, so the window is genuinely
+                        # reachable by a fast typist or a running program.
+                        #
+                        # Now: all SD work first, then arm once at the bottom. Y
+                        # stays BUSY throughout, which is precisely what $0F is for.
+                        # ──────────────────────────────────────────────────────────
+                        if saved:
 
-                    # Handle re-mounting an appended file, possibly mounting a
-                    # new file, or restoring the mounted file's name. Then
-                    # update the directory list with changes.
+                            # Handle re-mounting an appended file, possibly mounting a
+                            # new file, or restoring the mounted file's name. Then
+                            # update the directory list with changes.
 
-                    # MOUNT_FILE raises when the card has stopped answering
-                    # (ACTIVATE_SD gives up). This is the dispatcher, not a
-                    # PROCESS_CMD handler, so nothing above would catch it
-                    # and it would end TS2068_IO. The SAVE itself already
-                    # reached the card; log and fall through to the re-arm.
-                    sd_gone = False
-                    try:
-                        if getattr(TSP, "native_saved", False):
-                            # SAVE "f:..." wrote a native file (SAVE_TS): the mount,
-                            # its position and append are untouched.
-                            TSP.native_saved = False
-                            TSP.f_name = pf_name
-                            LOG("Saved a native file; mount unchanged", 0)
-                        elif pappend:
-                            # We will re-mount the updated tap from SD for the user to
-                            # see the addition (other original content is the same)
-                            if MOUNT_FILE(TSP.f_name, True):
-                                # Restore the previous index that got reset on mount
-                                TSP.append = True
-                                TSP.tap_idx = pidx
-                                TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
-                                LOG("Re-mounted appended file: %s" % TSP.f_name, 0)
-                            else:
-                                LOG("Re-mount appended file failed", 2)
-                            # ACTIVATE_MQ()
-
-                        elif not pf_name:
-
-                            # No file mounted before                        
-                            if TSP.f_name:
-                                # SAVE_TS saved saved a new file.
-                                # Mount new saved file if no file was already mounted, but
-                                # we don't set append on.
-                                if MOUNT_FILE(TSP.f_name, True):
-                                    LOG("Mounted new file: %s" % TSP.f_name, 0)
-                                else:
-                                    LOG("Re-mount failed for: %s" % TSP.f_name, 2)
-                                # ACTIVATE_MQ()
-                        
-                        elif TSP.f_name == pf_name:
-                            # This overwrote tap file that was mounted. The original
-                            # copy is still mounted, and the new tap on SD will only 
-                            # contain the one new saved file. You could turn on append,
-                            # and this will get re-mounted with the original content lost.
-                            LOG("Append is off. Overwrote mounted tap on SD but no re-mount.", 0)
-
-                        else:
-                            # Saved to a new file while one is mounted with append off.
-                            LOG("Append is off. Saved to new file: %s" % TSP.f_name, 0)
-                            # Put mounted file name back as we continue using it
-                            TSP.f_name = pf_name
-                    except Exception as e:
-                        LOG("Re-mount after save failed: %s" % e, 2)
-                        sd_gone = True
-
-                    # Update the directory list with the changes
-                    # (skipped if the re-mount just watched the card fail:
-                    # another 5 attempts would only push the Z80 toward J)
-                    if not sd_gone:
-                        try:
-                            ACTIVATE_SD()
-                            os.chdir(TSP.cur_path) # MOUNT_FILE doesn't set this
-                            LOG("os.chdir to:" + TSP.cur_path, 0) # debug
+                            # MOUNT_FILE raises when the card has stopped answering
+                            # (ACTIVATE_SD gives up). This is the dispatcher, not a
+                            # PROCESS_CMD handler, so nothing above would catch it
+                            # and it would end TS2068_IO. The SAVE itself already
+                            # reached the card; log and fall through to the re-arm.
+                            sd_gone = False
                             try:
-                                if DIR_FILES():
-                                    LOG("DIR_FILES OK", 0) # debug
-                            except:
-                                LOG("DIR_FILES failed after save", 2)
-                        except Exception as e:
-                            LOG("SD refresh failed after save: %s" % e, 2)
+                                if getattr(TSP, "native_saved", False):
+                                    # SAVE "f:..." wrote a native file (SAVE_TS): the mount,
+                                    # its position and append are untouched.
+                                    TSP.native_saved = False
+                                    TSP.f_name = pf_name
+                                    LOG("Saved a native file; mount unchanged", 0)
+                                elif pappend:
+                                    # We will re-mount the updated tap from SD for the user to
+                                    # see the addition (other original content is the same)
+                                    if MOUNT_FILE(TSP.f_name, True):
+                                        # Restore the previous index that got reset on mount
+                                        TSP.append = True
+                                        TSP.tap_idx = pidx
+                                        TSP.offset = TSP.offset_tbl[TSP.tap_idx][0]
+                                        LOG("Re-mounted appended file: %s" % TSP.f_name, 0)
+                                    else:
+                                        LOG("Re-mount appended file failed", 2)
+                                    # ACTIVATE_MQ()
 
-                    # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────
-                    # /sd was just mounted via ACTIVATE_SD above for the
-                    # DIR refresh; tear it down before reactivating MQ.
-                    # ──────────────────────────────────────────────────────
-                    DEACTIVATE_SD()
+                                elif not pf_name:
 
-                # Single arm point for BOTH outcomes (saved or aborted), and
-                # the first moment in this branch that no further SD access
-                # is pending. ACTIVATE_MQ leaves Y=BUSY, so the order is
-                # fixed: rebuild the SM, stage the status byte the next
-                # pre-header phase will read, and only then signal ready --
-                # READY + idle, or RECOVERED when SAVE_TS gave up on a Z80
-                # that went silent mid-transfer (the 1.8b ROM reports T).
-                ACTIVATE_MQ()
-                MQ.put(0x01)
-                MQ_STATUS(MQ, "recovered" if getattr(TSP, "save_recovered", False) else "idle")
+                                    # No file mounted before                        
+                                    if TSP.f_name:
+                                        # SAVE_TS saved saved a new file.
+                                        # Mount new saved file if no file was already mounted, but
+                                        # we don't set append on.
+                                        if MOUNT_FILE(TSP.f_name, True):
+                                            LOG("Mounted new file: %s" % TSP.f_name, 0)
+                                        else:
+                                            LOG("Re-mount failed for: %s" % TSP.f_name, 2)
+                                        # ACTIVATE_MQ()
+                        
+                                elif TSP.f_name == pf_name:
+                                    # This overwrote tap file that was mounted. The original
+                                    # copy is still mounted, and the new tap on SD will only 
+                                    # contain the one new saved file. You could turn on append,
+                                    # and this will get re-mounted with the original content lost.
+                                    LOG("Append is off. Overwrote mounted tap on SD but no re-mount.", 0)
 
-                led.value(0)
+                                else:
+                                    # Saved to a new file while one is mounted with append off.
+                                    LOG("Append is off. Saved to new file: %s" % TSP.f_name, 0)
+                                    # Put mounted file name back as we continue using it
+                                    TSP.f_name = pf_name
+                            except Exception as e:
+                                LOG("Re-mount after save failed: %s" % e, 2)
+                                sd_gone = True
+
+                            # Update the directory list with the changes
+                            # (skipped if the re-mount just watched the card fail:
+                            # another 5 attempts would only push the Z80 toward J)
+                            if not sd_gone:
+                                try:
+                                    ACTIVATE_SD()
+                                    os.chdir(TSP.cur_path) # MOUNT_FILE doesn't set this
+                                    LOG("os.chdir to:" + TSP.cur_path, 0) # debug
+                                    try:
+                                        if DIR_FILES():
+                                            LOG("DIR_FILES OK", 0) # debug
+                                    except:
+                                        LOG("DIR_FILES failed after save", 2)
+                                except Exception as e:
+                                    LOG("SD refresh failed after save: %s" % e, 2)
+
+                            # ─── DUAL-PORT MIGRATION: pair with DEACTIVATE_SD ─────
+                            # /sd was just mounted via ACTIVATE_SD above for the
+                            # DIR refresh; tear it down before reactivating MQ.
+                            # ──────────────────────────────────────────────────────
+                            DEACTIVATE_SD()
+
+                        # Single arm point for BOTH outcomes (saved or aborted), and
+                        # the first moment in this branch that no further SD access
+                        # is pending. ACTIVATE_MQ leaves Y=BUSY, so the order is
+                        # fixed: rebuild the SM, stage the status byte the next
+                        # pre-header phase will read, and only then signal ready --
+                        # READY + idle, or RECOVERED when SAVE_TS gave up on a Z80
+                        # that went silent mid-transfer (the 1.8b ROM reports T).
+                        ACTIVATE_MQ()
+                        MQ.put(0x01)
+                        MQ_STATUS(MQ, "recovered" if getattr(TSP, "save_recovered", False) else "idle")
+
+                        led.value(0)
                 
-            elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine
-                TLM("LVM LOAD enter", "pre=%s f_name=%s tap_idx=%d offset=%d" % (
-                    _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
-                LOG("Starting TS LVM", 0)
+                    elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine
+                        TLM("LVM LOAD enter", "pre=%s f_name=%s tap_idx=%d offset=%d" % (
+                            _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
+                        LOG("Starting TS LVM", 0)
 
-                # Same reason as SAVE above: a log write on core1 would stop
-                # both cores while LOAD_TS streams a block the Z80 reads with
-                # no handshake (a byte every ~50 us). Bounded; the Z80 waits
-                # ~20 s for READY at this point.
-                WAIT_CORE1(3000, "LOAD")
-                MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
-                # log_entries += new_logs
-                log_entries.append(new_logs) # for now
-                # log_entries.extend(new_logs) # when LOAD_TS returns an array
-                TLM("LVM LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
+                        # Same reason as SAVE above: a log write on core1 would stop
+                        # both cores while LOAD_TS streams a block the Z80 reads with
+                        # no handshake (a byte every ~50 us). Bounded; the Z80 waits
+                        # ~20 s for READY at this point.
+                        WAIT_CORE1(3000, "LOAD")
+                        MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
+                        # log_entries += new_logs
+                        log_entries.append(new_logs) # for now
+                        # log_entries.extend(new_logs) # when LOAD_TS returns an array
+                        TLM("LVM LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
 
-            elif (pre[0] == 0 or pre[0] == 255):                                                      # Headerless LOAD
-                TLM("LVM Headerless LOAD enter", "pre=%s tap_idx=%d offset=%d" % (
-                    _pre_snapshot, TSP.tap_idx, TSP.offset))
-                LOG("Starting TS LVM - Headerless LOAD", 0)
+                    elif (pre[0] == 0 or pre[0] == 255):                                                      # Headerless LOAD
+                        TLM("LVM Headerless LOAD enter", "pre=%s tap_idx=%d offset=%d" % (
+                            _pre_snapshot, TSP.tap_idx, TSP.offset))
+                        LOG("Starting TS LVM - Headerless LOAD", 0)
 
-                WAIT_CORE1(3000, "headerless LOAD")                     # as for LOAD above
-                MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
-                # log_entries += new_logs
-                log_entries.append(new_logs) # for now
-                # log_entries.extend(new_logs) # when LOAD_TS returns an array
-                TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
+                        WAIT_CORE1(3000, "headerless LOAD")                     # as for LOAD above
+                        MQ, TSP, new_logs = LOAD_SERVE(pre, MQ, TSP)
+                        # log_entries += new_logs
+                        log_entries.append(new_logs) # for now
+                        # log_entries.extend(new_logs) # when LOAD_TS returns an array
+                        TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
 
-            elif pre[0] == 66 and pre[1] in (4, 5, 6):                                # LPRINT / LLIST char, COPY
-                PRINT_IO(pre)
+                    elif pre[0] == 66 and pre[1] in (4, 5, 6):                                # LPRINT / LLIST char, COPY
+                        PRINT_IO(pre)
 
-            elif pre[0] == 66:
+                    elif pre[0] == 66:
 
-                LOG("Starting TS COMMAND " + str(pre), 0)
+                        LOG("Starting TS COMMAND " + str(pre), 0)
 
-                try:
-                    PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)
-                    TLM("main loop: PROCESS_CMD returned", "pre=%s" % _pre_snapshot)
-                except Exception as _e:
-                    LOG("Invalid data received from PROCESS_CMD: " + str(pre), 2)
-                    TLM("main loop: PROCESS_CMD raised exception", str(_e))
-                    continue
-                
-                if TSP.zx48:
-                    ZX48_IO(pre)
-                    
-            # ─── No 'A' (41h) branch any more ──────────────────────────────
-            # There was one: `elif pre[0] == 65:` ran PROCESS_ASM(pre) then
-            # DIR_FILES(), a placeholder for an "assembler command" block in
-            # Gustavo's design. No ROM sends 41h -- the EXROM's pre-header
-            # builder only does LD A,42h (docs/rom-analysis/
-            # PROTOCOL_FROM_ROM.md) -- and PROTOCOL.md calls it vestigial. If
-            # line noise ever produced one, the stub queued two bytes on top
-            # of the staged pre-load (an orphan byte for the next command) and
-            # listed the folder with /sd unmounted. A 41h now lands in the
-            # unrecognised branch below like any other unknown pre-header.
-            # Removed by the 2026-09-30 audit, with PROCESS_ASM.
-            # ──────────────────────────────────────────────────────────────
-            else:
-                try:
-                    LOG("Unrecognized command! " + str(list(pre)), 1)
-                except:
-                    LOG("Unrecognized command! Cannot get pre[] data", 1)
-
-                # ─── Back to a known state, WITH the pre-load staged ─────────
-                # This branch used to drain both FIFOs, restart the state
-                # machine and blink the LED for a second. That is Ryan's
-                # single-port recovery: his loop wrote a fresh 0x01 status at
-                # the top of every pass, so throwing TX away was safe. In the
-                # dual-port V6 chain the 0x01 the next command reads is staged
-                # ONCE, by whoever ran last -- so the drain left none, and the
-                # next command on a ROM without SYNC read 00: Report J
-                # (PROTOCOL.md 4.3 described exactly this). The 1 s BLINK_ERROR
-                # also blocked while the Z80 could already be sending its next
-                # pre-header. MQ_TO_IDLE (#51) is the bounded, standard way
-                # back: empty FIFOs, exactly one 0x01 staged, status RECOVERED
-                # -- the same as the partial-pre-header path above.
-                # (2026-09-30 audit.)
-                # ──────────────────────────────────────────────────────────────
-                MQ_TO_IDLE(MQ, recovered=True)
-
-            # ─── DUAL-PORT MIGRATION: bottom-of-loop drains REMOVED ───────
-            # Ryan's original code had defensive drains here ("clean up
-            # whatever the handler left behind"). In dual-port V6 those
-            # drains MASK bugs rather than fix them: each handler's V6
-            # tail must leave TX with exactly one 0x01 (the pre-load for
-            # the next command) and RX empty. If those invariants are
-            # ever violated, we want to see the resulting Report J/R
-            # immediately, not paper over it.
-            #
-            # If a bug ever causes orphan bytes here, you'll see the
-            # next command misbehave — which is the correct signal to
-            # go find the handler that didn't clean up after itself.
-            # ──────────────────────────────────────────────────────────────
-
-        else:
-            # Nothing to do, so check if time to save the log
-            # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap ──
-            # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min).
-            # Plain subtraction goes negative after wrap, satisfying
-            # both <2_000_000 and <2_100_000 conditions forever, so
-            # the loop spins in `continue` and the heartbeat never
-            # fires. User's reported "Pico halt with LED stopped
-            # blinking" was this — caught via Ctrl-C in Thonny
-            # showing the stuck line at the continue below.
-            # ────────────────────────────────────────────────────────
-            # Heartbeat: one 0.1 s flash every 2 s; with no SD card, two.
-            _hb = time.ticks_diff(time.ticks_us(), ts)
-            if _hb < 2_000_000:
-                continue
-            elif _hb < 2_100_000:
-                led.value(1)
-            elif not TSP.sd_present and _hb < 2_250_000:
-                led.value(0)
-            elif not TSP.sd_present and _hb < 2_350_000:
-                led.value(1)
-            else:
-                if log_entries:
-                    if not busy:
-                        # ─── DUAL-PORT MIGRATION: protect start_new_thread ─
-                        # SAVE_LOG sets `busy = False` BEFORE the thread
-                        # function actually returns, so core1 may still be
-                        # mid-cleanup here. A second start_new_thread call
-                        # in that window raises OSError "core1 in use".
-                        # Catch it and skip — we'll save the log on the
-                        # next idle pass once core1 is free.
-                        #
-                        # Without this guard, the OSError propagates up
-                        # through TS2068_IO to main.py (which has no
-                        # try/except) and drops the Pico to a REPL —
-                        # manifests as "Pico locked up, LED stops
-                        # blinking." Painful to diagnose.
-                        # ──────────────────────────────────────────────────
-                        # ─── DUAL-PORT MIGRATION: gc.collect REMOVED here ─
-                        # Previous code did LOG + gc.collect + LOG before
-                        # starting the SAVE_LOG thread. MicroPython's
-                        # gc.collect() is a stop-the-world operation that
-                        # routinely takes 10-100ms. During that pause, the
-                        # 2068 can send the entire next-command pre-header
-                        # (10 bytes in ~300us) — the 4-deep PIO RX FIFO
-                        # fills, and `push noblock` silently drops bytes
-                        # 4-9. When the main loop resumes, it reads 4 stale
-                        # pre-header bytes + 6 body bytes, producing a
-                        # malformed pre-header (decoded body-length of
-                        # 28791 etc.) and a J error on the 2068. Diagnosed
-                        # via trace showing pre=[66, 0, 255, 2, 'D', 7, 0,
-                        # 't', 'p', 'i'] for a SAVE "tpi:dir" — body bytes
-                        # leaked into the pre-header read.
-                        #
-                        # MicroPython's automatic GC runs when allocations
-                        # require it; no need to force it here. SAVE_LOG
-                        # on core1 can do its own gc.collect if memory
-                        # pressure becomes an issue inside the thread.
-                        # ──────────────────────────────────────────────────
-                        # `busy` goes True HERE, on core0, before the thread
-                        # starts -- not only inside SAVE_LOG. Otherwise there
-                        # is a window between start_new_thread returning and
-                        # core1 reaching SAVE_LOG's first line in which `busy`
-                        # is still False: a SAVE or LOAD that arrived in that
-                        # window would see core1 idle and start its transfer
-                        # just as the flash write begins. If the thread can't
-                        # be started (core1 still in use), nothing will clear
-                        # `busy` for us, so we clear it ourselves.
-                        busy = True
                         try:
-                            _thread.start_new_thread(SAVE_LOG, ())
-                        except OSError:
-                            busy = False
+                            PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)
+                            TLM("main loop: PROCESS_CMD returned", "pre=%s" % _pre_snapshot)
+                        except Exception as _e:
+                            LOG("Invalid data received from PROCESS_CMD: " + str(pre), 2)
+                            TLM("main loop: PROCESS_CMD raised exception", str(_e))
+                            continue
+                
+                        if TSP.zx48:
+                            ZX48_IO(pre)
+                    
+                    # ─── No 'A' (41h) branch any more ──────────────────────────────
+                    # There was one: `elif pre[0] == 65:` ran PROCESS_ASM(pre) then
+                    # DIR_FILES(), a placeholder for an "assembler command" block in
+                    # Gustavo's design. No ROM sends 41h -- the EXROM's pre-header
+                    # builder only does LD A,42h (docs/rom-analysis/
+                    # PROTOCOL_FROM_ROM.md) -- and PROTOCOL.md calls it vestigial. If
+                    # line noise ever produced one, the stub queued two bytes on top
+                    # of the staged pre-load (an orphan byte for the next command) and
+                    # listed the folder with /sd unmounted. A 41h now lands in the
+                    # unrecognised branch below like any other unknown pre-header.
+                    # Removed by the 2026-09-30 audit, with PROCESS_ASM.
+                    # ──────────────────────────────────────────────────────────────
+                    else:
+                        try:
+                            LOG("Unrecognized command! " + str(list(pre)), 1)
+                        except:
+                            LOG("Unrecognized command! Cannot get pre[] data", 1)
 
-                # Host text the firmware never reads fills MicroPython's
-                # stdin buffer, and then Ctrl-C can't get in (see
-                # DRAIN_STDIN). Keep it empty while idle.
-                DRAIN_STDIN(MQ)
-                led.value(0)
-                ts = time.ticks_us()
+                        # ─── Back to a known state, WITH the pre-load staged ─────────
+                        # This branch used to drain both FIFOs, restart the state
+                        # machine and blink the LED for a second. That is Ryan's
+                        # single-port recovery: his loop wrote a fresh 0x01 status at
+                        # the top of every pass, so throwing TX away was safe. In the
+                        # dual-port V6 chain the 0x01 the next command reads is staged
+                        # ONCE, by whoever ran last -- so the drain left none, and the
+                        # next command on a ROM without SYNC read 00: Report J
+                        # (PROTOCOL.md 4.3 described exactly this). The 1 s BLINK_ERROR
+                        # also blocked while the Z80 could already be sending its next
+                        # pre-header. MQ_TO_IDLE (#51) is the bounded, standard way
+                        # back: empty FIFOs, exactly one 0x01 staged, status RECOVERED
+                        # -- the same as the partial-pre-header path above.
+                        # (2026-09-30 audit.)
+                        # ──────────────────────────────────────────────────────────────
+                        MQ_TO_IDLE(MQ, recovered=True)
+
+                    # ─── DUAL-PORT MIGRATION: bottom-of-loop drains REMOVED ───────
+                    # Ryan's original code had defensive drains here ("clean up
+                    # whatever the handler left behind"). In dual-port V6 those
+                    # drains MASK bugs rather than fix them: each handler's V6
+                    # tail must leave TX with exactly one 0x01 (the pre-load for
+                    # the next command) and RX empty. If those invariants are
+                    # ever violated, we want to see the resulting Report J/R
+                    # immediately, not paper over it.
+                    #
+                    # If a bug ever causes orphan bytes here, you'll see the
+                    # next command misbehave — which is the correct signal to
+                    # go find the handler that didn't clean up after itself.
+                    # ──────────────────────────────────────────────────────────────
+
+                else:
+                    # Nothing to do, so check if time to save the log
+                    # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap ──
+                    # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min).
+                    # Plain subtraction goes negative after wrap, satisfying
+                    # both <2_000_000 and <2_100_000 conditions forever, so
+                    # the loop spins in `continue` and the heartbeat never
+                    # fires. User's reported "Pico halt with LED stopped
+                    # blinking" was this — caught via Ctrl-C in Thonny
+                    # showing the stuck line at the continue below.
+                    # ────────────────────────────────────────────────────────
+                    # Heartbeat: one 0.1 s flash every 2 s; with no SD card, two.
+                    _hb = time.ticks_diff(time.ticks_us(), ts)
+                    if _hb < 2_000_000:
+                        continue
+                    elif _hb < 2_100_000:
+                        led.value(1)
+                    elif not TSP.sd_present and _hb < 2_250_000:
+                        led.value(0)
+                    elif not TSP.sd_present and _hb < 2_350_000:
+                        led.value(1)
+                    else:
+                        if log_entries:
+                            if not busy:
+                                # ─── DUAL-PORT MIGRATION: protect start_new_thread ─
+                                # SAVE_LOG sets `busy = False` BEFORE the thread
+                                # function actually returns, so core1 may still be
+                                # mid-cleanup here. A second start_new_thread call
+                                # in that window raises OSError "core1 in use".
+                                # Catch it and skip — we'll save the log on the
+                                # next idle pass once core1 is free.
+                                #
+                                # Without this guard, the OSError propagates up
+                                # through TS2068_IO to main.py (which has no
+                                # try/except) and drops the Pico to a REPL —
+                                # manifests as "Pico locked up, LED stops
+                                # blinking." Painful to diagnose.
+                                # ──────────────────────────────────────────────────
+                                # ─── DUAL-PORT MIGRATION: gc.collect REMOVED here ─
+                                # Previous code did LOG + gc.collect + LOG before
+                                # starting the SAVE_LOG thread. MicroPython's
+                                # gc.collect() is a stop-the-world operation that
+                                # routinely takes 10-100ms. During that pause, the
+                                # 2068 can send the entire next-command pre-header
+                                # (10 bytes in ~300us) — the 4-deep PIO RX FIFO
+                                # fills, and `push noblock` silently drops bytes
+                                # 4-9. When the main loop resumes, it reads 4 stale
+                                # pre-header bytes + 6 body bytes, producing a
+                                # malformed pre-header (decoded body-length of
+                                # 28791 etc.) and a J error on the 2068. Diagnosed
+                                # via trace showing pre=[66, 0, 255, 2, 'D', 7, 0,
+                                # 't', 'p', 'i'] for a SAVE "tpi:dir" — body bytes
+                                # leaked into the pre-header read.
+                                #
+                                # MicroPython's automatic GC runs when allocations
+                                # require it; no need to force it here. SAVE_LOG
+                                # on core1 can do its own gc.collect if memory
+                                # pressure becomes an issue inside the thread.
+                                # ──────────────────────────────────────────────────
+                                # `busy` goes True HERE, on core0, before the thread
+                                # starts -- not only inside SAVE_LOG. Otherwise there
+                                # is a window between start_new_thread returning and
+                                # core1 reaching SAVE_LOG's first line in which `busy`
+                                # is still False: a SAVE or LOAD that arrived in that
+                                # window would see core1 idle and start its transfer
+                                # just as the flash write begins. If the thread can't
+                                # be started (core1 still in use), nothing will clear
+                                # `busy` for us, so we clear it ourselves.
+                                busy = True
+                                try:
+                                    _thread.start_new_thread(SAVE_LOG, ())
+                                except OSError:
+                                    busy = False
+
+                        # Host text the firmware never reads fills MicroPython's
+                        # stdin buffer, and then Ctrl-C can't get in (see
+                        # DRAIN_STDIN). Keep it empty while idle.
+                        DRAIN_STDIN(MQ)
+                        led.value(0)
+                        ts = time.ticks_us()
+        except Exception as err:
+            now = time.ticks_ms()
+            failures = [f for f in failures if time.ticks_diff(now, f) < 60_000]
+            failures.append(now)
+            LOG("Unexpected error; restarting the service loop (%d in the last minute): %r"
+                % (len(failures), err), 2)
+            pe = getattr(sys, "print_exception", None)               # MicroPython's traceback printer
+            if pe:
+                try:
+                    with open("/activity.log", "a") as f:
+                        pe(err, f)
+                except Exception:
+                    pass
+            SAVE_LOG()
+            if len(failures) >= 3:
+                raise
+            if sd_active:
+                DEACTIVATE_SD()
+            ACTIVATE_MQ()
+            MQ_TO_IDLE(MQ, recovered=True)
+            TSP.zx48 = False
+            ts = time.ticks_us()
                 
 
 # The ZX v3 ROM raises the report whose ERR_NR it is sent; FFh is 0 OK.

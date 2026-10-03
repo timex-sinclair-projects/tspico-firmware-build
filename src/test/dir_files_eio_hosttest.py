@@ -31,11 +31,11 @@ import process_cmd_hosttest as P                                # noqa: E402
 EIO = OSError(5, "EIO: write fail")
 
 
-class ReachedDispatcher(Exception):
+class ReachedDispatcher(BaseException):
     """TS2068_IO logged that it is about to enter its main loop."""
 
 
-class Bricked(Exception):
+class Bricked(BaseException):
     """TS2068_IO reached a BLINK_ERROR loop."""
 
 
@@ -153,7 +153,7 @@ def test_dir_files(t, logs):
               "EIO from %s: returns False, does not raise (%r)" % (what, raised))
         check(t.files == [] and t.files_upper == [],
               "EIO from %s: files[] emptied, no stale entries" % what)
-        check(t.lista[32:64].startswith("SD: card error") and "power cycle" in t.lista,
+        check(t.lista[32:64].startswith("SD: card error") and "reseat the card" in t.lista,
               "EIO from %s: lista keeps its layout and says the card failed" % what)
         check(any(lvl == 2 and "EIO" in m for lvl, m in logs),
               "EIO from %s: ERROR logged with the reason" % what)

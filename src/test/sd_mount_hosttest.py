@@ -23,7 +23,7 @@ sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 
 
-class Bricked(Exception):
+class Bricked(BaseException):
     """ACTIVATE_SD called BLINK_ERROR (it no longer should)."""
 
 

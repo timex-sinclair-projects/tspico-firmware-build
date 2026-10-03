@@ -1810,7 +1810,7 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the Pico's own
 the SD card). It's a single line of text:
 
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.1", "ROM_SLOT": 1, "VERBOSE": false}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.1", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false}
 ```
 
 | Setting | Meaning | Normally |
@@ -1822,6 +1822,7 @@ the SD card). It's a single line of text:
 | `ROM_SM` | Whether BOOT and DOCK use Flash or RAM | `10` (both Flash) |
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
 | `ROM_VERSION`, `FW_VERSION` | Version information shown by `tpi:info` and read by the updater | `"2.1"` |
+| `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
 
 You'd normally leave this file alone. To change it, connect the Pico to a computer and use a
 program such as Thonny. If the file is missing or unreadable, the TS-Pico uses the values above.
