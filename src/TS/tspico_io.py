@@ -176,6 +176,9 @@ def RX_CAPTURE(MQ, raw, n, stall_ms):
     # 4-deep FIFO overflows and bytes go missing from the middle of the
     # pre-header ("Partial pre-header 8/10" -> RECOVERED -> Report T,
     # hardware 2026-09-27). Direct calls allocate nothing.
+    if _ring is not None:                   # by DMA (RX_RING): the same results
+        code, got = RX_RING(_ring, MQ, raw, True, n, stall_ms, stall_ms)
+        return -got if code == RXB_ABORT else got
     got = 0
     while got < n:
         if MQ.rx_fifo():
@@ -473,6 +476,82 @@ RXB_ABORT = const(1)    # a write to port 0Fh (BREAK / SYNC); the Z80 waits for 
 RXB_STALL = const(3)    # silence: first_ms before the first byte, stall_ms after
 
 
+# ─── Receive by DMA: a ring buffer behind the RX FIFO ─────────────────────
+# The Z80 writes a SAVE block, a command body or a printer body ~30-43 us a
+# byte with no handshake, into a 4-deep RX FIFO: ~120-170 us of slack, and a
+# GC, a USB interrupt or a flash write on v1.29 is longer (dma_rx_harness:
+# polling lost 400-13979 words under those stalls, DMA none). So while
+# RX_BLOCK / RX_CAPTURE run, a DMA channel paced by the RX DREQ (4: PIO0,
+# state machine 0) drains the FIFO into a 1024-word ring in RAM -- ~44 ms of
+# slack instead of ~0.15 ms -- and core0 copies the words out of the ring at
+# its own pace. The channel and the ring are made once, at import: never
+# an allocation on the time-critical path. Without rp2.DMA (v1.20, the host
+# tests) both fall back to polling the FIFO, as before.
+_RING_BITS = const(12)              # the ring: 4096 bytes, 1024 words, 4096-aligned
+_RING_WORDS = const(1024)
+
+
+def _RING_SETUP():
+    """(channel, ring address, ctrl, the memory kept alive, mem32), or None."""
+    if _DMA is None or _mem32 is None:
+        return None
+    try:
+        import uctypes
+        mem = bytearray(2 << _RING_BITS)
+        base = uctypes.addressof(mem)
+        addr = base + ((-base) & ((1 << _RING_BITS) - 1))
+        d = _DMA()
+        ctrl = d.pack_ctrl(size=2, inc_read=False, inc_write=True,
+                           ring_size=_RING_BITS, ring_sel=True, treq_sel=4)
+        return d, addr, ctrl, mem, _mem32
+    except Exception:
+        return None
+
+
+_ring = _RING_SETUP()
+
+
+def RX_RING(ring, MQ, out, wide, n, first_ms, stall_ms):
+    """Take n words from the Z80 by DMA into out: the 9-bit words if wide (an
+    array), else their low bytes (a bytearray). Returns (code, words taken),
+    code one of RXB_*, exactly as RX_BLOCK. Leaves the channel stopped; words
+    the Z80 sends after the n (or after a stop) stay in the FIFO."""
+    d, addr, ctrl, _, m32 = ring
+    if n <= 0:
+        return RXB_OK, 0
+    d.config(read=MQ, write=addr, count=n, ctrl=ctrl, trigger=True)
+    mask = _RING_WORDS - 1
+    got = 0
+    w = 0
+    limit = first_ms
+    code = RXB_OK
+    t0 = time.ticks_ms()
+    try:
+        while got < n:
+            pos = n - d.count
+            if pos > got:
+                if pos - got > _RING_WORDS:     # core0 was away ~44 ms: words overwritten
+                    code = RXB_STALL
+                    break
+                while got < pos:
+                    w = m32[addr + ((got & mask) << 2)] & 0x1FF
+                    out[got] = w if wide else w & 0xFF
+                    got += 1
+                limit = stall_ms
+                t0 = time.ticks_ms()
+            elif w & PORT_0F:                   # nothing follows a 0Fh write
+                code = RXB_ABORT
+                break
+            elif time.ticks_diff(time.ticks_ms(), t0) >= limit:
+                code = RXB_STALL
+                break
+    finally:
+        d.active(0)
+    if code == RXB_OK and w & PORT_0F:
+        code = RXB_ABORT
+    return code, got
+
+
 def RX_BLOCK(MQ, buf, n, first_ms, stall_ms):
     """Take a SAVE data block of n bytes from the Z80 into buf (a bytearray).
     Returns (code, words taken), code one of RXB_*.
@@ -487,7 +566,11 @@ def RX_BLOCK(MQ, buf, n, first_ms, stall_ms):
     Allocation-free per byte: the bound methods are taken ONCE per call.
     Storing one per byte (as TX_ROOM once did) allocates 16 bytes each time,
     and the GCs that follow freeze the Pico mid-block -- see alloc_probe.py.
+
+    By DMA where there is one (RX_RING); this polling loop otherwise.
     """
+    if _ring is not None:
+        return RX_RING(_ring, MQ, buf, False, n, first_ms, stall_ms)
     rx = MQ.rx_fifo
     get = MQ.get
     got = 0

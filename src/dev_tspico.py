@@ -360,6 +360,7 @@ from TS.tspico_io import (
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
     RX_DMA,                              # the pre-header by DMA (v1.29)
+    STREAM_DMA,                          # blind sends by DMA (v1.29)
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
     RX_BLOCK, RXB_ABORT, RXB_OK,         # printer bodies, ZX tpi:
     ZX_FLUSH_TX, ZX_ROOM, ZX_STALL_MS,   # ZX48 mode (issue #51 stage 6)
@@ -851,6 +852,36 @@ def CMD_PUT(b):
         if why:
             raise CmdAbort(why)
     MQ.put(b)
+
+
+def CMD_SEND(buf, ready):
+    """Command output the ROM reads blind -- a message, a page of a listing:
+    the first bytes into TX, READY (if `ready`), then the rest. Raises
+    CmdAbort, as CMD_PUT.
+
+    The ROM prints each character as it reads it, with no ready-wait
+    (PROTOCOL.md, "Text rules"): RST 10 is slow, but a GC or a flash write
+    on v1.29 can outlast the four characters in the FIFO, and the ROM then
+    prints whatever it reads from an empty one. So the page is built in RAM
+    first and, where there is DMA, a channel feeds the FIFO from it whatever
+    core0 is doing (STREAM_DMA). Without DMA, CMD_PUT a byte at a time."""
+    n = len(buf)
+    k = min(TX_DEPTH, n)
+    for i in range(k):
+        CMD_PUT(buf[i])
+    if ready:
+        MQ_READY()
+    if k >= n:
+        return
+    if tspico_io._DMA is not None:
+        _CMD_ECHO[0] = 0
+        r = STREAM_DMA(MQ, memoryview(buf)[k:], _CMD_ECHO, CMD_STALL_MS, False)
+        if r is not None:
+            if r[0]:
+                raise CmdAbort(r[0])
+            return
+    for i in range(k, n):
+        CMD_PUT(buf[i])
 
 
 def CMD_KEY():
@@ -2031,17 +2062,19 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
         # "byte in buffer before signaling ready"), THEN MQ_READY, then
         # the body loop is paced by Z80 reads.
         # ───────────────────────────────────────────────────────────────
-        wrt(0x81)               # PRINT STRING — this IS the D-block status
-        wrt(st)                 # Return code
-        wrt(0x0D)               # Start with a newline
-        MQ_READY()              # Z80 starts reading the 3-byte header
-        for m in msg:           # Write message (paced by Z80 reads)
-            wrt(MSG_BYTE(m))    # ~ and | still pass, as FREE and STICK
+        ob = bytearray()        # the whole message, then CMD_SEND
+        put = ob.append
+        put(0x81)               # PRINT STRING — this IS the D-block status
+        put(st)                 # Return code
+        put(0x0D)               # Start with a newline
+        for m in msg:           # The message
+            put(MSG_BYTE(m))    # ~ and | still pass, as FREE and STICK
         if msg1:                # Write msg1
-            wrt(0x0D)
+            put(0x0D)
             for m in msg1:
-                wrt(MSG_BYTE(m))
-        wrt(0x00)               # End of string
+                put(MSG_BYTE(m))
+        put(0x00)               # End of string
+        CMD_SEND(ob, True)      # header in TX, READY, the rest as the Z80 reads
 
     else:
 
@@ -2105,17 +2138,17 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
     # it was needed, for many short lines (e.g. a long directory listing).
     # ─────────────────────────────────────────────────────────────────────
 
-    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    # Each page is built in RAM, then sent by CMD_SEND: the 4 header bytes
+    # into TX, READY -- so the Z80's first $0E read finds a real byte --
+    # and the rest by DMA where there is one. The ROM reads it all blind.
+    ob = bytearray()
+    wrt = ob.append
 
-    # Write the 4 header bytes directly to TX, then set Y=READY.
-    # FIFO is 4-deep so this fills it; MQ_READY immediately after means
-    # Z80's first $0E read finds a real byte.
     wrt(0x86)   # PRINT_STRING_WITH_LOOP (this IS the D-block status)
     wrt(st)     # BASIC return code
     wrt(0x0D)   # Start on a new line
     wrt(0x0D)   # Start with a blank line we don't count
 
-    MQ_READY()
     while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
         MQ.get()
 
@@ -2241,6 +2274,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
                 for m in scroll:
                     wrt(ord(m))
                 wrt(0x00)       # end of this page
+                CMD_SEND(ob, True)
                 # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ─
                 # When the Z80 sends the keypress (its OUT $0E for the
                 # 'Y'/'N'/digit), the PIO automatically drops Y to 0
@@ -2270,14 +2304,17 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
                 # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
                 # READY-before-data here (READY landed ~9.6 ms late); with MQX the
                 # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
+                # CMD_SEND keeps that order: the next page goes out with the
+                # first bytes in TX before READY.
+                ob = bytearray()
+                wrt = ob.append
                 for _eb in range(s):
                     wrt(0x08)
                     wrt(0x20)
                     wrt(0x08)
-                    if not _eb:
-                        MQ_READY()
 
     wrt(end_char)
+    CMD_SEND(ob, True)
     TLM("SEND_MSG2 end_char written", "0x%02X" % end_char)
 
     CMD_DRAIN()
@@ -3172,6 +3209,19 @@ def CH_READ(pre, cmd):                                                        # 
     wrt(1)
     wrt(len(data))
     CH_READY()                                                                # data in TX first, then READY
+    if tspico_io._DMA is not None:
+        # The bytes and the XOR by DMA: the ROM reads them blind (~70 us a
+        # byte), and a core0 pause longer than the FIFO's ~280 us would hand
+        # it 00s. A port-0Fh write or a stall ends it, as CMD_PUT.
+        out = bytearray(len(data) + 1)
+        out[:-1] = data
+        out[-1] = x
+        _CMD_ECHO[0] = 0
+        r = STREAM_DMA(MQ, out, _CMD_ECHO, CMD_STALL_MS, False)
+        if r is not None:
+            if r[0]:
+                raise CmdAbort(r[0])
+            return
     for b in data:
         wrt(b)
     wrt(x)
@@ -3830,6 +3880,35 @@ def BLKRCV(pre, cmd):                                                           
 
     def stream(f, total):
         """Send `total` bytes of file f (from its current position)."""
+        # By DMA where there is one: the whole image into RAM (a .DCK is 64K;
+        # v1.29 has ~180K free), the gate as below, then the rest from RAM by
+        # a DMA channel -- no file reads, GCs or USB interrupts can leave the
+        # FIFO dry under the Z80's 33 us write loop, which would put 00s in
+        # the flash. A Z80 that stops (reset mid-write) or a BREAK / SYNC now
+        # ends it too: the loop never pauses once it has started, so 3 s of
+        # no reads means it has gone.
+        data = None
+        if tspico_io._DMA is not None:
+            try:
+                gc.collect()
+                data = bytearray(total)
+            except MemoryError:
+                data = None
+        if data is not None:
+            got = f.readinto(data)
+            mvd = memoryview(data)[:got]
+            k = min(GATE, got)
+            for i in range(k):
+                CMD_PUT(mvd[i])
+            if k < got:
+                _CMD_ECHO[0] = 0
+                r = STREAM_DMA(MQ, mvd[k:], _CMD_ECHO, 3000, False)
+                if r is None:
+                    for j in range(k, got):
+                        wrt(mvd[j])
+                elif r[0]:
+                    raise CmdAbort(r[0])
+            return
         gate = GATE
         left = total
         while left > 0:
@@ -6716,9 +6795,18 @@ def ZX_TPI():
     # slower), so on v1.29 the FIFO ran dry and the mount message came out
     # garbled (hardware, 2026-10-02; src/test/mp_timing_bench.py). This
     # shape is ~9 us a byte on both.
+    n = len(out)
+    # By DMA where there is one: the FIFO is fed whatever core0 is doing.
+    r = STREAM_DMA(MQ, memoryview(out)[i:], None, ZX_STALL_MS, False) if i < n else None
+    if r is not None:
+        if r[0]:
+            w = r[2] if r[0] == 4 else -2
+            ZX_FLUSH_TX(MQ)
+            LOG("ZX tpi: reply stopped at byte %d of %d" % (i + r[1], n), 2)
+            return w if w >= 0 else -1
+        return -1
     txf = MQ.tx_fifo
     put = MQ.put
-    n = len(out)
     while i < n:
         if txf() >= TX_DEPTH:
             w = ZX_ROOM(MQ, ZX_STALL_MS)
