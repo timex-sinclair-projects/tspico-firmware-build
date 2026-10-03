@@ -3709,16 +3709,11 @@ def file_exists(filename):                                                      
     
 
 def xchr(m):
-    """Expand or replace character"""
-    ch = ord(m)
-    if ch < 32 or ch > 127:
-        return '?' # Replace control code or high-ASCII
-    elif ch == 124: # '|' prints as the STICK keyword on the 2068
-        return ' STICK '
-    elif ch == 126: # '~' prints as the FREE keyword
-        return ' FREE '
-    else:
-        return m
+    """A character of a Mac/PC name as the 2068 shows it: '?' for any it
+    can't print as itself or type back (catalog.screen_name). | and ~ used
+    to become " STICK " / " FREE " -- what the 2068 prints for them, but
+    nothing anyone could type into LOAD "tpi:..."."""
+    return catalog.screen_name(m)
 
 
 def xstr(s):
@@ -4284,7 +4279,11 @@ def GETHELP(pre, cmd):                                                 # Shows T
                 if file_exists(hname):
                     try:
                         with open(hname, 'rt') as help:
-                            msg = help.read()
+                            # Written on a Mac/PC: what the 2068 can't print
+                            # as itself (| ~ { } ...) shows as '?' -- but keep
+                            # line ends and \* (SEND_MSG2's (c)).
+                            msg = "".join(c if c in "\r\n" else catalog.screen_name(c)
+                                          for c in help.read())
                     except:
                         msg = "Failed to read help file: %s" % hname
                         st = _2_R_Tape_load
@@ -5086,6 +5085,17 @@ def LOAD_TPI(name, only_tap=False):
     name, idx = ResolveIndexName(name)
     if idx < 0 and name.upper() in files_upper:                                 # Is name a valid file?
         idx = files_upper.index(name.upper())
+    if idx < 0 and catalog.has_wild(name):
+        # The name as CAT showed it: '?' for a character the 2068 can't type
+        # (catalog.screen_name), '*' for any run. Exactly one match mounts
+        # it; several say so and point at the number.
+        hits = [i for i, f in enumerate(files) if catalog.match_shown(f, name)]
+        if len(hits) == 1:
+            idx = hits[0]
+        elif hits:
+            msg = "%d files match: " % len(hits)
+            LOG(msg + name, 1)
+            return msg, name + chr(13) + 'Use LOAD "tpi:" with its number.', _3_F_Invalid_file
     if idx < 0:
         msg = "File does not exist: "
         LOG(msg + name, 2)

@@ -127,6 +127,35 @@ def main():
         r, _ = run("1")
         check(r[0] == 0xFF and mounted == ["/sd/TAP/Jetpac.TAP"], "mounted Jetpac.TAP (%r)" % (r,))
 
+        print("names the 2068 can't type: '?' and '*' as wildcards")
+        real_files = ["Manic.tap", "Jetpac.TAP", "zx.rom"]
+        t_files_orig = list(real_files)
+
+        def run_files(files, name):
+            P.fresh(t, pio)
+            t.files = files
+            t.files_upper = [f.upper() for f in files]
+            t.TSP.listing_stale = False
+            pio.tx, pio.rx, pio.y = [], [], 0
+            pio.tx_at_ready = []
+            del mounted[:]
+            pio.run(z80_tpi(name))
+            nxt = t.ZX_TPI()
+            pio.finish()
+            return pio.result
+
+        fs = ["{game}.tap", "(game).tap", "jet~1.tap", "Manic.tap"]
+        r = run_files(fs, "?game?.tap")
+        check(r[0] == 0xFF and mounted == ["/sd/TAP/{game}.tap"],
+              "?game?.tap (as CAT shows {game}.tap) mounts it, not (game).tap (%r %s)" % (r, mounted))
+        r = run_files(fs, "jet?1.tap")
+        check(r[0] == 0xFF and mounted == ["/sd/TAP/jet~1.tap"], "jet?1.tap mounts jet~1.tap (%s)" % mounted)
+        r = run_files(fs, "*.tap")
+        check(r[0] == 0x0E and r[1].startswith(b"4 files match: *.tap") and not mounted,
+              "*.tap matches four: F, use the number, nothing mounted (%r)" % (r,))
+        r = run_files(fs, "?nothing?")
+        check(r[0] == 0x0E and r[1].startswith(b"File does not exist") and not mounted, "no match: F")
+
         print("errors")
         r, _ = run("nothere.tap")
         check(r == (0x0E, b"File does not exist: nothere.tap") and not mounted, "missing: F (%r)" % (r,))

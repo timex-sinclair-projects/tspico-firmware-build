@@ -133,6 +133,22 @@ def test_catalog(c):
           dr[2].startswith("    NOTES.TXT"), "dir rows: dirs, indexed and unindexed files")
     check(all(len(r) == 32 for r in dr), "dir rows: every row is 32 characters")
 
+    # Characters the 2068 can't print as themselves or type (2026-10-01 item)
+    check(c.screen_name("{a}|b~c\x7f\u00e9.tap") == "?a??b?c??.tap",
+          "screen_name: { } | ~ 7Fh and non-ASCII -> '?' (%r)" % c.screen_name("{a}|b~c\x7f\u00e9.tap"))
+    check(c.screen_name("GAME (1).TAP") == "GAME (1).TAP", "screen_name: everything else as it is")
+    check(c.match_shown("{game}.tap", "?GAME?.TAP") and not c.match_shown("(game).tap", "?game?.tap"),
+          "match_shown: '?' stands only for a character the 2068 can't show -- no collision with (game)")
+    check(c.match_shown("{game}.tap", "*.tap") and c.match_shown("(game).tap", "*GAME*"),
+          "match_shown: '*' matches anything")
+    dr = c.dir_rows([("{x}.TAP", False, 10)], lambda n: 3, lambda s, n: s[:n])
+    check(dr[0].startswith("003 ?x?.TAP"), "dir rows show the name as the 2068 can type it (%r)" % dr[0])
+    raw = bytearray(header(3, "x", 10))
+    raw[4:14] = b"a|b\x7f\x90cdefg"                 # the name, past length, flag and type
+    tbl = c.tap_table(io.BytesIO(bytes(raw) + data(bytes(10))))
+    check(tbl[0][3] == "a|b\x7f?cdefg",
+          "a TAP header name (the 2068 wrote it): its bytes as they are, 80h+ -> '?' (%r)" % tbl[0][3])
+
 
 # ---------------------------------------------------------------------------
 # tspico.DIR -> CATALOG against a temp directory
