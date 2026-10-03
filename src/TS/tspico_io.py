@@ -193,6 +193,87 @@ def RX_CAPTURE(MQ, raw, n, stall_ms):
     return n
 
 
+class RxDMA:
+    """The pre-header, caught by DMA. While the dispatcher is idle a DMA
+    channel stands armed on the bus state machine's RX FIFO (DREQ 4: PIO0,
+    state machine 0, RX), and every word the Z80 writes goes straight into
+    raw, an array('I') of n -- whatever core0 is doing.
+
+    Why (hardware, 2026-10-02, MicroPython v1.29): the first command after
+    a 2068 power-on gave Report T. Its pre-header arrived with one byte
+    missing from the middle (42 00 FF 00 00 00 07 00 BA): core0 had paused
+    for longer than the 4-deep FIFO lasts at the Z80's ~30 us a byte, and
+    TS_IO_DUAL's `push noblock` dropped one. A GC, a USB interrupt or a
+    flash write (SAVE_LOG on core1 stops both cores) can each do that.
+    src/test/dma_rx_harness.py: polling lost 400-13979 words under those
+    stalls, the DMA channel none.
+
+    One channel, claimed at boot and kept: arm() when idle, waiting() is
+    the idle loop's "has the Z80 started?", take() finishes the capture
+    with RX_CAPTURE's contract. The channel is never running outside the
+    idle loop -- take() always leaves it stopped -- so every handler reads
+    RX by hand, as before.
+    """
+
+    def __init__(self, raw):
+        self.d = _DMA()
+        self.raw = raw
+        self.n = len(raw)
+        self.ctrl = self.d.pack_ctrl(size=2, inc_read=False, inc_write=True, treq_sel=4)
+        self.armed = False
+
+    def arm(self, MQ):
+        if not self.armed:
+            self.d.config(read=MQ, write=self.raw, count=self.n, ctrl=self.ctrl, trigger=True)
+            self.armed = True
+
+    def waiting(self):
+        """Words the Z80 has written since arm(): 0 while it is quiet."""
+        return self.n - self.d.count if self.armed else 0
+
+    def stop(self):
+        """Stop the channel; the words it took."""
+        self.d.active(0)
+        self.armed = False
+        return self.n - self.d.count
+
+    def take(self, stall_ms):
+        """Wait for the rest of the burst. Returns as RX_CAPTURE: n, k for k
+        words then stall_ms of silence, -k when word k-1 was a write to
+        port 0Fh (the Z80 now waits for READY + IDLE). Leaves the channel
+        stopped; arm() again when idle. Allocates nothing."""
+        n = self.n
+        raw = self.raw
+        last = -1
+        t0 = 0
+        while True:
+            g = n - self.d.count
+            if g >= n:
+                self.armed = False          # all n taken: the channel is done
+                break
+            if g != last:
+                if g and raw[g - 1] & PORT_0F:
+                    return -self.stop()     # nothing follows a 0Fh write
+                last = g
+                t0 = time.ticks_ms()
+            elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                return self.stop()
+        if raw[n - 1] & PORT_0F:
+            return -n
+        return n
+
+
+def RX_DMA(raw):
+    """An RxDMA for raw, or None (no rp2.DMA, or no free channel): the
+    dispatcher then polls with RX_CAPTURE, as before."""
+    if _DMA is None:
+        return None
+    try:
+        return RxDMA(raw)
+    except Exception:
+        return None
+
+
 _stdin_ipoll = None           # set up on first DRAIN_STDIN: poll(0) on sys.stdin
 _stdin_readinto = None
 _stdin_byte = bytearray(1)

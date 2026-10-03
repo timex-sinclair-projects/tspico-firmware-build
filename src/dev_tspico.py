@@ -359,6 +359,7 @@ from TS.tspico_io import (
     SAVE_TS, SAVE_ZX,
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
+    RX_DMA,                              # the pre-header by DMA (v1.29)
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
     RX_BLOCK, RXB_ABORT, RXB_OK,         # printer bodies, ZX tpi:
     ZX_FLUSH_TX, ZX_ROOM, ZX_STALL_MS,   # ZX48 mode (issue #51 stage 6)
@@ -6106,7 +6107,8 @@ def TS2068_IO():                                                         # Main 
     led.value(0)
 
     pre = bytearray(10)
-    pre_raw = array("H", [0] * 10)          # 9-bit capture: bit 8 = port 0Fh write
+    pre_raw = array("I", [0] * 10)          # 9-bit capture: bit 8 = port 0Fh write
+    rxd = RX_DMA(pre_raw)                   # caught by DMA while idle; None: polled
     r1 = range(10)
 
     ts = time.ticks_us()                                                                           # ts -> timestamp
@@ -6129,7 +6131,9 @@ def TS2068_IO():                                                         # Main 
         try:
             while True:                                                                                    # main execution loop
 
-                if (MQ.rx_fifo()) != 0:
+                if rxd is not None:
+                    rxd.arm(MQ)                     # idle: a DMA channel takes the next pre-header
+                if (rxd.waiting() if rxd is not None else MQ.rx_fifo()) != 0:
 
                     ts = time.ticks_us()                                                                   # reset timestamp
 
@@ -6169,7 +6173,10 @@ def TS2068_IO():                                                         # Main 
                     # ROMs up to v1.7 never write 0Fh: for them only the stall path
                     # is new.
                     # ────────────────────────────────────────────────────────────
-                    got = RX_CAPTURE(MQ, pre_raw, 10, 1000)
+                    if rxd is not None:
+                        got = rxd.take(1000)        # the same results, from the DMA channel
+                    else:
+                        got = RX_CAPTURE(MQ, pre_raw, 10, 1000)
                     if got < 0:
                         # A write to 0Fh, with the Z80 now held until we say IDLE:
                         # SYNC, a BREAK abort that landed after its transaction had
@@ -6192,6 +6199,8 @@ def TS2068_IO():                                                         # Main 
                         # (No gc.collect() here: 4.6 ms on every SYNC -- every LPRINT
                         # character -- and not needed: RX_CAPTURE allocates nothing,
                         # so no GC can start during the pre-header burst.)
+                        if rxd is not None:
+                            rxd.arm(MQ)             # before IDLE: the pre-header follows at once
                         MQ_STATUS(MQ, "idle")
                         continue
                     if got != 10:
@@ -6635,6 +6644,8 @@ def TS2068_IO():                                                         # Main 
             SAVE_LOG()
             if len(failures) >= 3:
                 raise
+            if rxd is not None and rxd.armed:
+                rxd.stop()                  # re-armed at the top of the loop
             if sd_active:
                 DEACTIVATE_SD()
             ACTIVATE_MQ()

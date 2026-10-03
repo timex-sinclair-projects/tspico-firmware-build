@@ -20,6 +20,7 @@ pins the production copies. Nothing here watches the Z80 bus.
 Run:  python3 src/test/sync_io_hosttest.py
 """
 
+import ast
 import builtins
 import os
 import re
@@ -169,6 +170,88 @@ def main():
     check(io.RX_CAPTURE(mq, raw, 10, 1000) == -10,
           "a 0Fh write as the 10th word is still caught (returns -10)")
 
+    print("RxDMA (the pre-header by DMA, v1.29)")
+
+    class FakeChannel:
+        """rp2.DMA reading RX into memory, paced by the "RX not empty" DREQ:
+        it takes whatever the FakeMQ has whenever it is looked at."""
+
+        def __init__(self):
+            self.on, self.n, self.i = False, 0, 0
+
+        def pack_ctrl(self, **kw):
+            assert kw == dict(size=2, inc_read=False, inc_write=True, treq_sel=4), kw
+            return 7
+
+        def config(self, read, write, count, ctrl, trigger):
+            self.mq, self.buf, self.n, self.i, self.on = read, write, count, 0, bool(trigger)
+
+        def active(self, v=None):
+            if v is not None:
+                self.on = bool(v)
+            return self.on
+
+        @property
+        def count(self):
+            while self.on and self.i < self.n and self.mq.rx:
+                self.buf[self.i] = self.mq.rx.pop(0)
+                self.i += 1
+            if self.i >= self.n:
+                self.on = False
+            return self.n - self.i
+
+    io._DMA = FakeChannel
+    raw32 = array("I", [0] * 10)
+    rxd = io.RX_DMA(raw32)
+    check(rxd is not None, "RX_DMA gives a capture when rp2.DMA is there")
+
+    def dma_take(words):
+        mq = FakeMQ()
+        rxd.arm(mq)
+        quiet = rxd.waiting()
+        mq.rx.extend(words)
+        return quiet, rxd.waiting(), rxd.take(1000), mq
+
+    q, w, r, mq = dma_take(pre)
+    check(q == 0 and w == 10 and r == 10 and list(raw32) == pre and not rxd.armed,
+          "a whole pre-header: waiting() 0 while quiet, then 10; take() returns 10, in order")
+    q, w, r, mq = dma_take(pre + [0x41, 0x42])
+    check(r == 10 and mq.rx == [0x41, 0x42],
+          "the command body after it stays in the FIFO for the handler")
+    q, w, r, mq = dma_take([0x103])
+    check(r == -1 and raw32[0] == 0x103 and not rxd.armed,
+          "a lone port-0Fh write (SYNC 03h): -1, channel stopped")
+    t0 = io.time.ms
+    q, w, r, mq = dma_take(pre[:4])
+    check(r == 4 and 1000 <= io.time.ms - t0 <= 1010 and not rxd.armed,
+          "4 words then silence: 4 after the 1000 ms stall, channel stopped")
+    q, w, r, mq = dma_take(pre[:3] + [0x103])
+    check(r == -4, "3 words then a SYNC (2068 reset mid pre-header): -4")
+    q, w, r, mq = dma_take(pre[:9] + [0x103])
+    check(r == -10, "a 0Fh write as the 10th word is still caught (-10)")
+    mq = FakeMQ()
+    rxd.arm(mq)
+    ch = rxd.d
+    rxd.arm(mq)
+    check(rxd.armed and ch.on and rxd.waiting() == 0,
+          "arm() twice is one arming (the idle loop calls it every pass)")
+    rxd.stop()
+
+    def no_channel():
+        raise OSError("no free DMA channel")
+    io._DMA = no_channel
+    check(io.RX_DMA(raw32) is None, "no free channel: None, and the dispatcher polls")
+    io._DMA = None
+    check(io.RX_DMA(raw32) is None, "no rp2.DMA (v1.20): None")
+    fn = [n for n in ast.parse(open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read())
+          .body if isinstance(n, ast.ClassDef) and n.name == "RxDMA"][0]
+    take = [n for n in fn.body if isinstance(n, ast.FunctionDef) and n.name == "take"][0]
+    bad = [n.lineno for n in ast.walk(take)
+           if isinstance(n, (ast.List, ast.Dict, ast.ListComp, ast.JoinedStr))
+           or (isinstance(n, ast.Assign) and isinstance(n.value, ast.Attribute)
+               and n.value.attr in ("get", "rx_fifo", "active", "stop", "ticks_ms"))]
+    check(not bad, "take() builds nothing and stores no bound methods (%s)" % bad)
+
     print("MQ_STATUS")
     for st, want in (("idle", 0xFF), ("mid", 0xF7), ("recovered", 0xFB)):
         mq = FakeMQ()
@@ -197,6 +280,15 @@ def main():
         body = src[src.index("def TS2068_IO"):]
         check("got = RX_CAPTURE(MQ, pre_raw, 10, 1000)" in body,
               "%s: the main loop reads the pre-header through RX_CAPTURE" % name)
+        loop = body[body.index("    failures = []"):]
+        check("rxd.arm(MQ)" in loop and "rxd.waiting()" in loop and "got = rxd.take(1000)" in loop,
+              "%s: ...or, where there is DMA, through RxDMA: armed while idle, taken" % name)
+        sync = loop[loop.index("if got < 0:"):loop.index("if got != 10:")]
+        check(sync.index("rxd.arm(MQ)") < sync.index('MQ_STATUS(MQ, "idle")'),
+              "%s: after a SYNC the channel is armed BEFORE IDLE (the pre-header follows at once)" % name)
+        exc = loop[loop.index("except Exception as err:"):]
+        check(exc.index("rxd.stop()") < exc.index("MQ_TO_IDLE(MQ, recovered=True)"),
+              "%s: a service-loop restart stops the channel before draining RX" % name)
         check(not re.search(r"for i in r1:\s*\n\s*pre\[i\] = MQ\.get\(\)", body),
               "%s: the old blocking pre-header loop is gone" % name)
         sync = body[body.index("if got < 0:"):body.index("if got != 10:")]
