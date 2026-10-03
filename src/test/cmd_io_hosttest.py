@@ -282,6 +282,35 @@ def main():
               "26 chars + STICK straddles column 32: every line is two on screen, so 60 lines"
               " prompt twice (%s prompts)" % (r[1] if len(r) > 1 else r,))
 
+        print("RX flushes before a reply hear BREAK (audit §4)")
+        saved_mq = t.MQ
+        words = [0x41, 0x103]
+        t.MQ = types.SimpleNamespace(rx_fifo=lambda: len(words), get=lambda: words.pop(0))
+        try:
+            t.CMD_RX_FLUSH()
+            raised = None
+        except t.CmdAbort as e:
+            raised = e.args[0]
+        check(raised == 1 and not words, "a stray key, then BREAK's 0Fh write: CmdAbort(1), not swallowed")
+        words[:] = [0x41, 0x42]
+        t.CMD_RX_FLUSH()
+        check(not words, "stray keys alone: just emptied")
+        t.MQ = saved_mq
+        src = open(os.path.join(SRC, "TS", "tspico.py"), encoding="utf-8").read().replace("\r", "")
+        for fn in ("SEND_MSG2", "PROMPT_EACH", "ListMenu", "SEND_MSG_PROMPT_YN"):
+            body = src[src.index("def %s(" % fn):]
+            body = body[:body.index("\ndef ", 5)]
+            head = body[:body.index("CMD_KEY()") if "CMD_KEY()" in body else len(body)]
+            check("CMD_RX_FLUSH()" in head and "while MQ.rx_fifo() != 0:" not in head.split("CMD_RX_FLUSH()")[0],
+                  "%s empties RX with CMD_RX_FLUSH, not a plain drain" % fn)
+        pc = src[src.index("def PROCESS_CMD("):src.index("def TS2068_IO(")]
+        tail = pc[pc.index("finally:"):]
+        check(tail.index("RXD.arm(MQ)") < tail.index('MQ_STATUS(MQ, "recovered" if cmd_abort == 3 else "idle")'),
+              "PROCESS_CMD's tail arms the pre-header's DMA channel before it says IDLE")
+        loop = src[src.index("def TS2068_IO("):]
+        z = loop.index("ZX48_IO(pre)")
+        check("rxd.stop()" in loop[z - 200:z], "the channel is stopped before ZX48_IO reads RX by hand")
+
         print("a page that ends with short lines still prompts (audit §4, n > i + 34)")
         kw_text[0] = "".join("%02d a long line of help text....\r" % i for i in range(1, 22)) + "x\r" * 12
         pio, r = run(b"tpi:kw")

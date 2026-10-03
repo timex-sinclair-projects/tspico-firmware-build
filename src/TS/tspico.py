@@ -442,6 +442,8 @@ INK_ = "\x10"
 PAPER_ = "\x11"
 NORMAL_ = PAPER_ + "\x08" + INK_ + "\x08"
 
+RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD's tail
+
 # What a command that needs the card answers when there is none: always
 # shown (SEND_MSG forces it), with Report J -- "Invalid I/O device" is the
 # report that means the device isn't there.
@@ -671,9 +673,13 @@ def DEACTIVATE_SD():
     U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
     U3_CS.value(1)
 
-    # GPIO 2-4 are shared with SPI (SCK/MOSI/MISO). Drive them LOW
-    # before the PIO state machine reclaims them. This is the Report D
-    # fix from the dual-port migration.
+    # GPIO 2-4 are the SD card's SPI lines (SCK/MOSI/MISO) and also D0-D2
+    # of the 2068 bus. Leave them driven LOW, not floating, until the bus
+    # state machine takes them back (ACTIVATE_MQ, straight after). Kept
+    # as harmless; whether it's needed at all -- U6 keeps the 2068 off
+    # these pins during SD use since #61 -- needs a scope (audit §4). It is
+    # not the "Report D fix" this comment used to claim: that was about
+    # D6, which is GPIO 8.
     for p in (2, 3, 4):
         Pin(p, Pin.OUT).value(0)
     TLM("DEACTIVATE_SD exit", "GPIO 2-4 clamped LOW, U3_CS=HIGH")
@@ -936,6 +942,21 @@ def CMD_DRAIN():
             raise CmdAbort(1)
         if time.ticks_diff(time.ticks_ms(), t0) >= CMD_STALL_MS:
             raise CmdAbort(3)
+
+
+def CMD_RX_FLUSH():
+    """Empty RX before a reply that waits for keys -- but a write to port
+    0Fh found there is BREAK (or the next command's SYNC): raise CmdAbort,
+    as CMD_KEY would. A plain drain swallowed it, and the Z80, waiting in
+    its abort for READY + IDLE, then got the listing's READY + IDLE, raised
+    Report D, and left the Pico sending to nobody until the next command's
+    SYNC ended it -- whose pre-header was then lost: Report T (audit §4,
+    "RX flushes on entry")."""
+    for _ in range(64):
+        if not MQ.rx_fifo():
+            return
+        if MQ.get() & PORT_0F:
+            raise CmdAbort(1)
 
 
 def CMD_FLUSH():
@@ -2226,8 +2247,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
     wrt(0x0D)   # Start on a new line
     wrt(0x0D)   # Start with a blank line we don't count
 
-    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
-        MQ.get()
+    CMD_RX_FLUSH()              # stray keystrokes (a BREAK among them raises CmdAbort)
 
     TLM("SEND_MSG2 inline-wrt start", "header+MQ_READY done")
 
@@ -2678,8 +2698,7 @@ def PROMPT_EACH(prompts):                                                     # 
     global MQ
 
     wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
-    while MQ.rx_fifo() != 0:                                                  # stray keystrokes
-        MQ.get()
+    CMD_RX_FLUSH()                                                            # stray keystrokes; a BREAK raises CmdAbort
     wrt(0x86)                                                                 # PRINT STRING WITH LOOP -- the D-block status
     wrt(1)                                                                    # BASIC return code
     need_ready = True
@@ -3433,8 +3452,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
     # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
     need_ready = True
 
-    while MQ.rx_fifo() != 0:            # Drain any pre-existing keystrokes
-        MQ.get()
+    CMD_RX_FLUSH()                      # stray keystrokes; a BREAK raises CmdAbort
 
     # ─── DUAL-PORT MIGRATION: empty-list guard ──────────────────────────
     # Without this, an empty List skips the `while idx < n` loop entirely
@@ -4899,6 +4917,10 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         SEND_MSG(msg, "", _1_OK)
         LOG(msg, 0)
         
+        # Kept (audit §4): the ROM is switched under the running 2068 right
+        # here, and SEND_MSG has only waited for TX to empty -- the Z80 is
+        # still finishing the statement in the old ROM. 0.1 s is cheap next
+        # to a crash, and nothing measured says it can go.
         utime.sleep(.100)
         
         ROM.put(TSP.ROM_SM)
@@ -5223,8 +5245,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     if not lower:
         wrt(0x0D)   # Start a new line (the lower screen starts clear)
 
-    while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
-        MQ.get()
+    CMD_RX_FLUSH()              # stray keystrokes (a BREAK among them raises CmdAbort)
 
     for ch in prompt:
         wrt(ch)
@@ -5999,6 +6020,14 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         # its next status read blocks until timeout → Report J. The
         # pre-load byte sits in TX but the Z80 never reads it.
         # ──────────────────────────────────────────────────────────────────
+        # Arm the pre-header's DMA channel BEFORE saying IDLE, as the SYNC
+        # path does: the Z80 sends its next command the moment it sees IDLE
+        # -- a BASIC program's next tpi: line, or a SYNC this tail's drain
+        # just swallowed -- and between here and the top of the main loop
+        # (a LOG, the return, a TLM) the 4-deep FIFO overflowed: "Partial
+        # pre-header 4/10: 42 00 FF 00", Report T (hardware, 2026-10-03).
+        if RXD is not None:
+            RXD.arm(MQ)
         MQ_STATUS(MQ, "recovered" if cmd_abort == 3 else "idle")
 
         LOG("Exiting CMD processing: %s %d %d" % (cmd_exec, MQ.tx_fifo(), MQ.rx_fifo()), 0)
@@ -6301,6 +6330,8 @@ def TS2068_IO():                                                         # Main 
     pre = bytearray(10)
     pre_raw = array("I", [0] * 10)          # 9-bit capture: bit 8 = port 0Fh write
     rxd = RX_DMA(pre_raw)                   # caught by DMA while idle; None: polled
+    global RXD
+    RXD = rxd                               # PROCESS_CMD's tail arms it before IDLE
     r1 = range(10)
 
     ts = time.ticks_us()                                                                           # ts -> timestamp
@@ -6691,6 +6722,8 @@ def TS2068_IO():                                                         # Main 
                             continue
                 
                         if TSP.zx48:
+                            if rxd is not None and rxd.armed:
+                                rxd.stop()          # ZX48_IO reads RX by hand
                             ZX48_IO(pre)
                     
                     # ─── No 'A' (41h) branch any more ──────────────────────────────
