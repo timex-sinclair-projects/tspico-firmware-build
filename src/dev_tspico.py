@@ -2343,7 +2343,14 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
                             i += 1
                     wrt(0x0D)
 
-            if l == ll and n > i + 34:
+            # Prompt at the page's end unless what's left fits on the line or
+            # two the screen can still scroll: under 34 characters AND at most
+            # one line break. Characters alone let a tail of short lines (help
+            # text, a listing ending in one-word rows) scroll the page off
+            # unread: 21 lines + 12 short ones printed 34 with no prompt
+            # (audit §4, "n > i + 34"; host check 2026-10-03).
+            if l == ll and (n > i + 34 or msg.count("\r", i + 1) + msg.count("\n", i + 1)
+                            - msg.count("\r\n", i + 1) > 1):
                 # Scroll-prompt path (inline-wrt style).
                 l = 0
                 for m in "(%2d%%) " % ((i * 100) // n):
