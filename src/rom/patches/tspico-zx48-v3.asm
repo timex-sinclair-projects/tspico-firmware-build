@@ -4,7 +4,12 @@
 ;
 ; Build:  tools/build-rom.sh        (needs sjasmplus 1.20+)
 ; Input:  ROMs/TSPICO-ZX48-V2.BIN   the ZX v2 ROM, crc32 B3D40C73 (16K)
-; Output: src/rom/TSPICO-ZX48-V3.BIN
+; Output: src/rom/TSPICO-ZX48-V3.BIN, and with -DZXV=4 src/rom/TSPICO-ZX48-V4.BIN
+;
+; v4 (2026-10-03) adds SAVE "tpi:dir": the reply comes in pieces, so it can be
+; longer than the 255 bytes one length byte allows (a folder listing). It says
+; so by sending the op with bit 7 set; the firmware answers a v3 ROM -- op
+; without it -- exactly as before. See "v4" below.
 ;
 ; What it fixes: v2's WAIT_RDY left D = 4, so every ZX48 LOAD and SAVE moved
 ; 0400h + (length AND FFh) bytes -- see WAIT_RDY_V3 below.
@@ -35,6 +40,12 @@
 ;
 ; then "0 OK" -- the program goes on -- or the report.
 ;
+; v4: the op goes out with bit 7 set (80h + T_ADDR), and the reply after the
+; status is pieces: a length (1-255), that many bytes, printed as they come
+; -- the upper screen's own "scroll?" handles a long listing -- and so on to a
+; length of 0. One ENTER after the last piece; none if there was no text.
+; SAVE "tpi:dir [arg]" lists the Pico's current folder this way.
+;
 ; Firmware without the 'T' command treats it as an unknown byte and never
 ; raises READY: Report J after ~3.8 s. Any other LOAD, SAVE, VERIFY or MERGE
 ; is exactly as in v2. Checked by src/test/rom_zx48_hosttest.py.
@@ -60,7 +71,14 @@ ERR_J           equ 12h         ; J Invalid I/O device
 
 NEW_CODE        equ 38B8h       ; free (FFh) after v2's banner, to 3CFFh
 
+        IFNDEF ZXV
+ZXV     equ 3                   ; tools/build-rom.sh builds v4 with -DZXV=4
+        ENDIF
+        IF ZXV = 4
+        OUTPUT "TSPICO-ZX48-V4.BIN"
+        ELSE
         OUTPUT "TSPICO-ZX48-V3.BIN"
+        ENDIF
         INCBIN "../../ROMs/TSPICO-ZX48-V2.BIN"
 
         MACRO AT addr
@@ -99,9 +117,9 @@ WAIT_RDY_V3:
         ret
         ASSERT $ <= 388Ah       ; SAVE_WAIT at 388Ah is kept
 
-; ---- banner: "... TS-Pico ZX v2" -> "v3" --------------------------------------
+; ---- banner: "... TS-Pico ZX v2" -> "v3" (or "v4") ----------------------------
         AT 38B7h
-        db '3' | 80h
+        db ('0' + ZXV) | 80h
 
 ; =============================================================================
         AT NEW_CODE
@@ -152,6 +170,9 @@ TPI_CMD:
         ld a,ERR_J
         jr nc,TPI_ERR           ; no Pico, or firmware without 'T'
         ld a,(T_ADDR)
+        IF ZXV >= 4
+        or 80h                  ; v4: "send the reply in pieces"
+        ENDIF
         call TPI_OUT            ; op
         ld a,c
         call TPI_OUT            ; length
@@ -181,9 +202,38 @@ TPI_CMD:
 .reply: in a,(PORT_DATA)        ; status
         push af
         call TPI_DLY
-        in a,(PORT_DATA)        ; message length
+        in a,(PORT_DATA)        ; message length (v4: the first piece's)
         or a
         jr z,.done
+        IF ZXV >= 4
+        push af
+        ld bc,255
+        rst 30h                 ; BC-SPACES: DE = a 255-byte buffer in the workspace
+        pop af
+        push de                 ; the buffer, for every piece
+.piece: ld b,a                  ; B = this piece's length
+        pop de
+        push de
+        push bc
+.read:  call TPI_DLY
+        in a,(PORT_DATA)
+        ld (de),a
+        inc de
+        djnz .read
+        ld a,2
+        call CHAN_OPEN          ; the upper screen
+        pop bc
+        ld c,b
+        ld b,0                  ; BC = the length
+        pop de
+        push de
+        call PR_STRING          ; (its "scroll?" waits as long as it likes)
+        call TPI_DLY
+        in a,(PORT_DATA)        ; the next piece's length; 0 = the end
+        or a
+        jr nz,.piece
+        pop de
+        ELSE
         ld c,a
         ld b,0
         rst 30h                 ; BC-SPACES: DE = room in the workspace, BC kept
@@ -200,6 +250,7 @@ TPI_CMD:
         pop bc
         pop de
         call PR_STRING
+        ENDIF
         ld a,0Dh
         rst 10h
 .done:  pop af

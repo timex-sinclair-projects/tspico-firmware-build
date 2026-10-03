@@ -3,6 +3,7 @@
 #
 #   src/rom/patches/tspico-sync.asm      v1.7 + SYNC/BREAK -> src/rom/TSPICO-SYNC.ROM
 #   src/rom/patches/tspico-zx48-v3.asm   ZX v2 + tpi: LOAD -> src/rom/TSPICO-ZX48-V3.BIN
+#                            -DZXV=4: + SAVE "tpi:dir" -> src/rom/TSPICO-ZX48-V4.BIN
 #
 # Needs sjasmplus (https://github.com/z00m128/sjasmplus). The shipping ROM,
 # src/rom/TSPICO.ROM (slot 1 in flash/manifest.json), is never modified.
@@ -13,5 +14,6 @@ cd "$root/src/rom"
 # exactly the "ORG without padding" that warning describes.
 sjasmplus --nologo --msg=war -Wno-fileorg --lst=patches/tspico-sync.lst patches/tspico-sync.asm
 sjasmplus --nologo --msg=war -Wno-fileorg --lst=patches/tspico-zx48-v3.lst patches/tspico-zx48-v3.asm
+sjasmplus --nologo --msg=war -Wno-fileorg -DZXV=4 --lst=patches/tspico-zx48-v4.lst patches/tspico-zx48-v3.asm
 python3 "$root/src/test/rom_sync_hosttest.py"
 python3 "$root/src/test/rom_zx48_hosttest.py"

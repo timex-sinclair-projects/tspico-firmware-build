@@ -441,7 +441,9 @@ examples; most programs are better off driving the ports directly.
 
 After `tpi:zx48` the Pico serves the customised Spectrum ROM (flash slot 0) and
 speaks its protocol: no status port, no pre-header, no echo. `'L'` → flag +
-content + CRC; `'S'` → a block; `'T'` (ZX v3 ROM) → `LOAD "tpi:name"`. The V6
+content + CRC; `'S'` → a block; `'T'` (ZX v3 ROM) → `LOAD "tpi:name"`; ZX v4
+also `SAVE "tpi:dir"`, flagged by bit 7 of the op byte, with the reply in
+pieces (status, then length 1–255 + bytes, repeated, then 0). The V6
 pre-load chain does not apply (§13). The 2068 leaves ZX48 mode with
 `OUT 244,0` then `OUT 14,14`.
 

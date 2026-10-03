@@ -36,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 BASE = os.path.join(REPO, "ROMs", "TSPICO-ZX48-V2.BIN")
 PATCHED = os.path.join(REPO, "src", "rom", "TSPICO-ZX48-V3.BIN")
+PATCHED_V4 = os.path.join(REPO, "src", "rom", "TSPICO-ZX48-V4.BIN")   # -DZXV=4: SAVE "tpi:dir"
 ASM = os.path.join(REPO, "src", "rom", "patches", "tspico-zx48-v3.asm")
 
 V2_CRC = "B3D40C73"
@@ -201,6 +202,10 @@ class Z80:
             self.a = self.b
         elif op == 0x79:
             self.a = self.c
+        elif op == 0x47:
+            self.b = self.a; t = 4
+        elif op == 0x48:
+            self.c = self.b; t = 4
         elif op == 0x4F:
             self.c = self.a
         elif op == 0x41:
@@ -294,8 +299,9 @@ class Pico:
     OUT drops READY (PIO auto-busy); READY after 'T', then after the whole
     name, with the reply queued first. An IN from an empty TX reads 00."""
 
-    def __init__(self, reply=None, answer_t=True, reply_after_us=500, break_at_us=None):
+    def __init__(self, reply=None, answer_t=True, reply_after_us=500, break_at_us=None, piece=255):
         self.reply = reply              # (status, message) or None = never replies
+        self.piece = piece              # v4: the firmware's piece size
         self.answer_t = answer_t
         self.reply_after = reply_after_us * MHZ
         self.break_at = None if break_at_us is None else break_at_us * MHZ
@@ -317,7 +323,14 @@ class Pico:
         elif len(self.rx) >= 3 and len(self.rx) == 3 + self.rx[2]:
             if self.reply is not None:
                 st, msg = self.reply
-                self.tx = [st, len(msg)] + list(msg)
+                if self.rx[1] & 0x80:               # v4: pieces of up to 255, then 0
+                    self.tx = [st]
+                    for i in range(0, len(msg), self.piece):
+                        part = list(msg[i:i + self.piece])
+                        self.tx += [len(part)] + part
+                    self.tx.append(0)
+                else:
+                    self.tx = [st, len(msg)] + list(msg)
                 self.ready_at = t + self.reply_after
 
     def z80_in(self, port, t):
@@ -459,6 +472,53 @@ def main():
           "no BREAK: Report J after %.0f s" % secs)
     z, p, sp = run(rom, "tpi:big.tap", reply=(0xFF, b"ok"), reply_after_us=8_000_000)
     check(z.exit == "ok", "a slow mount (8 s, a big file copied to flash) still completes")
+
+    print('v4 (-DZXV=4): SAVE "tpi:dir", the reply in pieces')
+    rom4 = open(PATCHED_V4, "rb").read()
+    diff = [i for i in range(16384) if rom4[i] != base[i]]
+    outside = [i for i in diff if not (CALL_SITE <= i < CALL_SITE + 3 or i == 0x38B7
+                                       or 0x3874 <= i < 0x388A or NEW_CODE <= i < NEW_END)]
+    check(len(rom4) == 16384 and not outside and rom4[0x38B7] == 0xB4,
+          "v4: 16K, the same places changed, banner 'ZX v4'")
+    check(rom4[0x3874:0x388A] == rom[0x3874:0x388A] and rom4[CALL_SITE:CALL_SITE + 3] == rom[CALL_SITE:CALL_SITE + 3],
+          "v4: WAIT_RDY and the call site as in v3")
+    if shutil.which("sjasmplus"):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "src", "rom", "patches")
+            os.makedirs(src)
+            os.makedirs(os.path.join(tmp, "ROMs"))
+            shutil.copy(ASM, src)
+            shutil.copy(BASE, os.path.join(tmp, "ROMs"))
+            subprocess.run(["sjasmplus", "--nologo", "--msg=err", "-Wno-fileorg", "-DZXV=4",
+                            "patches/tspico-zx48-v3.asm"],
+                           cwd=os.path.join(tmp, "src", "rom"), check=True)
+            built = open(os.path.join(tmp, "src", "rom", "TSPICO-ZX48-V4.BIN"), "rb").read()
+            check(built == rom4, "v4: the committed image is what the source builds")
+
+    msg = b"File mounted OK manic.tap"
+    z, p, sp = run(rom4, "TPI:Manic.tap", reply=(0xFF, msg))
+    check(z.exit == "ok" and z.sp == sp + 2 and p.rx == [0x54, 0x81, 9] + list(b"Manic.tap")
+          and bytes(z.printed) == msg + b"\r" and z.m[IY] == 0xFF,
+          "LOAD: op 81h (LOAD, 'pieces'), one piece printed, ENTER, 0 OK (%r)" % bytes(z.printed))
+    listing = bytes((32 + i % 90) for i in range(1300))       # a 40-file folder's worth
+    for piece in (255, 32, 1):
+        z, p, sp = run(rom4, "tpi:dir", t_addr=0, reply=(0xFF, listing), piece=piece)
+        gaps = [(b - a) / MHZ for a, b in zip(p.in_t, p.in_t[1:])]
+        check(z.exit == "ok" and z.sp == sp + 2 and p.rx[:2] == [0x54, 0x80]
+              and bytes(z.printed) == listing + b"\r" and p.underrun == 0 and min(gaps) >= 35,
+              "SAVE \"tpi:dir\": op 80h; 1300 bytes in pieces of %d, all printed, one ENTER, "
+              "stack balanced, nothing read from an empty TX" % piece)
+    z, p, sp = run(rom4, "tpi:3", reply=(0xFF, b""))
+    check(z.exit == "ok" and z.sp == sp + 2 and not z.printed, "no text: nothing printed, no ENTER")
+    z, p, sp = run(rom4, "tpi:nothere.tap", reply=(0x0E, b"File does not exist: nothere.tap"))
+    check(z.exit == "report" and z.m[IY] == 0x0E and z.printed.startswith(b"File does not exist"),
+          "an error: its message, then Report F")
+    z, p, sp = run(rom4, "tpi:x.tap", answer_t=False)
+    check(z.exit == "report" and z.m[IY] == 0x12, "no Pico: Report J, as v3")
+    z, p, sp = run(rom4, "hello")
+    check(z.exit == "stock" and not p.rx, "other names: the stock path")
+    end = max(i for i in range(NEW_CODE, NEW_END) if rom4[i] != 0xFF)
+    check(end < NEW_END, "v4's code ends at %04Xh, inside the free space (to 3CFFh)" % end)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))

@@ -41,7 +41,8 @@ def check(cond, msg):
 
 
 def z80_tpi(name, op=1, stop_at=None):
-    """The v3 ROM after its 'T' (ZX48_IO has taken it)."""
+    """The v3 ROM after its 'T' (ZX48_IO has taken it). op with bit 7 set
+    is the v4 ROM, which reads the reply in pieces (length, bytes ... 0)."""
     st = yield ("wait", READY, 20000)
     if st is None:
         return ("J", None)
@@ -56,8 +57,12 @@ def z80_tpi(name, op=1, stop_at=None):
     status = yield ("in",)
     n = yield ("in",)
     msg = bytearray()
-    for _ in range(n):
-        msg.append((yield ("in",)))
+    while True:
+        for _ in range(n):
+            msg.append((yield ("in",)))
+        if not op & 0x80 or not n:
+            break
+        n = yield ("in",)                   # v4: the next piece's length, 0 = the end
     return (status, bytes(msg))
 
 
@@ -177,8 +182,40 @@ def main():
         check(r == (0x19, b"Only .tap files in ZX48 mode: zx.rom") and not mounted,
               "a .ROM: Q, not mounted (%r)" % (r,))
         r, _ = run("dir", op=0)
-        check(r[0] == 0x19 and r[1].startswith(b"Only LOAD") and not mounted,
-              'SAVE "tpi:dir": Q (%r)' % (r,))
+        check(r[0] == 0x19 and r[1] == b'SAVE "tpi:dir" needs ZX ROM v4' and not mounted,
+              'SAVE "tpi:dir" from a v3 ROM: Q, and why (%r)' % (r,))
+        r, _ = run("x", op=2)
+        check(r[0] == 0x19 and r[1].startswith(b"Only LOAD"), "VERIFY: Q (%r)" % (r,))
+        r, _ = run("MANIC.TAP", op=0x81)
+        check(r == (0xFF, b"File mounted OK MANIC.TAP") and mounted == ["/sd/TAP/Manic.tap"],
+              "a v4 LOAD (op 81h): the same mount, its message as one piece (%r)" % (r,))
+
+        print('SAVE "tpi:dir" from the v4 ROM: the listing in pieces')
+        real = {n: getattr(t, n) for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ", "CATALOG_TEXT")}
+        steps = []
+        big = t.DIR_HEADER("40 files, 0 dirs", "/TAP") + "".join(
+            "%03d %-18s%10s" % (i, "GAME%02d.TAP" % i, "47 kB") for i in range(40))
+        t.ACTIVATE_SD = lambda *a: steps.append("ACTIVATE_SD")
+        t.DEACTIVATE_SD = lambda: steps.append("DEACTIVATE_SD")
+        t.ACTIVATE_MQ = lambda *a: (steps.append("ACTIVATE_MQ"), setattr(t, "MQ", pio))
+        t.CATALOG_TEXT = lambda arg: (steps.append("CATALOG %r" % arg), (big, t._1_OK))[1]
+        try:
+            r, nxt = run("dir", op=0x80)
+            want = t.CAT_COLOUR(big).encode()
+            check(r[0] == 0xFF and r[1] == want and len(want) > 1300 and nxt == -1,
+                  "0 OK and all %d bytes of CAT's coloured listing, over the 255 one piece holds" % len(want))
+            check(steps == ["ACTIVATE_SD", "CATALOG ''", "DEACTIVATE_SD", "ACTIVATE_MQ"],
+                  "the card is read and the bus handed back (%s)" % steps)
+            check(not pio.tx and pio.dropped == 0, "TX empty afterwards, nothing dropped")
+            del steps[:]
+            run("DIR games", op=0x80)
+            check(steps[1] == "CATALOG 'games'", "SAVE \"tpi:dir games\": the argument goes to CATALOG (%s)" % steps)
+            t.CATALOG_TEXT = lambda arg: ("Not found: x", t._3_F_Invalid_file)
+            r, _ = run("dir x", op=0x80)
+            check(r == (0x0E, b"Not found: x"), "a CATALOG error: its report and message (%r)" % (r,))
+        finally:
+            for n, v in real.items():
+                setattr(t, n, v)
         ok_mount[0] = False
         r, _ = run("manic.tap")
         ok_mount[0] = True
