@@ -315,15 +315,18 @@ def main():
     check(code == io.RXB_OK and list(raw) == pre and mq.rx == [0x41],
           "wide (RX_CAPTURE): 9-bit words kept; the word after the n stays in the FIFO")
     name = b"AutoLyzer.tap"
-    mq = FakeMQ(rx=[1, len(name)] + list(name) + [0x4C])
+    # (The ZX ROM sends nothing more until READY, so nothing follows here.)
+    mq = FakeMQ(rx=[1, len(name)] + list(name))
     both = bytearray(257)
+    t0 = io.time.ms
     code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1)
     check(code == io.RXB_OK and got == 2 + len(name) and bytes(both[2:got]) == name
-          and mq.rx == [0x4C],
-          "len_at=1 (ZX tpi: op, length, name in one run): exactly 2 + 13 words, the rest left (%d)" % got)
-    mq = FakeMQ(rx=[1, 0, 0x4C])
+          and io.time.ms - t0 < 100 and not ch.on,
+          "len_at=1 (ZX tpi: op, length, name in one run): 2 + 13 words, done at once (%d)" % got)
+    mq = FakeMQ(rx=[1, 0])
+    t0 = io.time.ms
     code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1)
-    check(code == io.RXB_OK and got == 2 and mq.rx == [0x4C], "len_at with a length of 0: 2 words")
+    check(code == io.RXB_OK and got == 2 and io.time.ms - t0 < 100, "len_at with a length of 0: 2 words")
     io._ring = ring
     mq = FakeMQ(rx=pre[:3] + [0x103])
     check(io.RX_CAPTURE(mq, raw, 10, 1000) == -4, "RX_CAPTURE by ring: a SYNC after 3 words gives -4")
