@@ -727,6 +727,11 @@ def ACTIVATE_MQ():                                                              
                       sideset_base=Pin(12, Pin.OUT))
 
     MQ.active(1)                                                              # (an unused ready=False path, SM built but not started, was removed: audit §3)
+    # A new StateMachine doesn't clear Y: it keeps whatever the last program
+    # on state machine 0 left there, so "BUSY" below was never guaranteed --
+    # a READY left over would let the Z80 read an empty TX as 00. Say it
+    # (audit §4; ~18 us).
+    MQ_BUSY()
     # ─── DUAL-PORT MIGRATION: Y stays at BUSY here ──────────────────
     # We INTENTIONALLY do NOT set Y=READY in this function. Caller
     # MUST load any response bytes into TX and then call MQ_READY()
@@ -880,6 +885,34 @@ def CMD_SEND(buf, ready):
         MQ_READY()
     for i in range(k, n):
         CMD_PUT(buf[i])
+
+
+class CmdOut:
+    """A page of command output, built in RAM and sent with CMD_SEND:
+    `wrt = CmdOut()`, then wrt(byte or str) as with CMD_PUT, and
+    wrt.send() where the Pico would wait for the Z80 -- before a key read
+    or the end. Nothing reaches TX before send(), and send() says READY
+    once the first bytes are in (and, with DMA, the channel is running):
+    data in TX first, then READY, as every handler must. For menus and
+    prompts (ListMenu, PROMPT_EACH, SEND_MSG_PROMPT_YN), which the ROM
+    prints a character at a time, blind -- as SEND_MSG2's pages."""
+
+    def __init__(self):
+        self.b = bytearray()
+
+    def __call__(self, x):
+        if isinstance(x, str):
+            self.b.extend(x.encode())
+        else:
+            self.b.append(x)
+
+    def send(self, ready=True):
+        b = self.b
+        self.b = bytearray()
+        if b:
+            CMD_SEND(b, ready)
+        elif ready:
+            MQ_READY()
 
 
 def CMD_KEY():
@@ -1157,6 +1190,51 @@ def SD_REVALIDATE(changed):                                                    #
     os.chdir(TSP.cur_path)
     TSP.sd_listing_ok = DIR_FILES()
     alldirs = GET_DIRS()
+
+
+def LISTING_SIG(entries):                                                     # the folder's names, types and sizes, as one number
+
+    """A fingerprint of a folder listing (os.ilistdir's entries, in
+    LIST_DIR_FILES' order): name, type and size of each. Two listings with
+    the same fingerprint list the same files."""
+    return hash(tuple((e[0], e[1], e[3] if len(e) > 3 else 0) for e in entries))
+
+
+def LISTING_FRESHEN():                                                        # re-read the folder if the card's copy changed
+
+    """The card is mounted. Re-read the current folder (DIR_FILES: files,
+    lista, dirinfo.tap) if what is on the card no longer matches the last
+    listing. The Pico only noticed a card being swapped when a command found
+    it missing or a different card; the SAME card, taken out, given a file
+    on a Mac and put back between two commands, kept the old listing -- CAT
+    didn't show the file and LOAD "tpi:" couldn't find it until a reboot
+    (hardware, 2026-10-03). Reading the folder is cheap; rebuilding the
+    listing (dirinfo.tap, free space) happens only when it changed."""
+    try:
+        os.chdir(TSP.cur_path)
+        sig = LISTING_SIG(sorted(os.ilistdir(), key=lambda fname: fname[0].lower()))
+    except OSError:
+        return
+    if sig != getattr(TSP, "listing_sig", None):
+        LOG("The folder changed on the card: re-reading it", 0)
+        TSP.sd_listing_ok = DIR_FILES()
+
+
+def LISTING_CHECK():                                                         # mount, LISTING_FRESHEN, give the bus back
+
+    """Mount the card, bring the listing up to date if the folder changed
+    (LISTING_FRESHEN), and hand the bus back to the MQ (Y BUSY). False if
+    there is no card."""
+    ok = True
+    try:
+        ACTIVATE_SD()
+        LISTING_FRESHEN()
+    except OSError:
+        ok = False
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+    return ok
 
 
 def REFRESH_LISTING():                                                         # re-read the folder after a ZX48 SAVE
@@ -1535,6 +1613,7 @@ def LIST_DIR_FILES():                                                           
         listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
     else:
         listing = [item for item in os.ilistdir()]
+    TSP.listing_sig = LISTING_SIG(listing)                                    # what LISTING_FRESHEN compares
     
     nom = bytearray(32)
     
@@ -1542,7 +1621,7 @@ def LIST_DIR_FILES():                                                           
         if archs[1] == 16384:
             dirs.append(archs[0])
             dirs_upper.append(archs[0].upper())
-            nom = shorten_filename(archs[0].replace("~", "?"), 20)
+            nom = shorten_filename(catalog.screen_name(archs[0]), 20)
             dirinfo.append("%-32s" %  nom)
             L.append("<%-21s       0 B" % (nom + ">"))
 
@@ -1558,7 +1637,7 @@ def LIST_DIR_FILES():                                                           
             
             size_txt = catalog.size_text(int(archs[3]))
 
-            nom = "%03d %-18s%10s" % (i, shorten_filename(archs[0].replace("~", "?"), 18), size_txt)
+            nom = "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(archs[0]), 18), size_txt)
             L.append(nom)
             dirinfo.append(nom)
 
@@ -1569,7 +1648,7 @@ def LIST_DIR_FILES():                                                           
     for archs in listing:
         if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
                 and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
-            L.append("    %-18s%10s" % (shorten_filename(archs[0].replace("~", "?"), 18),
+            L.append("    %-18s%10s" % (shorten_filename(catalog.screen_name(archs[0]), 18),
                                         catalog.size_text(int(archs[3]))))
     
     del listing
@@ -2383,9 +2462,10 @@ def DIR(pre, cmd):                                                              
     if par1 == 0:
         # Regular listing. It is the one made when this card and folder were
         # last read, so look at the card first (one mount, ~0.2 s): a
-        # different card is read afresh (SD_NOTE_CARD), and a card that has
-        # been taken out gets the no-card answer instead of its old files.
-        if not SD_PROBE():
+        # different card is read afresh (SD_NOTE_CARD), a card that has
+        # been taken out gets the no-card answer instead of its old files,
+        # and a folder that changed on the card is re-read (LISTING_FRESHEN).
+        if not LISTING_CHECK():
             NO_CARD_REPLY("TPI:DIR")
             return
         TLM("DIR par1=0 — regular listing via SEND_MSG2")
@@ -2590,7 +2670,7 @@ def PROMPT_EACH(prompts):                                                     # 
 
     global MQ
 
-    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
     while MQ.rx_fifo() != 0:                                                  # stray keystrokes
         MQ.get()
     wrt(0x86)                                                                 # PRINT STRING WITH LOOP -- the D-block status
@@ -2601,13 +2681,11 @@ def PROMPT_EACH(prompts):                                                     # 
     for i, p in enumerate(prompts):
         if ch is not None:
             wrt(ch if 32 <= ch < 127 else 89)                                 # echo the last answer
-        if need_ready:
-            MQ_READY()                                                        # data in TX first, then READY
-            need_ready = False
         wrt(0x0D)
         for m in p:
             wrt(m)
         wrt(0x00)                                                             # Z80 prints, waits for a key
+        wrt.send()                                                            # data in TX first, then READY
         ch = CMD_KEY()                                                        # BREAK here raises CmdAbort
         if ch in (78, 110):                                                   # N: the ROM has left its loop
             MQ_READY()
@@ -2617,7 +2695,7 @@ def PROMPT_EACH(prompts):                                                     # 
         need_ready = True
     wrt(ch if 32 <= ch < 127 else 89)
     wrt(0x03)                                                                 # end the loop
-    MQ_READY()
+    wrt.send()
     CMD_DRAIN()
     return yes
 
@@ -3326,7 +3404,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
     # (This note used to say the opposite: drain after READY, and Y kept
     # READY all session. 2026-09-30 audit, §3.)
     # ─────────────────────────────────────────────────────────────────────
-    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
 
     def codes(s):     # colour codes, a byte at a time (CMD_PUT makes room for one)
         for c in s:
@@ -3368,7 +3446,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
     if n == 0:
         wrt(0x86)                       # PRINT_STRING_WITH_LOOP function code
         wrt(1)                          # status: no error
-        MQ_READY()                      # data in TX first, then READY
         wrt(0x0D)
         wrt(0x0D)
         codes(BAR)
@@ -3379,6 +3456,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
         for m in "(no items available)":
             wrt(m)
         wrt(0x03)                       # end of loop (no scroll, no keypress)
+        wrt.send()                      # data in TX first, then READY
         CMD_DRAIN()
         while MQ.rx_fifo() != 0:
             MQ.get()
@@ -3394,9 +3472,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             Init = False
         else:
             wrt(ch)     # Show previous choice
-        if need_ready:
-            MQ_READY()  # data in TX first, then READY
-            need_ready = False
         wrt(0x0D)
         wrt(0x0D)
         codes(BAR)
@@ -3443,6 +3518,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             wrt(m)
             
         wrt(0x00)       # End of this string (Z80 displays + waits for key)
+        wrt.send()      # the page into TX, READY, the rest as the Z80 reads it
         # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ────────
         # PIO drops Y to 0 automatically when the Z80 writes the
         # keypress (its OUT $0E). MQ.get() returns with us already in
@@ -3465,8 +3541,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             j = idx + LISTMENU_CHOICES[ch]
             if j < n:
                 wrt(ch)
-                MQ_READY()      # data in TX first, then READY
-                need_ready = False
                 # Erase bottom two lines
                 for b in range(32):
                     wrt(0x08)
@@ -3493,8 +3567,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             wrt(m)
             
     wrt(0x03) # End string loop
-    if need_ready:
-        MQ_READY()      # 'F' past the last page: nothing else was sent
+    wrt.send()          # the echo, erase, choice and 0x03; then READY
     # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
     CMD_DRAIN()
     while MQ.rx_fifo() != 0:
@@ -3709,16 +3782,11 @@ def file_exists(filename):                                                      
     
 
 def xchr(m):
-    """Expand or replace character"""
-    ch = ord(m)
-    if ch < 32 or ch > 127:
-        return '?' # Replace control code or high-ASCII
-    elif ch == 124: # '|' prints as the STICK keyword on the 2068
-        return ' STICK '
-    elif ch == 126: # '~' prints as the FREE keyword
-        return ' FREE '
-    else:
-        return m
+    """A character of a Mac/PC name as the 2068 shows it: '?' for any it
+    can't print as itself or type back (catalog.screen_name). | and ~ used
+    to become " STICK " / " FREE " -- what the 2068 prints for them, but
+    nothing anyone could type into LOAD "tpi:..."."""
+    return catalog.screen_name(m)
 
 
 def xstr(s):
@@ -4284,7 +4352,11 @@ def GETHELP(pre, cmd):                                                 # Shows T
                 if file_exists(hname):
                     try:
                         with open(hname, 'rt') as help:
-                            msg = help.read()
+                            # Written on a Mac/PC: what the 2068 can't print
+                            # as itself (| ~ { } ...) shows as '?' -- but keep
+                            # line ends and \* (SEND_MSG2's (c)).
+                            msg = "".join(c if c in "\r\n" else catalog.screen_name(c)
+                                          for c in help.read())
                     except:
                         msg = "Failed to read help file: %s" % hname
                         st = _2_R_Tape_load
@@ -5068,7 +5140,7 @@ def ResolveIndexName(name):
     return name, -1
 
 
-def LOAD_TPI(name, only_tap=False):
+def LOAD_TPI(name, only_tap=False, fresh=False):
     """LOAD "tpi:<name>": mount a file from the current folder. Returns
     (msg, name, status) for SEND_MSG -- or, in ZX48 mode, ZX_TPI.
 
@@ -5086,6 +5158,22 @@ def LOAD_TPI(name, only_tap=False):
     name, idx = ResolveIndexName(name)
     if idx < 0 and name.upper() in files_upper:                                 # Is name a valid file?
         idx = files_upper.index(name.upper())
+    if idx < 0 and catalog.has_wild(name):
+        # The name as CAT showed it: '?' for a character the 2068 can't type
+        # (catalog.screen_name), '*' for any run. Exactly one match mounts
+        # it; several say so and point at the number.
+        hits = [i for i, f in enumerate(files) if catalog.match_shown(f, name)]
+        if len(hits) == 1:
+            idx = hits[0]
+        elif hits:
+            msg = "%d files match: " % len(hits)
+            LOG(msg + name, 1)
+            return msg, name + chr(13) + 'Use LOAD "tpi:" with its number.', _3_F_Invalid_file
+    if idx < 0 and not fresh:
+        # Not in the listing: the folder may have changed on the card since
+        # (LISTING_FRESHEN). Look once more before saying it isn't there.
+        LISTING_CHECK()
+        return LOAD_TPI(name, only_tap, True)
     if idx < 0:
         msg = "File does not exist: "
         LOG(msg + name, 2)
@@ -5122,12 +5210,11 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     # the Z80 hadn't been told to read yet, so RX had nothing to drain.
     # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
     # ─────────────────────────────────────────────────────────────────────
-    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
     wrt(0x88 if lower else 0x86)   # PRINT STRING WITH LOOP (0x88: lower screen) -- this IS the D-block status
     wrt(0x01)   # BASIC return code
     if not lower:
         wrt(0x0D)   # Start a new line (the lower screen starts clear)
-    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
 
     while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
         MQ.get()
@@ -5135,6 +5222,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     for ch in prompt:
         wrt(ch)
     wrt(0x00)   # End string (Z80 prints + waits for key)
+    wrt.send()  # into TX, READY, the rest as the Z80 reads it
     # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ───────────────
     # PIO drops Y to 0 automatically on the Z80's keypress OUT, so by
     # the time MQ.get() returns we're already BUSY. Re-assert MQ_READY()
@@ -5158,7 +5246,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
         if lower:
             wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
         wrt(0x03) # End the string loop
-        MQ_READY()
+        wrt.send()      # echo and 0x03 in TX, then READY
         # Could add an option to not wrt(0x03) and let the caller do that after
         # writing some more text to indicate the result of the action.
 
@@ -5815,7 +5903,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         elif load_cmd:                                                                                  # Is it a "LOAD:tpi:..." command.....?
 
             msg, rest_cmd, status = LOAD_TPI(rest_cmd)
-            SEND_MSG(msg, rest_cmd, status)
+            SEND_MSG(msg, rest_cmd, status, " files match: " in msg)   # that one says what to do: always show it
 
         else:                                                                                                 # ...or it's a "SAVE:tpi:..." command
 
@@ -5870,15 +5958,18 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         # helpers being retired in stage 7). Behavior is identical.
         # ──────────────────────────────────────────────────────────────────
         TLM("PROCESS_CMD draining tx_fifo at exit")
+        # Bounded by time, not by a loop count whose length depended on the
+        # MicroPython version (audit §4): 3 s for the Z80 to read the tail.
         drain_tx = 0
+        _t0 = time.ticks_ms()
         while MQ.tx_fifo() != 0:
             drain_tx += 1
-            if drain_tx > 1000000:
+            if time.ticks_diff(time.ticks_ms(), _t0) >= 3000:
                 TLM("PROCESS_CMD STUCK draining tx", "tx=%d" % MQ.tx_fifo())
                 break
 
         drain_rx = 0
-        while MQ.rx_fifo() != 0:
+        while MQ.rx_fifo() != 0 and drain_rx < 64:  # a Z80 that keeps writing can't hold it here
             MQ.get()
             drain_rx += 1
 
@@ -6116,6 +6207,33 @@ def TS2068_IO():                                                         # Main 
     DEACTIVATE_SD()
     ACTIVATE_MQ()
 
+    # ─── Boot-noise flush (Ryan's diagnostic loop, kept) ──────────────────
+    # BEFORE the boot pre-load and READY (2026-10-03, audit §4): it used to
+    # run after them, ~0.5 s into a window in which the 2068 may already be
+    # sending its first command -- which this would have eaten. With Y still
+    # BUSY, the Z80 waits; only noise can arrive.
+    # The Z80 may emit stray bytes during its own power-on reset / boot
+    # window. We drain anything sitting in RX FIFO so the first "real"
+    # protocol byte isn't preceded by garbage. Per-byte LOG kept for
+    # diagnostic value — useful when chasing power-sequence weirdness.
+    # ─────────────────────────────────────────────────────────────────────
+    LOG("Boot noise flush: starting", 0)
+    boot_garbage = []
+    empty_start = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), empty_start) < 500:
+        if MQ.rx_fifo() != 0:
+            b = MQ.get()
+            boot_garbage.append(b)
+            LOG("Boot noise: got byte " + str(b) + " (total: " + str(len(boot_garbage)) + ")", 0)
+            empty_start = time.ticks_ms()  # Reset timer when we get data
+        time.sleep_ms(10)
+    LOG("Boot noise flush: done, FIFO empty for 500ms", 0)
+    if boot_garbage:
+        LOG("Flushed " + str(len(boot_garbage)) + " bytes of boot noise: " + str(boot_garbage), 0)
+    else:
+        LOG("No boot noise detected", 0)
+    # SAVE_LOG()
+
     # ─── DUAL-PORT MIGRATION: boot-time status pre-load + explicit ready ──
     # Pre-load a single 0x01 status byte into TX FIFO. The very first Z80
     # command will read this from $0E as its initial OK status. Every
@@ -6135,6 +6253,7 @@ def TS2068_IO():                                                         # Main 
     # succeed and it can read the pre-loaded 0x01 from $0E. The order is
     # non-negotiable: put-then-ready, never ready-then-put.
     # ─────────────────────────────────────────────────────────────────────
+
     MQ.put(0x01)
     MQ_READY()
 
@@ -6162,28 +6281,6 @@ def TS2068_IO():                                                         # Main 
 
     wrt = MQ.put
 
-    # ─── Boot-noise flush (Ryan's diagnostic loop, kept) ──────────────────
-    # The Z80 may emit stray bytes during its own power-on reset / boot
-    # window. We drain anything sitting in RX FIFO so the first "real"
-    # protocol byte isn't preceded by garbage. Per-byte LOG kept for
-    # diagnostic value — useful when chasing power-sequence weirdness.
-    # ─────────────────────────────────────────────────────────────────────
-    LOG("Boot noise flush: starting", 0)
-    boot_garbage = []
-    empty_start = time.ticks_ms()
-    while time.ticks_diff(time.ticks_ms(), empty_start) < 500:
-        if MQ.rx_fifo() != 0:
-            b = MQ.get()
-            boot_garbage.append(b)
-            LOG("Boot noise: got byte " + str(b) + " (total: " + str(len(boot_garbage)) + ")", 0)
-            empty_start = time.ticks_ms()  # Reset timer when we get data
-        time.sleep_ms(10)
-    LOG("Boot noise flush: done, FIFO empty for 500ms", 0)
-    if boot_garbage:
-        LOG("Flushed " + str(len(boot_garbage)) + " bytes of boot noise: " + str(boot_garbage), 0)
-    else:
-        LOG("No boot noise detected", 0)
-    # SAVE_LOG()
 
     LOG("Before main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
@@ -6759,8 +6856,13 @@ def ZX_TPI():
     (BREAK gives Report D), then reads a status -- FFh OK, else a report
     code -- the message length and the message, which it prints.
 
-    Only LOAD, and only .tap files: the rest of the tpi: commands need the
-    TS-2068 ROM. Every wait is bounded; nothing here blocks on the bus.
+    LOAD (.tap files only), and from the ZX v4 ROM SAVE "tpi:dir [arg]";
+    the rest of the tpi: commands need the TS-2068 ROM. Every wait is
+    bounded; nothing here blocks on the bus.
+
+    v4 ROM (op with bit 7 set): the reply after the status is pieces -- a
+    length 1-255, that many bytes, ... -- ended by a 0, so a folder listing
+    fits. v3 (bit 7 clear): one length and at most 200 bytes, as before.
     """
     global MQ
 
@@ -6786,28 +6888,69 @@ def ZX_TPI():
         return -1                           # the ROM gives up: Report J (or D)
 
     rest = "".join(chr(b) for b in name[:hdr[1]] if 0x20 <= b < 0x7F)
-    TLM("ZX_TPI", "op=%d name=%r" % (hdr[0], rest))
-    if hdr[0] != 1:
-        msg, rest, st = 'Only LOAD "tpi:..." works in ZX48 mode', "", _4_Q_Parameter
+    pieces = hdr[0] & 0x80                  # the v4 ROM: the reply in pieces
+    op = hdr[0] & 0x7F
+    TLM("ZX_TPI", "op=%d%s name=%r" % (op, " (v4)" if pieces else "", rest))
+    word = rest.lower()
+    listing = None
+    stall = ZX_STALL_MS
+    if op == 0 and (word == "dir" or word.startswith("dir ")):
+        if not pieces:
+            msg, rest, st = 'SAVE "tpi:dir" needs ZX ROM v4', "", _4_Q_Parameter
+        else:
+            if getattr(TSP, "listing_stale", False):
+                REFRESH_LISTING()
+            try:
+                ACTIVATE_SD()
+                try:
+                    text, st = CATALOG_TEXT(rest[3:].strip())
+                finally:
+                    DEACTIVATE_SD()
+                    ACTIVATE_MQ()
+            except OSError as e:
+                LOG("ZX tpi:dir: SD card error: %s" % e, 2)
+                text, st = "SD card error", _3_F_Invalid_file
+            if st == _1_OK:
+                listing = CAT_COLOUR(text)  # CAT's look: the Spectrum has the same colour codes
+                stall = CMD_STALL_MS        # its "scroll?" waits for the user; a new command ends it
+            msg, rest = text, ""
+    elif op != 1:
+        msg, rest, st = 'Only LOAD "tpi:..." and SAVE "tpi:dir" in ZX48 mode', "", _4_Q_Parameter
     else:
         if getattr(TSP, "listing_stale", False):        # a ZX SAVE added a file: LOAD_TPI matches names in it
             REFRESH_LISTING()
         msg, rest, st = LOAD_TPI(rest, only_tap=True)   # may use the SD card: MQ is rebuilt
-    text = (msg.strip() + " " + rest).strip().encode()[:200]
-    LOG("ZX48 tpi: %s" % text.decode(), 0 if st == _1_OK else 2)
+    if listing is not None:
+        text = bytes(b if b < 0x80 else 0x3F for b in listing.encode())
+        LOG("ZX48 tpi:dir: %d bytes" % len(text), 0)
+    else:
+        text = (msg.strip() + " " + rest).strip().encode()[:200]
+        LOG("ZX48 tpi: %s" % text.decode(), 0 if st == _1_OK else 2)
 
-    # The reply: status, length, message. The first bytes go in before
+    # The reply: status, then (v3) the length and the message, or (v4) the
+    # message in pieces of up to 255 and a 0. The first bytes go in before
     # READY -- the ROM reads the instant it sees it -- the rest as it reads.
-    out = bytearray(2 + len(text))
+    if pieces:
+        k = (len(text) + 254) // 255
+        out = bytearray(1 + len(text) + k + 1)
+        j = 1
+        for i in range(0, len(text), 255):
+            part = text[i:i + 255]
+            out[j] = len(part)
+            out[j + 1:j + 1 + len(part)] = part
+            j += 1 + len(part)
+        out[j] = 0
+    else:
+        out = bytearray(2 + len(text))
+        out[1] = len(text)
+        out[2:] = text
     out[0] = ZX_REPORT.get(st, 0x19)
-    out[1] = len(text)
-    out[2:] = text
     ZX_FLUSH_TX(MQ)
     gc.collect()
     n = len(out)
     # By DMA where there is one, READY once the channel runs: the ROM reads
     # the moment it sees READY, blind.
-    r = STREAM_DMA(MQ, out, None, ZX_STALL_MS, True)
+    r = STREAM_DMA(MQ, out, None, stall, True)
     if r is not None:
         if r[0]:
             w = r[2] if r[0] == 4 else -2
@@ -6831,7 +6974,7 @@ def ZX_TPI():
     put = MQ.put
     while i < n:
         if txf() >= TX_DEPTH:
-            w = ZX_ROOM(MQ, ZX_STALL_MS)
+            w = ZX_ROOM(MQ, stall)
             if w != -1:
                 ZX_FLUSH_TX(MQ)
                 LOG("ZX tpi: reply stopped at byte %d of %d" % (i, n), 2)

@@ -133,6 +133,22 @@ def test_catalog(c):
           dr[2].startswith("    NOTES.TXT"), "dir rows: dirs, indexed and unindexed files")
     check(all(len(r) == 32 for r in dr), "dir rows: every row is 32 characters")
 
+    # Characters the 2068 can't print as themselves or type (2026-10-01 item)
+    check(c.screen_name("{a}|b~c\x7f\u00e9.tap") == "?a??b?c??.tap",
+          "screen_name: { } | ~ 7Fh and non-ASCII -> '?' (%r)" % c.screen_name("{a}|b~c\x7f\u00e9.tap"))
+    check(c.screen_name("GAME (1).TAP") == "GAME (1).TAP", "screen_name: everything else as it is")
+    check(c.match_shown("{game}.tap", "?GAME?.TAP") and not c.match_shown("(game).tap", "?game?.tap"),
+          "match_shown: '?' stands only for a character the 2068 can't show -- no collision with (game)")
+    check(c.match_shown("{game}.tap", "*.tap") and c.match_shown("(game).tap", "*GAME*"),
+          "match_shown: '*' matches anything")
+    dr = c.dir_rows([("{x}.TAP", False, 10)], lambda n: 3, lambda s, n: s[:n])
+    check(dr[0].startswith("003 ?x?.TAP"), "dir rows show the name as the 2068 can type it (%r)" % dr[0])
+    raw = bytearray(header(3, "x", 10))
+    raw[4:14] = b"a|b\x7f\x90cdefg"                 # the name, past length, flag and type
+    tbl = c.tap_table(io.BytesIO(bytes(raw) + data(bytes(10))))
+    check(tbl[0][3] == "a|b\x7f?cdefg",
+          "a TAP header name (the 2068 wrote it): its bytes as they are, 80h+ -> '?' (%r)" % tbl[0][3])
+
 
 # ---------------------------------------------------------------------------
 # tspico.DIR -> CATALOG against a temp directory
@@ -143,6 +159,10 @@ class HostOS:
 
     def __init__(self, root):
         self.root = root
+        self.cwd = "/sd/TAP"
+
+    def chdir(self, p):
+        self.cwd = p
 
     def real(self, p):
         """Resolve case-insensitively, as FAT does (CI's Linux FS does not)."""
@@ -161,7 +181,8 @@ class HostOS:
         mode = 0x4000 if os.path.isdir(self.real(p)) else 0x8000
         return (mode, 0, 0, 0, 0, 0, st.st_size, 0, 0, 0)
 
-    def ilistdir(self, p):
+    def ilistdir(self, p=None):
+        p = self.cwd if p is None else p
         for n in os.listdir(self.real(p)):
             full = os.path.join(self.real(p), n)
             if os.path.isdir(full):
@@ -202,10 +223,31 @@ def test_dir(t, root):
         t.DIR(pre, "xxx" + cmd)
         return sent[-1] if sent else None
 
+    reread = []
+
+    def dir_files():
+        reread.append(1)
+        t.TSP.listing_sig = t.LISTING_SIG(sorted(hos.ilistdir("/sd/TAP"), key=lambda f: f[0].lower()))
+        t.lista = "NEW-LISTA"
+        return True
+    t.DIR_FILES = dir_files
+    t.TSP.listing_sig = t.LISTING_SIG(sorted(hos.ilistdir("/sd/TAP"), key=lambda f: f[0].lower()))
     r = run("tpi:dir")
-    check(r == ("MSG2", "CACHED-LISTA", t._1_OK) and sd == ["sd", "off", "mq"],
+    check(r == ("MSG2", "CACHED-LISTA", t._1_OK) and sd == ["sd", "off", "mq"] and not reread,
           "bare tpi:dir: looks at the card once (a swap or a pulled card shows), "
-          "then the cached listing (%r)" % sd)
+          "the folder unchanged: the cached listing (%r)" % sd)
+    open(os.path.join(root, "NEWONE.TAP"), "wb").write(b"x")
+    r = run("tpi:dir")
+    check(r == ("MSG2", "NEW-LISTA", t._1_OK) and reread == [1] and sd == ["sd", "off", "mq"],
+          "a file added on a Mac with the same card back in: re-read once, in the same mount "
+          "(hardware 2026-10-03: CAT showed the old folder until a reboot)")
+    del reread[:]
+    r = run("tpi:dir")
+    check(r[1] == "NEW-LISTA" and not reread, "...and not again while nothing changes")
+    os.remove(os.path.join(root, "NEWONE.TAP"))
+    dir_files()
+    t.lista = "CACHED-LISTA"
+    del reread[:]
 
     def no_card(*a, **k):
         sd.append("sd")

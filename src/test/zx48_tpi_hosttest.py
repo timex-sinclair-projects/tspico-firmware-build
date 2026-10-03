@@ -41,7 +41,8 @@ def check(cond, msg):
 
 
 def z80_tpi(name, op=1, stop_at=None):
-    """The v3 ROM after its 'T' (ZX48_IO has taken it)."""
+    """The v3 ROM after its 'T' (ZX48_IO has taken it). op with bit 7 set
+    is the v4 ROM, which reads the reply in pieces (length, bytes ... 0)."""
     st = yield ("wait", READY, 20000)
     if st is None:
         return ("J", None)
@@ -56,8 +57,12 @@ def z80_tpi(name, op=1, stop_at=None):
     status = yield ("in",)
     n = yield ("in",)
     msg = bytearray()
-    for _ in range(n):
-        msg.append((yield ("in",)))
+    while True:
+        for _ in range(n):
+            msg.append((yield ("in",)))
+        if not op & 0x80 or not n:
+            break
+        n = yield ("in",)                   # v4: the next piece's length, 0 = the end
     return (status, bytes(msg))
 
 
@@ -78,6 +83,8 @@ def main():
         mounted.append(path)
         return ok_mount[0]
     t.MOUNT_FILE = mount
+    checked = []
+    t.LISTING_CHECK = lambda: checked.append(1)      # the card's folder unchanged
 
     def run(name, stale=False, **kw):
         P.fresh(t, pio)
@@ -127,15 +134,88 @@ def main():
         r, _ = run("1")
         check(r[0] == 0xFF and mounted == ["/sd/TAP/Jetpac.TAP"], "mounted Jetpac.TAP (%r)" % (r,))
 
+        print("names the 2068 can't type: '?' and '*' as wildcards")
+        real_files = ["Manic.tap", "Jetpac.TAP", "zx.rom"]
+        t_files_orig = list(real_files)
+
+        def run_files(files, name):
+            P.fresh(t, pio)
+            t.files = files
+            t.files_upper = [f.upper() for f in files]
+            t.TSP.listing_stale = False
+            pio.tx, pio.rx, pio.y = [], [], 0
+            pio.tx_at_ready = []
+            del mounted[:]
+            pio.run(z80_tpi(name))
+            nxt = t.ZX_TPI()
+            pio.finish()
+            return pio.result
+
+        fs = ["{game}.tap", "(game).tap", "jet~1.tap", "Manic.tap"]
+        r = run_files(fs, "?game?.tap")
+        check(r[0] == 0xFF and mounted == ["/sd/TAP/{game}.tap"],
+              "?game?.tap (as CAT shows {game}.tap) mounts it, not (game).tap (%r %s)" % (r, mounted))
+        r = run_files(fs, "jet?1.tap")
+        check(r[0] == 0xFF and mounted == ["/sd/TAP/jet~1.tap"], "jet?1.tap mounts jet~1.tap (%s)" % mounted)
+        r = run_files(fs, "*.tap")
+        check(r[0] == 0x0E and r[1].startswith(b"4 files match: *.tap") and not mounted,
+              "*.tap matches four: F, use the number, nothing mounted (%r)" % (r,))
+        r = run_files(fs, "?nothing?")
+        check(r[0] == 0x0E and r[1].startswith(b"File does not exist") and not mounted, "no match: F")
+
         print("errors")
+        del checked[:]
         r, _ = run("nothere.tap")
-        check(r == (0x0E, b"File does not exist: nothere.tap") and not mounted, "missing: F (%r)" % (r,))
+        check(r == (0x0E, b"File does not exist: nothere.tap") and not mounted and checked == [1],
+              "missing: the card's folder looked at once, then F (%r)" % (r,))
+        real_check = t.LISTING_CHECK
+
+        def added_on_a_mac():
+            t.files.append("new.tap")
+            t.files_upper.append("NEW.TAP")
+        t.LISTING_CHECK = added_on_a_mac
+        r, _ = run("new.tap")
+        t.LISTING_CHECK = real_check
+        check(r[0] == 0xFF and mounted == ["/sd/TAP/new.tap"],
+              "a file put on the card since the last listing: found on that look, mounted (%r)" % (r,))
         r, _ = run("zx.rom")
         check(r == (0x19, b"Only .tap files in ZX48 mode: zx.rom") and not mounted,
               "a .ROM: Q, not mounted (%r)" % (r,))
         r, _ = run("dir", op=0)
-        check(r[0] == 0x19 and r[1].startswith(b"Only LOAD") and not mounted,
-              'SAVE "tpi:dir": Q (%r)' % (r,))
+        check(r[0] == 0x19 and r[1] == b'SAVE "tpi:dir" needs ZX ROM v4' and not mounted,
+              'SAVE "tpi:dir" from a v3 ROM: Q, and why (%r)' % (r,))
+        r, _ = run("x", op=2)
+        check(r[0] == 0x19 and r[1].startswith(b"Only LOAD"), "VERIFY: Q (%r)" % (r,))
+        r, _ = run("MANIC.TAP", op=0x81)
+        check(r == (0xFF, b"File mounted OK MANIC.TAP") and mounted == ["/sd/TAP/Manic.tap"],
+              "a v4 LOAD (op 81h): the same mount, its message as one piece (%r)" % (r,))
+
+        print('SAVE "tpi:dir" from the v4 ROM: the listing in pieces')
+        real = {n: getattr(t, n) for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ", "CATALOG_TEXT")}
+        steps = []
+        big = t.DIR_HEADER("40 files, 0 dirs", "/TAP") + "".join(
+            "%03d %-18s%10s" % (i, "GAME%02d.TAP" % i, "47 kB") for i in range(40))
+        t.ACTIVATE_SD = lambda *a: steps.append("ACTIVATE_SD")
+        t.DEACTIVATE_SD = lambda: steps.append("DEACTIVATE_SD")
+        t.ACTIVATE_MQ = lambda *a: (steps.append("ACTIVATE_MQ"), setattr(t, "MQ", pio))
+        t.CATALOG_TEXT = lambda arg: (steps.append("CATALOG %r" % arg), (big, t._1_OK))[1]
+        try:
+            r, nxt = run("dir", op=0x80)
+            want = t.CAT_COLOUR(big).encode()
+            check(r[0] == 0xFF and r[1] == want and len(want) > 1300 and nxt == -1,
+                  "0 OK and all %d bytes of CAT's coloured listing, over the 255 one piece holds" % len(want))
+            check(steps == ["ACTIVATE_SD", "CATALOG ''", "DEACTIVATE_SD", "ACTIVATE_MQ"],
+                  "the card is read and the bus handed back (%s)" % steps)
+            check(not pio.tx and pio.dropped == 0, "TX empty afterwards, nothing dropped")
+            del steps[:]
+            run("DIR games", op=0x80)
+            check(steps[1] == "CATALOG 'games'", "SAVE \"tpi:dir games\": the argument goes to CATALOG (%s)" % steps)
+            t.CATALOG_TEXT = lambda arg: ("Not found: x", t._3_F_Invalid_file)
+            r, _ = run("dir x", op=0x80)
+            check(r == (0x0E, b"Not found: x"), "a CATALOG error: its report and message (%r)" % (r,))
+        finally:
+            for n, v in real.items():
+                setattr(t, n, v)
         ok_mount[0] = False
         r, _ = run("manic.tap")
         ok_mount[0] = True

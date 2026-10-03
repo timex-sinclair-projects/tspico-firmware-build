@@ -2458,9 +2458,11 @@ def SAVE_TS(MQ, TSP, pre=None):
     MQ_STATUS(MQ, "mid")
 
     # The Z80 can take up to ~1 s to start the data block after reading the
-    # status (it does internal processing), so the first byte gets 1 s;
-    # after that, 1 s of silence mid-block means it has gone.
-    why, got = RX_BLOCK(MQ, blk, long, 1000, 1000, "mid")
+    # status (it does internal processing): 0.9 s measured for a 10-byte
+    # BASIC program (hardware, 2026-10-03), so the old 1 s limit had no
+    # margin. The first byte gets 3 s, as ZX mode's; after that, 1 s of
+    # silence mid-block means it has gone.
+    why, got = RX_BLOCK(MQ, blk, long, 3000, 1000, "mid")
 
     if why == RXB_STALL and got == 0:
         TLM("SAVE_TS EXIT no data after 1s")
