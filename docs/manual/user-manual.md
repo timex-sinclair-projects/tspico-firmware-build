@@ -361,10 +361,15 @@ CAT ""               : REM the blocks inside the mounted TAP
 path. `SAVE "tpi:dir games"`, `SAVE "tpi:dir *.tap"` and so on give the same listings, as long
 as the whole name fits in 31 characters.
 
-> **By the way:** `SAVE "tpi:dir"` shows the listing the TS-Pico made when you last entered
-> the folder. It checks the card first, so after swapping cards you see the new card. If you
-> add files to the same card from a computer, go into another folder and back again to see
-> them.
+> **By the way:** `SAVE "tpi:dir"` checks the card before it lists the folder. After you swap
+> cards you see the new card, and if you take the card out, add files from a computer and put
+> it back, the new files are there too. No restart needed.
+
+**Names with characters the 2068 can't show.** A file named on a computer can contain characters
+the 2068 doesn't have on its keyboard or prints as something else: `|` and `~` come out as the
+keywords STICK and FREE, `{` and `}` can come out as ON ERR and SOUND, and accented letters
+don't exist at all. The listing shows each of them as `?`, for example `?game?.tap` for
+`{game}.tap`. You can type the name just as it's shown; see the next section.
 
 ## 3.2 Folders: CD, MOVE TO and PATH
 
@@ -443,7 +448,13 @@ LOAD "tpi:12"
 - Only TAP, DCK, ROM and BIN files can be mounted. DCK, ROM and BIN files are cartridges and
   ROM images; they're covered in Chapter 8. TZX files are listed, but the TS-Pico can't mount
   them.
-- If the name isn't found, you'll get **F Invalid file name**.
+- If the name isn't found, you'll get **F Invalid file name**. A file you've just copied onto
+  the card from a computer is found without a restart.
+- **Type a `?` where the listing shows one.** `LOAD "tpi:?game?.tap"` mounts `{game}.tap`. A
+  `?` stands only for a character the 2068 can't show, so it won't pick `(game).tap` by
+  mistake. A `*` stands for any run of characters: `LOAD "tpi:fro*"` mounts `frogger.tap` if
+  it's the only match. When several files match, the TS-Pico says how many and asks you to use
+  the file's number instead.
 
 **Picking a file from a list.** `SAVE "tpi:idir"` shows the mountable files as a menu, using
 the same keys as `tpi:cd`, and mounts the one you pick.
@@ -1187,6 +1198,10 @@ modified so that its LOAD and SAVE use the SD card.
 - `SAVE "name"` saves a new `name.tap` in the current folder, replacing any file of that name.
 - `LOAD "tpi:name.tap"` and `LOAD "tpi:nnn"` mount another TAP from the current folder, by name or
   index number.
+- `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068, with `scroll?` for a long
+  one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too. This needs version 4 of the
+  TS-Pico Spectrum ROM: its copyright screen ends `TS-Pico ZX v4`. Version 3 answers
+  `SAVE "tpi:dir" needs ZX ROM v4`.
 - Other `tpi:` commands aren't available, and give **Q Parameter error**.
 
 **If a game won't load.** Some Spectrum programs use tricky loading routines. Try the
@@ -1210,7 +1225,8 @@ message (`CODE 1,0`).
 ## 9.4 Summary
 
 1. Mount a TAP, `SAVE "tpi:zx48"`, then `OUT 244,3`.
-2. LOAD, SAVE and `LOAD "tpi:..."` work in Spectrum mode.
+2. LOAD, SAVE and `LOAD "tpi:..."` work in Spectrum mode, and with the v4 Spectrum ROM so does
+   `SAVE "tpi:dir"`.
 3. `SAVE "tpi:zx48" CODE 0,2` picks the compatible loader for stubborn games.
 4. `OUT 244,0` then `OUT 14,14` brings you home.
 
@@ -1328,6 +1344,9 @@ LOAD "tpi:dirinfo.tap"    : REM mount the folder listing as a tape (see below)
 
 - Names match regardless of case. TAP, DCK, ROM and BIN files can be mounted. VERIFY and MERGE
   with `"tpi:..."` mount too.
+- `?` stands for a character the 2068 can't show (the listing shows it as `?`), and `*` for any
+  run of characters. One match mounts it. With several, you'll get **F** with
+  `n files match:` and a reminder to use the number (shown even with VERBOSE off).
 - *(verbose)* `File mounted OK`. **F**: `File does not exist:`. **Q**: `Error mounting file:`,
   for example a TZX file, a damaged cartridge, or a failed copy.
 - **For programmers:** `dirinfo.tap` holds one character array, `a$`. Row 1 is the number of
@@ -1549,7 +1568,8 @@ At switch-on, the setting comes from `config.ini` (off unless you change it; see
 
 ### zx48
 
-Switches to ZX Spectrum mode. See Chapter 9.
+Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` mounts a TAP and,
+with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
 
 ## 10.4 Commands you may see mentioned elsewhere
 
