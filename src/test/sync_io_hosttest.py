@@ -314,6 +314,16 @@ def main():
     code, got = io.RX_RING(ring, mq, raw, True, 10, 1000, 1000)
     check(code == io.RXB_OK and list(raw) == pre and mq.rx == [0x41],
           "wide (RX_CAPTURE): 9-bit words kept; the word after the n stays in the FIFO")
+    name = b"AutoLyzer.tap"
+    mq = FakeMQ(rx=[1, len(name)] + list(name) + [0x4C])
+    both = bytearray(257)
+    code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1)
+    check(code == io.RXB_OK and got == 2 + len(name) and bytes(both[2:got]) == name
+          and mq.rx == [0x4C],
+          "len_at=1 (ZX tpi: op, length, name in one run): exactly 2 + 13 words, the rest left (%d)" % got)
+    mq = FakeMQ(rx=[1, 0, 0x4C])
+    code, got = io.RX_RING(ring, mq, both, False, 257, 1000, 1000, 1)
+    check(code == io.RXB_OK and got == 2 and mq.rx == [0x4C], "len_at with a length of 0: 2 words")
     io._ring = ring
     mq = FakeMQ(rx=pre[:3] + [0x103])
     check(io.RX_CAPTURE(mq, raw, 10, 1000) == -4, "RX_CAPTURE by ring: a SYNC after 3 words gives -4")

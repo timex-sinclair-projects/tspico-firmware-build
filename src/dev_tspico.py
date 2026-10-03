@@ -6770,9 +6770,19 @@ def ZX_TPI():
     name = bytearray(255)
     gc.collect()                            # before READY: the name streams with no handshake
     MQX(MQ, "mov(y, invert(null))")         # READY: listening
-    code, got = RX_BLOCK(MQ, hdr, 2, ZX_STALL_MS, ZX_STALL_MS)
-    if code == RXB_OK:
-        code, got = RX_BLOCK(MQ, name, hdr[1], ZX_STALL_MS, ZX_STALL_MS)
+    if tspico_io._ring is not None:
+        # By DMA: op, length and name in ONE run (RX_RING's len_at), not two
+        # -- the name's first bytes overflowed the FIFO while a second run was
+        # set up (Report J, hardware 2026-10-03).
+        both = bytearray(257)
+        code, got = tspico_io.RX_RING(tspico_io._ring, MQ, both, False, 257,
+                                      ZX_STALL_MS, ZX_STALL_MS, 1)
+        hdr[:] = both[:2]
+        name[:] = both[2:]
+    else:
+        code, got = RX_BLOCK(MQ, hdr, 2, ZX_STALL_MS, ZX_STALL_MS)
+        if code == RXB_OK:
+            code, got = RX_BLOCK(MQ, name, hdr[1], ZX_STALL_MS, ZX_STALL_MS)
     if code != RXB_OK:
         LOG("ZX tpi: command stopped after %d bytes" % got, 2)
         return -1                           # the ROM gives up: Report J (or D)

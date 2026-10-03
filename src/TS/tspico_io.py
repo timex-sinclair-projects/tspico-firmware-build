@@ -529,15 +529,22 @@ def _RING_SETUP():
 _ring = _RING_SETUP()
 
 
-def RX_RING(ring, MQ, out, wide, n, first_ms, stall_ms):
+def RX_RING(ring, MQ, out, wide, n, first_ms, stall_ms, len_at=-1):
     """Take n words from the Z80 by DMA into out: the 9-bit words if wide (an
     array), else their low bytes (a bytearray). Returns (code, words taken),
     code one of RXB_*, exactly as RX_BLOCK. Leaves the channel stopped; words
-    the Z80 sends after the n (or after a stop) stay in the FIFO."""
+    the Z80 sends after the n (or after a stop) stay in the FIFO.
+
+    len_at >= 0: word len_at is a length, and the burst ends that many words
+    after it (n is then the most it can be). One run for a header and what
+    follows it: two runs back to back lose the bytes the Z80 sends while
+    the second is being set up (hardware, 2026-10-03: a ZX tpi: name lost 3
+    of 13 bytes, Report J)."""
     d, addr, ctrl, _, m32 = ring
     if n <= 0:
         return RXB_OK, 0
-    d.config(read=MQ, write=addr, count=n, ctrl=ctrl, trigger=True)
+    total = n                               # what the channel is set for
+    d.config(read=MQ, write=addr, count=total, ctrl=ctrl, trigger=True)
     mask = _RING_WORDS - 1
     got = 0
     w = 0
@@ -546,7 +553,9 @@ def RX_RING(ring, MQ, out, wide, n, first_ms, stall_ms):
     t0 = time.ticks_ms()
     try:
         while got < n:
-            pos = n - d.count
+            pos = total - d.count
+            if pos > n:
+                pos = n
             if pos > got:
                 if pos - got > _RING_WORDS:     # core0 was away ~44 ms: words overwritten
                     code = RXB_STALL
@@ -555,6 +564,10 @@ def RX_RING(ring, MQ, out, wide, n, first_ms, stall_ms):
                     w = m32[addr + ((got & mask) << 2)] & 0x1FF
                     out[got] = w if wide else w & 0xFF
                     got += 1
+                    if got == len_at + 1:       # the length: now n is known
+                        n = min(n, got + (w & 0xFF))
+                        if pos > n:
+                            pos = n
                 limit = stall_ms
                 t0 = time.ticks_ms()
             elif w & PORT_0F:                   # nothing follows a 0Fh write
