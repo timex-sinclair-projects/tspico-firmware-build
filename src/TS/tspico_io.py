@@ -80,6 +80,15 @@ from array import array
 PORT_0F = const(0x100)          # bit 8 of an RX word: the Z80 wrote port 0Fh
 TX_DEPTH = const(4)             # TS_IO_DUAL's FIFOs are not joined
 
+# LOAD streams file data through this, a chunk at a time. Reading one byte
+# per readinto() call cost too much per byte on MicroPython v1.29: the ROMs
+# read blind every ~43-47 us, and the log showed "TX ran dry" in 6914-byte
+# blocks on both the 2068 and ZX48 paths (hardware, 2026-10-02). Made once,
+# here, so the stream loops allocate nothing.
+LOAD_CHUNK = const(256)
+_LOAD_BUF = bytearray(LOAD_CHUNK)
+_LOAD_MV = memoryview(_LOAD_BUF)
+
 
 # ─── Fast exec: MQX(MQ, ) without the per-call assembler ───────────────
 # MicroPython 1.20's StateMachine.exec() runs the Python-level PIO
@@ -1159,29 +1168,38 @@ def LOAD_TS(pre, MQ, TSP):
             put(b)
             sent += 1
     else:
-        # Data block: stream from file byte-by-byte (avoid allocating a
-        # potentially huge buffer for ~14KB+ data blocks).
-        el = bytearray(1)
+        # Data block: from the file LOAD_CHUNK bytes at a time into _LOAD_BUF
+        # (a block can be 14 KB+, too big to hold whole). The tail of the
+        # block reads through a memoryview slice -- one small allocation a
+        # block, not a byte.
         rd = arch.readinto
-        for _ in range(totbytes - 1):
-            rd(el)
-            n = txf()
-            if n >= TX_DEPTH:
-                if not primed:
-                    MQX(MQ, "mov(y, invert(null))")     # READY: data waiting
-                    primed = True
-                    t_ready = time.ticks_ms()
-                why = TX_ROOM(MQ, echo)
-                if why:
-                    break
-            elif not n and primed:
-                dry += 1
-                if dry_at < 0:
-                    dry_at = sent
-            put(el[0])
-            sent += 1
-            if not sent & 0x3FF:
-                prof[sent >> 10] = time.ticks_diff(time.ticks_ms(), t_ready)
+        buf = _LOAD_BUF
+        left = totbytes - 1
+        while left and not why:
+            got = rd(buf) if left >= LOAD_CHUNK else rd(_LOAD_MV[:left])
+            if not got:
+                break                                   # the file ended early
+            left -= got
+            i = 0
+            while i < got:
+                n = txf()
+                if n >= TX_DEPTH:
+                    if not primed:
+                        MQX(MQ, "mov(y, invert(null))")     # READY: data waiting
+                        primed = True
+                        t_ready = time.ticks_ms()
+                    why = TX_ROOM(MQ, echo)
+                    if why:
+                        break
+                elif not n and primed:
+                    dry += 1
+                    if dry_at < 0:
+                        dry_at = sent
+                put(buf[i])
+                i += 1
+                sent += 1
+                if not sent & 0x3FF:
+                    prof[sent >> 10] = time.ticks_diff(time.ticks_ms(), t_ready)
     if not primed:
         MQX(MQ, "mov(y, invert(null))")                 # a block shorter than TX
 
@@ -1523,7 +1541,7 @@ def LOAD_ZX(MQ, TSP):
     put = MQ.put
     txf = MQ.tx_fifo
     rd = arch.readinto
-    el = bytearray(1)
+    buf = _LOAD_BUF     # a chunk at a time, as LOAD_TS (LOAD_CHUNK)
     nxt = -1
     sent = 1
     dry = 0             # times TX ran empty mid-block: the Z80 may have read 0x00
@@ -1533,18 +1551,25 @@ def LOAD_ZX(MQ, TSP):
     MQX(MQ, "mov(y, invert(null))")         # READY
 
     # totbytes counts flag + content + CRC; the flag is already queued.
-    for _ in range(totbytes - 1):
-        rd(el)
-        n = txf()
-        if n >= TX_DEPTH:
-            primed = True
-            nxt = ZX_ROOM(MQ, ZX_STALL_MS)
-            if nxt != -1:
-                break
-        elif not n and primed:
-            dry += 1
-        put(el[0])
-        sent += 1
+    left = totbytes - 1
+    while left and nxt == -1:
+        got = rd(buf) if left >= LOAD_CHUNK else rd(_LOAD_MV[:left])
+        if not got:
+            break                           # the file ended early
+        left -= got
+        i = 0
+        while i < got:
+            n = txf()
+            if n >= TX_DEPTH:
+                primed = True
+                nxt = ZX_ROOM(MQ, ZX_STALL_MS)
+                if nxt != -1:
+                    break
+            elif not n and primed:
+                dry += 1
+            put(buf[i])
+            i += 1
+            sent += 1
     arch.close()
 
     if nxt != -1:

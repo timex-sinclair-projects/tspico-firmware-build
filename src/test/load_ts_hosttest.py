@@ -363,6 +363,10 @@ def main():
               "LOAD_TS's stream loops: no append, no LOG, no string formatting")
         check(body.index("gc.collect()") < body.index("    primed = False"),
               "LOAD_TS collects garbage before streaming, while the Z80 waits for READY")
+        zx = io_src[io_src.index("def LOAD_ZX("):io_src.index("def LOAD_ZX_C(")]
+        check("rd(el)" not in loop and "rd(el)" not in zx and "rd(buf)" in loop and "rd(buf)" in zx,
+              "LOAD_TS and LOAD_ZX read the file a chunk at a time, not a byte per call "
+              "(v1.29: TX ran dry, hardware 2026-10-02)")
 
         print("TX-dry counter")
         load(pio, 0x00, len(header))
