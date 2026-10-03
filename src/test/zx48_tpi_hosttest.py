@@ -78,6 +78,8 @@ def main():
         mounted.append(path)
         return ok_mount[0]
     t.MOUNT_FILE = mount
+    checked = []
+    t.LISTING_CHECK = lambda: checked.append(1)      # the card's folder unchanged
 
     def run(name, stale=False, **kw):
         P.fresh(t, pio)
@@ -157,8 +159,20 @@ def main():
         check(r[0] == 0x0E and r[1].startswith(b"File does not exist") and not mounted, "no match: F")
 
         print("errors")
+        del checked[:]
         r, _ = run("nothere.tap")
-        check(r == (0x0E, b"File does not exist: nothere.tap") and not mounted, "missing: F (%r)" % (r,))
+        check(r == (0x0E, b"File does not exist: nothere.tap") and not mounted and checked == [1],
+              "missing: the card's folder looked at once, then F (%r)" % (r,))
+        real_check = t.LISTING_CHECK
+
+        def added_on_a_mac():
+            t.files.append("new.tap")
+            t.files_upper.append("NEW.TAP")
+        t.LISTING_CHECK = added_on_a_mac
+        r, _ = run("new.tap")
+        t.LISTING_CHECK = real_check
+        check(r[0] == 0xFF and mounted == ["/sd/TAP/new.tap"],
+              "a file put on the card since the last listing: found on that look, mounted (%r)" % (r,))
         r, _ = run("zx.rom")
         check(r == (0x19, b"Only .tap files in ZX48 mode: zx.rom") and not mounted,
               "a .ROM: Q, not mounted (%r)" % (r,))

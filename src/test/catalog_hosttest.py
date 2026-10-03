@@ -159,6 +159,10 @@ class HostOS:
 
     def __init__(self, root):
         self.root = root
+        self.cwd = "/sd/TAP"
+
+    def chdir(self, p):
+        self.cwd = p
 
     def real(self, p):
         """Resolve case-insensitively, as FAT does (CI's Linux FS does not)."""
@@ -177,7 +181,8 @@ class HostOS:
         mode = 0x4000 if os.path.isdir(self.real(p)) else 0x8000
         return (mode, 0, 0, 0, 0, 0, st.st_size, 0, 0, 0)
 
-    def ilistdir(self, p):
+    def ilistdir(self, p=None):
+        p = self.cwd if p is None else p
         for n in os.listdir(self.real(p)):
             full = os.path.join(self.real(p), n)
             if os.path.isdir(full):
@@ -218,10 +223,31 @@ def test_dir(t, root):
         t.DIR(pre, "xxx" + cmd)
         return sent[-1] if sent else None
 
+    reread = []
+
+    def dir_files():
+        reread.append(1)
+        t.TSP.listing_sig = t.LISTING_SIG(sorted(hos.ilistdir("/sd/TAP"), key=lambda f: f[0].lower()))
+        t.lista = "NEW-LISTA"
+        return True
+    t.DIR_FILES = dir_files
+    t.TSP.listing_sig = t.LISTING_SIG(sorted(hos.ilistdir("/sd/TAP"), key=lambda f: f[0].lower()))
     r = run("tpi:dir")
-    check(r == ("MSG2", "CACHED-LISTA", t._1_OK) and sd == ["sd", "off", "mq"],
+    check(r == ("MSG2", "CACHED-LISTA", t._1_OK) and sd == ["sd", "off", "mq"] and not reread,
           "bare tpi:dir: looks at the card once (a swap or a pulled card shows), "
-          "then the cached listing (%r)" % sd)
+          "the folder unchanged: the cached listing (%r)" % sd)
+    open(os.path.join(root, "NEWONE.TAP"), "wb").write(b"x")
+    r = run("tpi:dir")
+    check(r == ("MSG2", "NEW-LISTA", t._1_OK) and reread == [1] and sd == ["sd", "off", "mq"],
+          "a file added on a Mac with the same card back in: re-read once, in the same mount "
+          "(hardware 2026-10-03: CAT showed the old folder until a reboot)")
+    del reread[:]
+    r = run("tpi:dir")
+    check(r[1] == "NEW-LISTA" and not reread, "...and not again while nothing changes")
+    os.remove(os.path.join(root, "NEWONE.TAP"))
+    dir_files()
+    t.lista = "CACHED-LISTA"
+    del reread[:]
 
     def no_card(*a, **k):
         sd.append("sd")
