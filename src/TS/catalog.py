@@ -14,12 +14,37 @@ DIR_EXT = ('TAP', 'TZX', 'DCK', 'ROM', 'BIN')      # what a plain listing shows 
 BLK_TYPES = ('Program', 'Num. array', 'Char array', 'Code block')
 
 
+# Characters a name from a Mac or PC may hold that the 2068 can't show as
+# themselves or type back: its character printer (HOME 063Bh) prints |
+# and ~ as the STICK and FREE keywords always, and { } and 7Fh as ON ERR,
+# SOUND and RESET unless FLAGS bit 4 happens to be set; none of the five
+# is on its keyboard, nor is anything above 7Fh or below 20h.
+UNSHOWABLE = "{|}~\x7f"
+
+
+def screen_name(s):
+    """s as the 2068 lists it: every character it can't print or type
+    becomes '?', which LOAD "tpi:..." then takes as a wildcard (LOAD_TPI).
+    '?' can't be part of a FAT name, so it never collides with a real one."""
+    return "".join("?" if (c < " " or c > "~" or c in UNSHOWABLE) else c for c in s)
+
+
+def match_shown(name, pat):
+    """Does pat match name as the 2068 lists it (screen_name)? Case-
+    insensitive; '*' matches any run, but '?' only a character the 2068
+    can't show -- which is what a '?' in a listing stands for -- so
+    "?game?.tap" finds {game}.tap and not (game).tap. A '?' can't be part of
+    a FAT name, so this never shadows a real one."""
+    return match(screen_name(name), pat, False)
+
+
 def has_wild(s):
     return '*' in s or '?' in s
 
 
-def match(name, pat):
-    """Case-insensitive glob: '*' matches any run (including none), '?' one char."""
+def match(name, pat, any_q=True):
+    """Case-insensitive glob: '*' matches any run (including none), '?' one
+    char -- or, with any_q False, only a literal '?' (see match_shown)."""
 
     n = name.upper()
     p = pat.upper()
@@ -27,7 +52,7 @@ def match(name, pat):
     star = -1
     mark = 0
     while i < len(n):
-        if j < len(p) and (p[j] == '?' or p[j] == n[i]):
+        if j < len(p) and ((any_q and p[j] == '?') or p[j] == n[i]):
             i += 1
             j += 1
         elif j < len(p) and p[j] == '*':
@@ -211,7 +236,7 @@ def dir_rows(entries, index_of, shorten):
 
     L = []
     for name, is_dir, size in entries:
-        nom = name.replace("~", "?")
+        nom = screen_name(name)
         if is_dir:
             L.append("<%-21s       0 B" % (shorten(nom, 20) + ">"))
         else:
@@ -243,8 +268,11 @@ def tap_table(f):
         if n >= 14 and buf[2] == 0:
             hdr = " Y"
             try:
-                name_raw = bytes(buf[4:14]).decode()
-                name = ''.join(' ' if (ord(c) <= 30 or ord(c) >= 127) else c for c in name_raw)
+                # The 2068 wrote this name: send its bytes as they are, so it
+                # looks as the 2068 shows it anywhere else (| as STICK...).
+                # Only what SEND_MSG2 can't carry -- control codes, and 80h+
+                # (which would end the ROM's string) -- becomes '?'.
+                name = "".join(chr(b) if 32 <= b <= 127 else "?" for b in buf[4:14])
                 blk_type = BLK_TYPES[buf[3]]
             except Exception:
                 name = "??????????"

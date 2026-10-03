@@ -58,6 +58,7 @@ def gb(bigval, b0, bn):
 
 
 _CMD_TIMEOUT = const(50)
+_READ_TOKEN_MS = const(100)     # the SD spec's read access time limit
 
 # How long ACMD41 may take to bring the card out of idle. The SD spec allows
 # up to 1 s after power-up, and a cold card at boot really does take longer
@@ -387,17 +388,24 @@ class SDCard:
 
         cs(0)
 
-        # read until start byte (0xff)
-        for i in range(_CMD_TIMEOUT):
+        # read until the data token: fast polls first, then 1 ms apart, for
+        # up to _READ_TOKEN_MS. The SD spec allows a card 100 ms to start a
+        # read; this waited ~24 ms (audit §4), so a slow card's read could
+        # fail with "read timeout" where the spec says it's fine.
+        t0 = None
+        i = 0
+        while True:
             self.spi.readinto(self.tokenbuf, 0xFF)
             if self.tokenbuf[0] == _TOKEN_DATA:
                 break
+            i += 1
             if i > _CMD_TIMEOUT // 2:
+                if t0 is None:
+                    t0 = time.ticks_ms()
+                elif time.ticks_diff(time.ticks_ms(), t0) >= _READ_TOKEN_MS:
+                    cs(1)
+                    raise OSError(ETIMEDOUT, "read timeout")
                 time.sleep_ms(1)  # if response is slow, wait longer
-
-        else:
-            cs(1)
-            raise OSError(ETIMEDOUT, "read timeout")
 
         self.spi.readinto(buf, 0xFF)
 
