@@ -85,20 +85,30 @@ STALLS = {
 
 
 def gaps(words):
-    """Lost words: wherever consecutive values don't step down by one."""
+    """Lost words: wherever consecutive values don't step down by one. A
+    step the wrong way (a stale word) counts as -1, so it can't hide."""
     lost = 0
     for i in range(1, len(words)):
         d = (words[i - 1] - words[i]) & 0xFFFFFFFF
-        if d != 1:
-            lost += d - 1
+        if d == 0 or d > 0x7FFFFFFF:
+            return -1
+        lost += d - 1
     return lost
+
+
+def fresh(sm):
+    """Stopped, FIFOs empty (restart() doesn't empty them), counter at 0."""
+    sm.active(0)
+    while sm.rx_fifo():
+        sm.get()
+    sm.restart()
+    sm.exec("set(x, 0)")
 
 
 def run_poll(sm, stall):
     every, fn = stall
     got = array("I", bytes(4 * N))
-    sm.restart()
-    sm.exec("set(x, 0)")
+    fresh(sm)
     sm.active(1)
     i = 0
     get = sm.get
@@ -122,8 +132,7 @@ def run_dma(sm, n, stall):
     d = rp2.DMA()
     try:
         ctrl = d.pack_ctrl(size=2, inc_read=False, inc_write=True, treq_sel=dreq_rx(n))
-        sm.restart()
-        sm.exec("set(x, 0)")
+        fresh(sm)
         d.config(read=sm, write=got, count=N, ctrl=ctrl, trigger=True)
         sm.active(1)
         t0 = time.ticks_ms()
