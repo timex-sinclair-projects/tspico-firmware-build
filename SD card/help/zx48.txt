@@ -5,9 +5,11 @@ Shows more help when invoked.
 Mount a tap file first if you
 want LOAD "" in Spectrum mode.
 With the ZX v3 ROM, LOAD "tpi:
-name" mounts a .tap there too;
-other tpi: commands wait until
-you return to the 2068.
+name" mounts a .tap there too.
+With v4, SAVE "tpi:dir" lists
+the folder. Other tpi: commands
+wait until you're back on the
+2068.
 
   SAVE "tpi:zx48"
   SAVE "tpi:zx48"CODE *,0

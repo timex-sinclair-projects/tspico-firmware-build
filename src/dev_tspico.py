@@ -6759,8 +6759,13 @@ def ZX_TPI():
     (BREAK gives Report D), then reads a status -- FFh OK, else a report
     code -- the message length and the message, which it prints.
 
-    Only LOAD, and only .tap files: the rest of the tpi: commands need the
-    TS-2068 ROM. Every wait is bounded; nothing here blocks on the bus.
+    LOAD (.tap files only), and from the ZX v4 ROM SAVE "tpi:dir [arg]";
+    the rest of the tpi: commands need the TS-2068 ROM. Every wait is
+    bounded; nothing here blocks on the bus.
+
+    v4 ROM (op with bit 7 set): the reply after the status is pieces -- a
+    length 1-255, that many bytes, ... -- ended by a 0, so a folder listing
+    fits. v3 (bit 7 clear): one length and at most 200 bytes, as before.
     """
     global MQ
 
@@ -6786,28 +6791,69 @@ def ZX_TPI():
         return -1                           # the ROM gives up: Report J (or D)
 
     rest = "".join(chr(b) for b in name[:hdr[1]] if 0x20 <= b < 0x7F)
-    TLM("ZX_TPI", "op=%d name=%r" % (hdr[0], rest))
-    if hdr[0] != 1:
-        msg, rest, st = 'Only LOAD "tpi:..." works in ZX48 mode', "", _4_Q_Parameter
+    pieces = hdr[0] & 0x80                  # the v4 ROM: the reply in pieces
+    op = hdr[0] & 0x7F
+    TLM("ZX_TPI", "op=%d%s name=%r" % (op, " (v4)" if pieces else "", rest))
+    word = rest.lower()
+    listing = None
+    stall = ZX_STALL_MS
+    if op == 0 and (word == "dir" or word.startswith("dir ")):
+        if not pieces:
+            msg, rest, st = 'SAVE "tpi:dir" needs ZX ROM v4', "", _4_Q_Parameter
+        else:
+            if getattr(TSP, "listing_stale", False):
+                REFRESH_LISTING()
+            try:
+                ACTIVATE_SD()
+                try:
+                    text, st = CATALOG_TEXT(rest[3:].strip())
+                finally:
+                    DEACTIVATE_SD()
+                    ACTIVATE_MQ()
+            except OSError as e:
+                LOG("ZX tpi:dir: SD card error: %s" % e, 2)
+                text, st = "SD card error", _3_F_Invalid_file
+            if st == _1_OK:
+                listing = CAT_COLOUR(text)  # CAT's look: the Spectrum has the same colour codes
+                stall = CMD_STALL_MS        # its "scroll?" waits for the user; a new command ends it
+            msg, rest = text, ""
+    elif op != 1:
+        msg, rest, st = 'Only LOAD "tpi:..." and SAVE "tpi:dir" in ZX48 mode', "", _4_Q_Parameter
     else:
         if getattr(TSP, "listing_stale", False):        # a ZX SAVE added a file: LOAD_TPI matches names in it
             REFRESH_LISTING()
         msg, rest, st = LOAD_TPI(rest, only_tap=True)   # may use the SD card: MQ is rebuilt
-    text = (msg.strip() + " " + rest).strip().encode()[:200]
-    LOG("ZX48 tpi: %s" % text.decode(), 0 if st == _1_OK else 2)
+    if listing is not None:
+        text = bytes(b if b < 0x80 else 0x3F for b in listing.encode())
+        LOG("ZX48 tpi:dir: %d bytes" % len(text), 0)
+    else:
+        text = (msg.strip() + " " + rest).strip().encode()[:200]
+        LOG("ZX48 tpi: %s" % text.decode(), 0 if st == _1_OK else 2)
 
-    # The reply: status, length, message. The first bytes go in before
+    # The reply: status, then (v3) the length and the message, or (v4) the
+    # message in pieces of up to 255 and a 0. The first bytes go in before
     # READY -- the ROM reads the instant it sees it -- the rest as it reads.
-    out = bytearray(2 + len(text))
+    if pieces:
+        k = (len(text) + 254) // 255
+        out = bytearray(1 + len(text) + k + 1)
+        j = 1
+        for i in range(0, len(text), 255):
+            part = text[i:i + 255]
+            out[j] = len(part)
+            out[j + 1:j + 1 + len(part)] = part
+            j += 1 + len(part)
+        out[j] = 0
+    else:
+        out = bytearray(2 + len(text))
+        out[1] = len(text)
+        out[2:] = text
     out[0] = ZX_REPORT.get(st, 0x19)
-    out[1] = len(text)
-    out[2:] = text
     ZX_FLUSH_TX(MQ)
     gc.collect()
     n = len(out)
     # By DMA where there is one, READY once the channel runs: the ROM reads
     # the moment it sees READY, blind.
-    r = STREAM_DMA(MQ, out, None, ZX_STALL_MS, True)
+    r = STREAM_DMA(MQ, out, None, stall, True)
     if r is not None:
         if r[0]:
             w = r[2] if r[0] == 4 else -2
@@ -6831,7 +6877,7 @@ def ZX_TPI():
     put = MQ.put
     while i < n:
         if txf() >= TX_DEPTH:
-            w = ZX_ROOM(MQ, ZX_STALL_MS)
+            w = ZX_ROOM(MQ, stall)
             if w != -1:
                 ZX_FLUSH_TX(MQ)
                 LOG("ZX tpi: reply stopped at byte %d of %d" % (i, n), 2)
