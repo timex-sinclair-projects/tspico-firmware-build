@@ -1542,7 +1542,7 @@ def LIST_DIR_FILES():                                                           
         if archs[1] == 16384:
             dirs.append(archs[0])
             dirs_upper.append(archs[0].upper())
-            nom = shorten_filename(archs[0].replace("~", "?"), 20)
+            nom = shorten_filename(catalog.screen_name(archs[0]), 20)
             dirinfo.append("%-32s" %  nom)
             L.append("<%-21s       0 B" % (nom + ">"))
 
@@ -1558,7 +1558,7 @@ def LIST_DIR_FILES():                                                           
             
             size_txt = catalog.size_text(int(archs[3]))
 
-            nom = "%03d %-18s%10s" % (i, shorten_filename(archs[0].replace("~", "?"), 18), size_txt)
+            nom = "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(archs[0]), 18), size_txt)
             L.append(nom)
             dirinfo.append(nom)
 
@@ -1569,7 +1569,7 @@ def LIST_DIR_FILES():                                                           
     for archs in listing:
         if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
                 and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
-            L.append("    %-18s%10s" % (shorten_filename(archs[0].replace("~", "?"), 18),
+            L.append("    %-18s%10s" % (shorten_filename(catalog.screen_name(archs[0]), 18),
                                         catalog.size_text(int(archs[3]))))
     
     del listing
