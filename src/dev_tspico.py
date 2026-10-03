@@ -882,6 +882,34 @@ def CMD_SEND(buf, ready):
         CMD_PUT(buf[i])
 
 
+class CmdOut:
+    """A page of command output, built in RAM and sent with CMD_SEND:
+    `wrt = CmdOut()`, then wrt(byte or str) as with CMD_PUT, and
+    wrt.send() where the Pico would wait for the Z80 -- before a key read
+    or the end. Nothing reaches TX before send(), and send() says READY
+    once the first bytes are in (and, with DMA, the channel is running):
+    data in TX first, then READY, as every handler must. For menus and
+    prompts (ListMenu, PROMPT_EACH, SEND_MSG_PROMPT_YN), which the ROM
+    prints a character at a time, blind -- as SEND_MSG2's pages."""
+
+    def __init__(self):
+        self.b = bytearray()
+
+    def __call__(self, x):
+        if isinstance(x, str):
+            self.b.extend(x.encode())
+        else:
+            self.b.append(x)
+
+    def send(self, ready=True):
+        b = self.b
+        self.b = bytearray()
+        if b:
+            CMD_SEND(b, ready)
+        elif ready:
+            MQ_READY()
+
+
 def CMD_KEY():
     """The Z80's key at a prompt (its OUT $0E). A write to port 0Fh -- the
     1.8b ROM's BREAK at the key wait -- raises CmdAbort."""
@@ -2590,7 +2618,7 @@ def PROMPT_EACH(prompts):                                                     # 
 
     global MQ
 
-    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
     while MQ.rx_fifo() != 0:                                                  # stray keystrokes
         MQ.get()
     wrt(0x86)                                                                 # PRINT STRING WITH LOOP -- the D-block status
@@ -2601,13 +2629,11 @@ def PROMPT_EACH(prompts):                                                     # 
     for i, p in enumerate(prompts):
         if ch is not None:
             wrt(ch if 32 <= ch < 127 else 89)                                 # echo the last answer
-        if need_ready:
-            MQ_READY()                                                        # data in TX first, then READY
-            need_ready = False
         wrt(0x0D)
         for m in p:
             wrt(m)
         wrt(0x00)                                                             # Z80 prints, waits for a key
+        wrt.send()                                                            # data in TX first, then READY
         ch = CMD_KEY()                                                        # BREAK here raises CmdAbort
         if ch in (78, 110):                                                   # N: the ROM has left its loop
             MQ_READY()
@@ -2617,7 +2643,7 @@ def PROMPT_EACH(prompts):                                                     # 
         need_ready = True
     wrt(ch if 32 <= ch < 127 else 89)
     wrt(0x03)                                                                 # end the loop
-    MQ_READY()
+    wrt.send()
     CMD_DRAIN()
     return yes
 
@@ -3326,7 +3352,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
     # (This note used to say the opposite: drain after READY, and Y kept
     # READY all session. 2026-09-30 audit, §3.)
     # ─────────────────────────────────────────────────────────────────────
-    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
 
     def codes(s):     # colour codes, a byte at a time (CMD_PUT makes room for one)
         for c in s:
@@ -3368,7 +3394,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
     if n == 0:
         wrt(0x86)                       # PRINT_STRING_WITH_LOOP function code
         wrt(1)                          # status: no error
-        MQ_READY()                      # data in TX first, then READY
         wrt(0x0D)
         wrt(0x0D)
         codes(BAR)
@@ -3379,6 +3404,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
         for m in "(no items available)":
             wrt(m)
         wrt(0x03)                       # end of loop (no scroll, no keypress)
+        wrt.send()                      # data in TX first, then READY
         CMD_DRAIN()
         while MQ.rx_fifo() != 0:
             MQ.get()
@@ -3394,9 +3420,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             Init = False
         else:
             wrt(ch)     # Show previous choice
-        if need_ready:
-            MQ_READY()  # data in TX first, then READY
-            need_ready = False
         wrt(0x0D)
         wrt(0x0D)
         codes(BAR)
@@ -3443,6 +3466,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             wrt(m)
             
         wrt(0x00)       # End of this string (Z80 displays + waits for key)
+        wrt.send()      # the page into TX, READY, the rest as the Z80 reads it
         # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ────────
         # PIO drops Y to 0 automatically when the Z80 writes the
         # keypress (its OUT $0E). MQ.get() returns with us already in
@@ -3465,8 +3489,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             j = idx + LISTMENU_CHOICES[ch]
             if j < n:
                 wrt(ch)
-                MQ_READY()      # data in TX first, then READY
-                need_ready = False
                 # Erase bottom two lines
                 for b in range(32):
                     wrt(0x08)
@@ -3493,8 +3515,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             wrt(m)
             
     wrt(0x03) # End string loop
-    if need_ready:
-        MQ_READY()      # 'F' past the last page: nothing else was sent
+    wrt.send()          # the echo, erase, choice and 0x03; then READY
     # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
     CMD_DRAIN()
     while MQ.rx_fifo() != 0:
@@ -5122,12 +5143,11 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     # the Z80 hadn't been told to read yet, so RX had nothing to drain.
     # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
     # ─────────────────────────────────────────────────────────────────────
-    wrt = CMD_PUT     # never blocks; BREAK raises CmdAbort (#51)
+    wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
     wrt(0x88 if lower else 0x86)   # PRINT STRING WITH LOOP (0x88: lower screen) -- this IS the D-block status
     wrt(0x01)   # BASIC return code
     if not lower:
         wrt(0x0D)   # Start a new line (the lower screen starts clear)
-    MQ_READY()  # Z80 sees "ready" on $0F → starts reading bytes from $0E
 
     while MQ.rx_fifo() != 0:    # Flush any stray keystrokes
         MQ.get()
@@ -5135,6 +5155,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     for ch in prompt:
         wrt(ch)
     wrt(0x00)   # End string (Z80 prints + waits for key)
+    wrt.send()  # into TX, READY, the rest as the Z80 reads it
     # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ───────────────
     # PIO drops Y to 0 automatically on the Z80's keypress OUT, so by
     # the time MQ.get() returns we're already BUSY. Re-assert MQ_READY()
@@ -5158,7 +5179,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
         if lower:
             wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
         wrt(0x03) # End the string loop
-        MQ_READY()
+        wrt.send()      # echo and 0x03 in TX, then READY
         # Could add an option to not wrt(0x03) and let the caller do that after
         # writing some more text to indicate the result of the action.
 
