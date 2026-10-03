@@ -395,9 +395,11 @@ def ECHO_KEEP(echo, w):
         echo[0] = n + 1
 
 
-def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
+def STREAM_DMA(MQ, buf, echo, stall_ms, ready, first_ms=0):
     """Send buf (bytes) to the Z80 through the bus state machine's TX FIFO
-    by DMA, and say READY once it is moving if `ready`. Returns (why, sent, word), or None when DMA
+    by DMA, and say READY once it is moving: `ready` True for READY + IDLE,
+    a function (CH_READY, MQ_READY) to say it some other way, False when
+    the caller already has -- and the Z80 isn't reading yet. Returns (why, sent, word), or None when DMA
     isn't available -- the caller then streams by hand, as before.
 
       why 0  all of buf went into the FIFO (the Z80 reads the last few
@@ -418,7 +420,15 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
     a byte write across the word, and TS_IO_DUAL outputs bits 0-7.
 
     Meanwhile core0 only listens: the Z80's echo bytes go into echo (as
-    TX_ROOM keeps them), a port-0Fh write or a stall ends it."""
+    TX_ROOM keeps them), a port-0Fh write or a stall ends it. first_ms, if
+    given, is the stall limit until the Z80 has taken more than the first
+    FIFO-full (romupdate erases the slot for seconds before it reads).
+
+    The channel MUST be running before the Z80 starts reading blind:
+    setting it up takes a few hundred us on v1.29 -- ten of romupdate's
+    33 us reads -- so never start this behind a READY the Z80 is already
+    acting on. Say READY through `ready` instead (hardware, 2026-10-03: ten
+    empty reads at the start of a romupdate put 00s into the flash)."""
     if _DMA is None:
         return None
     try:
@@ -432,9 +442,12 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
         d.config(read=buf, write=MQ, count=n,
                  ctrl=d.pack_ctrl(size=0, inc_read=True, inc_write=False, treq_sel=0),
                  trigger=True)
-        if ready:
+        if ready is True:
             MQX(MQ, "mov(y, invert(null))")            # READY: the FIFO is full by now
+        elif ready:
+            ready()
         last = n
+        limit = first_ms or stall_ms
         t0 = time.ticks_ms()
         while d.active():
             if MQ.rx_fifo():
@@ -451,7 +464,9 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready):
             if c != last:
                 last = c
                 t0 = time.ticks_ms()
-            elif time.ticks_diff(time.ticks_ms(), t0) >= stall_ms:
+                if n - c > 2 * TX_DEPTH:
+                    limit = stall_ms                    # the Z80 is reading now
+            elif time.ticks_diff(time.ticks_ms(), t0) >= limit:
                 why = 3
                 break
         sent = n - d.count              # before stopping: see RxDMA.stop
@@ -1819,12 +1834,13 @@ def LOAD_ZX(MQ, TSP):
     primed = False      # TX has been full once; only then does empty mean late
 
     put(blk_info[2])                        # the flag
-    MQX(MQ, "mov(y, invert(null))")         # READY
 
     # totbytes counts flag + content + CRC; the flag is already queued.
     r = None
-    if whole is not None:
-        r = STREAM_DMA(MQ, whole, None, ZX_STALL_MS, False)  # see LOAD_TS
+    if whole is not None:                   # by DMA, READY once it runs (see LOAD_TS)
+        r = STREAM_DMA(MQ, whole, None, ZX_STALL_MS, True)
+    if r is None:
+        MQX(MQ, "mov(y, invert(null))")     # READY
     if r is not None:
         sent += r[1]
         if r[0] == 4:

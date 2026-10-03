@@ -865,21 +865,19 @@ def CMD_SEND(buf, ready):
     prints whatever it reads from an empty one. So the page is built in RAM
     first and, where there is DMA, a channel feeds the FIFO from it whatever
     core0 is doing (STREAM_DMA). Without DMA, CMD_PUT a byte at a time."""
+    if tspico_io._DMA is not None:
+        _CMD_ECHO[0] = 0                    # all of it by DMA, READY once it runs
+        r = STREAM_DMA(MQ, buf, _CMD_ECHO, CMD_STALL_MS, MQ_READY if ready else False)
+        if r is not None:
+            if r[0]:
+                raise CmdAbort(r[0])
+            return
     n = len(buf)
     k = min(TX_DEPTH, n)
     for i in range(k):
         CMD_PUT(buf[i])
     if ready:
         MQ_READY()
-    if k >= n:
-        return
-    if tspico_io._DMA is not None:
-        _CMD_ECHO[0] = 0
-        r = STREAM_DMA(MQ, memoryview(buf)[k:], _CMD_ECHO, CMD_STALL_MS, False)
-        if r is not None:
-            if r[0]:
-                raise CmdAbort(r[0])
-            return
     for i in range(k, n):
         CMD_PUT(buf[i])
 
@@ -3206,22 +3204,24 @@ def CH_READ(pre, cmd):                                                        # 
     x = 0
     for b in data:
         x ^= b
-    wrt(1)
-    wrt(len(data))
-    CH_READY()                                                                # data in TX first, then READY
     if tspico_io._DMA is not None:
-        # The bytes and the XOR by DMA: the ROM reads them blind (~70 us a
-        # byte), and a core0 pause longer than the FIFO's ~280 us would hand
-        # it 00s. A port-0Fh write or a stall ends it, as CMD_PUT.
-        out = bytearray(len(data) + 1)
-        out[:-1] = data
+        # All of it by DMA, CH_READY once the channel runs: the ROM reads it
+        # blind (~70 us a byte), and a core0 pause longer than the FIFO's
+        # ~280 us would hand it 00s. A port-0Fh write or a stall ends it.
+        out = bytearray(len(data) + 3)
+        out[0] = 1
+        out[1] = len(data)
+        out[2:-1] = data
         out[-1] = x
         _CMD_ECHO[0] = 0
-        r = STREAM_DMA(MQ, out, _CMD_ECHO, CMD_STALL_MS, False)
+        r = STREAM_DMA(MQ, out, _CMD_ECHO, CMD_STALL_MS, CH_READY)
         if r is not None:
             if r[0]:
                 raise CmdAbort(r[0])
             return
+    wrt(1)
+    wrt(len(data))
+    CH_READY()                                                                # data in TX first, then READY
     for b in data:
         wrt(b)
     wrt(x)
@@ -3897,20 +3897,26 @@ def BLKRCV(pre, cmd):                                                           
         if data is not None:
             got = f.readinto(data)
             mvd = memoryview(data)[:got]
-            k = min(GATE, got)
-            for i in range(k):
-                CMD_PUT(mvd[i])
-            if k < got:
-                _CMD_ECHO[0] = 0
-                r = STREAM_DMA(MQ, mvd[k:], _CMD_ECHO, 3000, False)
-                if r is None:
-                    for j in range(k, got):
-                        wrt(mvd[j])
+            # No gate: the channel starts now, seconds before the write loop
+            # reads (BASIC prints and erases first), and BREAK / a stall end
+            # it. The gate's late start cost ten empty reads -- 00s in the
+            # flash (hardware, 2026-10-03). Up to CMD_STALL_MS for the first
+            # read (the erase), then 3 s: the write loop never pauses.
+            _CMD_ECHO[0] = 0
+            r = STREAM_DMA(MQ, mvd, _CMD_ECHO, 3000, False, CMD_STALL_MS)
+            if r is not None:
+                TLM("BLKRCV streamed by DMA", "why=%d sent=%d of %d echo=%s rx=%d" % (
+                    r[0], r[1], got, bytes(_CMD_ECHO).hex(), MQ.rx_fifo()))
+                if r[0]:
+                    raise CmdAbort(r[0])
+                return
+            gate = GATE                     # no channel free: the stream below, from RAM
+            for i in range(got):
+                if gate:
+                    CMD_PUT(mvd[i])
+                    gate -= 1
                 else:
-                    TLM("BLKRCV streamed by DMA", "why=%d sent=%d of %d echo=%s rx=%d" % (
-                        r[0], r[1], got - k, bytes(_CMD_ECHO).hex(), MQ.rx_fifo()))
-                    if r[0]:
-                        raise CmdAbort(r[0])
+                    wrt(mvd[i])
             return
         gate = GATE
         left = total
@@ -6790,6 +6796,17 @@ def ZX_TPI():
     out[2:] = text
     ZX_FLUSH_TX(MQ)
     gc.collect()
+    n = len(out)
+    # By DMA where there is one, READY once the channel runs: the ROM reads
+    # the moment it sees READY, blind.
+    r = STREAM_DMA(MQ, out, None, ZX_STALL_MS, True)
+    if r is not None:
+        if r[0]:
+            w = r[2] if r[0] == 4 else -2
+            ZX_FLUSH_TX(MQ)
+            LOG("ZX tpi: reply stopped at byte %d of %d" % (r[1], n), 2)
+            return w if w >= 0 else -1
+        return -1
     i = 0
     while i < len(out) and MQ.tx_fifo() < TX_DEPTH:
         MQ.put(out[i])
@@ -6802,16 +6819,6 @@ def ZX_TPI():
     # slower), so on v1.29 the FIFO ran dry and the mount message came out
     # garbled (hardware, 2026-10-02; src/test/mp_timing_bench.py). This
     # shape is ~9 us a byte on both.
-    n = len(out)
-    # By DMA where there is one: the FIFO is fed whatever core0 is doing.
-    r = STREAM_DMA(MQ, memoryview(out)[i:], None, ZX_STALL_MS, False) if i < n else None
-    if r is not None:
-        if r[0]:
-            w = r[2] if r[0] == 4 else -2
-            ZX_FLUSH_TX(MQ)
-            LOG("ZX tpi: reply stopped at byte %d of %d" % (i + r[1], n), 2)
-            return w if w >= 0 else -1
-        return -1
     txf = MQ.tx_fifo
     put = MQ.put
     while i < n:
