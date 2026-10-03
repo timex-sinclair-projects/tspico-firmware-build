@@ -114,6 +114,21 @@ import json, os, sys
 out, tag, channel, source_url, uf2, uf2_zip, upgrade, sdcard = sys.argv[1:9]
 cfg = json.load(open(os.path.join(out, 'pico', 'config.ini')))
 opt = lambda v: None if v == 'null' else json.loads(v)
+
+
+def mp_version():
+    """The MicroPython release in firmware.uf2 ("1.29.0"), or None. The
+    page warns before installing an older one over a newer: a newer
+    MicroPython's filesystem can't be read by an older one, which then
+    formats the Pico's flash on its first boot."""
+    import re
+    try:
+        d = open(os.path.join(out, 'firmware.uf2'), 'rb').read()
+    except OSError:
+        return None
+    pay = b''.join(d[i + 32:i + 32 + 256] for i in range(0, len(d), 512))
+    m = re.search(rb'MicroPython v(\d+\.\d+\.\d+)', pay)
+    return m.group(1).decode() if m else None
 files = []
 for root, _dirs, names in os.walk(os.path.join(out, 'pico')):
     for n in sorted(names):
@@ -126,6 +141,7 @@ print(json.dumps({
     'tag': tag,
     'source_url': source_url or None,
     'fw_version': cfg.get('FW_VERSION', '?'),
+    'mp_version': mp_version(),
     'rom_version': cfg.get('ROM_VERSION'),
     'uf2': opt(uf2),
     'uf2_zip': opt(uf2_zip),
