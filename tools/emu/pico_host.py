@@ -209,14 +209,19 @@ class HostFS:
         return self.cwd
 
     def statvfs(self, p=""):
-        return (4096, 4096, 61440, 57000, 57000, 0, 0, 0, 0, 255)     # a 240 MB card
+        if self.pico(p).startswith("/sd"):
+            return (4096, 4096, 61440, 57000, 57000, 0, 0, 0, 0, 255)     # a 240 MB card
+        return (4096, 4096, 352, 182, 182, 0, 0, 0, 0, 255)               # the Pico's 1.4 MB flash
 
     def mount(self, dev, p):
         if getattr(dev, "absent", False):
             raise OSError(19, "ENODEV")
 
     def umount(self, p):
-        pass
+        # MicroPython: unmounting the filesystem the current directory is on
+        # leaves you at the root (vfs_cur goes back to "/").
+        if self.cwd == p or self.cwd.startswith(p.rstrip("/") + "/"):
+            self.cwd = "/"
 
     def sync(self):
         pass
@@ -473,6 +478,16 @@ def main():
     fs = HostFS(args.root)
     fw = install_firmware(fs)
     fw.TLM_ENABLED = True
+    try:                                       # Build, as the CI stamp would show it
+        import subprocess
+        sha = subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        br = subprocess.run(["git", "-C", REPO, "rev-parse", "--abbrev-ref", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+        if sha:
+            fw.BUILD_VERSION = "%s (%s)" % (sha, br)
+    except Exception:
+        pass
 
     def firmware():
         try:
