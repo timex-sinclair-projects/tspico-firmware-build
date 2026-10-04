@@ -170,6 +170,18 @@ def test_info(t):
     check(all(v not in (0, 3) for _, v in codes(msg)), "no value the ROM can't take")
     check(not re.search("\x10\x02", msg), "nothing missing: no red")
 
+    t.isTapMounted = lambda: True
+    t.TSP = types.SimpleNamespace(FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2, sd_present=True,
+                                  append=False, VERBOSE=True, f_name="/sd/TAP/Manic.tap", tap_idx=2,
+                                  offset_tbl=[[0, 19, " Y", "manic     "], [21, 20, " N", "Program"],
+                                              [43, 19, " Y", "manicscr  "], [64, 6914, " N", "Code block"]])
+    del sent[:]
+    t.GETINFO(bytearray(10), "D..tpi:info")
+    lines = screen(sent[-1][0])
+    t.isTapMounted = lambda: False
+    check("Block     02:manicscr:Code block" in lines and all(len(l) <= 32 for l in lines),
+          "a header before a Code block: one Block line, not 34 characters wrapped (emulator, 2026-10-04)")
+
     msg, _ = run(False, False)
     lines = screen(msg)
     check(codes(msg)[2] == (0x11, 2), "no SD card: the strip is red (%r)" % (codes(msg)[2],))
