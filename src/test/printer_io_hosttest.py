@@ -200,9 +200,9 @@ def main():
     print("the dispatcher flushes before any other command")
     for name in ("TS/tspico.py", "dev_tspico.py"):
         src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
-        i = src.index("if PRT.buf and not (pre[0] == 66 and pre[1] in (4, 5, 6)):")
-        j = src.index("if pre[0] not in (0, 255, 66):", i)
-        check("PRINT_FLUSH()" in src[i:j] and "elif pre[0] == 66 and pre[1] in (4, 5, 6):" in src,
+        i = src.index("if PRT.buf and not (pre[0] == PRE_CMD and pre[1] in (4, 5, 6)):")
+        j = src.index("if pre[0] not in (PRE_HEADER, PRE_DATA, PRE_CMD):", i)
+        check("PRINT_FLUSH()" in src[i:j] and "elif pre[0] == PRE_CMD and pre[1] in (4, 5, 6):" in src,
               "%s: flush before the handler, printer pre-headers go to PRINT_IO" % name)
 
     ok = all(results)

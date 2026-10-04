@@ -417,7 +417,7 @@ def main():
         print("READY for a command comes from PROCESS_CMD")
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
-            i = src.index("if pre[0] not in (0, 255, 66):")
+            i = src.index("if pre[0] not in (PRE_HEADER, PRE_DATA, PRE_CMD):")
             cond = src[i:src.index("MQ_READY()", i)]
             check("66" in cond,
                   "%s: the dispatcher skips READY for all 42h traffic (commands, printer)" % name)
@@ -425,7 +425,7 @@ def main():
             sync = src[i:src.index("if got != 10:", i)]
             check(sync.index("while busy and") < sync.index('MQ_STATUS(MQ, "idle")'),
                   "%s: after a SYNC, IDLE waits for a SAVE_LOG flash write to finish" % name)
-            code = [l.strip() for l in src[i:src.index("if pre[0] == 0 and pre[1] == 0:", i)].split("\n")
+            code = [l.strip() for l in src[i:src.index("if pre[0] == PRE_HEADER and pre[1] == 0:", i)].split("\n")
                     if l.strip() and not l.strip().startswith("#")]
             walks = [k for k, l in enumerate(code) if "gc.collect()" in l or
                      ("gc.mem_free()" in l and not (k and code[k - 1] == "if TSP.LOG_LEVEL == 0:"))]

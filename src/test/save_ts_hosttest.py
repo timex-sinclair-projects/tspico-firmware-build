@@ -159,7 +159,7 @@ def main():
               "the header capture says READY (mid) itself, once it is listening")
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
-            i = src.index("if pre[0] not in (0, 255, 66):")
+            i = src.index("if pre[0] not in (PRE_HEADER, PRE_DATA, PRE_CMD):")
             cond = src[i:src.index("MQ_READY()", i)]
             check("and not (pre[0] == 0 and pre[1] == 0)" not in cond      # SAVE no longer excepted
                   and "SAVE_TS(MQ, TSP, pre)" in src,

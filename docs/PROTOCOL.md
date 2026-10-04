@@ -271,6 +271,8 @@ becomes the command's result.
 | `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | **ROM 2.1 only**: `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
 | `$80`, `$89`–`$FF` (and `$88` on ROM 2.0) | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
 
+In the firmware (`TS/tspico.py`, issue #16) these are `FN_PRINT_STRING` (`$81`), `FN_PRINT_STRING_KEY` (`$82`), `FN_PRINT_CHAR` (`$83`), `FN_RETURN_KEY` (`$84`), `FN_GET_STATUS` (`$85`), `FN_PRINT_LOOP` (`$86`) and `FN_PRINT_LOOP_LOWER` (`$88`); the `$00` that ends a string or a page is `STR_END`, the `$03` that ends a loop `LOOP_END`, and a pre-header's first byte is `PRE_HEADER` (`$00`), `PRE_DATA` (`$FF`) or `PRE_CMD` (`$42`, `'B'`). Each use in the code also gives the number in its comment.
+
 Text rules (the ROM's `PRINT_STRING_FROM_PICO`, `$045F`/`$068E`/`$06F2`):
 
 - it reads each character **without a ready-wait**; `RST 10` is slow enough

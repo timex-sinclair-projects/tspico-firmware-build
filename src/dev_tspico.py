@@ -449,6 +449,30 @@ RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD
 # report that means the device isn't there.
 NO_CARD_MSG = "No SD card. Insert one and\rtry again."                 # 37 chars wrapped mid-word at 32
 
+# ─── Protocol bytes by name (issue #16) ─────────────────────────────────
+# The ROM function codes, the bytes that end a string or a loop, and the
+# first byte of a pre-header, as docs/PROTOCOL.md names them. Each use
+# site also says the number in its comment (0x86 ...): that's how many
+# people know these. See PROTOCOL.md §5 for each function's exchange.
+#
+# ROM function codes: a reply's first byte, in place of a status, picks
+# what the Z80 does with the bytes after it.
+FN_PRINT_STRING = const(0x81)       # print the text up to STR_END (main screen)
+FN_PRINT_STRING_KEY = const(0x82)   # print, then wait for a key and send it back (unused)
+FN_PRINT_CHAR = const(0x83)         # print one character (unused)
+FN_RETURN_KEY = const(0x84)         # wait for a key and send it back (unused)
+FN_GET_STATUS = const(0x85)         # the Z80 sends a keyboard/aux mask (unused)
+FN_PRINT_LOOP = const(0x86)         # pages of text, a key between them, LOOP_END ends it
+FN_PRINT_LOOP_LOWER = const(0x88)   # FN_PRINT_LOOP on the lower screen (ROM 2.1 only)
+# Inside those replies:
+STR_END = const(0x00)               # FN_PRINT_STRING: the end of the text. FN_PRINT_LOOP:
+                                    # the end of a page -- the Z80 waits for a key
+LOOP_END = const(0x03)              # FN_PRINT_LOOP: the end of the loop (no key wait)
+# The first byte of a pre-header (pre[0]):
+PRE_HEADER = const(0x00)            # a tape header block: LOAD / SAVE
+PRE_DATA = const(0xFF)              # a tape data block: LOAD / SAVE
+PRE_CMD = const(0x42)               # 'B': a tpi: command, or the printer (pre[1] 4-6)
+
 # Status codes returned to the 2068 - each maps to a BASIC error
 _1_OK = const(1)
 _2_R_Tape_load = const(2)
@@ -2162,7 +2186,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
         # ───────────────────────────────────────────────────────────────
         ob = bytearray()        # the whole message, then CMD_SEND
         put = ob.append
-        put(0x81)               # PRINT STRING — this IS the D-block status
+        put(FN_PRINT_STRING)    # 0x81 PRINT STRING — this IS the D-block status
         put(st)                 # Return code
         put(0x0D)               # Start with a newline
         for m in msg:           # The message
@@ -2171,7 +2195,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
             put(0x0D)
             for m in msg1:
                 put(MSG_BYTE(m))
-        put(0x00)               # End of string
+        put(STR_END)            # 0x00: end of string
         CMD_SEND(ob, True)      # header in TX, READY, the rest as the Z80 reads
 
     else:
@@ -2214,7 +2238,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
     # audit; cmd_io_hosttest.py runs a listing with ROM_VERSION "1.0" to
     # show it is ignored now. ROM_VERSION is still shown by tpi:info.
     # ─────────────────────────────────────────────────────────────────────
-    end_char = 0x03                                    # end of the 0x86 loop
+    end_char = LOOP_END                                # 0x03: end of the 0x86 loop
 
     scroll = "Scroll? (Y/n)"
 
@@ -2242,7 +2266,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
     ob = bytearray()
     wrt = ob.append
 
-    wrt(0x86)   # PRINT_STRING_WITH_LOOP (this IS the D-block status)
+    wrt(FN_PRINT_LOOP)  # 0x86 PRINT STRING WITH LOOP (this IS the D-block status)
     wrt(st)     # BASIC return code
     wrt(0x0D)   # Start on a new line
     wrt(0x0D)   # Start with a blank line we don't count
@@ -2377,7 +2401,7 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
                     wrt(ord(m))
                 for m in scroll:
                     wrt(ord(m))
-                wrt(0x00)       # end of this page
+                wrt(STR_END)    # 0x00: end of this page
                 CMD_SEND(ob, True)
                 # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ─
                 # When the Z80 sends the keypress (its OUT $0E for the
@@ -2699,7 +2723,7 @@ def PROMPT_EACH(prompts):                                                     # 
 
     wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
     CMD_RX_FLUSH()                                                            # stray keystrokes; a BREAK raises CmdAbort
-    wrt(0x86)                                                                 # PRINT STRING WITH LOOP -- the D-block status
+    wrt(FN_PRINT_LOOP)                                                        # 0x86 PRINT STRING WITH LOOP -- the D-block status
     wrt(1)                                                                    # BASIC return code
     need_ready = True
     yes = []
@@ -2710,7 +2734,7 @@ def PROMPT_EACH(prompts):                                                     # 
         wrt(0x0D)
         for m in p:
             wrt(m)
-        wrt(0x00)                                                             # Z80 prints, waits for a key
+        wrt(STR_END)                                                          # 0x00: Z80 prints, waits for a key
         wrt.send()                                                            # data in TX first, then READY
         ch = CMD_KEY()                                                        # BREAK here raises CmdAbort
         if ch in (78, 110):                                                   # N: the ROM has left its loop
@@ -2720,7 +2744,7 @@ def PROMPT_EACH(prompts):                                                     # 
             yes.append(i)
         need_ready = True
     wrt(ch if 32 <= ch < 127 else 89)
-    wrt(0x03)                                                                 # end the loop
+    wrt(LOOP_END)                                                             # 0x03: end the loop
     wrt.send()
     CMD_DRAIN()
     return yes
@@ -3469,7 +3493,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
     # intact.
     # ────────────────────────────────────────────────────────────────────
     if n == 0:
-        wrt(0x86)                       # PRINT_STRING_WITH_LOOP function code
+        wrt(FN_PRINT_LOOP)              # 0x86 PRINT STRING WITH LOOP function code
         wrt(1)                          # status: no error
         wrt(0x0D)
         wrt(0x0D)
@@ -3480,7 +3504,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
         wrt(0x0D)
         for m in "(no items available)":
             wrt(m)
-        wrt(0x03)                       # end of loop (no scroll, no keypress)
+        wrt(LOOP_END)                   # 0x03: end of loop (no scroll, no keypress)
         wrt.send()                      # data in TX first, then READY
         CMD_DRAIN()
         while MQ.rx_fifo() != 0:
@@ -3492,7 +3516,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
         # Write screen
 
         if Init:
-            wrt(0x86)   # PRINT STRING WITH LOOP — this IS the D-block status
+            wrt(FN_PRINT_LOOP)  # 0x86 PRINT STRING WITH LOOP — this IS the D-block status
             wrt(1)      # BASIC return code
             Init = False
         else:
@@ -3542,7 +3566,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
         for m in prompt2:
             wrt(m)
             
-        wrt(0x00)       # End of this string (Z80 displays + waits for key)
+        wrt(STR_END)    # 0x00: end of this string (Z80 displays + waits for key)
         wrt.send()      # the page into TX, READY, the rest as the Z80 reads it
         # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ────────
         # PIO drops Y to 0 automatically when the Z80 writes the
@@ -3591,7 +3615,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
         for m in "%s\r%s\r" % (chosen, List[sel]):
             wrt(m)
             
-    wrt(0x03) # End string loop
+    wrt(LOOP_END)       # 0x03: end string loop
     wrt.send()          # the echo, erase, choice and 0x03; then READY
     # ─── DUAL-PORT MIGRATION: inline tail drains ──────────────────────────
     CMD_DRAIN()
@@ -5240,7 +5264,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
     # ─────────────────────────────────────────────────────────────────────
     wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
-    wrt(0x88 if lower else 0x86)   # PRINT STRING WITH LOOP (0x88: lower screen) -- this IS the D-block status
+    wrt(FN_PRINT_LOOP_LOWER if lower else FN_PRINT_LOOP)   # 0x88 / 0x86 PRINT STRING WITH LOOP (0x88: lower screen) -- this IS the D-block status
     wrt(0x01)   # BASIC return code
     if not lower:
         wrt(0x0D)   # Start a new line (the lower screen starts clear)
@@ -5249,7 +5273,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
 
     for ch in prompt:
         wrt(ch)
-    wrt(0x00)   # End string (Z80 prints + waits for key)
+    wrt(STR_END)        # 0x00: end string (Z80 prints + waits for key)
     wrt.send()  # into TX, READY, the rest as the Z80 reads it
     # ─── Issue #14: 0x86 bit-6 ack (PIO auto-busy variant) ───────────────
     # PIO drops Y to 0 automatically on the Z80's keypress OUT, so by
@@ -5273,7 +5297,7 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
                 wrt(ch)
         if lower:
             wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
-        wrt(0x03) # End the string loop
+        wrt(LOOP_END)   # 0x03: end the string loop
         wrt.send()      # echo and 0x03 in TX, then READY
         # Could add an option to not wrt(0x03) and let the caller do that after
         # writing some more text to indicate the result of the action.
@@ -6473,7 +6497,7 @@ def TS2068_IO():                                                         # Main 
                     # command's Z80 is parked in its READY wait (it read its pre-load
                     # status straight after the pre-header; give it a moment, and put
                     # the status back if the SD access wiped it unread).
-                    if PRT.buf and not (pre[0] == 66 and pre[1] in (4, 5, 6)):
+                    if PRT.buf and not (pre[0] == PRE_CMD and pre[1] in (4, 5, 6)):     # 66 'B'; 4-6 printer
                         _t = time.ticks_ms()
                         while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), _t) < 50:
                             pass
@@ -6493,7 +6517,7 @@ def TS2068_IO():                                                         # Main 
                     # every flag-00/FF pre-header is left to its handler, as are
                     # commands and the printer (42h). (2026-09-30 audit.)
                     # ──────────────────────────────────────────────────────────────
-                    if pre[0] not in (0, 255, 66):   # LOAD/SAVE, commands, printer: the handler says READY
+                    if pre[0] not in (PRE_HEADER, PRE_DATA, PRE_CMD):   # 0, 255, 66: LOAD/SAVE, commands, printer: the handler says READY
                         MQ_READY()
 
                     # Snapshot pre[] for any later TLM that wants to print it.
@@ -6509,7 +6533,7 @@ def TS2068_IO():                                                         # Main 
                     if TSP.LOG_LEVEL == 0:
                         LOG("Top of main loop, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
-                    if pre[0] == 0 and pre[1] == 0:                                                           # pre[1] specifies which: if 0 -> SAVE   
+                    if pre[0] == PRE_HEADER and pre[1] == 0:                                                  # 0, 0: pre[1] specifies which: if 0 -> SAVE   
                         LOG("Starting SAVE TS", 0)
                 
                         led.value(1)
@@ -6678,7 +6702,7 @@ def TS2068_IO():                                                         # Main 
 
                         led.value(0)
                 
-                    elif (pre[0] == 0 or pre[0] == 255) and pre[1] < 10:                                      # for simplicity if 0 < pre[1] < 10: call LOAD routine
+                    elif (pre[0] == PRE_HEADER or pre[0] == PRE_DATA) and pre[1] < 10:  # 0 / 255: for simplicity if 0 < pre[1] < 10: call LOAD routine
                         TLM("LVM LOAD enter", "pre=%s f_name=%s tap_idx=%d offset=%d" % (
                             _pre_snapshot, TSP.f_name, TSP.tap_idx, TSP.offset))
                         LOG("Starting TS LVM", 0)
@@ -6694,7 +6718,7 @@ def TS2068_IO():                                                         # Main 
                         # log_entries.extend(new_logs) # when LOAD_TS returns an array
                         TLM("LVM LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
 
-                    elif (pre[0] == 0 or pre[0] == 255):                                                      # Headerless LOAD
+                    elif (pre[0] == PRE_HEADER or pre[0] == PRE_DATA):                                        # 0 / 255: Headerless LOAD
                         TLM("LVM Headerless LOAD enter", "pre=%s tap_idx=%d offset=%d" % (
                             _pre_snapshot, TSP.tap_idx, TSP.offset))
                         LOG("Starting TS LVM - Headerless LOAD", 0)
@@ -6706,10 +6730,10 @@ def TS2068_IO():                                                         # Main 
                         # log_entries.extend(new_logs) # when LOAD_TS returns an array
                         TLM("LVM Headerless LOAD exit", "tap_idx=%d offset=%d" % (TSP.tap_idx, TSP.offset))
 
-                    elif pre[0] == 66 and pre[1] in (4, 5, 6):                                # LPRINT / LLIST char, COPY
+                    elif pre[0] == PRE_CMD and pre[1] in (4, 5, 6):                           # 66 'B': LPRINT / LLIST char, COPY
                         PRINT_IO(pre)
 
-                    elif pre[0] == 66:
+                    elif pre[0] == PRE_CMD:                                                   # 66 'B': a tpi: command
 
                         LOG("Starting TS COMMAND " + str(pre), 0)
 
