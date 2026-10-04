@@ -535,11 +535,13 @@ try:
 except ImportError:
     BUILD_VERSION = "unknown (no buildinfo)"
 
-# The TS-Pico version: the firmware and its TS-2068 ROM share one number from
-# 2.0 on. 2.1 is the release ROM: the disk-command build from tools/build-rom.py
-# (PEEK 101 = 21h). tpi:info reports this, not the FW_VERSION an older
-# config.ini may still hold.
-FW_VERSION = "2.1"
+# The TS-Pico version: the firmware and its TS-2068 ROM share one major.minor
+# number from 2.0 on, and a third part marks a firmware-only release on the
+# same ROM. 2.1 is the release ROM: the disk-command build from
+# tools/build-rom.py (PEEK 101 = 21h). tpi:info reports these, not the
+# FW_VERSION an older config.ini may still hold.
+FW_VERSION = "2.1.1"
+ROM_VERSION = "2.1"
 # Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
 # when loaded via the dev override __name__ == "dev_tspico". This file is
 # kept byte-identical between the two locations so the stamp prints the
@@ -646,7 +648,7 @@ class PICO_STATUS():                                                            
         try:                                                                    # try to retrieve configuration values from init_values passed on startup
             self.ROM_VERSION = init_values["ROM_VERSION"]                       # Current ROM version.
         except:                                                                 # if fail, assume hard-wired values
-            self.ROM_VERSION = FW_VERSION
+            self.ROM_VERSION = ROM_VERSION
         try:                                                                    # try to retrieve configuration values from init_values passed on startup
             self.ZX_TAPE_COMPAT = init_values["ZX_TAPE_COMPAT"]                 # boolean for ZX Spectrum "compatible" tape routine (True) or normal (False)
         except:                                                                 # if fail, assume hard-wired values
@@ -4741,7 +4743,7 @@ def LOAD_CONFIG():
     default_values["ZX_TAPE_COMPAT"] = False                   # Use regular tape load routine in zx48 mode
     default_values["TELEMETRY"] = False                        # TLM over USB serial (main.py reads it; developers set true)
     default_values["FW_VERSION"] = FW_VERSION
-    default_values["ROM_VERSION"] = FW_VERSION                 # the ROM this firmware ships with
+    default_values["ROM_VERSION"] = ROM_VERSION                # the ROM this firmware ships with
     # Fill any missing values with the default
     for key, value in default_values.items():
         if key not in init_values:
