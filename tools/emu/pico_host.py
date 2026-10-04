@@ -585,7 +585,11 @@ def main():
     threading.Thread(target=firmware, daemon=True).start()
     if args.selftest:
         serve(args.tcp or TCP, "")
-        sys.exit(selftest(args.tcp or TCP))
+        rc = selftest(args.tcp or TCP)
+        # Straight out: the firmware's thread is still running, and an
+        # interpreter shutdown can abort on its stdout lock (macOS CI, #147).
+        sys.stdout.flush()
+        _os._exit(rc)
     print("[pico_host] TS-Pico firmware %s; flash and card in %s" % (fw.BUILD_VERSION, args.root), flush=True)
     for t in serve(args.tcp, args.unix):
         t.join()
