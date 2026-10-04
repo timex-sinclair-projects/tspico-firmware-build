@@ -1,0 +1,113 @@
+name: Standalone pico_host (emulator firmware)
+
+# The TS-Pico firmware for emulators (docs/EMULATOR_BRIDGE.md) as one
+# executable per platform, no Python needed: tools/emu/build_standalone.sh.
+# Each build boots the firmware and answers the bridge's HELLO before it is
+# uploaded (--selftest). On a release tag the binaries are attached to the
+# release that release.yml creates.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'src/**'
+      - 'basic/**'
+      - 'SD card/help/**'
+      - 'tools/emu/**'
+      - 'tools/build-basic.sh'
+      - 'tools/gen-buildinfo.py'
+      - '.github/workflows/emu-host.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tools/emu/**'
+      - '.github/workflows/emu-host.yml'
+  workflow_dispatch:
+
+jobs:
+  inputs:
+    # The generated files the bundle carries, made once: the assets TAPs
+    # (zmakebas) and the build stamp.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build BASIC programs (the assets TAPs)
+        run: ./tools/build-basic.sh
+      - name: Build stamp
+        run: python3 tools/gen-buildinfo.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emu-host-inputs
+          path: |
+            src/assets/*.tap
+            src/TS/buildinfo.py
+
+  build:
+    needs: inputs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: pico_host-macos-arm64
+          - os: ubuntu-22.04
+            name: pico_host-linux-x86_64
+          - os: windows-2022
+            name: pico_host-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHON: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: emu-host-inputs
+          path: src
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: PyInstaller
+        run: python -m pip install pyinstaller
+      - name: Build
+        run: tools/emu/build_standalone.sh
+      - name: Self-test (boots the firmware, answers HELLO over TCP)
+        run: |
+          exe=dist/pico_host; [ -f dist/pico_host.exe ] && exe=dist/pico_host.exe
+          "$exe" --root "$RUNNER_TEMP/tspico-root" --selftest --quiet
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/pico_host*
+
+  release:
+    # On a v* tag: attach the three binaries to the release release.yml makes.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: bins
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          for i in $(seq 1 60); do gh release view "$TAG" >/dev/null 2>&1 && break; sleep 10; done
+          cd bins
+          for d in pico_host-*; do
+            [ -d "$d" ] || continue
+            chmod +x "$d"/pico_host* 2>/dev/null || true
+            zip -j "$d.zip" "$d"/*
+          done
+          gh release upload "$TAG" pico_host-*.zip --clobber

@@ -60,13 +60,16 @@ class Session:
         # ZRCP port: stop them first.
         subprocess.run(["pkill", "-f", os.path.basename(EMU)], stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-f", "tools/emu/pico_host.py"], stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-f", "dist/pico_host"], stderr=subprocess.DEVNULL)
         time.sleep(0.5)
         if fresh and os.path.isdir(root):
             import shutil
             shutil.rmtree(root)
         self.port = port
+        host = os.environ.get("TSPICO_HOST")    # e.g. dist/pico_host, the standalone build
+        cmd = [host] if host else [sys.executable, "-u", os.path.join(HERE, "pico_host.py")]
         self.host = subprocess.Popen(
-            [sys.executable, "-u", os.path.join(HERE, "pico_host.py"), "--root", root, "--sd", sd],
+            cmd + ["--root", root, "--sd", sd],
             stdout=open(log, "w"), stderr=subprocess.STDOUT)
         t0 = time.time()
         while "listening" not in open(log).read():

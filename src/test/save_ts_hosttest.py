@@ -134,13 +134,31 @@ def main():
         out = io.SAVE_TS(pio, tsp, pre)
         saved = out[3]
         log = io.log_entries
-        # the dispatcher: ACTIVATE_MQ (fresh FIFOs) + 0x01 + idle/RECOVERED
-        pio.tx, pio.rx = [0x01], []
+        # the dispatcher: ACTIVATE_MQ (fresh FIFOs), the SAVE's final status if
+        # its data came in (TSP.save_final, sent only after all the SD work),
+        # 0x01 for the next command, then idle/RECOVERED
+        final = getattr(tsp, "save_final", None)
+        pio.tx, pio.rx = ([final] if final is not None else []) + [0x01], []
         io.MQ_STATUS(pio, "recovered" if getattr(tsp, "save_recovered", False) else "idle")
         pio.finish()
         return pio, pio.result, saved, log, tsp, os.listdir(d)
 
     try:
+        print("the final status goes out only after the SD work (savetest.bas, 2026-10-04)")
+        sv = open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read().replace("\r", "")
+        sv = sv[sv.index("def SAVE_TS("):sv.index("def SAVE_ZX(")]
+        tail = sv[sv.index("SAVE_TS data ok; final status after the write"):]
+        check("wrt(0x01)" not in tail.split("TSP.save_final = 0x01")[0] and "TSP.save_final = 0x01 if saved else 0x0A" in tail,
+              "SAVE_TS writes no final status itself; it leaves OK or J in TSP.save_final")
+        for name in ("TS/tspico.py", "dev_tspico.py"):
+            src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
+            br = src[src.index("if pre[0] == PRE_HEADER and pre[1] == 0:"):]
+            br = br[:br.index("elif (pre[0] == PRE_HEADER or pre[0] == PRE_DATA) and pre[1] < 10:")]
+            arm = br.index("final = getattr(TSP, \"save_final\", None)")
+            check(br.rindex("DIR_FILES()", 0, arm) < br.index("ACTIVATE_MQ()", br.rindex("DEACTIVATE_SD()", 0, arm)) < arm
+                  < br.index("MQ.put(final)") < br.index("MQ.put(0x01)", arm),
+                  "%s: re-mount and folder refresh, then ACTIVATE_MQ, the final status, the pre-load" % name)
+
         print("normal SAVE")
         pio, r, saved, log, tsp, files = save()
         check(r == "ok" and saved and files == ["savetest.tap"],
@@ -152,6 +170,13 @@ def main():
         check(pio.dropped == 0, "no RX overflow (%d dropped)" % pio.dropped)
         check(not tsp.save_recovered, "save_recovered stays False")
 
+        print("the dispatcher lets the Z80 read its status before the card check")
+        for name in ("TS/tspico.py", "dev_tspico.py"):
+            src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
+            br = src[src.index("if pre[0] == PRE_HEADER and pre[1] == 0:"):]
+            br = br[:br.index("SAVE_TS(MQ, TSP, pre)")]
+            check(br.index("PRELOAD_READ()") < br.index("SD_PROBE()") < br.index("MQ.put(0x01)"),
+                  "%s: PRELOAD_READ, then SD_PROBE, then the 0x01 put back if unread (emulator, 2026-10-04)" % name)
         print("READY: SAVE_TS raises it, right before the header capture")
         body = open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read().replace("\r", "")
         sv = body[body.index("def SAVE_TS("):body.index("def SAVE_ZX(")]
@@ -200,15 +225,15 @@ def main():
               "logged, and the Z80 sent no data block: %r" % log.strip().splitlines()[-1:])
 
         print("the write's mount fails (no card after the transfer; §2 #21)")
-        # The 2068 already has "0 OK" (the final status goes out before the
-        # SD grabs GPIO 2-4, #40), so this can only be logged and retracted.
+        # The final status waits for the write (2026-10-04), so the 2068 is
+        # told: Report J, not "0 OK" over a file that isn't there.
         def no_mount(*a):
             raise OSError(19, "SD card mount failed after 5 attempts")
         io.ENA_SD = no_mount
         pio, r, saved, log, tsp, files = save()
-        check(r == "ok" and not saved and not files and tsp.f_name == "",
-              "logged as a failed write; the name isn't left for the dispatcher to mount (%s, %r)"
-              % (saved, tsp.f_name))
+        check(r == "J" and not saved and not files and tsp.f_name == "",
+              "the 2068 gets Report J; the name isn't left for the dispatcher to mount (%s, %s, %r)"
+              % (r, saved, tsp.f_name))
         check("SAVE write FAILED" in log and "after 5 attempts" in log,
               "the log says why: %r" % log.strip().splitlines()[-1:])
 

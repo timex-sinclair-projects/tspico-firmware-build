@@ -2265,6 +2265,7 @@ def SAVE_TS(MQ, TSP, pre=None):
                                       # module-level import here would be circular
     wrt = MQ.put
     TSP.save_recovered = False
+    TSP.save_final = None          # the final status, once the data is in (see below)
     gc.collect()
     TLM("SAVE_TS enter", "f_name=%r append=%s" % (TSP.f_name, TSP.append))
 
@@ -2529,20 +2530,21 @@ def SAVE_TS(MQ, TSP, pre=None):
         TLM("SAVE_TS EXIT data parity", "got %02X want %02X" % (blk[long - 1], par))
         return MQ, TSP, log_entries, False
 
-    wrt(0x01)        # final status — Z80 reads this and reports "0 OK"
-    wrt(0x01)        # SENTINEL — do not remove. Nominally the pre-load for
-                     # the next command's status read, but the dispatcher's
-                     # ACTIVATE_MQ() builds a fresh StateMachine and discards
-                     # it, then re-arms with its own MQ.put(0x01). Its real
-                     # job is downstream: the "wait until tx_fifo() <= 1"
-                     # spin before ENA_SD uses it to tell "Z80 read the final
-                     # status" (2 -> 1) from "TX was always empty". Delete it
-                     # as redundant and that wait returns instantly, handing
-                     # back the GPIO 2-4 pin-grab race that #40 fixed.
-    MQX(MQ, "mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy from data phase)
-
+    # ─── The final status waits until ALL the SD work is done ───────────
+    # The Z80 waits for READY (~20 s) before it reads the final status
+    # (docs/PROTOCOL.md §6.2), so it is NOT sent here: the file is written
+    # first, the dispatcher re-mounts and re-reads the folder, and only
+    # then does its single arm point stage this status, the next pre-load
+    # and READY (TSP.save_final). This used to send it here, before the
+    # write: the 2068 printed "0 OK" and went on while the Pico spent ~0.9 s
+    # on the card with its bus interface down; a BASIC program's next tpi:
+    # command sent SYNC, waited the ROM's ~1 s for IDLE, sent its pre-header
+    # into nothing -- "Partial pre-header 4/10", Report J (hardware,
+    # 2026-10-04, savetest.bas). With the bus BUSY the Z80 doesn't read
+    # 0Eh during the write, so #40's pin-grab race can't happen either, and
+    # a failed write is now reported instead of "0 OK".
     totbytes = len(hdr) + long
-    TLM("SAVE_TS final status sent", "%d bytes total, Y=READY" % totbytes)
+    TLM("SAVE_TS data ok; final status after the write", "%d bytes total" % totbytes)
 
     # ============================================================
     # Reconstruct a standard TAP file from the received bytes.
@@ -2589,40 +2591,23 @@ def SAVE_TS(MQ, TSP, pre=None):
         mode = "wb"
         TSP.f_name = filename
 
-    # NOTE: write no other status here either, for the same reason as in
-    # LOAD_TS. The two wrt(0x01) writes earlier already handled the final
-    # status + next-iter pre-load chain. Another would orphan a status byte
-    # in TX that corrupts the next transaction.
+    # NOTE: write no status here: the final status and the next pre-load
+    # go out together from the dispatcher's arm point, after all the SD
+    # work (TSP.save_final). A byte staged here would be thrown away by its
+    # ACTIVATE_MQ, or worse, orphaned in TX for the next transaction.
 
     # ============================================================
     # Write the TAP to SD card. ENA_SD() switches GPIO 2-4 from PIO
     # to SPI mode for SD access. After the write completes, the main
     # dispatcher will switch back to PIO for the next Z80 transaction.
     # ============================================================
-    # RACE FIX: wait for the Z80 to actually READ the final status BEFORE
-    # ENA_SD hijacks GPIO 2-4. GPIO 2 = D0 = bit 0 of the status byte, so if
-    # the Z80's status read lands after the pin grab, the 0x01 corrupts to 0x00
-    # -> Report J. The two status bytes were staged as (final, pre-load); wait
-    # until the Z80 has consumed the final one (tx_fifo drops to <=1). Bounded
-    # so a missed read can't hang the save. This is what the clean harness does.
-    _tw = time.ticks_ms()
-    while MQ.tx_fifo() > 1:
-        if time.ticks_diff(time.ticks_ms(), _tw) >= 300:
-            TLM("SAVE_TS status-read wait TIMEOUT", "tx=%d" % MQ.tx_fifo())
-            break
-    TLM("SAVE_TS status read confirmed", "waited %dms tx=%d" % (
-        time.ticks_diff(time.ticks_ms(), _tw), MQ.tx_fifo()))
     TLM("SAVE_TS write start", "%r mode=%s" % (filename, mode))
 
-    # The write is guarded but the failure CANNOT be reported: the final
-    # status went out before ENA_SD, by design (#40 -- ENA_SD grabs
-    # GPIO 2-4, and GPIO 2 is D0, so a status read landing after the grab
-    # corrupts 0x01 to 0x00 and gives Report J). So the 2068 has already
-    # printed "0 OK" by the time we get here. That is an accepted
-    # limitation of the protocol ordering, not an oversight -- but it is
-    # no reason to also take the dispatcher down. ENA_SD swallows its own
-    # mount failure, so a pulled card surfaces here as OSError from
-    # open(); unguarded that reaches main.py and drops the Pico to a REPL.
+    # A failed write is reported: TSP.save_final is the final status the
+    # dispatcher sends once the card work is done (J if nothing landed).
+    # ENA_SD swallows its own mount failure, so a pulled card surfaces
+    # here as OSError from open(); unguarded that reaches main.py and
+    # drops the Pico to a REPL.
     saved = True
     try:
         ENA_SD(TSP.LOG_LEVEL)
@@ -2661,6 +2646,7 @@ def SAVE_TS(MQ, TSP, pre=None):
     if saved:
         LOG_ADD("INFO: SAVE TS complete: %d bytes -> %s" % (
             totbytes, filename), 0, TSP.LOG_LEVEL)
+    TSP.save_final = 0x01 if saved else 0x0A     # "0 OK", or J (Invalid I/O device): nothing written
     return MQ, TSP, log_entries, saved
 
 

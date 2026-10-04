@@ -40,11 +40,26 @@ import threading
 import time as _time
 import types
 
-REPO = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-SRC = _os.path.join(REPO, "src")
+FROZEN = getattr(sys, "frozen", False)          # the standalone build (PyInstaller)
+if FROZEN:
+    # Everything the firmware needs travels inside the bundle (see
+    # .github/workflows/emu-host.yml): src/TS, config.ini, words.txt,
+    # assets/, and a starter card in sd-seed/.
+    REPO = sys._MEIPASS
+    SRC = _os.path.join(REPO, "src")
+    SD_SEED = _os.path.join(REPO, "sd-seed")
+    DEFAULT_ROOT = _os.path.join(_os.path.expanduser("~"), "TS-Pico-emulator")
+else:
+    REPO = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    SRC = _os.path.join(REPO, "src")
+    SD_SEED = _os.path.join(REPO, "SD card")
+    DEFAULT_ROOT = "/tmp/tspico-root"
 SOCK = _os.environ.get("TSPICO_BRIDGE_SOCK", "/tmp/tspico_bridge.sock")
+TCP = "127.0.0.1:2068"
+BRIDGE_VERSION = 1                                  # docs/EMULATOR_BRIDGE.md
+TRACE = bool(_os.environ.get("TSPICO_TRACE"))       # print every frame (status reads only when they change)
 
-OP_OUT_DATA, OP_IN_DATA, OP_IN_STATUS, OP_OUT_STATUS = 0, 1, 2, 3
+OP_OUT_DATA, OP_IN_DATA, OP_IN_STATUS, OP_OUT_STATUS, OP_HELLO = 0, 1, 2, 3, 4
 PORT_0F = 0x100
 
 
@@ -120,6 +135,16 @@ class BusModel:
 
     # -- the emulator's side --
     def frame(self, op, v):
+        r = self._frame(op, v)
+        if TRACE and (op != OP_IN_STATUS or r != self._last_status):
+            print("[bus] %s %02X -> %02X" % (("OUT0E", "IN0E", "IN0F", "OUT0F", "HELLO")[op], v, r), flush=True)
+        if op == OP_IN_STATUS:
+            self._last_status = r
+        return r
+
+    _last_status = None
+
+    def _frame(self, op, v):
         if op == OP_OUT_DATA:
             self.rx.put(v)
             self.y = 0                  # auto-busy: every Z80 OUT drops READY
@@ -130,6 +155,8 @@ class BusModel:
             return 0
         if op == OP_IN_STATUS:
             return self.y & 0xFF
+        if op == OP_HELLO:
+            return BRIDGE_VERSION
         try:
             return self.tx.get_nowait()
         except queue.Empty:
@@ -356,7 +383,7 @@ def install_firmware(fs):
     sys.path.insert(0, SRC)
     import TS                                          # noqa: F401  (the package, for TS.sdcard)
     sys.modules["TS"].sdcard = sys.modules["TS.sdcard"]
-    import json, array, math, random, struct, select, traceback, gc   # noqa: F401  (stdlib that uses the real os)
+    import json, array, math, random, struct, select, traceback, gc, errno, _thread   # noqa: F401  (stdlib the firmware uses; also bundles them)
     real_os = sys.modules.get("os")
     sys.modules["os"] = os_mod                         # only while the firmware imports
     try:
@@ -443,51 +470,110 @@ def build_root(root, sd_src):
 
 # ---- the socket the emulator connects to ----------------------------------------
 
-def serve():
-    if _os.path.exists(SOCK):
-        _os.unlink(SOCK)
-    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(SOCK)
-    srv.listen(1)
-    print("[pico_host] listening on", SOCK, flush=True)
+def handle(conn, label):
+    """One emulator: frames in, replies out, until it disconnects."""
+    print("[pico_host] emulator connected (%s)" % label, flush=True)
+    try:
+        while True:
+            hdr = b""
+            while len(hdr) < 2:
+                chunk = conn.recv(2 - len(hdr))
+                if not chunk:
+                    raise ConnectionError
+                hdr += chunk
+            conn.sendall(bytes([BUS.frame(hdr[0], hdr[1]) & 0xFF]))
+    except (ConnectionError, OSError):
+        print("[pico_host] emulator disconnected (underruns: %d)" % BUS.underruns, flush=True)
+    finally:
+        conn.close()
+
+
+ONE_AT_A_TIME = threading.Lock()
+
+
+def listen(srv, label):
     while True:
         conn, _ = srv.accept()
-        print("[pico_host] emulator connected", flush=True)
-        try:
-            while True:
-                hdr = b""
-                while len(hdr) < 2:
-                    chunk = conn.recv(2 - len(hdr))
-                    if not chunk:
-                        raise ConnectionError
-                    hdr += chunk
-                conn.sendall(bytes([BUS.frame(hdr[0], hdr[1]) & 0xFF]))
-        except (ConnectionError, OSError):
-            print("[pico_host] emulator disconnected (underruns: %d)" % BUS.underruns, flush=True)
-        finally:
-            conn.close()
+        if label.startswith("tcp"):
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        with ONE_AT_A_TIME:                      # one emulator at a time
+            handle(conn, label)
+
+
+def serve(tcp, unix):
+    """Listen on TCP and/or a Unix socket (docs/EMULATOR_BRIDGE.md §2)."""
+    threads = []
+    if tcp:
+        host, port = tcp.rsplit(":", 1)
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind((host, int(port)))
+        srv.listen(1)
+        threads.append(threading.Thread(target=listen, args=(srv, "tcp " + tcp), daemon=True))
+        print("[pico_host] listening on tcp %s" % tcp, flush=True)
+    if unix and hasattr(socket, "AF_UNIX") and _os.name != "nt":
+        if _os.path.exists(unix):
+            _os.unlink(unix)
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(unix)
+        srv.listen(1)
+        threads.append(threading.Thread(target=listen, args=(srv, "unix " + unix), daemon=True))
+        print("[pico_host] listening on unix %s" % unix, flush=True)
+    for t in threads:
+        t.start()
+    return threads
+
+
+def selftest(tcp):
+    """The standalone build's check: the firmware boots to its main loop and
+    answers HELLO and a status read over TCP. Exit 0 if so."""
+    host, port = tcp.rsplit(":", 1)
+    t0 = _time.time()
+    while _time.time() - t0 < 30:
+        if BUS.y == 0xFFFFFFFF and BUS.tx.qsize() >= 1:     # the boot pre-load and READY: in the main loop
+            break
+        _time.sleep(0.2)
+    else:
+        print("[selftest] FAIL: the firmware never reached its main loop", flush=True)
+        return 1
+    c = socket.create_connection((host, int(port)), timeout=5)
+    c.sendall(bytes([OP_HELLO, BRIDGE_VERSION]))
+    hello = c.recv(1)
+    c.sendall(bytes([OP_IN_STATUS, 0]))
+    status = c.recv(1)
+    c.close()
+    ok = hello == bytes([BRIDGE_VERSION]) and status == b"\xff"
+    print("[selftest] %s: HELLO -> %r, status -> %r" % ("PASS" if ok else "FAIL", hello, status), flush=True)
+    return 0 if ok else 1
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default="/tmp/tspico-root", help="the Pico's flash; the card is <root>/sd")
-    ap.add_argument("--sd", default=_os.path.join(REPO, "SD card"), help="seeds <root>/sd the first time")
+    ap = argparse.ArgumentParser(description="The TS-Pico firmware, for a TS-2068 emulator "
+                                 "(docs/EMULATOR_BRIDGE.md).")
+    ap.add_argument("--root", default=DEFAULT_ROOT, help="the Pico's flash; the card is <root>/sd "
+                    "(default %(default)s)")
+    ap.add_argument("--sd", default=SD_SEED, help="seeds <root>/sd the first time")
+    ap.add_argument("--tcp", default=TCP, help="HOST:PORT to listen on, '' for none (default %(default)s)")
+    ap.add_argument("--unix", default=SOCK, help="Unix socket to listen on, '' for none (default %(default)s)")
+    ap.add_argument("--quiet", action="store_true", help="no firmware telemetry")
+    ap.add_argument("--selftest", action="store_true", help="boot, answer HELLO over TCP, exit")
     args = ap.parse_args()
     build_root(args.root, args.sd)
     sys.setswitchinterval(0.0002)
     fs = HostFS(args.root)
     fw = install_firmware(fs)
-    fw.TLM_ENABLED = True
-    try:                                       # Build, as the CI stamp would show it
-        import subprocess
-        sha = subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
-                             capture_output=True, text=True).stdout.strip()
-        br = subprocess.run(["git", "-C", REPO, "rev-parse", "--abbrev-ref", "HEAD"],
-                            capture_output=True, text=True).stdout.strip()
-        if sha:
-            fw.BUILD_VERSION = "%s (%s)" % (sha, _os.environ.get("TSPICO_BRANCH", br))
-    except Exception:
-        pass
+    fw.TLM_ENABLED = not args.quiet
+    if fw.BUILD_VERSION.startswith("unknown") and not FROZEN:   # Build, as the CI stamp would show it
+        try:
+            import subprocess
+            sha = subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
+                                 capture_output=True, text=True).stdout.strip()
+            br = subprocess.run(["git", "-C", REPO, "rev-parse", "--abbrev-ref", "HEAD"],
+                                capture_output=True, text=True).stdout.strip()
+            if sha:
+                fw.BUILD_VERSION = "%s (%s)" % (sha, _os.environ.get("TSPICO_BRANCH", br))
+        except Exception:
+            pass
 
     def firmware():
         try:
@@ -497,7 +583,12 @@ def main():
             traceback.print_exc()
             print("[pico_host] firmware stopped:", repr(e), flush=True)
     threading.Thread(target=firmware, daemon=True).start()
-    serve()
+    if args.selftest:
+        serve(args.tcp or TCP, "")
+        sys.exit(selftest(args.tcp or TCP))
+    print("[pico_host] TS-Pico firmware %s; flash and card in %s" % (fw.BUILD_VERSION, args.root), flush=True)
+    for t in serve(args.tcp, args.unix):
+        t.join()
 
 
 if __name__ == "__main__":
