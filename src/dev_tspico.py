@@ -6721,7 +6721,15 @@ def TS2068_IO():                                                         # Main 
                         # pre-header phase will read, and only then signal ready --
                         # READY + idle, or RECOVERED when SAVE_TS gave up on a Z80
                         # that went silent mid-transfer (the 1.8b ROM reports T).
+                        # A SAVE whose data arrived also has its FINAL status to
+                        # send here (SAVE_TS leaves it in TSP.save_final): the
+                        # Z80 has sat in its READY wait through all the SD work
+                        # above, and reads it now, ahead of the next pre-load.
                         ACTIVATE_MQ()
+                        final = getattr(TSP, "save_final", None)
+                        TSP.save_final = None
+                        if final is not None:
+                            MQ.put(final)
                         MQ.put(0x01)
                         MQ_STATUS(MQ, "recovered" if getattr(TSP, "save_recovered", False) else "idle")
 

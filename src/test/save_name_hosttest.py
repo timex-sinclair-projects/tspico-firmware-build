@@ -290,9 +290,11 @@ def test_accepts_good_name(tio):
         finally:
             os.chdir = saved_chdir
 
-        # mid-phase status, then the V6 pair (final status + next-cmd pre-load).
-        check(MQ.written == [0x01, 0x01, 0x01],
-              "wrote exactly the 3-byte status chain, got %r" % (MQ.written,))
+        # mid-phase status only: the final status waits for the SD work and
+        # goes out from the dispatcher's arm point (TSP.save_final).
+        check(MQ.written == [0x01] and getattr(TSP, "save_final", None) == 0x01,
+              "wrote only the mid-phase status; the final one is left for after the write, got %r %r"
+              % (MQ.written, getattr(TSP, "save_final", None)))
         check(os.listdir(d) == ["test.tap"],
               'saved as "test.tap", got %r' % (os.listdir(d),))
         check(TSP.f_name == d + "/test.tap",
