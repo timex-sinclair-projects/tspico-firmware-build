@@ -59,6 +59,8 @@ TCP = "127.0.0.1:2068"
 BRIDGE_VERSION = 1                                  # docs/EMULATOR_BRIDGE.md
 TRACE = bool(_os.environ.get("TSPICO_TRACE"))       # print every frame (status reads only when they change)
 
+TX_WAIT = 0.05                      # s an IN (0Eh) waits for the firmware before reading 00h
+
 OP_OUT_DATA, OP_IN_DATA, OP_IN_STATUS, OP_OUT_STATUS, OP_HELLO = 0, 1, 2, 3, 4
 PORT_0F = 0x100
 
@@ -73,7 +75,7 @@ class BusModel:
         self.rx = queue.Queue()         # words the Z80 wrote: v, or 0x100|v for port 0Fh
         self.tx = queue.Queue()         # bytes for the Z80's IN (0Eh)
         self.y = 0                      # the status byte the Z80 reads on 0Fh
-        self.underruns = 0              # IN (0Eh) with nothing queued: read as 00h
+        self.underruns = 0              # IN (0Eh) still empty after TX_WAIT: read as 00h
 
     # -- the firmware's side (rp2.StateMachine) --
     def get(self):
@@ -92,7 +94,7 @@ class BusModel:
     def rx_fifo(self):
         n = self.rx.qsize()
         if not n:
-            _time.sleep(0)              # let the frame thread run: the firmware polls this
+            _time.sleep(0.0005)         # the firmware polls this; sleep(0) spun a full core
         return min(n, 4)
 
     def tx_fifo(self):
@@ -158,7 +160,10 @@ class BusModel:
         if op == OP_HELLO:
             return BRIDGE_VERSION
         try:
-            return self.tx.get_nowait()
+            # Wait for the firmware thread: a loaded host can leave it a few
+            # bytes behind mid-block, and the real Pico keeps up. The ROM
+            # only reads 0Eh when a byte is due (it polls status on 0Fh).
+            return self.tx.get(timeout=TX_WAIT)
         except queue.Empty:
             self.underruns += 1
             return 0x00                 # PIO pull(noblock) of an empty FIFO

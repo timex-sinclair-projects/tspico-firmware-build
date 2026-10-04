@@ -80,6 +80,8 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 - **Lines:** `run()` takes BASIC tokens (`S.SAVE`, `S.LOAD`, `S.CAT`, …) and text. It types
   placeholders, then writes the tokenised line into the edit line, which is more reliable
   than typing keywords over ZRCP.
+- **Resetting:** to restart the 2068 while a program is running, send ZRCP `reset-cpu`.
+  `hard-reset-cpu` doesn't reliably restart the TS-2068 in that state.
 - **Files:** the firmware's output goes to `/tmp/pico_host.out` (telemetry on), and its card
   to `/tmp/tspico-root/sd`.
 - **Options:** `TSPICO_HOST=dist/pico_host` runs the standalone build instead of the script.
@@ -90,7 +92,7 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 
 | File | What |
 |---|---|
-| `pico_host.py` | The firmware on the host. `BusModel` stands in for TS_IO_DUAL: 9-bit RX words (bit 8 = a port-0Fh write), the status byte set by the firmware's `exec("mov(y, …)")`, BUSY after each Z80 write, a 4-deep TX FIFO, and an empty FIFO reading as 00h. `HostFS` maps the Pico's paths into a folder. MicroPython-isms are kept too: `bytearray += str`, `const`, and `sys.implementation` reporting 1.29. |
+| `pico_host.py` | The firmware on the host. `BusModel` stands in for TS_IO_DUAL: 9-bit RX words (bit 8 = a port-0Fh write), the status byte set by the firmware's `exec("mov(y, …)")`, BUSY after each Z80 write, and a 4-deep TX FIFO. An IN (0Eh) waits up to 50 ms (`TX_WAIT`) for the firmware thread to queue the byte, so a loaded host (several pairs in parallel) still sees a Pico that keeps up; only after that does the empty FIFO read as 00h, counted in `underruns` (printed on disconnect). `HostFS` maps the Pico's paths into a folder. MicroPython-isms are kept too: `bytearray += str`, `const`, and `sys.implementation` reporting 1.29. |
 | `session.py` | Starts the host, then ZEsarUX, and drives ZRCP. |
 | `smoke.py` | The end-to-end check. |
 | `fuse_smoke.py` | The same idea in Fuse (below). |
