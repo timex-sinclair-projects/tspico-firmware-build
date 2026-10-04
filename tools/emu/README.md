@@ -43,17 +43,19 @@ pico_host --selftest            # boot, answer HELLO, exit 0
 
 ## Setup
 
-1. **Build the patched ZEsarUX** (16K EXROM, and the 0Eh/0Fh socket hook):
+1. **Build ZEsarUX with a TS-Pico**, from the fork
+   [timex-sinclair-projects/zesarux-tspico](https://github.com/timex-sinclair-projects/zesarux-tspico)
+   (branch `tspico-device`: the 16K EXROM and the bridge, version 1):
 
    ```bash
-   git clone https://github.com/chernandezba/zesarux.git
-   cd zesarux && git checkout 4a57aafa50e4a526378c2806e6131ac8c60631a9
-   git am /path/to/tspico-firmware-build/tools/emu/zesarux-tspico.patch
-   cd src && ./configure && make
+   git clone https://github.com/timex-sinclair-projects/zesarux-tspico.git
+   cd zesarux-tspico/src && ./configure && make
    ```
 
-   Point `$ZESARUX` at the `zesarux` binary it makes. Without it, `session.py` looks for the lab
-   build in `~/Documents/github/zesarux-tspico-lab/work/zesarux-tspico`.
+   Point `$ZESARUX` at the `zesarux` binary it makes. On macOS, copy it out of `src/` first:
+   run from there, it takes `src/` for an app bundle and can't find its ROMs. Without
+   `$ZESARUX`, `session.py` looks for the lab build in
+   `~/Documents/github/zesarux-tspico-lab/work/zesarux-tspico`.
 2. **Python 3.10 or later.** Nothing to install. `pico_host.py` supplies its own stand-ins for
    MicroPython's `rp2`, `machine`, `utime`, `micropython` and the SD driver.
 
@@ -91,7 +93,6 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 | `pico_host.py` | The firmware on the host. `BusModel` stands in for TS_IO_DUAL: 9-bit RX words (bit 8 = a port-0Fh write), the status byte set by the firmware's `exec("mov(y, …)")`, BUSY after each Z80 write, a 4-deep TX FIFO, and an empty FIFO reading as 00h. `HostFS` maps the Pico's paths into a folder. MicroPython-isms are kept too: `bytearray += str`, `const`, and `sys.implementation` reporting 1.29. |
 | `session.py` | Starts the host, then ZEsarUX, and drives ZRCP. |
 | `smoke.py` | The end-to-end check. |
-| `zesarux-tspico.patch` | Three commits on ZEsarUX `4a57aaf`: the TS-2068's EXROM as 16K, the 0Eh/0Fh hook, and the socket bridge (Unix socket; TCP and HELLO to follow in the fork). |
 | `build_standalone.sh` | The standalone `pico_host` (PyInstaller). |
 | `manual_screens.py` | The user manual's 2068 screen pictures, captured. |
 
