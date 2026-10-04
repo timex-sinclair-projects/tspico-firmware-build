@@ -59,6 +59,7 @@ tools/zmakebas/*.o
 /SD card/TAP/test/RND WORDS.tap
 /SD card/TAP/test/hirescopy.tap
 /SD card/TAP/test/backtoback.tap
+/SD card/TAP/test/savetest.tap
 
 # Staging dir the CI 'Stage generated .tap files' step builds before
 # uploading them as the basic-taps artifact. Only appears if that step is
