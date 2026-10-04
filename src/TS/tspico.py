@@ -4560,7 +4560,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
         M.append(lab("Mounted") + "%s" % public_fname() + nl)
         if isTapMounted():
             i = TSP.tap_idx
-            M.append(lab("Block") + "%02d" % i)
+            val = "%02d" % i
             # A header is shown with the size of the data block after it,
             # offset_tbl[i+1]. A TAP can END with a header -- an append cut
             # short, or a header-only file -- and offset_tbl[i+1] then raised
@@ -4568,14 +4568,20 @@ def GETINFO(pre, cmd):                                                 # Shows T
             # (2026-09-30 audit.) The tap_idx bound is belt and braces.
             if 0 <= i < len(TSP.offset_tbl):
                 blk = TSP.offset_tbl[i]
+                # One line of 22 after the label: the name came padded to 10,
+                # and with "Code block" after it the line was 34 characters,
+                # wrapping "ck" onto a line of its own (found in the emulator,
+                # tools/emu, 2026-10-04). The name gives way, not the type.
                 if blk[2] == " Y":
                     nxt = TSP.offset_tbl[i+1][3] if i + 1 < len(TSP.offset_tbl) else "no data"
-                    M.append(":%s:%s" % (blk[3], nxt))
+                    what = blk[3].rstrip()
                 else:
-                    M.append(":Data block:%s" % blk[3])
+                    nxt = blk[3]
+                    what = "Data block" if len(nxt) <= 7 else "Data"
+                val += ":%s:%s" % (what[:max(1, 22 - len(val) - 2 - len(nxt))], nxt)
             else:
-                M.append(":<empty>")
-            M.append(nl)
+                val += ":<empty>"
+            M.append(lab("Block") + val[:22] + nl)
 
     M.append(lab("Path") + "%s" % public_path() + nl)
     M.append(lab("Files") + "%d" % len(files) + nl)

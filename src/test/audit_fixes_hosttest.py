@@ -540,8 +540,10 @@ def test_getinfo(t, root):
         tap_idx=2)
     try:
         t.GETINFO(bytearray(10), "D..tpi:info")
-        ok = bool(shown) and "Program: cut:no data" in shown[-1]
         got = re.sub("[\x10\x11].", "", shown[-1]).split("Block")[1].split("\r")[0] if shown else shown
+        # (the name gives way when the line would pass 32 columns)
+        ok = bool(shown) and got.strip().startswith("02:Program: cu") and got.endswith(":no data") \
+            and len("Block" + got) <= 32
     except Exception as e:                                      # noqa: BLE001
         ok, got = False, e
     check(ok, "the last block is a header: shown with 'no data', no IndexError (%r)" % (got,))
