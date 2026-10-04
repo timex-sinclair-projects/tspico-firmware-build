@@ -4,7 +4,11 @@ How a TS-2068 emulator talks to `pico_host` (`tools/emu/pico_host.py`, or the
 standalone `pico_host` binary), which runs the real TS-Pico firmware. This is
 the one thing an emulator has to implement to get a TS-Pico. ZEsarUX does it, in the fork
 [timex-sinclair-projects/zesarux-tspico](https://github.com/timex-sinclair-projects/zesarux-tspico)
-(`src/operaciones.c`); FUSE and TSRun are next (issue #35).
+(`src/operaciones.c`), and so does Fuse: in
+[fuse-tspico](https://github.com/timex-sinclair-projects/fuse-tspico) for Linux
+and Windows (`peripherals/tspico.c`), and in
+[fuse-for-macos-tspico](https://github.com/timex-sinclair-projects/fuse-for-macos-tspico)
+for the Mac. TSRun is next (issue #35).
 
 ## 1. What the emulator does
 
@@ -85,4 +89,4 @@ board.
 
 | Version | Change |
 |---------|--------|
-| 1 | Ops 0-3 (as in the first ZEsarUX patch, June 2026), op 4 HELLO, TCP alongside the Unix socket. In zesarux-tspico since `88dc915`. |
+| 1 | Ops 0-3 (as in the first ZEsarUX patch, June 2026), op 4 HELLO, TCP alongside the Unix socket. In zesarux-tspico since `88dc915`, and in Fuse (`--tspico`). |

@@ -93,8 +93,28 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 | `pico_host.py` | The firmware on the host. `BusModel` stands in for TS_IO_DUAL: 9-bit RX words (bit 8 = a port-0Fh write), the status byte set by the firmware's `exec("mov(y, …)")`, BUSY after each Z80 write, a 4-deep TX FIFO, and an empty FIFO reading as 00h. `HostFS` maps the Pico's paths into a folder. MicroPython-isms are kept too: `bytearray += str`, `const`, and `sys.implementation` reporting 1.29. |
 | `session.py` | Starts the host, then ZEsarUX, and drives ZRCP. |
 | `smoke.py` | The end-to-end check. |
+| `fuse_smoke.py` | The same idea in Fuse (below). |
 | `build_standalone.sh` | The standalone `pico_host` (PyInstaller). |
 | `manual_screens.py` | The user manual's 2068 screen pictures, captured. |
 
 The original exploration, notes and probe scripts are in the lab
 (`~/Documents/github/zesarux-tspico-lab`, `NOTES.md`).
+
+## Fuse
+
+Fuse has the TS-Pico too (`--tspico`, the same bridge):
+[fuse-tspico](https://github.com/timex-sinclair-projects/fuse-tspico) for Linux and Windows,
+[fuse-for-macos-tspico](https://github.com/timex-sinclair-projects/fuse-for-macos-tspico) for
+the Mac. Its `TSPICO.md` says how to run it. Fuse takes the TS-Pico ROM as two 16K halves
+(`--rom-ts2068-0`, `--rom-ts2068-1`).
+
+```bash
+FUSE=/path/to/fuse python3 tools/emu/fuse_smoke.py    # ~30 s
+```
+
+`$FUSE` is a fuse-tspico build configured `--with-null-ui --enable-automation` (headless).
+Fuse has no remote control like ZRCP, so the test is a BASIC program the firmware serves as
+its "nothing mounted" file: `LOAD ""` fetches it and it runs itself (CAT, mount a CODE file,
+LOAD it, VERIFY it). Fuse's debugger types `LOAD ""` (a code in LAST_K, FLAGS bit 5 set), and
+prints ERR_NR and the loaded bytes at the end. SAVE's "press any key" doesn't take a key that
+way, so SAVE stays with `smoke.py`.
