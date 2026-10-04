@@ -1,8 +1,8 @@
 # TS-2068 + TS-Pico with no hardware (issue #35)
 
 ZEsarUX emulates the TS-2068 running the TS-Pico ROM (`src/rom/TSPICO-21.ROM`).
-Every Z80 access to ports 0Eh/0Fh goes over a Unix socket to
-`pico_host.py`, which runs the **real firmware**: `TS.tspico.TS2068_IO()`,
+Every Z80 access to ports 0Eh/0Fh goes over a socket to `pico_host.py`, which
+runs the **real firmware**: `TS.tspico.TS2068_IO()`,
 its own main loop, unmodified. A host folder stands in for the Pico's flash
 and the SD card. You type BASIC through ZEsarUX's remote protocol (ZRCP), read
 the screen, and save screenshots.
@@ -23,6 +23,23 @@ the screen, and save screenshots.
   bus's real clock. A FIFO running dry or overflowing because the Pico was late can't
   happen here, and the DMA paths aren't used (`rp2.DMA` is absent, so the firmware takes its
   polling fallbacks). Bugs like "TX ran dry" or "Partial pre-header" need the hardware.
+
+The protocol between them is [`docs/EMULATOR_BRIDGE.md`](../../docs/EMULATOR_BRIDGE.md): two-byte
+frames over TCP `127.0.0.1:2068` or a Unix socket. An emulator implements that and gets a TS-Pico.
+
+## The standalone `pico_host`
+
+`tools/emu/build_standalone.sh` (PyInstaller) makes `pico_host` one executable with the firmware,
+its files and a starter card inside: no Python or checkout needed. The `Standalone pico_host`
+workflow builds it for macOS (Apple Silicon), Linux and Windows on every change to the firmware,
+runs `--selftest` on each (boot, then answer HELLO over TCP), and attaches the three to each
+release. On first run it makes `~/TS-Pico-emulator/` (the Pico's flash; the card is its `sd/`).
+
+```bash
+pico_host                       # listens on 127.0.0.1:2068 and /tmp/tspico_bridge.sock
+pico_host --root DIR --quiet    # another folder, no telemetry
+pico_host --selftest            # boot, answer HELLO, exit 0
+```
 
 ## Setup
 
@@ -63,6 +80,8 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
   than typing keywords over ZRCP.
 - **Files:** the firmware's output goes to `/tmp/pico_host.out` (telemetry on), and its card
   to `/tmp/tspico-root/sd`.
+- **Options:** `TSPICO_HOST=dist/pico_host` runs the standalone build instead of the script.
+  `TSPICO_TRACE=1` prints every frame (status reads only when they change).
 - **Making TAPs:** `S.basic_tap(name, lines)` builds a TAP holding a BASIC program.
 
 ## The pieces
@@ -72,7 +91,9 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 | `pico_host.py` | The firmware on the host. `BusModel` stands in for TS_IO_DUAL: 9-bit RX words (bit 8 = a port-0Fh write), the status byte set by the firmware's `exec("mov(y, …)")`, BUSY after each Z80 write, a 4-deep TX FIFO, and an empty FIFO reading as 00h. `HostFS` maps the Pico's paths into a folder. MicroPython-isms are kept too: `bytearray += str`, `const`, and `sys.implementation` reporting 1.29. |
 | `session.py` | Starts the host, then ZEsarUX, and drives ZRCP. |
 | `smoke.py` | The end-to-end check. |
-| `zesarux-tspico.patch` | Three commits on ZEsarUX `4a57aaf`: the TS-2068's EXROM as 16K, the 0Eh/0Fh hook, and the socket bridge. |
+| `zesarux-tspico.patch` | Three commits on ZEsarUX `4a57aaf`: the TS-2068's EXROM as 16K, the 0Eh/0Fh hook, and the socket bridge (Unix socket; TCP and HELLO to follow in the fork). |
+| `build_standalone.sh` | The standalone `pico_host` (PyInstaller). |
+| `manual_screens.py` | The user manual's 2068 screen pictures, captured. |
 
 The original exploration, notes and probe scripts are in the lab
 (`~/Documents/github/zesarux-tspico-lab`, `NOTES.md`).

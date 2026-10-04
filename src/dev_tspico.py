@@ -968,6 +968,18 @@ def CMD_DRAIN():
             raise CmdAbort(3)
 
 
+def PRELOAD_READ(ms=100):
+    """Wait (bounded) for the Z80 to read the pre-load status the ROM reads
+    with no wait straight after its pre-header. Call it before anything that
+    rebuilds the bus state machine (an SD access: ACTIVATE_SD / ACTIVATE_MQ),
+    which empties TX. True if it was read; if not, the caller puts 0x01
+    back after the SD access."""
+    t0 = time.ticks_ms()
+    while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), t0) < ms:
+        pass
+    return not MQ.tx_fifo()
+
+
 def CMD_RX_FLUSH():
     """Empty RX before a reply that waits for keys -- but a write to port
     0Fh found there is BREAK (or the next command's SYNC): raise CmdAbort,
@@ -6504,10 +6516,7 @@ def TS2068_IO():                                                         # Main 
                     # status straight after the pre-header; give it a moment, and put
                     # the status back if the SD access wiped it unread).
                     if PRT.buf and not (pre[0] == PRE_CMD and pre[1] in (4, 5, 6)):     # 66 'B'; 4-6 printer
-                        _t = time.ticks_ms()
-                        while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), _t) < 50:
-                            pass
-                        _unread = MQ.tx_fifo()
+                        _unread = not PRELOAD_READ()
                         PRINT_FLUSH()
                         if _unread:
                             MQ.put(0x01)
@@ -6557,7 +6566,17 @@ def TS2068_IO():                                                         # Main 
                         # program stays in its memory. Without this the save said "0 OK"
                         # and the write failed after it, silently. The Z80 is waiting
                         # for READY (Y BUSY) meanwhile; one mount costs ~0.1-0.3 s.
+                        # SD_PROBE rebuilds the bus state machine, which empties
+                        # TX: let the Z80 read its pre-load status first, as
+                        # PRINT_FLUSH's caller does, and put it back if not.
+                        # On hardware the Z80 reads it microseconds after the
+                        # pre-header; in the emulator (tools/emu) every port
+                        # access is a round trip and it lost: SAVE gave up on
+                        # its header (2026-10-04).
+                        _unread = not PRELOAD_READ()
                         TSP.save_no_card = not SD_PROBE()
+                        if _unread:
+                            MQ.put(0x01)
                         if TSP.save_no_card:
                             LOG("SAVE: no SD card; refused", 1)
 

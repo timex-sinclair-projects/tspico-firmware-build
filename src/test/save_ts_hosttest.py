@@ -152,6 +152,13 @@ def main():
         check(pio.dropped == 0, "no RX overflow (%d dropped)" % pio.dropped)
         check(not tsp.save_recovered, "save_recovered stays False")
 
+        print("the dispatcher lets the Z80 read its status before the card check")
+        for name in ("TS/tspico.py", "dev_tspico.py"):
+            src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
+            br = src[src.index("if pre[0] == PRE_HEADER and pre[1] == 0:"):]
+            br = br[:br.index("SAVE_TS(MQ, TSP, pre)")]
+            check(br.index("PRELOAD_READ()") < br.index("SD_PROBE()") < br.index("MQ.put(0x01)"),
+                  "%s: PRELOAD_READ, then SD_PROBE, then the 0x01 put back if unread (emulator, 2026-10-04)" % name)
         print("READY: SAVE_TS raises it, right before the header capture")
         body = open(os.path.join(SRC, "TS", "tspico_io.py"), encoding="utf-8").read().replace("\r", "")
         sv = body[body.index("def SAVE_TS("):body.index("def SAVE_ZX(")]
