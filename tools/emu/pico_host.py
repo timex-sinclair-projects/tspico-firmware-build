@@ -485,7 +485,7 @@ def main():
         br = subprocess.run(["git", "-C", REPO, "rev-parse", "--abbrev-ref", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
         if sha:
-            fw.BUILD_VERSION = "%s (%s)" % (sha, br)
+            fw.BUILD_VERSION = "%s (%s)" % (sha, _os.environ.get("TSPICO_BRANCH", br))
     except Exception:
         pass
 

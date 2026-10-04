@@ -62,6 +62,7 @@ def fresh_screen(s):
 
 
 def main():
+    os.environ["TSPICO_BRANCH"] = "main"                      # tpi:info's Build line, as users see it
     card()
     s = S.Session(sd=SEED)
     try:

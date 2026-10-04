@@ -11,9 +11,9 @@
 
 ---
 
-> The screen pictures in this manual are drawn by `tools/render_screens.py` from what the
-> TS-Pico firmware actually sends, using the 2068's own character set. They show exactly what
-> the TS-Pico prints; where on the screen it starts depends on what was there before.
+> The 2068 screen pictures in this manual are captured from an emulated 2068 running the real
+> TS-Pico ROM and firmware (`tools/emu/manual_screens.py`). The Spectrum-mode picture is drawn
+> from the firmware's output in the 2068's character set (`tools/render_screens.py`).
 
 ## Contents
 
@@ -367,7 +367,7 @@ as the whole name fits in 31 characters.
 
 ![CAT: the path and card on a blue bar, folders in blue, each file's number on a cyan chip](images/cat.png)
 
-*`CAT` on a card with three folders and eight files. `{game}.tap` and `jet~1.tap` appear as
+*`CAT` on a card with four folders and eight files. `{game}.tap` and `jet~1.tap` appear as
 `?game?.tap` and `jet?1.tap`; see below.*
 
 > **By the way:** `SAVE "tpi:dir"` checks the card before it lists the folder. After you swap
