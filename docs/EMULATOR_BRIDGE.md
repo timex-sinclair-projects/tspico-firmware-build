@@ -2,8 +2,9 @@
 
 How a TS-2068 emulator talks to `pico_host` (`tools/emu/pico_host.py`, or the
 standalone `pico_host` binary), which runs the real TS-Pico firmware. This is
-the one thing an emulator has to implement to get a TS-Pico. ZEsarUX does it
-(`tools/emu/zesarux-tspico.patch`); FUSE and TSRun are next (issue #35).
+the one thing an emulator has to implement to get a TS-Pico. ZEsarUX does it, in the fork
+[timex-sinclair-projects/zesarux-tspico](https://github.com/timex-sinclair-projects/zesarux-tspico)
+(`src/operaciones.c`); FUSE and TSRun are next (issue #35).
 
 ## 1. What the emulator does
 
@@ -46,7 +47,7 @@ the order of frames is exactly the order of the Z80's port accesses.
   and in a browser it can be bridged to a WebSocket. Set `TCP_NODELAY`, because
   every frame is a round trip.
 - **Unix socket `/tmp/tspico_bridge.sock`** (`--unix PATH`, or `$TSPICO_BRIDGE_SOCK`),
-  on macOS and Linux. The ZEsarUX patch in this repo uses it today.
+  on macOS and Linux.
 
 The emulator connects as the client. One emulator at a time; a second connection
 waits until the first closes.
@@ -84,4 +85,4 @@ board.
 
 | Version | Change |
 |---------|--------|
-| 1 | Ops 0-3 (as in the June 2026 ZEsarUX patch), op 4 HELLO, TCP alongside the Unix socket. |
+| 1 | Ops 0-3 (as in the first ZEsarUX patch, June 2026), op 4 HELLO, TCP alongside the Unix socket. In zesarux-tspico since `88dc915`. |

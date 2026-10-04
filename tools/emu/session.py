@@ -10,8 +10,9 @@ ZRCP client to type BASIC, read the screen and save screenshots.
         s.screenshot("cat.bmp")
         s.run(SAVE, '"tpi:info"')
 
-Needs the patched ZEsarUX (branch `tspico-device`: 16K EXROM and the port
-0Eh/0Fh bridge); its binary from $ZESARUX, else the lab's build. Each line is
+Needs ZEsarUX from timex-sinclair-projects/zesarux-tspico (branch
+`tspico-device`: 16K EXROM and the port 0Eh/0Fh bridge); its binary from
+$ZESARUX, else the lab's build. Each line is
 typed as a placeholder and then written into the edit line already
 tokenised (the 2068's keyword entry is too fiddly to type over ZRCP).
 """
