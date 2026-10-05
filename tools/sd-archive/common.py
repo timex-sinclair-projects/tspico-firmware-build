@@ -14,6 +14,15 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 EMU_DIR = os.path.join(REPO, "tools", "emu")
 WORK = os.path.abspath(os.path.expanduser(os.environ.get("TSPICO_ARCHIVE_WORK", "~/tspico-archive-work")))
 ARCHIVE = "https://archive.org/download/timex-sinclair-software-archive/"
+# The site the program pages are published on. fetch.py may read a local copy
+# (http://localhost/...); the catalog links the public pages.
+SITE = os.environ.get("TSPICO_ARCHIVE_SITE", "https://timexsinclair.com")
+
+
+def public(url):
+    """A program page's URL on the public site, whatever host fetch.py read."""
+    u = urllib.parse.urlparse(url)
+    return SITE + u._replace(scheme="", netloc="").geturl()
 
 
 def work(*p):
