@@ -357,7 +357,7 @@ CI builds two UF2s from this repo, not one:
 | UF2 | Freeze manifest | What it's for |
 |---|---|---|
 | `firmware.uf2` (`tspico-firmware-uf2`) | `src/manifest.py` | the TS-Pico firmware |
-| `upgrade.uf2` (`tspico-upgrade-uf2`) | `src/upgrade/manifest.py` | the web updater's ROM step: it serves the updater tape and writes ROM 2.x to flash slot 1 and ZX ROM v3 to slot 0 |
+| `upgrade.uf2` (`tspico-upgrade-uf2`) | `src/upgrade/manifest.py` | the web updater's ROM step: it serves the updater tape and writes ROM 2.x to flash slot 1 and ZX ROM v4 to slot 0 |
 
 The upgrade UF2 runs its own frozen `main.py` (`src/upgrade/main.py`) and
 reuses the bus code in `src/TS/tspico_io.py`. It freezes only the modules
@@ -781,6 +781,9 @@ If yes, delete it (§5 — the shadowing trap).
   protocol.
 - The Z80-side perspective on TPI: [`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md).
 - The instruction-by-instruction Pico view: [`PROTOCOL.md`](PROTOCOL.md).
+- The code itself, symbol by symbol, firmware and ROM: the programmer's
+  reference in [`reference/`](reference/README.md). Start with its
+  [overview](reference/overview.md); CI keeps it in step with the sources.
 - Why the code looks the way it does:
   [`DUAL_PORT_DEVELOPMENT.md`](DUAL_PORT_DEVELOPMENT.md).
 - For writing user-extensible commands:

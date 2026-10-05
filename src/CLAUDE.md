@@ -26,6 +26,11 @@ the hard way.
    Flash UF2s, watch telemetry and use the REPL with
    [`tools/pico-serial.py`](../tools/pico-serial.py) -- don't ask the
    user to copy/paste from Thonny. See "Talking to the Pico directly".
+5. **The programmer's reference moves with the code.** Every change
+   under `src/` updates its chapter in
+   [`docs/reference/`](../docs/reference/README.md) in the same PR, and
+   `python3 src/test/reference_hosttest.py` must pass. See "Keeping
+   docs/reference/ current" below.
 
 ---
 
@@ -168,6 +173,9 @@ historically caused regressions:
 8. **Document the gotcha** — `docs/PROTOCOL.md` §13 has a "pitfalls"
    list. If your debugging found a non-obvious trap, add it. Future
    contributors will thank you.
+   And update the entries in `docs/reference/` for every function or
+   variable the fix touched: what it does now, and why (the harness
+   result is the why). Re-stamp and re-index (next section).
 9. **Keep the harness in `src/test/`** — even if it's purpose-built for
    one bug, leave it. It's documentation of how to think about that
    class of problem.
@@ -352,7 +360,42 @@ are relative to that. This file (`src/CLAUDE.md`) also lives there.
   build of tspico_io.py".
 - **`src/test/`** — bus-level test harnesses (this guide).
 - **`docs/`** at the repo root — three layers: protocol design,
-  firmware implementation, development history.
+  firmware implementation, development history — plus
+  [`docs/reference/`](../docs/reference/README.md), the programmer's
+  reference, which follows the code symbol by symbol.
+
+## Keeping docs/reference/ current
+
+[`docs/reference/`](../docs/reference/README.md) is the programmer's
+reference: one chapter per source file, every function, variable, PIO
+program, `tpi:` command and ROM label explained, in source order. It is
+part of the code and CI treats it that way:
+[`test/reference_hosttest.py`](test/reference_hosttest.py) fails when a
+symbol has no entry, when a source changed since its chapter was checked
+(the stamp table in the README), or when the generated symbol index is
+stale.
+
+The routine, for any PR that touches `src/`, `flash/`, the ROM build tools
+or the workflows:
+
+1. Open the chapter(s) the README's stamp table names for each changed
+   file. Read the entries for what you changed. Fix them: behaviour, the
+   reason, the state touched, the callers. Add entries for new symbols
+   (heading or table row with the name in backticks; the README's
+   "Conventions" gives the six things an entry says). Remove entries for
+   removed symbols.
+2. `python3 src/test/reference_hosttest.py --missing` until it is empty.
+3. `python3 src/test/reference_hosttest.py --stamp` and paste the rows for
+   the files you changed into the README's stamp table. **Only after step
+   1.** A fresh stamp says "this chapter was checked against this source".
+4. `python3 src/test/reference_hosttest.py --index` (regenerates
+   `appendix/index.md`, which carries line numbers), then run the test
+   with no arguments: it must print `ALL PASS`.
+
+Don't write a change's explanation from memory of the design: read the
+code you changed and describe that. Don't re-stamp a chapter you did not
+re-read; if a change's meaning for the explanation is unclear, say so in
+the PR and leave the stamp stale so CI keeps the question open.
 
 ## Telemetry
 

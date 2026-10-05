@@ -806,5 +806,7 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   channels, from the BASIC side.
 - [`rom-analysis/`](rom-analysis/) — the ROM disassemblies, memory map and
   error-trapping notes.
+- [`reference/`](reference/README.md) — the programmer's reference: every
+  function, variable and ROM routine behind this protocol, in source order.
 - MicroPython rp2: https://docs.micropython.org/en/latest/library/rp2.html;
   RP2040 datasheet, chapter 3 (PIO).
