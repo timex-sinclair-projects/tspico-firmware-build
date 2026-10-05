@@ -162,16 +162,19 @@ and which slot and page. [hardware.md](../hardware.md), [pio.md](../firmware/pio
 **SA_funct.** The dictionary of built-in `tpi:` commands in `TS2068_IO`.
 [tspico-commands.md](../firmware/tspico-commands.md).
 
-**Session id.** A 16-bit value the ROM derives from FRAMES at the start of a
-SAVE or LOAD and sends in the pre-header and in each block; the Pico does
-not check it. [exrom-driver.md](../rom/exrom-driver.md) `SESSION_SETUP`.
+**Session id.** A 16-bit value the ROM derives from FRAMES (+1, never 0)
+at the start of a SAVE or LOAD and sends in the pre-headers and in a SAVE's
+blocks; it is cleared after the data block. The firmware uses it to tie a
+`tpi:fopen` to the SAVE or LOAD that follows, and otherwise ignores it.
+[exrom-driver.md](../rom/exrom-driver.md) `SESSION_SETUP`,
+[sysvars.md](../rom/sysvars.md#5dd1h-session-id).
 
 **Side-set.** The PIO feature that sets a pin on every instruction; `TS_IO_DUAL`
 drives the U6 bus-buffer enable with it. [pio.md](../firmware/pio.md).
 
-**Slot, page.** The flash (or SRAM) is sixteen 32K slots, each holding a
-HOME+EXROM ROM pair; a DOCK cartridge image takes two consecutive slots, a
-64K page, so cartridge slot numbers step by two. Selected through the BANK
+**Slot, page.** The flash (or SRAM) is sixteen 32K slots; a 2068 ROM
+fills one (HOME + EXROM), the 16K ZX Spectrum ROM one; a DOCK cartridge
+image takes two consecutive slots, a 64K page, so cartridge slot numbers step by two. Selected through the BANK
 state machine. [hardware.md](../hardware.md), `flash/README.md`.
 
 **Stamp.** In this reference, the hash of a source file recorded in the
@@ -182,7 +185,8 @@ against. [README.md](../README.md).
 
 **Status − 1 convention.** The ROM decrements a status before dispatching
 on it, so `CP 85h` in the function chain matches 86h, and `STATUS_TO_REPORT`
-is entered with A = status − 1. [exrom-driver.md](../rom/exrom-driver.md).
+is entered with A = status − 1. [exrom-chunk1.md](../rom/exrom-chunk1.md),
+[exrom-driver.md](../rom/exrom-driver.md).
 
 **SYNC.** ROM 2.0's `OUT (0Fh),03h` at the start of every transaction, with
 a ~1 s wait for READY + IDLE; the Pico abandons anything in progress and

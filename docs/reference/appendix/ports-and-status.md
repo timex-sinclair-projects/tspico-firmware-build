@@ -17,10 +17,11 @@ Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which
 the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
 
-The only Z80 I/O sites in the ROM are 2298h (`IN A,(0Eh)`), 229Dh
-(`OUT (0Eh),A`), 0655h (`IN A,(0Fh)`, the status read) and, from ROM 2.0,
-SYNC_WRITE's `OUT (0Fh),03h` at 2300h ([exrom-chunk1.md](../rom/exrom-chunk1.md),
-[exrom-sync.md](../rom/exrom-sync.md)).
+Data goes through two accessors, 2298h (`IN A,(0Eh)`) and 229Dh
+(`OUT (0Eh),A`), and status through READ_STATUS (0655h, the `IN A,(0Fh)` at
+065Bh); ROM 2.0 adds the SYNC and BREAK writes and its own status reads at
+2304h–23C0h, and ROM 2.1 one IDLE poll at 3657h. Every site is listed in
+[rom/overview.md](../rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 ## The status byte
 
@@ -50,7 +51,7 @@ clear as well.
 
 | What | Pace | Where |
 |---|---|---|
-| Z80 OUTs inside a block (pre-header, body, SAVE data) | one every ~30 µs (~43 µs in SAVE data), no handshake | [exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| Z80 OUTs inside a block (pre-header, body, SAVE data) | one every ~30 µs (~43 µs in SAVE data), no handshake | [exrom-driver.md](../rom/exrom-driver.md), [exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | Z80 reads inside a LOAD block | one every ~44–50 µs, no handshake | [tspico_io.md](../firmware/tspico_io.md) `LOAD_TS`, `STREAM_DMA` |
 | `tpi:chrd` data phase | one read every ~75 µs | [exrom-fdd.md](../rom/exrom-fdd.md) `CH_FETCH` |
 | Pico gives up on a half-received pre-header or body | 1 s of silence | `RX_CAPTURE`, `RX_BLOCK` |
@@ -146,7 +147,7 @@ dispatch compares A = code − 1 ([exrom-chunk1.md](../rom/exrom-chunk1.md)).
 | 82h | `FN_PRINT_STRING_KEY` | status, text, 00h; then a key comes back | prints, waits for a key, sends it | unused |
 | 83h | `FN_PRINT_CHAR` | status, one character | prints it | unused |
 | 84h | `FN_RETURN_KEY` | status | waits for a key, sends it | unused |
-| 85h | `FN_GET_STATUS` | status | sends a 2-bit mask (b0 keyboard, b1 aux) | unused |
+| 85h | `FN_GET_STATUS` | status | sends a 2-bit mask, with no ready wait: b0 = 1 when no key is down, b1 (aux) always 0 | unused |
 | 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (`N` ends the loop; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | 87h | — | status | HOME 08A6h: clears the screen | unused |
 | 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (ROM 2.1 only; `LOWER_LOOP`, 3344h) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
@@ -192,7 +193,7 @@ SAVE   OUT 00, 0, BANK, SESSION, IX, DE, XOR      IN 01   wait READY
 The block XOR covers the flag and the content, not the session bytes, so a
 TPI block is a TAP block. A SAVE is refused at the mid status or not at all.
 Firmware: [tspico_io.md](../firmware/tspico_io.md) `LOAD_TS`, `SAVE_TS`;
-ROM: [exrom-chunk1.md](../rom/exrom-chunk1.md).
+ROM: [exrom-driver.md](../rom/exrom-driver.md) (1879h, 196Dh).
 
 ## The channel commands (ROM 2.1)
 
@@ -242,7 +243,7 @@ request is a port-0Fh write followed by its arguments on 0Eh.
 | Bit | Set by | Meaning |
 |---|---|---|
 | 0 | `tpi:picopt` (set), `tpi:ts2040` (clear) | printing (LPRINT, LLIST, COPY) goes to the Pico |
-| 1 | `tpi:sdcard` (set), `tpi:tape` (clear) | LOAD and SAVE go to the Pico |
+| 1 | `tpi:sdcard` (set), `tpi:tape` (clears bits 0 **and** 1: TPMODE = 0) | LOAD and SAVE go to the Pico; 1 at power-on (TPMODE = 2) |
 
 The ROM handles these four names itself; the BIOS's G_MODE/S_MODE read and
 write the low nibble. [sysvars.md](../rom/sysvars.md).

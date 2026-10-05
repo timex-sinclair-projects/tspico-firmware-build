@@ -21,16 +21,16 @@ port). The TS-Pico replaces all three sources:
   trampolines for the disk keywords and the file channels. [rom/home.md](rom/home.md).
 - **EXROM** is 16K, not the genuine 8K. Chunk 0 is the genuine EXROM patched
   in 36 places, with the Pico driver written into its 1K hole at 1800h–1BFFh.
-  Chunk 1 holds the TS-Pico's own code: the response-function chain and the
-  port accessors at 2000h–22ADh, the ROM 2.0 SYNC and BREAK code at 2300h,
+  Chunk 1 holds the TS-Pico's own code: the response-function chain, the port
+  accessors and v1.7's SAVE-prompt BREAK test at 2000h–22FDh, the ROM 2.0 SYNC and BREAK code at 2300h,
   and the ROM 2.1 disk and channel module at 3000h. [rom/overview.md](rom/overview.md)
   and the four EXROM chapters.
 - **DOCK** is whatever cartridge page the Pico selects: a `.dck` image, or
   the customised ZX Spectrum ROM that `tpi:zx48` switches to. [rom/zx48.md](rom/zx48.md).
 
 The ROM images live on a 512K flash chip (and can be copied into a 512K
-SRAM) on the TS-Pico board, in sixteen 32K slots, each a HOME+EXROM pair; a
-cartridge takes two slots (64K). The Pico tells two PIO state machines
+SRAM) on the TS-Pico board, in sixteen 32K slots; a 2068 ROM fills one (16K
+HOME + 16K EXROM), the ZX Spectrum ROM one, a cartridge two (64K). The Pico tells two PIO state machines
 which slot and which chip to present on every Z80 memory cycle.
 [hardware.md](hardware.md).
 
@@ -155,7 +155,7 @@ which never write port 0Fh. [rom/overview.md](rom/overview.md).
 | `src/upgrade/` | ~800 | the upgrade UF2 and the Z80 updater | [upgrade.md](firmware/upgrade.md) |
 | `src/rom/fdd/fddcmd.asm` | 1,398 | ROM 2.1's module | [exrom-fdd.md](rom/exrom-fdd.md) |
 | `src/rom/patches/tspico-sync.asm` | 318 | ROM 2.0 | [exrom-sync.md](rom/exrom-sync.md) |
-| `src/rom/patches/tspico-zx48-v3.asm` | — | ZX v3/v4 | [zx48.md](rom/zx48.md) |
+| `src/rom/patches/tspico-zx48-v3.asm` | 280 | ZX v3/v4 | [zx48.md](rom/zx48.md) |
 | `src/rom/TSPICO-21.ROM` | 32K binary | the release ROM | [rom/overview.md](rom/overview.md) and the EXROM chapters |
 
 Line counts are those of the sources the stamps in the [README](README.md)
