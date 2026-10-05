@@ -125,8 +125,9 @@ only) the files `DIR` cannot index. Items are sorted case-insensitively.
 a dot; with a pattern, a non-match is dropped. A directory (type 16384)
 goes to the first group with size 0; with no pattern a file whose last
 three characters are not in `DIR_EXT` goes to the third group; everything
-else to the second, with its size (`item[3]`). With a pattern every match
-is therefore in the second group, in name order. Shared by `CATALOG_TEXT`
+else to the second, with its size (`item[3]`). With a pattern there is
+no third group: matching directories come first, then every matching file,
+in name order. Shared by `CATALOG_TEXT`
 and `DIR_NAMES` (`OPEN #n,"d:..."`), so both show the same entries.
 
 ### `basename(path)`

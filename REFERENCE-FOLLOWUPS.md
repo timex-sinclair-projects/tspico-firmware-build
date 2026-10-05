@@ -95,6 +95,7 @@ wrong; **test** a test docstring is wrong.
 | C38 | `src/rom/fdd/fddcmd.asm` `READ_STATUS EQU $02B9` | Same name as the curated READ_STATUS (0655h) and `tspico-sync.asm`'s, for a different routine (the curated READ_STATUS_BYTE). Rename the module's EQU | |
 | C39 | `docs/rom-analysis/SYMBOLS.md` | Lists an "EWAIT" BIOS entry at 184Eh (`JP 2279h`): 184Eh is the last byte of 184Ch's `JP`. Describes BREAK_ABORT as `POP BC / JP 1A61h` (1.x; 2.0 made it `JP BRK_ABORT`) | |
 | C40 | `fddcmd.asm` signature comment | `"FDDCMD"` — "build.py verifies this"; `build-rom.py` does not (it checks that `FDD_DISPATCH` is at 3000h). Add the check or fix the comment | |
+| C41 | `docs/AUDIT-2026-09-30.md` line 224 | "up to 144!'s digits" for the factorial example: the one-byte count allows 146! (255 digits) | |
 
 ## Test docstrings
 

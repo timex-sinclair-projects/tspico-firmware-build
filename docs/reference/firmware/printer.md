@@ -291,8 +291,9 @@ whole-picture buffer exists ("2048x1536 would not fit": that picture is
 
 The default `bmp_size` of 512×384 makes `COPY_BMP` pass `sx = sy = 2` for a
 256-wide screen and `sx = 1, sy = 2` for the hi-res one, so both come out
-512 wide; `tpi:bmp` allows widths of 256–4096 and heights of 192–1536
-(`PRN_BMP`). Pinned by `printer_hosttest.py`: a 512×384 file is
+512 wide; `tpi:bmp` accepts widths of 256, 512, 1024, 2048 or 4096 and
+heights of 192, 384, 768 or 1536, with 1596 read as 1536 as the manual
+misprints it (`PRN_BMP`). Pinned by `printer_hosttest.py`: a 512×384 file is
 14 + 40 + 64 + 256 × 384 = 98,422 bytes with a consistent header, 4 bpp and
 16 colours; a pixel at (x, y) lands at (2x, 2y) doubled; the bottom-right
 pixel is in the bottom-right; 1× gives 256×192; and
