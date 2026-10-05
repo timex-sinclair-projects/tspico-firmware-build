@@ -37,6 +37,7 @@ wrong; **test** a test docstring is wrong.
 | B16 | `.mpy` override | `main.py` and `build-dev-mpy.sh` say `/dev_tspico.mpy` is preferred over `/dev_tspico.py`; MicroPython's importer looks for `.py` first. Check on a board with both files | [boot.md](docs/reference/firmware/boot.md#the-dev-overrides) | |
 | B17 | ROM 2.1 EXROM 20BEh (`tpi:tape`) | `tpi:tape` sets TPMODE to 0, clearing the printer switch (bit 0) as well as LOAD/SAVE (bit 1); `tpi:sdcard` restores only bit 1. So `tpi:picopt`, `tpi:tape`, `tpi:sdcard` leaves the printer on the 2068. The manual documents the 0, so it may be intended | [rom/sysvars.md](docs/reference/rom/sysvars.md#5ddbh-tpmode-peek-24027) | |
 | B18 | ROM 2.1 SESSION_NAMED (1AC4h–1AD9h) | The `NET:` prefix is recognised (TPMODE bits 7+6) but leads nowhere: the switch words ignore it and the firmware answers "Unrecognized command". Dead feature or unfinished? | same | |
+| B19 | ROM HOME 0A4Ah | COPY-LINE's entry now thunks to EXROM 17C3h but nothing in ROM 2.1 calls it (its callers were inside the replaced COPY/COPY-BUFF). Dead, or kept for programs that call COPY-LINE? | |
 
 ## The user manual
 
@@ -88,6 +89,8 @@ wrong; **test** a test docstring is wrong.
 | C33 | `src/rom/fdd/README.md` | The 25D6h disk-token hook "is staged"; it is enabled. "$22A1–$2FFF is left for Gustavo"; ROM 2.0 now uses 2300h–23D3h | |
 | C34 | `docs/rom-analysis/README.md`, `MEMORY_MAP.md`, `SYMBOLS.md` | List v1.1's port I/O sites as "the only" ones; 2.x adds 2304h, 2311h, 2320h, 23A7h, 23C0h, 3657h. The dead `OUT (0Fh)` at 2236h is not mentioned | |
 | C35 | `docs/rom-analysis/PROTOCOL_FROM_ROM.md`, `SYMBOLS.md` sysvar tables | 5D37h "unclassified": it is the EXROM NMI routine's vector (moved from NMIADD 5CB0h, with the Spectrum's inverted test fixed). 5DDBh described only by its prefix bits; the switches are bits 0 (printer) and 1 (LOAD/SAVE) | |
+| C36 | `docs/rom-analysis/DIFF_HOME_vs_STOCK.md` | HOME 0065h "TPI BIOS version, medium confidence": it is the ROM version byte read by `PEEK 101`, changed with G_VERS each release. 041Eh–0421h "dead remnants": 2.1 uses 041Ch–0420h as the BEEPER thunk's tail | |
+| C37 | `docs/rom-analysis/SYMBOLS.md` | G_VERS "returns 0x0015": v1.1 only (0021h in 2.1) | |
 
 ## Test docstrings
 
