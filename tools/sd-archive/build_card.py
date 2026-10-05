@@ -95,7 +95,7 @@ def main():
                          original_file=os.path.basename(e["member"]),
                          tags=e["tags"], blocks_loaded="%s of %s" % (r.get("served"), r.get("blocks")),
                          converted_from=e["src"] if e["src"] != "tap" else "",
-                         also_listed_as="; ".join(e["also"]), page=e["page"], download=e["url"]))
+                         also_listed_as="; ".join(e["also"]), page=C.public(e["page"]), download=e["url"]))
     shutil.copytree(os.path.join(C.REPO, "SD card", "help"), os.path.join(out, "help"))
     rows.sort(key=lambda x: (x["folder"], x["file"]))
     for d in (out, left):
