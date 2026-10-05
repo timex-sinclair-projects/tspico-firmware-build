@@ -593,11 +593,11 @@ regenerate it when a line number moves (the test checks that it is current).
 | `FRAMES` | label | [43](../../../src/rom/fdd/fddcmd.asm#L43) | *(no entry)* |
 | `SESSION_ID` | label | [44](../../../src/rom/fdd/fddcmd.asm#L44) | *(no entry)* |
 | `SESSION_NAMED` | label | [45](../../../src/rom/fdd/fddcmd.asm#L45) | *(no entry)* |
-| `CALL_HOME` | label | [47](../../../src/rom/fdd/fddcmd.asm#L47) | *(no entry)* |
+| `CALL_HOME` | label | [47](../../../src/rom/fdd/fddcmd.asm#L47) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `H_EXPT_STR` | label | [49](../../../src/rom/fdd/fddcmd.asm#L49) | *(no entry)* |
 | `H_TEST_ROOM` | label | [51](../../../src/rom/fdd/fddcmd.asm#L51) | *(no entry)* |
 | `IY_SYSVARS` | label | [52](../../../src/rom/fdd/fddcmd.asm#L52) | *(no entry)* |
-| `SESSION_SETUP` | label | [55](../../../src/rom/fdd/fddcmd.asm#L55) | *(no entry)* |
+| `SESSION_SETUP` | label | [55](../../../src/rom/fdd/fddcmd.asm#L55) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `SAVE_ETC_BODY` | label | [56](../../../src/rom/fdd/fddcmd.asm#L56) | *(no entry)* |
 | `STATUS_REPORT` | label | [58](../../../src/rom/fdd/fddcmd.asm#L58) | *(no entry)* |
 | `SYNC_WRITE` | label | [59](../../../src/rom/fdd/fddcmd.asm#L59) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
@@ -608,7 +608,7 @@ regenerate it when a line number moves (the test checks that it is current).
 | `C_END_TAIL` | label | [64](../../../src/rom/fdd/fddcmd.asm#L64) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `BANK_SV` | label | [66](../../../src/rom/fdd/fddcmd.asm#L66) | *(no entry)* |
 | `MODE_SV` | label | [67](../../../src/rom/fdd/fddcmd.asm#L67) | *(no entry)* |
-| `READ_STATUS` | label | [68](../../../src/rom/fdd/fddcmd.asm#L68) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `READ_STATUS` | label | [68](../../../src/rom/fdd/fddcmd.asm#L68) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `OPEN_STREAM` | label | [69](../../../src/rom/fdd/fddcmd.asm#L69) | *(no entry)* |
 | `LOOP_BODY` | label | [70](../../../src/rom/fdd/fddcmd.asm#L70) | *(no entry)* |
 | `STREAM_LOWER` | label | [71](../../../src/rom/fdd/fddcmd.asm#L71) | *(no entry)* |
@@ -755,8 +755,8 @@ regenerate it when a line number moves (the test checks that it is current).
 | `ST_RECOVERED` | label | [42](../../../src/rom/patches/tspico-sync.asm#L42) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `ERR_D_BREAK` | label | [47](../../../src/rom/patches/tspico-sync.asm#L47) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `ERR_T_PICO` | label | [48](../../../src/rom/patches/tspico-sync.asm#L48) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `READ_STATUS` | label | [51](../../../src/rom/patches/tspico-sync.asm#L51) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `CHECK_BREAK` | label | [52](../../../src/rom/patches/tspico-sync.asm#L52) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `READ_STATUS` | label | [51](../../../src/rom/patches/tspico-sync.asm#L51) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `CHECK_BREAK` | label | [52](../../../src/rom/patches/tspico-sync.asm#L52) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `C_END_TAIL` | label | [53](../../../src/rom/patches/tspico-sync.asm#L53) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `POLL_KEYPRESS` | label | [54](../../../src/rom/patches/tspico-sync.asm#L54) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `TSPICO_WRITE` | label | [55](../../../src/rom/patches/tspico-sync.asm#L55) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
@@ -874,12 +874,12 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `BOOT_MAP_16K` | label | [15](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L15) | *(no entry)* |
-| `CALL_HOME` | label | [16](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L16) | *(no entry)* |
-| `BANK_SWITCH` | label | [17](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L17) | *(no entry)* |
-| `READ_STATUS` | label | [20](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L20) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `CHECK_BREAK` | label | [21](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L21) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `BREAK_ABORT` | label | [22](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L22) | *(no entry)* |
+| `BOOT_MAP_16K` | label | [15](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L15) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `CALL_HOME` | label | [16](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L16) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `BANK_SWITCH` | label | [17](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L17) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `READ_STATUS` | label | [20](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L20) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `CHECK_BREAK` | label | [21](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L21) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `BREAK_ABORT` | label | [22](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L22) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `READ_STATUS_BYTE` | label | [23](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L23) | *(no entry)* |
 | `READ_STATUS_AND_OPEN` | label | [26](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L26) | *(no entry)* |
 | `PRINT_STRING_FROM_PICO` | label | [27](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L27) | *(no entry)* |
@@ -901,30 +901,30 @@ regenerate it when a line number moves (the test checks that it is current).
 | `YN_LOOP` | label | [45](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L45) | *(no entry)* |
 | `FN_87_PRINT_N_CHARS` | label | [46](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L46) | *(no entry)* |
 | `FN_DEAD_BEEP` | label | [47](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L47) | *(no entry)* |
-| `WAIT_PICO_READY` | label | [50](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L50) | *(no entry)* |
-| `WAIT_PICO_READY_FAIL` | label | [51](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L51) | *(no entry)* |
-| `WAIT_PICO_READY_OK` | label | [52](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L52) | *(no entry)* |
-| `SESSION_SETUP` | label | [53](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L53) | *(no entry)* |
-| `SEND_BYTE_CRC` | label | [54](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L54) | *(no entry)* |
-| `BUILD_PREHEADER_B` | label | [55](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L55) | *(no entry)* |
-| `STATUS_TO_REPORT` | label | [56](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L56) | *(no entry)* |
-| `STATUS_OK` | label | [57](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L57) | *(no entry)* |
-| `SEND_KEY` | label | [58](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L58) | *(no entry)* |
-| `RPT_6_NUM_TOO_BIG` | label | [61](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L61) | *(no entry)* |
-| `RPT_8_END_OF_FILE` | label | [62](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L62) | *(no entry)* |
-| `RPT_9_STOP` | label | [63](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L63) | *(no entry)* |
-| `RPT_A_INVALID_ARG` | label | [64](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L64) | *(no entry)* |
-| `RPT_J_INVALID_IO` | label | [65](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L65) | *(no entry)* |
-| `RPT_C_NONSENSE` | label | [66](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L66) | *(no entry)* |
-| `RPT_F_BAD_FILENAME` | label | [67](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L67) | *(no entry)* |
-| `RPT_Q_PARAM_ERROR` | label | [68](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L68) | *(no entry)* |
-| `RPT_R_TAPE_ERROR` | label | [69](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L69) | *(no entry)* |
-| `RPT_D_BREAK_CONT` | label | [70](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L70) | *(no entry)* |
+| `WAIT_PICO_READY` | label | [50](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L50) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `WAIT_PICO_READY_FAIL` | label | [51](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L51) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `WAIT_PICO_READY_OK` | label | [52](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L52) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `SESSION_SETUP` | label | [53](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L53) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `SEND_BYTE_CRC` | label | [54](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L54) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `BUILD_PREHEADER_B` | label | [55](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L55) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `STATUS_TO_REPORT` | label | [56](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L56) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `STATUS_OK` | label | [57](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L57) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `SEND_KEY` | label | [58](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L58) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_6_NUM_TOO_BIG` | label | [61](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L61) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_8_END_OF_FILE` | label | [62](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L62) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_9_STOP` | label | [63](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L63) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_A_INVALID_ARG` | label | [64](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L64) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_J_INVALID_IO` | label | [65](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L65) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_C_NONSENSE` | label | [66](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L66) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_F_BAD_FILENAME` | label | [67](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L67) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_Q_PARAM_ERROR` | label | [68](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L68) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_R_TAPE_ERROR` | label | [69](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L69) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `RPT_D_BREAK_CONT` | label | [70](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L70) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `ENTRY_TABLE` | label | [73](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L73) | *(no entry)* |
 | `BEEPER` | label | [74](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L74) | *(no entry)* |
 | `BREAK_KEY` | label | [75](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L75) | *(no entry)* |
-| `BIOS_TABLE` | label | [76](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L76) | *(no entry)* |
-| `BIOS_G_VERS` | label | [77](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L77) | *(no entry)* |
+| `BIOS_TABLE` | label | [76](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L76) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `BIOS_G_VERS` | label | [77](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L77) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `PRINTER_TABLE` | label | [78](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L78) | *(no entry)* |
 | `SEND_DATA_BLOCK_D` | label | [79](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L79) | *(no entry)* |
 | `PICO_TRANSACT` | label | [80](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L80) | *(no entry)* |

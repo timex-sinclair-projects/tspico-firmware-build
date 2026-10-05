@@ -91,6 +91,8 @@ wrong; **test** a test docstring is wrong.
 | C35 | `docs/rom-analysis/PROTOCOL_FROM_ROM.md`, `SYMBOLS.md` sysvar tables | 5D37h "unclassified": it is the EXROM NMI routine's vector (moved from NMIADD 5CB0h, with the Spectrum's inverted test fixed). 5DDBh described only by its prefix bits; the switches are bits 0 (printer) and 1 (LOAD/SAVE) | |
 | C36 | `docs/rom-analysis/DIFF_HOME_vs_STOCK.md` | HOME 0065h "TPI BIOS version, medium confidence": it is the ROM version byte read by `PEEK 101`, changed with G_VERS each release. 041Eh–0421h "dead remnants": 2.1 uses 041Ch–0420h as the BEEPER thunk's tail | |
 | C37 | `docs/rom-analysis/SYMBOLS.md` | G_VERS "returns 0x0015": v1.1 only (0021h in 2.1) | |
+| C38 | `src/rom/fdd/fddcmd.asm` `READ_STATUS EQU $02B9` | Same name as the curated READ_STATUS (0655h) and `tspico-sync.asm`'s, for a different routine (the curated READ_STATUS_BYTE). Rename the module's EQU | |
+| C39 | `docs/rom-analysis/SYMBOLS.md` | Lists an "EWAIT" BIOS entry at 184Eh (`JP 2279h`): 184Eh is the last byte of 184Ch's `JP`. Describes BREAK_ABORT as `POP BC / JP 1A61h` (1.x; 2.0 made it `JP BRK_ABORT`) | |
 
 ## Test docstrings
 
