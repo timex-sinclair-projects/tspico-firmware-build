@@ -787,28 +787,28 @@ regenerate it when a line number moves (the test checks that it is current).
 |---|---|---|---|
 | `PORT_DATA` | label | [54](../../../src/rom/patches/tspico-zx48-v3.asm#L54) | [firmware/upgrade.md](../firmware/upgrade.md) |
 | `PORT_STATUS` | label | [55](../../../src/rom/patches/tspico-zx48-v3.asm#L55) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `WAIT_RDY` | label | [58](../../../src/rom/patches/tspico-zx48-v3.asm#L58) | *(no entry)* |
-| `STK_FETCH` | label | [59](../../../src/rom/patches/tspico-zx48-v3.asm#L59) | *(no entry)* |
-| `CHAN_OPEN` | label | [60](../../../src/rom/patches/tspico-zx48-v3.asm#L60) | *(no entry)* |
-| `PR_STRING` | label | [61](../../../src/rom/patches/tspico-zx48-v3.asm#L61) | *(no entry)* |
+| `WAIT_RDY` | label | [58](../../../src/rom/patches/tspico-zx48-v3.asm#L58) | [rom/zx48.md](../rom/zx48.md) |
+| `STK_FETCH` | label | [59](../../../src/rom/patches/tspico-zx48-v3.asm#L59) | [rom/zx48.md](../rom/zx48.md) |
+| `CHAN_OPEN` | label | [60](../../../src/rom/patches/tspico-zx48-v3.asm#L60) | [rom/zx48.md](../rom/zx48.md) |
+| `PR_STRING` | label | [61](../../../src/rom/patches/tspico-zx48-v3.asm#L61) | [rom/zx48.md](../rom/zx48.md) |
 | `BREAK_KEY` | label | [62](../../../src/rom/patches/tspico-zx48-v3.asm#L62) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
-| `SET_STK` | label | [63](../../../src/rom/patches/tspico-zx48-v3.asm#L63) | *(no entry)* |
-| `T_ADDR` | label | [64](../../../src/rom/patches/tspico-zx48-v3.asm#L64) | *(no entry)* |
+| `SET_STK` | label | [63](../../../src/rom/patches/tspico-zx48-v3.asm#L63) | [rom/zx48.md](../rom/zx48.md) |
+| `T_ADDR` | label | [64](../../../src/rom/patches/tspico-zx48-v3.asm#L64) | [rom/zx48.md](../rom/zx48.md) |
 | `CH_ADD` | label | [65](../../../src/rom/patches/tspico-zx48-v3.asm#L65) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `X_PTR` | label | [66](../../../src/rom/patches/tspico-zx48-v3.asm#L66) | *(no entry)* |
+| `X_PTR` | label | [66](../../../src/rom/patches/tspico-zx48-v3.asm#L66) | [rom/zx48.md](../rom/zx48.md) |
 | `ERR_SP` | label | [67](../../../src/rom/patches/tspico-zx48-v3.asm#L67) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `ERR_D` | label | [69](../../../src/rom/patches/tspico-zx48-v3.asm#L69) | *(no entry)* |
-| `ERR_J` | label | [70](../../../src/rom/patches/tspico-zx48-v3.asm#L70) | *(no entry)* |
-| `NEW_CODE` | label | [72](../../../src/rom/patches/tspico-zx48-v3.asm#L72) | *(no entry)* |
-| `ZXV` | label | [75](../../../src/rom/patches/tspico-zx48-v3.asm#L75) | *(no entry)* |
-| `WAIT_RDY_V3` | label | [104](../../../src/rom/patches/tspico-zx48-v3.asm#L104) | *(no entry)* |
-| `TPI_CHK` | label | [128](../../../src/rom/patches/tspico-zx48-v3.asm#L128) | *(no entry)* |
-| `TPI_TXT` | label | [155](../../../src/rom/patches/tspico-zx48-v3.asm#L155) | *(no entry)* |
-| `TPI_CMD` | label | [159](../../../src/rom/patches/tspico-zx48-v3.asm#L159) | *(no entry)* |
-| `TPI_ERR` | label | [261](../../../src/rom/patches/tspico-zx48-v3.asm#L261) | *(no entry)* |
-| `TPI_OUT` | label | [269](../../../src/rom/patches/tspico-zx48-v3.asm#L269) | *(no entry)* |
-| `TPI_DLY` | label | [272](../../../src/rom/patches/tspico-zx48-v3.asm#L272) | *(no entry)* |
-| `TPI_END` | label | [279](../../../src/rom/patches/tspico-zx48-v3.asm#L279) | *(no entry)* |
+| `ERR_D` | label | [69](../../../src/rom/patches/tspico-zx48-v3.asm#L69) | [rom/zx48.md](../rom/zx48.md) |
+| `ERR_J` | label | [70](../../../src/rom/patches/tspico-zx48-v3.asm#L70) | [rom/zx48.md](../rom/zx48.md) |
+| `NEW_CODE` | label | [72](../../../src/rom/patches/tspico-zx48-v3.asm#L72) | [rom/zx48.md](../rom/zx48.md) |
+| `ZXV` | label | [75](../../../src/rom/patches/tspico-zx48-v3.asm#L75) | [rom/zx48.md](../rom/zx48.md) |
+| `WAIT_RDY_V3` | label | [104](../../../src/rom/patches/tspico-zx48-v3.asm#L104) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_CHK` | label | [128](../../../src/rom/patches/tspico-zx48-v3.asm#L128) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_TXT` | label | [155](../../../src/rom/patches/tspico-zx48-v3.asm#L155) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_CMD` | label | [159](../../../src/rom/patches/tspico-zx48-v3.asm#L159) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_ERR` | label | [261](../../../src/rom/patches/tspico-zx48-v3.asm#L261) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_OUT` | label | [269](../../../src/rom/patches/tspico-zx48-v3.asm#L269) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_DLY` | label | [272](../../../src/rom/patches/tspico-zx48-v3.asm#L272) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_END` | label | [279](../../../src/rom/patches/tspico-zx48-v3.asm#L279) | [rom/zx48.md](../rom/zx48.md) |
 
 ## `src/upgrade/updater.asm`
 
