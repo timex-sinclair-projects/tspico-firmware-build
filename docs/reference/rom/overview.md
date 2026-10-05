@@ -165,9 +165,9 @@ EXROM 16K.
 The thunks end in the genuine `CALL_B`/`GOTO_B` dispatchers (EXROM
 0F99h/0F8Ah; HOME keeps a byte-identical copy at 040Dh), which touch no
 ports: they test VIDMOD (5CC2h) and jump to the bank-switch code **in RAM**
-— 65D0h and its neighbours normally, FD32h/FD90h when VIDMOD is non-zero
-*(inferred: the RAM copy sits higher in the 2068's extended video modes;
-the code only shows the two destinations)*. The port work is in
+— 6572h/65D0h with normal video, FD32h/FD90h when VIDMOD is non-zero
+(64-column video, where the 2068 moves that code to high RAM to clear the
+second display file; [DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md)). The port work is in
 `BANK_ENABLE`, genuine code at EXROM 1299h that the 2068 copies to RAM at
 6499h at boot; the TS-Pico widened its HSR masks from chunk 0 to chunks 0+1
 (three hunks). The routines in RAM keep a **bank stack** whose pointer is

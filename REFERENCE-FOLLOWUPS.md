@@ -35,6 +35,8 @@ wrong; **test** a test docstring is wrong.
 | B14 | `tspico.py` `SEND_MSG2` and the text rules | The firmware counts only 124 and 126 as keyword-width characters; ERROR_TRAPPING.md lists 123, 125, 127 as keyword tokens too. Whether the ROM prints 123/125/127 as keywords is unverified | [tspico-messages.md](docs/reference/firmware/tspico-messages.md#the-answer-on-the-wire) | |
 | B15 | `tspico.py` `MDIR` (4867) | The name is `cmd[10:]`, not `getArgs`: a second space after `tpi:md` becomes part of the name; no character check (FAT refuses with `OSError`, Q) | [tspico-commands.md](docs/reference/firmware/tspico-commands.md#mdirpre-cmd) | |
 | B16 | `.mpy` override | `main.py` and `build-dev-mpy.sh` say `/dev_tspico.mpy` is preferred over `/dev_tspico.py`; MicroPython's importer looks for `.py` first. Check on a board with both files | [boot.md](docs/reference/firmware/boot.md#the-dev-overrides) | |
+| B17 | ROM 2.1 EXROM 20BEh (`tpi:tape`) | `tpi:tape` sets TPMODE to 0, clearing the printer switch (bit 0) as well as LOAD/SAVE (bit 1); `tpi:sdcard` restores only bit 1. So `tpi:picopt`, `tpi:tape`, `tpi:sdcard` leaves the printer on the 2068. The manual documents the 0, so it may be intended | [rom/sysvars.md](docs/reference/rom/sysvars.md#5ddbh-tpmode-peek-24027) | |
+| B18 | ROM 2.1 SESSION_NAMED (1AC4h–1AD9h) | The `NET:` prefix is recognised (TPMODE bits 7+6) but leads nowhere: the switch words ignore it and the firmware answers "Unrecognized command". Dead feature or unfinished? | same | |
 
 ## The user manual
 
@@ -45,6 +47,7 @@ wrong; **test** a test docstring is wrong.
 | M3 | §10.3 boot | "MEM must be 1 or 2": `CODE 0,s` with `s` ≠ 0 is refused too | |
 | M4 | §10.3 ffw/rew/append | Nothing mounted answers 0 OK (message only with VERBOSE), except `append on`, which is Q. Worth saying | |
 | M5 | §10.3 dock | The `CODE 0,2` message (B2) | |
+
 
 ## Comments and docstrings that are out of date
 
@@ -84,6 +87,7 @@ wrong; **test** a test docstring is wrong.
 | C32 | `tools/romdiff.py` `IMAGES` comment | v1.7 "the ROM currently shipped" | |
 | C33 | `src/rom/fdd/README.md` | The 25D6h disk-token hook "is staged"; it is enabled. "$22A1–$2FFF is left for Gustavo"; ROM 2.0 now uses 2300h–23D3h | |
 | C34 | `docs/rom-analysis/README.md`, `MEMORY_MAP.md`, `SYMBOLS.md` | List v1.1's port I/O sites as "the only" ones; 2.x adds 2304h, 2311h, 2320h, 23A7h, 23C0h, 3657h. The dead `OUT (0Fh)` at 2236h is not mentioned | |
+| C35 | `docs/rom-analysis/PROTOCOL_FROM_ROM.md`, `SYMBOLS.md` sysvar tables | 5D37h "unclassified": it is the EXROM NMI routine's vector (moved from NMIADD 5CB0h, with the Spectrum's inverted test fixed). 5DDBh described only by its prefix bits; the switches are bits 0 (printer) and 1 (LOAD/SAVE) | |
 
 ## Test docstrings
 
@@ -96,4 +100,5 @@ wrong; **test** a test docstring is wrong.
 
 | # | What | Decision |
 |---|---|---|
+| R2 | `tools/romdisasm.sh` merges every `EQU` in 0100h–3FFFh into the EXROM label file, including the module's HOME addresses: EXROM 1BEFh is labelled `H_EXPT_STR` (a HOME routine) in the middle of STATUS_TO_REPORT's lead-in. Filter out the `H_*` names (or anything the source marks HOME) | |
 | R1 | `reference_hosttest.py` matches entries by name only. `src/main.py` and `src/upgrade/main.py` share pin names, so both sets index to `firmware/boot.md` (upgrade.md documents the upgrade ones) | |
