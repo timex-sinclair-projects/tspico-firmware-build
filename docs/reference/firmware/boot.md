@@ -158,15 +158,15 @@ file back when it changed anything; `PICO_STATUS` is built from what
 
 | Key | Type | Shipped | Meaning | Read by | Written by |
 |---|---|---|---|---|---|
-| `LOG_LEVEL` | int 0–4 | 2 | lowest level `LOG` keeps (0 INFO … 3 CRITICAL, 4 SPECIAL) | `LOAD_CONFIG` → `TSP.LOG_LEVEL` | `LOAD_CONFIG` (default) |
-| `FW_VERSION` | str | `"2.1.2"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` ~294–312; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
-| `DCK_SLOT` | int 0–15 | 0 | DOCK slot at power-on | `LOAD_CONFIG` → `TSP.DCK_SLOT`, `bank_sm` | `LOAD_CONFIG` (default) |
-| `ZX_TAPE_COMPAT` | bool | `false` | ZX48 mode loads with `LOAD_ZX_C` (the whole tape in RAM) | → `TSP.ZX_TAPE_COMPAT` | `LOAD_CONFIG` (default) |
-| `ROM_SM` | int 5, 6, 9, 10 | 10 | `set_ctrl`'s word: DOCK memory × 4 + BOOT memory, 1 SRAM, 2 flash | → `TSP.ROM_SM` | `LOAD_CONFIG` (default; the one-shot), `MEMBOOT` (low bits) |
-| `ROM_VERSION` | str | `"2.1"` | shown by `tpi:info`; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
-| `ROM_SLOT` | int 0–15 | 1 | BOOT slot at power-on | → `TSP.ROM_SLOT`, `bank_sm` | `LOAD_CONFIG` (the one-shot back to 1), `MEMBOOT` |
-| `VERBOSE` | bool | `false` | `SEND_MSG` prints messages | → `TSP.VERBOSE` | `LOAD_CONFIG` (default) |
-| `TELEMETRY` | bool | `false` | the `TLM` trace on USB serial | `_telemetry()` only | `LOAD_CONFIG` (default) |
+| LOG_LEVEL | int 0–4 | 2 | lowest level `LOG` keeps (0 INFO … 3 CRITICAL, 4 SPECIAL) | `LOAD_CONFIG` → `TSP.LOG_LEVEL` | `LOAD_CONFIG` (default) |
+| FW_VERSION | str | `"2.1.2"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` ~294–312; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
+| DCK_SLOT | int 0–15 | 0 | DOCK slot at power-on | `LOAD_CONFIG` → `TSP.DCK_SLOT`, `bank_sm` | `LOAD_CONFIG` (default) |
+| ZX_TAPE_COMPAT | bool | `false` | ZX48 mode loads with `LOAD_ZX_C` (the whole tape in RAM) | → `TSP.ZX_TAPE_COMPAT` | `LOAD_CONFIG` (default) |
+| ROM_SM | int 5, 6, 9, 10 | 10 | `set_ctrl`'s word: DOCK memory × 4 + BOOT memory, 1 SRAM, 2 flash | → `TSP.ROM_SM` | `LOAD_CONFIG` (default; the one-shot), `MEMBOOT` (low bits) |
+| ROM_VERSION | str | `"2.1"` | shown by `tpi:info`; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
+| ROM_SLOT | int 0–15 | 1 | BOOT slot at power-on | → `TSP.ROM_SLOT`, `bank_sm` | `LOAD_CONFIG` (the one-shot back to 1), `MEMBOOT` |
+| VERBOSE | bool | `false` | `SEND_MSG` prints messages | → `TSP.VERBOSE` | `LOAD_CONFIG` (default) |
+| TELEMETRY | bool | `false` | the `TLM` trace on USB serial | `_telemetry()` only | `LOAD_CONFIG` (default) |
 
 **The one-shot boot.** `tpi:boot CODE m,s` writes `ROM_SLOT = s` and
 `ROM_SM`'s low bits `= m` ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).

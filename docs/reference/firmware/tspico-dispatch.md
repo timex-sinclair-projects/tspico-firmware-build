@@ -503,7 +503,7 @@ Both are started, then given one word each: `ROM.put(TSP.ROM_SM)` — which
 memory (flash or SRAM) answers DOCK and ROM accesses, the 5/6/9/10 value
 `LOAD_CONFIG` checked — and `BANK.put(TSP.bank_sm)`, `DCK_SLOT * 16 +
 ROM_SLOT`, the slot of each. The programs are [pio.md](pio.md); the pins
-[hardware.md](hardware.md). A commented-out alternative (`set_dck` on
+[hardware.md](../hardware.md). A commented-out alternative (`set_dck` on
 state machine 4) maps the DOCK only. These two machines are built once and
 never again: the restart path at the end of the loop leaves them alone.
 `tpi:boot` and `tpi:dock` feed them new words ([tspico-commands.md](tspico-commands.md)).

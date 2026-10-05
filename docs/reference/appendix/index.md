@@ -69,8 +69,8 @@ regenerate it when a line number moves (the test checks that it is current).
 | `_10_J_Invalid_IO` | variable | [487](../../../src/TS/tspico.py#L487) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `_11_D_Break` | variable | [488](../../../src/TS/tspico.py#L488) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `TLM_ENABLED` | variable | [517](../../../src/TS/tspico.py#L517) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
-| `FW_VERSION` | variable | [544](../../../src/TS/tspico.py#L544) | [firmware/boot.md](../firmware/boot.md) |
-| `ROM_VERSION` | variable | [545](../../../src/TS/tspico.py#L545) | [firmware/boot.md](../firmware/boot.md) |
+| `FW_VERSION` | variable | [544](../../../src/TS/tspico.py#L544) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `ROM_VERSION` | variable | [545](../../../src/TS/tspico.py#L545) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `_tlm_last` | variable | [552](../../../src/TS/tspico.py#L552) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `TLM` | function | [555](../../../src/TS/tspico.py#L555) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `TLM_RESET` | function | [586](../../../src/TS/tspico.py#L586) | [firmware/tspico-state.md](../firmware/tspico-state.md) |

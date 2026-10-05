@@ -318,7 +318,7 @@ reports is in [ports-and-status.md](../appendix/ports-and-status.md).
 | `_2_R_Tape_load` | 2 | R Tape loading error | 6: short `f:` file, `tpi:help` file errors, a mount that failed, `PRINT_IO`, a bad command checksum, `ZX_REPORT` |
 | `_3_F_Invalid_file` | 3 | F Invalid file name | 50: "not found", SD card errors (`SD_CALL`), `CH_STATUS["F"]` |
 | `_4_Q_Parameter` | 4 | Q Parameter error | 41: bad arguments to the disk commands; the fallback in `CH_CALL` and `ZX_TPI` |
-| `_5_C_Nonsense` | 5 | C Nonsense in BASIC | 4: an unknown command, a body that does not decode, `SA_NOT_IMP` |
+| `_5_C_Nonsense` | 5 | C Nonsense in BASIC | 4: an unknown command (6000), a body that does not decode (5952), `SA_NOT_IMP` (3829), `tpi:chwr` with bad hex (3325) |
 | `_6_6_Num2Big` | 6 | 6 Number too big | 1: `tpi:dir CODE 1,n` with `n` past the end |
 | `_7_8_EOF` | 7 | 8 End of file | 3: `tpi:chrd` at the end, `tpi:md` of an existing folder |
 | `_8_A_Invalid_arg` | 8 | A Invalid argument | 21: `BAD_CODE`, bad `CODE` values |
