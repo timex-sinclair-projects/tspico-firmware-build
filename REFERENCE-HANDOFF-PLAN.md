@@ -391,7 +391,9 @@ Do this after §2, before the flows, chapter by chapter:
    must match (slot sizes are 32K; the SM numbers; the clocks; the status
    values). `overview.md` and `appendix/*` were written by the editor
    before the chapters and should be re-read against them.
-5. **Known disagreements** reported by authors — make sure each is stated
+5. **Known disagreements** are now logged in `REFERENCE-FOLLOWUPS.md` at the
+   repo root (add each new one there as chapters are written; the user
+   decides each). Originally: reported by authors — make sure each is stated
    in the chapter (code wins) and list them in the PR description as
    follow-ups, not fixed in code by this PR:
    - `updater.asm` line 5 and `upgrade.py` line 4 name `tools/build-upgrade.sh`;
