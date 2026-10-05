@@ -323,10 +323,11 @@ def DRAIN_STDIN(MQ, limit=1024):
     return n
 
 
-def MQ_TO_IDLE(MQ, recovered=False, status=True):
+def MQ_TO_IDLE(MQ, recovered=False, status=True, first=0x01):
     """The one way back to a known state, whatever happened: TX and RX empty,
     exactly one 0x01 pre-load staged (the ROM reads it with no wait straight
-    after the next pre-header), status idle -- or recovered.
+    after the next pre-header), status idle -- or recovered. `first` stages
+    another byte instead: the dispatcher's SYNC passes FIRST_STATUS().
 
     status=False leaves Y alone, so the caller decides when the Z80 may go
     on. After a SYNC the Z80 waits for IDLE: that is the moment to do slow
@@ -345,7 +346,7 @@ def MQ_TO_IDLE(MQ, recovered=False, status=True):
             break
         MQ.get()
     if MQ.tx_fifo() < TX_DEPTH:
-        MQ.put(0x01)
+        MQ.put(first)
     if status:
         MQ_STATUS(MQ, "recovered" if recovered else "idle")
 
@@ -1100,6 +1101,87 @@ def LOG_ADD(msg, level, log_level):
     return
 
 
+# A header LOAD refused (LOAD_REFUSE): the status its retry reads first.
+_ld_err = 0             # the error status, 0 = none pending
+_ld_err_t = 0           # when it was refused (ticks_ms)
+_ld_err_staged = False  # it is the byte staged for the next first-status read
+
+
+def LOAD_REFUSE(pre, MQ, st):
+    """End a LOAD with an error instead of a block: status st (2 = Report R,
+    7 = "End of file" -- which the 2.1 ROM shows as R too, see below).
+    Returns 0, or TX_ROOM's 1 / 3 after a BREAK or a stall (then idle).
+
+    The status can't simply be written first. The ROM reads a LOAD's first
+    status with no wait, straight after the pre-header (EXROM 19C7), so it
+    gets the 0x01 staged before the command arrived; a byte written now is
+    read as the block's FLAG (19DD). A flag that doesn't match fails the
+    block, and then:
+
+      * a data block: the ROM says R. Done.
+      * a header: the LOAD's search just asks again (EXROM 04DD: CALL 00FC /
+        JR NC back), and so does every other failure inside the block --
+        a bad checksum, or a final status of 2 (1A0B goes to the FUNCTION
+        chain at 026F, not to the report dispatcher). The 2.1 ROM, 2026-10-04:
+        a damaged header was asked for every ~100 ms, for ever, until the
+        Pico's stall gave Report T. The one place a report gets out of a
+        header search is that first status: anything but 00/01 there is
+        `JP 1C3E`, RST 8 Report R, whatever the value.
+
+    So a header is refused in two steps: the flag that fails it, and then
+    the error staged as the first status of the request the ROM sends next.
+    Without SYNC that byte waits in TX behind the flag; with SYNC (2.x) the
+    dispatcher's SYNC flush would drop it, so it re-stages it from here
+    (FIRST_STATUS), and LOAD_TS, seeing the retry, just goes back to idle
+    (LOAD_RETRY_DONE). Either way no stray byte is left behind
+    (src/CLAUDE.md, the orphan-byte family)."""
+    global _ld_err, _ld_err_t, _ld_err_staged
+    echo = bytearray(3)
+    MQ.put(st)                                 # the flag: never 00h or FFh
+    MQ.put(st if pre[0] == 0x00 else 0x01)     # the next request's first status
+    MQX(MQ, "mov(y, invert(null))")            # READY: the flag is waiting
+    w = RX_WORD(MQ, 1000)                      # the ROM's flag echo, then it stops
+    why = 3 if w < 0 else 1 if w & PORT_0F else 0
+    if why:
+        MQ_TO_IDLE(MQ, recovered=(why != 1))
+        return why
+    if pre[0] == 0x00:
+        _ld_err, _ld_err_t, _ld_err_staged = st, time.ticks_ms(), True
+    MQX(MQ, "mov(y, invert(null))")            # READY (the echo dropped it)
+    return 0
+
+
+def FIRST_STATUS():
+    """The byte the dispatcher stages after a SYNC, for the next command's
+    first status read: 0x01, or the error of a header LOAD refused just now
+    (LOAD_REFUSE) -- the ROM's retry follows within milliseconds, so after
+    two seconds it is stale (a BREAK took the ROM elsewhere) and dropped."""
+    global _ld_err, _ld_err_staged
+    if _ld_err and time.ticks_diff(time.ticks_ms(), _ld_err_t) < 2000:
+        _ld_err_staged = True
+        return _ld_err
+    _ld_err = 0
+    _ld_err_staged = False
+    return 0x01
+
+
+def LOAD_RETRY_DONE(pre, MQ):
+    """True when this LOAD is the ROM's retry of a refused header, which has
+    read the staged error and stopped: wait for that read (bounded), then
+    back to idle with 0x01 staged. Any other command drops the error."""
+    global _ld_err, _ld_err_staged
+    staged = _ld_err_staged and pre[0] == 0x00
+    _ld_err = 0
+    _ld_err_staged = False
+    if not staged:
+        return False
+    t0 = time.ticks_ms()
+    while MQ.tx_fifo() and time.ticks_diff(time.ticks_ms(), t0) < 200:
+        pass
+    MQ_TO_IDLE(MQ)
+    return True
+
+
 def LOAD_TS(pre, MQ, TSP):
     """Send one TAP block to the Z80 via Gustavo's TPI v2.4 protocol.
 
@@ -1172,6 +1254,10 @@ def LOAD_TS(pre, MQ, TSP):
     global log_entries
     log_entries = ""
 
+    # ---- The ROM's retry of a header just refused: it has its Report R ----
+    if LOAD_RETRY_DONE(pre, MQ):
+        return MQ, TSP, log_entries
+
     # ---- LED on so user sees activity ----
     led = Pin(25, Pin.OUT)
     led.value(1)
@@ -1210,10 +1296,7 @@ def LOAD_TS(pre, MQ, TSP):
                     2, TSP.LOG_LEVEL)
             print("[LOAD_TS] ERROR: /assets/nofile.tap missing. "
                   "Copy assets/*.tap from repo to /assets/ via Thonny.")
-            wrt = MQ.put
-            wrt(0x02)        # tape error — Z80 will display "R Tape loading error"
-            wrt(0x01)        # next-iter pre-load (so subsequent commands work)
-            MQX(MQ, "mov(y, invert(null))")  # #14: Y → READY (PIO auto-busy)
+            LOAD_REFUSE(pre, MQ, 0x02)   # Report R, and the next command's pre-load
             return MQ, TSP, log_entries
         arch = _nofile_arch
         local_fname = "/assets/nofile.tap"
@@ -1264,10 +1347,8 @@ def LOAD_TS(pre, MQ, TSP):
         # never close the module-owned cached nofile handle.
         if arch is not _nofile_arch:
             arch.close()
-        wrt = MQ.put
-        wrt(0x07)        # status 7 -> Report 8 "End of file"
-        wrt(0x01)        # next-iter pre-load, so the next command works
-        MQX(MQ, "mov(y, invert(null))")          # Y -> READY
+        LOAD_REFUSE(pre, MQ, 0x07)               # status 7: Report 8 where the ROM maps it;
+                                                 # a 2.1 header search shows R
         return MQ, TSP, log_entries
 
     # ---- Read the TAP block prefix [len_lo, len_hi, type] ----
@@ -1286,29 +1367,31 @@ def LOAD_TS(pre, MQ, TSP):
         TSP.tap_idx = 0
         TSP.ld_wrapped = True
 
-    arch.seek(TSP.offset)
+    # ---- Find the next block of the type the Z80 wants ----
+    # Every block of another type is skipped (LOAD often passes data blocks
+    # looking for the header whose name matches, etc.). All of them, not
+    # just one: a block of the wrong type served to the Z80 fails at its
+    # flag byte, the Z80 stops reading, and the rest of the block waited in
+    # TX until the next command's SYNC -- which looked like a BREAK and
+    # rewound the search to where it began, so it never got past. A lap of
+    # the file with no block of that type at all is the end of the search.
     blk_info = bytearray(3)
-    arch.readinto(blk_info)
-    totbytes = blk_info[0] + 256 * blk_info[1]   # = block size including type+CRC
-
-    # ---- Validate that the file's block type matches what Z80 wants ----
-    # If not, advance to the next block in the TAP and try again. (LOAD
-    # often skips header blocks looking for the data block whose name
-    # matches the request, etc.)
-    if pre[0] != blk_info[2]:
-        LOG_ADD("WARNING: Wrong block type in LOAD_TS. Moving ahead 1 block.",
-                1, TSP.LOG_LEVEL)
-        TSP.offset += totbytes + 2
-        TSP.tap_idx += 1
-        if TSP.offset >= TSP.totlen:
+    skipped = 0
+    while True:
+        if TSP.offset >= arch_len:
+            TSP.offset = 0
             TSP.tap_idx = 0
-            TSP.offset  = 0
             TSP.ld_wrapped = True          # one lap of the tape completed
-            LOG_ADD("WARNING: EOF reached searching in LOAD_TS; rewinding.",
-                    1, TSP.LOG_LEVEL)
         arch.seek(TSP.offset)
         arch.readinto(blk_info)
-        totbytes = blk_info[0] + 256 * blk_info[1]
+        totbytes = blk_info[0] + 256 * blk_info[1]   # = block size including type+CRC
+        if totbytes < 2 or TSP.offset + 2 + totbytes > arch_len or pre[0] == blk_info[2]:
+            break
+        if skipped >= arch_len:
+            break                          # every block looked at: none of this type
+        skipped += totbytes + 2
+        TSP.offset += totbytes + 2
+        TSP.tap_idx += 1
         # BLINK() used to be called here. It sleeps ~1 second, INSIDE a live
         # transaction, while the Z80 sits in WF_NPH. The protocol tolerates
         # it (the ready wait allows 19.9s) so it never broke anything, but
@@ -1318,19 +1401,33 @@ def LOAD_TS(pre, MQ, TSP):
         # protocol step; BLINK's real job is the watchdog's "something went
         # wrong" signal. The LED is already driven by the dispatcher.
 
-    # ---- A block that can't be one: Report R, not a crash ----
-    # Shorter than type + CRC, or running past the end of the file: a
-    # damaged TAP, or not a TAP at all.
+    # ---- A block the Z80 can't load: Report R, and move past it ----
+    # Shorter than type + CRC or running past the end of the file (a damaged
+    # TAP, or not a TAP at all); not the length the Z80 asked for (pre[7:9]:
+    # the 17 of a header, a header's data length) -- it reads exactly that
+    # many bytes and then a checksum, so it would stop part way or read past
+    # the end; or a bad XOR checksum (checked below, once the block is read).
+    # Each used to reach the Z80, which for a header just asked again. Now
+    # it gets Report R (LOAD_REFUSE), and the tape moves past the block, as a
+    # real tape would have played through it: the next LOAD goes on from
+    # there. (Archive tapes, ZEsarUX, 2026-10-04: these ended in Report T.)
+    req = pre[7] | (pre[8] << 8)
+    bad = None
     if totbytes < 2 or TSP.offset + 2 + totbytes > arch_len:
-        LOG_ADD("ERROR: LOAD_TS: no TAP block at offset %d (length %d, file %d)"
-                % (TSP.offset, totbytes, arch_len), 2, TSP.LOG_LEVEL)
+        bad = "no TAP block at offset %d (length %d, file %d)" % (
+            TSP.offset, totbytes, arch_len)
+    elif pre[0] != blk_info[2]:
         if arch is not _nofile_arch:
             arch.close()
-        wrt = MQ.put
-        wrt(0x02)        # status 2 -> Report R "Tape loading error"
-        wrt(0x01)        # next-iter pre-load, so the next command works
-        MQX(MQ, "mov(y, invert(null))")          # Y -> READY
+        TSP.ld_start = -1
+        TSP.ld_wrapped = False
+        LOG_ADD("ERROR: LOAD found no block of type %02Xh in the TAP." % pre[0],
+                2, TSP.LOG_LEVEL)
+        LOAD_REFUSE(pre, MQ, 0x07 if pre[0] == 0x00 else 0x02)
         return MQ, TSP, log_entries
+    elif totbytes != req + 2:
+        bad = "block %d at offset %d is %d bytes; the LOAD asked for %d" % (
+            TSP.tap_idx, TSP.offset, totbytes - 2, req)
 
     # ---- Header block: read it whole, then serve it exactly as on the tape ----
     # (A header is ~20 bytes, so it is buffered and streamed from memory
@@ -1367,7 +1464,9 @@ def LOAD_TS(pre, MQ, TSP):
     # failed the LOAD (hardware, 2026-10-03). v1.29 has ~180 KB free; a block
     # the heap can't hold still streams from the file, a chunk at a time.
     hdr = None                                       # the block, in RAM
-    if blk_info[2] == 0x00:                          # header block
+    if bad is not None:
+        pass
+    elif blk_info[2] == 0x00:                        # header block
         hdr = bytearray(totbytes - 1)
         arch.readinto(hdr)
     else:
@@ -1378,6 +1477,39 @@ def LOAD_TS(pre, MQ, TSP):
         except MemoryError:
             hdr = None
             arch.seek(TSP.offset + 3)                # back to the content for the file path
+
+    # ---- The block's own checksum, before the Z80 sees any of it ----
+    # The XOR of flag, content and checksum byte is 0 in a good block. A
+    # data block too big for the heap is checked a chunk at a time and the
+    # file put back where it streams from.
+    if bad is None:
+        x = blk_info[2]
+        if hdr is not None:
+            for b in hdr:
+                x ^= b
+        else:
+            left = totbytes - 1
+            while left:
+                got = arch.readinto(_LOAD_BUF if left >= LOAD_CHUNK else _LOAD_MV[:left])
+                if not got:
+                    break
+                left -= got
+                for i in range(got):
+                    x ^= _LOAD_BUF[i]
+            arch.seek(TSP.offset + 3)
+        if x:
+            bad = "block %d at offset %d has a bad checksum" % (TSP.tap_idx, TSP.offset)
+
+    if bad is not None:
+        LOG_ADD("ERROR: LOAD: %s -- Report R." % bad, 2, TSP.LOG_LEVEL)
+        if arch is not _nofile_arch:
+            arch.close()
+        TSP.offset = min(TSP.offset + 2 + totbytes, arch_len)   # past it; at the end, the next LOAD wraps
+        TSP.tap_idx += 1
+        TSP.ld_start = -1                            # the search is over
+        TSP.ld_wrapped = False
+        LOAD_REFUSE(pre, MQ, 0x02)                   # status 2 -> Report R "Tape loading error"
+        return MQ, TSP, log_entries
 
     # ---- Collect garbage NOW, while the Z80 waits for READY ----
     # Issue #51: once READY is up the Z80 reads a byte every 50 us with no

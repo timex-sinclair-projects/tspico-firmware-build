@@ -17,6 +17,13 @@ What it pins:
   * the Z80 going silent mid-block: RECOVERED (FB) after the stall, no hang;
   * no watchdog: LOAD_TS starts no thread;
   * a v1.7 LOAD, which never writes 0Fh, behaves exactly as before;
+  * a damaged or impossible block (bad checksum, wrong length, zero length,
+    past the end of the file) is Report R and leaves the protocol idle with
+    one pre-load: a data block at once; a header, which the ROM's search
+    retries after any failure, via the error staged for that retry -- with
+    and without SYNC -- and the tape moves past the block;
+  * a search skips every block of the wrong type in one request, and one
+    that never matches ends in R after a lap;
   * a BASIC header reaches the Z80 byte for byte as it is on the tape --
     "no autorun" (line >= 32768) included. The ROM itself skips the autorun
     for those (EXROM 06C3: AND 0C0h), so LOAD_TS no longer rewrites them;
@@ -214,10 +221,17 @@ def ready_wait():
 def z80_load(flag, length, break_at=None, stop_at=None, on_byte=None, seen=None):
     """The EXROM after the dispatcher has taken the pre-header: 19C7 status
     read (no wait), 19D4 ready-wait, 1924 echo, the data loop with the 1.8b
-    BREAK check every 256 bytes, CRC, 1A02 echo, 1A05 ready-wait, status."""
+    BREAK check every 256 bytes, CRC, 1A02 echo, 1A05 ready-wait, status.
+
+    A block that fails -- its flag (1A20), its checksum (19FE -> 0815, which
+    still echoes the checksum it computed) -- is Report R for a data block,
+    but a header LOAD's search just asks again (04DD: CALL 00FC / JR NC):
+    "retry". At 19C7 anything but 00/01 is Report R (1A35 -> 1C3E) and 00 is
+    J (1C20), whatever the request."""
     st = yield ("in",)
     if st != 0x01:
-        return "st%02X" % st
+        return "R" if st else "J"
+    fail = "retry" if flag == 0x00 else "R"
     if break_at == 0:                               # BREAK in the ready-wait
         yield out(0x0F, 0x03)
         yield ("wait", READY | IDLE, 3000)
@@ -228,7 +242,7 @@ def z80_load(flag, length, break_at=None, stop_at=None, on_byte=None, seen=None)
     yield out(0x0E, flag)
     got = yield ("in",)
     if got != flag:
-        return "R"
+        return fail
     parity = flag
     for i in range(length):
         if stop_at is not None and i == stop_at:
@@ -245,7 +259,8 @@ def z80_load(flag, length, break_at=None, stop_at=None, on_byte=None, seen=None)
         parity ^= b
     crc = yield ("in",)
     if crc != parity:
-        return "R"
+        yield out(0x0E, parity)
+        return fail
     yield out(0x0E, crc)
     r = yield from ready_wait()
     if r:
@@ -299,10 +314,13 @@ def main():
     tsp = types.SimpleNamespace(f_name="test.tap", totlen=len(tap), offset=0, tap_idx=0,
                                 LOG_LEVEL=0, ld_start=-1, ld_wrapped=False)
 
-    def load(pio, flag, length, serve=False, **kw):
+    def load(pio, flag, length, serve=False, sync=True, **kw):
         """The dispatcher's side: pre-load staged, READY after the pre-header,
-        then LOAD_TS; the Z80 script runs alongside."""
-        pio.tx = [0x01]
+        then LOAD_TS; the Z80 script runs alongside. sync: the 2.x ROM's
+        SYNC flushed TX and staged FIRST_STATUS(); without it (older ROMs)
+        whatever the last command left in TX is what the Z80 reads first."""
+        if sync:
+            pio.tx = [io.FIRST_STATUS()]
         pio.y = 0          # BUSY: the pre-header OUTs dropped it, and the
         pio.rx = []        # dispatcher no longer says READY for a LOAD
         pio.tx_at_ready = []
@@ -310,7 +328,7 @@ def main():
         io.dead = True
         io.busy = False
         pio.run(z80_load(flag, length, **kw))
-        pre = bytearray([flag, 1, 0xFF, 0x34, 0x12, 0, 0x80, 0, 0, 0])
+        pre = bytearray([flag, 1, 0xFF, 0x34, 0x12, 0, 0x80, length & 0xFF, length >> 8, 0])
         (io.LOAD_SERVE if serve else io.LOAD_TS)(pre, pio, tsp)
         pio.finish()
         return pio.result, io.log_entries
@@ -488,22 +506,110 @@ def main():
         r, _ = load(pio, 0x00, len(header))
         check(r == "ok" and tsp.tap_idx == 1 and idle(pio),
               "a LOAD that starts at the end of the tape rewinds and loads the header (%s)" % r)
-        for name, junk in (("a zero length", b"\x00\x00\x00" + bytes(40)),
-                           ("a length past the end of the file", b"\xff\x7f\x00" + bytes(40))):
-            bad = tempfile.NamedTemporaryFile(suffix=".tap", delete=False)
-            bad.write(junk)
-            bad.close()
-            paths["/TMP/temp.tap"] = bad.name
+        tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
+
+        print("damaged and impossible blocks: Report R, then a clean protocol (archive tapes, 2026-10-04)")
+
+        def mount(blob):
+            f = tempfile.NamedTemporaryFile(suffix=".tap", delete=False)
+            f.write(blob)
+            f.close()
+            paths["/TMP/temp.tap"] = f.name
+            tsp.totlen = len(blob)
             tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
-            r, log = load(pio, 0x00, 17)
-            # As on the no-match path: the Z80 reads the pre-load, echoes the
-            # flag and gets the error byte back (Report R); its echo leaves Y
-            # busy until the next command's SYNC, which the dispatcher resyncs.
-            check(r == "R" and pio.tx == [0x01] and "no TAP block" in log,
-                  "%s: Report R and the next command's pre-load -- not a MemoryError (%s %s)"
-                  % (name, r, pio.tx))
-            paths["/TMP/temp.tap"] = tmp.name
-            os.unlink(bad.name)
+            return f.name
+
+        def until_report(pio, flag, length, again=("retry",), **kw):
+            """One LOAD statement: the ROM asks again while a header search
+            fails (04DD) -- or, with again=("retry", "ok"), while the name
+            doesn't match. Returns the outcomes and every call's log."""
+            seq, logs = [], ""
+            for _ in range(12):
+                r, log = load(pio, flag, length, **kw)
+                seq.append(r)
+                logs += log
+                if r not in again:
+                    break
+            return seq, logs
+
+        def bad_crc(blk):
+            return blk[:-1] + bytes([blk[-1] ^ 0x5A])
+
+        prog = bytes([0]) + b"prog      " + bytes([4, 0, 0, 0x80, 4, 0])
+        good = tap_block(0x00, prog) + tap_block(0xFF, b"\x01\x02\x03\x04")
+        made = []
+        for name, blob, flag, length in (
+                ("one header-flag block, 7625 bytes, bad checksum",
+                 bad_crc(tap_block(0x00, bytes(range(256)) * 29 + bytes(201))), 0x00, 17),
+                ("the file starts 00 00 (a zero-length block)", b"\x00\x00" + good, 0x00, 17),
+                ("a 17-byte header with a bad checksum", bad_crc(tap_block(0x00, prog)) + good, 0x00, 17),
+                ("a 6-byte header-flag block (the length isn't 17)",
+                 bad_crc(tap_block(0x00, b"\x01\x02\x03\x04")) + good, 0x00, 17),
+                ("a length past the end of the file", b"\xff\x7f\x00" + bytes(40), 0x00, 17)):
+            made.append(mount(blob))
+            seq, log = until_report(pio, flag, length)
+            check(seq == ["retry", "R"] and idle(pio) and "Report R" in log,
+                  "%s: the ROM fails it, asks again, reads R first; then idle, TX = [01] (%s %s)"
+                  % (name, seq, pio.tx))
+        # The tape moved past the damaged block, as a real one would have:
+        # after the zero-length block, the next LOAD "" loads the program.
+        mount(b"\x00\x00" + good)
+        until_report(pio, 0x00, 17)
+        r0, _ = load(pio, 0x00, 17)
+        r1, _ = load(pio, 0xFF, 4)
+        check(r0 == r1 == "ok" and idle(pio),
+              "after the R, the next LOAD \"\" goes on past the bad block and loads (%s, %s)" % (r0, r1))
+
+        print("  without SYNC (ROMs before 1.8b): the error waits in TX for the retry")
+        mount(bad_crc(tap_block(0x00, prog)) + good)
+        seq, _ = until_report(pio, 0x00, 17, sync=False)
+        check(seq == ["retry", "R"] and idle(pio), "retry, then R, idle (%s %s)" % (seq, pio.tx))
+        r0, _ = load(pio, 0x00, 17, sync=False)
+        r1, _ = load(pio, 0xFF, 4, sync=False)
+        check(r0 == r1 == "ok" and idle(pio), "  and the next LOAD loads, nothing stray in TX (%s, %s)" % (r0, r1))
+
+        print("  a damaged data block: R at once, nothing left behind")
+        for name, blob in (("bad checksum", tap_block(0x00, prog) + bad_crc(tap_block(0xFF, b"\x01\x02\x03\x04"))),
+                           ("longer than its header says", tap_block(0x00, prog) + tap_block(0xFF, bytes(10))),
+                           ("shorter than its header says", tap_block(0x00, prog) + tap_block(0xFF, b"\x01"))):
+            mount(blob)
+            r0, _ = load(pio, 0x00, 17)
+            r1, log = load(pio, 0xFF, 4)
+            check(r0 == "ok" and r1 == "R" and idle(pio) and "Report R" in log,
+                  "%s: header loads, the data block is Report R, idle (%s, %s %s)" % (name, r0, r1, pio.tx))
+            r2, _ = load(pio, 0x00, 17)
+            check(r2 == "ok", "  and the next LOAD \"\" is served normally (%s)" % r2)
+
+        print("  the staged error is one-shot")
+        mount(bad_crc(tap_block(0x00, prog)) + good)
+        r, _ = load(pio, 0x00, 17)
+        io.time.ms += 3000                      # no retry came (BREAK): it's stale
+        r2, _ = load(pio, 0x00, 17)
+        check(r == "retry" and r2 == "ok" and idle(pio),
+              "seconds later the next LOAD gets 01, not the old R (%s, %s)" % (r, r2))
+
+        print("  a search skips every block of the wrong type, not just one")
+        made.append(mount(good + tap_block(0xFF, b"xx") + tap_block(0xFF, b"yy") + tap_block(0xFF, b"zz") + good))
+        tsp.offset = len(good)                  # at the first stray data block
+        seen = []
+        r, _ = load(pio, 0x00, 17, seen=seen)
+        check(r == "ok" and bytes(seen) == prog and tsp.offset == len(good) + 3 * 6 + 21,
+              "three data blocks passed in one request, the header served (%s, offset %d)" % (r, tsp.offset))
+
+        print("  a search that never matches ends in R (the 2.1 ROM can't show 8 there)")
+        mount(good)
+        seq, log = until_report(pio, 0x00, 17, again=("retry", "ok"))   # LOAD "nosuch"
+        check(seq[-1] == "R" and len(seq) <= 4 and idle(pio) and "no matching block" in log,
+              "after one lap: R, idle (%s)" % seq)
+        tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
+
+        print("  no block of the requested type in the whole file")
+        mount(tap_block(0x00, prog))
+        r, log = load(pio, 0xFF, 4)
+        check(r == "R" and idle(pio) and "no block of type FFh" in log, "data request: R, idle (%s)" % r)
+        paths["/TMP/temp.tap"], tsp.totlen = tmp.name, len(tap)
+        for f in made:
+            os.unlink(f)
         tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
 
         print("by DMA (rp2.DMA, MicroPython v1.22+): the same LOADs")

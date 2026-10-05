@@ -359,6 +359,7 @@ from TS.tspico_io import (
     SAVE_TS, SAVE_ZX,
     OPEN_NOFILE_TAP,                     # added: cached nofile handle
     RX_CAPTURE, MQ_TO_IDLE, MQ_STATUS,   # issue #51: SYNC / BREAK abort
+    FIRST_STATUS,                        # a refused header LOAD's Report R
     RX_DMA,                              # the pre-header by DMA (v1.29)
     STREAM_DMA,                          # blind sends by DMA (v1.29)
     TX_ROOM, RX_WORD, PORT_0F, TX_DEPTH, # issue #51 stage 4: command I/O
@@ -6450,8 +6451,10 @@ def TS2068_IO():                                                         # Main 
                         # finished, or a SYNC right behind a half-sent pre-header
                         # (2068 reset). Reset, do any slow work NOW, then IDLE and
                         # straight back to the capture -- nothing slow after IDLE,
-                        # the pre-header follows within microseconds.
-                        MQ_TO_IDLE(MQ, status=False)
+                        # the pre-header follows within microseconds. The byte
+                        # staged is 0x01, or Report R for the ROM's retry of a
+                        # header LOAD just refused (LOAD_REFUSE in tspico_io).
+                        MQ_TO_IDLE(MQ, status=False, first=FIRST_STATUS())
                         if got != -1:               # a lone SYNC is every command: not logged
                             TLM("Pre-header: 0Fh write", "%s" % " ".join(
                                 "%03X" % pre_raw[i] for i in range(-got)))
