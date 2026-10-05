@@ -129,7 +129,7 @@ regenerate it when a line number moves (the test checks that it is current).
 | `SEND_MSG2` | function | [2229](../../../src/TS/tspico.py#L2229) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
 | `WALK` | function | [2471](../../../src/TS/tspico.py#L2471) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `GET_DIRS` | function | [2487](../../../src/TS/tspico.py#L2487) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `DIR` | function | [2505](../../../src/TS/tspico.py#L2505) | *(no entry)* |
+| `DIR` | function | [2505](../../../src/TS/tspico.py#L2505) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `CATALOG` | function | [2581](../../../src/TS/tspico.py#L2581) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
 | `CATALOG_TEXT` | function | [2607](../../../src/TS/tspico.py#L2607) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
 | `SD_CALL` | function | [2669](../../../src/TS/tspico.py#L2669) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
@@ -174,59 +174,59 @@ regenerate it when a line number moves (the test checks that it is current).
 | `CH_WRITE` | function | [3318](../../../src/TS/tspico.py#L3318) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
 | `CH_READ` | function | [3331](../../../src/TS/tspico.py#L3331) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
 | `CH_CLOSE` | function | [3373](../../../src/TS/tspico.py#L3373) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
-| `IDIR` | function | [3414](../../../src/TS/tspico.py#L3414) | *(no entry)* |
+| `IDIR` | function | [3414](../../../src/TS/tspico.py#L3414) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `ListMenu` | function | [3447](../../../src/TS/tspico.py#L3447) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
-| `PATH` | function | [3643](../../../src/TS/tspico.py#L3643) | *(no entry)* |
+| `PATH` | function | [3643](../../../src/TS/tspico.py#L3643) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `isTapMounted` | function | [3668](../../../src/TS/tspico.py#L3668) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `TAPDIR` | function | [3675](../../../src/TS/tspico.py#L3675) | *(no entry)* |
-| `NEW_TAP` | function | [3759](../../../src/TS/tspico.py#L3759) | *(no entry)* |
-| `SA_NOT_IMP` | function | [3827](../../../src/TS/tspico.py#L3827) | *(no entry)* |
+| `TAPDIR` | function | [3675](../../../src/TS/tspico.py#L3675) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `NEW_TAP` | function | [3759](../../../src/TS/tspico.py#L3759) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `SA_NOT_IMP` | function | [3827](../../../src/TS/tspico.py#L3827) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `dir_exists` | function | [3834](../../../src/TS/tspico.py#L3834) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `file_exists` | function | [3841](../../../src/TS/tspico.py#L3841) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `xchr` | function | [3848](../../../src/TS/tspico.py#L3848) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
 | `xstr` | function | [3856](../../../src/TS/tspico.py#L3856) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
 | `public_path` | function | [3862](../../../src/TS/tspico.py#L3862) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `public_fname` | function | [3877](../../../src/TS/tspico.py#L3877) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `APPEND` | function | [3895](../../../src/TS/tspico.py#L3895) | *(no entry)* |
-| `BLKRCV` | function | [3960](../../../src/TS/tspico.py#L3960) | *(no entry)* |
+| `APPEND` | function | [3895](../../../src/TS/tspico.py#L3895) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `BLKRCV` | function | [3960](../../../src/TS/tspico.py#L3960) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `ChangeDir` | function | [4115](../../../src/TS/tspico.py#L4115) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `CDIR` | function | [4205](../../../src/TS/tspico.py#L4205) | *(no entry)* |
-| `FWD` | function | [4265](../../../src/TS/tspico.py#L4265) | *(no entry)* |
+| `CDIR` | function | [4205](../../../src/TS/tspico.py#L4205) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `FWD` | function | [4265](../../../src/TS/tspico.py#L4265) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `getArgs` | function | [4344](../../../src/TS/tspico.py#L4344) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `GETHELP` | function | [4354](../../../src/TS/tspico.py#L4354) | *(no entry)* |
+| `GETHELP` | function | [4354](../../../src/TS/tspico.py#L4354) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `BUILD_FIT` | function | [4507](../../../src/TS/tspico.py#L4507) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
-| `GETINFO` | function | [4521](../../../src/TS/tspico.py#L4521) | *(no entry)* |
-| `GETLOG` | function | [4609](../../../src/TS/tspico.py#L4609) | *(no entry)* |
+| `GETINFO` | function | [4521](../../../src/TS/tspico.py#L4521) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `GETLOG` | function | [4609](../../../src/TS/tspico.py#L4609) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `LOAD_CONFIG` | function | [4719](../../../src/TS/tspico.py#L4719) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
-| `LOGLEVEL` | function | [4798](../../../src/TS/tspico.py#L4798) | *(no entry)* |
-| `MDIR` | function | [4857](../../../src/TS/tspico.py#L4857) | *(no entry)* |
-| `MEMBOOT` | function | [4922](../../../src/TS/tspico.py#L4922) | *(no entry)* |
+| `LOGLEVEL` | function | [4798](../../../src/TS/tspico.py#L4798) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `MDIR` | function | [4857](../../../src/TS/tspico.py#L4857) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `MEMBOOT` | function | [4922](../../../src/TS/tspico.py#L4922) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `getBoot` | function | [4979](../../../src/TS/tspico.py#L4979) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `getDock` | function | [4990](../../../src/TS/tspico.py#L4990) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `BOOT_SLOT_CLASH` | function | [5001](../../../src/TS/tspico.py#L5001) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `MEMDOCK` | function | [5024](../../../src/TS/tspico.py#L5024) | *(no entry)* |
+| `MEMDOCK` | function | [5024](../../../src/TS/tspico.py#L5024) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `REMOVE_DIR` | function | [5098](../../../src/TS/tspico.py#L5098) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `REW` | function | [5115](../../../src/TS/tspico.py#L5115) | *(no entry)* |
+| `REW` | function | [5115](../../../src/TS/tspico.py#L5115) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `ResolveIndexName` | function | [5194](../../../src/TS/tspico.py#L5194) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `LOAD_TPI` | function | [5217](../../../src/TS/tspico.py#L5217) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `SEND_MSG_PROMPT_YN` | function | [5262](../../../src/TS/tspico.py#L5262) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
-| `BAD_CODE` | function | [5333](../../../src/TS/tspico.py#L5333) | *(no entry)* |
-| `BAD_ARG` | function | [5338](../../../src/TS/tspico.py#L5338) | *(no entry)* |
-| `RM` | function | [5343](../../../src/TS/tspico.py#L5343) | *(no entry)* |
-| `RM_CHECK` | function | [5389](../../../src/TS/tspico.py#L5389) | *(no entry)* |
-| `UNMOUNT` | function | [5407](../../../src/TS/tspico.py#L5407) | *(no entry)* |
+| `BAD_CODE` | function | [5333](../../../src/TS/tspico.py#L5333) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `BAD_ARG` | function | [5338](../../../src/TS/tspico.py#L5338) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `RM` | function | [5343](../../../src/TS/tspico.py#L5343) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `RM_CHECK` | function | [5389](../../../src/TS/tspico.py#L5389) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `UNMOUNT` | function | [5407](../../../src/TS/tspico.py#L5407) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `FORGET_MOUNT` | function | [5416](../../../src/TS/tspico.py#L5416) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
-| `VERB_TOGGLE` | function | [5435](../../../src/TS/tspico.py#L5435) | *(no entry)* |
-| `ZX48` | function | [5489](../../../src/TS/tspico.py#L5489) | *(no entry)* |
-| `NOP` | function | [5543](../../../src/TS/tspico.py#L5543) | *(no entry)* |
+| `VERB_TOGGLE` | function | [5435](../../../src/TS/tspico.py#L5435) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `ZX48` | function | [5489](../../../src/TS/tspico.py#L5489) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `NOP` | function | [5543](../../../src/TS/tspico.py#L5543) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `PRINT_FLUSH` | function | [5568](../../../src/TS/tspico.py#L5568) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `COPY_BMP` | function | [5600](../../../src/TS/tspico.py#L5600) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `PRINT_IO` | function | [5621](../../../src/TS/tspico.py#L5621) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
-| `PRN_OPEN` | function | [5666](../../../src/TS/tspico.py#L5666) | *(no entry)* |
-| `PRN_CLOSE` | function | [5687](../../../src/TS/tspico.py#L5687) | *(no entry)* |
-| `PRN_FLAG` | function | [5698](../../../src/TS/tspico.py#L5698) | *(no entry)* |
-| `PRN_SIZE` | function | [5711](../../../src/TS/tspico.py#L5711) | *(no entry)* |
-| `PRN_BMP` | function | [5729](../../../src/TS/tspico.py#L5729) | *(no entry)* |
+| `PRN_OPEN` | function | [5666](../../../src/TS/tspico.py#L5666) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `PRN_CLOSE` | function | [5687](../../../src/TS/tspico.py#L5687) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `PRN_FLAG` | function | [5698](../../../src/TS/tspico.py#L5698) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `PRN_SIZE` | function | [5711](../../../src/TS/tspico.py#L5711) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `PRN_BMP` | function | [5729](../../../src/TS/tspico.py#L5729) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 | `FAIL_CMD` | function | [5744](../../../src/TS/tspico.py#L5744) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `PROCESS_CMD` | function | [5796](../../../src/TS/tspico.py#L5796) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `TS2068_IO` | function | [6088](../../../src/TS/tspico.py#L6088) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
@@ -525,54 +525,54 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `tpi:append` | command | [6171](../../../src/TS/tspico.py#L6171) | *(no entry)* |
-| `tpi:blkrcv` | command | [6172](../../../src/TS/tspico.py#L6172) | *(no entry)* |
-| `tpi:cd` | command | [6173](../../../src/TS/tspico.py#L6173) | *(no entry)* |
-| `tpi:close` | command | [6174](../../../src/TS/tspico.py#L6174) | *(no entry)* |
-| `tpi:dir` | command | [6175](../../../src/TS/tspico.py#L6175) | *(no entry)* |
-| `tpi:copy` | command | [6176](../../../src/TS/tspico.py#L6176) | *(no entry)* |
-| `tpi:erase` | command | [6177](../../../src/TS/tspico.py#L6177) | *(no entry)* |
-| `tpi:format` | command | [6178](../../../src/TS/tspico.py#L6178) | *(no entry)* |
-| `tpi:ren` | command | [6179](../../../src/TS/tspico.py#L6179) | *(no entry)* |
-| `tpi:fopen` | command | [6180](../../../src/TS/tspico.py#L6180) | *(no entry)* |
-| `tpi:chopen` | command | [6181](../../../src/TS/tspico.py#L6181) | *(no entry)* |
-| `tpi:chwr` | command | [6182](../../../src/TS/tspico.py#L6182) | *(no entry)* |
-| `tpi:chrd` | command | [6183](../../../src/TS/tspico.py#L6183) | *(no entry)* |
-| `tpi:chclose` | command | [6184](../../../src/TS/tspico.py#L6184) | *(no entry)* |
-| `tpi:ffw` | command | [6185](../../../src/TS/tspico.py#L6185) | *(no entry)* |
-| `tpi:help` | command | [6186](../../../src/TS/tspico.py#L6186) | *(no entry)* |
-| `tpi:idir` | command | [6187](../../../src/TS/tspico.py#L6187) | *(no entry)* |
-| `tpi:info` | command | [6188](../../../src/TS/tspico.py#L6188) | *(no entry)* |
-| `tpi:log` | command | [6189](../../../src/TS/tspico.py#L6189) | *(no entry)* |
-| `tpi:loglevel` | command | [6190](../../../src/TS/tspico.py#L6190) | *(no entry)* |
-| `tpi:md` | command | [6191](../../../src/TS/tspico.py#L6191) | *(no entry)* |
-| `tpi:boot` | command | [6192](../../../src/TS/tspico.py#L6192) | *(no entry)* |
-| `tpi:memboot` | command | [6193](../../../src/TS/tspico.py#L6193) | *(no entry)* |
-| `tpi:dock` | command | [6194](../../../src/TS/tspico.py#L6194) | *(no entry)* |
-| `tpi:memdock` | command | [6195](../../../src/TS/tspico.py#L6195) | *(no entry)* |
-| `tpi:nop` | command | [6196](../../../src/TS/tspico.py#L6196) | *(no entry)* |
-| `tpi:path` | command | [6197](../../../src/TS/tspico.py#L6197) | *(no entry)* |
-| `tpi:rew` | command | [6198](../../../src/TS/tspico.py#L6198) | *(no entry)* |
-| `tpi:rm` | command | [6199](../../../src/TS/tspico.py#L6199) | *(no entry)* |
-| `tpi:newtap` | command | [6200](../../../src/TS/tspico.py#L6200) | *(no entry)* |
-| `tpi:tapdir` | command | [6201](../../../src/TS/tspico.py#L6201) | *(no entry)* |
-| `tpi:verbose` | command | [6202](../../../src/TS/tspico.py#L6202) | *(no entry)* |
-| `tpi:zx48` | command | [6203](../../../src/TS/tspico.py#L6203) | *(no entry)* |
-| `tpi:autolf` | command | [6204](../../../src/TS/tspico.py#L6204) | *(no entry)* |
-| `tpi:autopg` | command | [6205](../../../src/TS/tspico.py#L6205) | *(no entry)* |
-| `tpi:bmp` | command | [6206](../../../src/TS/tspico.py#L6206) | *(no entry)* |
-| `tpi:clprint` | command | [6207](../../../src/TS/tspico.py#L6207) | *(no entry)* |
-| `tpi:config` | command | [6208](../../../src/TS/tspico.py#L6208) | *(no entry)* |
-| `tpi:delete` | command | [6209](../../../src/TS/tspico.py#L6209) | *(no entry)* |
-| `tpi:freset` | command | [6210](../../../src/TS/tspico.py#L6210) | *(no entry)* |
-| `tpi:getconfig` | command | [6211](../../../src/TS/tspico.py#L6211) | *(no entry)* |
-| `tpi:list` | command | [6212](../../../src/TS/tspico.py#L6212) | *(no entry)* |
-| `tpi:meminfo` | command | [6213](../../../src/TS/tspico.py#L6213) | *(no entry)* |
-| `tpi:noautolf` | command | [6214](../../../src/TS/tspico.py#L6214) | *(no entry)* |
-| `tpi:noautopg` | command | [6215](../../../src/TS/tspico.py#L6215) | *(no entry)* |
-| `tpi:opprint` | command | [6216](../../../src/TS/tspico.py#L6216) | *(no entry)* |
-| `tpi:prnsz` | command | [6217](../../../src/TS/tspico.py#L6217) | *(no entry)* |
-| `tpi:stop` | command | [6218](../../../src/TS/tspico.py#L6218) | *(no entry)* |
+| `tpi:append` | command | [6171](../../../src/TS/tspico.py#L6171) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:blkrcv` | command | [6172](../../../src/TS/tspico.py#L6172) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:cd` | command | [6173](../../../src/TS/tspico.py#L6173) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:close` | command | [6174](../../../src/TS/tspico.py#L6174) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:dir` | command | [6175](../../../src/TS/tspico.py#L6175) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:copy` | command | [6176](../../../src/TS/tspico.py#L6176) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:erase` | command | [6177](../../../src/TS/tspico.py#L6177) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:format` | command | [6178](../../../src/TS/tspico.py#L6178) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:ren` | command | [6179](../../../src/TS/tspico.py#L6179) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:fopen` | command | [6180](../../../src/TS/tspico.py#L6180) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:chopen` | command | [6181](../../../src/TS/tspico.py#L6181) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:chwr` | command | [6182](../../../src/TS/tspico.py#L6182) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:chrd` | command | [6183](../../../src/TS/tspico.py#L6183) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:chclose` | command | [6184](../../../src/TS/tspico.py#L6184) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:ffw` | command | [6185](../../../src/TS/tspico.py#L6185) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:help` | command | [6186](../../../src/TS/tspico.py#L6186) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:idir` | command | [6187](../../../src/TS/tspico.py#L6187) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:info` | command | [6188](../../../src/TS/tspico.py#L6188) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:log` | command | [6189](../../../src/TS/tspico.py#L6189) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:loglevel` | command | [6190](../../../src/TS/tspico.py#L6190) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:md` | command | [6191](../../../src/TS/tspico.py#L6191) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:boot` | command | [6192](../../../src/TS/tspico.py#L6192) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:memboot` | command | [6193](../../../src/TS/tspico.py#L6193) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:dock` | command | [6194](../../../src/TS/tspico.py#L6194) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:memdock` | command | [6195](../../../src/TS/tspico.py#L6195) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:nop` | command | [6196](../../../src/TS/tspico.py#L6196) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:path` | command | [6197](../../../src/TS/tspico.py#L6197) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:rew` | command | [6198](../../../src/TS/tspico.py#L6198) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:rm` | command | [6199](../../../src/TS/tspico.py#L6199) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:newtap` | command | [6200](../../../src/TS/tspico.py#L6200) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:tapdir` | command | [6201](../../../src/TS/tspico.py#L6201) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:verbose` | command | [6202](../../../src/TS/tspico.py#L6202) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:zx48` | command | [6203](../../../src/TS/tspico.py#L6203) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:autolf` | command | [6204](../../../src/TS/tspico.py#L6204) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:autopg` | command | [6205](../../../src/TS/tspico.py#L6205) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:bmp` | command | [6206](../../../src/TS/tspico.py#L6206) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:clprint` | command | [6207](../../../src/TS/tspico.py#L6207) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:config` | command | [6208](../../../src/TS/tspico.py#L6208) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:delete` | command | [6209](../../../src/TS/tspico.py#L6209) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:freset` | command | [6210](../../../src/TS/tspico.py#L6210) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:getconfig` | command | [6211](../../../src/TS/tspico.py#L6211) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:list` | command | [6212](../../../src/TS/tspico.py#L6212) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:meminfo` | command | [6213](../../../src/TS/tspico.py#L6213) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:noautolf` | command | [6214](../../../src/TS/tspico.py#L6214) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:noautopg` | command | [6215](../../../src/TS/tspico.py#L6215) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:opprint` | command | [6216](../../../src/TS/tspico.py#L6216) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:prnsz` | command | [6217](../../../src/TS/tspico.py#L6217) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
+| `tpi:stop` | command | [6218](../../../src/TS/tspico.py#L6218) | [firmware/tspico-commands.md](../firmware/tspico-commands.md) |
 
 ## `src/TS/extcmd.py`
 
