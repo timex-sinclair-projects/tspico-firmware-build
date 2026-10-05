@@ -11,515 +11,515 @@ regenerate it when a line number moves (the test checks that it is current).
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
 | `_telemetry` | function | [27](../../../src/main.py#L27) | *(no entry)* |
-| `U6_EN` | variable | [64](../../../src/main.py#L64) | *(no entry)* |
-| `WAIT` | variable | [65](../../../src/main.py#L65) | *(no entry)* |
-| `U10_ENA` | variable | [66](../../../src/main.py#L66) | *(no entry)* |
-| `U13_ENA` | variable | [67](../../../src/main.py#L67) | *(no entry)* |
-| `BE` | variable | [68](../../../src/main.py#L68) | *(no entry)* |
-| `ROSCS` | variable | [69](../../../src/main.py#L69) | *(no entry)* |
-| `U10_WE` | variable | [70](../../../src/main.py#L70) | *(no entry)* |
+| `U6_EN` | variable | [64](../../../src/main.py#L64) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `WAIT` | variable | [65](../../../src/main.py#L65) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U10_ENA` | variable | [66](../../../src/main.py#L66) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U13_ENA` | variable | [67](../../../src/main.py#L67) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `BE` | variable | [68](../../../src/main.py#L68) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `ROSCS` | variable | [69](../../../src/main.py#L69) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U10_WE` | variable | [70](../../../src/main.py#L70) | [firmware/upgrade.md](../firmware/upgrade.md) |
 | `log_msg` | variable | [82](../../../src/main.py#L82) | *(no entry)* |
 
 ## `src/TS/tspico.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `PRT` | variable | [382](../../../src/TS/tspico.py#L382) | *(no entry)* |
-| `prn_path` | variable | [383](../../../src/TS/tspico.py#L383) | *(no entry)* |
-| `bmp_size` | variable | [384](../../../src/TS/tspico.py#L384) | *(no entry)* |
-| `PRINT_FLUSH_AT` | variable | [385](../../../src/TS/tspico.py#L385) | *(no entry)* |
-| `NULL_SM` | function | [395](../../../src/TS/tspico.py#L395) | *(no entry)* |
-| `LISTMENU_CHOICES` | variable | [404](../../../src/TS/tspico.py#L404) | *(no entry)* |
-| `LOG_LABELS` | variable | [410](../../../src/TS/tspico.py#L410) | *(no entry)* |
-| `sd_active` | variable | [416](../../../src/TS/tspico.py#L416) | *(no entry)* |
-| `prev_path` | variable | [420](../../../src/TS/tspico.py#L420) | *(no entry)* |
-| `files` | variable | [425](../../../src/TS/tspico.py#L425) | *(no entry)* |
-| `files_upper` | variable | [426](../../../src/TS/tspico.py#L426) | *(no entry)* |
-| `dirs` | variable | [427](../../../src/TS/tspico.py#L427) | *(no entry)* |
-| `dirs_upper` | variable | [428](../../../src/TS/tspico.py#L428) | *(no entry)* |
-| `lista` | variable | [429](../../../src/TS/tspico.py#L429) | *(no entry)* |
-| `alldirs` | variable | [430](../../../src/TS/tspico.py#L430) | *(no entry)* |
-| `sd_space` | variable | [431](../../../src/TS/tspico.py#L431) | *(no entry)* |
-| `INK_` | variable | [442](../../../src/TS/tspico.py#L442) | *(no entry)* |
-| `PAPER_` | variable | [443](../../../src/TS/tspico.py#L443) | *(no entry)* |
-| `NORMAL_` | variable | [444](../../../src/TS/tspico.py#L444) | *(no entry)* |
-| `RXD` | variable | [446](../../../src/TS/tspico.py#L446) | *(no entry)* |
-| `NO_CARD_MSG` | variable | [451](../../../src/TS/tspico.py#L451) | *(no entry)* |
-| `FN_PRINT_STRING` | variable | [461](../../../src/TS/tspico.py#L461) | *(no entry)* |
-| `FN_PRINT_STRING_KEY` | variable | [462](../../../src/TS/tspico.py#L462) | *(no entry)* |
-| `FN_PRINT_CHAR` | variable | [463](../../../src/TS/tspico.py#L463) | *(no entry)* |
-| `FN_RETURN_KEY` | variable | [464](../../../src/TS/tspico.py#L464) | *(no entry)* |
-| `FN_GET_STATUS` | variable | [465](../../../src/TS/tspico.py#L465) | *(no entry)* |
-| `FN_PRINT_LOOP` | variable | [466](../../../src/TS/tspico.py#L466) | *(no entry)* |
-| `FN_PRINT_LOOP_LOWER` | variable | [467](../../../src/TS/tspico.py#L467) | *(no entry)* |
-| `STR_END` | variable | [469](../../../src/TS/tspico.py#L469) | *(no entry)* |
-| `LOOP_END` | variable | [471](../../../src/TS/tspico.py#L471) | *(no entry)* |
-| `PRE_HEADER` | variable | [473](../../../src/TS/tspico.py#L473) | *(no entry)* |
-| `PRE_DATA` | variable | [474](../../../src/TS/tspico.py#L474) | *(no entry)* |
-| `PRE_CMD` | variable | [475](../../../src/TS/tspico.py#L475) | *(no entry)* |
-| `_1_OK` | variable | [478](../../../src/TS/tspico.py#L478) | *(no entry)* |
-| `_2_R_Tape_load` | variable | [479](../../../src/TS/tspico.py#L479) | *(no entry)* |
-| `_3_F_Invalid_file` | variable | [480](../../../src/TS/tspico.py#L480) | *(no entry)* |
-| `_4_Q_Parameter` | variable | [481](../../../src/TS/tspico.py#L481) | *(no entry)* |
-| `_5_C_Nonsense` | variable | [482](../../../src/TS/tspico.py#L482) | *(no entry)* |
-| `_6_6_Num2Big` | variable | [483](../../../src/TS/tspico.py#L483) | *(no entry)* |
-| `_7_8_EOF` | variable | [484](../../../src/TS/tspico.py#L484) | *(no entry)* |
-| `_8_A_Invalid_arg` | variable | [485](../../../src/TS/tspico.py#L485) | *(no entry)* |
-| `_9_9_STOP` | variable | [486](../../../src/TS/tspico.py#L486) | *(no entry)* |
-| `_10_J_Invalid_IO` | variable | [487](../../../src/TS/tspico.py#L487) | *(no entry)* |
-| `_11_D_Break` | variable | [488](../../../src/TS/tspico.py#L488) | *(no entry)* |
-| `TLM_ENABLED` | variable | [517](../../../src/TS/tspico.py#L517) | *(no entry)* |
-| `FW_VERSION` | variable | [544](../../../src/TS/tspico.py#L544) | *(no entry)* |
-| `ROM_VERSION` | variable | [545](../../../src/TS/tspico.py#L545) | *(no entry)* |
-| `_tlm_last` | variable | [552](../../../src/TS/tspico.py#L552) | *(no entry)* |
-| `TLM` | function | [555](../../../src/TS/tspico.py#L555) | *(no entry)* |
-| `TLM_RESET` | function | [586](../../../src/TS/tspico.py#L586) | *(no entry)* |
-| `PICO_STATUS` | class | [602](../../../src/TS/tspico.py#L602) | *(no entry)* |
-| `PICO_STATUS.__init__` | method | [604](../../../src/TS/tspico.py#L604) | *(no entry)* |
-| `DEACTIVATE_SD` | function | [691](../../../src/TS/tspico.py#L691) | *(no entry)* |
-| `ACTIVATE_MQ` | function | [751](../../../src/TS/tspico.py#L751) | *(no entry)* |
-| `MQ_READY` | function | [820](../../../src/TS/tspico.py#L820) | *(no entry)* |
-| `CmdAbort` | class | [868](../../../src/TS/tspico.py#L868) | *(no entry)* |
-| `_CMD_ECHO` | variable | [873](../../../src/TS/tspico.py#L873) | *(no entry)* |
-| `CMD_STALL_MS` | variable | [880](../../../src/TS/tspico.py#L880) | *(no entry)* |
-| `KEY_WAIT_MS` | variable | [881](../../../src/TS/tspico.py#L881) | *(no entry)* |
-| `CMD_PUT` | function | [885](../../../src/TS/tspico.py#L885) | *(no entry)* |
-| `CMD_SEND` | function | [895](../../../src/TS/tspico.py#L895) | *(no entry)* |
-| `CmdOut` | class | [923](../../../src/TS/tspico.py#L923) | *(no entry)* |
-| `CmdOut.__init__` | method | [933](../../../src/TS/tspico.py#L933) | *(no entry)* |
-| `CmdOut.__call__` | method | [936](../../../src/TS/tspico.py#L936) | *(no entry)* |
-| `CmdOut.send` | method | [942](../../../src/TS/tspico.py#L942) | *(no entry)* |
-| `CMD_KEY` | function | [951](../../../src/TS/tspico.py#L951) | *(no entry)* |
-| `CMD_DRAIN` | function | [962](../../../src/TS/tspico.py#L962) | *(no entry)* |
-| `PRELOAD_READ` | function | [974](../../../src/TS/tspico.py#L974) | *(no entry)* |
-| `CMD_RX_FLUSH` | function | [986](../../../src/TS/tspico.py#L986) | *(no entry)* |
-| `CMD_FLUSH` | function | [1001](../../../src/TS/tspico.py#L1001) | *(no entry)* |
-| `MQ_BUSY` | function | [1016](../../../src/TS/tspico.py#L1016) | *(no entry)* |
-| `SD_TRY_MS` | variable | [1063](../../../src/TS/tspico.py#L1063) | *(no entry)* |
-| `ACTIVATE_SD` | function | [1066](../../../src/TS/tspico.py#L1066) | *(no entry)* |
-| `SAVE_MOUNT` | function | [1160](../../../src/TS/tspico.py#L1160) | *(no entry)* |
-| `SD_NOTE_CARD` | function | [1179](../../../src/TS/tspico.py#L1179) | *(no entry)* |
-| `SD_REVALIDATE` | function | [1211](../../../src/TS/tspico.py#L1211) | *(no entry)* |
-| `LISTING_SIG` | function | [1255](../../../src/TS/tspico.py#L1255) | *(no entry)* |
-| `LISTING_FRESHEN` | function | [1263](../../../src/TS/tspico.py#L1263) | *(no entry)* |
-| `LISTING_CHECK` | function | [1283](../../../src/TS/tspico.py#L1283) | *(no entry)* |
-| `REFRESH_LISTING` | function | [1300](../../../src/TS/tspico.py#L1300) | *(no entry)* |
-| `SD_PROBE` | function | [1321](../../../src/TS/tspico.py#L1321) | *(no entry)* |
-| `BLINK_ERROR` | function | [1337](../../../src/TS/tspico.py#L1337) | *(no entry)* |
-| `BLINK_LED` | function | [1352](../../../src/TS/tspico.py#L1352) | *(no entry)* |
-| `COPY_FILE` | function | [1375](../../../src/TS/tspico.py#L1375) | *(no entry)* |
-| `DCK_IMAGE` | function | [1435](../../../src/TS/tspico.py#L1435) | *(no entry)* |
-| `shorten_filename` | function | [1507](../../../src/TS/tspico.py#L1507) | *(no entry)* |
-| `DIR_HEADER` | function | [1523](../../../src/TS/tspico.py#L1523) | *(no entry)* |
-| `CAT_COLOUR` | function | [1529](../../../src/TS/tspico.py#L1529) | *(no entry)* |
-| `TAPDIR_COLOUR` | function | [1565](../../../src/TS/tspico.py#L1565) | *(no entry)* |
-| `DIR_FILES` | function | [1594](../../../src/TS/tspico.py#L1594) | *(no entry)* |
-| `LIST_DIR_FILES` | function | [1638](../../../src/TS/tspico.py#L1638) | *(no entry)* |
-| `LOG` | function | [1748](../../../src/TS/tspico.py#L1748) | *(no entry)* |
-| `MOUNT_FILE` | function | [1791](../../../src/TS/tspico.py#L1791) | *(no entry)* |
-| `NEW_HDR` | function | [1959](../../../src/TS/tspico.py#L1959) | *(no entry)* |
-| `NEW_TAPBLK` | function | [1990](../../../src/TS/tspico.py#L1990) | *(no entry)* |
-| `OFF_TABLE` | function | [2026](../../../src/TS/tspico.py#L2026) | *(no entry)* |
-| `PARAMS` | function | [2041](../../../src/TS/tspico.py#L2041) | *(no entry)* |
-| `SAVE_LOG` | function | [2050](../../../src/TS/tspico.py#L2050) | *(no entry)* |
-| `WAIT_CORE1` | function | [2096](../../../src/TS/tspico.py#L2096) | *(no entry)* |
-| `CLEAR_LOG` | function | [2124](../../../src/TS/tspico.py#L2124) | *(no entry)* |
-| `MSG_BYTE` | function | [2145](../../../src/TS/tspico.py#L2145) | *(no entry)* |
-| `SEND_MSG` | function | [2169](../../../src/TS/tspico.py#L2169) | *(no entry)* |
-| `SEND_MSG2` | function | [2229](../../../src/TS/tspico.py#L2229) | *(no entry)* |
-| `WALK` | function | [2471](../../../src/TS/tspico.py#L2471) | *(no entry)* |
-| `GET_DIRS` | function | [2487](../../../src/TS/tspico.py#L2487) | *(no entry)* |
+| `PRT` | variable | [382](../../../src/TS/tspico.py#L382) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `prn_path` | variable | [383](../../../src/TS/tspico.py#L383) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `bmp_size` | variable | [384](../../../src/TS/tspico.py#L384) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `PRINT_FLUSH_AT` | variable | [385](../../../src/TS/tspico.py#L385) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `NULL_SM` | function | [395](../../../src/TS/tspico.py#L395) | [firmware/pio.md](../firmware/pio.md) |
+| `LISTMENU_CHOICES` | variable | [404](../../../src/TS/tspico.py#L404) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `LOG_LABELS` | variable | [410](../../../src/TS/tspico.py#L410) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `sd_active` | variable | [416](../../../src/TS/tspico.py#L416) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `prev_path` | variable | [420](../../../src/TS/tspico.py#L420) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `files` | variable | [425](../../../src/TS/tspico.py#L425) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `files_upper` | variable | [426](../../../src/TS/tspico.py#L426) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `dirs` | variable | [427](../../../src/TS/tspico.py#L427) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `dirs_upper` | variable | [428](../../../src/TS/tspico.py#L428) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `lista` | variable | [429](../../../src/TS/tspico.py#L429) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `alldirs` | variable | [430](../../../src/TS/tspico.py#L430) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `sd_space` | variable | [431](../../../src/TS/tspico.py#L431) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `INK_` | variable | [442](../../../src/TS/tspico.py#L442) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `PAPER_` | variable | [443](../../../src/TS/tspico.py#L443) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `NORMAL_` | variable | [444](../../../src/TS/tspico.py#L444) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `RXD` | variable | [446](../../../src/TS/tspico.py#L446) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `NO_CARD_MSG` | variable | [451](../../../src/TS/tspico.py#L451) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FN_PRINT_STRING` | variable | [461](../../../src/TS/tspico.py#L461) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FN_PRINT_STRING_KEY` | variable | [462](../../../src/TS/tspico.py#L462) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FN_PRINT_CHAR` | variable | [463](../../../src/TS/tspico.py#L463) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FN_RETURN_KEY` | variable | [464](../../../src/TS/tspico.py#L464) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FN_GET_STATUS` | variable | [465](../../../src/TS/tspico.py#L465) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FN_PRINT_LOOP` | variable | [466](../../../src/TS/tspico.py#L466) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FN_PRINT_LOOP_LOWER` | variable | [467](../../../src/TS/tspico.py#L467) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `STR_END` | variable | [469](../../../src/TS/tspico.py#L469) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `LOOP_END` | variable | [471](../../../src/TS/tspico.py#L471) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `PRE_HEADER` | variable | [473](../../../src/TS/tspico.py#L473) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `PRE_DATA` | variable | [474](../../../src/TS/tspico.py#L474) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `PRE_CMD` | variable | [475](../../../src/TS/tspico.py#L475) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_1_OK` | variable | [478](../../../src/TS/tspico.py#L478) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_2_R_Tape_load` | variable | [479](../../../src/TS/tspico.py#L479) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_3_F_Invalid_file` | variable | [480](../../../src/TS/tspico.py#L480) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_4_Q_Parameter` | variable | [481](../../../src/TS/tspico.py#L481) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_5_C_Nonsense` | variable | [482](../../../src/TS/tspico.py#L482) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_6_6_Num2Big` | variable | [483](../../../src/TS/tspico.py#L483) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_7_8_EOF` | variable | [484](../../../src/TS/tspico.py#L484) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_8_A_Invalid_arg` | variable | [485](../../../src/TS/tspico.py#L485) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_9_9_STOP` | variable | [486](../../../src/TS/tspico.py#L486) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_10_J_Invalid_IO` | variable | [487](../../../src/TS/tspico.py#L487) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_11_D_Break` | variable | [488](../../../src/TS/tspico.py#L488) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `TLM_ENABLED` | variable | [517](../../../src/TS/tspico.py#L517) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FW_VERSION` | variable | [544](../../../src/TS/tspico.py#L544) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `ROM_VERSION` | variable | [545](../../../src/TS/tspico.py#L545) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_tlm_last` | variable | [552](../../../src/TS/tspico.py#L552) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `TLM` | function | [555](../../../src/TS/tspico.py#L555) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `TLM_RESET` | function | [586](../../../src/TS/tspico.py#L586) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `PICO_STATUS` | class | [602](../../../src/TS/tspico.py#L602) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `PICO_STATUS.__init__` | method | [604](../../../src/TS/tspico.py#L604) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `DEACTIVATE_SD` | function | [691](../../../src/TS/tspico.py#L691) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `ACTIVATE_MQ` | function | [751](../../../src/TS/tspico.py#L751) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `MQ_READY` | function | [820](../../../src/TS/tspico.py#L820) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CmdAbort` | class | [868](../../../src/TS/tspico.py#L868) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `_CMD_ECHO` | variable | [873](../../../src/TS/tspico.py#L873) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `CMD_STALL_MS` | variable | [880](../../../src/TS/tspico.py#L880) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `KEY_WAIT_MS` | variable | [881](../../../src/TS/tspico.py#L881) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `CMD_PUT` | function | [885](../../../src/TS/tspico.py#L885) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CMD_SEND` | function | [895](../../../src/TS/tspico.py#L895) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CmdOut` | class | [923](../../../src/TS/tspico.py#L923) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CmdOut.__init__` | method | [933](../../../src/TS/tspico.py#L933) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CmdOut.__call__` | method | [936](../../../src/TS/tspico.py#L936) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CmdOut.send` | method | [942](../../../src/TS/tspico.py#L942) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CMD_KEY` | function | [951](../../../src/TS/tspico.py#L951) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CMD_DRAIN` | function | [962](../../../src/TS/tspico.py#L962) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `PRELOAD_READ` | function | [974](../../../src/TS/tspico.py#L974) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CMD_RX_FLUSH` | function | [986](../../../src/TS/tspico.py#L986) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CMD_FLUSH` | function | [1001](../../../src/TS/tspico.py#L1001) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `MQ_BUSY` | function | [1016](../../../src/TS/tspico.py#L1016) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `SD_TRY_MS` | variable | [1063](../../../src/TS/tspico.py#L1063) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `ACTIVATE_SD` | function | [1066](../../../src/TS/tspico.py#L1066) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `SAVE_MOUNT` | function | [1160](../../../src/TS/tspico.py#L1160) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `SD_NOTE_CARD` | function | [1179](../../../src/TS/tspico.py#L1179) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `SD_REVALIDATE` | function | [1211](../../../src/TS/tspico.py#L1211) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `LISTING_SIG` | function | [1255](../../../src/TS/tspico.py#L1255) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `LISTING_FRESHEN` | function | [1263](../../../src/TS/tspico.py#L1263) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `LISTING_CHECK` | function | [1283](../../../src/TS/tspico.py#L1283) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `REFRESH_LISTING` | function | [1300](../../../src/TS/tspico.py#L1300) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `SD_PROBE` | function | [1321](../../../src/TS/tspico.py#L1321) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `BLINK_ERROR` | function | [1337](../../../src/TS/tspico.py#L1337) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `BLINK_LED` | function | [1352](../../../src/TS/tspico.py#L1352) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `COPY_FILE` | function | [1375](../../../src/TS/tspico.py#L1375) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `DCK_IMAGE` | function | [1435](../../../src/TS/tspico.py#L1435) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `shorten_filename` | function | [1507](../../../src/TS/tspico.py#L1507) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `DIR_HEADER` | function | [1523](../../../src/TS/tspico.py#L1523) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `CAT_COLOUR` | function | [1529](../../../src/TS/tspico.py#L1529) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `TAPDIR_COLOUR` | function | [1565](../../../src/TS/tspico.py#L1565) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `DIR_FILES` | function | [1594](../../../src/TS/tspico.py#L1594) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `LIST_DIR_FILES` | function | [1638](../../../src/TS/tspico.py#L1638) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `LOG` | function | [1748](../../../src/TS/tspico.py#L1748) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `MOUNT_FILE` | function | [1791](../../../src/TS/tspico.py#L1791) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `NEW_HDR` | function | [1959](../../../src/TS/tspico.py#L1959) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `NEW_TAPBLK` | function | [1990](../../../src/TS/tspico.py#L1990) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `OFF_TABLE` | function | [2026](../../../src/TS/tspico.py#L2026) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `PARAMS` | function | [2041](../../../src/TS/tspico.py#L2041) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `SAVE_LOG` | function | [2050](../../../src/TS/tspico.py#L2050) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `WAIT_CORE1` | function | [2096](../../../src/TS/tspico.py#L2096) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `CLEAR_LOG` | function | [2124](../../../src/TS/tspico.py#L2124) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `MSG_BYTE` | function | [2145](../../../src/TS/tspico.py#L2145) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `SEND_MSG` | function | [2169](../../../src/TS/tspico.py#L2169) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `SEND_MSG2` | function | [2229](../../../src/TS/tspico.py#L2229) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `WALK` | function | [2471](../../../src/TS/tspico.py#L2471) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `GET_DIRS` | function | [2487](../../../src/TS/tspico.py#L2487) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `DIR` | function | [2505](../../../src/TS/tspico.py#L2505) | *(no entry)* |
-| `CATALOG` | function | [2581](../../../src/TS/tspico.py#L2581) | *(no entry)* |
-| `CATALOG_TEXT` | function | [2607](../../../src/TS/tspico.py#L2607) | *(no entry)* |
-| `SD_CALL` | function | [2669](../../../src/TS/tspico.py#L2669) | *(no entry)* |
-| `SD_FREE` | variable | [2690](../../../src/TS/tspico.py#L2690) | *(no entry)* |
-| `SD_QUIET` | variable | [2701](../../../src/TS/tspico.py#L2701) | *(no entry)* |
-| `SD_NEEDED` | function | [2704](../../../src/TS/tspico.py#L2704) | *(no entry)* |
-| `NO_CARD_REPLY` | function | [2713](../../../src/TS/tspico.py#L2713) | *(no entry)* |
-| `REFRESH_IF` | function | [2722](../../../src/TS/tspico.py#L2722) | *(no entry)* |
-| `PROMPT_EACH` | function | [2729](../../../src/TS/tspico.py#L2729) | *(no entry)* |
-| `DISK_COPY` | function | [2768](../../../src/TS/tspico.py#L2768) | *(no entry)* |
-| `DISK_COPY_WORK` | function | [2789](../../../src/TS/tspico.py#L2789) | *(no entry)* |
-| `DISK_ERASE` | function | [2857](../../../src/TS/tspico.py#L2857) | *(no entry)* |
-| `DISK_ERASE_ONE` | function | [2886](../../../src/TS/tspico.py#L2886) | *(no entry)* |
-| `DISK_ERASE_MATCHES` | function | [2920](../../../src/TS/tspico.py#L2920) | *(no entry)* |
-| `DISK_ERASE_LIST` | function | [2933](../../../src/TS/tspico.py#L2933) | *(no entry)* |
-| `DISK_FORMAT` | function | [2948](../../../src/TS/tspico.py#L2948) | *(no entry)* |
-| `DISK_NEW_TAP` | function | [2983](../../../src/TS/tspico.py#L2983) | *(no entry)* |
-| `DISK_MAKE_DIR` | function | [3001](../../../src/TS/tspico.py#L3001) | *(no entry)* |
-| `DISK_REN` | function | [3020](../../../src/TS/tspico.py#L3020) | *(no entry)* |
-| `DISK_REN_WORK` | function | [3034](../../../src/TS/tspico.py#L3034) | *(no entry)* |
-| `NATIVE_TAP` | variable | [3072](../../../src/TS/tspico.py#L3072) | *(no entry)* |
-| `MOD_CODE` | variable | [3073](../../../src/TS/tspico.py#L3073) | *(no entry)* |
-| `MOD_SCREEN` | variable | [3073](../../../src/TS/tspico.py#L3073) | *(no entry)* |
-| `MOD_DATA` | variable | [3073](../../../src/TS/tspico.py#L3073) | *(no entry)* |
-| `MOD_LINE` | variable | [3073](../../../src/TS/tspico.py#L3073) | *(no entry)* |
-| `KIND` | variable | [3074](../../../src/TS/tspico.py#L3074) | *(no entry)* |
-| `NATIVE_OPEN` | function | [3078](../../../src/TS/tspico.py#L3078) | *(no entry)* |
-| `NATIVE_SAVE_TARGET` | function | [3119](../../../src/TS/tspico.py#L3119) | *(no entry)* |
-| `NATIVE_LOAD_PREP` | function | [3136](../../../src/TS/tspico.py#L3136) | *(no entry)* |
-| `SD_FS` | class | [3198](../../../src/TS/tspico.py#L3198) | *(no entry)* |
-| `SD_FS.exists` | method | [3201](../../../src/TS/tspico.py#L3201) | *(no entry)* |
-| `SD_FS.size` | method | [3204](../../../src/TS/tspico.py#L3204) | *(no entry)* |
-| `SD_FS.read` | method | [3207](../../../src/TS/tspico.py#L3207) | *(no entry)* |
-| `SD_FS.write` | method | [3212](../../../src/TS/tspico.py#L3212) | *(no entry)* |
-| `CHANNELS` | variable | [3224](../../../src/TS/tspico.py#L3224) | *(no entry)* |
-| `CH_STATUS` | variable | [3225](../../../src/TS/tspico.py#L3225) | *(no entry)* |
-| `CH_READY` | function | [3228](../../../src/TS/tspico.py#L3228) | *(no entry)* |
-| `CH_REPLY` | function | [3241](../../../src/TS/tspico.py#L3241) | *(no entry)* |
-| `CH_CALL` | function | [3251](../../../src/TS/tspico.py#L3251) | *(no entry)* |
-| `DIR_NAMES` | function | [3263](../../../src/TS/tspico.py#L3263) | *(no entry)* |
-| `CH_OPEN` | function | [3283](../../../src/TS/tspico.py#L3283) | *(no entry)* |
-| `CH_WRITE` | function | [3318](../../../src/TS/tspico.py#L3318) | *(no entry)* |
-| `CH_READ` | function | [3331](../../../src/TS/tspico.py#L3331) | *(no entry)* |
-| `CH_CLOSE` | function | [3373](../../../src/TS/tspico.py#L3373) | *(no entry)* |
+| `CATALOG` | function | [2581](../../../src/TS/tspico.py#L2581) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `CATALOG_TEXT` | function | [2607](../../../src/TS/tspico.py#L2607) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `SD_CALL` | function | [2669](../../../src/TS/tspico.py#L2669) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `SD_FREE` | variable | [2690](../../../src/TS/tspico.py#L2690) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `SD_QUIET` | variable | [2701](../../../src/TS/tspico.py#L2701) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `SD_NEEDED` | function | [2704](../../../src/TS/tspico.py#L2704) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `NO_CARD_REPLY` | function | [2713](../../../src/TS/tspico.py#L2713) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `REFRESH_IF` | function | [2722](../../../src/TS/tspico.py#L2722) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `PROMPT_EACH` | function | [2729](../../../src/TS/tspico.py#L2729) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `DISK_COPY` | function | [2768](../../../src/TS/tspico.py#L2768) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_COPY_WORK` | function | [2789](../../../src/TS/tspico.py#L2789) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_ERASE` | function | [2857](../../../src/TS/tspico.py#L2857) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_ERASE_ONE` | function | [2886](../../../src/TS/tspico.py#L2886) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_ERASE_MATCHES` | function | [2920](../../../src/TS/tspico.py#L2920) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_ERASE_LIST` | function | [2933](../../../src/TS/tspico.py#L2933) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_FORMAT` | function | [2948](../../../src/TS/tspico.py#L2948) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_NEW_TAP` | function | [2983](../../../src/TS/tspico.py#L2983) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_MAKE_DIR` | function | [3001](../../../src/TS/tspico.py#L3001) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_REN` | function | [3020](../../../src/TS/tspico.py#L3020) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `DISK_REN_WORK` | function | [3034](../../../src/TS/tspico.py#L3034) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `NATIVE_TAP` | variable | [3072](../../../src/TS/tspico.py#L3072) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `MOD_CODE` | variable | [3073](../../../src/TS/tspico.py#L3073) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `MOD_SCREEN` | variable | [3073](../../../src/TS/tspico.py#L3073) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `MOD_DATA` | variable | [3073](../../../src/TS/tspico.py#L3073) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `MOD_LINE` | variable | [3073](../../../src/TS/tspico.py#L3073) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `KIND` | variable | [3074](../../../src/TS/tspico.py#L3074) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `NATIVE_OPEN` | function | [3078](../../../src/TS/tspico.py#L3078) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `NATIVE_SAVE_TARGET` | function | [3119](../../../src/TS/tspico.py#L3119) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `NATIVE_LOAD_PREP` | function | [3136](../../../src/TS/tspico.py#L3136) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `SD_FS` | class | [3198](../../../src/TS/tspico.py#L3198) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `SD_FS.exists` | method | [3201](../../../src/TS/tspico.py#L3201) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `SD_FS.size` | method | [3204](../../../src/TS/tspico.py#L3204) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `SD_FS.read` | method | [3207](../../../src/TS/tspico.py#L3207) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `SD_FS.write` | method | [3212](../../../src/TS/tspico.py#L3212) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `CHANNELS` | variable | [3224](../../../src/TS/tspico.py#L3224) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `CH_STATUS` | variable | [3225](../../../src/TS/tspico.py#L3225) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `CH_READY` | function | [3228](../../../src/TS/tspico.py#L3228) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CH_REPLY` | function | [3241](../../../src/TS/tspico.py#L3241) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `CH_CALL` | function | [3251](../../../src/TS/tspico.py#L3251) | [firmware/tspico-bus.md](../firmware/tspico-bus.md) |
+| `DIR_NAMES` | function | [3263](../../../src/TS/tspico.py#L3263) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `CH_OPEN` | function | [3283](../../../src/TS/tspico.py#L3283) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `CH_WRITE` | function | [3318](../../../src/TS/tspico.py#L3318) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `CH_READ` | function | [3331](../../../src/TS/tspico.py#L3331) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
+| `CH_CLOSE` | function | [3373](../../../src/TS/tspico.py#L3373) | [firmware/tspico-disk.md](../firmware/tspico-disk.md) |
 | `IDIR` | function | [3414](../../../src/TS/tspico.py#L3414) | *(no entry)* |
-| `ListMenu` | function | [3447](../../../src/TS/tspico.py#L3447) | *(no entry)* |
+| `ListMenu` | function | [3447](../../../src/TS/tspico.py#L3447) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
 | `PATH` | function | [3643](../../../src/TS/tspico.py#L3643) | *(no entry)* |
-| `isTapMounted` | function | [3668](../../../src/TS/tspico.py#L3668) | *(no entry)* |
+| `isTapMounted` | function | [3668](../../../src/TS/tspico.py#L3668) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `TAPDIR` | function | [3675](../../../src/TS/tspico.py#L3675) | *(no entry)* |
 | `NEW_TAP` | function | [3759](../../../src/TS/tspico.py#L3759) | *(no entry)* |
 | `SA_NOT_IMP` | function | [3827](../../../src/TS/tspico.py#L3827) | *(no entry)* |
-| `dir_exists` | function | [3834](../../../src/TS/tspico.py#L3834) | *(no entry)* |
-| `file_exists` | function | [3841](../../../src/TS/tspico.py#L3841) | *(no entry)* |
-| `xchr` | function | [3848](../../../src/TS/tspico.py#L3848) | *(no entry)* |
-| `xstr` | function | [3856](../../../src/TS/tspico.py#L3856) | *(no entry)* |
-| `public_path` | function | [3862](../../../src/TS/tspico.py#L3862) | *(no entry)* |
-| `public_fname` | function | [3877](../../../src/TS/tspico.py#L3877) | *(no entry)* |
+| `dir_exists` | function | [3834](../../../src/TS/tspico.py#L3834) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `file_exists` | function | [3841](../../../src/TS/tspico.py#L3841) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `xchr` | function | [3848](../../../src/TS/tspico.py#L3848) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `xstr` | function | [3856](../../../src/TS/tspico.py#L3856) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
+| `public_path` | function | [3862](../../../src/TS/tspico.py#L3862) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `public_fname` | function | [3877](../../../src/TS/tspico.py#L3877) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `APPEND` | function | [3895](../../../src/TS/tspico.py#L3895) | *(no entry)* |
 | `BLKRCV` | function | [3960](../../../src/TS/tspico.py#L3960) | *(no entry)* |
-| `ChangeDir` | function | [4115](../../../src/TS/tspico.py#L4115) | *(no entry)* |
+| `ChangeDir` | function | [4115](../../../src/TS/tspico.py#L4115) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `CDIR` | function | [4205](../../../src/TS/tspico.py#L4205) | *(no entry)* |
 | `FWD` | function | [4265](../../../src/TS/tspico.py#L4265) | *(no entry)* |
-| `getArgs` | function | [4344](../../../src/TS/tspico.py#L4344) | *(no entry)* |
+| `getArgs` | function | [4344](../../../src/TS/tspico.py#L4344) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `GETHELP` | function | [4354](../../../src/TS/tspico.py#L4354) | *(no entry)* |
-| `BUILD_FIT` | function | [4507](../../../src/TS/tspico.py#L4507) | *(no entry)* |
+| `BUILD_FIT` | function | [4507](../../../src/TS/tspico.py#L4507) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
 | `GETINFO` | function | [4521](../../../src/TS/tspico.py#L4521) | *(no entry)* |
 | `GETLOG` | function | [4609](../../../src/TS/tspico.py#L4609) | *(no entry)* |
-| `LOAD_CONFIG` | function | [4719](../../../src/TS/tspico.py#L4719) | *(no entry)* |
+| `LOAD_CONFIG` | function | [4719](../../../src/TS/tspico.py#L4719) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `LOGLEVEL` | function | [4798](../../../src/TS/tspico.py#L4798) | *(no entry)* |
 | `MDIR` | function | [4857](../../../src/TS/tspico.py#L4857) | *(no entry)* |
 | `MEMBOOT` | function | [4922](../../../src/TS/tspico.py#L4922) | *(no entry)* |
-| `getBoot` | function | [4979](../../../src/TS/tspico.py#L4979) | *(no entry)* |
-| `getDock` | function | [4990](../../../src/TS/tspico.py#L4990) | *(no entry)* |
-| `BOOT_SLOT_CLASH` | function | [5001](../../../src/TS/tspico.py#L5001) | *(no entry)* |
+| `getBoot` | function | [4979](../../../src/TS/tspico.py#L4979) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `getDock` | function | [4990](../../../src/TS/tspico.py#L4990) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `BOOT_SLOT_CLASH` | function | [5001](../../../src/TS/tspico.py#L5001) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `MEMDOCK` | function | [5024](../../../src/TS/tspico.py#L5024) | *(no entry)* |
-| `REMOVE_DIR` | function | [5098](../../../src/TS/tspico.py#L5098) | *(no entry)* |
+| `REMOVE_DIR` | function | [5098](../../../src/TS/tspico.py#L5098) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `REW` | function | [5115](../../../src/TS/tspico.py#L5115) | *(no entry)* |
-| `ResolveIndexName` | function | [5194](../../../src/TS/tspico.py#L5194) | *(no entry)* |
-| `LOAD_TPI` | function | [5217](../../../src/TS/tspico.py#L5217) | *(no entry)* |
-| `SEND_MSG_PROMPT_YN` | function | [5262](../../../src/TS/tspico.py#L5262) | *(no entry)* |
+| `ResolveIndexName` | function | [5194](../../../src/TS/tspico.py#L5194) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `LOAD_TPI` | function | [5217](../../../src/TS/tspico.py#L5217) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
+| `SEND_MSG_PROMPT_YN` | function | [5262](../../../src/TS/tspico.py#L5262) | [firmware/tspico-messages.md](../firmware/tspico-messages.md) |
 | `BAD_CODE` | function | [5333](../../../src/TS/tspico.py#L5333) | *(no entry)* |
 | `BAD_ARG` | function | [5338](../../../src/TS/tspico.py#L5338) | *(no entry)* |
 | `RM` | function | [5343](../../../src/TS/tspico.py#L5343) | *(no entry)* |
 | `RM_CHECK` | function | [5389](../../../src/TS/tspico.py#L5389) | *(no entry)* |
 | `UNMOUNT` | function | [5407](../../../src/TS/tspico.py#L5407) | *(no entry)* |
-| `FORGET_MOUNT` | function | [5416](../../../src/TS/tspico.py#L5416) | *(no entry)* |
+| `FORGET_MOUNT` | function | [5416](../../../src/TS/tspico.py#L5416) | [firmware/tspico-files.md](../firmware/tspico-files.md) |
 | `VERB_TOGGLE` | function | [5435](../../../src/TS/tspico.py#L5435) | *(no entry)* |
 | `ZX48` | function | [5489](../../../src/TS/tspico.py#L5489) | *(no entry)* |
 | `NOP` | function | [5543](../../../src/TS/tspico.py#L5543) | *(no entry)* |
-| `PRINT_FLUSH` | function | [5568](../../../src/TS/tspico.py#L5568) | *(no entry)* |
-| `COPY_BMP` | function | [5600](../../../src/TS/tspico.py#L5600) | *(no entry)* |
-| `PRINT_IO` | function | [5621](../../../src/TS/tspico.py#L5621) | *(no entry)* |
+| `PRINT_FLUSH` | function | [5568](../../../src/TS/tspico.py#L5568) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `COPY_BMP` | function | [5600](../../../src/TS/tspico.py#L5600) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `PRINT_IO` | function | [5621](../../../src/TS/tspico.py#L5621) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `PRN_OPEN` | function | [5666](../../../src/TS/tspico.py#L5666) | *(no entry)* |
 | `PRN_CLOSE` | function | [5687](../../../src/TS/tspico.py#L5687) | *(no entry)* |
 | `PRN_FLAG` | function | [5698](../../../src/TS/tspico.py#L5698) | *(no entry)* |
 | `PRN_SIZE` | function | [5711](../../../src/TS/tspico.py#L5711) | *(no entry)* |
 | `PRN_BMP` | function | [5729](../../../src/TS/tspico.py#L5729) | *(no entry)* |
-| `FAIL_CMD` | function | [5744](../../../src/TS/tspico.py#L5744) | *(no entry)* |
-| `PROCESS_CMD` | function | [5796](../../../src/TS/tspico.py#L5796) | *(no entry)* |
-| `TS2068_IO` | function | [6088](../../../src/TS/tspico.py#L6088) | *(no entry)* |
-| `ZX_REPORT` | variable | [6947](../../../src/TS/tspico.py#L6947) | *(no entry)* |
-| `ZX_TPI` | function | [6951](../../../src/TS/tspico.py#L6951) | *(no entry)* |
-| `ZX48_IO` | function | [7089](../../../src/TS/tspico.py#L7089) | *(no entry)* |
-| `MQ` | variable | [753](../../../src/TS/tspico.py#L753) | *(no entry)* |
-| `led` | variable | [1339](../../../src/TS/tspico.py#L1339) | *(no entry)* |
-| `dead` | variable | [1355](../../../src/TS/tspico.py#L1355) | *(no entry)* |
-| `busy` | variable | [1356](../../../src/TS/tspico.py#L1356) | *(no entry)* |
-| `log_entries` | variable | [1750](../../../src/TS/tspico.py#L1750) | *(no entry)* |
-| `log_to_serial` | variable | [1751](../../../src/TS/tspico.py#L1751) | *(no entry)* |
-| `TSP` | variable | [1752](../../../src/TS/tspico.py#L1752) | *(no entry)* |
-| `kill` | variable | [2237](../../../src/TS/tspico.py#L2237) | *(no entry)* |
-| `EXT_SA_FUNCT` | variable | [4364](../../../src/TS/tspico.py#L4364) | *(no entry)* |
-| `BANK` | variable | [4929](../../../src/TS/tspico.py#L4929) | *(no entry)* |
-| `ROM` | variable | [4930](../../../src/TS/tspico.py#L4930) | *(no entry)* |
+| `FAIL_CMD` | function | [5744](../../../src/TS/tspico.py#L5744) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `PROCESS_CMD` | function | [5796](../../../src/TS/tspico.py#L5796) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `TS2068_IO` | function | [6088](../../../src/TS/tspico.py#L6088) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `ZX_REPORT` | variable | [6947](../../../src/TS/tspico.py#L6947) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `ZX_TPI` | function | [6951](../../../src/TS/tspico.py#L6951) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `ZX48_IO` | function | [7089](../../../src/TS/tspico.py#L7089) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `MQ` | variable | [753](../../../src/TS/tspico.py#L753) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `led` | variable | [1339](../../../src/TS/tspico.py#L1339) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `dead` | variable | [1355](../../../src/TS/tspico.py#L1355) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `busy` | variable | [1356](../../../src/TS/tspico.py#L1356) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `log_entries` | variable | [1750](../../../src/TS/tspico.py#L1750) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `log_to_serial` | variable | [1751](../../../src/TS/tspico.py#L1751) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `TSP` | variable | [1752](../../../src/TS/tspico.py#L1752) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `kill` | variable | [2237](../../../src/TS/tspico.py#L2237) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `EXT_SA_FUNCT` | variable | [4364](../../../src/TS/tspico.py#L4364) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `BANK` | variable | [4929](../../../src/TS/tspico.py#L4929) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `ROM` | variable | [4930](../../../src/TS/tspico.py#L4930) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 
 ## `src/TS/tspico_io.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `log_entries` | variable | [50](../../../src/TS/tspico_io.py#L50) | *(no entry)* |
-| `_nofile_arch` | variable | [68](../../../src/TS/tspico_io.py#L68) | *(no entry)* |
-| `PORT_0F` | variable | [84](../../../src/TS/tspico_io.py#L84) | *(no entry)* |
-| `TX_DEPTH` | variable | [85](../../../src/TS/tspico_io.py#L85) | *(no entry)* |
-| `LOAD_CHUNK` | variable | [92](../../../src/TS/tspico_io.py#L92) | *(no entry)* |
-| `_LOAD_BUF` | variable | [93](../../../src/TS/tspico_io.py#L93) | *(no entry)* |
-| `_LOAD_MV` | variable | [94](../../../src/TS/tspico_io.py#L94) | *(no entry)* |
-| `_SM0_EXECCTRL` | variable | [112](../../../src/TS/tspico_io.py#L112) | *(no entry)* |
-| `_SM0_INSTR` | variable | [113](../../../src/TS/tspico_io.py#L113) | *(no entry)* |
-| `_SM0_PINCTRL` | variable | [114](../../../src/TS/tspico_io.py#L114) | *(no entry)* |
-| `_ENCODED` | variable | [115](../../../src/TS/tspico_io.py#L115) | *(no entry)* |
-| `MQX` | function | [118](../../../src/TS/tspico_io.py#L118) | *(no entry)* |
-| `MQ_STATUS` | function | [135](../../../src/TS/tspico_io.py#L135) | *(no entry)* |
-| `RX_CAPTURE` | function | [159](../../../src/TS/tspico_io.py#L159) | *(no entry)* |
-| `RxDMA` | class | [200](../../../src/TS/tspico_io.py#L200) | *(no entry)* |
-| `RxDMA.__init__` | method | [222](../../../src/TS/tspico_io.py#L222) | *(no entry)* |
-| `RxDMA.arm` | method | [229](../../../src/TS/tspico_io.py#L229) | *(no entry)* |
-| `RxDMA.waiting` | method | [234](../../../src/TS/tspico_io.py#L234) | *(no entry)* |
-| `RxDMA.stop` | method | [238](../../../src/TS/tspico_io.py#L238) | *(no entry)* |
-| `RxDMA.take` | method | [247](../../../src/TS/tspico_io.py#L247) | *(no entry)* |
-| `RX_DMA` | function | [273](../../../src/TS/tspico_io.py#L273) | *(no entry)* |
-| `_stdin_ipoll` | variable | [284](../../../src/TS/tspico_io.py#L284) | *(no entry)* |
-| `_stdin_readinto` | variable | [285](../../../src/TS/tspico_io.py#L285) | *(no entry)* |
-| `_stdin_byte` | variable | [286](../../../src/TS/tspico_io.py#L286) | *(no entry)* |
-| `DRAIN_STDIN` | function | [289](../../../src/TS/tspico_io.py#L289) | *(no entry)* |
-| `MQ_TO_IDLE` | function | [326](../../../src/TS/tspico_io.py#L326) | *(no entry)* |
-| `TX_ROOM` | function | [354](../../../src/TS/tspico_io.py#L354) | *(no entry)* |
-| `ECHO_KEEP` | function | [390](../../../src/TS/tspico_io.py#L390) | *(no entry)* |
-| `STREAM_DMA` | function | [400](../../../src/TS/tspico_io.py#L400) | *(no entry)* |
-| `RX_WORD` | function | [482](../../../src/TS/tspico_io.py#L482) | *(no entry)* |
-| `RXB_OK` | variable | [494](../../../src/TS/tspico_io.py#L494) | *(no entry)* |
-| `RXB_ABORT` | variable | [495](../../../src/TS/tspico_io.py#L495) | *(no entry)* |
-| `RXB_STALL` | variable | [496](../../../src/TS/tspico_io.py#L496) | *(no entry)* |
-| `_RING_BITS` | variable | [510](../../../src/TS/tspico_io.py#L510) | *(no entry)* |
-| `_RING_WORDS` | variable | [511](../../../src/TS/tspico_io.py#L511) | *(no entry)* |
-| `_RING_SETUP` | function | [514](../../../src/TS/tspico_io.py#L514) | *(no entry)* |
-| `_ring` | variable | [531](../../../src/TS/tspico_io.py#L531) | *(no entry)* |
-| `SAY_READY` | function | [534](../../../src/TS/tspico_io.py#L534) | *(no entry)* |
-| `RX_RING` | function | [543](../../../src/TS/tspico_io.py#L543) | *(no entry)* |
-| `RX_BLOCK` | function | [605](../../../src/TS/tspico_io.py#L605) | *(no entry)* |
-| `_SAVE_HDR_RAW` | variable | [649](../../../src/TS/tspico_io.py#L649) | *(no entry)* |
-| `OPEN_NOFILE_TAP` | function | [652](../../../src/TS/tspico_io.py#L652) | *(no entry)* |
-| `sel_bank` | function | [684](../../../src/TS/tspico_io.py#L684) | *(no entry)* |
-| `set_ctrl` | function | [708](../../../src/TS/tspico_io.py#L708) | *(no entry)* |
-| `set_dck` | function | [745](../../../src/TS/tspico_io.py#L745) | *(no entry)* |
-| `TS_IO_DUAL` | function | [767](../../../src/TS/tspico_io.py#L767) | *(no entry)* |
-| `REWIND_ABORTED_SEARCH` | function | [946](../../../src/TS/tspico_io.py#L946) | *(no entry)* |
-| `ENA_MQ_DUAL` | function | [974](../../../src/TS/tspico_io.py#L974) | *(no entry)* |
-| `SD_MOUNT` | variable | [1016](../../../src/TS/tspico_io.py#L1016) | *(no entry)* |
-| `ENA_SD` | function | [1019](../../../src/TS/tspico_io.py#L1019) | *(no entry)* |
-| `LOG_ADD` | function | [1077](../../../src/TS/tspico_io.py#L1077) | *(no entry)* |
-| `_ld_err` | variable | [1105](../../../src/TS/tspico_io.py#L1105) | *(no entry)* |
-| `_ld_err_t` | variable | [1106](../../../src/TS/tspico_io.py#L1106) | *(no entry)* |
-| `_ld_err_staged` | variable | [1107](../../../src/TS/tspico_io.py#L1107) | *(no entry)* |
-| `LOAD_REFUSE` | function | [1110](../../../src/TS/tspico_io.py#L1110) | *(no entry)* |
-| `FIRST_STATUS` | function | [1154](../../../src/TS/tspico_io.py#L1154) | *(no entry)* |
-| `LOAD_RETRY_DONE` | function | [1168](../../../src/TS/tspico_io.py#L1168) | *(no entry)* |
-| `LOAD_TS` | function | [1185](../../../src/TS/tspico_io.py#L1185) | *(no entry)* |
-| `LOAD_SERVE` | function | [1754](../../../src/TS/tspico_io.py#L1754) | *(no entry)* |
-| `ZX_STALL_MS` | variable | [1802](../../../src/TS/tspico_io.py#L1802) | *(no entry)* |
-| `ZX_BLOCK_GAP_MS` | variable | [1803](../../../src/TS/tspico_io.py#L1803) | *(no entry)* |
-| `ZX_FLUSH_TX` | function | [1806](../../../src/TS/tspico_io.py#L1806) | *(no entry)* |
-| `ZX_ROOM` | function | [1817](../../../src/TS/tspico_io.py#L1817) | *(no entry)* |
-| `TAPE_STREAM` | function | [1855](../../../src/TS/tspico_io.py#L1855) | *(no entry)* |
-| `TAPE_STREAM_OF` | function | [1861](../../../src/TS/tspico_io.py#L1861) | *(no entry)* |
-| `ZX_ARM` | function | [1876](../../../src/TS/tspico_io.py#L1876) | *(no entry)* |
-| `ZX_STREAM` | function | [1888](../../../src/TS/tspico_io.py#L1888) | *(no entry)* |
-| `LOAD_ZX` | function | [1924](../../../src/TS/tspico_io.py#L1924) | *(no entry)* |
-| `LOAD_ZX_C` | function | [2071](../../../src/TS/tspico_io.py#L2071) | *(no entry)* |
-| `SAVE_NAME` | function | [2200](../../../src/TS/tspico_io.py#L2200) | *(no entry)* |
-| `REFUSE_SAVE` | function | [2249](../../../src/TS/tspico_io.py#L2249) | *(no entry)* |
-| `DRAIN_REFUSED_SAVE` | function | [2279](../../../src/TS/tspico_io.py#L2279) | *(no entry)* |
-| `SAVE_TS` | function | [2309](../../../src/TS/tspico_io.py#L2309) | *(no entry)* |
-| `_xor` | function | [2785](../../../src/TS/tspico_io.py#L2785) | *(no entry)* |
-| `SAVE_ZX` | function | [2792](../../../src/TS/tspico_io.py#L2792) | *(no entry)* |
+| `log_entries` | variable | [50](../../../src/TS/tspico_io.py#L50) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `_nofile_arch` | variable | [68](../../../src/TS/tspico_io.py#L68) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `PORT_0F` | variable | [84](../../../src/TS/tspico_io.py#L84) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `TX_DEPTH` | variable | [85](../../../src/TS/tspico_io.py#L85) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_CHUNK` | variable | [92](../../../src/TS/tspico_io.py#L92) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_LOAD_BUF` | variable | [93](../../../src/TS/tspico_io.py#L93) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_LOAD_MV` | variable | [94](../../../src/TS/tspico_io.py#L94) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_SM0_EXECCTRL` | variable | [112](../../../src/TS/tspico_io.py#L112) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_SM0_INSTR` | variable | [113](../../../src/TS/tspico_io.py#L113) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_SM0_PINCTRL` | variable | [114](../../../src/TS/tspico_io.py#L114) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_ENCODED` | variable | [115](../../../src/TS/tspico_io.py#L115) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `MQX` | function | [118](../../../src/TS/tspico_io.py#L118) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `MQ_STATUS` | function | [135](../../../src/TS/tspico_io.py#L135) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RX_CAPTURE` | function | [159](../../../src/TS/tspico_io.py#L159) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RxDMA` | class | [200](../../../src/TS/tspico_io.py#L200) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RxDMA.__init__` | method | [222](../../../src/TS/tspico_io.py#L222) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RxDMA.arm` | method | [229](../../../src/TS/tspico_io.py#L229) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RxDMA.waiting` | method | [234](../../../src/TS/tspico_io.py#L234) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RxDMA.stop` | method | [238](../../../src/TS/tspico_io.py#L238) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RxDMA.take` | method | [247](../../../src/TS/tspico_io.py#L247) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RX_DMA` | function | [273](../../../src/TS/tspico_io.py#L273) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_stdin_ipoll` | variable | [284](../../../src/TS/tspico_io.py#L284) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_stdin_readinto` | variable | [285](../../../src/TS/tspico_io.py#L285) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_stdin_byte` | variable | [286](../../../src/TS/tspico_io.py#L286) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `DRAIN_STDIN` | function | [289](../../../src/TS/tspico_io.py#L289) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `MQ_TO_IDLE` | function | [326](../../../src/TS/tspico_io.py#L326) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `TX_ROOM` | function | [354](../../../src/TS/tspico_io.py#L354) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ECHO_KEEP` | function | [390](../../../src/TS/tspico_io.py#L390) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `STREAM_DMA` | function | [400](../../../src/TS/tspico_io.py#L400) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RX_WORD` | function | [482](../../../src/TS/tspico_io.py#L482) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RXB_OK` | variable | [494](../../../src/TS/tspico_io.py#L494) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RXB_ABORT` | variable | [495](../../../src/TS/tspico_io.py#L495) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RXB_STALL` | variable | [496](../../../src/TS/tspico_io.py#L496) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_RING_BITS` | variable | [510](../../../src/TS/tspico_io.py#L510) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_RING_WORDS` | variable | [511](../../../src/TS/tspico_io.py#L511) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_RING_SETUP` | function | [514](../../../src/TS/tspico_io.py#L514) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_ring` | variable | [531](../../../src/TS/tspico_io.py#L531) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SAY_READY` | function | [534](../../../src/TS/tspico_io.py#L534) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RX_RING` | function | [543](../../../src/TS/tspico_io.py#L543) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `RX_BLOCK` | function | [605](../../../src/TS/tspico_io.py#L605) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_SAVE_HDR_RAW` | variable | [649](../../../src/TS/tspico_io.py#L649) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `OPEN_NOFILE_TAP` | function | [652](../../../src/TS/tspico_io.py#L652) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `sel_bank` | function | [684](../../../src/TS/tspico_io.py#L684) | [firmware/pio.md](../firmware/pio.md) |
+| `set_ctrl` | function | [708](../../../src/TS/tspico_io.py#L708) | [firmware/pio.md](../firmware/pio.md) |
+| `set_dck` | function | [745](../../../src/TS/tspico_io.py#L745) | [firmware/pio.md](../firmware/pio.md) |
+| `TS_IO_DUAL` | function | [767](../../../src/TS/tspico_io.py#L767) | [firmware/pio.md](../firmware/pio.md) |
+| `REWIND_ABORTED_SEARCH` | function | [946](../../../src/TS/tspico_io.py#L946) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ENA_MQ_DUAL` | function | [974](../../../src/TS/tspico_io.py#L974) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SD_MOUNT` | variable | [1016](../../../src/TS/tspico_io.py#L1016) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ENA_SD` | function | [1019](../../../src/TS/tspico_io.py#L1019) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOG_ADD` | function | [1077](../../../src/TS/tspico_io.py#L1077) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_ld_err` | variable | [1105](../../../src/TS/tspico_io.py#L1105) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_ld_err_t` | variable | [1106](../../../src/TS/tspico_io.py#L1106) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_ld_err_staged` | variable | [1107](../../../src/TS/tspico_io.py#L1107) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_REFUSE` | function | [1110](../../../src/TS/tspico_io.py#L1110) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `FIRST_STATUS` | function | [1154](../../../src/TS/tspico_io.py#L1154) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_RETRY_DONE` | function | [1168](../../../src/TS/tspico_io.py#L1168) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_TS` | function | [1185](../../../src/TS/tspico_io.py#L1185) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_SERVE` | function | [1754](../../../src/TS/tspico_io.py#L1754) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ZX_STALL_MS` | variable | [1802](../../../src/TS/tspico_io.py#L1802) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ZX_BLOCK_GAP_MS` | variable | [1803](../../../src/TS/tspico_io.py#L1803) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ZX_FLUSH_TX` | function | [1806](../../../src/TS/tspico_io.py#L1806) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ZX_ROOM` | function | [1817](../../../src/TS/tspico_io.py#L1817) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `TAPE_STREAM` | function | [1855](../../../src/TS/tspico_io.py#L1855) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `TAPE_STREAM_OF` | function | [1861](../../../src/TS/tspico_io.py#L1861) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ZX_ARM` | function | [1876](../../../src/TS/tspico_io.py#L1876) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ZX_STREAM` | function | [1888](../../../src/TS/tspico_io.py#L1888) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_ZX` | function | [1924](../../../src/TS/tspico_io.py#L1924) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_ZX_C` | function | [2071](../../../src/TS/tspico_io.py#L2071) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SAVE_NAME` | function | [2200](../../../src/TS/tspico_io.py#L2200) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `REFUSE_SAVE` | function | [2249](../../../src/TS/tspico_io.py#L2249) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `DRAIN_REFUSED_SAVE` | function | [2279](../../../src/TS/tspico_io.py#L2279) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SAVE_TS` | function | [2309](../../../src/TS/tspico_io.py#L2309) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_xor` | function | [2785](../../../src/TS/tspico_io.py#L2785) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SAVE_ZX` | function | [2792](../../../src/TS/tspico_io.py#L2792) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
 
 ## `src/TS/sdcard.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `crc7_be_syndrome_table` | variable | [35](../../../src/TS/sdcard.py#L35) | *(no entry)* |
-| `crc7` | function | [48](../../../src/TS/sdcard.py#L48) | *(no entry)* |
-| `gb` | function | [55](../../../src/TS/sdcard.py#L55) | *(no entry)* |
-| `_CMD_TIMEOUT` | variable | [60](../../../src/TS/sdcard.py#L60) | *(no entry)* |
-| `_READ_TOKEN_MS` | variable | [61](../../../src/TS/sdcard.py#L61) | *(no entry)* |
-| `_INIT_TIMEOUT_MS` | variable | [69](../../../src/TS/sdcard.py#L69) | *(no entry)* |
-| `_CMD0_TIMEOUT_MS` | variable | [75](../../../src/TS/sdcard.py#L75) | *(no entry)* |
-| `_BUSY_TIMEOUT_MS` | variable | [81](../../../src/TS/sdcard.py#L81) | *(no entry)* |
-| `_R1_IDLE_STATE` | variable | [83](../../../src/TS/sdcard.py#L83) | *(no entry)* |
-| `_R1_ILLEGAL_COMMAND` | variable | [85](../../../src/TS/sdcard.py#L85) | *(no entry)* |
-| `_R1_COM_CRC_ERROR` | variable | [86](../../../src/TS/sdcard.py#L86) | *(no entry)* |
-| `_TOKEN_CMD25` | variable | [90](../../../src/TS/sdcard.py#L90) | *(no entry)* |
-| `_TOKEN_STOP_TRAN` | variable | [91](../../../src/TS/sdcard.py#L91) | *(no entry)* |
-| `_TOKEN_DATA` | variable | [92](../../../src/TS/sdcard.py#L92) | *(no entry)* |
-| `_HCS_BIT` | variable | [93](../../../src/TS/sdcard.py#L93) | *(no entry)* |
-| `SDCard` | class | [96](../../../src/TS/sdcard.py#L96) | *(no entry)* |
-| `SDCard.__init__` | method | [97](../../../src/TS/sdcard.py#L97) | *(no entry)* |
-| `SDCard.check_crcs` | method | [111](../../../src/TS/sdcard.py#L111) | *(no entry)* |
-| `SDCard.init_spi` | method | [118](../../../src/TS/sdcard.py#L118) | *(no entry)* |
-| `SDCard._spiff` | method | [128](../../../src/TS/sdcard.py#L128) | *(no entry)* |
-| `SDCard._wait_ready` | method | [131](../../../src/TS/sdcard.py#L131) | *(no entry)* |
-| `SDCard._recover` | method | [146](../../../src/TS/sdcard.py#L146) | *(no entry)* |
-| `SDCard.decode_cid` | method | [196](../../../src/TS/sdcard.py#L196) | *(no entry)* |
-| `SDCard.init_card` | method | [217](../../../src/TS/sdcard.py#L217) | *(no entry)* |
-| `SDCard.cmd` | method | [332](../../../src/TS/sdcard.py#L332) | *(no entry)* |
-| `SDCard.readinto` | method | [385](../../../src/TS/sdcard.py#L385) | *(no entry)* |
-| `SDCard.write` | method | [424](../../../src/TS/sdcard.py#L424) | *(no entry)* |
-| `SDCard.write_token` | method | [457](../../../src/TS/sdcard.py#L457) | *(no entry)* |
-| `SDCard.blocks` | method | [473](../../../src/TS/sdcard.py#L473) | *(no entry)* |
-| `SDCard.readblocks` | method | [479](../../../src/TS/sdcard.py#L479) | *(no entry)* |
-| `SDCard.writeblocks` | method | [507](../../../src/TS/sdcard.py#L507) | *(no entry)* |
-| `SDCard.ioctl` | method | [533](../../../src/TS/sdcard.py#L533) | *(no entry)* |
+| `crc7_be_syndrome_table` | variable | [35](../../../src/TS/sdcard.py#L35) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `crc7` | function | [48](../../../src/TS/sdcard.py#L48) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `gb` | function | [55](../../../src/TS/sdcard.py#L55) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_CMD_TIMEOUT` | variable | [60](../../../src/TS/sdcard.py#L60) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_READ_TOKEN_MS` | variable | [61](../../../src/TS/sdcard.py#L61) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_INIT_TIMEOUT_MS` | variable | [69](../../../src/TS/sdcard.py#L69) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_CMD0_TIMEOUT_MS` | variable | [75](../../../src/TS/sdcard.py#L75) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_BUSY_TIMEOUT_MS` | variable | [81](../../../src/TS/sdcard.py#L81) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_R1_IDLE_STATE` | variable | [83](../../../src/TS/sdcard.py#L83) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_R1_ILLEGAL_COMMAND` | variable | [85](../../../src/TS/sdcard.py#L85) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_R1_COM_CRC_ERROR` | variable | [86](../../../src/TS/sdcard.py#L86) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_TOKEN_CMD25` | variable | [90](../../../src/TS/sdcard.py#L90) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_TOKEN_STOP_TRAN` | variable | [91](../../../src/TS/sdcard.py#L91) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_TOKEN_DATA` | variable | [92](../../../src/TS/sdcard.py#L92) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_HCS_BIT` | variable | [93](../../../src/TS/sdcard.py#L93) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard` | class | [96](../../../src/TS/sdcard.py#L96) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.__init__` | method | [97](../../../src/TS/sdcard.py#L97) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.check_crcs` | method | [111](../../../src/TS/sdcard.py#L111) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.init_spi` | method | [118](../../../src/TS/sdcard.py#L118) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard._spiff` | method | [128](../../../src/TS/sdcard.py#L128) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard._wait_ready` | method | [131](../../../src/TS/sdcard.py#L131) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard._recover` | method | [146](../../../src/TS/sdcard.py#L146) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.decode_cid` | method | [196](../../../src/TS/sdcard.py#L196) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.init_card` | method | [217](../../../src/TS/sdcard.py#L217) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.cmd` | method | [332](../../../src/TS/sdcard.py#L332) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.readinto` | method | [385](../../../src/TS/sdcard.py#L385) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.write` | method | [424](../../../src/TS/sdcard.py#L424) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.write_token` | method | [457](../../../src/TS/sdcard.py#L457) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.blocks` | method | [473](../../../src/TS/sdcard.py#L473) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.readblocks` | method | [479](../../../src/TS/sdcard.py#L479) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.writeblocks` | method | [507](../../../src/TS/sdcard.py#L507) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.ioctl` | method | [533](../../../src/TS/sdcard.py#L533) | [firmware/sdcard.md](../firmware/sdcard.md) |
 
 ## `src/TS/channels.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `TOKENS` | variable | [25](../../../src/TS/channels.py#L25) | *(no entry)* |
-| `EXTRA` | variable | [37](../../../src/TS/channels.py#L37) | *(no entry)* |
-| `POUND` | variable | [39](../../../src/TS/channels.py#L39) | *(no entry)* |
-| `keyword` | function | [42](../../../src/TS/channels.py#L42) | *(no entry)* |
-| `TextOut` | class | [48](../../../src/TS/channels.py#L48) | *(no entry)* |
-| `TextOut.__init__` | method | [59](../../../src/TS/channels.py#L59) | *(no entry)* |
-| `TextOut._put` | method | [64](../../../src/TS/channels.py#L64) | *(no entry)* |
-| `TextOut.feed` | method | [73](../../../src/TS/channels.py#L73) | *(no entry)* |
-| `LATIN1` | variable | [100](../../../src/TS/channels.py#L100) | *(no entry)* |
-| `UTF8` | variable | [101](../../../src/TS/channels.py#L101) | *(no entry)* |
-| `TextIn` | class | [104](../../../src/TS/channels.py#L104) | *(no entry)* |
-| `TextIn.__init__` | method | [117](../../../src/TS/channels.py#L117) | *(no entry)* |
-| `TextIn.feed` | method | [121](../../../src/TS/channels.py#L121) | *(no entry)* |
-| `utf8_len` | function | [158](../../../src/TS/channels.py#L158) | *(no entry)* |
-| `Channel` | class | [180](../../../src/TS/channels.py#L180) | *(no entry)* |
-| `Channel.__init__` | method | [181](../../../src/TS/channels.py#L181) | *(no entry)* |
-| `Channel.pad` | method | [197](../../../src/TS/channels.py#L197) | *(no entry)* |
-| `ChannelError` | class | [201](../../../src/TS/channels.py#L201) | *(no entry)* |
-| `MAX_RECLEN` | variable | [205](../../../src/TS/channels.py#L205) | *(no entry)* |
-| `parse_mode` | function | [208](../../../src/TS/channels.py#L208) | *(no entry)* |
-| `Channels` | class | [219](../../../src/TS/channels.py#L219) | *(no entry)* |
-| `Channels.__init__` | method | [224](../../../src/TS/channels.py#L224) | *(no entry)* |
-| `Channels.open` | method | [228](../../../src/TS/channels.py#L228) | *(no entry)* |
-| `Channels.open_list` | method | [247](../../../src/TS/channels.py#L247) | *(no entry)* |
-| `Channels._size` | method | [256](../../../src/TS/channels.py#L256) | *(no entry)* |
-| `Channels._raw` | method | [259](../../../src/TS/channels.py#L259) | *(no entry)* |
-| `Channels._get` | method | [262](../../../src/TS/channels.py#L262) | *(no entry)* |
-| `Channels._put` | method | [268](../../../src/TS/channels.py#L268) | *(no entry)* |
-| `Channels._end_record` | method | [277](../../../src/TS/channels.py#L277) | *(no entry)* |
-| `Channels._seek` | method | [286](../../../src/TS/channels.py#L286) | *(no entry)* |
-| `Channels._data` | method | [298](../../../src/TS/channels.py#L298) | *(no entry)* |
-| `Channels.write` | method | [326](../../../src/TS/channels.py#L326) | *(no entry)* |
-| `Channels.read` | method | [348](../../../src/TS/channels.py#L348) | *(no entry)* |
-| `Channels.close` | method | [390](../../../src/TS/channels.py#L390) | *(no entry)* |
-| `Channels.close_writes` | method | [405](../../../src/TS/channels.py#L405) | *(no entry)* |
-| `Channels.close_all` | method | [419](../../../src/TS/channels.py#L419) | *(no entry)* |
-| `_split_cr` | function | [423](../../../src/TS/channels.py#L423) | *(no entry)* |
-| `_one_line` | function | [439](../../../src/TS/channels.py#L439) | *(no entry)* |
+| `TOKENS` | variable | [25](../../../src/TS/channels.py#L25) | [firmware/channels.md](../firmware/channels.md) |
+| `EXTRA` | variable | [37](../../../src/TS/channels.py#L37) | [firmware/channels.md](../firmware/channels.md) |
+| `POUND` | variable | [39](../../../src/TS/channels.py#L39) | [firmware/channels.md](../firmware/channels.md) |
+| `keyword` | function | [42](../../../src/TS/channels.py#L42) | [firmware/channels.md](../firmware/channels.md) |
+| `TextOut` | class | [48](../../../src/TS/channels.py#L48) | [firmware/channels.md](../firmware/channels.md) |
+| `TextOut.__init__` | method | [59](../../../src/TS/channels.py#L59) | [firmware/channels.md](../firmware/channels.md) |
+| `TextOut._put` | method | [64](../../../src/TS/channels.py#L64) | [firmware/channels.md](../firmware/channels.md) |
+| `TextOut.feed` | method | [73](../../../src/TS/channels.py#L73) | [firmware/channels.md](../firmware/channels.md) |
+| `LATIN1` | variable | [100](../../../src/TS/channels.py#L100) | [firmware/channels.md](../firmware/channels.md) |
+| `UTF8` | variable | [101](../../../src/TS/channels.py#L101) | [firmware/channels.md](../firmware/channels.md) |
+| `TextIn` | class | [104](../../../src/TS/channels.py#L104) | [firmware/channels.md](../firmware/channels.md) |
+| `TextIn.__init__` | method | [117](../../../src/TS/channels.py#L117) | [firmware/channels.md](../firmware/channels.md) |
+| `TextIn.feed` | method | [121](../../../src/TS/channels.py#L121) | [firmware/channels.md](../firmware/channels.md) |
+| `utf8_len` | function | [158](../../../src/TS/channels.py#L158) | [firmware/channels.md](../firmware/channels.md) |
+| `Channel` | class | [180](../../../src/TS/channels.py#L180) | [firmware/channels.md](../firmware/channels.md) |
+| `Channel.__init__` | method | [181](../../../src/TS/channels.py#L181) | [firmware/channels.md](../firmware/channels.md) |
+| `Channel.pad` | method | [197](../../../src/TS/channels.py#L197) | [firmware/channels.md](../firmware/channels.md) |
+| `ChannelError` | class | [201](../../../src/TS/channels.py#L201) | [firmware/channels.md](../firmware/channels.md) |
+| `MAX_RECLEN` | variable | [205](../../../src/TS/channels.py#L205) | [firmware/channels.md](../firmware/channels.md) |
+| `parse_mode` | function | [208](../../../src/TS/channels.py#L208) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels` | class | [219](../../../src/TS/channels.py#L219) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.__init__` | method | [224](../../../src/TS/channels.py#L224) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.open` | method | [228](../../../src/TS/channels.py#L228) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.open_list` | method | [247](../../../src/TS/channels.py#L247) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels._size` | method | [256](../../../src/TS/channels.py#L256) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels._raw` | method | [259](../../../src/TS/channels.py#L259) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels._get` | method | [262](../../../src/TS/channels.py#L262) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels._put` | method | [268](../../../src/TS/channels.py#L268) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels._end_record` | method | [277](../../../src/TS/channels.py#L277) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels._seek` | method | [286](../../../src/TS/channels.py#L286) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels._data` | method | [298](../../../src/TS/channels.py#L298) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.write` | method | [326](../../../src/TS/channels.py#L326) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.read` | method | [348](../../../src/TS/channels.py#L348) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.close` | method | [390](../../../src/TS/channels.py#L390) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.close_writes` | method | [405](../../../src/TS/channels.py#L405) | [firmware/channels.md](../firmware/channels.md) |
+| `Channels.close_all` | method | [419](../../../src/TS/channels.py#L419) | [firmware/channels.md](../firmware/channels.md) |
+| `_split_cr` | function | [423](../../../src/TS/channels.py#L423) | [firmware/channels.md](../firmware/channels.md) |
+| `_one_line` | function | [439](../../../src/TS/channels.py#L439) | [firmware/channels.md](../firmware/channels.md) |
 
 ## `src/TS/catalog.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `ROOT` | variable | [10](../../../src/TS/catalog.py#L10) | *(no entry)* |
-| `DIR_EXT` | variable | [12](../../../src/TS/catalog.py#L12) | *(no entry)* |
-| `BLK_TYPES` | variable | [14](../../../src/TS/catalog.py#L14) | *(no entry)* |
-| `UNSHOWABLE` | variable | [22](../../../src/TS/catalog.py#L22) | *(no entry)* |
-| `screen_name` | function | [25](../../../src/TS/catalog.py#L25) | *(no entry)* |
-| `match_shown` | function | [32](../../../src/TS/catalog.py#L32) | *(no entry)* |
-| `has_wild` | function | [41](../../../src/TS/catalog.py#L41) | *(no entry)* |
-| `match` | function | [45](../../../src/TS/catalog.py#L45) | *(no entry)* |
-| `resolve` | function | [73](../../../src/TS/catalog.py#L73) | *(no entry)* |
-| `public` | function | [99](../../../src/TS/catalog.py#L99) | *(no entry)* |
-| `split_arg` | function | [106](../../../src/TS/catalog.py#L106) | *(no entry)* |
-| `split_pair` | function | [121](../../../src/TS/catalog.py#L121) | *(no entry)* |
-| `select` | function | [136](../../../src/TS/catalog.py#L136) | *(no entry)* |
-| `basename` | function | [162](../../../src/TS/catalog.py#L162) | *(no entry)* |
-| `parent` | function | [166](../../../src/TS/catalog.py#L166) | *(no entry)* |
-| `within` | function | [170](../../../src/TS/catalog.py#L170) | *(no entry)* |
-| `size_text` | function | [177](../../../src/TS/catalog.py#L177) | *(no entry)* |
-| `space_pair` | function | [197](../../../src/TS/catalog.py#L197) | *(no entry)* |
-| `counts` | function | [222](../../../src/TS/catalog.py#L222) | *(no entry)* |
-| `dir_rows` | function | [228](../../../src/TS/catalog.py#L228) | *(no entry)* |
-| `tap_table` | function | [249](../../../src/TS/catalog.py#L249) | *(no entry)* |
-| `tap_header_rows` | function | [288](../../../src/TS/catalog.py#L288) | *(no entry)* |
+| `ROOT` | variable | [10](../../../src/TS/catalog.py#L10) | [firmware/catalog.md](../firmware/catalog.md) |
+| `DIR_EXT` | variable | [12](../../../src/TS/catalog.py#L12) | [firmware/catalog.md](../firmware/catalog.md) |
+| `BLK_TYPES` | variable | [14](../../../src/TS/catalog.py#L14) | [firmware/catalog.md](../firmware/catalog.md) |
+| `UNSHOWABLE` | variable | [22](../../../src/TS/catalog.py#L22) | [firmware/catalog.md](../firmware/catalog.md) |
+| `screen_name` | function | [25](../../../src/TS/catalog.py#L25) | [firmware/catalog.md](../firmware/catalog.md) |
+| `match_shown` | function | [32](../../../src/TS/catalog.py#L32) | [firmware/catalog.md](../firmware/catalog.md) |
+| `has_wild` | function | [41](../../../src/TS/catalog.py#L41) | [firmware/catalog.md](../firmware/catalog.md) |
+| `match` | function | [45](../../../src/TS/catalog.py#L45) | [firmware/catalog.md](../firmware/catalog.md) |
+| `resolve` | function | [73](../../../src/TS/catalog.py#L73) | [firmware/catalog.md](../firmware/catalog.md) |
+| `public` | function | [99](../../../src/TS/catalog.py#L99) | [firmware/catalog.md](../firmware/catalog.md) |
+| `split_arg` | function | [106](../../../src/TS/catalog.py#L106) | [firmware/catalog.md](../firmware/catalog.md) |
+| `split_pair` | function | [121](../../../src/TS/catalog.py#L121) | [firmware/catalog.md](../firmware/catalog.md) |
+| `select` | function | [136](../../../src/TS/catalog.py#L136) | [firmware/catalog.md](../firmware/catalog.md) |
+| `basename` | function | [162](../../../src/TS/catalog.py#L162) | [firmware/catalog.md](../firmware/catalog.md) |
+| `parent` | function | [166](../../../src/TS/catalog.py#L166) | [firmware/catalog.md](../firmware/catalog.md) |
+| `within` | function | [170](../../../src/TS/catalog.py#L170) | [firmware/catalog.md](../firmware/catalog.md) |
+| `size_text` | function | [177](../../../src/TS/catalog.py#L177) | [firmware/catalog.md](../firmware/catalog.md) |
+| `space_pair` | function | [197](../../../src/TS/catalog.py#L197) | [firmware/catalog.md](../firmware/catalog.md) |
+| `counts` | function | [222](../../../src/TS/catalog.py#L222) | [firmware/catalog.md](../firmware/catalog.md) |
+| `dir_rows` | function | [228](../../../src/TS/catalog.py#L228) | [firmware/catalog.md](../firmware/catalog.md) |
+| `tap_table` | function | [249](../../../src/TS/catalog.py#L249) | [firmware/catalog.md](../firmware/catalog.md) |
+| `tap_header_rows` | function | [288](../../../src/TS/catalog.py#L288) | [firmware/catalog.md](../firmware/catalog.md) |
 
 ## `src/TS/extcmd.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `OK` | variable | [50](../../../src/TS/extcmd.py#L50) | *(no entry)* |
-| `F_BAD_NAME` | variable | [51](../../../src/TS/extcmd.py#L51) | *(no entry)* |
-| `NUM_TOO_BIG` | variable | [52](../../../src/TS/extcmd.py#L52) | *(no entry)* |
-| `FACTORIAL` | function | [55](../../../src/TS/extcmd.py#L55) | *(no entry)* |
-| `WORDS` | variable | [74](../../../src/TS/extcmd.py#L74) | *(no entry)* |
-| `RND_WORD` | function | [77](../../../src/TS/extcmd.py#L77) | *(no entry)* |
-| `EXT_SA_FUNCT` | variable | [92](../../../src/TS/extcmd.py#L92) | *(no entry)* |
+| `OK` | variable | [50](../../../src/TS/extcmd.py#L50) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `F_BAD_NAME` | variable | [51](../../../src/TS/extcmd.py#L51) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `NUM_TOO_BIG` | variable | [52](../../../src/TS/extcmd.py#L52) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `FACTORIAL` | function | [55](../../../src/TS/extcmd.py#L55) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `WORDS` | variable | [74](../../../src/TS/extcmd.py#L74) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `RND_WORD` | function | [77](../../../src/TS/extcmd.py#L77) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `EXT_SA_FUNCT` | variable | [92](../../../src/TS/extcmd.py#L92) | [firmware/extcmd.md](../firmware/extcmd.md) |
 
 ## `src/TS/native.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `SIG` | variable | [11](../../../src/TS/native.py#L11) | *(no entry)* |
-| `HDR_LEN` | variable | [12](../../../src/TS/native.py#L12) | *(no entry)* |
-| `SCREEN_LEN` | variable | [13](../../../src/TS/native.py#L13) | *(no entry)* |
-| `SCREEN_ADDR` | variable | [14](../../../src/TS/native.py#L14) | *(no entry)* |
-| `T_PROGRAM` | variable | [16](../../../src/TS/native.py#L16) | *(no entry)* |
-| `T_NUMARR` | variable | [16](../../../src/TS/native.py#L16) | *(no entry)* |
-| `T_CHARARR` | variable | [16](../../../src/TS/native.py#L16) | *(no entry)* |
-| `T_CODE` | variable | [16](../../../src/TS/native.py#L16) | *(no entry)* |
-| `_u16` | function | [19](../../../src/TS/native.py#L19) | *(no entry)* |
-| `_put16` | function | [23](../../../src/TS/native.py#L23) | *(no entry)* |
-| `plus3_header` | function | [28](../../../src/TS/native.py#L28) | *(no entry)* |
-| `parse_plus3` | function | [51](../../../src/TS/native.py#L51) | *(no entry)* |
-| `is_screen` | function | [62](../../../src/TS/native.py#L62) | *(no entry)* |
-| `tape_header` | function | [68](../../../src/TS/native.py#L68) | *(no entry)* |
-| `fields_from_tape_header` | function | [82](../../../src/TS/native.py#L82) | *(no entry)* |
-| `tap_block` | function | [88](../../../src/TS/native.py#L88) | *(no entry)* |
-| `to_file` | function | [98](../../../src/TS/native.py#L98) | *(no entry)* |
-| `describe` | function | [107](../../../src/TS/native.py#L107) | *(no entry)* |
-| `headerless_code` | function | [124](../../../src/TS/native.py#L124) | *(no entry)* |
-| `as_tap` | function | [130](../../../src/TS/native.py#L130) | *(no entry)* |
-| `tape_name` | function | [138](../../../src/TS/native.py#L138) | *(no entry)* |
+| `SIG` | variable | [11](../../../src/TS/native.py#L11) | [firmware/native.md](../firmware/native.md) |
+| `HDR_LEN` | variable | [12](../../../src/TS/native.py#L12) | [firmware/native.md](../firmware/native.md) |
+| `SCREEN_LEN` | variable | [13](../../../src/TS/native.py#L13) | [firmware/native.md](../firmware/native.md) |
+| `SCREEN_ADDR` | variable | [14](../../../src/TS/native.py#L14) | [firmware/native.md](../firmware/native.md) |
+| `T_PROGRAM` | variable | [16](../../../src/TS/native.py#L16) | [firmware/native.md](../firmware/native.md) |
+| `T_NUMARR` | variable | [16](../../../src/TS/native.py#L16) | [firmware/native.md](../firmware/native.md) |
+| `T_CHARARR` | variable | [16](../../../src/TS/native.py#L16) | [firmware/native.md](../firmware/native.md) |
+| `T_CODE` | variable | [16](../../../src/TS/native.py#L16) | [firmware/native.md](../firmware/native.md) |
+| `_u16` | function | [19](../../../src/TS/native.py#L19) | [firmware/native.md](../firmware/native.md) |
+| `_put16` | function | [23](../../../src/TS/native.py#L23) | [firmware/native.md](../firmware/native.md) |
+| `plus3_header` | function | [28](../../../src/TS/native.py#L28) | [firmware/native.md](../firmware/native.md) |
+| `parse_plus3` | function | [51](../../../src/TS/native.py#L51) | [firmware/native.md](../firmware/native.md) |
+| `is_screen` | function | [62](../../../src/TS/native.py#L62) | [firmware/native.md](../firmware/native.md) |
+| `tape_header` | function | [68](../../../src/TS/native.py#L68) | [firmware/native.md](../firmware/native.md) |
+| `fields_from_tape_header` | function | [82](../../../src/TS/native.py#L82) | [firmware/native.md](../firmware/native.md) |
+| `tap_block` | function | [88](../../../src/TS/native.py#L88) | [firmware/native.md](../firmware/native.md) |
+| `to_file` | function | [98](../../../src/TS/native.py#L98) | [firmware/native.md](../firmware/native.md) |
+| `describe` | function | [107](../../../src/TS/native.py#L107) | [firmware/native.md](../firmware/native.md) |
+| `headerless_code` | function | [124](../../../src/TS/native.py#L124) | [firmware/native.md](../firmware/native.md) |
+| `as_tap` | function | [130](../../../src/TS/native.py#L130) | [firmware/native.md](../firmware/native.md) |
+| `tape_name` | function | [138](../../../src/TS/native.py#L138) | [firmware/native.md](../firmware/native.md) |
 
 ## `src/TS/printer.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `VLPRINT` | variable | [24](../../../src/TS/printer.py#L24) | *(no entry)* |
-| `VSCREEN` | variable | [25](../../../src/TS/printer.py#L25) | *(no entry)* |
-| `BLOCKS` | variable | [29](../../../src/TS/printer.py#L29) | *(no entry)* |
-| `CONTROLS` | variable | [31](../../../src/TS/printer.py#L31) | *(no entry)* |
-| `char_text` | function | [35](../../../src/TS/printer.py#L35) | *(no entry)* |
-| `TextCapture` | class | [50](../../../src/TS/printer.py#L50) | *(no entry)* |
-| `TextCapture.__init__` | method | [54](../../../src/TS/printer.py#L54) | *(no entry)* |
-| `TextCapture.reset` | method | [61](../../../src/TS/printer.py#L61) | *(no entry)* |
-| `TextCapture._newline` | method | [68](../../../src/TS/printer.py#L68) | *(no entry)* |
-| `TextCapture.feed` | method | [76](../../../src/TS/printer.py#L76) | *(no entry)* |
-| `next_name` | function | [112](../../../src/TS/printer.py#L112) | *(no entry)* |
-| `_PALETTE` | variable | [134](../../../src/TS/printer.py#L134) | *(no entry)* |
-| `_pix_addr` | function | [142](../../../src/TS/printer.py#L142) | *(no entry)* |
-| `screen_size` | function | [147](../../../src/TS/printer.py#L147) | *(no entry)* |
-| `HIRES_K` | variable | [160](../../../src/TS/printer.py#L160) | *(no entry)* |
-| `hires_ink_paper` | function | [163](../../../src/TS/printer.py#L163) | *(no entry)* |
-| `row_colours` | function | [171](../../../src/TS/printer.py#L171) | *(no entry)* |
-| `write_bmp` | function | [209](../../../src/TS/printer.py#L209) | *(no entry)* |
+| `VLPRINT` | variable | [24](../../../src/TS/printer.py#L24) | [firmware/printer.md](../firmware/printer.md) |
+| `VSCREEN` | variable | [25](../../../src/TS/printer.py#L25) | [firmware/printer.md](../firmware/printer.md) |
+| `BLOCKS` | variable | [29](../../../src/TS/printer.py#L29) | [firmware/printer.md](../firmware/printer.md) |
+| `CONTROLS` | variable | [31](../../../src/TS/printer.py#L31) | [firmware/printer.md](../firmware/printer.md) |
+| `char_text` | function | [35](../../../src/TS/printer.py#L35) | [firmware/printer.md](../firmware/printer.md) |
+| `TextCapture` | class | [50](../../../src/TS/printer.py#L50) | [firmware/printer.md](../firmware/printer.md) |
+| `TextCapture.__init__` | method | [54](../../../src/TS/printer.py#L54) | [firmware/printer.md](../firmware/printer.md) |
+| `TextCapture.reset` | method | [61](../../../src/TS/printer.py#L61) | [firmware/printer.md](../firmware/printer.md) |
+| `TextCapture._newline` | method | [68](../../../src/TS/printer.py#L68) | [firmware/printer.md](../firmware/printer.md) |
+| `TextCapture.feed` | method | [76](../../../src/TS/printer.py#L76) | [firmware/printer.md](../firmware/printer.md) |
+| `next_name` | function | [112](../../../src/TS/printer.py#L112) | [firmware/printer.md](../firmware/printer.md) |
+| `_PALETTE` | variable | [134](../../../src/TS/printer.py#L134) | [firmware/printer.md](../firmware/printer.md) |
+| `_pix_addr` | function | [142](../../../src/TS/printer.py#L142) | [firmware/printer.md](../firmware/printer.md) |
+| `screen_size` | function | [147](../../../src/TS/printer.py#L147) | [firmware/printer.md](../firmware/printer.md) |
+| `HIRES_K` | variable | [160](../../../src/TS/printer.py#L160) | [firmware/printer.md](../firmware/printer.md) |
+| `hires_ink_paper` | function | [163](../../../src/TS/printer.py#L163) | [firmware/printer.md](../firmware/printer.md) |
+| `row_colours` | function | [171](../../../src/TS/printer.py#L171) | [firmware/printer.md](../firmware/printer.md) |
+| `write_bmp` | function | [209](../../../src/TS/printer.py#L209) | [firmware/printer.md](../firmware/printer.md) |
 
 ## `src/upgrade/main.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `U6_EN` | variable | [12](../../../src/upgrade/main.py#L12) | *(no entry)* |
-| `WAIT` | variable | [13](../../../src/upgrade/main.py#L13) | *(no entry)* |
-| `U10_ENA` | variable | [14](../../../src/upgrade/main.py#L14) | *(no entry)* |
-| `U13_ENA` | variable | [15](../../../src/upgrade/main.py#L15) | *(no entry)* |
-| `BE` | variable | [16](../../../src/upgrade/main.py#L16) | *(no entry)* |
-| `ROSCS` | variable | [17](../../../src/upgrade/main.py#L17) | *(no entry)* |
-| `U10_WE` | variable | [18](../../../src/upgrade/main.py#L18) | *(no entry)* |
-| `U3_CS` | variable | [19](../../../src/upgrade/main.py#L19) | *(no entry)* |
-| `ROM` | variable | [29](../../../src/upgrade/main.py#L29) | *(no entry)* |
-| `BANK` | variable | [32](../../../src/upgrade/main.py#L32) | *(no entry)* |
-| `MQ` | variable | [37](../../../src/upgrade/main.py#L37) | *(no entry)* |
+| `U6_EN` | variable | [12](../../../src/upgrade/main.py#L12) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `WAIT` | variable | [13](../../../src/upgrade/main.py#L13) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U10_ENA` | variable | [14](../../../src/upgrade/main.py#L14) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U13_ENA` | variable | [15](../../../src/upgrade/main.py#L15) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `BE` | variable | [16](../../../src/upgrade/main.py#L16) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `ROSCS` | variable | [17](../../../src/upgrade/main.py#L17) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U10_WE` | variable | [18](../../../src/upgrade/main.py#L18) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U3_CS` | variable | [19](../../../src/upgrade/main.py#L19) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `ROM` | variable | [29](../../../src/upgrade/main.py#L29) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `BANK` | variable | [32](../../../src/upgrade/main.py#L32) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `MQ` | variable | [37](../../../src/upgrade/main.py#L37) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 
 ## `src/upgrade/upgrade.py`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `VERSION` | variable | [48](../../../src/upgrade/upgrade.py#L48) | *(no entry)* |
-| `REWIND_MS` | variable | [49](../../../src/upgrade/upgrade.py#L49) | *(no entry)* |
-| `STATUS_NAMES` | variable | [50](../../../src/upgrade/upgrade.py#L50) | *(no entry)* |
-| `report` | function | [54](../../../src/upgrade/upgrade.py#L54) | *(no entry)* |
-| `reply` | function | [60](../../../src/upgrade/upgrade.py#L60) | *(no entry)* |
-| `drained` | function | [80](../../../src/upgrade/upgrade.py#L80) | *(no entry)* |
-| `serve` | function | [88](../../../src/upgrade/upgrade.py#L88) | *(no entry)* |
+| `VERSION` | variable | [48](../../../src/upgrade/upgrade.py#L48) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `REWIND_MS` | variable | [49](../../../src/upgrade/upgrade.py#L49) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `STATUS_NAMES` | variable | [50](../../../src/upgrade/upgrade.py#L50) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `report` | function | [54](../../../src/upgrade/upgrade.py#L54) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `reply` | function | [60](../../../src/upgrade/upgrade.py#L60) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `drained` | function | [80](../../../src/upgrade/upgrade.py#L80) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `serve` | function | [88](../../../src/upgrade/upgrade.py#L88) | [firmware/upgrade.md](../firmware/upgrade.md) |
 
 ## `src/TS/tspico.py`
 
@@ -578,8 +578,8 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `tpi:.fact` | command | [93](../../../src/TS/extcmd.py#L93) | *(no entry)* |
-| `tpi:.rndw` | command | [94](../../../src/TS/extcmd.py#L94) | *(no entry)* |
+| `tpi:.fact` | command | [93](../../../src/TS/extcmd.py#L93) | [firmware/extcmd.md](../firmware/extcmd.md) |
+| `tpi:.rndw` | command | [94](../../../src/TS/extcmd.py#L94) | [firmware/extcmd.md](../firmware/extcmd.md) |
 
 ## `src/rom/fdd/fddcmd.asm`
 
@@ -600,15 +600,15 @@ regenerate it when a line number moves (the test checks that it is current).
 | `SESSION_SETUP` | label | [55](../../../src/rom/fdd/fddcmd.asm#L55) | *(no entry)* |
 | `SAVE_ETC_BODY` | label | [56](../../../src/rom/fdd/fddcmd.asm#L56) | *(no entry)* |
 | `STATUS_REPORT` | label | [58](../../../src/rom/fdd/fddcmd.asm#L58) | *(no entry)* |
-| `SYNC_WRITE` | label | [59](../../../src/rom/fdd/fddcmd.asm#L59) | *(no entry)* |
+| `SYNC_WRITE` | label | [59](../../../src/rom/fdd/fddcmd.asm#L59) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `BIOS_TX_A` | label | [60](../../../src/rom/fdd/fddcmd.asm#L60) | *(no entry)* |
 | `BIOS_RX_A` | label | [61](../../../src/rom/fdd/fddcmd.asm#L61) | *(no entry)* |
-| `BIOS_C_END` | label | [62](../../../src/rom/fdd/fddcmd.asm#L62) | *(no entry)* |
-| `BIOS_WF_NPH` | label | [63](../../../src/rom/fdd/fddcmd.asm#L63) | *(no entry)* |
-| `C_END_TAIL` | label | [64](../../../src/rom/fdd/fddcmd.asm#L64) | *(no entry)* |
+| `BIOS_C_END` | label | [62](../../../src/rom/fdd/fddcmd.asm#L62) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `BIOS_WF_NPH` | label | [63](../../../src/rom/fdd/fddcmd.asm#L63) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `C_END_TAIL` | label | [64](../../../src/rom/fdd/fddcmd.asm#L64) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `BANK_SV` | label | [66](../../../src/rom/fdd/fddcmd.asm#L66) | *(no entry)* |
 | `MODE_SV` | label | [67](../../../src/rom/fdd/fddcmd.asm#L67) | *(no entry)* |
-| `READ_STATUS` | label | [68](../../../src/rom/fdd/fddcmd.asm#L68) | *(no entry)* |
+| `READ_STATUS` | label | [68](../../../src/rom/fdd/fddcmd.asm#L68) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `OPEN_STREAM` | label | [69](../../../src/rom/fdd/fddcmd.asm#L69) | *(no entry)* |
 | `LOOP_BODY` | label | [70](../../../src/rom/fdd/fddcmd.asm#L70) | *(no entry)* |
 | `STREAM_LOWER` | label | [71](../../../src/rom/fdd/fddcmd.asm#L71) | *(no entry)* |
@@ -724,7 +724,7 @@ regenerate it when a line number moves (the test checks that it is current).
 | `CH_IN` | label | [1168](../../../src/rom/fdd/fddcmd.asm#L1168) | *(no entry)* |
 | `CH_FLUSH` | label | [1199](../../../src/rom/fdd/fddcmd.asm#L1199) | *(no entry)* |
 | `CH_FETCH` | label | [1213](../../../src/rom/fdd/fddcmd.asm#L1213) | *(no entry)* |
-| `CH_STATUS` | label | [1260](../../../src/rom/fdd/fddcmd.asm#L1260) | *(no entry)* |
+| `CH_STATUS` | label | [1260](../../../src/rom/fdd/fddcmd.asm#L1260) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `CH_SEND` | label | [1272](../../../src/rom/fdd/fddcmd.asm#L1272) | *(no entry)* |
 | `HEXDIG` | label | [1363](../../../src/rom/fdd/fddcmd.asm#L1363) | *(no entry)* |
 | `STRLEN` | label | [1370](../../../src/rom/fdd/fddcmd.asm#L1370) | *(no entry)* |
@@ -747,46 +747,46 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `ABORT_BYTE` | label | [37](../../../src/rom/patches/tspico-sync.asm#L37) | *(no entry)* |
-| `PORT_DATA` | label | [38](../../../src/rom/patches/tspico-sync.asm#L38) | *(no entry)* |
-| `PORT_STATUS` | label | [39](../../../src/rom/patches/tspico-sync.asm#L39) | *(no entry)* |
-| `ST_READY` | label | [40](../../../src/rom/patches/tspico-sync.asm#L40) | *(no entry)* |
-| `ST_IDLE` | label | [41](../../../src/rom/patches/tspico-sync.asm#L41) | *(no entry)* |
-| `ST_RECOVERED` | label | [42](../../../src/rom/patches/tspico-sync.asm#L42) | *(no entry)* |
-| `ERR_D_BREAK` | label | [47](../../../src/rom/patches/tspico-sync.asm#L47) | *(no entry)* |
-| `ERR_T_PICO` | label | [48](../../../src/rom/patches/tspico-sync.asm#L48) | *(no entry)* |
-| `READ_STATUS` | label | [51](../../../src/rom/patches/tspico-sync.asm#L51) | *(no entry)* |
-| `CHECK_BREAK` | label | [52](../../../src/rom/patches/tspico-sync.asm#L52) | *(no entry)* |
-| `C_END_TAIL` | label | [53](../../../src/rom/patches/tspico-sync.asm#L53) | *(no entry)* |
-| `POLL_KEYPRESS` | label | [54](../../../src/rom/patches/tspico-sync.asm#L54) | *(no entry)* |
-| `TSPICO_WRITE` | label | [55](../../../src/rom/patches/tspico-sync.asm#L55) | *(no entry)* |
-| `EX_PO_MSG` | label | [56](../../../src/rom/patches/tspico-sync.asm#L56) | *(no entry)* |
-| `EX_TO_HOME` | label | [57](../../../src/rom/patches/tspico-sync.asm#L57) | *(no entry)* |
-| `HOME_TO_EX` | label | [58](../../../src/rom/patches/tspico-sync.asm#L58) | *(no entry)* |
-| `HOME_MSG_TABLE` | label | [59](../../../src/rom/patches/tspico-sync.asm#L59) | *(no entry)* |
-| `HOME_MSG_SEP` | label | [60](../../../src/rom/patches/tspico-sync.asm#L60) | *(no entry)* |
-| `HOME_RST10` | label | [61](../../../src/rom/patches/tspico-sync.asm#L61) | *(no entry)* |
-| `EXROM` | label | [63](../../../src/rom/patches/tspico-sync.asm#L63) | *(no entry)* |
-| `SYNC_WRITE` | label | [160](../../../src/rom/patches/tspico-sync.asm#L160) | *(no entry)* |
-| `SYNC_WAIT` | label | [173](../../../src/rom/patches/tspico-sync.asm#L173) | *(no entry)* |
-| `BRK_ABORT` | label | [188](../../../src/rom/patches/tspico-sync.asm#L188) | *(no entry)* |
-| `BRK_TEST` | label | [198](../../../src/rom/patches/tspico-sync.asm#L198) | *(no entry)* |
-| `STEP` | label | [214](../../../src/rom/patches/tspico-sync.asm#L214) | *(no entry)* |
-| `KEYWAIT` | label | [225](../../../src/rom/patches/tspico-sync.asm#L225) | *(no entry)* |
-| `RD_STATUS` | label | [233](../../../src/rom/patches/tspico-sync.asm#L233) | *(no entry)* |
-| `EX_REPORT_MSG` | label | [244](../../../src/rom/patches/tspico-sync.asm#L244) | *(no entry)* |
-| `EX_HOME_PRINT` | label | [264](../../../src/rom/patches/tspico-sync.asm#L264) | *(no entry)* |
-| `MSG_PICO_RESET` | label | [270](../../../src/rom/patches/tspico-sync.asm#L270) | *(no entry)* |
-| `BIOS_WF_NPH` | label | [279](../../../src/rom/patches/tspico-sync.asm#L279) | *(no entry)* |
-| `BIOS_C_END` | label | [312](../../../src/rom/patches/tspico-sync.asm#L312) | *(no entry)* |
-| `NEW_CODE_END` | label | [317](../../../src/rom/patches/tspico-sync.asm#L317) | *(no entry)* |
+| `ABORT_BYTE` | label | [37](../../../src/rom/patches/tspico-sync.asm#L37) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `PORT_DATA` | label | [38](../../../src/rom/patches/tspico-sync.asm#L38) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `PORT_STATUS` | label | [39](../../../src/rom/patches/tspico-sync.asm#L39) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `ST_READY` | label | [40](../../../src/rom/patches/tspico-sync.asm#L40) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `ST_IDLE` | label | [41](../../../src/rom/patches/tspico-sync.asm#L41) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `ST_RECOVERED` | label | [42](../../../src/rom/patches/tspico-sync.asm#L42) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `ERR_D_BREAK` | label | [47](../../../src/rom/patches/tspico-sync.asm#L47) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `ERR_T_PICO` | label | [48](../../../src/rom/patches/tspico-sync.asm#L48) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `READ_STATUS` | label | [51](../../../src/rom/patches/tspico-sync.asm#L51) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `CHECK_BREAK` | label | [52](../../../src/rom/patches/tspico-sync.asm#L52) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `C_END_TAIL` | label | [53](../../../src/rom/patches/tspico-sync.asm#L53) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `POLL_KEYPRESS` | label | [54](../../../src/rom/patches/tspico-sync.asm#L54) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `TSPICO_WRITE` | label | [55](../../../src/rom/patches/tspico-sync.asm#L55) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `EX_PO_MSG` | label | [56](../../../src/rom/patches/tspico-sync.asm#L56) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `EX_TO_HOME` | label | [57](../../../src/rom/patches/tspico-sync.asm#L57) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `HOME_TO_EX` | label | [58](../../../src/rom/patches/tspico-sync.asm#L58) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `HOME_MSG_TABLE` | label | [59](../../../src/rom/patches/tspico-sync.asm#L59) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `HOME_MSG_SEP` | label | [60](../../../src/rom/patches/tspico-sync.asm#L60) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `HOME_RST10` | label | [61](../../../src/rom/patches/tspico-sync.asm#L61) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `EXROM` | label | [63](../../../src/rom/patches/tspico-sync.asm#L63) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `SYNC_WRITE` | label | [160](../../../src/rom/patches/tspico-sync.asm#L160) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `SYNC_WAIT` | label | [173](../../../src/rom/patches/tspico-sync.asm#L173) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `BRK_ABORT` | label | [188](../../../src/rom/patches/tspico-sync.asm#L188) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `BRK_TEST` | label | [198](../../../src/rom/patches/tspico-sync.asm#L198) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `STEP` | label | [214](../../../src/rom/patches/tspico-sync.asm#L214) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `KEYWAIT` | label | [225](../../../src/rom/patches/tspico-sync.asm#L225) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `RD_STATUS` | label | [233](../../../src/rom/patches/tspico-sync.asm#L233) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `EX_REPORT_MSG` | label | [244](../../../src/rom/patches/tspico-sync.asm#L244) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `EX_HOME_PRINT` | label | [264](../../../src/rom/patches/tspico-sync.asm#L264) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `MSG_PICO_RESET` | label | [270](../../../src/rom/patches/tspico-sync.asm#L270) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `BIOS_WF_NPH` | label | [279](../../../src/rom/patches/tspico-sync.asm#L279) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `BIOS_C_END` | label | [312](../../../src/rom/patches/tspico-sync.asm#L312) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `NEW_CODE_END` | label | [317](../../../src/rom/patches/tspico-sync.asm#L317) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 
 ## `src/rom/patches/tspico-zx48-v3.asm`
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `PORT_DATA` | label | [54](../../../src/rom/patches/tspico-zx48-v3.asm#L54) | *(no entry)* |
-| `PORT_STATUS` | label | [55](../../../src/rom/patches/tspico-zx48-v3.asm#L55) | *(no entry)* |
+| `PORT_DATA` | label | [54](../../../src/rom/patches/tspico-zx48-v3.asm#L54) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `PORT_STATUS` | label | [55](../../../src/rom/patches/tspico-zx48-v3.asm#L55) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `WAIT_RDY` | label | [58](../../../src/rom/patches/tspico-zx48-v3.asm#L58) | *(no entry)* |
 | `STK_FETCH` | label | [59](../../../src/rom/patches/tspico-zx48-v3.asm#L59) | *(no entry)* |
 | `CHAN_OPEN` | label | [60](../../../src/rom/patches/tspico-zx48-v3.asm#L60) | *(no entry)* |
@@ -814,61 +814,61 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `PORT_DATA` | label | [47](../../../src/upgrade/updater.asm#L47) | *(no entry)* |
-| `PORT_STAT` | label | [48](../../../src/upgrade/updater.asm#L48) | *(no entry)* |
-| `PORT_HSR` | label | [49](../../../src/upgrade/updater.asm#L49) | *(no entry)* |
-| `ROMFONT` | label | [51](../../../src/upgrade/updater.asm#L51) | *(no entry)* |
-| `SCREEN` | label | [52](../../../src/upgrade/updater.asm#L52) | *(no entry)* |
-| `ATTRS` | label | [53](../../../src/upgrade/updater.asm#L53) | *(no entry)* |
-| `CODE_AT` | label | [55](../../../src/upgrade/updater.asm#L55) | *(no entry)* |
-| `FONT` | label | [56](../../../src/upgrade/updater.asm#L56) | *(no entry)* |
-| `BUF` | label | [57](../../../src/upgrade/updater.asm#L57) | *(no entry)* |
-| `VARS` | label | [58](../../../src/upgrade/updater.asm#L58) | *(no entry)* |
-| `STACK` | label | [59](../../../src/upgrade/updater.asm#L59) | *(no entry)* |
-| `HSR_SLOT1` | label | [61](../../../src/upgrade/updater.asm#L61) | *(no entry)* |
-| `HSR_SLOT0` | label | [62](../../../src/upgrade/updater.asm#L62) | *(no entry)* |
-| `X_PICO` | label | [65](../../../src/upgrade/updater.asm#L65) | *(no entry)* |
-| `X_BLOCKED` | label | [66](../../../src/upgrade/updater.asm#L66) | *(no entry)* |
-| `X_XFER` | label | [67](../../../src/upgrade/updater.asm#L67) | *(no entry)* |
-| `X_WRITE` | label | [68](../../../src/upgrade/updater.asm#L68) | *(no entry)* |
-| `start` | label | [73](../../../src/upgrade/updater.asm#L73) | *(no entry)* |
-| `phase` | label | [123](../../../src/upgrade/updater.asm#L123) | *(no entry)* |
-| `erase` | label | [245](../../../src/upgrade/updater.asm#L245) | *(no entry)* |
-| `program` | label | [287](../../../src/upgrade/updater.asm#L287) | *(no entry)* |
-| `request` | label | [313](../../../src/upgrade/updater.asm#L313) | *(no entry)* |
-| `wait_ready` | label | [316](../../../src/upgrade/updater.asm#L316) | *(no entry)* |
-| `send` | label | [335](../../../src/upgrade/updater.asm#L335) | *(no entry)* |
-| `recv` | label | [343](../../../src/upgrade/updater.asm#L343) | *(no entry)* |
-| `status` | label | [355](../../../src/upgrade/updater.asm#L355) | *(no entry)* |
-| `fetch` | label | [376](../../../src/upgrade/updater.asm#L376) | *(no entry)* |
-| `fail` | label | [410](../../../src/upgrade/updater.asm#L410) | *(no entry)* |
-| `cls` | label | [447](../../../src/upgrade/updater.asm#L447) | *(no entry)* |
-| `print_msgs` | label | [460](../../../src/upgrade/updater.asm#L460) | *(no entry)* |
-| `print_at` | label | [471](../../../src/upgrade/updater.asm#L471) | *(no entry)* |
-| `char_at` | label | [481](../../../src/upgrade/updater.asm#L481) | *(no entry)* |
-| `tick` | label | [514](../../../src/upgrade/updater.asm#L514) | *(no entry)* |
-| `m_title` | label | [536](../../../src/upgrade/updater.asm#L536) | *(no entry)* |
-| `m_done` | label | [543](../../../src/upgrade/updater.asm#L543) | *(no entry)* |
-| `m_stuck` | label | [547](../../../src/upgrade/updater.asm#L547) | *(no entry)* |
-| `m_fail` | label | [552](../../../src/upgrade/updater.asm#L552) | *(no entry)* |
-| `f_pico` | label | [553](../../../src/upgrade/updater.asm#L553) | *(no entry)* |
-| `f_blocked` | label | [556](../../../src/upgrade/updater.asm#L556) | *(no entry)* |
-| `f_xfer` | label | [561](../../../src/upgrade/updater.asm#L561) | *(no entry)* |
-| `f_write` | label | [564](../../../src/upgrade/updater.asm#L564) | *(no entry)* |
-| `saved_sp` | label | [570](../../../src/upgrade/updater.asm#L570) | *(no entry)* |
-| `img` | label | [571](../../../src/upgrade/updater.asm#L571) | *(no entry)* |
-| `blk` | label | [572](../../../src/upgrade/updater.asm#L572) | *(no entry)* |
-| `nblocks` | label | [573](../../../src/upgrade/updater.asm#L573) | *(no entry)* |
-| `hsr` | label | [574](../../../src/upgrade/updater.asm#L574) | *(no entry)* |
-| `base` | label | [575](../../../src/upgrade/updater.asm#L575) | *(no entry)* |
-| `tries` | label | [576](../../../src/upgrade/updater.asm#L576) | *(no entry)* |
-| `xtries` | label | [577](../../../src/upgrade/updater.asm#L577) | *(no entry)* |
-| `reason` | label | [578](../../../src/upgrade/updater.asm#L578) | *(no entry)* |
-| `touched` | label | [579](../../../src/upgrade/updater.asm#L579) | *(no entry)* |
-| `was_data` | label | [580](../../../src/upgrade/updater.asm#L580) | *(no entry)* |
-| `zx_touched` | label | [581](../../../src/upgrade/updater.asm#L581) | *(no entry)* |
-| `ack` | label | [582](../../../src/upgrade/updater.asm#L582) | *(no entry)* |
-| `code_end` | label | [584](../../../src/upgrade/updater.asm#L584) | *(no entry)* |
+| `PORT_DATA` | label | [47](../../../src/upgrade/updater.asm#L47) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `PORT_STAT` | label | [48](../../../src/upgrade/updater.asm#L48) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `PORT_HSR` | label | [49](../../../src/upgrade/updater.asm#L49) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `ROMFONT` | label | [51](../../../src/upgrade/updater.asm#L51) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `SCREEN` | label | [52](../../../src/upgrade/updater.asm#L52) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `ATTRS` | label | [53](../../../src/upgrade/updater.asm#L53) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `CODE_AT` | label | [55](../../../src/upgrade/updater.asm#L55) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `FONT` | label | [56](../../../src/upgrade/updater.asm#L56) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `BUF` | label | [57](../../../src/upgrade/updater.asm#L57) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `VARS` | label | [58](../../../src/upgrade/updater.asm#L58) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `STACK` | label | [59](../../../src/upgrade/updater.asm#L59) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `HSR_SLOT1` | label | [61](../../../src/upgrade/updater.asm#L61) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `HSR_SLOT0` | label | [62](../../../src/upgrade/updater.asm#L62) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `X_PICO` | label | [65](../../../src/upgrade/updater.asm#L65) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `X_BLOCKED` | label | [66](../../../src/upgrade/updater.asm#L66) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `X_XFER` | label | [67](../../../src/upgrade/updater.asm#L67) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `X_WRITE` | label | [68](../../../src/upgrade/updater.asm#L68) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `start` | label | [73](../../../src/upgrade/updater.asm#L73) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `phase` | label | [123](../../../src/upgrade/updater.asm#L123) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `erase` | label | [245](../../../src/upgrade/updater.asm#L245) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `program` | label | [287](../../../src/upgrade/updater.asm#L287) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `request` | label | [313](../../../src/upgrade/updater.asm#L313) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `wait_ready` | label | [316](../../../src/upgrade/updater.asm#L316) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `send` | label | [335](../../../src/upgrade/updater.asm#L335) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `recv` | label | [343](../../../src/upgrade/updater.asm#L343) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `status` | label | [355](../../../src/upgrade/updater.asm#L355) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `fetch` | label | [376](../../../src/upgrade/updater.asm#L376) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `fail` | label | [410](../../../src/upgrade/updater.asm#L410) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `cls` | label | [447](../../../src/upgrade/updater.asm#L447) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `print_msgs` | label | [460](../../../src/upgrade/updater.asm#L460) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `print_at` | label | [471](../../../src/upgrade/updater.asm#L471) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `char_at` | label | [481](../../../src/upgrade/updater.asm#L481) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `tick` | label | [514](../../../src/upgrade/updater.asm#L514) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `m_title` | label | [536](../../../src/upgrade/updater.asm#L536) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `m_done` | label | [543](../../../src/upgrade/updater.asm#L543) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `m_stuck` | label | [547](../../../src/upgrade/updater.asm#L547) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `m_fail` | label | [552](../../../src/upgrade/updater.asm#L552) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `f_pico` | label | [553](../../../src/upgrade/updater.asm#L553) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `f_blocked` | label | [556](../../../src/upgrade/updater.asm#L556) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `f_xfer` | label | [561](../../../src/upgrade/updater.asm#L561) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `f_write` | label | [564](../../../src/upgrade/updater.asm#L564) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `saved_sp` | label | [570](../../../src/upgrade/updater.asm#L570) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `img` | label | [571](../../../src/upgrade/updater.asm#L571) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `blk` | label | [572](../../../src/upgrade/updater.asm#L572) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `nblocks` | label | [573](../../../src/upgrade/updater.asm#L573) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `hsr` | label | [574](../../../src/upgrade/updater.asm#L574) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `base` | label | [575](../../../src/upgrade/updater.asm#L575) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `tries` | label | [576](../../../src/upgrade/updater.asm#L576) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `xtries` | label | [577](../../../src/upgrade/updater.asm#L577) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `reason` | label | [578](../../../src/upgrade/updater.asm#L578) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `touched` | label | [579](../../../src/upgrade/updater.asm#L579) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `was_data` | label | [580](../../../src/upgrade/updater.asm#L580) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `zx_touched` | label | [581](../../../src/upgrade/updater.asm#L581) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `ack` | label | [582](../../../src/upgrade/updater.asm#L582) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `code_end` | label | [584](../../../src/upgrade/updater.asm#L584) | [firmware/upgrade.md](../firmware/upgrade.md) |
 
 ## `docs/rom-analysis/tspico-exrom-symbols.sym`
 
@@ -877,15 +877,15 @@ regenerate it when a line number moves (the test checks that it is current).
 | `BOOT_MAP_16K` | label | [15](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L15) | *(no entry)* |
 | `CALL_HOME` | label | [16](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L16) | *(no entry)* |
 | `BANK_SWITCH` | label | [17](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L17) | *(no entry)* |
-| `READ_STATUS` | label | [20](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L20) | *(no entry)* |
-| `CHECK_BREAK` | label | [21](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L21) | *(no entry)* |
+| `READ_STATUS` | label | [20](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L20) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
+| `CHECK_BREAK` | label | [21](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L21) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `BREAK_ABORT` | label | [22](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L22) | *(no entry)* |
 | `READ_STATUS_BYTE` | label | [23](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L23) | *(no entry)* |
 | `READ_STATUS_AND_OPEN` | label | [26](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L26) | *(no entry)* |
 | `PRINT_STRING_FROM_PICO` | label | [27](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L27) | *(no entry)* |
 | `GET_KEY_AND_SEND` | label | [28](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L28) | *(no entry)* |
 | `OPEN_MAIN_SCREEN` | label | [29](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L29) | *(no entry)* |
-| `POLL_KEYPRESS` | label | [30](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L30) | *(no entry)* |
+| `POLL_KEYPRESS` | label | [30](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L30) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `LOOP_EXIT_OK` | label | [31](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L31) | *(no entry)* |
 | `LOOP_EXIT_ERR` | label | [32](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L32) | *(no entry)* |
 | `GET_STATUS_BIT_0` | label | [33](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L33) | *(no entry)* |
