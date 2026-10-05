@@ -5,7 +5,7 @@ TS-2068 software list. Each program page links a zip in the archive.org
 collection. The scripts take the tapes out of the zips, give them short names
 in category folders, and try every one on a TS-Pico in the emulator
 (`tools/emu`). The card gets only the tapes that load and start. A catalog
-says how to load each one, and why any tape was left out.
+says what each one is, how to load it, and why any tape was left out.
 
 ```
 fetch.py PAGE ─▶ plan.py ─▶ loadtest.py ─▶ followup.py ─▶ build_card.py OUTDIR
@@ -30,10 +30,12 @@ fetch.py PAGE ─▶ plan.py ─▶ loadtest.py ─▶ followup.py ─▶ build_
 ```bash
 cd tools/sd-archive
 python3 fetch.py http://localhost/downloadable-software/downloadable-software-for-the-ts-2068/
+python3 describe.py           # the site's descriptions, for the catalog
 python3 plan.py
 python3 loadtest.py           # ~45 min for ~1400 tapes, 12 workers
 python3 followup.py           # ~15 min
 python3 build_card.py ~/Desktop/sd-2068
+python3 publish.py ~/Desktop/sd-2068    # to archive.org (--dry-run to check first)
 ```
 
 Every step reuses what's already done. The fetch keeps zips it has already
@@ -42,7 +44,7 @@ picks up where it left off. To update the card when the list changes, run all
 five steps again. Delete `results*.json` in the work folder to retest
 everything, for example after a firmware change.
 
-Then copy `OUTDIR/TAP` and `OUTDIR/help` to the card. `OUTDIR-not-loading/`
+Then copy `OUTDIR/TAP` and `OUTDIR/help` to the card, or publish it. `OUTDIR-not-loading/`
 holds the tapes that were left out, with the same catalog.
 
 ## What each step does
@@ -50,6 +52,11 @@ holds the tapes that were left out, with the same catalog.
 - **`fetch.py`** reads the list page and each program's page (cached in
   `detail/`), and downloads the zips four at a time. A program inside a
   collection has no link of its own, because the collection's zip brings it.
+- **`describe.py`** reads every `computer_media` post from the same site's
+  WordPress REST API (`/wp-json/wp/v2/computer_media`). The catalog's
+  `summary` is the post's excerpt, and its `description` is the post's opening
+  paragraph. A tape from a collection gets the collection's. Run it again after
+  editing the site; `build_card.py` leaves both columns empty without it.
 - **`plan.py`** takes each zip's `.tap` files, or converts its `.tzx` or `.wav`
   when there's no `.tap`. It also converts a `.tap` that is really a TZX, and
   drops zero padding after the last block. It removes identical tapes. It
@@ -71,6 +78,11 @@ holds the tapes that were left out, with the same catalog.
     the stock 2068 fails the same way, the tape is at fault, not the TS-Pico.
 - **`build_card.py`** decides each tape's verdict (`verdict()`), copies the
   tapes, and writes `catalog.csv`.
+- **`publish.py`** zips the card (`TAP/`, `help/`, `catalog.csv`) and uploads
+  the zip and the catalog to the `timex-sinclair-software-archive` item on
+  archive.org, beside the tapes they came from, replacing the old copies. The
+  web updater links there. It needs `pip install internetarchive` and an
+  account that can write the item (`ia configure`).
 
 ## Verdicts
 

@@ -752,8 +752,25 @@ function setRunning(on) {
     refreshPlan()
 }
 
+// The software library lives in the archive.org item its tapes came from
+// (tools/sd-archive/publish.py). Its downloads send no CORS header, so the
+// page only links them; the metadata API does, so the note shows the zip's
+// current size and date.
+async function libraryNote() {
+    const name = decodeURIComponent($('library-link').href.split('/').pop())
+    try {
+        const r = await fetch('https://archive.org/metadata/timex-sinclair-software-archive/files')
+        const f = (await r.json()).result.find((x) => x.name === name)
+        if (f) {
+            $('library-note').textContent = `(${sizeFmt(+f.size)}, ` +
+                `${new Date(f.mtime * 1000).toISOString().slice(0, 10)})`
+        }
+    } catch (_e) { /* the links work without it */ }
+}
+
 // ---------------------------------------------------------------------------
 async function init() {
+    libraryNote()
     if (typeof navigator.serial === 'undefined') {
         show($('unsupported'), true)
         show($('main'), false)
