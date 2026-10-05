@@ -25,8 +25,8 @@ code itself is in the chapters that follow:
 |---|---|
 | [sysvars.md](sysvars.md) | the TS-Pico system variables at 5Dxxh and the stock ones the ROM code uses |
 | [home.md](home.md) | every HOME hook and patch, 1.1 to 2.1 |
-| [exrom-driver.md](exrom-driver.md) | EXROM 1800h–1BFFh: the Pico driver and the BIOS table |
-| [exrom-chunk1.md](exrom-chunk1.md) | EXROM 2000h–22FDh and the chunk-0 paths: the function chain, LOAD, SAVE, printer |
+| [exrom-driver.md](exrom-driver.md) | EXROM 1800h–1BFFh: the Pico driver, the BIOS table, the SAVE and LOAD paths, the reports |
+| [exrom-chunk1.md](exrom-chunk1.md) | EXROM 2000h–22FDh and the chunk-0 helpers: the function chain, the accessors, the printer path |
 | [exrom-sync.md](exrom-sync.md) | ROM 2.0 at 2300h: SYNC, BREAK, recovery |
 | [exrom-fdd.md](exrom-fdd.md) | ROM 2.1 at 3000h: disk commands, `f:`, channels |
 | [zx48.md](zx48.md) | the ZX Spectrum ROM, v2 to v4 |

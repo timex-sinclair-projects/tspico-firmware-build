@@ -49,8 +49,8 @@ from the BASIC keyword to the SD card and back.
 | ROM | [rom/overview.md](rom/overview.md) | The images and their lineage, banking, how HOME calls EXROM, version bytes, the ROM build and the listings |
 | ROM | [rom/sysvars.md](rom/sysvars.md) | The TS-Pico system variables at 5Dxxh, and the stock ones the Pico code uses |
 | ROM | [rom/home.md](rom/home.md) | The HOME ROM: every hook and patch, 1.1 through 2.1 |
-| ROM | [rom/exrom-driver.md](rom/exrom-driver.md) | EXROM 1800h–1BFFh: the Pico driver and the BIOS table |
-| ROM | [rom/exrom-chunk1.md](rom/exrom-chunk1.md) | EXROM 2000h–22ADh: the function chain, LOAD, SAVE and printer paths |
+| ROM | [rom/exrom-driver.md](rom/exrom-driver.md) | EXROM 1800h–1BFFh: the Pico driver, the BIOS table, the SAVE and LOAD paths, the reports |
+| ROM | [rom/exrom-chunk1.md](rom/exrom-chunk1.md) | EXROM 2000h–22FDh and the chunk-0 helpers: the function chain, the accessors, the printer path |
 | ROM | [rom/exrom-sync.md](rom/exrom-sync.md) | ROM 2.0 at 2300h: SYNC, BREAK, recovery |
 | ROM | [rom/exrom-fdd.md](rom/exrom-fdd.md) | ROM 2.1 at 3000h: disk commands, `f:`, channels |
 | ROM | [rom/zx48.md](rom/zx48.md) | The ZX Spectrum ROM, v2 to v4 |
