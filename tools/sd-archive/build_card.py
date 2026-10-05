@@ -5,8 +5,9 @@
 
   OUTDIR/TAP/<CATEGORY>[/<COLLECTION>]/<name>.tap   the tapes that load and start
   OUTDIR/help/                                       the help files from "SD card/"
-  OUTDIR/catalog.csv                                 every tape: where it is, how
-                                                     to load it, why one is left out
+  OUTDIR/catalog.csv                                 every tape: where it is, what
+                                                     it is, how to load it, why one
+                                                     is left out
   OUTDIR-not-loading/                                the rest, same layout + catalog
 
 On the card: a program that loads and starts (by itself, or after RUN); bytes
@@ -76,6 +77,7 @@ def main():
     code, run, stock, ares = (results(n) for n in ("results_code.json", "results_run.json",
                                                     "results_stock.json", "results_alt.json"))
     alt = C.load("alt.json", {})
+    desc = C.load("descriptions.json", {})         # describe.py; optional
     rows = []
     for e in plan:
         sid = e["sha1"][:12]
@@ -86,8 +88,11 @@ def main():
         dst = os.path.join(out if on else left, "TAP", e["folder"])
         os.makedirs(dst, exist_ok=True)
         shutil.copyfile(src, os.path.join(dst, e["name"]))
+        about = desc.get(e["page"], {})
         rows.append(dict(on_card="yes" if on else "no", folder="TAP/" + e["folder"], file=e["name"],
-                         title=e["title"], load=how, note=note, original_file=os.path.basename(e["member"]),
+                         title=e["title"], summary=about.get("summary", ""),
+                         description=about.get("description", ""), load=how, note=note,
+                         original_file=os.path.basename(e["member"]),
                          tags=e["tags"], blocks_loaded="%s of %s" % (r.get("served"), r.get("blocks")),
                          converted_from=e["src"] if e["src"] != "tap" else "",
                          also_listed_as="; ".join(e["also"]), page=e["page"], download=e["url"]))
