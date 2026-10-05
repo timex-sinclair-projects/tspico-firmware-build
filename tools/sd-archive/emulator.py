@@ -1,7 +1,7 @@
 """The two machines the tapes are tried on, built on tools/emu/session.py:
 
   TSPico  ZEsarUX on the TS-Pico ROM with the real firmware behind it
-          (fast_host.py), the tape on its card: LOAD "tpi:name", LOAD "".
+          (tools/emu/pico_host.py), the tape on its card: LOAD "tpi:name", LOAD "".
   Stock   ZEsarUX on its own TS-2068 ROM, no TS-Pico, the tape loaded
           from its virtual deck (ZRCP smartload): what a real 2068 would do.
 
@@ -27,6 +27,14 @@ RUN = 0xF7
 STOCK_ROMS = [os.environ.get("TS2068_ROM", ""),
               "/Applications/zesarux.app/Contents/Resources/ts2068.rom",
               os.path.join(os.path.dirname(S.EMU), "..", "zesarux", "src", "ts2068.rom")]
+
+
+def free_port():
+    """A TCP port nothing is listening on, so runs in other work folders
+    (or other sessions) don't collide."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def emu_dir(*p):
@@ -97,16 +105,16 @@ class TSPico(Machine):
         for d in (self.root, seed):
             shutil.rmtree(d, ignore_errors=True)
         os.makedirs(os.path.join(seed, "TAP"))
-        bridge = "127.0.0.1:%d" % (20700 + k)
+        bridge = "127.0.0.1:%d" % free_port()
         self.host = subprocess.Popen(
-            [sys.executable, "-u", os.path.join(C.HERE, "fast_host.py"), "--root", self.root, "--sd", seed,
+            [sys.executable, "-u", os.path.join(C.EMU_DIR, "pico_host.py"), "--root", self.root, "--sd", seed,
              "--tcp", bridge, "--unix", ""], stdout=open(self.log, "w"), stderr=subprocess.STDOUT)
         t0 = time.time()
         while "listening" not in open(self.log).read():
             assert time.time() - t0 < 30, "pico_host didn't start: see " + self.log
             time.sleep(0.2)
         time.sleep(1.5)
-        self.start_emu(10100 + k, S.ROM, dict(os.environ, TSPICO_BRIDGE="tcp:" + bridge))
+        self.start_emu(free_port(), S.ROM, dict(os.environ, TSPICO_BRIDGE="tcp:" + bridge))
 
     def served(self, off):
         with open(self.log, errors="replace") as f:
@@ -171,7 +179,7 @@ class Stock(Machine):
         rom = next((p for p in STOCK_ROMS if p and os.path.exists(p)), None)
         assert rom, "no stock ts2068.rom: set TS2068_ROM"
         self.host = None
-        self.start_emu(10300 + k, rom, dict(os.environ, TSPICO_BRIDGE="tcp:127.0.0.1:9"))  # no TS-Pico
+        self.start_emu(free_port(), rom, dict(os.environ, TSPICO_BRIDGE="tcp:127.0.0.1:9"))  # no TS-Pico
 
     def test(self, job):
         self.cmd("smartload " + job["tap"])
