@@ -10,15 +10,15 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `_telemetry` | function | [27](../../../src/main.py#L27) | *(no entry)* |
-| `U6_EN` | variable | [64](../../../src/main.py#L64) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `WAIT` | variable | [65](../../../src/main.py#L65) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `U10_ENA` | variable | [66](../../../src/main.py#L66) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `U13_ENA` | variable | [67](../../../src/main.py#L67) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `BE` | variable | [68](../../../src/main.py#L68) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `ROSCS` | variable | [69](../../../src/main.py#L69) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `U10_WE` | variable | [70](../../../src/main.py#L70) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `log_msg` | variable | [82](../../../src/main.py#L82) | *(no entry)* |
+| `_telemetry` | function | [27](../../../src/main.py#L27) | [firmware/boot.md](../firmware/boot.md) |
+| `U6_EN` | variable | [64](../../../src/main.py#L64) | [firmware/boot.md](../firmware/boot.md) |
+| `WAIT` | variable | [65](../../../src/main.py#L65) | [firmware/boot.md](../firmware/boot.md) |
+| `U10_ENA` | variable | [66](../../../src/main.py#L66) | [firmware/boot.md](../firmware/boot.md) |
+| `U13_ENA` | variable | [67](../../../src/main.py#L67) | [firmware/boot.md](../firmware/boot.md) |
+| `BE` | variable | [68](../../../src/main.py#L68) | [firmware/boot.md](../firmware/boot.md) |
+| `ROSCS` | variable | [69](../../../src/main.py#L69) | [firmware/boot.md](../firmware/boot.md) |
+| `U10_WE` | variable | [70](../../../src/main.py#L70) | [firmware/boot.md](../firmware/boot.md) |
+| `log_msg` | variable | [82](../../../src/main.py#L82) | [firmware/boot.md](../firmware/boot.md) |
 
 ## `src/TS/tspico.py`
 
@@ -69,8 +69,8 @@ regenerate it when a line number moves (the test checks that it is current).
 | `_10_J_Invalid_IO` | variable | [487](../../../src/TS/tspico.py#L487) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `_11_D_Break` | variable | [488](../../../src/TS/tspico.py#L488) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `TLM_ENABLED` | variable | [517](../../../src/TS/tspico.py#L517) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
-| `FW_VERSION` | variable | [544](../../../src/TS/tspico.py#L544) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
-| `ROM_VERSION` | variable | [545](../../../src/TS/tspico.py#L545) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `FW_VERSION` | variable | [544](../../../src/TS/tspico.py#L544) | [firmware/boot.md](../firmware/boot.md) |
+| `ROM_VERSION` | variable | [545](../../../src/TS/tspico.py#L545) | [firmware/boot.md](../firmware/boot.md) |
 | `_tlm_last` | variable | [552](../../../src/TS/tspico.py#L552) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `TLM` | function | [555](../../../src/TS/tspico.py#L555) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `TLM_RESET` | function | [586](../../../src/TS/tspico.py#L586) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
@@ -497,13 +497,13 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `U6_EN` | variable | [12](../../../src/upgrade/main.py#L12) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `WAIT` | variable | [13](../../../src/upgrade/main.py#L13) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `U10_ENA` | variable | [14](../../../src/upgrade/main.py#L14) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `U13_ENA` | variable | [15](../../../src/upgrade/main.py#L15) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `BE` | variable | [16](../../../src/upgrade/main.py#L16) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `ROSCS` | variable | [17](../../../src/upgrade/main.py#L17) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `U10_WE` | variable | [18](../../../src/upgrade/main.py#L18) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `U6_EN` | variable | [12](../../../src/upgrade/main.py#L12) | [firmware/boot.md](../firmware/boot.md) |
+| `WAIT` | variable | [13](../../../src/upgrade/main.py#L13) | [firmware/boot.md](../firmware/boot.md) |
+| `U10_ENA` | variable | [14](../../../src/upgrade/main.py#L14) | [firmware/boot.md](../firmware/boot.md) |
+| `U13_ENA` | variable | [15](../../../src/upgrade/main.py#L15) | [firmware/boot.md](../firmware/boot.md) |
+| `BE` | variable | [16](../../../src/upgrade/main.py#L16) | [firmware/boot.md](../firmware/boot.md) |
+| `ROSCS` | variable | [17](../../../src/upgrade/main.py#L17) | [firmware/boot.md](../firmware/boot.md) |
+| `U10_WE` | variable | [18](../../../src/upgrade/main.py#L18) | [firmware/boot.md](../firmware/boot.md) |
 | `U3_CS` | variable | [19](../../../src/upgrade/main.py#L19) | [firmware/upgrade.md](../firmware/upgrade.md) |
 | `ROM` | variable | [29](../../../src/upgrade/main.py#L29) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `BANK` | variable | [32](../../../src/upgrade/main.py#L32) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
