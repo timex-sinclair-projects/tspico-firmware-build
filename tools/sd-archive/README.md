@@ -89,12 +89,11 @@ card, even when the first part loads.
 
 ## The emulator, in parallel
 
-- **Workers:** each one is a ZEsarUX plus a pico_host. ZRCP uses port
-  10100+k, the bridge 20700+k, and the stock 2068s 10300+k.
-- **`fast_host.py`:** this is `tools/emu/pico_host.py` with its bus model
-  patched. When several sessions share the CPU, the firmware thread falls
-  behind, and the 2068 reads 00h from an empty queue. Good tapes then fail with
-  Report R. With the patch, an `IN (0Eh)` waits up to 50 ms for its byte, and
-  the firmware's idle poll sleeps instead of spinning a core.
+- **Workers:** each one is a ZEsarUX plus a pico_host, on free ports the OS
+  picks (ZRCP and the bridge), so two runs can go at once in different work
+  folders.
+- **Underruns:** many sessions at once need `pico_host.py` from #151 or later.
+  Before it, a firmware thread that fell behind left the 2068 reading 00h, and
+  good tapes failed with Report R.
 - **Reset:** between tapes the 2068 is reset with ZRCP `reset-cpu`.
   `hard-reset-cpu` doesn't reliably restart a program that's running.
