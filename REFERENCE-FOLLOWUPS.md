@@ -79,6 +79,11 @@ wrong; **test** a test docstring is wrong.
 | C27 | `src/upgrade/main.py`, `src/main.py` | GPIO 14 named `WAIT` while `TS_IO_DUAL` waits on it as /PICOSEL (hardware.md marks the resolution unverified) | |
 | C28 | `src/upgrade/manifest.py` | Filesystem empty "after flash_nuke"; over WebUSB it is erased through PICOBOOT | |
 | C29 | `docs/SAVE_1.1C_VS_1.5.md` §7 | `SAVE_ZX` "has not been migrated"; it has | |
+| C30 | `tools/build-rom.sh` header | Calls `src/rom/TSPICO.ROM` "the shipping ROM (slot 1)"; slot 1 is `TSPICO-21.ROM`, `TSPICO.ROM` is the v1.7 base ([rom/overview.md](docs/reference/rom/overview.md#where-comments-and-the-code-disagree)) | |
+| C31 | `src/rom/patches/tspico-sync.asm` header | Its output `TSPICO-SYNC.ROM` "the shipping slot-1 ROM"; it is 2.1's base | |
+| C32 | `tools/romdiff.py` `IMAGES` comment | v1.7 "the ROM currently shipped" | |
+| C33 | `src/rom/fdd/README.md` | The 25D6h disk-token hook "is staged"; it is enabled. "$22A1–$2FFF is left for Gustavo"; ROM 2.0 now uses 2300h–23D3h | |
+| C34 | `docs/rom-analysis/README.md`, `MEMORY_MAP.md`, `SYMBOLS.md` | List v1.1's port I/O sites as "the only" ones; 2.x adds 2304h, 2311h, 2320h, 23A7h, 23C0h, 3657h. The dead `OUT (0Fh)` at 2236h is not mentioned | |
 
 ## Test docstrings
 
