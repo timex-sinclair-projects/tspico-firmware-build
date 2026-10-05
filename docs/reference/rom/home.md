@@ -241,7 +241,7 @@ gone; their callers are kept.
 | 0A12h | `BIT 1,(IY+1) / JP Z,061Eh` | printer to the Pico, but this character is not for the printer (FLAGS bit 1 clear): into 061Ah after its own test, which therefore takes the screen path |
 | 0A19h | `CP 80h / JR NC,0A68h` | a printer character: 80h and above to 0A68h |
 | 0A1Dh | `LD (5DCDh),HL / JP 04F2h` | below 80h: to the Pico, one character (EXROM 1668h) |
-| 0A23h | `JP 3CF8h` | COPY-BUFF's entry, called by the stock code at 056Ah, 06C3h, 0EDCh (a printed newline, the end of LPRINT/LLIST, and so on): 3CF8h → 04F8h → EXROM 17CDh, which flushes the Pico's line |
+| 0A23h | `JP 3CF8h` | COPY-BUFF's entry, called by the stock code at 056Ah, 06C3h, 0EDCh (a printed newline, the end of LPRINT/LLIST, and so on): 3CF8h → 04F8h → EXROM 1636h → 17CDh, the stock COPY-BUFF moved to the EXROM unchanged. It prints the buffer at 5B00h on a ZX Printer (port FBh) and returns at once when there is none; nothing goes to the Pico ([exrom-chunk1.md](exrom-chunk1.md#the-printer-path-1630h183bh)) |
 | 0A26h | `LD (5DCDh),HL / LD HL,163Ch / JP 0A50h` | a UDG (90h–A4h): EXROM 163Ch → 180Fh, which sends its 8-byte pattern (PMR1 = code × 8 + UDG) |
 | 0A2Fh | `NOP` | |
 
@@ -254,7 +254,7 @@ block graphics and UDGs as their patterns.
 
 | HOME | Now | What |
 |---|---|---|
-| 0A4Ah | `LD (5DCDh),HL / LD HL,1633h` (falls into 0A50h) | COPY-LINE's entry → EXROM 1633h → 17C3h |
+| 0A4Ah | `LD (5DCDh),HL / LD HL,1633h` (falls into 0A50h) | COPY-LINE's entry → EXROM 1633h → 17C3h, the stock COPY-LINE moved unchanged |
 | 0A50h | the no-return thunk (above) | |
 | 0A68h | `CP A5h / JP C,0A73h / SUB A5h / CALL 0745h / RET` | a keyword token (A5h and above): the stock PO-TOKENS prints its text, which comes back through 0500h one character at a time |
 | 0A73h | `CP 90h / JP NC,0A26h` | 90h–A4h: a UDG |
@@ -448,7 +448,7 @@ where the genuine stub jumped, is untouched.
 | OPEN # | 1438h → 14BDh (syntax); 145Eh → 1488h (run time) | G_OSYN, G_OPEN |
 | PRINT #, INPUT #, LIST #, INKEY$ # on an `F` stream | the record's 14A0h / 14A9h | G_OUT, G_IN |
 | CLOSE # | 13A5h → 1494h | G_CLOSE |
-| LPRINT, LLIST | 0500h → 0A09h → 04F2h / 0A26h / 04E8h; 0A23h at the end of a line | 1639h, 163Ch, 1636h |
+| LPRINT, LLIST | 0500h → 0A09h → 04F2h / 0A26h / 04E8h; 0A23h at the end of a line (the stock ZX Printer flush) | 1639h, 163Ch; 1636h |
 | COPY | 0A02h → 3CE3h | 1630h |
 | BEEP, the key click | 03F3h → 041Ch → 03FCh | G_BEEP → BEEPER |
 | any report | 0F12h → 03FCh | EX_REPORT_MSG |

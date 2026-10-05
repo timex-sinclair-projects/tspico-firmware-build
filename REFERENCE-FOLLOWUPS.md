@@ -107,3 +107,4 @@ wrong; **test** a test docstring is wrong.
 |---|---|---|
 | R2 | `tools/romdisasm.sh` merges every `EQU` in 0100h–3FFFh into the EXROM label file, including the module's HOME addresses: EXROM 1BEFh is labelled `H_EXPT_STR` (a HOME routine) in the middle of STATUS_TO_REPORT's lead-in. Filter out the `H_*` names (or anything the source marks HOME) | |
 | R1 | `reference_hosttest.py` matches entries by name only. `src/main.py` and `src/upgrade/main.py` share pin names, so both sets index to `firmware/boot.md` (upgrade.md documents the upgrade ones) | |
+| R3 | Name collisions the index cannot tell apart: `tspico-zx48-v3.asm`'s BREAK_KEY (Spectrum ROM 1F54h) and `fddcmd.asm`'s BEEPER (2000h) index to exrom-chunk1.md's BREAK_KEY (2009h) and BEEPER (203Fh); fddcmd's READ_STATUS (C38) likewise. Make the test match an entry to its source file, or rename the EQUs | |

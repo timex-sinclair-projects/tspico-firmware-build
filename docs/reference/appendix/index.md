@@ -643,7 +643,7 @@ regenerate it when a line number moves (the test checks that it is current).
 | `ERR_SP` | label | [108](../../../src/rom/fdd/fddcmd.asm#L108) | *(no entry)* |
 | `BANK_SP` | label | [109](../../../src/rom/fdd/fddcmd.asm#L109) | *(no entry)* |
 | `H_TRAP` | label | [110](../../../src/rom/fdd/fddcmd.asm#L110) | *(no entry)* |
-| `BEEPER` | label | [111](../../../src/rom/fdd/fddcmd.asm#L111) | *(no entry)* |
+| `BEEPER` | label | [111](../../../src/rom/fdd/fddcmd.asm#L111) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `READ_DELAY` | label | [112](../../../src/rom/fdd/fddcmd.asm#L112) | *(no entry)* |
 | `TOK_SCREEN` | label | [113](../../../src/rom/fdd/fddcmd.asm#L113) | *(no entry)* |
 | `TOK_CODE` | label | [114](../../../src/rom/fdd/fddcmd.asm#L114) | *(no entry)* |
@@ -791,7 +791,7 @@ regenerate it when a line number moves (the test checks that it is current).
 | `STK_FETCH` | label | [59](../../../src/rom/patches/tspico-zx48-v3.asm#L59) | *(no entry)* |
 | `CHAN_OPEN` | label | [60](../../../src/rom/patches/tspico-zx48-v3.asm#L60) | *(no entry)* |
 | `PR_STRING` | label | [61](../../../src/rom/patches/tspico-zx48-v3.asm#L61) | *(no entry)* |
-| `BREAK_KEY` | label | [62](../../../src/rom/patches/tspico-zx48-v3.asm#L62) | *(no entry)* |
+| `BREAK_KEY` | label | [62](../../../src/rom/patches/tspico-zx48-v3.asm#L62) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `SET_STK` | label | [63](../../../src/rom/patches/tspico-zx48-v3.asm#L63) | *(no entry)* |
 | `T_ADDR` | label | [64](../../../src/rom/patches/tspico-zx48-v3.asm#L64) | *(no entry)* |
 | `CH_ADD` | label | [65](../../../src/rom/patches/tspico-zx48-v3.asm#L65) | *(no entry)* |
@@ -880,27 +880,27 @@ regenerate it when a line number moves (the test checks that it is current).
 | `READ_STATUS` | label | [20](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L20) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `CHECK_BREAK` | label | [21](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L21) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `BREAK_ABORT` | label | [22](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L22) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
-| `READ_STATUS_BYTE` | label | [23](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L23) | *(no entry)* |
-| `READ_STATUS_AND_OPEN` | label | [26](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L26) | *(no entry)* |
-| `PRINT_STRING_FROM_PICO` | label | [27](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L27) | *(no entry)* |
-| `GET_KEY_AND_SEND` | label | [28](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L28) | *(no entry)* |
-| `OPEN_MAIN_SCREEN` | label | [29](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L29) | *(no entry)* |
+| `READ_STATUS_BYTE` | label | [23](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L23) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `READ_STATUS_AND_OPEN` | label | [26](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L26) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `PRINT_STRING_FROM_PICO` | label | [27](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L27) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `GET_KEY_AND_SEND` | label | [28](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L28) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `OPEN_MAIN_SCREEN` | label | [29](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L29) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `POLL_KEYPRESS` | label | [30](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L30) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `LOOP_EXIT_OK` | label | [31](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L31) | *(no entry)* |
-| `LOOP_EXIT_ERR` | label | [32](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L32) | *(no entry)* |
-| `GET_STATUS_BIT_0` | label | [33](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L33) | *(no entry)* |
-| `GET_STATUS_BIT_1` | label | [34](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L34) | *(no entry)* |
-| `FN_CHAIN_HEAD` | label | [37](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L37) | *(no entry)* |
-| `FN_81_PRINT_STRING` | label | [38](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L38) | *(no entry)* |
-| `FN_CHAIN_C1` | label | [39](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L39) | *(no entry)* |
-| `FN_82_PRINT_STR_KEY` | label | [40](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L40) | *(no entry)* |
-| `FN_83_PRINT_CHAR` | label | [41](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L41) | *(no entry)* |
-| `FN_84_RETURN_KEY` | label | [42](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L42) | *(no entry)* |
-| `FN_85_GET_STATUS` | label | [43](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L43) | *(no entry)* |
-| `FN_86_YN_PROMPT` | label | [44](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L44) | *(no entry)* |
-| `YN_LOOP` | label | [45](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L45) | *(no entry)* |
-| `FN_87_PRINT_N_CHARS` | label | [46](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L46) | *(no entry)* |
-| `FN_DEAD_BEEP` | label | [47](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L47) | *(no entry)* |
+| `LOOP_EXIT_OK` | label | [31](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L31) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `LOOP_EXIT_ERR` | label | [32](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L32) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `GET_STATUS_BIT_0` | label | [33](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L33) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `GET_STATUS_BIT_1` | label | [34](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L34) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_CHAIN_HEAD` | label | [37](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L37) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_81_PRINT_STRING` | label | [38](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L38) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_CHAIN_C1` | label | [39](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L39) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_82_PRINT_STR_KEY` | label | [40](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L40) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_83_PRINT_CHAR` | label | [41](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L41) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_84_RETURN_KEY` | label | [42](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L42) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_85_GET_STATUS` | label | [43](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L43) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_86_YN_PROMPT` | label | [44](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L44) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `YN_LOOP` | label | [45](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L45) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_87_PRINT_N_CHARS` | label | [46](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L46) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `FN_DEAD_BEEP` | label | [47](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L47) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `WAIT_PICO_READY` | label | [50](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L50) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `WAIT_PICO_READY_FAIL` | label | [51](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L51) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `WAIT_PICO_READY_OK` | label | [52](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L52) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
@@ -920,25 +920,25 @@ regenerate it when a line number moves (the test checks that it is current).
 | `RPT_Q_PARAM_ERROR` | label | [68](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L68) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `RPT_R_TAPE_ERROR` | label | [69](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L69) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `RPT_D_BREAK_CONT` | label | [70](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L70) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
-| `ENTRY_TABLE` | label | [73](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L73) | *(no entry)* |
-| `BEEPER` | label | [74](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L74) | *(no entry)* |
-| `BREAK_KEY` | label | [75](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L75) | *(no entry)* |
+| `ENTRY_TABLE` | label | [73](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L73) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `BEEPER` | label | [74](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L74) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `BREAK_KEY` | label | [75](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L75) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `BIOS_TABLE` | label | [76](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L76) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `BIOS_G_VERS` | label | [77](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L77) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
-| `PRINTER_TABLE` | label | [78](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L78) | *(no entry)* |
-| `SEND_DATA_BLOCK_D` | label | [79](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L79) | *(no entry)* |
-| `PICO_TRANSACT` | label | [80](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L80) | *(no entry)* |
-| `ERR_9` | label | [81](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L81) | *(no entry)* |
-| `TSPICO_READ_DATA` | label | [82](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L82) | *(no entry)* |
-| `TSPICO_WRITE_DATA` | label | [83](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L83) | *(no entry)* |
-| `YN_LOOP_GUARD` | label | [84](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L84) | *(no entry)* |
-| `HALT_STUB_2003` | label | [87](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L87) | *(no entry)* |
-| `HALT_STUB_2006` | label | [88](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L88) | *(no entry)* |
-| `HALT_STUB_2027` | label | [89](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L89) | *(no entry)* |
-| `HALT_STUB_202A` | label | [90](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L90) | *(no entry)* |
-| `HALT_STUB_202D` | label | [91](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L91) | *(no entry)* |
-| `HALT_STUB_2030` | label | [92](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L92) | *(no entry)* |
-| `HALT_STUB_2033` | label | [93](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L93) | *(no entry)* |
-| `HALT_STUB_2036` | label | [94](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L94) | *(no entry)* |
-| `HALT_STUB_2039` | label | [95](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L95) | *(no entry)* |
-| `HALT_STUB_203C` | label | [96](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L96) | *(no entry)* |
+| `PRINTER_TABLE` | label | [78](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L78) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `SEND_DATA_BLOCK_D` | label | [79](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L79) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `PICO_TRANSACT` | label | [80](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L80) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `ERR_9` | label | [81](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L81) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `TSPICO_READ_DATA` | label | [82](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L82) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `TSPICO_WRITE_DATA` | label | [83](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L83) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `YN_LOOP_GUARD` | label | [84](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L84) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_2003` | label | [87](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L87) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_2006` | label | [88](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L88) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_2027` | label | [89](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L89) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_202A` | label | [90](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L90) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_202D` | label | [91](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L91) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_2030` | label | [92](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L92) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_2033` | label | [93](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L93) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_2036` | label | [94](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L94) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_2039` | label | [95](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L95) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
+| `HALT_STUB_203C` | label | [96](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L96) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
