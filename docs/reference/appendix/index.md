@@ -585,163 +585,163 @@ regenerate it when a line number moves (the test checks that it is current).
 
 | Symbol | Kind | Line | Explained in |
 |---|---|---|---|
-| `FDD_BASE` | label | [34](../../../src/rom/fdd/fddcmd.asm#L34) | *(no entry)* |
-| `CH_ADD` | label | [39](../../../src/rom/fdd/fddcmd.asm#L39) | *(no entry)* |
-| `FLAGS` | label | [40](../../../src/rom/fdd/fddcmd.asm#L40) | *(no entry)* |
-| `TADDR` | label | [41](../../../src/rom/fdd/fddcmd.asm#L41) | *(no entry)* |
-| `STKEND` | label | [42](../../../src/rom/fdd/fddcmd.asm#L42) | *(no entry)* |
-| `FRAMES` | label | [43](../../../src/rom/fdd/fddcmd.asm#L43) | *(no entry)* |
-| `SESSION_ID` | label | [44](../../../src/rom/fdd/fddcmd.asm#L44) | *(no entry)* |
-| `SESSION_NAMED` | label | [45](../../../src/rom/fdd/fddcmd.asm#L45) | *(no entry)* |
+| `FDD_BASE` | label | [34](../../../src/rom/fdd/fddcmd.asm#L34) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_ADD` | label | [39](../../../src/rom/fdd/fddcmd.asm#L39) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FLAGS` | label | [40](../../../src/rom/fdd/fddcmd.asm#L40) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TADDR` | label | [41](../../../src/rom/fdd/fddcmd.asm#L41) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STKEND` | label | [42](../../../src/rom/fdd/fddcmd.asm#L42) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FRAMES` | label | [43](../../../src/rom/fdd/fddcmd.asm#L43) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SESSION_ID` | label | [44](../../../src/rom/fdd/fddcmd.asm#L44) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SESSION_NAMED` | label | [45](../../../src/rom/fdd/fddcmd.asm#L45) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `CALL_HOME` | label | [47](../../../src/rom/fdd/fddcmd.asm#L47) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
-| `H_EXPT_STR` | label | [49](../../../src/rom/fdd/fddcmd.asm#L49) | *(no entry)* |
-| `H_TEST_ROOM` | label | [51](../../../src/rom/fdd/fddcmd.asm#L51) | *(no entry)* |
-| `IY_SYSVARS` | label | [52](../../../src/rom/fdd/fddcmd.asm#L52) | *(no entry)* |
+| `H_EXPT_STR` | label | [49](../../../src/rom/fdd/fddcmd.asm#L49) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_TEST_ROOM` | label | [51](../../../src/rom/fdd/fddcmd.asm#L51) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `IY_SYSVARS` | label | [52](../../../src/rom/fdd/fddcmd.asm#L52) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `SESSION_SETUP` | label | [55](../../../src/rom/fdd/fddcmd.asm#L55) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
-| `SAVE_ETC_BODY` | label | [56](../../../src/rom/fdd/fddcmd.asm#L56) | *(no entry)* |
-| `STATUS_REPORT` | label | [58](../../../src/rom/fdd/fddcmd.asm#L58) | *(no entry)* |
+| `SAVE_ETC_BODY` | label | [56](../../../src/rom/fdd/fddcmd.asm#L56) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STATUS_REPORT` | label | [58](../../../src/rom/fdd/fddcmd.asm#L58) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `SYNC_WRITE` | label | [59](../../../src/rom/fdd/fddcmd.asm#L59) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `BIOS_TX_A` | label | [60](../../../src/rom/fdd/fddcmd.asm#L60) | *(no entry)* |
-| `BIOS_RX_A` | label | [61](../../../src/rom/fdd/fddcmd.asm#L61) | *(no entry)* |
+| `BIOS_TX_A` | label | [60](../../../src/rom/fdd/fddcmd.asm#L60) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `BIOS_RX_A` | label | [61](../../../src/rom/fdd/fddcmd.asm#L61) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `BIOS_C_END` | label | [62](../../../src/rom/fdd/fddcmd.asm#L62) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `BIOS_WF_NPH` | label | [63](../../../src/rom/fdd/fddcmd.asm#L63) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
 | `C_END_TAIL` | label | [64](../../../src/rom/fdd/fddcmd.asm#L64) | [rom/exrom-sync.md](../rom/exrom-sync.md) |
-| `BANK_SV` | label | [66](../../../src/rom/fdd/fddcmd.asm#L66) | *(no entry)* |
-| `MODE_SV` | label | [67](../../../src/rom/fdd/fddcmd.asm#L67) | *(no entry)* |
+| `BANK_SV` | label | [66](../../../src/rom/fdd/fddcmd.asm#L66) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `MODE_SV` | label | [67](../../../src/rom/fdd/fddcmd.asm#L67) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `READ_STATUS` | label | [68](../../../src/rom/fdd/fddcmd.asm#L68) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
-| `OPEN_STREAM` | label | [69](../../../src/rom/fdd/fddcmd.asm#L69) | *(no entry)* |
-| `LOOP_BODY` | label | [70](../../../src/rom/fdd/fddcmd.asm#L70) | *(no entry)* |
-| `STREAM_LOWER` | label | [71](../../../src/rom/fdd/fddcmd.asm#L71) | *(no entry)* |
-| `CURCHL` | label | [72](../../../src/rom/fdd/fddcmd.asm#L72) | *(no entry)* |
-| `THUNK_HX` | label | [73](../../../src/rom/fdd/fddcmd.asm#L73) | *(no entry)* |
-| `R_OUT` | label | [82](../../../src/rom/fdd/fddcmd.asm#L82) | *(no entry)* |
-| `R_IN` | label | [83](../../../src/rom/fdd/fddcmd.asm#L83) | *(no entry)* |
-| `R_LETTER` | label | [84](../../../src/rom/fdd/fddcmd.asm#L84) | *(no entry)* |
-| `R_STRM` | label | [85](../../../src/rom/fdd/fddcmd.asm#L85) | *(no entry)* |
-| `R_PAD` | label | [86](../../../src/rom/fdd/fddcmd.asm#L86) | *(no entry)* |
-| `R_OUTN` | label | [87](../../../src/rom/fdd/fddcmd.asm#L87) | *(no entry)* |
-| `R_INN` | label | [88](../../../src/rom/fdd/fddcmd.asm#L88) | *(no entry)* |
-| `R_INP` | label | [89](../../../src/rom/fdd/fddcmd.asm#L89) | *(no entry)* |
-| `R_FLAGS` | label | [90](../../../src/rom/fdd/fddcmd.asm#L90) | *(no entry)* |
-| `R_OUTBUF` | label | [91](../../../src/rom/fdd/fddcmd.asm#L91) | *(no entry)* |
-| `OUTMAX` | label | [92](../../../src/rom/fdd/fddcmd.asm#L92) | *(no entry)* |
-| `R_INBUF` | label | [93](../../../src/rom/fdd/fddcmd.asm#L93) | *(no entry)* |
-| `INMAX` | label | [94](../../../src/rom/fdd/fddcmd.asm#L94) | *(no entry)* |
-| `REC_LEN` | label | [95](../../../src/rom/fdd/fddcmd.asm#L95) | *(no entry)* |
-| `CH_ALLOC` | label | [96](../../../src/rom/fdd/fddcmd.asm#L96) | *(no entry)* |
-| `H_OUT_STUB` | label | [97](../../../src/rom/fdd/fddcmd.asm#L97) | *(no entry)* |
-| `H_IN_STUB` | label | [98](../../../src/rom/fdd/fddcmd.asm#L98) | *(no entry)* |
-| `H_MAKE_ROOM` | label | [99](../../../src/rom/fdd/fddcmd.asm#L99) | *(no entry)* |
-| `H_RECLAIM` | label | [100](../../../src/rom/fdd/fddcmd.asm#L100) | *(no entry)* |
-| `H_CHAN_OPEN` | label | [101](../../../src/rom/fdd/fddcmd.asm#L101) | *(no entry)* |
-| `STRMS` | label | [102](../../../src/rom/fdd/fddcmd.asm#L102) | *(no entry)* |
-| `CHANS` | label | [103](../../../src/rom/fdd/fddcmd.asm#L103) | *(no entry)* |
-| `PROG` | label | [104](../../../src/rom/fdd/fddcmd.asm#L104) | *(no entry)* |
-| `STREAM_N` | label | [105](../../../src/rom/fdd/fddcmd.asm#L105) | *(no entry)* |
-| `H_EXPT_1NUM` | label | [106](../../../src/rom/fdd/fddcmd.asm#L106) | *(no entry)* |
-| `H_FIND_INT2` | label | [107](../../../src/rom/fdd/fddcmd.asm#L107) | *(no entry)* |
-| `ERR_SP` | label | [108](../../../src/rom/fdd/fddcmd.asm#L108) | *(no entry)* |
-| `BANK_SP` | label | [109](../../../src/rom/fdd/fddcmd.asm#L109) | *(no entry)* |
-| `H_TRAP` | label | [110](../../../src/rom/fdd/fddcmd.asm#L110) | *(no entry)* |
+| `OPEN_STREAM` | label | [69](../../../src/rom/fdd/fddcmd.asm#L69) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `LOOP_BODY` | label | [70](../../../src/rom/fdd/fddcmd.asm#L70) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STREAM_LOWER` | label | [71](../../../src/rom/fdd/fddcmd.asm#L71) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CURCHL` | label | [72](../../../src/rom/fdd/fddcmd.asm#L72) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `THUNK_HX` | label | [73](../../../src/rom/fdd/fddcmd.asm#L73) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_OUT` | label | [82](../../../src/rom/fdd/fddcmd.asm#L82) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_IN` | label | [83](../../../src/rom/fdd/fddcmd.asm#L83) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_LETTER` | label | [84](../../../src/rom/fdd/fddcmd.asm#L84) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_STRM` | label | [85](../../../src/rom/fdd/fddcmd.asm#L85) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_PAD` | label | [86](../../../src/rom/fdd/fddcmd.asm#L86) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_OUTN` | label | [87](../../../src/rom/fdd/fddcmd.asm#L87) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_INN` | label | [88](../../../src/rom/fdd/fddcmd.asm#L88) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_INP` | label | [89](../../../src/rom/fdd/fddcmd.asm#L89) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_FLAGS` | label | [90](../../../src/rom/fdd/fddcmd.asm#L90) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_OUTBUF` | label | [91](../../../src/rom/fdd/fddcmd.asm#L91) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `OUTMAX` | label | [92](../../../src/rom/fdd/fddcmd.asm#L92) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `R_INBUF` | label | [93](../../../src/rom/fdd/fddcmd.asm#L93) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `INMAX` | label | [94](../../../src/rom/fdd/fddcmd.asm#L94) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `REC_LEN` | label | [95](../../../src/rom/fdd/fddcmd.asm#L95) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_ALLOC` | label | [96](../../../src/rom/fdd/fddcmd.asm#L96) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_OUT_STUB` | label | [97](../../../src/rom/fdd/fddcmd.asm#L97) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_IN_STUB` | label | [98](../../../src/rom/fdd/fddcmd.asm#L98) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_MAKE_ROOM` | label | [99](../../../src/rom/fdd/fddcmd.asm#L99) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_RECLAIM` | label | [100](../../../src/rom/fdd/fddcmd.asm#L100) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_CHAN_OPEN` | label | [101](../../../src/rom/fdd/fddcmd.asm#L101) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STRMS` | label | [102](../../../src/rom/fdd/fddcmd.asm#L102) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CHANS` | label | [103](../../../src/rom/fdd/fddcmd.asm#L103) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `PROG` | label | [104](../../../src/rom/fdd/fddcmd.asm#L104) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STREAM_N` | label | [105](../../../src/rom/fdd/fddcmd.asm#L105) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_EXPT_1NUM` | label | [106](../../../src/rom/fdd/fddcmd.asm#L106) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_FIND_INT2` | label | [107](../../../src/rom/fdd/fddcmd.asm#L107) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `ERR_SP` | label | [108](../../../src/rom/fdd/fddcmd.asm#L108) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `BANK_SP` | label | [109](../../../src/rom/fdd/fddcmd.asm#L109) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `H_TRAP` | label | [110](../../../src/rom/fdd/fddcmd.asm#L110) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `BEEPER` | label | [111](../../../src/rom/fdd/fddcmd.asm#L111) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
-| `READ_DELAY` | label | [112](../../../src/rom/fdd/fddcmd.asm#L112) | *(no entry)* |
-| `TOK_SCREEN` | label | [113](../../../src/rom/fdd/fddcmd.asm#L113) | *(no entry)* |
-| `TOK_CODE` | label | [114](../../../src/rom/fdd/fddcmd.asm#L114) | *(no entry)* |
-| `TOK_LINE` | label | [115](../../../src/rom/fdd/fddcmd.asm#L115) | *(no entry)* |
-| `TOK_DATA` | label | [116](../../../src/rom/fdd/fddcmd.asm#L116) | *(no entry)* |
-| `MAX_ARG` | label | [118](../../../src/rom/fdd/fddcmd.asm#L118) | *(no entry)* |
-| `ROOM` | label | [119](../../../src/rom/fdd/fddcmd.asm#L119) | *(no entry)* |
-| `CR` | label | [121](../../../src/rom/fdd/fddcmd.asm#L121) | *(no entry)* |
-| `SEP` | label | [122](../../../src/rom/fdd/fddcmd.asm#L122) | *(no entry)* |
-| `TOK_TO` | label | [125](../../../src/rom/fdd/fddcmd.asm#L125) | *(no entry)* |
-| `TOK_CAT` | label | [126](../../../src/rom/fdd/fddcmd.asm#L126) | *(no entry)* |
-| `TOK_FORMAT` | label | [127](../../../src/rom/fdd/fddcmd.asm#L127) | *(no entry)* |
-| `TOK_MOVE` | label | [128](../../../src/rom/fdd/fddcmd.asm#L128) | *(no entry)* |
-| `TOK_ERASE` | label | [129](../../../src/rom/fdd/fddcmd.asm#L129) | *(no entry)* |
-| `FDD_DISPATCH` | label | [136](../../../src/rom/fdd/fddcmd.asm#L136) | *(no entry)* |
-| `F_HOOK_VEC` | label | [138](../../../src/rom/fdd/fddcmd.asm#L138) | *(no entry)* |
-| `LOWER_VEC` | label | [140](../../../src/rom/fdd/fddcmd.asm#L140) | *(no entry)* |
-| `CH_OUT_VEC` | label | [142](../../../src/rom/fdd/fddcmd.asm#L142) | *(no entry)* |
-| `CH_IN_VEC` | label | [144](../../../src/rom/fdd/fddcmd.asm#L144) | *(no entry)* |
-| `CH_OPEN_VEC` | label | [146](../../../src/rom/fdd/fddcmd.asm#L146) | *(no entry)* |
-| `CH_CLOSE_VEC` | label | [148](../../../src/rom/fdd/fddcmd.asm#L148) | *(no entry)* |
-| `BEEP_VEC` | label | [150](../../../src/rom/fdd/fddcmd.asm#L150) | *(no entry)* |
-| `OPEN_SYN_VEC` | label | [152](../../../src/rom/fdd/fddcmd.asm#L152) | *(no entry)* |
-| `C_END_VEC` | label | [154](../../../src/rom/fdd/fddcmd.asm#L154) | *(no entry)* |
-| `G_BEEP` | label | [171](../../../src/rom/fdd/fddcmd.asm#L171) | *(no entry)* |
-| `G_MAIN` | label | [215](../../../src/rom/fdd/fddcmd.asm#L215) | *(no entry)* |
-| `G_OUT` | label | [217](../../../src/rom/fdd/fddcmd.asm#L217) | *(no entry)* |
-| `G_IN` | label | [219](../../../src/rom/fdd/fddcmd.asm#L219) | *(no entry)* |
-| `G_OPEN` | label | [221](../../../src/rom/fdd/fddcmd.asm#L221) | *(no entry)* |
-| `G_OSYN` | label | [223](../../../src/rom/fdd/fddcmd.asm#L223) | *(no entry)* |
-| `G_CLOSE` | label | [225](../../../src/rom/fdd/fddcmd.asm#L225) | *(no entry)* |
-| `GUARDED` | label | [227](../../../src/rom/fdd/fddcmd.asm#L227) | *(no entry)* |
-| `JP_HL` | label | [253](../../../src/rom/fdd/fddcmd.asm#L253) | *(no entry)* |
-| `FDD_MAIN` | label | [255](../../../src/rom/fdd/fddcmd.asm#L255) | *(no entry)* |
-| `FDD_VERSION` | label | [274](../../../src/rom/fdd/fddcmd.asm#L274) | *(no entry)* |
-| `FDD_CAT` | label | [280](../../../src/rom/fdd/fddcmd.asm#L280) | *(no entry)* |
-| `FDD_ONE_ARG` | label | [301](../../../src/rom/fdd/fddcmd.asm#L301) | *(no entry)* |
-| `FDD_MOVE` | label | [318](../../../src/rom/fdd/fddcmd.asm#L318) | *(no entry)* |
-| `NONSENSE` | label | [364](../../../src/rom/fdd/fddcmd.asm#L364) | *(no entry)* |
-| `TOO_LONG` | label | [367](../../../src/rom/fdd/fddcmd.asm#L367) | *(no entry)* |
-| `SKIP_SPACES` | label | [376](../../../src/rom/fdd/fddcmd.asm#L376) | *(no entry)* |
-| `NEXT_CHAR` | label | [387](../../../src/rom/fdd/fddcmd.asm#L387) | *(no entry)* |
-| `AT_END` | label | [394](../../../src/rom/fdd/fddcmd.asm#L394) | *(no entry)* |
-| `EXPT_STR_END` | label | [403](../../../src/rom/fdd/fddcmd.asm#L403) | *(no entry)* |
-| `RUNTIME` | label | [408](../../../src/rom/fdd/fddcmd.asm#L408) | *(no entry)* |
-| `HC_EXPT_STR` | label | [414](../../../src/rom/fdd/fddcmd.asm#L414) | *(no entry)* |
-| `POP_STR` | label | [422](../../../src/rom/fdd/fddcmd.asm#L422) | *(no entry)* |
-| `NOT_EMPTY` | label | [443](../../../src/rom/fdd/fddcmd.asm#L443) | *(no entry)* |
-| `BUILD_START` | label | [455](../../../src/rom/fdd/fddcmd.asm#L455) | *(no entry)* |
-| `HC_TEST_ROOM` | label | [466](../../../src/rom/fdd/fddcmd.asm#L466) | *(no entry)* |
-| `SEND_PREFIX` | label | [473](../../../src/rom/fdd/fddcmd.asm#L473) | *(no entry)* |
-| `SEND_ONE` | label | [479](../../../src/rom/fdd/fddcmd.asm#L479) | *(no entry)* |
-| `SEND_TAIL` | label | [489](../../../src/rom/fdd/fddcmd.asm#L489) | *(no entry)* |
-| `TPI_SEND` | label | [518](../../../src/rom/fdd/fddcmd.asm#L518) | *(no entry)* |
-| `COPY_CSTR` | label | [539](../../../src/rom/fdd/fddcmd.asm#L539) | *(no entry)* |
-| `F_HOOK` | label | [563](../../../src/rom/fdd/fddcmd.asm#L563) | *(no entry)* |
-| `PEEK_NAME` | label | [631](../../../src/rom/fdd/fddcmd.asm#L631) | *(no entry)* |
-| `SEND_FOPEN` | label | [647](../../../src/rom/fdd/fddcmd.asm#L647) | *(no entry)* |
-| `TXX` | label | [724](../../../src/rom/fdd/fddcmd.asm#L724) | *(no entry)* |
-| `TX_STR` | label | [731](../../../src/rom/fdd/fddcmd.asm#L731) | *(no entry)* |
-| `WF_FAIL` | label | [737](../../../src/rom/fdd/fddcmd.asm#L737) | *(no entry)* |
-| `C_FAIL` | label | [751](../../../src/rom/fdd/fddcmd.asm#L751) | *(no entry)* |
-| `C_END2` | label | [773](../../../src/rom/fdd/fddcmd.asm#L773) | *(no entry)* |
-| `FOPEN_TXT` | label | [781](../../../src/rom/fdd/fddcmd.asm#L781) | *(no entry)* |
-| `FOPEN_LEN` | label | [782](../../../src/rom/fdd/fddcmd.asm#L782) | *(no entry)* |
-| `LOWER_LOOP` | label | [797](../../../src/rom/fdd/fddcmd.asm#L797) | *(no entry)* |
-| `CH_OPEN_HOOK` | label | [830](../../../src/rom/fdd/fddcmd.asm#L830) | *(no entry)* |
-| `OPEN_SYNTAX` | label | [1000](../../../src/rom/fdd/fddcmd.asm#L1000) | *(no entry)* |
-| `STRMS_NC` | label | [1010](../../../src/rom/fdd/fddcmd.asm#L1010) | *(no entry)* |
-| `STRMS_HL` | label | [1016](../../../src/rom/fdd/fddcmd.asm#L1016) | *(no entry)* |
-| `CH_CLOSE_HOOK` | label | [1029](../../../src/rom/fdd/fddcmd.asm#L1029) | *(no entry)* |
-| `HC_EXPT_1NUM` | label | [1107](../../../src/rom/fdd/fddcmd.asm#L1107) | *(no entry)* |
-| `HC_FIND_INT2` | label | [1113](../../../src/rom/fdd/fddcmd.asm#L1113) | *(no entry)* |
-| `HC_MAKE_ROOM` | label | [1119](../../../src/rom/fdd/fddcmd.asm#L1119) | *(no entry)* |
-| `HC_RECLAIM` | label | [1125](../../../src/rom/fdd/fddcmd.asm#L1125) | *(no entry)* |
-| `HC_CHAN_OPEN` | label | [1131](../../../src/rom/fdd/fddcmd.asm#L1131) | *(no entry)* |
-| `CH_OUT` | label | [1137](../../../src/rom/fdd/fddcmd.asm#L1137) | *(no entry)* |
-| `CH_IN` | label | [1168](../../../src/rom/fdd/fddcmd.asm#L1168) | *(no entry)* |
-| `CH_FLUSH` | label | [1199](../../../src/rom/fdd/fddcmd.asm#L1199) | *(no entry)* |
-| `CH_FETCH` | label | [1213](../../../src/rom/fdd/fddcmd.asm#L1213) | *(no entry)* |
+| `READ_DELAY` | label | [112](../../../src/rom/fdd/fddcmd.asm#L112) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_SCREEN` | label | [113](../../../src/rom/fdd/fddcmd.asm#L113) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_CODE` | label | [114](../../../src/rom/fdd/fddcmd.asm#L114) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_LINE` | label | [115](../../../src/rom/fdd/fddcmd.asm#L115) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_DATA` | label | [116](../../../src/rom/fdd/fddcmd.asm#L116) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `MAX_ARG` | label | [118](../../../src/rom/fdd/fddcmd.asm#L118) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `ROOM` | label | [119](../../../src/rom/fdd/fddcmd.asm#L119) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CR` | label | [121](../../../src/rom/fdd/fddcmd.asm#L121) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SEP` | label | [122](../../../src/rom/fdd/fddcmd.asm#L122) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_TO` | label | [125](../../../src/rom/fdd/fddcmd.asm#L125) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_CAT` | label | [126](../../../src/rom/fdd/fddcmd.asm#L126) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_FORMAT` | label | [127](../../../src/rom/fdd/fddcmd.asm#L127) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_MOVE` | label | [128](../../../src/rom/fdd/fddcmd.asm#L128) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOK_ERASE` | label | [129](../../../src/rom/fdd/fddcmd.asm#L129) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_DISPATCH` | label | [136](../../../src/rom/fdd/fddcmd.asm#L136) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `F_HOOK_VEC` | label | [138](../../../src/rom/fdd/fddcmd.asm#L138) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `LOWER_VEC` | label | [140](../../../src/rom/fdd/fddcmd.asm#L140) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_OUT_VEC` | label | [142](../../../src/rom/fdd/fddcmd.asm#L142) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_IN_VEC` | label | [144](../../../src/rom/fdd/fddcmd.asm#L144) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_OPEN_VEC` | label | [146](../../../src/rom/fdd/fddcmd.asm#L146) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_CLOSE_VEC` | label | [148](../../../src/rom/fdd/fddcmd.asm#L148) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `BEEP_VEC` | label | [150](../../../src/rom/fdd/fddcmd.asm#L150) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `OPEN_SYN_VEC` | label | [152](../../../src/rom/fdd/fddcmd.asm#L152) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `C_END_VEC` | label | [154](../../../src/rom/fdd/fddcmd.asm#L154) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `G_BEEP` | label | [171](../../../src/rom/fdd/fddcmd.asm#L171) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `G_MAIN` | label | [215](../../../src/rom/fdd/fddcmd.asm#L215) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `G_OUT` | label | [217](../../../src/rom/fdd/fddcmd.asm#L217) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `G_IN` | label | [219](../../../src/rom/fdd/fddcmd.asm#L219) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `G_OPEN` | label | [221](../../../src/rom/fdd/fddcmd.asm#L221) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `G_OSYN` | label | [223](../../../src/rom/fdd/fddcmd.asm#L223) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `G_CLOSE` | label | [225](../../../src/rom/fdd/fddcmd.asm#L225) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `GUARDED` | label | [227](../../../src/rom/fdd/fddcmd.asm#L227) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `JP_HL` | label | [253](../../../src/rom/fdd/fddcmd.asm#L253) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_MAIN` | label | [255](../../../src/rom/fdd/fddcmd.asm#L255) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_VERSION` | label | [274](../../../src/rom/fdd/fddcmd.asm#L274) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_CAT` | label | [280](../../../src/rom/fdd/fddcmd.asm#L280) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_ONE_ARG` | label | [301](../../../src/rom/fdd/fddcmd.asm#L301) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_MOVE` | label | [318](../../../src/rom/fdd/fddcmd.asm#L318) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `NONSENSE` | label | [364](../../../src/rom/fdd/fddcmd.asm#L364) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TOO_LONG` | label | [367](../../../src/rom/fdd/fddcmd.asm#L367) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SKIP_SPACES` | label | [376](../../../src/rom/fdd/fddcmd.asm#L376) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `NEXT_CHAR` | label | [387](../../../src/rom/fdd/fddcmd.asm#L387) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `AT_END` | label | [394](../../../src/rom/fdd/fddcmd.asm#L394) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `EXPT_STR_END` | label | [403](../../../src/rom/fdd/fddcmd.asm#L403) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RUNTIME` | label | [408](../../../src/rom/fdd/fddcmd.asm#L408) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HC_EXPT_STR` | label | [414](../../../src/rom/fdd/fddcmd.asm#L414) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `POP_STR` | label | [422](../../../src/rom/fdd/fddcmd.asm#L422) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `NOT_EMPTY` | label | [443](../../../src/rom/fdd/fddcmd.asm#L443) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `BUILD_START` | label | [455](../../../src/rom/fdd/fddcmd.asm#L455) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HC_TEST_ROOM` | label | [466](../../../src/rom/fdd/fddcmd.asm#L466) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SEND_PREFIX` | label | [473](../../../src/rom/fdd/fddcmd.asm#L473) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SEND_ONE` | label | [479](../../../src/rom/fdd/fddcmd.asm#L479) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SEND_TAIL` | label | [489](../../../src/rom/fdd/fddcmd.asm#L489) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TPI_SEND` | label | [518](../../../src/rom/fdd/fddcmd.asm#L518) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `COPY_CSTR` | label | [539](../../../src/rom/fdd/fddcmd.asm#L539) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `F_HOOK` | label | [563](../../../src/rom/fdd/fddcmd.asm#L563) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `PEEK_NAME` | label | [631](../../../src/rom/fdd/fddcmd.asm#L631) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SEND_FOPEN` | label | [647](../../../src/rom/fdd/fddcmd.asm#L647) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TXX` | label | [724](../../../src/rom/fdd/fddcmd.asm#L724) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TX_STR` | label | [731](../../../src/rom/fdd/fddcmd.asm#L731) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `WF_FAIL` | label | [737](../../../src/rom/fdd/fddcmd.asm#L737) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `C_FAIL` | label | [751](../../../src/rom/fdd/fddcmd.asm#L751) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `C_END2` | label | [773](../../../src/rom/fdd/fddcmd.asm#L773) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FOPEN_TXT` | label | [781](../../../src/rom/fdd/fddcmd.asm#L781) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FOPEN_LEN` | label | [782](../../../src/rom/fdd/fddcmd.asm#L782) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `LOWER_LOOP` | label | [797](../../../src/rom/fdd/fddcmd.asm#L797) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_OPEN_HOOK` | label | [830](../../../src/rom/fdd/fddcmd.asm#L830) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `OPEN_SYNTAX` | label | [1000](../../../src/rom/fdd/fddcmd.asm#L1000) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STRMS_NC` | label | [1010](../../../src/rom/fdd/fddcmd.asm#L1010) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STRMS_HL` | label | [1016](../../../src/rom/fdd/fddcmd.asm#L1016) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_CLOSE_HOOK` | label | [1029](../../../src/rom/fdd/fddcmd.asm#L1029) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HC_EXPT_1NUM` | label | [1107](../../../src/rom/fdd/fddcmd.asm#L1107) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HC_FIND_INT2` | label | [1113](../../../src/rom/fdd/fddcmd.asm#L1113) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HC_MAKE_ROOM` | label | [1119](../../../src/rom/fdd/fddcmd.asm#L1119) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HC_RECLAIM` | label | [1125](../../../src/rom/fdd/fddcmd.asm#L1125) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HC_CHAN_OPEN` | label | [1131](../../../src/rom/fdd/fddcmd.asm#L1131) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_OUT` | label | [1137](../../../src/rom/fdd/fddcmd.asm#L1137) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_IN` | label | [1168](../../../src/rom/fdd/fddcmd.asm#L1168) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_FLUSH` | label | [1199](../../../src/rom/fdd/fddcmd.asm#L1199) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CH_FETCH` | label | [1213](../../../src/rom/fdd/fddcmd.asm#L1213) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `CH_STATUS` | label | [1260](../../../src/rom/fdd/fddcmd.asm#L1260) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
-| `CH_SEND` | label | [1272](../../../src/rom/fdd/fddcmd.asm#L1272) | *(no entry)* |
-| `HEXDIG` | label | [1363](../../../src/rom/fdd/fddcmd.asm#L1363) | *(no entry)* |
-| `STRLEN` | label | [1370](../../../src/rom/fdd/fddcmd.asm#L1370) | *(no entry)* |
-| `CMD_DIR` | label | [1383](../../../src/rom/fdd/fddcmd.asm#L1383) | *(no entry)* |
-| `CMD_DIR_ARG` | label | [1384](../../../src/rom/fdd/fddcmd.asm#L1384) | *(no entry)* |
-| `CMD_TAPDIR` | label | [1385](../../../src/rom/fdd/fddcmd.asm#L1385) | *(no entry)* |
-| `CMD_CD` | label | [1386](../../../src/rom/fdd/fddcmd.asm#L1386) | *(no entry)* |
-| `CMD_CD_BACK` | label | [1387](../../../src/rom/fdd/fddcmd.asm#L1387) | *(no entry)* |
-| `CMD_COPY` | label | [1388](../../../src/rom/fdd/fddcmd.asm#L1388) | *(no entry)* |
-| `CMD_ERASE` | label | [1389](../../../src/rom/fdd/fddcmd.asm#L1389) | *(no entry)* |
-| `CMD_FORMAT` | label | [1390](../../../src/rom/fdd/fddcmd.asm#L1390) | *(no entry)* |
-| `CMD_CHWR` | label | [1391](../../../src/rom/fdd/fddcmd.asm#L1391) | *(no entry)* |
-| `CMD_CHRD` | label | [1392](../../../src/rom/fdd/fddcmd.asm#L1392) | *(no entry)* |
-| `CMD_CHCLOSE` | label | [1393](../../../src/rom/fdd/fddcmd.asm#L1393) | *(no entry)* |
-| `CMD_CHOPEN` | label | [1394](../../../src/rom/fdd/fddcmd.asm#L1394) | *(no entry)* |
-| `MODE_R` | label | [1395](../../../src/rom/fdd/fddcmd.asm#L1395) | *(no entry)* |
-| `FDD_END` | label | [1397](../../../src/rom/fdd/fddcmd.asm#L1397) | *(no entry)* |
+| `CH_SEND` | label | [1272](../../../src/rom/fdd/fddcmd.asm#L1272) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `HEXDIG` | label | [1363](../../../src/rom/fdd/fddcmd.asm#L1363) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `STRLEN` | label | [1370](../../../src/rom/fdd/fddcmd.asm#L1370) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_DIR` | label | [1383](../../../src/rom/fdd/fddcmd.asm#L1383) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_DIR_ARG` | label | [1384](../../../src/rom/fdd/fddcmd.asm#L1384) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_TAPDIR` | label | [1385](../../../src/rom/fdd/fddcmd.asm#L1385) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_CD` | label | [1386](../../../src/rom/fdd/fddcmd.asm#L1386) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_CD_BACK` | label | [1387](../../../src/rom/fdd/fddcmd.asm#L1387) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_COPY` | label | [1388](../../../src/rom/fdd/fddcmd.asm#L1388) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_ERASE` | label | [1389](../../../src/rom/fdd/fddcmd.asm#L1389) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_FORMAT` | label | [1390](../../../src/rom/fdd/fddcmd.asm#L1390) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_CHWR` | label | [1391](../../../src/rom/fdd/fddcmd.asm#L1391) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_CHRD` | label | [1392](../../../src/rom/fdd/fddcmd.asm#L1392) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_CHCLOSE` | label | [1393](../../../src/rom/fdd/fddcmd.asm#L1393) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_CHOPEN` | label | [1394](../../../src/rom/fdd/fddcmd.asm#L1394) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `MODE_R` | label | [1395](../../../src/rom/fdd/fddcmd.asm#L1395) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_END` | label | [1397](../../../src/rom/fdd/fddcmd.asm#L1397) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 
 ## `src/rom/patches/tspico-sync.asm`
 
@@ -794,9 +794,9 @@ regenerate it when a line number moves (the test checks that it is current).
 | `BREAK_KEY` | label | [62](../../../src/rom/patches/tspico-zx48-v3.asm#L62) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `SET_STK` | label | [63](../../../src/rom/patches/tspico-zx48-v3.asm#L63) | *(no entry)* |
 | `T_ADDR` | label | [64](../../../src/rom/patches/tspico-zx48-v3.asm#L64) | *(no entry)* |
-| `CH_ADD` | label | [65](../../../src/rom/patches/tspico-zx48-v3.asm#L65) | *(no entry)* |
+| `CH_ADD` | label | [65](../../../src/rom/patches/tspico-zx48-v3.asm#L65) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `X_PTR` | label | [66](../../../src/rom/patches/tspico-zx48-v3.asm#L66) | *(no entry)* |
-| `ERR_SP` | label | [67](../../../src/rom/patches/tspico-zx48-v3.asm#L67) | *(no entry)* |
+| `ERR_SP` | label | [67](../../../src/rom/patches/tspico-zx48-v3.asm#L67) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `ERR_D` | label | [69](../../../src/rom/patches/tspico-zx48-v3.asm#L69) | *(no entry)* |
 | `ERR_J` | label | [70](../../../src/rom/patches/tspico-zx48-v3.asm#L70) | *(no entry)* |
 | `NEW_CODE` | label | [72](../../../src/rom/patches/tspico-zx48-v3.asm#L72) | *(no entry)* |

@@ -38,6 +38,7 @@ wrong; **test** a test docstring is wrong.
 | B17 | ROM 2.1 EXROM 20BEh (`tpi:tape`) | `tpi:tape` sets TPMODE to 0, clearing the printer switch (bit 0) as well as LOAD/SAVE (bit 1); `tpi:sdcard` restores only bit 1. So `tpi:picopt`, `tpi:tape`, `tpi:sdcard` leaves the printer on the 2068. The manual documents the 0, so it may be intended | [rom/sysvars.md](docs/reference/rom/sysvars.md#5ddbh-tpmode-peek-24027) | |
 | B18 | ROM 2.1 SESSION_NAMED (1AC4h–1AD9h) | The `NET:` prefix is recognised (TPMODE bits 7+6) but leads nowhere: the switch words ignore it and the firmware answers "Unrecognized command". Dead feature or unfinished? | same | |
 | B19 | ROM HOME 0A4Ah | COPY-LINE's entry now thunks to EXROM 17C3h but nothing in ROM 2.1 calls it (its callers were inside the replaced COPY/COPY-BUFF). Dead, or kept for programs that call COPY-LINE? | |
+| B20 | `fddcmd.asm` `SEND_FOPEN`, `CH_SEND` | Both read the pre-load status (`BIOS_RX_A`) and ignore it; `SEND_DATA_BLOCK_D` checks it. Harmless while the firmware never refuses at the pre-load | [rom/exrom-fdd.md](docs/reference/rom/exrom-fdd.md#send_fopen) | |
 
 ## The user manual
 
@@ -93,6 +94,7 @@ wrong; **test** a test docstring is wrong.
 | C37 | `docs/rom-analysis/SYMBOLS.md` | G_VERS "returns 0x0015": v1.1 only (0021h in 2.1) | |
 | C38 | `src/rom/fdd/fddcmd.asm` `READ_STATUS EQU $02B9` | Same name as the curated READ_STATUS (0655h) and `tspico-sync.asm`'s, for a different routine (the curated READ_STATUS_BYTE). Rename the module's EQU | |
 | C39 | `docs/rom-analysis/SYMBOLS.md` | Lists an "EWAIT" BIOS entry at 184Eh (`JP 2279h`): 184Eh is the last byte of 184Ch's `JP`. Describes BREAK_ABORT as `POP BC / JP 1A61h` (1.x; 2.0 made it `JP BRK_ABORT`) | |
+| C40 | `fddcmd.asm` signature comment | `"FDDCMD"` — "build.py verifies this"; `build-rom.py` does not (it checks that `FDD_DISPATCH` is at 3000h). Add the check or fix the comment | |
 
 ## Test docstrings
 
