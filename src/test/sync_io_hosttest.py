@@ -383,7 +383,7 @@ def main():
         check(not re.search(r"for i in r1:\s*\n\s*pre\[i\] = MQ\.get\(\)", body),
               "%s: the old blocking pre-header loop is gone" % name)
         sync = body[body.index("if got < 0:"):body.index("if got != 10:")]
-        order = [sync.find("MQ_TO_IDLE(MQ, status=False)"), sync.find("LOG("),
+        order = [sync.find("MQ_TO_IDLE(MQ, status=False"), sync.find("LOG("),
                  sync.find('MQ_STATUS(MQ, "idle")'), sync.find("continue")]
         check(-1 not in order and order == sorted(order),
               "%s: on SYNC it resets, logs, THEN says IDLE, then loops straight back" % name)

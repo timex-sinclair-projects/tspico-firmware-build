@@ -595,6 +595,23 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   and dispatches on garbage, and the trailing `0x01` is read as the final
   status — "0 OK" on screen for a save that never wrote a file. Refuse at
   the post-header status read via `REFUSE_SAVE()` instead.
+- **A LOAD's first status can't carry an error, and a header search
+  swallows every failure.** The ROM reads it with no wait straight after
+  the pre-header (EXROM 19C7), so it is the `0x01` staged before the
+  command arrived; an error byte `LOAD_TS` writes lands in the *flag* slot.
+  For a data block a wrong flag is Report R. For a header, the LOAD's
+  search (04DD: `CALL 00FC / JR NC`) just asks again after any failure — a
+  wrong flag, a bad checksum, even a final status of 2 (1A0B goes to the
+  FUNCTION chain, not the report dispatcher) — so a damaged header used to
+  be re-requested for ever, until a stall gave Report T. The only report a
+  header search can raise is the first status of its *next* request: any
+  value but 00/01 there is Report R. `LOAD_REFUSE()` does both steps (the
+  failing flag, then the error staged for the retry, re-staged after the
+  2.x ROM's SYNC by `FIRST_STATUS()`). It also means "End of file" (status
+  7) shows as R on a header search. And never stream a block the Z80 will
+  stop reading part way (wrong type, wrong length, bad checksum): the rest
+  waits in TX until the next SYNC, which looks like a BREAK and rewinds the
+  search. `LOAD_TS` checks all three before READY.
 - **Never call `_thread.start_new_thread()` unguarded.** If core1 is
   already in use the call raises `OSError` "core1 in use", and nothing up
   the stack catches it: it leaves `TS2068_IO` and reaches `main.py`,

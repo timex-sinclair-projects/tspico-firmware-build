@@ -698,6 +698,7 @@ def test_load_search_is_bounded(tio):
             tmp if str(p).endswith(("temp.tap", "nofile.tap")) else p, *a, **k)
 
         pre = bytearray(10)          # pre[0] = 0x00 -> header request
+        pre[7] = 17                  # the length the Z80 asks for: a header's
         served, refused_at = 0, None
         try:
             for i in range(12):      # far more than the tape holds
@@ -751,6 +752,7 @@ def test_load_data_request_ends_the_search(tio):
             tmp if str(p).endswith(("temp.tap", "nofile.tap")) else p, *a, **k)
         pre = bytearray(10)
         pre[0] = 0xFF               # data block request
+        pre[7] = len(body)          # the length it asks for
         try:
             MQ = FakeMQ(bytes([0xFF, 0x00]), z80_reads=True)
             tio.LOAD_TS(pre, MQ, TSP)
