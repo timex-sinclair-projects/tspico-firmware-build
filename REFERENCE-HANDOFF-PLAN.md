@@ -476,3 +476,29 @@ symbol names in links or plain text, not alone in backticks in headings.
   why (the reference, the rule, the test, the stamps), lists the
   follow-ups from §3.5, and ends with the generated-with line from the
   system reminder. Squash merge, delete branch, when the user says so.
+
+## 7. Status at the usage limit (2026-10-05, second session)
+
+Done: every chapter (0 of 847 uncovered); review loose ends, index, dead
+links, overview/appendices; group C spot-check applied; flows boot, command,
+load, save written. Left: flows channels, printer, sd-handover,
+break-and-recovery, zx48; apply the group A and group B spot-check findings
+(group B's report was not received — rerun it); §5 finish (merge main,
+re-stamp build.yml, --index, full CI); §6 PR on the user's OK.
+
+Group A findings to apply (verified by a reviewer, not yet applied):
+- exrom-sync.md l.179: `EX AF,AF'` at 19E3h and 19EBh (not 19E8h).
+- exrom-sync.md l.183-188: the 800 ms busy wait, `rxd.arm` and `MQ_STATUS(idle)`
+  are the dispatcher's (tspico.py 6457-6476), not `MQ_TO_IDLE`'s; the staged
+  byte is `FIRST_STATUS()` (01h, or a refused header LOAD's error).
+- exrom-sync.md l.380: mark "~88 ms per poll" *(inferred from 19.9 s / 226)*.
+- tspico_io.md l.185: `MQ_STATUS` callers also `CH_READY` (3238) and
+  PROCESS_CMD's body abort (5885).
+- tspico_io.md l.788: LOAD_SERVE gets every 00h/FFh pre-header except 00h with TADDR 0.
+- tspico_io.md l.800: getattr reads are `ld_start`, `ld_wrapped`, `load_file`;
+  `ld_start_idx` is only written (read by REWIND_ABORTED_SEARCH, 968).
+- tspico_io.md l.935: the abort line's text is "INFO:" but its level is WARN (BREAK) / ERROR (stall).
+- pio.md l.271: set_ctrl code 1 enables after 22 cycles, 147 ns (not 23); same in hardware.md l.276.
+- pio.md l.536: ZX48_IO's two TX drains are unbounded `while` loops (7212, 7256).
+- hardware.md l.75: main.py sets the pins after importing the firmware, before TS2068_IO.
+- hardware.md l.242: MEMDOCK puts only after BOOT_SLOT_CLASH passes and the reply is sent.
