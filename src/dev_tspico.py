@@ -606,7 +606,7 @@ class PICO_STATUS():                                                            
         self.append = False                                                     # whether or not append new SAVEd file to currently mounted TAP file
         self.bank_sm = 0                                                        # initial value for the BANK StateMachine
         self.cur_path = "/sd/TAP"                                               # string holding the current path
-        self.f_name = []                                                        # string of current filename
+        self.f_name = ""                                                        # string of current filename ("" = nothing mounted; was [], which CAT "x.tap" and tpi:blkrcv crashed on, #163)
         self.offset = 0                                                         # integer pointer to current position on a large TAP file
         self.offset_tbl = []                                                    # table of offsets for each segment in a .TAP file
         # LOAD search bookkeeping, used by LOAD_TS to bound the Z80's
@@ -3972,6 +3972,16 @@ def BLKRCV(pre, cmd):                                                           
 
     status = _1_OK
 
+    # Only a mounted .DCK, .BIN or .ROM has an image in /TMP/temp.bin. With
+    # anything else (nothing mounted, a TAP) neither branch below would send
+    # a byte: the ROM would read the pre-load 01h as "0 OK" and the updater
+    # would go on to erase the slot (#162, #163). Refuse, so it stops at
+    # line 280 before the erase.
+    if (TSP.f_name[-4:].upper() if TSP.f_name else "") not in (".DCK", ".BIN", ".ROM"):
+        LOG("BLKRCV: no ROM image mounted (%r). Command refused" % (TSP.f_name,), 1)
+        SEND_MSG("No ROM image mounted", "Mount a .ROM, .BIN or .DCK", _3_F_Invalid_file, True)
+        return
+
     # The Z80 erases and writes the DOCK slot as soon as this returns OK.
     # If that slot is the one it boots from, stop here (MEMDOCK normally
     # refused it already): report Q, nothing streamed, nothing erased.
@@ -5007,8 +5017,8 @@ def BOOT_SLOT_CLASH(mem, page, f_name):
     with the slot half-written. A .ROM/.BIN writes page `page`; a 64K .DCK
     writes `page` and `page`+1."""
 
-    if not isinstance(f_name, str):         # nothing mounted: TSP.f_name is []
-        return None                         # (MEMDOCK raised here -> Report J)
+    if not isinstance(f_name, str):         # TSP.f_name was [] before #163; MEMDOCK
+        return None                         # raised here -> Report J
     ext = f_name[-4:].upper()
     if ext not in (".ROM", ".BIN", ".DCK"):
         return None
