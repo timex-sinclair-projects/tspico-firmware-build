@@ -1,5 +1,5 @@
 ; z80dasm 1.2.0
-; command line: z80dasm -a -l -t -g 0x0000 -o docs/rom-analysis/disasm/tspico-21-home.asm -s docs/rom-analysis/disasm/tspico-21-home.sym /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.gdPvi9LJ2a/home.bin
+; command line: z80dasm -a -l -t -g 0x0000 -o docs/rom-analysis/disasm/tspico-22-home.asm -s docs/rom-analysis/disasm/tspico-22-home.sym /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.Dl9lV9d75m/home.bin
 
 	org 00000h
 
@@ -83,7 +83,7 @@ l0055h:
 	rst 38h			;0062	ff		.
 	rst 38h			;0063	ff		.
 	rst 38h			;0064	ff		.
-	ld hl,0e5f5h		;0065	21 f5 e5	! . .
+	ld (0e5f5h),hl		;0065	22 f5 e5	" . .
 	ld hl,(05cb0h)		;0068	2a b0 5c	* . \
 	ld a,h			;006b	7c		|
 	or l			;006c	b5		.

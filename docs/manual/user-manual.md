@@ -2,10 +2,10 @@
 
 ### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.1
 
-> **About this manual.** This manual describes **TS-Pico 2.1**, released on 30 September 2026:
-> the firmware and the TS-2068 ROM 2.1, which gives the 2068 the disk commands **CAT**,
+> **About this manual.** This manual describes **TS-Pico 2.2**, released in October 2026:
+> the firmware and the TS-2068 ROM 2.2, which gives the 2068 the disk commands **CAT**,
 > **MOVE**, **ERASE** and **FORMAT**, native `f:` files and `OPEN #` channels. It was written
-> from the 2.1 source code, which is the final word on how things behave. Where the code shows
+> from the 2.2 source code, which is the final word on how things behave. Where the code shows
 > a message, we quote it exactly. If you're coming from version 1.1, Appendix A shows how to
 > upgrade.
 
@@ -249,7 +249,7 @@ Now switch the 2068 on. Here's what happens:
    starting up.
 2. The Pico's LED blinks steadily while it opens the SD card and reads your `TAP` folder.
 3. The 2068 starts. You'll see the usual copyright lines, plus the TS-Pico's own line, which
-   includes the ROM version, for example `2026 TS-Pico ROM v2.1`.
+   includes the ROM version, for example `2026 TS-Pico ROM v2.2`.
 4. Press **ENTER** and the flashing **K** cursor appears.
 
 Let's make sure everything's talking:
@@ -1720,8 +1720,8 @@ Install the firmware and the ROM from the same release: they are made to work to
    6. Switch the 2068 **off** again, and press **The 2068 is off — continue** on the page.
 8. The page installs the firmware and copies its files to the Pico.
 9. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
-   reads `2026 TS-Pico ROM v2.1`. Try `CAT`. `PRINT PEEK 101` gives **33** (ROM 2.1), and
-   `SAVE "tpi:info"` shows the firmware version, 2.1.
+   reads `2026 TS-Pico ROM v2.2`. Try `CAT`. `PRINT PEEK 101` gives **34** (ROM 2.2), and
+   `SAVE "tpi:info"` shows the firmware version, 2.2.
 
 > **Why unplug the USB cable at the end?** It gives the TS-Pico and its SD card a real power-off.
 > A card left powered through a firmware update can be stuck until it loses power (see 2.6).
@@ -1762,11 +1762,11 @@ To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1: NEW`. You can
 If the 2068 starts with coloured stripes and TS Reset doesn't help, but another slot boots, you
 can put the standard ROM back from the SD card:
 
-1. Copy the 2.1 ROM file, `TSPICO-21.ROM`, to the card's `TAP` folder. It's in the release
+1. Copy the 2.1 ROM file, `TSPICO-22.ROM`, to the card's `TAP` folder. It's in the release
    `.zip` (in `src/rom`), from <https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/tag/v2.1>.
 2. Boot a working ROM from another slot, for example a test ROM in slot 4
    (`SAVE "tpi:boot" CODE 2,4: NEW`).
-3. `LOAD "tpi:TSPICO-21.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
+3. `LOAD "tpi:TSPICO-22.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
    that you're sure.
 4. Switch off, unplug the USB cable, and switch on again.
 
@@ -1872,8 +1872,8 @@ The 2068's ROM keeps the TS-Pico's two switches in one byte of memory, `PEEK 240
 | 0 | 1 | Printing goes to the TS-Pico (`tpi:picopt`); clear means the TS 2040 (`tpi:ts2040`) |
 
 So `PRINT PEEK 24027` gives 2 at switch-on, 3 after `tpi:picopt`, and 1 if you then use
-`tpi:tape`: each command changes only its own switch. (The ROM shipped with firmware 2.1.2
-and earlier gives 0 there: its `tpi:tape` turned the printer switch off as well.)
+`tpi:tape`: each command changes only its own switch. (ROM 2.1, which shipped with firmware 2.1.2
+and earlier, gives 0 there: its `tpi:tape` turned the printer switch off as well.)
 
 ---
 

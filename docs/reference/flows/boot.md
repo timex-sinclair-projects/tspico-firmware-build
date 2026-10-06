@@ -43,7 +43,7 @@ transaction after it ends by staging the next.
 
 | # | Where | What happens | What can go wrong |
 |---|---|---|---|
-| 1 | HOME 0000h | the Z80 resets into HOME — the Pico's flash slot `ROM_SLOT` (normally 1, ROM 2.1), served by the ROM state machine | the Pico not yet at step 8: the Z80 reads whatever the bus floats to *(unverified: in practice the Pico's boot is fast enough, and the 2068's own reset delay covers it)* |
+| 1 | HOME 0000h | the Z80 resets into HOME — the Pico's flash slot `ROM_SLOT` (normally 1, ROM 2.2), served by the ROM state machine | the Pico not yet at step 8: the Z80 reads whatever the bus floats to *(unverified: in practice the Pico's boot is fast enough, and the 2068's own reset delay covers it)* |
 | 2 | HOME (genuine) | the 2068's RAM test, system variables, channels | |
 | 3 | HOME 0DF1h | the 29-byte boot stub at 0E0Bh is copied to RAM 6000h and run: `OUT (F4h),03h` — chunks 0 and 1 from the cartridge bus (TS-Pico: 03h, genuine 01h), FFh bit 7 set (the EXROM), the 2068's bank-switch code copied from EXROM 1000h–162Fh to RAM 6200h, back to HOME ([../rom/home.md](../rom/home.md#0e0ch-a-16k-exrom)) | an 8K-only EXROM model (an old emulator) fails at the first call into chunk 1 |
 | 4 | HOME 0DFFh | the bank stack pointer (65CEh) initialised | |

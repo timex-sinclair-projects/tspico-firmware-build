@@ -1,8 +1,8 @@
 # The HOME ROM
 
-Source: [`src/rom/TSPICO-21.ROM`](../../../src/rom/TSPICO-21.ROM) bytes
+Source: [`src/rom/TSPICO-22.ROM`](../../../src/rom/TSPICO-22.ROM) bytes
 0000h–3FFFh, read in
-[`tspico-21-home.asm`](../../rom-analysis/disasm/tspico-21-home.asm); the
+[`tspico-22-home.asm`](../../rom-analysis/disasm/tspico-22-home.asm); the
 genuine HOME ROM [`ROMs/GENUINE-2068-home.bin`](../../../ROMs/GENUINE-2068-home.bin)
 and its listing [`genuine-2068-home.asm`](../../rom-analysis/disasm/genuine-2068-home.asm);
 the 2.0 HOME site in [`src/rom/patches/tspico-sync.asm`](../../../src/rom/patches/tspico-sync.asm);
@@ -54,7 +54,7 @@ the fixed one ([sysvars.md](sysvars.md#5d37h-the-nmi-vector)).
 
 | HOME | Since | Genuine | Now | What | Statement |
 |---|---|---|---|---|---|
-| 0065h | 1.1 | `FFh` | the version (21h) | `PEEK 101` | — |
+| 0065h | 1.1 | `FFh` | the version (22h) | `PEEK 101` | — |
 | 03F3h–0420h | 1.1, 2.1 | BEEPER | BEEPER thunk, the returning thunk 03FCh, a CALL_B copy at 040Dh | BEEPER moved to EXROM 203Fh | BEEP, key click |
 | 04E8h–0502h | 1.1 | the tail of a syntax routine; SENDTV `CALL 061Ah` | printer helpers; SENDTV `CALL 0A09h` | every printed character passes the TPMODE test | PRINT, LPRINT, LLIST |
 | 0A02h–0A2Fh | 1.1 | COPY (K_DUMP) and COPY-BUFF | COPY → EXROM 1630h; the character router 0A09h; COPY-BUFF → EXROM 1636h | COPY and the printer buffer | COPY, LPRINT |
@@ -175,7 +175,7 @@ but not the bank stack; see 14B2h below.
 
 `FFh` filler in the genuine ROM, between the restarts and the NMI routine
 at 0066h. The TS-Pico ROMs put their version there: 15h (v1.1, v1.5w), 17h
-(v1.7), 20h (2.0), 21h (2.1). `PEEK 101` reads it; nothing in either ROM
+(v1.7), 20h (2.0), 21h (2.1), 22h (2.2). `PEEK 101` reads it; nothing in either ROM
 does. BIOS G_VERS returns the same number in BC
 ([overview.md](overview.md#which-rom-is-this)). Each release changes this
 byte and G_VERS together.

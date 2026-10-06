@@ -79,7 +79,7 @@ table — its first live entry is `JP 203F`, i.e. "beep".
 | Hunk | What |
 |---|---|
 | `0x3CDC-0x3CFF` (36) | Written into `0xFF` filler after the "Bytes:" message. Contains **`CALL_EXROM`, the HOME→EXROM thunk at `0x3CE3`** — see below. Also `0x3CF8: LD (5DCD),HL; JP 04F8` (a post-return handler entered from `0x0A23`) and two trailing `NOP`s. |
-| `0x0065` (1) | `ff` → `15` in `RST` filler: the **ROM version byte** a program reads with `PEEK 101` (`0x15` v1.1, `0x17` v1.7, `0x20` 2.0, `0x21` 2.1), changed with `G_VERS` each release. Nothing in the ROM reads it. |
+| `0x0065` (1) | `ff` → `15` in `RST` filler: the **ROM version byte** a program reads with `PEEK 101` (`0x15` v1.1, `0x17` v1.7, `0x20` 2.0, `0x21` 2.1, `0x22` 2.2), changed with `G_VERS` each release. Nothing in the ROM reads it. |
 
 ### Small, less-certain changes
 

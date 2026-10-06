@@ -4,7 +4,7 @@ Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
 1430 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
 at EXROM 3000h–377Eh and spliced into ROM 2.0 with the patches that call
 it ([overview.md](overview.md#toolsbuild-rompy-rom-21)); the result read in
-[`tspico-21-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-21-exrom.labelled.asm).
+[`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
 
 ROM 2.1 is ROM 2.0 plus this module. It gives the 2068's dormant disk
 keywords — CAT, MOVE, ERASE, FORMAT — real meanings on the SD card; adds

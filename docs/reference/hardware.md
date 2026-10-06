@@ -199,7 +199,7 @@ Each chip is addressed as **16 slots of 32K**: A15–A18 come from the Pico
 select within it. The flash's slots are laid out in
 [`flash/README.md`](../../flash/README.md) and
 [`flash/manifest.json`](../../flash/manifest.json): slot 0 the ZX Spectrum
-ROM v4, slot 1 the TS-2068 ROM 2.1, slots 2 and 3 third-party ROMs, 4–7
+ROM v4, slot 1 the TS-2068 ROM 2.2, slots 2 and 3 third-party ROMs, 4–7
 spare, and DCK cartridges at 8, 10, 12 and 14. The SRAM has sixteen slots
 of its own (user manual 8.1).
 

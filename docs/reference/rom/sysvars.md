@@ -1,8 +1,8 @@
 # System variables
 
 Source: the ROM 2.1 listings
-[`tspico-21-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-21-exrom.labelled.asm)
-and [`tspico-21-home.asm`](../../rom-analysis/disasm/tspico-21-home.asm)
+[`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm)
+and [`tspico-22-home.asm`](../../rom-analysis/disasm/tspico-22-home.asm)
 (every site below was found by scanning them and read in context); the
 `EQU` blocks of [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm),
 [`src/rom/patches/tspico-sync.asm`](../../../src/rom/patches/tspico-sync.asm)

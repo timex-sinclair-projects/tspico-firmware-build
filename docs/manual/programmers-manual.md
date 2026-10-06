@@ -74,7 +74,7 @@ The book has two halves, one for each end of the cable:
 
 ## 1.2 What you need
 
-- A TS-Pico with the **2.1 release**: its firmware, and ROM 2.1 in the 2068. The ROM opens
+- A TS-Pico with the **2.2 release**: its firmware, and ROM 2.2 in the 2068. The ROM opens
   every exchange with a "SYNC" that the 1.1 firmware doesn't understand. Our
   machine-code routines do the same, so they need the 2.1 firmware as well.
 - An assembler for your computer. The examples use **sjasmplus** syntax (local labels start with
@@ -111,14 +111,15 @@ PRINT PEEK 101
 |---|---|
 | 21 (15h) | 1.1 |
 | 33 (21h) | 2.1 |
+| 34 (22h) | 2.2 |
 
 ## 1.5 Summary
 
 1. Part 1 is the 2068 side; Part 2 is the Pico side.
-2. You need the 2.1 release: its firmware and ROM 2.1.
+2. You need the 2.2 release: its firmware and ROM 2.2.
 3. BASIC, raw ports, or the ROM's BIOS: raw ports are the most flexible, and this book's library
    does the hard parts.
-4. `PEEK 101` tells you the ROM version: 33 for 2.1.
+4. `PEEK 101` tells you the ROM version: 34 for 2.2.
 
 ---
 
@@ -1994,7 +1995,7 @@ exchange, 03h at the end), 88h (86h on the lower screen). Other codes are Report
 |---|---|---|
 | EXROM | 1840h | G_MODE: BC = TPMODE |
 | EXROM | 1842h | S_MODE: TPMODE := A AND 0Fh |
-| EXROM | 1844h | G_VERS: BC = 0021h on ROM 2.1 |
+| EXROM | 1844h | G_VERS: BC = 0022h on ROM 2.2 (0021h on 2.1) |
 | EXROM | 1846h | TX_A: OUT (0Eh),A |
 | EXROM | 1848h | RX_A: IN A,(0Eh) |
 | EXROM | 184Ah | C_END: wait, read the answer, run response functions |

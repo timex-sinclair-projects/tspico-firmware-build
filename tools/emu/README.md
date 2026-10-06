@@ -1,6 +1,6 @@
 # TS-2068 + TS-Pico with no hardware (issue #35)
 
-ZEsarUX emulates the TS-2068 running the TS-Pico ROM (`src/rom/TSPICO-21.ROM`).
+ZEsarUX emulates the TS-2068 running the TS-Pico ROM (`src/rom/TSPICO-22.ROM`).
 Every Z80 access to ports 0Eh/0Fh goes over a socket to `pico_host.py`, which
 runs the **real firmware**: `TS.tspico.TS2068_IO()`,
 its own main loop, unmodified. A host folder stands in for the Pico's flash
@@ -8,7 +8,7 @@ and the SD card. You type BASIC through ZEsarUX's remote protocol (ZRCP), read
 the screen, and save screenshots.
 
 ```
- ZEsarUX (TS-2068, TSPICO-21.ROM)          pico_host.py (CPython)
+ ZEsarUX (TS-2068, TSPICO-22.ROM)          pico_host.py (CPython)
  Z80 OUT/IN (0Eh), IN/OUT (0Fh)  ─socket─▶  BusModel  ─▶  TS2068_IO()  (src/TS)
  ZRCP :10000  ◀── session.py: type, read the screen, screenshots
                                             /tmp/tspico-root/{config.ini, assets, TMP, sd/...}

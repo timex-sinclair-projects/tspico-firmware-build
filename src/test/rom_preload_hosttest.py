@@ -9,7 +9,7 @@ error, meant for the LOAD's retry.) This runs PRELOAD from the committed
 slot-1 image against a Pico that answers 0, 1 or 2 on port 0Eh, and checks
 that both call sites call it.
 
-Uses src/rom/TSPICO-21.ROM (CI checks it is what tools/build-rom.py builds).
+Uses src/rom/TSPICO-22.ROM (CI checks it is what tools/build-rom.py builds).
 Run:
     python3 src/test/rom_preload_hosttest.py
 """
@@ -23,7 +23,7 @@ sys.path.insert(0, HERE)
 
 from z80core import Z80                                          # noqa: E402
 
-ROM21 = os.path.join(REPO, "src", "rom", "TSPICO-21.ROM")
+ROM21 = os.path.join(REPO, "src", "rom", "TSPICO-22.ROM")
 PRELOAD = 0x3778
 CALLS = {"SEND_FOPEN": 0x32DE, "CH_SEND": 0x369F}
 DONE = 0xFF00

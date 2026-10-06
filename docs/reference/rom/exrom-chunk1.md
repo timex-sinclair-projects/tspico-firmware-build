@@ -1,6 +1,6 @@
 # EXROM chunk 1 and the function chain
 
-Source: [`tspico-21-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-21-exrom.labelled.asm):
+Source: [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm):
 EXROM 2000h–22FDh (chunk 1 up to ROM 2.0's code), the chunk-0 helpers the
 function chain uses (01C3h, 025Eh–02C6h, 045Fh–0480h, 04F1h, 05FAh,
 068Eh, 06F2h, 0810h–0815h), and the printer path at 1630h–183Bh. Names
