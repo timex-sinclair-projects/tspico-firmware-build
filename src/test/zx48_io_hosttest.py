@@ -19,7 +19,8 @@ What it pins:
     flushed so the next flag is clean;
   * a Z80 that stops reading mid-block (BREAK between blocks, a reset):
     the LOAD gives up after ZX_STALL_MS, TX is flushed, the next LOAD works;
-  * compatible mode (LOAD_ZX_C): READY for every 'L', a bounded tail;
+  * compatible mode (LOAD_ZX_C): READY for every 'L', a bounded tail; only
+    whole blocks served (ZX_C_BLOCKS); nofile.tap with nothing mounted;
   * SAVE writes the right .tap; a SAVE that stops, fails its parity or has
     an unusable name writes nothing, and a refused header's data block
     never gets READY (the ROM gives Report R);
@@ -142,7 +143,9 @@ def main():
     d = tempfile.mkdtemp()
     tap_path = os.path.join(d, "temp.tap")
     real_open = open
-    io.open = lambda path, mode="r": real_open(tap_path if path == "/TMP/temp.tap" else path, mode)
+    nofile_path = os.path.join(d, "nofile.tap")
+    io.open = lambda path, mode="r": real_open(
+        {"/TMP/temp.tap": tap_path, "/assets/nofile.tap": nofile_path}.get(path, path), mode)
 
     data_a = bytes((i * 5 + 1) & 0xFF for i in range(300))
     data_b = bytes((i * 11 + 7) & 0xFF for i in range(2000))
@@ -259,6 +262,33 @@ def main():
               "one LOAD_ZX_C streams the tape; READY for the ROM's second 'L' (%s, %s)" % (r[0], calls))
         check("stream ended with" in log and not pio.tx,
               "the unread tail (beta) is dropped after the stall, TX empty")
+
+        print("compatible mode: ZX_C_BLOCKS keeps whole blocks only (#172)")
+        b1, b2 = tap_block(0x00, header("x", 10)), tap_block(0xFF, bytes(10))
+        two = b1 + b2
+        blocks, used = io.ZX_C_BLOCKS(two)
+        check(len(blocks) == 2 and used == len(two) and bytes(blocks[1]) == b2[2:],
+              "two whole blocks: both, all bytes used")
+        for cut in (1, 2):
+            blocks, used = io.ZX_C_BLOCKS(two[:-cut])
+            check(len(blocks) == 1 and used == len(b1),
+                  "the second block cut %d byte(s) short: left for the next 'L' (%d blocks, used %d)"
+                  % (cut, len(blocks), used))
+        blocks, used = io.ZX_C_BLOCKS(b1 + b2[:1])
+        check(len(blocks) == 1 and used == len(b1), "one stray byte after a block: no IndexError")
+
+        print("compatible mode with nothing mounted: nofile.tap (#172)")
+        data_n = bytes((i * 7 + 3) & 0xFF for i in range(120))
+        with real_open(nofile_path, "wb") as f:
+            f.write(tap_block(0x00, header("nofile", len(data_n))) + tap_block(0xFF, data_n))
+        saved = tsp.f_name, tsp.totlen
+        for name, totlen in (("at boot (totlen 0)", 0), ("after tpi:close (totlen stale)", len(tap))):
+            tsp.f_name, tsp.totlen, tsp.offset, tsp.tap_idx = "", totlen, 0, 0
+            del calls[:]
+            r, log = session(z80_load(), compat=True)
+            check(r == ("ok", data_n), "%s: LOAD \"\" loads nofile.tap's program (%s)" % (name, r[0]))
+        tsp.f_name, tsp.totlen = saved
+        tsp.offset = tsp.tap_idx = 0
 
         print("SAVE")
         payload = bytes((i * 3) & 0xFF for i in range(1500))

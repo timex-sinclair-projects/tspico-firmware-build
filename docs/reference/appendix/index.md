@@ -317,13 +317,14 @@ regenerate it when a line number moves (the test checks that it is current).
 | `ZX_ARM` | function | [1873](../../../src/TS/tspico_io.py#L1873) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
 | `ZX_STREAM` | function | [1885](../../../src/TS/tspico_io.py#L1885) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
 | `LOAD_ZX` | function | [1921](../../../src/TS/tspico_io.py#L1921) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
-| `LOAD_ZX_C` | function | [2068](../../../src/TS/tspico_io.py#L2068) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
-| `SAVE_NAME` | function | [2197](../../../src/TS/tspico_io.py#L2197) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
-| `REFUSE_SAVE` | function | [2246](../../../src/TS/tspico_io.py#L2246) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
-| `DRAIN_REFUSED_SAVE` | function | [2276](../../../src/TS/tspico_io.py#L2276) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
-| `SAVE_TS` | function | [2306](../../../src/TS/tspico_io.py#L2306) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
-| `_xor` | function | [2782](../../../src/TS/tspico_io.py#L2782) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
-| `SAVE_ZX` | function | [2789](../../../src/TS/tspico_io.py#L2789) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `ZX_C_BLOCKS` | function | [2068](../../../src/TS/tspico_io.py#L2068) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `LOAD_ZX_C` | function | [2085](../../../src/TS/tspico_io.py#L2085) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SAVE_NAME` | function | [2207](../../../src/TS/tspico_io.py#L2207) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `REFUSE_SAVE` | function | [2256](../../../src/TS/tspico_io.py#L2256) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `DRAIN_REFUSED_SAVE` | function | [2286](../../../src/TS/tspico_io.py#L2286) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SAVE_TS` | function | [2316](../../../src/TS/tspico_io.py#L2316) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `_xor` | function | [2792](../../../src/TS/tspico_io.py#L2792) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
+| `SAVE_ZX` | function | [2799](../../../src/TS/tspico_io.py#L2799) | [firmware/tspico_io.md](../firmware/tspico_io.md) |
 
 ## `src/TS/sdcard.py`
 

@@ -88,10 +88,10 @@ In source order, with line numbers of the file as it is today:
   `ZX_BLOCK_GAP_MS`, `ZX_FLUSH_TX`, `ZX_ROOM`.
 - 1838–1918: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
   `ZX_STREAM`.
-- 1921–2194: `LOAD_ZX`, `LOAD_ZX_C`.
-- 2197–2303: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
-- 2306–2779: `SAVE_TS`.
-- 2782–2916: `_xor`, `SAVE_ZX`.
+- 1921–2204: `LOAD_ZX`, `ZX_C_BLOCKS`, `LOAD_ZX_C`.
+- 2207–2313: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
+- 2316–2789: `SAVE_TS`.
+- 2792–2926: `_xor`, `SAVE_ZX`.
 
 The last section of this chapter lists the places where a comment, a design
 document and the code disagree.
@@ -1133,6 +1133,18 @@ as the Z80 sends its next `'L'`, the tape moving on, the unread tail flushed;
 a Z80 that stops mid-block giving up after `ZX_STALL_MS` with TX flushed and
 the next LOAD working; no `put()` into a full TX; and the same by DMA.
 
+### `ZX_C_BLOCKS(data)`
+
+`LOAD_ZX_C`'s cut of its buffer into whole TAP blocks. Returns `(blocks,
+used)`: each block is flag + content + CRC (the TAP block without its 2-byte
+length) and `used` the bytes they take. A block the buffer cuts short is left
+out, for the next `'L'` to start at, and a lone byte after the last block is
+ignored. Why it exists (#172): the inline loop it replaced tested
+`long > len(rd_bytes)`, two bytes short, so a block the buffer cut by one or
+two bytes was served truncated and counted as read, and one leftover byte
+raised `IndexError`. [`zx48_io_hosttest.py`](../../../src/test/zx48_io_hosttest.py)
+pins the edges.
+
 ### `LOAD_ZX_C(MQ, TSP, buf_size)`
 
 ZX Spectrum LOAD in "compatible" mode (`TSP.ZX_TAPE_COMPAT`; `ZX48_IO` passes
@@ -1144,16 +1156,16 @@ LD-BYTES calls as they would be off a tape running continuously, which is what
 makes hard-to-load TAPs work here and not in `LOAD_ZX`. It is memory-hungry and
 can run the Pico out of memory.
 
-Steps: `log_entries` is `" "`. If `TSP.offset >= TSP.totlen` it returns at
-once with -1 — so at the end of the tape the ROM gets nothing and times out
-*(inferred: the ROM's ~3.8 s poll, then Report R)*. `size_rd` is the lesser of
-what is left and `buf_size`; `rd_bytes = bytearray(size_rd)`; the file is
-`/assets/nofile.tap` with no mount or `/TMP/temp.tap`, read from `offset` (a
-read error, caught by a bare `except`, logs and returns -1); `TSP.offset`
-advances by the whole buffer. The buffer is cut into blocks, each entry being
-`rd_bytes[2:len + 2]` (flag + content + CRC): a block whose length exceeds the
-bytes left ends the cut and `offset` is pulled back by what is left, so the
-next call starts at that block. `ZX_FLUSH_TX`, `gc.collect()`. The first byte
+Steps: `log_entries` is `" "`. The file first: `/assets/nofile.tap` when
+nothing is mounted (`not TSP.f_name` or `totlen` 0), as `LOAD_ZX` does, with
+its own length (seek to the end); else `/TMP/temp.tap` and `TSP.totlen`. A file
+that won't open logs and returns -1. If `TSP.offset` is at or past that length
+it returns -1 — so at the end of the tape the ROM gets nothing and times out
+*(inferred: the ROM's ~3.8 s poll, then Report R)*. Up to `buf_size` bytes are
+read from `offset` (a read error, caught by a bare `except`, logs and returns
+-1), cut into whole blocks by `ZX_C_BLOCKS`, and `TSP.offset` advances by the
+bytes those blocks used, so the next call starts at the first block left out.
+`ZX_FLUSH_TX`, `gc.collect()`. The first byte
 of the first block is queued before READY (a memoryview keeps the rest from
 being copied), and the blocks are streamed with the LED on per block: a full
 TX waits in `ZX_ROOM(MQ, ZX_STALL_MS)`, and `'L'` (76) from the ROM — its next
@@ -1165,14 +1177,14 @@ and the old unbounded wait here hung ZX48 mode until reset ([PROTOCOL.md §13](.
 "`while MQ.tx_fifo() != 0: pass` can hang forever"). An early end logs the
 unread count and flushes TX; -2 becomes -1.
 
-Beware: the no-mount branch (`"no file mounted in LOAD_ZX_C"`) can never run,
-because with `totlen` 0 the `offset >= totlen` test above it returns first;
-the boundary test `long > len(rd_bytes)` should be `long + 2 >
-len(rd_bytes)`: a block that the buffer cuts one or two bytes short of its end
-is served truncated and `offset` is not pulled back for it *(read from the
-code; not observed)*; and the position moves by the whole buffer per `'L'`,
-not by what the ROM read. `zx48_io_hosttest.py` pins READY for every `'L'` and
-a bounded tail.
+Before #172 the file was chosen after the `offset >= totlen` test, so with
+nothing mounted at boot (`totlen` 0) the ROM got nothing, and after
+`tpi:close` (which leaves `totlen`) `nofile.tap` was read sized by the
+forgotten file; and blocks were cut as `ZX_C_BLOCKS` now explains. Beware:
+the position moves by the blocks buffered per `'L'`, not by what the ROM read.
+`zx48_io_hosttest.py` pins READY for every `'L'`, a bounded tail, the cut and
+`nofile.tap` with nothing mounted. (Compatible mode is parked as a whole,
+#129.)
 
 ## SAVE
 
@@ -1436,8 +1448,6 @@ The code wins in each case.
 
 - `SAVE_TS`: "mid" said both before and inside `RX_BLOCK`, the first time
   before the DMA channel is set up.
-- `LOAD_ZX_C`: the "no file mounted" branch is unreachable, and the boundary
-  test is two bytes short (see the entry).
 - `LOAD_TS`: `prof` is sampled only on the file-streaming path.
 - (#181 fixed the rest: `ENA_SD`'s comment and PROTOCOL.md §6.2/§13 on when
   the SAVE's final status goes out, `LOAD_TS`'s, `REWIND_ABORTED_SEARCH`'s,
