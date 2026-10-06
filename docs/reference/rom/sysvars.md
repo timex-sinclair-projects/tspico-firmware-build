@@ -176,12 +176,16 @@ returns BC = TPMODE AND 0Fh, keeping AF; S_MODE (1842h → 1862h) stores A AND
 0Fh, keeping AF; 1861h is `XOR A` falling into it. Both mask to the low
 nibble, so they never see or set the prefix flags.
 
-The NET: device: SESSION_NAMED recognises it, and nothing else does — the
-switch words ignore it and the command is sent to the Pico with no sign of
-the prefix but the text; the firmware expects every command to start
-`tpi:` ([PROTOCOL.md §5.2](../../PROTOCOL.md#52-the-body)) and answers
-"Unrecognized command"
-([PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#an-undocumented-net-device)).
+The NET: device: Gustavo's provision for networking from the 2068 (an
+extended ZX Interface 1 network, as the project understands it; no spec
+describes it). SESSION_NAMED recognises the prefix, and the only readers of
+bit 6 are the switch words (20B0h, 20F2h, 2140h, 217Dh), which refuse a
+`NET:` name, so it goes to the Pico as an ordinary command with `net:` at
+the start of the text. That is all the ROM needs: no firmware implements a
+network yet, and today the command word `NET:…` matches nothing and is
+"Unrecognized command", Report C
+([PROTOCOL.md §5.2](../../PROTOCOL.md#52-the-body); #177). A network service
+would be firmware alone, dispatching on the prefix.
 Bits 6 and 7 are transient: they live from SESSION_NAMED to the point where
 the name is classified, and are clear between statements.
 

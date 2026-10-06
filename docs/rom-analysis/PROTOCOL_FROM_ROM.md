@@ -445,7 +445,7 @@ Stock sysvars the TS-PICO leans on:
 The non-zero forcing is deliberate — `LOW-LEVEL-PROTOCOL-V5.TXT:173-176` reserves
 session `0000` for "not generated from a BASIC command".
 
-## An undocumented `NET:` device
+## The `NET:` device: a hook for networking
 
 Prefix parsing at `0x1A73`+ masks with `0x5F` (uppercase) and recognises **two**
 device prefixes:
@@ -453,8 +453,13 @@ device prefixes:
 - `"TPI"` → `0x5DDB` bit 7 set, bit 6 clear
 - `"NET"` → `0x5DDB |= 0xC0` (bits 7 and 6)
 
-**`NET:` appears in no document in `docs/`.** Whether the Pico side implements it
-is unknown from the Z80 side alone.
+**`NET:` is Gustavo's provision for networking** from the 2068 (an extended ZX
+Interface 1 network, as the project understands it); his file-system spec v2.5
+defines only the file-system subsystem (`0x50`). The ROM's side is complete as
+a hook: bit 6 is read only by the four switch words, which refuse a `NET:` name,
+so it reaches the Pico as an ordinary `'B'` command with `net:` at the start of
+the text. No firmware implements it yet: it answers "Unrecognized command"
+(Report C). See [PROTOCOL.md §5.2](../PROTOCOL.md#52-the-body).
 
 ## Doc-vs-ROM discrepancies
 
@@ -479,7 +484,8 @@ Ranked by how likely they are to burn you.
 6. **`0xF4` is the horizontal *select* register, not "horizontal scroll"**
    (`GUSTAVO_PROTOCOL.md:86-87`).
 7. **SESSION ID is `FRAMES`-derived, not random** (`GUSTAVO_PROTOCOL.md:309`).
-8. **`NET:` device prefix exists in the ROM** and in no doc.
+8. **`NET:` device prefix exists in the ROM**; it is the hook for networking
+   (see above), documented in `PROTOCOL.md` §5.2 since #177.
 9. **No `0x43` `'C'` (CP/M) or `0x45` `'E'` frame is ever emitted** — those block
    types are unimplemented in this ROM.
 10. **`0x5DCF` is BANK and `0x5DD1` is SESSION_ID.**

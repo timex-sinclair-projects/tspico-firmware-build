@@ -229,6 +229,14 @@ the Pico: the ROM handles them (they set TPMODE, `$5DDB` = 24027: bit 1
 LOAD/SAVE to the Pico, bit 0 printer to the Pico). Sent raw, they are
 "Unrecognized command".
 
+The ROM also recognises a second prefix, `net:`: Gustavo's provision for
+networking from the 2068, meant as an extended ZX Interface 1 network. A
+`net:` name goes to the Pico like a `tpi:` command (it is never a switch
+word), with `net:` at the start of the text. No firmware implements it yet:
+the command word `NET:…` matches nothing and is "Unrecognized command"
+(Report C). A network service would need only firmware: dispatch on the
+`NET:` prefix in `PROCESS_CMD`; the ROM side is in place.
+
 ### 5.3 The answer: a status
 
 The ROM reads one byte, `AND A` (0 → its internal "no answer", Report J),
