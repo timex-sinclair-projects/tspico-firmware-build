@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2505–2582 (`DIR`), 3419–3830 (`IDIR` … `SA_NOT_IMP`), 3895–4133
-(`APPEND`, `BLKRCV`), 4225–4762 (`CDIR` … `GETLOG`), 4842–5139
-(`LOGLEVEL` … `MEMDOCK`), 5159–5235 (`REW`), 5377–5604 (`BAD_CODE` …
-`NOP`) and 5710–5786 (the printer settings); the dispatch table
-`SA_funct` at 6214–6264, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4225–4762 (`CDIR` … `GETLOG`), 4842–5148
+(`LOGLEVEL` … `MEMDOCK`), 5168–5244 (`REW`), 5386–5613 (`BAD_CODE` …
+`NOP`) and 5719–5795 (the printer settings); the dispatch table
+`SA_funct` at 6223–6273, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -42,22 +42,22 @@ where the manual and the code differ, the entries below say so.
 | `GETLOG(pre, cmd)` | 4635 | `tpi:log` |
 | `LOGLEVEL(pre, cmd)` | 4842 | `tpi:loglevel` |
 | `MDIR(pre, cmd)` | 4901 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 4966 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5068 | `tpi:dock`, `tpi:memdock` |
-| `REW(pre, cmd)` | 5159 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5377 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5382 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5387 | `tpi:rm` |
-| `RM_CHECK(name)` | 5433 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5451 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5479 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5533 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5587 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5710 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5731 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5742 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5755 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5773 | `tpi:bmp` |
+| `MEMBOOT(pre, cmd)` | 4975 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5077 | `tpi:dock`, `tpi:memdock` |
+| `REW(pre, cmd)` | 5168 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5386 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5391 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5396 | `tpi:rm` |
+| `RM_CHECK(name)` | 5442 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5460 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5488 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5542 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5596 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 5719 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 5740 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 5751 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 5764 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 5782 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -79,7 +79,7 @@ Then:
    `cmd[7:]` the text after `tpi:`. Handlers index into it at fixed
    offsets (`MDIR` takes `cmd[10:]`, the name after `tpi:md `).
 2. The command word is the text up to its first space, upper-cased, with
-   `TPI:`: `"TPI:DIR"`. The comment above `SA_funct` (6211–6212) says
+   `TPI:`: `"TPI:DIR"`. The comment above `SA_funct` (6220–6221) says
    commands that take a name "need a space at the end of their dictionary
    key"; no key has one, and the split on the first space makes it
    unnecessary. The comment is out of date.
@@ -134,7 +134,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6214) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6223) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -652,27 +652,33 @@ Level 4 (SPECIAL) keeps only what is logged at 4.
 
 ### `MDIR(pre, cmd)`
 
-`tpi:md name`: make a folder in the current one. `name` is `cmd[10:]`,
-everything after `tpi:md ` exactly as typed (one space is assumed; a
-second becomes part of the name). No validation of the characters: the
-card's filesystem refuses what FAT cannot hold, as `OSError`.
+`tpi:md name`: make a folder in the current one. `name` is
+`getArgs(cmd).strip()`, as the other commands take theirs; before #174 it
+was `cmd[10:]`, so a second space after `tpi:md` became part of the name.
 
 1. No name: "MD: Filename required", Report A.
-2. `ACTIVATE_SD()` (not in a `try`), `os.chdir(TSP.cur_path)`.
-3. A folder of that name exists: 'MD: directory "x" exists', **Report 8**
+2. `.`, `..`, or a name with `/`, a character below space or above `~`, or
+   any of `:*?\|"<>`: "MD: name not allowed:" and the name, Report F,
+   nothing made. One folder only: `FORMAT "a/b/"` makes paths, and a
+   leading `/` would have made the folder on the Pico's own flash.
+3. `ACTIVATE_SD()` (not in a `try`), `os.chdir(TSP.cur_path)`; from here
+   the name is used as `cur_path/name`, whatever the current directory.
+4. A folder of that name exists: 'MD: directory "x" exists', **Report 8**
    (`_7_8_EOF`) — so that `CODE 1,0` can still go into it (below). A file:
    'MD: file "x" exists', Report F.
-4. Otherwise `os.mkdir(name)`; the listing is re-read (`DIR_FILES`)
+5. Otherwise `os.mkdir`; the listing is re-read (`DIR_FILES`)
    unless `CODE 1,0` (the change of folder re-reads it); `alldirs` gets the
    new path (`cur_path` without `/sd`, plus the name) and is sorted, without
    walking the card again. `OSError`: "MD: OS error creating:", Report Q.
-5. `DEACTIVATE_SD()`, `ACTIVATE_MQ()`.
-6. With `CODE 1,0`, and the folder made or already there: `CDIR` with
-   `CODE 2,0` — the change, and its message shown. Otherwise
+6. `DEACTIVATE_SD()`, `ACTIVATE_MQ()`.
+7. With `CODE 1,0`, and the folder made or already there: `CDIR` with
+   `CODE 2,0` and a `tpi:cd <name>` built from the clean name — the
+   change, and its message shown. Otherwise
    `SEND_MSG(message, name, status)` ("Created dir: " and the name, not
    shown).
 
-The manual's reports for `tpi:md` (8, F, A) match the code.
+The manual's reports for `tpi:md` (8, F, A) match the code
+([`commands_hosttest.py`](../../../src/test/commands_hosttest.py)).
 
 ### `MEMBOOT(pre, cmd)`
 
@@ -933,7 +939,7 @@ The code is right by definition; these are for the manual's next edit.
 
 And in the code's own comments:
 
-- The comment above `SA_funct` (6211–6212) about a trailing space in the
+- The comment above `SA_funct` (6220–6221) about a trailing space in the
   keys of commands that take a name: no key has one.
 - `TAPDIR`'s header comment says `CODE 1,n` shows `n` headers either side;
   the window is counted in blocks.

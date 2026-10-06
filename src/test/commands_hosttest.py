@@ -12,7 +12,9 @@ and a temporary config.ini:
   * BOOT saves the memory type with the slot, LOAD_CONFIG uses both once and
     puts back flash slot 1, and MEM 3 is refused;
   * DIR CODE 1,n / 2,n past the last file gives the real range, 0 to n-1;
-  * FWD CODE 2,n (by file) on the last header says it can't, not "Moved".
+  * FWD CODE 2,n (by file) on the last header says it can't, not "Moved";
+  * MD takes its name as the other commands do and refuses paths and the
+    characters FAT won't take.
 
 Run:  python3 src/test/commands_hosttest.py
 """
@@ -192,6 +194,35 @@ def test_ffw_by_file(t, sent):
     t.TSP.f_name, t.TSP.offset_tbl, t.TSP.tap_idx, t.TSP.offset = real
 
 
+def test_md(t, root, sent):
+    print("tpi:md (#174)")
+    D.build_card(root)
+    t.TSP.cur_path = "/sd/TAP"
+    del sent[:]
+    run(t, t.MDIR, "tpi:md  spaced")
+    check(D.on_card(root, "SPACED") and not D.on_card(root, " SPACED") and sent[-1][3] == t._1_OK,
+          "a second space is not part of the name (%r)" % (sent[-1],))
+    before = sorted(os.listdir(root))
+    for bad in ("a/b", "/x", "bad*name", "..", "q?"):
+        del sent[:]
+        run(t, t.MDIR, "tpi:md " + bad)
+        check(sent[-1][1] == "MD: name not allowed: " and sent[-1][2] == bad and sent[-1][3] == t._3_F_Invalid_file,
+              "%r: not allowed, F (%r)" % (bad, sent[-1]))
+    check(sorted(os.listdir(root)) == before, "  and nothing is made")
+    del sent[:]
+    run(t, t.MDIR, "tpi:md tools")
+    check(D.on_card(root, "TOOLS") and sent[-1][1] == "Created dir: " and sent[-1][2] == "tools",
+          "a plain name is made (%r)" % (sent[-1],))
+    del sent[:]
+    run(t, t.MDIR, "tpi:md tools")
+    check(sent[-1][3] == t._7_8_EOF, "made again: exists, 8 (%r)" % (sent[-1],))
+    del sent[:]
+    run(t, t.MDIR, "tpi:md  deeper", 1, 0)
+    check(t.TSP.cur_path.upper().endswith("/DEEPER"),
+          "CODE 1,0 goes into it, by the clean name (%s)" % t.TSP.cur_path)
+    t.TSP.cur_path = "/sd/TAP"
+
+
 def test_boot(t, cfg):
     print("tpi:boot and LOAD_CONFIG")
     with open(cfg, "w") as f:
@@ -252,6 +283,7 @@ def main():
         test_rm(t, root, sent)
         test_dir_range(t, sent)
         test_ffw_by_file(t, sent)
+        test_md(t, root, sent)
         test_boot(t, cfg)
     finally:
         shutil.rmtree(root, ignore_errors=True)

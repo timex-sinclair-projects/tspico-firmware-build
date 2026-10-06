@@ -1505,7 +1505,8 @@ numbers log more. The setting lasts until the TS-Pico is switched off.
 ### md: make a folder
 
 `SAVE "tpi:md name"`, or `CODE 1,0` to go into it too. *(verbose)* `Created dir: name`.
-**8**: `MD: directory "x" exists`. **F**: `MD: file "x" exists`. **A**: no name.
+**8**: `MD: directory "x" exists`. **F**: `MD: file "x" exists`, or `MD: name not allowed:` for a
+path (use `FORMAT "a/b/"`) or a character the card can't hold. **A**: no name.
 
 ### newtap: make a new TAP
 
