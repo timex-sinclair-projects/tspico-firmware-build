@@ -418,7 +418,7 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 `NEW_TAP`, [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file and the mount of
 a newly saved file when nothing was mounted ([part 3](tspico-dispatch.md),
-lines 6715 and 6732, inside a `try` because the card may have gone).
+lines 6721 and 6738, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -596,7 +596,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (2996); the main loop before a SAVE, a LOAD and a
 headerless LOAD (2996 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7191), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7197), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 

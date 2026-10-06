@@ -53,8 +53,8 @@ computes the UDG's address. Either way PMR1 high = 2 and the length is 8:
 after the pre-load and the ready-wait the 2068 sends a `'D'` body with the
 eight bytes (SEND_DATA_BLOCK_D), and the Pico reads it, writes the
 character's escape (`\A` … `\U`, or the block-graphic escape) and answers
-a final status — TX [status, 01]. The pattern is read and not used; its
-XOR is not checked ([#180](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/180)).
+a final status — TX [status, 01]. The pattern is read and not used; a bad
+XOR is logged as a warning, and the character is printed anyway (#180).
 
 **The buffer.** `PRT` turns the stream into zmakebas text: ENTER a line
 end (`\n`, or `\r\n` with AUTOLF), the colour controls as `\{INK n}` and
