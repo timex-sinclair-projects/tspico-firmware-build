@@ -2,7 +2,7 @@
 
 Source: [`src/rom/patches/tspico-sync.asm`](../../../src/rom/patches/tspico-sync.asm)
 (318 lines); listing
-[`tspico-21-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-21-exrom.labelled.asm)
+[`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm)
 at 2300h–23D3h. Host test:
 [`src/test/rom_sync_hosttest.py`](../../../src/test/rom_sync_hosttest.py).
 
@@ -142,7 +142,7 @@ confirms the 2.1 image still holds it. The table agrees with
 
 | Bank | Addr | v1.7 | 2.0 | Why |
 |---|---|---|---|---|
-| HOME | 0065h | `db 17h` | `db 20h` | The version marker, `PEEK 101`. 2.1 writes 21h here. |
+| HOME | 0065h | `db 17h` | `db 20h` | The version marker, `PEEK 101`. 2.1 writes 21h here, 2.2 22h. |
 | HOME | 0F12h–0F1Fh | `LD A,B / LD DE,0F65h / CALL 073Fh / XOR A / LD DE,1115h / CALL 073Fh` | `LD A,B / LD (5DCDh),HL / LD HL,EX_REPORT_MSG / CALL 03FCh / 4×NOP` | The report printer. B holds ERR_NR+1. HOME's table has no text for 1Ch, so the text and the ", " are printed by EXROM code that knows it; every other code prints from the HOME table as before. The four NOPs fill the 14 bytes exactly (`ASSERT $ == 0F20h`). |
 | EXROM | 1853h | `db 17h` | `db 20h` | The byte of BIOS G_VERS's `LD BC,0017h` at 1852h. 2.1 makes it 21h. |
 | EXROM | 1C6Ch–1C85h | the v1.7 boot line | `" 2026 TS-Pico ROM v2.0   "` + `" "│80h` | Same 26 bytes, bit 7 on the last. 2.1 edits the four bytes at 1C7Eh to `v2.1`. |

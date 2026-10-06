@@ -1,5 +1,5 @@
 ; z80dasm 1.2.0
-; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.S6wFcruouL/exrom.bin
+; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-22-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-22-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.Dl9lV9d75m/exrom.bin
 
 	org 00000h
 CH_ALLOC:	equ 0x0200
@@ -34,7 +34,6 @@ l0017h:
 	push hl			;001f	e5		.
 l0020h:
 	push af			;0020	f5		.
-l0021h:
 	ld a,(05cc2h)		;0021	3a c2 5c	: . \
 	and a			;0024	a7		.
 	ei			;0025	fb		.
@@ -3904,7 +3903,7 @@ sub_184ch:
 l184fh:
 	jp C_END_VEC		;184f	c3 1b 30	. . 0
 BIOS_G_VERS:
-	ld bc,l0021h		;1852	01 21 00	. ! .
+	ld bc,00022h		;1852	01 22 00	. " .
 	ret			;1855	c9		.
 l1856h:
 	push af			;1856	f5		.
@@ -4556,7 +4555,7 @@ l1c5dh:
 	ld c,a			;1c7b	4f		O
 	ld c,l			;1c7c	4d		M
 	jr nz,l1cf5h		;1c7d	20 76		  v
-	ld (FDD_MOVE.cd+1),a	;1c7f	32 2e 31	2 . 1
+	ld (l322eh),a		;1c7f	32 2e 32	2 . 2
 	jr nz,l1ca4h		;1c82	20 20		   
 	jr nz,l1c26h		;1c84	20 a0		  .
 l1c86h:
@@ -9444,6 +9443,7 @@ F_HOOK:
 F_HOOK.nz:
 	inc hl			;322c	23		#
 	ld a,h			;322d	7c		|
+l322eh:
 	or l			;322e	b5		.
 	jr z,F_HOOK.nz		;322f	28 fb		( .
 	ld (05dd1h),hl		;3231	22 d1 5d	" . ]

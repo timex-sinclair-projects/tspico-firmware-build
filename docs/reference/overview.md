@@ -129,10 +129,10 @@ consequences before their causes.
 
 | What | Version | Where it is written | How to read it |
 |---|---|---|---|
-| Firmware | 2.1.2 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
-| TS-2068 ROM | 2.1 | HOME 0065h (`PEEK 101` = 33), BIOS G_VERS = 0021h, the boot banner | `PEEK 101`; `SAVE "tpi:info"` |
+| Firmware | 2.2 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
+| TS-2068 ROM | 2.2 | HOME 0065h (`PEEK 101` = 34), BIOS G_VERS = 0022h, the boot banner | `PEEK 101`; `SAVE "tpi:info"` |
 | ZX Spectrum ROM | v4 | the banner byte at 38B7h | the boot screen in ZX48 mode |
-| ROM 2.1 module | FDD_VERSION 8 | EXROM 30AFh | — |
+| ROM 2.2 module | FDD_VERSION 8 | EXROM 30AFh | — |
 
 From 2.0 the firmware and the ROM share a major.minor number; the third
 part is a firmware-only release on the same ROM. ROM 2.0 and later need
@@ -156,7 +156,7 @@ which never write port 0Fh. [rom/overview.md](rom/overview.md).
 | `src/rom/fdd/fddcmd.asm` | 1,398 | ROM 2.1's module | [exrom-fdd.md](rom/exrom-fdd.md) |
 | `src/rom/patches/tspico-sync.asm` | 318 | ROM 2.0 | [exrom-sync.md](rom/exrom-sync.md) |
 | `src/rom/patches/tspico-zx48-v3.asm` | 280 | ZX v3/v4 | [zx48.md](rom/zx48.md) |
-| `src/rom/TSPICO-21.ROM` | 32K binary | the release ROM | [rom/overview.md](rom/overview.md) and the EXROM chapters |
+| `src/rom/TSPICO-22.ROM` | 32K binary | the release ROM | [rom/overview.md](rom/overview.md) and the EXROM chapters |
 
 Line counts are those of the sources the stamps in the [README](README.md)
 were taken from; [appendix/index.md](appendix/index.md) has the line of

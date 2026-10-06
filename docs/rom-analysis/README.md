@@ -81,10 +81,10 @@ docs/rom-analysis/
   tspico-exrom-symbols.sym   curated symbol names, as z80dasm input
   hunks.json                 machine-readable diff hunks
   disasm/                    generated listings (see caveat below)
-    tspico-21-exrom.labelled.asm        <- ROM 2.1 (the release ROM): read this one
-    tspico-21-exrom-symbols.sym         <- its labels: the curated names + the 2.0
+    tspico-22-exrom.labelled.asm        <- ROM 2.1 (the release ROM): read this one
+    tspico-22-exrom-symbols.sym         <- its labels: the curated names + the 2.0
                                            patch's + the 2.1 module's (generated)
-    tspico-21-home.asm                  <- ROM 2.1 HOME, raw sweep
+    tspico-22-home.asm                  <- ROM 2.1 HOME, raw sweep
     tspico-1{1,5w}-exrom.labelled.asm   <- v1.1 / v1.5w, named
     *.asm / *.sym                       <- raw linear sweeps
 ```

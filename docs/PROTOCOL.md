@@ -414,7 +414,7 @@ A jump table for machine-code programs, stable across ROMs:
 |-------|------|----------|
 | `$1840` | G_MODE | BC = TPMODE (low nibble); AF kept |
 | `$1842` | S_MODE | TPMODE := A AND `0Fh`; AF kept |
-| `$1844` | G_VERS | BC = the interface version: `$0015` v1.1/1.5w, `$0017` v1.7, `$0020` ROM 2.0, `$0021` ROM 2.1 |
+| `$1844` | G_VERS | BC = the interface version: `$0015` v1.1/1.5w, `$0017` v1.7, `$0020` ROM 2.0, `$0021` ROM 2.1, `$0022` ROM 2.2 |
 | `$1846` | TX_A | `OUT (0Eh),A`; no wait, no BREAK check |
 | `$1848` | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | `$184A` | C_END | wait READY, read the answer, run the response functions. NC = status 1 (A = 0). C = failed, see below. |

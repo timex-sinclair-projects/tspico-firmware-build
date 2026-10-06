@@ -538,11 +538,11 @@ except ImportError:
 
 # The TS-Pico version: the firmware and its TS-2068 ROM share one major.minor
 # number from 2.0 on, and a third part marks a firmware-only release on the
-# same ROM. 2.1 is the release ROM: the disk-command build from
-# tools/build-rom.py (PEEK 101 = 21h). tpi:info reports these, not the
+# same ROM. 2.2 is the release ROM: the disk-command build from
+# tools/build-rom.py (PEEK 101 = 22h). tpi:info reports these, not the
 # FW_VERSION an older config.ini may still hold.
-FW_VERSION = "2.1.2"
-ROM_VERSION = "2.1"
+FW_VERSION = "2.2"
+ROM_VERSION = "2.2"
 # Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
 # when loaded via the dev override __name__ == "dev_tspico". This file is
 # kept byte-identical between the two locations so the stamp prints the

@@ -159,11 +159,11 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | Key | Type | Shipped | Meaning | Read by | Written by |
 |---|---|---|---|---|---|
 | LOG_LEVEL | int 0–4 | 2 | lowest level `LOG` keeps (0 INFO … 3 CRITICAL, 4 SPECIAL) | `LOAD_CONFIG` → `TSP.LOG_LEVEL` | `LOAD_CONFIG` (default) |
-| FW_VERSION | str | `"2.1.2"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` ~294–312; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
+| FW_VERSION | str | `"2.2"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` ~294–312; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
 | DCK_SLOT | int 0–15 | 0 | DOCK slot at power-on | `LOAD_CONFIG` → `TSP.DCK_SLOT`, `bank_sm` | `LOAD_CONFIG` (default) |
 | ZX_TAPE_COMPAT | bool | `false` | ZX48 mode loads with `LOAD_ZX_C` (the whole tape in RAM) | → `TSP.ZX_TAPE_COMPAT` | `LOAD_CONFIG` (default) |
 | ROM_SM | int 5, 6, 9, 10 | 10 | `set_ctrl`'s word: DOCK memory × 4 + BOOT memory, 1 SRAM, 2 flash | → `TSP.ROM_SM` | `LOAD_CONFIG` (default; the one-shot), `MEMBOOT` (low bits) |
-| ROM_VERSION | str | `"2.1"` | shown by `tpi:info`; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
+| ROM_VERSION | str | `"2.2"` | shown by `tpi:info`; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
 | ROM_SLOT | int 0–15 | 1 | BOOT slot at power-on | → `TSP.ROM_SLOT`, `bank_sm` | `LOAD_CONFIG` (the one-shot back to 1), `MEMBOOT` |
 | VERBOSE | bool | `false` | `SEND_MSG` prints messages | → `TSP.VERBOSE` | `LOAD_CONFIG` (default) |
 | TELEMETRY | bool | `false` | the `TLM` trace on USB serial | `_telemetry()` only | `LOAD_CONFIG` (default) |
@@ -316,10 +316,10 @@ Ubuntu 22.04. The steps, in order:
    **programmer's manual examples**: `docs/manual/examples/test_examples.py`
    (the Z80 routines against a simulated Pico) and `test_extcmd_host.py`
    (the example commands through the real `PROCESS_CMD`).
-6. **ROM 2.1**: `tools/build-rom.py --verify` assembles the fdd module and
+6. **ROM 2.2**: `tools/build-rom.py --verify` assembles the fdd module and
    splices it onto ROM 2.0, failing if any patch's "before" bytes or any
    anchor no longer match ([../rom/overview.md](../rom/overview.md)); then
-   `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-21.ROM`: the
+   `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-22.ROM`: the
    committed slot-1 image must be exactly what the sources build. Then
    `rom_cend_hosttest.py` runs the ROM's BIOS `C_END`, and
    `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest), and
@@ -363,15 +363,15 @@ the emulator, and attaches the binaries to a release
 ## Releases: `release.yml`
 
 Fires on a pushed tag `v*` (or by hand with a tag). Version numbers: the
-major.minor are the ROM's, the patch digit is firmware-only (2.1.2 is
-firmware 2.1.2 on ROM 2.1). The job, at the tag:
+major.minor are the ROM's, the patch digit is firmware-only (2.1.2 was
+firmware 2.1.2 on ROM 2.1; 2.2 is firmware 2.2 on ROM 2.2). The job, at the tag:
 
 1. Builds as `build.yml` does — the stamp check, staging, the firmware
    UF2, `dev_tspico.mpy`, the upgrade UF2, the BASIC TAPs. **It runs no
    tests**: the commit is expected to have passed `build.yml` already.
 2. **The bundle** `ts-pico-<tag>.zip`: `firmware.uf2`, a generated
    `DEPLOY.md`, `src/` (`main.py`, `config.ini`, `words.txt`,
-   `assets/*.tap`, `rom/TSPICO-21.ROM`) for the Pico's flash, and
+   `assets/*.tap`, `rom/TSPICO-22.ROM`) for the Pico's flash, and
    `SD card/` (`TAP/` recursively, `help/`, the loose `*.tap` of the card's
    root).
 3. **The 512K flash image** `Pico-<tag>.rom`, if a base image can be
@@ -408,7 +408,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.1 | `src/rom/TSPICO-21.ROM` | `2B29F3E8` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.2 | `src/rom/TSPICO-22.ROM` | `8363E100` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |
@@ -450,7 +450,7 @@ may contain the third-party slots (decided 2026-09-28).
 - **`extract image --out DIR`**: takes a production image apart into slot
   files (used once, to seed the manifest).
 
-The module docstring names `src/rom/TSPICO-21.ROM` for slot 1 and points at
+The module docstring names `src/rom/TSPICO-22.ROM` for slot 1 and points at
 the manifest and this chapter (until #181 it named `TSPICO.ROM` and a
 `FLASH_LAYOUT.md` that does not exist). [`build_flash_hosttest.py`](../../../src/test/build_flash_hosttest.py)
 pins the build's refusals.

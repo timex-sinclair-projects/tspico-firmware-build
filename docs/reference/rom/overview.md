@@ -2,7 +2,7 @@
 
 Source: the images [`src/rom/TSPICO.ROM`](../../../src/rom/TSPICO.ROM)
 (v1.7), [`src/rom/TSPICO-SYNC.ROM`](../../../src/rom/TSPICO-SYNC.ROM)
-(2.0), [`src/rom/TSPICO-21.ROM`](../../../src/rom/TSPICO-21.ROM) (2.1),
+(2.0), [`src/rom/TSPICO-22.ROM`](../../../src/rom/TSPICO-22.ROM) (2.1),
 [`src/rom/TSPICO-ZX48-V4.BIN`](../../../src/rom/TSPICO-ZX48-V4.BIN); the
 build [`tools/build-rom.py`](../../../tools/build-rom.py) and
 [`tools/build-rom.sh`](../../../tools/build-rom.sh); the analysis tools
@@ -48,7 +48,8 @@ All checksums below were computed from the files in the repository.
 | v1.5w | `ROMs/TSPICO-15w-home`, `-exrom` | 16K + 16K | `E8714BED`, `CACF18C5` | 15h | v1.1 plus 15 EXROM bytes: a ready-wait and guard in the Y/N loop | history ([DIFF_V11_vs_V15W.md](../../rom-analysis/DIFF_V11_vs_V15W.md)) |
 | v1.7 | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | v1.5w plus BREAK at the SAVE prompt: 89 EXROM bytes and the version byte | the base `tspico-sync.asm` patches |
 | 2.0 | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | v1.7 plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | the base `build-rom.py` patches; never released on its own |
-| **2.1** | `src/rom/TSPICO-21.ROM` | 32K | `2B29F3E8` | 21h | 2.0 plus 16 patches and the module at EXROM 3000h–377Eh; 2030 bytes in 15 hunks | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| 2.1 | `src/rom/TSPICO-21.ROM` until 2.2 (`git show v2.1.2:src/rom/TSPICO-21.ROM`) | 32K | `E813BF90` | 21h | 2.0 plus 15 patches and the module at EXROM 3000h–376Ch | shipped with firmware 2.1–2.1.2 |
+| **2.2** | `src/rom/TSPICO-22.ROM` | 32K | `8363E100` | 22h | 2.1 plus the `tpi:tape` patch at EXROM 20BEh and the module's TAPE_MODE and PRELOAD fixes: 16 patches and the module at EXROM 3000h–377Eh; 2030 bytes in 15 hunks | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX v2 | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base of v3/v4 |
 | ZX v3 | `src/rom/TSPICO-ZX48-V3.BIN` | 16K | `C4A833B8` | — | v2 plus a WAIT_RDY fix and `LOAD "tpi:…"` | superseded by v4 |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | v3 plus `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
@@ -64,8 +65,8 @@ why it differs from the file's own.
 
 The lineage, in one line: genuine → v1.1 (Gustavo) → v1.5w → v1.7
 (Gustavo) → 2.0 (`src/rom/patches/tspico-sync.asm`) → 2.1
-(`src/rom/fdd/fddcmd.asm` + `build-rom.py`'s patches). From 2.0 on, the ROM
-and the firmware share one version number: firmware 2.1.x runs ROM 2.1
+(`src/rom/fdd/fddcmd.asm` + `build-rom.py`'s patches) → 2.2 (two fixes to 2.1). From 2.0 on, the ROM
+and the firmware share one version number: firmware 2.2 runs ROM 2.2
 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)). ROM 2.0
 and later need firmware that understands the SYNC byte; older firmware
 reads it as the first byte of a command
@@ -200,16 +201,17 @@ copies): [SYMBOLS.md](../../rom-analysis/SYMBOLS.md#cross-rom-machinery).
 
 Four places say, and they are changed together:
 
-| Where | v1.1 | v1.7 | 2.0 | 2.1 |
-|---|---|---|---|---|
-| HOME 0065h (`PEEK 101`) | 15h | 17h | 20h | 21h |
-| BIOS G_VERS (EXROM 1844h → 1852h, `LD BC,nnnn`) | | 0017h | 0020h | 0021h |
-| the banner at EXROM 1C6Ch, at start-up | | "2025 Timex Pico Interface" | "2026 TS-Pico ROM v2.0" | "2026 TS-Pico ROM v2.1" |
-| the module's FDD_VERSION (EXROM 30AFh) | | | | 8 |
+| Where | v1.1 | v1.7 | 2.0 | 2.1 | 2.2 |
+|---|---|---|---|---|---|
+| HOME 0065h (`PEEK 101`) | 15h | 17h | 20h | 21h | 22h |
+| BIOS G_VERS (EXROM 1844h → 1852h, `LD BC,nnnn`) | | 0017h | 0020h | 0021h | 0022h |
+| the banner at EXROM 1C6Ch, at start-up | | "2025 Timex Pico Interface" | "2026 TS-Pico ROM v2.0" | "2026 TS-Pico ROM v2.1" | "2026 TS-Pico ROM v2.2" |
+| the module's FDD_VERSION (EXROM 30AFh) | | | | 8 | 8 |
 
 A BASIC program tests `PEEK 101`; machine code calls G_VERS through the
 BIOS table ([exrom-driver.md](exrom-driver.md)). FDD_VERSION counts
-revisions of the module within 2.1 and follows the signature `"FDDCMD"` at
+revisions of the module within 2.1 (2.2's two fixes left it at 8: `PEEK 101`
+tells 2.1 from 2.2) and follows the signature `"FDDCMD"` at
 30A8h ([exrom-fdd.md](exrom-fdd.md)). The firmware does not read any of
 them: its `ROM_VERSION` is a string in `config.ini`
 ([../firmware/boot.md](../firmware/boot.md#configini)).
@@ -267,7 +269,7 @@ Each source `INCBIN`s its base image and overlays its patches with `FPOS`
 CI does not run this script — it runs the two tests on the committed
 images — so a change to these sources is rebuilt by hand and the image
 committed. The script's header notes that `src/rom/TSPICO.ROM`, the v1.7
-base, is never modified (slot 1 is `TSPICO-21.ROM`; until #181 the header
+base, is never modified (slot 1 is `TSPICO-22.ROM`; until #181 the header
 called `TSPICO.ROM` the shipping slot-1 ROM). The ZX sources:
 [zx48.md](zx48.md); the 2.0 source: [exrom-sync.md](exrom-sync.md).
 
@@ -298,10 +300,10 @@ moved site refuses, naming it: a patch that no longer fits needs a person,
 not a new checksum. It leaves `ROMs/` and `romdiff.py`'s `EXPECT_CRC` alone.
 
 After a change to the module or the patches: `python3 tools/build-rom.py
---verify`, copy `build/TSPICO-fdd.ROM` over `src/rom/TSPICO-21.ROM`, and
+--verify`, copy `build/TSPICO-fdd.ROM` over `src/rom/TSPICO-22.ROM`, and
 set slot 1's crc32 in `flash/manifest.json` (`tools/build-flash.py check`
 prints it). CI ([../firmware/boot.md](../firmware/boot.md#ci-buildyml))
-runs `--verify`, fails if the committed `TSPICO-21.ROM` differs from the
+runs `--verify`, fails if the committed `TSPICO-22.ROM` differs from the
 fresh build by a single byte, checks the manifest's crc32, and runs
 `rom_cend_hosttest.py` on `C_END2`, `rom_tpmode_hosttest.py` on the
 switch words and `rom_preload_hosttest.py` on `PRELOAD` in a Z80
@@ -327,9 +329,9 @@ Sixteen, applied in this order. The reason for each is in the source's
 | HOME 13A5h | `CALL 13BEh` → `CALL 1494h` | CLOSE # through its trampoline | [home.md](home.md) |
 | EXROM 184Fh | `JP 23CDh` → `JP 301Bh` | BIOS C_END becomes C_END2: a timeout is J, not F | [exrom-driver.md](exrom-driver.md), [exrom-fdd.md](exrom-fdd.md) |
 | EXROM 20BEh | `CALL 1861h / JR 2108h` → `JP 301Eh` + 2 × `00` | `tpi:tape` clears only the LOAD/SAVE switch (TPMODE bit 1), through the module's TAPE_MODE; it used to set TPMODE to 0, turning the printer switch off too (#176) | [sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027), [exrom-fdd.md](exrom-fdd.md) |
-| EXROM 1C7Eh | `"v2.0"` → `"v2.1"` | the banner | [exrom-driver.md](exrom-driver.md) |
-| HOME 0065h | `20h` → `21h` | `PEEK 101` | [home.md](home.md) |
-| EXROM 1852h | `LD BC,0020h` → `LD BC,0021h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
+| EXROM 1C7Eh | `"v2.0"` → `"v2.2"` | the banner | [exrom-driver.md](exrom-driver.md) |
+| HOME 0065h | `20h` → `22h` | `PEEK 101` | [home.md](home.md) |
+| EXROM 1852h | `LD BC,0020h` → `LD BC,0022h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
 
 The resulting 2.0 → 2.1 difference, measured on the committed images: 2030
 bytes in 15 hunks: 99 in HOME, 16 in the EXROM outside the module, and
@@ -392,9 +394,9 @@ file offset = Z80 address):
 
 | File | What |
 |---|---|
-| `tspico-21-exrom.labelled.asm` | **ROM 2.1's EXROM, labelled. The one this reference cites.** |
-| `tspico-21-exrom-symbols.sym` | its labels, generated: the curated names of `docs/rom-analysis/tspico-exrom-symbols.sym`, plus every label of `tspico-sync.asm` (2300h) and `fddcmd.asm` (3000h) from a fresh sjasmplus assembly, EXROM addresses (0100h–3FFFh) only, less the `EQU`s a source marks `; HOME` (a HOME address is not an EXROM label; until #183 `H_EXPT_STR` named EXROM 1BEFh). Edit the sources, not this |
-| `tspico-21-home.asm`, `.sym` | ROM 2.1's HOME, a raw sweep with `z80dasm`'s own `lXXXXh` labels |
+| `tspico-22-exrom.labelled.asm` | **ROM 2.1's EXROM, labelled. The one this reference cites.** |
+| `tspico-22-exrom-symbols.sym` | its labels, generated: the curated names of `docs/rom-analysis/tspico-exrom-symbols.sym`, plus every label of `tspico-sync.asm` (2300h) and `fddcmd.asm` (3000h) from a fresh sjasmplus assembly, EXROM addresses (0100h–3FFFh) only, less the `EQU`s a source marks `; HOME` (a HOME address is not an EXROM label; until #183 `H_EXPT_STR` named EXROM 1BEFh). Edit the sources, not this |
+| `tspico-22-home.asm`, `.sym` | ROM 2.1's HOME, a raw sweep with `z80dasm`'s own `lXXXXh` labels |
 | `tspico-11-exrom.labelled.asm`, `tspico-15w-exrom.labelled.asm` | the 1.x EXROMs, labelled with the curated names |
 | `tspico-11-exrom.asm`, `tspico-15w-exrom.asm`, `tspico-home.asm`, `genuine-2068-*.asm` (+ `.sym`) | raw sweeps |
 
@@ -402,7 +404,7 @@ How to use them:
 
 - **Find an address** by its comment: every line ends with the address in
   lower-case hex and the bytes, `;1a54  cd 55 06`. In HOME,
-  `grep -n ';0f12' tspico-21-home.asm`; an address in the middle of an
+  `grep -n ';0f12' tspico-22-home.asm`; an address in the middle of an
   instruction is not found, so try the bytes before it.
 - **They are linear sweeps.** Text, tables and `FFh` filler disassemble as
   nonsense, and a sweep that starts inside an instruction stays out of

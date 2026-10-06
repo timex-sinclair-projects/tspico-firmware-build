@@ -4,6 +4,7 @@ An assembly-level account of what changed on top of Gustavo Pane's v1.7 ROM:
 
 - ROM 2.0: SYNC, BREAK and recovery.
 - ROM 2.1: the disk commands, `f:` files and file channels.
+- ROM 2.2: two fixes to the 2.1 module.
 - The ZX Spectrum ROM v3.
 
 Addresses are Z80 addresses. In the 32 K image, HOME sits at file offset 0000h
@@ -18,7 +19,8 @@ sources are listed [at the end](#sources).
 |---|---|---|
 | **v1.7** | `src/rom/TSPICO.ROM`, crc 09D4CA63 | Gustavo's ROM, the base for everything here. The only public release before this was v1.1. |
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
-| **2.1** | `src/rom/TSPICO-21.ROM`, crc 2B29F3E8 | 2.0 plus 16 HOME/EXROM patches and a 1919-byte module at EXROM 3000h–377Eh. This is the release ROM and the slot-1 image. |
+| **2.1** | `src/rom/TSPICO-21.ROM` until 2.2, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. It shipped with firmware 2.1.0–2.1.2. |
+| **2.2** | `src/rom/TSPICO-22.ROM`, crc 8363E100 | 2.1 plus a 16th patch (EXROM 20BEh) and two module fixes: `tpi:tape` keeps the printer switch ([TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), #176) and a pre-load of 0 is Report J ([PRELOAD](#preload-a-pre-load-of-0-is-report-j), #179). The module is 1919 bytes, 3000h–377Eh. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -257,7 +259,7 @@ Two problems turned up along the way, and they shaped every entry point.
 | HOME | 03F3h | `LD (5DCDh),HL / LD HL,2000h / JP 03FCh` | `DI / LD (5DCDh),HL / LD HL,3015h / JR 041Ch` | This is the BEEPER thunk. BEEPER ends in EI, so the switch back to HOME ran with interrupts on. The editor clicks once per character, so INPUT # from a file crashed within a few hundred characters. |
 | HOME | 041Ch | `00 00 10 d3 fe` (dead) | `CALL 03FCh / EI / RET` | The BEEPER thunk's tail. These bytes are left over from the relocated BEEPER, and nothing references them. |
 | EXROM | 184Fh | `JP 23CDh` | `JP 301Bh` | BIOS C_END becomes [C_END2](#c_end2-a-timeout-is-j-not-f). 2.0's C_END returned A = 02h for a timeout and for status 3 alike, so callers reported a silent Pico as F. |
-| EXROM | 20BEh | `CALL 1861h / JR 2108h` | `JP 301Eh / 00 00` | `tpi:tape` goes to [TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), which clears TPMODE bit 1 only. 2.0 set TPMODE to 0, turning the printer switch off too (#176). |
+| EXROM | 20BEh | `CALL 1861h / JR 2108h` | `JP 301Eh / 00 00` | `tpi:tape` goes to [TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), which clears TPMODE bit 1 only. 2.0 and 2.1 set TPMODE to 0, turning the printer switch off too (#176; new in 2.2). |
 | HOME | 0065h | `20h` | `21h` | Version marker. |
 | EXROM | 1852h | `LD BC,0020h` | `LD BC,0021h` | BIOS G_VERS. |
 | EXROM | 1C7Eh | `"v2.0"` | `"v2.1"` | Boot banner. |
@@ -267,6 +269,8 @@ The build also checks anchor bytes elsewhere in the base ROM, including 23CDh,
 instead of jumping into the wrong code.
 
 ## ROM 2.1: the module at EXROM 3000h
+
+This section describes the module as ROM 2.2 ships it; 2.2 added TAPE_MODE and PRELOAD.
 
 The module is `src/rom/fdd/fddcmd.asm`. It is 1919 bytes, from 3000h to 377Eh,
 with FDD_VERSION 8 and the signature `"FDDCMD"` at 30A8h. It starts with a jump
@@ -430,6 +434,7 @@ On failure, A is now always ready for the status-to-report routine at 1BF3h:
 
 ### PRELOAD: a pre-load of 0 is Report J
 
+New in ROM 2.2.
 `SEND_FOPEN` and `CH_SEND` build their exchanges by hand through the BIOS, and
 read the pre-load status with `BIOS_RX_A` -- and ignored it, so with no Pico (a
 0) they went on into `BIOS_WF_NPH`'s timeout. They now call `PRELOAD` (3778h,
@@ -443,6 +448,7 @@ two seconds for the LOAD's retry and which a channel command in that time
 
 ### TAPE_MODE: tpi:tape keeps the printer switch
 
+New in ROM 2.2.
 TPMODE (5DDBh) holds two switches: bit 1 sends LOAD and SAVE to the Pico,
 bit 0 sends printing to it. `tpi:sdcard`, `tpi:picopt` and `tpi:ts2040` each
 change their own bit, but `tpi:tape` (EXROM 20BEh, unchanged since v1.1) did
@@ -611,12 +617,12 @@ in v2.
 
 ## Version bytes
 
-| Where | v1.7 | 2.0 | 2.1 |
-|---|---|---|---|
-| HOME 0065h (`PEEK 101`) | 17h | 20h | 21h |
-| BIOS G_VERS (EXROM 1852h, `LD BC,nnnn`) | 0017h | 0020h | 0021h |
-| Boot line (EXROM 1C6Ch) | v1.7 | `" 2026 TS-Pico ROM v2.0"` | `"… v2.1"` |
-| Module FDD_VERSION (EXROM 30AFh) | — | — | 08h |
+| Where | v1.7 | 2.0 | 2.1 | 2.2 |
+|---|---|---|---|---|
+| HOME 0065h (`PEEK 101`) | 17h | 20h | 21h | 22h |
+| BIOS G_VERS (EXROM 1852h, `LD BC,nnnn`) | 0017h | 0020h | 0021h | 0022h |
+| Boot line (EXROM 1C6Ch) | v1.7 | `" 2026 TS-Pico ROM v2.0"` | `"… v2.1"` | `"… v2.2"` |
+| Module FDD_VERSION (EXROM 30AFh) | — | — | 08h | 08h |
 
 v1.1 reads 15h at 0065h.
 

@@ -138,12 +138,12 @@ jobs:
       - name: Check the flash manifest against the ROMs in the repo
         run: python3 tools/build-flash.py check flash/manifest.json
 
-      # ROM 2.1, the release ROM: disk commands, f: files and OPEN # channels.
+      # ROM 2.2, the release ROM: disk commands, f: files and OPEN # channels.
       # tools/build-rom.py assembles src/rom/fdd/fddcmd.asm and splices it onto
       # the 2.0 ROM; --verify fails the build if any patch's "before" bytes or
       # any anchor no longer match the base, or if anything outside the
       # intended hunks changed. The result must equal the committed slot-1
-      # image, src/rom/TSPICO-21.ROM (checked below).
+      # image, src/rom/TSPICO-22.ROM (checked below).
       # sjasmplus has no Ubuntu package; v1.22.0 is the version the module is
       # developed with, and it builds a byte-identical ROM.
       - name: Install sjasmplus
@@ -161,26 +161,26 @@ jobs:
           python3 docs/manual/examples/test_examples.py
           python3 docs/manual/examples/test_extcmd_host.py
 
-      - name: Build the fdd ROM (ROM 2.1)
+      - name: Build the fdd ROM (ROM 2.2)
         run: python3 tools/build-rom.py --verify
 
-      # src/rom/TSPICO-21.ROM is the slot-1 image (flash/manifest.json), so the
+      # src/rom/TSPICO-22.ROM is the slot-1 image (flash/manifest.json), so the
       # flash image, the upgrade UF2 and the web updater all ship it. It must be
       # exactly what build-rom.py makes from the sources.
       - name: The committed slot-1 ROM is what build-rom.py builds
         run: |
-          if ! cmp -s build/TSPICO-fdd.ROM src/rom/TSPICO-21.ROM; then
-            echo "::error::src/rom/TSPICO-21.ROM differs from tools/build-rom.py's output. Run: python3 tools/build-rom.py --verify && cp build/TSPICO-fdd.ROM src/rom/TSPICO-21.ROM, then set flash/manifest.json's slot-1 crc32 (python3 tools/build-flash.py check flash/manifest.json)."
+          if ! cmp -s build/TSPICO-fdd.ROM src/rom/TSPICO-22.ROM; then
+            echo "::error::src/rom/TSPICO-22.ROM differs from tools/build-rom.py's output. Run: python3 tools/build-rom.py --verify && cp build/TSPICO-fdd.ROM src/rom/TSPICO-22.ROM, then set flash/manifest.json's slot-1 crc32 (python3 tools/build-flash.py check flash/manifest.json)."
             exit 1
           fi
 
-      - name: Test ROM 2.1's BIOS C_END in the Z80 interpreter
+      - name: Test ROM 2.2's BIOS C_END in the Z80 interpreter
         run: python3 src/test/rom_cend_hosttest.py
 
-      - name: Test ROM 2.1's switch words (tpi:tape keeps the printer switch) in the Z80 interpreter
+      - name: Test ROM 2.2's switch words (tpi:tape keeps the printer switch) in the Z80 interpreter
         run: python3 src/test/rom_tpmode_hosttest.py
 
-      - name: Test ROM 2.1's pre-load check (PRELOAD) in the Z80 interpreter
+      - name: Test ROM 2.2's pre-load check (PRELOAD) in the Z80 interpreter
         run: python3 src/test/rom_preload_hosttest.py
 
       - name: Upload the fdd ROM artifact

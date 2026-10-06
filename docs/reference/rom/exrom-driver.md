@@ -1,6 +1,6 @@
 # EXROM 1800h–1BFFh: the Pico driver
 
-Source: [`tspico-21-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-21-exrom.labelled.asm),
+Source: [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm),
 EXROM 1800h–1C8Fh and the chunk-0 routines the driver stands on (0000h–
 0060h, 00F8h, 03DDh, 0655h–06B0h, 0F99h); names from
 [`docs/rom-analysis/tspico-exrom-symbols.sym`](../../rom-analysis/tspico-exrom-symbols.sym).
@@ -197,8 +197,8 @@ had it right).
 
 ### `BIOS_G_VERS` (1852h)
 
-`LD BC,0021h / RET`: the version, matching HOME 0065h (`PEEK 101`). 0015h
-in v1.1 and v1.5w (which it cannot tell apart), 0017h in v1.7, 0020h in 2.0, 0021h in 2.1; each release patches it with 0065h
+`LD BC,0022h / RET`: the version, matching HOME 0065h (`PEEK 101`). 0015h
+in v1.1 and v1.5w (which it cannot tell apart), 0017h in v1.7, 0020h in 2.0, 0021h in 2.1, 0022h in 2.2; each release patches it with 0065h
 ([overview.md](overview.md#which-rom-is-this)). The `RET` at 1855h is also
 used as a landing point: HOME's helpers 255Bh and 3CDCh jump into the EXROM
 at 1855h so that the `RET` returns to their EXROM caller with the EXROM
