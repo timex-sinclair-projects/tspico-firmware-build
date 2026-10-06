@@ -43,10 +43,11 @@ import json
 import time
 
 from TS.tspico_io import (MQX, TAPE_STREAM_OF, ZX_ARM, ZX_STREAM, ZX_FLUSH_TX,
-                          ZX_ROOM, RX_WORD, TX_DEPTH, PORT_0F)
+                          ZX_ROOM, RX_WORD, TX_DEPTH, PORT_0F, STREAM_DMA)
 
 VERSION = 1
 REWIND_MS = 5000        # a LOAD stopped part-way: rewind the tape after this
+REPLY_STALL_MS = 1000   # a reply the Z80 stopped reading
 STATUS_NAMES = {"P": "phase", "E": "erased", "W": "written", "V": "verified",
                 "D": "done", "X": "failed"}
 
@@ -58,23 +59,44 @@ def report(event, **kw):
 
 
 def reply(MQ, data):
-    """Queue data for the Z80: the first bytes go in before READY (it reads
-    the instant it sees it), the rest as it reads (~44 us a byte). False if
-    it stopped reading."""
+    """Queue data for the Z80 and raise READY; it reads the reply blind, a
+    byte every ~44 us, the instant it sees READY. Returns
+
+        -1       all of data went into the FIFO
+        -2       the Z80 stopped reading for REPLY_STALL_MS
+        0..511   a word the Z80 wrote mid-reply (it gave up on this one and
+                 asked again): serve() handles it as its next request
+
+    A block (257 bytes) goes by DMA, as LOAD's blocks do (tspico_io's
+    STREAM_DMA): on MicroPython v1.29 a Python loop putting a byte at a time
+    lets the 4-deep FIFO run dry, the Z80 reads 00s, the block fails its XOR
+    five times and the updater gives up with slot 1 already erased (hardware,
+    2026-10-06). The channel is running, the FIFO full, before READY. A reply
+    that fits the FIFO (the 'I' and 'S' answers) needs no DMA, and the hand
+    loop stays as the fallback when no channel is free."""
     ZX_FLUSH_TX(MQ)
     n = len(data)
+    if n > TX_DEPTH:
+        r = STREAM_DMA(MQ, data, None, REPLY_STALL_MS, True)
+        if r is not None:
+            why, _sent, word = r
+            if why == 0:
+                return -1
+            ZX_FLUSH_TX(MQ)
+            return word if why == 4 else -2
     i = 0
     while i < n and MQ.tx_fifo() < TX_DEPTH:
         MQ.put(data[i])
         i += 1
     MQX(MQ, "mov(y, invert(null))")         # READY
     while i < n:
-        if ZX_ROOM(MQ, 1000) != -1:
+        w = ZX_ROOM(MQ, REPLY_STALL_MS)
+        if w != -1:
             ZX_FLUSH_TX(MQ)
-            return False
+            return w
         MQ.put(data[i])
         i += 1
-    return True
+    return -1
 
 
 def drained(MQ, ms):
@@ -96,8 +118,11 @@ def serve(MQ, data):
     gc.collect()
     pos = ZX_ARM(MQ, stream)
     loading = False
+    nxt = -1                                # a word a reply() already read
     while True:
-        if service:
+        if nxt >= 0:
+            w, nxt = nxt, -1
+        elif service:
             while not MQ.rx_fifo():
                 pass
             w = MQ.get()
@@ -134,7 +159,7 @@ def serve(MQ, data):
         if c == 0x49:                                           # 'I'
             service = True
             loading = False
-            reply(MQ, bytes((0x54, 0x50, VERSION, 0)))
+            nxt = reply(MQ, bytes((0x54, 0x50, VERSION, 0)))
             report("updater")
         elif c == 0x52:                                         # 'R'
             img = RX_WORD(MQ, 100)
@@ -152,14 +177,14 @@ def serve(MQ, data):
                 blk[i] = v
                 x ^= v
             blk[256] = x
-            reply(MQ, blk)
+            nxt = reply(MQ, blk)
         elif c == 0x53:                                         # 'S'
             code = RX_WORD(MQ, 100)
             arg = RX_WORD(MQ, 100)
             if code < 0 or arg < 0:
                 continue
             code = chr(code & 0xFF)
-            reply(MQ, b"\x00")
+            nxt = reply(MQ, b"\x00")
             report("status", code=code, what=STATUS_NAMES.get(code, "?"), arg=arg & 0xFF)
             if code == "X":                 # back to BASIC: LOAD "" tries again
                 drained(MQ, 200)
