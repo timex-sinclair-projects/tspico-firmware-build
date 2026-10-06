@@ -14,7 +14,8 @@ and a temporary config.ini:
   * DIR CODE 1,n / 2,n past the last file gives the real range, 0 to n-1;
   * FWD CODE 2,n (by file) on the last header says it can't, not "Moved";
   * MD takes its name as the other commands do and refuses paths and the
-    characters FAT won't take.
+    characters FAT won't take;
+  * shorten_filename never returns more than it was asked for.
 
 Run:  python3 src/test/commands_hosttest.py
 """
@@ -223,6 +224,21 @@ def test_md(t, root, sent):
     t.TSP.cur_path = "/sd/TAP"
 
 
+def test_shorten(t):
+    print("shorten_filename (#168)")
+    f = t.shorten_filename
+    check(f("SHORT.TAP", 18) == "SHORT.TAP", "a name that fits is unchanged")
+    check(f("AVERYLONGGAMENAME2.TAP", 18) == "AVERYLO>ENAME2.TAP", "a long name keeps its extension, as before (%r)" % f("AVERYLONGGAMENAME2.TAP", 18))
+    p = "/TAP/GAMES/A.VERYLONGFOLDERNAMEWITHADOTXXXXXXX"         # 46: the old code gave 73
+    check(len(f(p, 27)) == 27 and f(p, 27).startswith("/TAP/GA"),
+          "a path whose last dot is in a long folder name: 27 characters, not 73 (%r)" % f(p, 27))
+    names = ["X" * 40, "NAME." + "E" * 30, "A.B", "LONGNAME.TAPE", ".HIDDENFILENAME", "A" * 10 + "." + "B" * 10]
+    bad = [(n, l, f(n, l)) for n in names for l in range(0, 34) if len(f(n, l)) > max(l, 0)]
+    check(not bad, "never longer than asked, for l 0-33 (%r)" % (bad[:3],))
+    ok = [(n, l) for n in names for l in range(2, 34) if len(n) > l and len(f(n, l)) != l]
+    check(not ok, "a name too long comes out exactly l long (%r)" % (ok[:3],))
+
+
 def test_boot(t, cfg):
     print("tpi:boot and LOAD_CONFIG")
     with open(cfg, "w") as f:
@@ -284,6 +300,7 @@ def main():
         test_dir_range(t, sent)
         test_ffw_by_file(t, sent)
         test_md(t, root, sent)
+        test_shorten(t)
         test_boot(t, cfg)
     finally:
         shutil.rmtree(root, ignore_errors=True)

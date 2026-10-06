@@ -186,7 +186,7 @@ empties both FIFOs and stages one byte — 01h, or the error of a header LOAD
 just refused (`FIRST_STATUS`); the dispatcher itself then waits up to 800 ms
 for a flash write on the other core to finish, re-arms the pre-header DMA
 channel when there is one, and sets the status idle (FFh) (tspico.py
-6510–6529). So after a SYNC the link is normally TX = `[01]`, RX empty, whatever state an earlier
+6515–6534). So after a SYNC the link is normally TX = `[01]`, RX empty, whatever state an earlier
 client left it in ([tspico-dispatch.md](../firmware/tspico-dispatch.md)).
 
 Beware: the SYNC is sent before the ready-wait of the transaction it opens,
