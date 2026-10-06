@@ -1148,6 +1148,10 @@ The loader shows a warning, because the slot you pick is erased first. It then a
 A cartridge loads the same way, into an even slot; the loader then offers to put it in the dock
 and restart.
 
+If the image isn't mounted any more when the loader asks for it (after `tpi:close`, say), the
+loader stops with `No ROM image mounted` and **F** before it erases anything. Mount the file
+and run `LOAD ""` again.
+
 **Two important rules:**
 
 - **Keep the P10 jumper fitted.** Without it the Flash can't be written, and the loader will say so.
@@ -1495,7 +1499,8 @@ SAVE "tpi:log clear" CODE 255,0   : REM empty it without asking
 ```
 
 The log records problems the TS-Pico couldn't show on the screen. It's worth a look when
-something's gone wrong. **Q**: `Log file too large` (use `CODE 0,n`).
+something's gone wrong. *(verbose)* `The log is empty` when nothing has been logged yet.
+**Q**: `Log file too large` (use `CODE 0,n`).
 
 ### loglevel
 
@@ -1515,9 +1520,10 @@ path (use `FORMAT "a/b/"`) or a character the card can't hold. **A**: no name.
 
 ### newtap: make a new TAP
 
-`SAVE "tpi:newtap name"` makes `name.tap`, mounts it and switches append on. **F**: no name,
-a name with `:*\/|"<>` in it, or a file of that name already there (`File exists:`; the file
-is left alone).
+`SAVE "tpi:newtap name"` makes `name.tap`, mounts it and switches append on. A name that
+already ends in `.tap` is used as it is: `tpi:newtap a.b.tap` makes `a.b.tap`. **F**: no name
+(`Name required for new .tap file`, also for `.tap` on its own), a name with `:*\/|"<>` in it,
+or a file of that name already there (`File exists:`; the file is left alone).
 
 ### nop
 
