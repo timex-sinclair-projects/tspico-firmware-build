@@ -1,5 +1,9 @@
 # TS-2068 + TS-Pico with no hardware (issue #35)
 
+> Testing your own TS-2068 programs this way, with the emulator releases and the standalone
+> `pico_host`: see [Testing in an Emulator](../../docs/manual/emulators.md). This README is
+> about the tools in this folder.
+
 ZEsarUX emulates the TS-2068 running the TS-Pico ROM (`src/rom/TSPICO-22.ROM`).
 Every Z80 access to ports 0Eh/0Fh goes over a socket to `pico_host.py`, which
 runs the **real firmware**: `TS.tspico.TS2068_IO()`,
