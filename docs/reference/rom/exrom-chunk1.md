@@ -499,8 +499,13 @@ in 5DCDh; the XOR; then `SEND_DATA_BLOCK_D` from 4000h. The firmware turns
 the body into a BMP ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#print_iopre)).
 
 **COPY-LINE (17C3h) and COPY-BUFF (17CDh)** are the stock routines moved
-from HOME unchanged: they clock pixel lines into a ZX Printer on port FBh
-(17DCh–180Eh, the loop with the `CALL 2009h` that pins BREAK_KEY). 17CDh
+from HOME: they clock pixel lines into a ZX Printer on port FBh (17DCh–180Eh,
+the loop with the `CALL 2009h` that pins BREAK_KEY). 17C3h is the entry
+HOME's 0A4Ah reaches: `CALL 17DCh / EXX / LD HL,0619h / JP 08DDh`, back to
+HOME. The loop at 17DCh is the stock COPY-LINE (HOME 0A4Ah) byte for byte
+but for its BREAK exit, which calls 17BAh (`LD HL,0A30h / JP CALL_HOME`:
+the motor-off and buffer-clear tail, still in HOME) where the stock code
+did that inline (#178). 17CDh
 prints the printer buffer at 5B00h, 8 lines. **Nothing here goes to the
 Pico**: with `tpi:picopt`, characters reach the Pico one by one through
 1639h, and COPY-BUFF, still called at the end of each LPRINT line, finds
