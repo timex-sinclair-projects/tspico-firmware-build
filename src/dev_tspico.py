@@ -2544,7 +2544,12 @@ def DIR(pre, cmd):                                                              
 
         n = len(files)
         if par2 >= n:
-            msg = "File index %d out of range 0-%d" % (par2, n)
+            # The indexes run 0 to n-1 (#160: this said 0-n). No files at
+            # all has no range to give.
+            if n:
+                msg = "File index %d out of range 0-%d" % (par2, n - 1)
+            else:
+                msg = "No files in this folder"
             LOG(msg, 2)
             SEND_MSG(msg, "", _6_6_Num2Big)
             return

@@ -10,7 +10,8 @@ and a temporary config.ini:
     number, and empty folders; it refuses the mounted file, a missing name, a
     non-empty folder and the current folder -- before its Y/N prompt;
   * BOOT saves the memory type with the slot, LOAD_CONFIG uses both once and
-    puts back flash slot 1, and MEM 3 is refused.
+    puts back flash slot 1, and MEM 3 is refused;
+  * DIR CODE 1,n / 2,n past the last file gives the real range, 0 to n-1.
 
 Run:  python3 src/test/commands_hosttest.py
 """
@@ -133,6 +134,27 @@ def test_rm(t, root, sent):
     check(sent[-1][3] == t._8_A_Invalid_arg, "no name is A")
 
 
+def test_dir_range(t, sent):
+    print("tpi:dir CODE 1,n / 2,n past the last file (#160)")
+    real = t.files
+    t.files = ["F%02d.TAP" % i for i in range(12)]
+    for a in (1, 2):
+        del sent[:]
+        run(t, t.DIR, "tpi:dir", a, 12)
+        check(sent and sent[-1][1] == "File index 12 out of range 0-11" and sent[-1][3] == t._6_6_Num2Big,
+              "CODE %d,12 with twelve files: \"0-11\", Report 6 (%r)" % (a, sent[-1:]))
+    del sent[:]
+    run(t, t.DIR, "tpi:dir", 1, 11)
+    check(sent and sent[-1][3] == t._1_OK and "F11.TAP" in sent[-1][2],
+          "CODE 1,11, the last one, is in range (%r)" % (sent[-1:],))
+    t.files = []
+    del sent[:]
+    run(t, t.DIR, "tpi:dir", 1, 0)
+    check(sent and sent[-1][1] == "No files in this folder" and sent[-1][3] == t._6_6_Num2Big,
+          "no files at all: says so, not \"0--1\" (%r)" % (sent[-1:],))
+    t.files = real
+
+
 def test_boot(t, cfg):
     print("tpi:boot and LOAD_CONFIG")
     with open(cfg, "w") as f:
@@ -191,6 +213,7 @@ def main():
         t.BANK = types.SimpleNamespace(put=lambda v: None)
         test_newtap(t, root, sent)
         test_rm(t, root, sent)
+        test_dir_range(t, sent)
         test_boot(t, cfg)
     finally:
         shutil.rmtree(root, ignore_errors=True)

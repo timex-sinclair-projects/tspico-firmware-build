@@ -329,9 +329,9 @@ def cross_cutting_docs():
 # ---------------------------------------------------------------------------
 
 # A line number in prose: 2-5 digits, not part of a word, a hex address
-# (3000h, $3000, 0x3000), a decimal (4.4), a path, a value in backticks or a
-# number with a unit ("6000 ms", "512 bytes"); "#L123" is a line link and is
-# matched.
+# (3000h, $3000, 0x3000), a decimal (4.4), a path, or a number with a unit
+# ("6000 ms", "512 bytes"); "#L123" is a line link and is matched. Inline code
+# (`WAIT_CORE1(3000, ...)`) is skipped whole: numbers there are values.
 LINE_REF_RE = re.compile(r"(?:(?<=#L)|(?<![\w.#/$\\`-]))(\d{2,5})"
                          r"(?![\w%`]|\.\d|\s?(?:ms|µs|s\b|bytes|KB|MHz|kHz|Hz|baud|columns|lines\b|bits))")
 # Numbers that are values, not lines, whatever range they fall in.
@@ -387,7 +387,8 @@ def remap_lines(doc, moves, old_len, apply):
             new, exact = moves[int(v)]
             changes.append((no, v, str(new), exact, line.strip()[:110]))
             return str(new)
-        out.append(LINE_REF_RE.sub(sub, line))
+        parts = line.split("`")                    # even parts are prose; odd ones are code spans
+        out.append("`".join(LINE_REF_RE.sub(sub, x) if i % 2 == 0 else x for i, x in enumerate(parts)))
     if apply and changes:
         with open(os.path.join(ROOT, doc), "w") as f:
             f.write("\n".join(out))
