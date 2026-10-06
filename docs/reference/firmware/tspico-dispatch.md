@@ -219,7 +219,7 @@ only waiting for READY. A UDG or a COPY ends with TX = `[status, 01]`.
 fit the four-deep FIFO.
 
 Why one transaction per call: this function used to loop reading the next
-pre-headers itself; on the 1.8b ROM the per-character SYNC misaligned it
+pre-headers itself; the ROM's per-character SYNC misaligned it
 after the first character, and the first non-printer pre-header ended the
 loop and was swallowed. Why the dispatcher does not say READY before
 calling it: the same rule as for LOAD and SAVE (see `TS2068_IO`); the ROM
@@ -664,12 +664,12 @@ method is stored.
 
 ### SYNC and BREAK: `got < 0`
 
-A write to port 0Fh. On ROM 2.x that is every transaction's opening SYNC
+A write to port 0Fh. That is every transaction's opening SYNC
 (`OUT (0Fh),03h`, then a wait of up to ~1 s for READY + IDLE), a BREAK
 abort that landed after its transaction had finished, or a SYNC right
 behind a half-sent pre-header after a 2068 reset
-([PROTOCOL.md §4.1](../../PROTOCOL.md#41-sync-rom-20-and-firmware-20),
-[exrom-sync.md](../rom/exrom-sync.md)). ROMs up to 1.7 never write 0Fh.
+([PROTOCOL.md §4.1](../../PROTOCOL.md#41-sync),
+[exrom-sync.md](../rom/exrom-sync.md)). ROM 1.1 never writes 0Fh.
 
 1. `MQ_TO_IDLE(MQ, status=False, first=FIRST_STATUS())`: both FIFOs emptied,
    one byte staged, Y left where the OUT dropped it (BUSY). The byte is
@@ -708,7 +708,7 @@ Part of a burst, then a second of silence: a 2068 reset mid-pre-header, a
 lost byte, or noise. The loop does not guess at a command: a level-2 `LOG`
 "Partial pre-header k/10: …  -- RECOVERED", a `TLM`, and
 `MQ_TO_IDLE(MQ, recovered=True)` — FIFOs emptied, one `0x01` staged,
-Y = `0xFB`. A ROM 2.x still waiting for READY sees RECOVERED and reports
+Y = `0xFB`. A ROM still waiting for READY sees RECOVERED and reports
 "T TS-Pico reset, try again"; its next SYNC clears it. `continue`.
 Before #51 this read hung for good (the main-loop case in
 [OPEN_QUESTIONS.md](../../OPEN_QUESTIONS.md)).
@@ -938,8 +938,8 @@ must not log before IDLE.
 
 ## `ZX_TPI()`
 
-The ZX ROM's `'T'` command: `LOAD "tpi:name"` (ZX v3 and v4) and
-`SAVE "tpi:dir [arg]"` (v4), the only `tpi:` commands that exist in
+The ZX ROM's `'T'` command: `LOAD "tpi:name"` and
+`SAVE "tpi:dir [arg]"`, the only `tpi:` commands that exist in
 Spectrum mode. Returns `nxt` as `LOAD_ZX` does: `-1`, or a word the Z80
 wrote while the reply was going out — its next command, for `ZX48_IO` to
 dispatch.
@@ -948,11 +948,11 @@ The ROM side ([tspico-zx48-v3.asm](../../../src/rom/patches/tspico-zx48-v3.asm),
 `TPI_CMD`; [ROM_CHANGES.md](../../ROM_CHANGES.md#the-addition-load-tpiname-in-zx48-mode);
 [rom/zx48.md](../rom/zx48.md)): after `OUT (0Eh),'T'` it waits for READY
 (~3.8 s, else J), sends the op byte (T-ADDR: 0 SAVE, 1 LOAD, 2 VERIFY,
-3 MERGE; v4 ORs in 80h), the length and the name after `tpi:`, with a delay
+3 MERGE; ZX v4 ORs in 80h), the length and the name after `tpi:`, with a delay
 after each byte for the four-deep RX FIFO, then waits up to ~30 s for READY
 (BREAK between rounds: Report D) and reads the reply: a status byte — FFh
-is OK, anything else an ERR_NR — then, on v3, one length and the message;
-on v4, pieces: a length 1–255, that many bytes, printed as they come, until
+is OK, anything else an ERR_NR — then, if the op had no 80h, one length and
+the message; with 80h (v4), pieces: a length 1–255, that many bytes, printed as they come, until
 a length of 0. How long the ROM leaves between bytes is given three ways —
 "~54 us" in this function's docstring, "~50 us (TPI_OUT/TPI_DLY)" in
 ROM_CHANGES.md, "~45 us (TPI_DLY)" in the reply loop's comment — and this
@@ -971,7 +971,7 @@ What it does:
    `LOG` and `return -1` — the ROM then gives up on its own, J or D.
 2. `rest` is the name's printable characters; `pieces = hdr[0] & 0x80`;
    `op = hdr[0] & 0x7F`; `word = rest.lower()`; `stall = ZX_STALL_MS`.
-3. `op == 0` and the word is `dir` or starts `dir `: on a v3 ROM (no
+3. `op == 0` and the word is `dir` or starts `dir `: from an older ZX ROM (no
    `pieces`) the answer is `'SAVE "tpi:dir" needs ZX ROM v4'` with
    `_4_Q_Parameter`. On v4: `REFRESH_LISTING()` if a ZX SAVE made the
    listing stale; `ACTIVATE_SD()`; `text, st = CATALOG_TEXT(rest[3:].strip())`
@@ -992,7 +992,7 @@ What it does:
    otherwise `(msg.strip() + " " + rest).strip()`, cut to 200 bytes. A
    `LOG` at level 0 (2 for an error).
 7. The reply buffer `out`: v4 — `status`, then for each 255-byte slice its
-   length and bytes, then `0`; v3 — `status`, `len(text)`, the text.
+   length and bytes, then `0`; without `pieces` — `status`, `len(text)`, the text.
    `out[0] = ZX_REPORT.get(st, 0x19)`: FFh for `_1_OK`, 1Ah (R), 0Eh (F),
    19h (Q), and Q for any other status.
 8. `ZX_FLUSH_TX(MQ)`; `gc.collect()`; `r = STREAM_DMA(MQ, out, None, stall,
@@ -1022,7 +1022,7 @@ State: `TSP.listing_stale`, the mount through `LOAD_TPI`, `tspico_io._ring`.
 in any case or a listing number mounts with FFh and the message; the reply's
 first bytes are in TX before READY and the rest follows without an empty
 read; a missing file is F (0Eh), a `.ROM` Q (19h), `SAVE "tpi:x"` Q, a
-failed mount Q, v3 asking for `dir` gets the "needs ZX ROM v4" Q, v4's
+failed mount Q, an op without 80h asking for `dir` gets the "needs ZX ROM v4" Q, v4's
 `dir` goes through `ACTIVATE_SD`/`CATALOG`/`DEACTIVATE_SD`/`ACTIVATE_MQ`
 and comes back in pieces with `nxt == -1`; a name that stops half-way gives
 no reply, no mount, no hang; a stale listing is re-read first. The user's
@@ -1056,7 +1056,7 @@ The loop. If `nxt >= 0` (a command byte a handler took in the middle of
 its block) or RX has a word: `a` is that byte or `MQ.get()` — the nine-bit
 word, unmasked, which is safe because it is only compared. A bounded wait
 (3000 ms, then a level-2 `LOG`) for a `SAVE_LOG` on core1: a flash write
-stops both cores and must not overlap a block; the ZX v2 ROM waits ~3.8 s for
+stops both cores and must not overlap a block; the ZX ROM waits ~3.8 s for
 READY after its `'L'` or `'S'`. Then:
 
 - `'L'` (76): with `TSP.ZX_TAPE_COMPAT`, `LOAD_ZX_C(MQ, TSP, buf_size)` —
@@ -1087,7 +1087,7 @@ restarted, a level-0 `LOG`; else a level-0 `LOG`. Ricardo's fix of
 21 Aug 2025; the audit thought #52 (the one-byte-too-many in `LOAD_ZX`) had
 made it obsolete, but that fixed one cause only. A `TLM`, and return to
 `TS2068_IO`, which re-arms the pre-header channel at the top of its loop.
-Nothing stages a pre-load on the way out: a ROM 2.x's next SYNC stages one
+Nothing stages a pre-load on the way out: the ROM's next SYNC stages one
 (`MQ_TO_IDLE`); on ROM 1.1 the next command would read `0x00` and get J
 (audit §2 #12, *unverified* on hardware).
 

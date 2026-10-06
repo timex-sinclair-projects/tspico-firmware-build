@@ -1203,8 +1203,8 @@ modified so that its LOAD and SAVE use the SD card.
   index number.
 - `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068, with `scroll?` for a long
   one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too. This needs version 4 of the
-  TS-Pico Spectrum ROM: its copyright screen ends `TS-Pico ZX v4`. Version 3 answers
-  `SAVE "tpi:dir" needs ZX ROM v4`.
+  TS-Pico Spectrum ROM: its copyright screen ends `TS-Pico ZX v4`. An older Spectrum ROM
+  answers `SAVE "tpi:dir" needs ZX ROM v4`.
 
   ![SAVE "tpi:dir" on the Spectrum: the same listing as CAT on the 2068](images/zx48-dir.png)
 - Other `tpi:` commands aren't available, and give **Q Parameter error**.
@@ -1873,8 +1873,8 @@ The 2068's ROM keeps the TS-Pico's two switches in one byte of memory, `PEEK 240
 | 0 | 1 | Printing goes to the TS-Pico (`tpi:picopt`); clear means the TS 2040 (`tpi:ts2040`) |
 
 So `PRINT PEEK 24027` gives 2 at switch-on, 3 after `tpi:picopt`, and 1 if you then use
-`tpi:tape`: each command changes only its own switch. (ROM 2.1, which shipped with firmware 2.1.2
-and earlier, gives 0 there: its `tpi:tape` turned the printer switch off as well.)
+`tpi:tape`: each command changes only its own switch. (ROM 1.1 gives 0 there: its `tpi:tape`
+turned the printer switch off as well.)
 
 ---
 

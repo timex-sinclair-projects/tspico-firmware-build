@@ -5,8 +5,8 @@ Source: [`src/rom/TSPICO-22.ROM`](../../../src/rom/TSPICO-22.ROM) bytes
 [`tspico-22-home.asm`](../../rom-analysis/disasm/tspico-22-home.asm); the
 genuine HOME ROM [`ROMs/GENUINE-2068-home.bin`](../../../ROMs/GENUINE-2068-home.bin)
 and its listing [`genuine-2068-home.asm`](../../rom-analysis/disasm/genuine-2068-home.asm);
-the 2.0 HOME site in [`src/rom/patches/tspico-sync.asm`](../../../src/rom/patches/tspico-sync.asm);
-the 2.1 HOME patches in [`tools/build-rom.py`](../../../tools/build-rom.py)'s
+the SYNC layer's HOME sites in [`src/rom/patches/tspico-sync.asm`](../../../src/rom/patches/tspico-sync.asm);
+the disk-command layer's HOME patches in [`tools/build-rom.py`](../../../tools/build-rom.py)'s
 `PATCHES`.
 
 The TS-Pico's HOME ROM is the genuine TS2068 HOME ROM with hooks. It has no
@@ -25,15 +25,17 @@ differ, with runs closer than five bytes merged into one hunk):
 
 | From → to | Bytes changed | Hunks |
 |---|---|---|
-| genuine → v1.1 (= v1.5w) | 242 | 10 |
-| v1.1 → v1.7 | 1 | 1 (0065h) |
-| v1.7 → 2.0 | 14 | 2 (0065h, 0F13h–0F1Fh) |
-| 2.0 → 2.1 | 100 | 9 |
-| genuine → 2.1 | 346 | 17 |
+| genuine → 1.1 | 242 | 10 |
+| 1.1 → the base image (`TSPICO.ROM`) | 1 | 1 (0065h) |
+| the base image → the SYNC layer (`TSPICO-SYNC.ROM`) | 14 | 2 (0065h, 0F13h–0F1Fh) |
+| the SYNC layer → ROM 2.2 (the disk-command layer) | 99 | 9 |
+| genuine → ROM 2.2 | 342 | 17 |
 
-The older account of the genuine → v1.1 hunks, with the bytes, is
-[DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md); the 2.0
-and 2.1 ones are in [ROM_CHANGES.md](../../ROM_CHANGES.md). This chapter
+The layers are described in
+[overview.md](overview.md#the-images). The older account of the genuine →
+1.1 hunks, with the bytes, is
+[DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md); the
+layers' are in the build history, [ROM_CHANGES.md](../../ROM_CHANGES.md). This chapter
 follows the code and links to them for the history.
 
 ## Map of HOME
@@ -55,21 +57,21 @@ the fixed one ([sysvars.md](sysvars.md#5d37h-the-nmi-vector)).
 | HOME | Since | Genuine | Now | What | Statement |
 |---|---|---|---|---|---|
 | 0065h | 1.1 | `FFh` | the version (22h) | `PEEK 101` | — |
-| 03F3h–0420h | 1.1, 2.1 | BEEPER | BEEPER thunk, the returning thunk 03FCh, a CALL_B copy at 040Dh | BEEPER moved to EXROM 203Fh | BEEP, key click |
+| 03F3h–0420h | 1.1, disk-command layer | BEEPER | BEEPER thunk, the returning thunk 03FCh, a CALL_B copy at 040Dh | BEEPER moved to EXROM 203Fh | BEEP, key click |
 | 04E8h–0502h | 1.1 | the tail of a syntax routine; SENDTV `CALL 061Ah` | printer helpers; SENDTV `CALL 0A09h` | every printed character passes the TPMODE test | PRINT, LPRINT, LLIST |
 | 0A02h–0A2Fh | 1.1 | COPY (K_DUMP) and COPY-BUFF | COPY → EXROM 1630h; the character router 0A09h; COPY-BUFF → EXROM 1636h | COPY and the printer buffer | COPY, LPRINT |
 | 0A4Ah–0A81h | 1.1 | COPY-LINE (the ZX Printer loop) | the 0A50h thunk; token expansion | the printer sends text, not dots | LPRINT, LLIST |
 | 0E0Ch | 1.1 | `01h` | `03h` | the HSR mask at boot: a 16K EXROM | power-on |
-| 0F13h–0F1Fh | 2.0 | print a report's text from HOME's table | hand it to EXROM 235Ah | Report T has text | any report |
-| 13A6h–13A7h | 2.1 | `CALL 13BEh` | `CALL 1494h` | CLOSE # through the module | CLOSE # |
-| 1439h–143Ah | 2.1 | `CALL 2569h` | `CALL 14BDh` | OPEN # syntax parses `,mode[,reclen]` | OPEN # |
-| 145Fh | 2.1 | `CALL 1465h` | `CALL 1488h` | OPEN # through the module | OPEN # |
-| 1488h–14C5h | 2.1 | dead SYSCON code | five trampolines and the error trap | the module's HOME entries | OPEN #, CLOSE #, PRINT #, INPUT # |
-| 1946h–1949h | 2.1 | syntax offsets `d0 c0 c4 c8` | `d2 c2 c6 ca` | a bare CAT/FORMAT/MOVE/ERASE is accepted | the disk keywords |
+| 0F13h–0F1Fh | SYNC layer | print a report's text from HOME's table | hand it to EXROM 235Ah | Report T has text | any report |
+| 13A6h–13A7h | disk-command layer | `CALL 13BEh` | `CALL 1494h` | CLOSE # through the module | CLOSE # |
+| 1439h–143Ah | disk-command layer | `CALL 2569h` | `CALL 14BDh` | OPEN # syntax parses `,mode[,reclen]` | OPEN # |
+| 145Fh | disk-command layer | `CALL 1465h` | `CALL 1488h` | OPEN # through the module | OPEN # |
+| 1488h–14C5h | disk-command layer | dead SYSCON code | five trampolines and the error trap | the module's HOME entries | OPEN #, CLOSE #, PRINT #, INPUT # |
+| 1946h–1949h | disk-command layer | syntax offsets `d0 c0 c4 c8` | `d2 c2 c6 ca` | a bare CAT/FORMAT/MOVE/ERASE is accepted | the disk keywords |
 | 24C5h–24CEh | 1.1 | part of the AROS stream dispatch | helpers the EXROM's SAVE path calls | | SAVE etc. |
 | 2548h–2560h | 1.1 | DOSAVE, the class-0Bh dispatcher | jumps to EXROM 01ABh, 01CCh, 1855h | SAVE, LOAD, VERIFY, MERGE go to the EXROM | SAVE, LOAD, VERIFY, MERGE |
 | 25C0h | 1.1 | `CALL 0F09h` | `CALL 0F43h` | | *(uncertain)* |
-| 25D6h–25E3h | 2.1 | the disk-keyword stub | `DI / LD HL,3000h / CALL 03FCh / EI / RET` | the disk keywords enter the module | CAT, FORMAT, MOVE, ERASE |
+| 25D6h–25E3h | disk-command layer | the disk-keyword stub | `DI / LD HL,3000h / CALL 03FCh / EI / RET` | the disk keywords enter the module | CAT, FORMAT, MOVE, ERASE |
 | 3CDCh–3CFFh | 1.1 | `FFh` filler | the HOME→EXROM thunk 3CE3h and two helpers | | everything |
 
 ## The thunks
@@ -156,13 +158,13 @@ on its return pages HOME back, keeping a frame on the RAM bank stack
 (pointer at 65CEh) for the way back. The two zero words are that frame's
 room *(inferred from the frame GUARDED expects: [exrom-fdd.md](exrom-fdd.md))*.
 
-v1.1 used it only for BEEPER. ROM 2.1 enters its module this way from
+1.1 used it only for BEEPER. ROM 2.2 enters its module this way from
 every hook (25D6h, 1488h–14BDh, 03F3h via 041Ch) and always under `DI`:
 the bank switch writes port FFh then F4h with interrupts on, and an
 interrupt between the two finds the empty DOCK at 0038h. Stock code
 switches banks a few times per command; a file channel switches for every
 character, and hit the window within a few hundred characters in ZEsarUX.
-The 2.1 callers do not store HL in 5DCDh first (the module needs nothing in
+The module's callers do not store HL in 5DCDh first (the module needs nothing in
 HL), so the HL that reaches the module is whatever 5DCDh held.
 
 Beware: 5DCDh is also the EXROM's block counter ([sysvars.md](sysvars.md#5dcdh-a-byte-counter-and-the-thunks-hl)).
@@ -174,9 +176,9 @@ but not the bank stack; see 14B2h below.
 ### 0065h: the version byte
 
 `FFh` filler in the genuine ROM, between the restarts and the NMI routine
-at 0066h. The TS-Pico ROMs put their version there: 15h (v1.1, v1.5w), 17h
-(v1.7), 20h (2.0), 21h (2.1), 22h (2.2). `PEEK 101` reads it; nothing in either ROM
-does. BIOS G_VERS returns the same number in BC
+at 0066h. The TS-Pico ROMs put their version there: 15h in 1.1, 22h (34) in
+ROM 2.2; the two build inputs carry 17h and 20h, which the build
+overwrites. `PEEK 101` reads it; nothing in either ROM does. BIOS G_VERS returns the same number in BC
 ([overview.md](overview.md#which-rom-is-this)). Each release changes this
 byte and G_VERS together.
 
@@ -190,21 +192,21 @@ What is there now:
 
 | HOME | Bytes | Since |
 |---|---|---|
-| 03F3h | `DI / LD (5DCDh),HL / LD HL,3015h / JR 041Ch` | 2.1 (v1.1: `LD (5DCDh),HL / LD HL,2000h / JP 03FCh`) |
+| 03F3h | `DI / LD (5DCDh),HL / LD HL,3015h / JR 041Ch` | disk-command layer (1.1: `LD (5DCDh),HL / LD HL,2000h / JP 03FCh`) |
 | 03FCh | the returning thunk (above) | v1.1 |
 | 040Dh | the CALL_B copy (above) | v1.1 |
-| 041Ch | `CALL 03FCh / EI / RET` | 2.1 (v1.1: `00 00` and three bytes left from BEEPER) |
+| 041Ch | `CALL 03FCh / EI / RET` | disk-command layer (1.1: `00 00` and three bytes left from BEEPER) |
 
 The callers still `CALL 03F3h` with BEEPER's arguments (HL the pitch, DE
 the duration): 04A7h, 0A9Ah, 0BF7h, 0CD5h. HL goes through 5DCDh, DE
-travels in its register. In v1.1 the target was EXROM 2000h, a `JP 203Fh`.
-2.1 calls the module's G_BEEP (vector 3015h) instead, under `DI`: BEEPER
+travels in its register. In 1.1 the target was EXROM 2000h, a `JP 203Fh`.
+ROM 2.2 calls the module's G_BEEP (vector 3015h) instead, under `DI`: BEEPER
 ends with `EI`, so the switch back to HOME ran with interrupts on and could
 take an interrupt with the DOCK paged; the editor clicks once per
 character, so `INPUT #` from a file crashed within a few hundred
 characters in ZEsarUX. G_BEEP calls BEEPER at EXROM 2000h and disables
 interrupts again after its `EI`; 041Ch's `EI` restores them once HOME is
-back ([exrom-fdd.md](exrom-fdd.md)). The patch fits because the 2.1 bytes
+back ([exrom-fdd.md](exrom-fdd.md)). The patch fits because the new bytes
 at 03F3h are one longer (the `DI`) and the jump to 041Ch is a 2-byte `JR`.
 
 ### 04E8h–0502h: the printer's character helpers, and SENDTV
@@ -262,7 +264,7 @@ block graphics and UDGs as their patterns.
 | 0A81h | `NOP` | |
 
 The genuine bytes were COPY-LINE, the loop that clocked a line of pixels
-into the ZX Printer on port FBh. In ROM 2.1 nothing in the ROM calls 0A4Ah:
+into the ZX Printer on port FBh. In ROM 2.2 nothing in the ROM calls 0A4Ah:
 its two genuine callers (0A0Ah, 0A2Ah) were inside K_DUMP and COPY-BUFF,
 which moved to the EXROM. The entry is kept for programs that call the stock
 COPY-LINE themselves, and it works: 0A4Ah reaches EXROM 17C3h, which calls
@@ -281,27 +283,27 @@ became `LD A,03h` (chunks 0 and 1), so the copy is made with both halves of
 the 16K EXROM paged. With the same change in the EXROM's own boot path and
 in BANK_ENABLE, this one byte is why the TS-Pico EXROM can be 16K.
 
-### 0F12h–0F1Fh: the report printer (2.0)
+### 0F12h–0F1Fh: the report printer
 
 ```text
 genuine:  LD A,B / LD DE,0F65h / CALL 073Fh / XOR A / LD DE,1115h / CALL 073Fh
-2.0:      LD A,B / LD (5DCDh),HL / LD HL,235Ah / CALL 03FCh / 4 × NOP
+now:      LD A,B / LD (5DCDh),HL / LD HL,235Ah / CALL 03FCh / 4 × NOP
 ```
 
 When a report is printed, B holds ERR_NR + 1. The genuine code printed the
 message from HOME's table at 0F65h and then ", " from 1115h. HOME's table
-has no text for ROM 2.0's new report 1Ch, "T TS-Pico reset, try again", so
+has no text for the SYNC layer's new report 1Ch, "T TS-Pico reset, try again", so
 the whole job moved to EXROM 235Ah (EX_REPORT_MSG), which prints the new
 text itself and every other code from HOME's table as before. The four
 `NOP`s pad the patch to the original 14 bytes. Details:
 [exrom-sync.md](exrom-sync.md).
 
-### 13A5h, 1438h, 145Eh: OPEN # and CLOSE # (2.1)
+### 13A5h, 1438h, 145Eh: OPEN # and CLOSE \#
 
 Three `CALL`s in the stock OPEN # and CLOSE # code are redirected to
 trampolines at 1488h–14BDh:
 
-| HOME | Genuine | 2.1 | Why |
+| HOME | Genuine | ROM 2.2 | Why |
 |---|---|---|---|
 | 13A5h | `CALL 13BEh` | `CALL 1494h` | CLOSE #: the module closes an `F` stream itself (and returns carry); anything else goes on to 13BEh. Stock CLOSE # on an unknown channel letter ran off the end of its table and crashed |
 | 1438h | `CALL 2569h` | `CALL 14BDh` | OPEN #'s syntax: the module parses `,mode[,reclen]`. The stock code skipped everything after the comma in the syntax pass, which also skipped storing each number's hidden five-byte form, so a record length could not be evaluated at run time (Report C) |
@@ -311,7 +313,7 @@ trampolines at 1488h–14BDh:
 [exrom-fdd.md](exrom-fdd.md); the bytes these rely on are anchors in
 `build-rom.py` (1461h, 13A8h, 140Fh; [overview.md](overview.md#the-anchors)).
 
-### 1488h–14C5h: the module's HOME entries (2.1)
+### 1488h–14C5h: the module's HOME entries
 
 55 bytes of an unreferenced remnant of a SYSCON open path — no `CALL`,
 `JP`, `LD` or `JR` in either ROM reaches 1488h–14C6h — rewritten as:
@@ -345,13 +347,13 @@ Without it each error inside a thunked call left the bank stack 4–8 bytes
 lower, and after about 16 errors it overwrote the bank-switch code below it
 ([exrom-fdd.md](exrom-fdd.md), [ROM_CHANGES.md](../../ROM_CHANGES.md#guarded-and-the-home-trap)).
 
-### 1946h–1949h: bare disk keywords (2.1)
+### 1946h–1949h: bare disk keywords
 
 The syntax table's offset bytes for CAT, FORMAT, MOVE and ERASE (tokens
 CFh–D2h, entries 1946h–1949h). Each entry plus its offset is the
 statement's parameter list:
 
-| Keyword | Genuine: entry → list | 2.1 | The list there |
+| Keyword | Genuine: entry → list | ROM 2.2 | The list there |
 |---|---|---|---|
 | CAT | 1946h + D0h → 1A16h | + D2h → 1A18h | `0A 2C` `05 25C8h` |
 | FORMAT | 1947h + C0h → 1A07h | + C2h → 1A09h | `0A 2C` `05 25CCh` |
@@ -360,7 +362,7 @@ statement's parameter list:
 
 The genuine lists begin `0Ah` (a string expression) and `2Ch` (a comma),
 so the 2068 demanded `CAT "name",` before handing over to the routine. The
-2.1 offsets point two bytes on, at class 05h ("the routine does the rest")
+new offsets point two bytes on, at class 05h ("the routine does the rest")
 and the routine's address, so a bare `CAT` is accepted and the module
 parses whatever follows on both passes. The routines at 25C8h–25D4h are
 `LD B,token / JR 25D6h`, unchanged.
@@ -405,7 +407,7 @@ which the EXROM calls on its way out. v1.1:
 
 So a tape statement goes HOME → EXROM 01ABh, which borrows HOME's
 expression evaluator through these helpers, and at run time reaches 01D2h:
-in 2.1 F_HOOK (the `f:` check), then SESSION_SETUP, which decides between
+in ROM 2.2 F_HOOK (the `f:` check), then SESSION_SETUP, which decides between
 a `tpi:` command, the Pico's LOAD/SAVE and the tape (by TPMODE bit 1)
 ([exrom-driver.md](exrom-driver.md), [exrom-fdd.md](exrom-fdd.md),
 [../flows/save.md](../flows/save.md), [../flows/command.md](../flows/command.md)).
@@ -419,12 +421,12 @@ DIFF_HOME_vs_STOCK.md reads 0F43h as entering a routine past its first
 checks (`CP 09h`, `CP 15h`); what that changes for which statement is not
 established *(unverified)*.
 
-### 25D6h–25E3h: the disk keywords (2.1)
+### 25D6h–25E3h: the disk keywords
 
 All four keyword routines (25C8h–25D4h) load B with their token and jump
 here. The genuine 14 bytes were `CALL 2889h / JR NZ / CALL 2569h / CALL 1B44h /
 JP 2567h`, the stock handling of keywords the 2068 had no disk to drive;
-what each call did is not decoded here. 2.1:
+what each call did is not decoded here. ROM 2.2:
 
 ```text
 25D6h   DI
@@ -466,5 +468,5 @@ trapped by `ON ERR` like any other ([ERROR_TRAPPING.md](../../rom-analysis/ERROR
 
 None known: #182 corrected
 [DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md) (0065h is
-the version byte `PEEK 101` reads; 041Ch–0420h is 2.1's BEEPER thunk tail)
+the version byte `PEEK 101` reads; 041Ch–0420h is ROM 2.2's BEEPER thunk tail)
 and [SYMBOLS.md](../../rom-analysis/SYMBOLS.md) (G_VERS by release).

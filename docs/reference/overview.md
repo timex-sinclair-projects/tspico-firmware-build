@@ -17,13 +17,13 @@ port). The TS-Pico replaces all three sources:
 
 - **HOME** is the genuine 2068 ROM with ten hunks of patches: hooks in the
   tape and printer routines, a 16K-wide bank switch, and thunks that call
-  into the EXROM. ROM 2.0 and 2.1 add a version byte, a new report, and
+  into the EXROM. The current ROM adds a version byte, a new report, and
   trampolines for the disk keywords and the file channels. [rom/home.md](rom/home.md).
 - **EXROM** is 16K, not the genuine 8K. Chunk 0 is the genuine EXROM patched
   in 36 places, with the Pico driver written into its 1K hole at 1800h–1BFFh.
   Chunk 1 holds the TS-Pico's own code: the response-function chain, the port
-  accessors and v1.7's SAVE-prompt BREAK test at 2000h–22FDh, the ROM 2.0 SYNC and BREAK code at 2300h,
-  and the ROM 2.1 disk and channel module at 3000h. [rom/overview.md](rom/overview.md)
+  accessors and the SAVE-prompt BREAK test at 2000h–22FDh, the SYNC and BREAK code at 2300h,
+  and the disk and channel module at 3000h. [rom/overview.md](rom/overview.md)
   and the four EXROM chapters.
 - **DOCK** is whatever cartridge page the Pico selects: a `.dck` image, or
   the customised ZX Spectrum ROM that `tpi:zx48` switches to. [rom/zx48.md](rom/zx48.md).
@@ -71,7 +71,7 @@ demands it: the pre-header capture and the LOAD stream.
 
 ## A transaction in one paragraph
 
-ROM 2.0 opens every exchange with `OUT (0Fh),03h` (SYNC) and waits up to a
+The ROM opens every exchange with `OUT (0Fh),03h` (SYNC) and waits up to a
 second for the status to read READY and IDLE; the Pico, seeing a port-0Fh
 write, drops whatever it was doing, empties both FIFOs, queues a single 01h
 and says idle. The Z80 then writes ten bytes to port 0Eh, the pre-header,
@@ -119,8 +119,9 @@ consequences before their causes.
    `ACTIVATE_MQ`, `SD_CALL`) and the lines are clamped low in between, which
    closed the original "Report D" bug. [firmware/tspico-bus.md](firmware/tspico-bus.md),
    [flows/sd-handover.md](flows/sd-handover.md).
-5. **The ROM is binary.** Gustavo Pane's v1.7 ROM has no source; ROM 2.0 and
-   2.1 are byte patches and a module spliced into free space, built by
+5. **The ROM is binary.** The base image, `src/rom/TSPICO.ROM`, has no
+   source; the SYNC/BREAK layer and the disk module are byte patches and a
+   module spliced into its free space, built by
    `tools/build-rom.py` with every patch site checked. The listing is the
    ground truth, and the Z80 decrements a status before dispatching on it,
    so `CP 85h` means status 86h. [rom/overview.md](rom/overview.md).
@@ -134,10 +135,10 @@ consequences before their causes.
 | ZX Spectrum ROM | v4 | the banner byte at 38B7h | the boot screen in ZX48 mode |
 | ROM 2.2 module | FDD_VERSION 8 | EXROM 30AFh | — |
 
-From 2.0 the firmware and the ROM share a major.minor number; the third
-part is a firmware-only release on the same ROM. ROM 2.0 and later need
-firmware that understands SYNC; firmware 2.x still serves ROMs 1.1–1.7,
-which never write port 0Fh. [rom/overview.md](rom/overview.md).
+The firmware and the ROM share a major.minor number; the third part is a
+firmware-only release on the same ROM. ROM 2.2 needs firmware that
+understands SYNC; the firmware still serves ROM 1.1, which never writes
+port 0Fh. [rom/overview.md](rom/overview.md).
 
 ## The sources, by size
 
@@ -153,9 +154,9 @@ which never write port 0Fh. [rom/overview.md](rom/overview.md).
 | `src/TS/extcmd.py` | 95 | external commands | [extcmd.md](firmware/extcmd.md) |
 | `src/main.py` | 128 | boot | [boot.md](firmware/boot.md) |
 | `src/upgrade/` | ~800 | the upgrade UF2 and the Z80 updater | [upgrade.md](firmware/upgrade.md) |
-| `src/rom/fdd/fddcmd.asm` | 1,398 | ROM 2.1's module | [exrom-fdd.md](rom/exrom-fdd.md) |
-| `src/rom/patches/tspico-sync.asm` | 318 | ROM 2.0 | [exrom-sync.md](rom/exrom-sync.md) |
-| `src/rom/patches/tspico-zx48-v3.asm` | 280 | ZX v3/v4 | [zx48.md](rom/zx48.md) |
+| `src/rom/fdd/fddcmd.asm` | 1,398 | the disk module | [exrom-fdd.md](rom/exrom-fdd.md) |
+| `src/rom/patches/tspico-sync.asm` | 318 | the SYNC/BREAK layer | [exrom-sync.md](rom/exrom-sync.md) |
+| `src/rom/patches/tspico-zx48-v3.asm` | 280 | the ZX Spectrum ROM v4 | [zx48.md](rom/zx48.md) |
 | `src/rom/TSPICO-22.ROM` | 32K binary | the release ROM | [rom/overview.md](rom/overview.md) and the EXROM chapters |
 
 Line counts are those of the sources the stamps in the [README](README.md)

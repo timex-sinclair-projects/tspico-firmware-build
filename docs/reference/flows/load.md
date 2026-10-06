@@ -67,10 +67,10 @@ status and the pre-load are both its job.
 ### The bounded search
 
 The Z80 drives the search: it asks for headers until one matches, and a ROM
-before 2.0 cannot tell the Pico it gave up. So `LOAD_TS` keeps a search
+without SYNC (ROM 1.1) cannot tell the Pico it gave up. So `LOAD_TS` keeps a search
 start (`ld_start`) and lets the tape wrap round once: a header request that
 comes back to where the search began after a wrap is answered with status
-7 ("End of file"; ROM 2.1 shows it as R), and the search ends. `LOAD
+7 ("End of file"; ROM 2.2 shows it as R), and the search ends. `LOAD
 "name"` with no such program therefore ends with a report after one lap,
 not a hang ([../firmware/tspico_io.md](../firmware/tspico_io.md#load_tspre-mq-tsp)).
 
@@ -105,7 +105,7 @@ refused with Report R ([../firmware/boot.md](../firmware/boot.md#the-picos-flash
 
 ### `LOAD "f:file"`
 
-The 2.1 module's F_HOOK sends `tpi:fopen file` first, with the statement's
+The disk module's F_HOOK sends `tpi:fopen file` first, with the statement's
 session id, and replaces the name with `""`
 ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#f_hook)). The firmware builds a
 one-shot tape `/TMP/native.tap` from the file's +3DOS header and data. When

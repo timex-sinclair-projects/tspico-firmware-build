@@ -317,7 +317,7 @@ Ubuntu 22.04. The steps, in order:
    (the Z80 routines against a simulated Pico) and `test_extcmd_host.py`
    (the example commands through the real `PROCESS_CMD`).
 6. **ROM 2.2**: `tools/build-rom.py --verify` assembles the fdd module and
-   splices it onto ROM 2.0, failing if any patch's "before" bytes or any
+   splices it onto the SYNC/BREAK layer's image (`src/rom/TSPICO-SYNC.ROM`), failing if any patch's "before" bytes or any
    anchor no longer match ([../rom/overview.md](../rom/overview.md)); then
    `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-22.ROM`: the
    committed slot-1 image must be exactly what the sources build. Then
@@ -363,8 +363,8 @@ the emulator, and attaches the binaries to a release
 ## Releases: `release.yml`
 
 Fires on a pushed tag `v*` (or by hand with a tag). Version numbers: the
-major.minor are the ROM's, the patch digit is firmware-only (2.1.2 was
-firmware 2.1.2 on ROM 2.1; 2.2 was firmware 2.2 on ROM 2.2; 2.2.1 is firmware 2.2.1 on the same ROM). The job, at the tag:
+major.minor are the ROM's, the patch digit is firmware-only (2.2.1 is
+firmware 2.2.1 on ROM 2.2). The job, at the tag:
 
 1. Builds as `build.yml` does — the stamp check, staging, the firmware
    UF2, `dev_tspico.mpy`, the upgrade UF2, the BASIC TAPs. **It runs no

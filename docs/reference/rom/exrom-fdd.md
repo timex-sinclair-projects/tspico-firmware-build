@@ -1,30 +1,32 @@
-# EXROM 3000h: the ROM 2.1 module
+# EXROM 3000h: the disk module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
 1430 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
-at EXROM 3000h–377Eh and spliced into ROM 2.0 with the patches that call
-it ([overview.md](overview.md#toolsbuild-rompy-rom-21)); the result read in
+at EXROM 3000h–377Eh and spliced into the SYNC layer's image
+(`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
+`src/rom/TSPICO-22.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
 
-ROM 2.1 is ROM 2.0 plus this module. It gives the 2068's dormant disk
-keywords — CAT, MOVE, ERASE, FORMAT — real meanings on the SD card; adds
+The module and its patches are ROM 2.2's last layer. The module gives the
+2068's dormant disk keywords — CAT, MOVE, ERASE, FORMAT — real meanings
+on the SD card; adds
 `SAVE`/`LOAD`/`VERIFY`/`MERGE "f:path"` for plain files; adds file
 channels: `OPEN #n,"f:path","mode"[,reclen]`, `PRINT #`, `INPUT #`,
 `CLOSE #`, and `"d:"` directory listings; adds response function 88h (a
-Y/N prompt on the lower screen); and fixes the BIOS C_END so a timeout is
-J, not F. Everything is turned into `tpi:` commands the firmware already
+Y/N prompt on the lower screen); and makes the BIOS C_END report a timeout
+as J, never F. Everything is turned into `tpi:` commands the firmware already
 answers ([../firmware/tspico-disk.md](../firmware/tspico-disk.md)). The
 design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
-byte-level change list is [ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
+byte-level change list is in [the build history](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
 The module is 1919 bytes. It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
 report is raised. Commands are built in the calculator-stack workspace and
-sent either through ROM 1.x's own `SAVE "tpi:"` machinery (entered past
-its name-length gate, so arguments can be longer) or byte by byte through
+sent either through the `SAVE "tpi:"` machinery the ROM has had since 1.1
+(entered past its name-length gate, so arguments can be longer) or byte by byte through
 the Pico Interface BIOS.
 
 ## Map
@@ -62,7 +64,7 @@ called READ_STATUS until #181, the name of a different routine at 0655h.)
 
 | Name | Value | Meaning |
 |---|---|---|
-| `FDD_BASE` | 3000h | the `ORG`. Must equal `FDD_ORG` in `build-rom.py`, which also checks that `FDD_DISPATCH` lands there. 3000h–3FFFh is the module's 4K; 2300h–23D3h is ROM 2.0's |
+| `FDD_BASE` | 3000h | the `ORG`. Must equal `FDD_ORG` in `build-rom.py`, which also checks that `FDD_DISPATCH` lands there. 3000h–3FFFh is the module's 4K; 2300h–23D3h is the SYNC layer's |
 
 ### HOME and EXROM addresses the module calls
 
@@ -79,10 +81,10 @@ ROM that moves one fails instead of jumping into the wrong code
 | `SESSION_SETUP` | EXROM 1A73h | where 01D2h went before F_HOOK |
 | `SAVE_ETC_BODY` | EXROM 01D5h | the stock SAVE-ETC after SESSION_SETUP's non-command exit (BC = 11h) |
 | `STATUS_REPORT` | EXROM 1BF3h | `STATUS_TO_REPORT`: A = status − 1 → the report |
-| `SYNC_WRITE` | EXROM 2300h | ROM 2.0: SYNC, wait READY + IDLE, `OUT (0Eh),A` |
+| `SYNC_WRITE` | EXROM 2300h | the SYNC layer's: SYNC, wait READY + IDLE, `OUT (0Eh),A` |
 | `BIOS_TX_A` | EXROM 1846h | BIOS: `OUT (0Eh),A` |
 | `BIOS_RX_A` | EXROM 1848h | BIOS: `IN A,(0Eh)` |
-| `BIOS_C_END` | EXROM 184Ah | BIOS: the status; NC OK, C with A = status − 1 (C_END2 in 2.1) |
+| `BIOS_C_END` | EXROM 184Ah | BIOS: the status; NC OK, C with A = status − 1 (through the module's C_END2) |
 | `BIOS_WF_NPH` | EXROM 184Ch | BIOS: wait for the Pico; C with A = 02h / 0Ch / 1Ch |
 | `C_END_TAIL` | EXROM 227Fh | C_END after its wait: read the status, run any response function |
 | `READ_STATUS_BYTE` | EXROM 02B9h | the response function's own status byte (the curated name; `READ_STATUS` until #181) |
@@ -96,7 +98,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `H_CHAN_OPEN` | HOME 1230h | CHAN-OPEN: select stream A |
 | `H_EXPT_1NUM` | HOME 1BE5h | syntax class 06h: a numeric expression |
 | `H_FIND_INT2` | HOME 1F23h | the number on the calculator stack → BC; Report B |
-| `H_TRAP` | HOME 14B2h | GUARDED's error trap ([home.md](home.md#1488h14c5h-the-modules-home-entries-21)) |
+| `H_TRAP` | HOME 14B2h | GUARDED's error trap ([home.md](home.md#1488h14c5h-the-modules-home-entries)) |
 | `BEEPER` | EXROM 2000h | the `JP` to the relocated BEEPER |
 
 ### System variables
@@ -150,7 +152,7 @@ The record's first five bytes are the 2068's standard channel header (two
 routine addresses and the letter), so `RST 10` and INPUT treat it as any
 other channel. The two addresses are fixed HOME stubs, never addresses in
 the module, so nothing in a record moves when CHANS does or the module is
-rebuilt ([home.md](home.md#1488h14c5h-the-modules-home-entries-21)). The
+rebuilt ([home.md](home.md#1488h14c5h-the-modules-home-entries)). The
 pad keeps both bytes of the stream's offset below 80h, because CHAN-OPEN
 treats an offset whose high bit is set as a SYSCON channel (its `D OR E ≥
 80h` test, an anchor).
@@ -211,8 +213,8 @@ matched the four letters and the length 8 and cleared bits 7–6 of TPMODE
 ([sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027)). A held the length
 test's 8 there, so TPMODE is read again.
 
-Why: ROM 1.x and 2.0 did `CALL 1861h` here — `XOR A` into S_MODE —
-setting TPMODE to 0 and so clearing the printer switch (bit 0) as well,
+Why: 1.1 did `CALL 1861h` here, and so does the SYNC layer's image the
+module is built on — `XOR A` into S_MODE — setting TPMODE to 0 and so clearing the printer switch (bit 0) as well,
 while `tpi:sdcard` sets only bit 1: `tpi:picopt`, `tpi:tape`,
 `tpi:sdcard` left printing on the 2068 (#176). The five bytes at 20BEh
 could not hold the fix (a reload, a `RES` and the jump to 2105h are
@@ -223,7 +225,7 @@ runs the switch words from the committed image.
 
 ### `G_BEEP` (3029h)
 
-BEEPER's new entry (HOME's thunk moved here in 2.1, [home.md](home.md#03f3h0420h-beeper-moved-out)).
+BEEPER's new entry (the module's patch moves HOME's thunk here, [home.md](home.md#03f3h0420h-beeper-moved-out)).
 With HL = C8h (the editor's key click, from HOME 0A97h) and the current
 channel an `F` record (CURCHL + 4 = `'F'`), it skips the beep: INPUT #
 from a file takes characters through the editor, which clicks for every
@@ -275,7 +277,7 @@ bank-switch code below it. Both ROMs' `RST 8` end `LD SP,(ERR_SP)`, HOME
 1354h, `RET` with HOME paged — so the trap must be in HOME, at 14B2h, which
 puts 65CEh back to the value recorded here (the pointer as it was before
 the thunk's 4-byte frame), restores ERR_SP, `EI`, and returns into the old
-handler as the `RST 8` would have ([home.md](home.md#1488h14c5h-the-modules-home-entries-21)).
+handler as the `RST 8` would have ([home.md](home.md#1488h14c5h-the-modules-home-entries)).
 
 Registers: A, F, BC and DE reach the routine; it returns AF, BC, DE and HL
 (the `EX (SP),HL` / `POP HL` pair preserves HL across the restore).
@@ -309,7 +311,7 @@ After it, at 30A8h, `"FDDCMD",0` — a signature nothing checks;
 
 ### `FDD_VERSION` (30AFh)
 
-One byte, 8: the module's revision within ROM 2.1. Nothing reads it; the
+One byte, 8: the module's revision number. Nothing reads it; the
 ROM's version for programs is `PEEK 101` and G_VERS
 ([overview.md](overview.md#which-rom-is-this)).
 
@@ -577,7 +579,7 @@ with A = status − 1 (and 09h, the timeout, is J).
 
 ### `C_END2`
 
-The BIOS C_END for ROM 2.1, reached from the table entry 184Ah → 184Fh
+The BIOS C_END of ROM 2.2, reached from the table entry 184Ah → 184Fh
 (patched) through `C_END_VEC`.
 
 ```text
@@ -590,10 +592,11 @@ C_END2: CALL BIOS_WF_NPH
         RET                   ; carry still set
 ```
 
-ROM 2.0's C_END failed with A = 02h both for a timeout (BIOS_WF_NPH's
-code) and for status 3 (A = status − 1 = 02h, Report F), so a caller could
-not tell a silent Pico from a bad file name — and this module's callers
-reported a timeout as F. Now every failure comes back ready for
+Why: the SYNC layer's BIOS_C_END (23CDh), which 184Fh reached before the
+module's patch, fails with A = 02h both for a timeout (BIOS_WF_NPH's code)
+and for status 3 (A = status − 1 = 02h, Report F), so a caller could not
+tell a silent Pico from a bad file name — and this module's callers would
+report a timeout as F. With C_END2 every failure comes back ready for
 `STATUS_REPORT` or `C_FAIL`: an error status, A = status − 1 (01h R, 02h F
 … 09h J, 0Ah and up D); a timeout, A = 09h (J, what the ROM's own commands
 report); BREAK, 0Ch; a Pico reset, 1Ch. 0Ch and 1Ch are never status − 1
@@ -601,7 +604,7 @@ values, since the firmware's highest status is 11. Carry clear and A = 0
 for status 1, as the BIOS always did. Machine-code callers of the BIOS get
 the same contract ([PROTOCOL.md §9](../../PROTOCOL.md#9-the-pico-interface-bios-exrom-1840));
 [`rom_cend_hosttest.py`](../../../src/test/rom_cend_hosttest.py) runs it in
-a Z80 interpreter against 2.0's for contrast.
+a Z80 interpreter against the SYNC layer's BIOS_C_END for contrast.
 
 ### `FOPEN_TXT` and `FOPEN_LEN`
 
@@ -626,9 +629,9 @@ LOWER_LOOP: CALL READ_STATUS_BYTE ; 02B9h: the function's own status
 
 Exactly 86h's handler (`CALL 01C3h`, which opens stream FEh) with another
 stream. Reached from the function chain's last check at 2213h, which had
-been dead (a second `CP 86h`) and ROM 2.1 patched to `CP 87h / JP Z,3006h /
-RET` ([exrom-chunk1.md](exrom-chunk1.md#fn_dead_beep-2216h)). On ROM 2.0 a
-88h falls off the chain (Report D), so the firmware sends it only in reply
+been dead (a second `CP 86h`) and the module's patch makes `CP 87h / JP
+Z,3006h / RET` ([exrom-chunk1.md](exrom-chunk1.md#fn_dead_beep-2216h)). On
+1.1 a 88h falls off the chain (Report D), so the firmware sends it only in reply
 to `tpi:fopen`, which only this module sends. The lower screen starts
 clear, so the firmware's 88h text has no leading CR; keep it to one line
 ([../firmware/tspico-messages.md](../firmware/tspico-messages.md#send_msg_prompt_ynprompt-echotrue-lowerfalse)).

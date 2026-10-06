@@ -1,10 +1,10 @@
-# tspico.py part 7 — ROM 2.1's commands on the Pico: CAT, MOVE, ERASE, FORMAT, `f:` files, the channels
+# tspico.py part 7 — the ROM's disk commands on the Pico: CAT, MOVE, ERASE, FORMAT, `f:` files, the channels
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2589–3425.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
-ROM 2.1 gives the four stock disk keywords (CAT, MOVE, ERASE, FORMAT) a
+The ROM gives the four stock disk keywords (CAT, MOVE, ERASE, FORMAT) a
 meaning, adds `f:` names to SAVE, LOAD, VERIFY and MERGE, and adds `f:` and
 `d:` channels to OPEN # and CLOSE #. None of that is new wire protocol: the
 ROM's module at EXROM 3000h turns each statement into an ordinary `'B'`
@@ -16,8 +16,8 @@ listings), [native.py](native.md) (the +3DOS header) and
 part does the SD access, the bus answer and the bookkeeping around them.
 [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md) is the contract these
 handlers implement; [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md)
-is the ROM mechanism; [ROM_CHANGES.md](../../ROM_CHANGES.md) lists the ROM
-2.1 patches.
+is the ROM mechanism; [ROM_CHANGES.md](../../ROM_CHANGES.md) lists the disk
+module's patches.
 
 ## Map of the file
 
@@ -34,7 +34,7 @@ is the ROM mechanism; [ROM_CHANGES.md](../../ROM_CHANGES.md) lists the ROM
 
 ## The two sides of every command
 
-The table says, for each statement, what ROM 2.1 sends and which handler
+The table says, for each statement, what the ROM sends and which handler
 answers. The strings are the `CMD_*` constants at the end of `fddcmd.asm`;
 the ROM sends every one as a `'B'` command with T-ADDR 0, so `PROCESS_CMD`
 ([tspico-dispatch.md](tspico-dispatch.md)) looks the word up in `SA_funct`
@@ -70,8 +70,8 @@ are sent by hand through the Pico Interface BIOS, because they go out in the
 middle of a statement: pre-header `'B'`, 00h, BANK, PMR1 (two bytes), PMR2
 (two bytes), LEN, 00h, XOR; then the preloaded status is read and the ROM
 waits READY (`BIOS_WF_NPH`); then the body `'D'`, LEN, 00h, the text, XOR.
-After the body, `SEND_FOPEN` and `CH_STATUS` call `BIOS_C_END` (`C_END2` on
-ROM 2.1) and raise the report of an error status through `C_FAIL`;
+After the body, `SEND_FOPEN` and `CH_STATUS` call `BIOS_C_END` (`C_END2` in the
+disk module) and raise the report of an error status through `C_FAIL`;
 `CH_FETCH` reads the `tpi:chrd` data phase itself.
 
 **What the Pico answers.** A plain status is one byte below 80h, written
@@ -82,7 +82,7 @@ and the text ([tspico-messages.md](tspico-messages.md), PROTOCOL
 `SEND_MSG2`: function 86h, the status, then pages with the "Scroll? (Y/n)"
 prompt. ERASE's per-match prompts are one 86h loop built by `PROMPT_EACH`;
 the "Replace x? (Y/N)" prompt before an `f:` SAVE is function 88h, the
-same loop on the lower screen, which only ROM 2.1 has. The channel commands
+same loop on the lower screen. The channel commands
 answer with the bare status alone, whatever VERBOSE says, because a printed
 message would move the ROM's current channel mid-statement (`CH_REPLY`).
 `tpi:chrd` is the one command with a data phase: status 1, a count, the
@@ -455,8 +455,7 @@ another session drops a stale arm.
 
 Why the lower screen: `SAVE "f:x" SCREEN$` saves the display, and an 86h
 prompt on the main screen would be in the picture (spec §4a, PROTOCOL
-[§5.4](../../PROTOCOL.md)). Function 88h exists only on ROM 2.1 and the
-Pico sends it only here, because only that ROM sends `tpi:fopen`. The
+[§5.4](../../PROTOCOL.md)). The Pico sends function 88h only here. The
 prompt is cut to 31 characters so that it and the key echo fit one
 lower-screen line. `TPI:FOPEN` is in `SD_QUIET`, so a missing card gets
 the bare status J; the handler itself answers with `SEND_MSG`, which prints

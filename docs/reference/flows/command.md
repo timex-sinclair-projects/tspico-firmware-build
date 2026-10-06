@@ -53,7 +53,7 @@ without sending anything. Nothing reaches the Pico.
 | 17 | 2068 | C_END_TAIL (227Fh): reads the status: 86h → `DEC A` → the function chain → `FN_86_YN_PROMPT`: reads its own status (01h), opens the screen, prints the page byte by byte, blind, to the `00h` ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#fn_86_yn_prompt-21e3h)) | `IN` × the page | [rest…] / [] / FF | an empty FIFO mid-page prints nothing more of it (00h ends the text) |
 | 18 | 2068 | GET_KEY_AND_SEND: waits for no key, then a key (BREAK tested), then SEND_KEY: WAIT_PICO_READY, `OUT` the key | `OUT` 'Y' | [] / [59] / 00 | BREAK here: `BRK_ABORT` (below) |
 | 19 | Pico | `CMD_KEY()` returns 'Y'; the next page: 19 × (`08h 20h 08h`) to erase the prompt, the text, … `CMD_SEND` again: bytes, then READY | | [08 20 08 08] / [] / FF | |
-| 20 | 2068 | YN_LOOP_GUARD (22A1h): WAIT_PICO_READY, then the next page | | | a timeout here: Report J (v1.5w's guard) |
+| 20 | 2068 | YN_LOOP_GUARD (22A1h): WAIT_PICO_READY, then the next page | | | a timeout here: Report J (the base image's guard) |
 | … | | steps 17–20 for each page | | | |
 | 21 | Pico | the last page ends `03h` instead of `00h`; `CMD_DRAIN()` waits until the Z80 has read it all | | [] / [] / FF | |
 | 22 | 2068 | PRINT_STRING_FROM_PICO meets `03h` → the loop's end: the function returns its status, 1 → A = 0 | | | |
@@ -113,7 +113,7 @@ with the same helpers (`tp.SEND_MSG`, `CMD_PUT`), and the tail is the same
 At step 14 `TSP.sd_present` is false: `SD_PROBE()` mounts once (~0.5 s; a
 card that has come back is set up). Still none: `NO_CARD_REPLY("TPI:DIR")`
 — `SEND_MSG(NO_CARD_MSG, "", 10, True)`: "No SD card. Insert one and try
-again.", always shown, Report J. For the ROM 2.1 channel commands the answer
+again.", always shown, Report J. For the channel commands the answer
 is `CH_REPLY(10)`, a bare J. Commands in `SD_FREE` (`tpi:info`, `tpi:boot`,
 the printer settings …) run as usual.
 

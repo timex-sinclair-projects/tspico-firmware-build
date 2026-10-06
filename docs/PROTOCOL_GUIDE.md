@@ -5,7 +5,7 @@ you type a command, why each step is there, and what the error reports are
 telling you. You don't need to know Z80 assembly or Python to follow it.
 
 When you want exact byte values and addresses, [`PROTOCOL.md`](PROTOCOL.md) is
-the reference. This guide describes firmware 2.0 and later with ROM 2.0, 2.1 and 2.2 (2.1 with two fixes).
+the reference. This guide describes firmware 2.2.1 with ROM 2.2.
 
 ---
 
@@ -64,8 +64,8 @@ waits for READY before it reads, and the Pico always queues its answer
 
 ## 3. Starting clean: SYNC
 
-Every conversation (a **transaction**) starts the same way on ROM 2.0 and
-later: the 2068 writes the byte 3 to port 15. This is called **SYNC**.
+Every conversation (a **transaction**) starts the same way: the 2068 writes
+the byte 3 to port 15. This is called **SYNC**.
 
 When the Pico sees it, it:
 
@@ -176,10 +176,9 @@ text:
   listings ("Scroll? (Y/n)") and for yes/no questions. `N` stops; a digit sets
   how many lines the next page shows; any other key shows a full page. The
   byte 3 ends the whole thing.
-- **136 (`88`) — the same on the bottom two lines of the screen.** New in ROM
-  2.1, for the question `SAVE "f:x" SCREEN$` asks when the file exists: asking
-  on the main screen would write over the picture that's about to be saved.
-  ROM 2.0 doesn't know this code, and reports D if it ever sees it.
+- **136 (`88`) — the same on the bottom two lines of the screen.** This is
+  for the question `SAVE "f:x" SCREEN$` asks when the file exists: asking on
+  the main screen would write over the picture that's about to be saved.
 
 The ROM prints the text as it reads it. It doesn't wait between characters,
 because printing a character takes much longer than the Pico needs to queue
@@ -227,7 +226,7 @@ use both at once. By the time the card is written, the 2068 has already
 printed "0 OK". If the card fails at that moment, the error goes in the
 TS-Pico's log (`SAVE "tpi:log"`) instead.
 
-## 8. Files as streams (ROM 2.1)
+## 8. Files as streams
 
 `OPEN #4,"f:notes.txt"`, `PRINT #4`, `INPUT #4` and `CLOSE #4` use four
 ordinary commands underneath: open, write, read and close. Each is a complete
@@ -326,4 +325,4 @@ Programmer's Manual* go further.
 | **auto-busy** | the status dropping to 0 on every byte the 2068 sends |
 | **response function** | an answer of 128 or more: "print this", "ask this" |
 | **checksum (XOR)** | a byte computed from all the others, to catch a lost or changed byte |
-| **ROM 2.0 / 2.1 / 2.2** | the TS-2068 ROMs this guide describes; 2.1 adds the disk commands and `f:` files, 2.2 fixes two of its details |
+| **ROM 2.2** | the TS-2068 ROM this guide describes, with the disk commands and `f:` files |

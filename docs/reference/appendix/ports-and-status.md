@@ -11,7 +11,7 @@ that explains the code behind it. The byte-level narrative is
 | Port | Z80 `IN` returns | Z80 `OUT` does | Where |
 |---|---|---|---|
 | 0Eh (14) | the next byte of the Pico's TX FIFO, or 00h when it is empty | puts the byte in the RX FIFO as a 9-bit word with bit 8 = 0 | [pio.md](../firmware/pio.md) `TS_IO_DUAL` |
-| 0Fh (15) | the status byte: the PIO's Y register, which no read consumes | puts `0x100 | value` in the RX FIFO; firmware 2.0 treats any such write as SYNC / abort | [pio.md](../firmware/pio.md), [tspico_io.md](../firmware/tspico_io.md) `RX_CAPTURE`, `PORT_0F` |
+| 0Fh (15) | the status byte: the PIO's Y register, which no read consumes | puts `0x100 | value` in the RX FIFO; the firmware treats any such write as SYNC / abort | [pio.md](../firmware/pio.md), [tspico_io.md](../firmware/tspico_io.md) `RX_CAPTURE`, `PORT_0F` |
 
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which
@@ -19,18 +19,18 @@ the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
 
 Data goes through two accessors, 2298h (`IN A,(0Eh)`) and 229Dh
 (`OUT (0Eh),A`), and status through READ_STATUS (0655h, the `IN A,(0Fh)` at
-065Bh); ROM 2.0 adds the SYNC and BREAK writes and its own status reads at
-2304h–23C0h, and ROM 2.1 one IDLE poll at 3662h. Every site is listed in
+065Bh); the SYNC/BREAK layer adds the SYNC and BREAK writes and its own status reads at
+2304h–23C0h, and the disk module one IDLE poll at 3662h. Every site is listed in
 [rom/overview.md](../rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 ## The status byte
 
-| Bit | Name | Meaning | Since |
-|---|---|---|---|
-| 6 | READY | 1 = the answer is queued, or the Pico is ready for the next phase. The only bit ROMs up to 1.7 test. | 1.x |
-| 3 | IDLE | 1 = no transaction is open | firmware 2.0 |
-| 2 | RECOVERED | 0 = the Pico gave up on a transaction by itself (active low); the next SYNC clears it | firmware 2.0 |
-| 7, 5, 4, 1, 0 | — | unused; read as 1 | — |
+| Bit | Name | Meaning |
+|---|---|---|
+| 6 | READY | 1 = the answer is queued, or the Pico is ready for the next phase. The only bit ROM 1.1 tests. |
+| 3 | IDLE | 1 = no transaction is open |
+| 2 | RECOVERED | 0 = the Pico gave up on a transaction by itself (active low); the next SYNC clears it |
+| 7, 5, 4, 1, 0 | — | unused; read as 1 |
 
 The firmware writes four values ([tspico_io.md](../firmware/tspico_io.md)
 `MQ_STATUS`, [tspico-bus.md](../firmware/tspico-bus.md) `MQ_READY`,
@@ -43,7 +43,7 @@ The firmware writes four values ([tspico_io.md](../firmware/tspico_io.md)
 | FBh | recovered | READY + IDLE with bit 2 low |
 | 00h | busy | the PIO writes it after every Z80 OUT (auto-busy); `MQ_BUSY()` writes it too |
 
-Old firmware returned FFh always, so the IDLE and RECOVERED tests of ROM 2.0
+Old firmware returned FFh always, so the IDLE and RECOVERED tests of the ROM
 never misfire on it. Test RECOVERED only once READY is set: busy has bit 2
 clear as well.
 
@@ -57,7 +57,7 @@ clear as well.
 | Pico gives up on a half-received pre-header or body | 1 s of silence | `RX_CAPTURE`, `RX_BLOCK` |
 | Pico gives up on command output nobody reads | 10 min (`CMD_STALL_MS`); a key wait: a day (`KEY_WAIT_MS`) | [tspico-state.md](../firmware/tspico-state.md) |
 | The ROM's ready wait | 226 polls, each through the debounced BREAK scan: ~19.9 s, at least 88 ms per call | [exrom-driver.md](../rom/exrom-driver.md) `WAIT_PICO_READY` |
-| SYNC wait (ROM 2.0) | 65536 polls, ~1.05 s | [exrom-sync.md](../rom/exrom-sync.md) `SYNC_WAIT` |
+| SYNC wait | 65536 polls, ~1.05 s | [exrom-sync.md](../rom/exrom-sync.md) `SYNC_WAIT` |
 | ZX48 `WAIT_RDY` | 4 × 65536 polls, ~3.8 s | [zx48.md](../rom/zx48.md) |
 
 ## The pre-header
@@ -101,7 +101,7 @@ The XOR covers `'D'` through the last text byte and the Pico checks it
 (status 2, Report R, on a mismatch). The text starts with `tpi:` in any
 case; the command word is the text up to the first space, upper-cased
 (`"TPI:DIR"`); `getArgs(cmd)` gives the rest. From BASIC the ROM sends only
-names of 6–31 characters; the ROM 2.1 module enters past that gate
+names of 6–31 characters; the disk module enters past that gate
 (`SESSION_NAMED`, 1AACh); a machine-code client has a 16-bit LEN.
 
 `tpi:tape`, `tpi:sdcard`, `tpi:picopt` and `tpi:ts2040` never reach the Pico:
@@ -129,10 +129,10 @@ Anything ≥ 80h is a response function (next table). Everything else goes to
 | 9 | 8 | 9 STOP statement | 08h | `_9_9_STOP` | 1C1Ah |
 | 10 | 9 | J Invalid I/O device | 12h | `_10_J_Invalid_IO` | 1C21h |
 | 11–127 | ≥ 10 | D BREAK - CONT repeats | 0Ch | `_11_D_Break` | 00F8h |
-| READY with bit 2 low | — | T TS-Pico reset, try again | 1Ch | — | `RD_STATUS`, ROM 2.0 |
+| READY with bit 2 low | — | T TS-Pico reset, try again | 1Ch | — | `RD_STATUS` |
 
 The ROM's BIOS `C_END` returns these on failure with carry set: A = status − 1
-for an error status, 09h for a timeout (ROM 2.1; 02h on ROM 2.0), 0Ch for
+for an error status, 09h for a timeout, 0Ch for
 BREAK, 1Ch for a Pico reset ([exrom-fdd.md](../rom/exrom-fdd.md) `C_END2`).
 
 ## Response functions
@@ -150,8 +150,8 @@ dispatch compares A = code − 1 ([exrom-chunk1.md](../rom/exrom-chunk1.md)).
 | 85h | `FN_GET_STATUS` | status | sends a 2-bit mask, with no ready wait: b0 = 1 when no key is down, b1 (aux) always 0 | unused |
 | 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (`N` ends the loop; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | 87h | — | status | HOME 08A6h: clears the screen | unused |
-| 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (ROM 2.1 only; `LOWER_LOOP`, 334Fh) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
-| 80h, 89h–FFh (88h on ROM 2.0) | — | — | fall through the chain: Report D | — |
+| 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (`LOWER_LOOP`, 334Fh) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
+| 80h, 89h–FFh | — | — | fall through the chain: Report D | — |
 
 Text rules: the ROM reads characters without a ready wait; 00h ends a string
 and so does any byte ≥ 80h; 03h ends a loop; control codes 16–23 (INK … TAB)
@@ -164,13 +164,13 @@ firmware. Keys come back upper-cased after a ready wait (`SEND_KEY`, 1C40h).
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (low nibble); AF kept |
 | 1842h | S_MODE | TPMODE := A AND 0Fh; AF kept |
-| 1844h | G_VERS | BC = the version: 0015h (1.1/1.5w), 0017h (1.7), 0020h (2.0), 0021h (2.1) |
+| 1844h | G_VERS | BC = the version: 0022h on ROM 2.2 (0015h on ROM 1.1) |
 | 1846h | TX_A | `OUT (0Eh),A`; no wait |
 | 1848h | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | 184Ah | C_END | wait READY, read the answer, run the response functions; NC = status 1 |
 | 184Ch | WF_NPH | wait READY (~19.9 s); NC = ready; C with A = 02h timeout, 0Ch BREAK, 1Ch RECOVERED |
 
-Full contracts and the 2.0/2.1 changes: [exrom-driver.md](../rom/exrom-driver.md).
+Full contracts: [exrom-driver.md](../rom/exrom-driver.md).
 
 ## LOAD and SAVE blocks
 
@@ -195,7 +195,7 @@ TPI block is a TAP block. A SAVE is refused at the mid status or not at all.
 Firmware: [tspico_io.md](../firmware/tspico_io.md) `LOAD_TS`, `SAVE_TS`;
 ROM: [exrom-driver.md](../rom/exrom-driver.md) (1879h, 196Dh).
 
-## The channel commands (ROM 2.1)
+## The channel commands
 
 | Text | PMR1 | PMR2 | Answer |
 |---|---|---|---|
@@ -222,7 +222,7 @@ final status. Every character is its own transaction, SYNC included.
 
 No status handshake beyond READY, no pre-header, no echo. `'L'` (4Ch) is the
 Spectrum ROM's LD-BYTES asking for the next block: the Pico streams flag,
-content and XOR. `'S'` (53h) precedes a saved block. `'T'` (54h) is the ZX v3
+content and XOR. `'S'` (53h) precedes a saved block. `'T'` (54h) is the ZX
 ROM's `LOAD "tpi:name"`: op, length, name; then READY; then a status (FFh =
 OK, else an ERR_NR) and a message. ZX v4 sets bit 7 of the op for
 `SAVE "tpi:dir"` and reads the reply in pieces (length 1–255, bytes, … 0).

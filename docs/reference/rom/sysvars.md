@@ -1,6 +1,6 @@
 # System variables
 
-Source: the ROM 2.1 listings
+Source: the ROM 2.2 listings
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm)
 and [`tspico-22-home.asm`](../../rom-analysis/disasm/tspico-22-home.asm)
 (every site below was found by scanning them and read in context); the
@@ -17,7 +17,7 @@ reference and [PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#ts-
 use, and the module's `EQU`s where it has one. TPMODE (5DDBh) is the one a
 BASIC program is meant to read, as `PEEK 24027`.
 
-Addresses are those of ROM 2.1. "EXROM 1A7Dh" is a site in the EXROM half,
+Addresses are those of ROM 2.2. "EXROM 1A7Dh" is a site in the EXROM half,
 "HOME 0A0Ah" one in HOME. Where a site is in the routine of another
 chapter, that chapter explains the routine; this one says what the
 variable is for.
@@ -50,7 +50,7 @@ The EXROM's NMI routine (1107h–1113h, ending `RETN`) does `LD HL,(5D37h)`
 it is non-zero. The genuine EXROM has the same routine reading NMIADD
 (5CB0h) with the test the other way round — `JR NZ` past, so it jumps only
 when the vector is **zero**, the bug the 2068 inherited from the Spectrum.
-The TS-Pico fixed the test and moved the vector. Nothing in either 2.1 half
+The TS-Pico fixed the test and moved the vector. Nothing in either ROM 2.2 half
 writes 5D37h; a program that wants an NMI handler stores its address
 there. Its value at power-on depends on what the 2068 leaves in that RAM
 *(unverified)*.
@@ -63,7 +63,7 @@ Two unrelated uses share the word.
 `LD (5DCDh),HL` / `LD HL,target` and jumps to 03FCh or 0A50h, which load
 HL back from it after pushing the bank word ([overview.md](overview.md#banking-how-home-and-the-exrom-reach-each-other)).
 HOME writes it at 03F4h (the BEEPER thunk), 0A1Dh, 0A26h, 0A4Ah, 0F13h
-(ROM 2.0's hook) and 3CF8h, and reads it at 0406h and 0A5Ah.
+(the SYNC layer's hook) and 3CF8h, and reads it at 0406h and 0A5Ah.
 
 **A transfer's byte count.** BUILD_PREHEADER_B (EXROM 1BA0h) stores the
 command text's length there, sends its low byte (from B) and high byte
@@ -98,7 +98,7 @@ the Pico tell a new statement from a retry. Written by:
   it is not 0. So it is not random, as one design document says, and never
   0 for a BASIC statement: 0 is reserved for transfers not started from a
   BASIC command ([PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#ts-pico-system-variables)).
-- **TPI_SEND** (31EFh) and **F_HOOK** (3231h) in the 2.1 module, the same
+- **TPI_SEND** (31EFh) and **F_HOOK** (3231h) in the disk module, the same
   way ([exrom-fdd.md](exrom-fdd.md)).
 - **04E8h**, which stores 0: called after a SAVE's data block (18ECh, when
   the flag byte was not 0) and after a LOAD's (19B2h, flag FFh). The
@@ -136,7 +136,7 @@ character), and 5DD7h a buffer address (1820h: a character code × 8 +
 
 | Bit | Meaning | Set by | Cleared by | Read by |
 |---|---|---|---|---|
-| 0 | printer output goes to the Pico | `SAVE "tpi:picopt"` (2151h) | `SAVE "tpi:ts2040"` (218Fh); `SAVE "tpi:tape"` too before ROM 2.1 | HOME 0A09h (every character of output: SENDTV now calls it), EXROM 1781h (COPY) |
+| 0 | printer output goes to the Pico | `SAVE "tpi:picopt"` (2151h) | `SAVE "tpi:ts2040"` (218Fh); in 1.1, `SAVE "tpi:tape"` too | HOME 0A09h (every character of output: SENDTV now calls it), EXROM 1781h (COPY) |
 | 1 | LOAD, SAVE, VERIFY, MERGE go to the Pico | `SAVE "tpi:sdcard"` (2103h); 1 at boot | `SAVE "tpi:tape"` (20BEh → TAPE_MODE) | 1879h (SA-BYTES), 196Dh (LD-BYTES); clear = the stock tape routines |
 | 2–3 | unused | | | kept by S_MODE |
 | 4–5 | unused | | SESSION_SETUP's non-command exit (1A3Ah), F_HOOK (325Fh) | |
@@ -157,7 +157,7 @@ four words that the ROM handles itself and never sends:
 
 | Text | Length (C) | Effect | Code |
 |---|---|---|---|
-| `tpi:tape` | 8 | bit 1 cleared (2.1; 1.x and 2.0 set TPMODE to 0, both switches off) | 208Eh → 20BEh → TAPE_MODE (301Eh) |
+| `tpi:tape` | 8 | bit 1 cleared (1.1 set TPMODE to 0, both switches off) | 208Eh → 20BEh → TAPE_MODE (301Eh) |
 | `tpi:sdcard` | 10 | bit 1 set | 20C3h |
 | `tpi:picopt` | 10 | bit 0 set | 2111h |
 | `tpi:ts2040` | 10 | bit 0 cleared | 2155h |
@@ -168,7 +168,7 @@ that does not match exactly, goes on to 210Eh and is sent to the Pico as an
 ordinary command (where it is "Unrecognized"). A match ends the statement
 with "0 OK" (1B72h → STATUS_OK). Each word changes one switch: after
 `tpi:picopt` then `tpi:tape` then `tpi:sdcard` the value is 3, both on.
-Before 2.1, `tpi:tape` cleared the printer switch too and the same sequence
+In 1.1, `tpi:tape` cleared the printer switch too and the same sequence
 gave 2 (#176; [exrom-fdd.md](exrom-fdd.md#tape_mode-3021h)).
 
 **The BIOS** ([exrom-driver.md](exrom-driver.md)): G_MODE (1840h → 1856h)
@@ -210,11 +210,11 @@ the names are the TS2068's (ZX Spectrum names where they are the same).
 | 5C78h | FRAMES | the session id's seed | 1A75h, 31E7h, 3229h |
 | 5C7Bh | UDG | the printer path's character address | 1817h |
 | 5C92h | MEMBOT | stored in PMR1 by HOME 04EBh | HOME 04E8h |
-| 5CB7h | ERRLN's high byte | bit 6 ("an ON ERR trap was taken"; [ERROR_TRAPPING.md](../../rom-analysis/ERROR_TRAPPING.md)) is tested as `IY+7Dh` by the copy of BREAK_KEY at 2009h and by the 2.0/1.7 BREAK paths | 200Fh, 22F0h, 2327h |
+| 5CB7h | ERRLN's high byte | bit 6 ("an ON ERR trap was taken"; [ERROR_TRAPPING.md](../../rom-analysis/ERROR_TRAPPING.md)) is tested as `IY+7Dh` by the copy of BREAK_KEY at 2009h and by the BREAK paths of the base image (22F0h) and the SYNC layer (2327h) | 200Fh, 22F0h, 2327h |
 | 5C8Dh | ATTR_P | sent in the printer pre-header | 169Fh |
 
-TV_FLAG (5C3Ch, `IY+2`) bit 5 is set by v1.7's SAVE-prompt BREAK routine
-at 22AEh (clear the lower screen).
+TV_FLAG (5C3Ch, `IY+2`) bit 5 is set by the base image's SAVE-prompt BREAK
+routine at 22AEh (clear the lower screen).
 
 ### Channels and streams
 
@@ -244,7 +244,7 @@ are in that copy, not variables in the usual sense.
 
 ## The ZX Spectrum ROM's variables
 
-The ZX v3/v4 ROM ([zx48.md](zx48.md)) runs with the Spectrum's own system
+The ZX v4 ROM ([zx48.md](zx48.md)) runs with the Spectrum's own system
 variables, at the same addresses where the two machines agree: T_ADDR
 (5C74h, the SA-ALL operation, 0 SAVE … 3 MERGE), CH_ADD (5C5Dh), X_PTR
 (5C5Fh), ERR_SP (5C3Dh). It has no TPMODE and no session: in ZX48 mode the

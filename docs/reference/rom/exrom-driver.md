@@ -4,8 +4,8 @@ Source: [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exr
 EXROM 1800h–1C8Fh and the chunk-0 routines the driver stands on (0000h–
 0060h, 00F8h, 03DDh, 0655h–06B0h, 0F99h); names from
 [`docs/rom-analysis/tspico-exrom-symbols.sym`](../../rom-analysis/tspico-exrom-symbols.sym).
-ROM 2.1. Every routine was read in the listing; the bytes of the 1.x
-versions are in [DIFF_EXROM_vs_STOCK.md](../../rom-analysis/DIFF_EXROM_vs_STOCK.md).
+ROM 2.2. Every routine was read in the listing; how the 1.1 EXROM differs
+from the genuine one, byte by byte, is in [DIFF_EXROM_vs_STOCK.md](../../rom-analysis/DIFF_EXROM_vs_STOCK.md).
 
 The genuine 2068 EXROM had a 1K hole at 1800h–1BFFh. Gustavo Pane put the
 core of the Pico driver there: the BIOS table that machine code calls, the
@@ -15,7 +15,7 @@ ready-wait every exchange uses, the routine that decides whether a
 report translation. This chapter follows that region in address order,
 after the handful of chunk-0 primitives it calls. The function chain, the
 accessors at 2298h/229Dh, the command-body sender and the printer path are
-in [exrom-chunk1.md](exrom-chunk1.md); ROM 2.0's SYNC and BREAK code, which
+in [exrom-chunk1.md](exrom-chunk1.md); the SYNC layer's SYNC and BREAK code, which
 the driver now calls at every transaction, is [exrom-sync.md](exrom-sync.md);
 the firmware on the other end is [../firmware/](../firmware/), and the wire
 format [PROTOCOL.md](../../PROTOCOL.md).
@@ -29,38 +29,43 @@ failed, with A saying why.
 
 ## Map
 
-| EXROM | Symbol / what | Since |
+"From" says which layer of the ROM put the code there: **1.1** (it was
+already in the 1.1 ROM), **SYNC layer** (`tspico-sync.asm`) or **disk
+module** (the patches `build-rom.py` applies with the module). Two entries
+mean the later layer changed it.
+
+| EXROM | Symbol / what | From |
 |---|---|---|
 | 0000h, 0049h | reset entry; `BOOT_MAP_16K` | 1.1 (one byte) |
 | 00F8h | `RPT_D_BREAK_CONT` | genuine |
 | 03DDh | `CALL_HOME`, the EXROM→HOME returning thunk | 1.1 |
 | 0655h | `READ_STATUS` | 1.1 |
 | 069Fh | `CHECK_BREAK` | 1.1 |
-| 06AAh | `BREAK_ABORT` | 1.1; 2.0 |
+| 06AAh | `BREAK_ABORT` | 1.1; SYNC layer |
 | 0F99h | `BANK_SWITCH` (CALL_B) | genuine |
 | 1800h–183Bh | the tail of the printer path (COPY-LINE's loop, the UDG sender, 1828h) | 1.1; [exrom-chunk1.md](exrom-chunk1.md) |
 | 183Ch–183Fh | `FFh` | |
-| 1840h | `BIOS_TABLE` | 1.1; 2.0, 2.1 |
-| 1852h | `BIOS_G_VERS` | 1.1 |
+| 1840h | `BIOS_TABLE` | 1.1; SYNC layer, disk module |
+| 1852h | `BIOS_G_VERS` | 1.1; the value: SYNC layer, disk module |
 | 1856h–1871h | G_MODE, S_MODE, RX_A, TX_A bodies | 1.1 |
-| 1872h–1935h | the SAVE path (SA-BYTES via 0068h) | 1.1; 2.0 |
+| 1872h–1935h | the SAVE path (SA-BYTES via 0068h) | 1.1; SYNC layer |
 | 1936h–196Ch | the byte senders with XOR | 1.1 |
-| 196Dh–1A38h | the LOAD path (LD-BYTES via 00FCh) | 1.1; 2.0 |
+| 196Dh–1A38h | the LOAD path (LD-BYTES via 00FCh) | 1.1; SYNC layer |
 | 1A39h–1A53h | `SESSION_SETUP`'s exits; LOAD to tape | 1.1 |
-| 1A54h | `WAIT_PICO_READY`, `WAIT_PICO_READY_FAIL` (1A61h), `WAIT_PICO_READY_OK` (1A6Eh) | 1.1; 2.0 |
+| 1A54h | `WAIT_PICO_READY`, `WAIT_PICO_READY_FAIL` (1A61h), `WAIT_PICO_READY_OK` (1A6Eh) | 1.1; SYNC layer |
 | 1A73h | `SESSION_SETUP` (SESSION_NAMED at 1AACh) | 1.1 |
 | 1B6Bh | end-of-statement test | 1.1 |
 | 1B7Eh | `SEND_BYTE_CRC` | 1.1 |
 | 1B8Dh–1B9Fh | a command: the name fetched | 1.1 |
-| 1BA0h | `BUILD_PREHEADER_B` | 1.1; 2.0 |
+| 1BA0h | `BUILD_PREHEADER_B` | 1.1; SYNC layer |
 | 1BEEh | a no-op remnant | 1.1 |
 | 1BF3h | `STATUS_TO_REPORT` and the report targets (1C16h–1C3Fh) | 1.1 |
 | 1C23h | `STATUS_OK` | 1.1 |
 | 1C40h | `SEND_KEY` | 1.1 |
-| 1C49h–1C8Fh | the boot message | 1.1; 2.0, 2.1 |
+| 1C49h–1C8Fh | the boot message | 1.1; SYNC layer, disk module |
 
-The listing also shows names at some of these addresses from the 2.0 and
-2.1 sources (`C_END_VEC`, `BIOS_WF_NPH`, `F_HOOK_VEC`, `SYNC_WRITE`,
+The listing also shows names at some of these addresses from the SYNC
+layer's and the disk module's sources (`C_END_VEC`, `BIOS_WF_NPH`, `F_HOOK_VEC`, `SYNC_WRITE`,
 `STEP`, `RD_STATUS`, and `H_EXPT_STR` at 1BEFh, which is a HOME address
 the label file wrongly applies here); those belong to
 [exrom-sync.md](exrom-sync.md) and [exrom-fdd.md](exrom-fdd.md).
@@ -121,10 +126,10 @@ GOTO_B (to FD32h/6572h). HOME keeps a byte-for-byte copy at 040Dh
 ```
 
 Every ready-wait reads the Pico's status through here — there is no bare
-`IN A,(0Fh)` in 1.x code — so every wait is also a BREAK check. Returns A =
-the status byte (READY is bit 6; ROM 2.0 adds IDLE bit 3 and RECOVERED bit
-2, [PROTOCOL.md §3](../../PROTOCOL.md#3-the-status-byte)). ROM 2.0 wraps
-it in RD_STATUS (234Fh) for the RECOVERED test.
+`IN A,(0Fh)` in the code from 1.1 — so every wait is also a BREAK check.
+Returns A = the status byte (READY is bit 6; the SYNC layer adds IDLE bit 3
+and RECOVERED bit 2, [PROTOCOL.md §3](../../PROTOCOL.md#3-the-status-byte)).
+The SYNC layer wraps it in RD_STATUS (234Fh) for the RECOVERED test.
 
 Beware the name: `src/rom/fdd/fddcmd.asm` has an `EQU` called READ_STATUS
 that is **02B9h**, the routine this reference calls `READ_STATUS_BYTE`
@@ -146,10 +151,10 @@ the Pico is already READY.
 
 ### `BREAK_ABORT` (06AAh)
 
-Where `READ_STATUS` goes on BREAK. In 1.x: `POP BC / JP 1A61h` — out
-through WAIT_PICO_READY's failure exit, so a BREAK during a wait became
-Report J after the caller's cleanup, and the Pico was never told. ROM 2.0:
-`JP BRK_ABORT` (2320h) and four `NOP`s: the abort byte 03h is written to
+Where `READ_STATUS` goes on BREAK. In 1.1 and the base image: `POP BC /
+JP 1A61h` — out through WAIT_PICO_READY's failure exit, so a BREAK during a
+wait became Report J after the caller's cleanup, and the Pico was never
+told. The SYNC layer makes it `JP BRK_ABORT` (2320h) and four `NOP`s: the abort byte 03h is written to
 port 0Fh, the Pico cleans up, and Report D follows
 ([exrom-sync.md](exrom-sync.md),
 [BREAK_AND_ABORT.md](../../rom-analysis/BREAK_AND_ABORT.md)).
@@ -173,32 +178,35 @@ the programmer's manual's chapter 8 is the tutorial).
 |---|---|---|---|
 | 1840h | G_MODE | 1856h | BC = TPMODE AND 0Fh; AF kept |
 | 1842h | S_MODE | 1862h | TPMODE = A AND 0Fh; AF kept |
-| 1844h | G_VERS | 1852h | BC = the ROM version: 0021h in 2.1 |
+| 1844h | G_VERS | 1852h | BC = the ROM version: 0022h |
 | 1846h | TX_A | 186Dh → 229Dh | `OUT (0Eh),A`, carry clear |
 | 1848h | RX_A | 186Ah → 2298h | `IN A,(0Eh)`, carry clear |
-| 184Ah | C_END | 184Fh → C_END_VEC (301Bh) | the end of a command: wait for READY, read the status, run any response function. NC = status 1; C with A = status − 1, or 09h for a timeout (2.1), 0Ch BREAK, 1Ch the Pico dropped it |
+| 184Ah | C_END | 184Fh → C_END_VEC (301Bh) | the end of a command: wait for READY, read the status, run any response function. NC = status 1; C with A = status − 1, or 09h for a timeout, 0Ch BREAK, 1Ch the Pico dropped it |
 | 184Ch | WF_NPH | BIOS_WF_NPH (239Eh) | wait for READY: NC ready; C with A = 02h timeout, 0Ch BREAK, 1Ch reset |
 
 TPMODE's bits are in [sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027). The
 entries are `JR`s except the last two, which are `JP`s placed so that
-184Ch and 184Fh are each three bytes. What changed: in v1.1–v1.7, WF_NPH
-jumped to WAIT_PICO_READY (1A54h) and C_END to 2279h, both of which raise
-reports from inside — a RAM program lost control on a BREAK or a Pico
-reset. ROM 2.0 pointed both at new code that returns carry with a reason
-instead ([exrom-sync.md](exrom-sync.md#bios_wf_nph-239eh)); ROM 2.1 points
-C_END at C_END2, which reports a timeout as 09h (J) because 2.0's 02h was
-also status 3 (Report F) ([exrom-fdd.md](exrom-fdd.md)). The bytes at
-1840h–1855h, by version: identical `JR`s throughout; 184Ch `JP 1A54h` and
-184Fh `JP 2279h` in v1.1–v1.7, `JP 239Eh` / `JP 23CDh` in 2.0, `JP 239Eh` /
-`JP 301Bh` in 2.1. 184Eh is the last byte of 184Ch's `JP`, not an entry
+184Ch and 184Fh are each three bytes. Unlike 1.1, where WF_NPH jumped to
+WAIT_PICO_READY (1A54h) and C_END to 2279h, both of which raise reports
+from inside — a RAM program lost control on a BREAK or a Pico reset — both
+entries now reach code that returns carry with a reason. The SYNC layer
+points WF_NPH at BIOS_WF_NPH ([exrom-sync.md](exrom-sync.md#bios_wf_nph-239eh));
+the disk module's patch points C_END at C_END2, which reports a timeout as
+09h (J), because BIOS_WF_NPH's timeout code, 02h, is also status 3's
+status − 1 (Report F) ([exrom-fdd.md](exrom-fdd.md#c_end2)). The bytes at
+1840h–1855h: `JR`s unchanged since 1.1; 184Ch `JP 1A54h` and 184Fh `JP
+2279h` in 1.1 and the base image, `JP 239Eh` / `JP 23CDh` after the SYNC
+layer, `JP 239Eh` / `JP 301Bh` in ROM 2.2. 184Eh is the last byte of 184Ch's `JP`, not an entry
 (until #182 [SYMBOLS.md](../../rom-analysis/SYMBOLS.md) listed an "EWAIT"
 there; [PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#the-real-api-table-tpi-bios-at-0x1840)
 had it right).
 
 ### `BIOS_G_VERS` (1852h)
 
-`LD BC,0022h / RET`: the version, matching HOME 0065h (`PEEK 101`). 0015h
-in v1.1 and v1.5w (which it cannot tell apart), 0017h in v1.7, 0020h in 2.0, 0021h in 2.1, 0022h in 2.2; each release patches it with 0065h
+`LD BC,0022h / RET`: the version, matching HOME 0065h (`PEEK 101`): 0022h
+in ROM 2.2, 0015h in 1.1. Each layer that changes the version patches it
+together with 0065h: the base image's value, the SYNC layer's and the disk
+module's are in [the build history](../../ROM_CHANGES.md#version-bytes)
 ([overview.md](overview.md#which-rom-is-this)). The `RET` at 1855h is also
 used as a landing point: HOME's helpers 255Bh and 3CDCh jump into the EXROM
 at 1855h so that the `RET` returns to their EXROM caller with the EXROM
@@ -207,8 +215,8 @@ paged ([home.md](home.md#2548h2560h-save-load-verify-merge-v11)).
 The other bodies: G_MODE (1856h) `PUSH AF / LD A,(5DDBh) / AND 0Fh / LD B,0
 / LD C,A / POP AF / RET`; 1861h `XOR A` falls into S_MODE (1862h) `PUSH AF
 / AND 0Fh / LD (5DDBh),A / POP AF / RET` — 1861h, "TPMODE = 0", is what
-`tpi:tape` called before 2.1 (2.1's 20BEh goes to the module's TAPE_MODE
-instead, so nothing calls 1861h now), and 081Dh (`LD A,2 / JP 1862h`) is the power-on value;
+`tpi:tape` called in 1.1 (20BEh now goes to the module's TAPE_MODE
+instead, so nothing calls 1861h), and 081Dh (`LD A,2 / JP 1862h`) is the power-on value;
 RX_A and TX_A are `JP`s to the accessors. 1870h–1871h (`AND A / RET`)
 follow TX_A unreferenced.
 
@@ -227,8 +235,8 @@ stock routine.
 3. **A data block (FFh) has no pre-header**: straight to step 6. A header or
    other block:
 4. **The pre-header** (189Ah–18BEh), ten bytes, L the running XOR:
-   SYNC_WRITE sends the flag (2.0: preceded by the SYNC, `OUT (0Fh),03h`,
-   and a wait for READY + IDLE, [exrom-sync.md](exrom-sync.md#sync_write-2300h));
+   SYNC_WRITE sends the flag (the SYNC layer's routine: the SYNC, `OUT
+   (0Fh),03h`, first, and a wait for READY + IDLE, [exrom-sync.md](exrom-sync.md#sync_write-2300h));
    then T_ADDR (0 for SAVE), BANK (5DCFh, always FFh), the session id
    (5DD1h), IX, DE, and L.
 5. **The pre-load**: read one byte. Carry or 0: Report J (1C1Fh). Not 1: it
@@ -238,8 +246,8 @@ stock routine.
 6. **The block** (18D8h–1904h): the flag; the session id (whose bytes go
    into L, not into the block's XOR in H); then, if the flag was not 0, the
    session is ended (5DD1h = 0, 04E8h) — the data block is the last of
-   the statement. Then the bytes from IX, H the running XOR, ROM 2.0's
-   `STEP` after each (`INC IX / DEC DE`, and a BREAK test every 256 bytes,
+   the statement. Then the bytes from IX, H the running XOR, the SYNC
+   layer's `STEP` after each (`INC IX / DEC DE`, and a BREAK test every 256 bytes,
    [exrom-sync.md](exrom-sync.md#step-2339h)); then H.
 7. **The status**: `WAIT_PICO_READY` (J on failure), read (carry or 0: J),
    `DEC A`; not OK → the function chain (`FN_CHAIN_HEAD`,
@@ -330,7 +338,7 @@ a block, before a key is sent, at the end of a command (PICO_TRANSACT,
 ```text
 1A54h   PUSH AF / PUSH BC
         LD B,E2h              ; 226 polls
-1A58h   CALL RD_STATUS        ; 2.0: READ_STATUS + the RECOVERED test
+1A58h   CALL RD_STATUS        ; SYNC layer: READ_STATUS + the RECOVERED test
         BIT 6,A               ; READY?
         JR NZ,WAIT_PICO_READY_OK
         DJNZ 1A58h
@@ -345,9 +353,9 @@ the firmware keeps the Z80 in a ready-wait, never in a blind read, while it
 does slow work ([../firmware/tspico-bus.md](../firmware/tspico-bus.md)).
 
 It does not always return. A BREAK during the wait goes to `BREAK_ABORT`
-(Report D in 2.0), and since 2.0 a READY with RECOVERED low raises Report T
-from inside RD_STATUS (234Fh, [exrom-sync.md](exrom-sync.md#rd_status-234fh)).
-In v1.1–v1.7 the status read was `CALL READ_STATUS` at 1A58h.
+(Report D), and a READY with RECOVERED low raises Report T from inside
+RD_STATUS (234Fh, [exrom-sync.md](exrom-sync.md#rd_status-234fh)).
+In 1.1 and the base image the status read was `CALL READ_STATUS` at 1A58h.
 
 #### `WAIT_PICO_READY_FAIL` (1A61h)
 
@@ -355,8 +363,8 @@ In v1.1–v1.7 the status read was `CALL READ_STATUS` at 1A58h.
 SCF / RET`. The `LD A,40h` is overwritten at once: a remnant of a removed
 patch (the 40h is the single-port firmware's "ready" byte), dead. Every
 internal caller turns the carry into Report J and discards the 02h; only
-machine code calling the BIOS saw it, and since 2.0 the BIOS has its own
-wait.
+machine code calling the BIOS saw it, and the BIOS now has its own wait
+(the SYNC layer's BIOS_WF_NPH).
 
 #### `WAIT_PICO_READY_OK` (1A6Eh)
 
@@ -364,7 +372,7 @@ wait.
 
 ## `SESSION_SETUP` (1A73h): is this name a command?
 
-Reached from SAVE-ETC (01D2h: in 2.1 by way of F_HOOK, which first takes
+Reached from SAVE-ETC (01D2h: by way of the disk module's F_HOOK, which first takes
 `f:` names, [exrom-fdd.md](exrom-fdd.md)) on **both** the syntax pass and
 the run-time pass of every `SAVE`, `LOAD`, `VERIFY` and `MERGE`, with the
 name's string on the calculator stack. It decides: a `tpi:` command (sent
@@ -381,7 +389,7 @@ SAVE-ETC).
    different: in the syntax pass it is accepted (STATUS_OK), at run time
    it is Report C (1C2Fh) *(the second length test at 1AA1h, `CP 20h`, can
    never succeed after the first; inferred dead)*.
-3. **SESSION_NAMED (1AACh)** — where ROM 2.1's module enters to send its
+3. **SESSION_NAMED (1AACh)** — where the disk module enters to send its
    own commands of up to 64 characters past the gate: 5DD3h = the address,
    5DD5h = the length. The first three characters, upper-cased with
    `AND 5Fh`: `TPI` → TPMODE bit 7 set, bit 6 cleared; `NET` → bits 7 and 6
@@ -436,7 +444,7 @@ A `tpi:` command's pre-header, then its body, then the answer.
 1BA0h   LD (5DCDh),BC          ; the text's length
         LD B,C / LD C,0Dh
         LD A,'B' / LD D,A      ; D = the XOR, seeded with the first byte
-1BAAh   CALL SYNC_WRITE        ; 2.0: SYNC, wait READY+IDLE, then OUT 'B'
+1BAAh   CALL SYNC_WRITE        ; SYNC layer: SYNC, wait READY+IDLE, then OUT 'B'
         T_ADDR    (0 SAVE, 1 LOAD: the mount)
         BANK      (5DCDh's neighbour 5DCFh: FFh)
         PMR1 lo, hi
@@ -546,14 +554,15 @@ TPMODE and BANK, [sysvars.md](sysvars.md)):
    JP EX_PO_MSG` (03EDh, HOME's PO-MSG through the thunk): print message 0
    of the table at 5B0Bh.
 3. The table (1C68h): `80h` (the dummy entry), `0Dh 0Dh`, `7Fh` (©), and
-   " 2026 TS-Pico ROM v2.1   " with bit 7 set on the last space.
+   " 2026 TS-Pico ROM v2.2   " with bit 7 set on the last space.
 4. `LD HL,5EEAh / JP 1C86h`: the rest of the genuine EXTINIT, displaced
    from 08E7h when that became `JP 01BCh`.
 
 The text is copied to RAM because PO-MSG runs in HOME and reads the table
-with HOME paged: a table in the EXROM would be invisible to it. ROM 2.0
-rewrote the text (1C70h–1C85h, from "2025 Timex Pico Interface"); 2.1
-changed "v2.0" to "v2.1" at 1C7Eh.
+with HOME paged: a table in the EXROM would be invisible to it. The SYNC
+layer rewrote the text (1C70h–1C85h, from the base image's "2025 Timex
+Pico Interface"); the disk module's patches set the version digits at
+1C7Eh to "v2.2".
 
 ## Where comments, documents and the code disagree
 

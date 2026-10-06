@@ -10,8 +10,8 @@ Source: [`src/upgrade/main.py`](../../../src/upgrade/main.py),
 [`web-updater/`](../../../web-updater/). Part of the
 [programmer's reference](../README.md).
 
-A board on firmware 1.1 or 1.5 has a TS-2068 ROM in flash slot 1 that speaks
-the single-port protocol of those releases. Firmware 2.x speaks the dual-port
+A board on firmware 1.1 has a TS-2068 ROM in flash slot 1 that speaks
+the single-port protocol of that release. The current firmware speaks the dual-port
 one ([PROTOCOL.md](../../PROTOCOL.md) §1–§3), so once the Pico has new
 firmware the 2068 ROM cannot talk to it, and the ROM can only be rewritten
 by the Z80: the flash chip hangs off the 2068's bus, and the firmware's own
@@ -64,7 +64,7 @@ from slot 1. The whole exchange, Pico loop, tape, Z80 binary, banking and
 chip model, runs in CPython in
 [`src/test/upgrade_hosttest.py`](../../../src/test/upgrade_hosttest.py) and
 [`src/test/updater_hosttest.py`](../../../src/test/updater_hosttest.py); the
-tape path was proven on hardware with a v15w chip
+tape path was proven on hardware with a real flash chip
 ([`src/test/zx_bootstrap_harness.py`](../../../src/test/zx_bootstrap_harness.py)).
 
 ## Map
@@ -283,7 +283,7 @@ an empty TX reads as 00h (`TS_IO_DUAL`'s docstring;
 Why DMA for a block: `recv` reads blind, a byte every ~44 µs, from a 4-deep
 FIFO. On MicroPython v1.29 a Python loop putting one byte at a time (with a
 `ZX_ROOM` call per byte) falls behind; the FIFO runs dry and the Z80 reads
-00h. On hardware (2026-10-06, firmware v2.2, the web updater's
+00h. On hardware (2026-10-06, the web updater's
 "Latest release") the updater erased slot 1 and then never got a block that
 passed its XOR, and gave up with slot 1 blank. `LOAD_TS`, `LOAD_ZX` and
 `romupdate` had moved to `STREAM_DMA` for the same reason in #126–#128
@@ -343,9 +343,9 @@ Then, by what `w` is:
 1. **A port-0Eh write** (`not w & PORT_0F`):
    - `w == 0x4C`, the Spectrum ROM's `'L'`. Its bytes are already queued, so
      the only action is `MQX(MQ, "mov(y, invert(null))")`, READY, for a
-     board that already has ZX v3 or v4 in slot 0: those ROMs wait for READY
+     board that already has the customised ZX ROM in slot 0: it waits for READY
      after `'L'` ([../rom/zx48.md](../rom/zx48.md)), the original does not
-     look. (ZX v2 cannot run the upgrade: its `WAIT_RDY` counts in D and
+     look. (An older customised ZX ROM cannot run the upgrade: its `WAIT_RDY` counts in D and
      breaks every LOAD, [PATCH_ZX48_HANDSHAKE.md](../../rom-analysis/PATCH_ZX48_HANDSHAKE.md).)
      In service mode an `'L'` means the 2068 was reset and `LOAD ""` typed
      again: `service = False`, `pos = ZX_ARM(...)`, `report("tape",
@@ -354,7 +354,7 @@ Then, by what `w` is:
    - any other byte in service mode: ignored. The updater opens every
      request on 0Fh, so a 0Eh byte here is a stray.
    - any other byte in tape mode: an old TS-2068 ROM's command, a burst of
-     pre-header bytes ([PROTOCOL.md](../../PROTOCOL.md) §4.3; a 1.x ROM never
+     pre-header bytes ([PROTOCOL.md](../../PROTOCOL.md) §4.3; ROM 1.1 never
      writes 0Fh). Swallow RX until 50 ms pass with nothing new, re-arm the
      tape, `loading = False`, `report("ignored", byte=..., say='That was the
      TS-2068 ROM: type OUT 244,3 first')`.
@@ -377,7 +377,7 @@ Then, by what `w` is:
      nothing: the Pico stays in service mode with the updater halted until
      the page reboots it.
    - anything else in tape mode: `ZX_FLUSH_TX` and re-arm, "a 0Fh write that
-     isn't ours (a 1.8b SYNC)": a ROM 2.0/2.1 board opens every command
+     isn't ours" (the comment): a board whose ROM sends SYNC opens every command
      with 03h on 0Fh. In service mode an unknown 0Fh write is ignored.
 
 State: `service`, `loading`, `pos` (the stream position) are locals; the
@@ -398,7 +398,7 @@ Beware:
 
 What the tests pin: `upgrade_hosttest.py` runs this function against a
 scripted LD-BYTES and then the real `updater.bin` in `z80core`, with and
-without the P10 jumper, and once with a ZX v3-style READY wait after `'L'`;
+without the P10 jumper, and once with the customised ZX ROM's READY wait after `'L'`;
 it checks the lines `waiting, tape, updater, P 1 ... 192 W ... D`, the
 flash's final contents, and that after `X 2` TX holds the tape's first four
 bytes again. Since 2026-10-06 it runs the whole upgrade once more with every
@@ -639,8 +639,8 @@ one `reply` raises for this request. Keeps DE, HL; corrupts AF, B.
 
 Poll port 0Fh bit 6 until set. Out: carry set = READY; carry clear after
 4 × 65536 polls, ~4 s. Keeps DE (pushed), HL, C; corrupts AF, B. The same
-shape as the ZX v3 ROM's `WAIT_RDY` at 3874h ([ROM_CHANGES.md](../../ROM_CHANGES.md),
-"ZX Spectrum ROM v3"), with B as the outer and DE as the inner counter. The
+shape as the ZX v4 ROM's `WAIT_RDY` at 3874h ([../rom/zx48.md](../rom/zx48.md)),
+with B as the outer and DE as the inner counter. The
 timeout path leaves carry clear from the `OR E` that ended the last inner
 loop; `DJNZ`, `POP` and `RET` do not touch it. Called by `request`,
 `status`, `fetch`.
@@ -1012,13 +1012,13 @@ config.ini)"; `from1x` is a major below 2, and `ver` is the running
 module's major.minor (`verOf`), null when it came from `config.ini` or
 nowhere. The ROM can't be read over USB, so `romBehind` takes the firmware
 version for the ROM's: the ROM step is due when `ver` is older than the
-channel's `rom_version`, or unknown (a wiped Pico, a 1.x board), since in
+channel's `rom_version`, or unknown (a wiped Pico, a 1.1 board), since in
 practice every board out there still has 1.1's ROM; only a board already on
 the channel's major.minor skips it. `connect`, and `loadChannel` when a
 board is already connected, tick "Update the TS-2068 ROM" when
 `romBehind()` and the channel has `upgrade_uf2`. `refreshPlan` forces
 "Erase the Pico first" on whenever the ROM step is ticked, because the
-upgrade UF2's frozen `main.py` must not be shadowed; it warns a 1.x board
+upgrade UF2's frozen `main.py` must not be shadowed; it warns a 1.1 board
 that unticks the ROM step that its ROM cannot talk to the new firmware, and
 any other board behind the channel that unticking leaves its older ROM.
 Before 2.2 it ticked the step for `from1x` alone.
@@ -1098,8 +1098,8 @@ or a size mismatch; then `machine.reset()`. The done panel tells the user
 to unplug USB so the TS-Pico and its card really lose power, then switch
 the 2068 on, and to leave P10 fitted.
 
-The README still lists an end-to-end hardware pass on a 1.1 board and a
-1.5 board, on macOS and Windows, as to do; the repo's own record of the
-updater on a board is the harness that proved the tape path with a v15w
-chip. Nothing in this chapter about the page's behaviour on a real board
+The README still lists an end-to-end hardware pass on a 1.1 board, among
+others, on macOS and Windows, as to do; the repo's own record of the
+updater on a board is the harness that proved the tape path on a real
+flash chip. Nothing in this chapter about the page's behaviour on a real board
 goes beyond what the code says *(unverified)*.

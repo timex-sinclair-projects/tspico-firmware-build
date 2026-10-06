@@ -46,7 +46,7 @@ FIFO through the never-blocking command I/O of
 What the ROM does with the first byte it reads after a command
 ([PROTOCOL.md §5.3](../../PROTOCOL.md#53-the-answer-a-status)): `00h` is
 "no answer", Report J; `01h` is OK; `02h`–`7Fh` is a report, by
-`STATUS_TO_REPORT` with A = status − 1; `81h`, `86h` (and `88h` on ROM 2.1)
+`STATUS_TO_REPORT` with A = status − 1; `81h`, `86h` and `88h`
 start a response function. **Every response function then reads one more
 byte, its own status, which becomes the command's result** when the
 function ends. So every answer built here starts with two bytes: the
@@ -57,7 +57,7 @@ function code, then the status.
 | status | `st` | `C_END`: 1 = OK, else the report | `SEND_MSG` (VERBOSE off), `CH_REPLY` |
 | `81h` PRINT STRING | `81h`, `st`, text, `00h` | prints the text on the main screen, then `st` is the result | `SEND_MSG` (VERBOSE on, or forced) |
 | `86h` PRINT STRING WITH LOOP | `86h`, `st`, then pages | each page is text ending `00h`: the ROM prints it, waits for a key, waits for READY, OUTs the key. `N` ends the loop there. Any other key: the ROM waits for READY and reads the next page. `03h` instead of `00h` ends the loop with no key | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
-| `88h` | as `86h` | `86h` on the lower screen, ROM 2.1 only (`LOWER_LOOP`, [../rom/exrom-fdd.md](../rom/exrom-fdd.md)) | `SEND_MSG_PROMPT_YN(lower=True)` |
+| `88h` | as `86h` | `86h` on the lower screen (`LOWER_LOOP`, [../rom/exrom-fdd.md](../rom/exrom-fdd.md)) | `SEND_MSG_PROMPT_YN(lower=True)` |
 
 `82h`–`85h` and `87h` exist in the ROM and are unused by the firmware.
 
@@ -111,7 +111,7 @@ returns. In the single-port firmware READY was a `40h` byte in TX
 interleaved with the text; each builder's "DUAL-PORT MIGRATION" comment
 records the `wrt(0x40)`s it lost.
 
-A BREAK at any key wait (the 2.x ROMs' `KEYWAIT`) is a port-0Fh write;
+A BREAK at any key wait (the ROM's `KEYWAIT`) is a port-0Fh write;
 `CMD_KEY` and `CMD_RX_FLUSH` raise `CmdAbort` and `PROCESS_CMD` ends the
 command ([tspico-bus.md](tspico-bus.md#command-io-that-never-blocks)).
 After a builder that waits for keys has returned, nothing more may be sent
@@ -513,9 +513,9 @@ Beware:
 
 One question, one key: returns the key's code. With `lower`, the question
 is asked on the lower screen with function `88h`, so it does not write
-over the picture — **only ROM 2.1 has `88h`**; on ROM 2.0 it falls
-through the ROM's chain to Report D. Pass it only for a command that
-ROM 2.1 sent: `tpi:fopen`'s "Replace NAME? (Y/N)" before `SAVE "f:x"
+over the picture. `88h` belongs to the ROM's disk module
+([../rom/exrom-fdd.md](../rom/exrom-fdd.md)); pass it only for a command
+that module sent: `tpi:fopen`'s "Replace NAME? (Y/N)" before `SAVE "f:x"
 SCREEN$` overwrites a file (3109), kept to one line.
 
 1. `88h` if `lower` else `86h`; status `1`; `0Dh` unless `lower` (the

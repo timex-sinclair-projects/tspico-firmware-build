@@ -120,11 +120,10 @@ programmer's manual 4.5 and 5.5–5.6):
 ```
 
 The first byte must stay below 80h: a byte of 80h or more is a response
-function, the ROM handles 81h–87h (88h on ROM 2.1), and anything else is
+function, the ROM handles 81h–88h, and anything else is
 Report D with the data never read (EXTCMD_PROTOCOL.md §4,
 [appendix/ports-and-status.md](../appendix/ports-and-status.md)). Bytes a
-program leaves unread are cleared by the next command's SYNC on ROM 2.0 and
-later.
+program leaves unread are cleared by the next command's SYNC.
 
 ## `OK`, `F_BAD_NAME`, `NUM_TOO_BIG`
 

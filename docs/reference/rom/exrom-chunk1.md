@@ -1,19 +1,19 @@
 # EXROM chunk 1 and the function chain
 
 Source: [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm):
-EXROM 2000h–22FDh (chunk 1 up to ROM 2.0's code), the chunk-0 helpers the
+EXROM 2000h–22FDh (chunk 1 up to the SYNC layer's code), the chunk-0 helpers the
 function chain uses (01C3h, 025Eh–02C6h, 045Fh–0480h, 04F1h, 05FAh,
 068Eh, 06F2h, 0810h–0815h), and the printer path at 1630h–183Bh. Names
 from [`docs/rom-analysis/tspico-exrom-symbols.sym`](../../rom-analysis/tspico-exrom-symbols.sym).
-ROM 2.1.
+ROM 2.2.
 
 When a `tpi:` command, a LOAD or a SAVE ends, the Pico's answer is one
 byte. Status 1 is OK and 2–127 a report ([exrom-driver.md](exrom-driver.md#status_to_report-1bf3h));
 80h and above asks the 2068 to do something first: print a message, show
 pages of text and send back keys, ask a question. That is the **function
 chain**, and this chapter is its code, with the two port accessors every
-byte goes through, the routine that sends a command's text, the
-v1.5w/v1.7 fixes that live in chunk 1, and the printer path that sends
+byte goes through, the routine that sends a command's text, the two
+fixes the base image made to 1.1 in chunk 1, and the printer path that sends
 LPRINT and COPY to the Pico. The firmware side of each function is
 [../firmware/tspico-messages.md](../firmware/tspico-messages.md); the
 table of codes is [PROTOCOL.md §5.4](../../PROTOCOL.md#54-the-answer-a-response-function-status--80).
@@ -27,30 +27,36 @@ like a bug for so long.
 
 ## Map
 
-| EXROM | Symbol / what | Since |
+"From" says which layer of the ROM put the code there: **1.1** (it was
+already in the 1.1 ROM), **base image** (added in `src/rom/TSPICO.ROM`
+after 1.1), **SYNC layer** (`tspico-sync.asm`) or **disk module** (the
+patches `build-rom.py` applies with the module). Two entries mean the
+later layer changed it.
+
+| EXROM | Symbol / what | From |
 |---|---|---|
 | 01C3h | `READ_STATUS_AND_OPEN` | 1.1 |
 | 025Eh, 026Ah | `GET_STATUS_BIT_0`, `GET_STATUS_BIT_1` | 1.1 |
 | 026Fh | `FN_CHAIN_HEAD`; 0274h `FN_81_PRINT_STRING` | 1.1 |
 | 02B9h | `READ_STATUS_BYTE` | 1.1 |
 | 045Fh | `PRINT_STRING_FROM_PICO` (with 068Eh, 05FAh, 06F2h) | 1.1 |
-| 0471h | `GET_KEY_AND_SEND` | 1.1; 2.0 (0479h) |
+| 0471h | `GET_KEY_AND_SEND` | 1.1; SYNC layer (0479h) |
 | 04F1h | `OPEN_MAIN_SCREEN` | 1.1 |
 | 0810h, 0813h | `LOOP_EXIT_OK`, `LOOP_EXIT_ERR` | 1.1 |
-| 0886h | the SAVE prompt's call to 22AEh | 1.7 |
+| 0886h | the SAVE prompt's call to 22AEh | base image |
 | 1630h | `PRINTER_TABLE` and the printer path to 183Bh | 1.1 |
 | 2000h | `ENTRY_TABLE`, the landing pad: `BREAK_KEY` (2009h), the `HALT_STUB_*`s | 1.1 |
 | 203Fh | `BEEPER`, moved from HOME | 1.1 |
 | 2082h | the printer-line helper | 1.1 |
 | 208Eh–2193h | the four switch words | 1.1 ([sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027)) |
-| 2194h | `FN_CHAIN_C1` and functions 82h–88h | 1.1; 2.1 (2213h) |
+| 2194h | `FN_CHAIN_C1` and functions 82h–88h | 1.1; disk module (2213h) |
 | 2219h–223Dh | the dead beep handler; EXTINIT's helper; unreferenced stubs | 1.1 |
 | 223Eh | `SEND_DATA_BLOCK_D` | 1.1 |
 | 2274h | `PICO_TRANSACT` (C_END_TAIL at 227Fh) | 1.1 |
 | 2294h | `ERR_9` | 1.1 |
 | 2298h, 229Dh | `TSPICO_READ_DATA`, `TSPICO_WRITE_DATA` | 1.1 |
-| 22A1h | `YN_LOOP_GUARD` | 1.5w |
-| 22AEh–22FDh | the SAVE-prompt BREAK routine | 1.7 |
+| 22A1h | `YN_LOOP_GUARD` | base image |
+| 22AEh–22FDh | the SAVE-prompt BREAK routine | base image |
 
 ## The accessors
 
@@ -58,7 +64,7 @@ like a bug for so long.
 
 `IN A,(0Eh) / AND A / RET`, then a stray `RET` at 229Ch. Every byte from
 the Pico comes through here (the only other port-0Eh read in the ROM is
-ROM 2.1's channel data phase, [exrom-fdd.md](exrom-fdd.md)). The `AND A`
+the disk module's channel data phase, [exrom-fdd.md](exrom-fdd.md)). The `AND A`
 clears carry and sets Z for a 00h, which is how the callers spot "no
 answer": an empty TX FIFO reads as 00h, so a status of 0 is never a real
 status.
@@ -74,7 +80,7 @@ to)*.
 the Pico's READY at once (the PIO's auto-busy,
 [../firmware/pio.md](../firmware/pio.md#ts_io_dual)), which is why every
 write that expects an answer is followed by a ready-wait. Carry always
-clear, as above. ROM 2.0's tspico-sync.asm calls it TSPICO_WRITE.
+clear, as above. `tspico-sync.asm` calls it TSPICO_WRITE.
 
 ## Sending a command's text
 
@@ -114,9 +120,9 @@ body; unlike the pre-header's, this XOR is checked by the firmware
 ```
 
 So: A = 0 and carry clear for OK; carry set with A = status − 1 for a
-report, or A = 09h (`ERR_9`) for no answer. 2279h was the 1.x BIOS C_END
-target; ROM 2.0's BIOS_C_END and 2.1's C_END2 enter at 227Fh, after their
-own waits ([exrom-sync.md](exrom-sync.md#bios_c_end-23cdh),
+report, or A = 09h (`ERR_9`) for no answer. 2279h was the BIOS C_END
+target in 1.1; the SYNC layer's BIOS_C_END and the disk module's C_END2
+enter at 227Fh, after their own waits ([exrom-sync.md](exrom-sync.md#bios_c_end-23cdh),
 [exrom-fdd.md](exrom-fdd.md)). The `LD C,0Eh` is never used: C is not read
 after it *(inferred: the port number, from a version that read with `IN
 A,(C)`)*.
@@ -145,7 +151,7 @@ chunk 0, the rest at 2194h in chunk 1.
 | 85h | 21C7h `CP 84h` | `FN_85_GET_STATUS` | sends a 2-bit keyboard/aux mask |
 | 86h | 21DFh `CP 85h` | `FN_86_YN_PROMPT` | pages of text with a key between them |
 | 87h | 21FDh `CP 86h` | `FN_87_PRINT_N_CHARS` | clears the screen (HOME 08A6h) |
-| 88h | 2213h `CP 87h` (2.1) | LOWER_LOOP (3006h) | 86h on the lower screen |
+| 88h | 2213h `CP 87h` (disk module) | LOWER_LOOP (3006h) | 86h on the lower screen |
 | anything else | 2218h `RET` | — | back with A unchanged: STATUS_TO_REPORT gives D |
 
 Every handler first reads **one more byte, its own status**
@@ -178,7 +184,7 @@ this call and pop it last, so the flags and A they return are this status's.
 ### `READ_STATUS_AND_OPEN` (01C3h)
 
 `CALL READ_STATUS_BYTE / JP OPEN_MAIN_SCREEN`: function 86h's opening, and
-the first half of what ROM 2.1's LOWER_LOOP reuses (anchored by
+the first half of what the disk module's LOWER_LOOP reuses (anchored by
 `build-rom.py`).
 
 ### `OPEN_MAIN_SCREEN` (04F1h)
@@ -187,7 +193,7 @@ the first half of what ROM 2.1's LOWER_LOOP reuses (anchored by
 main screen, "S") through HOME's CHAN-OPEN (0426h is the CALL_HOME
 preamble for HOME 1230h). AF is kept, so the status survives. Printing
 through RST 10 then goes to the screen whatever stream the statement was
-using — which is why ROM 2.1's channel commands must never get a printed
+using — which is why the disk module's channel commands must never get a printed
 answer ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#ch_replyst)).
 
 ### `PRINT_STRING_FROM_PICO` (045Fh)
@@ -233,7 +239,7 @@ prevent.
 0471h   CALL 03C1h               ; HOME KEY-SCAN: DE = FFFFh when no key
         INC DE / LD A,D / OR E
         JR NZ,0471h              ; wait until every key is released
-0479h   CALL KEYWAIT             ; 2.0: BREAK test, then POLL_KEYPRESS
+0479h   CALL KEYWAIT             ; SYNC layer: BREAK test, then POLL_KEYPRESS
         JR Z,0479h               ; wait for a key
         JP SEND_KEY              ; wait for READY, OUT (0Eh) the key
 ```
@@ -244,9 +250,9 @@ ready-wait, so the Pico has finished sending the page
 ([exrom-driver.md](exrom-driver.md#send_key-1c40h)). Returns A = the key:
 LAST_K as the 2068's keyboard routine leaves it, upper case for letters
 *(per [PROTOCOL.md §5.4](../../PROTOCOL.md#54-the-answer-a-response-function-status--80);
-the firmware compares only upper case)*. In 1.x 0479h was `CALL
-POLL_KEYPRESS` directly and BREAK could not end a prompt; ROM 2.0's
-KEYWAIT adds the test and the abort ([exrom-sync.md](exrom-sync.md#keywait-2346h)).
+the firmware compares only upper case)*. In 1.1 and the base image 0479h
+was `CALL POLL_KEYPRESS` directly and BREAK could not end a prompt; the
+SYNC layer's KEYWAIT adds the test and the abort ([exrom-sync.md](exrom-sync.md#keywait-2346h)).
 
 ### `LOOP_EXIT_OK` (0810h) and `LOOP_EXIT_ERR` (0813h)
 
@@ -326,9 +332,9 @@ The loop's head, the target of the guard's `JP`.
 #### `YN_LOOP_GUARD` (22A1h)
 
 `CALL WAIT_PICO_READY / JR C,22A9h / JP YN_LOOP`; 22A9h: `POP AF / LD
-A,09h / SCF / RET` — a timeout is J. This is v1.5w's whole change (15
-bytes, two hunks, [DIFF_V11_vs_V15W.md](../../rom-analysis/DIFF_V11_vs_V15W.md)):
-in v1.1, 21F4h was `JP NZ,YN_LOOP`, so the Z80 sent the key and then read
+A,09h / SCF / RET` — a timeout is J. The base image added it after 1.1
+(15 bytes, two hunks, [the diff](../../rom-analysis/DIFF_V11_vs_V15W.md)):
+in 1.1, 21F4h was `JP NZ,YN_LOOP`, so the Z80 sent the key and then read
 the next page at once, before the Pico had had time to put it in TX — an
 empty FIFO read as 00h, an empty page, a broken listing. The guard makes it
 wait for READY. With the dual-port firmware this is also what the
@@ -344,11 +350,11 @@ Unused.
 
 ### `FN_DEAD_BEEP` (2216h)
 
-In v1.1–2.0, 2213h was a second `CP 86h / RET NZ` and 2216h `CALL 02B9h`
+In 1.1, and up to the disk module, 2213h was a second `CP 86h / RET NZ` and 2216h `CALL 02B9h`
 then a beep: unreachable, because 21FDh's `JR NZ` had already taken every
 A that was not 86h, so A could never be 86h at 2213h — the "duplicate
 `CP 86h`" of [PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#bug-the-second-cp-86h-is-unreachable).
-ROM 2.1 rewrote 2213h–2218h as `CP 87h / JP Z,3006h / RET`: status 88h now
+The disk module's patch rewrote 2213h–2218h as `CP 87h / JP Z,3006h / RET`: status 88h now
 goes to LOWER_LOOP, function 86h on the lower screen
 ([exrom-fdd.md](exrom-fdd.md)). 2216h is now inside that `JP Z`; the old
 handler's tail, 2219h–221Eh (`PUSH AF / CALL BEEPER / POP AF / RET`), is
@@ -362,7 +368,7 @@ Not an API table, despite its look:
 
 | EXROM | Bytes | What |
 |---|---|---|
-| 2000h | `JP 203Fh` | BEEPER's entry: HOME's BEEPER thunk calls 2000h (in 1.x directly; in 2.1 the module's G_BEEP does) |
+| 2000h | `JP 203Fh` | BEEPER's entry: HOME's BEEPER thunk calls 2000h (in 1.1 directly; now the disk module's G_BEEP does) |
 | 2003h, 2006h | `HALT_STUB_2003`, `HALT_STUB_2006` | `JP` to itself |
 | 2009h | `BREAK_KEY` | address-pinned (below) |
 | 201Eh–2026h | dead | `LD A,20h / OUT (0Fh),A / XOR A / OUT (0Fh),A / POP AF / RET`, after `BREAK_KEY`'s `RET`, reached by nothing |
@@ -384,7 +390,7 @@ Not an API table, despite its look:
 The ten stubs are padding that keeps 2009h where it must be, written to
 hang (a `JP` to itself) rather than run into garbage if anything ever
 jumps there. The dead `OUT (0Fh)` pair would, if it ran, be read by
-firmware 2.0 and later as SYNC/BREAK
+the firmware as SYNC/BREAK
 ([overview.md](overview.md#where-the-rom-touches-ports-0eh-and-0fh)).
 
 ### `BREAK_KEY` (2009h)
@@ -401,13 +407,14 @@ HOME's own 1AB9h reference is to HOME's copy. Not to be confused with the BREAK_
 `JP` in front of this one.
 
 The flag at 5CB7h bit 6: [ERROR_TRAPPING.md](../../rom-analysis/ERROR_TRAPPING.md)
-reads it as "an `ON ERR` trap was taken", the v1.7 review as a break
-inhibit; whichever it is, while it is set BREAK is not seen here or by
-v1.7's prompt test (22F0h).
+reads it as "an `ON ERR` trap was taken", [the review of the SAVE
+prompt's BREAK routine](../../rom-analysis/REVIEW_ROM_V17_SAVE_BREAK.md) as
+a break inhibit; whichever it is, while it is set BREAK is not seen here or
+by that routine's prompt test (22F0h).
 
 ### `BEEPER` (203Fh)
 
-The genuine HOME BEEPER, moved here by v1.1 to make room for the returning
+The genuine HOME BEEPER, moved here in 1.1 to make room for the returning
 thunk in HOME; identical but for its two `IX` operands, rebased to 205Bh
 and 2060h ([home.md](home.md#03f3h0420h-beeper-moved-out)). Entered with HL
 = the pitch and DE = the duration, as on a stock 2068; reads BORDCR to keep
@@ -428,13 +435,13 @@ handler.
   JP 192Fh`. Each is preceded by a stray `RRCA` byte *(likely leftovers of
   removed code; inferred)*.
 
-## The SAVE prompt and BREAK (v1.7, 22AEh–22FDh)
+## The SAVE prompt and BREAK (22AEh–22FDh)
 
 Stock SAVE prints "Start tape, then press any key" and waits; on the
-TS-Pico the "tape" is the Pico, and v1.1–v1.5w noticed a BREAK there only
-after the 17-byte header had gone to the Pico, which then had to time out
-of a half-finished transaction. v1.7 tests for BREAK **before** anything
-is sent. The call site, 0886h:
+TS-Pico the "tape" is the Pico, and 1.1 noticed a BREAK there only after
+the 17-byte header had gone to the Pico, which then had to time out of a
+half-finished transaction. The base image tests for BREAK **before**
+anything is sent. The call site, 0886h:
 
 ```text
 0886h   CALL 22AEh
@@ -458,11 +465,11 @@ No BREAK → `JP C,08BEh`, the stock code's continuation. BREAK → `CALL
 `EX (SP),HL` (drop the data pointer and put the return address back),
 restore the border from BORDCR, `AND A` (carry clear), `EI / RET` →
 0889h's `JR C` not taken → Report D. SPACE alone is the BREAK, as it is
-everywhere else on the tape path; the first v1.7 build required CAPS
-SHIFT as well and broke the stack, which the shipped build fixed
+everywhere else on the tape path; a first build of this routine required
+CAPS SHIFT as well and broke the stack, which the base image's build fixed
 ([REVIEW_ROM_V17_SAVE_BREAK.md](../../rom-analysis/REVIEW_ROM_V17_SAVE_BREAK.md) §10).
-ROM 2.0 adds a SYNC at the start of every transaction, so even a BREAK
-that slips past this leaves the Pico able to recover.
+The SYNC layer adds a SYNC at the start of every transaction, so even a
+BREAK that slips past this leaves the Pico able to recover.
 
 ## The printer path (1630h–183Bh)
 
@@ -553,5 +560,5 @@ Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-p
 - `FN_87_PRINT_N_CHARS`'s name (from the original specification) does not
   describe the code, which clears the screen.
 - `LOOP_EXIT_ERR` is also the normal end of an 86h loop.
-- `FN_DEAD_BEEP` (2216h) names an address that in 2.1 is the middle of an
+- `FN_DEAD_BEEP` (2216h) names an address that is now the middle of an
   instruction.

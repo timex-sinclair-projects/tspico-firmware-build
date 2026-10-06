@@ -5,10 +5,10 @@ lang: en
 date: 2026-10-05 06:00:00 -0400
 ---
 
-The last TS-Pico software most owners installed was version 1.1. Version 2.1 replaces it.
-It updates both halves of the TS-Pico: the **firmware** on the Pico, and the **TS-2068 ROM**
-in its flash chip. The current release is **2.2.1**: firmware 2.2.1 with ROM 2.2. The
-firmware and the ROM are made to work together, so install both. The
+The last TS-Pico software most owners installed was version 1.1. The current release,
+**2.2.1**, replaces it. It updates both halves of the TS-Pico: the **firmware** on the Pico
+(firmware 2.2.1), and the **TS-2068 ROM** in its flash chip (ROM 2.2). The firmware and
+the ROM are made to work together, so install both. The
 [web updater]({{ site.updater_url | relative_url }}) does it from Chrome or Edge in about
 fifteen minutes.
 
@@ -31,7 +31,7 @@ come from that.
   from the tape pointer and wraps round once. If nothing matches, you get **8 End of file**
   instead of an endless wait.
 - **A damaged TAP file gives Report R Tape loading error**, the same report a bad cassette
-  gives. New in 2.1.2.
+  gives.
 - **SAVE checks the name first.** A plain SAVE name can use letters, digits, `-` and `_`.
   Anything else gives **F Invalid file name** before anything is written. Saving an empty
   program gives **A Invalid argument**.
@@ -84,7 +84,7 @@ come from that.
 ## New commands: the disk keywords
 
 The TS-2068 ROM has four keywords that Timex never implemented: **CAT**, **MOVE**, **ERASE**
-and **FORMAT**. Timex meant them for a disk drive. ROM 2.1 makes them work on the SD card,
+and **FORMAT**. Timex meant them for a disk drive. The new ROM makes them work on the SD card,
 with features borrowed from the Zebra FDD's TOS. They take wildcards
 (`*` and `?`), paths, and string expressions such as `CAT a$`.
 
@@ -175,7 +175,7 @@ on archive.org, ready to copy to an SD card.
 **What's on it**
 
 - **Every program has been tested.** Each one was loaded with `LOAD ""` on a TS-Pico
-  running the real 2.1 firmware, in an emulator (see below). Programs that failed were tried
+  running the real firmware, in an emulator (see below). Programs that failed were tried
   again with `LOAD "" CODE` or `RUN`, from the archive's TZX or WAV copies, and on a stock
   2068 for comparison. A tape went on the card only if it loaded and started. Tapes with a
   damaged block were left out.
@@ -227,7 +227,7 @@ plain-language introduction in
 **A TS-Pico in your emulator.** You no longer need the hardware to develop for the TS-Pico.
 **`pico_host`** runs the real TS-Pico firmware, unmodified, on your computer, with a folder
 standing in for the SD card. Two emulators connect to it, and their TS-2068 then has a
-TS-Pico on ports 0Eh and 0Fh, running the 2.1 ROM:
+TS-Pico on ports 0Eh and 0Fh, running the TS-Pico ROM:
 
 - **ZEsarUX**, in the
   [zesarux-tspico](https://github.com/timex-sinclair-projects/zesarux-tspico) fork.

@@ -496,8 +496,8 @@ call. The callers that need it are listed in `MQ_READY`'s docstring
 ([tspico-bus.md](tspico-bus.md)); the design note is
 [DEVELOPER_GUIDE.md](../../DEVELOPER_GUIDE.md) §7.
 
-Because 18 is one PIO instruction and the write to 0Fh (SYNC or BREAK in
-ROM 2.0) goes through the same path, a 0Fh write also reads BUSY until
+Because 18 is one PIO instruction and the write to 0Fh (SYNC or BREAK from
+the ROM) goes through the same path, a 0Fh write also reads BUSY until
 Python answers; that is what the ROM's SYNC waits for
 ([PROTOCOL.md](../../PROTOCOL.md) §4.1).
 
