@@ -4333,7 +4333,13 @@ def FWD(pre, cmd):                                                              
             i = l
         else:
             i = num_blks - 1
-        TSP.tap_idx = i
+        if i == TSP.tap_idx:
+            # On a header with no later one: nothing to move to. This said
+            # "Moved ahead to block # i" without moving (#170).
+            msg = "Can't FWD. No later file."
+            forth = 0
+        else:
+            TSP.tap_idx = i
 
     else:
         # Invalid option
