@@ -37,9 +37,9 @@ I soon realized that I needed a storage method for saving and loading programs a
 
 I used my knowledge of electronics and programming, modifying the use of the original SAVE/LOAD commands, but simultaneously keeping the cassette system, because my entire library was saved on tape.
 
-Today, 40 years after the launch of the TS-2068, I found it useful to adapt my CP/M storage routines to the latest, most advanced TS-Pico interface available today. In addition to the original version, which only supported SAVE/LOAD/VERIFY/MERGE, I have included the COPY/LPRINT/LLIST commands so that they can be handled by the TS-Pico. You are able to save to text files or image files, intended for the TS-2040 printer, on the SD cards.
+40 years after the launch of the TS-2068, I found it useful to adapt my CP/M storage routines to the latest, most advanced TS-Pico interface available today. In addition to the original version, which only supported SAVE/LOAD/VERIFY/MERGE, I have included the COPY/LPRINT/LLIST commands so that they can be handled by the TS-Pico. You are able to save to text files or image files, intended for the TS-2040 printer, on the SD cards.
 
-I am very proud to be part of this group of four people who are part of this new project, and I want to publicly thank the other members of the team, who have helped make it possible for my program written 40 years ago to be part of this storage solution for the TS-2068.
+I am very proud to be part of this group, and I want to publicly thank the other members of the team, who have helped make it possible for my program written 40 years ago to be part of this storage solution for the TS-2068.
 
 ## Jeff Burrell
 
@@ -73,8 +73,4 @@ My first home computer was the Timex Sinclair 1000, which I spent many hours lea
 
 My early experiences with many computers, from home micros to mainframes, led to a career in IT and eventually to developing and managing websites.
 
-Despite owning multiple, different systems, my favorites have always been the Timex Sinclair 1000 and 2068. I have a 2068 on his desk that sees action several times a week.
-
-When Ricardo and Gustavo reached out to me about the TS Pico, I immediately recommended Tim H as a potential team member. Not long after, I suggested inviting Jeff, who was working on a similar project, to coordinate efforts and ensure the two projects would work together. Jeff was quickly pulled into the TS Pico project as well.
-
-In this project, I have facilitated weekly team meetings and helped keep the scope focused on the goal of launching near the 40th anniversary of the TS 2068. I’m working on the user guide and will eventually make the TS Pico available through my site, [andertone.com](https://www.andertone.com).
+Despite owning multiple, different systems, my favorites have always been the Timex Sinclair 1000 and 2068. I have a 2068 on my desk that sees regular action.
