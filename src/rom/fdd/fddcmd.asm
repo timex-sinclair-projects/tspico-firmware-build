@@ -67,7 +67,7 @@ BANK_SV         EQU $5DCF          ; pre-header byte 2
 MODE_SV         EQU $5DDB          ; SESSION_SETUP clears bits 7-4 for a plain name
 MODE_SET_OK     EQU $2105          ; EXROM: CALL S_MODE ($1862) with A, then "0 OK" --
                                    ;   where tpi:sdcard and tpi:picopt end
-READ_STATUS     EQU $02B9          ; EXROM: the response's status byte -> AF ($01C3's first half)
+READ_STATUS_BYTE EQU $02B9          ; EXROM: the response's status byte -> AF ($01C3's first half)
 OPEN_STREAM     EQU $0426          ; EXROM: open stream A ($04F1 opens $FE, the main screen)
 LOOP_BODY       EQU $21E6          ; EXROM: function $86's loop after $01C3 (PUSH AF; print/key...)
 STREAM_LOWER    EQU $FD            ; stream -3: K, the lower screen
@@ -287,7 +287,7 @@ FDD_MAIN:
         jp      z,FDD_ONE_ARG
         ret                        ; unknown token — no-op
 
-        db      "FDDCMD",0         ; signature — build.py verifies this
+        db      "FDDCMD",0         ; signature (nothing checks it; build-rom.py checks FDD_DISPATCH is at $3000)
 FDD_VERSION:
         db      8
 
@@ -805,14 +805,14 @@ FOPEN_LEN    EQU $-FOPEN_TXT
 ; function dispatcher's last, otherwise dead, check at $2213 (patched to
 ; CP 87h / JP Z,$3006 / RET) with A = function - 1.
 ;
-; Exactly $86's handler with a different stream: $01C3 is READ_STATUS then
+; Exactly $86's handler with a different stream: $01C3 is READ_STATUS_BYTE then
 ; "open stream $FE"; this opens $FD instead and joins $86's loop, which prints
 ; through the current channel and leaves via its own POP AF / RET.
 ; The Pico only sends $88 to a ROM it knows has it (tpi:fopen comes only from
 ; this module).
 ;------------------------------------------------------------------------------
 LOWER_LOOP:
-        call    READ_STATUS
+        call    READ_STATUS_BYTE
         push    af
         ld      a,STREAM_LOWER
         call    OPEN_STREAM

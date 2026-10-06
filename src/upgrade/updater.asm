@@ -2,7 +2,7 @@
 ; TS-Pico ROM updater -- rewrites flash slots 1 (TS-2068 ROM) and 0 (ZX ROM)
 ; =============================================================================
 ;
-; Build:  tools/build-upgrade.sh    (sjasmplus; also makes the .tap and the
+; Build:  tools/build-upgrade.py    (sjasmplus; also makes the .tap and the
 ;                                    upgrade UF2's data module)
 ; Runs on the ORIGINAL slot-0 Spectrum ROM, which every shipped flash image
 ; has: the user upgrades the Pico to the upgrade UF2, types OUT 244,3 on the
@@ -55,7 +55,7 @@ ATTRS           equ 5800h
 CODE_AT         equ 6000h
 FONT            equ 7000h       ; 96 x 8 bytes
 BUF             equ 7400h       ; one 256-byte block (+1: its XOR)
-VARS            equ 7600h
+; (VARS equ 7600h used to be here, unused: the variables live in the code block)
 STACK           equ 7FF0h
 
 HSR_SLOT1       equ 0F6h
@@ -211,7 +211,7 @@ phase:
         ld a,(img)
         ld c,a
         ld a,'V'
-        jp status                       ; and return, carry set
+        jp status                       ; and return (status's carry: nobody reads it)
 
 .progerr:
         pop hl

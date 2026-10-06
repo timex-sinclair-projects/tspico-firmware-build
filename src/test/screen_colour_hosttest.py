@@ -232,7 +232,7 @@ def test_listmenu(t):
     t.CMD_DRAIN = lambda: None
     t.CMD_KEY = lambda: 78                                       # N: quit at the first prompt
     t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
-    t.ListMenu(["GAMES", "UTILS"], "Path:/", "  Directory Name", "  " + "-" * 30,
+    t.ListMenu(["GAMES", "UTILS"], "Path:/", "  Directory Name",
                "Change to dir", "Changing dir to: ", True)
     text = "".join(chr(b) for b in out[2:])                      # past 86h and the status
     lines = screen(text.split("\x00")[0])

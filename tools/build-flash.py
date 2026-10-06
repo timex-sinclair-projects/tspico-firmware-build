@@ -3,7 +3,7 @@
 
 The flash is 16 slots of 32K, zero-filled where unused. Slot 1 is the TS-PICO's
 own 2068 ROM (HOME 16K + EXROM 16K) -- the only slot that changes when we cut a
-new ROM. See docs/rom-analysis/FLASH_LAYOUT.md.
+new ROM. The slots are listed in flash/manifest.json (docs/reference/firmware/boot.md).
 
     # take an existing production image apart (once, to seed the components)
     ./tools/build-flash.py extract Pico-v15w.rom --out flash/
@@ -14,7 +14,7 @@ new ROM. See docs/rom-analysis/FLASH_LAYOUT.md.
                            --out Pico-v18.rom
 
     # rebuild with a new 2068 ROM in slot 1
-    ./tools/build-flash.py build flash/manifest.json --slot 1=src/rom/TSPICO.ROM \
+    ./tools/build-flash.py build flash/manifest.json --slot 1=src/rom/TSPICO-21.ROM \
                            --out Pico-v18.rom
 
     # check a built image against the manifest's checksums
@@ -166,7 +166,7 @@ def cmd_build(args):
 def cmd_check(args):
     """Validate the manifest against the slot files in the repo.
 
-    CI runs this on every push: if src/rom/TSPICO.ROM or the ZX ROM
+    CI runs this on every push: if src/rom/TSPICO-21.ROM or the ZX ROM
     changes without the manifest's crc32 being updated, the build fails
     rather than silently shipping an image nobody checked.
     """

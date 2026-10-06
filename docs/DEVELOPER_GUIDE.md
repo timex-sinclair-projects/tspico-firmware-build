@@ -551,13 +551,11 @@ the success path must be the pre-load byte + `MQ_READY()`.
 
 ## 8. The TLM telemetry switch
 
-`dev_tspico.py` has a tracing system that records timing-relevant
-events into a ring buffer. It's off by default (zero overhead) and
-toggled at the top of the file:
-
-```python
-TLM_ENABLED = False    # default
-```
+The firmware (`TS/tspico.py`, and `dev_tspico.py` when it is loaded) has a
+tracing system that prints timing-relevant events over USB serial. It's off
+by default (zero overhead). Switch it on with `"TELEMETRY": true` in the
+Pico's `/config.ini`; `main.py` reads it at boot and sets `TLM_ENABLED`
+for both copies. Releases ship it `false`.
 
 When enabled, lines like
 
@@ -582,9 +580,9 @@ import dev_tspico
 dev_tspico.TLM_ENABLED = True
 ```
 
-Or set it permanently by editing `dev_tspico.py` and rebuilding the
-`.mpy`. Leave it off in checked-in code — the prints are surprisingly
-expensive in tight inner loops.
+(or `TS.tspico.TLM_ENABLED`, for the frozen module). Leave `TELEMETRY` off
+on boards you aren't debugging: the prints are surprisingly expensive in
+tight inner loops.
 
 ---
 

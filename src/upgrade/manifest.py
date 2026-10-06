@@ -4,7 +4,7 @@
 # programs and streaming from tspico_io, the upgrade loop, the generated
 # payload (the updater tape and both ROM images, from tools/build-upgrade.py)
 # and main.py -- a frozen main.py runs at boot even with an empty filesystem,
-# which is what the web updater leaves after flash_nuke. CI stages these files
+# which is what the web updater leaves after erasing the flash (over WebUSB, through PICOBOOT). CI stages these files
 # in ports/rp2/modules-upgrade/ (see .github/workflows/build.yml).
 freeze("$(PORT_DIR)/modules", "_boot.py")
 freeze("$(PORT_DIR)/modules", "rp2.py")

@@ -62,7 +62,7 @@ except ValueError as e:
     print("[DEV] /dev_tspico ignored (%s); using frozen TS.tspico" % e)
 
 U6_EN = Pin(12, Pin.OUT, Pin.PULL_UP)
-WAIT = Pin(14, Pin.OUT, Pin.PULL_DOWN)
+WAIT = Pin(14, Pin.OUT, Pin.PULL_DOWN)     # TS_IO_DUAL waits on GPIO 14 as /PICOSEL (the name is unverified: hardware.md)
 U10_ENA = Pin(19, Pin.OUT, Pin.PULL_UP)
 U13_ENA = Pin(20, Pin.OUT, Pin.PULL_UP)
 BE = Pin(21, Pin.OUT, Pin.PULL_UP)

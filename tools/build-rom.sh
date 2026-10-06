@@ -5,8 +5,8 @@
 #   src/rom/patches/tspico-zx48-v3.asm   ZX v2 + tpi: LOAD -> src/rom/TSPICO-ZX48-V3.BIN
 #                            -DZXV=4: + SAVE "tpi:dir" -> src/rom/TSPICO-ZX48-V4.BIN
 #
-# Needs sjasmplus (https://github.com/z00m128/sjasmplus). The shipping ROM,
-# src/rom/TSPICO.ROM (slot 1 in flash/manifest.json), is never modified.
+# Needs sjasmplus (https://github.com/z00m128/sjasmplus). The v1.7 base,
+# src/rom/TSPICO.ROM (slot 1 is TSPICO-21.ROM, from build-rom.py), is never modified.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root/src/rom"

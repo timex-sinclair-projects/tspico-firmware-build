@@ -235,8 +235,7 @@ Two words configure the mapping, both fields of `TSP`
   ROM-area access, bits 2–3 on a dock access.
 - **`bank_sm`**, put to `BANK`: `DCK_SLOT * 16 + ROM_SLOT`, four bits
   each; default 1 (dock 0, ROM 1). Bits 0–3 go to A15–A18 on a ROM-area
-  access, bits 4–7 on a dock access. (The comment on `bank_sm` says the
-  default is "0001 0000"; the code computes 1.)
+  access, bits 4–7 on a dock access.
 
 They are put three times: in `TS2068_IO` at boot, right after the two
 state machines are built; in `MEMBOOT` (`tpi:boot`), after writing the
@@ -367,8 +366,8 @@ D0–D7 through U6 and GPIO 2–4 are the SD card's SCK/MOSI/MISO; GPIO 10 is
 A0; GPIO 11 is R/W, high for a Z80 OUT; GPIO 12 is `U6_EN`, active low;
 GPIO 14 is `/PICOSEL` to the PIO and `WAIT` to `main.py`; GPIO 15–18 are
 "A15..A18"; GPIO 19 is `U10_ENA`, 20 `U13_ENA`, 21 `BE`, 26 `ROSCS`, 27
-`U10_WE`, 28 `U3_CS`; the `set_ctrl` header names "/BE, A14_L, /U10_CE
-/U10_OE"; U3 is on the 3V3 rail with a 4K7 pull-up on nCS; the flash is
+`U10_WE`, 28 `U3_CS`; the `set_ctrl` header names "/BE, A14_L" and
+`U10_ENA`, `U13_ENA` (before #181, "/U10_CE /U10_OE"); U3 is on the 3V3 rail with a 4K7 pull-up on nCS; the flash is
 512K in 16 slots of 32K and a DCK takes two; the clocks are 270, 30, 150,
 15 MHz and 5 MHz; D6 is GPIO 8; there is no /WAIT line; port 0Ah is not
 decoded.

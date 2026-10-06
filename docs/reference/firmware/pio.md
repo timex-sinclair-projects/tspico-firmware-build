@@ -119,9 +119,8 @@ ROM_SLOT` (`PICO_STATUS.__init__`, [tspico-state.md](tspico-state.md)):
 | 8–31 | ignored: never shifted out before the next pull | — |
 
 Bit 0 of the driven nibble lands on GPIO 15 (A15), bit 3 on GPIO 18 (A18).
-The default word is therefore 1 (dock 0, ROM 1). The comment on `bank_sm`
-in `PICO_STATUS` says "Default 0001 0000"; that is 16, and the code
-computes 1. The code wins.
+The default word is therefore 1 (dock 0, ROM 1), as the comment on
+`bank_sm` in `PICO_STATUS` says (until #181 it said "0001 0000", 16).
 
 ### The instructions
 
@@ -185,13 +184,12 @@ decides whether the Pico answers at all and what A14_L should be. Runs on
 `ROM` (state machine 4, PIO1) at 150 MHz with `in_base=Pin(0)`,
 `jmp_pin=Pin(26)`, `set_base=Pin(21)`, `out_base=Pin(19)`.
 
-The header comment calls the four lines "/BE, A14_L, /U10_CE /U10_OE".
-[`src/main.py`](../../../src/main.py) names GPIO 19 `U10_ENA` and GPIO 20
-`U13_ENA`, one enable per chip, and the bit patterns below only make sense
-that way (a MEM value of 2 drives GPIO 19 low and GPIO 20 high; the two
-pins are never both low for a valid word). This chapter follows the pin
-names and the bit patterns; the "/U10_CE /U10_OE" wording is taken as
-stale.
+The header comment names the four lines: /BE and A14_L on the set pins,
+`U10_ENA` and `U13_ENA` (flash, SRAM) on the out pins, as
+[`src/main.py`](../../../src/main.py) names GPIO 19 and 20: one enable per
+chip, which is the only way the bit patterns below make sense (a MEM value
+of 2 drives GPIO 19 low and GPIO 20 high; the two pins are never both low
+for a valid word). Until #181 the header called them "/U10_CE /U10_OE".
 
 ### Configuration
 
@@ -440,11 +438,10 @@ every ~30 µs inside a block, one `IN` every ~44–50 µs
 ([PROTOCOL.md](../../PROTOCOL.md) §3.3), so the state machine is idle for
 all but a few hundred nanoseconds of each.
 
-The docstring also says "RP2040 PIO can run up to half the system clock
-(135MHz at 270MHz CPU)". The code itself asks for 150 MHz for `ROM` and
-`BANK`, and the datasheet's clock divider goes down to 1, the full system
-clock; the "half" is not a hardware limit. Treat the sentence as a
-rationale for 30 MHz being safe, not as a bound.
+The docstring calls 30 MHz conservative: a PIO state machine can run at
+the full system clock (the datasheet's clock divider goes down to 1), and
+the code asks for 150 MHz for `ROM` and `BANK`. (Until #181 it said "up to
+half the system clock".)
 
 ### The register contracts
 
@@ -536,7 +533,7 @@ v1.29 (`~null` does not; `MQ_READY`'s comment). The bit meanings are
 Two other `MQX` strings touch the FIFOs rather than Y: `MQ_TO_IDLE`,
 `ZX_FLUSH_TX`, `CMD_FLUSH`, `FAIL_CMD` and `ZX48_IO` drain TX with
 `pull (noblock)` followed by `mov (osr, null)`, one word per pair, bounded
-at 64 except in `ZX48_IO`, whose two inline drains (tspico.py 7276, 7320)
+at 64 except in `ZX48_IO`, whose two inline drains (tspico.py 7266, 7310)
 loop until TX is empty ([tspico_io.md](tspico_io.md), [tspico-bus.md](tspico-bus.md),
 [tspico-dispatch.md](tspico-dispatch.md)). The `pull` moves a word out of
 the FIFO into the OSR; the `mov` only tidies the OSR.

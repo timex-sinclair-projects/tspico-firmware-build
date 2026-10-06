@@ -253,7 +253,7 @@ ANCHORS = [
          bank="exrom", addr=0x227F, bytes="0e 0e cd 98 22 38 0e a7"),
     dict(name="Pico Interface BIOS table (TX_A, RX_A, C_END, WF_NPH)",
          bank="exrom", addr=0x1846, bytes="18 25 18 20 18 03 c3 9e 23 c3 cd 23"),
-    dict(name="$86's pieces LOWER_LOOP reuses: READ_STATUS, OPEN_STREAM via $04F1, the loop",
+    dict(name="$86's pieces LOWER_LOOP reuses: READ_STATUS_BYTE, OPEN_STREAM via $04F1, the loop",
          bank="exrom", addr=0x01C3, bytes="cd b9 02 c3 f1 04"),
     dict(name="$04F1: open stream $FE through $0426",
          bank="exrom", addr=0x04F1, bytes="f5 3e fe cd 26 04 f1 c9"),

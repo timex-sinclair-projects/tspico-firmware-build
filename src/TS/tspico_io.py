@@ -157,8 +157,8 @@ def MQ_STATUS(MQ, st):
 
 
 def RX_CAPTURE(MQ, raw, n, stall_ms, ready=None):
-    """Take a burst of n words from the Z80 into raw, an array('H') (the
-    words are 9-bit). Returns:
+    """Take a burst of n words from the Z80 into raw, an array of ints (the
+    dispatcher passes array('I'); the words are 9-bit). Returns:
 
         n          the whole burst arrived
         k, 0<=k<n  k words, then stall_ms of silence
@@ -608,7 +608,7 @@ def RX_BLOCK(MQ, buf, n, first_ms, stall_ms, ready=None):
 
     The Z80's SAVE loop OUTs a byte every ~43 us with no handshake and the RX
     FIFO holds 4, so the per-byte path is only: test the FIFO, get, store.
-    The port-0Fh test, the watchdog flag and the clock run only when the FIFO
+    The port-0Fh test and the clock run only when the FIFO
     is empty -- exactly when the Z80 has paused or stopped. A 0Fh write
     (0x100 | value) is always the last thing it sends before it stops, so it
     is the newest word then; `w` keeps it (buf only holds the low 8 bits).
@@ -697,7 +697,7 @@ def sel_bank():
     wrap()
     
 
-@asm_pio(                                       # Control lines: /BE, A14_L, /U10_CE /U10_OE
+@asm_pio(                                       # Control lines: set /BE, A14_L; out U10_ENA, U13_ENA (flash, SRAM)
     set_init=(PIO.OUT_HIGH, ) * 2,
     in_shiftdir=PIO.SHIFT_LEFT,
     out_init=(PIO.OUT_HIGH, ) * 2,
@@ -736,7 +736,7 @@ def set_ctrl():
     wrap()
 
 
-@asm_pio(                                       # Control lines /U10_CE /U10_OE only; for DCK access with not ROM mapping
+@asm_pio(                                       # Control lines U10_ENA, U13_ENA only; for DCK access with not ROM mapping
     out_init=(PIO.OUT_HIGH, ) * 2,
     out_shiftdir=PIO.SHIFT_RIGHT,
     autopull=True,
@@ -819,8 +819,8 @@ def TS_IO_DUAL():
 
     Run at freq=30_000_000. The dual-port decode adds ~7 cycles to the
     read path vs. single-port; 30MHz keeps the total under the Z80's
-    data setup window with margin. RP2040 PIO can run up to half the
-    system clock (135MHz at 270MHz CPU), so 30MHz is conservative.
+    data setup window with margin. A PIO state machine can run at the
+    full system clock (ROM/BANK run at 150MHz on 270MHz), so 30MHz is conservative.
 
     Total: 19 instructions of 32 available.
 
@@ -950,7 +950,7 @@ def REWIND_ABORTED_SEARCH(TSP):
     Z80 never tells us about it -- its abort path writes nothing, and the
     whole EXROM holds exactly one `OUT ($0E),A`
     (docs/rom-analysis/BREAK_AND_ABORT.md). All we ever see is the transfer
-    going quiet, and 3 seconds later the watchdog firing.
+    going quiet, and then the stream's stall limit (TX_ROOM's code 3).
 
     By then the search has walked an arbitrary distance through the tape,
     so without this the next LOAD starts from wherever the abandoned search
@@ -1046,9 +1046,9 @@ def ENA_SD(log_level=0):
     # What this guard is for: carry on when the mount fails, and let the
     # caller's own write fail if there really is no card. Both callers wrap
     # ENA_SD() and the open()/write() after it in `try ... except Exception`,
-    # log "SAVE write FAILED ..." and keep the dispatcher alive (SAVE_TS can't
-    # report it to the 2068 any more: its final status went out before the
-    # pin grab, see the RACE FIX comment there). Not raising also covers a
+    # log "SAVE write FAILED ..." and keep the dispatcher alive; SAVE_TS then
+    # reports the failure to the 2068 (Report J): its final status goes out
+    # after the write (TSP.save_final). Not raising also covers a
     # /sd that is somehow still mounted: os.mount() then fails with EPERM,
     # but the write still works on the existing mount, as it always has.
     #
@@ -1136,7 +1136,6 @@ def LOAD_REFUSE(pre, MQ, st):
     (LOAD_RETRY_DONE). Either way no stray byte is left behind
     (src/CLAUDE.md, the orphan-byte family)."""
     global _ld_err, _ld_err_t, _ld_err_staged
-    echo = bytearray(3)
     MQ.put(st)                                 # the flag: never 00h or FFh
     MQ.put(st if pre[0] == 0x00 else 0x01)     # the next request's first status
     MQX(MQ, "mov(y, invert(null))")            # READY: the flag is waiting
@@ -1213,8 +1212,8 @@ def LOAD_TS(pre, MQ, TSP):
           3. Echo phase
              - Z80 OUTs block_type ack (echo of what it expected to load)
              - Z80 OUTs its computed CRC (verification)
-             - We drain both with MQ.get(); could verify but currently
-               trust them.
+             - They arrive as RX words the stream keeps (ECHO_KEEP, RX_WORD);
+               nothing checks them.
           4. Final status + next-iteration pre-load
              - Two MQ.put(0x01) writes:
                * first 0x01 = this iteration's final status byte (Z80
@@ -1225,8 +1224,8 @@ def LOAD_TS(pre, MQ, TSP):
 
     TIMING NOTE: this routine writes to TX much faster than the Z80 can
     read ($0E reads cap at ~47µs/byte due to Z80 ROM loop overhead). The
-    per-byte streaming loop relies on MQ.put() blocking when the FIFO is
-    full to pace the data flow — no software synchronization needed.
+    per-byte streaming loop puts only when TX has room (TX_ROOM, bounded;
+    a port-0Fh write or a stall ends it) -- no blocking MQ.put().
 
     The Z80 ROM has a long timeout on $0F polling (~20s per Gustavo's
     modification), so even slow file I/O is safe. The 88ms gap commonly
@@ -1561,13 +1560,13 @@ def LOAD_TS(pre, MQ, TSP):
     # phase 2. Per byte on the fast path: read, one FIFO test, one put --
     # no more work than the old read + put + kill test.
     #
-    # Older ROMs never write 0Fh; for them only the watchdog (2) can end
-    # the loop early, exactly as before.
+    # Older ROMs never write 0Fh; for them only a stall (3: the Z80 stopped
+    # reading) ends the loop early.
     # ────────────────────────────────────────────────────────────────────
     put = MQ.put
     txf = MQ.tx_fifo
     echo = bytearray(3) # [count, block type, CRC] -- see ECHO_KEEP; no allocation mid-stream
-    why = 0             # 0 ok, 1 port-0Fh write, 2 watchdog, 3 stall (TX_ROOM's codes)
+    why = 0             # 0 ok, 1 port-0Fh write, 3 stall (TX_ROOM's codes; 2, the watchdog, is gone)
     sent = 1            # bytes queued for the Z80, flag included
     dry = 0             # times TX was found empty mid-stream (a near-miss:
     dry_at = -1         # the Z80 may have read 0x00) and the first byte
@@ -1695,8 +1694,6 @@ def LOAD_TS(pre, MQ, TSP):
         return MQ, TSP, log_entries
 
     _close_if_local()
-    blq_t = echo[1]                                   # block_type ack
-    crc   = echo[2]                                   # Z80's computed CRC
 
     # ============================================================
     # Phase 3: final status + pre-load for the NEXT command
@@ -2263,11 +2260,11 @@ def REFUSE_SAVE(MQ, status, quiet_ms=500):
     on garbage, and the trailing 0x01 is read as the final status, so the
     2068 prints "0 OK" for a transfer that never produced a file.
 
-    Statuses in use (see docs/GUSTAVO_PROTOCOL.md section 8):
-        0x02 -> Report R, tape loading error  (bad header CRC, no data)
-        0x03 -> Report F, invalid file name   (name not in the allowlist)
-        0x06 -> Report 6, number too big      (data block won't fit in RAM)
-        0x08 -> Report A, invalid argument    (empty program, BLEN=0)
+    Statuses in use (status -> report, when; GUSTAVO_PROTOCOL.md 8 had four):
+        0x02 R  bad header CRC, no data      0x03 F  name not allowed
+        0x06 6  data block won't fit in RAM   0x08 A  empty program, BLEN=0
+        0x0A J  no SD card (save_no_card)     0x0B D  an f: file, the user said N
+        (PROTOCOL.md lists the reports for every status.)
 
     Caller is responsible for returning.
     """
@@ -2598,14 +2595,14 @@ def SAVE_TS(MQ, TSP, pre=None):
     why, got = RX_BLOCK(MQ, blk, long, 3000, 1000, "mid")
 
     if why == RXB_STALL and got == 0:
-        TLM("SAVE_TS EXIT no data after 1s")
+        TLM("SAVE_TS EXIT no data after 3s")
         # Refuse rather than write 0x01 0x01. If the Z80 aborted
         # (BREAK on a ROM without the 0Fh abort) it isn't reading and the
         # byte is harmless -- the dispatcher's ACTIVATE_MQ discards it. If
         # it was merely slow, claiming OK meant it went on to stream a data
         # block into a returned handler, jamming RX for the next command.
         _fl = REFUSE_SAVE(MQ, 0x02)  # -> Report R "Tape loading error"
-        LOG_ADD("ERROR: SAVE_TS aborted (no data after 1s), drained %d"
+        LOG_ADD("ERROR: SAVE_TS aborted (no data after 3s), drained %d"
                 % _fl, 2, TSP.LOG_LEVEL)
         return MQ, TSP, log_entries, False
 
