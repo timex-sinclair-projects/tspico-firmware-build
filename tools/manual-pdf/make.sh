@@ -11,6 +11,8 @@
 #                                         and stapling on the fold
 #
 # Usage: tools/manual-pdf/make.sh [OUTDIR]     (default build/manual-pdf)
+#        Only the two PDFs go into OUTDIR. pages.yml builds them into
+#        site/manual for the website; release.yml attaches them.
 #
 # Needs pandoc (2.19 or later), Google Chrome or Chromium (set CHROME to its
 # path if it isn't found), and Python 3 with pypdf. The version on the cover
@@ -23,6 +25,10 @@ REPO="$(cd "$HERE/../.." && pwd)"
 OUT="${1:-$REPO/build/manual-pdf}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
+# Everything but the two PDFs is made in a scratch folder, so OUTDIR can be
+# a folder of the website (pages.yml uses site/manual) without stray files.
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
 
 if [ -z "$CHROME" ]; then
   for c in "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
@@ -39,25 +45,25 @@ print('FW=%s ROM=%s' % (c['FW_VERSION'], c['ROM_VERSION']))")"
 DATE="$(cd "$REPO" && git log -1 --format=%cd --date=format:'%B %Y' 2>/dev/null || date +'%B %Y')"
 fill() {
   sed -e "s|{{FW}}|$FW|g" -e "s|{{ROM}}|$ROM|g" -e "s|{{DATE}}|$DATE|g" \
-      -e "s|{{IMG}}|file://$REPO/site/assets/img|g" "$HERE/$1" > "$OUT/$1"
+      -e "s|{{IMG}}|file://$REPO/site/assets/img|g" "$HERE/$1" > "$WORK/$1"
 }
 fill print.css; fill cover.css; fill front.html; fill back.html
 
 pdf() {
   "$CHROME" --headless=new --disable-gpu --no-sandbox --no-pdf-header-footer \
-            --print-to-pdf="$OUT/$2" "file://$OUT/$1" >/dev/null 2>&1
-  [ -s "$OUT/$2" ] || { echo "Chrome produced no $2" >&2; exit 1; }
+            --print-to-pdf="$WORK/$2" "file://$WORK/$1" >/dev/null 2>&1
+  [ -s "$WORK/$2" ] || { echo "Chrome produced no $2" >&2; exit 1; }
 }
 
 if pandoc --help | grep -q -- --embed-resources; then EMBED=--embed-resources; else EMBED=--self-contained; fi
 pandoc "$REPO/docs/manual/user-manual.md" -f gfm -t html5 --standalone $EMBED \
        --resource-path="$REPO/docs/manual" --metadata pagetitle="TS-Pico User Manual" \
-       --css "$OUT/print.css" -o "$OUT/user-manual.html"
+       --css "$WORK/print.css" -o "$WORK/user-manual.html"
 pdf user-manual.html body.pdf
 pdf front.html front.pdf
 pdf back.html back.pdf
 
-cd "$OUT"
+cd "$WORK"
 python3 - <<'PY'
 import pypdf
 W, H = 5.5 * 72, 8.5 * 72
@@ -96,6 +102,6 @@ assert n % 4 == 0
 print("manual %d pages; one-up %d pages; booklet %d pages (%d blank padding), %d letter sheets"
       % (len(body), len(body) + 1, n, pad, n // 4))
 PY
-rm -f body.pdf front.pdf back.pdf
+cp user-manual-half-letter.pdf user-manual-saddle-stitch-letter.pdf "$OUT/"
 echo "$OUT/user-manual-half-letter.pdf"
 echo "$OUT/user-manual-saddle-stitch-letter.pdf"

@@ -407,8 +407,9 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
 by a workflow's token), on a green build of `main`, and on pushes to
 `main` that touch `site/`, `web-updater/`, `SD card/`, the manuals or the
 reference. It copies the two manuals and this reference into the site
-(`tools/build-site-docs.py`, links rewritten for the site), builds the
-Jekyll site and mounts the web updater at `/updater/`, with the latest
+(`tools/build-site-docs.py`, links rewritten for the site), builds the user
+manual's two PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
+from the Docs page), builds the Jekyll site and mounts the web updater at `/updater/`, with the latest
 release's payload under `/updater/release/` and the latest green `main`
 build under `/updater/main/` — served from the site itself because
 GitHub's release CDN sends no CORS header, so a browser cannot fetch

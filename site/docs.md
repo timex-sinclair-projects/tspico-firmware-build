@@ -15,6 +15,10 @@ loading and saving from the SD card, the disk commands (CAT, MOVE, ERASE, FORMAT
 and `OPEN #` channels, every `tpi:` command, the printer, Spectrum mode, and updating with the
 [web updater]({{ site.updater_url | relative_url }}).
 
+As a PDF: [for reading]({{ '/manual/user-manual-half-letter.pdf' | relative_url }}) (5.5 × 8.5 in),
+or [as a booklet to print]({{ '/manual/user-manual-saddle-stitch-letter.pdf' | relative_url }})
+(letter paper, printed double-sided and flipped on the short edge, then folded and stapled).
+
 ## For programmers
 
 **[Programmer's Manual]({{ '/manual/programmers-manual.html' | relative_url }})** — machine

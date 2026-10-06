@@ -41,6 +41,7 @@ on:
       - 'docs/manual/*.md'
       - 'docs/manual/images/**'
       - 'tools/build-site-docs.py'
+      - 'tools/manual-pdf/**'
       - '.github/workflows/pages.yml'
   release:
     types: [published]
@@ -100,6 +101,17 @@ jobs:
       # Generated here, never committed. It fails on a broken link.
       - name: Put the manuals and the programmer's reference into the site
         run: python3 tools/build-site-docs.py
+
+      # The user manual as PDFs (tools/manual-pdf/make.sh), next to its page
+      # in site/manual/ (generated, like the page), so the Docs page can link
+      # to them: built from main, as the rest of the site is. Releases attach
+      # the same two files built at their tag (release.yml).
+      - name: Install pandoc, the PDF fonts and pypdf
+        timeout-minutes: 10
+        run: tools/manual-pdf/ci-setup.sh
+
+      - name: Build the user manual PDFs into the site
+        run: tools/manual-pdf/make.sh site/manual
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
