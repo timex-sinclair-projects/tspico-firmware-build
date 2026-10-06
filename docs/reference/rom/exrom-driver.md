@@ -556,7 +556,7 @@ changed "v2.0" to "v2.1" at 1C7Eh.
 
 ## Where comments, documents and the code disagree
 
-Logged in [REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md).
+Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
 - [SYMBOLS.md](../../rom-analysis/SYMBOLS.md) lists an EWAIT entry at
   184Eh (`JP 2279h`); 184Eh is the last byte of 184Ch's `JP`.
@@ -564,4 +564,4 @@ Logged in [REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md).
   is 1.x. ROM 2.0 made it `JP BRK_ABORT`.
 - SYMBOLS.md says G_VERS returns 0015h (v1.1).
 - The labelled listing names EXROM 1BEFh `H_EXPT_STR`, a HOME routine's
-  name from `fddcmd.asm` (follow-up R2).
+  name from `fddcmd.asm` ([#183](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/183), R2).

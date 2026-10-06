@@ -248,7 +248,7 @@ block, and [zx48.md](zx48.md) explains each use.
 
 ## Where comments and the code disagree
 
-Logged in [REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md).
+Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
 - [PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#ts-pico-system-variables)
   lists 5D37h as "unclassified"; it is the NMI vector. It describes 5DDBh

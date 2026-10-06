@@ -540,7 +540,7 @@ blocks ([../firmware/printer.md](../firmware/printer.md),
 
 ## Where comments, documents and the code disagree
 
-Logged in [REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md).
+Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
 - [rom/home.md](home.md) said, until this chapter was written, that HOME's
   COPY-BUFF hook flushes a line to the Pico; 17CDh is the stock ZX Printer

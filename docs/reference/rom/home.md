@@ -460,7 +460,7 @@ trapped by `ON ERR` like any other ([ERROR_TRAPPING.md](../../rom-analysis/ERROR
 
 ## Where comments, documents and the code disagree
 
-Logged in [REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md).
+Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
 - [DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md) says
   the 0065h byte (15h) is "the TPI BIOS version, medium confidence, nothing

@@ -446,7 +446,7 @@ here say so. [ROM_CHANGES.md](../../ROM_CHANGES.md) is the account of 2.0,
 
 ## Where comments and the code disagree
 
-Logged in [REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md).
+Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
 - `tools/build-rom.sh` calls `src/rom/TSPICO.ROM` "the shipping ROM (slot
   1)"; slot 1 is `TSPICO-21.ROM`, and `TSPICO.ROM` is the v1.7 base.

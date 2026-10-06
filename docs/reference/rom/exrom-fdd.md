@@ -49,8 +49,7 @@ Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS,
 SYNC_WRITE, BIOS_WF_NPH, BIOS_C_END, C_END_TAIL, BEEPER, CH_STATUS — are
 entered in the chapters that own them; the reference index matches by
-name, so it points there ([../../../REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md),
-R3). Two of them mean something different here: the module's READ_STATUS
+name, so it points there ([#183](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/183), R3). Two of them mean something different here: the module's READ_STATUS
 is **02B9h** (the curated `READ_STATUS_BYTE`), and its BEEPER is 2000h
 (the `JP` to BEEPER).
 
@@ -852,12 +851,12 @@ region is all `FFh`.
 
 ## Where comments, documents and the code disagree
 
-Logged in [REFERENCE-FOLLOWUPS.md](../../../REFERENCE-FOLLOWUPS.md).
+Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
 - The signature comment says "build.py verifies this"; `build-rom.py` does
   not check the `"FDDCMD"` bytes.
 - [src/rom/fdd/README.md](../../../src/rom/fdd/README.md) says the 25D6h
-  hook is "staged" (C33).
+  hook is "staged" ([#181](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/181), C33).
 - `SEND_FOPEN` and `CH_SEND` read the pre-load status and do not check it.
 - The module's READ_STATUS `EQU` (02B9h) shares its name with the curated
-  READ_STATUS (0655h) (C38).
+  READ_STATUS (0655h) ([#181](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/181), C38).
