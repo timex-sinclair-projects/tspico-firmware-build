@@ -128,7 +128,9 @@ which fails when:
 - a source below has changed since the reference was checked against it.
   The table records a hash of each file; after re-reading the chapter, and
   the flows and appendices the row lists, and fixing what the change
-  affects, refresh the row with `python3 src/test/reference_hosttest.py
+  affects (including the line numbers the chapters cite:
+  `python3 src/test/reference_hosttest.py --relines <source>` lists those
+  the change moved, before you re-stamp), refresh the row with `python3 src/test/reference_hosttest.py
   --stamp` (it prints each row with the new hash; paste only the rows you
   re-read);
 - a flow or appendix is not listed against any source (a new flow needs

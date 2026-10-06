@@ -22,7 +22,11 @@ is true, so:
   file can make a flow wrong without touching any entry.
 - **A fix for a `reference-followup` issue updates the chapters that cite
   it.** The caveat and the issue link go; the entry says the new behaviour.
-- **Then re-stamp and re-index.** `python3 src/test/reference_hosttest.py`
+- **Move the line numbers, then re-stamp and re-index.** The chapters cite
+  their source by line; `python3 src/test/reference_hosttest.py --relines
+  <source>` lists the ones a change moved (run it before re-stamping, and
+  check the list: it can't tell a line from a value), `--apply` writes them.
+  Then re-stamp and re-index: `python3 src/test/reference_hosttest.py`
   fails CI until every symbol has an entry, every changed source has a fresh
   row in the stamp table in `docs/reference/README.md` (`--stamp` prints
   the rows) and `docs/reference/appendix/index.md` is regenerated
