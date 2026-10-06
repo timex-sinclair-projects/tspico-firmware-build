@@ -41,6 +41,15 @@ BRANCH = "main"
 SOURCES = [("docs/reference", "reference"), ("docs/manual", "manual")]
 COPY_DIRS = [("docs/manual/images", "manual/images")]
 
+# Lines added under a page's "From ... on GitHub" note. The user manual's
+# PDFs are built into the same folder by tools/manual-pdf/make.sh in pages.yml.
+EXTRA = {
+    "docs/manual/user-manual.md":
+        "<p class=\"doc-pdf\">As a PDF: <a href=\"user-manual-half-letter.pdf\">for reading</a> "
+        "(5.5 &times; 8.5 in), or <a href=\"user-manual-saddle-stitch-letter.pdf\">as a booklet to "
+        "print</a> (letter, double-sided, flip on the short edge; fold and staple).</p>",
+}
+
 LINK = re.compile(r"(!?\[(?:[^\[\]]|\[[^\]]*\])*\])\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 
@@ -141,7 +150,8 @@ def convert(text, repo_md, pages):
              "render_with_liquid: false", "---", ""]
     note = ("<p class=\"doc-source\">From <a href=\"%s/blob/%s/%s\"><code>%s</code></a> on GitHub, "
             "as it is on <code>%s</code>.</p>" % (GITHUB, BRANCH, repo_md, repo_md, BRANCH))
-    return "\n".join(front + [note, ""] + out)
+    extra = EXTRA.get(repo_md)
+    return "\n".join(front + [note] + ([extra] if extra else []) + [""] + out)
 
 
 def yaml_str(s):
