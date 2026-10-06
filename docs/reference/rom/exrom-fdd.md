@@ -47,12 +47,12 @@ the Pico Interface BIOS.
 | 1400–1415 | to 3777h | the command strings, `MODE_R`, `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
-that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS,
+that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
 SYNC_WRITE, BIOS_WF_NPH, BIOS_C_END, C_END_TAIL, BEEPER, CH_STATUS — are
 entered in the chapters that own them; the reference index matches by
-name, so it points there ([#183](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/183), R3). Two of them mean something different here: the module's READ_STATUS
-is **02B9h** (the curated `READ_STATUS_BYTE`), and its BEEPER is 2000h
-(the `JP` to BEEPER).
+name, so it points there ([#183](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/183), R3). One of them means something different here: the module's BEEPER
+is 2000h (the `JP` to BEEPER). (The module's READ_STATUS_BYTE, 02B9h, was
+called READ_STATUS until #181, the name of a different routine at 0655h.)
 
 ## The `EQU`s
 
@@ -83,7 +83,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | BIOS_C_END | EXROM 184Ah | BIOS: the status; NC OK, C with A = status − 1 (C_END2 in 2.1) |
 | BIOS_WF_NPH | EXROM 184Ch | BIOS: wait for the Pico; C with A = 02h / 0Ch / 1Ch |
 | C_END_TAIL | EXROM 227Fh | C_END after its wait: read the status, run any response function |
-| READ_STATUS | EXROM 02B9h | the response function's own status byte (curated: `READ_STATUS_BYTE`) |
+| READ_STATUS_BYTE | EXROM 02B9h | the response function's own status byte (the curated name; `READ_STATUS` until #181) |
 | `OPEN_STREAM` | EXROM 0426h | open stream A (through HOME CHAN-OPEN) |
 | `LOOP_BODY` | EXROM 21E6h | function 86h's loop after its opening |
 | `THUNK_HX` | HOME 03FCh | the returning HOME→EXROM thunk (named; the module never calls it — HOME's stubs do) |
@@ -301,9 +301,9 @@ other way to hand over the syntax check), with B = the token.
    `CMD_ERASE`; FORMAT → `FDD_ONE_ARG` with `CMD_FORMAT`; any other token →
    `RET` (no-op; nothing else reaches 25D6h).
 
-After it, at 30A8h, `"FDDCMD",0` — a signature, whose comment says
-"build.py verifies this"; `build-rom.py` does not (it checks
-`FDD_DISPATCH`'s address).
+After it, at 30A8h, `"FDDCMD",0` — a signature nothing checks;
+`build-rom.py` checks `FDD_DISPATCH`'s address instead, as the comment says
+(until #181 it claimed "build.py verifies this").
 
 ### `FDD_VERSION` (30AFh)
 
@@ -612,7 +612,7 @@ a Z80 interpreter against 2.0's for contrast.
 Response function 88h: function 86h on the **lower** screen.
 
 ```text
-LOWER_LOOP: CALL READ_STATUS      ; 02B9h: the function's own status
+LOWER_LOOP: CALL READ_STATUS_BYTE ; 02B9h: the function's own status
             PUSH AF
             LD A,STREAM_LOWER     ; FDh, K
             CALL OPEN_STREAM
@@ -876,10 +876,5 @@ region is all `FFh`.
 
 Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
-- The signature comment says "build.py verifies this"; `build-rom.py` does
-  not check the `"FDDCMD"` bytes.
-- [src/rom/fdd/README.md](../../../src/rom/fdd/README.md) says the 25D6h
-  hook is "staged" ([#181](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/181), C33).
 - `SEND_FOPEN` and `CH_SEND` read the pre-load status and do not check it.
-- The module's READ_STATUS `EQU` (02B9h) shares its name with the curated
-  READ_STATUS (0655h) ([#181](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/181), C38).
+

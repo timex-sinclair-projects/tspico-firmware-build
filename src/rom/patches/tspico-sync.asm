@@ -4,7 +4,7 @@
 ;
 ; Build:  tools/build-rom.sh        (needs sjasmplus 1.20+)
 ; Input:  src/rom/TSPICO.ROM        v1.7, crc32 09D4CA63 (HOME 16K + EXROM 16K)
-; Output: src/rom/TSPICO-SYNC.ROM   ROM 2.0, the shipping slot-1 ROM (flash/manifest.json)
+; Output: src/rom/TSPICO-SYNC.ROM   ROM 2.0, the base build-rom.py makes ROM 2.1 (slot 1) from
 ;
 ; Version 2.0 (2026-09-27): the ROM and the TS-Pico firmware share one version
 ; number from here on (firmware: FW_VERSION in src/TS/tspico.py).

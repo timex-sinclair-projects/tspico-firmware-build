@@ -153,7 +153,7 @@ the #82 import failure showed itself (`manifest.py`'s comment).
 | Variable | GPIO | Mode, level | What it is |
 |---|---|---|---|
 | `U6_EN` | 12 | output, pull-up, driven 1 | the U6 bus buffer's enable, also `MQ`'s side-set pin; 1 = the Pico off the bus (`TS_IO_DUAL`'s docstring) |
-| `WAIT` | 14 | output, pull-down, driven 1 | named for the Z80's /WAIT line; `TS_IO_DUAL` waits on this very pin (`wait(0, gpio, 14)`) and its docstring calls it /PICOSEL, the bus-cycle strobe. Which name is right is [hardware.md](../hardware.md)'s; the upgrade code only sets it as `src/main.py` does |
+| `WAIT` | 14 | output, pull-down, driven 1 | named for the Z80's /WAIT line; `TS_IO_DUAL` waits on this very pin (`wait(0, gpio, 14)`) and its docstring calls it /PICOSEL, the bus-cycle strobe, as the line's comment now says. Which name is right is [hardware.md](../hardware.md)'s; the upgrade code only sets it as `src/main.py` does |
 | `U10_ENA` | 19 | output, pull-up, driven 1 | the flash's (U10) enable, by `main.py`'s name; `ROM`'s first out pin. `set_ctrl`'s header comment calls its two out pins /U10_CE and /U10_OE, which [hardware.md](../hardware.md) reconciles |
 | `U13_ENA` | 20 | output, pull-up, driven 1 | the SRAM's (U13) enable, by `main.py`'s name; `ROM`'s second out pin (see the row above) |
 | `BE` | 21 | output, pull-up, driven 1 | bus enable, `ROM`'s set pin |
@@ -215,8 +215,8 @@ joined) and `PORT_0F` (bit 8 of an RX word). It imports nothing else from
 `TS`, but `tspico_io` does, which is why `manifest.py` freezes `TS.sdcard` and
 `TS.native` too ([DEVELOPER_GUIDE.md](../../DEVELOPER_GUIDE.md), "The upgrade
 UF2 is a second build of `tspico_io.py`"). The module's docstring names its
-build script as `tools/build-upgrade.sh`; the script is
-[`tools/build-upgrade.py`](#toolsbuild-upgradepy).
+build script, [`tools/build-upgrade.py`](#toolsbuild-upgradepy) (until #181,
+as a `.sh` that does not exist).
 
 ### `VERSION`
 
@@ -382,8 +382,8 @@ original slot-0 Spectrum ROM with interrupts off, calls no ROM routine,
 prints with its own copy of the ROM font, and never fetches an instruction
 from the flash chip after it starts; `updater_hosttest.py` checks the last
 point on every run. The header comment says it is built by
-`tools/build-upgrade.sh`; no such file exists, and
-[`tools/build-upgrade.py`](#toolsbuild-upgradepy) does not assemble: the
+[`tools/build-upgrade.py`](#toolsbuild-upgradepy) (until #181, by a `.sh`
+that does not exist); that script does not assemble: the
 `.bin` is committed, and `updater_hosttest.py` reassembles the source and
 compares when `sjasmplus` is on the path.
 
@@ -447,7 +447,6 @@ are untouched; the tests check the pattern around them survives.
 | `CODE_AT` | 6000h | where the code is assembled and loaded: chunk 3, RAM under every HSR; `RANDOMIZE USR 24576` | `ORG`; the loader |
 | `FONT` | 7000h | the font copy, 768 bytes; glyph 7Fh is overwritten with a solid cell | `start`, `char_at`; `code_end` must not reach it |
 | `BUF` | 7400h | one 256-byte block and its XOR, 257 bytes; also the 4-byte `'I'` reply | `start`, `phase`, `fetch` |
-| `VARS` | 7600h | defined, never used: the variables live in the code block (`saved_sp` onwards, 650Dh–651Bh), as the comment above them says. The EQU is dead | — |
 | `STACK` | 7FF0h | the updater's stack pointer, set at `start`; BASIC's stack is below 6000h after `CLEAR 24575` | `start` |
 | `HSR_SLOT1` | F6h | chunks 1, 2, 4–7 from the DOCK: slot 1 at 8000h–FFFFh plus the command addresses | `phase` |
 | `HSR_SLOT0` | 07h | chunks 0–2 from the DOCK: slot 0's lower 24K at 0000h–5FFFh | `phase` |
@@ -792,8 +791,9 @@ clean. None is cleared at `start` except `touched`.
 
 The end of the binary: 1308 bytes from 6000h. `ASSERT code_end <= FONT`
 keeps the code, text and variables out of the font copy at 7000h; the
-build fails rather than overlap. 7000h–7FFFh above it is the font, `BUF`,
-the dead `VARS` and the stack.
+build fails rather than overlap. 7000h–7FFFh above it is the font, `BUF`
+and the stack. (A `VARS` EQU at 7600h, never used -- the variables live in
+the code block, `saved_sp` onwards -- went in #181.)
 
 ## src/upgrade/loader.bas
 

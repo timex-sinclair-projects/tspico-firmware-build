@@ -208,7 +208,7 @@ def main():
         def listing(pre, cmd):
             t.SEND_MSG2(long_text, t._1_OK)
         def menu(pre, cmd):
-            menu_result.append(t.ListMenu(["FIRST", "SECOND"], "hdr1", "hdr2", "hdr3",
+            menu_result.append(t.ListMenu(["FIRST", "SECOND"], "hdr1", "hdr2",
                                           "Change to dir", "Changing to: "))
         def ask(pre, cmd):
             menu_result.append(t.SEND_MSG_PROMPT_YN("Sure? "))

@@ -499,9 +499,9 @@ _11_D_Break = const(11)
 #
 # TO ENABLE FOR A TESTING SESSION (pick one):
 #
-#   1. EASIEST — edit /main.py on the Pico's flash. Find the line:
-#         TS.tspico.TLM_ENABLED = ...   (or `dev_tspico.TLM_ENABLED`)
-#      and set it to True. Reboot. No UF2 rebuild needed.
+#   1. EASIEST — set "TELEMETRY": true in the Pico's /config.ini;
+#      main.py reads it at boot and sets TLM_ENABLED (the frozen
+#      module's and dev_tspico's). Reboot. No UF2 rebuild needed.
 #
 #   2. AT THE REPL (transient — gone on reboot):
 #         import dev_tspico
@@ -655,7 +655,7 @@ class PICO_STATUS():                                                            
         except:                                                                 # if fail, assume hard-wired values
             self.ZX_TAPE_COMPAT = False
 
-        self.bank_sm = (self.DCK_SLOT * 16) + self.ROM_SLOT                    # bit pattern to store slot of DCK/ROM. 4 bits each. Default 0001 0000
+        self.bank_sm = (self.DCK_SLOT * 16) + self.ROM_SLOT                    # bit pattern to store slot of DCK/ROM. 4 bits each. Default 0000 0001 (DCK 0, ROM 1)
         # The SD card, as the last mount found it (ACTIVATE_SD / SD_NOTE_CARD).
         # sd_cid is the card's CID register (maker, product, serial number):
         # a different value on a later mount means a different card.
@@ -684,9 +684,9 @@ class PICO_STATUS():                                                            
 #   2. The dual-port protocol is sensitive to bus-handover timing.
 #      Splitting teardown lets us do it deterministically: unmount
 #      once, then clamp the SPI data lines LOW before the PIO reclaims
-#      them. This eliminates the tri-state window where Z80 D6 could
-#      float high — the original Report D root cause (see
-#      docs/DUAL_PORT_DEVELOPMENT.md §1).
+#      them, so they are not left floating. (Not the original Report D
+#      fix: that was Z80 D6, GPIO 8 -- see the comment in the body and
+#      docs/DUAL_PORT_DEVELOPMENT.md §1.)
 # ───────────────────────────────────────────────────────────────────────
 def DEACTIVATE_SD():
     """Tear down SD card access and safe the shared bus lines."""
@@ -723,8 +723,8 @@ def DEACTIVATE_SD():
 #   2. PIO clock:    15 MHz       -> 30 MHz
 #      The dual-port decode adds ~7 instructions to the read path.
 #      30 MHz keeps the total well within Z80's data setup window.
-#      RP2040 PIO can run up to half the CPU clock (135 MHz at our
-#      270 MHz setting) so 30 MHz is conservative.
+#      A PIO state machine can run at the full system clock (ROM and
+#      BANK run at 150 MHz on our 270 MHz), so 30 MHz is conservative.
 #
 #   3. Y stays BUSY after activation (it was set READY here at first)
 #      The caller loads its reply into TX and then calls MQ_READY():
@@ -820,7 +820,7 @@ def ACTIVATE_MQ():                                                              
 def MQ_READY():
     """Signal 'ready' to Z80 — bit 6 set on $0F reads (Y = 0xFFFFFFFF).
 
-    Per the V1.5 protocol (Gustavo's V5 doc), the Z80 polls $0F bit 6
+    Per PROTOCOL.md (and the ROM's WAIT_PICO_READY), the Z80 polls $0F bit 6
     in WAIT EXECUTION before reading TX or writing RX, and only
     proceeds when it observes bit 6 = 1. MQ_READY asserts that.
 
@@ -1017,7 +1017,7 @@ def MQ_BUSY():
     """Signal 'not ready' to Z80 — bit 6 clear on $0F reads (Y = 0).
 
     With the issue-#14 PIO auto-busy it isn't needed: the PIO drops Y to
-    0 on every Z80 OUT, and nothing calls this today. Kept for a path that
+    0 on every Z80 OUT. ACTIVATE_MQ calls it: a fresh state machine. Kept for a path that
     must assert BUSY without an inbound write -- and for the open audit
     question (§4) of whether a fresh state machine's Y is reliably 0.
     """
@@ -1761,7 +1761,7 @@ def LOG(msg, level):                                                            
     else:
         m = msg
 
-    if log_to_serial:                                                                    # If enabled, send log msg to console instead of logfile
+    if log_to_serial:                                                                    # If enabled, print log msg to the console as well as logging it
         print(m)
     
     # ─── LOG must work before TSP exists ──────────────────────────────────
@@ -2171,7 +2171,7 @@ def MSG_BYTE(m):                                                                
     return o if 32 <= o <= 127 or o == 0x0D else 0x3F
 
 
-def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                                         # Sends one-line status message(s)
+def SEND_MSG(msg, msg1, st: int, forceDisplay=False):                                           # Sends one-line status message(s)
                                                                                                 # back to the TS, once a command is finished
     global MQ
     global TSP
@@ -2184,7 +2184,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     # ─── DUAL-PORT MIGRATION ──────────────────────────────────────────────
     # The two `wrt(0x40)` "Read continue flag" writes in the single-port
     # version have been removed. The continue flag now lives on $0F via
-    # the Y register (kept at READY for the entire session). A 0x40 in
+    # the Y register (set READY by the Pico, dropped by the PIO on every OUT). A 0x40 in
     # the TX FIFO would have been consumed by the Z80's $0E read as if
     # it were data — orphaning the rest of the response by one byte.
     #
@@ -2231,7 +2231,7 @@ def SEND_MSG(msg, msg1, st: bytes, forceDisplay=False):                         
     return
 
 
-def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):                                         # Sends a SCROLLING status message back to the TS,
+def SEND_MSG2(msg, st: int, expandKeywords = True, colour = False):                                           # Sends a SCROLLING status message 
                                                                                               # once a command is finished
     # msg: a string of the message (no bytearrays)
     # st:  report status
@@ -2239,8 +2239,6 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
     global MQ
     global TSP
     
-    global kill
-    global dead
 
     TLM("SEND_MSG2 enter", "msg_len=%d st=%d expand=%s rom_ver=%s" % (
         len(msg), st, expandKeywords, TSP.ROM_VERSION))
@@ -2265,13 +2263,13 @@ def SEND_MSG2(msg, st: bytes, expandKeywords = True, colour = False):           
     s = len(scroll) + 6
     n = len(msg)
 
-    # ─── Inline-wrt SEND_MSG2 ──────────────────────────────────────────────
-    # Confirmed by regression test: the buffer-prebuild + preload-then-
-    # MQ_READY refactor caused `tpi:help border` to consistently fail,
-    # even though both patterns place the same 4 header bytes in TX at
-    # the moment Y=READY fires. The original inline-wrt pattern (bytes
-    # go directly to TX as the per-char loop produces them) handles
-    # border correctly, so we're back to that.
+    # ─── SEND_MSG2's output: history ──────────────────────────────────────
+    # A buffer-prebuild + preload-then-MQ_READY refactor once made
+    # `tpi:help border` fail, and the per-character inline-wrt pattern
+    # (bytes straight into TX as the loop made them) came back. That has
+    # gone too: each page is now built in RAM and sent by CMD_SEND (see
+    # below), which puts the header in TX before READY and the rest by
+    # DMA where there is one.
     #
     # The "Scroll? (Y/n)" prompt is gated on the line count alone (l == ll
     # below), so output that fits on one screen never prompts. An earlier
@@ -2756,7 +2754,6 @@ def PROMPT_EACH(prompts):                                                     # 
     CMD_RX_FLUSH()                                                            # stray keystrokes; a BREAK raises CmdAbort
     wrt(FN_PRINT_LOOP)                                                        # 0x86 PRINT STRING WITH LOOP -- the D-block status
     wrt(1)                                                                    # BASIC return code
-    need_ready = True
     yes = []
     ch = None
     for i, p in enumerate(prompts):
@@ -2773,7 +2770,6 @@ def PROMPT_EACH(prompts):                                                     # 
             return yes
         if ch in (89, 121):
             yes.append(i)
-        need_ready = True
     wrt(ch if 32 <= ch < 127 else 89)
     wrt(LOOP_END)                                                             # 0x03: end the loop
     wrt.send()
@@ -3442,13 +3438,12 @@ def IDIR(pre, cmd):
     led.value(1)
     hdr1 = "Path:%s" % public_path(27)
     hdr2 = "   #  File Name"
-    hdr3 = "  ------------------------------"
     List = []
     idx = 0
     for f in files:
         List.append("%03d %s" % (idx, shorten_filename(xstr(f), 26)))
         idx += 1
-    isel = ListMenu(List, hdr1, hdr2, hdr3, 'Mount file', "Mounting: ")
+    isel = ListMenu(List, hdr1, hdr2, 'Mount file', "Mounting: ")
 
     if isel >= 0:
         sel = files[isel]
@@ -3460,7 +3455,7 @@ def IDIR(pre, cmd):
     return
 
 
-def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
+def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
 
     # Given a list of strings, present them 16 at a time to pick from by
     # pressing keys 0-9,Q-Y or N to stop, B to go back a page or other key to go
@@ -3492,7 +3487,7 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
             wrt(ord(c))
 
     # CAT's colours (2026-10-02): the path on the blue bar, the titles and
-    # page on cyan, hdr3's dashed line gone, each choice letter on a cyan
+    # page on cyan, the old dashed hdr3 line gone, each choice letter on a cyan
     # chip, folders in blue, the page's place in the list on cyan.
     BAR = PAPER_ + "\x01" + INK_ + "\x07"
     CYAN = PAPER_ + "\x05" + INK_ + "\x09"
@@ -3505,7 +3500,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
     # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
     # READY-before-data here (READY landed ~9.6 ms late); with MQX the
     # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
-    need_ready = True
 
     CMD_RX_FLUSH()                      # stray keystrokes; a BREAK raises CmdAbort
 
@@ -3611,7 +3605,6 @@ def ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False):
         if ch == 78:    # 'N' then done (ROM ended the loops)
             MQ_READY()  # restore Y for downstream reads
             return -1
-        need_ready = True   # READY after the next reply's first byte
         if ch == 66: # B
             if idx >= nmax:
                 idx -= nmax
@@ -3694,10 +3687,10 @@ def TAPDIR(pre, cmd):                                                        # D
     # SAVE "tpi:tapdir"CODE 0,n     - Show a listing of only n blocks before and
     #                                 after the current position with n=0 to 
     #                                 show all blocks
-    # SAVE "tpi:tapdir"CODE 1,n     - Show a listing of n headers before and 
-    #                                 after the current position with n=0 to 
-    #                                 all headers. If the current position is on
-    #                                 a data block, it is also shown.
+    # SAVE "tpi:tapdir"CODE 1,n     - Show the headers within 2n blocks before
+    #                                 and after the current position (about n
+    #                                 programs each way); n=0: all headers. A data
+    #                                 block at the current position is shown too.
     # SAVE "tpi:tapdir"CODE x,255   - Show a screenfull around the current pos
 
     global TSP
@@ -4261,7 +4254,6 @@ def CDIR(pre, cmd):                                                             
         cwd = public_path(27)
         hdr1 = "Path:%s" % cwd
         hdr2 = "  Directory Name"
-        hdr3 = "  ------------------------------"
         if par2 == 0:
             if cwd != '/TAP':
                 List = ['..'] + dirs
@@ -4269,7 +4261,7 @@ def CDIR(pre, cmd):                                                             
                 List = dirs
         else:
             List = alldirs
-        isel = ListMenu(List, hdr1, hdr2, hdr3, "Change to dir", "Changing dir to: ", True)
+        isel = ListMenu(List, hdr1, hdr2, "Change to dir", "Changing dir to: ", True)
         if isel >= 0:
             status, message = ChangeDir(List[isel])
         led.value(0)
@@ -5344,9 +5336,9 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     # via the Y register. A 0x40 left in TX would be consumed as data
     # by Z80's $0E read, orphaning the rest of the response.
     #
-    # The EMPTY_RX_FIFO moved BELOW MQ_READY: at the original position
-    # the Z80 hadn't been told to read yet, so RX had nothing to drain.
-    # After MQ_READY the Z80 may dump stale keystrokes; we drain those.
+    # The RX drain (now CMD_RX_FLUSH, below) runs BEFORE wrt.send() says
+    # READY: the Z80 is still in its ready-wait then, so anything in RX is a
+    # stray keystroke (or a BREAK, which raises CmdAbort), not its answer.
     # ─────────────────────────────────────────────────────────────────────
     wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
     wrt(FN_PRINT_LOOP_LOWER if lower else FN_PRINT_LOOP)   # 0x88 / 0x86 PRINT STRING WITH LOOP (0x88: lower screen) -- this IS the D-block status
@@ -5887,8 +5879,8 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     #   - wrt(0x40): "continue flag" — signal Pico is ready for body
     #   - wrt(0x01): pre-load of initial status for command body phase
     # Both are obsolete in dual-port:
-    #   - The continue flag lives on $0F via the Y register (kept at
-    #     READY for the entire session).
+    #   - The continue flag lives on $0F via the Y register (set READY
+    #     by the Pico, dropped by the PIO on every OUT).
     #   - The initial status byte the Z80 just read at pre-header time
     #     was supplied by the PREVIOUS handler's V6 tail pre-load (or
     #     by the boot pre-load for the very first command).
@@ -6154,10 +6146,9 @@ def TS2068_IO():                                                         # Main 
     global busy                                                        # whether 2nd core is busy
     global dead                                                        # boolean to indicate whether an IO routine is "alive" or not. Used for watchdog CHK_STATUS
     global files                                                       # array of only the files of current directory; used for index mounting of files ( LOAD "TPI:*nn") 
-    global kill                                                        # boolean set to True when watchdog wants to end a misbehaving IO routine 
     global lista                                                       # all contents of current dir, in string format to be displayed by "TPI:DIR"
     global log_entries                                                 # log entries to be saved during next loop
-    global log_to_serial                                               # If TRUE, all logging messages will be displayed on screen instead of the logfile
+    global log_to_serial                                               # If TRUE, all logging messages are printed on the console as well as logged
     
     global ROM
     global BANK
@@ -6170,7 +6161,6 @@ def TS2068_IO():                                                         # Main 
     
     busy = False
     dead = True
-    kill = False
     
     files = []
     lista = ""
@@ -6228,8 +6218,8 @@ def TS2068_IO():                                                         # Main 
 
     os.chdir('/')
     
-    # Commands expecting a name following the command word need a space at the
-    # end of their dictionary key string.
+    # Keys are the command word alone, in capitals, no trailing space:
+    # PROCESS_CMD splits off the word and hands the handler the whole text.
 
     SA_funct = {
         "TPI:APPEND" : APPEND,
@@ -6345,9 +6335,9 @@ def TS2068_IO():                                                         # Main 
     # ─── DUAL-PORT MIGRATION: explicit SD-teardown before MQ activation ───
     # ACTIVATE_MQ no longer unmounts /sd itself; we must do it explicitly
     # via DEACTIVATE_SD first (see stage-3 comments above ACTIVATE_MQ).
-    # This also clamps GPIO 2-4 LOW before the PIO reclaims them, which
-    # closes the tri-state window that was the original Report D root
-    # cause (docs/DUAL_PORT_DEVELOPMENT.md §1).
+    # This also clamps GPIO 2-4 LOW before the PIO reclaims them -- harmless,
+    # and not the original Report D fix (that was Z80 D6, GPIO 8; see
+    # DEACTIVATE_SD and docs/DUAL_PORT_DEVELOPMENT.md §1).
     # ─────────────────────────────────────────────────────────────────────
     DEACTIVATE_SD()
     ACTIVATE_MQ()

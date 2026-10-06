@@ -1,5 +1,5 @@
 ; z80dasm 1.2.0
-; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.tpglAkPkAv/exrom.bin
+; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.cmndITgnZR/exrom.bin
 
 	org 00000h
 CH_ALLOC:	equ 0x0200

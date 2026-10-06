@@ -266,9 +266,9 @@ Each source `INCBIN`s its base image and overlays its patches with `FPOS`
 [`rom_zx48_hosttest.py`](../../../src/test/rom_zx48_hosttest.py) the ZX ones.
 CI does not run this script — it runs the two tests on the committed
 images — so a change to these sources is rebuilt by hand and the image
-committed. The script's comment that "the shipping ROM,
-`src/rom/TSPICO.ROM` (slot 1)" is never modified is out of date: slot 1 is
-2.1; `TSPICO.ROM` is v1.7, the base. The ZX sources:
+committed. The script's header notes that `src/rom/TSPICO.ROM`, the v1.7
+base, is never modified (slot 1 is `TSPICO-21.ROM`; until #181 the header
+called `TSPICO.ROM` the shipping slot-1 ROM). The ZX sources:
 [zx48.md](zx48.md); the 2.0 source: [exrom-sync.md](exrom-sync.md).
 
 ### `tools/build-rom.py`: ROM 2.1
@@ -381,8 +381,7 @@ bytes, 10 hunks), genuine → v1.1 EXROM chunk 0 (2326 bytes, 36 hunks), v1.1
 hunks, 1 HOME byte). It checks each image's crc32 against `EXPECT_CRC` and
 says so when one differs. It covers the 1.x line only; the 2.x differences
 are produced by `build-rom.py`'s hunk report and the hand-written
-[ROM_CHANGES.md](../../ROM_CHANGES.md). Its comment calling v1.7 "the ROM
-currently shipped in `src/rom/TSPICO.ROM`" is out of date (2.1 ships).
+[ROM_CHANGES.md](../../ROM_CHANGES.md).
 
 ## Reading the listings
 
@@ -451,15 +450,6 @@ here say so. [ROM_CHANGES.md](../../ROM_CHANGES.md) is the account of 2.0,
 
 Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
-- `tools/build-rom.sh` calls `src/rom/TSPICO.ROM` "the shipping ROM (slot
-  1)"; slot 1 is `TSPICO-21.ROM`, and `TSPICO.ROM` is the v1.7 base.
-- `src/rom/patches/tspico-sync.asm`'s header calls its output
-  `TSPICO-SYNC.ROM` "the shipping slot-1 ROM"; it is the base of 2.1.
-- `tools/romdiff.py` calls v1.7 "the ROM currently shipped".
-- `src/rom/fdd/README.md` says the 25D6h disk-token hook is "staged"; it is
-  enabled (it is in `PATCHES` with no `enabled=False`), and is how every
-  disk keyword reaches the module. It also leaves "$22A1–$2FFF for
-  Gustavo", where ROM 2.0's code now sits at 2300h–23D3h.
 - [docs/rom-analysis/README.md](../../rom-analysis/README.md) lists the
   port sites of v1.1; 2.0 and 2.1 add the seven at 2304h–23C0h and 3662h
   (the table above).

@@ -350,12 +350,12 @@ Header (flag 00):                                     Pico (SAVE_TS)
 ~1 s pause (the ROM HALTs)
 Data (flag FF), NO pre-header:
   OUT FF, SESSION lo/hi, DE bytes, CRC                  RX_BLOCK (length + 4)
-  wait READY; IN final status                          01, then the SD write, then the pre-load
+  wait READY; IN final status                          the SD write, then 01 (0A, J, if it failed) + the pre-load
 ```
 
 Refuse a SAVE at the **mid-phase** status, never after the final status: by
-then the 2068 has printed `0 OK` and gone. A failed SD write after the final
-status can't be reported, by design (§13). `SAVE ""` and names over 10
+then the 2068 has printed `0 OK` and gone. The final status waits for the SD
+write, so a failed write is reported as J (§13). `SAVE ""` and names over 10
 characters are refused by the ROM before anything is sent.
 
 ## 7. The channel commands (ROM 2.1, firmware 2.0)
@@ -648,12 +648,14 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   `MemoryError` reaches `main.py` and drops the Pico to a REPL, and if the
   allocation sits before the mid-phase status write the 2068 *also* hangs
   to its ~19.9s `WF_NPH` timeout. Collect, retry once, then refuse.
-- **A failed SD write cannot be reported, by design.** The final status
-  must go out before `ENA_SD()` (see the pin-grab race above), so by the
-  time `open()` fails the 2068 has already printed `0 OK`. That is an
-  accepted consequence of the ordering — but still wrap the write, or an
-  `OSError` from a pulled card takes the dispatcher down on top of losing
-  the file.
+- **A failed SD write is reported: the final status waits for it.**
+  `SAVE_TS` leaves the final status in `TSP.save_final` and the dispatcher
+  sends it once the card work is done and the bus is back (the pin-grab
+  rule above): `01`, or `0A` (J, Invalid I/O device) if nothing was
+  written. Before that change the final status went out before
+  `ENA_SD()`, and a failed write could not be reported. Still wrap the
+  write, or an `OSError` from a pulled card takes the dispatcher down on
+  top of losing the file.
 - **`END_MSG()` has no callers and should keep it that way.** It is
   retained as documented context for the trap above, not as an API.
 - **`busy` is set by another core: never wait on it unbounded, and always

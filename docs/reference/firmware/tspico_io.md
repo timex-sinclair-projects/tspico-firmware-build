@@ -81,17 +81,17 @@ In source order, with line numbers of the file as it is today:
   [pio.md](pio.md); this chapter has no entries for them.
 - 946–997: `REWIND_ABORTED_SEARCH`, `ENA_MQ_DUAL`.
 - 1000–1101: the SD card and the log: `SD_MOUNT`, `ENA_SD`, `LOG_ADD`.
-- 1104–1182: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
+- 1104–1181: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
   `LOAD_REFUSE`, `FIRST_STATUS`, `LOAD_RETRY_DONE`.
-- 1185–1796: `LOAD_TS`, `LOAD_SERVE`.
-- 1798–1838: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
+- 1184–1793: `LOAD_TS`, `LOAD_SERVE`.
+- 1795–1835: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
   `ZX_BLOCK_GAP_MS`, `ZX_FLUSH_TX`, `ZX_ROOM`.
-- 1841–1921: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
+- 1838–1918: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
   `ZX_STREAM`.
-- 1924–2197: `LOAD_ZX`, `LOAD_ZX_C`.
-- 2200–2306: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
-- 2309–2782: `SAVE_TS`.
-- 2785–2919: `_xor`, `SAVE_ZX`.
+- 1921–2194: `LOAD_ZX`, `LOAD_ZX_C`.
+- 2197–2303: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
+- 2306–2779: `SAVE_TS`.
+- 2782–2916: `_xor`, `SAVE_ZX`.
 
 The last section of this chapter lists the places where a comment, a design
 document and the code disagree.
@@ -183,8 +183,8 @@ The bits are [PROTOCOL.md §3.1](../../PROTOCOL.md); the ROM side is
 [../rom/exrom-sync.md](../rom/exrom-sync.md).
 
 Callers: `SAY_READY` (for `"mid"`), `MQ_TO_IDLE`, `SAVE_TS`, and in `tspico.py`
-the SYNC branch of the idle loop, `PROCESS_CMD`'s body abort (5949) and
-tail, `PRINT_IO`, `CH_READY` (3254, `"mid"`) and the post-SAVE arm point. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
+the SYNC branch of the idle loop, `PROCESS_CMD`'s body abort (5941) and
+tail, `PRINT_IO`, `CH_READY` (3250, `"mid"`) and the post-SAVE arm point. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
 pins the three values.
 
 ## The pre-header capture
@@ -556,9 +556,8 @@ only: test the FIFO, get, store the low byte. The 0Fh test and the clock run
 only when the FIFO is empty, exactly when the Z80 has paused or stopped; a 0Fh
 write is always the last thing it sends, so it is the newest word then, and `w`
 keeps it (the buffer holds only the low 8 bits). The clock allows `first_ms`
-before the first byte and `stall_ms` after it. The docstring still names "the
-watchdog flag" among the things tested when the FIFO is empty; there is no
-such flag in the code.
+before the first byte and `stall_ms` after it. (Until #181 the docstring
+also named "the watchdog flag" among the things tested; there is none.)
 
 Callers: `SAVE_TS` (the data block, `long` bytes, 3000 then 1000 ms, `"mid"`),
 `SAVE_ZX` (21 bytes and `n + 4`, `ZX_STALL_MS` both, `"ready"`), `tspico.py`'s
@@ -585,8 +584,8 @@ on `False`, and lazily by `LOAD_TS`.
 ## The PIO programs
 
 Lines 678–943 define `sel_bank` (bank selection on A15–A18), `set_ctrl` (the
-control lines /BE, A14_L, /U10_CE, /U10_OE), `set_dck` (/U10_CE and /U10_OE
-only, for DOCK access without ROM mapping) and `TS_IO_DUAL` (the two ports; 20
+control lines /BE, A14_L, `U10_ENA`, `U13_ENA`), `set_dck` (`U10_ENA` and
+`U13_ENA` only, for DOCK access without ROM mapping) and `TS_IO_DUAL` (the two ports; 20
 instructions, with the auto-busy `mov(y, null)` of issue #14). They are
 explained instruction by instruction, with the Y register contract and the
 FIFOs, in [pio.md](pio.md); the hardware they drive is in
@@ -612,10 +611,9 @@ before 2.0 never tells the Pico about it — its abort path writes nothing, and
 the whole EXROM holds exactly one `OUT (0Eh),A`
 ([BREAK_AND_ABORT.md](../../rom-analysis/BREAK_AND_ABORT.md)). The search has
 walked an arbitrary distance through the tape by then, so without this the
-next LOAD starts wherever the abandoned search stopped. The docstring says the
-signal is "3 seconds later the watchdog firing"; the watchdog is gone, and
-today the signal is `TX_ROOM`'s 3 s stall (`why` 3) or, on a 2.x ROM, the
-BREAK's 0Fh write (`why` 1). Called only from `LOAD_TS`'s abort path.
+next LOAD starts wherever the abandoned search stopped. The signal is
+`TX_ROOM`'s 3 s stall (`why` 3) or, on a 2.x ROM, the BREAK's 0Fh write
+(`why` 1); until #181 the docstring still said "the watchdog firing". Called only from `LOAD_TS`'s abort path.
 [`load_ts_hosttest.py`](../../../src/test/load_ts_hosttest.py) checks the offset
 after a BREAK.
 
@@ -678,14 +676,12 @@ callers logged as "name 'TSP' isn't defined", hiding the mount error
 Either way the GPIO 2–4 pins are left claimed by SPI and the bus state
 machine is off the bus; the caller restores it (`SAVE_ZX` with `ENA_MQ_DUAL`,
 `SAVE_TS` by returning to the dispatcher, whose SAVE branch runs
-`DEACTIVATE_SD` and `ACTIVATE_MQ`). The long comment above the `try` says the
-failure is not raised because "SAVE_TS can't report it to the 2068 any more:
-its final status went out before the pin grab, see the RACE FIX comment
-there". That is no longer how `SAVE_TS` works: its final status now goes out
-from the dispatcher after the write (`TSP.save_final`), a failed write is
-reported as Report J, and the "RACE FIX" comment no longer exists. The
-behaviour the comment describes (log and carry on) is still what the code
-does. [`audit_fixes_hosttest.py`](../../../src/test/audit_fixes_hosttest.py)
+`DEACTIVATE_SD` and `ACTIVATE_MQ`). The long comment above the `try` says
+why: the caller's own write then fails, and `SAVE_TS` reports that to the
+2068 as Report J, because its final status goes out from the dispatcher
+after the write (`TSP.save_final`). (Until #181 the comment said the final
+status went out first and the failure could not be reported, citing a
+"RACE FIX" comment that no longer exists.) [`audit_fixes_hosttest.py`](../../../src/test/audit_fixes_hosttest.py)
 (`test_ena_sd`) pins -99 with the real error logged when there is no card, -99
 without raising on EPERM, and Ctrl-C not swallowed;
 [`sd_wedged_hosttest.py`](../../../src/test/sd_wedged_hosttest.py)
@@ -939,8 +935,8 @@ sees TX = `[01]` and FFh after a BREAK — the 2.x ROM is waiting for READY +
 IDLE to raise Report D — or FBh after a stall, so its next command gets Report
 T.
 
-**Phase 3, success.** The file is closed; `echo[1]` and `echo[2]` are copied
-to `blq_t` and `crc`, which nothing reads. Two `wrt(0x01)`: the first is this
+**Phase 3, success.** The file is closed (the echo's block type and CRC,
+`echo[1]` and `echo[2]`, are not checked). Two `wrt(0x01)`: the first is this
 transaction's final status, which the Z80 reads after polling 0Fh, the second
 the pre-load for the next command's first status read; then READY, because
 the echo OUTs dropped Y to busy (issue #14) and without it the two bytes would
@@ -968,13 +964,13 @@ and one that never matches ends in R after a lap; a BASIC header reaches the
 Z80 byte for byte, "no autorun" included; a LOAD starting at the end of the
 tape rewinds; and the DMA section listed under `STREAM_DMA`.
 
-**Stale comments.** The docstring's TIMING NOTE says the streaming loop
-"relies on `MQ.put()` blocking when the FIFO is full to pace the data flow";
-the code never blocks in `put`, it waits in `TX_ROOM`. The docstring's "We
-drain both with `MQ.get()`" is now `RX_WORD` and `ECHO_KEEP`. The comment on
-`why` lists "2 watchdog", and the one above the stream says that for older
-ROMs "only the watchdog (2) can end the loop early": 2 is never produced, and a
-stall gives 3.
+**The comments.** The docstring's TIMING NOTE says the loop puts only when
+TX has room (`TX_ROOM`) and never blocks in `put`; the echo arrives as RX
+words the stream keeps (`ECHO_KEEP`, `RX_WORD`); the comment on `why` gives
+its codes, 0, 1 and 3 (2, the watchdog's, is gone), and for older ROMs only
+a stall ends the loop early. Until #181 these said the loop relied on a
+blocking `MQ.put()`, the echo was drained "with `MQ.get()`", and "only the
+watchdog (2) can end the loop early".
 
 ### `LOAD_SERVE(pre, MQ, TSP)`
 
@@ -1217,7 +1213,7 @@ the bytes drained; the caller returns afterwards. The statuses `SAVE_TS` sends
 through it: 0x02 Report R (session mismatch, bad header CRC, no data block),
 0x03 Report F (name), 0x06 Report 6 (no memory for the block), 0x08 Report A
 (BLEN 0), 0x0A Report J (no SD card) and 0x0B Report D (a native "Replace?"
-answered N); the docstring lists only the first four. The mapping is
+answered N); the docstring lists all six (until #181, the first four). The mapping is
 [PROTOCOL.md §5.3](../../PROTOCOL.md).
 
 ### `DRAIN_REFUSED_SAVE(MQ, quiet_ms=500)`
@@ -1298,8 +1294,8 @@ Note that "mid" is said twice: once here and again inside `RX_BLOCK` through
 which is the order `RX_RING`'s own docstring warns against; what makes it safe
 is the ROM's pause before the data block *(inferred from the measured 0.9 s
 and the code's comments; not tested as such)*. The outcomes: `RXB_STALL` with
-nothing received refuses with R ("no data after 1s" in the TLM and log text,
-though the wait is 3 s) rather than claim OK, which on a slow Z80 meant a data
+nothing received refuses with R ("no data after 3s" in the TLM and log text)
+rather than claim OK, which on a slow Z80 meant a data
 block streamed into a returned handler, jamming RX for the next command; a
 0Fh write (the 2.x ROM checks BREAK every 256 bytes) logs INFO and returns
 `False` with nothing written, the Z80 waiting for READY + IDLE; a stall
@@ -1438,31 +1434,14 @@ READY; and no watchdog.
 
 The code wins in each case.
 
-- `ENA_SD`'s comment: "SAVE_TS can't report it to the 2068 any more: its final
-  status went out before the pin grab, see the RACE FIX comment there".
-  `SAVE_TS` now sends its final status through `TSP.save_final` after the
-  write, and a failed write is Report J; there is no RACE FIX comment.
-  [PROTOCOL.md §6.2](../../PROTOCOL.md) ("01, then the SD write, then the
-  pre-load"; "a failed SD write after the final status can't be reported, by
-  design") and §13 ("A failed SD write cannot be reported, by design")
-  describe the same older ordering.
-- `LOAD_TS`'s docstring: the stream "relies on `MQ.put()` blocking"; the echo
-  is drained "with `MQ.get()`"; `why` code 2 "watchdog" and "only the watchdog
-  (2) can end the loop early" for older ROMs. The stream waits in `TX_ROOM`,
-  the echo comes through `RX_WORD`, and 2 is never produced.
-- `REWIND_ABORTED_SEARCH`'s docstring: "3 seconds later the watchdog firing".
-  The signal today is `TX_ROOM`'s stall or a 0Fh write.
-- `RX_BLOCK`'s docstring names "the watchdog flag" among what runs when the
-  FIFO is empty; there is none.
-- `SAVE_TS`: the TLM and log text "no data after 1s" for a wait of 3 s; "mid"
-  said both before and inside `RX_BLOCK`, the first time before the DMA
-  channel is set up.
-- `REFUSE_SAVE`'s docstring lists four statuses; `SAVE_TS` sends six.
+- `SAVE_TS`: "mid" said both before and inside `RX_BLOCK`, the first time
+  before the DMA channel is set up.
 - `LOAD_ZX_C`: the "no file mounted" branch is unreachable, and the boundary
   test is two bytes short (see the entry).
-- `LOAD_REFUSE`: `echo` is allocated and unused. `LOAD_TS`: `blq_t` and `crc`
-  are assigned and unused; `prof` is sampled only on the file-streaming path.
+- `LOAD_TS`: `prof` is sampled only on the file-streaming path.
 - [SAVE_1.1C_VS_1.5.md §7](../../SAVE_1.1C_VS_1.5.md): `SAVE_ZX` "has not been
   migrated"; it has.
-- `RX_CAPTURE`'s docstring says `raw` is an `array('H')`; the dispatcher
-  passes an `array('I')`, and either works.
+- (#181 fixed the rest: `ENA_SD`'s comment and PROTOCOL.md §6.2/§13 on when
+  the SAVE's final status goes out, `LOAD_TS`'s, `REWIND_ABORTED_SEARCH`'s,
+  `RX_BLOCK`'s and `RX_CAPTURE`'s docstrings, `REFUSE_SAVE`'s status list,
+  "no data after 1s", and the unused `echo`, `blq_t` and `crc`.)

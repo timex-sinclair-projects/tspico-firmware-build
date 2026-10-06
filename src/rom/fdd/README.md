@@ -52,7 +52,7 @@ those in the same pass if you keep the split halves in sync.
 
 - **Base address `$3000`** is set by `FDD_BASE` in `fddcmd.asm` and mirrored by
   `FDD_ORG` in `tools/build-rom.py` — keep them in sync. `$3000–$3FFF` is our 4 KB;
-  `$22A1–$2FFF` is left for Gustavo (design doc §2).
+  ROM 2.0's own code is at `$2300–$23D3` (`tspico-sync.asm`); the rest is free.
 - **HOME-ROM patches** are data in `tools/build-rom.py`'s `PATCHES` list, not in
   this source (the source is EXROM-only). The syntax-offset-table fix is enabled;
-  the `$25D6` disk-token hook is staged (needs the HOME→EXROM thunk stub).
+  the `$25D6` disk-token hook is enabled (through the HOME→EXROM thunk stub).

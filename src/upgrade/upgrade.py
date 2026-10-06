@@ -1,7 +1,7 @@
 """TS-Pico upgrade firmware: the Pico side of the ROM update.
 
 This is not the TS-Pico firmware. It is a separate UF2 (see src/upgrade/
-main.py and tools/build-upgrade.sh) that the web updater writes before the
+main.py and tools/build-upgrade.py) that the web updater writes before the
 real firmware, for a board coming from 1.1 / 1.5 whose TS-2068 ROM can't
 talk to the current firmware. It does two things:
 

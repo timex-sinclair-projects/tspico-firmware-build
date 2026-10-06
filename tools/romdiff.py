@@ -27,7 +27,7 @@ IMAGES = {
     "tspico-11-exrom": "TSPICO-11-exrom",
     "tspico-15w-exrom": "TSPICO-15w-exrom",
     # v1.7 = Gustavo's SAVE-prompt BREAK release (Nov 2025 / Sep 2026 build),
-    # the ROM currently shipped in src/rom/TSPICO.ROM.
+    # kept in src/rom/TSPICO.ROM: the base of ROM 2.0 (2.1 is what ships).
     "tspico-17-home": "TSPICO-17-home",
     "tspico-17-exrom": "TSPICO-17-exrom",
     # Baseline TS2068 ROMs, from zesarux/src/ts2068.rom.
