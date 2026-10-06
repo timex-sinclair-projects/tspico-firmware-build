@@ -65,6 +65,8 @@ C_END_TAIL      EQU $227F          ; EXROM: C_END after its wait: read the statu
                                    ;   run the response functions (v1.7's $2279 tail)
 BANK_SV         EQU $5DCF          ; pre-header byte 2
 MODE_SV         EQU $5DDB          ; SESSION_SETUP clears bits 7-4 for a plain name
+MODE_SET_OK     EQU $2105          ; EXROM: CALL S_MODE ($1862) with A, then "0 OK" --
+                                   ;   where tpi:sdcard and tpi:picopt end
 READ_STATUS     EQU $02B9          ; EXROM: the response's status byte -> AF ($01C3's first half)
 OPEN_STREAM     EQU $0426          ; EXROM: open stream A ($04F1 opens $FE, the main screen)
 LOOP_BODY       EQU $21E6          ; EXROM: function $86's loop after $01C3 (PUSH AF; print/key...)
@@ -153,6 +155,21 @@ OPEN_SYN_VEC:
         jp      G_OSYN             ; $3018: OPEN #'s syntax pass after a comma, via HOME $14BD
 C_END_VEC:
         jp      C_END2             ; $301B: the BIOS C_END entry ($184A -> $184F, build-rom.py)
+TAPE_VEC:
+        jp      TAPE_MODE          ; $301E: SAVE "tpi:tape" from $20BE (build-rom.py)
+
+;------------------------------------------------------------------------------
+; TAPE_MODE -- SAVE "tpi:tape": LOAD and SAVE back to the cassette (TPMODE bit
+; 1 clear), the printer switch (bit 0) left as it is. ROM 2.0 did XOR A /
+; S_MODE ($1861) here, clearing the printer switch too, and tpi:sdcard sets
+; only bit 1: so tpi:picopt, tpi:tape, tpi:sdcard quietly sent printing back
+; to the 2068 (#176). $20BE jumps here once the name and its length have
+; matched and bits 7-6 are cleared in MODE_SV; A was used for the length test.
+;------------------------------------------------------------------------------
+TAPE_MODE:
+        ld      a,(MODE_SV)
+        res     1,a                ; cassette; bit 0 (the printer) untouched
+        jp      MODE_SET_OK
 
 ;------------------------------------------------------------------------------
 ; G_BEEP -- the key click and BEEP. The TS-Pico ROM moved BEEPER to EXROM

@@ -1,8 +1,8 @@
 # EXROM 3000h: the ROM 2.1 module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
-1398 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
-at EXROM 3000h–376Ch and spliced into ROM 2.0 with the patches that call
+1415 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
+at EXROM 3000h–3777h and spliced into ROM 2.0 with the patches that call
 it ([overview.md](overview.md#toolsbuild-rompy-rom-21)); the result read in
 [`tspico-21-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-21-exrom.labelled.asm).
 
@@ -18,7 +18,7 @@ design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
 byte-level change list is [ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
-The module is 1901 bytes. It enters the 2068's code only through a vector
+The module is 1912 bytes. It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
@@ -31,19 +31,20 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 34–129 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 136–155 | 3000h–301Dh | the vector table |
-| 170–193 | 301Eh | `G_BEEP` |
-| 195–253 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 255–275 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30A4h) |
-| 277–369 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `NONSENSE`, `TOO_LONG` |
-| 371–445 | | the parsing helpers |
-| 447–546 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 548–783 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 785–805 | | `LOWER_LOOP` (function 88h) |
-| 807–1361 | | the channel driver |
-| 1363–1381 | | `HEXDIG`, `STRLEN` |
-| 1383–1398 | to 376Ch | the command strings, `MODE_R`, `FDD_END` |
+| 34–131 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 138–159 | 3000h–3020h | the vector table |
+| 161–172 | 3021h | `TAPE_MODE` |
+| 187–210 | 3029h | `G_BEEP` |
+| 212–270 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 272–292 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 294–386 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `NONSENSE`, `TOO_LONG` |
+| 388–462 | | the parsing helpers |
+| 464–563 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 565–800 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 802–822 | | `LOWER_LOOP` (function 88h) |
+| 824–1378 | | the channel driver |
+| 1380–1398 | | `HEXDIG`, `STRLEN` |
+| 1400–1415 | to 3777h | the command strings, `MODE_R`, `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS,
@@ -108,7 +109,8 @@ ROM that moves one fails instead of jumping into the wrong code
 | `SESSION_ID` | 5DD1h | where the session id is kept |
 | `IY_SYSVARS` | 5C3Ah | what HOME expects in IY (the bank switch clobbers IY) |
 | `BANK_SV` | 5DCFh | pre-header byte 2 |
-| `MODE_SV` | 5DDBh | TPMODE; F_HOOK clears bits 7–4 as SESSION_SETUP's non-command exit does |
+| `MODE_SV` | 5DDBh | TPMODE; F_HOOK clears bits 7–4 as SESSION_SETUP's non-command exit does; TAPE_MODE clears bit 1 |
+| `MODE_SET_OK` | 2105h | where `tpi:sdcard` and `tpi:picopt` end: `CALL S_MODE` (1862h) with A, `CALL 042Fh`, `JP 1B72h` ("0 OK"); TAPE_MODE jumps here |
 | `CURCHL` | 5C51h | the current channel's record |
 | `STRMS` | 5C10h | the stream table, streams −3 to 15, two bytes each |
 | `CHANS` | 5C4Fh | the channel area |
@@ -190,13 +192,34 @@ not at 3000h. The patches point at these vectors, never at routines:
 | `BEEP_VEC` | 3015h | `G_BEEP` | HOME 03F3h → 041Ch, BEEPER |
 | `OPEN_SYN_VEC` | 3018h | `G_OSYN` | HOME 14BDh, OPEN #'s syntax |
 | `C_END_VEC` | 301Bh | `C_END2` | EXROM 184Fh, the BIOS C_END |
+| `TAPE_VEC` | 301Eh | `TAPE_MODE` | EXROM 20BEh, `SAVE "tpi:tape"` |
 
 The HOME entries come through the returning thunk under `DI`; the EXROM
-ones (01D2h, 2213h, 184Fh) are plain jumps within the EXROM.
+ones (01D2h, 2213h, 184Fh, 20BEh) are plain jumps within the EXROM.
+
+### `TAPE_MODE` (3021h)
+
+`SAVE "tpi:tape"`: LOAD and SAVE back to the cassette, the printer switch
+left as it is. `LD A,(MODE_SV)` / `RES 1,A` / `JP MODE_SET_OK` (2105h),
+which stores TPMODE through S_MODE and ends the statement with "0 OK",
+as `tpi:sdcard` and `tpi:picopt` do.
+
+Reached by `JP TAPE_VEC` at EXROM 20BEh, once the switch-word code has
+matched the four letters and the length 8 and cleared bits 7–6 of TPMODE
+([sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027)). A held the length
+test's 8 there, so TPMODE is read again.
+
+Why: ROM 1.x and 2.0 did `CALL 1861h` here — `XOR A` into S_MODE —
+setting TPMODE to 0 and so clearing the printer switch (bit 0) as well,
+while `tpi:sdcard` sets only bit 1: `tpi:picopt`, `tpi:tape`,
+`tpi:sdcard` left printing on the 2068 (#176). The five bytes at 20BEh
+could not hold the fix (a reload, a `RES` and the jump to 2105h are
+seven), hence the vector. [`rom_tpmode_hosttest.py`](../../../src/test/rom_tpmode_hosttest.py)
+runs the switch words from the committed image.
 
 ## Entries and the error frame
 
-### `G_BEEP` (301Eh)
+### `G_BEEP` (3029h)
 
 BEEPER's new entry (HOME's thunk moved here in 2.1, [home.md](home.md#03f3h0420h-beeper-moved-out)).
 With HL = C8h (the editor's key click, from HOME 0A97h) and the current
@@ -278,11 +301,11 @@ other way to hand over the syntax check), with B = the token.
    `CMD_ERASE`; FORMAT → `FDD_ONE_ARG` with `CMD_FORMAT`; any other token →
    `RET` (no-op; nothing else reaches 25D6h).
 
-After it, at 309Dh, `"FDDCMD",0` — a signature, whose comment says
+After it, at 30A8h, `"FDDCMD",0` — a signature, whose comment says
 "build.py verifies this"; `build-rom.py` does not (it checks
 `FDD_DISPATCH`'s address).
 
-### `FDD_VERSION` (30A4h)
+### `FDD_VERSION` (30AFh)
 
 One byte, 8: the module's revision within ROM 2.1. Nothing reads it; the
 ROM's version for programs is `PEEK 101` and G_VERS

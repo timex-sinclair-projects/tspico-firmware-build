@@ -320,7 +320,9 @@ Ubuntu 22.04. The steps, in order:
    anchor no longer match ([../rom/overview.md](../rom/overview.md)); then
    `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-21.ROM`: the
    committed slot-1 image must be exactly what the sources build. Then
-   `rom_cend_hosttest.py` runs the ROM's BIOS `C_END` in a Z80 interpreter.
+   `rom_cend_hosttest.py` runs the ROM's BIOS `C_END`, and
+   `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest), in
+   a Z80 interpreter.
    The ROM and its two halves are uploaded as `tspico-fdd-rom`.
 7. **MicroPython v1.29.0**, cloned shallow.
 8. **The build stamp**: `cmp` of `src/TS/tspico.py` with
@@ -404,7 +406,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.1 | `src/rom/TSPICO-21.ROM` | `E813BF90` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.1 | `src/rom/TSPICO-21.ROM` | `F3316DCF` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |

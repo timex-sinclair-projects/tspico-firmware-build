@@ -1,5 +1,5 @@
 ; z80dasm 1.2.0
-; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.gdPvi9LJ2a/exrom.bin
+; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.tpglAkPkAv/exrom.bin
 
 	org 00000h
 CH_ALLOC:	equ 0x0200
@@ -7,8 +7,8 @@ H_MAKE_ROOM:	equ 0x12bb
 H_EXPT_1NUM:	equ 0x1be5
 H_TEST_ROOM:	equ 0x1fbb
 BIOS_WF_NPH:	equ 0x239e
-SKIP_SPACES:	equ 0x313e
-LOWER_LOOP:	equ 0x3344
+SKIP_SPACES:	equ 0x3149
+LOWER_LOOP:	equ 0x334f
 
 l0000h:
 	di			;0000	f3		.
@@ -3917,7 +3917,6 @@ l1856h:
 	ld c,a			;185e	4f		O
 	pop af			;185f	f1		.
 	ret			;1860	c9		.
-sub_1861h:
 	xor a			;1861	af		.
 l1862h:
 	push af			;1862	f5		.
@@ -4560,7 +4559,7 @@ l1c5dh:
 	ld c,a			;1c7b	4f		O
 	ld c,l			;1c7c	4d		M
 	jr nz,l1cf5h		;1c7d	20 76		  v
-	ld (l312eh),a		;1c7f	32 2e 31	2 . 1
+	ld (FDD_MOVE.cd+1),a	;1c7f	32 2e 31	2 . 1
 	jr nz,l1ca4h		;1c82	20 20		   
 	jr nz,l1c26h		;1c84	20 a0		  .
 l1c86h:
@@ -4674,7 +4673,7 @@ l1d00h:
 	jr nz,$+101		;1d14	20 63		  c
 	inc h			;1d16	24		$
 	ld h,e			;1d17	63		c
-	ld hl,(03563h)		;1d18	2a 63 35	* c 5
+	ld hl,(CH_OUT+1)	;1d18	2a 63 35	* c 5
 	ld h,e			;1d1b	63		c
 	ld a,063h		;1d1c	3e 63		> c
 	ld b,h			;1d1e	44		D
@@ -5151,7 +5150,7 @@ l1f05h:
 	ld a,(l3acah)		;1f0b	3a ca 3a	: . :
 	cp e			;1f0e	bb		.
 l1f0fh:
-	ld a,(03656h)		;1f0f	3a 56 36	: V 6
+	ld a,(l3656h)		;1f0f	3a 56 36	: V 6
 	out (035h),a		;1f12	d3 35		. 5
 	ld l,(hl)		;1f14	6e		n
 	dec (hl)		;1f15	35		5
@@ -5162,11 +5161,11 @@ l1f0fh:
 	out (033h),a		;1f1a	d3 33		. 3
 	adc a,033h		;1f1c	ce 33		. 3
 	and c			;1f1e	a1		.
-	ld sp,BUILD_START	;1f1f	31 93 31	1 . 1
+	ld sp,l3193h		;1f1f	31 93 31	1 . 1
 l1f22h:
 	ld h,b			;1f22	60		`
 H_FIND_INT2:
-	ld sp,030f9h		;1f23	31 f9 30	1 . 0
+	ld sp,l30f9h		;1f23	31 f9 30	1 . 0
 	jp (hl)			;1f26	e9		.
 	jr nc,l1f0fh		;1f27	30 e6		0 .
 	jr nc,l1f84h		;1f29	30 59		0 Y
@@ -5460,8 +5459,9 @@ l208eh:
 	ld a,008h		;20b9	3e 08		> .
 	cp c			;20bb	b9		.
 	jr nz,l210eh		;20bc	20 50		  P
-	call sub_1861h		;20be	cd 61 18	. a .
-	jr l2108h		;20c1	18 45		. E
+	jp TAPE_VEC		;20be	c3 1e 30	. . 0
+	nop			;20c1	00		.
+	nop			;20c2	00		.
 l20c3h:
 	inc hl			;20c3	23		#
 	ld a,b			;20c4	78		x
@@ -5502,9 +5502,8 @@ l20c3h:
 	jr nz,l210eh		;20fe	20 0e		  .
 	ld a,(05ddbh)		;2100	3a db 5d	: . ]
 	or 002h			;2103	f6 02		. .
-l2105h:
+MODE_SET_OK:
 	call l1862h		;2105	cd 62 18	. b .
-l2108h:
 	call sub_042fh		;2108	cd 2f 04	. / .
 	jp l1b72h		;210b	c3 72 1b	. r .
 l210eh:
@@ -5549,7 +5548,7 @@ l2111h:
 	jr nz,l210eh		;214c	20 c0		  .
 	ld a,(05ddbh)		;214e	3a db 5d	: . ]
 	set 0,a			;2151	cb c7		. .
-	jr l2105h		;2153	18 b0		. .
+	jr MODE_SET_OK		;2153	18 b0		. .
 l2155h:
 	cp 053h			;2155	fe 53		. S
 	jr nz,l210eh		;2157	20 b5		  .
@@ -5584,7 +5583,7 @@ l2159h:
 	jp nz,l210eh		;2189	c2 0e 21	. . !
 	ld a,(05ddbh)		;218c	3a db 5d	: . ]
 	res 0,a			;218f	cb 87		. .
-	jp l2105h		;2191	c3 05 21	. . !
+	jp MODE_SET_OK		;2191	c3 05 21	. . !
 FN_CHAIN_C1:
 	cp 081h			;2194	fe 81		. .
 	jr nz,l21a4h		;2196	20 0c		  .
@@ -9090,1199 +9089,1196 @@ l2fafh:
 	rst 38h			;2fff	ff		.
 FDD_BASE:
 FDD_DISPATCH:
-	jp G_MAIN		;3000	c3 3a 30	. : 0
+	jp G_MAIN		;3000	c3 45 30	. E 0
 F_HOOK_VEC:
-	jp F_HOOK		;3003	c3 fd 31	. . 1
+	jp F_HOOK		;3003	c3 08 32	. . 2
 LOWER_VEC:
-	jp LOWER_LOOP		;3006	c3 44 33	. D 3
+	jp LOWER_LOOP		;3006	c3 4f 33	. O 3
 CH_OUT_VEC:
-	jp G_OUT		;3009	c3 3f 30	. ? 0
+	jp G_OUT		;3009	c3 4a 30	. J 0
 CH_IN_VEC:
-	jp G_IN			;300c	c3 44 30	. D 0
+	jp G_IN			;300c	c3 4f 30	. O 0
 CH_OPEN_VEC:
-	jp G_OPEN		;300f	c3 49 30	. I 0
+	jp G_OPEN		;300f	c3 54 30	. T 0
 CH_CLOSE_VEC:
-	jp G_CLOSE		;3012	c3 53 30	. S 0
+	jp G_CLOSE		;3012	c3 5e 30	. ^ 0
 BEEP_VEC:
-	jp G_BEEP		;3015	c3 1e 30	. . 0
+	jp G_BEEP		;3015	c3 29 30	. ) 0
 OPEN_SYN_VEC:
-	jp G_OSYN		;3018	c3 4e 30	. N 0
+	jp G_OSYN		;3018	c3 59 30	. Y 0
 C_END_VEC:
-	jp C_END2		;301b	c3 2d 33	. - 3
+	jp C_END2		;301b	c3 38 33	. 8 3
+TAPE_VEC:
+	jp TAPE_MODE		;301e	c3 21 30	. ! 0
+TAPE_MODE:
+	ld a,(05ddbh)		;3021	3a db 5d	: . ]
+	res 1,a			;3024	cb 8f		. .
+	jp MODE_SET_OK		;3026	c3 05 21	. . !
 G_BEEP:
-	ld a,h			;301e	7c		|
-	and a			;301f	a7		.
-	jr nz,G_BEEP.beep	;3020	20 13		  .
-	ld a,l			;3022	7d		}
-	cp 0c8h			;3023	fe c8		. .
-	jr nz,G_BEEP.beep	;3025	20 0e		  .
-	push hl			;3027	e5		.
-	ld hl,(05c51h)		;3028	2a 51 5c	* Q \
-	inc hl			;302b	23		#
-	inc hl			;302c	23		#
-	inc hl			;302d	23		#
-	inc hl			;302e	23		#
-	ld a,(hl)		;302f	7e		~
-	pop hl			;3030	e1		.
-	cp 046h			;3031	fe 46		. F
-	jr z,G_BEEP.quiet	;3033	28 03		( .
+	ld a,h			;3029	7c		|
+	and a			;302a	a7		.
+	jr nz,G_BEEP.beep	;302b	20 13		  .
+	ld a,l			;302d	7d		}
+	cp 0c8h			;302e	fe c8		. .
+	jr nz,G_BEEP.beep	;3030	20 0e		  .
+	push hl			;3032	e5		.
+	ld hl,(05c51h)		;3033	2a 51 5c	* Q \
+	inc hl			;3036	23		#
+	inc hl			;3037	23		#
+	inc hl			;3038	23		#
+	inc hl			;3039	23		#
+	ld a,(hl)		;303a	7e		~
+	pop hl			;303b	e1		.
+	cp 046h			;303c	fe 46		. F
+	jr z,G_BEEP.quiet	;303e	28 03		( .
 G_BEEP.beep:
-	call ENTRY_TABLE	;3035	cd 00 20	. .  
+	call ENTRY_TABLE	;3040	cd 00 20	. .  
 G_BEEP.quiet:
-	di			;3038	f3		.
-	ret			;3039	c9		.
+	di			;3043	f3		.
+	ret			;3044	c9		.
 G_MAIN:
-	ld hl,FDD_MAIN		;303a	21 7c 30	! | 0
-	jr GUARDED		;303d	18 17		. .
+	ld hl,FDD_MAIN		;3045	21 87 30	! . 0
+	jr GUARDED		;3048	18 17		. .
 G_OUT:
-	ld hl,CH_OUT		;303f	21 57 35	! W 5
-	jr GUARDED		;3042	18 12		. .
+	ld hl,CH_OUT		;304a	21 62 35	! b 5
+	jr GUARDED		;304d	18 12		. .
 G_IN:
-	ld hl,CH_IN		;3044	21 96 35	! . 5
-	jr GUARDED		;3047	18 0d		. .
+	ld hl,CH_IN		;304f	21 a1 35	! . 5
+	jr GUARDED		;3052	18 0d		. .
 G_OPEN:
-	ld hl,CH_OPEN_HOOK	;3049	21 51 33	! Q 3
-	jr GUARDED		;304c	18 08		. .
+	ld hl,CH_OPEN_HOOK	;3054	21 5c 33	! \ 3
+	jr GUARDED		;3057	18 08		. .
 G_OSYN:
-	ld hl,OPEN_SYNTAX	;304e	21 83 34	! . 4
-	jr GUARDED		;3051	18 03		. .
+	ld hl,OPEN_SYNTAX	;3059	21 8e 34	! . 4
+	jr GUARDED		;305c	18 03		. .
 G_CLOSE:
-	ld hl,CH_CLOSE_HOOK	;3053	21 a8 34	! . 4
+	ld hl,CH_CLOSE_HOOK	;305e	21 b3 34	! . 4
 GUARDED:
-	push hl			;3056	e5		.
-	ld hl,(05c3dh)		;3057	2a 3d 5c	* = \
-	ex (sp),hl		;305a	e3		.
-	push hl			;305b	e5		.
-	ld hl,(065ceh)		;305c	2a ce 65	* . e
-	inc hl			;305f	23		#
-	inc hl			;3060	23		#
-	inc hl			;3061	23		#
-	inc hl			;3062	23		#
-	ex (sp),hl		;3063	e3		.
-	push hl			;3064	e5		.
-	ld hl,H_TRAP		;3065	21 b2 14	! . .
-	ex (sp),hl		;3068	e3		.
-	ld (05c3dh),sp		;3069	ed 73 3d 5c	. s = \
-	call JP_HL		;306d	cd 7b 30	. { 0
-	di			;3070	f3		.
-	inc sp			;3071	33		3
-	inc sp			;3072	33		3
-	inc sp			;3073	33		3
-	inc sp			;3074	33		3
-	ex (sp),hl		;3075	e3		.
-	ld (05c3dh),hl		;3076	22 3d 5c	" = \
-	pop hl			;3079	e1		.
-	ret			;307a	c9		.
+	push hl			;3061	e5		.
+	ld hl,(05c3dh)		;3062	2a 3d 5c	* = \
+	ex (sp),hl		;3065	e3		.
+	push hl			;3066	e5		.
+	ld hl,(065ceh)		;3067	2a ce 65	* . e
+	inc hl			;306a	23		#
+	inc hl			;306b	23		#
+	inc hl			;306c	23		#
+	inc hl			;306d	23		#
+	ex (sp),hl		;306e	e3		.
+	push hl			;306f	e5		.
+	ld hl,H_TRAP		;3070	21 b2 14	! . .
+	ex (sp),hl		;3073	e3		.
+	ld (05c3dh),sp		;3074	ed 73 3d 5c	. s = \
+	call JP_HL		;3078	cd 86 30	. . 0
+	di			;307b	f3		.
+	inc sp			;307c	33		3
+	inc sp			;307d	33		3
+	inc sp			;307e	33		3
+	inc sp			;307f	33		3
+	ex (sp),hl		;3080	e3		.
+	ld (05c3dh),hl		;3081	22 3d 5c	" = \
+	pop hl			;3084	e1		.
+	ret			;3085	c9		.
 JP_HL:
-	jp (hl)			;307b	e9		.
+	jp (hl)			;3086	e9		.
 FDD_MAIN:
-	ld iy,05c3ah		;307c	fd 21 3a 5c	. ! : \
-	ei			;3080	fb		.
-	ld a,b			;3081	78		x
-	cp 0cfh			;3082	fe cf		. .
-	jp z,FDD_CAT		;3084	ca a5 30	. . 0
-	cp 0d1h			;3087	fe d1		. .
-	jp z,FDD_MOVE		;3089	ca df 30	. . 0
-	ld hl,CMD_ERASE		;308c	21 2a 37	! * 7
-	cp 0d2h			;308f	fe d2		. .
-	jp z,FDD_ONE_ARG	;3091	ca c9 30	. . 0
-	ld hl,CMD_FORMAT	;3094	21 35 37	! 5 7
-	cp 0d0h			;3097	fe d0		. .
-	jp z,FDD_ONE_ARG	;3099	ca c9 30	. . 0
-	ret			;309c	c9		.
-	ld b,(hl)		;309d	46		F
-	ld b,h			;309e	44		D
-	ld b,h			;309f	44		D
-	ld b,e			;30a0	43		C
-	ld c,l			;30a1	4d		M
-	ld b,h			;30a2	44		D
-	nop			;30a3	00		.
+	ld iy,05c3ah		;3087	fd 21 3a 5c	. ! : \
+	ei			;308b	fb		.
+	ld a,b			;308c	78		x
+	cp 0cfh			;308d	fe cf		. .
+	jp z,FDD_CAT		;308f	ca b0 30	. . 0
+	cp 0d1h			;3092	fe d1		. .
+	jp z,FDD_MOVE		;3094	ca ea 30	. . 0
+	ld hl,CMD_ERASE		;3097	21 35 37	! 5 7
+	cp 0d2h			;309a	fe d2		. .
+	jp z,FDD_ONE_ARG	;309c	ca d4 30	. . 0
+	ld hl,CMD_FORMAT	;309f	21 40 37	! @ 7
+	cp 0d0h			;30a2	fe d0		. .
+	jp z,FDD_ONE_ARG	;30a4	ca d4 30	. . 0
+	ret			;30a7	c9		.
+	ld b,(hl)		;30a8	46		F
+	ld b,h			;30a9	44		D
+	ld b,h			;30aa	44		D
+	ld b,e			;30ab	43		C
+	ld c,l			;30ac	4d		M
+	ld b,h			;30ad	44		D
+	nop			;30ae	00		.
 FDD_VERSION:
-	ex af,af'		;30a4	08		.
+	ex af,af'		;30af	08		.
 FDD_CAT:
-	call AT_END		;30a5	cd 55 31	. U 1
-	jr z,FDD_CAT.bare	;30a8	28 15		( .
-	call EXPT_STR_END	;30aa	cd 5e 31	. ^ 1
-	ret z			;30ad	c8		.
-	call POP_STR		;30ae	cd 75 31	. u 1
-	ld a,b			;30b1	78		x
-	or c			;30b2	b1		.
-	ld hl,CMD_TAPDIR	;30b3	21 04 37	! . 7
-	jp z,SEND_PREFIX	;30b6	ca ae 31	. . 1
-	ld hl,CMD_DIR_ARG	;30b9	21 fb 36	! . 6
-	jp SEND_ONE		;30bc	c3 b4 31	. . 1
+	call AT_END		;30b0	cd 60 31	. ` 1
+	jr z,FDD_CAT.bare	;30b3	28 15		( .
+	call EXPT_STR_END	;30b5	cd 69 31	. i 1
+	ret z			;30b8	c8		.
+	call POP_STR		;30b9	cd 80 31	. . 1
+	ld a,b			;30bc	78		x
+	or c			;30bd	b1		.
+	ld hl,CMD_TAPDIR	;30be	21 0f 37	! . 7
+	jp z,SEND_PREFIX	;30c1	ca b9 31	. . 1
+	ld hl,CMD_DIR_ARG	;30c4	21 06 37	! . 7
+	jp SEND_ONE		;30c7	c3 bf 31	. . 1
 FDD_CAT.bare:
-	call RUNTIME		;30bf	cd 66 31	. f 1
-	ret z			;30c2	c8		.
-	ld hl,CMD_DIR		;30c3	21 f3 36	! . 6
-	jp SEND_PREFIX		;30c6	c3 ae 31	. . 1
+	call RUNTIME		;30ca	cd 71 31	. q 1
+	ret z			;30cd	c8		.
+	ld hl,CMD_DIR		;30ce	21 fe 36	! . 6
+	jp SEND_PREFIX		;30d1	c3 b9 31	. . 1
 FDD_ONE_ARG:
-	push hl			;30c9	e5		.
-	call AT_END		;30ca	cd 55 31	. U 1
-	jr z,NONSENSE		;30cd	28 6b		( k
-	call EXPT_STR_END	;30cf	cd 5e 31	. ^ 1
-	pop hl			;30d2	e1		.
-	ret z			;30d3	c8		.
 	push hl			;30d4	e5		.
-	call POP_STR		;30d5	cd 75 31	. u 1
-	pop hl			;30d8	e1		.
-	call NOT_EMPTY		;30d9	cd 8e 31	. . 1
-	jp SEND_ONE		;30dc	c3 b4 31	. . 1
+	call AT_END		;30d5	cd 60 31	. ` 1
+	jr z,NONSENSE		;30d8	28 6b		( k
+	call EXPT_STR_END	;30da	cd 69 31	. i 1
+	pop hl			;30dd	e1		.
+	ret z			;30de	c8		.
+	push hl			;30df	e5		.
+	call POP_STR		;30e0	cd 80 31	. . 1
+	pop hl			;30e3	e1		.
+	call NOT_EMPTY		;30e4	cd 99 31	. . 1
+	jp SEND_ONE		;30e7	c3 bf 31	. . 1
 FDD_MOVE:
-	call SKIP_SPACES	;30df	cd 3e 31	. > 1
-	cp 0cch			;30e2	fe cc		. .
-	jr z,FDD_MOVE.cd	;30e4	28 3c		( <
-	call AT_END		;30e6	cd 55 31	. U 1
-	jr z,NONSENSE		;30e9	28 4f		( O
-	call HC_EXPT_STR	;30eb	cd 6c 31	. l 1
-	call SKIP_SPACES	;30ee	cd 3e 31	. > 1
-	cp 0cch			;30f1	fe cc		. .
-	jr nz,NONSENSE		;30f3	20 45		  E
-	call NEXT_CHAR		;30f5	cd 4d 31	. M 1
-	call EXPT_STR_END	;30f8	cd 5e 31	. ^ 1
-	ret z			;30fb	c8		.
-	call POP_STR		;30fc	cd 75 31	. u 1
-	call NOT_EMPTY		;30ff	cd 8e 31	. . 1
-	push de			;3102	d5		.
-	push bc			;3103	c5		.
-	call POP_STR		;3104	cd 75 31	. u 1
-	call NOT_EMPTY		;3107	cd 8e 31	. . 1
-	push de			;310a	d5		.
-	push bc			;310b	c5		.
-	ld hl,CMD_COPY		;310c	21 20 37	!   7
-	call BUILD_START	;310f	cd 93 31	. . 1
-	pop bc			;3112	c1		.
-	ex (sp),hl		;3113	e3		.
-	ldir			;3114	ed b0		. .
-	ld a,07ch		;3116	3e 7c		> |
-	ld (de),a		;3118	12		.
-	inc de			;3119	13		.
-	pop hl			;311a	e1		.
-	pop bc			;311b	c1		.
-	ex (sp),hl		;311c	e3		.
-	ldir			;311d	ed b0		. .
-	jp SEND_TAIL		;311f	c3 bd 31	. . 1
+	call SKIP_SPACES	;30ea	cd 49 31	. I 1
+	cp 0cch			;30ed	fe cc		. .
+	jr z,FDD_MOVE.cd	;30ef	28 3c		( <
+	call AT_END		;30f1	cd 60 31	. ` 1
+	jr z,NONSENSE		;30f4	28 4f		( O
+	call HC_EXPT_STR	;30f6	cd 77 31	. w 1
+l30f9h:
+	call SKIP_SPACES	;30f9	cd 49 31	. I 1
+	cp 0cch			;30fc	fe cc		. .
+	jr nz,NONSENSE		;30fe	20 45		  E
+	call NEXT_CHAR		;3100	cd 58 31	. X 1
+	call EXPT_STR_END	;3103	cd 69 31	. i 1
+	ret z			;3106	c8		.
+	call POP_STR		;3107	cd 80 31	. . 1
+	call NOT_EMPTY		;310a	cd 99 31	. . 1
+	push de			;310d	d5		.
+	push bc			;310e	c5		.
+	call POP_STR		;310f	cd 80 31	. . 1
+	call NOT_EMPTY		;3112	cd 99 31	. . 1
+	push de			;3115	d5		.
+	push bc			;3116	c5		.
+	ld hl,CMD_COPY		;3117	21 2b 37	! + 7
+	call BUILD_START	;311a	cd 9e 31	. . 1
+	pop bc			;311d	c1		.
+	ex (sp),hl		;311e	e3		.
+	ldir			;311f	ed b0		. .
+	ld a,07ch		;3121	3e 7c		> |
+	ld (de),a		;3123	12		.
+	inc de			;3124	13		.
+	pop hl			;3125	e1		.
+	pop bc			;3126	c1		.
+	ex (sp),hl		;3127	e3		.
+	ldir			;3128	ed b0		. .
+	jp SEND_TAIL		;312a	c3 c8 31	. . 1
 FDD_MOVE.cd:
-	call NEXT_CHAR		;3122	cd 4d 31	. M 1
-	call EXPT_STR_END	;3125	cd 5e 31	. ^ 1
-	ret z			;3128	c8		.
-	call POP_STR		;3129	cd 75 31	. u 1
-	ld a,b			;312c	78		x
-	or c			;312d	b1		.
-l312eh:
-	ld hl,CMD_CD_BACK	;312e	21 17 37	! . 7
-	jp z,SEND_PREFIX	;3131	ca ae 31	. . 1
-	ld hl,CMD_CD		;3134	21 0f 37	! . 7
-	jp SEND_ONE		;3137	c3 b4 31	. . 1
+	call NEXT_CHAR		;312d	cd 58 31	. X 1
+	call EXPT_STR_END	;3130	cd 69 31	. i 1
+	ret z			;3133	c8		.
+	call POP_STR		;3134	cd 80 31	. . 1
+	ld a,b			;3137	78		x
+	or c			;3138	b1		.
+	ld hl,CMD_CD_BACK	;3139	21 22 37	! " 7
+	jp z,SEND_PREFIX	;313c	ca b9 31	. . 1
+	ld hl,CMD_CD		;313f	21 1a 37	! . 7
+	jp SEND_ONE		;3142	c3 bf 31	. . 1
 NONSENSE:
-	rst 8			;313a	cf		.
-	dec bc			;313b	0b		.
+	rst 8			;3145	cf		.
+	dec bc			;3146	0b		.
 TOO_LONG:
-	rst 8			;313c	cf		.
-	ld c,02ah		;313d	0e 2a		. *
-	ld e,l			;313f	5d		]
-	ld e,h			;3140	5c		\
+	rst 8			;3147	cf		.
+	ld c,02ah		;3148	0e 2a		. *
+	ld e,l			;314a	5d		]
+	ld e,h			;314b	5c		\
 SKIP_SPACES.loop:
-	ld a,(hl)		;3141	7e		~
-	cp 020h			;3142	fe 20		.  
-	jr nz,SKIP_SPACES.done	;3144	20 03		  .
-	inc hl			;3146	23		#
-	jr SKIP_SPACES.loop	;3147	18 f8		. .
+	ld a,(hl)		;314c	7e		~
+	cp 020h			;314d	fe 20		.  
+	jr nz,SKIP_SPACES.done	;314f	20 03		  .
+	inc hl			;3151	23		#
+	jr SKIP_SPACES.loop	;3152	18 f8		. .
 SKIP_SPACES.done:
-	ld (05c5dh),hl		;3149	22 5d 5c	" ] \
-	ret			;314c	c9		.
+	ld (05c5dh),hl		;3154	22 5d 5c	" ] \
+	ret			;3157	c9		.
 NEXT_CHAR:
-	ld hl,(05c5dh)		;314d	2a 5d 5c	* ] \
-	inc hl			;3150	23		#
-	ld (05c5dh),hl		;3151	22 5d 5c	" ] \
-	ret			;3154	c9		.
+	ld hl,(05c5dh)		;3158	2a 5d 5c	* ] \
+	inc hl			;315b	23		#
+	ld (05c5dh),hl		;315c	22 5d 5c	" ] \
+	ret			;315f	c9		.
 AT_END:
-	call SKIP_SPACES	;3155	cd 3e 31	. > 1
-	cp 00dh			;3158	fe 0d		. .
-	ret z			;315a	c8		.
-	cp 03ah			;315b	fe 3a		. :
-	ret			;315d	c9		.
+	call SKIP_SPACES	;3160	cd 49 31	. I 1
+	cp 00dh			;3163	fe 0d		. .
+	ret z			;3165	c8		.
+	cp 03ah			;3166	fe 3a		. :
+	ret			;3168	c9		.
 EXPT_STR_END:
-	call HC_EXPT_STR	;315e	cd 6c 31	. l 1
-	call AT_END		;3161	cd 55 31	. U 1
-	jr nz,NONSENSE		;3164	20 d4		  .
+	call HC_EXPT_STR	;3169	cd 77 31	. w 1
+	call AT_END		;316c	cd 60 31	. ` 1
+	jr nz,NONSENSE		;316f	20 d4		  .
 RUNTIME:
-	ld a,(05c3bh)		;3166	3a 3b 5c	: ; \
-	and 080h		;3169	e6 80		. .
-	ret			;316b	c9		.
+	ld a,(05c3bh)		;3171	3a 3b 5c	: ; \
+	and 080h		;3174	e6 80		. .
+	ret			;3176	c9		.
 HC_EXPT_STR:
-	push ix			;316c	dd e5		. .
-	exx			;316e	d9		.
-	ld hl,H_EXPT_STR	;316f	21 ef 1b	! . .
-	jp CALL_HOME		;3172	c3 dd 03	. . .
+	push ix			;3177	dd e5		. .
+	exx			;3179	d9		.
+	ld hl,H_EXPT_STR	;317a	21 ef 1b	! . .
+	jp CALL_HOME		;317d	c3 dd 03	. . .
 POP_STR:
-	ld hl,(05c65h)		;3175	2a 65 5c	* e \
-	dec hl			;3178	2b		+
-	ld b,(hl)		;3179	46		F
-	dec hl			;317a	2b		+
-	ld c,(hl)		;317b	4e		N
-	dec hl			;317c	2b		+
-	ld d,(hl)		;317d	56		V
-	dec hl			;317e	2b		+
-	ld e,(hl)		;317f	5e		^
-	dec hl			;3180	2b		+
-	ld (05c65h),hl		;3181	22 65 5c	" e \
-	ld a,b			;3184	78		x
-	and a			;3185	a7		.
-	jr nz,TOO_LONG		;3186	20 b4		  .
-	ld a,c			;3188	79		y
-	cp 041h			;3189	fe 41		. A
-	jr nc,TOO_LONG		;318b	30 af		0 .
-	ret			;318d	c9		.
+	ld hl,(05c65h)		;3180	2a 65 5c	* e \
+	dec hl			;3183	2b		+
+	ld b,(hl)		;3184	46		F
+	dec hl			;3185	2b		+
+	ld c,(hl)		;3186	4e		N
+	dec hl			;3187	2b		+
+	ld d,(hl)		;3188	56		V
+	dec hl			;3189	2b		+
+	ld e,(hl)		;318a	5e		^
+	dec hl			;318b	2b		+
+	ld (05c65h),hl		;318c	22 65 5c	" e \
+	ld a,b			;318f	78		x
+	and a			;3190	a7		.
+	jr nz,TOO_LONG		;3191	20 b4		  .
+l3193h:
+	ld a,c			;3193	79		y
+	cp 041h			;3194	fe 41		. A
+	jr nc,TOO_LONG		;3196	30 af		0 .
+	ret			;3198	c9		.
 NOT_EMPTY:
-	ld a,b			;318e	78		x
-	or c			;318f	b1		.
-	ret nz			;3190	c0		.
-	jr TOO_LONG		;3191	18 a9		. .
+	ld a,b			;3199	78		x
+	or c			;319a	b1		.
+	ret nz			;319b	c0		.
+	jr TOO_LONG		;319c	18 a9		. .
 BUILD_START:
-	push hl			;3193	e5		.
-	ld bc,l00a0h		;3194	01 a0 00	. . .
-	call HC_TEST_ROOM	;3197	cd a5 31	. . 1
-	pop hl			;319a	e1		.
-	ld de,(05c65h)		;319b	ed 5b 65 5c	. [ e \
-	push de			;319f	d5		.
-	call COPY_CSTR		;31a0	cd f5 31	. . 1
-	pop hl			;31a3	e1		.
-	ret			;31a4	c9		.
+	push hl			;319e	e5		.
+	ld bc,l00a0h		;319f	01 a0 00	. . .
+	call HC_TEST_ROOM	;31a2	cd b0 31	. . 1
+	pop hl			;31a5	e1		.
+	ld de,(05c65h)		;31a6	ed 5b 65 5c	. [ e \
+	push de			;31aa	d5		.
+	call COPY_CSTR		;31ab	cd 00 32	. . 2
+	pop hl			;31ae	e1		.
+	ret			;31af	c9		.
 HC_TEST_ROOM:
-	push ix			;31a5	dd e5		. .
-	exx			;31a7	d9		.
-	ld hl,H_TEST_ROOM	;31a8	21 bb 1f	! . .
-	jp CALL_HOME		;31ab	c3 dd 03	. . .
+	push ix			;31b0	dd e5		. .
+	exx			;31b2	d9		.
+	ld hl,H_TEST_ROOM	;31b3	21 bb 1f	! . .
+	jp CALL_HOME		;31b6	c3 dd 03	. . .
 SEND_PREFIX:
-	call BUILD_START	;31ae	cd 93 31	. . 1
-	push hl			;31b1	e5		.
-	jr SEND_TAIL		;31b2	18 09		. .
+	call BUILD_START	;31b9	cd 9e 31	. . 1
+	push hl			;31bc	e5		.
+	jr SEND_TAIL		;31bd	18 09		. .
 SEND_ONE:
-	push de			;31b4	d5		.
-	push bc			;31b5	c5		.
-	call BUILD_START	;31b6	cd 93 31	. . 1
-	pop bc			;31b9	c1		.
-	ex (sp),hl		;31ba	e3		.
-	ldir			;31bb	ed b0		. .
+	push de			;31bf	d5		.
+	push bc			;31c0	c5		.
+	call BUILD_START	;31c1	cd 9e 31	. . 1
+	pop bc			;31c4	c1		.
+	ex (sp),hl		;31c5	e3		.
+	ldir			;31c6	ed b0		. .
 SEND_TAIL:
-	pop hl			;31bd	e1		.
-	ld a,e			;31be	7b		{
-	sub l			;31bf	95		.
-	ld c,a			;31c0	4f		O
-	ld a,d			;31c1	7a		z
-	sbc a,h			;31c2	9c		.
-	ld b,a			;31c3	47		G
-	ex de,hl		;31c4	eb		.
-	ld (hl),000h		;31c5	36 00		6 .
-	inc hl			;31c7	23		#
-	ld (hl),e		;31c8	73		s
-	inc hl			;31c9	23		#
-	ld (hl),d		;31ca	72		r
-	inc hl			;31cb	23		#
-	ld (hl),c		;31cc	71		q
-	inc hl			;31cd	23		#
-	ld (hl),b		;31ce	70		p
-	inc hl			;31cf	23		#
-	ld (05c65h),hl		;31d0	22 65 5c	" e \
-	xor a			;31d3	af		.
-	ld (05c74h),a		;31d4	32 74 5c	2 t \
-	ld (05c75h),a		;31d7	32 75 5c	2 u \
+	pop hl			;31c8	e1		.
+	ld a,e			;31c9	7b		{
+	sub l			;31ca	95		.
+	ld c,a			;31cb	4f		O
+	ld a,d			;31cc	7a		z
+	sbc a,h			;31cd	9c		.
+	ld b,a			;31ce	47		G
+	ex de,hl		;31cf	eb		.
+	ld (hl),000h		;31d0	36 00		6 .
+	inc hl			;31d2	23		#
+	ld (hl),e		;31d3	73		s
+	inc hl			;31d4	23		#
+	ld (hl),d		;31d5	72		r
+	inc hl			;31d6	23		#
+	ld (hl),c		;31d7	71		q
+	inc hl			;31d8	23		#
+	ld (hl),b		;31d9	70		p
+	inc hl			;31da	23		#
+	ld (05c65h),hl		;31db	22 65 5c	" e \
+	xor a			;31de	af		.
+	ld (05c74h),a		;31df	32 74 5c	2 t \
+	ld (05c75h),a		;31e2	32 75 5c	2 u \
 TPI_SEND:
-	push hl			;31da	e5		.
-	push de			;31db	d5		.
-	ld hl,(05c78h)		;31dc	2a 78 5c	* x \
+	push hl			;31e5	e5		.
+	push de			;31e6	d5		.
+	ld hl,(05c78h)		;31e7	2a 78 5c	* x \
 TPI_SEND.nz:
-	inc hl			;31df	23		#
-	ld a,h			;31e0	7c		|
-	or l			;31e1	b5		.
-	jr z,TPI_SEND.nz	;31e2	28 fb		( .
-	ld (05dd1h),hl		;31e4	22 d1 5d	" . ]
-	ld hl,(05c65h)		;31e7	2a 65 5c	* e \
-	dec hl			;31ea	2b		+
-	ld b,(hl)		;31eb	46		F
-	dec hl			;31ec	2b		+
-	ld c,(hl)		;31ed	4e		N
-	dec hl			;31ee	2b		+
-	ld d,(hl)		;31ef	56		V
-	dec hl			;31f0	2b		+
-	ld e,(hl)		;31f1	5e		^
-	jp SESSION_NAMED	;31f2	c3 ac 1a	. . .
+	inc hl			;31ea	23		#
+	ld a,h			;31eb	7c		|
+	or l			;31ec	b5		.
+	jr z,TPI_SEND.nz	;31ed	28 fb		( .
+	ld (05dd1h),hl		;31ef	22 d1 5d	" . ]
+	ld hl,(05c65h)		;31f2	2a 65 5c	* e \
+	dec hl			;31f5	2b		+
+	ld b,(hl)		;31f6	46		F
+	dec hl			;31f7	2b		+
+	ld c,(hl)		;31f8	4e		N
+	dec hl			;31f9	2b		+
+	ld d,(hl)		;31fa	56		V
+	dec hl			;31fb	2b		+
+	ld e,(hl)		;31fc	5e		^
+	jp SESSION_NAMED	;31fd	c3 ac 1a	. . .
 COPY_CSTR:
-	ld a,(hl)		;31f5	7e		~
-	inc hl			;31f6	23		#
-	and a			;31f7	a7		.
-	ret z			;31f8	c8		.
-	ld (de),a		;31f9	12		.
-	inc de			;31fa	13		.
-	jr COPY_CSTR		;31fb	18 f8		. .
+	ld a,(hl)		;3200	7e		~
+	inc hl			;3201	23		#
+	and a			;3202	a7		.
+	ret z			;3203	c8		.
+	ld (de),a		;3204	12		.
+	inc de			;3205	13		.
+	jr COPY_CSTR		;3206	18 f8		. .
 F_HOOK:
-	push hl			;31fd	e5		.
-	push de			;31fe	d5		.
-	call PEEK_NAME		;31ff	cd 69 32	. i 2
-	ld a,b			;3202	78		x
-	and a			;3203	a7		.
-	jr nz,F_HOOK.stock	;3204	20 5e		  ^
-	ld a,c			;3206	79		y
-	cp 003h			;3207	fe 03		. .
-	jr c,F_HOOK.stock	;3209	38 59		8 Y
-	ld a,(de)		;320b	1a		.
-	and 0dfh		;320c	e6 df		. .
-	cp 046h			;320e	fe 46		. F
-	jr nz,F_HOOK.stock	;3210	20 52		  R
-	inc de			;3212	13		.
-	ld a,(de)		;3213	1a		.
-	cp 03ah			;3214	fe 3a		. :
-	jr nz,F_HOOK.stock	;3216	20 4c		  L
-	ld a,c			;3218	79		y
-	cp 043h			;3219	fe 43		. C
-	jp nc,TOO_LONG		;321b	d2 3c 31	. < 1
-	ld hl,(05c78h)		;321e	2a 78 5c	* x \
+	push hl			;3208	e5		.
+	push de			;3209	d5		.
+	call PEEK_NAME		;320a	cd 74 32	. t 2
+	ld a,b			;320d	78		x
+	and a			;320e	a7		.
+	jr nz,F_HOOK.stock	;320f	20 5e		  ^
+	ld a,c			;3211	79		y
+	cp 003h			;3212	fe 03		. .
+	jr c,F_HOOK.stock	;3214	38 59		8 Y
+	ld a,(de)		;3216	1a		.
+	and 0dfh		;3217	e6 df		. .
+	cp 046h			;3219	fe 46		. F
+	jr nz,F_HOOK.stock	;321b	20 52		  R
+	inc de			;321d	13		.
+	ld a,(de)		;321e	1a		.
+	cp 03ah			;321f	fe 3a		. :
+	jr nz,F_HOOK.stock	;3221	20 4c		  L
+	ld a,c			;3223	79		y
+	cp 043h			;3224	fe 43		. C
+	jp nc,TOO_LONG		;3226	d2 47 31	. G 1
+	ld hl,(05c78h)		;3229	2a 78 5c	* x \
 F_HOOK.nz:
-	inc hl			;3221	23		#
-	ld a,h			;3222	7c		|
-	or l			;3223	b5		.
-	jr z,F_HOOK.nz		;3224	28 fb		( .
-	ld (05dd1h),hl		;3226	22 d1 5d	" . ]
-	push ix			;3229	dd e5		. .
-	call SEND_FOPEN		;322b	cd 75 32	. u 2
-	pop ix			;322e	dd e1		. .
-	ld hl,(05c65h)		;3230	2a 65 5c	* e \
-	dec hl			;3233	2b		+
-	dec hl			;3234	2b		+
-	ld a,(05c74h)		;3235	3a 74 5c	: t \
-	and a			;3238	a7		.
-	jr nz,F_HOOK.anyname	;3239	20 17		  .
-	ld a,(hl)		;323b	7e		~
-	sub 002h		;323c	d6 02		. .
-	cp 00bh			;323e	fe 0b		. .
-	jr c,F_HOOK.fits	;3240	38 02		8 .
-	ld a,00ah		;3242	3e 0a		> .
+	inc hl			;322c	23		#
+	ld a,h			;322d	7c		|
+	or l			;322e	b5		.
+	jr z,F_HOOK.nz		;322f	28 fb		( .
+	ld (05dd1h),hl		;3231	22 d1 5d	" . ]
+	push ix			;3234	dd e5		. .
+	call SEND_FOPEN		;3236	cd 80 32	. . 2
+	pop ix			;3239	dd e1		. .
+	ld hl,(05c65h)		;323b	2a 65 5c	* e \
+	dec hl			;323e	2b		+
+	dec hl			;323f	2b		+
+	ld a,(05c74h)		;3240	3a 74 5c	: t \
+	and a			;3243	a7		.
+	jr nz,F_HOOK.anyname	;3244	20 17		  .
+	ld a,(hl)		;3246	7e		~
+	sub 002h		;3247	d6 02		. .
+	cp 00bh			;3249	fe 0b		. .
+	jr c,F_HOOK.fits	;324b	38 02		8 .
+	ld a,00ah		;324d	3e 0a		> .
 F_HOOK.fits:
-	ld (hl),a		;3244	77		w
-	dec hl			;3245	2b		+
-	dec hl			;3246	2b		+
-	ld a,(hl)		;3247	7e		~
-	add a,002h		;3248	c6 02		. .
-	ld (hl),a		;324a	77		w
-	inc hl			;324b	23		#
-	ld a,(hl)		;324c	7e		~
-	adc a,000h		;324d	ce 00		. .
 	ld (hl),a		;324f	77		w
-	jr F_HOOK.go		;3250	18 02		. .
+	dec hl			;3250	2b		+
+	dec hl			;3251	2b		+
+	ld a,(hl)		;3252	7e		~
+	add a,002h		;3253	c6 02		. .
+	ld (hl),a		;3255	77		w
+	inc hl			;3256	23		#
+	ld a,(hl)		;3257	7e		~
+	adc a,000h		;3258	ce 00		. .
+	ld (hl),a		;325a	77		w
+	jr F_HOOK.go		;325b	18 02		. .
 F_HOOK.anyname:
-	ld (hl),000h		;3252	36 00		6 .
+	ld (hl),000h		;325d	36 00		6 .
 F_HOOK.go:
-	ld a,(05ddbh)		;3254	3a db 5d	: . ]
-	and 00fh		;3257	e6 0f		. .
-	ld (05ddbh),a		;3259	32 db 5d	2 . ]
-	pop de			;325c	d1		.
-	pop hl			;325d	e1		.
-	ld bc,l0010h+1		;325e	01 11 00	. . .
-	jp SAVE_ETC_BODY	;3261	c3 d5 01	. . .
+	ld a,(05ddbh)		;325f	3a db 5d	: . ]
+	and 00fh		;3262	e6 0f		. .
+	ld (05ddbh),a		;3264	32 db 5d	2 . ]
+	pop de			;3267	d1		.
+	pop hl			;3268	e1		.
+	ld bc,l0010h+1		;3269	01 11 00	. . .
+	jp SAVE_ETC_BODY	;326c	c3 d5 01	. . .
 F_HOOK.stock:
-	pop de			;3264	d1		.
-	pop hl			;3265	e1		.
-	jp SESSION_SETUP	;3266	c3 73 1a	. s .
+	pop de			;326f	d1		.
+	pop hl			;3270	e1		.
+	jp SESSION_SETUP	;3271	c3 73 1a	. s .
 PEEK_NAME:
-	ld hl,(05c65h)		;3269	2a 65 5c	* e \
-	dec hl			;326c	2b		+
-	ld b,(hl)		;326d	46		F
-	dec hl			;326e	2b		+
-	ld c,(hl)		;326f	4e		N
-	dec hl			;3270	2b		+
-	ld d,(hl)		;3271	56		V
-	dec hl			;3272	2b		+
-	ld e,(hl)		;3273	5e		^
-	ret			;3274	c9		.
+	ld hl,(05c65h)		;3274	2a 65 5c	* e \
+	dec hl			;3277	2b		+
+	ld b,(hl)		;3278	46		F
+	dec hl			;3279	2b		+
+	ld c,(hl)		;327a	4e		N
+	dec hl			;327b	2b		+
+	ld d,(hl)		;327c	56		V
+	dec hl			;327d	2b		+
+	ld e,(hl)		;327e	5e		^
+	ret			;327f	c9		.
 SEND_FOPEN:
-	ld hl,(05c5dh)		;3275	2a 5d 5c	* ] \
+	ld hl,(05c5dh)		;3280	2a 5d 5c	* ] \
 SEND_FOPEN.sp:
-	ld a,(hl)		;3278	7e		~
-	inc hl			;3279	23		#
-	cp 020h			;327a	fe 20		.  
-	jr z,SEND_FOPEN.sp	;327c	28 fa		( .
-	cp 0afh			;327e	fe af		. .
-	jr z,SEND_FOPEN.tok	;3280	28 0d		( .
-	cp 0aah			;3282	fe aa		. .
-	jr z,SEND_FOPEN.tok	;3284	28 09		( .
-	cp 0e4h			;3286	fe e4		. .
-	jr z,SEND_FOPEN.tok	;3288	28 05		( .
-	cp 0cah			;328a	fe ca		. .
-	jr z,SEND_FOPEN.tok	;328c	28 01		( .
-	xor a			;328e	af		.
+	ld a,(hl)		;3283	7e		~
+	inc hl			;3284	23		#
+	cp 020h			;3285	fe 20		.  
+	jr z,SEND_FOPEN.sp	;3287	28 fa		( .
+	cp 0afh			;3289	fe af		. .
+	jr z,SEND_FOPEN.tok	;328b	28 0d		( .
+	cp 0aah			;328d	fe aa		. .
+	jr z,SEND_FOPEN.tok	;328f	28 09		( .
+	cp 0e4h			;3291	fe e4		. .
+	jr z,SEND_FOPEN.tok	;3293	28 05		( .
+	cp 0cah			;3295	fe ca		. .
+	jr z,SEND_FOPEN.tok	;3297	28 01		( .
+	xor a			;3299	af		.
 SEND_FOPEN.tok:
-	push af			;328f	f5		.
-	call PEEK_NAME		;3290	cd 69 32	. i 2
-	inc de			;3293	13		.
-	inc de			;3294	13		.
-	ex de,hl		;3295	eb		.
-	ld a,c			;3296	79		y
-	sub 002h		;3297	d6 02		. .
-	ld b,a			;3299	47		G
-	add a,00ah		;329a	c6 0a		. .
-	ld c,a			;329c	4f		O
-	pop af			;329d	f1		.
-	ld e,a			;329e	5f		_
-	push hl			;329f	e5		.
-	push bc			;32a0	c5		.
-	ld a,042h		;32a1	3e 42		> B
-	ld d,a			;32a3	57		W
-	call SYNC_WRITE		;32a4	cd 00 23	. . #
-	xor a			;32a7	af		.
-	call TXX		;32a8	cd 05 33	. . 3
-	ld a,(05dcfh)		;32ab	3a cf 5d	: . ]
-	call TXX		;32ae	cd 05 33	. . 3
-	ld a,(05c74h)		;32b1	3a 74 5c	: t \
-	call TXX		;32b4	cd 05 33	. . 3
-	ld a,e			;32b7	7b		{
-	call TXX		;32b8	cd 05 33	. . 3
-	ld a,(05dd1h)		;32bb	3a d1 5d	: . ]
-	call TXX		;32be	cd 05 33	. . 3
-	ld a,(05dd2h)		;32c1	3a d2 5d	: . ]
-	call TXX		;32c4	cd 05 33	. . 3
-	ld a,c			;32c7	79		y
-	call TXX		;32c8	cd 05 33	. . 3
-	xor a			;32cb	af		.
-	call TXX		;32cc	cd 05 33	. . 3
-	ld a,d			;32cf	7a		z
-	call BIOS_TX_A		;32d0	cd 46 18	. F .
-	call BIOS_RX_A		;32d3	cd 48 18	. H .
-	call sub_184ch		;32d6	cd 4c 18	. L .
-	jr c,WF_FAIL		;32d9	38 39		8 9
-	pop bc			;32db	c1		.
-	pop hl			;32dc	e1		.
-	ld a,044h		;32dd	3e 44		> D
-	ld d,a			;32df	57		W
-	call BIOS_TX_A		;32e0	cd 46 18	. F .
-	ld a,c			;32e3	79		y
-	call TXX		;32e4	cd 05 33	. . 3
-	xor a			;32e7	af		.
-	call TXX		;32e8	cd 05 33	. . 3
-	push hl			;32eb	e5		.
-	push bc			;32ec	c5		.
-	ld hl,FOPEN_TXT		;32ed	21 3a 33	! : 3
-	ld b,00ah		;32f0	06 0a		. .
-	call TX_STR		;32f2	cd 0c 33	. . 3
-	pop bc			;32f5	c1		.
-	pop hl			;32f6	e1		.
-	call TX_STR		;32f7	cd 0c 33	. . 3
-	ld a,d			;32fa	7a		z
-	call BIOS_TX_A		;32fb	cd 46 18	. F .
-	call sub_184ah		;32fe	cd 4a 18	. J .
-	ret nc			;3301	d0		.
-	jp C_FAIL		;3302	c3 22 33	. " 3
+	push af			;329a	f5		.
+	call PEEK_NAME		;329b	cd 74 32	. t 2
+	inc de			;329e	13		.
+	inc de			;329f	13		.
+	ex de,hl		;32a0	eb		.
+	ld a,c			;32a1	79		y
+	sub 002h		;32a2	d6 02		. .
+	ld b,a			;32a4	47		G
+	add a,00ah		;32a5	c6 0a		. .
+	ld c,a			;32a7	4f		O
+	pop af			;32a8	f1		.
+	ld e,a			;32a9	5f		_
+	push hl			;32aa	e5		.
+	push bc			;32ab	c5		.
+	ld a,042h		;32ac	3e 42		> B
+	ld d,a			;32ae	57		W
+	call SYNC_WRITE		;32af	cd 00 23	. . #
+	xor a			;32b2	af		.
+	call TXX		;32b3	cd 10 33	. . 3
+	ld a,(05dcfh)		;32b6	3a cf 5d	: . ]
+	call TXX		;32b9	cd 10 33	. . 3
+	ld a,(05c74h)		;32bc	3a 74 5c	: t \
+	call TXX		;32bf	cd 10 33	. . 3
+	ld a,e			;32c2	7b		{
+	call TXX		;32c3	cd 10 33	. . 3
+	ld a,(05dd1h)		;32c6	3a d1 5d	: . ]
+	call TXX		;32c9	cd 10 33	. . 3
+	ld a,(05dd2h)		;32cc	3a d2 5d	: . ]
+	call TXX		;32cf	cd 10 33	. . 3
+	ld a,c			;32d2	79		y
+	call TXX		;32d3	cd 10 33	. . 3
+	xor a			;32d6	af		.
+	call TXX		;32d7	cd 10 33	. . 3
+	ld a,d			;32da	7a		z
+	call BIOS_TX_A		;32db	cd 46 18	. F .
+	call BIOS_RX_A		;32de	cd 48 18	. H .
+	call sub_184ch		;32e1	cd 4c 18	. L .
+	jr c,WF_FAIL		;32e4	38 39		8 9
+	pop bc			;32e6	c1		.
+	pop hl			;32e7	e1		.
+	ld a,044h		;32e8	3e 44		> D
+	ld d,a			;32ea	57		W
+	call BIOS_TX_A		;32eb	cd 46 18	. F .
+	ld a,c			;32ee	79		y
+	call TXX		;32ef	cd 10 33	. . 3
+	xor a			;32f2	af		.
+	call TXX		;32f3	cd 10 33	. . 3
+	push hl			;32f6	e5		.
+	push bc			;32f7	c5		.
+	ld hl,FOPEN_TXT		;32f8	21 45 33	! E 3
+	ld b,00ah		;32fb	06 0a		. .
+	call TX_STR		;32fd	cd 17 33	. . 3
+	pop bc			;3300	c1		.
+	pop hl			;3301	e1		.
+	call TX_STR		;3302	cd 17 33	. . 3
+	ld a,d			;3305	7a		z
+	call BIOS_TX_A		;3306	cd 46 18	. F .
+	call sub_184ah		;3309	cd 4a 18	. J .
+	ret nc			;330c	d0		.
+	jp C_FAIL		;330d	c3 2d 33	. - 3
 TXX:
-	push af			;3305	f5		.
-	xor d			;3306	aa		.
-	ld d,a			;3307	57		W
-	pop af			;3308	f1		.
-	jp BIOS_TX_A		;3309	c3 46 18	. F .
+	push af			;3310	f5		.
+	xor d			;3311	aa		.
+	ld d,a			;3312	57		W
+	pop af			;3313	f1		.
+	jp BIOS_TX_A		;3314	c3 46 18	. F .
 TX_STR:
-	ld a,(hl)		;330c	7e		~
-	inc hl			;330d	23		#
-	call TXX		;330e	cd 05 33	. . 3
-	djnz TX_STR		;3311	10 f9		. .
-	ret			;3313	c9		.
+	ld a,(hl)		;3317	7e		~
+	inc hl			;3318	23		#
+	call TXX		;3319	cd 10 33	. . 3
+	djnz TX_STR		;331c	10 f9		. .
+	ret			;331e	c9		.
 WF_FAIL:
-	cp 00ch			;3314	fe 0c		. .
-	jr z,WF_FAIL.brk	;3316	28 06		( .
-	cp 01ch			;3318	fe 1c		. .
-	jr z,WF_FAIL.rst	;331a	28 04		( .
-	rst 8			;331c	cf		.
-	ld (de),a		;331d	12		.
+	cp 00ch			;331f	fe 0c		. .
+	jr z,WF_FAIL.brk	;3321	28 06		( .
+	cp 01ch			;3323	fe 1c		. .
+	jr z,WF_FAIL.rst	;3325	28 04		( .
+	rst 8			;3327	cf		.
+	ld (de),a		;3328	12		.
 WF_FAIL.brk:
-	rst 8			;331e	cf		.
-	inc c			;331f	0c		.
+	rst 8			;3329	cf		.
+	inc c			;332a	0c		.
 WF_FAIL.rst:
-	rst 8			;3320	cf		.
-	inc e			;3321	1c		.
+	rst 8			;332b	cf		.
+	inc e			;332c	1c		.
 C_FAIL:
-	cp 00ch			;3322	fe 0c		. .
-	jr z,WF_FAIL.brk	;3324	28 f8		( .
-	cp 01ch			;3326	fe 1c		. .
-	jr z,WF_FAIL.rst	;3328	28 f6		( .
-	jp STATUS_TO_REPORT	;332a	c3 f3 1b	. . .
+	cp 00ch			;332d	fe 0c		. .
+	jr z,WF_FAIL.brk	;332f	28 f8		( .
+	cp 01ch			;3331	fe 1c		. .
+	jr z,WF_FAIL.rst	;3333	28 f6		( .
+	jp STATUS_TO_REPORT	;3335	c3 f3 1b	. . .
 C_END2:
-	call sub_184ch		;332d	cd 4c 18	. L .
-	jp nc,C_END_TAIL	;3330	d2 7f 22	. . "
-	cp 002h			;3333	fe 02		. .
-	scf			;3335	37		7
-	ret nz			;3336	c0		.
-	ld a,009h		;3337	3e 09		> .
-	ret			;3339	c9		.
+	call sub_184ch		;3338	cd 4c 18	. L .
+	jp nc,C_END_TAIL	;333b	d2 7f 22	. . "
+	cp 002h			;333e	fe 02		. .
+	scf			;3340	37		7
+	ret nz			;3341	c0		.
+	ld a,009h		;3342	3e 09		> .
+	ret			;3344	c9		.
 FOPEN_TXT:
-	ld (hl),h		;333a	74		t
-	ld (hl),b		;333b	70		p
-	ld l,c			;333c	69		i
-	ld a,(06f66h)		;333d	3a 66 6f	: f o
-	ld (hl),b		;3340	70		p
-	ld h,l			;3341	65		e
-	ld l,(hl)		;3342	6e		n
-	jr nz,$-49		;3343	20 cd		  .
-	cp c			;3345	b9		.
-	ld (bc),a		;3346	02		.
-	push af			;3347	f5		.
-	ld a,0fdh		;3348	3e fd		> .
-	call OPEN_STREAM	;334a	cd 26 04	. & .
-	pop af			;334d	f1		.
-	jp LOOP_BODY		;334e	c3 e6 21	. . !
+	ld (hl),h		;3345	74		t
+	ld (hl),b		;3346	70		p
+	ld l,c			;3347	69		i
+	ld a,(06f66h)		;3348	3a 66 6f	: f o
+	ld (hl),b		;334b	70		p
+	ld h,l			;334c	65		e
+	ld l,(hl)		;334d	6e		n
+	jr nz,$-49		;334e	20 cd		  .
+	cp c			;3350	b9		.
+	ld (bc),a		;3351	02		.
+	push af			;3352	f5		.
+	ld a,0fdh		;3353	3e fd		> .
+	call OPEN_STREAM	;3355	cd 26 04	. & .
+	pop af			;3358	f1		.
+	jp LOOP_BODY		;3359	c3 e6 21	. . !
 CH_OPEN_HOOK:
-	ld iy,05c3ah		;3351	fd 21 3a 5c	. ! : \
-	call PEEK_NAME		;3355	cd 69 32	. i 2
-	ld a,b			;3358	78		x
-	and a			;3359	a7		.
-	jp nz,STRMS_NC		;335a	c2 99 34	. . 4
-	ld a,c			;335d	79		y
-	cp 002h			;335e	fe 02		. .
-	jp c,STRMS_NC		;3360	da 99 34	. . 4
-	inc de			;3363	13		.
-	ld a,(de)		;3364	1a		.
-	dec de			;3365	1b		.
-	cp 03ah			;3366	fe 3a		. :
-	jp nz,STRMS_NC		;3368	c2 99 34	. . 4
-	ld a,(de)		;336b	1a		.
-	and 0dfh		;336c	e6 df		. .
-	cp 044h			;336e	fe 44		. D
-	jr z,CH_OPEN_HOOK.ours	;3370	28 0b		( .
-	cp 046h			;3372	fe 46		. F
-	jp nz,STRMS_NC		;3374	c2 99 34	. . 4
-	ld a,c			;3377	79		y
-	cp 003h			;3378	fe 03		. .
-	jp c,STRMS_NC		;337a	da 99 34	. . 4
+	ld iy,05c3ah		;335c	fd 21 3a 5c	. ! : \
+	call PEEK_NAME		;3360	cd 74 32	. t 2
+	ld a,b			;3363	78		x
+	and a			;3364	a7		.
+	jp nz,STRMS_NC		;3365	c2 a4 34	. . 4
+	ld a,c			;3368	79		y
+	cp 002h			;3369	fe 02		. .
+	jp c,STRMS_NC		;336b	da a4 34	. . 4
+	inc de			;336e	13		.
+	ld a,(de)		;336f	1a		.
+	dec de			;3370	1b		.
+	cp 03ah			;3371	fe 3a		. :
+	jp nz,STRMS_NC		;3373	c2 a4 34	. . 4
+	ld a,(de)		;3376	1a		.
+	and 0dfh		;3377	e6 df		. .
+	cp 044h			;3379	fe 44		. D
+	jr z,CH_OPEN_HOOK.ours	;337b	28 0b		( .
+	cp 046h			;337d	fe 46		. F
+	jp nz,STRMS_NC		;337f	c2 a4 34	. . 4
+	ld a,c			;3382	79		y
+	cp 003h			;3383	fe 03		. .
+	jp c,STRMS_NC		;3385	da a4 34	. . 4
 CH_OPEN_HOOK.ours:
-	ld a,c			;337d	79		y
-	cp 043h			;337e	fe 43		. C
-	jp nc,TOO_LONG		;3380	d2 3c 31	. < 1
-	ld bc,l02a0h		;3383	01 a0 02	. . .
-	call HC_TEST_ROOM	;3386	cd a5 31	. . 1
-	ld bc,l0000h		;3389	01 00 00	. . .
-	call AT_END		;338c	cd 55 31	. U 1
-	jr z,CH_OPEN_HOOK.dflt0	;338f	28 32		( 2
-	cp 02ch			;3391	fe 2c		. ,
-	jp nz,NONSENSE		;3393	c2 3a 31	. : 1
-	call NEXT_CHAR		;3396	cd 4d 31	. M 1
-	call HC_EXPT_STR	;3399	cd 6c 31	. l 1
-	call SKIP_SPACES	;339c	cd 3e 31	. > 1
-	ld bc,l0000h		;339f	01 00 00	. . .
-	cp 02ch			;33a2	fe 2c		. ,
-	jr nz,CH_OPEN_HOOK.nolen	;33a4	20 09		  .
-	call NEXT_CHAR		;33a6	cd 4d 31	. M 1
-	call HC_EXPT_1NUM	;33a9	cd 2a 35	. * 5
-	call HC_FIND_INT2	;33ac	cd 33 35	. 3 5
+	ld a,c			;3388	79		y
+	cp 043h			;3389	fe 43		. C
+	jp nc,TOO_LONG		;338b	d2 47 31	. G 1
+	ld bc,l02a0h		;338e	01 a0 02	. . .
+	call HC_TEST_ROOM	;3391	cd b0 31	. . 1
+	ld bc,l0000h		;3394	01 00 00	. . .
+	call AT_END		;3397	cd 60 31	. ` 1
+	jr z,CH_OPEN_HOOK.dflt0	;339a	28 32		( 2
+	cp 02ch			;339c	fe 2c		. ,
+	jp nz,NONSENSE		;339e	c2 45 31	. E 1
+	call NEXT_CHAR		;33a1	cd 58 31	. X 1
+	call HC_EXPT_STR	;33a4	cd 77 31	. w 1
+	call SKIP_SPACES	;33a7	cd 49 31	. I 1
+	ld bc,l0000h		;33aa	01 00 00	. . .
+	cp 02ch			;33ad	fe 2c		. ,
+	jr nz,CH_OPEN_HOOK.nolen	;33af	20 09		  .
+	call NEXT_CHAR		;33b1	cd 58 31	. X 1
+	call HC_EXPT_1NUM	;33b4	cd 35 35	. 5 5
+	call HC_FIND_INT2	;33b7	cd 3e 35	. > 5
 CH_OPEN_HOOK.nolen:
-	push bc			;33af	c5		.
-	call AT_END		;33b0	cd 55 31	. U 1
-	jp nz,NONSENSE		;33b3	c2 3a 31	. : 1
-	call POP_STR		;33b6	cd 75 31	. u 1
-	ld a,c			;33b9	79		y
-	and a			;33ba	a7		.
-	jr z,CH_OPEN_HOOK.dflt	;33bb	28 07		( .
-	cp 004h			;33bd	fe 04		. .
-	jr c,CH_OPEN_HOOK.mode	;33bf	38 09		8 .
-	rst 8			;33c1	cf		.
-	add hl,de		;33c2	19		.
+	push bc			;33ba	c5		.
+	call AT_END		;33bb	cd 60 31	. ` 1
+	jp nz,NONSENSE		;33be	c2 45 31	. E 1
+	call POP_STR		;33c1	cd 80 31	. . 1
+	ld a,c			;33c4	79		y
+	and a			;33c5	a7		.
+	jr z,CH_OPEN_HOOK.dflt	;33c6	28 07		( .
+	cp 004h			;33c8	fe 04		. .
+	jr c,CH_OPEN_HOOK.mode	;33ca	38 09		8 .
+	rst 8			;33cc	cf		.
+	add hl,de		;33cd	19		.
 CH_OPEN_HOOK.dflt0:
-	push bc			;33c3	c5		.
+	push bc			;33ce	c5		.
 CH_OPEN_HOOK.dflt:
-	ld de,MODE_R		;33c4	11 6c 37	. l 7
-	ld bc,l0001h		;33c7	01 01 00	. . .
+	ld de,MODE_R		;33cf	11 77 37	. w 7
+	ld bc,l0001h		;33d2	01 01 00	. . .
 CH_OPEN_HOOK.mode:
-	push bc			;33ca	c5		.
-	push de			;33cb	d5		.
-	ld hl,CMD_CHOPEN	;33cc	21 60 37	! ` 7
-	ld de,(05c65h)		;33cf	ed 5b 65 5c	. [ e \
-	call COPY_CSTR		;33d3	cd f5 31	. . 1
-	pop hl			;33d6	e1		.
-	pop bc			;33d7	c1		.
-	ldir			;33d8	ed b0		. .
-	ld a,020h		;33da	3e 20		>  
-	ld (de),a		;33dc	12		.
-	inc de			;33dd	13		.
-	push de			;33de	d5		.
-	call PEEK_NAME		;33df	cd 69 32	. i 2
-	ld a,(de)		;33e2	1a		.
-	and 0dfh		;33e3	e6 df		. .
-	cp 044h			;33e5	fe 44		. D
-	jr z,CH_OPEN_HOOK.keep	;33e7	28 04		( .
-	inc de			;33e9	13		.
-	inc de			;33ea	13		.
-	dec bc			;33eb	0b		.
-	dec bc			;33ec	0b		.
+	push bc			;33d5	c5		.
+	push de			;33d6	d5		.
+	ld hl,CMD_CHOPEN	;33d7	21 6b 37	! k 7
+	ld de,(05c65h)		;33da	ed 5b 65 5c	. [ e \
+	call COPY_CSTR		;33de	cd 00 32	. . 2
+	pop hl			;33e1	e1		.
+	pop bc			;33e2	c1		.
+	ldir			;33e3	ed b0		. .
+	ld a,020h		;33e5	3e 20		>  
+	ld (de),a		;33e7	12		.
+	inc de			;33e8	13		.
+	push de			;33e9	d5		.
+	call PEEK_NAME		;33ea	cd 74 32	. t 2
+	ld a,(de)		;33ed	1a		.
+	and 0dfh		;33ee	e6 df		. .
+	cp 044h			;33f0	fe 44		. D
+	jr z,CH_OPEN_HOOK.keep	;33f2	28 04		( .
+	inc de			;33f4	13		.
+	inc de			;33f5	13		.
+	dec bc			;33f6	0b		.
+	dec bc			;33f7	0b		.
 CH_OPEN_HOOK.keep:
-	ex de,hl		;33ed	eb		.
-	pop de			;33ee	d1		.
-	ld a,b			;33ef	78		x
-	or c			;33f0	b1		.
-	jr z,CH_OPEN_HOOK.none	;33f1	28 02		( .
-	ldir			;33f3	ed b0		. .
+	ex de,hl		;33f8	eb		.
+	pop de			;33f9	d1		.
+	ld a,b			;33fa	78		x
+	or c			;33fb	b1		.
+	jr z,CH_OPEN_HOOK.none	;33fc	28 02		( .
+	ldir			;33fe	ed b0		. .
 CH_OPEN_HOOK.none:
-	xor a			;33f5	af		.
-	ld (de),a		;33f6	12		.
-	pop bc			;33f7	c1		.
-	push bc			;33f8	c5		.
-	ld a,b			;33f9	78		x
-	and a			;33fa	a7		.
-	jr z,CH_OPEN_HOOK.len	;33fb	28 02		( .
-	ld c,0ffh		;33fd	0e ff		. .
+	xor a			;3400	af		.
+	ld (de),a		;3401	12		.
+	pop bc			;3402	c1		.
+	push bc			;3403	c5		.
+	ld a,b			;3404	78		x
+	and a			;3405	a7		.
+	jr z,CH_OPEN_HOOK.len	;3406	28 02		( .
+	ld c,0ffh		;3408	0e ff		. .
 CH_OPEN_HOOK.len:
-	ld b,000h		;33ff	06 00		. .
-	ld hl,(05c65h)		;3401	2a 65 5c	* e \
-	ld a,(05ccbh)		;3404	3a cb 5c	: . \
-	call CH_SEND		;3407	cd 45 36	. E 6
-	call CH_STATUS		;340a	cd 36 36	. 6 6
-	ld hl,(05c65h)		;340d	2a 65 5c	* e \
-	ld de,0fffbh		;3410	11 fb ff	. . .
-	add hl,de		;3413	19		.
-	ld (05c65h),hl		;3414	22 65 5c	" e \
-	ld hl,(05c53h)		;3417	2a 53 5c	* S \
-	dec hl			;341a	2b		+
-	ld a,(hl)		;341b	7e		~
-	cp 080h			;341c	fe 80		. .
-	jr z,CH_OPEN_HOOK.end	;341e	28 01		( .
-	dec hl			;3420	2b		+
+	ld b,000h		;340a	06 00		. .
+	ld hl,(05c65h)		;340c	2a 65 5c	* e \
+	ld a,(05ccbh)		;340f	3a cb 5c	: . \
+	call CH_SEND		;3412	cd 50 36	. P 6
+	call CH_STATUS		;3415	cd 41 36	. A 6
+	ld hl,(05c65h)		;3418	2a 65 5c	* e \
+	ld de,0fffbh		;341b	11 fb ff	. . .
+	add hl,de		;341e	19		.
+	ld (05c65h),hl		;341f	22 65 5c	" e \
+	ld hl,(05c53h)		;3422	2a 53 5c	* S \
+	dec hl			;3425	2b		+
+	ld a,(hl)		;3426	7e		~
+	cp 080h			;3427	fe 80		. .
+	jr z,CH_OPEN_HOOK.end	;3429	28 01		( .
+	dec hl			;342b	2b		+
 CH_OPEN_HOOK.end:
-	push hl			;3421	e5		.
-	ld de,(05c4fh)		;3422	ed 5b 4f 5c	. [ O \
-	and a			;3426	a7		.
-	sbc hl,de		;3427	ed 52		. R
-	inc hl			;3429	23		#
-	xor a			;342a	af		.
-	bit 7,l			;342b	cb 7d		. }
-	jr z,CH_OPEN_HOOK.pad	;342d	28 01		( .
-	sub l			;342f	95		.
+	push hl			;342c	e5		.
+	ld de,(05c4fh)		;342d	ed 5b 4f 5c	. [ O \
+	and a			;3431	a7		.
+	sbc hl,de		;3432	ed 52		. R
+	inc hl			;3434	23		#
+	xor a			;3435	af		.
+	bit 7,l			;3436	cb 7d		. }
+	jr z,CH_OPEN_HOOK.pad	;3438	28 01		( .
+	sub l			;343a	95		.
 CH_OPEN_HOOK.pad:
-	pop hl			;3430	e1		.
-	push af			;3431	f5		.
-	push hl			;3432	e5		.
-	dec hl			;3433	2b		+
-	ld bc,CH_ALLOC		;3434	01 00 02	. . .
-	call HC_MAKE_ROOM	;3437	cd 3c 35	. < 5
-	pop hl			;343a	e1		.
-	push hl			;343b	e5		.
-	ld d,h			;343c	54		T
-	ld e,l			;343d	5d		]
-	inc de			;343e	13		.
-	ld (hl),000h		;343f	36 00		6 .
-	ld bc,l01ffh		;3441	01 ff 01	. . .
-	ldir			;3444	ed b0		. .
-	pop hl			;3446	e1		.
-	pop af			;3447	f1		.
-	ld e,a			;3448	5f		_
-	ld d,000h		;3449	16 00		. .
-	add hl,de		;344b	19		.
-	push hl			;344c	e5		.
-	pop ix			;344d	dd e1		. .
-	ld (ix+000h),0a0h	;344f	dd 36 00 a0	. 6 . .
-	ld (ix+001h),014h	;3453	dd 36 01 14	. 6 . .
-	ld (ix+002h),0a9h	;3457	dd 36 02 a9	. 6 . .
-	ld (ix+003h),014h	;345b	dd 36 03 14	. 6 . .
-	ld (ix+004h),046h	;345f	dd 36 04 46	. 6 . F
-	ld (ix+006h),a		;3463	dd 77 06	. w .
-	ld a,(05ccbh)		;3466	3a cb 5c	: . \
-	ld (ix+005h),a		;3469	dd 77 05	. w .
-	pop bc			;346c	c1		.
-	ld a,b			;346d	78		x
-	or c			;346e	b1		.
-	jr z,CH_OPEN_HOOK.strm	;346f	28 04		( .
-	ld (ix+00ah),001h	;3471	dd 36 0a 01	. 6 . .
+	pop hl			;343b	e1		.
+	push af			;343c	f5		.
+	push hl			;343d	e5		.
+	dec hl			;343e	2b		+
+	ld bc,CH_ALLOC		;343f	01 00 02	. . .
+	call HC_MAKE_ROOM	;3442	cd 47 35	. G 5
+	pop hl			;3445	e1		.
+	push hl			;3446	e5		.
+	ld d,h			;3447	54		T
+	ld e,l			;3448	5d		]
+	inc de			;3449	13		.
+	ld (hl),000h		;344a	36 00		6 .
+	ld bc,l01ffh		;344c	01 ff 01	. . .
+	ldir			;344f	ed b0		. .
+	pop hl			;3451	e1		.
+	pop af			;3452	f1		.
+	ld e,a			;3453	5f		_
+	ld d,000h		;3454	16 00		. .
+	add hl,de		;3456	19		.
+	push hl			;3457	e5		.
+	pop ix			;3458	dd e1		. .
+	ld (ix+000h),0a0h	;345a	dd 36 00 a0	. 6 . .
+	ld (ix+001h),014h	;345e	dd 36 01 14	. 6 . .
+	ld (ix+002h),0a9h	;3462	dd 36 02 a9	. 6 . .
+	ld (ix+003h),014h	;3466	dd 36 03 14	. 6 . .
+	ld (ix+004h),046h	;346a	dd 36 04 46	. 6 . F
+	ld (ix+006h),a		;346e	dd 77 06	. w .
+	ld a,(05ccbh)		;3471	3a cb 5c	: . \
+	ld (ix+005h),a		;3474	dd 77 05	. w .
+	pop bc			;3477	c1		.
+	ld a,b			;3478	78		x
+	or c			;3479	b1		.
+	jr z,CH_OPEN_HOOK.strm	;347a	28 04		( .
+	ld (ix+00ah),001h	;347c	dd 36 0a 01	. 6 . .
 CH_OPEN_HOOK.strm:
-	ld de,(05c4fh)		;3475	ed 5b 4f 5c	. [ O \
-	and a			;3479	a7		.
-	sbc hl,de		;347a	ed 52		. R
-	inc hl			;347c	23		#
-	ex de,hl		;347d	eb		.
-	call STRMS_HL		;347e	cd 9e 34	. . 4
-	scf			;3481	37		7
-	ret			;3482	c9		.
+	ld de,(05c4fh)		;3480	ed 5b 4f 5c	. [ O \
+	and a			;3484	a7		.
+	sbc hl,de		;3485	ed 52		. R
+	inc hl			;3487	23		#
+	ex de,hl		;3488	eb		.
+	call STRMS_HL		;3489	cd a9 34	. . 4
+	scf			;348c	37		7
+	ret			;348d	c9		.
 OPEN_SYNTAX:
-	ld iy,05c3ah		;3483	fd 21 3a 5c	. ! : \
-	call NEXT_CHAR		;3487	cd 4d 31	. M 1
-	call HC_EXPT_STR	;348a	cd 6c 31	. l 1
-	call SKIP_SPACES	;348d	cd 3e 31	. > 1
-	cp 02ch			;3490	fe 2c		. ,
-	ret nz			;3492	c0		.
-	call NEXT_CHAR		;3493	cd 4d 31	. M 1
-	jp HC_EXPT_1NUM		;3496	c3 2a 35	. * 5
+	ld iy,05c3ah		;348e	fd 21 3a 5c	. ! : \
+	call NEXT_CHAR		;3492	cd 58 31	. X 1
+	call HC_EXPT_STR	;3495	cd 77 31	. w 1
+	call SKIP_SPACES	;3498	cd 49 31	. I 1
+	cp 02ch			;349b	fe 2c		. ,
+	ret nz			;349d	c0		.
+	call NEXT_CHAR		;349e	cd 58 31	. X 1
+	jp HC_EXPT_1NUM		;34a1	c3 35 35	. 5 5
 STRMS_NC:
-	call STRMS_HL		;3499	cd 9e 34	. . 4
-	and a			;349c	a7		.
-	ret			;349d	c9		.
+	call STRMS_HL		;34a4	cd a9 34	. . 4
+	and a			;34a7	a7		.
+	ret			;34a8	c9		.
 STRMS_HL:
-	ld a,(05ccbh)		;349e	3a cb 5c	: . \
-	add a,a			;34a1	87		.
-	add a,016h		;34a2	c6 16		. .
-	ld l,a			;34a4	6f		o
-	ld h,05ch		;34a5	26 5c		& \
-	ret			;34a7	c9		.
+	ld a,(05ccbh)		;34a9	3a cb 5c	: . \
+	add a,a			;34ac	87		.
+	add a,016h		;34ad	c6 16		. .
+	ld l,a			;34af	6f		o
+	ld h,05ch		;34b0	26 5c		& \
+	ret			;34b2	c9		.
 CH_CLOSE_HOOK:
-	ld iy,05c3ah		;34a8	fd 21 3a 5c	. ! : \
-	bit 7,b			;34ac	cb 78		. x
-	jr nz,CH_CLOSE_HOOK.stock	;34ae	20 0f		  .
-	ld hl,(05c4fh)		;34b0	2a 4f 5c	* O \
-	add hl,bc		;34b3	09		.
-	dec hl			;34b4	2b		+
-	push hl			;34b5	e5		.
-	pop ix			;34b6	dd e1		. .
-	ld a,(ix+004h)		;34b8	dd 7e 04	. ~ .
-	cp 046h			;34bb	fe 46		. F
-	jr z,CH_CLOSE_HOOK.ours	;34bd	28 06		( .
+	ld iy,05c3ah		;34b3	fd 21 3a 5c	. ! : \
+	bit 7,b			;34b7	cb 78		. x
+	jr nz,CH_CLOSE_HOOK.stock	;34b9	20 0f		  .
+	ld hl,(05c4fh)		;34bb	2a 4f 5c	* O \
+	add hl,bc		;34be	09		.
+	dec hl			;34bf	2b		+
+	push hl			;34c0	e5		.
+	pop ix			;34c1	dd e1		. .
+	ld a,(ix+004h)		;34c3	dd 7e 04	. ~ .
+	cp 046h			;34c6	fe 46		. F
+	jr z,CH_CLOSE_HOOK.ours	;34c8	28 06		( .
 CH_CLOSE_HOOK.stock:
-	call STRMS_HL		;34bf	cd 9e 34	. . 4
-	ld a,b			;34c2	78		x
-	or c			;34c3	b1		.
-	ret			;34c4	c9		.
+	call STRMS_HL		;34ca	cd a9 34	. . 4
+	ld a,b			;34cd	78		x
+	or c			;34ce	b1		.
+	ret			;34cf	c9		.
 CH_CLOSE_HOOK.ours:
-	push bc			;34c5	c5		.
-	call CH_FLUSH		;34c6	cd c9 35	. . 5
-	ld a,(ix+005h)		;34c9	dd 7e 05	. ~ .
-	ld hl,CMD_CHCLOSE	;34cc	21 54 37	! T 7
-	ld bc,l0000h		;34cf	01 00 00	. . .
-	call CH_SEND		;34d2	cd 45 36	. E 6
-	call CH_STATUS		;34d5	cd 36 36	. 6 6
-	pop bc			;34d8	c1		.
-	ld e,(ix+006h)		;34d9	dd 5e 06	. ^ .
-	ld d,000h		;34dc	16 00		. .
-	push ix			;34de	dd e5		. .
-	pop hl			;34e0	e1		.
-	and a			;34e1	a7		.
-	sbc hl,de		;34e2	ed 52		. R
-	push hl			;34e4	e5		.
-	ld hl,05c10h		;34e5	21 10 5c	! . \
-	ld a,013h		;34e8	3e 13		> .
+	push bc			;34d0	c5		.
+	call CH_FLUSH		;34d1	cd d4 35	. . 5
+	ld a,(ix+005h)		;34d4	dd 7e 05	. ~ .
+	ld hl,CMD_CHCLOSE	;34d7	21 5f 37	! _ 7
+	ld bc,l0000h		;34da	01 00 00	. . .
+	call CH_SEND		;34dd	cd 50 36	. P 6
+	call CH_STATUS		;34e0	cd 41 36	. A 6
+	pop bc			;34e3	c1		.
+	ld e,(ix+006h)		;34e4	dd 5e 06	. ^ .
+	ld d,000h		;34e7	16 00		. .
+	push ix			;34e9	dd e5		. .
+	pop hl			;34eb	e1		.
+	and a			;34ec	a7		.
+	sbc hl,de		;34ed	ed 52		. R
+	push hl			;34ef	e5		.
+	ld hl,05c10h		;34f0	21 10 5c	! . \
+	ld a,013h		;34f3	3e 13		> .
 CH_CLOSE_HOOK.fix:
-	ld e,(hl)		;34ea	5e		^
-	inc hl			;34eb	23		#
-	ld d,(hl)		;34ec	56		V
-	bit 7,d			;34ed	cb 7a		. z
-	jr nz,CH_CLOSE_HOOK.next	;34ef	20 0b		  .
-	push hl			;34f1	e5		.
-	ld h,b			;34f2	60		`
-	ld l,c			;34f3	69		i
-	and a			;34f4	a7		.
-	sbc hl,de		;34f5	ed 52		. R
-	pop hl			;34f7	e1		.
-	jr nc,CH_CLOSE_HOOK.next	;34f8	30 02		0 .
-	dec (hl)		;34fa	35		5
-	dec (hl)		;34fb	35		5
+	ld e,(hl)		;34f5	5e		^
+	inc hl			;34f6	23		#
+	ld d,(hl)		;34f7	56		V
+	bit 7,d			;34f8	cb 7a		. z
+	jr nz,CH_CLOSE_HOOK.next	;34fa	20 0b		  .
+	push hl			;34fc	e5		.
+	ld h,b			;34fd	60		`
+	ld l,c			;34fe	69		i
+	and a			;34ff	a7		.
+	sbc hl,de		;3500	ed 52		. R
+	pop hl			;3502	e1		.
+	jr nc,CH_CLOSE_HOOK.next	;3503	30 02		0 .
+	dec (hl)		;3505	35		5
+	dec (hl)		;3506	35		5
 CH_CLOSE_HOOK.next:
-	inc hl			;34fc	23		#
-	dec a			;34fd	3d		=
-	jr nz,CH_CLOSE_HOOK.fix	;34fe	20 ea		  .
-	pop hl			;3500	e1		.
-	push hl			;3501	e5		.
-	ld de,(05c51h)		;3502	ed 5b 51 5c	. [ Q \
-	ex de,hl		;3506	eb		.
-	and a			;3507	a7		.
-	sbc hl,de		;3508	ed 52		. R
-	ld a,000h		;350a	3e 00		> .
-	jr c,CH_CLOSE_HOOK.keep	;350c	38 08		8 .
-	ld a,h			;350e	7c		|
-	cp 002h			;350f	fe 02		. .
-	ld a,000h		;3511	3e 00		> .
-	jr nc,CH_CLOSE_HOOK.keep	;3513	30 01		0 .
-	inc a			;3515	3c		<
+	inc hl			;3507	23		#
+	dec a			;3508	3d		=
+	jr nz,CH_CLOSE_HOOK.fix	;3509	20 ea		  .
+	pop hl			;350b	e1		.
+	push hl			;350c	e5		.
+	ld de,(05c51h)		;350d	ed 5b 51 5c	. [ Q \
+	ex de,hl		;3511	eb		.
+	and a			;3512	a7		.
+	sbc hl,de		;3513	ed 52		. R
+	ld a,000h		;3515	3e 00		> .
+	jr c,CH_CLOSE_HOOK.keep	;3517	38 08		8 .
+	ld a,h			;3519	7c		|
+	cp 002h			;351a	fe 02		. .
+	ld a,000h		;351c	3e 00		> .
+	jr nc,CH_CLOSE_HOOK.keep	;351e	30 01		0 .
+	inc a			;3520	3c		<
 CH_CLOSE_HOOK.keep:
-	pop hl			;3516	e1		.
-	push af			;3517	f5		.
-	ld bc,CH_ALLOC		;3518	01 00 02	. . .
-	call HC_RECLAIM		;351b	cd 45 35	. E 5
-	pop af			;351e	f1		.
-	and a			;351f	a7		.
-	ld a,002h		;3520	3e 02		> .
-	call nz,HC_CHAN_OPEN	;3522	c4 4e 35	. N 5
-	call STRMS_HL		;3525	cd 9e 34	. . 4
-	scf			;3528	37		7
-	ret			;3529	c9		.
+	pop hl			;3521	e1		.
+	push af			;3522	f5		.
+	ld bc,CH_ALLOC		;3523	01 00 02	. . .
+	call HC_RECLAIM		;3526	cd 50 35	. P 5
+	pop af			;3529	f1		.
+	and a			;352a	a7		.
+	ld a,002h		;352b	3e 02		> .
+	call nz,HC_CHAN_OPEN	;352d	c4 59 35	. Y 5
+	call STRMS_HL		;3530	cd a9 34	. . 4
+	scf			;3533	37		7
+	ret			;3534	c9		.
 HC_EXPT_1NUM:
-	push ix			;352a	dd e5		. .
-	exx			;352c	d9		.
-	ld hl,H_EXPT_1NUM	;352d	21 e5 1b	! . .
-	jp CALL_HOME		;3530	c3 dd 03	. . .
+	push ix			;3535	dd e5		. .
+	exx			;3537	d9		.
+	ld hl,H_EXPT_1NUM	;3538	21 e5 1b	! . .
+	jp CALL_HOME		;353b	c3 dd 03	. . .
 HC_FIND_INT2:
-	push ix			;3533	dd e5		. .
-	exx			;3535	d9		.
-	ld hl,H_FIND_INT2	;3536	21 23 1f	! # .
-	jp CALL_HOME		;3539	c3 dd 03	. . .
+	push ix			;353e	dd e5		. .
+	exx			;3540	d9		.
+	ld hl,H_FIND_INT2	;3541	21 23 1f	! # .
+	jp CALL_HOME		;3544	c3 dd 03	. . .
 HC_MAKE_ROOM:
-	push ix			;353c	dd e5		. .
-	exx			;353e	d9		.
-	ld hl,H_MAKE_ROOM	;353f	21 bb 12	! . .
-	jp CALL_HOME		;3542	c3 dd 03	. . .
+	push ix			;3547	dd e5		. .
+	exx			;3549	d9		.
+	ld hl,H_MAKE_ROOM	;354a	21 bb 12	! . .
+	jp CALL_HOME		;354d	c3 dd 03	. . .
 HC_RECLAIM:
-	push ix			;3545	dd e5		. .
-	exx			;3547	d9		.
-	ld hl,H_RECLAIM		;3548	21 50 17	! P .
-	jp CALL_HOME		;354b	c3 dd 03	. . .
+	push ix			;3550	dd e5		. .
+	exx			;3552	d9		.
+	ld hl,H_RECLAIM		;3553	21 50 17	! P .
+	jp CALL_HOME		;3556	c3 dd 03	. . .
 HC_CHAN_OPEN:
-	push ix			;354e	dd e5		. .
-	exx			;3550	d9		.
-	ld hl,H_CHAN_OPEN	;3551	21 30 12	! 0 .
-	jp CALL_HOME		;3554	c3 dd 03	. . .
+	push ix			;3559	dd e5		. .
+	exx			;355b	d9		.
+	ld hl,H_CHAN_OPEN	;355c	21 30 12	! 0 .
+	jp CALL_HOME		;355f	c3 dd 03	. . .
 CH_OUT:
-	ld iy,05c3ah		;3557	fd 21 3a 5c	. ! : \
-	push ix			;355b	dd e5		. .
-	ld ix,(05c51h)		;355d	dd 2a 51 5c	. * Q \
-	ld c,a			;3561	4f		O
-	cp 017h			;3562	fe 17		. .
-	jr nz,CH_OUT.put	;3564	20 08		  .
-	ld (ix+008h),000h	;3566	dd 36 08 00	. 6 . .
-	ld (ix+009h),000h	;356a	dd 36 09 00	. 6 . .
+	ld iy,05c3ah		;3562	fd 21 3a 5c	. ! : \
+	push ix			;3566	dd e5		. .
+	ld ix,(05c51h)		;3568	dd 2a 51 5c	. * Q \
+	ld c,a			;356c	4f		O
+	cp 017h			;356d	fe 17		. .
+	jr nz,CH_OUT.put	;356f	20 08		  .
+	ld (ix+008h),000h	;3571	dd 36 08 00	. 6 . .
+	ld (ix+009h),000h	;3575	dd 36 09 00	. 6 . .
 CH_OUT.put:
-	ld a,(ix+007h)		;356e	dd 7e 07	. ~ .
-	push ix			;3571	dd e5		. .
-	pop hl			;3573	e1		.
-	ld de,l000bh		;3574	11 0b 00	. . .
-	add hl,de		;3577	19		.
-	ld e,a			;3578	5f		_
-	ld d,000h		;3579	16 00		. .
-	add hl,de		;357b	19		.
-	ld (hl),c		;357c	71		q
-	inc a			;357d	3c		<
-	ld (ix+007h),a		;357e	dd 77 07	. w .
-	cp 040h			;3581	fe 40		. @
-	jr nc,CH_OUT.send	;3583	30 0b		0 .
-	ld a,c			;3585	79		y
-	cp 00dh			;3586	fe 0d		. .
-	jr nz,CH_OUT.done	;3588	20 09		  .
-	bit 0,(ix+00ah)		;358a	dd cb 0a 46	. . . F
-	jr z,CH_OUT.done	;358e	28 03		( .
+	ld a,(ix+007h)		;3579	dd 7e 07	. ~ .
+	push ix			;357c	dd e5		. .
+	pop hl			;357e	e1		.
+	ld de,l000bh		;357f	11 0b 00	. . .
+	add hl,de		;3582	19		.
+	ld e,a			;3583	5f		_
+	ld d,000h		;3584	16 00		. .
+	add hl,de		;3586	19		.
+	ld (hl),c		;3587	71		q
+	inc a			;3588	3c		<
+	ld (ix+007h),a		;3589	dd 77 07	. w .
+	cp 040h			;358c	fe 40		. @
+	jr nc,CH_OUT.send	;358e	30 0b		0 .
+	ld a,c			;3590	79		y
+	cp 00dh			;3591	fe 0d		. .
+	jr nz,CH_OUT.done	;3593	20 09		  .
+	bit 0,(ix+00ah)		;3595	dd cb 0a 46	. . . F
+	jr z,CH_OUT.done	;3599	28 03		( .
 CH_OUT.send:
-	call CH_FLUSH		;3590	cd c9 35	. . 5
+	call CH_FLUSH		;359b	cd d4 35	. . 5
 CH_OUT.done:
-	pop ix			;3593	dd e1		. .
-	ret			;3595	c9		.
+	pop ix			;359e	dd e1		. .
+	ret			;35a0	c9		.
 CH_IN:
-	ld iy,05c3ah		;3596	fd 21 3a 5c	. ! : \
-	push ix			;359a	dd e5		. .
-	ld ix,(05c51h)		;359c	dd 2a 51 5c	. * Q \
+	ld iy,05c3ah		;35a1	fd 21 3a 5c	. ! : \
+	push ix			;35a5	dd e5		. .
+	ld ix,(05c51h)		;35a7	dd 2a 51 5c	. * Q \
 CH_IN.again:
-	ld a,(ix+009h)		;35a0	dd 7e 09	. ~ .
-	cp (ix+008h)		;35a3	dd be 08	. . .
-	jr c,CH_IN.have		;35a6	38 0d		8 .
-	call CH_FLUSH		;35a8	cd c9 35	. . 5
-	call CH_FETCH		;35ab	cd e1 35	. . 5
-	jr z,CH_IN.again	;35ae	28 f0		( .
-	pop ix			;35b0	dd e1		. .
-	xor a			;35b2	af		.
-	inc a			;35b3	3c		<
-	ret			;35b4	c9		.
+	ld a,(ix+009h)		;35ab	dd 7e 09	. ~ .
+	cp (ix+008h)		;35ae	dd be 08	. . .
+	jr c,CH_IN.have		;35b1	38 0d		8 .
+	call CH_FLUSH		;35b3	cd d4 35	. . 5
+	call CH_FETCH		;35b6	cd ec 35	. . 5
+	jr z,CH_IN.again	;35b9	28 f0		( .
+	pop ix			;35bb	dd e1		. .
+	xor a			;35bd	af		.
+	inc a			;35be	3c		<
+	ret			;35bf	c9		.
 CH_IN.have:
-	ld e,a			;35b5	5f		_
-	inc a			;35b6	3c		<
-	ld (ix+009h),a		;35b7	dd 77 09	. w .
-	ld d,000h		;35ba	16 00		. .
-	push ix			;35bc	dd e5		. .
-	pop hl			;35be	e1		.
-	add hl,de		;35bf	19		.
-	ld de,l004bh		;35c0	11 4b 00	. K .
-	add hl,de		;35c3	19		.
-	ld a,(hl)		;35c4	7e		~
-	pop ix			;35c5	dd e1		. .
-	scf			;35c7	37		7
-	ret			;35c8	c9		.
+	ld e,a			;35c0	5f		_
+	inc a			;35c1	3c		<
+	ld (ix+009h),a		;35c2	dd 77 09	. w .
+	ld d,000h		;35c5	16 00		. .
+	push ix			;35c7	dd e5		. .
+	pop hl			;35c9	e1		.
+	add hl,de		;35ca	19		.
+	ld de,l004bh		;35cb	11 4b 00	. K .
+	add hl,de		;35ce	19		.
+	ld a,(hl)		;35cf	7e		~
+	pop ix			;35d0	dd e1		. .
+	scf			;35d2	37		7
+	ret			;35d3	c9		.
 CH_FLUSH:
-	ld a,(ix+007h)		;35c9	dd 7e 07	. ~ .
-	and a			;35cc	a7		.
-	ret z			;35cd	c8		.
-	ld b,a			;35ce	47		G
-	ld (ix+007h),000h	;35cf	dd 36 07 00	. 6 . .
-	ld c,000h		;35d3	0e 00		. .
-	ld a,(ix+005h)		;35d5	dd 7e 05	. ~ .
-	ld hl,CMD_CHWR		;35d8	21 41 37	! A 7
-	call CH_SEND		;35db	cd 45 36	. E 6
-	jp CH_STATUS		;35de	c3 36 36	. 6 6
+	ld a,(ix+007h)		;35d4	dd 7e 07	. ~ .
+	and a			;35d7	a7		.
+	ret z			;35d8	c8		.
+	ld b,a			;35d9	47		G
+	ld (ix+007h),000h	;35da	dd 36 07 00	. 6 . .
+	ld c,000h		;35de	0e 00		. .
+	ld a,(ix+005h)		;35e0	dd 7e 05	. ~ .
+	ld hl,CMD_CHWR		;35e3	21 4c 37	! L 7
+	call CH_SEND		;35e6	cd 50 36	. P 6
+	jp CH_STATUS		;35e9	c3 41 36	. A 6
 CH_FETCH:
-	ld b,000h		;35e1	06 00		. .
-	ld c,0ffh		;35e3	0e ff		. .
-	ld a,(ix+005h)		;35e5	dd 7e 05	. ~ .
-	ld hl,CMD_CHRD		;35e8	21 4b 37	! K 7
-	call CH_SEND		;35eb	cd 45 36	. E 6
-	call sub_184ch		;35ee	cd 4c 18	. L .
-	jp c,WF_FAIL		;35f1	da 14 33	. . 3
-	call BIOS_RX_A		;35f4	cd 48 18	. H .
-	cp 001h			;35f7	fe 01		. .
-	jr z,CH_FETCH.data	;35f9	28 0a		( .
-	cp 007h			;35fb	fe 07		. .
-	jr nz,CH_FETCH.err	;35fd	20 02		  .
-	or a			;35ff	b7		.
-	ret			;3600	c9		.
+	ld b,000h		;35ec	06 00		. .
+	ld c,0ffh		;35ee	0e ff		. .
+	ld a,(ix+005h)		;35f0	dd 7e 05	. ~ .
+	ld hl,CMD_CHRD		;35f3	21 56 37	! V 7
+	call CH_SEND		;35f6	cd 50 36	. P 6
+	call sub_184ch		;35f9	cd 4c 18	. L .
+	jp c,WF_FAIL		;35fc	da 1f 33	. . 3
+	call BIOS_RX_A		;35ff	cd 48 18	. H .
+	cp 001h			;3602	fe 01		. .
+	jr z,CH_FETCH.data	;3604	28 0a		( .
+	cp 007h			;3606	fe 07		. .
+	jr nz,CH_FETCH.err	;3608	20 02		  .
+	or a			;360a	b7		.
+	ret			;360b	c9		.
 CH_FETCH.err:
-	dec a			;3601	3d		=
-	jp STATUS_TO_REPORT	;3602	c3 f3 1b	. . .
+	dec a			;360c	3d		=
+	jp STATUS_TO_REPORT	;360d	c3 f3 1b	. . .
 CH_FETCH.data:
-	call BIOS_RX_A		;3605	cd 48 18	. H .
-	ld b,a			;3608	47		G
-	ld (ix+008h),a		;3609	dd 77 08	. w .
-	ld (ix+009h),000h	;360c	dd 36 09 00	. 6 . .
-	push ix			;3610	dd e5		. .
-	pop hl			;3612	e1		.
-	ld de,l004bh		;3613	11 4b 00	. K .
-	add hl,de		;3616	19		.
-	ld d,000h		;3617	16 00		. .
+	call BIOS_RX_A		;3610	cd 48 18	. H .
+	ld b,a			;3613	47		G
+	ld (ix+008h),a		;3614	dd 77 08	. w .
+	ld (ix+009h),000h	;3617	dd 36 09 00	. 6 . .
+	push ix			;361b	dd e5		. .
+	pop hl			;361d	e1		.
+	ld de,l004bh		;361e	11 4b 00	. K .
+	add hl,de		;3621	19		.
+	ld d,000h		;3622	16 00		. .
 CH_FETCH.byte:
-	ld e,010h		;3619	1e 10		. .
+	ld e,010h		;3624	1e 10		. .
 CH_FETCH.dly:
-	dec e			;361b	1d		.
-	jr nz,CH_FETCH.dly	;361c	20 fd		  .
-	call BIOS_RX_A		;361e	cd 48 18	. H .
-	ld (hl),a		;3621	77		w
-	inc hl			;3622	23		#
-	xor d			;3623	aa		.
-	ld d,a			;3624	57		W
-	djnz CH_FETCH.byte	;3625	10 f2		. .
-	ld e,010h		;3627	1e 10		. .
+	dec e			;3626	1d		.
+	jr nz,CH_FETCH.dly	;3627	20 fd		  .
+	call BIOS_RX_A		;3629	cd 48 18	. H .
+	ld (hl),a		;362c	77		w
+	inc hl			;362d	23		#
+	xor d			;362e	aa		.
+	ld d,a			;362f	57		W
+	djnz CH_FETCH.byte	;3630	10 f2		. .
+	ld e,010h		;3632	1e 10		. .
 CH_FETCH.dly2:
-	dec e			;3629	1d		.
-	jr nz,CH_FETCH.dly2	;362a	20 fd		  .
-	call BIOS_RX_A		;362c	cd 48 18	. H .
-	cp d			;362f	ba		.
-	jr nz,CH_FETCH.bad	;3630	20 02		  .
-	xor a			;3632	af		.
-	ret			;3633	c9		.
+	dec e			;3634	1d		.
+	jr nz,CH_FETCH.dly2	;3635	20 fd		  .
+	call BIOS_RX_A		;3637	cd 48 18	. H .
+	cp d			;363a	ba		.
+	jr nz,CH_FETCH.bad	;363b	20 02		  .
+	xor a			;363d	af		.
+	ret			;363e	c9		.
 CH_FETCH.bad:
-	rst 8			;3634	cf		.
-	ld a,(de)		;3635	1a		.
+	rst 8			;363f	cf		.
+	ld a,(de)		;3640	1a		.
 CH_STATUS:
-	ld hl,(05c51h)		;3636	2a 51 5c	* Q \
-	push hl			;3639	e5		.
-	call sub_184ah		;363a	cd 4a 18	. J .
-	pop hl			;363d	e1		.
-	ld (05c51h),hl		;363e	22 51 5c	" Q \
-	ret nc			;3641	d0		.
-	jp C_FAIL		;3642	c3 22 33	. " 3
+	ld hl,(05c51h)		;3641	2a 51 5c	* Q \
+	push hl			;3644	e5		.
+	call sub_184ah		;3645	cd 4a 18	. J .
+	pop hl			;3648	e1		.
+	ld (05c51h),hl		;3649	22 51 5c	" Q \
+	ret nc			;364c	d0		.
+	jp C_FAIL		;364d	c3 2d 33	. - 3
 CH_SEND:
-	push af			;3645	f5		.
-	push hl			;3646	e5		.
-	push bc			;3647	c5		.
-	call STRLEN		;3648	cd e7 36	. . 6
-	pop bc			;364b	c1		.
-	add a,b			;364c	80		.
-	add a,b			;364d	80		.
-	ld e,a			;364e	5f		_
-	pop hl			;364f	e1		.
-	pop af			;3650	f1		.
+	push af			;3650	f5		.
 	push hl			;3651	e5		.
 	push bc			;3652	c5		.
-	push af			;3653	f5		.
-	ld bc,l0000h		;3654	01 00 00	. . .
+	call STRLEN		;3653	cd f2 36	. . 6
+l3656h:
+	pop bc			;3656	c1		.
+	add a,b			;3657	80		.
+	add a,b			;3658	80		.
+	ld e,a			;3659	5f		_
+	pop hl			;365a	e1		.
+	pop af			;365b	f1		.
+	push hl			;365c	e5		.
+	push bc			;365d	c5		.
+	push af			;365e	f5		.
+	ld bc,l0000h		;365f	01 00 00	. . .
 CH_SEND.idle:
-	in a,(00fh)		;3657	db 0f		. .
-	and 048h		;3659	e6 48		. H
-	cp 048h			;365b	fe 48		. H
-	jr z,CH_SEND.sync	;365d	28 05		( .
-	dec bc			;365f	0b		.
-	ld a,b			;3660	78		x
-	or c			;3661	b1		.
-	jr nz,CH_SEND.idle	;3662	20 f3		  .
+	in a,(00fh)		;3662	db 0f		. .
+	and 048h		;3664	e6 48		. H
+	cp 048h			;3666	fe 48		. H
+	jr z,CH_SEND.sync	;3668	28 05		( .
+	dec bc			;366a	0b		.
+	ld a,b			;366b	78		x
+	or c			;366c	b1		.
+	jr nz,CH_SEND.idle	;366d	20 f3		  .
 CH_SEND.sync:
-	pop af			;3664	f1		.
-	pop bc			;3665	c1		.
-	push bc			;3666	c5		.
-	push af			;3667	f5		.
-	ld a,042h		;3668	3e 42		> B
-	ld d,a			;366a	57		W
-	call SYNC_WRITE		;366b	cd 00 23	. . #
-	xor a			;366e	af		.
-	call TXX		;366f	cd 05 33	. . 3
-	ld a,(05dcfh)		;3672	3a cf 5d	: . ]
-	call TXX		;3675	cd 05 33	. . 3
-	pop af			;3678	f1		.
-	call TXX		;3679	cd 05 33	. . 3
-	xor a			;367c	af		.
-	call TXX		;367d	cd 05 33	. . 3
-	ld a,c			;3680	79		y
-	call TXX		;3681	cd 05 33	. . 3
-	xor a			;3684	af		.
-	call TXX		;3685	cd 05 33	. . 3
-	ld a,e			;3688	7b		{
-	call TXX		;3689	cd 05 33	. . 3
-	xor a			;368c	af		.
-	call TXX		;368d	cd 05 33	. . 3
-	ld a,d			;3690	7a		z
-	call BIOS_TX_A		;3691	cd 46 18	. F .
-	call BIOS_RX_A		;3694	cd 48 18	. H .
-	call sub_184ch		;3697	cd 4c 18	. L .
-	jp c,WF_FAIL		;369a	da 14 33	. . 3
-	ld a,044h		;369d	3e 44		> D
-	ld d,a			;369f	57		W
-	call BIOS_TX_A		;36a0	cd 46 18	. F .
-	ld a,e			;36a3	7b		{
-	call TXX		;36a4	cd 05 33	. . 3
-	xor a			;36a7	af		.
-	call TXX		;36a8	cd 05 33	. . 3
-	pop bc			;36ab	c1		.
-	pop hl			;36ac	e1		.
-	push bc			;36ad	c5		.
+	pop af			;366f	f1		.
+	pop bc			;3670	c1		.
+	push bc			;3671	c5		.
+	push af			;3672	f5		.
+	ld a,042h		;3673	3e 42		> B
+	ld d,a			;3675	57		W
+	call SYNC_WRITE		;3676	cd 00 23	. . #
+	xor a			;3679	af		.
+	call TXX		;367a	cd 10 33	. . 3
+	ld a,(05dcfh)		;367d	3a cf 5d	: . ]
+	call TXX		;3680	cd 10 33	. . 3
+	pop af			;3683	f1		.
+	call TXX		;3684	cd 10 33	. . 3
+	xor a			;3687	af		.
+	call TXX		;3688	cd 10 33	. . 3
+	ld a,c			;368b	79		y
+	call TXX		;368c	cd 10 33	. . 3
+	xor a			;368f	af		.
+	call TXX		;3690	cd 10 33	. . 3
+	ld a,e			;3693	7b		{
+	call TXX		;3694	cd 10 33	. . 3
+	xor a			;3697	af		.
+	call TXX		;3698	cd 10 33	. . 3
+	ld a,d			;369b	7a		z
+	call BIOS_TX_A		;369c	cd 46 18	. F .
+	call BIOS_RX_A		;369f	cd 48 18	. H .
+	call sub_184ch		;36a2	cd 4c 18	. L .
+	jp c,WF_FAIL		;36a5	da 1f 33	. . 3
+	ld a,044h		;36a8	3e 44		> D
+	ld d,a			;36aa	57		W
+	call BIOS_TX_A		;36ab	cd 46 18	. F .
+	ld a,e			;36ae	7b		{
+	call TXX		;36af	cd 10 33	. . 3
+	xor a			;36b2	af		.
+	call TXX		;36b3	cd 10 33	. . 3
+	pop bc			;36b6	c1		.
+	pop hl			;36b7	e1		.
+	push bc			;36b8	c5		.
 CH_SEND.pre:
-	ld a,(hl)		;36ae	7e		~
-	inc hl			;36af	23		#
-	and a			;36b0	a7		.
-	jr z,CH_SEND.hex	;36b1	28 05		( .
-	call TXX		;36b3	cd 05 33	. . 3
-	jr CH_SEND.pre		;36b6	18 f6		. .
+	ld a,(hl)		;36b9	7e		~
+	inc hl			;36ba	23		#
+	and a			;36bb	a7		.
+	jr z,CH_SEND.hex	;36bc	28 05		( .
+	call TXX		;36be	cd 10 33	. . 3
+	jr CH_SEND.pre		;36c1	18 f6		. .
 CH_SEND.hex:
-	pop bc			;36b8	c1		.
-	ld a,b			;36b9	78		x
-	and a			;36ba	a7		.
-	jr z,CH_SEND.end	;36bb	28 19		( .
-	push de			;36bd	d5		.
-	push ix			;36be	dd e5		. .
-	pop hl			;36c0	e1		.
-	ld de,l000bh		;36c1	11 0b 00	. . .
-	add hl,de		;36c4	19		.
-	pop de			;36c5	d1		.
+	pop bc			;36c3	c1		.
+	ld a,b			;36c4	78		x
+	and a			;36c5	a7		.
+	jr z,CH_SEND.end	;36c6	28 19		( .
+	push de			;36c8	d5		.
+	push ix			;36c9	dd e5		. .
+	pop hl			;36cb	e1		.
+	ld de,l000bh		;36cc	11 0b 00	. . .
+	add hl,de		;36cf	19		.
+	pop de			;36d0	d1		.
 CH_SEND.hx:
-	ld a,(hl)		;36c6	7e		~
-	inc hl			;36c7	23		#
-	push af			;36c8	f5		.
-	rrca			;36c9	0f		.
-	rrca			;36ca	0f		.
-	rrca			;36cb	0f		.
-	rrca			;36cc	0f		.
-	call HEXDIG		;36cd	cd da 36	. . 6
-	pop af			;36d0	f1		.
-	call HEXDIG		;36d1	cd da 36	. . 6
-	djnz CH_SEND.hx		;36d4	10 f0		. .
+	ld a,(hl)		;36d1	7e		~
+	inc hl			;36d2	23		#
+	push af			;36d3	f5		.
+	rrca			;36d4	0f		.
+	rrca			;36d5	0f		.
+	rrca			;36d6	0f		.
+	rrca			;36d7	0f		.
+	call HEXDIG		;36d8	cd e5 36	. . 6
+	pop af			;36db	f1		.
+	call HEXDIG		;36dc	cd e5 36	. . 6
+	djnz CH_SEND.hx		;36df	10 f0		. .
 CH_SEND.end:
-	ld a,d			;36d6	7a		z
-	jp BIOS_TX_A		;36d7	c3 46 18	. F .
+	ld a,d			;36e1	7a		z
+	jp BIOS_TX_A		;36e2	c3 46 18	. F .
 HEXDIG:
-	and 00fh		;36da	e6 0f		. .
-	add a,030h		;36dc	c6 30		. 0
-	cp 03ah			;36de	fe 3a		. :
-	jr c,HEXDIG.d		;36e0	38 02		8 .
-	add a,027h		;36e2	c6 27		. '
+	and 00fh		;36e5	e6 0f		. .
+	add a,030h		;36e7	c6 30		. 0
+	cp 03ah			;36e9	fe 3a		. :
+	jr c,HEXDIG.d		;36eb	38 02		8 .
+	add a,027h		;36ed	c6 27		. '
 HEXDIG.d:
-	jp TXX			;36e4	c3 05 33	. . 3
+	jp TXX			;36ef	c3 10 33	. . 3
 STRLEN:
-	ld c,000h		;36e7	0e 00		. .
+	ld c,000h		;36f2	0e 00		. .
 STRLEN.l:
-	ld a,(hl)		;36e9	7e		~
-	inc hl			;36ea	23		#
-	and a			;36eb	a7		.
-	jr z,STRLEN.e		;36ec	28 03		( .
-	inc c			;36ee	0c		.
-	jr STRLEN.l		;36ef	18 f8		. .
+	ld a,(hl)		;36f4	7e		~
+	inc hl			;36f5	23		#
+	and a			;36f6	a7		.
+	jr z,STRLEN.e		;36f7	28 03		( .
+	inc c			;36f9	0c		.
+	jr STRLEN.l		;36fa	18 f8		. .
 STRLEN.e:
-	ld a,c			;36f1	79		y
-	ret			;36f2	c9		.
+	ld a,c			;36fc	79		y
+	ret			;36fd	c9		.
 CMD_DIR:
-	ld (hl),h		;36f3	74		t
-	ld (hl),b		;36f4	70		p
-	ld l,c			;36f5	69		i
-	ld a,(06964h)		;36f6	3a 64 69	: d i
-	ld (hl),d		;36f9	72		r
-	nop			;36fa	00		.
+	ld (hl),h		;36fe	74		t
+	ld (hl),b		;36ff	70		p
+	ld l,c			;3700	69		i
+	ld a,(06964h)		;3701	3a 64 69	: d i
+	ld (hl),d		;3704	72		r
+	nop			;3705	00		.
 CMD_DIR_ARG:
-	ld (hl),h		;36fb	74		t
-	ld (hl),b		;36fc	70		p
-	ld l,c			;36fd	69		i
-	ld a,(06964h)		;36fe	3a 64 69	: d i
-	ld (hl),d		;3701	72		r
-	jr nz,CMD_TAPDIR	;3702	20 00		  .
+	ld (hl),h		;3706	74		t
+	ld (hl),b		;3707	70		p
+	ld l,c			;3708	69		i
+	ld a,(06964h)		;3709	3a 64 69	: d i
+	ld (hl),d		;370c	72		r
+	jr nz,CMD_TAPDIR	;370d	20 00		  .
 CMD_TAPDIR:
-	ld (hl),h		;3704	74		t
-	ld (hl),b		;3705	70		p
-	ld l,c			;3706	69		i
-	ld a,(06174h)		;3707	3a 74 61	: t a
-	ld (hl),b		;370a	70		p
-	ld h,h			;370b	64		d
-	ld l,c			;370c	69		i
-	ld (hl),d		;370d	72		r
-	nop			;370e	00		.
-CMD_CD:
 	ld (hl),h		;370f	74		t
 	ld (hl),b		;3710	70		p
 	ld l,c			;3711	69		i
-	ld a,(06463h)		;3712	3a 63 64	: c d
-	jr nz,CMD_CD_BACK	;3715	20 00		  .
+	ld a,(06174h)		;3712	3a 74 61	: t a
+	ld (hl),b		;3715	70		p
+	ld h,h			;3716	64		d
+	ld l,c			;3717	69		i
+	ld (hl),d		;3718	72		r
+	nop			;3719	00		.
+CMD_CD:
+	ld (hl),h		;371a	74		t
+	ld (hl),b		;371b	70		p
+	ld l,c			;371c	69		i
+	ld a,(06463h)		;371d	3a 63 64	: c d
+	jr nz,CMD_CD_BACK	;3720	20 00		  .
 CMD_CD_BACK:
-	ld (hl),h		;3717	74		t
-	ld (hl),b		;3718	70		p
-	ld l,c			;3719	69		i
-	ld a,(06463h)		;371a	3a 63 64	: c d
-	jr nz,l374ch		;371d	20 2d		  -
-	nop			;371f	00		.
+	ld (hl),h		;3722	74		t
+	ld (hl),b		;3723	70		p
+	ld l,c			;3724	69		i
+	ld a,(06463h)		;3725	3a 63 64	: c d
+	jr nz,l3757h		;3728	20 2d		  -
+	nop			;372a	00		.
 CMD_COPY:
-	ld (hl),h		;3720	74		t
-	ld (hl),b		;3721	70		p
-	ld l,c			;3722	69		i
-	ld a,(06f63h)		;3723	3a 63 6f	: c o
-	ld (hl),b		;3726	70		p
-	ld a,c			;3727	79		y
-	jr nz,CMD_ERASE		;3728	20 00		  .
+	ld (hl),h		;372b	74		t
+	ld (hl),b		;372c	70		p
+	ld l,c			;372d	69		i
+	ld a,(06f63h)		;372e	3a 63 6f	: c o
+	ld (hl),b		;3731	70		p
+	ld a,c			;3732	79		y
+	jr nz,CMD_ERASE		;3733	20 00		  .
 CMD_ERASE:
-	ld (hl),h		;372a	74		t
-	ld (hl),b		;372b	70		p
-	ld l,c			;372c	69		i
-	ld a,(07265h)		;372d	3a 65 72	: e r
-	ld h,c			;3730	61		a
-	ld (hl),e		;3731	73		s
-	ld h,l			;3732	65		e
-	jr nz,CMD_FORMAT	;3733	20 00		  .
-CMD_FORMAT:
 	ld (hl),h		;3735	74		t
 	ld (hl),b		;3736	70		p
 	ld l,c			;3737	69		i
-	ld a,(06f66h)		;3738	3a 66 6f	: f o
-	ld (hl),d		;373b	72		r
-	ld l,l			;373c	6d		m
-	ld h,c			;373d	61		a
-	ld (hl),h		;373e	74		t
-	jr nz,CMD_CHWR		;373f	20 00		  .
+	ld a,(07265h)		;3738	3a 65 72	: e r
+	ld h,c			;373b	61		a
+	ld (hl),e		;373c	73		s
+	ld h,l			;373d	65		e
+	jr nz,CMD_FORMAT	;373e	20 00		  .
+CMD_FORMAT:
+	ld (hl),h		;3740	74		t
+	ld (hl),b		;3741	70		p
+	ld l,c			;3742	69		i
+	ld a,(06f66h)		;3743	3a 66 6f	: f o
+	ld (hl),d		;3746	72		r
+	ld l,l			;3747	6d		m
+	ld h,c			;3748	61		a
+	ld (hl),h		;3749	74		t
+	jr nz,CMD_CHWR		;374a	20 00		  .
 CMD_CHWR:
-	ld (hl),h		;3741	74		t
-	ld (hl),b		;3742	70		p
-	ld l,c			;3743	69		i
-	ld a,(06863h)		;3744	3a 63 68	: c h
-	ld (hl),a		;3747	77		w
-	ld (hl),d		;3748	72		r
-	jr nz,CMD_CHRD		;3749	20 00		  .
+	ld (hl),h		;374c	74		t
+	ld (hl),b		;374d	70		p
+	ld l,c			;374e	69		i
+	ld a,(06863h)		;374f	3a 63 68	: c h
+	ld (hl),a		;3752	77		w
+	ld (hl),d		;3753	72		r
+	jr nz,CMD_CHRD		;3754	20 00		  .
 CMD_CHRD:
-	ld (hl),h		;374b	74		t
-l374ch:
-	ld (hl),b		;374c	70		p
-	ld l,c			;374d	69		i
-	ld a,(06863h)		;374e	3a 63 68	: c h
-	ld (hl),d		;3751	72		r
-	ld h,h			;3752	64		d
-	nop			;3753	00		.
+	ld (hl),h		;3756	74		t
+l3757h:
+	ld (hl),b		;3757	70		p
+	ld l,c			;3758	69		i
+	ld a,(06863h)		;3759	3a 63 68	: c h
+	ld (hl),d		;375c	72		r
+	ld h,h			;375d	64		d
+	nop			;375e	00		.
 CMD_CHCLOSE:
-	ld (hl),h		;3754	74		t
-	ld (hl),b		;3755	70		p
-	ld l,c			;3756	69		i
-	ld a,(06863h)		;3757	3a 63 68	: c h
-	ld h,e			;375a	63		c
-	ld l,h			;375b	6c		l
-	ld l,a			;375c	6f		o
-	ld (hl),e		;375d	73		s
-	ld h,l			;375e	65		e
-	nop			;375f	00		.
+	ld (hl),h		;375f	74		t
+	ld (hl),b		;3760	70		p
+	ld l,c			;3761	69		i
+	ld a,(06863h)		;3762	3a 63 68	: c h
+	ld h,e			;3765	63		c
+	ld l,h			;3766	6c		l
+	ld l,a			;3767	6f		o
+	ld (hl),e		;3768	73		s
+	ld h,l			;3769	65		e
+	nop			;376a	00		.
 CMD_CHOPEN:
-	ld (hl),h		;3760	74		t
-	ld (hl),b		;3761	70		p
-	ld l,c			;3762	69		i
-	ld a,(06863h)		;3763	3a 63 68	: c h
-	ld l,a			;3766	6f		o
-	ld (hl),b		;3767	70		p
-	ld h,l			;3768	65		e
-	ld l,(hl)		;3769	6e		n
-	jr nz,MODE_R		;376a	20 00		  .
+	ld (hl),h		;376b	74		t
+	ld (hl),b		;376c	70		p
+	ld l,c			;376d	69		i
+	ld a,(06863h)		;376e	3a 63 68	: c h
+	ld l,a			;3771	6f		o
+	ld (hl),b		;3772	70		p
+	ld h,l			;3773	65		e
+	ld l,(hl)		;3774	6e		n
+	jr nz,MODE_R		;3775	20 00		  .
 MODE_R:
-	ld (hl),d		;376c	72		r
+	ld (hl),d		;3777	72		r
 FDD_END:
-	rst 38h			;376d	ff		.
-	rst 38h			;376e	ff		.
-	rst 38h			;376f	ff		.
-	rst 38h			;3770	ff		.
-	rst 38h			;3771	ff		.
-	rst 38h			;3772	ff		.
-	rst 38h			;3773	ff		.
-	rst 38h			;3774	ff		.
-	rst 38h			;3775	ff		.
-	rst 38h			;3776	ff		.
-	rst 38h			;3777	ff		.
 	rst 38h			;3778	ff		.
 	rst 38h			;3779	ff		.
 	rst 38h			;377a	ff		.

@@ -48,7 +48,7 @@ All checksums below were computed from the files in the repository.
 | v1.5w | `ROMs/TSPICO-15w-home`, `-exrom` | 16K + 16K | `E8714BED`, `CACF18C5` | 15h | v1.1 plus 15 EXROM bytes: a ready-wait and guard in the Y/N loop | history ([DIFF_V11_vs_V15W.md](../../rom-analysis/DIFF_V11_vs_V15W.md)) |
 | v1.7 | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | v1.5w plus BREAK at the SAVE prompt: 89 EXROM bytes and the version byte | the base `tspico-sync.asm` patches |
 | 2.0 | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | v1.7 plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | the base `build-rom.py` patches; never released on its own |
-| **2.1** | `src/rom/TSPICO-21.ROM` | 32K | `E813BF90` | 21h | 2.0 plus 15 patches and the module at EXROM 3000h–376Ch; 2007 bytes in 14 hunks | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **2.1** | `src/rom/TSPICO-21.ROM` | 32K | `F3316DCF` | 21h | 2.0 plus 16 patches and the module at EXROM 3000h–3777h; 2023 bytes in 15 hunks | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX v2 | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base of v3/v4 |
 | ZX v3 | `src/rom/TSPICO-ZX48-V3.BIN` | 16K | `C4A833B8` | — | v2 plus a WAIT_RDY fix and `LOAD "tpi:…"` | superseded by v4 |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | v3 plus `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
@@ -107,7 +107,7 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | 1.7 | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | 2.0 | [exrom-sync.md](exrom-sync.md) |
 | 23D4h–2FFFh | 3116 | `FFh`, free | | |
-| 3000h–376Ch | 1901 | the disk-command module | 2.1 | [exrom-fdd.md](exrom-fdd.md) |
+| 3000h–3777h | 1912 | the disk-command module | 2.1 | [exrom-fdd.md](exrom-fdd.md) |
 | 376Dh–3FFFh | 2195 | `FFh`, free | | |
 
 Chunk 0 is effectively full: the 1K hole at 1800h was used for the driver,
@@ -205,12 +205,12 @@ Four places say, and they are changed together:
 | HOME 0065h (`PEEK 101`) | 15h | 17h | 20h | 21h |
 | BIOS G_VERS (EXROM 1844h → 1852h, `LD BC,nnnn`) | | 0017h | 0020h | 0021h |
 | the banner at EXROM 1C6Ch, at start-up | | "2025 Timex Pico Interface" | "2026 TS-Pico ROM v2.0" | "2026 TS-Pico ROM v2.1" |
-| the module's FDD_VERSION (EXROM 30A4h) | | | | 8 |
+| the module's FDD_VERSION (EXROM 30AFh) | | | | 8 |
 
 A BASIC program tests `PEEK 101`; machine code calls G_VERS through the
 BIOS table ([exrom-driver.md](exrom-driver.md)). FDD_VERSION counts
 revisions of the module within 2.1 and follows the signature `"FDDCMD"` at
-309Dh ([exrom-fdd.md](exrom-fdd.md)). The firmware does not read any of
+30A8h ([exrom-fdd.md](exrom-fdd.md)). The firmware does not read any of
 them: its `ROM_VERSION` is a string in `config.ini`
 ([../firmware/boot.md](../firmware/boot.md#configini)).
 
@@ -228,7 +228,7 @@ Every `IN`/`OUT` on the TS-Pico's two ports in ROM 2.1 (HOME has none):
 | 2320h | `OUT (0Fh),A` (03h) | BRK_ABORT | the abort on BREAK |
 | 23A7h | `IN A,(0Fh)` | BIOS WF_NPH | the BIOS ready-wait |
 | 23C0h | `OUT (0Fh),A` (03h) | BIOS WF_NPH | its BREAK abort |
-| 3657h | `IN A,(0Fh)` | CH_SEND | a channel command waits for IDLE before its SYNC |
+| 3662h | `IN A,(0Fh)` | CH_SEND | a channel command waits for IDLE before its SYNC |
 | 2020h, 2023h | `OUT (0Fh),A` (20h, then 00h) | — | dead: after a `RET`, never called ([PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#0x2000-0x203e-is-a-relocation-landing-pad-not-an-api-table)) |
 | 2236h | `OUT (0Fh),A` (00h) | — | after a `RET`; nothing jumps or calls here *(inferred unreachable)* |
 
@@ -303,11 +303,12 @@ set slot 1's crc32 in `flash/manifest.json` (`tools/build-flash.py check`
 prints it). CI ([../firmware/boot.md](../firmware/boot.md#ci-buildyml))
 runs `--verify`, fails if the committed `TSPICO-21.ROM` differs from the
 fresh build by a single byte, checks the manifest's crc32, and runs
-`rom_cend_hosttest.py` on `C_END2` in a Z80 interpreter.
+`rom_cend_hosttest.py` on `C_END2` and `rom_tpmode_hosttest.py` on the
+switch words in a Z80 interpreter.
 
 #### The patches
 
-Fifteen, applied in this order. The reason for each is in the source's
+Sixteen, applied in this order. The reason for each is in the source's
 `note`, and in full, with what it calls, in the chapter named.
 
 | Site | Before → after | What it does | Chapter |
@@ -324,13 +325,14 @@ Fifteen, applied in this order. The reason for each is in the source's
 | HOME 14BDh | 9 dead bytes → `DI / LD HL,3018h / CALL 03FCh / EI / RET` | the OPEN # syntax trampoline | [home.md](home.md) |
 | HOME 13A5h | `CALL 13BEh` → `CALL 1494h` | CLOSE # through its trampoline | [home.md](home.md) |
 | EXROM 184Fh | `JP 23CDh` → `JP 301Bh` | BIOS C_END becomes C_END2: a timeout is J, not F | [exrom-driver.md](exrom-driver.md), [exrom-fdd.md](exrom-fdd.md) |
+| EXROM 20BEh | `CALL 1861h / JR 2108h` → `JP 301Eh` + 2 × `00` | `tpi:tape` clears only the LOAD/SAVE switch (TPMODE bit 1), through the module's TAPE_MODE; it used to set TPMODE to 0, turning the printer switch off too (#176) | [sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027), [exrom-fdd.md](exrom-fdd.md) |
 | EXROM 1C7Eh | `"v2.0"` → `"v2.1"` | the banner | [exrom-driver.md](exrom-driver.md) |
 | HOME 0065h | `20h` → `21h` | `PEEK 101` | [home.md](home.md) |
 | EXROM 1852h | `LD BC,0020h` → `LD BC,0021h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
 
-The resulting 2.0 → 2.1 difference, measured on the committed images: 2007
-bytes in 14 hunks: 100 in HOME, 12 in the EXROM outside the module, and
-1895 in the module's region — 6 of the module's 1901 bytes are `FFh`, the
+The resulting 2.0 → 2.1 difference, measured on the committed images: 2023
+bytes in 15 hunks: 99 in HOME, 16 in the EXROM outside the module, and
+1908 in the module's region — 4 of the module's 1912 bytes are `FFh`, the
 same as the free space they replaced. The byte-by-byte account is
 [ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-home-and-exrom-patches).
 
@@ -361,6 +363,7 @@ must be kept in step.
 | EXROM 21E3h | the 86h handler and its loop at 21E6h |
 | HOME 03FCh | the returning HOME→EXROM thunk |
 | EXROM 2000h | `JP` to the relocated BEEPER (G_BEEP calls it) |
+| EXROM 2105h | `CALL S_MODE / CALL 042Fh / JP 1B72h`: where `tpi:sdcard` and `tpi:picopt` store TPMODE and say "0 OK"; TAPE_MODE ends here (MODE_SET_OK) |
 | HOME 12BBh | MAKE-ROOM (OPEN # appends a record) |
 | HOME 1750h | RECLAIM (CLOSE # removes it) |
 | HOME 1230h | CHAN-OPEN; its `D OR E ≥ 80h` test sets the offset rule for records |
@@ -458,5 +461,5 @@ Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-p
   disk keyword reaches the module. It also leaves "$22A1–$2FFF for
   Gustavo", where ROM 2.0's code now sits at 2300h–23D3h.
 - [docs/rom-analysis/README.md](../../rom-analysis/README.md) lists the
-  port sites of v1.1; 2.0 and 2.1 add the seven at 2304h–23C0h and 3657h
+  port sites of v1.1; 2.0 and 2.1 add the seven at 2304h–23C0h and 3662h
   (the table above).

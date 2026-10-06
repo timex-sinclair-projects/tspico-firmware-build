@@ -15,8 +15,9 @@ the status (`FF` READY + IDLE, `F7` READY mid-transaction, `00` BUSY).
 ## The switch
 
 TPMODE bit 0 ([../rom/sysvars.md](../rom/sysvars.md#5ddbh-tpmode-peek-24027)):
-`tpi:picopt` sets it, `tpi:ts2040` clears it, `tpi:tape` clears it too
-(TPMODE = 0). The ROM handles all three itself; nothing is sent. Clear,
+`tpi:picopt` sets it, `tpi:ts2040` clears it; `tpi:tape` and
+`tpi:sdcard` leave it alone (before ROM 2.1, `tpi:tape` set TPMODE to 0 and
+cleared it too, #176). The ROM handles all four itself; nothing is sent. Clear,
 the 2068 prints as stock — the ZX Printer routines, moved from HOME to the
 EXROM unchanged, still drive a printer on port FBh
 ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#the-printer-path-1630h183bh)).
