@@ -3770,20 +3770,15 @@ def NEW_TAP(pre, cmd):
     global TSP
     
     TLM("NEW_TAP enter")
-    arg = getArgs(cmd)
-    if arg == "":
+    arg = getArgs(cmd).strip()
+    # Remove a .tap extension: only at the end (#169: the text from the
+    # first dot was compared, so "a.b.tap" became a.b.tap.tap)
+    filename = (arg[:-4] if arg.lower().endswith('.tap') else arg).strip()
+    if filename == "":                          # nothing, or ".tap" alone
         msg = "Name required for new .tap file"
         LOG(msg, 1)
         SEND_MSG(msg, "", _3_F_Invalid_file, True)
         return
-    # Remove a .tap extension
-    jarg = arg.find('.')
-    if jarg >= 0 and arg[jarg:].lower() == '.tap':
-        filename = "%s" % arg[:jarg]
-    else:
-        filename = "%s" % arg
-    # Make new .tap file name
-    filename = filename.strip()
     # Check for invalid chars
     clean_fname = ''.join(l for l in filename if (l >= ' ' and l < chr(127) and (l not in r':*\/|"<>')))
     if clean_fname != filename:
