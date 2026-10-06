@@ -365,6 +365,39 @@ def main():
     stream, starts = tio.TAPE_STREAM_OF(data.TAPE)
     check(bus.tx == list(stream[:4]), "the tape is re-armed for LOAD \"\" (TX %s)" % bus.tx)
 
+    print("blocks by DMA, as on the Pico (v1.29: a byte loop ran the FIFO dry, 2026-10-06)")
+    L.FakeDMA.made = []
+    tio._DMA = L.FakeDMA
+    try:
+        end, box, lines, bus = session()
+    finally:
+        tio._DMA = None
+    st = [(l["code"], l["arg"]) for l in lines if l["event"] == "status"]
+    check(end == "halt" and bytes(box["flash"].m[0x8000:0x10000]) == data.IMG1
+          and bytes(box["flash"].m[0:0x4000]) == data.IMG0 and st[-1] == ("D", 0),
+          "the upgrade completes with every block sent by DMA (%s)" % end)
+    check(len(L.FakeDMA.made) == 192,
+          "one DMA channel per block, none for the short 'I'/'S' answers (%d)" % len(L.FakeDMA.made))
+
+    print("a word the Z80 sends mid-reply is handed back, not lost")
+
+    def gives_up(n):
+        for _ in range(n):
+            yield ("in",)
+        yield ("out", 0x0F, 0x52)           # 'R' again: it gave up on this block
+        yield ("idle", 1000)
+
+    for label, dma in (("by hand", None), ("by DMA", L.FakeDMA)):
+        bus = Bus()
+        bus.run(gives_up(6))
+        tio._DMA = dma
+        try:
+            w = upgrade.reply(bus, bytes(257))
+        finally:
+            tio._DMA = None
+        check(w == 0x152 and not bus.tx,
+              "%s: reply() returns the 'R' (%r) and leaves TX empty (%d)" % (label, w, len(bus.tx)))
+
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
     return 0 if ok else 1
