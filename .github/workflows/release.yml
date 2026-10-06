@@ -348,6 +348,16 @@ jobs:
           python3 tools/build-flash.py verify flash/manifest.json "${OUT}"
           echo "rom=${OUT}" >> "$GITHUB_OUTPUT"
 
+      # The user manual as PDFs (tools/manual-pdf/make.sh, also built by
+      # build.yml on every push): the half-letter one-up for reading and the
+      # saddle-stitch booklet imposed on letter, both from the manual at the tag.
+      - name: Install pandoc, the PDF fonts and pypdf
+        timeout-minutes: 10
+        run: tools/manual-pdf/ci-setup.sh
+
+      - name: Build the user manual PDFs
+        run: tools/manual-pdf/make.sh "${RUNNER_TEMP}/manual-pdf"
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -355,11 +365,13 @@ jobs:
           UF2: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
           FLASH_ROM: ${{ steps.flash.outputs.rom }}
         run: |
-          # Assets: bundle + raw UF2 + the upgrade UF2, plus the 512K flash
-          # image when the build-flash step produced one (see the step above).
+          # Assets: bundle + raw UF2 + the upgrade UF2 + the user manual PDFs,
+          # plus the 512K flash image when the build-flash step produced one.
           # pages.yml publishes firmware.uf2 and upgrade.uf2 to the updater.
           ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)"
                    "${RUNNER_TEMP}/upgrade.uf2#upgrade.uf2 (ROM updater: writes the TS-2068 and ZX ROMs to the flash)" )
+          ASSETS+=( "${RUNNER_TEMP}/manual-pdf/user-manual-half-letter.pdf#user-manual-half-letter.pdf (the user manual, 5.5 x 8.5 in, for reading)"
+                    "${RUNNER_TEMP}/manual-pdf/user-manual-saddle-stitch-letter.pdf#user-manual-saddle-stitch-letter.pdf (the user manual as a booklet: print on letter, double-sided, flip on the short edge; fold and staple)" )
           if [ -n "${FLASH_ROM:-}" ] && [ -f "${FLASH_ROM}" ]; then
             ASSETS+=( "${FLASH_ROM}#${FLASH_ROM} (512K flash image, for a chip programmer)" )
           fi

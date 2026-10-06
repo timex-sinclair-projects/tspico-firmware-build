@@ -30,7 +30,7 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `src/manifest.py` | the freeze manifest: which modules go into the UF2 |
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
-| `.github/workflows/build.yml` | every push: tests, ROM checks, the two UF2s, artifacts |
+| `.github/workflows/build.yml` | every push: tests, ROM checks, the two UF2s, the user manual PDFs, artifacts |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
 | `tools/pico-serial.py` | the USB console from a shell |
@@ -350,6 +350,19 @@ Ubuntu 22.04. The steps, in order:
     `dev_tspico-mpy`.
 14. On failure, the CMake logs.
 
+A second job, `manual-pdf`, runs alongside: `tools/manual-pdf/ci-setup.sh`
+installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
+the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
+DejaVu Sans Mono) and `pypdf`; `tools/manual-pdf/make.sh` turns
+`docs/manual/user-manual.md` into HTML with pandoc, prints it and the two
+covers with the runner's Chrome, and assembles the half-letter one-up
+(cover + manual) and the saddle-stitch booklet (covers, blank inside
+covers, padding to a multiple of 4, imposed two up on letter). The cover's
+version comes from `config.ini` and its date from the last commit. The
+script checks the page size and count; the two PDFs are uploaded as
+`tspico-manual-pdf`. Building them on every push means a manual change that
+breaks them fails here, not at release time.
+
 Artifacts are kept 30 days. `tools/pico-serial.py flash --branch B`
 downloads the `tspico-firmware-uf2` of B's current head and flashes it
 (below). The list of host tests in step 3 is the authority on what CI
@@ -376,8 +389,12 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    root).
 3. **The 512K flash image** `Pico-<tag>.rom`, if a base image can be
    found (below): `build-flash.py check`, `build --base`, `verify`.
-4. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
-   reflash), `upgrade.uf2`, and the flash image when there is one. If the
+4. **The user manual PDFs**, as `build.yml`'s `manual-pdf` job makes them,
+   from the manual at the tag.
+5. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
+   reflash), `upgrade.uf2`, `user-manual-half-letter.pdf`,
+   `user-manual-saddle-stitch-letter.pdf`, and the flash image when there
+   is one. If the
    release already exists, the assets are uploaded to it (`--clobber`) and
    its notes left alone; otherwise it is created with the notes in
    `.github/release-notes/<tag>.md` if that file exists at the tag, else
@@ -388,7 +405,9 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
 **Pages** (`pages.yml`) runs when the release workflow completes (a
 `workflow_run`: GitHub does not fire `release` events for releases made
 by a workflow's token), on a green build of `main`, and on pushes to
-`main` that touch `site/`, `web-updater/` or `SD card/`. It builds the
+`main` that touch `site/`, `web-updater/`, `SD card/`, the manuals or the
+reference. It copies the two manuals and this reference into the site
+(`tools/build-site-docs.py`, links rewritten for the site), builds the
 Jekyll site and mounts the web updater at `/updater/`, with the latest
 release's payload under `/updater/release/` and the latest green `main`
 build under `/updater/main/` — served from the site itself because
