@@ -526,7 +526,7 @@ SCREEN$` overwrites a file (3104), kept to one line.
    return the key.
 
 The status is always 1. The callers act on the key: `GETLOG`'s "Clear the
-log file (y/N)?" (4629) and `RM`'s "Remove NAME (y/N)?" (5376) go on only
+log file (y/N)?" (4649) and `RM`'s "Remove NAME (y/N)?" (5376) go on only
 for 89 (`Y`), and the question is the whole answer — a refusal reaches only
 the log. `tpi:fopen` records anything but `Y` as a refusal that `SAVE_TS`
 turns into Report D at the header. All callers use `echo=True`.

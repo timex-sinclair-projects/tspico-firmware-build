@@ -591,10 +591,21 @@ problem. `sd_state_hosttest.py`'s `test_info` pins the card lines.
 | `CODE 0,n` | the last `n` bytes (the whole log if it is shorter) |
 | `clear` | `SEND_MSG_PROMPT_YN("Clear the log file (y/N)?")`; `Y`: `CLEAR_LOG()`, nothing more sent; anything else: nothing done, logged at 0 |
 | `clear` `CODE 255,0` | `CLEAR_LOG()` with no question; "Log file was cleared", 0 OK |
+| (any form that shows the log) with no `/activity.log`, or an empty one | "The log is empty", 0 OK |
 | another word | `BAD_ARG`, Report A |
 | `CODE a,b`, `a` not 0 (without `clear`) | `BAD_CODE`, Report A |
 
-`CLEAR_LOG` failing: "Couldn't clear log file", Report Q.
+`CLEAR_LOG` failing: with `CODE 255,0`, "Couldn't clear log file", Report Q
+(before #165's fix the `CODE` check below overwrote it with "LOG: Bad CODE
+255,0", Report A). After the Y/N prompt, nothing: the prompt was the
+whole answer (function 86h ends the exchange once the key is back), so a
+message then would sit unread in TX; `CLEAR_LOG` has logged the failure
+(#165).
+
+No log: a fresh flash has no `/activity.log` until the first `LOG()` at or
+above `LOG_LEVEL`. `os.stat` failing, or a size of 0, answers "The log is
+empty" before the LED goes on; before #166 the `OSError` reached
+`FAIL_CMD`, Report J.
 
 Reading: the requested part is read into one `bytearray` and decoded as
 UTF-8. The log is trimmed to 64 KB only at boot, so in a long session it
@@ -604,7 +615,7 @@ middle of a UTF-8 sequence) "Couldn't read the log file", Report Q,
 logged. The buffer is dropped before `SEND_MSG2` builds its pages. LED on,
 off in a `finally`.
 
-Why the `try` covers only the read (the comment at 4672–4690; 2026-09-30
+Why the `try` covers only the read (the comment at 4710–4728; 2026-09-30
 audit): it was a bare `except:` around the read **and** `SEND_MSG2`. A
 BREAK at the "Scroll?" prompt raises `CmdAbort`, a `BaseException`, which
 a bare `except:` catches: `GETLOG` ate the BREAK and then sent "Log file
@@ -613,13 +624,7 @@ through to `PROCESS_CMD` ([`audit_fixes_hosttest.py`](../../../src/test/audit_fi
 
 Beware:
 
-- If `CLEAR_LOG` fails after the user answered `Y`, the handler still
-  sends "Couldn't clear log file" — after the prompt has ended the
-  exchange. The ROM does not read it, and the bytes stay in TX until the
-  tail or the next SYNC empties them *(inferred from the order of the
-  code)*.
-- `os.stat("/activity.log")` is outside the `try`: with no log file at
-  all it raises `OSError`, and `FAIL_CMD` answers Report J.
+- A failed clear after `Y` is in the log only; the 2068 shows nothing.
 - No card needed: the log is on the flash.
 
 ### `LOGLEVEL(pre, cmd)`

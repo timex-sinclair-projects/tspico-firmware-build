@@ -318,7 +318,7 @@ by `PROCESS_CMD` (6004), which records the code in `cmd_abort` for its tail.
 Why a `BaseException`: so that a handler's `except Exception:` cannot
 swallow it and carry on writing to a Z80 that has gone. Handlers are full
 of `except Exception` (card errors, bad arguments); `GETLOG` relies on
-this (its comment at 4679–4688: `SEND_MSG2` runs outside its `try`, so a
+this (its comment at 4717–4726: `SEND_MSG2` runs outside its `try`, so a
 BREAK at the "Scroll?" prompt passes straight through), and so does
 `TS2068_IO`'s outer loop (6394), which lets BaseExceptions — Ctrl-C from
 the host, `CmdAbort` — pass. `extcmd.py`'s header (line 21) tells external

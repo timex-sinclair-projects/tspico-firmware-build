@@ -286,7 +286,7 @@ def test_cd(t, root):
 # ---------------------------------------------------------------------------
 
 def test_getlog(t, root):
-    print("6. tpi:log: BREAK at the Scroll? prompt is not swallowed")
+    print("6. tpi:log: BREAK at the Scroll? prompt is not swallowed; no log; a failed clear")
     D.setup(t, root)
     logf = os.path.join(root, "activity.log")
     with open(logf, "w") as f:
@@ -326,6 +326,33 @@ def test_getlog(t, root):
     t.GETLOG(bytearray(10), "D..tpi:log")
     check(sent == [("Log file too large", t._4_Q_Parameter)] and not shown,
           "a log too big for memory still says so, with Q (%r)" % (sent,))
+
+    def gone(p):
+        raise OSError(2, "ENOENT")
+    for what, stat in (("no /activity.log", gone), ("an empty /activity.log", lambda p: (0,) * 7)):
+        t.os = types.SimpleNamespace(stat=stat)
+        del sent[:], shown[:]
+        try:
+            t.GETLOG(bytearray(10), "D..tpi:log")
+            ok = sent == [("The log is empty", t._1_OK)] and not shown
+        except Exception as e:                                  # noqa: BLE001
+            ok = e
+        check(ok is True, "tpi:log with %s: \"The log is empty\", 0 OK -- not OSError / J (#166) (%r)"
+              % (what, ok if ok is not True else sent))
+
+    real_clear = t.CLEAR_LOG
+    t.CLEAR_LOG = lambda: False
+    t.SEND_MSG_PROMPT_YN = lambda prompt, *a, **k: 89          # the user answers Y
+    del sent[:]
+    t.GETLOG(bytearray(10), "D..tpi:log clear")
+    check(sent == [], "tpi:log clear, Y, then CLEAR_LOG fails: nothing sent after the prompt "
+          "ended the exchange (#165) (%r)" % (sent,))
+    pre = bytearray(10)
+    pre[3] = 255                                                # CODE 255,0: no prompt
+    t.GETLOG(pre, "D..tpi:log clear")
+    check(sent == [("Couldn't clear log file", t._4_Q_Parameter)],
+          "CODE 255,0 (no prompt) and CLEAR_LOG fails: Report Q, shown (%r)" % (sent,))
+    t.CLEAR_LOG = real_clear
 
 
 # ---------------------------------------------------------------------------

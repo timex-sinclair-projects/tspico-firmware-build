@@ -4655,6 +4655,11 @@ def GETLOG(pre, cmd):                                                 # Shows th
                 if not sent:
                     SEND_MSG(msg, "", _1_OK)
                 return
+            elif sent:
+                # The Y/N prompt was the whole answer: function 86h ends the
+                # exchange once the key is back, so a message now would sit
+                # unread in TX (#165). CLEAR_LOG has logged the failure.
+                return
             else:
                 msg = "Couldn't clear log file"
                 status = _4_Q_Parameter
@@ -4662,7 +4667,10 @@ def GETLOG(pre, cmd):                                                 # Shows th
         else:
             par1 = -1
 
-    if par1 < 0:
+    if status != _1_OK:                     # a failed clear: its own message, not "Bad CODE 255,0"
+        pass
+
+    elif par1 < 0:
         msg = BAD_ARG("LOG", arg)
         status = _8_A_Invalid_arg
 
@@ -4675,13 +4683,23 @@ def GETLOG(pre, cmd):                                                 # Shows th
         SEND_MSG(msg, "", status)
         return
     
-    led.value(1)
-
     log_fname = "/activity.log"
     file_seek = 0
-    
+
+    # No log file is an empty log: CLEAR_LOG leaves one, but a fresh flash
+    # has none until the first LOG() at or above LOG_LEVEL, and os.stat()
+    # raising here was Report J (#166).
+    try:
+        len_file = os.stat(log_fname)[6]
+    except OSError:
+        len_file = 0
+    if len_file == 0:
+        SEND_MSG("The log is empty", "", _1_OK)
+        return
+
+    led.value(1)
+
     len_cmd = par2
-    len_file = os.stat(log_fname)[6]
     
     if len_cmd != 0 and (len_cmd <= len_file):
         len_read = len_cmd
