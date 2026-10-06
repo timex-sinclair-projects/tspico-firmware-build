@@ -80,11 +80,18 @@ The text rules, which the builders all keep
   INVERSE 0 or OVER 0.
 - `0Dh` is a new line; `08h` moves back one column.
 - Codes 124 (`|`) and 126 (`~`) print as the TS2068 keywords STICK and
-  FREE, with their spaces. [ERROR_TRAPPING.md](../../rom-analysis/ERROR_TRAPPING.md)
-  lists 123 (`{`, ON ERR), 125 (SOUND) and 127 (RESET) as keyword tokens
-  too; the firmware treats only 124 and 126 as keywords when it counts
-  columns, and maps `\*` to 127 for ©. How the ROM's print routine renders
-  123, 125 and 127 is not settled here *(unverified)*.
+  FREE, with their spaces, always. 123 (`{`, ON ERR), 125 (`}`, SOUND) and
+  127 (©, RESET) are keyword tokens too
+  ([ERROR_TRAPPING.md](../../rom-analysis/ERROR_TRAPPING.md)), but HOME's
+  print routine (063Bh) prints them as keywords only while FLAGS bit 4
+  (`IY+1`) is clear. The editor sets that bit from its mode on every key
+  (1683h: set in L mode), and it is set at start-up; when a command's answer
+  prints it is set, so they print as the characters `{`, `}` and ©, one
+  column each (ZEsarUX: FLAGS = 10h at a typed `SAVE "tpi:…"`, and `PRINT
+  CHR$ 123;CHR$ 125;CHR$ 127;CHR$ 124;CHR$ 126` shows `{}© STICK FREE`;
+  #173). So the firmware counts only 124 and 126 as keywords, and maps
+  `\*` to 127 for ©. In practice names and help text never carry 123–126:
+  `catalog.screen_name` turns them into `?` first.
 - Keys come back **upper case** (`GET_KEY_AND_SEND` 0471h → `SEND_KEY`
   1C40h); the builders compare with 78 (`N`), 89 (`Y`) and so on.
 
@@ -247,7 +254,7 @@ A command's answer when it is one status, or one message and a status.
 
 `msg` and `msg1` are the message's two parts (`str`, or anything whose
 items `MSG_BYTE` takes); `msg1` may be empty. `st` is the status, an int
-1–127 (the `_n_X_…` constants; the annotation `bytes` is wrong). With
+1–127 (the `_n_X_…` constants; annotated `int` since #181). With
 `forceDisplay`, the message is shown even with VERBOSE off; passing the
 object `NO_CARD_MSG` as `msg` forces it too (an identity test, `is`).
 
