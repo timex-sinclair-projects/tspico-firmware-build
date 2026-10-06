@@ -38,8 +38,8 @@ TS.tspico.TLM_ENABLED = _telemetry()
 # Dev override: if /dev_tspico.{py,mpy} is present on flash, use that
 # instead of the frozen TS.tspico. Lets you iterate on a single file
 # without rebuilding the UF2. To revert, just delete /dev_tspico.* from
-# flash. The .mpy variant is preferred (skips the parser, saves ~80%
-# RAM at import) — produced by ./build-dev-mpy.sh locally or by CI.
+# flash. A .mpy (no parsing, ~80% less RAM at import; build-dev-mpy.sh or CI)
+# is used only with no .py beside it: MicroPython imports .py first (#175).
 #
 # CRITICAL: when the dev override loads, the TLM_ENABLED flag we set
 # above is on TS.tspico, NOT dev_tspico. We must mirror it onto the

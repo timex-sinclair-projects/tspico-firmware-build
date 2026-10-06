@@ -83,7 +83,7 @@ A `.mpy` built for another MicroPython won't load ("incompatible .mpy
 file"); `main.py` then says so and runs the frozen firmware instead.
 
 If you'd rather use the `mpy-cross` produced by the CI's own
-MicroPython build, the [`build-dev-mpy.sh`](../build-dev-mpy.sh)
+MicroPython build, the [`build-dev-mpy.sh`](../src/build-dev-mpy.sh)
 script in the repo root will use whichever `mpy-cross` is on your
 `$PATH`.
 
@@ -338,8 +338,9 @@ output `dev_tspico.mpy` lands next to the source.
 2. `./build-dev-mpy.sh`
 3. In Thonny: upload `dev_tspico.mpy` to the Pico's root.
    **Delete any old `dev_tspico.py` of the same name on the Pico.**
-   Don't have both — MicroPython's import order between them is
-   not what you want to debug.
+   Don't have both: MicroPython imports `name.py` before `name.mpy`, so
+   an old `.py` would run instead of your new `.mpy` (checked on a
+   TS-Pico, MicroPython 1.29, #175).
 4. Reset the Pico (Ctrl-D in Thonny, or physical reset).
 5. Test on the TS-2068.
 
@@ -592,7 +593,7 @@ For wire-level bugs — anything that involves Z80/PIO timing, FIFO
 depth, race windows — **write a harness in `/test/` before editing
 production code.**
 
-Read [`/test/_harness_template.py`](../test/_harness_template.py)
+Read [`/test/_harness_template.py`](../src/test/_harness_template.py)
 first. It enforces the two-phase capture rule (set up → fire →
 capture → assert offline) that keeps the harness's own timing from
 distorting the very signals you're trying to measure.
