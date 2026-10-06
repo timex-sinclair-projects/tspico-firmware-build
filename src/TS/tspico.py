@@ -759,12 +759,12 @@ def ACTIVATE_MQ():                                                              
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
 
-    MQ.active(1)                                                              # (an unused ready=False path, SM built but not started, was removed: audit §3)
-    # A new StateMachine doesn't clear Y: it keeps whatever the last program
-    # on state machine 0 left there, so "BUSY" below was never guaranteed --
-    # a READY left over would let the Z80 read an empty TX as 00. Say it
-    # (audit §4; ~18 us).
+    # A new StateMachine keeps the old Y, and a READY left over would let the
+    # Z80 read an empty TX as 00. So BUSY first, then start -- an exec runs on
+    # a stopped state machine (both checked on a Pico, #171; started first,
+    # the old Y showed for ~18 us, audit §4).
     MQ_BUSY()
+    MQ.active(1)                                                              # (an unused ready=False path, SM built but not started, was removed: audit §3)
     # ─── DUAL-PORT MIGRATION: Y stays at BUSY here ──────────────────
     # We INTENTIONALLY do NOT set Y=READY in this function. Caller
     # MUST load any response bytes into TX and then call MQ_READY()
@@ -1018,8 +1018,8 @@ def MQ_BUSY():
 
     With the issue-#14 PIO auto-busy it isn't needed: the PIO drops Y to
     0 on every Z80 OUT. ACTIVATE_MQ calls it: a fresh state machine. Kept for a path that
-    must assert BUSY without an inbound write -- and for the open audit
-    question (§4) of whether a fresh state machine's Y is reliably 0.
+    must assert BUSY without an inbound write: a fresh state machine keeps
+    the old Y (checked on a Pico, #171), so ACTIVATE_MQ calls it first.
     """
     MQX(MQ, "set(y, 0)")
 

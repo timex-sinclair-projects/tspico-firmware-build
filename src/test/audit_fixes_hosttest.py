@@ -36,6 +36,10 @@ Batch A (2026-10-01; the SD-card-ID fix is pinned in sd_state_hosttest.py):
      non-number crashed the boot.
  12. SEND_MSG sent a non-ASCII character as several UTF-8 bytes >= 80h.
 
+#171: ACTIVATE_MQ started the new state machine, then set Y to BUSY: for
+~18 us the Z80 read the old Y (a fresh SM keeps it; checked on a Pico). It
+now sets BUSY first -- an exec runs on a stopped SM (checked too).
+
 NOTE ON SCOPE: control flow only, on CPython with the usual fakes. None of
 this observes the Z80 bus; see src/CLAUDE.md.
 
@@ -634,6 +638,29 @@ def test_dock_prev(t):
     check(sent and "MEM=1, PAGE=3" in sent[-1], "CODE 0,1 names SRAM page 3 (%r)" % sent)
 
 
+def test_activate_mq_busy_first(t):
+    print("#171. ACTIVATE_MQ: Y = BUSY before the state machine starts")
+    order = []
+
+    class SM:
+        def exec(self, instr):
+            order.append("exec " + instr)
+
+        def active(self, *a):
+            if a:
+                order.append("active %d" % a[0])
+            return 1
+    real = t.StateMachine, t.ACTIVATE_MQ
+    t.StateMachine = lambda *a, **k: SM()
+    t.ACTIVATE_MQ = REAL["ACTIVATE_MQ"]                         # earlier tests stub it
+    try:
+        t.ACTIVATE_MQ()
+    finally:
+        t.StateMachine, t.ACTIVATE_MQ = real
+    check(order[:2] == ["exec set(y, 0)", "active 1"],
+          "set(y, 0) is executed, then the SM is started -- no window with the old Y (%r)" % order)
+
+
 def test_text_in():
     print("§2 #20. Text read through OPEN #: no byte dropped or swallowed")
     from TS.channels import TextIn
@@ -664,7 +691,7 @@ def main():
     t.TLM_ENABLED = False
     REAL["LOG"], REAL["SAVE_LOG"] = t.LOG, t.SAVE_LOG
     REAL["MOUNT_FILE"], REAL["COPY_FILE"], REAL["SEND_MSG"] = t.MOUNT_FILE, t.COPY_FILE, t.SEND_MSG
-    REAL["ACTIVATE_SD"] = t.ACTIVATE_SD
+    REAL["ACTIVATE_SD"], REAL["ACTIVATE_MQ"] = t.ACTIVATE_SD, t.ACTIVATE_MQ
     root = tempfile.mkdtemp(prefix="audit_hosttest.")
     try:
         test_busy(t, root)
@@ -680,6 +707,7 @@ def main():
         test_rom_sm(t, root)
         test_send_msg_bytes(t)
         test_dock_prev(t)
+        test_activate_mq_busy_first(t)
         test_text_in()
     finally:
         shutil.rmtree(root, ignore_errors=True)
