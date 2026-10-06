@@ -66,6 +66,19 @@ def test_newtap(t, root, sent):
     run(t, t.NEW_TAP, "tpi:newtap chess.tap")
     check(sent[-1][3] == t._3_F_Invalid_file, "the same with .tap given")
 
+    del sent[:]
+    run(t, t.NEW_TAP, "tpi:newtap a.b.tap")
+    check(D.on_card(root, "a.b.tap") and not D.on_card(root, "a.b.tap.tap") and sent[-1][3] == t._1_OK,
+          "a.b.tap makes a.b.tap, not a.b.tap.tap (#169) (%r)" % (sent[-1],))
+    del sent[:]
+    run(t, t.NEW_TAP, "tpi:newtap v1.2")
+    check(D.on_card(root, "v1.2.tap"), "v1.2 (a dot, no .tap) makes v1.2.tap")
+    del sent[:]
+    n = len(t.mounted)
+    run(t, t.NEW_TAP, "tpi:newtap .tap")
+    check(sent[-1][3] == t._3_F_Invalid_file and not D.on_card(root, ".tap") and len(t.mounted) == n,
+          ".tap alone is no name: F, nothing made (%r)" % (sent[-1],))
+
 
 def test_rm(t, root, sent):
     print("tpi:rm")
