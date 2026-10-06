@@ -720,7 +720,7 @@ the slot half-written).
 |---|---|
 | none | "DOCK is MEM=m, PAGE=s", shown, 0 OK |
 | `0,1` | "DOCK was previously:" and `TSP.dck_prev_mem`/`dck_prev_slot`, shown, 0 OK |
-| `0,2` | swap to the previous setting (as `CODE prev_mem,prev_slot` below), message "Swapped with previous setting" |
+| `0,2` | swap to the previous setting (as `CODE prev_mem,prev_slot` below): "Change DOCK to MEM=m, PAGE=s" naming the setting swapped to, and "Swapped with previous setting" |
 | `0,3`…`0,15` | `BAD_CODE`, Report A |
 | `m,s` (m 1–2) | change, below |
 | `m` > 2 or `s` > 15 | "Wrong values, …", Report A |
@@ -734,13 +734,13 @@ Otherwise the old setting becomes the previous one, the new is written
 into `ROM_SM`/`bank_sm`, "Change DOCK to MEM=…, PAGE=…" is sent (not
 shown), and `ROM.put`, `BANK.put` switch the bank at once.
 
-Beware: on the swap, the message is built from the `CODE` before the swap,
-so it reads "Change DOCK to MEM=0, PAGE=2" rather than the setting swapped
-to; the swap itself is right. `CODE 0,0`'s show form is reached only after
+The message is built from the setting written, so after a swap it names
+the setting swapped to; before #161 it was built from the `CODE` and read
+"Change DOCK to MEM=0, PAGE=2". Beware: `CODE 0,0`'s show form is reached only after
 the range check, so `CODE 0,16` is "Wrong values", not a show.
 [`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)
-pins the refusal before the DOCK moves or a byte is streamed, and that
-another slot, the other memory, plain DOCK use with nothing mounted and a
+pins the refusal before the DOCK moves or a byte is streamed, the swap's
+message, and that another slot, the other memory, plain DOCK use with nothing mounted and a
 `.DCK` spanning slots n and n+1 still go through.
 
 ### `REW(pre, cmd)`
@@ -919,8 +919,6 @@ wide) and `y` one of 192, 384, 768, 1536; `y = 1596` is taken as 1536,
 
 The code is right by definition; these are for the manual's next edit.
 
-- `tpi:dock CODE 0,2`: the manual does not show the message, which names
-  the wrong setting (see `MEMDOCK`).
 - `tpi:cd`: the manual lists only F for a failed change; a path given as
   `/tap/x` that does not exist is Q (`ChangeDir`).
 - `tpi:boot`: the manual says MEM must be 1 or 2; `CODE 0,s` with `s` ≠ 0

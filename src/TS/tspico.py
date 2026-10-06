@@ -5128,7 +5128,7 @@ def MEMDOCK(pre, cmd):                                                  # Change
         val1 = TSP.bank_sm & 15
         TSP.bank_sm = val1 + (par2 * 16)
 
-        msg = "Change DOCK to %s" % new
+        msg = "Change DOCK to MEM=%d, PAGE=%d" % (par1, par2)   # after a swap, the setting swapped to (#161)
         SEND_MSG(msg, msg2, _1_OK)
         LOG("%s. %s" % (msg, msg2), 0)
         
