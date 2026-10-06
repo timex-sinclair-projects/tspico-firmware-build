@@ -1863,7 +1863,7 @@ the SD card). It's a single line of text:
 | `ROM_SLOT` | The BOOT slot. Anything but 1 is used for one start, then set back to 1 | `1` |
 | `ROM_SM` | Whether BOOT and DOCK use Flash or RAM | `10` (both Flash) |
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
-| `ROM_VERSION`, `FW_VERSION` | Version information shown by `tpi:info` and read by the updater | `"2.2.1"`, `"2.2"` |
+| `ROM_VERSION`, `FW_VERSION` | Version information shown by `tpi:info` and read by the updater | `"2.2"`, `"2.2.1"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
 
 You'd normally leave this file alone. To change it, connect the Pico to a computer and use a
