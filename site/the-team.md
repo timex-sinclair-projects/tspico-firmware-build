@@ -59,6 +59,10 @@ Within the past few years, Tim acquired a TS 2068 and became active in the inter
 
 Tim joined the team early, offering his software and hardware design support to the project.
 
+## Ryan Gray
+
+[Ryan](https://graytrek.com/) joined the team to develop tools like the Commander and help with firmware on the Pico.
+
 ## David Anderson
 
 <img class="portrait" src="{{ '/assets/img/david.png' | relative_url }}" alt="David Anderson (on the right)">
