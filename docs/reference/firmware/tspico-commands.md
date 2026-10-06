@@ -222,8 +222,10 @@ listings `DIR` sends.
 index n out of range 0-N", Report 6, where N is the last index, one less
 than the number of files (`File index 12 out of range 0-11` for twelve, as
 in the user manual); with no files at all, "No files in this folder",
-Report 6. Before #160 it printed the number of files, one past the last
-index ([`commands_hosttest.py`](../../../src/test/commands_hosttest.py)).
+Report 6. Both are plain `SEND_MSG`, not forced, so with VERBOSE off the
+2068 shows only Report 6 (the maintainer's choice, 2026-10-06: the range is
+there for whoever turns VERBOSE on). Before #160 it printed the number of
+files, one past the last index ([`commands_hosttest.py`](../../../src/test/commands_hosttest.py)).
 
 The `CODE 1`/`CODE 2` forms work from the cached `files` list and do not
 look at the card; only the plain form checks it. The full names are sent
