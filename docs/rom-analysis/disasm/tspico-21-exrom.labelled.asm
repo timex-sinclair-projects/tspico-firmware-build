@@ -1,11 +1,8 @@
 ; z80dasm 1.2.0
-; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.cmndITgnZR/exrom.bin
+; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.RbU4PVpD2i/exrom.bin
 
 	org 00000h
 CH_ALLOC:	equ 0x0200
-H_MAKE_ROOM:	equ 0x12bb
-H_EXPT_1NUM:	equ 0x1be5
-H_TEST_ROOM:	equ 0x1fbb
 BIOS_WF_NPH:	equ 0x239e
 SKIP_SPACES:	equ 0x3149
 LOWER_LOOP:	equ 0x334f
@@ -585,7 +582,7 @@ sub_0373h:
 sub_037ch:
 	push ix			;037c	dd e5		. .
 	exx			;037e	d9		.
-	ld hl,H_FIND_INT2	;037f	21 23 1f	! # .
+	ld hl,l1f23h		;037f	21 23 1f	! # .
 	jp CALL_HOME		;0382	c3 dd 03	. . .
 l0385h:
 	jr l03bch		;0385	18 35		. 5
@@ -631,7 +628,7 @@ sub_03c1h:
 sub_03cah:
 	push ix			;03ca	dd e5		. .
 	exx			;03cc	d9		.
-	ld hl,H_EXPT_1NUM	;03cd	21 e5 1b	! . .
+	ld hl,01be5h		;03cd	21 e5 1b	! . .
 	jp CALL_HOME		;03d0	c3 dd 03	. . .
 l03d3h:
 	jr l03ffh		;03d3	18 2a		. *
@@ -688,7 +685,7 @@ l041bh:
 OPEN_STREAM:
 	push ix			;0426	dd e5		. .
 	exx			;0428	d9		.
-	ld hl,H_CHAN_OPEN	;0429	21 30 12	! 0 .
+	ld hl,l1230h		;0429	21 30 12	! 0 .
 	jp CALL_HOME		;042c	c3 dd 03	. . .
 sub_042fh:
 	push ix			;042f	dd e5		. .
@@ -746,7 +743,7 @@ l0481h:
 	ret z			;048b	c8		.
 	push ix			;048c	dd e5		. .
 	exx			;048e	d9		.
-	ld hl,H_FIND_INT2	;048f	21 23 1f	! # .
+	ld hl,l1f23h		;048f	21 23 1f	! # .
 	push hl			;0492	e5		.
 	ld l,000h		;0493	2e 00		. .
 	ld h,0ffh		;0495	26 ff		& .
@@ -953,7 +950,7 @@ l05e9h:
 sub_05f1h:
 	push ix			;05f1	dd e5		. .
 	exx			;05f3	d9		.
-	ld hl,H_TEST_ROOM	;05f4	21 bb 1f	! . .
+	ld hl,01fbbh		;05f4	21 bb 1f	! . .
 	jp CALL_HOME		;05f7	c3 dd 03	. . .
 sub_05fah:
 	ld (iy+052h),0ffh	;05fa	fd 36 52 ff	. 6 R .
@@ -982,7 +979,7 @@ l0619h:
 	ld (05c5fh),ix		;0619	dd 22 5f 5c	. " _ \
 	push ix			;061d	dd e5		. .
 	exx			;061f	d9		.
-	ld hl,H_RECLAIM		;0620	21 50 17	! P .
+	ld hl,l1750h		;0620	21 50 17	! P .
 	push hl			;0623	e5		.
 	ld l,000h		;0624	2e 00		. .
 	ld h,0ffh		;0626	26 ff		& .
@@ -1009,7 +1006,7 @@ l0638h:
 sub_064ch:
 	push ix			;064c	dd e5		. .
 	exx			;064e	d9		.
-	ld hl,H_MAKE_ROOM	;064f	21 bb 12	! . .
+	ld hl,012bbh		;064f	21 bb 12	! . .
 	jp CALL_HOME		;0652	c3 dd 03	. . .
 READ_STATUS:
 	call CHECK_BREAK	;0655	cd 9f 06	. . .
@@ -1240,7 +1237,7 @@ sub_0799h:
 	exx			;07b1	d9		.
 	call BANK_SWITCH	;07b2	cd 99 0f	. . .
 	exx			;07b5	d9		.
-	ld hl,H_RECLAIM		;07b6	21 50 17	! P .
+	ld hl,l1750h		;07b6	21 50 17	! P .
 	push hl			;07b9	e5		.
 	ld l,000h		;07ba	2e 00		. .
 	ld h,0ffh		;07bc	26 ff		& .
@@ -1330,7 +1327,7 @@ l0825h:
 	push de			;0837	d5		.
 	push ix			;0838	dd e5		. .
 	exx			;083a	d9		.
-	ld hl,H_RECLAIM		;083b	21 50 17	! P .
+	ld hl,l1750h		;083b	21 50 17	! P .
 	push hl			;083e	e5		.
 	ld l,000h		;083f	2e 00		. .
 	ld h,0ffh		;0841	26 ff		& .
@@ -2407,7 +2404,7 @@ l0f01h:
 	ld (05cc0h),hl		;0f1f	22 c0 5c	" . \
 	ld bc,l12c0h		;0f22	01 c0 12	. . .
 	ld hl,06840h		;0f25	21 40 68	! @ h
-	ld de,H_RECLAIM		;0f28	11 50 17	. P .
+	ld de,l1750h		;0f28	11 50 17	. P .
 	push de			;0f2b	d5		.
 	ld de,0ff00h		;0f2c	11 00 ff	. . .
 	push de			;0f2f	d5		.
@@ -2446,7 +2443,7 @@ l0f3eh:
 	ld hl,(05c5dh)		;0f5f	2a 5d 5c	* ] \
 	dec hl			;0f62	2b		+
 	bit 0,a			;0f63	cb 47		. G
-HOME_MSG_TABLE:
+l0f65h:
 	jr z,l0f73h		;0f65	28 0c		( .
 l0f67h:
 	dec a			;0f67	3d		=
@@ -2734,7 +2731,7 @@ l1111h:
 	pop hl			;1111	e1		.
 	pop af			;1112	f1		.
 	retn			;1113	ed 45		. E
-HOME_MSG_SEP:
+l1115h:
 	rst 38h			;1115	ff		.
 	push af			;1116	f5		.
 	push bc			;1117	c5		.
@@ -2917,7 +2914,7 @@ HOME_MSG_SEP:
 	jr l124ah		;122b	18 1d		. .
 l122dh:
 	ld bc,l0000h		;122d	01 00 00	. . .
-H_CHAN_OPEN:
+l1230h:
 	jr l124ah		;1230	18 18		. .
 l1232h:
 	in a,(0f4h)		;1232	db f4		. .
@@ -3335,12 +3332,12 @@ l145fh:
 	jr c,l14adh		;14a6	38 05		8 .
 	ldir			;14a8	ed b0		. .
 	add hl,bc		;14aa	09		.
-	jr H_TRAP		;14ab	18 05		. .
+	jr l14b2h		;14ab	18 05		. .
 l14adh:
 	lddr			;14ad	ed b8		. .
 	and a			;14af	a7		.
 	sbc hl,bc		;14b0	ed 42		. B
-H_TRAP:
+l14b2h:
 	ld (ix+006h),l		;14b2	dd 75 06	. u .
 	ld (ix+007h),h		;14b5	dd 74 07	. t .
 	pop bc			;14b8	c1		.
@@ -3741,7 +3738,7 @@ l1746h:
 	ld hl,l1820h		;1749	21 20 18	!   .
 	cp 003h			;174c	fe 03		. .
 	jr nz,l1752h		;174e	20 02		  .
-H_RECLAIM:
+l1750h:
 	ld l,040h		;1750	2e 40		. @
 l1752h:
 	ld a,l			;1752	7d		}
@@ -4447,7 +4444,7 @@ BUILD_PREHEADER_B:
 	and a			;1bea	a7		.
 	jp z,STATUS_OK		;1beb	ca 23 1c	. # .
 	push af			;1bee	f5		.
-H_EXPT_STR:
+l1befh:
 	xor a			;1bef	af		.
 	pop af			;1bf0	f1		.
 l1bf1h:
@@ -5164,7 +5161,7 @@ l1f0fh:
 	ld sp,l3193h		;1f1f	31 93 31	1 . 1
 l1f22h:
 	ld h,b			;1f22	60		`
-H_FIND_INT2:
+l1f23h:
 	ld sp,l30f9h		;1f23	31 f9 30	1 . 0
 	jp (hl)			;1f26	e9		.
 	jr nc,l1f0fh		;1f27	30 e6		0 .
@@ -5880,7 +5877,7 @@ RD_STATUS:
 EX_REPORT_MSG:
 	cp 01dh			;235a	fe 1d		. .
 	jr z,EX_REPORT_MSG.pico	;235c	28 08		( .
-	ld de,HOME_MSG_TABLE	;235e	11 65 0f	. e .
+	ld de,l0f65h		;235e	11 65 0f	. e .
 	call EX_PO_MSG		;2361	cd ed 03	. . .
 	jr EX_REPORT_MSG.sep	;2364	18 10		. .
 EX_REPORT_MSG.pico:
@@ -5896,7 +5893,7 @@ EX_REPORT_MSG.chr:
 	jr z,EX_REPORT_MSG.chr	;2374	28 f3		( .
 EX_REPORT_MSG.sep:
 	xor a			;2376	af		.
-	ld de,HOME_MSG_SEP	;2377	11 15 11	. . .
+	ld de,l1115h		;2377	11 15 11	. . .
 	jp EX_PO_MSG		;237a	c3 ed 03	. . .
 EX_HOME_PRINT:
 	push ix			;237d	dd e5		. .
@@ -9165,7 +9162,7 @@ GUARDED:
 	inc hl			;306d	23		#
 	ex (sp),hl		;306e	e3		.
 	push hl			;306f	e5		.
-	ld hl,H_TRAP		;3070	21 b2 14	! . .
+	ld hl,l14b2h		;3070	21 b2 14	! . .
 	ex (sp),hl		;3073	e3		.
 	ld (05c3dh),sp		;3074	ed 73 3d 5c	. s = \
 	call JP_HL		;3078	cd 86 30	. . 0
@@ -9318,7 +9315,7 @@ RUNTIME:
 HC_EXPT_STR:
 	push ix			;3177	dd e5		. .
 	exx			;3179	d9		.
-	ld hl,H_EXPT_STR	;317a	21 ef 1b	! . .
+	ld hl,l1befh		;317a	21 ef 1b	! . .
 	jp CALL_HOME		;317d	c3 dd 03	. . .
 POP_STR:
 	ld hl,(05c65h)		;3180	2a 65 5c	* e \
@@ -9358,7 +9355,7 @@ BUILD_START:
 HC_TEST_ROOM:
 	push ix			;31b0	dd e5		. .
 	exx			;31b2	d9		.
-	ld hl,H_TEST_ROOM	;31b3	21 bb 1f	! . .
+	ld hl,01fbbh		;31b3	21 bb 1f	! . .
 	jp CALL_HOME		;31b6	c3 dd 03	. . .
 SEND_PREFIX:
 	call BUILD_START	;31b9	cd 9e 31	. . 1
@@ -9903,27 +9900,27 @@ CH_CLOSE_HOOK.keep:
 HC_EXPT_1NUM:
 	push ix			;3535	dd e5		. .
 	exx			;3537	d9		.
-	ld hl,H_EXPT_1NUM	;3538	21 e5 1b	! . .
+	ld hl,01be5h		;3538	21 e5 1b	! . .
 	jp CALL_HOME		;353b	c3 dd 03	. . .
 HC_FIND_INT2:
 	push ix			;353e	dd e5		. .
 	exx			;3540	d9		.
-	ld hl,H_FIND_INT2	;3541	21 23 1f	! # .
+	ld hl,l1f23h		;3541	21 23 1f	! # .
 	jp CALL_HOME		;3544	c3 dd 03	. . .
 HC_MAKE_ROOM:
 	push ix			;3547	dd e5		. .
 	exx			;3549	d9		.
-	ld hl,H_MAKE_ROOM	;354a	21 bb 12	! . .
+	ld hl,012bbh		;354a	21 bb 12	! . .
 	jp CALL_HOME		;354d	c3 dd 03	. . .
 HC_RECLAIM:
 	push ix			;3550	dd e5		. .
 	exx			;3552	d9		.
-	ld hl,H_RECLAIM		;3553	21 50 17	! P .
+	ld hl,l1750h		;3553	21 50 17	! P .
 	jp CALL_HOME		;3556	c3 dd 03	. . .
 HC_CHAN_OPEN:
 	push ix			;3559	dd e5		. .
 	exx			;355b	d9		.
-	ld hl,H_CHAN_OPEN	;355c	21 30 12	! 0 .
+	ld hl,l1230h		;355c	21 30 12	! 0 .
 	jp CALL_HOME		;355f	c3 dd 03	. . .
 CH_OUT:
 	ld iy,05c3ah		;3562	fd 21 3a 5c	. ! : \

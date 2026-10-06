@@ -3,8 +3,8 @@
 A TS-Pico's SD card failed to mount at boot while the same card mounted
 fine by hand seconds later. ACTIVATE_SD now tries the whole mount up to 5
 times, 0.5 s apart, prints each failure with its reason, and only then gives
-up -- by raising OSError, not by looping in BLINK_ERROR (the boot call keeps
-the blink loop; mid-session callers recover, see sd_wedged_hosttest.py).
+up -- by raising OSError, not by looping in BLINK_ERROR (the boot call
+catches it and boots without a card; mid-session callers recover too, see sd_wedged_hosttest.py).
 
 Runs the REAL TS.tspico.ACTIVATE_SD (device modules faked the same way as
 process_cmd_hosttest.py) with SDCard / SPI / os.mount replaced by fakes.

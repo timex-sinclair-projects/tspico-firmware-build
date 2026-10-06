@@ -392,7 +392,7 @@ file offset = Z80 address):
 | File | What |
 |---|---|
 | `tspico-21-exrom.labelled.asm` | **ROM 2.1's EXROM, labelled. The one this reference cites.** |
-| `tspico-21-exrom-symbols.sym` | its labels, generated: the curated names of `docs/rom-analysis/tspico-exrom-symbols.sym`, plus every label of `tspico-sync.asm` (2300h) and `fddcmd.asm` (3000h) from a fresh sjasmplus assembly, EXROM addresses (0100h–3FFFh) only. Edit the sources, not this |
+| `tspico-21-exrom-symbols.sym` | its labels, generated: the curated names of `docs/rom-analysis/tspico-exrom-symbols.sym`, plus every label of `tspico-sync.asm` (2300h) and `fddcmd.asm` (3000h) from a fresh sjasmplus assembly, EXROM addresses (0100h–3FFFh) only, less the `EQU`s a source marks `; HOME` (a HOME address is not an EXROM label; until #183 `H_EXPT_STR` named EXROM 1BEFh). Edit the sources, not this |
 | `tspico-21-home.asm`, `.sym` | ROM 2.1's HOME, a raw sweep with `z80dasm`'s own `lXXXXh` labels |
 | `tspico-11-exrom.labelled.asm`, `tspico-15w-exrom.labelled.asm` | the 1.x EXROMs, labelled with the curated names |
 | `tspico-11-exrom.asm`, `tspico-15w-exrom.asm`, `tspico-home.asm`, `genuine-2068-*.asm` (+ `.sym`) | raw sweeps |

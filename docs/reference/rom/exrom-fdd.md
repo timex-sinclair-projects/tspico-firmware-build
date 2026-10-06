@@ -49,9 +49,10 @@ the Pico Interface BIOS.
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
 SYNC_WRITE, BIOS_WF_NPH, BIOS_C_END, C_END_TAIL, BEEPER, CH_STATUS — are
-entered in the chapters that own them; the reference index matches by
-name, so it points there ([#183](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/183), R3). One of them means something different here: the module's BEEPER
-is 2000h (the `JP` to BEEPER). (The module's READ_STATUS_BYTE, 02B9h, was
+explained in the chapters that own them, with a row here saying what the
+module uses them for; the index links each name to the chapter of the file
+that defines it. One of them means something different here: the module's
+BEEPER is 2000h (the `JP` to BEEPER). (The module's READ_STATUS_BYTE, 02B9h, was
 called READ_STATUS until #181, the name of a different routine at 0655h.)
 
 ## The `EQU`s
@@ -71,19 +72,19 @@ ROM that moves one fails instead of jumping into the wrong code
 | Name | Value | What it is |
 |---|---|---|
 | `SESSION_NAMED` | EXROM 1AACh | SESSION_SETUP past its 5–31-character gate, DE = name, BC = length ([exrom-driver.md](exrom-driver.md#session_setup-1a73h-is-this-name-a-command)) |
-| CALL_HOME | EXROM 03DDh | the EXROM→HOME returning thunk |
+| `CALL_HOME` | EXROM 03DDh | the EXROM→HOME returning thunk |
 | `H_EXPT_STR` | HOME 1BEFh | syntax class 0Ah: SCANNING, then Report C unless the result is a string |
 | `H_TEST_ROOM` | HOME 1FBBh | TEST-ROOM: Report 4 unless BC bytes fit at STKEND |
-| SESSION_SETUP | EXROM 1A73h | where 01D2h went before F_HOOK |
+| `SESSION_SETUP` | EXROM 1A73h | where 01D2h went before F_HOOK |
 | `SAVE_ETC_BODY` | EXROM 01D5h | the stock SAVE-ETC after SESSION_SETUP's non-command exit (BC = 11h) |
 | `STATUS_REPORT` | EXROM 1BF3h | `STATUS_TO_REPORT`: A = status − 1 → the report |
-| SYNC_WRITE | EXROM 2300h | ROM 2.0: SYNC, wait READY + IDLE, `OUT (0Eh),A` |
+| `SYNC_WRITE` | EXROM 2300h | ROM 2.0: SYNC, wait READY + IDLE, `OUT (0Eh),A` |
 | `BIOS_TX_A` | EXROM 1846h | BIOS: `OUT (0Eh),A` |
 | `BIOS_RX_A` | EXROM 1848h | BIOS: `IN A,(0Eh)` |
-| BIOS_C_END | EXROM 184Ah | BIOS: the status; NC OK, C with A = status − 1 (C_END2 in 2.1) |
-| BIOS_WF_NPH | EXROM 184Ch | BIOS: wait for the Pico; C with A = 02h / 0Ch / 1Ch |
-| C_END_TAIL | EXROM 227Fh | C_END after its wait: read the status, run any response function |
-| READ_STATUS_BYTE | EXROM 02B9h | the response function's own status byte (the curated name; `READ_STATUS` until #181) |
+| `BIOS_C_END` | EXROM 184Ah | BIOS: the status; NC OK, C with A = status − 1 (C_END2 in 2.1) |
+| `BIOS_WF_NPH` | EXROM 184Ch | BIOS: wait for the Pico; C with A = 02h / 0Ch / 1Ch |
+| `C_END_TAIL` | EXROM 227Fh | C_END after its wait: read the status, run any response function |
+| `READ_STATUS_BYTE` | EXROM 02B9h | the response function's own status byte (the curated name; `READ_STATUS` until #181) |
 | `OPEN_STREAM` | EXROM 0426h | open stream A (through HOME CHAN-OPEN) |
 | `LOOP_BODY` | EXROM 21E6h | function 86h's loop after its opening |
 | `THUNK_HX` | HOME 03FCh | the returning HOME→EXROM thunk (named; the module never calls it — HOME's stubs do) |
@@ -95,7 +96,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `H_EXPT_1NUM` | HOME 1BE5h | syntax class 06h: a numeric expression |
 | `H_FIND_INT2` | HOME 1F23h | the number on the calculator stack → BC; Report B |
 | `H_TRAP` | HOME 14B2h | GUARDED's error trap ([home.md](home.md#1488h14c5h-the-modules-home-entries-21)) |
-| BEEPER | EXROM 2000h | the `JP` to the relocated BEEPER |
+| `BEEPER` | EXROM 2000h | the `JP` to the relocated BEEPER |
 
 ### System variables
 

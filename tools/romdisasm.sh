@@ -90,15 +90,28 @@ if [ -f "$ROM21" ]; then
             echo ";   + the labels of src/rom/patches/tspico-sync.asm (ROM 2.0, 2300h)"
             echo ";   + the labels of src/rom/fdd/fddcmd.asm (ROM 2.1, 3000h)"
             echo "; Only values in 0100h-3FFFh are kept: everything else is a constant"
-            echo "; or a RAM address, not an EXROM label."
+            echo "; or a RAM address, not an EXROM label. EQUs the sources mark"
+            echo "; \"; HOME\" are dropped too: a HOME address is not an EXROM label."
             grep -E '^[A-Za-z_][A-Za-z0-9_.]*:[[:space:]]*equ' "$SYMS"
             # "NAME: EQU 0x0000XXXX" -> "NAME:\tequ 0xXXXX", EXROM addresses only
-            python3 - "$TMP/sync.sym" "$TMP/fdd.sym" <<'PY'
-import sys
-for path in sys.argv[1:]:
+            python3 - "$TMP/sync.sym" "$TMP/fdd.sym" -- \
+                src/rom/patches/tspico-sync.asm src/rom/fdd/fddcmd.asm <<'PY'
+import re, sys
+args = sys.argv[1:]
+syms, sources = args[:args.index("--")], args[args.index("--") + 1:]
+# fddcmd.asm's H_EXPT_STR (1BEFh) is a HOME routine; merged as an EXROM label
+# it named the middle of STATUS_TO_REPORT's lead-in. The sources say which
+# EQUs are HOME addresses ("NAME EQU $xxxx ; HOME: ..."); leave those out.
+home = set()
+for src in sources:
+    for line in open(src):
+        m = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s+EQU\s+\S+\s*;\s*HOME\b", line, re.I)
+        if m:
+            home.add(m.group(1))
+for path in syms:
     for line in open(path):
         name, _, rest = line.partition(":")
-        if "EQU" not in rest:
+        if "EQU" not in rest or name.strip() in home:
             continue
         v = int(rest.split()[-1], 16)
         if 0x100 <= v <= 0x3FFF:

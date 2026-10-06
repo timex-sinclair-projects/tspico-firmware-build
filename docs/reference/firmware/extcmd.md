@@ -215,12 +215,12 @@ the upper-case command word with its `TPI:`; a key with a trailing space
 would never match, since the dispatcher cuts the word at the first space.
 The imported name becomes `tspico`'s global `EXT_SA_FUNCT` (declared
 `global` in `TS2068_IO` and `GETHELP`), passed to every `PROCESS_CMD` call.
-Two tests stand in for it: `sd_wedged_hosttest.py` registers an empty
-`dev_extcmd` module before importing `tspico`, its comment saying the real
-`dev_extcmd` annotates with `StateMachine` without importing it (true of
-the #65 version; the current file has no annotations and imports only
-`math` and `random`, so the comment is stale); `extcmd_hosttest.py` uses the
-real table.
+Two tests stand in for it: `sd_wedged_hosttest.py` (and
+`dir_files_eio_hosttest.py`) register an empty `dev_extcmd` module before
+importing `tspico`, because the real one imports the firmware module back
+(`dev_tspico` or `TS.tspico`, at load) and those tests need none of its
+commands; `extcmd_hosttest.py` uses the real table. (Until #183 their comment
+gave a reason from the #65 version: annotations with `StateMachine`.)
 
 ### `tpi:.fact`
 

@@ -557,7 +557,6 @@ changed "v2.0" to "v2.1" at 1C7Eh.
 
 ## Where comments, documents and the code disagree
 
-Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
-
-- The labelled listing names EXROM 1BEFh `H_EXPT_STR`, a HOME routine's
-  name from `fddcmd.asm` ([#183](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/183), R2).
+None known: #182 corrected SYMBOLS.md, and #183 stopped the labelled
+listing naming EXROM addresses after HOME routines (EXROM 1BEFh was
+`H_EXPT_STR`).
