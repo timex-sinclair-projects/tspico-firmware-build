@@ -179,4 +179,4 @@ behaviour, and the caveat and the issue link go.
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/build.yml` | `03da0246b057` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/release.yml` | `37c4563a16aa` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/release.yml` | `21ace77af2d3` | [firmware/boot.md](firmware/boot.md) | — |

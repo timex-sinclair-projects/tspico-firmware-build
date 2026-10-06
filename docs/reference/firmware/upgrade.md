@@ -953,9 +953,10 @@ the firmware's half):
 [`release.yml`](../../../.github/workflows/release.yml) does steps 2–4 in
 one step, "Build the upgrade UF2", copies the result to
 `$RUNNER_TEMP/upgrade.uf2`, and attaches it to the GitHub Release as
-`upgrade.uf2 (ROM updater for boards coming from 1.1)` next to
-`firmware.uf2` and the bundle ([v2.1 release notes](../../../.github/release-notes/v2.1.md),
-[v2.1.2](../../../.github/release-notes/v2.1.2.md)).
+`upgrade.uf2 (ROM updater: writes the TS-2068 and ZX ROMs to the flash)` next to
+`firmware.uf2` and the bundle; until 2.2.1 the label said "for boards coming from 1.1", and
+since #208 the web updater offers it to every board behind the release ([v2.2.1 release
+notes](../../../.github/release-notes/v2.2.1.md)).
 `tools/pico-serial.py flash --upgrade` fetches the `tspico-upgrade-uf2`
 artifact instead of the firmware's, for flashing a board by hand.
 

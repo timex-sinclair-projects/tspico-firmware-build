@@ -2,8 +2,8 @@
 
 This is the byte-level reference for how a Timex Sinclair 2068 and the TS-Pico
 talk: the two I/O ports, the status byte, every kind of transaction, and the
-rules a firmware handler must follow. It describes **firmware 2.0 with ROM 2.0
-and ROM 2.1** (the disk-command ROM), as the code on `main` does it. Where an
+rules a firmware handler must follow. It describes **firmware 2.0 and later with ROM 2.0
+and ROM 2.1/2.2** (the disk-command ROM; 2.2 is 2.1 with two fixes), as the code on `main` does it. Where an
 older document or the original spec says otherwise, this one follows the code.
 
 > **New to all this?** Start with [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md), a

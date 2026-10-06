@@ -1,6 +1,6 @@
 # TS-Pico User Manual
 
-### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.1
+### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.2
 
 > **About this manual.** This manual describes **TS-Pico 2.2**, released in October 2026:
 > the firmware and the TS-2068 ROM 2.2, which gives the 2068 the disk commands **CAT**,
@@ -1763,8 +1763,8 @@ To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1: NEW`. You can
 If the 2068 starts with coloured stripes and TS Reset doesn't help, but another slot boots, you
 can put the standard ROM back from the SD card:
 
-1. Copy the 2.1 ROM file, `TSPICO-22.ROM`, to the card's `TAP` folder. It's in the release
-   `.zip` (in `src/rom`), from <https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/tag/v2.1>.
+1. Copy the ROM file, `TSPICO-22.ROM`, to the card's `TAP` folder. It's in the release
+   `.zip` (in `src/rom`), from <https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest>.
 2. Boot a working ROM from another slot, for example a test ROM in slot 4
    (`SAVE "tpi:boot" CODE 2,4: NEW`).
 3. `LOAD "tpi:TSPICO-22.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
@@ -1846,7 +1846,7 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the Pico's own
 the SD card). It's a single line of text:
 
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.1", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.2.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.2", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false}
 ```
 
 | Setting | Meaning | Normally |
@@ -1857,7 +1857,7 @@ the SD card). It's a single line of text:
 | `ROM_SLOT` | The BOOT slot. Anything but 1 is used for one start, then set back to 1 | `1` |
 | `ROM_SM` | Whether BOOT and DOCK use Flash or RAM | `10` (both Flash) |
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
-| `ROM_VERSION`, `FW_VERSION` | Version information shown by `tpi:info` and read by the updater | `"2.1"` |
+| `ROM_VERSION`, `FW_VERSION` | Version information shown by `tpi:info` and read by the updater | `"2.2.1"`, `"2.2"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
 
 You'd normally leave this file alone. To change it, connect the Pico to a computer and use a
