@@ -157,6 +157,20 @@ def test_blkrcv_checks_the_image_first(t, image):
         os.remove(full)
 
 
+def test_dock_swap_message(t, image):
+    print("tpi:dock CODE 0,2 names the setting it swapped to (#161)")
+    sent = setup(t, (2, 1), (2, 4), "", image)                  # DOCK flash 4; previous flash 0
+    r = memdock(t, sent, 0, 2)
+    check(r[2] == t._1_OK and t.getDock() == (2, 0), "swaps to the previous setting, flash 0 (%r)" % (r,))
+    check(r[0] == "Change DOCK to MEM=2, PAGE=0" and r[1] == "Swapped with previous setting",
+          "  and says so -- not \"MEM=0, PAGE=2\", the CODE values (%r)" % (r[:2],))
+    check((t.TSP.dck_prev_mem, t.TSP.dck_prev_slot) == (2, 4), "  flash 4 is now the previous setting")
+    r = memdock(t, sent, 0, 2)
+    check(r[0] == "Change DOCK to MEM=2, PAGE=4" and t.getDock() == (2, 4), "swapping again goes back (%r)" % (r[:2],))
+    r = memdock(t, sent, 1, 3)
+    check(r[0] == "Change DOCK to MEM=1, PAGE=3" and r[1] == "", "a plain CODE 1,3 is unchanged (%r)" % (r[:2],))
+
+
 def test_rom(t, image):
     print(".ROM mounted, booted from Flash slot 4 (the 2026-09-28 incident)")
     sent = setup(t, (2, 4), (2, 0), "/sd/TAP/TEST.ROM", image)
@@ -241,6 +255,7 @@ def main():
         test_nothing_mounted(t, image)
         test_blkrcv_needs_an_image(t, image)
         test_blkrcv_checks_the_image_first(t, image)
+        test_dock_swap_message(t, image)
         test_rom(t, image)
         test_sram_boot(t, image)
         test_dck(t, image)
