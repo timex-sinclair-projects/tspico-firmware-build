@@ -2,7 +2,7 @@
 layout: post
 title: "What's New in the TS-Pico Since 1.1"
 lang: en
-date: 2026-10-05 12:00:00
+date: 2026-10-05 06:00:00 -0400
 ---
 
 The last TS-Pico software most owners installed was version 1.1. Version 2.1 replaces it.
