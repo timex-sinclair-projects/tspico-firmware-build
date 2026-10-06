@@ -1,8 +1,8 @@
 # TS/tspico.py (part 3) — the dispatcher
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4768–4845
-(`LOAD_CONFIG`), 5626–5722 (the printer path), 5802–6138 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6146–7327 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4774–4851
+(`LOAD_CONFIG`), 5632–5728 (the printer path), 5808–6144 (`FAIL_CMD`,
+`PROCESS_CMD`) and 6152–7333 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -36,17 +36,17 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 
 | Symbol | Line | Role |
 |---|---|---|
-| `LOAD_CONFIG()` | 4768 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
-| `PRINT_FLUSH()` | 5626 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
-| `COPY_BMP(scr, mode, colour)` | 5658 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
-| `PRINT_IO(pre)` | 5679 | one printer transaction: an LPRINT character, or COPY |
-| `FAIL_CMD(status)` | 5802 | a command that failed: one status byte, on a bus in a known state |
-| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 5854 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
-| `TS2068_IO()` | 6146 | the board setup and the service loop |
-| `ZX_TPI()` | 7009 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7147 | the Spectrum-mode loop |
+| `LOAD_CONFIG()` | 4774 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
+| `PRINT_FLUSH()` | 5632 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
+| `COPY_BMP(scr, mode, colour)` | 5664 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
+| `PRINT_IO(pre)` | 5685 | one printer transaction: an LPRINT character, or COPY |
+| `FAIL_CMD(status)` | 5808 | a command that failed: one status byte, on a bus in a known state |
+| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 5860 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
+| `TS2068_IO()` | 6152 | the board setup and the service loop |
+| `ZX_TPI()` | 7015 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 7153 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 7005), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 7011), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -80,7 +80,7 @@ What it does:
    | ROM_VERSION | the module's `ROM_VERSION` | the ROM this firmware ships with; shown by `tpi:info`, nothing else reads it |
 
    The shipped [`src/config.ini`](../../../src/config.ini) holds exactly
-   these nine keys. The comment at line 4781 notes that `PICO_STATUS`
+   these nine keys. The comment at line 4787 notes that `PICO_STATUS`
    carries a second copy of the defaults (it does, as `try/except` fallbacks)
    and that there should be one; there are still two.
 3. `ROM_SM` must be one of 5, 6, 9, 10 — the four combinations `tpi:boot`
@@ -481,7 +481,7 @@ stop), `kill` (set `False` here and read by nothing: the core1 watchdog that
 read it was removed in #71/#72), `files`, `lista`, `log_entries`,
 `log_to_serial` (initialised `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file), `ROM`, `BANK`,
-`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6436, `RXD`.
+`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6442, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
 
 ### Configuration and the log file
@@ -620,7 +620,7 @@ seeds the chain for the life of the session. It must be here and not inside
 that `LOAD ""` will give Report R until the assets are copied. The SD outcome
 is logged (OK / mounted but failing / no card), `SAVE_LOG()`, a `gc.collect()`,
 "TS Pico initialized OK. Waiting for commands...", `SAVE_LOG()` again, LED
-off. `wrt = MQ.put` at line 6421 is assigned and never used.
+off. `wrt = MQ.put` at line 6427 is assigned and never used.
 
 ### The capture buffers and the DMA channel
 
@@ -696,7 +696,7 @@ status read (`RD_STATUS`), not in `SYNC_WAIT`, so a transaction the Pico
 dropped reports T only if its ROM is still waiting for READY when the
 `0xFB` goes up; a later command finds `0xFF` *(inferred from
 [tspico-sync.asm](../../../src/rom/patches/tspico-sync.asm): `SYNC_WAIT`
-masks READY and IDLE only)*. The comments at lines 6449 and 6541 that say
+masks READY and IDLE only)*. The comments at lines 6455 and 6547 that say
 "the next command gets Report T" describe the ROM's own ready-wait of the
 transaction in hand, not a later one.
 

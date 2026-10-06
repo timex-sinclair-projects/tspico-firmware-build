@@ -2742,10 +2742,16 @@ def PROMPT_EACH(prompts):                                                     # 
     answered Y. Any other key skips that one. N ends the exchange -- the ROM
     stops its loop on N -- so nothing from there on is chosen. Same byte
     sequence as ListMenu: the echo of the last key starts the next string,
-    READY goes up after it, and 0x03 ends the loop."""
+    READY goes up after it, and 0x03 ends the loop.
+
+    No prompts: [] with nothing sent -- an exchange needs a question -- and
+    the caller still owes the Z80 its answer (#167: the closing echo hit
+    `32 <= None`, TypeError, Report J)."""
 
     global MQ
 
+    if not prompts:
+        return []
     wrt = CmdOut()    # each page built in RAM, sent by CMD_SEND (DMA); BREAK raises CmdAbort
     CMD_RX_FLUSH()                                                            # stray keystrokes; a BREAK raises CmdAbort
     wrt(FN_PRINT_LOOP)                                                        # 0x86 PRINT STRING WITH LOOP -- the D-block status
