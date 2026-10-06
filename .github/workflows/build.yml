@@ -356,3 +356,26 @@ jobs:
             ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeOutput.log
             ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeError.log
           retention-days: 7
+
+  # The user manual as PDFs (tools/manual-pdf/make.sh): a half-letter one-up
+  # for reading and a saddle-stitch booklet imposed on letter. Built on every
+  # push so a manual change that breaks the PDFs shows here, not at release
+  # time; release.yml attaches the same two files to each release.
+  manual-pdf:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install pandoc, the PDF fonts and pypdf
+        timeout-minutes: 10
+        run: tools/manual-pdf/ci-setup.sh
+
+      - name: Build the user manual PDFs
+        run: tools/manual-pdf/make.sh "${{ runner.temp }}/manual-pdf"
+
+      - name: Upload the manual PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-manual-pdf
+          path: ${{ runner.temp }}/manual-pdf/*.pdf

@@ -1,0 +1,36 @@
+/* Half letter, 5.5in x 8.5in; mirrored margins for saddle stitching */
+@page { size: 5.5in 8.5in; margin: 0.55in 0.45in 0.6in 0.6in; }
+@page :left  { margin-left: 0.45in; margin-right: 0.6in;
+  @bottom-left  { content: counter(page); font: 8pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #555; }
+  @top-left     { content: "TS-Pico User Manual"; font: 7pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #888; } }
+@page :right { margin-left: 0.6in; margin-right: 0.45in;
+  @bottom-right { content: counter(page); font: 8pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #555; }
+  @top-right    { content: "Version {{ROM}}"; font: 7pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #888; } }
+@page :first { @top-left { content: none; } @top-right { content: none; } @bottom-right { content: none; } }
+
+html { font: 9.5pt/1.38 "Charter", "Charis SIL", "Bitstream Charter", Georgia, serif; color: #111; }
+body { margin: 0; }
+h1, h2, h3, h4 { font-family: "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; line-height: 1.2; break-after: avoid; }
+h1 { font-size: 17pt; margin: 0 0 .6em; break-before: page; }
+body > h1:first-of-type { break-before: avoid; font-size: 22pt; margin-top: 1.2in; }
+h2 { font-size: 12pt; margin: 1.2em 0 .4em; }
+h3 { font-size: 10.5pt; margin: 1em 0 .3em; }
+h4 { font-size: 9.5pt; margin: .8em 0 .3em; }
+p, li { orphans: 3; widows: 3; }
+a { color: #1a4f9c; text-decoration: none; }
+code, pre { font-family: "Menlo", "DejaVu Sans Mono", Consolas, monospace; font-size: 8pt; }
+code { background: #f1f3f6; border-radius: 2px; padding: 0 .15em; }
+pre { background: #f4f6f8; border: .5pt solid #d5dae0; border-radius: 3px; padding: 5pt 6pt;
+      white-space: pre-wrap; word-break: break-word; break-inside: avoid; line-height: 1.3; }
+pre code { background: none; padding: 0; }
+blockquote { margin: .6em 0; padding: .2em .8em; border-left: 2pt solid #c8ced6; color: #333; background: #fafbfc; }
+table { border-collapse: collapse; width: 100%; font-size: 7.8pt; line-height: 1.3; margin: .6em 0; break-inside: auto; }
+th, td { border: .5pt solid #c8ced6; padding: 2pt 4pt; vertical-align: top; text-align: left; overflow-wrap: break-word; }
+th { white-space: nowrap; }
+th { background: #eef1f5; }
+tr { break-inside: avoid; }
+thead { display: table-header-group; }
+img { max-width: 100%; height: auto; display: block; margin: .5em auto; break-inside: avoid; }
+figure { margin: .6em 0; break-inside: avoid; }
+figcaption { font-size: 8pt; color: #555; text-align: center; }
+hr { border: 0; border-top: .5pt solid #ccd; }
