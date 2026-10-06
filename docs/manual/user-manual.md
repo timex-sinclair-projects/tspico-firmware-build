@@ -162,7 +162,7 @@ There are two ways to connect the TS-Pico.
 right of the 2068 and sticks out behind it.
 
 **On an expansion bus.** The bus board plugs into the 2068, and the TS-Pico plugs into one of
-its slots. While any slot works; many people use the one nearest the 2068.
+its slots. Any slot works; many people use the one nearest the 2068.
 
 > **Important: the BUSISO jumpers/switches.** The expansion bus has "BUSISO bypass" jumpers 
 > or switches on its
@@ -171,7 +171,7 @@ its slots. While any slot works; many people use the one nearest the 2068.
 > On expansion boards with a jumper, the jumper for the TS-Pico's slot **must be removed**, or 
 > the TS-Pico won't work. Park the jumper on a single pin so it doesn't get lost.
 >
-> On expansion boards with switches, slide the towards the 2068. The other switches should 
+> On expansion boards with switches, slide the BUSISO switch towards the 2068. The other switches should 
 > be towards the back of the board, away from the 2068.
 
 Both connectors are keyed, so they only go in one way. Expect a fair amount of resistance when
