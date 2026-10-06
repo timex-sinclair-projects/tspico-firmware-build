@@ -277,6 +277,12 @@ def test_prompt_each(t):
           "N: stops there, no 0x03 (the ROM already left its loop)")
     got = run([ord("n")])
     check(got == [] and 0x03 not in tx, "lower-case n stops too (the ROM tests AND 5Fh)")
+    try:
+        got = run([], prompts=())
+        ok = got == [] and tx == []
+    except Exception as e:                                      # noqa: BLE001
+        ok, got = False, e
+    check(ok, "no prompts: [] and nothing sent -- not TypeError (#167) (%r, %r)" % (got, tx))
 
     print("SEND_MSG_PROMPT_YN on the lower screen (function 0x88)")
     def yn(k, lower):
