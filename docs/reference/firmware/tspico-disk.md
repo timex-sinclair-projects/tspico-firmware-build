@@ -163,7 +163,7 @@ Builds the listing text for `CATALOG`. The SD card must be active. Returns
    component when it holds `*` or `?`, else `None`.
    `catalog.resolve(TSP.cur_path, where)` gives the real path, or `None`
    when the path climbs above the root: `"Not found: <arg>"`, F.
-2. `os.stat(real)`: an `OSError` is `"Not found"`, F. Bit 14 of the mode
+2. `os.stat(real)`: an `OSError` is `"Not found: <arg>"`, F. Bit 14 of the mode
    says whether it is a directory.
 3. **One file, no pattern.** If its name ends `.TAP` (any case): the block
    table is the mounted file's live `TSP.offset_tbl` with `TSP.tap_idx` as
@@ -185,7 +185,7 @@ Builds the listing text for `CATALOG`. The SD card must be active. Returns
 5. The index column: only when the listed directory is `TSP.cur_path`
    (case-insensitive) is `index_of(name)` the position of the name in
    `files`, the list `DIR_FILES` built; elsewhere every index is blank.
-   Line 2 is `"<pat>: "` (if any) + `catalog.counts(files, dirs)`. The text
+   Line 2 is `"<pat>: "` (if any) + `catalog.counts(nf, nd)`, the numbers of files and folders in `entries`. The text
    is `DIR_HEADER(line2, path)` ([tspico-files.md](tspico-files.md): four
    32-character rows, `Path:` first) followed by
    `catalog.dir_rows(entries, index_of, shorten_filename)`.
@@ -435,7 +435,8 @@ the SAVE or LOAD that follows in the same session.
    path=real, session=session, refuse=False)`. If the file exists:
    `SEND_MSG_PROMPT_YN("Replace <base name shortened to 16>? (Y/N)",
    lower=True)` — function 88h, the status 1, the prompt, 00h; the key; for
-   Y its echo, a CR and 03h; for N nothing more. `refuse` becomes true for
+   `N` (78) nothing more; for any other key, `n` included, its echo (or `Y`
+   if unprintable), a CR and 03h. `refuse` becomes true for
    any key but `Y`/`y`. The function returns without another `SEND_MSG`:
    the 88h exchange's status was the command's answer. A new file:
    `SEND_MSG("Saving to <public>", "", 1)`.

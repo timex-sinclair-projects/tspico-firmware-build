@@ -269,7 +269,7 @@ unverified: computed from the listing)*:
 - ROM access, code 0: /BE and A14_L after 7, 8, 12–16: 9 cycles, 60 ns;
   enables after 17, 20, 21: 22 cycles, 147 ns.
 - ROM access, code 1: /BE and A14_L after 10 cycles, 67 ns; enables after
-  23 cycles, 153 ns.
+  22 cycles, 147 ns.
 - Release: the enables go high one cycle after the strobe is seen high
   (instruction 1); /BE and A14_L two cycles later (3).
 
@@ -536,7 +536,8 @@ v1.29 (`~null` does not; `MQ_READY`'s comment). The bit meanings are
 Two other `MQX` strings touch the FIFOs rather than Y: `MQ_TO_IDLE`,
 `ZX_FLUSH_TX`, `CMD_FLUSH`, `FAIL_CMD` and `ZX48_IO` drain TX with
 `pull (noblock)` followed by `mov (osr, null)`, one word per pair, bounded
-at 64 ([tspico_io.md](tspico_io.md), [tspico-bus.md](tspico-bus.md),
+at 64 except in `ZX48_IO`, whose two inline drains (tspico.py 7212, 7256)
+loop until TX is empty ([tspico_io.md](tspico_io.md), [tspico-bus.md](tspico-bus.md),
 [tspico-dispatch.md](tspico-dispatch.md)). The `pull` moves a word out of
 the FIFO into the OSR; the `mov` only tidies the OSR.
 

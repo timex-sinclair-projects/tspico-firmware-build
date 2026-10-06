@@ -72,8 +72,9 @@ which set up the same pins the same way.
 | 27 | `U10_WE` | `main.py` (out, pull-up, 1) | out | the flash's write enable, held inactive by the Pico; never written again *(inferred: the Z80 programs the flash, see below)* |
 | 28 | `U3_CS` | `main.py` (upgrade only), `ACTIVATE_SD`, `ENA_SD`, `DEACTIVATE_SD` (out, pull-up, 1) | out | the SD card's chip select, active low; "nCS = GP28 with a 4K7 pull-up" ([DEVELOPER_GUIDE.md](../DEVELOPER_GUIDE.md) §3) |
 
-`src/main.py` sets up 12, 14, 19, 20, 21, 26 and 27 before anything else
-runs, all outputs driven high except ROSCS, an input: U6 off, both memory
+`src/main.py` sets up 12, 14, 19, 20, 21, 26 and 27 after importing the
+firmware (which runs `tspico_io`'s module level) and before calling
+`TS2068_IO`, all outputs driven high except ROSCS, an input: U6 off, both memory
 chips disabled, /BE and the write enable inactive. `src/upgrade/main.py`
 does the same and adds `U3_CS` high. The state machines then take their
 pins over: building `ROM` and `BANK` moves 15–22 to PIO1, building `MQ`
@@ -240,7 +241,8 @@ Two words configure the mapping, both fields of `TSP`
 They are put three times: in `TS2068_IO` at boot, right after the two
 state machines are built; in `MEMBOOT` (`tpi:boot`), after writing the
 new boot setting to `config.ini` and sleeping 0.1 s; and in `MEMDOCK`
-(`tpi:dock`), after refusing a slot the 2068 is running from. The upgrade
+(`tpi:dock`), once `BOOT_SLOT_CLASH` has passed and the reply has been
+sent (a refused slot is never put). The upgrade
 firmware puts the defaults, 10 and 1. The state machines keep the last
 word in their X register and apply it to every access until the next
 `put()`: the change is immediate, which is why the user manual says to
@@ -273,7 +275,7 @@ its own ROMs.
 |---|---|---|---|
 | CPU (both cores) | 270 MHz | `freq(270_000_000)` in both `main.py`s; printed at boot | not stated beyond the PIO rate below. The RP2040's rated maximum is 133 MHz (datasheet); the audit lists "270 MHz" with the PIO settle delays as "bus timing, logic analyser only; leave them" (§4) |
 | the bus state machine (MQ, running TS_IO_DUAL) | 30 MHz | `StateMachine(0, …, freq=30_000_000)` | the dual-port decode added ~7 cycles to the read path over the single-port program's 15 MHz; 30 MHz "keeps the total under the Z80's data setup window with margin" (`TS_IO_DUAL`'s docstring, `ACTIVATE_MQ`'s comment). A cycle is 33 ns; a read is answered in 9 cycles *(computed, unverified)* |
-| the memory state machines (ROM and BANK) | 150 MHz | `StateMachine(4/5, …, freq=150_000_000)` | not stated. A cycle is 6.7 ns; the ROM path's enables follow the strobe by up to 23 cycles *(computed, unverified)*. This exceeds the "half the system clock" the `TS_IO_DUAL` docstring gives as the PIO's limit; the datasheet's divider goes down to 1, so the code, not the comment, is right |
+| the memory state machines (ROM and BANK) | 150 MHz | `StateMachine(4/5, …, freq=150_000_000)` | not stated. A cycle is 6.7 ns; the ROM path's enables follow the strobe by up to 22 cycles *(computed, unverified)*. This exceeds the "half the system clock" the `TS_IO_DUAL` docstring gives as the PIO's limit; the datasheet's divider goes down to 1, so the code, not the comment, is right |
 | the parked bus state machine (NULL_SM) | 15 MHz | `ACTIVATE_SD` | the old single-port rate; irrelevant for a `nop` |
 | SPI0 | 100 kHz, then 5 MHz | `sdcard.py` | the SD initialisation sequence needs a slow clock; 5 MHz kept by the audit (§5) |
 

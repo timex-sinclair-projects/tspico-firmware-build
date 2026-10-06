@@ -39,6 +39,8 @@ wrong; **test** a test docstring is wrong.
 | B18 | ROM 2.1 SESSION_NAMED (1AC4h–1AD9h) | The `NET:` prefix is recognised (TPMODE bits 7+6) but leads nowhere: the switch words ignore it and the firmware answers "Unrecognized command". Dead feature or unfinished? | same | |
 | B19 | ROM HOME 0A4Ah | COPY-LINE's entry now thunks to EXROM 17C3h but nothing in ROM 2.1 calls it (its callers were inside the replaced COPY/COPY-BUFF). Dead, or kept for programs that call COPY-LINE? | |
 | B20 | `fddcmd.asm` `SEND_FOPEN`, `CH_SEND` | Both read the pre-load status (`BIOS_RX_A`) and ignore it; `SEND_DATA_BLOCK_D` checks it. Harmless while the firmware never refuses at the pre-load | [rom/exrom-fdd.md](docs/reference/rom/exrom-fdd.md#send_fopen) | |
+| B21 | `tspico.py` `CATALOG_TEXT` (2625) | `TSP.f_name.upper()` with no guard: before the first mount of a session `f_name` is still the initial `[]`, so `CAT "x.tap"` raises `AttributeError` → Report J. Same root as B4 (`BLKRCV`); initialising `f_name` to `""` in `PICO_STATUS.__init__` would fix both | [tspico-state.md](docs/reference/firmware/tspico-state.md#pico_status__init__self-init_values) | |
+| B22 | `tspico.py` `PRINT_IO` | A UDG's 8-byte pattern body has its XOR computed but not checked: a damaged body still answers status 1 (COPY's body is checked) | [tspico-dispatch.md](docs/reference/firmware/tspico-dispatch.md#print_iopre) | |
 
 ## The user manual
 

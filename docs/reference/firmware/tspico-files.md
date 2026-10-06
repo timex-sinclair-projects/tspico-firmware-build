@@ -213,7 +213,7 @@ What it does:
    on the card.
 4. Folders (type 16384) first: each goes into `dirs`/`dirs_upper`; its shown
    name is `shorten_filename(catalog.screen_name(name), 20)`; the `dirinfo`
-   row is the name padded to 32; the listing row is
+   row is that shown name padded to 32; the listing row is
    `"<%-21s       0 B" % (name + ">")`, 32 characters.
 5. Files (type 32768) whose last three characters, upper-cased, are in `ext`,
    that do not start with `.` and are not `dirinfo.tap`: each goes into
@@ -222,7 +222,8 @@ What it does:
    also 32 characters, and the same row goes into `dirinfo`. `i` counts from
    0. **This `i` is the index `LOAD "tpi:n"`, `tpi:dir CODE 1,n` and `tpi:rm n`
    use, and `files[i]` is the file.**
-6. Every other file: a row with four spaces where the index would be. It is
+6. Every other file not starting with `.` and not `dirinfo.tap`, after the
+   indexed ones: a row with four spaces where the index would be. It is
    not in `files` and not in `dirinfo.tap` ("spec §2":
    [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md)).
 7. `os.statvfs("")` on the card: `sd_space = (total, free)` in bytes and

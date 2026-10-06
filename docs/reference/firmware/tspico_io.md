@@ -183,8 +183,8 @@ The bits are [PROTOCOL.md §3.1](../../PROTOCOL.md); the ROM side is
 [../rom/exrom-sync.md](../rom/exrom-sync.md).
 
 Callers: `SAY_READY` (for `"mid"`), `MQ_TO_IDLE`, `SAVE_TS`, and in `tspico.py`
-the SYNC branch of the idle loop, `PROCESS_CMD`'s tail, `PRINT_IO` and the
-post-SAVE arm point. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
+the SYNC branch of the idle loop, `PROCESS_CMD`'s body abort (5885) and
+tail, `PRINT_IO`, `CH_READY` (3238, `"mid"`) and the post-SAVE arm point. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
 pins the three values.
 
 ## The pre-header capture
@@ -786,7 +786,7 @@ Sends one TAP block to the Z80 through the TPI LOAD exchange of
 [PROTOCOL.md §6.1](../../PROTOCOL.md); the flow from the keyword to the last
 byte is [../flows/load.md](../flows/load.md). The dispatcher calls it (through
 `LOAD_SERVE`) for every pre-header whose first byte is 00h (header) or FFh
-(data) and whose TADDR is not 0 — LOAD, VERIFY, MERGE, and the headerless LOAD
+(data), except 00h with TADDR 0 (a SAVE) — LOAD, VERIFY, MERGE, and the headerless LOAD
 of machine code calling LD-BYTES — after waiting (bounded, 3 s) for any core1
 flash write, and without saying READY: the Z80 is parked in `WAIT_PICO_READY`
 (EXROM 1A54h, [../rom/exrom-driver.md](../rom/exrom-driver.md)), having read
@@ -798,9 +798,10 @@ Nothing runs after it returns — the dispatcher's LOAD branch has no arm point
 — so every exit path leaves the link in its final state itself.
 
 State: reads `TSP.f_name`, `totlen`, `offset`, `tap_idx`, `ld_start`,
-`ld_wrapped`, `ld_start_idx`, `load_file` (the last four with `getattr`
-defaults, because a stale `dev_tspico` may predate them), `LOG_LEVEL`; writes
-`offset`, `tap_idx`, `ld_start`, `ld_start_idx`, `ld_wrapped`. Files: the
+`ld_wrapped`, `load_file` (the last three with `getattr` defaults, because a
+stale `dev_tspico` may predate them), `LOG_LEVEL`; writes `offset`,
+`tap_idx`, `ld_start`, `ld_start_idx` (read back only by
+`REWIND_ABORTED_SEARCH`), `ld_wrapped`. Files: the
 mount's copy on the Pico's flash, `/TMP/temp.tap` (or `TSP.load_file`), or the
 cached `/assets/nofile.tap`; never the SD card, which is unmounted while the
 dispatcher runs ([../flows/sd-handover.md](../flows/sd-handover.md)).
@@ -932,8 +933,8 @@ the count and the first byte.
 what is still in TX (0–4 means it was still in the ready-wait before the data);
 `REWIND_ABORTED_SEARCH` puts a search in progress back where it began; the
 local file is closed; `MQ_TO_IDLE(MQ, recovered=(why != 1))` empties both
-FIFOs, stages one 0x01 and sets the status; an INFO (BREAK) or ERROR (stall)
-line is logged with the count and the rewound offset; return. The Z80 then
+FIFOs, stages one 0x01 and sets the status; a line beginning "INFO:" is logged at
+level WARN for a BREAK or ERROR for a stall, with the count and the rewound offset; return. The Z80 then
 sees TX = `[01]` and FFh after a BREAK — the 2.x ROM is waiting for READY +
 IDLE to raise Report D — or FBh after a stall, so its next command gets Report
 T.

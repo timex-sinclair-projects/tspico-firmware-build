@@ -198,7 +198,8 @@ What it does:
    `body[n+3]`, and `body[0] == 0x44`.
 2. `status = _1_OK`. For a character (`pre[1] == 5`): `PRT.feed(pre[3])`
    turns it into text in `PRT.buf` ([printer.md](printer.md)); the pattern
-   body of a UDG is read, checked and discarded. If the buffer has reached
+   body of a UDG is read and discarded: its XOR is computed but not acted
+   on, so a bad body still answers status 1. If the buffer has reached
    `PRINT_FLUSH_AT`, `PRINT_FLUSH()` — the Z80 is waiting for READY, so the
    SD access is allowed; afterwards TX is empty and Y BUSY, which is what the
    next step expects anyway. For COPY, `COPY_BMP(memoryview(body)[3:n + 3],
@@ -684,7 +685,7 @@ behind a half-sent pre-header after a 2068 reset
    ("Partial pre-header 8/10" → Report T in Commander, hardware 2026-09-27).
    No `gc.collect()` here: 4.6 ms on every SYNC, every LPRINT character, and
    `RX_CAPTURE` allocates nothing.
-4. `rxd.arm(MQ)` — before IDLE, since the pre-header follows at once — then
+4. `rxd.arm(MQ)` when there is a DMA capture — before IDLE, since the pre-header follows at once — then
    `MQ_STATUS(MQ, "idle")`: Y = `0xFF`. `continue`.
 
 Y is BUSY from step 1 to step 4; the Z80 waits. A SYNC therefore always
@@ -782,8 +783,9 @@ A SAVE's header pre-header ([PROTOCOL.md §6.2](../../PROTOCOL.md#62-save),
    - `pappend`: `MOUNT_FILE(TSP.f_name, True)` re-mounts the appended TAP
      so the addition is visible, then restores `append`, `tap_idx` and the
      `offset` from `offset_tbl` that the mount reset;
-   - no file was mounted and `SAVE_TS` made one: `MOUNT_FILE` it (append
-     stays off);
+   - no file was mounted and `SAVE_TS` made one: `MOUNT_FILE(TSP.f_name,
+     True)` it (append stays off; as a "remount", a failure goes straight
+     to `UNMOUNT`, which calls `SEND_MSG` before the arm point);
    - the SAVE overwrote the mounted TAP (`TSP.f_name == pf_name`): logged;
      the old content stays mounted, no re-mount;
    - a new file while another is mounted: `TSP.f_name = pf_name`.

@@ -176,15 +176,17 @@ Starts a transaction: SYNC, wait, then the write the call site used to do.
 
 Takes A = the first byte of the pre-header. Preserves every register; only
 the flags change, as before. DE, HL, IX and AF' are never touched. AF' is
-live in the LOAD loop (`EX AF,AF'` at 19E8h and 19EBh carries the LOAD/VERIFY
+live in the LOAD loop (`EX AF,AF'` at 19E3h and 19EBh carries the LOAD/VERIFY
 flag), which is why this routine saves AF and BC on the stack instead of
 using the alternate set.
 
 On the Pico, `RX_CAPTURE` sees the 103h word and returns a negative count;
 `TS2068_IO` calls `MQ_TO_IDLE(status=False, first=FIRST_STATUS())`, which
-empties both FIFOs and stages one pre-load byte, waits up to 800 ms for a
-flash write on the other core to finish, then sets the status idle (FFh).
-So after a SYNC the link is TX = `[01]`, RX empty, whatever state an earlier
+empties both FIFOs and stages one byte — 01h, or the error of a header LOAD
+just refused (`FIRST_STATUS`); the dispatcher itself then waits up to 800 ms
+for a flash write on the other core to finish, re-arms the pre-header DMA
+channel when there is one, and sets the status idle (FFh) (tspico.py
+6457–6476). So after a SYNC the link is normally TX = `[01]`, RX empty, whatever state an earlier
 client left it in ([tspico-dispatch.md](../firmware/tspico-dispatch.md)).
 
 Beware: the SYNC is sent before the ready-wait of the transaction it opens,
@@ -377,8 +379,8 @@ v1.7, but it never raises a report.
 
 Returns carry clear when ready (A, BC preserved); carry set with A = 02h on
 a timeout (v1.7's code), 0Ch on BREAK, 1Ch on RECOVERED; BC preserved in
-every case. DE, HL, IX untouched. Each poll costs ~88 ms because
-`CHECK_BREAK` runs ten debounced keyboard scans, which is where the 19.9 s
+every case. DE, HL, IX untouched. Each poll costs ~88 ms *(inferred: 19.9 s / 226)*
+because `CHECK_BREAK` runs ten debounced keyboard scans, which is where the 19.9 s
 comes from and why the ROM 2.1 channel driver never uses this for byte-level
 I/O ([FDD_COMMANDS_DESIGN.md §6.2](../../FDD_COMMANDS_DESIGN.md)). The
 contract is documented in [PROTOCOL.md §9](../../PROTOCOL.md) and the
