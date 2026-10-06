@@ -4908,7 +4908,11 @@ def MDIR(pre, cmd):                                                             
     global alldirs
     
     TLM("MDIR enter")
-    name = cmd[10:]
+    # The name as every handler takes it (#174: this was cmd[10:], so a
+    # second space after "tpi:md" became part of it), one folder in the
+    # current one: no "/" (FORMAT "a/b/" makes paths; "/x" made x on the
+    # Pico's own flash) and nothing FAT refuses.
+    name = getArgs(cmd).strip()
     message = "Created dir: "
     status = _1_OK
     par1, par2 = PARAMS(pre)
@@ -4917,21 +4921,26 @@ def MDIR(pre, cmd):                                                             
         status = _8_A_Invalid_arg
         message = "MD: Filename required"
         LOG(message, 2)
+    elif name in (".", "..") or any(c < ' ' or c > '~' or c in ':*?\\/|"<>' for c in name):
+        status = _3_F_Invalid_file
+        message = "MD: name not allowed: "
+        LOG(message + name, 2)
     else:
         ACTIVATE_SD()
         os.chdir(TSP.cur_path)
+        full = "%s/%s" % (TSP.cur_path, name)  # by full path, whatever the current directory
 
-        if dir_exists(name):
+        if dir_exists(full):
             message = 'MD: directory "%s" exists' % name
             LOG(message, 2)
             status = _7_8_EOF
-        elif file_exists(name):
+        elif file_exists(full):
             message = 'MD: file "%s" exists' % name
             LOG(message,2)
             status = _3_F_Invalid_file
         else:
             try:
-                os.mkdir(name)
+                os.mkdir(full)
                 if par1 != 1 or par2 != 0:
                     DIR_FILES() # Update local dir list
                 # Update alldirs w/o calling GET_DIRS()
@@ -4956,7 +4965,7 @@ def MDIR(pre, cmd):                                                             
         # Change to new DIR with show path option
         pre = [0] * 10
         pre[3] = 2 # CODE 2,0
-        CDIR(pre, cmd)
+        CDIR(pre, cmd[:3] + "tpi:cd " + name)   # the clean name, not this command's text
     else:
         SEND_MSG(message, name, status)
             
