@@ -4075,24 +4075,34 @@ def BLKRCV(pre, cmd):                                                           
                 wrt(mv[j])
             left -= n
 
+    # The image itself, before any status: once the Z80 has "0 OK" it erases
+    # the slot and reads blind, so nothing found wrong after that can be
+    # reported, and an empty FIFO goes into the flash as 00s. A .DCK must be
+    # the full 64K DCK_IMAGE wrote (#164); a .BIN/.ROM must be there.
+    try:
+        file_len = os.stat("/TMP/temp.bin")[6]
+    except OSError:
+        file_len = -1
+    if file_len < (65536 if TSP.f_name[-4:].upper() == ".DCK" else 1):
+        LOG("BLKRCV: /TMP/temp.bin is %s. Command refused" %
+            ("missing" if file_len < 0 else "%d bytes" % file_len), 1)
+        SEND_MSG("The ROM image isn't ready", "Mount the file again", _3_F_Invalid_file, True)
+        return
+
     led.value(1)
     try:
         if TSP.f_name[-4:].upper() == ".DCK":
 
-            # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
-            wrt(status)
-            MQ_READY()
-
-            try:
-                with open("/TMP/temp.bin", "rb") as file:
-                    stream(file, 65536)     # DCK_IMAGE always writes the full 64K
-            except Exception as e:
-                print(f"ERROR! {e}")
-                return
+            # Opened before the status goes out (#164): an error here is
+            # still Report J through FAIL_CMD, before the Z80 erases anything.
+            with open("/TMP/temp.bin", "rb") as file:
+                # ─── DUAL-PORT MIGRATION: status + MQ_READY (was wrt(0x40); wrt(status)) ──
+                wrt(status)
+                MQ_READY()
+                stream(file, 65536)         # DCK_IMAGE always writes the full 64K
 
         elif TSP.f_name[-4:].upper() in [".BIN", ".ROM"]:
 
-            file_len = os.stat("/TMP/temp.bin")[6]
             send_len = file_len
 
             par1, par2 = PARAMS(pre)

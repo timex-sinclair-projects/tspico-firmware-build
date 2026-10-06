@@ -126,6 +126,37 @@ def test_blkrcv_needs_an_image(t, image):
         check(len(r[0]) <= 32 and len(r[1]) <= 32, "  both lines fit 32 columns")
 
 
+def test_blkrcv_checks_the_image_first(t, image):
+    print("tpi:blkrcv checks /TMP/temp.bin before it says OK (#164)")
+    # Booted from flash 1, DOCK flash 4: no boot-slot clash, so only the image decides.
+    sent = setup(t, (2, 1), (2, 4), "/sd/TAP/GAME.DCK", image)      # the 772-byte image
+    r = blkrcv(t, sent)
+    check(r is not None and r[2] == t._3_F_Invalid_file and r[3] and t.MQ.puts == [],
+          ".DCK with a short image: Report F, shown, nothing streamed (%r)" % (r,))
+    check(len(r[0]) <= 32 and len(r[1]) <= 32, "  both lines fit 32 columns")
+
+    def gone(p):
+        raise OSError(2, "ENOENT")
+    for f_name in ("/sd/TAP/GAME.DCK", "/sd/TAP/NEW.ROM"):
+        sent = setup(t, (2, 1), (2, 4), f_name, image)
+        t.os = types.SimpleNamespace(stat=gone)
+        r = blkrcv(t, sent)
+        check(r is not None and r[2] == t._3_F_Invalid_file and t.MQ.puts == [],
+              "%s with /TMP/temp.bin missing: Report F, nothing streamed (%r)" % (f_name[-4:], r))
+
+    fd, full = tempfile.mkstemp(prefix="boot_guard_dck.", suffix=".bin")
+    with os.fdopen(fd, "wb") as f:
+        f.write(bytes(range(256)) * 256)                           # 64K, as DCK_IMAGE writes
+    try:
+        sent = setup(t, (2, 1), (2, 4), "/sd/TAP/GAME.DCK", full)
+        r = blkrcv(t, sent)
+        check(r is None and t.MQ.puts[:1] == [t._1_OK] and len(t.MQ.puts) == 1 + 65536
+              and bytes(t.MQ.puts[1:257]) == bytes(range(256)),
+              ".DCK with the full 64K: status 1, then all 65536 bytes (%d puts)" % len(t.MQ.puts))
+    finally:
+        os.remove(full)
+
+
 def test_rom(t, image):
     print(".ROM mounted, booted from Flash slot 4 (the 2026-09-28 incident)")
     sent = setup(t, (2, 4), (2, 0), "/sd/TAP/TEST.ROM", image)
@@ -209,6 +240,7 @@ def main():
     try:
         test_nothing_mounted(t, image)
         test_blkrcv_needs_an_image(t, image)
+        test_blkrcv_checks_the_image_first(t, image)
         test_rom(t, image)
         test_sram_boot(t, image)
         test_dck(t, image)

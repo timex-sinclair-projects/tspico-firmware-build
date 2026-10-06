@@ -366,13 +366,21 @@ user manual §8.4).
    another slot first.", shown, Report Q, and stop: nothing streamed,
    nothing erased. `MEMDOCK` normally refused the slot already; this is
    the second check ([`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)).
-3. **`.DCK`**: status 1 into TX (`MQ.put`), `MQ_READY()`, then the 65 536
-   bytes of `/TMP/temp.bin` (`DCK_IMAGE` always writes a full 64K image).
-4. **`.BIN`/`.ROM`**: `CODE len,offset`. If `len + offset` is past the
+3. **The image file.** `/TMP/temp.bin` must exist and, for a `.DCK`, be
+   at least 65 536 bytes (`DCK_IMAGE` always writes a full 64K image).
+   Otherwise "The ROM image isn't ready" / "Mount the file again", shown,
+   Report F, and stop. This comes before any status because once the Z80
+   has "0 OK" it erases the slot and reads blind: nothing found wrong after
+   that can be reported, and an empty FIFO goes into the flash as `00h`s
+   (#164).
+4. **`.DCK`**: `/TMP/temp.bin` opened, then status 1 into TX (`MQ.put`),
+   `MQ_READY()`, and its 65 536 bytes. An error opening it raises before
+   the status, so `FAIL_CMD` answers J and nothing is erased.
+5. **`.BIN`/`.ROM`**: `CODE len,offset`. If `len + offset` is past the
    end of `/TMP/temp.bin`, status 3 (Report F) after a one-second
    `BLINK_ERROR`, and nothing more. Otherwise status 1, `MQ_READY()`, and
    `len` bytes from `offset` (`len` 0: to the end of the file).
-5. LED on for the transfer, off in a `finally`.
+6. LED on for the transfer, off in a `finally`.
 
 **The stream.** The updater's BASIC prints, erases the slot (`USR
 32800`/`32600`) and only then runs its write loop (`USR 32870`/`32670`),
@@ -410,10 +418,12 @@ needs a power cycle anyway (the comment at 3985–4010).
 
 Beware:
 
-- The status goes out before the stream, so an error while reading
-  `/TMP/temp.bin` on the `.DCK` path is printed to the console and the
-  handler returns: the 2068 has "0 OK" and erases the slot, then reads an
-  empty FIFO.
+- The status still goes out before the stream, so a read error part way
+  through (after the checks above) cannot reach the 2068: it is raised,
+  `PROCESS_CMD` logs it and `FAIL_CMD` answers J, and the 2068, already in
+  its write loop, takes that status byte as data and then reads an empty
+  FIFO for the rest *(inferred)*. The slot is half-written either way. Before #164 the `.DCK` path also sent the status
+  before opening the file, and only printed an error opening it.
 - The status and the stream use `MQ.put` directly; at this point TX is
   empty (the command body has just been read), so the first `put`s cannot
   block.
