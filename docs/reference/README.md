@@ -168,5 +168,5 @@ contributors and AI agents is in [`CLAUDE.md`](../../CLAUDE.md).
 | `tools/build-flash.py` | `5393518b3bb1` | [firmware/boot.md](firmware/boot.md) |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) |
-| `.github/workflows/build.yml` | `e838a3249d7d` | [firmware/boot.md](firmware/boot.md) |
+| `.github/workflows/build.yml` | `a33c94967cc4` | [firmware/boot.md](firmware/boot.md) |
 | `.github/workflows/release.yml` | `65183ad466bc` | [firmware/boot.md](firmware/boot.md) |
