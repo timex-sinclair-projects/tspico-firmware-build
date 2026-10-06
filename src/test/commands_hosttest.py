@@ -11,7 +11,8 @@ and a temporary config.ini:
     non-empty folder and the current folder -- before its Y/N prompt;
   * BOOT saves the memory type with the slot, LOAD_CONFIG uses both once and
     puts back flash slot 1, and MEM 3 is refused;
-  * DIR CODE 1,n / 2,n past the last file gives the real range, 0 to n-1.
+  * DIR CODE 1,n / 2,n past the last file gives the real range, 0 to n-1;
+  * FWD CODE 2,n (by file) on the last header says it can't, not "Moved".
 
 Run:  python3 src/test/commands_hosttest.py
 """
@@ -168,6 +169,29 @@ def test_dir_range(t, sent):
     t.files = real
 
 
+def test_ffw_by_file(t, sent):
+    print("tpi:ffw CODE 2,n by file (#170)")
+    real = t.TSP.f_name, getattr(t.TSP, "offset_tbl", []), getattr(t.TSP, "tap_idx", 0), getattr(t.TSP, "offset", 0)
+    t.TSP.f_name = "/sd/TAP/GAMES.TAP"
+    # two programs: header 0 + data 1, header 2 + data 3
+    t.TSP.offset_tbl = [[0, 19, " Y", "a"], [21, 100, " N", ""], [123, 19, " Y", "b"], [144, 50, " N", ""]]
+    t.TSP.tap_idx = 0
+    del sent[:]
+    run(t, t.FWD, "tpi:ffw", 2, 1)
+    check(t.TSP.tap_idx == 2 and sent[-1][1] == "Moved ahead to block # 2" and t.TSP.offset == 123,
+          "from the first header: to the second (%r, idx %d)" % (sent[-1], t.TSP.tap_idx))
+    del sent[:]
+    run(t, t.FWD, "tpi:ffw", 2, 1)
+    check(t.TSP.tap_idx == 2 and t.TSP.offset == 123 and sent[-1][1] == "Can't FWD. No later file."
+          and sent[-1][3] == t._1_OK,
+          "on the last header: stays, and says so -- not \"Moved ahead\" (%r)" % (sent[-1],))
+    t.TSP.tap_idx = 1
+    del sent[:]
+    run(t, t.FWD, "tpi:ffw", 2, 5)
+    check(t.TSP.tap_idx == 2, "from a data block, CODE 2,5 stops at the last header there is (%d)" % t.TSP.tap_idx)
+    t.TSP.f_name, t.TSP.offset_tbl, t.TSP.tap_idx, t.TSP.offset = real
+
+
 def test_boot(t, cfg):
     print("tpi:boot and LOAD_CONFIG")
     with open(cfg, "w") as f:
@@ -227,6 +251,7 @@ def main():
         test_newtap(t, root, sent)
         test_rm(t, root, sent)
         test_dir_range(t, sent)
+        test_ffw_by_file(t, sent)
         test_boot(t, cfg)
     finally:
         shutil.rmtree(root, ignore_errors=True)

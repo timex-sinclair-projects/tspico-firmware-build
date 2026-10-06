@@ -3,8 +3,8 @@
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1507–1591
 (`shorten_filename`, `DIR_HEADER`, the colour helpers), 2145–2470
 (`MSG_BYTE`, `SEND_MSG`, `SEND_MSG2`), 2734–2770 (`PROMPT_EACH`),
-3452–3645 (`ListMenu`), 3848–3860 (`xchr`, `xstr`), 4527–4539
-(`BUILD_FIT`) and 5300–5369 (`SEND_MSG_PROMPT_YN`).
+3452–3645 (`ListMenu`), 3848–3860 (`xchr`, `xstr`), 4533–4545
+(`BUILD_FIT`) and 5306–5375 (`SEND_MSG_PROMPT_YN`).
 
 A `tpi:` command answers the 2068 with one byte — a status — or with a
 **response function**: a byte of `80h` or more that makes the ROM print
@@ -38,8 +38,8 @@ FIFO through the never-blocking command I/O of
 | `ListMenu(List, hdr1, hdr2, hdr3, action, chosen, folders=False)` | 3452 | `86h`: pick one of a list, 16 to a page |
 | `xchr(m)` | 3848 | a character of a card name as the 2068 lists it |
 | `xstr(s)` | 3856 | a name as the 2068 lists it |
-| `BUILD_FIT(s, n)` | 4527 | the build stamp in `n` characters |
-| `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | 5300 | `86h` or `88h`: one question, one key |
+| `BUILD_FIT(s, n)` | 4533 | the build stamp in `n` characters |
+| `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | 5306 | `86h` or `88h`: one question, one key |
 
 ## The answer on the wire
 
@@ -109,7 +109,7 @@ A BREAK at any key wait (the 2.x ROMs' `KEYWAIT`) is a port-0Fh write;
 command ([tspico-bus.md](tspico-bus.md#command-io-that-never-blocks)).
 After a builder that waits for keys has returned, nothing more may be sent
 for that command: the ROM has finished its function and will read the next
-byte as a status (the comments at 3457 and 5303).
+byte as a status (the comments at 3457 and 5309).
 
 ## Names and listings on a 32-column screen
 
@@ -183,7 +183,7 @@ which would hide the line's end from `SEND_MSG2`'s column count. Colour 8
 only values used beyond 1, 5 and 7, so none is `00h` or `03h` (see the
 text rules). Send the result with `SEND_MSG2(…, colour=True)`; without
 `colour` the codes are stripped. Callers: `DIR` (2539), `CATALOG` (2605),
-`CDIR` (4271), `ZX_TPI`'s listing (7054).
+`CDIR` (4271), `ZX_TPI`'s listing (7060).
 
 `lista` and `dirinfo.tap` keep the plain text; the colour is added only on
 the way out.
@@ -265,7 +265,7 @@ that it was once described as redundant and the audit tried removing it.
 
 Callers: 72 sites in `tspico.py` — most handlers end with it — and
 external commands through `extcmd.py`. The forced ones: `NO_CARD_REPLY`
-(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (6017:
+(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (6023:
 that message says what to do), and `extcmd`'s `tpi:list` (89). The
 `romupdate` refusal and the other mount errors go through `LOAD_TPI`'s
 message ([tspico-files.md](tspico-files.md)).
@@ -378,9 +378,9 @@ Callers, with their flags:
 | Caller | `expandKeywords` | `colour` |
 |---|---|---|
 | DIR (2539, 2574), CATALOG (2605), CDIR (4271) — listings through CAT_COLOUR | `False` (2574: `True`) | `True` |
-| DISK_COPY (2787), GETHELP (4522) | `False` | `False` |
-| TAPDIR (3759), GETINFO (4624) | `True` | `True` |
-| GETLOG (4750) | `True` | `False` |
+| DISK_COPY (2787), GETHELP (4528) | `False` | `False` |
+| TAPDIR (3759), GETINFO (4630) | `True` | `True` |
+| GETLOG (4756) | `True` | `False` |
 
 Beware:
 
@@ -526,14 +526,14 @@ SCREEN$` overwrites a file (3109), kept to one line.
    return the key.
 
 The status is always 1. The callers act on the key: `GETLOG`'s "Clear the
-log file (y/N)?" (4649) and `RM`'s "Remove NAME (y/N)?" (5414) go on only
+log file (y/N)?" (4655) and `RM`'s "Remove NAME (y/N)?" (5420) go on only
 for 89 (`Y`), and the question is the whole answer — a refusal reaches only
 the log. `tpi:fopen` records anything but `Y` as a refusal that `SAVE_TS`
 turns into Report D at the header. All callers use `echo=True`.
 
 Beware: like the other builders it ends the exchange; the comment at the
 top says "this cannot be followed by another SEND_MSG* call". The
-migration comment at 5321–5323 says the RX drain moved below `MQ_READY`;
+migration comment at 5327–5329 says the RX drain moved below `MQ_READY`;
 since the audit it is above it again (`CMD_RX_FLUSH`, before anything is
 sent), which the comment in `ListMenu` (3472–3475) records.
 
@@ -563,7 +563,7 @@ The build stamp in at most `n` characters. `s` is `BUILD_VERSION`, "commit
 or is not of that shape, it is cut to `n`. Otherwise the commit is kept
 whole and the branch cut to fit with `..`: `"abc1234 (long-bra..)"`; if
 not even one branch character fits, the commit alone, cut to `n`. `..`
-rather than `~` because `~` prints as FREE. One caller, `GETINFO` (4577),
+rather than `~` because `~` prints as FREE. One caller, `GETINFO` (4583),
 which gives it 22 columns after the 10-column label.
 
 ## Where comments and the code disagree
@@ -576,5 +576,5 @@ The code wins; the entries above give the detail.
   status is an int.
 - `SEND_MSG2`'s "Inline-wrt" comment (2263–2269): pages are built in RAM
   and sent with `CMD_SEND`, as the later comment (2278–2280) says.
-- `SEND_MSG_PROMPT_YN`'s migration comment (5321–5323): RX is emptied
+- `SEND_MSG_PROMPT_YN`'s migration comment (5327–5329): RX is emptied
   before READY, not after.

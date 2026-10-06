@@ -505,7 +505,8 @@ SAVE "tpi:rew" CODE 3,2    : REM back two files, then show the tape
 ```
 
 With verbose on you'll see `Moved ahead to block # 4`. The tape stops at either end: you'll
-get `Can't FWD. Already at end.` rather than a wrap-around.
+get `Can't FWD. Already at end.` rather than a wrap-around, or `Can't FWD. No later file.` when
+you skip by files from the last program.
 
 ## 3.6 Ejecting the tape: CLOSE
 
@@ -1451,7 +1452,7 @@ SAVE "tpi:ffw" CODE 3,n      : REM n files, then show the tape
 ```
 
 `tpi:rew` works the same way, backwards. *(verbose)* `Moved ahead to block # 4`,
-`Can't FWD. Already at end.`, `No .tap file mounted`.
+`Can't FWD. Already at end.`, `Can't FWD. No later file.`, `No .tap file mounted`.
 
 ### help
 
