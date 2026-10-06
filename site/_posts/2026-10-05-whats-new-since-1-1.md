@@ -7,7 +7,7 @@ date: 2026-10-05 06:00:00 -0400
 
 The last TS-Pico software most owners installed was version 1.1. Version 2.1 replaces it.
 It updates both halves of the TS-Pico: the **firmware** on the Pico, and the **TS-2068 ROM**
-in its flash chip. The current release is **2.2**: firmware 2.2 with ROM 2.2. The
+in its flash chip. The current release is **2.2.1**: firmware 2.2.1 with ROM 2.2. The
 firmware and the ROM are made to work together, so install both. The
 [web updater]({{ site.updater_url | relative_url }}) does it from Chrome or Edge in about
 fifteen minutes.
@@ -254,7 +254,7 @@ fresh clone to a tested change. It covers the host tests that CI runs on every p
 tests in `tools/emu`. The scripts that built and tested the software library are in
 `tools/sd-archive`.
 
-## Getting 2.2
+## Getting 2.2.1
 
 1. Switch the TS-2068 off.
 2. Open the [web updater]({{ site.updater_url | relative_url }}) in Chrome or Edge, connect
@@ -263,6 +263,6 @@ tests in `tools/emu`. The scripts that built and tested the software library are
 3. Keep the **P10 jumper** fitted. Writing the ROM to the flash chip needs it.
 
 Afterwards, `PRINT PEEK 101` on the 2068 gives **34** (ROM 2.2), and `SAVE "tpi:info"` shows
-firmware 2.2.
+firmware 2.2.1.
 
 Thanks to everyone who tested along the way.

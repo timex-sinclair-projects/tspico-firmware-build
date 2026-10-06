@@ -3,7 +3,7 @@
 The internals of the TS-Pico, explained down to every function, variable,
 PIO instruction and ROM routine: what each one does, why it exists, what it
 touches and what will break if you change it. It covers the code as it is on
-`main` today: firmware 2.2, ROM 2.2 and the ZX Spectrum ROM v4.
+`main` today: firmware 2.2.1, ROM 2.2 and the ZX Spectrum ROM v4.
 
 This is the reference for people who want to **change** the platform. If you
 want to **use** it, start elsewhere:
@@ -150,7 +150,7 @@ behaviour, and the caveat and the issue link go.
 | Source | Checked at | Chapter | Flows and appendices |
 |---|---|---|---|
 | `src/main.py` | `95ce18e5b382` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
-| `src/TS/tspico.py` | `60b9dbf9491b` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/TS/tspico.py` | `6ccdc2ccdbfa` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/TS/tspico_io.py` | `dac5067eb814` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) | [flows/boot.md](flows/boot.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/TS/sdcard.py` | `e1c614de390c` | [firmware/sdcard.md](firmware/sdcard.md) | [flows/sd-handover.md](flows/sd-handover.md) |
 | `src/TS/channels.py` | `5b1d30b1efe4` | [firmware/channels.md](firmware/channels.md) | [flows/channels.md](flows/channels.md) |
@@ -165,7 +165,7 @@ behaviour, and the caveat and the issue link go.
 | `src/rom/patches/tspico-zx48-v3.asm` | `c942ea86b3aa` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md) |
 | `src/upgrade/updater.asm` | `4826d5f78d95` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `docs/rom-analysis/tspico-exrom-symbols.sym` | `72aa7dccef81` | [rom/exrom-driver.md](rom/exrom-driver.md), [rom/exrom-chunk1.md](rom/exrom-chunk1.md), [rom/home.md](rom/home.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
-| `src/config.ini` | `86e451feb587` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
+| `src/config.ini` | `fea905957cf3` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
 | `src/manifest.py` | `61eaa0d88fb4` | [firmware/boot.md](firmware/boot.md) | — |
 | `src/upgrade/manifest.py` | `ae1e377eaa80` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/upgrade/loader.bas` | `78d09ea9d4fe` | [firmware/upgrade.md](firmware/upgrade.md) | — |

@@ -129,7 +129,7 @@ consequences before their causes.
 
 | What | Version | Where it is written | How to read it |
 |---|---|---|---|
-| Firmware | 2.2 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
+| Firmware | 2.2.1 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
 | TS-2068 ROM | 2.2 | HOME 0065h (`PEEK 101` = 34), BIOS G_VERS = 0022h, the boot banner | `PEEK 101`; `SAVE "tpi:info"` |
 | ZX Spectrum ROM | v4 | the banner byte at 38B7h | the boot screen in ZX48 mode |
 | ROM 2.2 module | FDD_VERSION 8 | EXROM 30AFh | — |
