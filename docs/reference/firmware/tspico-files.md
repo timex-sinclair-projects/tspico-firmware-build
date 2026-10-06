@@ -164,7 +164,7 @@ Rebuilds the folder caches for the current folder and survives a card error.
 It is the function every "something changed on the card" path calls.
 
 What it does: try `LIST_DIR_FILES()` and return `True`. On `OSError`: log
-"DIR_FILES: SD card error, directory listing skipped: <reason>" at level 2;
+`"DIR_FILES: SD card error, directory listing skipped: <reason>"` at level 2;
 empty `files`, `dirs`, `files_upper` and `dirs_upper`; `sd_space = None`;
 `lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"`;
 remove `dirinfo.tap` if it is there ("a half-written one would LOAD as
@@ -710,9 +710,9 @@ the first rule that matches:
 
 If the status is OK: `os.chdir(new_path)` and `TSP.cur_path = os.getcwd()`;
 any exception makes it Q. If still OK: `prev_path = old_path` when the path
-actually changed; log "Changed dir to: <arg>" at level 0; `DIR_FILES()`
-(its result is ignored). Otherwise the message is "OS error changing to:
-<arg>" at level 2 — for the plain not-found F as well as the Q. Unless
+actually changed; log `"Changed dir to: <arg>"` at level 0; `DIR_FILES()`
+(its result is ignored). Otherwise the message is
+`"OS error changing to: <arg>"` at level 2 — for the plain not-found F as well as the Q. Unless
 `SDactive`: `DEACTIVATE_SD()`, `ACTIVATE_MQ()`.
 
 Why: the two comment blocks. A hand-made `..` branch from before

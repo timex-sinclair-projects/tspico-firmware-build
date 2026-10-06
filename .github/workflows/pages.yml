@@ -37,6 +37,10 @@ on:
       - 'site/**'
       - 'web-updater/**'
       - 'SD card/**'
+      - 'docs/reference/**'
+      - 'docs/manual/*.md'
+      - 'docs/manual/images/**'
+      - 'tools/build-site-docs.py'
       - '.github/workflows/pages.yml'
   release:
     types: [published]
@@ -89,6 +93,13 @@ jobs:
       # gcc/make are preinstalled on the ubuntu runner.
       - name: Build BASIC programs (basic/ -> TAP)
         run: ./tools/build-basic.sh
+
+      # The user manual, the programmer's manual and the programmer's reference,
+      # copied from docs/ into site/manual/ and site/reference/ with their links
+      # rewritten for the site, so the website shows them as they are on main.
+      # Generated here, never committed. It fails on a broken link.
+      - name: Put the manuals and the programmer's reference into the site
+        run: python3 tools/build-site-docs.py
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
