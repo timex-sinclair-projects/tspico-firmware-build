@@ -2,19 +2,6 @@
 
 ### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.2
 
-> **About this manual.** This manual describes **TS-Pico 2.2**, released in October 2026:
-> the firmware and the TS-2068 ROM 2.2, which gives the 2068 the disk commands **CAT**,
-> **MOVE**, **ERASE** and **FORMAT**, native `f:` files and `OPEN #` channels. It was written
-> from the 2.2 source code, which is the final word on how things behave. Where the code shows
-> a message, we quote it exactly. If you're coming from version 1.1, Appendix A shows how to
-> upgrade.
-
----
-
-> The 2068 screen pictures in this manual are captured from an emulated 2068 running the real
-> TS-Pico ROM and firmware (`tools/emu/manual_screens.py`). The Spectrum-mode picture is drawn
-> from the firmware's output in the 2068's character set (`tools/render_screens.py`).
-
 ## Contents
 
 1. Meet the TS-Pico
@@ -40,10 +27,6 @@ Appendices
 ---
 
 # Chapter 1: Meet the TS-Pico
-
-> **Chapter Preview.** What the TS-Pico is, what it does for your 2068, and the few ideas
-> you need to use every command in this book: the `tpi:` prefix, `CODE a,b`, verbose
-> messages, and the reports the 2068 gives you.
 
 ## 1.1 What is the TS-Pico?
 
@@ -179,12 +162,17 @@ There are two ways to connect the TS-Pico.
 right of the 2068 and sticks out behind it.
 
 **On an expansion bus.** The bus board plugs into the 2068, and the TS-Pico plugs into one of
-its slots. Any slot works; many people use the one nearest the 2068.
+its slots. While any slot works; many people use the one nearest the 2068.
 
-> **Important: the BUSISO jumpers.** The expansion bus has "BUSISO bypass" jumpers on its
-> right-hand side, between the card-edge connectors. The jumper for the TS-Pico's slot **must
-> be removed**, or the TS-Pico won't work. The simplest rule is to remove all of them. Park each
-> one on a single pin so it doesn't get lost.
+> **Important: the BUSISO jumpers/switches.** The expansion bus has "BUSISO bypass" jumpers 
+> or switches on its
+> right-hand side, between the card-edge connectors. 
+>
+> On expansion boards with a jumper, the jumper for the TS-Pico's slot **must be removed**, or 
+> the TS-Pico won't work. Park the jumper on a single pin so it doesn't get lost.
+>
+> On expansion boards with switches, slide the towards the 2068. The other switches should 
+> be towards the back of the board, away from the 2068.
 
 Both connectors are keyed, so they only go in one way. Expect a fair amount of resistance when
 you press the board home. That's normal. If you find yourself forcing it, stop and check that
@@ -230,16 +218,14 @@ contacts first and clicks into place.
 
 Your card came ready to use. If you set up a new one:
 
-1. Format it **FAT32** on your computer. Cards up to 32GB work.
+1. Format it **FAT32** on your computer. Cards up to 16GB work.
 2. Create a folder called **`TAP`** at the top level of the card. This is essential: the
    TS-Pico treats `TAP` as its root folder, and won't start without it.
 3. Copy your `.tap` files into `TAP`, or into folders inside it.
 4. If you like, copy the `help` folder from the TS-Pico release to the top level of the card,
    next to `TAP`. That's where `SAVE "tpi:help word"` finds its help pages.
 
-**Naming files.** Stick to letters, digits, `-` and `_` for anything you'll SAVE from the
-2068. The TS-Pico accepts longer names and spaces when *loading*, but a plain `SAVE "name"`
-only allows letters, digits, `-` and `_`.
+**Naming files.** Stick to letters, digits, `-` and `_` for anything you'll SAVE from the 2068. The TS-Pico accepts longer names and spaces when *loading*, but a plain `SAVE "name"` only allows letters, digits, `-` and `_`.
 
 ## 2.5 Switching on
 
@@ -334,9 +320,6 @@ or it may be write-protected, in which case the TS-Pico can't make its `TAP` fol
 
 # Chapter 3: Getting Around: Files, Folders and Tapes
 
-> **Chapter Preview.** Listing what's on your card, moving between folders, "mounting" a TAP
-> file so `LOAD ""` can read it, looking inside a TAP, and moving its tape pointer.
-
 ## 3.1 What's on the card? DIR and CAT
 
 You've already met the directory listing:
@@ -345,7 +328,7 @@ You've already met the directory listing:
 SAVE "tpi:dir"
 ```
 
-Or simply type **CAT**. The listing shows the folder you're in (the
+Or you can use the **CAT** command. The listing shows the folder you're in (the
 *current folder*), how big the card is and how much space is free, then folders, then files.
 If it's longer than the screen, you'll see `Scroll? (Y/n)` with a percentage showing how far
 through you are. Press **Y** or **ENTER** for more, a number **1** to **9** to scroll that many
@@ -546,10 +529,6 @@ see them all.
 
 # Chapter 4: Loading and Saving
 
-> **Chapter Preview.** How the ordinary LOAD, SAVE, VERIFY and MERGE commands behave with the
-> TS-Pico, where your saves go, how to add to an existing TAP, and switching back to a real
-> cassette recorder.
-
 ## 4.1 LOAD, VERIFY and MERGE
 
 Once a TAP is mounted, all the loading commands work exactly as they would with tape:
@@ -643,9 +622,6 @@ tape. Printing stays where it was (Chapter 7). You can check the setting with `P
 
 # Chapter 5: Native Files with `f:`
 
-> **Chapter Preview.** Saving a program, a picture or a block of code as its own file on the
-> card, like a disk drive does, instead of inside a TAP.
-
 ## 5.1 Why native files?
 
 A TAP file is a whole cassette. Sometimes you just want one file: `advent.bas`, `title.scr`,
@@ -718,7 +694,7 @@ With verbose on, the TS-Pico says which, for example `advent.bas holds a program
 
 # Chapter 6: Streams and Channels: `OPEN #`
 
-> **Chapter Preview.** Using the 2068's own PRINT #, INPUT # and LIST # statements to write and
+> Using the 2068's own PRINT #, INPUT # and LIST # statements to write and
 > read text files, keep records you can jump to by number, and read a folder listing into a
 > program. Each idea comes with a short program to try.
 
@@ -997,9 +973,6 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 
 # Chapter 7: The Virtual Printer
 
-> **Chapter Preview.** Sending LPRINT, LLIST and COPY to files on the SD card instead of a
-> TS 2040 printer, and choosing how those files look.
-
 ## 7.1 Switching the printer
 
 When you switch on, printing goes to a real TS 2040 printer, if you have one. To send it to
@@ -1062,9 +1035,6 @@ These settings last until the TS-Pico is switched off.
 ---
 
 # Chapter 8: ROM Slots, Cartridges and the Flash Chip
-
-> **Chapter Preview.** The TS-Pico's Flash and RAM slots, choosing which ROM the 2068 starts
-> with, running cartridges, and loading new ROMs and cartridges into the slots.
 
 ## 8.1 The slots
 
@@ -1180,9 +1150,6 @@ and run `LOAD ""` again.
 
 # Chapter 9: ZX Spectrum Mode
 
-> **Chapter Preview.** Turning your 2068 into a ZX Spectrum 48K that loads and saves with the
-> TS-Pico.
-
 ## 9.1 Entering Spectrum mode
 
 The 2068 can run Spectrum software with a Spectrum ROM. The TS-Pico keeps one in Flash slot 0,
@@ -1206,10 +1173,8 @@ modified so that its LOAD and SAVE use the SD card.
 - `LOAD "tpi:name.tap"` and `LOAD "tpi:nnn"` mount another TAP from the current folder, by name or
   index number.
 - `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068, with `scroll?` for a long
-  one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too. This needs version 4 of the
-  TS-Pico Spectrum ROM: its copyright screen ends `TS-Pico ZX v4`. An older Spectrum ROM
-  answers `SAVE "tpi:dir" needs ZX ROM v4`.
-
+  one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too. 
+  
   ![SAVE "tpi:dir" on the Spectrum: the same listing as CAT on the 2068](images/zx48-dir.png)
 - Other `tpi:` commands aren't available, and give **Q Parameter error**.
 
@@ -1242,10 +1207,6 @@ message (`CODE 1,0`).
 ---
 
 # Chapter 10: Command Reference
-
-> **Chapter Preview.** Every TS-Pico command, in alphabetical order: how to type it, what each
-> `CODE` option does, what you'll see, and which reports it can give. The BASIC keywords come
-> first, then the `tpi:` commands.
 
 **How to read an entry.** Messages marked *(verbose)* appear only after
 `SAVE "tpi:verbose" CODE 1,1`; the others always appear. `CODE a,b` values not listed give
@@ -1515,8 +1476,11 @@ numbers log more. The setting lasts until the TS-Pico is switched off.
 ### md: make a folder
 
 `SAVE "tpi:md name"`, or `CODE 1,0` to go into it too. *(verbose)* `Created dir: name`.
-**8**: `MD: directory "x" exists`. **F**: `MD: file "x" exists`, or `MD: name not allowed:` for a
-path (use `FORMAT "a/b/"`) or a character the card can't hold. **A**: no name.
+
+- **8**: `MD: directory "x" exists`. 
+- **F**: `MD: file "x" exists`, or `MD: name not allowed:` for a
+  path (use `FORMAT "a/b/"`) or a character the card can't hold. 
+- **A**: no name.
 
 ### newtap: make a new TAP
 
@@ -1549,8 +1513,11 @@ SAVE "tpi:ren old.tap new.tap"    : REM rename
 SAVE "tpi:ren game.tap archive"   : REM move into a folder, keeping the name
 ```
 
-This works for folders too. **F**: `Not found:`, `Already exists:`. **Q**: `File is mounted`,
-`Can't rename the current directory`, `Can't move a directory into itself`.
+This works for folders too.
+
+- **F**: `Not found:`, `Already exists:`. 
+- **Q**: `File is mounted`,
+  `Can't rename the current directory`, `Can't move a directory into itself`.
 
 ### rm: remove a file or empty folder
 
@@ -1562,9 +1529,12 @@ SAVE "tpi:rm 3"              : REM by index number
 SAVE "tpi:rm old.tap" CODE 255,0   : REM without asking
 ```
 
-Press **Y** to remove it. A folder must be empty. **F**: `RM: Not found:`. **Q**: `RM: File is
-mounted; tpi:close it first`, `Directory not empty`, `RM: Can't remove the current directory`.
-**A**: no name, or a CODE other than 255,0.
+Press **Y** to remove it. A folder must be empty. 
+
+- **F**: `RM: Not found:`. 
+- **Q**: `RM: File is
+  mounted; tpi:close it first`, `Directory not empty`, `RM: Can't remove the current directory`.
+- **A**: no name, or a CODE other than 255,0.
 
 ### tapdir: look inside the mounted TAP
 
@@ -1608,9 +1578,6 @@ with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
 
 # Chapter 11: When Things Don't Go As Expected
 
-> **Chapter Preview.** What to try, in order, when the TS-Pico or your 2068 doesn't do what you
-> expect.
-
 It's bound to happen. You type a command and the 2068 throws up its digital hands. Don't worry:
 the TS-Pico is difficult, but not impossible, to break, and almost everything here is quick to
 fix.
@@ -1636,7 +1603,7 @@ things it couldn't show on the screen, look in its log: `SAVE "tpi:log" CODE 0,1
    flashes mean it's running without an SD card (see 2.6). If commands that need the card
    are the only ones failing, you'll see "No SD card" first.
 2. If a computer is connected by USB, close Thonny or any other program using the Pico's serial
-   port. Connecting one interrupts the TS-Pico.
+   port. Connecting one can interrupt the TS-Pico.
 3. The firmware and the ROM must come from the same release. An older firmware doesn't
    understand the new ROM, and every command times out after a long pause.
 4. Press **TS Reset**. If that doesn't help, switch off, unplug the USB cable, and switch on again.
@@ -1888,22 +1855,16 @@ turned the printer switch off as well.)
 
 The TS-Pico began in 2021, when **Ricardo Calcagno** of Argentina, stuck at home during COVID,
 decided to learn MicroPython on the new Raspberry Pi Pico. His friend **Gustavo Pane** had
-developed the "tpi" system back in 1985, and adapted it for the TS-Pico. In 2022 Ricardo
+developed the "tpi" system back in 1985, and adapted it for the TS-Pico. Ricardo
 contacted **David Anderson**, who hosted international Zoom meetings for Timex Sinclair fans
 and introduced Ricardo to **Tim H** of New Zealand and **Jeff Burrell** of the United States,
-who designed the hardware. David coordinated the weekly meetings and wrote the manuals.
-**Ryan Gray** joined the team to work on the firmware.
-
-**The TS-Pico team:** Ricardo Calcagno, Gustavo Pane, Jeff Burrell, Ryan Gray, Tim H and
-David Anderson.
+who designed the hardware. **Ryan Gray** joined the team to work on the firmware and additional features.
 
 Thanks to **Paul Anderson**, **David Green** and **Adam Trionfo** for beta testing.
 
 Special thanks to the people of Timex Computer Corporation; to Johan "Dr Beep" Koelman, whose
 PC-ZX interface inspired the TS-Pico; to the members of the TS2068 list at groups.io and the
 Zoom meetings; and to our families.
-
-Illustrations by Evlyn Moreau.
 
 - Source code and releases: <https://github.com/timex-sinclair-projects/tspico-firmware-build>
 - Board design: https://github.com/jburrell7/TSPICO
