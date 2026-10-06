@@ -18,7 +18,7 @@ sources are listed [at the end](#sources).
 |---|---|---|
 | **v1.7** | `src/rom/TSPICO.ROM`, crc 09D4CA63 | Gustavo's ROM, the base for everything here. The only public release before this was v1.1. |
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
-| **2.1** | `src/rom/TSPICO-21.ROM`, crc F3316DCF | 2.0 plus 16 HOME/EXROM patches and a 1912-byte module at EXROM 3000h–3777h. This is the release ROM and the slot-1 image. |
+| **2.1** | `src/rom/TSPICO-21.ROM`, crc 2B29F3E8 | 2.0 plus 16 HOME/EXROM patches and a 1919-byte module at EXROM 3000h–377Eh. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -268,7 +268,7 @@ instead of jumping into the wrong code.
 
 ## ROM 2.1: the module at EXROM 3000h
 
-The module is `src/rom/fdd/fddcmd.asm`. It is 1912 bytes, from 3000h to 3777h,
+The module is `src/rom/fdd/fddcmd.asm`. It is 1919 bytes, from 3000h to 377Eh,
 with FDD_VERSION 8 and the signature `"FDDCMD"` at 30A8h. It starts with a jump
 table, so the ROM patches point at fixed vectors rather than at routines that
 move when the module is rebuilt.
@@ -428,6 +428,19 @@ On failure, A is now always ready for the status-to-report routine at 1BF3h:
 0Ch and 1Ch can't be status−1 values, because the firmware's highest status is
 11. WF_NPH itself is unchanged.
 
+### PRELOAD: a pre-load of 0 is Report J
+
+`SEND_FOPEN` and `CH_SEND` build their exchanges by hand through the BIOS, and
+read the pre-load status with `BIOS_RX_A` -- and ignored it, so with no Pico (a
+0) they went on into `BIOS_WF_NPH`'s timeout. They now call `PRELOAD` (3778h,
+at the end of the module, so nothing else moved): `CALL BIOS_RX_A / RET NZ /
+JP WF_FAIL`, Report J at once for a 0, as the ROM's own exchanges give it
+(1A35h). Any other value goes on, as before: the ROM's "not 1 is a refusal"
+would catch only a refused header LOAD's error, which the firmware stages for
+two seconds for the LOAD's retry and which a channel command in that time
+(an `ON ERR` handler doing `PRINT #`) would report as its own (#179).
+`rom_preload_hosttest.py` runs it from the committed image.
+
 ### TAPE_MODE: tpi:tape keeps the printer switch
 
 TPMODE (5DDBh) holds two switches: bit 1 sends LOAD and SAVE to the Pico,
@@ -518,7 +531,7 @@ record. It also puts DI back after BEEPER's EI.
 | 31E5h | TPI_SEND (→ SESSION_NAMED 1AACh) | 35ECh | CH_FETCH |
 | 3208h | F_HOOK | 3641h | CH_STATUS |
 | 3280h | SEND_FOPEN | 3650h | CH_SEND |
-| 331Fh | WF_FAIL (J / D / T) |  |  |
+| 331Fh | WF_FAIL (J / D / T) | 3778h | PRELOAD (#179) |
 
 ## ZX Spectrum ROM v3
 

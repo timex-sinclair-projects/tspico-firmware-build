@@ -1,8 +1,8 @@
 # EXROM 3000h: the ROM 2.1 module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
-1415 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
-at EXROM 3000h–3777h and spliced into ROM 2.0 with the patches that call
+1430 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
+at EXROM 3000h–377Eh and spliced into ROM 2.0 with the patches that call
 it ([overview.md](overview.md#toolsbuild-rompy-rom-21)); the result read in
 [`tspico-21-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-21-exrom.labelled.asm).
 
@@ -18,7 +18,7 @@ design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
 byte-level change list is [ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
-The module is 1912 bytes. It enters the 2068's code only through a vector
+The module is 1919 bytes. It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
@@ -44,7 +44,8 @@ the Pico Interface BIOS.
 | 802–822 | | `LOWER_LOOP` (function 88h) |
 | 824–1378 | | the channel driver |
 | 1380–1398 | | `HEXDIG`, `STRLEN` |
-| 1400–1415 | to 3777h | the command strings, `MODE_R`, `FDD_END` |
+| 1400–1412 | to 3777h | the command strings, `MODE_R` |
+| 1414–1429 | 3778h–377Eh | `PRELOAD`, `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -533,8 +534,8 @@ and leaves CH_ADD alone.
    0 (a command); BANK; PMR1 low = T-ADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3
    MERGE), PMR1 high = the token; PMR2 = the session id; the length (C, 0);
    the XOR.
-4. `BIOS_RX_A` reads the pre-load — and ignores it. `BIOS_WF_NPH`; a failure
-   → `WF_FAIL`.
+4. `PRELOAD` reads the pre-load: 0 is Report J at once; any other value
+   goes on (#179). `BIOS_WF_NPH`; a failure → `WF_FAIL`.
 5. **The body**: `'D'` (D reseeded), the length, `FOPEN_TXT` ("tpi:fopen "),
    the path, the XOR.
 6. `BIOS_C_END` (`C_END2`): NC → return. The Pico may first run a response
@@ -833,7 +834,7 @@ after the body, and the caller reads the answer.
    module's only direct port read.
 3. **The pre-header**, D the running XOR: SYNC_WRITE `'B'`, TADDR 0, BANK,
    the stream and 0 (PMR1), C and 0 (PMR2), E and 0 (the length), the XOR.
-   `BIOS_RX_A` (the pre-load, not checked), `BIOS_WF_NPH` (failure →
+   `PRELOAD` (the pre-load: 0 is J, #179), `BIOS_WF_NPH` (failure →
    `WF_FAIL`).
 4. **The body**: `'D'`, E, 0, the prefix, then each payload byte as two
    lower-case hex digits (`HEXDIG`), then the XOR.
@@ -867,15 +868,33 @@ NUL-ended prefixes, sent as the start of each command:
 | `CMD_CHOPEN` | `tpi:chopen ` | `CH_OPEN_HOOK` |
 | `MODE_R` | `r` (not NUL-ended: copied with a length of 1) | OPEN # with no mode |
 
+### `PRELOAD` (3778h)
+
+`SEND_FOPEN`'s and `CH_SEND`'s read of the pre-load status: `CALL
+BIOS_RX_A` (`IN A,(0Eh) / AND A`), `RET NZ`, `JP WF_FAIL`. A 0 means no
+Pico, or a link out of step, and is Report J at once, as the ROM's own
+exchanges give it (1A35h), instead of going on into `BIOS_WF_NPH`'s
+timeout. Any other value goes on as before (#179).
+
+Why not the ROM's whole rule, "not 1: the Pico's refusal, status − 1"?
+The firmware refuses nothing at these pre-loads. The one other value it
+stages is a refused header LOAD's error (R or 8), for two seconds after
+the refusal, meant for the LOAD's retry
+([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md)). A
+channel command in that time -- an `ON ERR` handler doing `PRINT #` -- would
+read it and report it as its own. At the end of the module, so that adding
+it moved no other address: the two `CALL BIOS_RX_A`s became `CALL PRELOAD`
+in place. [`rom_preload_hosttest.py`](../../../src/test/rom_preload_hosttest.py)
+runs it from the committed image.
+
 ### `FDD_END`
 
-The end of the module, 376Dh; `SAVEBIN` writes `FDD_BASE` to here as
+The end of the module, 377Fh; `SAVEBIN` writes `FDD_BASE` to here as
 `fddcmd.bin`, which `build-rom.py` splices in after checking that the
 region is all `FFh`.
 
 ## Where comments, documents and the code disagree
 
-Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
-
-- `SEND_FOPEN` and `CH_SEND` read the pre-load status and do not check it.
+None known. The last, `SEND_FOPEN` and `CH_SEND` reading the pre-load
+without checking it, is `PRELOAD` since #179.
 

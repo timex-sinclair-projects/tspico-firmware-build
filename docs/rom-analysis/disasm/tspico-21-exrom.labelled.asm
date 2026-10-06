@@ -1,5 +1,5 @@
 ; z80dasm 1.2.0
-; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.RbU4PVpD2i/exrom.bin
+; command line: z80dasm -a -l -t -g 0x0000 -S docs/rom-analysis/disasm/tspico-21-exrom-symbols.sym -o docs/rom-analysis/disasm/tspico-21-exrom.labelled.asm /var/folders/g_/g7fbfjh557g6jk0qzzghq8p40000gn/T/tmp.S6wFcruouL/exrom.bin
 
 	org 00000h
 CH_ALLOC:	equ 0x0200
@@ -9550,7 +9550,7 @@ SEND_FOPEN.tok:
 	call TXX		;32d7	cd 10 33	. . 3
 	ld a,d			;32da	7a		z
 	call BIOS_TX_A		;32db	cd 46 18	. F .
-	call BIOS_RX_A		;32de	cd 48 18	. H .
+	call PRELOAD		;32de	cd 78 37	. x 7
 	call sub_184ch		;32e1	cd 4c 18	. L .
 	jr c,WF_FAIL		;32e4	38 39		8 9
 	pop bc			;32e6	c1		.
@@ -10105,7 +10105,7 @@ CH_SEND.sync:
 	call TXX		;3698	cd 10 33	. . 3
 	ld a,d			;369b	7a		z
 	call BIOS_TX_A		;369c	cd 46 18	. F .
-	call BIOS_RX_A		;369f	cd 48 18	. H .
+	call PRELOAD		;369f	cd 78 37	. x 7
 	call sub_184ch		;36a2	cd 4c 18	. L .
 	jp c,WF_FAIL		;36a5	da 1f 33	. . 3
 	ld a,044h		;36a8	3e 44		> D
@@ -10275,14 +10275,11 @@ CMD_CHOPEN:
 	jr nz,MODE_R		;3775	20 00		  .
 MODE_R:
 	ld (hl),d		;3777	72		r
+PRELOAD:
+	call BIOS_RX_A		;3778	cd 48 18	. H .
+	ret nz			;377b	c0		.
+	jp WF_FAIL		;377c	c3 1f 33	. . 3
 FDD_END:
-	rst 38h			;3778	ff		.
-	rst 38h			;3779	ff		.
-	rst 38h			;377a	ff		.
-	rst 38h			;377b	ff		.
-	rst 38h			;377c	ff		.
-	rst 38h			;377d	ff		.
-	rst 38h			;377e	ff		.
 	rst 38h			;377f	ff		.
 	rst 38h			;3780	ff		.
 	rst 38h			;3781	ff		.

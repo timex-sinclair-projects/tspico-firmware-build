@@ -711,7 +711,7 @@ SEND_FOPEN:
         call    TXX
         ld      a,d
         call    BIOS_TX_A          ; the pre-header's XOR
-        call    BIOS_RX_A          ; the preloaded status
+        call    PRELOAD            ; the preloaded status: 0 is J (#179)
         call    BIOS_WF_NPH
         jr      c,WF_FAIL
         pop     bc
@@ -1334,7 +1334,7 @@ CH_SEND:
         call    TXX
         ld      a,d
         call    BIOS_TX_A
-        call    BIOS_RX_A          ; the preloaded status
+        call    PRELOAD            ; the preloaded status: 0 is J (#179)
         call    BIOS_WF_NPH
         jp      c,WF_FAIL
         ld      a,'D'
@@ -1410,6 +1410,21 @@ CMD_CHRD:    db "tpi:chrd",0
 CMD_CHCLOSE: db "tpi:chclose",0
 CMD_CHOPEN:  db "tpi:chopen ",0
 MODE_R:      db "r"
+
+;------------------------------------------------------------------------------
+; PRELOAD -- SEND_FOPEN's and CH_SEND's read of the preloaded status (#179).
+; 0 means no Pico, or a link out of step: Report J at once, as the ROM's own
+; exchanges give it (1A35h), instead of carrying on into a timeout. Anything
+; else goes on as before. Not the ROM's whole rule ("not 1: the Pico's
+; refusal"): the firmware refuses nothing here, and the one other value it
+; stages is a refused header LOAD's error, for the LOAD's retry, which a
+; channel command in the next 2 s (an ON ERR handler doing PRINT #) would
+; otherwise report as its own. At the end of the module so nothing moves.
+;------------------------------------------------------------------------------
+PRELOAD:
+        call    BIOS_RX_A          ; IN A,(0Eh) / AND A: Z if 0
+        ret     nz
+        jp      WF_FAIL            ; A = 0: J (Invalid I/O device)
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE
