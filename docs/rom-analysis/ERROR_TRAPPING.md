@@ -110,6 +110,12 @@ keyword table lists them last but they tokenize to low bytes:
 | `RESET`  | 127 |
 
 So `on err go to 500` tokenizes to `7B EC …` and `on err reset` to `7B 7F`.
+
+Printed, 124 and 126 always come out as STICK and FREE, but 123, 125 and 127
+come out as keywords only while FLAGS bit 4 is clear: HOME's print routine
+(063Bh) tests it, and the editor sets it in L mode (1683h). Most of the time
+`PRINT CHR$ 123` shows `{` (checked in ZEsarUX; see
+[the reference](../reference/firmware/tspico-messages.md)).
 Verify with a hex dump of the generated `.tap` if a program misbehaves — a
 keyword `zmakebas` failed to recognise shows up as plain ASCII letters.
 
