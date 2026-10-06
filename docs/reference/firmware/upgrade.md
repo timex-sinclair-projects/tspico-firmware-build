@@ -968,12 +968,20 @@ how it moves on.
 **Deciding to do the ROM step.** `readInstalled` asks the running firmware
 for its `FW_VERSION` over the raw REPL (`sys.modules['TS.tspico']` or
 `dev_tspico`), falling back to `/config.ini`'s, then to "1.1 (no version in
-config.ini)"; `from1x` is a major below 2. `connect` ticks "Update the
-TS-2068 ROM" when `from1x` and the channel has `upgrade_uf2`. `refreshPlan`
-forces "Erase the Pico first" on whenever the ROM step is ticked, because
-the upgrade UF2's frozen `main.py` must not be shadowed, and warns a 1.x
-board that unticks the ROM step that its ROM cannot talk to the new
-firmware.
+config.ini)"; `from1x` is a major below 2, and `ver` is the running
+module's major.minor (`verOf`), null when it came from `config.ini` or
+nowhere. The ROM can't be read over USB, so `romBehind` takes the firmware
+version for the ROM's: the ROM step is due when `ver` is older than the
+channel's `rom_version`, or unknown (a wiped Pico, a 1.x board), since in
+practice every board out there still has 1.1's ROM; only a board already on
+the channel's major.minor skips it. `connect`, and `loadChannel` when a
+board is already connected, tick "Update the TS-2068 ROM" when
+`romBehind()` and the channel has `upgrade_uf2`. `refreshPlan` forces
+"Erase the Pico first" on whenever the ROM step is ticked, because the
+upgrade UF2's frozen `main.py` must not be shadowed; it warns a 1.x board
+that unticks the ROM step that its ROM cannot talk to the new firmware, and
+any other board behind the channel that unticking leaves its older ROM.
+Before 2.2 it ticked the step for `from1x` alone.
 
 **Getting into BOOTSEL and wiping.** `enterBootsel` runs
 `machine.bootloader()` over the REPL (`execNoReply`: raw REPL, the code,
