@@ -66,7 +66,7 @@ why it differs from the file's own.
 The lineage, in one line: genuine → v1.1 (Gustavo) → v1.5w → v1.7
 (Gustavo) → 2.0 (`src/rom/patches/tspico-sync.asm`) → 2.1
 (`src/rom/fdd/fddcmd.asm` + `build-rom.py`'s patches) → 2.2 (two fixes to 2.1). From 2.0 on, the ROM
-and the firmware share one version number: firmware 2.2 runs ROM 2.2
+and the firmware share one version number: firmware 2.2.x runs ROM 2.2
 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)). ROM 2.0
 and later need firmware that understands the SYNC byte; older firmware
 reads it as the first byte of a command

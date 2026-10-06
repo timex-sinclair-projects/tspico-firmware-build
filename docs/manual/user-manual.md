@@ -1722,7 +1722,7 @@ Install the firmware and the ROM from the same release: they are made to work to
 8. The page installs the firmware and copies its files to the Pico.
 9. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
    reads `2026 TS-Pico ROM v2.2`. Try `CAT`. `PRINT PEEK 101` gives **34** (ROM 2.2), and
-   `SAVE "tpi:info"` shows the firmware version, 2.2.
+   `SAVE "tpi:info"` shows the firmware version, 2.2.1.
 
 > **Why unplug the USB cable at the end?** It gives the TS-Pico and its SD card a real power-off.
 > A card left powered through a firmware update can be stuck until it loses power (see 2.6).

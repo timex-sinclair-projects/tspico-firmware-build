@@ -541,7 +541,7 @@ except ImportError:
 # same ROM. 2.2 is the release ROM: the disk-command build from
 # tools/build-rom.py (PEEK 101 = 22h). tpi:info reports these, not the
 # FW_VERSION an older config.ini may still hold.
-FW_VERSION = "2.2"
+FW_VERSION = "2.2.1"
 ROM_VERSION = "2.2"
 # Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
 # when loaded via the dev override __name__ == "dev_tspico". This file is
