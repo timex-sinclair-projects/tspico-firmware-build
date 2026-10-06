@@ -36,7 +36,7 @@ FIFOs; **Y** the status the Z80 reads on port 0Fh.
 | 5 | Note the card | `SD_NOTE_CARD(CID)` → `SD_REVALIDATE` when it is back or different | the folder, the mount, append, the channels fixed for the new card | ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#sd_note_cardcid)) |
 | 6 | **The work** | the handler's file operations | | keep it short: the Z80's budget is shared with everything else in the transaction |
 | 7 | Unmount, CS high, clamp | `DEACTIVATE_SD`: `os.umount`, U3_CS = 1, GPIO 2–4 driven low | | a defined level until the PIO takes the pins (whether the clamp is still needed with U6 is an open question, audit §4) |
-| 8 | Bus program back | `ACTIVATE_MQ`: `StateMachine(0, TS_IO_DUAL, 30 MHz, …)`, `active(1)`, `MQ_BUSY()` | **TX [], RX [], Y `00`** | Y must be BUSY: a fresh state machine keeps the old Y, and a READY now would let the Z80 read an empty TX as 00h (Report J) ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#activate_mq)) |
+| 8 | Bus program back | `ACTIVATE_MQ`: `StateMachine(0, TS_IO_DUAL, 30 MHz, …)`, `MQ_BUSY()`, then `active(1)` | **TX [], RX [], Y `00`** | Y must be BUSY: a fresh state machine keeps the old Y, and a READY now would let the Z80 read an empty TX as 00h (Report J) ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#activate_mq)) |
 | 9 | The answer, then READY | `CMD_PUT`/`CMD_SEND`/`SEND_MSG` …, which say READY after the first bytes are in TX | TX [answer…], Y `FF` or `F7` | data first, then READY |
 
 Steps 2–5 are `ACTIVATE_SD`, 7–8 `DEACTIVATE_SD` + `ACTIVATE_MQ`. Most

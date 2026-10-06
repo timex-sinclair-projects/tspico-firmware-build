@@ -589,7 +589,7 @@ period. `sd_ok = TSP.sd_present and TSP.sd_listing_ok`; `gc.collect()`.
 
 `DEACTIVATE_SD()` — unmount, `U3_CS` high, GPIO 2–4 driven low — then
 `ACTIVATE_MQ()`: `MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, …)` on
-GPIO 2 (D0) with `jmp_pin` 11 and side-set 12, started, `MQ_BUSY()`. Y is
+GPIO 2 (D0) with `jmp_pin` 11 and side-set 12, `MQ_BUSY()`, started. Y is
 BUSY, both FIFOs empty, `sd_active` false. `ACTIVATE_MQ` neither stages a
 pre-load nor says READY; both were tried and both were bugs
 (DUAL_PORT_DEVELOPMENT.md §8 "Bug 1"; the `ready` parameter removed by the

@@ -180,8 +180,8 @@ starts it, and sets Y BUSY. Leaves TX empty and does **not** say READY.
    machine: the program is loaded, the FIFOs are cleared, and the pins
    named go back to the PIO — GPIO 2–9 as data, GPIO 11 (R/W, [hardware.md](../hardware.md)) as the jump pin, GPIO 12 (U6) as the
    side-set pin.
-3. `MQ.active(1)`.
-4. `MQ_BUSY()`: `set(y, 0)`.
+3. `MQ_BUSY()`: `set(y, 0)`, executed on the stopped state machine.
+4. `MQ.active(1)`.
 
 Why each choice (the comment at 716–750 lists five changes from the
 single-port version; DUAL_PORT_DEVELOPMENT.md tells the story):
@@ -201,11 +201,16 @@ single-port version; DUAL_PORT_DEVELOPMENT.md tells the story):
   `NEW_TAP`, `GETHELP`) lost it reliably. The contract now is: `ACTIVATE_MQ`,
   then the reply into TX, then `MQ_READY` (the `SEND_MSG` family does the
   last two).
-- **`MQ_BUSY()` explicitly.** A new `StateMachine` does not clear Y: it
-  keeps whatever the last program on state machine 0 left there, so "Y is
-  BUSY" was never guaranteed; a READY left over would let the Z80 read an
-  empty TX as `00`. The explicit `set(y, 0)` was added by the 2026-09-30
-  audit (§4) and costs about 18 µs.
+- **`MQ_BUSY()` explicitly, before the start.** A new `StateMachine` does
+  not clear Y: it keeps whatever the last program on state machine 0 left
+  there, so "Y is BUSY" was never guaranteed; a READY left over would let
+  the Z80 read an empty TX as `00`. The explicit `set(y, 0)` was added by
+  the 2026-09-30 audit (§4). Until #171 it came after `MQ.active(1)`, so for
+  ~18 µs the old Y showed. An `exec` runs on a stopped state machine, so it
+  now comes first and there is no window. Both facts were checked on a Pico
+  (PIO0 SM 3, a free one): a fresh `StateMachine` kept a Y of 21, and both
+  `exec` and a direct `INSTR` write (`MQX`'s way) on the stopped machine set
+  it.
 - **No pre-load.** `ACTIVATE_MQ` runs at boot and in the middle of
   commands. Mid-command, the next thing the caller does is put its own
   status into TX; a pre-load added here would leave two `0x01`s, the Z80
@@ -222,13 +227,6 @@ dispatcher's call is what ends a SAVE or LOAD there, and ZX48 mode uses
 
 Beware:
 
-- `MQ.active(1)` comes before `set(y, 0)`, so for the ~18 µs between them Y
-  is whatever was left in it *(inferred: the code orders them this way; a
-  `set` executed on the stopped machine before `active(1)` would close the
-  window)*. On every path through `ACTIVATE_SD` the state machine last ran
-  `NULL_SM`, a `nop`, which does not touch Y, so the leftover is the value
-  `TS_IO_DUAL` had before the SD access — normally BUSY, since the Z80's
-  pre-header OUTs dropped it.
 - Anything in TX before the call is gone. See `PRELOAD_READ`.
 - The `MQ` object is new. Code holding the old one (a local, a tuple
   element) is talking to nothing; the functions in `tspico_io` take `MQ` as
@@ -485,9 +483,10 @@ no pre-load: `PROCESS_CMD`'s tail does that, once. One caller,
 Says BUSY: `MQX(MQ, "set(y, 0)")`. The Z80 reads `00h` on 0Fh.
 
 With the PIO's auto-busy it is rarely needed: `ACTIVATE_MQ` calls it
-(767) since the 2026-09-30 audit, because a new state machine keeps the Y
-its predecessor left -- a path that must assert BUSY without an inbound
-write. (Until #181 the docstring said nothing called it.)
+(766), before starting the state machine, because a new state machine keeps
+the Y its predecessor left (checked on a Pico, #171) -- a path that must
+assert BUSY without an inbound write. (Until #181 the docstring said
+nothing called it.)
 
 ## The SD card's state
 
