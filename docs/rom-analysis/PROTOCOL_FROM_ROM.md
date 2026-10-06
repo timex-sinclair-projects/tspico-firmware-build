@@ -416,8 +416,8 @@ helper:
 | `0x5DD5` | 16 | command-string length |
 | `0x5DD7` | 16 | PMR1 (e.g. `CODE` start) |
 | `0x5DD9` | 16 | PMR2 (e.g. `CODE` length) |
-| `0x5DDB` | 8 | device/mode flags — bit7 = TPI/NET active, bit6 = NET vs TPI |
-| `0x5D37` | 16 | unclassified |
+| `0x5DDB` | 8 | TPMODE: bit 0 printer to the Pico, bit 1 LOAD/SAVE to the Pico; bit7 = TPI/NET active, bit6 = NET vs TPI |
+| `0x5D37` | 16 | the EXROM NMI routine's vector (moved from NMIADD `0x5CB0`, the Spectrum's inverted test fixed); 0 = none |
 
 Stock sysvars the TS-PICO leans on:
 

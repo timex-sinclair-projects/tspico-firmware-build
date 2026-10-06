@@ -45,7 +45,7 @@ This gap was empty in the genuine EXROM. It now holds the core Pico driver.
 |---|---|---|
 | `0x0655` | **`READ_STATUS`** | `CALL 069F; JP NC,06AA; IN A,(0Fh); RET`. The **only** status read. |
 | `0x069F` | `CHECK_BREAK` | Reads keyboard row `0xFE`. Carry clear = key down. |
-| `0x06AA` | `BREAK_ABORT` | `POP BC; JP 1A61` — BREAK exits via the timeout path. |
+| `0x06AA` | `BREAK_ABORT` | v1.x: `POP BC; JP 1A61` — BREAK exits via the timeout path. ROM 2.0: `JP BRK_ABORT` (`0x231E`), which tells the Pico and raises D. |
 | `0x02B9` | **`READ_STATUS_BYTE`** | `CALL 2298`; 0 or carry → `JP 192F` (err); `DEC A`; `RET Z` if OK, else `SCF; RET`. |
 | `0x01C3` | `READ_STATUS_AND_OPEN` | `CALL 02B9; JP 04F1`. |
 | `0x04F1` | `OPEN_MAIN_SCREEN` | `LD A,0FEh; CALL 0426` → HOME `0x1230`. Opens channel `0xFE`. |
@@ -109,12 +109,11 @@ They are padding, not unimplemented API slots.
 |---|---|---|---|
 | `0x1840` | `G_MODE` | `0x1856` | get TP_MODE |
 | `0x1842` | `S_MODE` | `0x1862` | set TP_MODE |
-| `0x1844` | `G_VERS` | `0x1852` | version → `BC = 0x0015` (21) |
+| `0x1844` | `G_VERS` | `0x1852` | version → `BC` = `0x0015` in v1.1 (`0x0020` in 2.0, `0x0021` in 2.1) |
 | `0x1846` | `TX_A` | `0x186D` → `JP 229D` | send byte |
 | `0x1848` | `RX_A` | `0x186A` → `JP 2298` | receive byte |
 | `0x184A` | `C_END` | `0x184F` | end command |
 | `0x184C` | `WF_NPH` | `JP 1A54` | wait for ready — **the only way to see `A=02h`** |
-| `0x184E` | `EWAIT` | `JP 2279` | wait + read status |
 
 `0x1630` printer/COPY table: `1630→1781` (COPY), `1633→17C3`, `1636→17CD` (buffer
 flush), `1639→1668` (LPRINT via Pico), `163C→180F`.
@@ -199,8 +198,8 @@ full table with evidence.
 |---|---|---|---|---|
 | `0x5DCD`/`0x5DCE` | COMND/BLOCK LEN | | `0x5DD7` | PMR1 |
 | `0x5DCF` | BANK (`0xFF`=HOME) | | `0x5DD9` | PMR2 |
-| `0x5DD1` | SESSION ID | | `0x5DDB` | device flags (b7=TPI/NET, b6=NET) |
-| `0x5DD3` | command-string addr | | `0x5D37` | unclassified |
+| `0x5DD1` | SESSION ID | | `0x5DDB` | TPMODE: b0 printer, b1 LOAD/SAVE to the Pico; b7=TPI/NET, b6=NET |
+| `0x5DD3` | command-string addr | | `0x5D37` | NMI vector (EXROM's NMI routine; 0 = none) |
 | `0x5DD5` | command-string len | | | |
 
 Stock sysvars in play: `0x5C74` `T-ADDR`, `0x5C78` `FRAMES`, `0x5C48` `BORDCR`,

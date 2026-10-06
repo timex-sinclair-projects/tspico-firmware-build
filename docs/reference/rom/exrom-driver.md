@@ -190,10 +190,10 @@ C_END at C_END2, which reports a timeout as 09h (J) because 2.0's 02h was
 also status 3 (Report F) ([exrom-fdd.md](exrom-fdd.md)). The bytes at
 1840h–1855h, by version: identical `JR`s throughout; 184Ch `JP 1A54h` and
 184Fh `JP 2279h` in v1.1–v1.7, `JP 239Eh` / `JP 23CDh` in 2.0, `JP 239Eh` /
-`JP 301Bh` in 2.1. 184Eh is the last byte of 184Ch's `JP`, not an entry:
-[SYMBOLS.md](../../rom-analysis/SYMBOLS.md) lists an "EWAIT" there, which
-does not exist ([PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#the-real-api-table-tpi-bios-at-0x1840)
-has it right).
+`JP 301Bh` in 2.1. 184Eh is the last byte of 184Ch's `JP`, not an entry
+(until #182 [SYMBOLS.md](../../rom-analysis/SYMBOLS.md) listed an "EWAIT"
+there; [PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#the-real-api-table-tpi-bios-at-0x1840)
+had it right).
 
 ### `BIOS_G_VERS` (1852h)
 
@@ -559,10 +559,5 @@ changed "v2.0" to "v2.1" at 1C7Eh.
 
 Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
-- [SYMBOLS.md](../../rom-analysis/SYMBOLS.md) lists an EWAIT entry at
-  184Eh (`JP 2279h`); 184Eh is the last byte of 184Ch's `JP`.
-- SYMBOLS.md describes `BREAK_ABORT` (06AAh) as `POP BC / JP 1A61h`; that
-  is 1.x. ROM 2.0 made it `JP BRK_ABORT`.
-- SYMBOLS.md says G_VERS returns 0015h (v1.1).
 - The labelled listing names EXROM 1BEFh `H_EXPT_STR`, a HOME routine's
   name from `fddcmd.asm` ([#183](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/183), R2).

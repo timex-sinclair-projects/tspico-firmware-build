@@ -1422,10 +1422,10 @@ object is returned to `ZX48_IO`. A success is logged at INFO; `nxt` is -1.
 
 [SD_ROBUSTNESS_PROPOSAL.md §0](../../SD_ROBUSTNESS_PROPOSAL.md) records the
 limit: the ZX ROM has no way to refuse a SAVE, so one with no card fails after
-the fact. [SAVE_1.1C_VS_1.5.md §7](../../SAVE_1.1C_VS_1.5.md) says `SAVE_ZX`
-"genuinely has not been migrated" to dual-port; that was true when it was
-written and is not now (the docstring's "DUAL-PORT MIGRATION (2026-09)"
-describes the change). [`zx48_io_hosttest.py`](../../../src/test/zx48_io_hosttest.py)
+the fact. [SAVE_1.1C_VS_1.5.md §7](../../SAVE_1.1C_VS_1.5.md) records that
+`SAVE_ZX` had not been migrated to dual-port when it was written; it has
+since, as a note there now says (the docstring's "DUAL-PORT MIGRATION
+(2026-09)" describes the change). [`zx48_io_hosttest.py`](../../../src/test/zx48_io_hosttest.py)
 pins the right `.tap` written; a SAVE that stops, fails its parity or has an
 unusable name writing nothing; a refused header's data block never getting
 READY; and no watchdog.
@@ -1439,8 +1439,6 @@ The code wins in each case.
 - `LOAD_ZX_C`: the "no file mounted" branch is unreachable, and the boundary
   test is two bytes short (see the entry).
 - `LOAD_TS`: `prof` is sampled only on the file-streaming path.
-- [SAVE_1.1C_VS_1.5.md §7](../../SAVE_1.1C_VS_1.5.md): `SAVE_ZX` "has not been
-  migrated"; it has.
 - (#181 fixed the rest: `ENA_SD`'s comment and PROTOCOL.md §6.2/§13 on when
   the SAVE's final status goes out, `LOAD_TS`'s, `REWIND_ABORTED_SEARCH`'s,
   `RX_BLOCK`'s and `RX_CAPTURE`'s docstrings, `REFUSE_SAVE`'s status list,

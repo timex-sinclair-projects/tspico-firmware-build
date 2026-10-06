@@ -460,13 +460,7 @@ trapped by `ON ERR` like any other ([ERROR_TRAPPING.md](../../rom-analysis/ERROR
 
 ## Where comments, documents and the code disagree
 
-Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
-
-- [DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md) says
-  the 0065h byte (15h) is "the TPI BIOS version, medium confidence, nothing
-  in HOME reads it". It is the version number, changed with G_VERS in every
-  release since (17h, 20h, 21h); nothing reads it but `PEEK 101`.
-- The same document lists BEEPER's remnants at 041Eh–0421h as dead; in
-  2.1, 041Ch–0420h is the BEEPER thunk's tail.
-- [SYMBOLS.md](../../rom-analysis/SYMBOLS.md) says G_VERS returns `0015h`;
-  that was v1.1.
+None known: #182 corrected
+[DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md) (0065h is
+the version byte `PEEK 101` reads; 041Ch–0420h is 2.1's BEEPER thunk tail)
+and [SYMBOLS.md](../../rom-analysis/SYMBOLS.md) (G_VERS by release).

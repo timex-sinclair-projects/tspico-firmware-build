@@ -152,7 +152,7 @@ number, `tp.PARAMS(pre)[0]`:
    gets Report 6. The comment's reason: 33! has 37 digits, "keep it short";
    the audit (§3) notes that the bound is now a documentation, test and
    BASIC choice, since the count byte could carry up to 146!'s 255 digits (147! has 257;
-AUDIT-2026-09-30.md's "144!" is a slip).
+as AUDIT-2026-09-30.md says).
 2. `digits = str(math.factorial(n)).encode()`, at most 36 bytes for 32!,
    and `x`, their XOR.
 3. `tp.CMD_PUT(1)` (status: data follows), `tp.CMD_PUT(len(digits))`, then

@@ -251,9 +251,6 @@ block, and [zx48.md](zx48.md) explains each use.
 
 Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
 
-- [PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#ts-pico-system-variables)
-  lists 5D37h as "unclassified"; it is the NMI vector. It describes 5DDBh
-  only by its prefix bits; the switches are bits 0 and 1.
 - `fddcmd.asm`'s comment on MODE_SV says SESSION_SETUP "clears bits 7–4 for
   a plain name": it clears bits 7–4 at 1A3Ah (`AND 0Fh`) on the non-command
   exit, which is the same thing, and bits 7–6 at 1B8Dh before a command.

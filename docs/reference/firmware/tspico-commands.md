@@ -928,14 +928,9 @@ wide) and `y` one of 192, 384, 768, 1536; `y = 1596` is taken as 1536,
 
 ## Where the user manual and the code differ
 
-The code is right by definition; these are for the manual's next edit.
-
-- `tpi:cd`: the manual lists only F for a failed change; a path given as
-  `/tap/x` that does not exist is Q (`ChangeDir`).
-- `tpi:boot`: the manual says MEM must be 1 or 2; `CODE 0,s` with `s` ≠ 0
-  is also refused (and `CODE 0,0` is the show form).
-- `tpi:ffw`/`tpi:rew`/`tpi:append` with nothing mounted answer 0 OK (the
-  messages show only with VERBOSE on), except `tpi:append on`, which is Q.
+None known. #182 brought the manual into line: `tpi:cd`'s Q for a full path
+that does not exist, `tpi:boot`'s refusal of `CODE 0,s`, the 0 OK of
+`tpi:ffw`/`tpi:rew` with nothing mounted, and `tpi:dock`'s swap message.
 
 (#181 brought the code's own comments here into line: `SA_funct`'s keys
 and `TAPDIR`'s `CODE 1,n` window.)
