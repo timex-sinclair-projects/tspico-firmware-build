@@ -18,7 +18,7 @@ sources are listed [at the end](#sources).
 |---|---|---|
 | **v1.7** | `src/rom/TSPICO.ROM`, crc 09D4CA63 | Gustavo's ROM, the base for everything here. The only public release before this was v1.1. |
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
-| **2.1** | `src/rom/TSPICO-21.ROM`, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. This is the release ROM and the slot-1 image. |
+| **2.1** | `src/rom/TSPICO-21.ROM`, crc F3316DCF | 2.0 plus 16 HOME/EXROM patches and a 1912-byte module at EXROM 3000h–3777h. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -257,6 +257,7 @@ Two problems turned up along the way, and they shaped every entry point.
 | HOME | 03F3h | `LD (5DCDh),HL / LD HL,2000h / JP 03FCh` | `DI / LD (5DCDh),HL / LD HL,3015h / JR 041Ch` | This is the BEEPER thunk. BEEPER ends in EI, so the switch back to HOME ran with interrupts on. The editor clicks once per character, so INPUT # from a file crashed within a few hundred characters. |
 | HOME | 041Ch | `00 00 10 d3 fe` (dead) | `CALL 03FCh / EI / RET` | The BEEPER thunk's tail. These bytes are left over from the relocated BEEPER, and nothing references them. |
 | EXROM | 184Fh | `JP 23CDh` | `JP 301Bh` | BIOS C_END becomes [C_END2](#c_end2-a-timeout-is-j-not-f). 2.0's C_END returned A = 02h for a timeout and for status 3 alike, so callers reported a silent Pico as F. |
+| EXROM | 20BEh | `CALL 1861h / JR 2108h` | `JP 301Eh / 00 00` | `tpi:tape` goes to [TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), which clears TPMODE bit 1 only. 2.0 set TPMODE to 0, turning the printer switch off too (#176). |
 | HOME | 0065h | `20h` | `21h` | Version marker. |
 | EXROM | 1852h | `LD BC,0020h` | `LD BC,0021h` | BIOS G_VERS. |
 | EXROM | 1C7Eh | `"v2.0"` | `"v2.1"` | Boot banner. |
@@ -267,8 +268,8 @@ instead of jumping into the wrong code.
 
 ## ROM 2.1: the module at EXROM 3000h
 
-The module is `src/rom/fdd/fddcmd.asm`. It is 1901 bytes, from 3000h to 376Ch,
-with FDD_VERSION 8 and the signature `"FDDCMD"` at 309Dh. It starts with a jump
+The module is `src/rom/fdd/fddcmd.asm`. It is 1912 bytes, from 3000h to 3777h,
+with FDD_VERSION 8 and the signature `"FDDCMD"` at 30A8h. It starts with a jump
 table, so the ROM patches point at fixed vectors rather than at routines that
 move when the module is rebuilt.
 
@@ -286,6 +287,7 @@ move when the module is rebuilt.
 | 3015h | `G_BEEP` | HOME 03F3h → 041Ch, BEEPER |
 | 3018h | `G_OSYN → OPEN_SYNTAX` | HOME 14BDh, OPEN # syntax |
 | 301Bh | `C_END2` | EXROM 184Fh, BIOS C_END |
+| 301Eh | `TAPE_MODE` | EXROM 20BEh, `SAVE "tpi:tape"` |
 
 ### GUARDED and the HOME trap
 
@@ -360,11 +362,11 @@ The two passes work like this:
 
 ### SAVE / LOAD "f:path"
 
-F_HOOK (31FDh) peeks at the name on the calculator stack. If the name doesn't
+F_HOOK (3208h) peeks at the name on the calculator stack. If the name doesn't
 start with `f:` (in any case), it goes on to SESSION_SETUP (1A73h) exactly as
 before. For an `f:` name, F_HOOK first makes a session id the way
 SESSION_SETUP does: FRAMES+1, and never 0. It then sends `tpi:fopen <path>`
-by hand through the BIOS (SEND_FOPEN, 3275h):
+by hand through the BIOS (SEND_FOPEN, 3280h):
 
 ```
 pre-header  'B', 00h (T-ADDR: a command), BANK, PMR1 lo = T-ADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE),
@@ -426,6 +428,25 @@ On failure, A is now always ready for the status-to-report routine at 1BF3h:
 0Ch and 1Ch can't be status−1 values, because the firmware's highest status is
 11. WF_NPH itself is unchanged.
 
+### TAPE_MODE: tpi:tape keeps the printer switch
+
+TPMODE (5DDBh) holds two switches: bit 1 sends LOAD and SAVE to the Pico,
+bit 0 sends printing to it. `tpi:sdcard`, `tpi:picopt` and `tpi:ts2040` each
+change their own bit, but `tpi:tape` (EXROM 20BEh, unchanged since v1.1) did
+`CALL 1861h`, which is `XOR A` into S_MODE: TPMODE = 0. So `tpi:picopt`,
+`tpi:tape`, `tpi:sdcard` quietly sent printing back to the 2068 (#176).
+
+```z80
+TAPE_MODE:                          ; 3021h, from JP TAPE_VEC at 20BEh
+        ld   a,(5DDBh)              ; A held the length test's 8
+        res  1,a                    ; cassette; bit 0, the printer, untouched
+        jp   2105h                  ; CALL S_MODE / CALL 042Fh / JP 1B72h: "0 OK"
+```
+
+The five bytes at 20BEh can't hold the reload, the `RES` and the jump, so they
+became `JP 301Eh` and two `00`s that nothing reaches. `rom_tpmode_hosttest.py`
+runs the switch words from the committed image in the Z80 interpreter.
+
 ### File channels: OPEN #, PRINT #, INPUT #, CLOSE #
 
 `OPEN #n,"f:path"[,"mode"[,reclen]]` builds an 'F' record in CHANS and points
@@ -452,7 +473,7 @@ Record layout:
 | +11 | 64-byte output buffer, then the 255-byte input buffer |
 
 Each channel command is a 'B' command sent through the BIOS, with PMR1 = the
-stream (CH_SEND, 3645h). Before its SYNC, CH_SEND waits up to about 1 s for
+stream (CH_SEND, 3650h). Before its SYNC, CH_SEND waits up to about 1 s for
 IDLE. The Pico answers a channel command with READY before it is IDLE again,
 and a SYNC sent before then would be lost along with the pre-header behind it.
 
@@ -478,25 +499,26 @@ and a SYNC sent before then would be lost along with the pre-header behind it.
 Every exchange keeps CURCHL, because the command goes out in the middle of a
 PRINT # or INPUT # statement.
 
-G_BEEP (301Eh) skips the editor's key click (HL = 00C8h) when CURCHL is an 'F'
+G_BEEP (3029h) skips the editor's key click (HL = 00C8h) when CURCHL is an 'F'
 record. It also puts DI back after BEEPER's EI.
 
 ### Routine index
 
 | Addr | Routine | Addr | Routine |
 |---|---|---|---|
-| 301Eh | G_BEEP | 3322h | C_FAIL |
-| 303Ah | G_MAIN … G_CLOSE (to 3053h) | 332Dh | C_END2 |
-| 3056h | GUARDED | 3344h | LOWER_LOOP |
-| 307Ch | FDD_MAIN | 3351h | CH_OPEN_HOOK |
-| 30A4h | FDD_VERSION (08h) | 3483h | OPEN_SYNTAX |
-| 30A5h | FDD_CAT | 34A8h | CH_CLOSE_HOOK |
-| 30C9h | FDD_ONE_ARG (ERASE, FORMAT) | 3557h | CH_OUT |
-| 30DFh | FDD_MOVE | 3596h | CH_IN |
-| 31DAh | TPI_SEND (→ SESSION_NAMED 1AACh) | 35C9h | CH_FLUSH |
-| 31FDh | F_HOOK | 35E1h | CH_FETCH |
-| 3275h | SEND_FOPEN | 3636h | CH_STATUS |
-| 3314h | WF_FAIL (J / D / T) | 3645h | CH_SEND |
+| 3021h | TAPE_MODE | 332Dh | C_FAIL |
+| 3029h | G_BEEP | 3338h | C_END2 |
+| 3045h | G_MAIN … G_CLOSE (to 305Eh) | 334Fh | LOWER_LOOP |
+| 3061h | GUARDED | 335Ch | CH_OPEN_HOOK |
+| 3087h | FDD_MAIN | 348Eh | OPEN_SYNTAX |
+| 30AFh | FDD_VERSION (08h) | 34B3h | CH_CLOSE_HOOK |
+| 30B0h | FDD_CAT | 3562h | CH_OUT |
+| 30D4h | FDD_ONE_ARG (ERASE, FORMAT) | 35A1h | CH_IN |
+| 30EAh | FDD_MOVE | 35D4h | CH_FLUSH |
+| 31E5h | TPI_SEND (→ SESSION_NAMED 1AACh) | 35ECh | CH_FETCH |
+| 3208h | F_HOOK | 3641h | CH_STATUS |
+| 3280h | SEND_FOPEN | 3650h | CH_SEND |
+| 331Fh | WF_FAIL (J / D / T) |  |  |
 
 ## ZX Spectrum ROM v3
 
@@ -581,7 +603,7 @@ in v2.
 | HOME 0065h (`PEEK 101`) | 17h | 20h | 21h |
 | BIOS G_VERS (EXROM 1852h, `LD BC,nnnn`) | 0017h | 0020h | 0021h |
 | Boot line (EXROM 1C6Ch) | v1.7 | `" 2026 TS-Pico ROM v2.0"` | `"… v2.1"` |
-| Module FDD_VERSION (EXROM 30A4h) | — | — | 08h |
+| Module FDD_VERSION (EXROM 30AFh) | — | — | 08h |
 
 v1.1 reads 15h at 0065h.
 

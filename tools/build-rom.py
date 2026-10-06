@@ -187,6 +187,18 @@ PATCHES = [
              "WF_NPH ($184C) is unchanged.",
     ),
     dict(
+        name="tpi:tape: $20BE CALL $1861 / JR $2108 -> JP TAPE_VEC ($301E)",
+        bank="exrom", addr=0x20BE,
+        before="cd 61 18 18 45", after="c3 1e 30 00 00",
+        note="ROM 2.0 set TPMODE to 0 (XOR A / S_MODE), clearing the printer "
+             "switch (bit 0) as well as LOAD/SAVE (bit 1); tpi:sdcard sets only "
+             "bit 1, so picopt -> tape -> sdcard left printing on the 2068 (#176). "
+             "The module's TAPE_MODE clears bit 1 alone and ends at $2105 as "
+             "tpi:sdcard does. The five bytes don't fit the fix in place: A holds "
+             "the length test's 8 here. $20C1-$20C2 (the JR) become unreachable; "
+             "nothing else jumps to $20BE-$20C2 ($20C3 is tpi:sdcard's entry).",
+    ),
+    dict(
         name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.1\"",
         bank="exrom", addr=0x1C7E,
         before="76 32 2e 30", after="76 32 2e 31",
@@ -251,6 +263,8 @@ ANCHORS = [
          bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
     dict(name="EXROM $2000: JP to the relocated BEEPER (G_BEEP calls it)",
          bank="exrom", addr=0x2000, bytes="c3 3f 20"),
+    dict(name="MODE_SET_OK: CALL S_MODE / CALL $042F / JP $1B72 (\"0 OK\"), TAPE_MODE ends here",
+         bank="exrom", addr=0x2105, bytes="cd 62 18 cd 2f 04 c3 72 1b"),
     dict(name="H_MAKE_ROOM (OPEN # appends a record)",
          bank="home", addr=0x12BB, bytes="e5 cd bb 1f e1 cd ca 12"),
     dict(name="H_RECLAIM (CLOSE # removes it)",

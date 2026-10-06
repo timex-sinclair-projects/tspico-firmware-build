@@ -98,7 +98,7 @@ characters through the record's input routine, HOME 14A9h → `CH_IN`.
 
 The editor clicks once per character taken; ROM 2.1's G_BEEP skips the
 click when the current channel is an `F` record, so a file is read
-silently ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_beep-301eh)).
+silently ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_beep-3029h)).
 
 ## CLOSE
 

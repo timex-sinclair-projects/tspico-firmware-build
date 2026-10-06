@@ -321,7 +321,7 @@ trampolines at 1488h–14BDh:
 | 14B2h | `POP HL / LD (65CEh),HL / POP HL / LD (5C3Dh),HL / LD SP,HL / EI / RET` | H_TRAP, the module's error trap |
 | 14BDh | `DI / LD HL,3018h / CALL 03FCh / EI / RET` | OPEN #'s syntax (G_OSYN) |
 
-The addresses are the module's vector table (3000h–301Bh), not its
+The addresses are the module's vector table (3000h–301Eh), not its
 routines, so a rebuilt module does not move them. An `F` record in CHANS
 holds 14A0h and 14A9h as its output and input addresses: fixed HOME
 addresses, so nothing in a record has to change when CHANS moves or the

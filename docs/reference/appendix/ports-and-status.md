@@ -20,7 +20,7 @@ the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
 Data goes through two accessors, 2298h (`IN A,(0Eh)`) and 229Dh
 (`OUT (0Eh),A`), and status through READ_STATUS (0655h, the `IN A,(0Fh)` at
 065Bh); ROM 2.0 adds the SYNC and BREAK writes and its own status reads at
-2304h–23C0h, and ROM 2.1 one IDLE poll at 3657h. Every site is listed in
+2304h–23C0h, and ROM 2.1 one IDLE poll at 3662h. Every site is listed in
 [rom/overview.md](../rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 ## The status byte
@@ -150,7 +150,7 @@ dispatch compares A = code − 1 ([exrom-chunk1.md](../rom/exrom-chunk1.md)).
 | 85h | `FN_GET_STATUS` | status | sends a 2-bit mask, with no ready wait: b0 = 1 when no key is down, b1 (aux) always 0 | unused |
 | 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (`N` ends the loop; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | 87h | — | status | HOME 08A6h: clears the screen | unused |
-| 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (ROM 2.1 only; `LOWER_LOOP`, 3344h) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
+| 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (ROM 2.1 only; `LOWER_LOOP`, 334Fh) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
 | 80h, 89h–FFh (88h on ROM 2.0) | — | — | fall through the chain: Report D | — |
 
 Text rules: the ROM reads characters without a ready wait; 00h ends a string

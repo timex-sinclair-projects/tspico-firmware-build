@@ -629,7 +629,7 @@ SAVE "tpi:sdcard"    : REM back to the TS-Pico (the setting at switch-on)
 ```
 
 `tpi:` commands keep working in tape mode; only plain LOAD, SAVE, VERIFY and MERGE go to
-tape. You can check the setting with `PRINT PEEK 24027`; see Appendix D.
+tape. Printing stays where it was (Chapter 7). You can check the setting with `PRINT PEEK 24027`; see Appendix D.
 
 ## 4.5 Summary
 
@@ -1865,7 +1865,9 @@ The 2068's ROM keeps the TS-Pico's two switches in one byte of memory, `PEEK 240
 | 1 | 2 | LOAD and SAVE use the TS-Pico (`tpi:sdcard`); clear means cassette (`tpi:tape`) |
 | 0 | 1 | Printing goes to the TS-Pico (`tpi:picopt`); clear means the TS 2040 (`tpi:ts2040`) |
 
-So `PRINT PEEK 24027` gives 2 at switch-on, 3 after `tpi:picopt`, and 0 after `tpi:tape`.
+So `PRINT PEEK 24027` gives 2 at switch-on, 3 after `tpi:picopt`, and 1 if you then use
+`tpi:tape`: each command changes only its own switch. (The ROM shipped with firmware 2.1.2
+and earlier gives 0 there: its `tpi:tape` turned the printer switch off as well.)
 
 ---
 

@@ -207,7 +207,8 @@ paged ([home.md](home.md#2548h2560h-save-load-verify-merge-v11)).
 The other bodies: G_MODE (1856h) `PUSH AF / LD A,(5DDBh) / AND 0Fh / LD B,0
 / LD C,A / POP AF / RET`; 1861h `XOR A` falls into S_MODE (1862h) `PUSH AF
 / AND 0Fh / LD (5DDBh),A / POP AF / RET` — 1861h, "TPMODE = 0", is what
-`tpi:tape` calls, and 081Dh (`LD A,2 / JP 1862h`) is the power-on value;
+`tpi:tape` called before 2.1 (2.1's 20BEh goes to the module's TAPE_MODE
+instead, so nothing calls 1861h now), and 081Dh (`LD A,2 / JP 1862h`) is the power-on value;
 RX_A and TX_A are `JP`s to the accessors. 1870h–1871h (`AND A / RET`)
 follow TX_A unreferenced.
 
