@@ -450,9 +450,9 @@ The SD card, kept by `ACTIVATE_SD` and `SD_NOTE_CARD` ([tspico-bus.md](tspico-bu
 |---|---|---|---|---|
 | `sd_present` | `False` | a card was there at the last mount | `SD_NOTE_CARD` (`True`), `ACTIVATE_SD` on failure, `SD_REVALIDATE` when no `TAP` folder can be made, `TS2068_IO` when the boot mount fails (`False`) | `ACTIVATE_SD` (how many tries), `SD_CALL`, `PROCESS_CMD`'s card gate, `GETINFO`, the idle heartbeats of `TS2068_IO` and `ZX48_IO` (two blinks without a card), `TS2068_IO`'s boot log |
 | `sd_cid` | `None` | the CID register of the last card mounted: `None` until one has been seen, 0 when the driver could not read it, otherwise the card's identity | `SD_NOTE_CARD` | `SD_NOTE_CARD`, `ACTIVATE_SD` ("none since power-on") |
-| `save_no_card` | `False` | the dispatcher's card check for this SAVE failed | the SAVE branch (from `SD_PROBE`; back to `False` after `SAVE_TS`) | `SAVE_TS` (tspico_io 2465, by `getattr`) refuses at the header with Report J |
+| `save_no_card` | `False` | the dispatcher's card check for this SAVE failed | the SAVE branch (from `SD_PROBE`; back to `False` after `SAVE_TS`) | `SAVE_TS` (tspico_io 2475, by `getattr`) refuses at the header with Report J |
 | `sd_listing_ok` | `False` | `DIR_FILES` read the current folder without errors | `SD_REVALIDATE`, `LISTING_FRESHEN`, `REFRESH_LISTING` (each from `DIR_FILES`'s result) | `TS2068_IO`'s boot log (`sd_ok`) |
-| `listing_stale` | `False` | a ZX48 SAVE wrote into the current folder, and the caches have not been re-read | `SAVE_ZX` (tspico_io 2902, `True`), `REFRESH_LISTING` (`False`) | `PROCESS_CMD` (5998), `ZX_TPI` (7063, 7082), both by `getattr` |
+| `listing_stale` | `False` | a ZX48 SAVE wrote into the current folder, and the caches have not been re-read | `SAVE_ZX` (tspico_io 2912, `True`), `REFRESH_LISTING` (`False`) | `PROCESS_CMD` (5998), `ZX_TPI` (7063, 7082), both by `getattr` |
 
 `tpi:dock`'s memory of its previous setting (2026-09-30 audit §2 #19;
 [`audit_fixes_hosttest.py`](../../../src/test/audit_fixes_hosttest.py),
@@ -470,9 +470,9 @@ with `getattr` where they may be missing:
 |---|---|---|
 | `listing_sig` | `LIST_DIR_FILES` (1681) | `LISTING_SIG` of the folder as last listed; `LISTING_FRESHEN` compares against it |
 | `native` | `NATIVE_OPEN` (3102–3127); cleared by `LOAD_TS`/`SAVE_TS` in tspico_io | the pending `f:` operation: `op`, `session`, the path or the one-shot tape ([tspico-disk.md](tspico-disk.md)) |
-| `native_saved` | `SAVE_TS` (tspico_io 2709, 2761), the SAVE branch | the save went to an `f:` file: refresh the listing, change no mount |
+| `native_saved` | `SAVE_TS` (tspico_io 2719, 2771), the SAVE branch | the save went to an `f:` file: refresh the listing, change no mount |
 | `load_file` | `LOAD_TS` (tspico_io 1780, 1790) | the tape `LOAD_TS` is serving when it is not `/TMP/temp.tap` |
-| `save_final`, `save_recovered` | `SAVE_TS` (tspico_io 2396–2397, 2414, 2620, 2778); the SAVE branch clears `save_final` | the final status to send after the SD work, and whether `SAVE_TS` gave up on a silent Z80 (RECOVERED) |
+| `save_final`, `save_recovered` | `SAVE_TS` (tspico_io 2406–2407, 2424, 2630, 2788); the SAVE branch clears `save_final` | the final status to send after the SD work, and whether `SAVE_TS` gave up on a silent Z80 (RECOVERED) |
 
 ## The rest of the file's variables, in source order
 

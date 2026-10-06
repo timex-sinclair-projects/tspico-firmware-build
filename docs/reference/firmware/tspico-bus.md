@@ -686,7 +686,7 @@ different (`changed` true for a different card).
 Writes `alldirs`, `prev_path`, `prn_path`, `TSP.cur_path`, `TSP.append`,
 `TSP.sd_present`, `TSP.sd_listing_ok`, the mount, the channels, the current
 directory. Called only by `SD_NOTE_CARD`; the comments in `GETINFO` (4167),
-`TS2068_IO` (6316) and `tspico_io`'s SAVE paths (2744, 2887) describe its
+`TS2068_IO` (6316) and `tspico_io`'s SAVE paths (2754, 2897) describe its
 effects. `SAVE_TS` checks one of them: after its mount, `append` gone off
 means the card was swapped during the transfer, and it refuses to append to
 a file of the same name on the new card.

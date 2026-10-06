@@ -2065,6 +2065,23 @@ def LOAD_ZX(MQ, TSP):
     return MQ, TSP, log_entries, nxt
 
 
+def ZX_C_BLOCKS(data):
+    """Split TAP bytes into whole blocks for LOAD_ZX_C. Returns (blocks,
+    used): each block is flag + content + CRC (the TAP block without its
+    2-byte length), and used is how many bytes of data they took. A block
+    the data cuts short is left out, for the next 'L' to start at. (#172:
+    the test was `long > len`, two bytes short -- a block cut by one or two
+    bytes was served truncated -- and one byte left over raised IndexError.)"""
+    blocks, i, n = [], 0, len(data)
+    while i + 2 <= n:
+        long = data[i] | (data[i + 1] << 8)
+        if i + 2 + long > n:
+            break
+        blocks.append(data[i + 2:i + 2 + long])
+        i += 2 + long
+    return blocks, i
+
+
 def LOAD_ZX_C(MQ, TSP, buf_size):
     """ZX Spectrum LOAD in 'compatible' mode — stream the tape continuously.
 
@@ -2091,49 +2108,42 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
     global log_entries
     log_entries = " "
 
-    cur_buf = []
-
-    if (TSP.offset >= TSP.totlen):
-        return MQ, TSP, log_entries, -1
-
-    size_rd = TSP.totlen - TSP.offset
-
-    if (size_rd >= buf_size):
-        size_rd = buf_size
-    rd_bytes = bytearray(size_rd)
-
-    if (not TSP.f_name or TSP.totlen == 0):
+    # The file first, then its length (#172). With nothing mounted -- at
+    # boot totlen is 0, and after tpi:close it is the forgotten file's --
+    # serve nofile.tap as LOAD_ZX does, sized by itself.
+    if not TSP.f_name or TSP.totlen == 0:
         local_fname = "/assets/nofile.tap"
         LOG_ADD("WARNING: no file mounted in LOAD_ZX_C", 1, TSP.LOG_LEVEL)
     else:
         local_fname = "/TMP/temp.tap"
 
-    arch = open(local_fname, "rb")
-    arch.seek(TSP.offset)
+    try:
+        arch = open(local_fname, "rb")
+    except OSError:
+        LOG_ADD("ERROR: can't open %s in LOAD_ZX_C" % local_fname, 2, TSP.LOG_LEVEL)
+        return MQ, TSP, log_entries, -1
+    if local_fname == "/TMP/temp.tap":
+        totlen = TSP.totlen
+    else:
+        arch.seek(0, 2)
+        totlen = arch.tell()
 
+    if TSP.offset >= totlen:
+        arch.close()
+        return MQ, TSP, log_entries, -1
+
+    rd_bytes = bytearray(min(totlen - TSP.offset, buf_size))
+    arch.seek(TSP.offset)
     try:
         arch.readinto(rd_bytes)
     except:
         LOG_ADD("ERROR: while reading file in LOAD_ZX_C!", 2, TSP.LOG_LEVEL)
         arch.close()
         return MQ, TSP, log_entries, -1
-
     arch.close()
 
-    TSP.offset += len(rd_bytes)
-
-    while (rd_bytes):
-        long = rd_bytes[0] + (256*rd_bytes[1])
-
-        if (long > len(rd_bytes)):
-            TSP.offset -= len(rd_bytes)
-            break
-        hasta = long + 2
-
-        cur_buf.append(rd_bytes[2:hasta])
-
-        rd_bytes = rd_bytes[hasta:]
-
+    cur_buf, used = ZX_C_BLOCKS(rd_bytes)
+    TSP.offset += used                      # the next 'L' starts at the first block left out
     del rd_bytes
     ZX_FLUSH_TX(MQ)
     gc.collect()                            # now, not mid-stream (see LOAD_ZX)
