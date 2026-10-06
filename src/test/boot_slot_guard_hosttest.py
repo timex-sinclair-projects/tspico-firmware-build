@@ -104,11 +104,57 @@ def blkrcv(t, sent):
 
 
 def test_nothing_mounted(t, image):
-    print("nothing mounted (TSP.f_name is [] after boot; hardware 2026-10-03: Report J)")
-    sent = setup(t, (2, 1), (2, 4), [], image)
-    r = memdock(t, sent, 2, 0)
-    check(r[2] == t._1_OK and t.getDock() == (2, 0),
-          "tpi:memdock CODE 2,0 with no file mounted: OK, DOCK moved (%r)" % (r,))
+    print("nothing mounted (TSP.f_name is \"\" after boot; [] before #163, Report J on hardware 2026-10-03)")
+    for f_name in ("", []):
+        sent = setup(t, (2, 1), (2, 4), f_name, image)
+        r = memdock(t, sent, 2, 0)
+        check(r[2] == t._1_OK and t.getDock() == (2, 0),
+              "tpi:memdock CODE 2,0 with f_name=%r: OK, DOCK moved (%r)" % (f_name, r))
+    tsp = t.PICO_STATUS({"ROM_SM": 6, "DCK_SLOT": 3, "ROM_SLOT": 1, "LOG_LEVEL": 2})
+    check(tsp.f_name == "", "PICO_STATUS starts with f_name \"\", a string: CAT \"x.tap\" "
+          "and tpi:blkrcv no longer raise AttributeError before the first mount (#163)")
+
+
+def test_blkrcv_needs_an_image(t, image):
+    print("tpi:blkrcv with no image mounted refuses before anything is streamed (#162, #163)")
+    for f_name in ("", "/sd/TAP/GAME.TAP", "/sd/TAP/README.TXT"):
+        sent = setup(t, (2, 1), (2, 4), f_name, image)
+        r = blkrcv(t, sent)
+        check(r is not None and r[2] == t._3_F_Invalid_file and r[3],
+              "f_name=%r: Report F, shown (%r)" % (f_name, r))
+        check(t.MQ.puts == [], "  nothing streamed, so the updater stops before its erase")
+        check(len(r[0]) <= 32 and len(r[1]) <= 32, "  both lines fit 32 columns")
+
+
+def test_blkrcv_checks_the_image_first(t, image):
+    print("tpi:blkrcv checks /TMP/temp.bin before it says OK (#164)")
+    # Booted from flash 1, DOCK flash 4: no boot-slot clash, so only the image decides.
+    sent = setup(t, (2, 1), (2, 4), "/sd/TAP/GAME.DCK", image)      # the 772-byte image
+    r = blkrcv(t, sent)
+    check(r is not None and r[2] == t._3_F_Invalid_file and r[3] and t.MQ.puts == [],
+          ".DCK with a short image: Report F, shown, nothing streamed (%r)" % (r,))
+    check(len(r[0]) <= 32 and len(r[1]) <= 32, "  both lines fit 32 columns")
+
+    def gone(p):
+        raise OSError(2, "ENOENT")
+    for f_name in ("/sd/TAP/GAME.DCK", "/sd/TAP/NEW.ROM"):
+        sent = setup(t, (2, 1), (2, 4), f_name, image)
+        t.os = types.SimpleNamespace(stat=gone)
+        r = blkrcv(t, sent)
+        check(r is not None and r[2] == t._3_F_Invalid_file and t.MQ.puts == [],
+              "%s with /TMP/temp.bin missing: Report F, nothing streamed (%r)" % (f_name[-4:], r))
+
+    fd, full = tempfile.mkstemp(prefix="boot_guard_dck.", suffix=".bin")
+    with os.fdopen(fd, "wb") as f:
+        f.write(bytes(range(256)) * 256)                           # 64K, as DCK_IMAGE writes
+    try:
+        sent = setup(t, (2, 1), (2, 4), "/sd/TAP/GAME.DCK", full)
+        r = blkrcv(t, sent)
+        check(r is None and t.MQ.puts[:1] == [t._1_OK] and len(t.MQ.puts) == 1 + 65536
+              and bytes(t.MQ.puts[1:257]) == bytes(range(256)),
+              ".DCK with the full 64K: status 1, then all 65536 bytes (%d puts)" % len(t.MQ.puts))
+    finally:
+        os.remove(full)
 
 
 def test_rom(t, image):
@@ -193,6 +239,8 @@ def main():
         f.write(bytes(range(256)) * 3 + b"tail")               # not a multiple of 256
     try:
         test_nothing_mounted(t, image)
+        test_blkrcv_needs_an_image(t, image)
+        test_blkrcv_checks_the_image_first(t, image)
         test_rom(t, image)
         test_sram_boot(t, image)
         test_dck(t, image)

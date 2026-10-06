@@ -792,8 +792,9 @@ overwrite the slot the 2068 is running from? Returns the refusal as
 `"the 2068 is running from it." + CR + "Boot another slot first."` — or
 `None`.
 
-The rule: `None` unless `f_name` is a `str` (nothing mounted: `TSP.f_name` is
-`[]` at boot) whose extension is `.ROM`, `.BIN` or `.DCK`; `None` unless
+The rule: `None` unless `f_name` is a `str` whose extension is `.ROM`,
+`.BIN` or `.DCK` (the `str` test dates from when `TSP.f_name` started as
+`[]`, before #163; it is now always a `str`); `None` unless
 `mem` is the boot memory (`getBoot`); `None` unless `page` is the boot slot,
 or, for a `.DCK`, the boot slot is `page + 1` — a 64 KB cartridge fills
 `page` and `page + 1`. Otherwise the refusal, naming the boot slot.

@@ -351,7 +351,14 @@ to `/TMP/temp.bin` and mounts the updater tape instead
 ([tspico-files.md](tspico-files.md#mount_filef_name-remountingfalse);
 user manual §8.4).
 
-1. **The boot-slot guard.** `getDock()` is the slot the updater will
+1. **An image must be mounted.** Unless `TSP.f_name` ends in `.DCK`,
+   `.BIN` or `.ROM` (nothing mounted, a TAP, any other file), answer "No
+   ROM image mounted" / "Mount a .ROM, .BIN or .DCK", shown, Report F, and
+   stop. Neither branch below would send a byte for any other file, so the
+   ROM would read the tail's pre-load `01h` as "0 OK" and the updater
+   would go on to erase the slot; the refusal stops it at line 280, before
+   the erase (#162, #163; [`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)).
+2. **The boot-slot guard.** `getDock()` is the slot the updater will
    write (the DOCK slot it chose with `tpi:dock`); if
    `BOOT_SLOT_CLASH(mem, page, TSP.f_name)` says it is the slot the 2068
    is running from (for a `.DCK`, either of its two 32K slots), answer
@@ -359,13 +366,21 @@ user manual §8.4).
    another slot first.", shown, Report Q, and stop: nothing streamed,
    nothing erased. `MEMDOCK` normally refused the slot already; this is
    the second check ([`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)).
-2. **`.DCK`**: status 1 into TX (`MQ.put`), `MQ_READY()`, then the 65 536
-   bytes of `/TMP/temp.bin` (`DCK_IMAGE` always writes a full 64K image).
-3. **`.BIN`/`.ROM`**: `CODE len,offset`. If `len + offset` is past the
+3. **The image file.** `/TMP/temp.bin` must exist and, for a `.DCK`, be
+   at least 65 536 bytes (`DCK_IMAGE` always writes a full 64K image).
+   Otherwise "The ROM image isn't ready" / "Mount the file again", shown,
+   Report F, and stop. This comes before any status because once the Z80
+   has "0 OK" it erases the slot and reads blind: nothing found wrong after
+   that can be reported, and an empty FIFO goes into the flash as `00h`s
+   (#164).
+4. **`.DCK`**: `/TMP/temp.bin` opened, then status 1 into TX (`MQ.put`),
+   `MQ_READY()`, and its 65 536 bytes. An error opening it raises before
+   the status, so `FAIL_CMD` answers J and nothing is erased.
+5. **`.BIN`/`.ROM`**: `CODE len,offset`. If `len + offset` is past the
    end of `/TMP/temp.bin`, status 3 (Report F) after a one-second
    `BLINK_ERROR`, and nothing more. Otherwise status 1, `MQ_READY()`, and
    `len` bytes from `offset` (`len` 0: to the end of the file).
-4. LED on for the transfer, off in a `finally`.
+6. LED on for the transfer, off in a `finally`.
 
 **The stream.** The updater's BASIC prints, erases the slot (`USR
 32800`/`32600`) and only then runs its write loop (`USR 32870`/`32670`),
@@ -403,18 +418,12 @@ needs a power cycle anyway (the comment at 3985–4010).
 
 Beware:
 
-- The status goes out before the stream, so an error while reading
-  `/TMP/temp.bin` on the `.DCK` path is printed to the console and the
-  handler returns: the 2068 has "0 OK" and erases the slot, then reads an
-  empty FIFO.
-- With a mounted file of any other type, no branch runs and nothing is
-  sent. The ROM then reads the tail's pre-load `01h` as its status
-  *(inferred from `PROCESS_CMD`'s tail)*. The updaters only send it with
-  an image mounted.
-- With nothing mounted since boot, `TSP.f_name` is still the initial
-  empty list, and `TSP.f_name[-4:].upper()` raises `AttributeError`:
-  `FAIL_CMD`, Report J. After `tpi:close` it is `""` and the case above
-  applies.
+- The status still goes out before the stream, so a read error part way
+  through (after the checks above) cannot reach the 2068: it is raised,
+  `PROCESS_CMD` logs it and `FAIL_CMD` answers J, and the 2068, already in
+  its write loop, takes that status byte as data and then reads an empty
+  FIFO for the rest *(inferred)*. The slot is half-written either way. Before #164 the `.DCK` path also sent the status
+  before opening the file, and only printed an error opening it.
 - The status and the stream use `MQ.put` directly; at this point TX is
   empty (the command body has just been read), so the first `put`s cannot
   block.
