@@ -745,7 +745,8 @@ regenerate it when a line number moves (the test checks that it is current).
 | `CMD_CHCLOSE` | label | [1410](../../../src/rom/fdd/fddcmd.asm#L1410) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `CMD_CHOPEN` | label | [1411](../../../src/rom/fdd/fddcmd.asm#L1411) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `MODE_R` | label | [1412](../../../src/rom/fdd/fddcmd.asm#L1412) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `FDD_END` | label | [1414](../../../src/rom/fdd/fddcmd.asm#L1414) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `PRELOAD` | label | [1424](../../../src/rom/fdd/fddcmd.asm#L1424) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_END` | label | [1429](../../../src/rom/fdd/fddcmd.asm#L1429) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 
 ## `src/rom/patches/tspico-sync.asm`
 

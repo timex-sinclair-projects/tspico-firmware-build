@@ -48,7 +48,7 @@ All checksums below were computed from the files in the repository.
 | v1.5w | `ROMs/TSPICO-15w-home`, `-exrom` | 16K + 16K | `E8714BED`, `CACF18C5` | 15h | v1.1 plus 15 EXROM bytes: a ready-wait and guard in the Y/N loop | history ([DIFF_V11_vs_V15W.md](../../rom-analysis/DIFF_V11_vs_V15W.md)) |
 | v1.7 | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | v1.5w plus BREAK at the SAVE prompt: 89 EXROM bytes and the version byte | the base `tspico-sync.asm` patches |
 | 2.0 | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | v1.7 plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | the base `build-rom.py` patches; never released on its own |
-| **2.1** | `src/rom/TSPICO-21.ROM` | 32K | `F3316DCF` | 21h | 2.0 plus 16 patches and the module at EXROM 3000h–3777h; 2023 bytes in 15 hunks | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **2.1** | `src/rom/TSPICO-21.ROM` | 32K | `2B29F3E8` | 21h | 2.0 plus 16 patches and the module at EXROM 3000h–377Eh; 2030 bytes in 15 hunks | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX v2 | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base of v3/v4 |
 | ZX v3 | `src/rom/TSPICO-ZX48-V3.BIN` | 16K | `C4A833B8` | — | v2 plus a WAIT_RDY fix and `LOAD "tpi:…"` | superseded by v4 |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | v3 plus `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
@@ -107,7 +107,7 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | 1.7 | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | 2.0 | [exrom-sync.md](exrom-sync.md) |
 | 23D4h–2FFFh | 3116 | `FFh`, free | | |
-| 3000h–3777h | 1912 | the disk-command module | 2.1 | [exrom-fdd.md](exrom-fdd.md) |
+| 3000h–377Eh | 1919 | the disk-command module | 2.1 | [exrom-fdd.md](exrom-fdd.md) |
 | 376Dh–3FFFh | 2195 | `FFh`, free | | |
 
 Chunk 0 is effectively full: the 1K hole at 1800h was used for the driver,
@@ -303,8 +303,9 @@ set slot 1's crc32 in `flash/manifest.json` (`tools/build-flash.py check`
 prints it). CI ([../firmware/boot.md](../firmware/boot.md#ci-buildyml))
 runs `--verify`, fails if the committed `TSPICO-21.ROM` differs from the
 fresh build by a single byte, checks the manifest's crc32, and runs
-`rom_cend_hosttest.py` on `C_END2` and `rom_tpmode_hosttest.py` on the
-switch words in a Z80 interpreter.
+`rom_cend_hosttest.py` on `C_END2`, `rom_tpmode_hosttest.py` on the
+switch words and `rom_preload_hosttest.py` on `PRELOAD` in a Z80
+interpreter.
 
 #### The patches
 
@@ -330,9 +331,9 @@ Sixteen, applied in this order. The reason for each is in the source's
 | HOME 0065h | `20h` → `21h` | `PEEK 101` | [home.md](home.md) |
 | EXROM 1852h | `LD BC,0020h` → `LD BC,0021h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
 
-The resulting 2.0 → 2.1 difference, measured on the committed images: 2023
+The resulting 2.0 → 2.1 difference, measured on the committed images: 2030
 bytes in 15 hunks: 99 in HOME, 16 in the EXROM outside the module, and
-1908 in the module's region — 4 of the module's 1912 bytes are `FFh`, the
+1915 in the module's region — 4 of the module's 1919 bytes are `FFh`, the
 same as the free space they replaced. The byte-by-byte account is
 [ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-home-and-exrom-patches).
 

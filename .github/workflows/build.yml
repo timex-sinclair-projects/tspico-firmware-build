@@ -180,6 +180,9 @@ jobs:
       - name: Test ROM 2.1's switch words (tpi:tape keeps the printer switch) in the Z80 interpreter
         run: python3 src/test/rom_tpmode_hosttest.py
 
+      - name: Test ROM 2.1's pre-load check (PRELOAD) in the Z80 interpreter
+        run: python3 src/test/rom_preload_hosttest.py
+
       - name: Upload the fdd ROM artifact
         uses: actions/upload-artifact@v4
         with:

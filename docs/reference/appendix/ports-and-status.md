@@ -187,7 +187,7 @@ SAVE   OUT 00, 0, BANK, SESSION, IX, DE, XOR      IN 01   wait READY
        wait READY; IN mid status       01, or 03 (F) / 08 (A): refused
        ~1 s pause
        OUT FF, SESSION lo/hi, DE bytes, XOR       no pre-header
-       wait READY; IN final status     01, then the SD write, then the pre-load
+       wait READY; IN final status     the SD write, then 01 (0A, J, if it failed) + the pre-load
 ```
 
 The block XOR covers the flag and the content, not the session bytes, so a
