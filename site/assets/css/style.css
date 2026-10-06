@@ -156,3 +156,13 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
   .hero h1 { font-size: 2.1rem; }
   .header-inner { min-height: 54px; }
 }
+
+/* --- Docs: the manuals and the programmer's reference (tools/build-site-docs.py) --- */
+.page table { display: block; overflow-x: auto; border-collapse: collapse; font-size: .9rem; margin: 1em 0; }
+.page th, .page td { border: 1px solid var(--border); padding: 4px 8px; vertical-align: top; text-align: left; }
+.page th { background: var(--panel); }
+.page pre { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 12px; overflow-x: auto; font-size: .85rem; line-height: 1.45; }
+.page code { font-size: .9em; }
+.page pre code { font-size: inherit; }
+.page blockquote { margin: 1em 0; padding: 0 1em; border-left: 3px solid var(--border); color: var(--muted); }
+.doc-source { font-size: .85rem; color: var(--muted); margin-top: 0; }

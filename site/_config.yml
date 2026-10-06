@@ -34,6 +34,8 @@ nav:
     url: /
   - title: Updates
     url: /updates/
+  - title: Docs
+    url: /docs/
   - title: The Team
     url: /the-team/
   - title: Web Updater
