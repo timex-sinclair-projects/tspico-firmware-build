@@ -1,6 +1,6 @@
 # Flow: `OPEN #`, `PRINT #`, `INPUT #`, `CLOSE #`
 
-ROM 2.1 lets BASIC open a file on the SD card as a stream:
+The ROM lets BASIC open a file on the SD card as a stream:
 `OPEN #4,"f:log.txt","a"`, then `PRINT #4` and `INPUT #4` as with any
 channel, then `CLOSE #4`. The 2068 keeps a channel record in CHANS, with a
 small output and input buffer; the Pico keeps each stream's file, mode and
@@ -39,7 +39,7 @@ and armed the capture, and `CH_SEND` waits for that `FF` before its SYNC.
 
 | # | Side | Routine | What happens | What can go wrong |
 |---|---|---|---|---|
-| 1 | 2068, syntax | HOME 1438h → 14BDh → `OPEN_SYNTAX` | the spec, then `,"mode"` and an optional `,reclen` are evaluated, so the number's hidden form is stored ([../rom/home.md](../rom/home.md#13a5h-1438h-145eh-open--and-close--21)) | extra arguments to a K/S/P OPEN: Report C, now at syntax time |
+| 1 | 2068, syntax | HOME 1438h → 14BDh → `OPEN_SYNTAX` | the spec, then `,"mode"` and an optional `,reclen` are evaluated, so the number's hidden form is stored ([../rom/home.md](../rom/home.md#13a5h-1438h-145eh-open--and-close-)) | extra arguments to a K/S/P OPEN: Report C, now at syntax time |
 | 2 | 2068, run time | HOME 140Fh (the stream into 5CCBh) → 145Eh → 1488h → `CH_OPEN_HOOK` | `f:` or `d:`: ours; K/S/P go to the stock 1465h | |
 | 3 | 2068 | `CH_OPEN_HOOK` | room for the record and the command (Report 4); the mode popped (1–3 characters; none = `r`); `tpi:chopen a log.txt` built at STKEND | a mode of 4+ characters: Q |
 | 4 | 2068 | `CH_SEND` | waits for IDLE; SYNC; the pre-header — TADDR 0, PMR1 = 4 (the stream), PMR2 = the record length (0) — the pre-load (`PRELOAD`: 0 is J), WF_NPH, the body | |
@@ -96,7 +96,7 @@ characters through the record's input routine, HOME 14A9h → `CH_IN`.
    8, End of file**; anything else, its report.
 5. Back in `CH_IN`: hand out the first byte.
 
-The editor clicks once per character taken; ROM 2.1's G_BEEP skips the
+The editor clicks once per character taken; the ROM's G_BEEP skips the
 click when the current channel is an `F` record, so a file is read
 silently ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_beep-3029h)).
 
@@ -161,4 +161,4 @@ for every character.
 - The ROM side: [../rom/exrom-fdd.md](../rom/exrom-fdd.md#the-channel-driver).
 - The Pico side: [../firmware/tspico-disk.md](../firmware/tspico-disk.md#open--channels-tpichopen-tpichwr-tpichrd-tpichclose),
   [../firmware/channels.md](../firmware/channels.md).
-- Byte by byte: [PROTOCOL.md §7](../../PROTOCOL.md#7-the-channel-commands-rom-21-firmware-20).
+- Byte by byte: [PROTOCOL.md §7](../../PROTOCOL.md#7-the-channel-commands).

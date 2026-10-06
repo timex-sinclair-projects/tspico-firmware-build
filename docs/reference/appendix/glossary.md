@@ -17,7 +17,7 @@ set through ports F4h and FFh. [rom/overview.md](../rom/overview.md).
 
 **Bank stack.** The RAM stack at (65CEh) on which the HOME→EXROM thunk at
 03FCh pushes a frame for every call and pops it on return. An error raised
-inside the EXROM used to leak one frame per error; ROM 2.1's `GUARDED` and
+inside the EXROM used to leak one frame per error; the disk module's `GUARDED` and
 `H_TRAP` fix it. [exrom-fdd.md](../rom/exrom-fdd.md), [home.md](../rom/home.md).
 
 **BIOS.** The jump table at EXROM 1840h (G_MODE, S_MODE, G_VERS, TX_A, RX_A,
@@ -28,7 +28,7 @@ across ROM versions. [exrom-driver.md](../rom/exrom-driver.md),
 **Body.** The second part of a command transaction: `'D'`, a 16-bit length,
 the command text, an XOR. [ports-and-status.md](ports-and-status.md).
 
-**BREAK abort.** ROM 2.0's handling of CAPS SHIFT + SPACE during a Pico
+**BREAK abort.** The ROM's handling of CAPS SHIFT + SPACE during a Pico
 transaction: `OUT (0Fh),03h`, a wait for READY + IDLE, Report D. The Pico
 sees the 0Fh write and goes idle. [exrom-sync.md](../rom/exrom-sync.md),
 [flows/break-and-recovery.md](../flows/break-and-recovery.md).
@@ -73,7 +73,7 @@ genuine 8K EXROM in chunk 0 and TS-Pico code in chunk 1. [rom/overview.md](../ro
 **EXT_SA_FUNCT.** The dictionary of external commands (`tpi:.name`) in
 `TS/extcmd.py` or `/dev_extcmd.py`. [extcmd.md](../firmware/extcmd.md).
 
-**`f:` and `d:`.** Name prefixes ROM 2.1 understands: `f:path` is a plain
+**`f:` and `d:`.** Name prefixes the ROM understands: `f:path` is a plain
 file on the SD card (a +3DOS-headed file for LOAD/SAVE, a text or binary
 file for a channel); `d:pattern` opens a folder listing as a channel.
 [tspico-disk.md](../firmware/tspico-disk.md), [exrom-fdd.md](../rom/exrom-fdd.md).
@@ -188,7 +188,7 @@ on it, so `CP 85h` in the function chain matches 86h, and `STATUS_TO_REPORT`
 is entered with A = status − 1. [exrom-chunk1.md](../rom/exrom-chunk1.md),
 [exrom-driver.md](../rom/exrom-driver.md).
 
-**SYNC.** ROM 2.0's `OUT (0Fh),03h` at the start of every transaction, with
+**SYNC.** The ROM's `OUT (0Fh),03h` at the start of every transaction, with
 a ~1 s wait for READY + IDLE; the Pico abandons anything in progress and
 restores the pre-load. [exrom-sync.md](../rom/exrom-sync.md),
 [tspico_io.md](../firmware/tspico_io.md) `MQ_TO_IDLE`.
@@ -226,7 +226,7 @@ flash (U10) and the SRAM (U13). [hardware.md](../hardware.md).
 the upgrade payload each ship as one. [boot.md](../firmware/boot.md).
 
 **Upgrade UF2.** The separate firmware that serves the Z80 updater tape and
-feeds it the new ROM images, for boards whose ROM predates firmware 2.0.
+feeds it the new ROM images, for boards whose ROM is behind the release (in practice, ROM 1.1).
 [upgrade.md](../firmware/upgrade.md).
 
 **V6 pattern, pre-load chain.** The rule, from the sixth protocol observer,

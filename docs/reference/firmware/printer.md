@@ -8,8 +8,8 @@ The 2068 sends its printer output to the TS-Pico while bit 0 of TPMODE
 `SAVE "tpi:ts2040"` undoes; the ROM parses both commands itself and the Pico
 never sees them ([user-manual.md D.2](../../manual/user-manual.md),
 [rom/exrom-chunk1.md](../rom/exrom-chunk1.md)). The module docstring records
-the wire format, captured on hardware with the 1.8b ROM on 2026-09-27 and
-the same in ROM 2.1: an LPRINT or LLIST character is one transaction, the
+the wire format, captured on hardware on 2026-09-27 and
+unchanged in ROM 2.2: an LPRINT or LLIST character is one transaction, the
 10-byte pre-header `42 05 FF <char> 01|02 <flags> <ATTR_P> LL HH <xor>`,
 with an 8-byte body (the character's pattern) for characters of 80h and
 above; LLIST arrives already detokenised, and ENTER is 0Dh. COPY is
@@ -52,7 +52,7 @@ follows the EXROM's sequences, with the SD card as a temp folder.
 | 112–128 | `next_name` |
 | 131–139 | `_PALETTE` |
 | 142–149 | `_pix_addr`, `screen_size` |
-| 152–168 | `HIRES_K`, `hires_ink_paper`: the 2.1 ROM's 64-column colour byte |
+| 152–168 | `HIRES_K`, `hires_ink_paper`: the ROM's 64-column colour byte |
 | 171–206 | `row_colours`: the four screen modes |
 | 209–243 | `write_bmp`: the file |
 
@@ -219,7 +219,7 @@ the scale factors.
 
 ## `HIRES_K`
 
-The 2.1 ROM's COPY (EXROM `sub_16f3h` in the listing, which opens with
+The ROM's COPY (EXROM `sub_16f3h` in the listing, which opens with
 `ld a,042h` and `SYNC_WRITE`) reads port FFh and, in 64-column mode, sends
 the colour choice `k` (bits 3–5 of the port) not as `k` but as the `k`-th
 byte of the table at EXROM 16EBh, `07 16 43 52 25 34 61 70` (the listing's

@@ -2,9 +2,8 @@
 
 This is the byte-level reference for how a Timex Sinclair 2068 and the TS-Pico
 talk: the two I/O ports, the status byte, every kind of transaction, and the
-rules a firmware handler must follow. It describes **firmware 2.0 and later with ROM 2.0
-and ROM 2.1/2.2** (the disk-command ROM; 2.2 is 2.1 with two fixes), as the code on `main` does it. Where an
-older document or the original spec says otherwise, this one follows the code.
+rules a firmware handler must follow. It describes **firmware 2.2.1 with ROM 2.2**
+(the disk-command ROM), as the code on `main` does it. Where an older document or the original spec says otherwise, this one follows the code.
 
 > **New to all this?** Start with [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md), a
 > plain-language walk through the same ground. Come back here for the details.
@@ -12,14 +11,14 @@ older document or the original spec says otherwise, this one follows the code.
 > **Source paths** like `TS/tspico_io.py` are Python-package paths; the files
 > are under `src/` (`src/TS/tspico_io.py`). ROM addresses are written
 > `EXROM $xxxx` / `HOME $xxxx`; the ROM sources are
-> `src/rom/patches/tspico-sync.asm` (ROM 2.0) and `src/rom/fdd/fddcmd.asm` +
-> `tools/build-rom.py` (ROM 2.1).
+> `src/rom/patches/tspico-sync.asm` (SYNC, BREAK abort, the BIOS wait) and
+> `src/rom/fdd/fddcmd.asm` + `tools/build-rom.py` (the disk commands and channels).
 
 > **History.** The protocol is Gustavo Pane's TPI design
 > ([`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) tells that story). Since then
 > the Pico side moved from one shared FIFO to two ports ("dual-port",
 > [`DUAL_PORT_DEVELOPMENT.md`](DUAL_PORT_DEVELOPMENT.md)), the status port
-> became a real handshake (auto-busy, issue #14), and ROM 2.0 added SYNC,
+> became a real handshake (auto-busy, issue #14), and the ROM gained SYNC,
 > BREAK abort and the IDLE/RECOVERED bits (issue #51).
 
 ---
@@ -29,7 +28,7 @@ older document or the original spec says otherwise, this one follows the code.
 | Port  | Decimal | Z80 `IN` gives                                             | Z80 `OUT` does                                        |
 |-------|---------|------------------------------------------------------------|-------------------------------------------------------|
 | `$0E` | 14      | the next byte of the Pico's TX FIFO; **`$00` if it's empty** | puts the byte in the Pico's RX FIFO (9-bit word, bit 8 = 0) |
-| `$0F` | 15      | the **status byte** (PIO register Y); reading it takes nothing from any FIFO | also reaches the RX FIFO, as `0x100 \| value`. Firmware 2.0 treats **any** write here as SYNC / abort (§4.1) |
+| `$0F` | 15      | the **status byte** (PIO register Y); reading it takes nothing from any FIFO | also reaches the RX FIFO, as `0x100 \| value`. The firmware treats **any** write here as SYNC / abort (§4.1) |
 
 Both FIFOs are **4 entries deep** and not joined (`TX_DEPTH`,
 `TS/tspico_io.py`). There is no `/WAIT` line: the Z80 is never held up. So:
@@ -39,7 +38,7 @@ Both FIFOs are **4 entries deep** and not joined (`TX_DEPTH`,
 
 Everything below exists to keep both of those from happening.
 
-Earlier firmware (1.5 and before) served both ports from one FIFO and
+The 1.1 firmware served both ports from one FIFO and
 interleaved `0x40` "continue" bytes with the data. That is gone: `$0F` is a
 register, and a `0x40` in TX today is an orphan byte (§13).
 
@@ -73,8 +72,8 @@ Z80 (there's no `/WAIT`), and the SM would miss the next bus cycles. With
 
 | Bit | Name | Meaning |
 |-----|------|---------|
-| 6 | READY | 1 = the Pico has its answer queued, or is ready for the next phase. The only bit ROMs up to 1.7 test. |
-| 3 | IDLE | 1 = no transaction is open (firmware 2.0) |
+| 6 | READY | 1 = the Pico has its answer queued, or is ready for the next phase. The only bit the 1.1 ROM tests. |
+| 3 | IDLE | 1 = no transaction is open |
 | 2 | RECOVERED | **0** = the Pico gave up on a transaction by itself (active low). Cleared by the next SYNC. |
 | 7, 5, 4, 1, 0 | — | reserved |
 
@@ -108,7 +107,7 @@ fast Z80 could read before the Pico had queued anything.
 |------|------|
 | Z80 OUTs inside a block (pre-header, body, SAVE data) | one every ~30 µs (43 µs in SAVE data), **no handshake** |
 | Z80 reads inside a block (LOAD data) | one every ~44–50 µs, **no handshake** |
-| `tpi:chrd` data phase (ROM 2.1 driver) | one every ~75 µs |
+| `tpi:chrd` data phase (the ROM's channel driver) | one every ~75 µs |
 | The Pico gives up on a half-received pre-header or body | after **1 s** of silence (`RX_CAPTURE(..., 1000)`, `BODY_READ_TIMEOUT_MS`) |
 | The Pico gives up on command output nobody reads | 10 min (`CMD_STALL_MS`); key waits: a day (`KEY_WAIT_MS`) |
 | The ROM's ready-wait | 226 polls through a debounced BREAK scan, **~19.9 s**, ≥ 88 ms per call |
@@ -117,9 +116,9 @@ A Z80 program must never use `OTIR`/`INIR` to the Pico.
 
 ## 4. Transactions
 
-### 4.1 SYNC (ROM 2.0 and firmware 2.0)
+### 4.1 SYNC
 
-ROM 2.0 opens **every** transaction with `OUT (0Fh),03h` and then waits up to
+The ROM opens **every** transaction with `OUT (0Fh),03h` and then waits up to
 ~1 s for READY + IDLE before its first byte (`SYNC_WRITE` EXROM `$2300`,
 `SYNC_WAIT` `$230E`). The patched sites are the SAVE pre-header (`$189A`),
 every LOAD/VERIFY/MERGE block (`$1998`), `tpi:` commands (`$1BAA`), the LPRINT
@@ -140,11 +139,11 @@ an earlier client left it in.
   **Report T "TS-Pico reset, try again"** (ERR_NR `$1C`, `RD_STATUS`).
 - **Wait for IDLE before a SYNC** that follows a READY-not-IDLE answer
   (§5.6): a SYNC sent while the Pico is still in `PROCESS_CMD`'s tail is lost
-  with the pre-header behind it (Report T). The ROM 2.1 channel driver does.
+  with the pre-header behind it (Report T). The ROM's channel driver does.
 
-ROM 2.0 **requires** firmware 2.0: older firmware reads the SYNC byte as the
-first pre-header byte and hangs or misaligns. ROMs up to 1.7 never write `$0F`,
-and firmware 2.0 still serves them.
+The ROM **requires** firmware that knows SYNC: the 1.1 firmware reads the SYNC
+byte as the first pre-header byte and hangs or misaligns. The 1.1 ROM never
+writes `$0F`, and the current firmware still serves it.
 
 ### 4.2 The pre-load byte
 
@@ -192,7 +191,7 @@ Two layouts share the byte positions:
 
 ```
 Z80                                                   Pico
-[wait IDLE]                  (ROM 2.1 channel driver)
+[wait IDLE]                  (the channel driver)
 OUT (0Fh),03h  SYNC --------------------------------> MQ_TO_IDLE: TX=[01], status FF
 wait READY+IDLE (<= ~1 s)
 OUT 'B', 0, FF, PMR1 lo/hi, PMR2 lo/hi, LEN lo/hi, XOR  RX_CAPTURE, 10 words
@@ -221,7 +220,7 @@ are `"TPI:DIR"` and so on); `getArgs(cmd)` returns the rest, case kept.
 Handlers receive `cmd = "D.." + text`.
 
 From BASIC the ROM only sends names of 6–31 characters as commands (EXROM
-`$1A90`/`$1AFC`); the ROM 2.1 module enters past that gate
+`$1A90`/`$1AFC`); the disk-command module enters past that gate
 (`SESSION_NAMED` `$1AAC`). A machine-code client has no gate: LEN is 16 bits.
 
 The names `tpi:tape`, `tpi:sdcard`, `tpi:picopt` and `tpi:ts2040` never reach
@@ -258,7 +257,7 @@ A = status − 1:
 | 9 | 8 | 9 STOP statement | `$08` | `_9_9_STOP` |
 | 10 | 9 | J Invalid I/O device | `$12` | `_10_J_Invalid_IO` |
 | 11–127 | ≥ 10 | D BREAK - CONT repeats | `$0C` | `_11_D_Break` |
-| RECOVERED bit | — | T TS-Pico reset, try again (ROM 2.0) | `$1C` | — |
+| RECOVERED bit | — | T TS-Pico reset, try again | `$1C` | — |
 
 ### 5.4 The answer: a response function (status ≥ `$80`)
 
@@ -276,8 +275,8 @@ becomes the command's result.
 | `$85` | GET STATUS | status; the Z80 OUTs a 2-bit mask (b0 keyboard, b1 aux) | `$21CB` | unused |
 | `$86` | PRINT STRING WITH LOOP | status, then pages: text, `$00` → the Z80 waits for a key, waits READY, OUTs the key; `N` ends the loop; any other key: it waits READY and prints the next page. `$03` ends the loop. | `$21E3` (loop `$21E7`, guard `$22A1`) | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | `$87` | (spec: "print n characters") | status | calls HOME `$08A6`, which clears the screen like CLS | unused |
-| `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | **ROM 2.1 only**: `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
-| `$80`, `$89`–`$FF` (and `$88` on ROM 2.0) | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
+| `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
+| `$80`, `$89`–`$FF` | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
 
 In the firmware (`TS/tspico.py`, issue #16) these are `FN_PRINT_STRING` (`$81`), `FN_PRINT_STRING_KEY` (`$82`), `FN_PRINT_CHAR` (`$83`), `FN_RETURN_KEY` (`$84`), `FN_GET_STATUS` (`$85`), `FN_PRINT_LOOP` (`$86`) and `FN_PRINT_LOOP_LOWER` (`$88`); the `$00` that ends a string or a page is `STR_END`, the `$03` that ends a loop `LOOP_END`, and a pre-header's first byte is `PRE_HEADER` (`$00`), `PRE_DATA` (`$FF`) or `PRE_CMD` (`$42`, `'B'`). Each use in the code also gives the number in its comment.
 
@@ -294,7 +293,7 @@ Keys (`GET_KEY_AND_SEND` `$0471` → `SEND_KEY` `$1C40`): letters are sent **upp
 case**, after a ready-wait. The Pico compares with `78` (`N`) only, so a
 machine-code client must send upper case too. At a `SEND_MSG2` "Scroll?"
 prompt a digit also sets the page length (`1`–`9` lines, `0` = 10); any other
-key is a full page. ROM 2.0 puts a BREAK test in front of the key poll
+key is a full page. The ROM puts a BREAK test in front of the key poll
 (`KEYWAIT`, patched at `$0479`).
 
 ### 5.5 Mounting: `LOAD "tpi:name"` (TADDR 1–3)
@@ -325,7 +324,7 @@ VERIFY), IX = destination, DE = length.
 
 ```
 Z80                                                   Pico (LOAD_TS)
-SYNC (ROM 2.0)
+SYNC
 OUT flag, TADDR, BANK, SESSION lo/hi, IX lo/hi, DE lo/hi, XOR
 IN  status  (the pre-load; must be 1, else Report R)
 wait READY ........................................... queue the first bytes, then READY
@@ -366,7 +365,7 @@ then the 2068 has printed `0 OK` and gone. The final status waits for the SD
 write, so a failed write is reported as J (§13). `SAVE ""` and names over 10
 characters are refused by the ROM before anything is sent.
 
-## 7. The channel commands (ROM 2.1, firmware 2.0)
+## 7. The channel commands
 
 `OPEN #`, `PRINT #`, `INPUT #` and `CLOSE #` on `f:` and `d:` streams become
 ordinary commands (client: `fddcmd.asm` `CH_SEND`/`CH_FETCH`/`CH_STATUS`;
@@ -414,7 +413,7 @@ A jump table for machine-code programs, stable across ROMs:
 |-------|------|----------|
 | `$1840` | G_MODE | BC = TPMODE (low nibble); AF kept |
 | `$1842` | S_MODE | TPMODE := A AND `0Fh`; AF kept |
-| `$1844` | G_VERS | BC = the interface version: `$0015` v1.1/1.5w, `$0017` v1.7, `$0020` ROM 2.0, `$0021` ROM 2.1, `$0022` ROM 2.2 |
+| `$1844` | G_VERS | BC = the interface version: `$0015` on ROM 1.1, `$0022` on ROM 2.2 |
 | `$1846` | TX_A | `OUT (0Eh),A`; no wait, no BREAK check |
 | `$1848` | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | `$184A` | C_END | wait READY, read the answer, run the response functions. NC = status 1 (A = 0). C = failed, see below. |
@@ -422,20 +421,20 @@ A jump table for machine-code programs, stable across ROMs:
 
 C_END's failure codes:
 
-| | ROM 2.0 | ROM 2.1 |
-|---|---|---|
-| error status *s* | A = *s* − 1 | A = *s* − 1 |
-| timeout | A = `02h` — **the same as status 3 (F)** | A = `09h` (J) |
-| BREAK | `0Ch` | `0Ch` |
-| Pico reset (RECOVERED) | `1Ch` | `1Ch` |
+| Failure | A |
+|---|---|
+| error status *s* | *s* − 1 |
+| timeout | `09h` (J) |
+| BREAK | `0Ch` |
+| Pico reset (RECOVERED) | `1Ch` |
 
-On ROM 2.0, call WF_NPH first and treat a C_END failure as A = status − 1.
-ROM 2.1 sends the table entry (`$184F`) to the module's `C_END2` (`$301B`), so a
-timeout is J. `0Ch` and `1Ch` never collide with a status: the firmware's
+The table entry (`$184F`) goes to the module's `C_END2` (`$301B`). It calls
+WF_NPH first and turns its timeout (`02h`) into `09h`, so a silent Pico is J;
+read as a status, `02h` would be status 3, F. `0Ch` and `1Ch` never collide with a status: the firmware's
 highest is 11. Note that C_END runs the response functions, which can raise a
 report from inside (BREAK in a key wait, RECOVERED in the `$86` loop).
 
-Other fixed EXROM addresses (ROM 2.0/2.1): `SYNC_WRITE` `$2300`, `SYNC_WAIT`
+Other fixed EXROM addresses: `SYNC_WRITE` `$2300`, `SYNC_WAIT`
 `$230E`, `STATUS_TO_REPORT` `$1BF3` (A = status − 1; never returns),
 `READ_STATUS` `$0655`, `SESSION_SETUP` `$1A73`, `SESSION_NAMED` `$1AAC`.
 **`$2003`, `$2006` and `$2027`–`$203C` are `JP self` padding: calling one hangs.**
@@ -443,16 +442,16 @@ Other fixed EXROM addresses (ROM 2.0/2.1): `SYNC_WRITE` `$2300`, `SYNC_WAIT`
 A RAM program reaches the EXROM through HOME `$03FC` (HL = target; A, F, BC,
 DE in and out; **IX not kept**; an HL argument goes in `$5DCD`), with
 interrupts off around the call (§13, the bank-switch pitfall). A report raised inside the
-EXROM leaks four bytes of the bank-switch stack at `($65CE)` each time; ROM
-2.1's `GUARDED` traps ERR_SP for that. See the programmer's manual for worked
+EXROM leaks four bytes of the bank-switch stack at `($65CE)` each time; the
+ROM's own `GUARDED` (`fddcmd.asm`) traps ERR_SP for that. See the programmer's manual for worked
 examples; most programs are better off driving the ports directly.
 
 ## 10. ZX48 mode
 
 After `tpi:zx48` the Pico serves the customised Spectrum ROM (flash slot 0) and
 speaks its protocol: no status port, no pre-header, no echo. `'L'` → flag +
-content + CRC; `'S'` → a block; `'T'` (ZX v3 ROM) → `LOAD "tpi:name"`; ZX v4
-also `SAVE "tpi:dir"`, flagged by bit 7 of the op byte, with the reply in
+content + CRC; `'S'` → a block; `'T'` → `LOAD "tpi:name"`, or, on the ZX v4
+ROM, `SAVE "tpi:dir"`, flagged by bit 7 of the op byte, with the reply in
 pieces (status, then length 1–255 + bytes, repeated, then 0). The V6
 pre-load chain does not apply (§13). The 2068 leaves ZX48 mode with
 `OUT 244,0` then `OUT 14,14`.
@@ -738,8 +737,8 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   `TS2068_IO` and `ZX48_IO` drain stdin at their idle heartbeat; see
   `src/test/stdin_drain_hosttest.py`.
 - **A reply the ROM answers straight away must say READY, not IDLE.**
-  `MQ_READY()` sets Y to `0xFF`, which is READY *and* IDLE. A 1.8b-style
-  ROM that sends its next command as soon as it has this one's answer
+  `MQ_READY()` sets Y to `0xFF`, which is READY *and* IDLE. A ROM that
+  sends its next command as soon as it has this one's answer
   (the fdd channel driver: `CLOSE #` flushes, then sends `tpi:chclose`
   at once) waits only for IDLE after its SYNC. If IDLE is already up while
   `PROCESS_CMD`'s tail is still draining and logging, the tail's own IDLE
@@ -762,18 +761,12 @@ Each of these was a real bug. Most show up one command *after* the mistake.
 - **Don't write `0x40`.** It was the single-port "continue" byte. Port
   `$0F` is a register now; a `0x40` in TX is read as data (§1).
 - **One answer per command, including external commands.** The two example
-  commands that shipped in `TS/extcmd.py` with firmware 2.0 and earlier broke
-  this:
+  commands in `TS/extcmd.py` used to break this:
   `.rndw` answered `0x01` and then sent the word as extra bytes, `.fact` sent
   a message and then more bytes with a blocking `MQ.put`. The extra bytes are
   orphans; from BASIC they happened to be read by `IN 14`, and the next
-  command's SYNC now clears what's left, but on older ROMs they became the
-  next command's status. `src/test/extcmd_hosttest.py` checks the fixed ones.
-- **C_END's `A = 02h` is ambiguous on ROM 2.0** (timeout, or status 3 =
-  Report F). Call WF_NPH first, or use ROM 2.1, where a timeout is `09h` (§9).
-- **Function `$88` exists only on ROM 2.1.** On ROM 2.0 it is Report D with
-  the rest of the answer unread. The firmware sends it only after
-  `tpi:fopen`, which only ROM 2.1 sends.
+  command's SYNC now clears what's left, but on a ROM without SYNC (1.1) they
+  became the next command's status. `src/test/extcmd_hosttest.py` checks the fixed ones.
 - **Send `N` in upper case to end a `$86` loop.** The Pico compares with 78;
   the ROM upper-cases letters, a machine-code client must too.
 - **Byte 23 in a channel write is always a TAB**, in binary mode too (§7).
@@ -800,8 +793,8 @@ Each of these was a real bug. Most show up one command *after* the mistake.
 | `TS/tspico.py` | the dispatcher (`TS2068_IO`), `PROCESS_CMD`, every built-in command (`SA_funct`), `SEND_MSG`/`SEND_MSG2`/`CMD_PUT`/`CH_READY`/`SD_CALL`, `PRINT_IO`, `PICO_STATUS` |
 | `TS/channels.py`, `TS/catalog.py`, `TS/native.py` | channel, listing/path and `f:` file logic (pure Python, host-tested) |
 | `TS/extcmd.py` | the external-command table and its examples |
-| `rom/patches/tspico-sync.asm` | ROM 2.0: SYNC, BREAK abort, RECOVERED/Report T, the BIOS wait |
-| `rom/fdd/fddcmd.asm`, `tools/build-rom.py` | ROM 2.1: disk commands, `f:`/`d:` channels, function `$88`, `C_END2` |
+| `rom/patches/tspico-sync.asm` | SYNC, BREAK abort, RECOVERED/Report T, the BIOS wait |
+| `rom/fdd/fddcmd.asm`, `tools/build-rom.py` | disk commands, `f:`/`d:` channels, function `$88`, `C_END2` |
 | `test/` | host tests and bus harnesses |
 | `manifest.py` | the MicroPython freeze list: a new `TS/` module must be added here |
 
@@ -812,7 +805,7 @@ Each of these was a real bug. Most show up one command *after* the mistake.
 - [`GUSTAVO_PROTOCOL.md`](GUSTAVO_PROTOCOL.md) — the original design, and why
   the ROM was modified. Historical: where it differs, this document wins.
 - [`EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md) — external commands.
-- [`DISK_COMMANDS_SPEC.md`](DISK_COMMANDS_SPEC.md) — ROM 2.1's commands and
+- [`DISK_COMMANDS_SPEC.md`](DISK_COMMANDS_SPEC.md) — the ROM's disk commands and
   channels, from the BASIC side.
 - [`rom-analysis/`](rom-analysis/) — the ROM disassemblies, memory map and
   error-trapping notes.

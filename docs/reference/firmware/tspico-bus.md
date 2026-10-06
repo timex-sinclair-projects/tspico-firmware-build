@@ -270,7 +270,7 @@ helpers in this section (issue #51, stage 4; the comment at 850–867).
 
 Before them, command output used `MQ.put()`, which blocks for good once the
 4-deep TX FIFO is full and the Z80 has stopped reading — and no watchdog
-covers commands. The 1.8b ROM's BREAK at a "Scroll? (Y/n)" prompt or a menu
+covers commands. The ROM's BREAK at a "Scroll? (Y/n)" prompt or a menu
 key wait arrives as a port-0Fh write (word `0x103`); `MQ.get()` handed it
 back as a key, `SEND_MSG2` took it for "next page" and wrote the erase and
 the next page into a TX nobody read. The Pico hung until reset.
@@ -288,7 +288,7 @@ The contract now:
 - **`PROCESS_CMD` catches it** ([tspico-dispatch.md](tspico-dispatch.md),
   6066): `CMD_FLUSH` empties both FIFOs, the log says which of the two it
   was, and the tail stages the one pre-load and says READY + IDLE — or
-  RECOVERED when the Z80 went silent. READY + IDLE is what the 2.x ROM's
+  RECOVERED when the Z80 went silent. READY + IDLE is what the ROM's
   `BRK_ABORT` waits for before it gives Report D
   ([../rom/exrom-sync.md](../rom/exrom-sync.md)).
 
@@ -413,7 +413,7 @@ call in the file uses the default `ready=True`.
 The Z80's key at a prompt: its `OUT (0Eh)` of the key code. Waits with
 `RX_WORD(MQ, KEY_WAIT_MS)` (a day — the user may take as long as they
 like). Returns `w & 0xFF`. A timeout (`-1`) raises `CmdAbort(3)`; a word
-with `PORT_0F` (bit 8) set — the 1.8b-and-later ROM's BREAK at the key
+with `PORT_0F` (bit 8) set — the ROM's BREAK at the key
 wait, or a SYNC — raises `CmdAbort(1)`.
 
 When it returns, the PIO has already dropped Y to BUSY (auto-busy after the
@@ -868,7 +868,7 @@ one in is all it takes. `test_gate` pins it.
 
 The answer to a command that needs the card when there is none. Logs
 "`cmd_word`: no SD card" at level 1, then: for a command in `SD_QUIET`
-(`tpi:chopen`, `tpi:chwr`, `tpi:chrd`, `tpi:fopen` — sent by ROM 2.1 in the
+(`tpi:chopen`, `tpi:chwr`, `tpi:chrd`, `tpi:fopen` — sent by the ROM in the
 middle of a BASIC statement), `CH_REPLY(_10_J_Invalid_IO)`, a bare status,
 because a printed message would move the ROM's current channel; for any
 other, `SEND_MSG(NO_CARD_MSG, "", _10_J_Invalid_IO, True)`, the message
@@ -888,7 +888,7 @@ that makes or removes a folder does that itself.
 
 ## The channel replies
 
-ROM 2.1's channel driver (`OPEN #`, `PRINT #`, `INPUT #`, `CLOSE #` on an
+The ROM's channel driver (`OPEN #`, `PRINT #`, `INPUT #`, `CLOSE #` on an
 `f:` or `d:` stream; [../rom/exrom-fdd.md](../rom/exrom-fdd.md)) sends
 `tpi:chopen`, `tpi:chwr`, `tpi:chrd` and `tpi:chclose` from inside a BASIC
 statement. Two things differ from an ordinary command, and these three

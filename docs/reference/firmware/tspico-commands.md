@@ -13,7 +13,7 @@ calls the handler. This chapter is that table, one row per word, and then
 every handler of this part of the file in source order: what each form of
 the command does, what it answers, which reports it gives and why, what
 it needs from the bus and the SD card, and what state it changes. The
-handlers of ROM 2.1's disk keywords and channels (`DISK_*`,
+handlers of the ROM's disk keywords and channels (`DISK_*`,
 `NATIVE_OPEN`, `CH_*`) are in [tspico-disk.md](tspico-disk.md); mounting
 (`LOAD "tpi:name"`, `MOUNT_FILE`, `LOAD_TPI`) and the helpers the handlers
 share (`getArgs`, `PARAMS`, `ChangeDir`, `getBoot`, `getDock`,
@@ -149,8 +149,8 @@ applies (the word is not in `SD_FREE`).
 | `tpi:erase` | DISK_ERASE ([tspico-disk.md](tspico-disk.md#disk_erasepre-cmd)) | yes | a name or a pattern | `SEND_MSG`, or `PROMPT_EACH` |
 | `tpi:format` | DISK_FORMAT ([tspico-disk.md](tspico-disk.md#disk_formatpre-cmd)) | yes | `x.tap` or `dir/` | `SEND_MSG` |
 | `tpi:ren` | DISK_REN ([tspico-disk.md](tspico-disk.md#disk_renpre-cmd)) | yes | `old\|new` or `old new` | `SEND_MSG` |
-| `tpi:fopen` | NATIVE_OPEN ([tspico-disk.md](tspico-disk.md#native_openpre-cmd)) | yes | sent by ROM 2.1 before `SAVE`/`LOAD "f:…"` | `SEND_MSG`, or the `88h` prompt |
-| `tpi:chopen` | CH_OPEN ([tspico-disk.md](tspico-disk.md#ch_openpre-cmd)) | yes | sent by ROM 2.1's `OPEN #` | `CH_REPLY` |
+| `tpi:fopen` | NATIVE_OPEN ([tspico-disk.md](tspico-disk.md#native_openpre-cmd)) | yes | sent by the ROM before `SAVE`/`LOAD "f:…"` | `SEND_MSG`, or the `88h` prompt |
+| `tpi:chopen` | CH_OPEN ([tspico-disk.md](tspico-disk.md#ch_openpre-cmd)) | yes | sent by the ROM's `OPEN #` | `CH_REPLY` |
 | `tpi:chwr` | CH_WRITE ([tspico-disk.md](tspico-disk.md#ch_writepre-cmd)) | yes | sent by `PRINT #` | `CH_REPLY` |
 | `tpi:chrd` | CH_READ ([tspico-disk.md](tspico-disk.md#ch_readpre-cmd)) | yes | sent by `INPUT #`, `INKEY$ #` | a data phase |
 | `tpi:chclose` | CH_CLOSE ([tspico-disk.md](tspico-disk.md#ch_closepre-cmd)) | no | sent by `CLOSE #` | `CH_REPLY` |
@@ -436,7 +436,7 @@ Beware:
 
 ### `CDIR(pre, cmd)`
 
-`tpi:cd`: change the current folder. ROM 2.1's `MOVE TO "x"` arrives as
+`tpi:cd`: change the current folder. The ROM's `MOVE TO "x"` arrives as
 `tpi:cd x` and `MOVE TO ""` as `tpi:cd -`
 ([../rom/exrom-fdd.md](../rom/exrom-fdd.md)).
 

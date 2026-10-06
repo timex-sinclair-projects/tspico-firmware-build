@@ -15,7 +15,7 @@ creates most of the run-time globals; part 4
 2068; part 5 ([tspico-files.md](tspico-files.md)) the functions that fill
 the caches described here; part 6 ([tspico-commands.md](tspico-commands.md))
 the `tpi:` handlers that read `TSP`; part 7 ([tspico-disk.md](tspico-disk.md))
-the ROM 2.1 disk commands and the channels.
+the ROM's disk commands and the channels.
 
 `NULL_SM` (line 393) is a PIO program and is explained in [pio.md](pio.md).
 
@@ -23,7 +23,7 @@ the ROM 2.1 disk commands and the channels.
 
 | Lines | What |
 |---|---|
-| 1–318 | The changelog comment: Ryan's history of the single-port firmware up to 1.5 ([below](#the-changelog-at-the-top-of-the-file)) |
+| 1–318 | The changelog comment: Ryan's history of the single-port firmware ([below](#the-changelog-at-the-top-of-the-file)) |
 | 320–376 | Imports; the dual-port migration note on what changed from the single-port import |
 | 382–385 | The virtual printer's state: `PRT`, `prn_path`, `bmp_size`, `PRINT_FLUSH_AT` |
 | 393 | `NULL_SM` ([pio.md](pio.md)) |
@@ -55,10 +55,10 @@ and each entry says so.
 
 ## The changelog at the top of the file
 
-Lines 1 to 318 are a comment: a header box (`DATE: 2026/04/15`, `FIRMWARE
-VERSION: 1.5`, `ROM: 1.5W`), a `CHANGELOG` of about 270 one-line items, and a
+Lines 1 to 318 are a comment: a header box (`DATE: 2026/04/15`, then the
+firmware and ROM versions of that day), a `CHANGELOG` of about 270 one-line items, and a
 `TO DO` list. It is Ryan's changelog for the single-port firmware, and it
-stops at firmware 1.5. The same block heads the archived copy of that
+stops before the dual-port rewrite. The same block heads the archived copy of that
 firmware, [`archive/tspico-ryan.py`](../../../archive/tspico-ryan.py), whose
 header has one more line (`DEPENDS: tspico_upgrade.py`) that this file has
 lost; the 2026-09-30 audit used that copy to trace anything older than the
@@ -88,13 +88,13 @@ eject command) is Ryan's, and some of it has since been done another way:
 the printer path exists ([printer.md](printer.md)), and a missing card is
 reported per command rather than ejected.
 
-Everything after 1.5 is recorded elsewhere, not here. The dual-port
+Everything after it is recorded elsewhere, not here. The dual-port
 migration is told in [DUAL_PORT_DEVELOPMENT.md](../../DUAL_PORT_DEVELOPMENT.md);
 the issue and pull-request numbers the code's comments cite (#14, #42,
 #43, #51, #64, #101, …) are the history of each change; the 2026-09-30 audit
 and its status are in [AUDIT-2026-09-30.md](../../AUDIT-2026-09-30.md); the
-release notes are in [`.github/release-notes/`](../../../.github/release-notes/)
-(`v2.1.md`, `v2.1.2.md`); and the git log is the record of all of it. The
+release notes are in [`.github/release-notes/`](../../../.github/release-notes/),
+one file per release tag; and the git log is the record of all of it. The
 changelog comment is kept as history and is not maintained.
 
 ## The module header
@@ -290,15 +290,12 @@ site also says the number in its comment. All are `const()`.
 | `FN_RETURN_KEY` | `0x84` | wait for a key and send it back | nothing |
 | `FN_GET_STATUS` | `0x85` | the Z80 sends a keyboard/aux mask | nothing |
 | `FN_PRINT_LOOP` | `0x86` | pages of text with a key between them, `LOOP_END` ends it | `SEND_MSG2` (2287), `PROMPT_EACH` (2755), `ListMenu` (3521, 3544), `SEND_MSG_PROMPT_YN` (5344) |
-| `FN_PRINT_LOOP_LOWER` | `0x88` | `FN_PRINT_LOOP` on the lower screen; ROM 2.1 only | `SEND_MSG_PROMPT_YN` with `lower=True`, which only `tpi:fopen`'s prompt passes (5344) |
+| `FN_PRINT_LOOP_LOWER` | `0x88` | `FN_PRINT_LOOP` on the lower screen | `SEND_MSG_PROMPT_YN` with `lower=True`, which only `tpi:fopen`'s prompt passes (5344) |
 | `STR_END` | `0x00` | end of the text (`FN_PRINT_STRING`); end of a page, the Z80 waits for a key (`FN_PRINT_LOOP`) | `SEND_MSG` (2218), `SEND_MSG2` (2422), `PROMPT_EACH` (2765), `ListMenu` (3594), `SEND_MSG_PROMPT_YN` (5353) |
 | `LOOP_END` | `0x03` | end of the `FN_PRINT_LOOP` loop, no key wait | `SEND_MSG2` (2259), `PROMPT_EACH` (2774), `ListMenu` (3532, 3642), `SEND_MSG_PROMPT_YN` (5377) |
 | `PRE_HEADER` | `0x00` | `pre[0]` of a tape header block: LOAD or SAVE | the dispatcher (6600, 6616, 6803, 6819) |
 | `PRE_DATA` | `0xFF` | `pre[0]` of a tape data block | the dispatcher (6600, 6803, 6819) |
 | `PRE_CMD` | `0x42` | `'B'`: a `tpi:` command, or the printer when `pre[1]` is 4–6 | the dispatcher (6583, 6600, 6831, 6834) |
-
-`FN_PRINT_LOOP_LOWER` on ROM 2.0 is Report D with the rest of the answer
-unread ([PROTOCOL.md §13](../../PROTOCOL.md)).
 
 ### The status codes
 
@@ -355,7 +352,7 @@ list it as a variable.
 ### `FW_VERSION`, `ROM_VERSION`
 
 `"2.2.1"` and `"2.2"`: the release number of this firmware and the ROM it
-ships with. From 2.0 on the firmware and its ROM share one `major.minor`,
+ships with. The firmware and its ROM share one `major.minor`,
 and a third part marks a firmware-only release on the same ROM (the
 comment). `PICO_STATUS.__init__` copies `FW_VERSION` into `TSP` unconditionally
 and takes `ROM_VERSION` from `config.ini` with this as the fallback;
@@ -518,7 +515,7 @@ Both are long on purpose: the Z80 legitimately stops reading for as long
 as the user takes at the ROM's own "scroll?" prompt or a slow listing, and
 a 3 s limit killed `tpi:idir` and a mount-error reply on hardware
 (2026-09-27, the comment; #69 in the audit's "still needed" list). A Z80
-that has really gone says so at once on the 2.x ROMs: BREAK or the next
+that has really gone says so at once: BREAK or the next
 command's SYNC is a port-0Fh write, which ends either wait
 ([PROTOCOL.md §3.3](../../PROTOCOL.md)). Users: `CMD_PUT`, `CMD_SEND`,
 `CMD_DRAIN`, `CH_READ` (3372), `BLKRCV` (4052, as the limit after the first
@@ -643,7 +640,7 @@ card: `CH_CLOSE` mounts the card itself in that one case, and `CLOSE #` of
 a read stream must keep working with no card in (the comment at
 3387–3407; audit §1 #3).
 
-`SD_QUIET` lists the commands the ROM 2.1 driver sends in the middle of a
+`SD_QUIET` lists the commands the ROM's disk module sends in the middle of a
 BASIC statement (`TPI:CHOPEN`, `TPI:CHWR`, `TPI:CHRD`, `TPI:FOPEN`): a
 printed message would move the ROM's current channel, so with no card they
 get the bare status from `CH_REPLY` instead of `NO_CARD_MSG`.
@@ -713,7 +710,7 @@ must never use state machines 4 or 5.
 
 `{_1_OK: 0xFF, _2_R_Tape_load: 0x1A, _3_F_Invalid_file: 0x0E,
 _4_Q_Parameter: 0x19}`: the status codes above translated into the byte
-the ZX v3 ROM puts in `ERR_NR` for `LOAD "tpi:…"` in ZX48 mode, where
+the ZX ROM puts in `ERR_NR` for `LOAD "tpi:…"` in ZX48 mode, where
 `0xFF` is `0 OK`. `ZX_TPI` sends `ZX_REPORT.get(st, 0x19)` as the first
 byte of its reply (7109), so any other status is Report Q. See
 [tspico-dispatch.md](tspico-dispatch.md), `ZX_TPI`, and

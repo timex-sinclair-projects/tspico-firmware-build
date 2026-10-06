@@ -50,8 +50,8 @@ Words used below: READY means Y = 0xFFFFFFFF, so port 0Fh reads FFh (READY +
 IDLE); "mid" is F7h (READY, transaction open); "recovered" is FBh (READY +
 IDLE, RECOVERED low); busy is 00h, which the PIO sets on every Z80 OUT
 (auto-busy, [PROTOCOL.md §3](../../PROTOCOL.md)). An RX word is 9 bits: D0–D7
-and, in bit 8, A0; "a 0Fh write" is a word with that bit set, which only a
-2.x ROM sends (SYNC and BREAK, both `OUT (0Fh),03h`; ROMs to 1.7 never write
+and, in bit 8, A0; "a 0Fh write" is a word with that bit set, which only the
+ROM's SYNC and BREAK send (both `OUT (0Fh),03h`; ROM 1.1 never writes
 0Fh).
 
 ## Map of the file
@@ -127,7 +127,7 @@ data loop reading 00h from an empty TX and give Report J
 |---|---|---|
 | `_DMA` | `rp2.DMA`, or `None` | Set at import inside `try/except ImportError`: `None` on MicroPython v1.20 and under the host tests' fake `rp2`. Every DMA path tests it and falls back to the polling loop it replaced. |
 | `_mem32` | `machine.mem32`, or `None` | `None` on a PC, where `MQX` falls back to `StateMachine.exec` and `_RING_SETUP` returns `None`. |
-| `PORT_0F` | `const(0x100)` | Bit 8 of an RX word: A0 was 1, the Z80 wrote port 0Fh. `TS_IO_DUAL` samples nine pins, D0–D7 and A0, on every OUT. Tested by every receive loop in this file; only the 2.x ROM's SYNC and BREAK set it. |
+| `PORT_0F` | `const(0x100)` | Bit 8 of an RX word: A0 was 1, the Z80 wrote port 0Fh. `TS_IO_DUAL` samples nine pins, D0–D7 and A0, on every OUT. Tested by every receive loop in this file; only the ROM's SYNC and BREAK set it. |
 | `TX_DEPTH` | `const(4)` | `TS_IO_DUAL`'s FIFOs are not joined, so TX holds four words. "TX is full" is `MQ.tx_fifo() >= TX_DEPTH` everywhere below. |
 | `LOAD_CHUNK` | `const(256)` | How many bytes a file-streamed LOAD block reads at a time. One `readinto` per byte cost too much on v1.29: the ROMs read blind every ~43–47 µs and the log showed "TX ran dry" in 6914-byte blocks on both the 2068 and ZX48 paths (hardware, 2026-10-02). |
 | `_LOAD_BUF` | `bytearray(LOAD_CHUNK)` | The chunk buffer, made once at import so the stream loops allocate nothing. Used by `LOAD_TS` (the checksum pass and the data stream when the block does not fit in RAM) and `LOAD_ZX`. |
@@ -175,7 +175,7 @@ invert(null))`: Y = 0xFFFFFFFF, the port reads FFh, which is what firmware
 always showed, so older ROMs see no difference. `"mid"` is `set(y, 8)` then
 `mov(y, invert(y))`: F7h, IDLE (bit 3) clear with READY set. Anything else is
 `set(y, 4)` then the invert: FBh, RECOVERED (bit 2, active low) clear, which
-tells a 2.x ROM this Pico gave up on a transaction by itself; the ROM reports
+tells the ROM this Pico gave up on a transaction by itself; the ROM reports
 "T TS-Pico reset, try again" and its next SYNC clears it. The two-exec values
 read as busy for the instant between the execs, which a Z80 polling for READY
 tolerates by polling again. No logging: this runs on time-critical paths.
@@ -609,12 +609,12 @@ Z80 had already accepted is left alone, because that position is where the
 user actually is.
 
 Why: the user's only way out of a LOAD that cannot match is BREAK, and a ROM
-before 2.0 never tells the Pico about it — its abort path writes nothing, and
+without SYNC, such as ROM 1.1, never tells the Pico about it — its abort path writes nothing, and
 the whole EXROM holds exactly one `OUT (0Eh),A`
 ([BREAK_AND_ABORT.md](../../rom-analysis/BREAK_AND_ABORT.md)). The search has
 walked an arbitrary distance through the tape by then, so without this the
 next LOAD starts wherever the abandoned search stopped. The signal is
-`TX_ROOM`'s 3 s stall (`why` 3) or, on a 2.x ROM, the BREAK's 0Fh write
+`TX_ROOM`'s 3 s stall (`why` 3) or the BREAK's 0Fh write
 (`why` 1); until #181 the docstring still said "the watchdog firing". Called only from `LOAD_TS`'s abort path.
 [`load_ts_hosttest.py`](../../../src/test/load_ts_hosttest.py) checks the offset
 after a BREAK.
@@ -711,7 +711,7 @@ path. `ticks_us()` wraps after ~71 minutes.
 ### `LOAD_REFUSE(pre, MQ, st)`
 
 Ends a LOAD with an error instead of a block: status `st`, 2 for Report R, 7
-for "End of file" (Report 8 where the ROM maps it; the 2.1 ROM's header search
+for "End of file" (Report 8 where the ROM maps it; ROM 2.2's header search
 shows it as R). Returns 0, or `TX_ROOM`'s 1 or 3 after a BREAK or a stall,
 having gone back to idle.
 
@@ -723,7 +723,7 @@ before the command arrived; a byte written now is read as the block's flag
 Report R and done, while a header's search just asks again (EXROM 04DDh:
 `CALL 00FC / JR NC` back), as it does after every failure inside a block — a
 bad checksum, or a final status of 2 (1A0Bh goes to the function chain at
-026Fh, not the report dispatcher). On the 2.1 ROM, 2026-10-04, a damaged
+026Fh, not the report dispatcher). On hardware on 2026-10-04, a damaged
 header was asked for every ~100 ms for ever, until the Pico's stall gave
 Report T. The one place a report gets out of a header search is the first
 status of the *next* request: anything but 00h or 01h there is `JP 1C3E`, RST
@@ -739,7 +739,7 @@ Silence is `why` 3 and a 0Fh write `why` 1: `MQ_TO_IDLE(recovered=(why !=
 1))` and return. Otherwise, for a header, the error is recorded in `_ld_err`,
 `_ld_err_t` and `_ld_err_staged`, READY is said again (the echo OUT dropped
 Y), and 0 is returned. Without SYNC the staged byte waits in TX behind the flag
-for the retry; with SYNC (ROM 2.x) the dispatcher's `MQ_TO_IDLE` would drop
+for the retry; with SYNC (ROM 2.2) the dispatcher's `MQ_TO_IDLE` would drop
 it, so the SYNC branch re-stages it from `FIRST_STATUS()`, and `LOAD_TS`,
 seeing the retry, goes straight back to idle (`LOAD_RETRY_DONE`). Either way no
 stray byte is left behind (the orphan-byte family of
@@ -752,7 +752,7 @@ Beware: `echo = bytearray(3)` on the first line is allocated and never used;
 and on a ROM without SYNC the second byte is whatever comes next reads first,
 which is by design the ROM's retry within ~100 ms — if the user breaks out of
 the search instead, that byte is the next command's first status and that
-command gets Report R *(inferred; the ROM's BREAK path on 1.x writes nothing,
+command gets Report R *(inferred; ROM 1.1's BREAK path writes nothing,
 so nothing clears it)*. [`load_ts_hosttest.py`](../../../src/test/load_ts_hosttest.py)
 pins "retry, then R, idle" with and without SYNC, R at once for a data block,
 and the tape moving past the block.
@@ -765,7 +765,7 @@ then marked staged); otherwise 0x01, with the error cleared. The ROM's retry
 follows a refusal within milliseconds, so after two seconds the error is stale
 — a BREAK took the ROM elsewhere — and dropped. Called only from the SYNC
 branch of `TS2068_IO`'s idle loop: `MQ_TO_IDLE(MQ, status=False,
-first=FIRST_STATUS())`. `load_ts_hosttest.py` uses it to model the 2.x ROM's
+first=FIRST_STATUS())`. `load_ts_hosttest.py` uses it to model the ROM's
 SYNC and checks a 3 s old error gives 0x01.
 
 ### `LOAD_RETRY_DONE(pre, MQ)`
@@ -819,15 +819,15 @@ metadata is hot from `MOUNT_FILE`'s `COPY_FILE`, so the open is sub-ms.
 
 **The bounded search.** The Z80 drives the LOAD retry loop: it asks for a
 header, compares the name itself, and asks again on a mismatch, and a ROM
-before 2.0 cannot tell the Pico it gave up ([BREAK_AND_ABORT.md](../../rom-analysis/BREAK_AND_ABORT.md)),
+without SYNC (ROM 1.1) cannot tell the Pico it gave up ([BREAK_AND_ABORT.md](../../rom-analysis/BREAK_AND_ABORT.md)),
 so the loop is bounded here. A data-block request (`pre[0] == 0xFF`) means
 the Z80 accepted a header: `TSP.ld_start = -1`, the search is over. A header
 request with no search in progress (`ld_start < 0`) starts one at the current
 `offset` and `tap_idx`, with `ld_wrapped = False`. A header request after the
 tape has wrapped (`ld_wrapped`) and come back to or past `ld_start` is a full
 lap with nothing accepted: the search ends, the file is closed if it is not the
-cached handle, and the LOAD is refused with status 7 ("End of file"; the 2.1
-ROM shows R). One lap is allowed deliberately, because a program that
+cached handle, and the LOAD is refused with status 7 ("End of file"; ROM 2.2
+shows R). One lap is allowed deliberately, because a program that
 legitimately needs to wrap cannot rewind — it does not speak TPI — and a second
 lap would only repeat the first. Then the end of the tape: `arch_len` is the
 file's size, and an `offset` at or past it is reset to block 0 with
@@ -873,11 +873,11 @@ and every byte of `hdr`, or of the file in `LOAD_CHUNK` chunks through
 search and calls `LOAD_REFUSE(pre, MQ, 0x02)`.
 
 The comment at this point records the autorun patch that used to live here,
-inherited from the v1.5 firmware and removed on 2026-10-01: a BASIC header with
+inherited from the single-port firmware and removed on 2026-10-01: a BASIC header with
 a "no autorun" line (32768 or more) had its high byte rewritten to 28h. The
 ROM already skips the autorun for those (EXROM 06C3h: `LD H,(IX+0Eh) / AND
 0C0h / JR NZ`, the same test as the Spectrum, identical in the genuine 2068
-EXROM and ROMs 1.1, 1.5w, 2.0 and 2.1; the 2068's own SAVE without LINE writes
+EXROM and ROMs 1.1 and 2.2; the 2068's own SAVE without LINE writes
 80h there, 0450h), the patch made every non-autorun program autorun at a line
 that cannot exist, and its CRC fix-up was only right when the old byte was
 exactly 80h, so FFFFh ("no autorun" from some tape tools) reached the Z80 with
@@ -933,7 +933,7 @@ what is still in TX (0–4 means it was still in the ready-wait before the data)
 local file is closed; `MQ_TO_IDLE(MQ, recovered=(why != 1))` empties both
 FIFOs, stages one 0x01 and sets the status; a line beginning "INFO:" is logged at
 level WARN for a BREAK or ERROR for a stall, with the count and the rewound offset; return. The Z80 then
-sees TX = `[01]` and FFh after a BREAK — the 2.x ROM is waiting for READY +
+sees TX = `[01]` and FFh after a BREAK — the ROM is waiting for READY +
 IDLE to raise Report D — or FBh after a stall, so its next command gets Report
 T.
 
@@ -958,7 +958,7 @@ header and data blocks load with both echoes, the final status and one
 pre-load; a BREAK mid-block is heard in the send loop and ends in idle with TX
 = `[01]` and the next LOAD working first time; a BREAK in the ready-wait
 before the data ("read 0–4 bytes"); silence mid-block gives RECOVERED; no
-thread is started; a v1.7 LOAD, which never writes 0Fh, behaves as before; a
+thread is started; a LOAD without SYNC, as ROM 1.1 sends it, which never writes 0Fh, behaves as before; a
 damaged or impossible block is Report R with the protocol left idle (at once
 for data, through the staged error for a header, with and without SYNC) and
 the tape past the block; a search skips every wrong-type block in one request
@@ -1037,7 +1037,7 @@ wants, then prints its name and asks for the next. No allocation, as
 
 ### UPDATE mode
 
-A board upgraded from 1.1 or 1.5 to this firmware still has its old TS-2068
+A board upgraded from 1.1 to this firmware still has its old TS-2068
 ROM, which cannot talk to it. Every shipped flash image has the same original
 Spectrum ROM in slot 0 (crc32 A8E12A24), and `OUT 244,3` switches to it
 whatever the 2068 ROM is, so that ROM loads the updater
@@ -1047,7 +1047,7 @@ the flag, whatever is in TX. So UPDATE mode does not answer `'L'`: TX always
 holds the next bytes of the updater tape, kept as one stream — each block's
 flag, content and CRC back to back — and the next block's flag is already
 queued behind the last block's CRC when the next `'L'` comes. Proven on
-hardware with a v15w chip ([`zx_bootstrap_harness.py`](../../../src/test/zx_bootstrap_harness.py)):
+hardware with a real flash chip ([`zx_bootstrap_harness.py`](../../../src/test/zx_bootstrap_harness.py)):
 BASIC, SCREEN$ and CODE loaded, TX never ran empty, each `'L'` arrived exactly
 at its block's flag. The four helpers are used by `src/upgrade/upgrade.py`'s
 `serve()`; [`upgrade_hosttest.py`](../../../src/test/upgrade_hosttest.py) runs
@@ -1093,7 +1093,7 @@ updater is not yet running.
 ### `LOAD_ZX(MQ, TSP)`
 
 Sends one TAP block to the Spectrum ROM: after the `'L'` that `ZX48_IO`
-consumed and the ROM's poll of 0Fh for READY (the ZX v2 ROM and later; up to
+consumed and the ROM's poll of 0Fh for READY (the customised ZX ROM, not the original in slot 0; up to
 ~3.8 s, then Report R), the response is exactly `totbytes` bytes, flag +
 content + CRC, with no status byte and no pre-load. The LED goes on. The source
 is `/assets/nofile.tap` with no mount (`f_name` empty or `totlen` 0; a WARNING
@@ -1270,7 +1270,7 @@ not in the dispatcher (#51 stage 3): the Z80 streams all 21 bytes ~43 µs a byte
 the moment it sees it, while the dispatcher was still logging and this function
 still in its TLM print. Fewer than 21 words: a 0Fh write (BREAK) logs INFO and
 returns `False`; silence sets `TSP.save_recovered` (the dispatcher answers
-RECOVERED, Report T on the 2.x ROM) and logs ERROR. The low bytes go into
+RECOVERED, Report T on the ROM) and logs ERROR. The low bytes go into
 `hdr`.
 
 **Refusals at the mid-phase status**, each through `REFUSE_SAVE` and a
@@ -1311,7 +1311,7 @@ and the code's comments; not tested as such)*. The outcomes: `RXB_STALL` with
 nothing received refuses with R ("no data after 3s" in the TLM and log text)
 rather than claim OK, which on a slow Z80 meant a data
 block streamed into a returned handler, jamming RX for the next command; a
-0Fh write (the 2.x ROM checks BREAK every 256 bytes) logs INFO and returns
+0Fh write (the ROM checks BREAK every 256 bytes) logs INFO and returns
 `False` with nothing written, the Z80 waiting for READY + IDLE; a stall
 mid-block sets `save_recovered` and logs ERROR. The dispatcher's arm point
 afterwards is the way back in every case.
@@ -1406,7 +1406,7 @@ ERROR, drains with `DRAIN_REFUSED_SAVE(MQ, 1500)` when `drain` — swallowing th
 rest of what the ROM is sending, the data block's `'S'` included, so none of
 it is dispatched as a command — and returns with `nxt` -1. Steps:
 `RX_BLOCK(MQ, hdr, 21, ZX_STALL_MS, ZX_STALL_MS, "ready")` (READY once
-listening: the `'S'` dropped Y and the ZX v2 ROM polls 0Fh before sending);
+listening: the `'S'` dropped Y and the ZX ROM polls 0Fh before sending);
 not `RXB_OK` fails without a drain. The block must be a tape header: length
 17, flag 0, parity 0, else `fail` with a drain. `blk = bytearray(n + 4)` after
 a `gc.collect()`, `MemoryError` failing with a drain. `RX_WORD(MQ,

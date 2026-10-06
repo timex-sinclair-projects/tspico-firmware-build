@@ -21,8 +21,8 @@ SAVE-ETC (01D2h) goes through F_HOOK (not `f:`) and SESSION_SETUP, which
 makes the **session id** from FRAMES and, the name not starting `tpi:`,
 returns to the stock SAVE-ETC body ([../rom/exrom-driver.md](../rom/exrom-driver.md#session_setup-1a73h-is-this-name-a-command)).
 The stock code builds the 17-byte header and prints "Start tape, then
-press any key"; v1.7's routine at 22AEh waits for a key and tests BREAK
-before anything is sent ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#the-save-prompt-and-break-v17-22aeh22fdh)).
+press any key"; the base image's routine at 22AEh waits for a key and tests BREAK
+before anything is sent ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#the-save-prompt-and-break-22aeh22fdh)).
 
 ## The header block
 
@@ -81,7 +81,7 @@ card. `tpi:newtap name` (or `FORMAT "name.tap"`) makes an empty TAP,
 mounts it and turns append on: the usual way to collect several programs
 in one tape ([../firmware/tspico-commands.md](../firmware/tspico-commands.md#new_tappre-cmd)).
 
-### `SAVE "f:path"` (ROM 2.1)
+### `SAVE "f:path"`
 
 Before step 1, the module's F_HOOK sends **`tpi:fopen path`** with the
 statement's session id and the modifier token (CODE, SCREEN$, DATA, LINE)
@@ -113,7 +113,7 @@ a card in and saving again is all it takes.
 |---|---|---|
 | no card, a bad name, a zero length, no room | step 9, the mid status | J, F, A, 6 — nothing sent after the header |
 | the header misaligned or damaged | step 9 | R |
-| BREAK at the prompt | v1.7's 22AEh, before step 1 | D |
+| BREAK at the prompt | 22AEh, before step 1 | D |
 | BREAK in a block | `STEP` → `BRK_ABORT`; `SAVE_TS` returns on the 0Fh write | D, nothing written |
 | the data damaged in transit | step 14 | R, nothing written |
 | the 2068 stops mid-block (reset) | `RX_BLOCK`'s stall, 1 s | the next command: T |
