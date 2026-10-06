@@ -1,11 +1,11 @@
 # TS/tspico.py (part 6) — the `tpi:` commands
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
-2505–2577 (`DIR`), 3414–3830 (`IDIR` … `SA_NOT_IMP`), 3895–4113
-(`APPEND`, `BLKRCV`), 4205–4718 (`CDIR` … `GETLOG`), 4798–5095
-(`LOGLEVEL` … `MEMDOCK`), 5115–5191 (`REW`), 5333–5560 (`BAD_CODE` …
-`NOP`) and 5666–5742 (the printer settings); the dispatch table
-`SA_funct` at 6170–6220, inside `TS2068_IO`.
+2505–2577 (`DIR`), 3414–3830 (`IDIR` … `SA_NOT_IMP`), 3895–4133
+(`APPEND`, `BLKRCV`), 4225–4756 (`CDIR` … `GETLOG`), 4836–5133
+(`LOGLEVEL` … `MEMDOCK`), 5153–5229 (`REW`), 5371–5598 (`BAD_CODE` …
+`NOP`) and 5704–5780 (the printer settings); the dispatch table
+`SA_funct` at 6208–6258, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -35,29 +35,29 @@ where the manual and the code differ, the entries below say so.
 | `SA_NOT_IMP(pre, cmd)` | 3827 | the seven reserved words |
 | `APPEND(pre, cmd)` | 3895 | `tpi:append` |
 | `BLKRCV(pre, cmd)` | 3960 | `tpi:blkrcv` |
-| `CDIR(pre, cmd)` | 4205 | `tpi:cd` |
-| `FWD(pre, cmd)` | 4265 | `tpi:ffw` |
-| `GETHELP(pre, cmd)` | 4354 | `tpi:help` |
-| `GETINFO(pre, cmd)` | 4521 | `tpi:info` |
-| `GETLOG(pre, cmd)` | 4609 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 4798 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 4857 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 4922 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5024 | `tpi:dock`, `tpi:memdock` |
-| `REW(pre, cmd)` | 5115 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5333 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5338 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5343 | `tpi:rm` |
-| `RM_CHECK(name)` | 5389 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5407 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5435 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5489 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5543 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5666 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5687 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5698 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5711 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5729 | `tpi:bmp` |
+| `CDIR(pre, cmd)` | 4225 | `tpi:cd` |
+| `FWD(pre, cmd)` | 4285 | `tpi:ffw` |
+| `GETHELP(pre, cmd)` | 4374 | `tpi:help` |
+| `GETINFO(pre, cmd)` | 4541 | `tpi:info` |
+| `GETLOG(pre, cmd)` | 4629 | `tpi:log` |
+| `LOGLEVEL(pre, cmd)` | 4836 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 4895 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 4960 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5062 | `tpi:dock`, `tpi:memdock` |
+| `REW(pre, cmd)` | 5153 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5371 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5376 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5381 | `tpi:rm` |
+| `RM_CHECK(name)` | 5427 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5445 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5473 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5527 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5581 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 5704 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 5725 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 5736 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 5749 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 5767 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -79,7 +79,7 @@ Then:
    `cmd[7:]` the text after `tpi:`. Handlers index into it at fixed
    offsets (`MDIR` takes `cmd[10:]`, the name after `tpi:md `).
 2. The command word is the text up to its first space, upper-cased, with
-   `TPI:`: `"TPI:DIR"`. The comment above `SA_funct` (6167–6168) says
+   `TPI:`: `"TPI:DIR"`. The comment above `SA_funct` (6205–6206) says
    commands that take a name "need a space at the end of their dictionary
    key"; no key has one, and the split on the first space makes it
    unnecessary. The comment is out of date.
@@ -134,7 +134,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6170) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6208) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -414,7 +414,7 @@ Z80's loop is running and will read to the end; from there the fast
 `put()` is kept, because `CMD_PUT`'s check on every byte would eat into
 the 33 µs. A 2068 reset in the middle of the write loop still leaves the
 Pico in `put()` on the non-DMA paths — and a half-written slot, which
-needs a power cycle anyway (the comment at 3985–4010).
+needs a power cycle anyway (the comment at 3995–4020).
 
 Beware:
 
@@ -516,7 +516,7 @@ says), `expandKeywords` off.
   then every `SAVE` command with its `CODE` options, 32-column lines,
   three pages with their own headings — and, if external commands are
   loaded, a list of their words. Status 1. The summary is a literal in
-  the code (4437–4490); it must be kept in step with this table by hand.
+  the code (4457–4510); it must be kept in step with this table by hand.
 - **`?`**: the topics: every `*.txt` in `/sd/help` (sorted, without the
   extension, names starting with `.` skipped), packed into 32-column
   lines.
@@ -534,7 +534,7 @@ in a `try`) and gives it back before answering; the card gate has already
 probed for a card, since a topic needs one (`SD_NEEDED`'s special case).
 An error in `os.ilistdir` or `ACTIVATE_SD` reaches `FAIL_CMD`, Report J.
 The help files are written for the 2068's screen: short lines, CR, LF or
-CR LF line ends (the comment at 4359–4361). Error statuses are logged.
+CR LF line ends (the comment at 4379–4381). Error statuses are logged.
 
 ### `GETINFO(pre, cmd)`
 
@@ -930,7 +930,7 @@ The code is right by definition; these are for the manual's next edit.
 
 And in the code's own comments:
 
-- The comment above `SA_funct` (6167–6168) about a trailing space in the
+- The comment above `SA_funct` (6205–6206) about a trailing space in the
   keys of commands that take a name: no key has one.
 - `TAPDIR`'s header comment says `CODE 1,n` shows `n` headers either side;
   the window is counted in blocks.

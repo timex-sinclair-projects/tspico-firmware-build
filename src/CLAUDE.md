@@ -391,6 +391,14 @@ or the workflows:
    If the PR fixes a [`reference-followup`](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup)
    issue, find the chapters that cite it (`grep -rn "issues/NNN" docs/reference`)
    and replace the caveat with the new behaviour.
+   Line numbers: the chapters cite their source by line ("the comment at
+   4710–4728"), and lines you added or removed move every number below
+   them. **Before re-stamping**, `python3 src/test/reference_hosttest.py
+   --relines src/TS/tspico.py` (each changed source) lists the numbers in
+   its chapters that moved, from the version the stamp names. It can't
+   tell a line from a value (128, a GPIO pin, another file's line), so
+   check the list, then add `--apply` or fix them by hand. Other chapters
+   that cite the file (`tspico.py 7250`) are yours to find.
 2. `python3 src/test/reference_hosttest.py --missing` until it is empty.
 3. `python3 src/test/reference_hosttest.py --stamp` and paste the rows for
    the files you changed into the README's stamp table (it prints each row

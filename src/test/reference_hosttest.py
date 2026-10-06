@@ -24,6 +24,8 @@ Run:  python3 src/test/reference_hosttest.py            # check (CI)
       python3 src/test/reference_hosttest.py --missing  # only what is uncovered
       python3 src/test/reference_hosttest.py --list     # the whole inventory
       python3 src/test/reference_hosttest.py --stamp    # every stamp row with its current hash
+      python3 src/test/reference_hosttest.py --relines SRC...  # line numbers in SRC's chapters
+                        # that moved since SRC was stamped (--apply writes them)
       python3 src/test/reference_hosttest.py --index    # regenerate appendix/index.md
 
 The rule itself is in CLAUDE.md ("Keeping docs/reference/ current").
@@ -311,6 +313,114 @@ def cross_cutting_docs():
     return out
 
 
+# ---------------------------------------------------------------------------
+# Line numbers in the prose (--relines)
+#
+# The chapters cite their source by line ("the comment at 4710-4728",
+# "TS2068_IO's outer loop (6394)"). The index's numbers are regenerated, but
+# these are prose: a change that adds lines above them leaves them pointing
+# at the wrong code and fails nothing. --relines finds the version of a
+# source its stamp was made against in git history (or --since REV), maps
+# every old line to its new one (difflib), and lists each number in the
+# row's chapters that would move. It cannot tell a line number from a value
+# (128, a GPIO pin, another file's line), so it only proposes: check the
+# list, then --apply writes it. Run it BEFORE re-stamping, while the stamp
+# still names the old version.
+# ---------------------------------------------------------------------------
+
+# A line number in prose: 2-5 digits, not part of a word, a hex address
+# (3000h, $3000, 0x3000), a decimal (4.4), a path, a value in backticks or a
+# number with a unit ("6000 ms", "512 bytes"); "#L123" is a line link and is
+# matched.
+LINE_REF_RE = re.compile(r"(?:(?<=#L)|(?<![\w.#/$\\`-]))(\d{2,5})"
+                         r"(?![\w%`]|\.\d|\s?(?:ms|µs|s\b|bytes|KB|MHz|kHz|Hz|baud|columns|lines\b|bits))")
+# Numbers that are values, not lines, whatever range they fall in.
+NOT_LINES = {"1024", "2040", "2068", "4096", "6912", "8192", "15104", "16384", "32768", "65536"}
+
+
+def git(*args):
+    import subprocess
+    r = subprocess.run(("git", "-C", ROOT) + args, capture_output=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def stamped_version(rel, want):
+    """The text of rel at the newest commit whose content has stamp `want`."""
+    for rev in (git("log", "--format=%H", "--", rel) or b"").decode().split():
+        data = git("show", "%s:%s" % (rev, rel))
+        if data is not None and hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()[:12] == want:
+            return data.replace(b"\r\n", b"\n").decode("utf-8", "replace")
+    return None
+
+
+def line_map(old_text, new_text):
+    """{old line: (new line, exact)} for every line that moved."""
+    import difflib
+    old, new = old_text.split("\n"), new_text.split("\n")
+    out = {}
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        for k in range(i1, i2):
+            if tag == "equal":
+                n, exact = j1 + (k - i1), True
+            else:                                   # changed or deleted: the start of what replaced it
+                n, exact = min(j1 + (k - i1), max(j2 - 1, j1)), False
+            if n != k or not exact:
+                out[k + 1] = (n + 1, exact)
+    return out
+
+
+def remap_lines(doc, moves, old_len, apply):
+    """doc's line numbers through moves: [(line, old, new, exact, context)]; writes if apply."""
+    text = read(doc)
+    changes, out, in_code = [], [], False
+    for no, line in enumerate(text.split("\n"), 1):
+        if line.startswith("```"):
+            in_code = not in_code
+        if in_code or line.startswith("```"):
+            out.append(line)
+            continue
+
+        def sub(m):
+            v = m.group(1)
+            if v in NOT_LINES or int(v) > old_len or int(v) not in moves:
+                return v
+            new, exact = moves[int(v)]
+            changes.append((no, v, str(new), exact, line.strip()[:110]))
+            return str(new)
+        out.append(LINE_REF_RE.sub(sub, line))
+    if apply and changes:
+        with open(os.path.join(ROOT, doc), "w") as f:
+            f.write("\n".join(out))
+    return changes
+
+
+def relines(sources, since=None, apply=False):
+    """--relines: the line numbers in each source's chapters that moved."""
+    rows = stamp_rows()
+    total = 0
+    for rel in sources:
+        if rel not in rows:
+            print("%s: no stamp row" % rel)
+            return 1
+        h, line = rows[rel]
+        if since:
+            old = git("show", "%s:%s" % (since, rel))
+            old = old.replace(b"\r\n", b"\n").decode("utf-8", "replace") if old is not None else None
+        else:
+            old = stamped_version(rel, h)
+        if old is None:
+            print("%s: no version stamped %s in git history (give --since REV)" % (rel, h))
+            return 1
+        moves = line_map(old, read(rel))
+        for doc in row_docs(line.split("|")[3]):         # the Chapter cell, not the flows
+            for no, a, b, exact, ctx in remap_lines(doc, moves, old.count("\n") + 1, apply):
+                total += 1
+                print("%s:%d  %s -> %s%s  | %s" % (doc, no, a, b, "" if exact else "  (changed line)", ctx))
+    print("\n%d number(s) %s" % (total, "moved" if apply else
+          "would move. Check each is a line of that source, then --apply (or fix by hand)"))
+    return 0
+
+
 INDEX = os.path.join(REF, "appendix", "index.md")
 
 
@@ -358,6 +468,15 @@ def main(argv):
             f.write(index_text(inv, entries()))
         print("wrote %s" % os.path.relpath(INDEX, ROOT))
         return 0
+
+    if "--relines" in argv:
+        args = [x for x in argv[argv.index("--relines") + 1:] if x != "--apply"]
+        since = None
+        if "--since" in args:
+            i = args.index("--since")
+            since = args[i + 1]
+            args = args[:i] + args[i + 2:]
+        return relines(args, since, "--apply" in argv)
 
     if "--stamp" in argv:
         rows = stamp_rows()
@@ -448,7 +567,9 @@ def main(argv):
     if fails:
         print("\n%d problem(s). Each uncovered symbol needs an entry in docs/reference/ "
               "(a heading or table row naming it in backticks). For a changed source, "
-              "re-read the chapters, flows and appendices its row lists, fix what the change affects, then paste its row from\n"
+              "re-read the chapters, flows and appendices its row lists, fix what the change affects (first\n"
+              "    python3 src/test/reference_hosttest.py --relines SOURCE\n"
+              "lists the line numbers in its chapters the change moved), then paste its row from\n"
               "    python3 src/test/reference_hosttest.py --stamp\n"
               "into the stamp table in docs/reference/README.md." % fails)
         return 1
