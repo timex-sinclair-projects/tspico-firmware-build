@@ -1708,8 +1708,8 @@ Install the firmware and the ROM from the same release: they are made to work to
    and suggests the right steps.
 5. Choose your options:
    - **Erase the Pico first** is recommended, and required when coming from 1.1.
-   - **Update the TS-2068 ROM** is needed for boards coming from 1.1. The page ticks it
-     for you when it sees an older version.
+   - **Update the TS-2068 ROM** is needed on every board that isn't already on this release.
+     The page ticks it for you unless the board already runs it.
 6. Press **Start**, and follow the page. It puts the Pico into its update mode by itself. If your
    browser asks you to pick a drive, choose **RPI-RP2**.
 7. **If you're updating the ROM**, the page asks you to go to the 2068:

@@ -9,7 +9,7 @@
  *                (PICOBOOT) or, failing that, the RPI-RP2 drive (File System
  *                Access API). See flasher.js.
  *   3. Wipe      erase all 2 MB (WebUSB) or write flash_nuke.uf2 (drive).
- *   4. ROM       boards from 1.1/1.5 only: write upgrade.uf2, reboot, and
+ *   4. ROM       boards behind the channel's ROM (romBehind): write upgrade.uf2, reboot, and
  *                follow its "UPG {json}" lines while the user runs the updater
  *                on the 2068 (OUT 244,3, LOAD ""). Then back to BOOTSEL.
  *   5. Firmware  write firmware.uf2 and reboot.
@@ -64,7 +64,7 @@ let manifest = null
 let serial = null        // WebSerial transport, open
 let raw = null           // MpRawMode, while in the raw REPL
 let boot = null          // UsbBootsel | DriveBootsel, while the Pico is in BOOTSEL
-let installed = null     // { fw, from1x, mp } once read
+let installed = null     // { fw, ver, from1x, mp } once read
 let running = false
 
 // ---------------------------------------------------------------------------
@@ -152,6 +152,8 @@ async function loadChannel(ch) {
     $('sdcard-note').textContent = m.sdcard ? `(${m.sdcard.files} files, ${sizeFmt(m.sdcard.size)})` : ''
     log(`Loaded ${ch} channel: firmware ${m.fw_version || '?'} (${m.tag}), ${m.files.length} files` +
         (m.upgrade_uf2 ? ', ROM updater included.' : ', no ROM updater.'))
+    // Already connected: the new channel's ROM decides the ROM step afresh.
+    if (installed && !running) $('opt-rom').checked = !!m.upgrade_uf2 && romBehind()
     refreshPlan()
 }
 
@@ -167,6 +169,26 @@ function setLink(id, href) {
 function majorOf(v) {
     const n = parseFloat(String(v))
     return Number.isFinite(n) ? n : null
+}
+
+// "2.1.2" -> [2, 1]: the major.minor that firmware and ROM share from 2.0 on.
+function verOf(v) {
+    const m = /^(\d+)\.(\d+)/.exec(String(v || ''))
+    return m ? [Number(m[1]), Number(m[2])] : null
+}
+
+// Does this board need the ROM step? The ROM can't be read over USB, so the
+// installed firmware's major.minor stands for it. Anything older than the
+// channel's ROM needs it, and so does a board whose version is unknown (a
+// wiped Pico): in practice every board out there still has 1.1's ROM. Only a
+// board already on the channel's major.minor skips it.
+function romBehind() {
+    if (!installed || !manifest) return false
+    const want = verOf(manifest.rom_version || manifest.fw_version)
+    if (!want) return installed.from1x
+    const have = installed.ver
+    if (!have) return true
+    return have[0] < want[0] || (have[0] === want[0] && have[1] < want[1])
 }
 
 function refreshPlan() {
@@ -190,6 +212,11 @@ function refreshPlan() {
         hint.classList.add('warn')
         hint.textContent = `This board is on ${installed.fw}. Its TS-2068 ROM can't talk to ` +
             `firmware ${m.fw_version} — tick “Update the TS-2068 ROM” or the 2068 won't work afterwards.`
+    } else if (!wantRom && romBehind()) {
+        hint.classList.add('warn')
+        hint.textContent = `This board is on ${installed.fw}, so its TS-2068 ROM is probably older ` +
+            `than ROM ${m.rom_version || m.fw_version}. Tick “Update the TS-2068 ROM” to install it ` +
+            `with the firmware.`
     } else {
         hint.textContent = planText()
     }
@@ -302,7 +329,11 @@ async function readInstalled() {
     let cfg = null
     try { cfg = JSON.parse(new TextDecoder().decode(await raw.readFile('/config.ini'))) } catch (_e) { /* none */ }
     let fw, major
+    // config.ini's FW_VERSION is only a guess (1.5 wrote it; a board can
+    // keep a stale one), so only the running module's version counts as known.
+    let known = false
     if (code) {
+        known = true
         fw = code
         major = majorOf(code)
     } else if (cfg) {
@@ -312,7 +343,7 @@ async function readInstalled() {
         fw = 'unknown (no firmware running, no config.ini)'
         major = null
     }
-    return { fw, from1x: major !== null && major < 2, mp: info.release || null }
+    return { fw, ver: known ? verOf(code) : null, from1x: major !== null && major < 2, mp: info.release || null }
 }
 
 async function connect() {
@@ -341,7 +372,7 @@ async function connect() {
         await enterRaw()
         installed = await readInstalled()
         $('installed-version').textContent = installed.fw
-        if (manifest && manifest.upgrade_uf2) $('opt-rom').checked = installed.from1x
+        if (manifest && manifest.upgrade_uf2) $('opt-rom').checked = romBehind()
         setStage('connect', 'done', `Connected. Installed: ${installed.fw}.`)
         showConnected(true)
     } catch (err) {

@@ -10,8 +10,9 @@ with no files to drag. Started as the prototype for
 The user connects, ticks what they need, and presses **Start**:
 
 1. **Connect** — Web Serial → Ctrl-C the firmware → raw REPL. Reads
-   `FW_VERSION` from `/config.ini` (1.1 has none) and pre-ticks the ROM update
-   for a board on 1.x.
+   the running firmware's `FW_VERSION` (else `/config.ini`'s; 1.1 has none) and
+   pre-ticks the ROM update unless the board is already on the channel's ROM
+   version (`romBehind` in `app.js`; an unknown version counts as behind).
 2. **BOOTSEL** — `machine.bootloader()` over the REPL, then a handle on the
    boot ROM: **WebUSB/PICOBOOT** if the browser can open it, else the
    **RPI-RP2 drive** through the File System Access API (see below). A Pico
@@ -19,7 +20,7 @@ The user connects, ticks what they need, and presses **Start**:
 3. **Wipe** — erase all 2 MB (WebUSB), or write `flash_nuke.uf2` onto the
    drive and wait for it to come back. Clears old files such as a `/TS/`
    folder that would shadow the frozen modules.
-4. **ROM update** (boards from 1.1/1.5) — write `upgrade.uf2`
+4. **ROM update** (every board behind the channel's ROM) — write `upgrade.uf2`
    ([src/upgrade/](../src/upgrade/)), reboot, reopen the serial port, and
    follow its `UPG {json}` lines while the user types `OUT 244,3` and
    `LOAD ""` on the 2068: tape loading, each block written, verify, DONE, or a
