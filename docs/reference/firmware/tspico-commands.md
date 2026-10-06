@@ -4,8 +4,8 @@ Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2508–2585 (`DIR`), 3426–3834 (`IDIR` … `SA_NOT_IMP`), 3899–4137
 (`APPEND`, `BLKRCV`), 4229–4765 (`CDIR` … `GETLOG`), 4845–5151
 (`LOGLEVEL` … `MEMDOCK`), 5171–5247 (`REW`), 5389–5616 (`BAD_CODE` …
-`NOP`) and 5722–5798 (the printer settings); the dispatch table
-`SA_funct` at 6224–6274, inside `TS2068_IO`.
+`NOP`) and 5728–5804 (the printer settings); the dispatch table
+`SA_funct` at 6230–6280, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -53,11 +53,11 @@ where the manual and the code differ, the entries below say so.
 | `VERB_TOGGLE(pre, cmd)` | 5491 | `tpi:verbose` |
 | `ZX48(pre, cmd)` | 5545 | `tpi:zx48` |
 | `NOP(pre, cmd)` | 5599 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5722 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5743 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5754 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5767 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5785 | `tpi:bmp` |
+| `PRN_OPEN(pre, cmd)` | 5728 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 5749 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 5760 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 5773 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 5791 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -80,7 +80,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6221–6222) says (until #181 it
+   trailing space, as the comment above it (6227–6228) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -133,7 +133,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6224) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6230) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).

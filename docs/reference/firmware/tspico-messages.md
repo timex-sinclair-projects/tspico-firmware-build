@@ -196,7 +196,7 @@ which would hide the line's end from `SEND_MSG2`'s column count. Colour 8
 only values used beyond 1, 5 and 7, so none is `00h` or `03h` (see the
 text rules). Send the result with `SEND_MSG2(…, colour=True)`; without
 `colour` the codes are stripped. Callers: `DIR` (2542), `CATALOG` (2608),
-`CDIR` (4274), `ZX_TPI`'s listing (7070).
+`CDIR` (4274), `ZX_TPI`'s listing (7076).
 
 `lista` and `dirinfo.tap` keep the plain text; the colour is added only on
 the way out.
@@ -278,7 +278,7 @@ that it was once described as redundant and the audit tried removing it.
 
 Callers: 72 sites in `tspico.py` — most handlers end with it — and
 external commands through `extcmd.py`. The forced ones: `NO_CARD_REPLY`
-(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (6035:
+(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (6041:
 that message says what to do), and `extcmd`'s `tpi:list` (89). The
 `romupdate` refusal and the other mount errors go through `LOAD_TPI`'s
 message ([tspico-files.md](tspico-files.md)).

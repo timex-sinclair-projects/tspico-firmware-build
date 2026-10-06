@@ -13,7 +13,8 @@ What it pins:
   * the text lands in /VLPRINT/PRN0001.TXT in zmakebas form, flushed
     mid-printout once the buffer passes PRINT_FLUSH_AT, and on CLPRINT;
     OPPRINT starts the next numbered file;
-  * a UDG's 8-byte body is taken and the Z80 gets final status 01;
+  * a UDG's 8-byte body is taken and the Z80 gets final status 01, a damaged
+    one too (the pattern is never used), with a warning in the log;
   * COPY writes /VSCREEN/SCR0001.BMP at the default 512x384, status 01;
     tpi:bmp changes the size;
   * BREAK in the middle of a COPY body: back to idle, no file;
@@ -57,8 +58,8 @@ def z80_char():
     return r or ("ok" if st == 0x01 else "st%02X" % (st or 0))
 
 
-def z80_body(data, break_at=None):
-    """A character >= 80h or COPY: EXROM 223Eh."""
+def z80_body(data, break_at=None, bad_xor=False):
+    """A character >= 80h or COPY: EXROM 223Eh. bad_xor: a damaged body."""
     st = yield ("in",)
     if st != 0x01:
         return "st%02X" % (st or 0)
@@ -70,6 +71,8 @@ def z80_body(data, break_at=None):
     x = 0
     for b in body:
         x ^= b
+    if bad_xor:
+        x ^= 0xFF
     for i, b in enumerate(body + bytes([x])):
         if break_at is not None and i == break_at:
             yield L.out(0x0F, 0x03)
@@ -151,6 +154,17 @@ def main():
     r = run(z80_body([0, 0x3C, 0x42, 0x42, 0x7E, 0x42, 0x42, 0]), char_pre(0x90, 8))
     check(r == "ok" and idle() and t.PRT.buf.endswith(b"\\A"),
           "body taken, final status 01, \\A in the text (%s)" % r)
+
+    logged = []
+    real_log = t.LOG
+    t.LOG = lambda msg, level=0, *a: logged.append((msg, level))
+    r = run(z80_body([0, 0x3C, 0x42, 0x42, 0x7E, 0x42, 0x42, 0], bad_xor=True), char_pre(0x90, 8))
+    t.LOG = real_log
+    check(r == "ok" and idle() and t.PRT.buf.endswith(b"\\A\\A"),
+          "a damaged pattern: still final status 01 and \\A -- the pattern is never used (%s)" % r)
+    check(any("failed its XOR" in m and lv == 1 for m, lv in logged),
+          "  and it is logged as a warning (#180) (%r)" % (logged,))
+    t.PRT.buf = t.PRT.buf[:-2]                  # as before, for the flush test below
 
     print("flush mid-printout")
     t.PRINT_FLUSH_AT = 8

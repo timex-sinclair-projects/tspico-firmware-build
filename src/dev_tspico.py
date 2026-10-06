@@ -5707,6 +5707,12 @@ def PRINT_IO(pre):
         ok = x == body[n + 3] and body[0] == 0x44
     status = _1_OK
     if pre[1] == 5:
+        if not ok:
+            # A UDG's or block graphic's pattern: never used (the text gets
+            # the character's escape from pre[3], in the pre-header), so
+            # printing goes on -- but a bad XOR means the bus garbled a
+            # transfer, which is worth seeing (#180).
+            LOG("Printer: the pattern of character %d failed its XOR; printed anyway" % pre[3], 1)
         PRT.feed(pre[3])
         if len(PRT.buf) >= PRINT_FLUSH_AT:
             PRINT_FLUSH()                           # the Z80 waits for READY
