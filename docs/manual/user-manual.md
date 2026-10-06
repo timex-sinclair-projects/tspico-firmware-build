@@ -1427,7 +1427,8 @@ SAVE "tpi:dir" CODE 2,20     : REM ... starting at file 20
 ```
 
 Long names are shortened in the middle with `>` in the normal listing; `CODE 1,n` and `CODE 2,n`
-show them in full. **6**: `File index 12 out of range 0-11`.
+show them in full. **6** for a number past the last file, with *(verbose)* `File index 12 out of
+range 0-11` (twelve files), or `No files in this folder`.
 
 ### dock  (also memdock)
 
