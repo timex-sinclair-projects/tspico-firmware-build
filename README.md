@@ -35,6 +35,11 @@ TS-Pico Python modules **frozen** into the firmware.
 >   GETTING_STARTED): the `.mpy` build flow, the dev-override
 >   pattern, the `/TS/` shadowing trap, debugging recipes.
 
+> Changing the platform? [`docs/reference/`](docs/reference/README.md) is the
+> programmer's reference: the firmware and the ROM explained down to every
+> function, variable, PIO instruction and ROM routine, one chapter per source
+> file. CI keeps it in step with the code.
+
 Freezing the modules eliminates the `MemoryError: memory allocation
 failed, allocating XXXX bytes` that occurs when MicroPython tries to
 import the modules from the flash filesystem at runtime — frozen
