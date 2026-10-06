@@ -274,12 +274,13 @@ argument, and writes the `.mpy` beside it. CI builds the same file with the
 artifact. A `.mpy` built for another MicroPython is rejected at import
 with `ValueError`, which `main.py` turns into "use the frozen module".
 
-The build script's comment says MicroPython prefers a `.mpy` to a `.py`
-of the same name, and `main.py`'s says the `.mpy` "is preferred".
-MicroPython's importer looks for `name.py` before `name.mpy` in each
-directory, so with both on the flash the `.py` would be loaded *(from
-MicroPython's `py/builtinimport.c`; not checked on a TS-Pico)*.
-DEVELOPER_GUIDE §5 gives the safe rule: never have both.
+With both `/dev_tspico.py` and `/dev_tspico.mpy` on the flash, the `.py` is
+loaded: MicroPython's importer looks for `name.py` before `name.mpy` in each
+directory. Checked on a TS-Pico (MicroPython 1.29, #175): with only a
+`probe.mpy` on flash, `import probe` loaded it; with a `probe.py` beside it, a
+fresh import loaded the `.py`. So a stale `.py` shadows a fresh `.mpy`, and
+DEVELOPER_GUIDE §5's rule is the one to follow: never have both. (Until #175
+`main.py`'s and `build-dev-mpy.sh`'s comments said the `.mpy` was preferred.)
 
 **The `/TS/` trap.** A folder `/TS/` on the flash makes MicroPython
 resolve the whole `TS` package from it and stop looking at the frozen
@@ -502,7 +503,5 @@ them up first.
 
 ## Where comments and the code disagree
 
-- `build-dev-mpy.sh` and `main.py` say a `.mpy` is preferred over a `.py`;
-  MicroPython looks for the `.py` first *(unverified on a TS-Pico)*.
 - The `WAIT` name for GPIO 14 (above); the line's comment now says
   `TS_IO_DUAL` uses it as /PICOSEL, and that the name is unverified.

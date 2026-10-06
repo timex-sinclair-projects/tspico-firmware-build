@@ -18,11 +18,11 @@
 #   pip install --user mpy-cross==1.29.*  # match the UF2's MicroPython version
 #                                          # (mpy v6.3 bytecode for MP 1.29.0)
 #
-# After build: upload <name>.mpy to the Pico's flash root via Thonny. Python's
-# import system picks up .mpy in preference to .py, so main.py's
-# `from dev_tspico import TS2068_IO` will use the compiled bytecode without
-# any code changes. If you want to revert to .py, delete the .mpy from the
-# Pico.
+# After build: upload <name>.mpy to the Pico's flash root (tools/pico-serial.py
+# put), and delete any /dev_tspico.py there: MicroPython imports name.py before
+# name.mpy (checked on a TS-Pico, MicroPython 1.29, #175), so a .py beside it
+# wins. main.py's `from dev_tspico import TS2068_IO` then uses the bytecode.
+# To go back to the .py, delete the .mpy and put the .py.
 
 set -euo pipefail
 
