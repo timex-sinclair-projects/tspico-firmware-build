@@ -7,7 +7,11 @@ every label of the ROM sources. This test fails CI when:
   1. a symbol in the code has no entry in the reference (COVERAGE), or
   2. a source file changed since the reference was last checked against it
      (STAMPS: the table in docs/reference/README.md records a hash of each
-     source; re-read the matching chapter, fix what changed, then re-stamp).
+     source; re-read the chapters, flows and appendices its row lists, fix
+     what changed, then re-stamp), or
+  3. a flow or appendix is not listed against any source in that table
+     (FLOWS: they cut across the sources, so the table says which sources
+     each one follows; appendix/index.md and appendix/glossary.md exempt).
 
 What counts as an entry: a Markdown heading (## or deeper) or the first cell
 of a table row, anywhere under docs/reference/ except README.md and
@@ -19,7 +23,7 @@ RX_CAPTURE. Command names compare case-insensitively.
 Run:  python3 src/test/reference_hosttest.py            # check (CI)
       python3 src/test/reference_hosttest.py --missing  # only what is uncovered
       python3 src/test/reference_hosttest.py --list     # the whole inventory
-      python3 src/test/reference_hosttest.py --stamp    # fresh rows for the stamp table
+      python3 src/test/reference_hosttest.py --stamp    # every stamp row with its current hash
       python3 src/test/reference_hosttest.py --index    # regenerate appendix/index.md
 
 The rule itself is in CLAUDE.md ("Keeping docs/reference/ current").
@@ -266,15 +270,44 @@ def entries():
     return found
 
 
-def stamps():
-    """{source: hash} from README.md's table."""
+LINK_RE = re.compile(r"\]\(([^)#]+\.md)\)")
+# Never tied to a source: the generated index, and the glossary.
+UNSTAMPED_DOCS = ("docs/reference/appendix/index.md", "docs/reference/appendix/glossary.md")
+
+
+def stamp_rows():
+    """{source: (hash, line)} from README.md's table."""
     out = {}
     if not os.path.exists(README):
         return out
     for line in read(os.path.relpath(README, ROOT)).splitlines():
         m = STAMP_ROW_RE.match(line)
         if m:
-            out[m.group(1).strip()] = m.group(2)
+            out[m.group(1).strip()] = (m.group(2), line)
+    return out
+
+
+def stamps():
+    """{source: hash} from README.md's table."""
+    return {rel: h for rel, (h, line) in stamp_rows().items()}
+
+
+def row_docs(line):
+    """The chapters, flows and appendices a stamp row names, relative to ROOT."""
+    return [os.path.normpath(os.path.join("docs/reference", t)) for t in LINK_RE.findall(line)]
+
+
+def cross_cutting_docs():
+    """flows/*.md and appendix/*.md, which the stamp table must list."""
+    out = []
+    for sub in ("flows", "appendix"):
+        d = os.path.join(REF, sub)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            rel = os.path.relpath(os.path.join(d, fn), ROOT)
+            if fn.endswith(".md") and rel not in UNSTAMPED_DOCS:
+                out.append(rel)
     return out
 
 
@@ -327,8 +360,14 @@ def main(argv):
         return 0
 
     if "--stamp" in argv:
+        rows = stamp_rows()
         for rel in STAMPED:
-            print("| `%s` | `%s` |" % (rel, stamp(rel)))
+            h = stamp(rel)
+            if rel in rows:
+                old, line = rows[rel]
+                print(line.replace("`%s`" % old, "`%s`" % h, 1))
+            else:
+                print("| `%s` | `%s` | *(chapter)* | *(flows)* |" % (rel, h))
         return 0
 
     found = entries()
@@ -359,6 +398,7 @@ def main(argv):
             for n in names:
                 print("          missing: %s" % n)
 
+    rows = stamp_rows()
     have = stamps()
     for rel in STAMPED:
         want = stamp(rel)
@@ -372,10 +412,27 @@ def main(argv):
             fails += 1
             print("  FAIL  stamp %s: the file changed since the reference was checked "
                   "against it (stamped %s, now %s)" % (rel, got, want))
+            for doc in row_docs(rows[rel][1]):
+                print("          re-read: %s" % doc)
     extra = [r for r in have if r not in STAMPED]
     for rel in extra:
         fails += 1
         print("  FAIL  stamp %s: not a source this test knows (add it to STAMPED or drop the row)" % rel)
+
+    listed = set()
+    for h, line in rows.values():
+        listed.update(row_docs(line))
+    for doc in cross_cutting_docs():
+        if doc in listed:
+            print("  PASS  %s is listed against its sources" % doc)
+        else:
+            fails += 1
+            print("  FAIL  %s: no stamp row lists it; add it to the \"Flows and appendices\" "
+                  "cell of each source it follows" % doc)
+    for doc in sorted(listed):
+        if not os.path.exists(os.path.join(ROOT, doc)):
+            fails += 1
+            print("  FAIL  the stamp table links %s, which does not exist" % doc)
 
     want = index_text(inv, found)
     try:
@@ -391,7 +448,7 @@ def main(argv):
     if fails:
         print("\n%d problem(s). Each uncovered symbol needs an entry in docs/reference/ "
               "(a heading or table row naming it in backticks). For a changed source, "
-              "re-read its chapter, fix what the change affects, then paste the row from\n"
+              "re-read the chapters, flows and appendices its row lists, fix what the change affects, then paste its row from\n"
               "    python3 src/test/reference_hosttest.py --stamp\n"
               "into the stamp table in docs/reference/README.md." % fails)
         return 1

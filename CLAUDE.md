@@ -17,6 +17,11 @@ is true, so:
   the same PR.** A new function, variable, `tpi:` command or ROM label gets
   a new entry. Changed behaviour: the entry says the new behaviour and, if
   the reason changed, the new reason. A removed symbol: its entry goes.
+  The flows and appendices the stamp row lists for that source get the
+  same re-read: they follow operations across files, so a change in one
+  file can make a flow wrong without touching any entry.
+- **A fix for a `reference-followup` issue updates the chapters that cite
+  it.** The caveat and the issue link go; the entry says the new behaviour.
 - **Then re-stamp and re-index.** `python3 src/test/reference_hosttest.py`
   fails CI until every symbol has an entry, every changed source has a fresh
   row in the stamp table in `docs/reference/README.md` (`--stamp` prints

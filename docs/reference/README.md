@@ -26,7 +26,7 @@ of the chapter. The flows then cut across the files to follow one operation
 from the BASIC keyword to the SD card and back.
 
 | Part | Chapter | Covers |
-|---|---|---|
+|---|---|---|---|
 | Start | [overview.md](overview.md) | The ecosystem on one page: the two computers, the bus between them, the three state machines, the two cores, the ROM banks; versions; how to read the rest |
 | Start | [hardware.md](hardware.md) | What the Pico is wired to, as the code sees it: every GPIO, the bus lines, ports 0Eh/0Fh, the flash and SRAM slots, the SD card, clocks |
 | Firmware | [firmware/boot.md](firmware/boot.md) | `src/main.py`, `config.ini`, the freeze manifest and `buildinfo`, the dev overrides, the UF2 build and CI, the flash image |
@@ -81,7 +81,7 @@ looks for:
 ### `files`
 ### `tpi:cd`
 ### `WAIT_PICO_READY` (1A54h)
-| `_1_OK` | 1 | status 1: success |
+| `_1_OK` | 1 | status 1: success | — |
 ```
 
 A trailing `(…)` is ignored, so a heading may show the signature. Related
@@ -126,47 +126,55 @@ which fails when:
 - a symbol in the code has no entry (a new function, variable, command or
   ROM label);
 - a source below has changed since the reference was checked against it.
-  The table records a hash of each file; after re-reading the chapter and
-  fixing what the change affects, refresh the row with
-  `python3 src/test/reference_hosttest.py --stamp`;
+  The table records a hash of each file; after re-reading the chapter, and
+  the flows and appendices the row lists, and fixing what the change
+  affects, refresh the row with `python3 src/test/reference_hosttest.py
+  --stamp` (it prints each row with the new hash; paste only the rows you
+  re-read);
+- a flow or appendix is not listed against any source (a new flow needs
+  the sources it follows; `index.md` and `glossary.md` are exempt);
 - [`appendix/index.md`](appendix/index.md) is out of date: regenerate it
   with `python3 src/test/reference_hosttest.py --index`.
 
 Re-stamping without re-reading defeats the purpose. The rule for
 contributors and AI agents is in [`CLAUDE.md`](../../CLAUDE.md).
 
+A fix for a [`reference-followup`](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup)
+issue also updates the chapters that cite it: the entry says the new
+behaviour, and the caveat and the issue link go.
+
 ### Stamps
 
-| Source | Checked at | Chapter |
-|---|---|---|
-| `src/main.py` | `0a99c9789b5e` | [firmware/boot.md](firmware/boot.md) |
-| `src/TS/tspico.py` | `cf308953afbc` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) |
-| `src/TS/tspico_io.py` | `1df5f7bf5cd7` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) |
-| `src/TS/sdcard.py` | `e1c614de390c` | [firmware/sdcard.md](firmware/sdcard.md) |
-| `src/TS/channels.py` | `5b1d30b1efe4` | [firmware/channels.md](firmware/channels.md) |
-| `src/TS/catalog.py` | `0c79a1e750db` | [firmware/catalog.md](firmware/catalog.md) |
-| `src/TS/extcmd.py` | `b8ad10ebadd7` | [firmware/extcmd.md](firmware/extcmd.md) |
-| `src/TS/native.py` | `3f4bb90a622f` | [firmware/native.md](firmware/native.md) |
-| `src/TS/printer.py` | `d8bb84d1d654` | [firmware/printer.md](firmware/printer.md) |
-| `src/upgrade/main.py` | `5a451c6b90e9` | [firmware/upgrade.md](firmware/upgrade.md) |
-| `src/upgrade/upgrade.py` | `934337cd9e0d` | [firmware/upgrade.md](firmware/upgrade.md) |
-| `src/rom/fdd/fddcmd.asm` | `bb2a69425ea2` | [rom/exrom-fdd.md](rom/exrom-fdd.md) |
-| `src/rom/patches/tspico-sync.asm` | `78b0c59d81c5` | [rom/exrom-sync.md](rom/exrom-sync.md) |
-| `src/rom/patches/tspico-zx48-v3.asm` | `c942ea86b3aa` | [rom/zx48.md](rom/zx48.md) |
-| `src/upgrade/updater.asm` | `a84ece7babe5` | [firmware/upgrade.md](firmware/upgrade.md) |
-| `docs/rom-analysis/tspico-exrom-symbols.sym` | `72aa7dccef81` | [rom/exrom-driver.md](rom/exrom-driver.md), [rom/exrom-chunk1.md](rom/exrom-chunk1.md), [rom/home.md](rom/home.md) |
-| `src/config.ini` | `6d77099b0a83` | [firmware/boot.md](firmware/boot.md) |
-| `src/manifest.py` | `61eaa0d88fb4` | [firmware/boot.md](firmware/boot.md) |
-| `src/upgrade/manifest.py` | `52879c3ffca7` | [firmware/upgrade.md](firmware/upgrade.md) |
-| `src/upgrade/loader.bas` | `78d09ea9d4fe` | [firmware/upgrade.md](firmware/upgrade.md) |
-| `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) |
-| `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) |
-| `src/rom/TSPICO-21.ROM` | `35b5d681c78b` | [rom/overview.md](rom/overview.md) |
-| `src/rom/TSPICO-ZX48-V4.BIN` | `ec57f307bd0d` | [rom/zx48.md](rom/zx48.md) |
-| `flash/manifest.json` | `9ce8d9fd295c` | [firmware/boot.md](firmware/boot.md) |
-| `tools/build-rom.py` | `3b742758a0d1` | [rom/overview.md](rom/overview.md) |
-| `tools/build-flash.py` | `5393518b3bb1` | [firmware/boot.md](firmware/boot.md) |
-| `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) |
-| `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) |
-| `.github/workflows/build.yml` | `a33c94967cc4` | [firmware/boot.md](firmware/boot.md) |
-| `.github/workflows/release.yml` | `65183ad466bc` | [firmware/boot.md](firmware/boot.md) |
+| Source | Checked at | Chapter | Flows and appendices |
+|---|---|---|---|
+| `src/main.py` | `0a99c9789b5e` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
+| `src/TS/tspico.py` | `cf308953afbc` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/TS/tspico_io.py` | `1df5f7bf5cd7` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) | [flows/boot.md](flows/boot.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/TS/sdcard.py` | `e1c614de390c` | [firmware/sdcard.md](firmware/sdcard.md) | [flows/sd-handover.md](flows/sd-handover.md) |
+| `src/TS/channels.py` | `5b1d30b1efe4` | [firmware/channels.md](firmware/channels.md) | [flows/channels.md](flows/channels.md) |
+| `src/TS/catalog.py` | `0c79a1e750db` | [firmware/catalog.md](firmware/catalog.md) | — |
+| `src/TS/extcmd.py` | `b8ad10ebadd7` | [firmware/extcmd.md](firmware/extcmd.md) | — |
+| `src/TS/native.py` | `3f4bb90a622f` | [firmware/native.md](firmware/native.md) | [flows/save.md](flows/save.md) |
+| `src/TS/printer.py` | `d8bb84d1d654` | [firmware/printer.md](firmware/printer.md) | [flows/printer.md](flows/printer.md) |
+| `src/upgrade/main.py` | `5a451c6b90e9` | [firmware/upgrade.md](firmware/upgrade.md) | — |
+| `src/upgrade/upgrade.py` | `934337cd9e0d` | [firmware/upgrade.md](firmware/upgrade.md) | — |
+| `src/rom/fdd/fddcmd.asm` | `bb2a69425ea2` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/rom/patches/tspico-sync.asm` | `78b0c59d81c5` | [rom/exrom-sync.md](rom/exrom-sync.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/rom/patches/tspico-zx48-v3.asm` | `c942ea86b3aa` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md) |
+| `src/upgrade/updater.asm` | `a84ece7babe5` | [firmware/upgrade.md](firmware/upgrade.md) | — |
+| `docs/rom-analysis/tspico-exrom-symbols.sym` | `72aa7dccef81` | [rom/exrom-driver.md](rom/exrom-driver.md), [rom/exrom-chunk1.md](rom/exrom-chunk1.md), [rom/home.md](rom/home.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/config.ini` | `6d77099b0a83` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
+| `src/manifest.py` | `61eaa0d88fb4` | [firmware/boot.md](firmware/boot.md) | — |
+| `src/upgrade/manifest.py` | `52879c3ffca7` | [firmware/upgrade.md](firmware/upgrade.md) | — |
+| `src/upgrade/loader.bas` | `78d09ea9d4fe` | [firmware/upgrade.md](firmware/upgrade.md) | — |
+| `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
+| `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
+| `src/rom/TSPICO-21.ROM` | `35b5d681c78b` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/rom/TSPICO-ZX48-V4.BIN` | `ec57f307bd0d` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `flash/manifest.json` | `9ce8d9fd295c` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
+| `tools/build-rom.py` | `3b742758a0d1` | [rom/overview.md](rom/overview.md) | — |
+| `tools/build-flash.py` | `5393518b3bb1` | [firmware/boot.md](firmware/boot.md) | — |
+| `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
+| `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `a33c94967cc4` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/release.yml` | `65183ad466bc` | [firmware/boot.md](firmware/boot.md) | — |

@@ -384,9 +384,17 @@ or the workflows:
    (heading or table row with the name in backticks; the README's
    "Conventions" gives the six things an entry says). Remove entries for
    removed symbols.
+   Then read the flows and appendices in the same row's last column
+   (`flows/save.md`, `appendix/ports-and-status.md` …): a step, a status
+   byte or a timeout that changed is wrong there too. A new flow goes in
+   that column for every source it follows; the test fails until it does.
+   If the PR fixes a [`reference-followup`](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup)
+   issue, find the chapters that cite it (`grep -rn "issues/NNN" docs/reference`)
+   and replace the caveat with the new behaviour.
 2. `python3 src/test/reference_hosttest.py --missing` until it is empty.
 3. `python3 src/test/reference_hosttest.py --stamp` and paste the rows for
-   the files you changed into the README's stamp table. **Only after step
+   the files you changed into the README's stamp table (it prints each row
+   whole, with only the hash changed). **Only after step
    1.** A fresh stamp says "this chapter was checked against this source".
 4. `python3 src/test/reference_hosttest.py --index` (regenerates
    `appendix/index.md`, which carries line numbers), then run the test
