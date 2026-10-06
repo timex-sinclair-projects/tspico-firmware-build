@@ -905,6 +905,11 @@ which are padded with `CHR$ 0` instead of spaces.
 101;a$` reads from the 101st character of a text file. In mode `"u"`, a `PRINT #4` straight
 after an `INPUT #4` replaces the next line.
 
+**How far TAB reaches.** TAB takes 0 to 65535, like any 2068 TAB; a bigger number stops with
+**B Integer out of range**. In a record file that's record 65535. In a file with no record
+length, TAB counts bytes, so it reaches the first 65,535. Beyond that, read or write in order:
+a `PRINT #4` or `INPUT #4` without `TAB` carries on from where the last one stopped.
+
 ## 6.8 Listing files into a program: `d:`
 
 `OPEN #` with `"d:"` gives you a folder listing, one name at a time. It's just what you need
