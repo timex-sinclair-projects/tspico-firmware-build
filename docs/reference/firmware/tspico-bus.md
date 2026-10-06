@@ -510,9 +510,8 @@ that notices a card has gone, come back, or been swapped, and
 [`sd_state_hosttest.py`](../../../src/test/sd_state_hosttest.py) pins the
 attempts, the revalidation, the no-card gate, `SD_CALL`'s answer and
 `tpi:info`; [`sd_mount_hosttest.py`](../../../src/test/sd_mount_hosttest.py)
-the retry loop at boot (its docstring's "the boot call keeps the blink
-loop" is out of date: `TS2068_IO` catches the `OSError` and boots without a
-card, 6315–6319); [`sd_recover_hosttest.py`](../../../src/test/sd_recover_hosttest.py)
+the retry loop at boot (and, as its docstring says, that `TS2068_IO`
+catches the `OSError` and boots without a card, 6315–6319); [`sd_recover_hosttest.py`](../../../src/test/sd_recover_hosttest.py)
 the driver's recovery of a card left mid-transfer, which `ACTIVATE_SD`
 reports ([sdcard.md](sdcard.md)).
 
@@ -935,8 +934,6 @@ success and a message otherwise. Callers: `CH_OPEN` (3308, 3324, 3339),
 
 ## Where comments and the code disagree
 
-The code wins in each case; the comments are left as they are by this
-reference.
-
-- `sd_mount_hosttest.py`'s docstring says the boot call "keeps the blink
-  loop"; `TS2068_IO` catches the `OSError` and boots without a card.
+None known: #181 and #183 brought the last ones (the clamp, the PIO
+clock, `MQ_BUSY`, `MQ_READY`, `sd_mount_hosttest.py`'s docstring) into
+line.
