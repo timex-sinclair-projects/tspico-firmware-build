@@ -43,15 +43,4 @@ description: >-
   </div>
 </section>
 
-<section class="section alt">
-  <div class="wrap">
-    <div class="promo">
-      <div>
-        <h2>Interested in the PicoVideo for your TS 2068?</h2>
-        <p>The PicoVideo is a Raspberry Pi Pico-based solution that gives your TS 2068 crystal clear VGA output.</p>
-        <p><a class="btn btn-buy" href="{{ site.buy_picovideo }}">Buy Now</a></p>
-      </div>
-      <img src="{{ '/assets/img/picovideo.png' | relative_url }}" alt="PicoVideo VGA output on a monitor">
-    </div>
-  </div>
-</section>
+
