@@ -113,7 +113,7 @@ specific divergences. The ones that carry real behavioral risk:
 Divergences A, B, C and E are still open. D is fixed on this branch.
 
 `SAVE_ZX` (ZX Spectrum compatibility mode) is the routine that genuinely
-**has not** been migrated — see §7.
+**had not** been migrated when this was written — see §7 (it has since).
 
 ---
 
@@ -494,6 +494,12 @@ counterpart.
 ---
 
 ## 7. What genuinely has *not* been migrated
+
+> **Since then:** `SAVE_ZX`, `LOAD_ZX` and `LOAD_ZX_C` have been migrated:
+> they run on `TS_IO_DUAL`, and `SAVE_ZX` hands the bus back with
+> `ENA_MQ_DUAL`
+> ([docs/reference/firmware/tspico_io.md](reference/firmware/tspico_io.md#zx48-mode)).
+> This section describes the code as it was.
 
 `SAVE_ZX` (`src/TS/tspico_io.py:1211`) is still single-port, and says so
 in its own docstring:

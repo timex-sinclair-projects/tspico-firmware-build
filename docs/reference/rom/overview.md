@@ -448,8 +448,5 @@ here say so. [ROM_CHANGES.md](../../ROM_CHANGES.md) is the account of 2.0,
 
 ## Where comments and the code disagree
 
-Tracked in the [`reference-followup` issues](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup).
-
-- [docs/rom-analysis/README.md](../../rom-analysis/README.md) lists the
-  port sites of v1.1; 2.0 and 2.1 add the seven at 2304h–23C0h and 3662h
-  (the table above).
+None known: #181 and #182 brought the build scripts' comments and
+`docs/rom-analysis/README.md`'s list of port sites into line.

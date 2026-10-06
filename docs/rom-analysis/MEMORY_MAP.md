@@ -170,6 +170,8 @@ BREAK escape. Full details in [PROTOCOL_FROM_ROM.md](PROTOCOL_FROM_ROM.md).
 
 > **Watch out when grepping for I/O.** A naive scan for `DB xx` / `D3 xx` opcode
 > bytes produces heavy false positives: `db 5d` is usually the low byte of a
-> `LD (5Dxx),A` referencing a TS-PICO system variable, not `IN A,(5Dh)`. The only
+> `LD (5Dxx),A` referencing a TS-PICO system variable, not `IN A,(5Dh)`. In v1.1 the
 > genuine TS-PICO port I/O sites are `0x0E` at `0x2298`/`0x229D` and `0x0F` at
-> `0x065B`, `0x2020`, `0x2023`, `0x2236`.
+> `0x065B`, plus dead `OUT (0Fh)`s at `0x2020`, `0x2023`, `0x2236`; ROM 2.0 adds
+> `0x2304`–`0x23C0` (five) and 2.1 `0x3662`
+> ([every site](../reference/rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh)).

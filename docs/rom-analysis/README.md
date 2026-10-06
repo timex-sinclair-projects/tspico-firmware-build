@@ -149,8 +149,10 @@ z80dasm -a -l -t -g 0x0000 -o out.asm -s out.sym ROMs/TSPICO-11-exrom
 - **Naive `IN`/`OUT` scans lie.** Searching for `DB xx`/`D3 xx` opcode bytes finds
   mostly false positives — `db 5d` is nearly always the low byte of a
   `LD (5Dxx),A` referencing a TS-PICO system variable. The genuine TS-PICO port
-  I/O sites are `0x0E` at `0x2298`/`0x229D` and `0x0F` at `0x065B`, `0x2020`,
-  `0x2023`, `0x2236`.
+  I/O sites in v1.1 are `0x0E` at `0x2298`/`0x229D` and `0x0F` at `0x065B`, plus
+  dead `OUT (0Fh)`s at `0x2020`, `0x2023` and `0x2236` that nothing reaches. ROM 2.0
+  adds `0x2304`, `0x2311`, `0x2320`, `0x23A7`, `0x23C0` and 2.1 `0x3662`; every site is
+  in [the reference](../reference/rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 - **Hunk counts are baseline-specific.** Several TS2068 ROM images are in
   circulation and they are not interchangeable. Everything here is measured against

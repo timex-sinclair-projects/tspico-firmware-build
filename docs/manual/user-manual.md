@@ -1388,7 +1388,7 @@ The choice (RAM or Flash, and the slot) is also used once more the next time the
 starts, then returns to Flash slot 1. RAM loses its contents when the power is off, so only
 boot a RAM slot you've loaded since switching on.
 *(verbose)* `Change ROM to MEM=2, PAGE=4`. **A**: `Wrong values, MEM=…, PAGE=…` (MEM must be
-1 or 2). See Chapter 8.
+1 or 2, so `CODE 0,s` is refused too, except `CODE 0,0`, which shows). See Chapter 8.
 
 ### cd: change folder
 
@@ -1403,7 +1403,8 @@ SAVE "tpi:cd games" CODE 2,0 : REM ... then show the new path
 ```
 
 *(verbose)* `Changed dir to: games` and `Current: /TAP/GAMES`. **F**: `OS error changing to:` a
-folder that isn't there, or `-` with no previous folder.
+folder that isn't there, or `-` with no previous folder. **Q**: the same message for a full path
+whose folder isn't there, such as `/tap/x`.
 
 ### close: unmount
 
@@ -1437,6 +1438,8 @@ SAVE "tpi:dock" CODE 0,1     : REM show the previous setting
 SAVE "tpi:dock" CODE 0,2     : REM swap with the previous setting
 ```
 
+*(verbose)* `Change DOCK to MEM=2, PAGE=0`, and after a swap `Swapped with previous setting`.
+
 Chooses what appears in the cartridge bank. It lasts until the TS-Pico is switched off. While a
 ROM or cartridge is mounted for loading, choosing the slot the 2068 is running from gives
 **Q** (`Can't write Flash slot N:`). See Chapter 8.
@@ -1452,7 +1455,8 @@ SAVE "tpi:ffw" CODE 3,n      : REM n files, then show the tape
 ```
 
 `tpi:rew` works the same way, backwards. *(verbose)* `Moved ahead to block # 4`,
-`Can't FWD. Already at end.`, `Can't FWD. No later file.`, `No .tap file mounted`.
+`Can't FWD. Already at end.`, `Can't FWD. No later file.`, `No .tap file mounted`. All of these
+are **0 OK**, even with nothing mounted: with verbose off, nothing tells you the tape didn't move.
 
 ### help
 

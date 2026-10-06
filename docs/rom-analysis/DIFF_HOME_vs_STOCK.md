@@ -68,7 +68,7 @@ boot with a `+0x5200` offset.
 | `0x0A4A-0x0A81` (56) | `PRSCAN` — the ZX-Printer bit-banging loop on port `0xFB` | Entirely replaced. Adds token expansion at `0x0A68` (`CP 0A5h; SUB 0A5h; CALL 0745h`), converting printer output from a ZX-Printer **bitmap** to **ASCII with BASIC tokens expanded**. |
 | `0x04E8-0x0502` (27) | Tail of the SAVE/LOAD/MERGE filename evaluator | `LD DE,5C92h; LD (5DD7),DE; JP 0A1D` plus trampolines at `0x04F2`/`0x04F8`. **`0x0500` `SENDTV`: `CALL 061A` → `CALL 0A09`** — all character output now passes the `TP_MODE` check. |
 | `0x2548-0x2560` (25) | `DOSAVE` — stock 8-push `LD BC,SLVM; PUSH BC; …` dispatcher | `POP AF; EXX; LD HL,01AB; JP 3CE3` — ~13 bytes saved, plus entries for `0x01CC` and `0x1855`. |
-| `0x03F3-0x041D` (43) | **`BEEPER`** — the `BEEP`/key-click tone generator (`DI; LD A,L; SRL L; SRL L; CPL; AND 03h; LD C,A; LD B,0; LD IX,040Fh`) | Overwritten with a `CALL`-style thunk to **EXROM `0x2000`**, plus a shared dispatcher helper at `0x040D`. **BEEPER itself was relocated verbatim to EXROM `0x203F`** — the only changes are the two `IX` operands (`040F`→`205B`, `0414`→`2060`), preserving the same relative offsets. Bytes `0x041E-0x0421` are now dead remnants. |
+| `0x03F3-0x041D` (43) | **`BEEPER`** — the `BEEP`/key-click tone generator (`DI; LD A,L; SRL L; SRL L; CPL; AND 03h; LD C,A; LD B,0; LD IX,040Fh`) | Overwritten with a `CALL`-style thunk to **EXROM `0x2000`**, plus a shared dispatcher helper at `0x040D`. **BEEPER itself was relocated verbatim to EXROM `0x203F`** — the only changes are the two `IX` operands (`040F`→`205B`, `0414`→`2060`), preserving the same relative offsets. Bytes `0x041E-0x0421` are dead remnants in v1.1; ROM 2.1 reuses `0x041C-0x0420` as the BEEPER thunk's tail (`CALL 03FCh / EI / RET`). |
 
 The `BEEPER` relocation is a neat trick: HOME needed the 43 bytes, the EXROM had
 room, and the routine is self-contained. It also explains EXROM `0x2000`'s entry
@@ -79,7 +79,7 @@ table — its first live entry is `JP 203F`, i.e. "beep".
 | Hunk | What |
 |---|---|
 | `0x3CDC-0x3CFF` (36) | Written into `0xFF` filler after the "Bytes:" message. Contains **`CALL_EXROM`, the HOME→EXROM thunk at `0x3CE3`** — see below. Also `0x3CF8: LD (5DCD),HL; JP 04F8` (a post-return handler entered from `0x0A23`) and two trailing `NOP`s. |
-| `0x0065` (1) | `ff` → `15` in `RST` filler. `0x15` = 21 = the **TPI BIOS version** (`0x0015`). *Medium confidence* — the value matches, but nothing in HOME reads it. |
+| `0x0065` (1) | `ff` → `15` in `RST` filler: the **ROM version byte** a program reads with `PEEK 101` (`0x15` v1.1, `0x17` v1.7, `0x20` 2.0, `0x21` 2.1), changed with `G_VERS` each release. Nothing in the ROM reads it. |
 
 ### Small, less-certain changes
 
