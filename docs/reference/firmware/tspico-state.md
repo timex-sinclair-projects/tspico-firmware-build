@@ -41,12 +41,12 @@ the ROM 2.1 disk commands and the channels.
 | 1339–1356 | `led`, `dead`, `busy` (first named in `BLINK_ERROR` / `BLINK_LED`) |
 | 1750–1752 | `log_entries`, `log_to_serial`, `TSP` (first named in `LOG`) |
 | 2237 | `kill` (first named in `SEND_MSG2`) |
-| 2690–2701 | `SD_FREE`, `SD_QUIET` (which commands need the card) |
-| 3072–3074 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` (`f:` files) |
-| 3224–3225 | `CHANNELS`, `CH_STATUS` (`OPEN #` channels) |
-| 4384 | `EXT_SA_FUNCT` (first named in `GETHELP`) |
-| 4967–4968 | `BANK`, `ROM` (first named in `MEMBOOT`) |
-| 6985 | `ZX_REPORT` (status codes for the ZX ROM) |
+| 2695–2706 | `SD_FREE`, `SD_QUIET` (which commands need the card) |
+| 3077–3079 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` (`f:` files) |
+| 3229–3230 | `CHANNELS`, `CH_STATUS` (`OPEN #` channels) |
+| 4389 | `EXT_SA_FUNCT` (first named in `GETHELP`) |
+| 4972–4973 | `BANK`, `ROM` (first named in `MEMBOOT`) |
+| 6990 | `ZX_REPORT` (status codes for the ZX ROM) |
 
 The run-time globals are listed where their first `global` declaration is,
 which is how the inventory in
@@ -105,10 +105,10 @@ changelog comment is kept as history and is not maintained.
 A [`printer.TextCapture`](printer.md): the virtual printer's text buffer and
 its settings (`buf`, `col`, `line`, `cols`, `lines`, `autolf`, `autopg`).
 Created once at import. `PRINT_IO` feeds characters into it (`PRT.feed`,
-line 5692); `PRINT_FLUSH` writes `PRT.buf` to the card and empties it
-(5619–5632); `PRN_OPEN`, `PRN_CLOSE`, `PRN_FLAG` and `PRN_SIZE` reset or set
+line 5697); `PRINT_FLUSH` writes `PRT.buf` to the card and empties it
+(5624–5637); `PRN_OPEN`, `PRN_CLOSE`, `PRN_FLAG` and `PRN_SIZE` reset or set
 its fields; the dispatcher tests `PRT.buf` before every non-printer
-transaction to decide whether to flush (6561). The invariant is that text
+transaction to decide whether to flush (6566). The invariant is that text
 waits in RAM and reaches the SD card only while the Z80 is parked in a READY
 wait ([tspico-dispatch.md](tspico-dispatch.md), `PRINT_FLUSH`).
 
@@ -116,9 +116,9 @@ wait ([tspico-dispatch.md](tspico-dispatch.md), `PRINT_FLUSH`).
 
 `str` or `None`; `None` at import. The path of the open `/sd/VLPRINT`
 capture file (`PRNnnn.TXT`, from `printer.next_name`). `PRINT_FLUSH` opens
-one when it is `None` (5623–5624) and appends to it afterwards; `PRN_OPEN`
-sets it to a fresh file (5711) or `None` on failure; `PRN_CLOSE` sets it to
-`None` (5731); `SD_REVALIDATE` sets it to `None` when a different card is
+one when it is `None` (5628–5629) and appends to it afterwards; `PRN_OPEN`
+sets it to a fresh file (5716) or `None` on failure; `PRN_CLOSE` sets it to
+`None` (5736); `SD_REVALIDATE` sets it to `None` when a different card is
 in, because the file was on the other card (1249). `None` means "the next
 flush starts a new file". The buffered text in `PRT.buf` is not dropped
 with it, so after a card swap the next flush writes the same text into a
@@ -127,21 +127,21 @@ new file on the new card.
 ### `bmp_size`
 
 `(width, height)` in pixels, `(512, 384)` at import: the size of the `.BMP`
-that `COPY` writes. `PRN_BMP` (`SAVE "tpi:bmp" CODE x,y`) sets it (5779);
+that `COPY` writes. `PRN_BMP` (`SAVE "tpi:bmp" CODE x,y`) sets it (5784);
 `COPY_BMP` derives integer scale factors from it (`bmp_size[0] // w0`,
-`bmp_size[1] // 192`, 5645–5646). See [printer.md](printer.md).
+`bmp_size[1] // 192`, 5650–5651). See [printer.md](printer.md).
 
 ### `PRINT_FLUSH_AT`
 
 `4096`: when `PRT.buf` holds at least this many bytes, `PRINT_IO` flushes
-mid-printout (5693) instead of waiting for the next non-printer
+mid-printout (5698) instead of waiting for the next non-printer
 transaction. The number is a RAM bound, not a measurement.
 
 ### `LISTMENU_CHOICES`
 
 A `dict` from a key's ASCII code to a menu index: `48`–`57` (`0`–`9`) to
 0–9, `81` `87` `69` `82` `84` `89` (`Q W E R T Y`) to 10–15. Read by
-`ListMenu` (3604–3605) when the user picks an entry. Made once at import so
+`ListMenu` (3609–3610) when the user picks an entry. Made once at import so
 the menu loop does not rebuild it (the comment says why). The letters are
 the top row of the 2068 keyboard, so sixteen choices fit one hand (Ricardo's
 change, per the changelog).
@@ -150,7 +150,7 @@ change, per the changelog).
 
 `("INFO", "WARNING", "ERROR", "CRITICAL", "SPECIAL")`: the prefix `LOG`
 puts before a message whose level is 0–4 (1755); `LOGLEVEL` prints the
-current level's label (4864, 4882). Note the fifth label: `LOG` accepts
+current level's label (4869, 4887). Note the fifth label: `LOG` accepts
 level 4, and because its filter drops a message when `level <
 TSP.LOG_LEVEL`, level 4 passes every threshold the manual allows (0–4,
 [user manual App. D](../../manual/user-manual.md)). The comment in
@@ -161,9 +161,9 @@ TSP.LOG_LEVEL`, level 4 passes every threshold the manual allows (0–4,
 `bool`, `False` at import. `True` from `ACTIVATE_SD` (the state machine is
 parked on `NULL_SM` and GPIO 2–4 belong to SPI) until the next
 `ACTIVATE_MQ` sets it `False` ([tspico-bus.md](tspico-bus.md)). Two readers,
-both recovery paths: `FAIL_CMD` (5807) hands the bus back first when a
+both recovery paths: `FAIL_CMD` (5812) hands the bus back first when a
 handler raised while the card had it, and the service-loop restart in
-`TS2068_IO` (6976) does the same after an unexpected error. Without that
+`TS2068_IO` (6981) does the same after an unexpected error. Without that
 check a `put()` would go to the parked state machine and the 2068 would
 never hear from the Pico again (the comment in `FAIL_CMD`;
 [`sd_wedged_hosttest.py`](../../../src/test/sd_wedged_hosttest.py)). Note
@@ -173,28 +173,28 @@ that `DEACTIVATE_SD` does not clear it: only `ACTIVATE_MQ` does.
 
 `str` or `None`; `None` at import. The current directory before the last
 successful change, one level deep like a shell's `cd -`. `CDIR` sets it to
-the old path after a change (4208) and goes back to it for `tpi:cd -`
-(`MOVE TO ""`, 4148–4149); `SD_REVALIDATE` clears it when the folder is not
+the old path after a change (4213) and goes back to it for `tpi:cd -`
+(`MOVE TO ""`, 4153–4154); `SD_REVALIDATE` clears it when the folder is not
 on the card that is in (1241–1242).
 
 ### `files`
 
-`list` of `str`, `[]` at import and again at the top of `TS2068_IO` (6149).
+`list` of `str`, `[]` at import and again at the top of `TS2068_IO` (6154).
 The names of the files in the current folder that a plain listing indexes:
 extension in `catalog.DIR_EXT` (`TAP TZX DCK ROM BIN`), not starting with
 `.`, not `dirinfo.tap`, sorted case-insensitively. The position in this list
 is the number `LOAD "tpi:nnn"` mounts by. `LIST_DIR_FILES` fills it
 (1695) and `DIR_FILES` empties it on a card error (1623)
-([tspico-files.md](tspico-files.md)); readers are `DIR` (2545–2565),
-`CATALOG` (2655), `IDIR` (3422–3438), `GETINFO` (4622), `LOAD_TPI`
-(5243–5295) and `PROCESS_CMD`. Empty until a card has been read: with no
+([tspico-files.md](tspico-files.md)); readers are `DIR` (2545–2570),
+`CATALOG` (2660), `IDIR` (3427–3443), `GETINFO` (4627), `LOAD_TPI`
+(5248–5300) and `PROCESS_CMD`. Empty until a card has been read: with no
 card at boot the commands that list or index are refused by `SD_NEEDED`
 until a card is in (the comment above it).
 
 ### `files_upper`
 
 The same names upper-cased, filled alongside `files` (1696) and emptied
-with it. `LOAD_TPI` matches a typed name against it (5271–5272) so that
+with it. `LOAD_TPI` matches a typed name against it (5276–5277) so that
 mounting is case-insensitive.
 
 ### `dirs`
@@ -202,7 +202,7 @@ mounting is case-insensitive.
 `list` of `str`: the subfolder names of the current folder (type `16384`
 in `os.ilistdir`), in listing order. Filled by `LIST_DIR_FILES` (1682),
 emptied by `DIR_FILES` on error. Read by `CDIR`'s interactive menu
-(4256–4258), with `..` in front except at the top.
+(4261–4263), with `..` in front except at the top.
 
 ### `dirs_upper`
 
@@ -218,7 +218,7 @@ titles) followed by one row per folder, indexed file and unindexed file,
 each 32 characters, with colour codes added at print time by `CAT_COLOUR`.
 `LIST_DIR_FILES` builds it (1725–1727); on a card error `DIR_FILES` replaces
 it with a header and `SD card error: reseat the card` (1628). `DIR` sends it
-(2539) and `CDIR` after a change with `CODE 2,0` (4271). It is the cached
+(2539) and `CDIR` after a change with `CODE 2,0` (4276). It is the cached
 listing: `DIR` looks at the card first (`LISTING_CHECK`,
 [tspico-bus.md](tspico-bus.md)) and only rebuilds it when the folder changed.
 
@@ -226,17 +226,17 @@ listing: `DIR` looks at the card first (`LISTING_CHECK`,
 
 `list` of `str`: every folder under `/sd/TAP`, as paths without the `/sd`
 prefix (`/TAP`, `/TAP/GAMES`, …), sorted; `GET_DIRS` walks the card for it
-(2487). Set by `SD_REVALIDATE` (1252) and `DISK_REN_WORK` (3060); kept up to
-date in place by `MDIR` (append and sort, 4933–4934), `DISK_MAKE_DIR`
-(3012–3013) and `DISK_ERASE` (a slice assignment that drops a removed tree,
-2906). Read by `CDIR`'s global interactive menu (`CODE 0,1`, 4260).
+(2487). Set by `SD_REVALIDATE` (1252) and `DISK_REN_WORK` (3065); kept up to
+date in place by `MDIR` (append and sort, 4938–4939), `DISK_MAKE_DIR`
+(3017–3018) and `DISK_ERASE` (a slice assignment that drops a removed tree,
+2911). Read by `CDIR`'s global interactive menu (`CODE 0,1`, 4265).
 
 ### `sd_space`
 
 `(total, free)` in bytes from `os.statvfs` of the card, or `None`. Set at
 the end of `LIST_DIR_FILES` (1719) and to `None` by `DIR_FILES` on error
 (1627). `GETINFO` prints it when `TSP.sd_present` and it is not `None`
-(4581–4582); the listing header line is built from it at the same time.
+(4586–4587); the listing header line is built from it at the same time.
 
 ### `INK_`, `PAPER_`, `NORMAL_`
 
@@ -257,11 +257,11 @@ text the code and its value are dropped. Users: `DIR_HEADER`, `CAT_COLOUR`,
 
 ### `RXD`
 
-`None` at import; `TS2068_IO` sets it to `RX_DMA(pre_raw)` (6417), the
+`None` at import; `TS2068_IO` sets it to `RX_DMA(pre_raw)` (6422), the
 `RxDMA` channel that catches the pre-header while the Pico is idle, or
 `None` where there is no `rp2.DMA` or no free channel
 ([tspico_io.md](tspico_io.md)). The one reader is `PROCESS_CMD`'s tail,
-which re-arms it (`RXD.arm(MQ)`) before saying IDLE (6112–6113) so that a
+which re-arms it (`RXD.arm(MQ)`) before saying IDLE (6117–6118) so that a
 command the Z80 sends the moment IDLE rises is captured. The dispatcher
 keeps the same object in its local `rxd`.
 
@@ -271,8 +271,8 @@ keeps the same object in its local `rxd`.
 that needs the card gives when there is none, with status
 `_10_J_Invalid_IO`. `SEND_MSG` compares by identity (`msg is NO_CARD_MSG`,
 2176) and forces the display whatever `VERBOSE` says, so callers must pass
-this object, not a copy of its text. Used by `SD_CALL` (2679) and
-`NO_CARD_REPLY` (2719). The comment explains the wording: the `\r` breaks
+this object, not a copy of its text. Used by `SD_CALL` (2684) and
+`NO_CARD_REPLY` (2724). The comment explains the wording: the `\r` breaks
 the 37-character text before the 32-column wrap would, and Report J is the
 report that means the device is not there.
 
@@ -290,13 +290,13 @@ site also says the number in its comment. All are `const()`.
 | `FN_PRINT_CHAR` | `0x83` | print one character | nothing |
 | `FN_RETURN_KEY` | `0x84` | wait for a key and send it back | nothing |
 | `FN_GET_STATUS` | `0x85` | the Z80 sends a keyboard/aux mask | nothing |
-| `FN_PRINT_LOOP` | `0x86` | pages of text with a key between them, `LOOP_END` ends it | `SEND_MSG2` (2284), `PROMPT_EACH` (2741), `ListMenu` (3511, 3534), `SEND_MSG_PROMPT_YN` (5326) |
-| `FN_PRINT_LOOP_LOWER` | `0x88` | `FN_PRINT_LOOP` on the lower screen; ROM 2.1 only | `SEND_MSG_PROMPT_YN` with `lower=True`, which only `tpi:fopen`'s prompt passes (5326) |
-| `STR_END` | `0x00` | end of the text (`FN_PRINT_STRING`); end of a page, the Z80 waits for a key (`FN_PRINT_LOOP`) | `SEND_MSG` (2213), `SEND_MSG2` (2419), `PROMPT_EACH` (2752), `ListMenu` (3584), `SEND_MSG_PROMPT_YN` (5335) |
-| `LOOP_END` | `0x03` | end of the `FN_PRINT_LOOP` loop, no key wait | `SEND_MSG2` (2256), `PROMPT_EACH` (2762), `ListMenu` (3522, 3633), `SEND_MSG_PROMPT_YN` (5359) |
-| `PRE_HEADER` | `0x00` | `pre[0]` of a tape header block: LOAD or SAVE | the dispatcher (6578, 6594, 6781, 6797) |
-| `PRE_DATA` | `0xFF` | `pre[0]` of a tape data block | the dispatcher (6578, 6781, 6797) |
-| `PRE_CMD` | `0x42` | `'B'`: a `tpi:` command, or the printer when `pre[1]` is 4–6 | the dispatcher (6561, 6578, 6809, 6812) |
+| `FN_PRINT_LOOP` | `0x86` | pages of text with a key between them, `LOOP_END` ends it | `SEND_MSG2` (2284), `PROMPT_EACH` (2746), `ListMenu` (3516, 3539), `SEND_MSG_PROMPT_YN` (5331) |
+| `FN_PRINT_LOOP_LOWER` | `0x88` | `FN_PRINT_LOOP` on the lower screen; ROM 2.1 only | `SEND_MSG_PROMPT_YN` with `lower=True`, which only `tpi:fopen`'s prompt passes (5331) |
+| `STR_END` | `0x00` | end of the text (`FN_PRINT_STRING`); end of a page, the Z80 waits for a key (`FN_PRINT_LOOP`) | `SEND_MSG` (2213), `SEND_MSG2` (2419), `PROMPT_EACH` (2757), `ListMenu` (3589), `SEND_MSG_PROMPT_YN` (5340) |
+| `LOOP_END` | `0x03` | end of the `FN_PRINT_LOOP` loop, no key wait | `SEND_MSG2` (2256), `PROMPT_EACH` (2767), `ListMenu` (3527, 3638), `SEND_MSG_PROMPT_YN` (5364) |
+| `PRE_HEADER` | `0x00` | `pre[0]` of a tape header block: LOAD or SAVE | the dispatcher (6583, 6599, 6786, 6802) |
+| `PRE_DATA` | `0xFF` | `pre[0]` of a tape data block | the dispatcher (6583, 6786, 6802) |
+| `PRE_CMD` | `0x42` | `'B'`: a `tpi:` command, or the printer when `pre[1]` is 4–6 | the dispatcher (6566, 6583, 6814, 6817) |
 
 `FN_PRINT_LOOP_LOWER` on ROM 2.0 is Report D with the rest of the answer
 unread ([PROTOCOL.md §13](../../PROTOCOL.md)).
@@ -318,7 +318,7 @@ reports is in [ports-and-status.md](../appendix/ports-and-status.md).
 | `_2_R_Tape_load` | 2 | R Tape loading error | 6: short `f:` file, `tpi:help` file errors, a mount that failed, `PRINT_IO`, a bad command checksum, `ZX_REPORT` |
 | `_3_F_Invalid_file` | 3 | F Invalid file name | 50: "not found", SD card errors (`SD_CALL`), `CH_STATUS["F"]` |
 | `_4_Q_Parameter` | 4 | Q Parameter error | 41: bad arguments to the disk commands; the fallback in `CH_CALL` and `ZX_TPI` |
-| `_5_C_Nonsense` | 5 | C Nonsense in BASIC | 4: an unknown command (6038), a body that does not decode (5990), `SA_NOT_IMP` (3829), `tpi:chwr` with bad hex (3325) |
+| `_5_C_Nonsense` | 5 | C Nonsense in BASIC | 4: an unknown command (6043), a body that does not decode (5995), `SA_NOT_IMP` (3834), `tpi:chwr` with bad hex (3330) |
 | `_6_6_Num2Big` | 6 | 6 Number too big | 1: `tpi:dir CODE 1,n` with `n` past the end |
 | `_7_8_EOF` | 7 | 8 End of file | 3: `tpi:chrd` at the end, `tpi:md` of an existing folder |
 | `_8_A_Invalid_arg` | 8 | A Invalid argument | 21: `BAD_CODE`, bad `CODE` values |
@@ -350,7 +350,7 @@ it observes ([PROTOCOL.md §13](../../PROTOCOL.md), first pitfall).
 staged ([boot.md](boot.md)); `"unknown (no buildinfo)"` when that module
 is missing, so a hand build still runs. Printed at import, tagged with
 `__name__` (`TS.tspico` or `dev_tspico`, the two byte-identical copies);
-logged by `LOAD_CONFIG` (4759); shown by `tpi:info` (4577, through
+logged by `LOAD_CONFIG` (4764); shown by `tpi:info` (4582, through
 `BUILD_FIT`). The comment records why it is generated: a hand-written
 literal rotted. It is assigned inside a `try`, so the inventory does not
 list it as a variable.
@@ -363,7 +363,7 @@ and a third part marks a firmware-only release on the same ROM (the
 comment). `PICO_STATUS.__init__` copies `FW_VERSION` into `TSP` unconditionally
 and takes `ROM_VERSION` from `config.ini` with this as the fallback;
 `LOAD_CONFIG` writes both into the defaults it fills `config.ini` with
-(4784–4785). `tpi:info` reports `TSP.FW_VERSION` and `TSP.ROM_VERSION`.
+(4789–4790). `tpi:info` reports `TSP.FW_VERSION` and `TSP.ROM_VERSION`.
 `config.ini`'s own `FW_VERSION` is kept because `build-payload.sh` and the
 web updater read it ([AUDIT-2026-09-30.md](../../AUDIT-2026-09-30.md),
 status). Maintained by hand on purpose: `BUILD_VERSION` is the commit
@@ -455,7 +455,7 @@ The SD card, kept by `ACTIVATE_SD` and `SD_NOTE_CARD` ([tspico-bus.md](tspico-bu
 | `sd_cid` | `None` | the CID register of the last card mounted: `None` until one has been seen, 0 when the driver could not read it, otherwise the card's identity | `SD_NOTE_CARD` | `SD_NOTE_CARD`, `ACTIVATE_SD` ("none since power-on") |
 | `save_no_card` | `False` | the dispatcher's card check for this SAVE failed | the SAVE branch (from `SD_PROBE`; back to `False` after `SAVE_TS`) | `SAVE_TS` (tspico_io 2468, by `getattr`) refuses at the header with Report J |
 | `sd_listing_ok` | `False` | `DIR_FILES` read the current folder without errors | `SD_REVALIDATE`, `LISTING_FRESHEN`, `REFRESH_LISTING` (each from `DIR_FILES`'s result) | `TS2068_IO`'s boot log (`sd_ok`) |
-| `listing_stale` | `False` | a ZX48 SAVE wrote into the current folder, and the caches have not been re-read | `SAVE_ZX` (tspico_io 2905, `True`), `REFRESH_LISTING` (`False`) | `PROCESS_CMD` (5974), `ZX_TPI` (7041, 7060), both by `getattr` |
+| `listing_stale` | `False` | a ZX48 SAVE wrote into the current folder, and the caches have not been re-read | `SAVE_ZX` (tspico_io 2905, `True`), `REFRESH_LISTING` (`False`) | `PROCESS_CMD` (5979), `ZX_TPI` (7046, 7065), both by `getattr` |
 
 `tpi:dock`'s memory of its previous setting (2026-09-30 audit §2 #19;
 [`audit_fixes_hosttest.py`](../../../src/test/audit_fixes_hosttest.py),
@@ -472,7 +472,7 @@ with `getattr` where they may be missing:
 | Attribute | Set by | Meaning |
 |---|---|---|
 | `listing_sig` | `LIST_DIR_FILES` (1676) | `LISTING_SIG` of the folder as last listed; `LISTING_FRESHEN` compares against it |
-| `native` | `NATIVE_OPEN` (3090–3115); cleared by `LOAD_TS`/`SAVE_TS` in tspico_io | the pending `f:` operation: `op`, `session`, the path or the one-shot tape ([tspico-disk.md](tspico-disk.md)) |
+| `native` | `NATIVE_OPEN` (3095–3120); cleared by `LOAD_TS`/`SAVE_TS` in tspico_io | the pending `f:` operation: `op`, `session`, the path or the one-shot tape ([tspico-disk.md](tspico-disk.md)) |
 | `native_saved` | `SAVE_TS` (tspico_io 2712, 2764), the SAVE branch | the save went to an `f:` file: refresh the listing, change no mount |
 | `load_file` | `LOAD_TS` (tspico_io 1783, 1793) | the tape `LOAD_TS` is serving when it is not `/TMP/temp.tap` |
 | `save_final`, `save_recovered` | `SAVE_TS` (tspico_io 2399–2400, 2417, 2623, 2781); the SAVE branch clears `save_final` | the final status to send after the SD work, and whether `SAVE_TS` gave up on a silent Z80 (RECOVERED) |
@@ -483,14 +483,14 @@ with `getattr` where they may be missing:
 
 The bus state machine, `rp2.StateMachine` on PIO0 state machine 0; the
 object every FIFO read and write and every `MQX` exec goes through. It does
-not exist until `TS2068_IO` first calls `ACTIVATE_SD` (6300): before that
+not exist until `TS2068_IO` first calls `ACTIVATE_SD` (6305): before that
 `TLM` catches the `NameError` and prints `tx=? rx=?`. Three functions
 build it, each a new object on the same hardware state machine:
 `ACTIVATE_MQ` (`TS_IO_DUAL` at 30 MHz, running, Y BUSY), `ACTIVATE_SD`
 (`NULL_SM` at 15 MHz, started and stopped at once: parked) and `ZX48_IO`
-(7145, `TS_IO_DUAL`, started a moment later). The dispatcher and `ZX48_IO`
+(7150, `TS_IO_DUAL`, started a moment later). The dispatcher and `ZX48_IO`
 also take it back from the tuples `SAVE_TS`, `LOAD_SERVE`, `LOAD_ZX`,
-`LOAD_ZX_C` and `SAVE_ZX` return (6632, 6791, 6803, 7191, 7195, 7205), which
+`LOAD_ZX_C` and `SAVE_ZX` return (6637, 6796, 6808, 7196, 7200, 7210), which
 hand back the object they were given. Lifetime: the session. The invariant
 is `sd_active`: when it is `True`, `MQ` is the parked `NULL_SM`, its FIFOs
 reach no Z80, and the real program's FIFOs and Y are gone; every SD access
@@ -506,7 +506,7 @@ keep the Z80's stray writes in while command output waits for room —
 `[count, byte, byte]`, never a list, because this runs while the Z80 is
 streaming and an allocation can start a GC ([tspico_io.md](tspico_io.md),
 `TX_ROOM`). Each user zeroes `_CMD_ECHO[0]` before the call: `CMD_PUT`
-(888), `CMD_SEND` (907), `CH_READ` (3359) and `BLKRCV` (4047, which also
+(888), `CMD_SEND` (907), `CH_READ` (3364) and `BLKRCV` (4052, which also
 logs its contents on a failure). A key the user presses while a listing is
 still going out lands here and is dropped.
 
@@ -524,8 +524,8 @@ a 3 s limit killed `tpi:idir` and a mount-error reply on hardware
 that has really gone says so at once on the 2.x ROMs: BREAK or the next
 command's SYNC is a port-0Fh write, which ends either wait
 ([PROTOCOL.md §3.3](../../PROTOCOL.md)). Users: `CMD_PUT`, `CMD_SEND`,
-`CMD_DRAIN`, `CH_READ` (3360), `BLKRCV` (4048, as the limit after the first
-FIFO-full), `ZX_TPI` for a listing's pages (7055); `CMD_KEY` for
+`CMD_DRAIN`, `CH_READ` (3365), `BLKRCV` (4053, as the limit after the first
+FIFO-full), `ZX_TPI` for a listing's pages (7060); `CMD_KEY` for
 `KEY_WAIT_MS`.
 
 ### `SD_TRY_MS`
@@ -543,7 +543,7 @@ two such attempts, about 8.5 s. Pinned by
 ### `led`
 
 `machine.Pin(25, Pin.OUT)`, the Pico's on-board LED. Created in
-`TS2068_IO` (6154) and never replaced; it does not exist before that, and
+`TS2068_IO` (6159) and never replaced; it does not exist before that, and
 `BLINK_ERROR`, `BLINK_LED` and the other functions that name it with
 `global led` only read it. On during work the user should see as work:
 `MOUNT_FILE`, `DIR`, `CATALOG`, `IDIR`, `GETHELP`, `CDIR`, `GETLOG`, the
@@ -555,12 +555,12 @@ toggled by `BLINK_ERROR` and by `COPY_FILE` as it copies; blinked by
 
 ### `dead`
 
-`bool`. `TS2068_IO` sets it `True` at the start (6146), `False` just before
-it starts `BLINK_LED` on core1 (6286), and `True` again once the card has
-been looked for (6305), which is what tells `BLINK_LED` to stop. The only
+`bool`. `TS2068_IO` sets it `True` at the start (6151), `False` just before
+it starts `BLINK_LED` on core1 (6291), and `True` again once the card has
+been looked for (6310), which is what tells `BLINK_LED` to stop. The only
 reader is `BLINK_LED`'s loop. `SEND_MSG2` declares it `global` and does
 not use it. Its name is the core1 watchdog's ("whether an IO routine is
-alive", the comment at 6129); that watchdog was removed in issue #51
+alive", the comment at 6134); that watchdog was removed in issue #51
 ([DUAL_PORT_DEVELOPMENT.md §8](../../DUAL_PORT_DEVELOPMENT.md), Bug 2, for
 its history in tspico_io), and the `dead`/`busy` handshake `COPY_FILE`
 had with it is gone (the comment at 1379–1402). Nothing else is left of it
@@ -569,17 +569,17 @@ here.
 ### `busy`
 
 `bool`: core1 is writing the log to flash (or, during boot, blinking the
-LED). `TS2068_IO` sets it `False` at the start (6145). Set `True` by
+LED). `TS2068_IO` sets it `False` at the start (6150). Set `True` by
 `BLINK_LED` on entry and `False` on exit; `True` by `SAVE_LOG` and `False`
 in its `finally` (2077, 2091); `True` and `False` around `CLEAR_LOG`'s
 write (2129, 2140); and `True` on core0 by the idle loop just before it
-spawns `SAVE_LOG` (6946), `False` again if the spawn fails with "core1 in
+spawns `SAVE_LOG` (6951), `False` again if the spawn fails with "core1 in
 use" (6912), because then nobody else will clear it. Readers: `WAIT_CORE1`
 (bounded; the dispatcher calls it before a SAVE or LOAD), the SYNC path's
-800 ms wait before IDLE (6507), the idle loop's `if not busy` before
-spawning (6901), `TS2068_IO`'s wait for `BLINK_LED` to stop (6311,
+800 ms wait before IDLE (6512), the idle loop's `if not busy` before
+spawning (6906), `TS2068_IO`'s wait for `BLINK_LED` to stop (6316,
 unbounded, and the comment says why that one is safe), and `ZX48_IO`'s
-bounded 3 s wait before a transfer (7175). The invariant it carries is
+bounded 3 s wait before a transfer (7180). The invariant it carries is
 "a flash write stops both cores, so no transfer may start while one is in
 progress" ([PROTOCOL.md §13](../../PROTOCOL.md), "Wait for core1" and
 "`busy` is set by another core"). Before the 2026-09-30 audit `SAVE_LOG`
@@ -591,30 +591,30 @@ reads.
 
 ### `log_entries`
 
-`list` of `str`, `[]` from `TS2068_IO` (6151). `LOG` appends
+`list` of `str`, `[]` from `TS2068_IO` (6156). `LOG` appends
 `"[<ticks_us>]<LABEL>:<msg>\n"` (1786); the dispatcher and `ZX48_IO` append
 the one string `SAVE_TS`, `LOAD_SERVE` and the ZX transfers return as
-their log (6636, 6793, 6805, 7197, 7207; the comments say an array was
+their log (6641, 6798, 6810, 7202, 7212; the comments say an array was
 planned). `SAVE_LOG` writes every entry to `/activity.log` and replaces the
 list with an empty one in its `finally`, write or no write, so a full flash
 cannot make it grow without bound (2081–2090); `CLEAR_LOG` empties it with
 the file (2134). The idle heartbeats test it (`if log_entries`) to decide
-whether to save (6900, 7275). `SAVE_LOG` runs on core1 in `TS2068_IO`'s
+whether to save (6905, 7280). `SAVE_LOG` runs on core1 in `TS2068_IO`'s
 idle loop and synchronously everywhere else; an entry `LOG` appends on
 core0 between core1's write loop and its `log_entries = []` is lost with
 the replaced list *(inferred: nothing in the code guards that window)*.
 
 ### `log_to_serial`
 
-`bool`, `False` from `TS2068_IO` (6152); nothing in the firmware sets it
+`bool`, `False` from `TS2068_IO` (6157); nothing in the firmware sets it
 `True`. When it is, `LOG` prints each message to the console (1759) and
 then goes on to append it to `log_entries` as usual, so it is "as well as",
-not "instead of" as the comments at 1759 and 6134 say. The code wins. A
+not "instead of" as the comments at 1759 and 6139 say. The code wins. A
 developer flips it at the REPL.
 
 ### `TSP`
 
-The `PICO_STATUS` object. `TS2068_IO` creates it (6157) right after
+The `PICO_STATUS` object. `TS2068_IO` creates it (6162) right after
 `LOAD_CONFIG` returns the settings, and it lives for the session;
 thirty-odd functions declare it `global` and read or write its fields, and
 the dispatcher and `ZX48_IO` take it back from the transfer functions'
@@ -628,9 +628,9 @@ boot with a bad `config.ini`; audit §1 #2,
 
 ### `kill`
 
-`bool`, `False` from `TS2068_IO` (6147). Declared `global` in `SEND_MSG2`
+`bool`, `False` from `TS2068_IO` (6152). Declared `global` in `SEND_MSG2`
 (2237) and read by nothing: the core1 watchdog's "end this IO routine"
-flag (the comment at 6131), left behind when the watchdog went in issue
+flag (the comment at 6136), left behind when the watchdog went in issue
 #51. The audit removed `tspico_io`'s copies (§3); this one is write-only.
 
 ### `SD_FREE`, `SD_QUIET`
@@ -651,7 +651,7 @@ in `SA_funct` needs the card, as do `LOAD "tpi:name"` and `tpi:help
 although closing a write stream with a part-written record writes to the
 card: `CH_CLOSE` mounts the card itself in that one case, and `CLOSE #` of
 a read stream must keep working with no card in (the comment at
-3375–3395; audit §1 #3).
+3380–3400; audit §1 #3).
 
 `SD_QUIET` lists the commands the ROM 2.1 driver sends in the middle of a
 BASIC statement (`TPI:CHOPEN`, `TPI:CHWR`, `TPI:CHRD`, `TPI:FOPEN`): a
@@ -666,12 +666,12 @@ For `SAVE`/`LOAD`/`VERIFY`/`MERGE "f:<path>"`, which the fdd ROM turns into
 
 | Name | Value | Meaning | Used by |
 |---|---|---|---|
-| `NATIVE_TAP` | `"/TMP/native.tap"` | the one-shot tape `NATIVE_LOAD_PREP` builds on the Pico's flash for `LOAD_TS` to serve; on flash because `LOAD_TS` cannot use the card | `NATIVE_OPEN` (3115, into `TSP.native`), `NATIVE_LOAD_PREP` (3168) |
-| `MOD_CODE` | `0xAF` | the BASIC token of `CODE`: the statement's modifier as the ROM sends it | `NATIVE_LOAD_PREP` (3146, 3155) |
-| `MOD_SCREEN` | `0xAA` | `SCREEN$` | `NATIVE_LOAD_PREP` (3148, 3155, 3161) |
+| `NATIVE_TAP` | `"/TMP/native.tap"` | the one-shot tape `NATIVE_LOAD_PREP` builds on the Pico's flash for `LOAD_TS` to serve; on flash because `LOAD_TS` cannot use the card | `NATIVE_OPEN` (3120, into `TSP.native`), `NATIVE_LOAD_PREP` (3173) |
+| `MOD_CODE` | `0xAF` | the BASIC token of `CODE`: the statement's modifier as the ROM sends it | `NATIVE_LOAD_PREP` (3151, 3160) |
+| `MOD_SCREEN` | `0xAA` | `SCREEN$` | `NATIVE_LOAD_PREP` (3153, 3160, 3166) |
 | `MOD_DATA` | `0xE4` | `DATA` | defined, not used by name |
-| `MOD_LINE` | `0xCA` | `LINE` | `NATIVE_LOAD_PREP` (3153) |
-| `KIND` | `{native.T_PROGRAM: "a program", native.T_NUMARR: "an array", native.T_CHARARR: "an array", native.T_CODE: "bytes"}` | the words of the refusal "`<file> holds a program`" when the file's +3DOS type does not match the statement | `NATIVE_LOAD_PREP` (3160, `"data"` for any other type) |
+| `MOD_LINE` | `0xCA` | `LINE` | `NATIVE_LOAD_PREP` (3158) |
+| `KIND` | `{native.T_PROGRAM: "a program", native.T_NUMARR: "an array", native.T_CHARARR: "an array", native.T_CODE: "bytes"}` | the words of the refusal "`<file> holds a program`" when the file's +3DOS type does not match the statement | `NATIVE_LOAD_PREP` (3165, `"data"` for any other type) |
 
 ### `CHANNELS`, `CH_STATUS`
 
@@ -686,36 +686,36 @@ different card is in (1248).
 `CH_STATUS` maps a `ChannelError`'s report letter to a status:
 `"F"` to `_3_F_Invalid_file`, `"Q"` to `_4_Q_Parameter`, `"O"` to
 `_10_J_Invalid_IO`. `CH_CALL` looks the letter up with `_4_Q_Parameter` as
-the default (3259). The comment at 3406 points at the ROM side of the same
+the default (3264). The comment at 3411 points at the ROM side of the same
 table (`CH_CLOSE_HOOK` → `CH_STATUS` → `C_FAIL` in
 [exrom-fdd.md](../rom/exrom-fdd.md)).
 
 ### `EXT_SA_FUNCT`
 
 `dict` from an upper-cased command word to a handler, the external
-commands. `TS2068_IO` imports it (6271–6280) from `/dev_extcmd.py` if that
+commands. `TS2068_IO` imports it (6276–6285) from `/dev_extcmd.py` if that
 override is on the flash, else from the frozen `TS.extcmd`
 ([extcmd.md](extcmd.md)), else `{}` with a log line. `TS2068_IO` passes it
 to `PROCESS_CMD` as a parameter of the same name, which shadows the global
-there (5834, 6030–6034); `GETHELP` reads the global to list the external
-commands (4511–4515). Lifetime: the session; nothing rewrites it.
+there (5839, 6035–6039); `GETHELP` reads the global to list the external
+commands (4516–4520). Lifetime: the session; nothing rewrites it.
 
 ### `BANK`, `ROM`
 
 Two more state machines, created once by `TS2068_IO` and never rebuilt:
 `ROM = StateMachine(4, set_ctrl, freq=150_000_000, in_base=Pin(0),
-jmp_pin=Pin(26), set_base=Pin(21), out_base=Pin(19))` (6179) drives the
+jmp_pin=Pin(26), set_base=Pin(21), out_base=Pin(19))` (6184) drives the
 flash and SRAM control lines, and `BANK = StateMachine(5, sel_bank,
-freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(15))` (6186) the bank
+freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(15))` (6191) the bank
 select lines; the programs are in [pio.md](pio.md), the pins in
 [hardware.md](../hardware.md). Each takes one word through its TX FIFO:
-`ROM.put(TSP.ROM_SM)` and `BANK.put(TSP.bank_sm)` at boot (6189–6190), and
-again from `MEMBOOT` (5009–5010, after a 0.1 s sleep the audit kept) and
-`MEMDOCK` (5130–5131) when the user changes a slot. `PROCESS_CMD` declares
+`ROM.put(TSP.ROM_SM)` and `BANK.put(TSP.bank_sm)` at boot (6194–6195), and
+again from `MEMBOOT` (5014–5015, after a 0.1 s sleep the audit kept) and
+`MEMDOCK` (5135–5136) when the user changes a slot. `PROCESS_CMD` declares
 both `global` and does not use them. The service-loop restart leaves them
 alone on purpose: rebuilding them, or `machine.reset()`, would release the
 lines that select the 2068's ROM bank under the running machine (the
-comment at 6422–6431). The commented-out alternative at 6182–6184
+comment at 6427–6436). The commented-out alternative at 6187–6189
 (`set_dck` on state machine 4) is the DOCK-only mapping. Host harnesses
 must never use state machines 4 or 5.
 
@@ -725,6 +725,6 @@ must never use state machines 4 or 5.
 _4_Q_Parameter: 0x19}`: the status codes above translated into the byte
 the ZX v3 ROM puts in `ERR_NR` for `LOAD "tpi:…"` in ZX48 mode, where
 `0xFF` is `0 OK`. `ZX_TPI` sends `ZX_REPORT.get(st, 0x19)` as the first
-byte of its reply (7087), so any other status is Report Q. See
+byte of its reply (7092), so any other status is Report Q. See
 [tspico-dispatch.md](tspico-dispatch.md), `ZX_TPI`, and
 [zx48.md](../rom/zx48.md).

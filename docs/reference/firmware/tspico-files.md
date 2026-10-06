@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1375–2144,
-2471–2503, 3668–3673, 3834–3893, 4135–4222, 4364–4371, 5017–5060,
-5136–5150, 5232–5297 and 5454–5470 (firmware 2.1.2).
+2471–2503, 3673–3678, 3839–3898, 4140–4227, 4369–4376, 5022–5065,
+5141–5155, 5237–5302 and 5459–5475 (firmware 2.1.2).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -47,20 +47,20 @@ document it is linked, not restated: the pitfalls are in
 | `CLEAR_LOG()` | 2124–2142 | truncate `/activity.log` |
 | `WALK(top)` | 2471–2484 | recursive folder walk (generator) |
 | `GET_DIRS(path='/sd/TAP')` | 2487–2502 | every folder on the card, sorted, as public paths |
-| `isTapMounted()` | 3668–3672 | is the mounted file a `.tap`? |
-| `dir_exists(filename)` | 3834–3838 | `os.stat` says directory |
-| `file_exists(filename)` | 3841–3845 | `os.stat` says not a directory |
-| `public_path(n=0)` | 3862–3874 | `TSP.cur_path` without `/sd`, optionally shortened |
-| `public_fname(n=0)` | 3877–3892 | `TSP.f_name` without `/sd`, optionally shortened |
-| `ChangeDir(potential_new_path, SDactive=False)` | 4135–4222 | the rules of `tpi:cd` / `MOVE TO` |
-| `getArgs(cmd)` | 4364–4371 | the text after the command word |
-| `getBoot()` | 5017–5025 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5028–5036 | (memory, slot) in the DOCK |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5039–5059 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5136–5150 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5232–5252 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5255–5297 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 5454–5470 | nothing mounted: clear the fields, delete the flash copies |
+| `isTapMounted()` | 3673–3677 | is the mounted file a `.tap`? |
+| `dir_exists(filename)` | 3839–3843 | `os.stat` says directory |
+| `file_exists(filename)` | 3846–3850 | `os.stat` says not a directory |
+| `public_path(n=0)` | 3867–3879 | `TSP.cur_path` without `/sd`, optionally shortened |
+| `public_fname(n=0)` | 3882–3897 | `TSP.f_name` without `/sd`, optionally shortened |
+| `ChangeDir(potential_new_path, SDactive=False)` | 4140–4227 | the rules of `tpi:cd` / `MOVE TO` |
+| `getArgs(cmd)` | 4369–4376 | the text after the command word |
+| `getBoot()` | 5022–5030 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5033–5041 | (memory, slot) in the DOCK |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5044–5064 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 5141–5155 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5237–5257 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5260–5302 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 5459–5475 | nothing mounted: clear the fields, delete the flash copies |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -418,7 +418,7 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 `NEW_TAP`, [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file and the mount of
 a newly saved file when nothing was mounted ([part 3](tspico-dispatch.md),
-lines 6699 and 6716, inside a `try` because the card may have gone).
+lines 6704 and 6721, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -596,7 +596,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3000); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3000 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7175), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7180), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
