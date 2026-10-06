@@ -516,11 +516,12 @@ regenerate it when a line number moves (the test checks that it is current).
 |---|---|---|---|
 | `VERSION` | variable | [48](../../../src/upgrade/upgrade.py#L48) | [firmware/upgrade.md](../firmware/upgrade.md) |
 | `REWIND_MS` | variable | [49](../../../src/upgrade/upgrade.py#L49) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `STATUS_NAMES` | variable | [50](../../../src/upgrade/upgrade.py#L50) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `report` | function | [54](../../../src/upgrade/upgrade.py#L54) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `reply` | function | [60](../../../src/upgrade/upgrade.py#L60) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `drained` | function | [80](../../../src/upgrade/upgrade.py#L80) | [firmware/upgrade.md](../firmware/upgrade.md) |
-| `serve` | function | [88](../../../src/upgrade/upgrade.py#L88) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `REPLY_STALL_MS` | variable | [50](../../../src/upgrade/upgrade.py#L50) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `STATUS_NAMES` | variable | [51](../../../src/upgrade/upgrade.py#L51) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `report` | function | [55](../../../src/upgrade/upgrade.py#L55) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `reply` | function | [61](../../../src/upgrade/upgrade.py#L61) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `drained` | function | [102](../../../src/upgrade/upgrade.py#L102) | [firmware/upgrade.md](../firmware/upgrade.md) |
+| `serve` | function | [110](../../../src/upgrade/upgrade.py#L110) | [firmware/upgrade.md](../firmware/upgrade.md) |
 
 ## `src/TS/tspico.py`
 

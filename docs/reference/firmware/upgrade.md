@@ -74,9 +74,9 @@ tape path was proven on hardware with a v15w chip
 | main.py 12–27 | the bus pins at their idle levels, the CPU clock |
 | main.py 29–39 | the three state machines: `ROM`, `BANK`, `MQ`, with the default slot mapping |
 | main.py 41 | `upgrade.serve(MQ, upgrade_data)` |
-| upgrade.py 41–51 | imports from `tspico_io`; `VERSION`, `REWIND_MS`, `STATUS_NAMES` |
-| upgrade.py 54–85 | `report`, `reply`, `drained` |
-| upgrade.py 88–170 | `serve`: tape mode and service mode |
+| upgrade.py 41–52 | imports from `tspico_io`; `VERSION`, `REWIND_MS`, `REPLY_STALL_MS`, `STATUS_NAMES` |
+| upgrade.py 55–107 | `report`, `reply`, `drained` |
+| upgrade.py 110–195 | `serve`: tape mode and service mode |
 | updater.asm 47–68 | ports, ROM and RAM addresses, HSR values, failure reasons |
 | updater.asm 73–119 | `start`: hello, both phases, DONE |
 | updater.asm 123–239 | `phase`: erase, then fetch, program, verify, block by block |
@@ -205,11 +205,12 @@ The last line, `upgrade.serve(MQ, upgrade_data)`, never returns.
 
 ## src/upgrade/upgrade.py
 
-The Pico side of the ROM update: one module, four functions, three
+The Pico side of the ROM update: one module, four functions, four
 constants. It imports from [tspico_io.md](tspico_io.md) exactly what it
 relies on: `MQX` (a PIO instruction without the assembler), `TAPE_STREAM_OF`,
 `ZX_ARM` and `ZX_STREAM` (the tape as one stream, armed and fed), `ZX_FLUSH_TX`
-and `ZX_ROOM` (empty TX; wait for room while listening), `RX_WORD` (a word or
+and `ZX_ROOM` (empty TX; wait for room while listening), `STREAM_DMA` (a
+buffer into TX by DMA, READY once it moves), `RX_WORD` (a word or
 -1 after a timeout, never a bare `MQ.get()`), `TX_DEPTH` (4: the FIFOs are not
 joined) and `PORT_0F` (bit 8 of an RX word). It imports nothing else from
 `TS`, but `tspico_io` does, which is why `manifest.py` freezes `TS.sdcard` and
@@ -232,6 +233,13 @@ tape, the stream is re-armed from its start, so a LOAD that was stopped
 (BREAK between blocks, a reset) does not leave the next one starting in the
 middle of the tape ([tspico_io.md](tspico_io.md) `ZX_STREAM`).
 
+### `REPLY_STALL_MS`
+
+`int`, 1000 ms. How long `reply` waits for the Z80 to take the next byte
+before it gives the reply up (`STREAM_DMA`'s `stall_ms`, `ZX_ROOM`'s
+`stall_ms` on the hand path). It was a literal 1000 in `reply` until the
+2026-10-06 fix.
+
 ### `STATUS_NAMES`
 
 `dict`, code letter to word: `P` phase, `E` erased, `W` written, `V`
@@ -249,28 +257,49 @@ no harm to it.
 
 ### `reply(MQ, data)`
 
-Queue a reply for the Z80 and say READY. Steps: `ZX_FLUSH_TX` (whatever was
-left in TX, up to 64 pulls); put bytes while TX has room, at most `TX_DEPTH`
-(4); `MQX(MQ, "mov(y, invert(null))")`, Y all ones, READY; then for the
-rest, `ZX_ROOM(MQ, 1000)` before each put: -1 means room, so put; anything
-else (-2, a second of no reading; or 0–511, a word the Z80 wrote) flushes TX
-and returns `False`. Returns `True` once every byte is queued, which is not
-yet read: the last four may still sit in TX.
+Queue a reply for the Z80 and say READY. Returns -1 when every byte is in
+TX (the last four may still be unread), -2 when the Z80 stopped reading for
+`REPLY_STALL_MS`, or 0–511, a word the Z80 wrote mid-reply, which `serve`
+then handles as its next request. Steps: `ZX_FLUSH_TX` (whatever was left
+in TX, up to 64 pulls); then
 
-Why in two halves: the PIO dropped the status to BUSY at the Z80's OUT, the
-Z80 polls for READY and reads the moment it sees it, and an empty TX reads
-as 00h (`TS_IO_DUAL`'s docstring; [PROTOCOL.md](../../PROTOCOL.md) §3.2), so
-the first bytes must be there before READY. After that the 4-deep FIFO paces
-the stream: `recv` reads a byte every ~44 µs and `ZX_ROOM` only waits, as
-`LOAD_ZX` does. Calls `MQX`, `ZX_FLUSH_TX`, `ZX_ROOM`; called by `serve` for
-all three replies.
+- **a reply longer than `TX_DEPTH`** (an `'R'` block, 257 bytes):
+  `STREAM_DMA(MQ, data, None, REPLY_STALL_MS, True)`. The channel starts and
+  fills the FIFO, and only then is READY raised; the DMA feeds TX in
+  hardware as the Z80 reads, while core0 only listens. `why` 0 returns -1;
+  `why` 4 (a word, `echo` being `None`) flushes TX and returns the word;
+  any other `why` (3, a stall) flushes and returns -2. `None` (no DMA, or no
+  free channel) falls through to the hand loop;
+- **otherwise, or as the fallback**: put bytes while TX has room, at most
+  `TX_DEPTH`; `MQX(MQ, "mov(y, invert(null))")`, READY; then for the rest
+  `ZX_ROOM(MQ, REPLY_STALL_MS)` before each put: -1 means room, so put;
+  anything else flushes TX and is returned.
 
-Beware: when `ZX_ROOM` returns a word, that word is consumed. The Z80 only
-writes mid-reply if it has given up on this reply, so what is lost is the
-first byte of its next request, and the request's remaining bytes fall
-through `serve`'s "stray byte" path. The updater's own timeouts cover this:
-`wait_ready` gives up after ~4 s and `fetch` asks again *(inferred from the
-code; the host tests do not drive this case)*.
+Why READY only after TX holds bytes: the PIO dropped the status to BUSY at
+the Z80's OUT, the Z80 polls for READY and reads the moment it sees it, and
+an empty TX reads as 00h (`TS_IO_DUAL`'s docstring;
+[PROTOCOL.md](../../PROTOCOL.md) §3.2).
+
+Why DMA for a block: `recv` reads blind, a byte every ~44 µs, from a 4-deep
+FIFO. On MicroPython v1.29 a Python loop putting one byte at a time (with a
+`ZX_ROOM` call per byte) falls behind; the FIFO runs dry and the Z80 reads
+00h. On hardware (2026-10-06, firmware v2.2, the web updater's
+"Latest release") the updater erased slot 1 and then never got a block that
+passed its XOR, and gave up with slot 1 blank. `LOAD_TS`, `LOAD_ZX` and
+`romupdate` had moved to `STREAM_DMA` for the same reason in #126–#128
+([tspico_io.md](tspico_io.md) `STREAM_DMA`); `reply` was the blind stream
+left behind. The 1- and 4-byte answers fit the FIFO before READY, so they
+need no channel.
+
+Why return the word: the Z80 only writes mid-reply after giving up on this
+one, and that word is the first of its next request (`'R'` again, or the
+`'S'` of its failure). Before the fix `reply` read it and dropped it, so the
+request's argument bytes fell through `serve` as strays and the updater
+lost ~4 s in `wait_ready` per occurrence; `serve` now dispatches it.
+Calls `ZX_FLUSH_TX`, `STREAM_DMA`, `MQX`, `ZX_ROOM`; called by `serve` for
+all three replies. `upgrade_hosttest.py` runs the whole upgrade with every
+block sent through a fake DMA channel, and checks a word sent mid-reply
+comes back on both paths.
 
 ### `drained(MQ, ms)`
 
@@ -292,11 +321,14 @@ Setup: `images = {0: IMG0, 1: IMG1}`; `stream, starts = TAPE_STREAM_OF(TAPE)`
 (the tape with its 2-byte lengths dropped; `starts` is not used); `blk`, a
 257-byte buffer reused for every `'R'`; `service = False`;
 `report("waiting", say=...)`; `gc.collect()`; `pos = ZX_ARM(MQ, stream)`, TX
-flushed and the first four bytes queued; `loading = False`. The images and
+flushed and the first four bytes queued; `loading = False`; `nxt = -1`, a
+word a `reply` already read (each `reply`'s result is kept in `nxt`; -1 and
+-2 mean none). The images and
 the tape are frozen `bytes`, so RAM holds only the stream and the block
 *(inferred from the freeze)*.
 
-The loop has two modes, chosen by `service`:
+Each pass first takes `nxt` if it holds a word (and clears it); otherwise
+the loop has two modes, chosen by `service`:
 
 - **Tape mode** (`service` false): `w, pos = ZX_STREAM(MQ, stream, pos,
   REWIND_MS)` feeds TX from the stream, byte by byte as room appears, until
@@ -369,7 +401,12 @@ scripted LD-BYTES and then the real `updater.bin` in `z80core`, with and
 without the P10 jumper, and once with a ZX v3-style READY wait after `'L'`;
 it checks the lines `waiting, tape, updater, P 1 ... 192 W ... D`, the
 flash's final contents, and that after `X 2` TX holds the tape's first four
-bytes again. It also checks that every module-level import of the frozen
+bytes again. Since 2026-10-06 it runs the whole upgrade once more with every
+block sent through a fake DMA channel (`load_ts_hosttest.FakeDMA`), and
+checks that a word the Z80 writes mid-reply comes back from `reply` on both
+paths. The model's Z80 never reads an empty TX, so none of this can show
+the dry FIFO the DMA fixes: that was seen, and must be checked, on
+hardware. It also checks that every module-level import of the frozen
 files is itself frozen and that both workflows stage exactly the frozen
 `TS` files.
 
@@ -626,10 +663,11 @@ Read DE bytes from port 0Eh to (HL), ~44 µs apart. In: HL = destination,
 DE = the count, at least 1. Out: HL past the last byte, DE = 0; corrupts
 AF, B. Each byte: `B = 8`, `DJNZ`, `IN A,(0Eh)`, store, `INC HL`, `DEC DE`,
 loop while DE ≠ 0. There is no handshake per byte and no check: an empty TX
-reads 00h. The cadence is LOAD's, which the 4-deep TX FIFO and `reply`'s
-`ZX_ROOM` loop are known to keep up with; `updater_hosttest.py` asserts
-every reply read is ≥ 40 µs after the previous and that none came from an
-empty TX. Called by `start` (4 bytes), `status` (1), `fetch` (257).
+reads 00h. The cadence is LOAD's: too fast for a Python loop on
+MicroPython v1.29, which is why `reply` sends a block by DMA (2026-10-06);
+`updater_hosttest.py` asserts every reply read is ≥ 40 µs after the previous
+and that none came from an empty TX, in a model where the Pico is never
+late. Called by `start` (4 bytes), `status` (1), `fetch` (257).
 
 ### `status` (61E2h)
 
@@ -665,8 +703,9 @@ Reads `img`, `blk`; writes `xtries`.
 4. `.retry`: `xtries -= 1`; if not zero, `.try`; else carry clear, return.
 
 On the Pico: the `'R'` branch of `serve`. A dropped request (argument
-timeout, or an `'R'` consumed by a `reply` still waiting for room from the
-previous try) costs one try through `wait_ready`'s ~4 s; a reply that was
+timeout) costs one try through `wait_ready`'s ~4 s (an `'R'` that arrives
+while the previous reply is still going is handed back by `reply` and
+answered); a reply that was
 read out of step fails the XOR and costs one try at once. `updater_hosttest.py`
 pins both: three bad XORs still complete, endless bad XORs end in `X 3`
 with the Spectrum ROM intact. Called by `phase`.

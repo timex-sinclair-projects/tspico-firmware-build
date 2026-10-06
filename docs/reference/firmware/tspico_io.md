@@ -441,7 +441,9 @@ flash).
 Callers: `LOAD_TS` (a block in RAM; `echo`, 3000 ms, `True`), `LOAD_ZX`
 (`None`, `ZX_STALL_MS`, `True`), and in `tspico.py` `CMD_SEND` (`MQ_READY` or
 `False`), `CH_READ` (`CH_READY`), the DCK/ROM image stream of `romupdate`
-(`False`, `first_ms=CMD_STALL_MS`) and `ZX_TPI` (`None`, `True`). Beware: `why
+(`False`, `first_ms=CMD_STALL_MS`) and `ZX_TPI` (`None`, `True`); and `upgrade.py`'s
+`reply` for an updater block (`None`, `REPLY_STALL_MS`, `True`; since
+2026-10-06, [upgrade.md](upgrade.md)). Beware: `why
 == 0` says the bytes are in the FIFO, not that the Z80 read them; the claim and
 `pack_ctrl` allocate, which is acceptable only because the Z80 is parked in a
 ready-wait at that moment. [`load_ts_hosttest.py`](../../../src/test/load_ts_hosttest.py)'s
@@ -1031,7 +1033,7 @@ holds — LD-BYTES reads flag + the length it expects + CRC, whatever the block'
 own length — and `LOAD "name"` does that with every block before the one it
 wants, then prints its name and asks for the next. No allocation, as
 `TX_ROOM`. Callers: `LOAD_ZX`, `LOAD_ZX_C`, `ZX_TPI`, and `upgrade.py`'s
-`reply`.
+`reply` (its short answers, and its fallback when no DMA channel is free).
 
 ### UPDATE mode
 
