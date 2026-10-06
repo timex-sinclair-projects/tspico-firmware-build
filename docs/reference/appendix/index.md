@@ -804,7 +804,7 @@ regenerate it when a line number moves (the test checks that it is current).
 | `WAIT_RDY_V3` | label | [104](../../../src/rom/patches/tspico-zx48-v3.asm#L104) | [rom/zx48.md](../rom/zx48.md) |
 | `TPI_CHK` | label | [128](../../../src/rom/patches/tspico-zx48-v3.asm#L128) | [rom/zx48.md](../rom/zx48.md) |
 | `TPI_TXT` | label | [155](../../../src/rom/patches/tspico-zx48-v3.asm#L155) | [rom/zx48.md](../rom/zx48.md) |
-| `TPI_CMD` | label | [159](../../../src/rom/patches/tspico-zx48-v3.asm#L159) | [rom/zx48.md](../rom/zx48.md) |
+| `TPI_CMD` | label | [159](../../../src/rom/patches/tspico-zx48-v3.asm#L159) | [flows/zx48.md](../flows/zx48.md) |
 | `TPI_ERR` | label | [261](../../../src/rom/patches/tspico-zx48-v3.asm#L261) | [rom/zx48.md](../rom/zx48.md) |
 | `TPI_OUT` | label | [269](../../../src/rom/patches/tspico-zx48-v3.asm#L269) | [rom/zx48.md](../rom/zx48.md) |
 | `TPI_DLY` | label | [272](../../../src/rom/patches/tspico-zx48-v3.asm#L272) | [rom/zx48.md](../rom/zx48.md) |
@@ -901,7 +901,7 @@ regenerate it when a line number moves (the test checks that it is current).
 | `YN_LOOP` | label | [45](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L45) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `FN_87_PRINT_N_CHARS` | label | [46](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L46) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
 | `FN_DEAD_BEEP` | label | [47](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L47) | [rom/exrom-chunk1.md](../rom/exrom-chunk1.md) |
-| `WAIT_PICO_READY` | label | [50](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L50) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
+| `WAIT_PICO_READY` | label | [50](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L50) | [flows/break-and-recovery.md](../flows/break-and-recovery.md) |
 | `WAIT_PICO_READY_FAIL` | label | [51](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L51) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `WAIT_PICO_READY_OK` | label | [52](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L52) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
 | `SESSION_SETUP` | label | [53](../../../docs/rom-analysis/tspico-exrom-symbols.sym#L53) | [rom/exrom-driver.md](../rom/exrom-driver.md) |
