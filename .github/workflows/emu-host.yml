@@ -5,6 +5,13 @@ name: Standalone pico_host (emulator firmware)
 # Each build boots the firmware and answers the bridge's HELLO before it is
 # uploaded (--selftest). On a release tag the binaries are attached to the
 # release that release.yml creates.
+#
+# The macOS one is signed (hardened runtime) and notarized when the Apple
+# secrets are available to this repository: MACOS_CERTIFICATE_P12 and
+# MACOS_CERTIFICATE_PASSWORD (Developer ID Application .p12, base64),
+# APPLE_TEAM_ID, NOTARY_API_KEY_P8 (base64), NOTARY_API_KEY_ID,
+# NOTARY_API_ISSUER_ID. Without them it's built unsigned, as before. A bare
+# executable can't carry a stapled ticket: Gatekeeper checks it online.
 
 on:
   push:
@@ -75,12 +82,69 @@ jobs:
           python-version: '3.12'
       - name: PyInstaller
         run: python -m pip install pyinstaller
+      - name: Signing keychain (macOS, when the Apple secrets are set)
+        id: signing
+        if: runner.os == 'macOS'
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$P12" ] || [ -z "$TEAM" ]; then
+            echo "No signing secrets: unsigned."; exit 0
+          fi
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KC_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KC_PASSWORD" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KC_PASSWORD" "$KC"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          # Keychain Access exports with RC2-40: OpenSSL 3 needs -legacy
+          OPENSSL="$(brew --prefix openssl@3)/bin/openssl"
+          if ! "$OPENSSL" pkcs12 -legacy -in "$RUNNER_TEMP/cert.p12" -noout -passin env:P12_PASSWORD; then
+            echo "::error::MACOS_CERTIFICATE_PASSWORD doesn't open MACOS_CERTIFICATE_P12"
+            rm -f "$RUNNER_TEMP/cert.p12"; exit 1
+          fi
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASSWORD" "$KC"
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KC" | sed -n 's/.*"\(Developer ID Application: .*('"$TEAM"')\)"/\1/p' | head -1)
+          [ -n "$IDENTITY" ] || { echo "::error::no Developer ID Application identity for the team"; exit 1; }
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
       - name: Build
+        env:
+          CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
         run: tools/emu/build_standalone.sh
       - name: Self-test (boots the firmware, answers HELLO over TCP)
         run: |
           exe=dist/pico_host; [ -f dist/pico_host.exe ] && exe=dist/pico_host.exe
           "$exe" --root "$RUNNER_TEMP/tspico-root" --selftest --quiet
+      - name: Notarize (macOS, signed)
+        if: steps.signing.outputs.identity != ''
+        env:
+          KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          codesign --verify --strict --verbose=2 dist/pico_host
+          codesign -dvv dist/pico_host 2>&1 | grep -E "flags=.*runtime" || { echo "::error::no hardened runtime"; exit 1; }
+          codesign -dvv dist/pico_host 2>&1 | grep -q "^Timestamp=" || { echo "::error::no secure timestamp"; exit 1; }
+          echo "$KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          ditto -c -k dist/pico_host "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --key "$RUNNER_TEMP/notary.p8" \
+            --key-id "$KEY_ID" --issuer "$ISSUER" --wait --output-format json | tee "$RUNNER_TEMP/notary.json"
+          STATUS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$RUNNER_TEMP/notary.json")
+          if [ "$STATUS" != "Accepted" ]; then
+            ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$RUNNER_TEMP/notary.json")
+            xcrun notarytool log "$ID" --key "$RUNNER_TEMP/notary.p8" --key-id "$KEY_ID" --issuer "$ISSUER" || true
+            rm -f "$RUNNER_TEMP/notary.p8"
+            echo "::error::notarization: $STATUS"; exit 1
+          fi
+          rm -f "$RUNNER_TEMP/notary.p8"
+      - name: Remove the signing keychain
+        if: always() && steps.signing.outputs.identity != ''
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
