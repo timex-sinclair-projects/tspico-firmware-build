@@ -11,6 +11,8 @@ want to **use** it, start elsewhere:
 - using the TS-Pico from BASIC: [the user manual](../manual/user-manual.md);
 - talking to it from machine code, or adding a `tpi:` command: [the
   programmer's manual](../manual/programmers-manual.md), a tutorial;
+- testing programs without the hardware, in ZEsarUX or Fuse: [testing in an
+  emulator](../manual/emulators.md);
 - the wire protocol byte by byte: [PROTOCOL.md](../PROTOCOL.md), whose §13
   is the pitfalls list every contributor should read;
 - why the code is shaped the way it is: [DUAL_PORT_DEVELOPMENT.md](../DUAL_PORT_DEVELOPMENT.md)

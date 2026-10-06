@@ -21,6 +21,11 @@ and `OPEN #` channels, every `tpi:` command, the printer, Spectrum mode, and upd
 code for the TS-2068 that talks to the TS-Pico: the ports and the protocol, the ROM's BIOS
 table, and new `tpi:` commands for the Pico, with worked examples.
 
+**[Testing in an Emulator]({{ '/manual/emulators.html' | relative_url }})** — writing and
+testing TS-Pico programs without the hardware: ZEsarUX or Fuse with `pico_host`, the real
+firmware on your computer and a folder for the SD card; debugging, automated tests, and what
+still needs a real TS-Pico.
+
 **[Programmer's Reference]({{ '/reference/' | relative_url }})** — the firmware and the ROM
 explained function by function: what each routine, variable, PIO program and ROM label does,
 why it exists and what it touches. It is checked against the source on every change, so it is
