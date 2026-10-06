@@ -359,7 +359,7 @@ jobs:
           # image when the build-flash step produced one (see the step above).
           # pages.yml publishes firmware.uf2 and upgrade.uf2 to the updater.
           ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)"
-                   "${RUNNER_TEMP}/upgrade.uf2#upgrade.uf2 (ROM updater for boards coming from 1.1)" )
+                   "${RUNNER_TEMP}/upgrade.uf2#upgrade.uf2 (ROM updater: writes the TS-2068 and ZX ROMs to the flash)" )
           if [ -n "${FLASH_ROM:-}" ] && [ -f "${FLASH_ROM}" ]; then
             ASSETS+=( "${FLASH_ROM}#${FLASH_ROM} (512K flash image, for a chip programmer)" )
           fi

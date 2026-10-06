@@ -11,8 +11,8 @@ command that needs the card when there is none.
 Notation: **TX**/**RX** are the bus state machine's FIFOs (TX is what the
 Z80 reads next); **Y** is the status on port 0Fh: `FF` READY + IDLE, `F7`
 READY with a transaction open, `FB` READY + IDLE + RECOVERED, `00` BUSY.
-The PIO drops Y to `00` after every Z80 OUT by itself (auto-busy). ROM 2.1
-and firmware 2.1.2 throughout.
+The PIO drops Y to `00` after every Z80 OUT by itself (auto-busy). ROM 2.2
+and firmware 2.2.1 throughout.
 
 ## Before it starts
 

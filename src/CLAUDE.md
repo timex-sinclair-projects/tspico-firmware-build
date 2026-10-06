@@ -12,7 +12,7 @@ the hard way.
    - [`docs/PROTOCOL_GUIDE.md`](docs/PROTOCOL_GUIDE.md) — the protocol in
      plain language
    - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the byte-level reference
-     (firmware 2.0, ROM 2.0/2.1), with the pitfalls list
+     (firmware 2.0 and later, ROM 2.0/2.1/2.2), with the pitfalls list
    - [`docs/GUSTAVO_PROTOCOL.md`](docs/GUSTAVO_PROTOCOL.md) — the original
      design, as history (its opening note lists what has changed)
    - [`docs/DUAL_PORT_DEVELOPMENT.md`](docs/DUAL_PORT_DEVELOPMENT.md) —

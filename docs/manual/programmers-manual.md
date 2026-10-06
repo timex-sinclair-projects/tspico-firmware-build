@@ -1,10 +1,10 @@
 # TS-Pico Programmer's Manual
 
-### Machine code for the TS-2068, and new commands for the Pico — version 2.1
+### Machine code for the TS-2068, and new commands for the Pico — version 2.2
 
-> **About this manual.** This manual describes **TS-Pico 2.1**, released on 30 September 2026,
-> and was written from its source code: the firmware, the ROM patches and the test harnesses at
-> the `v2.1` tag. Appendix D lists the repository documents that go with it.
+> **About this manual.** This manual describes **TS-Pico 2.2** (firmware 2.2.1 and ROM 2.2, October
+> 2026). It was written from the source code at the `v2.1` tag: the firmware, the ROM patches and
+> the test harnesses. Nothing it covers changed in 2.2 except the version numbers. Appendix D lists the repository documents that go with it.
 >
 > **Every example is in the `examples` folder next to this manual.** Each machine-code example
 > was assembled with sjasmplus. It was then run in the firmware repository's Z80 interpreter
@@ -76,7 +76,7 @@ The book has two halves, one for each end of the cable:
 
 - A TS-Pico with the **2.2 release**: its firmware, and ROM 2.2 in the 2068. The ROM opens
   every exchange with a "SYNC" that the 1.1 firmware doesn't understand. Our
-  machine-code routines do the same, so they need the 2.1 firmware as well.
+  machine-code routines do the same, so they need firmware 2.0 or later as well.
 - An assembler for your computer. The examples use **sjasmplus** syntax (local labels start with
   a dot, `equ` and `db` as usual).
 - For Part 2: a USB cable and either Thonny or the repository's `tools/pico-serial.py`.
@@ -1266,13 +1266,13 @@ Pico, they're "Unrecognized command" (**C**). From machine code, set the bits yo
 
 ## 8.1 The table
 
-The EXROM holds a jump table at 1840h, the same in every ROM from 1.1 to 2.1:
+The EXROM holds a jump table at 1840h, the same in every ROM from 1.1 to 2.2:
 
 | Address | Name | What it does |
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (its low four bits). AF kept. |
 | 1842h | S_MODE | TPMODE := A AND 0Fh. AF kept. |
-| 1844h | G_VERS | BC = the interface version: 0015h on 1.1, **0021h on 2.1** |
+| 1844h | G_VERS | BC = the interface version: 0015h on 1.1, 0021h on 2.1, **0022h on 2.2** |
 | 1846h | TX_A | `OUT (0Eh),A`. No wait, no BREAK check. |
 | 1848h | RX_A | `IN A,(0Eh)`: Z if the byte is 0. No wait. |
 | 184Ah | C_END | waits for READY, reads the answer and runs the response functions (printing, "Scroll?"). NC = OK; C = failed: A = status−1, or 0Ch (BREAK), 1Ch (the Pico reset the transaction), or 09h on a timeout. See 8.4. |
@@ -1405,7 +1405,7 @@ in RAM, with no bank switching at all.
 
 > **Chapter Preview.** A checklist to keep beside you.
 
-1. **The 2.1 firmware.** The 1.1 firmware doesn't know SYNC, and a SYNC makes
+1. **Firmware 2.0 or later.** The 1.1 firmware doesn't know SYNC, and a SYNC makes
    it lose track of the command.
 2. **SYNC first, every time**, and wait for IDLE before the SYNC.
 3. **Wait for READY after every OUT**, before you read. Every OUT makes the Pico busy.

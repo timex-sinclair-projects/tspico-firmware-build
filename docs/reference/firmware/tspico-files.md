@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1375–2149,
 2474–2506, 3677–3682, 3838–3897, 4139–4226, 4373–4380, 5035–5078,
-5154–5168, 5250–5315 and 5472–5488 (firmware 2.1.2).
+5154–5168, 5250–5315 and 5472–5488 (firmware 2.2.1).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
