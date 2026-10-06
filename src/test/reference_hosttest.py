@@ -331,11 +331,15 @@ def cross_cutting_docs():
 # A line number in prose: 2-5 digits, not part of a word, a hex address
 # (3000h, $3000, 0x3000), a decimal (4.4), a path, or a number with a unit
 # ("6000 ms", "512 bytes"); "#L123" is a line link and is matched. Inline code
-# (`WAIT_CORE1(3000, ...)`) is skipped whole: numbers there are values.
+# (`WAIT_CORE1(3000, ...)`) is skipped whole: numbers there are values. So is
+# a "(...)" that names another source ("(tspico_io 2399, 2417)", "tspico_io's
+# SAVE paths (2747, 2890)"): those are its lines, not this one's.
 LINE_REF_RE = re.compile(r"(?:(?<=#L)|(?<![\w.#/$\\`-]))(\d{2,5})"
                          r"(?![\w%`]|\.\d|\s?(?:ms|µs|s\b|bytes|KB|MHz|kHz|Hz|baud|columns|lines\b|bits))")
-# Numbers that are values, not lines, whatever range they fall in.
-NOT_LINES = {"1024", "2040", "2068", "4096", "6912", "8192", "15104", "16384", "32768", "65536"}
+# Numbers that are values, not lines, whatever range they fall in (and the
+# years this project has dates in).
+NOT_LINES = {"1024", "1536", "2040", "2048", "2068", "4096", "6912", "8192", "15104", "16384", "32768", "65536",
+             "2024", "2025", "2026", "2027"}
 
 
 def git(*args):
@@ -369,7 +373,29 @@ def line_map(old_text, new_text):
     return out
 
 
-def remap_lines(doc, moves, old_len, apply):
+def other_sources(rel):
+    """Stems of the other code sources: "(tspico_io 2399, 2417)" cites them."""
+    stems = {os.path.splitext(os.path.basename(r))[0] for r in FIRMWARE + ROM_ASM}
+    stems.discard(os.path.splitext(os.path.basename(rel))[0])
+    return stems
+
+
+def foreign_spans(line, others):
+    """(start, end) of each "(...)" that cites another source's lines: one
+    that starts with its name ("(tspico_io 2399"), or that follows it named
+    as a file -- `tspico_io`'s, tspico_io.py -- within 40 characters. (A
+    bare `native` is as likely a field as native.py.)"""
+    spans = []
+    for m in re.finditer(r"\(([^()]*)\)", line):
+        head = m.group(1).split(" ", 1)[0].strip("`'")
+        before = line[max(0, m.start() - 40):m.start()]
+        if any(head in (o, o + ".py", o + ".asm") for o in others) or any(
+                re.search(r"`%s`'s|\b%s\.(py|asm)\b" % (re.escape(o), re.escape(o)), before) for o in others):
+            spans.append((m.start(), m.end()))
+    return spans
+
+
+def remap_lines(doc, moves, old_len, apply, others=()):
     """doc's line numbers through moves: [(line, old, new, exact, context)]; writes if apply."""
     text = read(doc)
     changes, out, in_code = [], [], False
@@ -380,15 +406,21 @@ def remap_lines(doc, moves, old_len, apply):
             out.append(line)
             continue
 
-        def sub(m):
+        def sub(m, base=0, spans=()):
             v = m.group(1)
-            if v in NOT_LINES or int(v) > old_len or int(v) not in moves:
-                return v
+            at = base + m.start()
+            if (v in NOT_LINES or int(v) > old_len or int(v) not in moves
+                    or any(a <= at < b for a, b in spans)):
+                return m.group(0)
             new, exact = moves[int(v)]
             changes.append((no, v, str(new), exact, line.strip()[:110]))
             return str(new)
-        parts = line.split("`")                    # even parts are prose; odd ones are code spans
-        out.append("`".join(LINE_REF_RE.sub(sub, x) if i % 2 == 0 else x for i, x in enumerate(parts)))
+        spans = foreign_spans(line, others)
+        parts, done, pos = line.split("`"), [], 0  # even parts are prose; odd ones are code spans
+        for i, x in enumerate(parts):
+            done.append(LINE_REF_RE.sub(lambda m, b=pos: sub(m, b, spans), x) if i % 2 == 0 else x)
+            pos += len(x) + 1
+        out.append("`".join(done))
     if apply and changes:
         with open(os.path.join(ROOT, doc), "w") as f:
             f.write("\n".join(out))
@@ -414,7 +446,8 @@ def relines(sources, since=None, apply=False):
             return 1
         moves = line_map(old, read(rel))
         for doc in row_docs(line.split("|")[3]):         # the Chapter cell, not the flows
-            for no, a, b, exact, ctx in remap_lines(doc, moves, old.count("\n") + 1, apply):
+            for no, a, b, exact, ctx in remap_lines(doc, moves, old.count("\n") + 1, apply,
+                                                    other_sources(rel)):
                 total += 1
                 print("%s:%d  %s -> %s%s  | %s" % (doc, no, a, b, "" if exact else "  (changed line)", ctx))
     print("\n%d number(s) %s" % (total, "moved" if apply else

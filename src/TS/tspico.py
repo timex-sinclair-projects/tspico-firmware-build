@@ -1507,10 +1507,15 @@ def DCK_IMAGE():
 def shorten_filename(nom, l):
     # Shorten a filename to fit in length l by removing characters from the
     # middle of the name before the file extension, replacing them with a '>'.
+    # Never longer than l (#168): an "extension" too long to keep with the
+    # '>' in front -- a path whose last dot is in a long folder name -- is
+    # shortened as part of the name.
     size = len(nom)
     if size > l:
+        if l < 1:
+            return ""
         j = nom.rfind('.')
-        if j == -1:
+        if j == -1 or size - j > l - 1:     # no room for the '>' before it
             j = size
         e = size - j # length of ext with dot
         k = l - 1 - e
