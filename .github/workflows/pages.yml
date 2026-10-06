@@ -159,14 +159,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Don't filter with --status success: while other main builds are
-          # in flight it has returned a months-old run (Pages run
-          # 36475123993). List recent runs, keep the green ones client-side,
-          # newest first, and take the first whose firmware still downloads.
-          CANDIDATES="$(gh run list --workflow build.yml --branch main --event push \
-                          --limit 20 --json databaseId,headSha,conclusion,createdAt \
-                          --jq 'map(select(.conclusion == "success")) | sort_by(.createdAt) | reverse
-                                | .[] | "\(.databaseId) \(.headSha)"')"
+          # Walk main's newest commits and look each one's build up by
+          # head_sha; take the first green run whose firmware still downloads.
+          # Not `gh run list --branch main`: GitHub's branch filter for main
+          # stopped at a June run here (2026-10-06: the newest it returned
+          # was 27991316095, so every candidate's artifact had expired and
+          # the main/ channel vanished), and with --status success it once
+          # returned a months-old run (Pages run 36475123993).
+          # tools/pico-serial.py looks runs up by head commit for the same
+          # reason (2026-10-01).
+          CANDIDATES=""
+          for C in $(gh api "repos/$GITHUB_REPOSITORY/commits?sha=main&per_page=20" --jq '.[].sha'); do
+            R="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?head_sha=$C&event=push" \
+                   --jq '[.workflow_runs[] | select(.conclusion == "success" and .head_branch == "main")]
+                         | sort_by(.created_at) | reverse | .[0].id // empty')" || R=
+            if [ -n "$R" ]; then CANDIDATES="$CANDIDATES$R $C"$'\n'; fi
+          done
           ID= SHA=
           while read -r CID CSHA; do
             [ -n "$CID" ] || continue
