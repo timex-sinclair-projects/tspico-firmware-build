@@ -254,7 +254,7 @@ block graphics and UDGs as their patterns.
 
 | HOME | Now | What |
 |---|---|---|
-| 0A4Ah | `LD (5DCDh),HL / LD HL,1633h` (falls into 0A50h) | COPY-LINE's entry → EXROM 1633h → 17C3h, the stock COPY-LINE moved unchanged |
+| 0A4Ah | `LD (5DCDh),HL / LD HL,1633h` (falls into 0A50h) | COPY-LINE's entry, at the stock address → EXROM 1633h → 17C3h → the stock COPY-LINE at 17DCh, moved |
 | 0A50h | the no-return thunk (above) | |
 | 0A68h | `CP A5h / JP C,0A73h / SUB A5h / CALL 0745h / RET` | a keyword token (A5h and above): the stock PO-TOKENS prints its text, which comes back through 0500h one character at a time |
 | 0A73h | `CP 90h / JP NC,0A26h` | 90h–A4h: a UDG |
@@ -262,10 +262,14 @@ block graphics and UDGs as their patterns.
 | 0A81h | `NOP` | |
 
 The genuine bytes were COPY-LINE, the loop that clocked a line of pixels
-into the ZX Printer on port FBh. In ROM 2.1 nothing calls 0A4Ah: its two
-genuine callers were inside K_DUMP and COPY-BUFF, which are gone. A program
-that called the stock COPY-LINE directly would now reach the EXROM
-*(inferred: kept for that reason or by accident)*. Printer output becomes
+into the ZX Printer on port FBh. In ROM 2.1 nothing in the ROM calls 0A4Ah:
+its two genuine callers (0A0Ah, 0A2Ah) were inside K_DUMP and COPY-BUFF,
+which moved to the EXROM. The entry is kept for programs that call the stock
+COPY-LINE themselves, and it works: 0A4Ah reaches EXROM 17C3h, which calls
+the moved loop at 17DCh -- the stock bytes but for its BREAK exit -- and
+returns to HOME, so a machine-code call still drives a TS2040 (checked
+against `ROMs/GENUINE-2068-home.bin`, #178; whether the thunk was placed at
+the stock address for this reason is not recorded *(inferred)*). Printer output becomes
 text with the keywords spelled out, where the ZX Printer received dots.
 
 ### 0E0Ch: a 16K EXROM
