@@ -277,6 +277,14 @@ def test_prompt_each(t):
           "N: stops there, no 0x03 (the ROM already left its loop)")
     got = run([ord("n")])
     check(got == [] and 0x03 not in tx, "lower-case n stops too (the ROM tests AND 5Fh)")
+
+    t.rom_id = 0x23                                             # ROM 2.3 (#227): keys as typed, N goes on
+    got = run([ord("y"), ord("n"), ord("Y")])
+    check(got == [0, 2] and nr(tx)[-3:] == [ord("Y"), 0x03, "DRAIN"] and tx.count("READY") == 4,
+          "ROM 2.3: y / n / Y -> 0 and 2; n skips that one, the exchange goes on to 0x03 (%r)" % got)
+    check([b for b in tx if b in (ord("y"), ord("n"))] == [ord("y"), ord("n")],
+          "  each key echoed as typed")
+    t.rom_id = 0xFF
     try:
         got = run([], prompts=())
         ok = got == [] and tx == []
@@ -290,13 +298,20 @@ def test_prompt_each(t):
         keys[:] = [k]
         return t.SEND_MSG_PROMPT_YN("Replace x? (Y/N)", lower=lower)
     got = yn(ord("y"), True)
-    check(got == ord("y") and nr(tx)[:3] == [0x88, 1, ord("R")] and ready_after_data(tx),
+    check(got == ord("Y") and nr(tx)[:3] == [0x88, 1, ord("R")] and ready_after_data(tx),
           "0x88, status, then the prompt at once -- no leading new line; READY after data (%r)" % tx[:5])
     k = tx.index(0)
     check(tx[k + 1:k + 5] == [ord("y"), 0x0D, 0x03, "READY"],  # (3 bytes: all in TX, then READY)
           "after the key: its echo, a new line for the ROM's next message, 0x03, READY (%r)" % tx[k + 1:])
     got = yn(ord("N"), True)
     check(got == ord("N") and 0x0D not in tx[tx.index(0):] and 0x03 not in tx, "N: nothing after the key")
+    t.rom_id = 0x23
+    got = yn(ord("n"), True)
+    k = tx.index(0)
+    check(got == ord("N") and tx[k + 1:k + 5] == [ord("n"), 0x0D, 0x03, "READY"],
+          "ROM 2.3: 'n' comes back as N; the ROM reads on, so its echo as typed, 0x0D, 0x03, READY (%r)"
+          % tx[k + 1:])
+    t.rom_id = 0xFF
     yn(ord("y"), False)
     check(nr(tx)[:3] == [0x86, 1, 0x0D] and ready_after_data(tx) and 0x0D not in tx[tx.index(0):],
           "main screen (0x86): the leading new line and echo as before, no extra one")

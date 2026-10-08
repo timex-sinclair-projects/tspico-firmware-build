@@ -47,7 +47,7 @@ All checksums below were computed from the files in the repository.
 | 1.1 | `ROMs/TSPICO-11-home`, `-exrom` | 16K + 16K | `E8714BED`, `268649F6` | 15h | Gustavo Pane's ROM as the boards shipped; the only public release before ROM 2.2 | what users still have (the upgrade UF2 replaces it; [../firmware/upgrade.md](../firmware/upgrade.md)) |
 | the base image | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | 1.1 plus 104 EXROM bytes (a ready-wait and guard in the Y/N loop, and BREAK at the SAVE prompt) and the version byte | build input: the base `tspico-sync.asm` patches; never released |
 | the SYNC layer | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | the base image plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | build input: the base `build-rom.py` patches; never released |
-| **ROM 2.2** | `src/rom/TSPICO-22.ROM` | 32K | `8363E100` | 22h | the SYNC layer plus the disk-command layer: 16 patches and the module at EXROM 3000h–377Eh; 2030 bytes in 15 hunks | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **ROM 2.3** (prototype, #227/#228) | `src/rom/TSPICO-22.ROM` (the name kept until release) | 32K | `1338F0D5` | 23h | the SYNC layer plus the disk-command layer: 20 patches and the module at EXROM 3000h–37B4h; 2099 bytes in 19 hunks. ROM 2.2 (`8363E100`, 22h) was the same less four patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX build input | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base `tspico-zx48-v3.asm` patches |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | the ZX build input plus a WAIT_RDY fix, `LOAD "tpi:…"` and `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
 
@@ -76,6 +76,9 @@ ROM 2.2 is built in layers, each the image below it plus patches:
 build history ([ROM_CHANGES.md](../../ROM_CHANGES.md#lineage)) has the
 detail. The ROM and the firmware share one version number: firmware 2.2.x
 runs ROM 2.2 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)).
+ROM 2.3 changes what function 86h does after `N` and what the string
+reader takes for the end (#227, #228); firmware tells it from an older ROM
+by byte 2 of each command pre-header, so one firmware answers both.
 ROM 2.2 needs firmware that understands the SYNC byte; the firmware that
 came with 1.1 reads it as the first byte of a command.
 
@@ -115,8 +118,8 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | the base image | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | the SYNC layer | [exrom-sync.md](exrom-sync.md) |
 | 23D4h–2FFFh | 3116 | `FFh`, free | | |
-| 3000h–377Eh | 1919 | the disk-command module | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
-| 377Fh–3FFFh | 2177 | `FFh`, free | | |
+| 3000h–37B4h | 1973 | the disk-command module (377Fh–37B4h `PS_READ`, from ROM 2.3) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
+| 37B5h–3FFFh | 2123 | `FFh`, free | | |
 
 Chunk 0 is effectively full: the 1K hole at 1800h was used for the driver,
 and the stock "call into HOME" sequence, repeated through the ROM, was
@@ -208,11 +211,12 @@ copies): [SYMBOLS.md](../../rom-analysis/SYMBOLS.md#cross-rom-machinery).
 
 Four places say, and they are changed together:
 
-| Where | 1.1 | ROM 2.2 |
-|---|---|---|
-| HOME 0065h (`PEEK 101`) | 15h | 22h (34) |
-| BIOS G_VERS (EXROM 1844h → 1852h, `LD BC,nnnn`) | | 0022h |
-| the banner at EXROM 1C6Ch, at start-up | | "2026 TS-Pico ROM v2.2" |
+| Where | 1.1 | ROM 2.2 | ROM 2.3 |
+|---|---|---|---|
+| HOME 0065h (`PEEK 101`) | 15h | 22h (34) | 23h (35) |
+| BIOS G_VERS (EXROM 1844h → 1852h, `LD BC,nnnn`) | | 0022h | 0023h |
+| the banner at EXROM 1C6Ch, at start-up | | "2026 TS-Pico ROM v2.2" | "… v2.3" |
+| byte 2 of a command pre-header (EXROM 1BB5h, the module's `ROM_ID`), which the Pico reads | FFh | FFh | 23h |
 | the module's FDD_VERSION (EXROM 30AFh) | | 8 |
 
 A BASIC program tests `PEEK 101`; machine code calls G_VERS through the
@@ -314,12 +318,18 @@ prints it). CI ([../firmware/boot.md](../firmware/boot.md#ci-buildyml))
 runs `--verify`, fails if the committed `TSPICO-22.ROM` differs from the
 fresh build by a single byte, checks the manifest's crc32, and runs
 `rom_cend_hosttest.py` on `C_END2`, `rom_tpmode_hosttest.py` on the
-switch words and `rom_preload_hosttest.py` on `PRELOAD` in a Z80
+switch words, `rom_preload_hosttest.py` on `PRELOAD` and
+`rom_fn86_hosttest.py` on `PS_READ` and function 86h's loop in a Z80
 interpreter.
+
+A patch that jumps into the module names a fixed address in its `after`
+bytes. `FIXED_SYMS` lists each such module symbol with the address the
+patches use (`PS_READ`: 377Fh), and the build fails if the assembled module
+puts it anywhere else.
 
 #### The patches
 
-Sixteen, applied in this order. The reason for each is in the source's
+Twenty, applied in this order (the last four are ROM 2.3's). The reason for each is in the source's
 `note`, and in full, with what it calls, in the chapter named.
 
 | Site | Before → after | What it does | Chapter |
@@ -337,14 +347,18 @@ Sixteen, applied in this order. The reason for each is in the source's
 | HOME 13A5h | `CALL 13BEh` → `CALL 1494h` | CLOSE # through its trampoline | [home.md](home.md) |
 | EXROM 184Fh | `JP 23CDh` → `JP 301Bh` | BIOS C_END becomes C_END2: a timeout is J, not F | [exrom-driver.md](exrom-driver.md), [exrom-fdd.md](exrom-fdd.md) |
 | EXROM 20BEh | `CALL 1861h / JR 2108h` → `JP 301Eh` + 2 × `00` | `tpi:tape` clears only the LOAD/SAVE switch (TPMODE bit 1), through the module's TAPE_MODE; 1.1 set TPMODE to 0, turning the printer switch off too (#176) | [sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027), [exrom-fdd.md](exrom-fdd.md) |
-| EXROM 1C7Eh | the SYNC layer's four version characters → `"v2.2"` | the banner | [exrom-driver.md](exrom-driver.md) |
-| HOME 0065h | `20h` → `22h` | `PEEK 101` | [home.md](home.md) |
-| EXROM 1852h | `LD BC,0020h` → `LD BC,0022h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
+| EXROM 1C7Eh | the SYNC layer's four version characters → `"v2.3"` | the banner | [exrom-driver.md](exrom-driver.md) |
+| HOME 0065h | `20h` → `23h` | `PEEK 101` | [home.md](home.md) |
+| EXROM 1852h | `LD BC,0020h` → `LD BC,0023h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
+| EXROM 1BB5h | `LD A,(5DCFh)` → `LD A,23h / NOP` | a command pre-header's byte 2 is the ROM's version, not BANK_SV (always FFh): the firmware knows a 2.3 ROM (#227) | [exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h) |
+| EXROM 21F0h | `AND 5Fh / CP 'N' / JP NZ,22A1h` → `JP 22A1h` + 4 × `00` | function 86h (and 88h): `N` goes round the loop like any key; the Pico ends it with 03h (#227) | [exrom-chunk1.md](exrom-chunk1.md#fn_86_yn_prompt-21e3h) |
+| EXROM 0572h | `AND 0DFh` → 2 × `00` | `POLL_KEYPRESS` no longer upper-cases a letter: the key goes as typed (#227) | [exrom-chunk1.md](exrom-chunk1.md#get_key_and_send-0471h) |
+| EXROM 045Fh | `PUSH AF / JR 0465h` → `JP 377Fh` | `PRINT_STRING_FROM_PICO` becomes the module's `PS_READ`: control-code values and bytes ≥ 80h are text (#228) | [exrom-fdd.md](exrom-fdd.md#ps_read) |
 
 The difference the disk-command layer makes, measured on the committed
-images (`TSPICO-SYNC.ROM` → `TSPICO-22.ROM`): 2030 bytes in 15 hunks: 99
-in HOME, 16 in the EXROM outside the module, and 1915 in the module's
-region — 4 of the module's 1919 bytes are `FFh`, the same as the free space
+images (`TSPICO-SYNC.ROM` → `TSPICO-22.ROM`): 2099 bytes in 19 hunks: 99
+in HOME, 31 in the EXROM outside the module, and 1969 in the module's
+region — 4 of the module's 1973 bytes are `FFh`, the same as the free space
 they replaced. The three version patches replace the SYNC layer's own version marks
 (its banner characters, `20h` and `0020h`). The byte-by-byte account is in the build
 history ([ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-home-and-exrom-patches)).

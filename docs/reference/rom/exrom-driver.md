@@ -446,7 +446,7 @@ A `tpi:` command's pre-header, then its body, then the answer.
         LD A,'B' / LD D,A      ; D = the XOR, seeded with the first byte
 1BAAh   CALL SYNC_WRITE        ; SYNC layer: SYNC, wait READY+IDLE, then OUT 'B'
         T_ADDR    (0 SAVE, 1 LOAD: the mount)
-        BANK      (5DCDh's neighbour 5DCFh: FFh)
+1BB5h   BANK      (5DCDh's neighbour 5DCFh: FFh); ROM 2.3: 23h
         PMR1 lo, hi
         PMR2 lo, hi
         length lo (B), length hi (5DCEh)
@@ -454,6 +454,17 @@ A `tpi:` command's pre-header, then its body, then the answer.
 1BE1h   LD HL,(5DD3h)          ; the text
         CALL SEND_DATA_BLOCK_D
 ```
+
+**Byte 2 in ROM 2.3** (#227). Up to ROM 2.2, 1BB5h is `LD A,(5DCFh)`:
+BANK_SV, which is always FFh, and the firmware ignored the byte. ROM 2.3
+patches it to `LD A,23h / NOP`, its version marker (the value `PEEK 101`
+gives), and the disk module sends the same from `SEND_FOPEN` and `CH_SEND`
+([exrom-fdd.md](exrom-fdd.md)). So every command the Pico answers says
+which ROM sent it, and the firmware knows whether function 86h will read on
+after `N` and whether the string reader takes control-code values as text
+(`rom_id`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id)).
+Only the `'B'` pre-header changed; a LOAD or SAVE block's pre-header
+(189Ah) still sends BANK_SV.
 
 The ten bytes are [PROTOCOL.md §4.3](../../PROTOCOL.md#43-the-pre-header-and-the-dispatcher)'s
 `'B'` layout; the Pico does not check this XOR for commands. SEND_DATA_BLOCK_D
@@ -539,9 +550,11 @@ run time → Report C) the over-long name.
 `CALL WAIT_PICO_READY / JP C,1B87h / JP TSPICO_WRITE_DATA`: wait for READY,
 then send the key in A. GET_KEY_AND_SEND (0471h) tail-calls it for response
 functions 82h, 84h and 86h ([exrom-chunk1.md](exrom-chunk1.md)). On a
-timeout, 1B87h pops three levels and raises Report R. The key is sent
-upper-case (the keyboard routines produce it that way), which is what the
-firmware compares against ([../firmware/tspico-messages.md](../firmware/tspico-messages.md#the-answer-on-the-wire)).
+timeout, 1B87h pops three levels and raises Report R. Up to ROM 2.2 a letter
+is sent upper case (`POLL_KEYPRESS` makes it so at 0572h); ROM 2.3 sends it
+as typed, and the firmware upper-cases it for its own tests
+([exrom-chunk1.md](exrom-chunk1.md#get_key_and_send-0471h),
+[../firmware/tspico-messages.md](../firmware/tspico-messages.md#the-answer-on-the-wire)).
 
 ## The boot message (1C49h)
 

@@ -56,7 +56,7 @@ the fixed one ([sysvars.md](sysvars.md#5d37h-the-nmi-vector)).
 
 | HOME | Since | Genuine | Now | What | Statement |
 |---|---|---|---|---|---|
-| 0065h | 1.1 | `FFh` | the version (22h) | `PEEK 101` | — |
+| 0065h | 1.1 | `FFh` | the version (23h; 22h in ROM 2.2) | `PEEK 101` | — |
 | 03F3h–0420h | 1.1, disk-command layer | BEEPER | BEEPER thunk, the returning thunk 03FCh, a CALL_B copy at 040Dh | BEEPER moved to EXROM 203Fh | BEEP, key click |
 | 04E8h–0502h | 1.1 | the tail of a syntax routine; SENDTV `CALL 061Ah` | printer helpers; SENDTV `CALL 0A09h` | every printed character passes the TPMODE test | PRINT, LPRINT, LLIST |
 | 0A02h–0A2Fh | 1.1 | COPY (K_DUMP) and COPY-BUFF | COPY → EXROM 1630h; the character router 0A09h; COPY-BUFF → EXROM 1636h | COPY and the printer buffer | COPY, LPRINT |
@@ -177,7 +177,7 @@ but not the bank stack; see 14B2h below.
 
 `FFh` filler in the genuine ROM, between the restarts and the NMI routine
 at 0066h. The TS-Pico ROMs put their version there: 15h in 1.1, 22h (34) in
-ROM 2.2; the two build inputs carry 17h and 20h, which the build
+ROM 2.2, 23h (35) in ROM 2.3; the two build inputs carry 17h and 20h, which the build
 overwrites. `PEEK 101` reads it; nothing in either ROM does. BIOS G_VERS returns the same number in BC
 ([overview.md](overview.md#which-rom-is-this)). Each release changes this
 byte and G_VERS together.

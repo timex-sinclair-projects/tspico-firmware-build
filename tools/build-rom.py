@@ -199,28 +199,78 @@ PATCHES = [
              "nothing else jumps to $20BE-$20C2 ($20C3 is tpi:sdcard's entry).",
     ),
     dict(
-        name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.2\"",
+        name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.3\"",
         bank="exrom", addr=0x1C7E,
-        before="76 32 2e 30", after="76 32 2e 32",
+        before="76 32 2e 30", after="76 32 2e 33",
         note="The copyright line at $1C6C (tspico-sync.asm) shown at start-up. "
              "Same length, so nothing else moves.",
     ),
     dict(
-        name="version marker: HOME $0065 20h -> 22h (ROM 2.2)",
+        name="version marker: HOME $0065 20h -> 23h (ROM 2.3)",
         bank="home", addr=0x0065,
-        before="20", after="22",
+        before="20", after="23",
         note="PEEK 101 tells a program which ROM it has: 15h v1.1, 17h v1.7, "
-             "20h 2.0 (tspico-sync.asm), 21h 2.1 (the disk commands), 22h this "
-             "ROM, 2.2 (2.1 plus the tpi:tape and pre-load fixes).",
+             "20h 2.0 (tspico-sync.asm), 21h 2.1 (the disk commands), 22h 2.2 "
+             "(2.1 plus the tpi:tape and pre-load fixes), 23h this ROM, 2.3 "
+             "(keys as typed, the Pico ends the $86 loop, the new string reader).",
     ),
     dict(
-        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0022h",
+        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0023h",
         bank="exrom", addr=0x1852,
-        before="01 20 00 c9", after="01 22 00 c9",
+        before="01 20 00 c9", after="01 23 00 c9",
         note="The Pico Interface BIOS G_VERS ($1844 -> $1852) returns the same "
              "version as HOME $0065.",
     ),
+    dict(
+        name="command pre-header byte 2: LD A,(BANK_SV) -> LD A,23h (ROM_ID)",
+        bank="exrom", addr=0x1BB5,
+        before="3a cf 5d", after="3e 23 00",
+        note="BUILD_PREHEADER_B sent BANK_SV, which is always FFh, and the Pico "
+             "ignored it. ROM 2.3 sends its version marker instead, so the "
+             "firmware knows the ROM keeps the $86 loop going after N and sends "
+             "keys as typed (#227) and reads control-code parameters and bytes "
+             ">= 80h as text (#228). fddcmd.asm's SEND_FOPEN and CH_SEND send "
+             "ROM_ID too. FFh = ROM 2.2 or earlier.",
+    ),
+    dict(
+        name="function $86: every key goes on round the loop ($21F0 -> JP YN_LOOP_GUARD)",
+        bank="exrom", addr=0x21F0,
+        before="e6 5f fe 4e c2 a1 22", after="c3 a1 22 00 00 00 00",
+        note="Was AND 5Fh / CP 'N' / JP NZ,YN_LOOP_GUARD, then JP LOOP_EXIT_OK "
+             "($21F7): N printed itself and left the loop with nothing more read. "
+             "Now N is a key like any other (#227): the ROM waits for READY and "
+             "reads what the Pico sends next, and the Pico ends the loop with "
+             "03h. $21F7 and LOOP_EXIT_OK ($0810) become unreachable. $88 joins "
+             "this loop at $21E6 (LOWER_LOOP), so it changes too.",
+    ),
+    dict(
+        name="POLL_KEYPRESS: keys as typed ($0572 AND 0DFh -> NOP NOP)",
+        bank="exrom", addr=0x0572,
+        before="e6 df", after="00 00",
+        note="POLL_KEYPRESS ended CP 61h / RET C / CP 7Bh / RET NC / AND 0DFh: "
+             "a lower-case letter went to the Pico upper case. Now the key goes "
+             "as typed and the firmware decides what case means (#227). After "
+             "the CP 7Bh the flags are already NZ, so 'Z = no key' still holds. "
+             "Its only caller is KEYWAIT ($2346), from GET_KEY_AND_SEND ($0479): "
+             "the key waits of functions $82, $84 and $86/$88.",
+    ),
+    dict(
+        name="PRINT_STRING_FROM_PICO: $045F -> JP PS_READ ($377F)",
+        bank="exrom", addr=0x045F,
+        before="f5 18 03", after="c3 7f 37",
+        note="The v1.1 reader (PUSH AF / JR $0465) tested every byte for 00h, "
+             "03h and >= 80h, the parameter bytes after a control code "
+             "included, so INK 0 or PAPER 3 ended the text and graphics, UDGs "
+             "and tokens could not be sent. The module's PS_READ passes "
+             "parameters through and ends only on 00h and 03h (#228). Its three "
+             "callers enter at $045F ($027A for $81, $219E for $82, $21E7 for "
+             "$86/$88); $0462-$046F, $068E and $06F2-$06FC become unreachable.",
+    ),
 ]
+
+# Module symbols the patches above jump to by a fixed address: the build fails
+# if the module moves one, rather than patch a jump into the wrong code.
+FIXED_SYMS = {"PS_READ": 0x377F}
 
 
 # --- Anchors: base-ROM code the module calls or jumps into --------------------
@@ -436,6 +486,10 @@ def main():
     entry = syms.get("FDD_DISPATCH")
     if entry != FDD_ORG:
         die(f"FDD_DISPATCH is {entry:#06x}, expected FDD_ORG {FDD_ORG:#06x}")
+    for name, addr in FIXED_SYMS.items():
+        if syms.get(name) != addr:
+            die(f"{name} is at {syms.get(name, 0):#06x}; the patches jump to "
+                f"{addr:#06x}. Update FIXED_SYMS and the patch bytes together.")
 
     out = bytearray(base)
     touched = []   # (start, end) file-offset ranges we intend to change

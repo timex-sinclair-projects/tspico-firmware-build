@@ -5,7 +5,8 @@ EXROM 2000h–22FDh (chunk 1 up to the SYNC layer's code), the chunk-0 helpers t
 function chain uses (01C3h, 025Eh–02C6h, 045Fh–0480h, 04F1h, 05FAh,
 068Eh, 06F2h, 0810h–0815h), and the printer path at 1630h–183Bh. Names
 from [`docs/rom-analysis/tspico-exrom-symbols.sym`](../../rom-analysis/tspico-exrom-symbols.sym).
-ROM 2.2.
+ROM 2.2, with what ROM 2.3 changes here (#227, #228) noted where it does: the
+disassembly is of 2.2.
 
 When a `tpi:` command, a LOAD or a SAVE ends, the Pico's answer is one
 byte. Status 1 is OK and 2–127 a report ([exrom-driver.md](exrom-driver.md#status_to_report-1bf3h));
@@ -39,10 +40,10 @@ later layer changed it.
 | 025Eh, 026Ah | `GET_STATUS_BIT_0`, `GET_STATUS_BIT_1` | 1.1 |
 | 026Fh | `FN_CHAIN_HEAD`; 0274h `FN_81_PRINT_STRING` | 1.1 |
 | 02B9h | `READ_STATUS_BYTE` | 1.1 |
-| 045Fh | `PRINT_STRING_FROM_PICO` (with 068Eh, 05FAh, 06F2h) | 1.1 |
+| 045Fh | `PRINT_STRING_FROM_PICO` (with 068Eh, 05FAh, 06F2h) | 1.1; ROM 2.3 jumps from 045Fh to the module's `PS_READ` |
 | 0471h | `GET_KEY_AND_SEND` | 1.1; SYNC layer (0479h) |
 | 04F1h | `OPEN_MAIN_SCREEN` | 1.1 |
-| 0810h, 0813h | `LOOP_EXIT_OK`, `LOOP_EXIT_ERR` | 1.1 |
+| 0810h, 0813h | `LOOP_EXIT_OK`, `LOOP_EXIT_ERR` | 1.1; ROM 2.3 no longer reaches `LOOP_EXIT_OK` |
 | 0886h | the SAVE prompt's call to 22AEh | base image |
 | 1630h | `PRINTER_TABLE` and the printer path to 183Bh | 1.1 |
 | 2000h | `ENTRY_TABLE`, the landing pad: `BREAK_KEY` (2009h), the `HALT_STUB_*`s | 1.1 |
@@ -198,7 +199,11 @@ answer ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#ch_replyst)).
 
 ### `PRINT_STRING_FROM_PICO` (045Fh)
 
-Prints bytes from the Pico until a terminator.
+Prints bytes from the Pico until a terminator. This is the v1.1 routine, in
+every ROM up to 2.2. **ROM 2.3 replaces it**: 045Fh is `JP 377Fh`, the disk
+module's `PS_READ` ([exrom-fdd.md](exrom-fdd.md#ps_read), #228), which
+passes a control code's value bytes through and ends only on 00h and 03h;
+0462h–046Fh, 068Eh and 06F2h–06FCh below are then unreachable.
 
 ```text
 045Fh   PUSH AF                  ; the caller's status
@@ -248,9 +253,28 @@ Waits for the keyboard to be clear (so the key that answered the last
 prompt is not taken again), then for a key, then sends it — after a
 ready-wait, so the Pico has finished sending the page
 ([exrom-driver.md](exrom-driver.md#send_key-1c40h)). Returns A = the key:
-LAST_K as the 2068's keyboard routine leaves it, upper case for letters
-*(per [PROTOCOL.md §5.4](../../PROTOCOL.md#54-the-answer-a-response-function-status--80);
-the firmware compares only upper case)*. In 1.1 and the base image 0479h
+LAST_K (5C08h) `AND 7Fh`, as `POLL_KEYPRESS` (0546h) leaves it.
+
+**The case of a letter.** `POLL_KEYPRESS` sets FLAGS bit 3 (L mode) before
+the keyboard scan, so a letter comes back lower case unless CAPS SHIFT or
+CAPS LOCK made it a capital; then its tail, at 0566h, upper-cases it:
+
+```text
+0566h   RET Z                    ; no key
+        LD A,(5C08h) / AND 7Fh   ; LAST_K
+        CP 61h / RET C           ; below 'a': as it is
+        CP 7Bh / RET NC          ; above 'z': as it is
+0572h   AND 0DFh                 ; a-z -> A-Z
+        RET
+```
+
+So up to ROM 2.2 every letter reaches the Pico upper case, and the
+firmware compared upper case only. **ROM 2.3 makes 0572h two `NOP`s**
+(#227): the key goes as typed and the firmware decides what case means
+(`KEY_UP`, [../firmware/tspico-bus.md](../firmware/tspico-bus.md#key_upch)).
+After `CP 7Bh` with no `RET NC` the flags are already NZ, so "Z = no key"
+holds without the `AND`. `POLL_KEYPRESS` has one caller, KEYWAIT, so only
+the key waits of functions 82h, 84h and 86h/88h change. In 1.1 and the base image 0479h
 was `CALL POLL_KEYPRESS` directly and BREAK could not end a prompt; the
 SYNC layer's KEYWAIT adds the test and the abort ([exrom-sync.md](exrom-sync.md#keywait-2346h)).
 
@@ -259,7 +283,9 @@ SYNC layer's KEYWAIT adds the test and the abort ([exrom-sync.md](exrom-sync.md#
 `LOOP_EXIT_OK`: `CALL 05FAh` (print A — the `N` the user typed), then
 falls into `LOOP_EXIT_ERR`: `POP AF / RET`, the function's status back.
 Both are function 86h's exits; "ERR" is a misnomer — 0813h is also the
-normal end of the loop on 03h.
+normal end of the loop on 03h. In ROM 2.3 the loop ends only on 03h, so
+`LOOP_EXIT_OK` is no longer reached (#227); the Pico prints the echo of
+the `N` instead.
 
 ### `FN_CHAIN_C1` (2194h)
 
@@ -324,6 +350,23 @@ next page's first bytes — is [../firmware/tspico-messages.md](../firmware/tspi
 On `N` the ROM leaves the loop without waiting for READY and reads nothing
 more, so the firmware sends nothing after an `N`. Letters are compared after
 `AND 5Fh`, so `n` would do as well as `N`.
+
+**ROM 2.3** (#227) makes 21F0h–21F6h `JP YN_LOOP_GUARD` and four `NOP`s:
+
+```text
+21ED    CALL GET_KEY_AND_SEND       ; the key, as typed (0572h)
+21F0    JP YN_LOOP_GUARD            ; every key: wait for READY, the next page
+```
+
+`N` is a key like any other: the ROM sends it, waits for READY and reads
+on, and the loop ends only when the Pico sends `03h`. The Pico can then
+decide what `N` means where it is asked — stop a listing, skip one file of
+an ERASE — and it can print something before the `03h` (the firmware
+echoes the key). The firmware must know which ROM it is talking to, since
+after `N` the two want opposite things; ROM 2.3 says so in byte 2 of each
+command pre-header ([exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h)).
+21F7h (`JP LOOP_EXIT_OK`) is left in place, unreachable. 88h's loop is this
+one (`LOWER_LOOP` joins at 21E6h), so it changes the same way.
 
 #### `YN_LOOP` (21E7h)
 

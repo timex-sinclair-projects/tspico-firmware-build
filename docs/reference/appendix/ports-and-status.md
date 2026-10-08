@@ -79,7 +79,7 @@ Ten bytes open every transaction. Byte 0 picks the kind
 |---|---|---|
 | 0 | `'B'` | flag: 00h header, FFh data |
 | 1 | TADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE) | TADDR |
-| 2 | bank (FFh = HOME); ignored for commands | bank |
+| 2 | FFh up to ROM 2.2; ROM 2.3 sends 23h, its version (the firmware's `rom_id`) | bank |
 | 3–4 | PMR1: the first `CODE` number, little-endian | session id |
 | 5–6 | PMR2: the second `CODE` number | address (IX) |
 | 7–8 | length of the command text | block length (DE) |
@@ -148,15 +148,18 @@ dispatch compares A = code − 1 ([exrom-chunk1.md](../rom/exrom-chunk1.md)).
 | 83h | `FN_PRINT_CHAR` | status, one character | prints it | unused |
 | 84h | `FN_RETURN_KEY` | status | waits for a key, sends it | unused |
 | 85h | `FN_GET_STATUS` | status | sends a 2-bit mask, with no ready wait: b0 = 1 when no key is down, b1 (aux) always 0 | unused |
-| 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (`N` ends the loop; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
+| 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (up to ROM 2.2 `N` ends the loop; from ROM 2.3 every key goes round it; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | 87h | — | status | HOME 08A6h: clears the screen | unused |
 | 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (`LOWER_LOOP`, 334Fh) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
 | 80h, 89h–FFh | — | — | fall through the chain: Report D | — |
 
 Text rules: the ROM reads characters without a ready wait; 00h ends a string
-and so does any byte ≥ 80h; 03h ends a loop; control codes 16–23 (INK … TAB)
-consume the bytes after them. `STR_END` is 00h and `LOOP_END` is 03h in the
-firmware. Keys come back upper-cased after a ready wait (`SEND_KEY`, 1C40h).
+and, up to ROM 2.2, so does any byte ≥ 80h; 03h ends a loop; control codes
+16–23 (INK … TAB) consume the bytes after them, and up to ROM 2.2 a 00h or
+03h among those bytes still ends the text (ROM 2.3's `PS_READ` passes them
+through, #228). `STR_END` is 00h and `LOOP_END` is 03h in the firmware. Keys
+come back after a ready wait (`SEND_KEY`, 1C40h): upper-cased up to ROM 2.2,
+as typed from ROM 2.3 (#227).
 
 ## The BIOS table (EXROM 1840h)
 
