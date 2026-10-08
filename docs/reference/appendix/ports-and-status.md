@@ -166,7 +166,7 @@ back as typed after a ready wait (`SEND_KEY`, 1C40h; #227).
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (low nibble); AF kept |
 | 1842h | S_MODE | TPMODE := A AND 0Fh; AF kept |
-| 1844h | G_VERS | BC = the version: 0022h on ROM 2.2 (0015h on ROM 1.1) |
+| 1844h | G_VERS | BC = the version: 0023h on ROM 2.3 (0022h on 2.2, 0015h on 1.1) |
 | 1846h | TX_A | `OUT (0Eh),A`; no wait |
 | 1848h | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | 184Ah | C_END | wait READY, read the answer, run the response functions; NC = status 1 |

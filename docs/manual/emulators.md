@@ -1,6 +1,6 @@
 # Testing TS-Pico Programs in an Emulator
 
-### ZEsarUX and Fuse with the real TS-Pico firmware — for TS-Pico 2.2
+### ZEsarUX and Fuse with the real TS-Pico firmware — for TS-Pico 2.3
 
 > **About this guide.** You can write and test software for the TS-Pico without the hardware.
 > `pico_host` runs the real TS-Pico firmware, unmodified, on your computer, with a folder
@@ -34,7 +34,7 @@
 | Piece | Where to get it |
 |---|---|
 | `pico_host` | Every [TS-Pico firmware release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest) has `pico_host-macos-arm64.zip`, `pico_host-windows-x86_64.zip` and `pico_host-linux-x86_64.zip`. No Python needed. |
-| The TS-Pico ROM | [`src/rom/`](https://github.com/timex-sinclair-projects/tspico-firmware-build/tree/main/src/rom) in the firmware repository: `TSPICO-23.ROM` for ROM 2.3. It's 32K: a 16K HOME ROM and a 16K EXROM. |
+| The TS-Pico ROM | [`src/rom/`](https://github.com/timex-sinclair-projects/tspico-firmware-build/tree/main/src/rom) in the firmware repository: `TSPICO-23.ROM` for ROM 2.3. It's 32K: a 16K HOME ROM and a 16K EXROM. The release zip has it too, in `src/rom`. Use the ROM and `pico_host` from the same release: firmware 2.3 needs ROM 2.3. |
 | An emulator with the TS-Pico | **ZEsarUX:** [zesarux-tspico](https://github.com/timex-sinclair-projects/zesarux-tspico/releases/latest) for macOS (signed), Windows and Linux. **Fuse:** [fuse-for-macos-tspico](https://github.com/timex-sinclair-projects/fuse-for-macos-tspico/releases/latest) for macOS (signed), [fuse-tspico](https://github.com/timex-sinclair-projects/fuse-tspico/releases/latest) for Windows. |
 
 **Which emulator?** Both run the same firmware, so either will do for most work.
@@ -66,7 +66,7 @@ It prints the firmware version and where it keeps the Pico's flash and the SD ca
 waits for an emulator:
 
 ```
-[pico_host] TS-Pico firmware 1a2b3c4 (v2.2.1); flash and card in ~/TS-Pico-emulator
+[pico_host] TS-Pico firmware 1a2b3c4 (v2.3); flash and card in ~/TS-Pico-emulator
 [pico_host] listening on tcp 127.0.0.1:2068
 ```
 

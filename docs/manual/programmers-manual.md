@@ -1,14 +1,14 @@
 # TS-Pico Programmer's Manual
 
-### Machine code for the TS-2068, and new commands for the Pico — version 2.2
+### Machine code for the TS-2068, and new commands for the Pico — version 2.3
 
-> **About this manual.** This manual describes **TS-Pico 2.2** (firmware 2.2.1 and ROM 2.2, October
+> **About this manual.** This manual describes **TS-Pico 2.3** (firmware 2.3 and ROM 2.3, October
 > 2026). It was written from the source code: the firmware, the ROM patches and the test
 > harnesses. Appendix D lists the repository documents that go with it.
 >
 > **Every example is in the `examples` folder next to this manual.** Each machine-code example
 > was assembled with sjasmplus. It was then run in the firmware repository's Z80 interpreter
-> against a simulated TS-Pico: that's `test_examples.py`, with 71 checks, all passing. The
+> against a simulated TS-Pico: that's `test_examples.py`, with 77 checks, all passing. The
 > Pico-side examples were run through the firmware's real command dispatcher by
 > `test_extcmd_host.py`. **None of them has yet run on a real 2068.** `picoex.tap` holds all the
 > machine-code examples, ready to try. The BIOS example (`bios.asm`) and the error trap in
@@ -74,7 +74,8 @@ The book has two halves, one for each end of the cable:
 
 ## 1.2 What you need
 
-- A TS-Pico with the **2.2 release**: its firmware, and ROM 2.2 in the 2068. The ROM opens
+- A TS-Pico with the **2.3 release**: its firmware, and ROM 2.3 in the 2068. The two go
+  together: firmware 2.3 needs ROM 2.3 (section 3.7 says why). The ROM opens
   every exchange with a "SYNC" that the 1.1 firmware doesn't understand. Our
   machine-code routines do the same, so they don't work with the 1.1 firmware either.
 - An assembler for your computer. The examples use **sjasmplus** syntax (local labels start with
@@ -111,14 +112,18 @@ PRINT PEEK 101
 |---|---|
 | 21 (15h) | 1.1 |
 | 34 (22h) | 2.2 |
+| 35 (23h) | 2.3 |
+
+The ROM also tells the Pico: from 2.3 it sends its version in every command's pre-header
+(section 3.4), and `SAVE "tpi:info"` shows it on its ROM line.
 
 ## 1.5 Summary
 
 1. Part 1 is the 2068 side; Part 2 is the Pico side.
-2. You need the 2.2 release: its firmware and ROM 2.2.
+2. You need the 2.3 release: its firmware and ROM 2.3.
 3. BASIC, raw ports, or the ROM's BIOS: raw ports are the most flexible, and this book's library
    does the hard parts.
-4. `PEEK 101` tells you the ROM version: 34 for 2.2.
+4. `PEEK 101` tells you the ROM version: 35 for 2.3.
 
 ---
 
@@ -261,7 +266,7 @@ Ten bytes, sent one at a time:
 |---|---|---|
 | 0 | `'B'` (42h) | a command |
 | 1 | 0 | 0 = a `SAVE "tpi:..."` command. 1, 2 or 3 = `LOAD`/`VERIFY`/`MERGE "tpi:name"`, which mounts a file. **4, 5 and 6 are printer traffic: never send them.** |
-| 2 | FFh | the bank. The Pico ignores it for commands. |
+| 2 | 23h | the ROM's version, as `PEEK 101` gives it. The ROM sends 23h; send the same. The Pico keeps it and shows it in `tpi:info`. |
 | 3, 4 | first CODE number, low byte first | `SAVE "tpi:..." CODE a,b` sends *a* here; 0 without CODE |
 | 5, 6 | second CODE number, low byte first | *b* |
 | 7, 8 | length of the command text, low byte first | |
@@ -319,16 +324,21 @@ command's result. The firmware uses these:
 | Code | What follows | What the 2068 does |
 |---|---|---|
 | 81h | status, text, 00h | prints the text (it usually starts with a carriage return) |
-| 86h | status, then pages of text. Each page ends in 00h, and the whole thing ends in 03h. | prints each page. At each 00h it waits for a key, waits for READY, and sends the key. `N` ends it. |
+| 86h | status, then pages of text. Each page ends in 00h, and the whole thing ends in 03h. | prints each page. At each 00h it waits for a key, waits for READY, and sends the key, then waits for READY again and reads on, whatever the key was. Only the 03h ends it. |
 | 88h | as 86h, on the lower screen | only for `tpi:fopen` (the "Replace?" question of `SAVE "f:..."`) |
 
-Text inside these is bytes below 80h. A byte of 80h or more ends a string, as 00h does. Keys
-go back **in upper case**: the Pico ends a listing only on `N` (78), never on `n`. The ROM also
+Text ends at 00h, and an 86h listing at 03h; every other byte is printed with `RST 10h`. That
+includes bytes of 80h and more (block graphics, UDGs, keywords), and the value bytes after a
+control code: INK 0 is a colour, and AT 3,0 a position, not the end of the text. The ROM also
 understands 82h–85h and 87h, but the firmware never sends them. Any other code gives
 **Report D**, with the rest of the answer left unread.
 
-At an 86h "Scroll?" prompt, the key does more than yes or no. `N` stops, a digit 1–9 shows that
-many lines before the next prompt, `0` shows ten, and anything else shows a full page.
+**The key is the Pico's to interpret.** Keys go back as typed, in either case, and the Pico
+decides what each one means at that prompt. At a "Scroll?" prompt `N` stops, a digit 1–9 shows
+that many lines before the next prompt, `0` shows ten, and anything else shows a full page; at an
+ERASE question `N` skips that file. Whatever the key, **keep reading**: after `N` the Pico still
+sends something, at least an echo of the key and the closing 03h. A client that stops at its own
+`N` leaves those bytes behind, and the next command reads them as its status.
 
 ## 3.8 The tail
 
@@ -569,36 +579,24 @@ GET_REPLY:
 
 .msg:   call RXP                ; 81h: status, text, 00h
         push af
-.m1:    call RXP
-        and a
-        jr z,.done              ; 00h ends the text
-        cp 80h
-        jr nc,.done             ; so does any byte 80h or over
-        rst 10h
-        jr .m1
+.m1:    call TEXT
+        jr nc,.m1               ; until 00h (or 03h)
 .done:  pop af
         jp MAP_STATUS
 
 .loop:  call RXP                ; 86h: status, then pages of text
         push af
-.page:  call RXP
-        and a
-        jr z,.key               ; 00h: end of a page, the Pico waits for a key
+.page:  call TEXT
+        jr nc,.page
         cp 03h
         jr z,.done              ; 03h: the end
-        cp 80h
-        jr nc,.done
-        rst 10h
-        jr .page
-.key:   call GETKEY             ; upper case: the Pico stops only on 'N' (78)
+        call GETKEY             ; 00h: end of a page, the Pico waits for a key
         push af
         call WAIT_READY         ; the ROM waits for READY before it sends a key
         jr c,.kfail
         pop af
-        out (PORT_DATA),a
-        cp 'N'
-        jr z,.done              ; N: nothing more comes
-        call WAIT_READY         ; the next page is on its way
+        out (PORT_DATA),a       ; any key, N included: the Pico ends the loop
+        call WAIT_READY         ; the next page, or the Pico's last words, are on their way
         jr nc,.page
         pop hl                  ; drop the saved status, keep A
         scf
@@ -606,6 +604,40 @@ GET_REPLY:
 .kfail: pop hl
         pop hl
         scf
+        ret
+```
+
+`TEXT` reads and prints one character, and tells `GET_REPLY` when it meets a 00h or a 03h. A
+control code from 10h (INK) to 17h (TAB) takes its value bytes with it, one, or two for AT and
+TAB, whatever they are, so a 00h value doesn't end the text:
+
+```asm
+TEXT:   call RXP
+        and a
+        scf
+        ret z                   ; 00h
+        cp 03h
+        scf
+        ret z                   ; 03h
+        push bc
+        ld b,1                  ; one byte: the character
+        cp 10h
+        jr c,.put
+        cp 18h
+        jr nc,.put
+        inc b                   ; a control code and one value
+        cp 16h
+        jr c,.put
+        inc b                   ; AT, TAB: two values
+.put:   push bc
+        rst 10h
+        pop bc
+        dec b
+        jr z,.out
+        call RXP                ; a value byte
+        jr .put
+.out:   pop bc
+        and a                   ; NC
         ret
 ```
 
@@ -618,7 +650,7 @@ for us to read an answer we don't understand.
 
 `GETKEY` waits for a key using the ROM's own keyboard scan, which runs on every interrupt. It
 clears bit 5 of FLAGS, then HALTs until the interrupt routine sets it again with a new key in
-LAST_K:
+LAST_K. It returns the key as typed; the Pico reads either case:
 
 ```asm
 GETKEY: push hl
@@ -630,11 +662,6 @@ GETKEY: push hl
         jr z,.w
         pop hl
         ld a,(LAST_K)           ; 5C08h
-        cp 'a'
-        ret c
-        cp 'z'+1
-        ret nc
-        and 0DFh                ; upper case
         ret
 ```
 
@@ -834,7 +861,8 @@ instead.
 
 > **Remember:** BREAK works while the program is waiting for the Pico (in `WAIT_READY`): you
 > get Report D, and the next command works normally. At a "Scroll?" prompt the program is
-> waiting for *you*, and `GETKEY` doesn't watch for BREAK, so press **N** to stop a listing.
+> waiting for *you*, and `GETKEY` doesn't watch for BREAK, so press **N** to stop a listing:
+> the Pico echoes it and ends the listing.
 
 ## 5.2 Loading any file into memory: `loadfile`
 
@@ -1265,13 +1293,13 @@ Pico, they're "Unrecognized command" (**C**). From machine code, set the bits yo
 
 ## 8.1 The table
 
-The EXROM holds a jump table at 1840h, the same in every ROM from 1.1 to 2.2:
+The EXROM holds a jump table at 1840h, the same in every ROM from 1.1 to 2.3:
 
 | Address | Name | What it does |
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (its low four bits). AF kept. |
 | 1842h | S_MODE | TPMODE := A AND 0Fh. AF kept. |
-| 1844h | G_VERS | BC = the interface version: 0015h on 1.1, **0022h on 2.2** |
+| 1844h | G_VERS | BC = the interface version: 0015h on 1.1, 0022h on 2.2, **0023h on 2.3** |
 | 1846h | TX_A | `OUT (0Eh),A`. No wait, no BREAK check. |
 | 1848h | RX_A | `IN A,(0Eh)`: Z if the byte is 0. No wait. |
 | 184Ah | C_END | waits for READY, reads the answer and runs the response functions (printing, "Scroll?"). NC = OK; C = failed: A = status−1, or 0Ch (BREAK), 1Ch (the Pico reset the transaction), or 09h on a timeout. See 8.4. |
@@ -1410,7 +1438,8 @@ in RAM, with no bank switching at all.
 4. **Never `OTIR` or `INIR`.** About 50 µs a byte out, 75 µs a byte in, and no gap longer than
    a second in the middle of a command.
 5. **Check the XOR** on data answers. An empty FIFO reads 00h silently.
-6. **Keys go back in upper case.** The Pico ends a listing only on `N`.
+6. **After a key, keep reading.** Send the key as typed; the Pico decides what it means and
+   ends a listing with 03h, even after `N`.
 7. **Handle BREAK with a SYNC** so the Pico stops too.
 8. **Close your channels**, even when something fails.
 9. **Don't write byte 23 through a channel** unless you mean a TAB.
@@ -1726,8 +1755,8 @@ tp.SEND_MSG("First line", "Second line", OK, True)
 ```
 
 The ROM prints a carriage return, the first line, a carriage return, then the second. Keep
-the text to plain ASCII below 128. A byte of 128 or more ends the message early. The control
-codes 16–23 (INK, PAPER, AT, TAB…) eat the bytes that follow them.
+the text to plain ASCII: a byte of 128 or more prints as a 2068 graphic, UDG or keyword. The
+control codes 16–23 (INK, PAPER, AT, TAB…) take the bytes that follow them as their values.
 
 ## 12.3 Scrolling text (86h)
 
@@ -1735,9 +1764,10 @@ codes 16–23 (INK, PAPER, AT, TAB…) eat the bytes that follow them.
 tp.SEND_MSG2("\r".join(lines), OK)
 ```
 
-Text under 500 characters goes out in one piece. Longer text stops every screenful at
+Text that fits on the screen goes out in one piece. Longer text stops every screenful at
 "Scroll? (Y/n)" and waits for a key: `N` ends it, a digit sets the page length, and anything
-else continues. `SEND_MSG2` handles the prompt, the key, BREAK, and the closing 03h. `\*`
+else continues. `SEND_MSG2` handles the prompt, the key in either case, BREAK, and the closing
+03h, which it sends after `N` too. `\*`
 in the text prints as ©.
 
 ## 12.4 A yes/no question
@@ -1748,7 +1778,7 @@ if key == ord("Y"):
     ...
 ```
 
-This prints the prompt, waits for one key, and returns it (already in upper case). **It is
+This prints the prompt, waits for one key, echoes it as typed, and returns it in upper case. **It is
 the answer**: once it returns, send nothing more. Do the work quietly and record any failure
 in the log (`tp.LOG(msg, 2)`), because the 2068 has already moved on.
 
@@ -1993,7 +2023,7 @@ exchange, 03h at the end), 88h (86h on the lower screen). Other codes are Report
 |---|---|---|
 | EXROM | 1840h | G_MODE: BC = TPMODE |
 | EXROM | 1842h | S_MODE: TPMODE := A AND 0Fh |
-| EXROM | 1844h | G_VERS: BC = 0022h on ROM 2.2 |
+| EXROM | 1844h | G_VERS: BC = 0023h on ROM 2.3 |
 | EXROM | 1846h | TX_A: OUT (0Eh),A |
 | EXROM | 1848h | RX_A: IN A,(0Eh) |
 | EXROM | 184Ah | C_END: wait, read the answer, run response functions |

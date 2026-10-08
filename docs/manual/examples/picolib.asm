@@ -182,7 +182,8 @@ SEND_CMD:
 ; GET_REPLY -- read the answer to an ordinary command, the way the ROM does.
 ; Prints text the Pico sends (functions 81h, 86h, 88h) with RST 10h, so select
 ; the channel first (LD A,2 / CALL CHAN_OPEN for the main screen). At a
-; "Scroll?" prompt it waits for a key and sends it; N stops the listing.
+; "Scroll?" prompt it waits for a key and sends it, then reads on whatever the
+; key: the Pico decides what it means and ends the listing with 03h.
 ; NC = OK. C = failed, A = error code.
 GET_REPLY:
         call WAIT_READY
@@ -205,36 +206,24 @@ GET_REPLY:
 
 .msg:   call RXP                ; 81h: status, text, 00h
         push af
-.m1:    call RXP
-        and a
-        jr z,.done              ; 00h ends the text
-        cp 80h
-        jr nc,.done             ; so does any byte 80h or over
-        rst 10h
-        jr .m1
+.m1:    call TEXT
+        jr nc,.m1               ; until 00h (or 03h)
 .done:  pop af
         jp MAP_STATUS
 
 .loop:  call RXP                ; 86h: status, then pages of text
         push af
-.page:  call RXP
-        and a
-        jr z,.key               ; 00h: end of a page, the Pico waits for a key
+.page:  call TEXT
+        jr nc,.page
         cp 03h
         jr z,.done              ; 03h: the end
-        cp 80h
-        jr nc,.done
-        rst 10h
-        jr .page
-.key:   call GETKEY             ; upper case: the Pico stops only on 'N' (78)
+        call GETKEY             ; 00h: end of a page, the Pico waits for a key
         push af
         call WAIT_READY         ; the ROM waits for READY before it sends a key
         jr c,.kfail
         pop af
-        out (PORT_DATA),a
-        cp 'N'
-        jr z,.done              ; N: nothing more comes
-        call WAIT_READY         ; the next page is on its way
+        out (PORT_DATA),a       ; any key, N included: the Pico ends the loop
+        call WAIT_READY         ; the next page, or the Pico's last words, are on their way
         jr nc,.page
         pop hl                  ; drop the saved status, keep A
         scf
@@ -242,6 +231,39 @@ GET_REPLY:
 .kfail: pop hl
         pop hl
         scf
+        ret
+
+; TEXT -- read one character of an answer and print it, as the ROM does.
+; C = a terminator, with A = 00h (the end of the text or page) or 03h (the end
+; of an 86h listing). NC = printed. A control code from 10h (INK) to 17h (TAB)
+; is printed with its value bytes, one or two (AT and TAB), whatever they are:
+; INK 0 is a colour, not the end. Keeps BC, DE, HL.
+TEXT:   call RXP
+        and a
+        scf
+        ret z                   ; 00h
+        cp 03h
+        scf
+        ret z                   ; 03h
+        push bc
+        ld b,1                  ; one byte: the character
+        cp 10h
+        jr c,.put
+        cp 18h
+        jr nc,.put
+        inc b                   ; a control code and one value
+        cp 16h
+        jr c,.put
+        inc b                   ; AT, TAB: two values
+.put:   push bc
+        rst 10h
+        pop bc
+        dec b
+        jr z,.out
+        call RXP                ; a value byte
+        jr .put
+.out:   pop bc
+        and a                   ; NC
         ret
 
 ; ---------------------------------------------------------------------------
@@ -310,8 +332,9 @@ RPT_TAB:
         db 1Ah, 0Eh, 19h, 0Bh, 05h, 07h, 09h, 08h, 12h, 0Ch
 
 ; ---------------------------------------------------------------------------
-; GETKEY -- wait for a key press and return it in A, letters in upper case.
-; Uses the keyboard scan the ROM runs on every interrupt. Keeps BC, DE, HL.
+; GETKEY -- wait for a key press and return it in A, as typed (the Pico reads
+; either case). Uses the keyboard scan the ROM runs on every interrupt.
+; Keeps BC, DE, HL.
 GETKEY: push hl
         ei
         ld hl,FLAGS
@@ -321,11 +344,6 @@ GETKEY: push hl
         jr z,.w
         pop hl
         ld a,(LAST_K)
-        cp 'a'
-        ret c
-        cp 'z'+1
-        ret nc
-        and 0DFh
         ret
 
 ; ---------------------------------------------------------------------------

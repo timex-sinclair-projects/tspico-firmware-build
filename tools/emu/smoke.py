@@ -60,6 +60,8 @@ def main():
         print('SAVE "tpi:info"')
         t = s.run(S.SAVE, '"tpi:info"')
         check("interface status" in t and "uPython 1.29.0" in t and "0 OK" in t, "status screen")
+        check("ROM       2.3" in t or "ROM 2.3" in " ".join(t.split()),
+              "its ROM line is the version ROM 2.3 sent in the pre-header")
 
         print('SAVE "tpi:picopt", LPRINT')
         s.run(S.SAVE, '"tpi:picopt"')
@@ -67,6 +69,15 @@ def main():
         s.run(S.SAVE, '"tpi:path"')                            # another command writes the text out
         p = os.path.join(ROOT, "sd", "VLPRINT", "PRN0001.TXT")
         check(os.path.exists(p) and "LPRINT through the emulator" in open(p).read(), "printer text on the card")
+
+        print('SAVE "tpi:cd" (the menu, then n)')
+        t = s.run(S.SAVE, '"tpi:cd"', until="quit?", timeout=30)
+        s.cmd("send-keys-ascii 120 110")                       # n: the Pico echoes it and ends the loop
+        time.sleep(3)
+        t = s.text()
+        check("0 OK" in t, "n cancels the menu")
+        t = s.run(S.SAVE, '"tpi:path"')
+        check("/TAP" in t and "0 OK" in t, "and the next command reads a clean link")
 
         print('SAVE "tpi:cd" (the menu, then 0)')
         t = s.run(S.SAVE, '"tpi:cd"', until="quit?", timeout=30)

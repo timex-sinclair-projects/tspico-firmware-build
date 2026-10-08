@@ -2,7 +2,7 @@
 
 This is the byte-level reference for how a Timex Sinclair 2068 and the TS-Pico
 talk: the two I/O ports, the status byte, every kind of transaction, and the
-rules a firmware handler must follow. It describes **firmware 2.2.1 with ROM 2.2**
+rules a firmware handler must follow. It describes **firmware 2.3 with ROM 2.3**
 (the disk-command ROM), as the code on `main` does it. Where an older document or the original spec says otherwise, this one follows the code.
 
 > **New to all this?** Start with [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md), a
@@ -417,7 +417,7 @@ A jump table for machine-code programs, stable across ROMs:
 |-------|------|----------|
 | `$1840` | G_MODE | BC = TPMODE (low nibble); AF kept |
 | `$1842` | S_MODE | TPMODE := A AND `0Fh`; AF kept |
-| `$1844` | G_VERS | BC = the interface version: `$0015` on ROM 1.1, `$0022` on ROM 2.2 |
+| `$1844` | G_VERS | BC = the interface version: `$0015` on ROM 1.1, `$0022` on ROM 2.2, `$0023` on ROM 2.3 |
 | `$1846` | TX_A | `OUT (0Eh),A`; no wait, no BREAK check |
 | `$1848` | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | `$184A` | C_END | wait READY, read the answer, run the response functions. NC = status 1 (A = 0). C = failed, see below. |

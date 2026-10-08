@@ -18,7 +18,7 @@ LPRINT and the disk keywords to the Pico, and the reports the 2068 prints
 when something fails. This chapter is the map: which images exist and
 which one ships, how a 32K image is laid out, how HOME and EXROM call each
 other across the 2068's bank switching, how to tell which ROM a machine
-has, how ROM 2.2 is built and checked, and how to read the listings. The
+has, how ROM 2.3 is built and checked, and how to read the listings. The
 code itself is in the chapters that follow:
 
 | Chapter | Covers |
@@ -60,7 +60,7 @@ baselines. The slot-0 crc32 in
 `flash/manifest.json` is of the image padded with `00h` to 32K, which is
 why it differs from the file's own.
 
-ROM 2.2 is built in layers, each the image below it plus patches:
+ROM 2.3 is built in layers, each the image below it plus patches:
 
 1. **The base image**, `src/rom/TSPICO.ROM`: 1.1 with two small EXROM
    fixes. It is never modified.
@@ -74,13 +74,13 @@ ROM 2.2 is built in layers, each the image below it plus patches:
 
 `TSPICO.ROM` and `TSPICO-SYNC.ROM` are build inputs, not releases; the
 build history ([ROM_CHANGES.md](../../ROM_CHANGES.md#lineage)) has the
-detail. The ROM and the firmware share one version number: firmware 2.2.x
-runs ROM 2.2 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)).
+detail. The ROM and the firmware share one version number: firmware 2.3.x
+runs ROM 2.3 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)).
 ROM 2.3 changes what function 86h does after `N` and what the string
 reader takes for the end (#227, #228), so it needs the firmware written for
 it, and that firmware needs it; it sends its version in byte 2 of each
 command pre-header, which `tpi:info` shows.
-ROM 2.2 needs firmware that understands the SYNC byte; the firmware that
+ROM 2.3, like 2.2, needs firmware that understands the SYNC byte; the firmware that
 came with 1.1 reads it as the first byte of a command.
 
 ## The 32K file
