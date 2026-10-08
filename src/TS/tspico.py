@@ -445,6 +445,11 @@ PAPER_ = "\x11"
 # (10h-15h); anything else is Report K (see SEND_MSG2).
 ATTR_VALUES = (tuple(range(10)), tuple(range(10)), (0, 1, 8), (0, 1, 8), (0, 1), (0, 1))
 NORMAL_ = PAPER_ + "\x08" + INK_ + "\x08"
+INV_ON_ = "\x14\x01"                 # INVERSE 1 (ROM 2.3: the 01h value travels, #228)
+INV_OFF_ = "\x14\x00"                # INVERSE 0
+# CAT's index chip colour by file type (TEST STYLING): TAP green, TZX yellow,
+# DCK magenta, ROM and BIN red; anything else cyan.
+CAT_TYPE_PAPER = {"TAP": 4, "TZX": 6, "DCK": 3, "ROM": 2, "BIN": 2}
 
 RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD's tail
 
@@ -1567,21 +1572,35 @@ def CAT_COLOUR(text):                                                         # 
 
     if not text.startswith("Path:") or len(text) < 128:
         return text
-    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
-           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
-    rest = text[128:]                                                      # [96:128] is the dashes
+    # TEST STYLING (cat-colour-test): ROM 2.3 passes every attribute value
+    # (#228), so this uses black, magenta and INVERSE as well. No FLASH or
+    # BRIGHT. Every row begins INVERSE 0, so no row inherits the titles'.
+    ink = lambda c: INK_ + chr(c)
+    paper = lambda c: PAPER_ + chr(c)
+    base = NORMAL_ + INV_OFF_
+    head, card = text[0:32], text[32:64]
+    f = card.find("free:")
+    if f < 0:
+        f = 32
+    out = [base + paper(1) + ink(6) + head[:5] + ink(7) + head[5:],          # "Path:" in yellow
+           base + paper(1) + ink(7) + card[:f] + ink(5) + card[f:],          # free space in cyan
+           base + INV_ON_ + text[64:96]]                                      # titles: white on black
+    rest = text[128:]                                                         # [96:128] is the dashes
     while len(rest) >= 32:
         row = rest[:32]
         if row[0] == "<":
-            out.append(NORMAL_ + INK_ + "\x01" + row[:22] + "%10s" % "folder")
+            out.append(base + ink(1) + row[:22] + ink(3) + "%10s" % "folder")
         elif row[:3].isdigit() and row[3] == " ":
-            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + NORMAL_ + row[3:])
+            name = row[4:22].rstrip()
+            ext = name[name.rfind(".") + 1:].upper() if "." in name else ""
+            chip = CAT_TYPE_PAPER.get(ext, 5)
+            out.append(base + paper(chip) + ink(9) + row[:3] + base + row[3:])
         elif row[:4] == "    ":
-            out.append(NORMAL_ + row)
+            out.append(base + row)
         else:
             break
         rest = rest[32:]
-    out.append(NORMAL_ + rest)
+    out.append(base + rest)
     return "".join(out)
 
 
