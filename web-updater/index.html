@@ -46,6 +46,7 @@
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.primary:hover:not(:disabled) { background: #3d87e6; }
   a.btn { display: inline-block; text-decoration: none; }
+  a.btn.primary { background: var(--accent); color: #fff; border-radius: 8px; padding: 9px 16px; font-weight: 600; }
   a.disabled { pointer-events: none; opacity: .45; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .spacer { flex: 1; }
@@ -134,6 +135,28 @@
     <p class="note">Open this page in Chrome, Edge, or Opera and try again.</p>
   </div>
 
+  <!-- Shown on Windows: the browser can't write the firmware there (README) -->
+  <div class="panel" id="windows-note" hidden>
+    <h2>On Windows, download the TS-Pico Updater program</h2>
+    <p>On Windows the browser can't write the firmware onto the Pico, so this page can't do the
+       update. You need to download and run <strong>TS-Pico-Updater.exe</strong> instead. It does
+       the same steps as this page, and there's nothing to install.</p>
+    <p><a class="btn primary" id="win-download"
+          href="https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest/download/TS-Pico-Updater.exe">Download
+          TS-Pico-Updater.exe</a></p>
+    <ol class="steps">
+      <li>Run the file you downloaded. If Windows says it doesn't know the program, click
+          <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
+      <li>Close Thonny or anything else using the Pico, leave the 2068 switched off, and plug in
+          the Pico's USB cable.</li>
+      <li>Click <strong>Connect to TS-Pico</strong>, check the options, and click
+          <strong>Start</strong>. The program finds the Pico by itself and tells you what to do.</li>
+    </ol>
+    <p class="note">The SD card files and the “do it by hand” downloads below still work on Windows.
+       <a href="#" id="win-anyway">Show the browser updater anyway</a> (only if you've installed the
+       WinUSB driver for “RP2 Boot” with Zadig).</p>
+  </div>
+
   <main id="main">
 
     <!-- What's being installed -->
@@ -154,7 +177,7 @@
     </div>
 
     <!-- The guided run -->
-    <div class="panel">
+    <div class="panel" id="upgrade-panel">
       <h2>Upgrade your TS-Pico</h2>
       <p class="lead">Leave the TS-Pico plugged into the TS-2068 and connect the Pico’s
          Micro-USB port to this computer. Close Thonny or anything else using the Pico.</p>

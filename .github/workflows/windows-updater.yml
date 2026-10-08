@@ -1,0 +1,84 @@
+name: Windows Updater
+
+# Builds TS-Pico-Updater.exe (windows-updater/) on a Windows runner: the host
+# test, then PyInstaller --onefile. Every build uploads it as an artifact.
+#
+# It goes onto a Release when the Release workflow finishes (workflow_run, as
+# pages.yml does it: a Release made with GITHUB_TOKEN fires no `release` event
+# downstream), or by hand: Actions -> Windows Updater -> Run workflow with a
+# tag. The exe fetches firmware from the published updater channels at run
+# time, so any build of it installs the newest release; attaching it to each
+# release is only so users find it there.
+
+on:
+  push:
+    paths:
+      - 'windows-updater/**'
+      - 'web-updater/flash_nuke.uf2'
+      - '.github/workflows/windows-updater.yml'
+  pull_request:
+    paths:
+      - 'windows-updater/**'
+      - 'web-updater/flash_nuke.uf2'
+      - '.github/workflows/windows-updater.yml'
+  workflow_run:
+    workflows: ["Release TS-Pico Firmware"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Attach the exe to this existing release (e.g. v2.2.1). Empty: artifact only.'
+        required: false
+        type: string
+
+permissions:
+  contents: write     # gh release upload
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: windows-latest
+    steps:
+      # A Release run's head is its tag; the updater itself comes from main
+      # (the default checkout for workflow_run), which is what users should get.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Dependencies
+        run: python -m pip install -r windows-updater/requirements.txt
+
+      - name: Host test
+        run: python windows-updater/test/core_test.py
+
+      - name: Build the exe
+        run: >
+          pyinstaller --onefile --windowed --noconfirm
+          --name TS-Pico-Updater
+          --add-data "web-updater/flash_nuke.uf2;."
+          --distpath dist --workpath build
+          windows-updater/app.py
+
+      - name: Smoke test (the bundle imports and finds its files)
+        run: |
+          python -c "import sys; sys.path.insert(0, 'windows-updater'); import core, os; assert os.path.exists(core.resource('flash_nuke.uf2'))"
+          if (-not (Test-Path dist/TS-Pico-Updater.exe)) { throw 'no exe' }
+          Get-Item dist/TS-Pico-Updater.exe | Format-List Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TS-Pico-Updater
+          path: dist/TS-Pico-Updater.exe
+
+      - name: Attach to the release
+        if: ${{ github.event_name == 'workflow_run' || inputs.tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.tag }}
+        run: gh release upload "$TAG" dist/TS-Pico-Updater.exe --clobber --repo "$GITHUB_REPOSITORY"
