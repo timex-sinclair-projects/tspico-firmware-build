@@ -5,7 +5,7 @@ you type a command, why each step is there, and what the error reports are
 telling you. You don't need to know Z80 assembly or Python to follow it.
 
 When you want exact byte values and addresses, [`PROTOCOL.md`](PROTOCOL.md) is
-the reference. This guide describes firmware 2.2.1 with ROM 2.2.
+the reference. This guide describes firmware 2.3 with ROM 2.3.
 
 ---
 
@@ -173,9 +173,10 @@ text:
   when VERBOSE is on.
 - **134 (`86`) — print this, page by page.** After each page (ending in 0)
   the 2068 waits for a key and sends it back. The Pico uses this for long
-  listings ("Scroll? (Y/n)") and for yes/no questions. `N` stops; a digit sets
-  how many lines the next page shows; any other key shows a full page. The
-  byte 3 ends the whole thing.
+  listings ("Scroll? (Y/n)") and for yes/no questions. The Pico decides what
+  the key means: at a Scroll? prompt `N` stops, a digit sets how many lines
+  the next page shows, and any other key shows a full page. Only the byte 3
+  ends the whole thing, so after `N` the Pico echoes the key and sends the 3.
 - **136 (`88`) — the same on the bottom two lines of the screen.** This is
   for the question `SAVE "f:x" SCREEN$` asks when the file exists: asking on
   the main screen would write over the picture that's about to be saved.
@@ -325,4 +326,4 @@ Programmer's Manual* go further.
 | **auto-busy** | the status dropping to 0 on every byte the 2068 sends |
 | **response function** | an answer of 128 or more: "print this", "ask this" |
 | **checksum (XOR)** | a byte computed from all the others, to catch a lost or changed byte |
-| **ROM 2.2** | the TS-2068 ROM this guide describes, with the disk commands and `f:` files |
+| **ROM 2.3** | the TS-2068 ROM this guide describes, with the disk commands and `f:` files |

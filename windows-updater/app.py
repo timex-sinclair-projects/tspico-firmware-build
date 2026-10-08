@@ -363,9 +363,10 @@ class App:
                             "“Update the TS-2068 ROM” or the 2068 won't work afterwards." % (
                                 inst["fw"], m["fw_version"])), "#b26a00"
         elif not rom and self.up.rom_behind():
-            text, colour = ("This board is on %s, so its TS-2068 ROM is probably older than ROM %s. "
-                            "Tick “Update the TS-2068 ROM” to install it with the firmware." % (
-                                inst["fw"], m.get("rom_version") or m["fw_version"])), "#b26a00"
+            text, colour = ("This board is on %s, so its TS-2068 ROM is older than ROM %s, which "
+                            "firmware %s needs. Tick “Update the TS-2068 ROM” to install it with the "
+                            "firmware." % (inst["fw"], m.get("rom_version") or m["fw_version"],
+                                           m["fw_version"])), "#b26a00"
         else:
             steps = []
             if self.opt_wipe.get():

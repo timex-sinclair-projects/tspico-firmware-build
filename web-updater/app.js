@@ -214,9 +214,9 @@ function refreshPlan() {
             `firmware ${m.fw_version} — tick “Update the TS-2068 ROM” or the 2068 won't work afterwards.`
     } else if (!wantRom && romBehind()) {
         hint.classList.add('warn')
-        hint.textContent = `This board is on ${installed.fw}, so its TS-2068 ROM is probably older ` +
-            `than ROM ${m.rom_version || m.fw_version}. Tick “Update the TS-2068 ROM” to install it ` +
-            `with the firmware.`
+        hint.textContent = `This board is on ${installed.fw}, so its TS-2068 ROM is older than ` +
+            `ROM ${m.rom_version || m.fw_version}, which firmware ${m.fw_version} needs. Tick ` +
+            `“Update the TS-2068 ROM” to install it with the firmware.`
     } else {
         hint.textContent = planText()
     }

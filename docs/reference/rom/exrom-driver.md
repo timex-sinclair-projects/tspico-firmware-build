@@ -203,8 +203,8 @@ had it right).
 
 ### `BIOS_G_VERS` (1852h)
 
-`LD BC,0022h / RET`: the version, matching HOME 0065h (`PEEK 101`): 0022h
-in ROM 2.2, 0015h in 1.1. Each layer that changes the version patches it
+`LD BC,0022h / RET`: the version, matching HOME 0065h (`PEEK 101`): 0023h
+in ROM 2.3 (the listing's 0022h is ROM 2.2's), 0015h in 1.1. Each layer that changes the version patches it
 together with 0065h: the base image's value, the SYNC layer's and the disk
 module's are in [the build history](../../ROM_CHANGES.md#version-bytes)
 ([overview.md](overview.md#which-rom-is-this)). The `RET` at 1855h is also

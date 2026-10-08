@@ -237,8 +237,10 @@ def h_dir(p, pre, cmd):
         p.put(c)
     p.put(0)
     k = yield                                    # CMD_KEY
-    if k == 78:
+    if k in (78, 110):                           # N or n: the ROM reads on (2.3)
+        p.put(k)                                 # the echo
         p.ready()
+        p.put(3)                                 # and the end of the loop
         return
     for i in range(19):
         p.put(8), p.put(32), p.put(8)
@@ -327,7 +329,20 @@ def h_chclose(p, pre, cmd):
     ch_reply(p, 1)
 
 
-HANDLERS = {"TPI:PATH": h_path, "TPI:DIR": h_dir, "TPI:CHOPEN": h_chopen,
+def h_colour(p, pre, cmd):
+    """A one-page 86h answer with INK 0, PAPER 3, AT 0,3 and a UDG: value
+    bytes of 00h/03h and bytes >= 80h are text, not ends (#228)."""
+    for b in (0x86, 1, 0x0D):
+        p.put(b)
+    p.ready()
+    for b in (0x10, 0x00, 0x11, 0x03, ord("a"), 0x16, 0x00, 0x03, 0x90, ord("z")):
+        p.put(b)
+    p.put(3)
+    return
+    yield
+
+
+HANDLERS = {"TPI:PATH": h_path, "TPI:DIR": h_dir, "TPI:COLOUR": h_colour, "TPI:CHOPEN": h_chopen,
             "TPI:CHWR": h_chwr, "TPI:CHRD": h_chrd, "TPI:CHCLOSE": h_chclose}
 
 # dev_extcmd.py, run unchanged: its `tp` module is this simulation
@@ -450,12 +465,23 @@ def main():
     check(b"File 29.tap" in r["text"] and p.keys_seen == [ord("Y")], "both pages printed, key sent")
     link_ok(p, "dir Y")
 
-    print("picocmd: tpi:dir, N at the prompt")
+    print("picocmd: tpi:dir, n at the prompt")
     p = Pico()
-    r = run("picocmd", p, pk, keys=[ord("N")])
+    r = run("picocmd", p, pk, keys=[ord("n")])
     check(r["returned"] and r["bc"] == 0, "returns 0 = OK")
-    check(b"File 20.tap" in r["text"] and b"File 21.tap" not in r["text"], "stopped after page 1")
-    link_ok(p, "dir N")
+    check(b"File 20.tap" in r["text"] and b"File 21.tap" not in r["text"] and p.keys_seen == [ord("n")],
+          "stopped after page 1; the key went as typed")
+    check(r["text"].endswith(b"Scroll? (Y/n)n"), "read on after n: the Pico's echo, then its 03h")
+    link_ok(p, "dir n")
+
+    print("picocmd: control-code values and a UDG in the text")
+    p = Pico()
+    poke_text(pk, 60010, 60012, b"tpi:colour", word=True)
+    r = run("picocmd", p, pk)
+    check(r["returned"] and r["bc"] == 0, "returns 0 = OK")
+    check(bytes(r["text"]) == b"\r\x10\x00\x11\x03a\x16\x00\x03\x90z",
+          "INK 0, PAPER 3, AT 0,3 and the UDG all printed (%r)" % bytes(r["text"]))
+    link_ok(p, "colour")
 
     print("picocmd: an unknown command, both entries")
     p = Pico()

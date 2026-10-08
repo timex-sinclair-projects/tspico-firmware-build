@@ -130,15 +130,15 @@ consequences before their causes.
 
 | What | Version | Where it is written | How to read it |
 |---|---|---|---|
-| Firmware | 2.2.1 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
-| TS-2068 ROM | 2.2 | HOME 0065h (`PEEK 101` = 34), BIOS G_VERS = 0022h, the boot banner | `PEEK 101`; `SAVE "tpi:info"` |
+| Firmware | 2.3 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
+| TS-2068 ROM | 2.3 | HOME 0065h (`PEEK 101` = 35), BIOS G_VERS = 0023h, the boot banner, and byte 2 of every command pre-header | `PEEK 101`; `SAVE "tpi:info"` (from the pre-header) |
 | ZX Spectrum ROM | v4 | the banner byte at 38B7h | the boot screen in ZX48 mode |
-| ROM 2.2 module | FDD_VERSION 8 | EXROM 30AFh | — |
+| The ROM's disk module | FDD_VERSION 8 (unchanged by 2.3, which added `PS_READ` at its end) | EXROM 30AFh | — |
 
 The firmware and the ROM share a major.minor number; the third part is a
-firmware-only release on the same ROM. ROM 2.2 needs firmware that
-understands SYNC; the firmware still serves ROM 1.1, which never writes
-port 0Fh. [rom/overview.md](rom/overview.md).
+firmware-only release on the same ROM. Firmware 2.3 needs ROM 2.3: after
+`N` at a prompt it ends function 86h's loop itself, which a 2.2 ROM would
+not read ([firmware/tspico-state.md](firmware/tspico-state.md#rom_id)). [rom/overview.md](rom/overview.md).
 
 ## The sources, by size
 

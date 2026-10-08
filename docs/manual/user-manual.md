@@ -1,6 +1,6 @@
 # TS-Pico User Manual
 
-### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.2
+### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.3
 
 ## Contents
 
@@ -235,7 +235,7 @@ Now switch the 2068 on. Here's what happens:
    starting up.
 2. The Pico's LED blinks steadily while it opens the SD card and reads your `TAP` folder.
 3. The 2068 starts. You'll see the usual copyright lines, plus the TS-Pico's own line, which
-   includes the ROM version, for example `2026 TS-Pico ROM v2.2`.
+   includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
 4. Press **ENTER** and the flashing **K** cursor appears.
 
 Let's make sure everything's talking:
@@ -1256,8 +1256,8 @@ ERASE "*.bak"        : REM asks about each matching file
 ERASE "empty/"       : REM remove an empty folder (note the slash)
 ```
 
-- With a pattern, you're asked `Erase NAME (Y/N)?` for each file. **Y** erases it; **N** stops
-  and erases nothing more; any other key skips that file.
+- With a pattern, you're asked `Erase NAME (Y/N)?` for each file. **Y** erases it; **N**, or
+  any other key, skips that file and goes on to the next.
 - Only an empty folder can be erased.
 - **F**: `Not found:`, `No match for`. **Q**: `File is mounted` (close it first),
   `Directory not empty`, `Can't erase the current directory`, `A directory: ERASE "x/"` (you left
@@ -1449,7 +1449,8 @@ to mount one, **B** for the previous page, **N** to quit, or any other key for t
 
 ### info
 
-`SAVE "tpi:info"` shows the TS-Pico's status: firmware and ROM versions, free memory, Flash and
+`SAVE "tpi:info"` shows the TS-Pico's status: the firmware version and the version of the ROM
+your 2068 is running, free memory, Flash and
 SD card space (or `SD card: none`), the BOOT and DOCK slots, append and verbose, the mounted file and tape position,
 the current folder and how many files are in it.
 
@@ -1701,8 +1702,8 @@ Install the firmware and the ROM from the same release: they are made to work to
    6. Switch the 2068 **off** again, and press **The 2068 is off — continue** on the page.
 8. The page installs the firmware and copies its files to the Pico.
 9. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
-   reads `2026 TS-Pico ROM v2.2`. Try `CAT`. `PRINT PEEK 101` gives **34** (ROM 2.2), and
-   `SAVE "tpi:info"` shows the firmware version, 2.2.1.
+   reads `2026 TS-Pico ROM v2.3`. Try `CAT`. `PRINT PEEK 101` gives **35** (ROM 2.3), and
+   `SAVE "tpi:info"` shows firmware 2.3 and ROM 2.3.
 
 > **Why unplug the USB cable at the end?** It gives the TS-Pico and its SD card a real power-off.
 > A card left powered through a firmware update can be stuck until it loses power (see 2.6).
@@ -1722,8 +1723,9 @@ steps as above. You don't have to pick a port or a drive. It finds the Pico by i
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the
-RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then, from 1.1 only,
-`upgrade.uf2` and the ROM steps above, then `firmware.uf2`. Finally connect with the web page
+RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then, unless the board already
+has this release's ROM, `upgrade.uf2` and the ROM steps above, then `firmware.uf2`. The
+firmware and the ROM go together: firmware 2.3 needs ROM 2.3. Finally connect with the web page
 and press Start with **Erase** unticked to copy the files.
 
 ## A.3 Updating the SD card
@@ -1751,11 +1753,11 @@ To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1: NEW`. You can
 If the 2068 starts with coloured stripes and TS Reset doesn't help, but another slot boots, you
 can put the standard ROM back from the SD card:
 
-1. Copy the ROM file, `TSPICO-22.ROM`, to the card's `TAP` folder. It's in the release
+1. Copy the ROM file, `TSPICO-23.ROM`, to the card's `TAP` folder. It's in the release
    `.zip` (in `src/rom`), from <https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest>.
 2. Boot a working ROM from another slot, for example a test ROM in slot 4
    (`SAVE "tpi:boot" CODE 2,4: NEW`).
-3. `LOAD "tpi:TSPICO-22.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
+3. `LOAD "tpi:TSPICO-23.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
    that you're sure.
 4. Switch off, unplug the USB cable, and switch on again.
 
@@ -1834,7 +1836,7 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the Pico's own
 the SD card). It's a single line of text:
 
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.2.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.2", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false}
 ```
 
 | Setting | Meaning | Normally |
@@ -1845,7 +1847,7 @@ the SD card). It's a single line of text:
 | `ROM_SLOT` | The BOOT slot. Anything but 1 is used for one start, then set back to 1 | `1` |
 | `ROM_SM` | Whether BOOT and DOCK use Flash or RAM | `10` (both Flash) |
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
-| `ROM_VERSION`, `FW_VERSION` | Version information shown by `tpi:info` and read by the updater | `"2.2"`, `"2.2.1"` |
+| `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
 
 You'd normally leave this file alone. To change it, connect the Pico to a computer and use a
