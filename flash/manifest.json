@@ -16,7 +16,7 @@
       "kind": "ROM",
       "size": 32768,
       "name": "TS-Pico TS-2068 ROM 2.3",
-      "file": "../src/rom/TSPICO-22.ROM",
+      "file": "../src/rom/TSPICO-23.ROM",
       "crc32": "1338F0D5"
     },
     {

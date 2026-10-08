@@ -2,7 +2,7 @@
 
 Source: the images [`src/rom/TSPICO.ROM`](../../../src/rom/TSPICO.ROM)
 (the base image), [`src/rom/TSPICO-SYNC.ROM`](../../../src/rom/TSPICO-SYNC.ROM)
-(the SYNC layer), [`src/rom/TSPICO-22.ROM`](../../../src/rom/TSPICO-22.ROM) (ROM 2.2),
+(the SYNC layer), [`src/rom/TSPICO-23.ROM`](../../../src/rom/TSPICO-23.ROM) (ROM 2.3),
 [`src/rom/TSPICO-ZX48-V4.BIN`](../../../src/rom/TSPICO-ZX48-V4.BIN); the
 build [`tools/build-rom.py`](../../../tools/build-rom.py) and
 [`tools/build-rom.sh`](../../../tools/build-rom.sh); the analysis tools
@@ -47,7 +47,7 @@ All checksums below were computed from the files in the repository.
 | 1.1 | `ROMs/TSPICO-11-home`, `-exrom` | 16K + 16K | `E8714BED`, `268649F6` | 15h | Gustavo Pane's ROM as the boards shipped; the only public release before ROM 2.2 | what users still have (the upgrade UF2 replaces it; [../firmware/upgrade.md](../firmware/upgrade.md)) |
 | the base image | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | 1.1 plus 104 EXROM bytes (a ready-wait and guard in the Y/N loop, and BREAK at the SAVE prompt) and the version byte | build input: the base `tspico-sync.asm` patches; never released |
 | the SYNC layer | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | the base image plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | build input: the base `build-rom.py` patches; never released |
-| **ROM 2.3** (prototype, #227/#228) | `src/rom/TSPICO-22.ROM` (the name kept until release) | 32K | `1338F0D5` | 23h | the SYNC layer plus the disk-command layer: 20 patches and the module at EXROM 3000h–37B4h; 2099 bytes in 19 hunks. ROM 2.2 (`8363E100`, 22h) was the same less four patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **ROM 2.3** (#227, #228) | `src/rom/TSPICO-23.ROM` | 32K | `1338F0D5` | 23h | the SYNC layer plus the disk-command layer: 20 patches and the module at EXROM 3000h–37B4h; 2099 bytes in 19 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less four patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX build input | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base `tspico-zx48-v3.asm` patches |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | the ZX build input plus a WAIT_RDY fix, `LOAD "tpi:…"` and `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
 
@@ -70,7 +70,7 @@ ROM 2.2 is built in layers, each the image below it plus patches:
    ([exrom-sync.md](exrom-sync.md)).
 3. **The disk-command layer**, the module `src/rom/fdd/fddcmd.asm` at EXROM
    3000h plus the HOME and EXROM patches in `tools/build-rom.py`, which
-   writes `src/rom/TSPICO-22.ROM` ([exrom-fdd.md](exrom-fdd.md)).
+   writes `src/rom/TSPICO-23.ROM` ([exrom-fdd.md](exrom-fdd.md)).
 
 `TSPICO.ROM` and `TSPICO-SYNC.ROM` are build inputs, not releases; the
 build history ([ROM_CHANGES.md](../../ROM_CHANGES.md#lineage)) has the
@@ -282,7 +282,7 @@ SYNC-layer patch site and the base-image bytes it replaced;
 CI does not run this script — it runs the two tests on the committed
 images — so a change to these sources is rebuilt by hand and the image
 committed. The script's header notes that `src/rom/TSPICO.ROM`, the base
-image, is never modified (slot 1 is `TSPICO-22.ROM`; until #181 the header
+image, is never modified (slot 1 is `TSPICO-23.ROM`; until #181 the header
 called `TSPICO.ROM` the shipping slot-1 ROM). The ZX sources:
 [zx48.md](zx48.md); the SYNC layer's source: [exrom-sync.md](exrom-sync.md).
 
@@ -313,10 +313,10 @@ moved site refuses, naming it: a patch that no longer fits needs a person,
 not a new checksum. It leaves `ROMs/` and `romdiff.py`'s `EXPECT_CRC` alone.
 
 After a change to the module or the patches: `python3 tools/build-rom.py
---verify`, copy `build/TSPICO-fdd.ROM` over `src/rom/TSPICO-22.ROM`, and
+--verify`, copy `build/TSPICO-fdd.ROM` over `src/rom/TSPICO-23.ROM`, and
 set slot 1's crc32 in `flash/manifest.json` (`tools/build-flash.py check`
 prints it). CI ([../firmware/boot.md](../firmware/boot.md#ci-buildyml))
-runs `--verify`, fails if the committed `TSPICO-22.ROM` differs from the
+runs `--verify`, fails if the committed `TSPICO-23.ROM` differs from the
 fresh build by a single byte, checks the manifest's crc32, and runs
 `rom_cend_hosttest.py` on `C_END2`, `rom_tpmode_hosttest.py` on the
 switch words, `rom_preload_hosttest.py` on `PRELOAD` and
@@ -357,7 +357,7 @@ Twenty, applied in this order (the last four are ROM 2.3's). The reason for each
 | EXROM 045Fh | `PUSH AF / JR 0465h` → `JP 377Fh` | `PRINT_STRING_FROM_PICO` becomes the module's `PS_READ`: control-code values and bytes ≥ 80h are text (#228) | [exrom-fdd.md](exrom-fdd.md#ps_read) |
 
 The difference the disk-command layer makes, measured on the committed
-images (`TSPICO-SYNC.ROM` → `TSPICO-22.ROM`): 2099 bytes in 19 hunks: 99
+images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2099 bytes in 19 hunks: 99
 in HOME, 31 in the EXROM outside the module, and 1969 in the module's
 region — 4 of the module's 1973 bytes are `FFh`, the same as the free space
 they replaced. The three version patches replace the SYNC layer's own version marks

@@ -21,7 +21,7 @@ no key held) return; BRK_TEST ($2327, which reads IY) says no BREAK; and
 POLL_KEYPRESS ($0546) is entered past its IY prologue at $0566 with a key in
 LAST_K, so the case logic under test runs as it is in the ROM.
 
-Uses the committed slot-1 image, src/rom/TSPICO-22.ROM (CI checks it is what
+Uses the committed slot-1 image, src/rom/TSPICO-23.ROM (CI checks it is what
 tools/build-rom.py builds). Run:
     python3 src/test/rom_fn86_hosttest.py
 """
@@ -34,7 +34,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 from z80core import Z80                                          # noqa: E402
 
-ROM23 = os.path.join(REPO, "src", "rom", "TSPICO-22.ROM")
+ROM23 = os.path.join(REPO, "src", "rom", "TSPICO-23.ROM")
 ROM20 = os.path.join(REPO, "src", "rom", "TSPICO-SYNC.ROM")
 DONE = 0xFF00
 LAST_K = 0x5C08

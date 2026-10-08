@@ -173,12 +173,12 @@ behaviour, and the caveat and the issue link go.
 | `src/upgrade/loader.bas` | `78d09ea9d4fe` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
-| `src/rom/TSPICO-22.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/rom/TSPICO-23.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/rom/TSPICO-ZX48-V4.BIN` | `ec57f307bd0d` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
-| `flash/manifest.json` | `9f7ea141eb80` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
-| `tools/build-rom.py` | `c2cf64f94768` | [rom/overview.md](rom/overview.md) | — |
-| `tools/build-flash.py` | `a5e04bab852a` | [firmware/boot.md](firmware/boot.md) | — |
+| `flash/manifest.json` | `37d54aad1795` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
+| `tools/build-rom.py` | `22badceddc88` | [rom/overview.md](rom/overview.md) | — |
+| `tools/build-flash.py` | `e2f58cd4004a` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/build.yml` | `ab2bef3e1908` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/release.yml` | `a8e2150f70ac` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `d9c67b47872f` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/release.yml` | `dbd396b21251` | [firmware/boot.md](firmware/boot.md) | — |

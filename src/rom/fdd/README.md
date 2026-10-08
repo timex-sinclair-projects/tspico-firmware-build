@@ -6,16 +6,17 @@ Z80 source for the native disk commands (`CAT`/`FORMAT`/`MOVE`/`ERASE`, and late
 
 - **`fddcmd.asm`** — the module, assembled at **`$3000`** and spliced into the
   EXROM half of `src/rom/TSPICO-SYNC.ROM` (ROM 2.0). With the patches in
-  `tools/build-rom.py` this makes **ROM 2.1**, the release ROM: the disk
-  keywords, `f:` files, `OPEN #` channels, function `$88` and the BIOS C_END
-  fix. The result is committed as `src/rom/TSPICO-22.ROM`, the slot-1 image in
+  `tools/build-rom.py` this makes **ROM 2.3**, the release ROM: the disk
+  keywords, `f:` files, `OPEN #` channels, function `$88`, the BIOS C_END
+  fix, and (2.3) keys sent as typed, the `$86` loop ended by the Pico, and
+  `PS_READ`, the string reader. The result is committed as `src/rom/TSPICO-23.ROM`, the slot-1 image in
   `flash/manifest.json`; CI fails if it differs from a fresh build.
 
 ## Build
 
 ```bash
 python3 tools/build-rom.py --verify      # -> build/TSPICO-fdd.ROM
-cp build/TSPICO-fdd.ROM src/rom/TSPICO-22.ROM   # after a change: refresh the slot-1 image
+cp build/TSPICO-fdd.ROM src/rom/TSPICO-23.ROM   # after a change: refresh the slot-1 image
 python3 tools/build-flash.py check flash/manifest.json  # and fix slot 1's crc32 if it says so
 ```
 

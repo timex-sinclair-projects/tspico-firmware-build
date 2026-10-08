@@ -1,6 +1,6 @@
 # The HOME ROM
 
-Source: [`src/rom/TSPICO-22.ROM`](../../../src/rom/TSPICO-22.ROM) bytes
+Source: [`src/rom/TSPICO-23.ROM`](../../../src/rom/TSPICO-23.ROM) bytes
 0000h–3FFFh, read in
 [`tspico-22-home.asm`](../../rom-analysis/disasm/tspico-22-home.asm); the
 genuine HOME ROM [`ROMs/GENUINE-2068-home.bin`](../../../ROMs/GENUINE-2068-home.bin)

@@ -13,11 +13,11 @@ Pipeline (see docs/FDD_COMMANDS_DESIGN.md §8):
   5. write build/TSPICO-fdd.ROM (+ split halves) and print a hunk report,
      asserting that ONLY the intended regions changed
 
-The result is ROM 2.2, the slot-1 image: it is committed as
-src/rom/TSPICO-22.ROM (flash/manifest.json slot 1), and CI fails if that file
+The result is ROM 2.3, the slot-1 image: it is committed as
+src/rom/TSPICO-23.ROM (flash/manifest.json slot 1), and CI fails if that file
 differs from a fresh build. After changing the module or the patches:
     python3 tools/build-rom.py --verify
-    cp build/TSPICO-fdd.ROM src/rom/TSPICO-22.ROM
+    cp build/TSPICO-fdd.ROM src/rom/TSPICO-23.ROM
 and update slot 1's crc32 in flash/manifest.json.
 
 Requires sjasmplus (brew install sjasmplus).

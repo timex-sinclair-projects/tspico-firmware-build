@@ -4,7 +4,7 @@ Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
 1488 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
 at EXROM 3000h–37B4h and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
-`src/rom/TSPICO-22.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
+`src/rom/TSPICO-23.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
 
 The module and its patches are ROM 2.3's last layer (2.2's, plus #227 and

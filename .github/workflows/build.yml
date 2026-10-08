@@ -143,7 +143,7 @@ jobs:
       # the 2.0 ROM; --verify fails the build if any patch's "before" bytes or
       # any anchor no longer match the base, or if anything outside the
       # intended hunks changed. The result must equal the committed slot-1
-      # image, src/rom/TSPICO-22.ROM (checked below).
+      # image, src/rom/TSPICO-23.ROM (checked below).
       # sjasmplus has no Ubuntu package; v1.22.0 is the version the module is
       # developed with, and it builds a byte-identical ROM.
       - name: Install sjasmplus
@@ -164,13 +164,13 @@ jobs:
       - name: Build the fdd ROM (ROM 2.2)
         run: python3 tools/build-rom.py --verify
 
-      # src/rom/TSPICO-22.ROM is the slot-1 image (flash/manifest.json), so the
+      # src/rom/TSPICO-23.ROM is the slot-1 image (flash/manifest.json), so the
       # flash image, the upgrade UF2 and the web updater all ship it. It must be
       # exactly what build-rom.py makes from the sources.
       - name: The committed slot-1 ROM is what build-rom.py builds
         run: |
-          if ! cmp -s build/TSPICO-fdd.ROM src/rom/TSPICO-22.ROM; then
-            echo "::error::src/rom/TSPICO-22.ROM differs from tools/build-rom.py's output. Run: python3 tools/build-rom.py --verify && cp build/TSPICO-fdd.ROM src/rom/TSPICO-22.ROM, then set flash/manifest.json's slot-1 crc32 (python3 tools/build-flash.py check flash/manifest.json)."
+          if ! cmp -s build/TSPICO-fdd.ROM src/rom/TSPICO-23.ROM; then
+            echo "::error::src/rom/TSPICO-23.ROM differs from tools/build-rom.py's output. Run: python3 tools/build-rom.py --verify && cp build/TSPICO-fdd.ROM src/rom/TSPICO-23.ROM, then set flash/manifest.json's slot-1 crc32 (python3 tools/build-flash.py check flash/manifest.json)."
             exit 1
           fi
 
