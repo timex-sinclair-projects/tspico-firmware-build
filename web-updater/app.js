@@ -803,8 +803,17 @@ async function libraryNote() {
 async function init() {
     libraryNote()
     // Windows: WebUSB can't open RP2 Boot and the drive picker won't take
-    // RPI-RP2, so the firmware steps fail. Point at windows-updater/.
-    if (/Windows/.test(navigator.userAgent)) show($('windows-note'), true)
+    // RPI-RP2, so the firmware steps fail. Point at windows-updater/ and hide
+    // the run, unless the user asks for it (a Zadig'd machine can use WebUSB).
+    if (/Windows/.test(navigator.userAgent)) {
+        show($('windows-note'), true)
+        show($('upgrade-panel'), false)
+        $('win-anyway').addEventListener('click', (e) => {
+            e.preventDefault()
+            show($('upgrade-panel'), true)
+            $('upgrade-panel').scrollIntoView({ behavior: 'smooth' })
+        })
+    }
     if (typeof navigator.serial === 'undefined') {
         show($('unsupported'), true)
         show($('main'), false)
