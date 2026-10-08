@@ -802,6 +802,9 @@ async function libraryNote() {
 // ---------------------------------------------------------------------------
 async function init() {
     libraryNote()
+    // Windows: WebUSB can't open RP2 Boot and the drive picker won't take
+    // RPI-RP2, so the firmware steps fail. Point at windows-updater/.
+    if (/Windows/.test(navigator.userAgent)) show($('windows-note'), true)
     if (typeof navigator.serial === 'undefined') {
         show($('unsupported'), true)
         show($('main'), false)

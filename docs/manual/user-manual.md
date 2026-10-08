@@ -1667,7 +1667,7 @@ Install the firmware and the ROM from the same release: they are made to work to
 ## A.1 Before you start
 
 - A computer with **Google Chrome** or **Microsoft Edge**. The updater uses features only they
-  have.
+  have. **On Windows, use the TS-Pico Updater program instead** (see the end of A.2).
 - A **Micro-USB cable** that carries data, not just power.
 - About fifteen minutes.
 
@@ -1709,6 +1709,14 @@ Install the firmware and the ROM from the same release: they are made to work to
 the Pico's white **BOOTSEL** button, press and release the TS-Pico's **Pico Reset** button (or
 unplug and replug the USB cable), then let go. A drive called **RPI-RP2** appears on your
 computer. Leave it alone and press **Start** without connecting.
+
+**On Windows**, the browser can't put the firmware onto the Pico. Download
+**TS-Pico-Updater.exe** from the
+[latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
+and run it. There's nothing to install. Windows may warn that it doesn't know the program:
+click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
+release**, then **Connect to TS-Pico**, tick the options, press **Start**, and follow the same
+steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the

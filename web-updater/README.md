@@ -38,7 +38,7 @@ Every step can be rerun; a Pico left in BOOTSEL is always recoverable.
 | Path | How | Works on |
 |---|---|---|
 | **WebUSB (PICOBOOT)** | [Pico⚡Flash](https://github.com/piersfinlayson/picoflash)'s protocol code talks to the boot ROM's vendor interface: erase, write, read back, reboot. | Chrome/Edge on macOS, ChromeOS, Android. Linux needs picotool's udev rule. **An RP2040 on Windows needs WinUSB bound to “RP2 Boot” (Zadig)** — its boot ROM has no Microsoft OS descriptors. |
-| **RPI-RP2 drive** | `showDirectoryPicker()` on the drive (checked by its `INFO_UF2.TXT`), then the UF2 is written onto it, as a drag would. The Pico reboots on the last block, so a failing close/rename afterwards is expected; the drive disappearing is the success signal. The handle is by path, so it works again when the drive comes back. | Any desktop Chrome/Edge, no driver. |
+| **RPI-RP2 drive** | `showDirectoryPicker()` on the drive (checked by its `INFO_UF2.TXT`), then the UF2 is written onto it, as a drag would. The Pico reboots on the last block, so a failing close/rename afterwards is expected; the drive disappearing is the success signal. The handle is by path, so it works again when the drive comes back. | Desktop Chrome/Edge on macOS and Linux. **Not Windows** in practice: the write fails there. |
 
 The page offers WebUSB first and falls back to the drive when the device
 can't be opened. `?via=drive` forces the drive route (for testing it, or when
@@ -94,6 +94,13 @@ web-updater/
 └── main/               generated channel (gitignored)
 ```
 
+## Windows
+
+On Windows neither route works without help: WebUSB needs Zadig, and the
+drive route fails. The page shows Windows users a note pointing at
+**TS-Pico-Updater.exe**, a native program that does the same run
+([windows-updater/](../windows-updater/)). Each release carries it.
+
 ## Browser support
 
 Web Serial is **Chromium-only**: Chrome, Edge, Opera on desktop/ChromeOS. No
@@ -135,8 +142,7 @@ One-time repo setup: **Settings → Pages → Source → “GitHub Actions”**.
 ## Still to do
 
 - [ ] Hardware pass on a 1.1 board and a 1.5 board end to end, on macOS
-      (WebUSB) and Windows (drive path).
-- [ ] Confirm Chrome on Windows lets `showDirectoryPicker()` pick a drive root.
+      (WebUSB). Windows goes through windows-updater/ instead.
 - [ ] Per-file byte-level progress for the file copy.
 
 ## License
