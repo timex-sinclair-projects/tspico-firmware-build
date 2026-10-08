@@ -648,7 +648,9 @@ MERGE "f:subs.bas"
 ```
 
 The name can include a folder: `SAVE "f:games/advent.bas"`. The extension is up to you;
-the TS-Pico knows the file's type from the file itself.
+the TS-Pico knows the file's type from the file itself. The name after `f:` can be up to 64
+characters long, counting any folders, slashes and the extension. The 10-character limit
+of a tape name doesn't apply here.
 
 ## 5.2 Replacing a file
 
@@ -676,7 +678,7 @@ loaded as CODE: `LOAD "f:font.bin" CODE 60000` puts the whole file at 60000.
 
 | What you see | Why |
 |---|---|
-| **F Invalid file name** | The file or its folder isn't there, or the name isn't allowed |
+| **F Invalid file name** | The file or its folder isn't there, the name isn't allowed, or it is longer than 64 characters |
 | **Q Parameter error** | The name is a folder; the file is the mounted TAP; or you asked for the wrong type (for example, `LOAD "f:title.scr"` without `SCREEN$`) |
 | **R Tape loading error** | The file is shorter than its header says |
 | **D BREAK - CONT repeats** | You answered anything but Y to "Replace?" |
