@@ -87,10 +87,10 @@ def check(cond, msg):
     print(("  PASS  " if cond else "  FAIL  ") + msg)
 
 
-def z80_cmd(body, keys=(), break_at_prompt=None, stop_after=None, body_break_at=None, rom23=False):
-    """The EXROM after the dispatcher has taken the command pre-header.
-    rom23: ROM 2.3's $86 (#227, #228) -- after N it waits for READY and reads
-    on like any key, and a control code's value bytes are never a terminator."""
+def z80_cmd(body, keys=(), break_at_prompt=None, stop_after=None, body_break_at=None):
+    """The EXROM (ROM 2.3) after the dispatcher has taken the command
+    pre-header. Its $86 waits for READY and reads on after N like any key
+    (#227), and a control code's value bytes are never a terminator (#228)."""
     st = yield ("in",)                          # pre-load status, no wait
     if st != 0x01:
         return ("st%02X" % (st or 0),)
@@ -124,8 +124,6 @@ def z80_cmd(body, keys=(), break_at_prompt=None, stop_after=None, body_break_at=
                 return ("D", prompts, bytes(text))
             key = keys[prompts - 1] if prompts <= len(keys) else ord("Y")
             yield L.out(0x0E, key)
-            if key == ord("N") and not rom23:
-                return ("N", prompts, bytes(text))
             r = yield from L.ready_wait()
             if r:
                 return (r, prompts, bytes(text))
@@ -133,7 +131,7 @@ def z80_cmd(body, keys=(), break_at_prompt=None, stop_after=None, body_break_at=
         if c == 0x03:                           # end of message
             return ("ok", prompts, bytes(text))
         text.append(c)
-        if rom23 and 0x10 <= c <= 0x17:         # PS_READ: the value bytes, whatever they are
+        if 0x10 <= c <= 0x17:                   # PS_READ: the value bytes, whatever they are
             for _ in range(2 if c >= 0x16 else 1):
                 text.append((yield ("in",)))
 
@@ -228,12 +226,12 @@ def main():
 
     menu_result = []
 
-    def pre_for(text, rom_id):
+    def pre_for(text, rom_id=0x23):
         pre = P.make_pre(text)
-        pre[2] = rom_id                         # FFh: ROM 2.2 and earlier; 23h: ROM 2.3
+        pre[2] = rom_id                         # ROM 2.3 sends its version here (#227)
         return pre
 
-    def run_script(text, script, rom_id=0xFF):
+    def run_script(text, script, rom_id=0x23):
         pio = PIO()
         P.fresh(t, pio)
         t.TSP.ROM_VERSION = "1.7"
@@ -253,7 +251,7 @@ def main():
         pio.y = 0                               # pre-header OUTs dropped it
         tio.kill = False
         pio.run(z80_cmd(P.make_body(text), **kw))
-        t.PROCESS_CMD(pre_for(text, 0x23 if kw.get("rom23") else 0xFF), handlers(), {})
+        t.PROCESS_CMD(pre_for(text), handlers(), {})
         pio.finish()
         return pio, (pio.result or ("no result",))
 
@@ -271,34 +269,29 @@ def main():
         check(r[0] == "ok" and len(r) > 2 and r[1] >= 2 and b"line 60" in r[2] and idle(pio),
               "Y through the prompts to the end, all 60 lines, back to idle (%s)" % (r[:2],))
         pio, r = run(b"tpi:list", keys=(ord("N"),))
-        check(r[0] == "N" and len(r) > 1 and r[1] == 1 and idle(pio),
-              "N at the first prompt stops it, back to idle (%s)" % (r[0],))
+        check(r[0] == "ok" and len(r) > 2 and r[1] == 1 and r[2].endswith(b"Scroll? (Y/n)N") and idle(pio),
+              "N at the first prompt: its echo and 0x03 end it, back to idle (%s)" % (r[:2],))
+        check(t.rom_id == 0x23, "PROCESS_CMD keeps the ROM's version from pre-header byte 2 (%r)" % t.rom_id)
 
-        print("ROM 2.3: keys as typed, the Pico ends the loop after N (#227)")
-        pio, r = run(b"tpi:list", keys=(ord("n"),), rom23=True)
+        print("keys as typed, the Pico ends the loop after N (#227)")
+        pio, r = run(b"tpi:list", keys=(ord("n"),))
         check(r[0] == "ok" and len(r) > 2 and r[1] == 1 and r[2].endswith(b"Scroll? (Y/n)n")
               and pio.empty_reads == 0 and idle(pio),
               "'n' at the first prompt: the echo 'n' and 0x03 end it, back to idle (%s)" % (r[:2],))
-        pio, r = run(b"tpi:list", keys=(ord("y"), ord("5")), rom23=True)
+        pio, r = run(b"tpi:list", keys=(ord("y"), ord("5")))
         check(r[0] == "ok" and len(r) > 2 and b"line 60" in r[2] and idle(pio),
               "lower-case 'y' pages on like 'Y' (%s)" % (r[:2],))
-        pio, r = run(b"tpi:list", keys=(ord("N"),))
-        check(r[0] == "N" and 0x03 not in pio.tx and idle(pio),
-              "ROM 2.2 (pre-header byte 2 FFh): N still sends nothing more (%s)" % (r[0],))
 
-        print("ROM 2.3: colour values 0 and 3 (#228)")
+        print("colour values 0 and 3 (#228)")
         kw_text[0] = "\x10\x00black \x11\x03magenta \x12\x01flash\x10\x08\x11\x08\x12\x00"
-        pio, r = run(b"tpi:col", rom23=True)
+        pio, r = run(b"tpi:col")
         check(r[0] == "ok" and len(r) > 2 and r[2] == b"\r\r\x10\x00black \x11\x03magenta \x12\x01flash"
               b"\x10\x08\x11\x08\x12\x00" and idle(pio),
               "INK 0, PAPER 3, FLASH 1 and FLASH 0 sent with their values (%r)" % (r[2:] or r,))
-        pio, r = run(b"tpi:col")
-        check(r[0] == "ok" and len(r) > 2 and r[2] == b"\r\rblack magenta flash\x10\x08\x11\x08",
-              "ROM 2.2: the same text without the codes it can't take (%r)" % (r[2:] or r,))
         kw_text[0] = "\x10\x0cbad"
-        pio, r = run(b"tpi:col", rom23=True)
+        pio, r = run(b"tpi:col")
         check(r[0] == "ok" and len(r) > 2 and r[2] == b"\r\rbad",
-              "ROM 2.3: INK 12, a value RST 10h refuses (Report K), is still dropped (%r)" % (r[2:] or r,))
+              "INK 12, a value RST 10h refuses (Report K), is still dropped (%r)" % (r[2:] or r,))
 
         print("ROM_VERSION is not a protocol switch (audit 2026-09-30)")
         pio, r = run(b"tpi:list", rom="1.0")
@@ -431,13 +424,13 @@ def main():
         check(r[0] == "ok" and pio.empty_reads == 0 and menu_result == [ord("Y")] and idle(pio),
               "SEND_MSG_PROMPT_YN: prompt, Y, echo -- 0 empty reads (%s, %d)" % (r[0], pio.empty_reads))
         del menu_result[:]
-        pio, r = run_script(b"tpi:menu", z80_menu(P.make_body(b"tpi:menu"), ord("n")), rom_id=0x23)
+        pio, r = run_script(b"tpi:menu", z80_menu(P.make_body(b"tpi:menu"), ord("n")))
         check(r == ("ok", b"n") and pio.empty_reads == 0 and menu_result == [-1] and idle(pio),
-              "ROM 2.3 ListMenu: 'n' -> -1, its echo and 0x03 end the loop (%s, %r)" % (r, menu_result))
+              "ListMenu: 'n' -> -1, its echo and 0x03 end the loop (%s, %r)" % (r, menu_result))
         del menu_result[:]
-        pio, r = run_script(b"tpi:ask", z80_menu(P.make_body(b"tpi:ask"), ord("y")), rom_id=0x23)
+        pio, r = run_script(b"tpi:ask", z80_menu(P.make_body(b"tpi:ask"), ord("y")))
         check(r == ("ok", b"y") and menu_result == [ord("Y")] and idle(pio),
-              "ROM 2.3 SEND_MSG_PROMPT_YN: 'y' echoed as typed, returned as Y (%s, %r)" % (r, menu_result))
+              "SEND_MSG_PROMPT_YN: 'y' echoed as typed, returned as Y (%s, %r)" % (r, menu_result))
 
         print("the pre-header capture allocates nothing")
         import ast

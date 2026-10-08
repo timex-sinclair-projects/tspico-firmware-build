@@ -3,11 +3,12 @@ SD sizes in units that fit the card (2026-10-02).
 
   * catalog.space_pair: kB / MB / GB chosen from the total, so the 256 MB
     cards the boards ship with read "240 MB", not "0.2346GB".
-  * SEND_MSG2(colour=True) passes INK (10h) and PAPER (11h) with a value
-    the ROM can take (1, 2, 4-9), at zero width: a 32-character row with
-    codes in it still ends in exactly one CR. Values 0 and 3 would end the
-    ROM's string, so those codes are dropped with their value. Without
-    colour=True every attribute code is dropped, as before.
+  * SEND_MSG2(colour=True) passes INK, PAPER, FLASH, BRIGHT, INVERSE and
+    OVER (10h-15h) with a value RST 10h takes, 0 and 3 included (ROM 2.3's
+    string reader passes values through, #228), at zero width: a
+    32-character row with codes in it still ends in exactly one CR. A value
+    RST 10h would refuse is dropped with its code. Without colour=True every
+    attribute code is dropped, as before.
   * CAT_COLOUR: blue bar over the path and card line, cyan column titles,
     the dashed line gone, folders in blue as "folder", index numbers on
     cyan chips; any other text goes through unchanged.
@@ -95,8 +96,11 @@ def test_send_msg2(t):
     check(got == b"A" * 32 + b"\r" + b"B" * 32 + b"\r\x03",
           "without colour=True: dropped with their value, as before (%r)" % got)
     got = send2(t, "\x10\x00a\x11\x03b\x10\x09c\x12\x01d", True)
-    check(got == b"ab\x10\x09cd\x03",
-          "values 0 and 3 (they would end the ROM's string) and FLASH dropped; INK 9 kept (%r)" % got)
+    check(got == b"\x10\x00a\x11\x03b\x10\x09c\x12\x01d\x03",
+          "INK 0, PAPER 3, INK 9 and FLASH 1 kept: ROM 2.3's reader takes any value (#228) (%r)" % got)
+    got = send2(t, "\x10\x0aa\x12\x02b\x14\x08c", True)
+    check(got == b"abc\x03",
+          "INK 10, FLASH 2, INVERSE 8 dropped: RST 10h would give Report K (%r)" % got)
     got = send2(t, "abc\x10\x01def\r", True)
     check(got == b"abc\x10\x01def\r\x03", "a short line with a code: one CR, no extra (%r)" % got)
 

@@ -460,9 +460,8 @@ BANK_SV, which is always FFh, and the firmware ignored the byte. ROM 2.3
 patches it to `LD A,23h / NOP`, its version marker (the value `PEEK 101`
 gives), and the disk module sends the same from `SEND_FOPEN` and `CH_SEND`
 ([exrom-fdd.md](exrom-fdd.md)). So every command the Pico answers says
-which ROM sent it, and the firmware knows whether function 86h will read on
-after `N` and whether the string reader takes control-code values as text
-(`rom_id`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id)).
+which ROM sent it (`rom_id`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id),
+which `tpi:info` shows).
 Only the `'B'` pre-header changed; a LOAD or SAVE block's pre-header
 (189Ah) still sends BANK_SV.
 

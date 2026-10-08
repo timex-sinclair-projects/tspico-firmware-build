@@ -362,9 +362,10 @@ more, so the firmware sends nothing after an `N`. Letters are compared after
 on, and the loop ends only when the Pico sends `03h`. The Pico can then
 decide what `N` means where it is asked — stop a listing, skip one file of
 an ERASE — and it can print something before the `03h` (the firmware
-echoes the key). The firmware must know which ROM it is talking to, since
-after `N` the two want opposite things; ROM 2.3 says so in byte 2 of each
-command pre-header ([exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h)).
+echoes the key). After `N` ROM 2.2 and 2.3 want opposite things, so
+firmware and ROM must match: the current firmware is written for 2.3 only.
+ROM 2.3 also says which it is in byte 2 of each command pre-header
+([exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h)).
 21F7h (`JP LOOP_EXIT_OK`) is left in place, unreachable. 88h's loop is this
 one (`LOWER_LOOP` joins at 21E6h), so it changes the same way.
 

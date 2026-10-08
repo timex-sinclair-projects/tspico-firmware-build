@@ -118,7 +118,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `SESSION_ID` | 5DD1h | where the session id is kept |
 | `IY_SYSVARS` | 5C3Ah | what HOME expects in IY (the bank switch clobbers IY) |
 | `BANK_SV` | 5DCFh | pre-header byte 2 up to ROM 2.2 (always FFh); no longer read by the module |
-| `ROM_ID` | 23h | not a variable: what ROM 2.3 sends as byte 2 of a command pre-header instead of `BANK_SV`, the same value as its version marker (HOME 0065h). `SEND_FOPEN` and `CH_SEND` send it, and `build-rom.py` patches `BUILD_PREHEADER_B` (1BB5h) to send it too, so the firmware can tell this ROM from an older one (`rom_id`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id), #227) |
+| `ROM_ID` | 23h | not a variable: what ROM 2.3 sends as byte 2 of a command pre-header instead of `BANK_SV`, the same value as its version marker (HOME 0065h). `SEND_FOPEN` and `CH_SEND` send it, and `build-rom.py` patches `BUILD_PREHEADER_B` (1BB5h) to send it too, so the firmware knows which ROM sent each command (`rom_id`, shown by `tpi:info`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id), #227) |
 | `MODE_SV` | 5DDBh | TPMODE; F_HOOK clears bits 7–4 as SESSION_SETUP's non-command exit does; TAPE_MODE clears bit 1 |
 | `MODE_SET_OK` | 2105h | where `tpi:sdcard` and `tpi:picopt` end: `CALL S_MODE` (1862h) with A, `CALL 042Fh`, `JP 1B72h` ("0 OK"); TAPE_MODE jumps here |
 | `CURCHL` | 5C51h | the current channel's record |
@@ -948,8 +948,8 @@ against RST 10h's hundreds, so a Pico that kept ahead of v1.1 keeps ahead
 of this. C carries the count across `PRINT_A`, which goes through HOME
 and may change any register.
 
-The firmware sends what only this reader can read only when the command
-came from ROM 2.3 (`ROM23()`, [../firmware/tspico-bus.md](../firmware/tspico-bus.md#rom23)):
+The firmware assumes this reader (INK 0, PAPER 3 and the other attribute
+values in `SEND_MSG2`, [../firmware/tspico-messages.md](../firmware/tspico-messages.md));
 to an older ROM those bytes would end the text early. Tested in the Z80
 interpreter against the committed image, with v1.1's reader (from
 `TSPICO-SYNC.ROM`) for contrast:

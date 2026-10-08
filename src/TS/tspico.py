@@ -431,10 +431,10 @@ alldirs = []
 sd_space = None                                                                # (total, free) bytes, as the last listing read them
 
 # ─── Colour in SEND_MSG2 (the CAT listing and tpi:info, 2026-10-02) ─────
-# The 2068 prints INK (10h) and PAPER (11h) followed by a value. The ROM's
-# string reader stops on 00h and 03h, so values 0 (black) and 3 (magenta)
-# can't be sent, nor any 0 that would switch INVERSE, BRIGHT or FLASH off.
-# What is used: colours 1, 2, 4-7; 8 ("transparent": the colour already on
+# The 2068 prints INK (10h) and PAPER (11h) followed by a value. Up to ROM
+# 2.2 the string reader stopped on a 00h or 03h value, so black, magenta and
+# FLASH/BRIGHT/INVERSE/OVER 0 couldn't be sent; ROM 2.3's passes any value
+# through (#228). What the listings use: colours 1, 2, 4-7; 8 ("transparent": the colour already on
 # screen, i.e. the user's own colours on a fresh line) to go back to normal;
 # and INK 9 ("contrast": black or white to suit the paper). Only messages
 # sent with SEND_MSG2(..., colour=True) keep these; in any other text they
@@ -442,16 +442,18 @@ sd_space = None                                                                #
 INK_ = "\x10"
 PAPER_ = "\x11"
 # The values RST 10h takes after INK, PAPER, FLASH, BRIGHT, INVERSE and OVER
-# (10h-15h); anything else is Report K. Used for ROM 2.3 only (see SEND_MSG2).
+# (10h-15h); anything else is Report K (see SEND_MSG2).
 ATTR_VALUES = (tuple(range(10)), tuple(range(10)), (0, 1, 8), (0, 1, 8), (0, 1), (0, 1))
 NORMAL_ = PAPER_ + "\x08" + INK_ + "\x08"
 
 RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD's tail
 
-# ─── Which ROM sent the command (#227, #228) ────────────────────────────
+# ─── Which ROM sent the command (#227) ──────────────────────────────────
 # Byte 2 of a command's pre-header was BANK_SV, always FFh, and the Pico
-# ignored it. ROM 2.3 sends its version marker there (23h, as PEEK 101), so
-# PROCESS_CMD keeps it here for ROM23(): FFh until a 2.3 ROM says otherwise.
+# ignored it. ROM 2.3 sends its version marker there (23h, as PEEK 101), and
+# PROCESS_CMD keeps it here; tpi:info shows it. FFh: a ROM older than 2.3,
+# which this firmware does not support (its 0x86 loop and string reader
+# differ: see SEND_MSG2).
 rom_id = 0xFF
 
 # What a command that needs the card answers when there is none: always
@@ -968,19 +970,9 @@ def CMD_KEY():
     return w & 0xFF
 
 
-def ROM23():
-    """True when the command came from ROM 2.3 or later (rom_id, from its
-    pre-header). Its function 0x86 sends every key as typed, N included, then
-    waits for READY and reads on, so the Pico ends the loop with LOOP_END
-    (#227); and its string reader prints a control code's value bytes and
-    bytes of 0x80 and above instead of taking them for the end (#228). FFh,
-    every ROM up to 2.2, is False."""
-    return 0x23 <= rom_id < 0xFF
-
-
 def KEY_UP(ch):
-    """A key from CMD_KEY in upper case: ROM 2.3 sends letters as typed, ROM 2.2
-    and earlier always upper case (#227). Anything but a-z is unchanged."""
+    """A key from CMD_KEY in upper case: ROM 2.3 sends letters as typed (#227).
+    Anything but a-z is unchanged."""
     return ch - 32 if 97 <= ch <= 122 else ch
 
 
@@ -2350,15 +2342,14 @@ def SEND_MSG2(msg, st: int, expandKeywords = True, colour = False):             
                     continue
 
             elif ch >= 0x10 and ch <= 0x15:
-                # INK/PAPER and a value the ROM can take: kept, zero width,
-                # in a message built with colour codes (see INK_). Any other
-                # attribute code, and every one in other text, is dropped
-                # with its value byte. ROM 2.3 reads a code's value byte
-                # whatever it is (#228), so there every attribute code and
-                # every value RST 10h accepts is kept, 0 and 3 included.
-                if colour and i + 1 < n and ord(msg[i+1]) in (
-                        ATTR_VALUES[ch - 0x10] if ROM23() else
-                        ((1, 2, 4, 5, 6, 7, 8, 9) if ch <= 0x11 else ())):
+                # INK, PAPER, FLASH, BRIGHT, INVERSE, OVER and a value RST
+                # 10h takes: kept, zero width, in a message built with colour
+                # codes (see INK_). ROM 2.3's string reader passes a code's
+                # value byte whatever it is (#228), so 0 and 3 are fine; ROM
+                # 2.2 took them for the end of the page or loop. A value RST
+                # 10h refuses (Report K mid-text), and every code in other
+                # text, is dropped with its value byte.
+                if colour and i + 1 < n and ord(msg[i+1]) in ATTR_VALUES[ch - 0x10]:
                     wrt(ch)
                     wrt(ord(msg[i+1]))
                 i += 1
@@ -2465,13 +2456,9 @@ def SEND_MSG2(msg, st: int, expandKeywords = True, colour = False):             
 
                 ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
                 if KEY_UP(ch) == 78:    # 'N' or 'n' → done
-                    if not ROM23():
-                        # ROM 2.2 and earlier print the N and leave the 0x86
-                        # loop themselves: nothing more is read.
-                        MQ_READY()  # restore Y for downstream reads (V6 pre-load)
-                        return
-                    # ROM 2.3 waits for READY and reads on (#227): echo the
-                    # key as typed, then the end of the loop below.
+                    # The ROM waits for READY and reads on after N like any
+                    # key (#227): echo the key as typed, then the end of the
+                    # loop below. (ROM 2.2 left the loop itself on N.)
                     ob = bytearray()
                     wrt = ob.append
                     wrt(ch)
@@ -2775,10 +2762,9 @@ def REFRESH_IF(*dirs):                                                        # 
 def PROMPT_EACH(prompts):                                                     # one 0x86 exchange, one key per prompt
 
     """Ask each prompt in one function-0x86 exchange and return the indexes
-    answered Y. Any other key skips that one. On ROM 2.2 and earlier N ends
-    the exchange -- that ROM stops its loop on N -- so nothing from there on
-    is chosen; ROM 2.3 sends N on like any key (#227), and it only skips that
-    one. Same byte
+    answered Y. Any other key, N included, skips that one: the ROM sends N on
+    like any key (#227), so N means "not this one", not "stop asking" as it
+    did when ROM 2.2 left its loop on N. Same byte
     sequence as ListMenu: the echo of the last key starts the next string,
     READY goes up after it, and 0x03 ends the loop.
 
@@ -2805,9 +2791,6 @@ def PROMPT_EACH(prompts):                                                     # 
         wrt(STR_END)                                                          # 0x00: Z80 prints, waits for a key
         wrt.send()                                                            # data in TX first, then READY
         ch = CMD_KEY()                                                        # BREAK here raises CmdAbort
-        if KEY_UP(ch) == 78 and not ROM23():                                  # N: ROM 2.2 has left its loop
-            MQ_READY()
-            return yes
         if KEY_UP(ch) == 89:
             yes.append(i)
     wrt(ch if 32 <= ch < 127 else 89)
@@ -3644,10 +3627,7 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
         ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
         k = KEY_UP(ch)      # ROM 2.3 sends letters as typed (#227)
         if k == 78:     # 'N' then done
-            if not ROM23():
-                MQ_READY()  # ROM 2.2 ended the loop itself; restore Y for downstream reads
-                return -1
-            wrt(ch)         # ROM 2.3 reads on: the echo, then 0x03 below
+            wrt(ch)         # the ROM reads on after N (#227): the echo, then 0x03 below
             break
         if k == 66: # B
             if idx >= nmax:
@@ -4626,7 +4606,8 @@ def GETINFO(pre, cmd):                                                 # Shows T
     M.append(NORMAL_ + INK_ + "\x01" + " %s 2023-2026 TS Pico Dev Team" % cop + INK_ + "\x08" + nl + nl)
     M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + INK_ + "\x01" + "uPython " + INK_ + "\x08"
              + ".".join(str(v) for v in sys.implementation.version[:3]) + nl)
-    M.append(lab("ROM") + "%s" % TSP.ROM_VERSION + nl)
+    M.append(lab("ROM") + ("%d.%d" % (rom_id >> 4, rom_id & 0x0F) if rom_id != 0xFF   # what the ROM said (#227)
+                           else TSP.ROM_VERSION) + nl)
     M.append(lab("Build") + BUILD_FIT(BUILD_VERSION, 22) + nl)        # 10 + 22: the 32-col line
     M.append(lab("Board") + "V2.2  " + INK_ + "\x01" + "Log level " + INK_ + "\x08" + "%d" % TSP.LOG_LEVEL + nl)
     M.append(lab("Free RAM") + "%d kB" % (gc.mem_free() >> 10) + nl)
@@ -5404,29 +5385,27 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
     # ──────────────────────────────────────────────────────────────────────
 
     ch = CMD_KEY()      # BREAK at the prompt raises CmdAbort (#51)
-    if KEY_UP(ch) == 78 and not ROM23():    # 'N': ROM 2.2 ends the string loop and any exchange
-        MQ_READY()      # nothing more to send; restore Y for downstream reads
-    else:               # ROM 2.3 reads on after N too (#227)
-        # The echo and 0x03 first, THEN READY -- data in TX first, then READY: the Z80 reads TX the moment it sees
-        # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
-        # READY-before-data here (READY landed ~9.6 ms late); with MQX the
-        # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
-        if echo:
-            if ch < 32 or ch > 127:
-                wrt(89) # Y
-            else:
-                wrt(ch)
-        if lower:
-            wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
-        wrt(LOOP_END)   # 0x03: end the string loop
-        wrt.send()      # echo and 0x03 in TX, then READY
-        # Could add an option to not wrt(0x03) and let the caller do that after
-        # writing some more text to indicate the result of the action.
+    # Any key, N included: the ROM reads on until 0x03 (#227).
+    # The echo and 0x03 first, THEN READY -- data in TX first, then READY: the Z80 reads TX the moment it sees
+    # READY, and an empty TX reads as 00. The slow MQ.exec() used to hide
+    # READY-before-data here (READY landed ~9.6 ms late); with MQX the
+    # 2068 read 00 and Commander crashed on tpi:cd (hardware, 2026-09-27).
+    if echo:
+        if ch < 32 or ch > 127:
+            wrt(89) # Y
+        else:
+            wrt(ch)
+    if lower:
+        wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
+    wrt(LOOP_END)   # 0x03: end the string loop
+    wrt.send()      # echo and 0x03 in TX, then READY
+    # Could add an option to not wrt(0x03) and let the caller do that after
+    # writing some more text to indicate the result of the action.
 
-        # ─── DUAL-PORT MIGRATION: inline drains ───────────────────────
-        CMD_DRAIN()
-        while MQ.rx_fifo() != 0:
-            MQ.get()
+    # ─── DUAL-PORT MIGRATION: inline drains ───────────────────────
+    CMD_DRAIN()
+    while MQ.rx_fifo() != 0:
+        MQ.get()
 
     return KEY_UP(ch)   # upper case: the callers test 89 (Y)
 

@@ -227,10 +227,9 @@ PATCHES = [
         before="3a cf 5d", after="3e 23 00",
         note="BUILD_PREHEADER_B sent BANK_SV, which is always FFh, and the Pico "
              "ignored it. ROM 2.3 sends its version marker instead, so the "
-             "firmware knows the ROM keeps the $86 loop going after N and sends "
-             "keys as typed (#227) and reads control-code parameters and bytes "
-             ">= 80h as text (#228). fddcmd.asm's SEND_FOPEN and CH_SEND send "
-             "ROM_ID too. FFh = ROM 2.2 or earlier.",
+             "firmware knows which ROM sent each command (tpi:info shows it; "
+             "#227). fddcmd.asm's SEND_FOPEN and CH_SEND send ROM_ID too. "
+             "FFh = ROM 2.2 or earlier.",
     ),
     dict(
         name="function $86: every key goes on round the loop ($21F0 -> JP YN_LOOP_GUARD)",

@@ -77,8 +77,9 @@ build history ([ROM_CHANGES.md](../../ROM_CHANGES.md#lineage)) has the
 detail. The ROM and the firmware share one version number: firmware 2.2.x
 runs ROM 2.2 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)).
 ROM 2.3 changes what function 86h does after `N` and what the string
-reader takes for the end (#227, #228); firmware tells it from an older ROM
-by byte 2 of each command pre-header, so one firmware answers both.
+reader takes for the end (#227, #228), so it needs the firmware written for
+it, and that firmware needs it; it sends its version in byte 2 of each
+command pre-header, which `tpi:info` shows.
 ROM 2.2 needs firmware that understands the SYNC byte; the firmware that
 came with 1.1 reads it as the first byte of a command.
 
@@ -350,7 +351,7 @@ Twenty, applied in this order (the last four are ROM 2.3's). The reason for each
 | EXROM 1C7Eh | the SYNC layer's four version characters → `"v2.3"` | the banner | [exrom-driver.md](exrom-driver.md) |
 | HOME 0065h | `20h` → `23h` | `PEEK 101` | [home.md](home.md) |
 | EXROM 1852h | `LD BC,0020h` → `LD BC,0023h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
-| EXROM 1BB5h | `LD A,(5DCFh)` → `LD A,23h / NOP` | a command pre-header's byte 2 is the ROM's version, not BANK_SV (always FFh): the firmware knows a 2.3 ROM (#227) | [exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h) |
+| EXROM 1BB5h | `LD A,(5DCFh)` → `LD A,23h / NOP` | a command pre-header's byte 2 is the ROM's version, not BANK_SV (always FFh): the firmware knows which ROM sent each command (#227) | [exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h) |
 | EXROM 21F0h | `AND 5Fh / CP 'N' / JP NZ,22A1h` → `JP 22A1h` + 4 × `00` | function 86h (and 88h): `N` goes round the loop like any key; the Pico ends it with 03h (#227) | [exrom-chunk1.md](exrom-chunk1.md#fn_86_yn_prompt-21e3h) |
 | EXROM 0572h | `AND 0DFh` → 2 × `00` | `POLL_KEYPRESS` no longer upper-cases a letter: the key goes as typed (#227) | [exrom-chunk1.md](exrom-chunk1.md#get_key_and_send-0471h) |
 | EXROM 045Fh | `PUSH AF / JR 0465h` → `JP 377Fh` | `PRINT_STRING_FROM_PICO` becomes the module's `PS_READ`: control-code values and bytes ≥ 80h are text (#228) | [exrom-fdd.md](exrom-fdd.md#ps_read) |

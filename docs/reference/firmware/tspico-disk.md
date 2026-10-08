@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, MOVE, ERASE, FORMAT, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2627–3465.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2614–3448.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -23,14 +23,14 @@ module's patches.
 
 | Lines | What | Chapter |
 |---|---|---|
-| 2627–2706 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
-| 2715–2817 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 2820–3114 | `DISK_COPY` … `DISK_REN_WORK` — MOVE, ERASE, FORMAT and `tpi:ren` | here |
-| 3124–3127 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3130–3236 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3250–3277 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3280–3312 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3315–3465 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2614–2693 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
+| 2702–2800 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
+| 2803–3097 | `DISK_COPY` … `DISK_REN_WORK` — MOVE, ERASE, FORMAT and `tpi:ren` | here |
+| 3107–3110 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 3113–3219 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 3233–3260 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3263–3295 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3298–3448 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -208,7 +208,7 @@ the parent unindexed.
 
 ## MOVE, ERASE, FORMAT and tpi:ren
 
-The comment at line 2835 states the rules all four share: paths resolve
+The comment at line 2818 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -289,9 +289,8 @@ a pattern (a Y/N prompt each), or an empty directory (`dir/`).
 4. `PROMPT_EACH(["Erase <public path, shortened to 20> (Y/N)?" …])`
    ([tspico-messages.md](tspico-messages.md)): one function-86h exchange,
    one prompt per file, the bus active and the card not. It returns the
-   indexes answered Y. Up to ROM 2.2, N ends the ROM's loop, so N stops
-   the whole exchange; any other key skips that file. With ROM 2.3, N
-   skips that file too and the questions go on (#227).
+   indexes answered Y; any other key, N included, skips that file and the
+   questions go on (#227; with ROM 2.2, N ended the whole exchange).
 5. If anything was chosen: `SD_CALL(DISK_ERASE_LIST, [...])`. Nothing more
    is sent: the 86h exchange carried the status, and the per-file results
    go to the log only.
@@ -408,7 +407,7 @@ itself Q, the mounted file Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3117 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 3100 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -436,9 +435,8 @@ the SAVE or LOAD that follows in the same session.
    path=real, session=session, refuse=False)`. If the file exists:
    `SEND_MSG_PROMPT_YN("Replace <base name shortened to 16>? (Y/N)",
    lower=True)` — function 88h, the status 1, the prompt, 00h; the key; for
-   `N` from ROM 2.2 and earlier, nothing more; for any other key, and for
-   `N` from ROM 2.3 (which reads on, #227), its echo (or `Y` if
-   unprintable), a CR and 03h. `refuse` becomes true for
+   any key, `N` included (the ROM reads on after it, #227), its echo (or
+   `Y` if unprintable), a CR and 03h. `refuse` becomes true for
    any key but `Y`/`y`. The function returns without another `SEND_MSG`:
    the 88h exchange's status was the command's answer. A new file:
    `SEND_MSG("Saving to <public>", "", 1)`.
@@ -523,7 +521,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
 
-The comment at line 3239 lists the four commands. The ROM's channel driver
+The comment at line 3222 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -682,7 +680,7 @@ so: `CH_CALL(CHANNELS.close, stream)`, which mounts the card; an error
 (no card: J; an SD error: F) is logged and sent, and the stream stays in
 `CHANNELS`.
 
-The long comment at line 3427 is the history. When channels arrived (#83)
+The long comment at line 3410 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a
