@@ -63,7 +63,12 @@ BIOS_C_END      EQU $184A          ;   status: NC ok, else C with A = status-1
 BIOS_WF_NPH     EQU $184C          ;   wait for the Pico: C with A = 02/0C/1C
 C_END_TAIL      EQU $227F          ; EXROM: C_END after its wait: read the status,
                                    ;   run the response functions (v1.7's $2279 tail)
-BANK_SV         EQU $5DCF          ; pre-header byte 2
+BANK_SV         EQU $5DCF          ; pre-header byte 2 on ROM 2.2 and earlier (always FFh)
+ROM_ID          EQU $23            ; ROM 2.3: a command pre-header's byte 2 (#227, #228),
+                                   ;   the version marker at HOME $0065; build-rom.py
+                                   ;   patches $1BB5 to send the same
+TSPICO_READ_DATA EQU $2298         ; EXROM: IN A,(0Eh) / AND A / RET -- no ready-wait
+PRINT_A         EQU $05FA          ; EXROM: SCR_CT = FFh, then RST 10h through CALL_HOME
 MODE_SV         EQU $5DDB          ; SESSION_SETUP clears bits 7-4 for a plain name
 MODE_SET_OK     EQU $2105          ; EXROM: CALL S_MODE ($1862) with A, then "0 OK" --
                                    ;   where tpi:sdcard and tpi:picopt end
@@ -658,7 +663,7 @@ PEEK_NAME:
         ret
 
 ; SEND_FOPEN -- the 'B' command "tpi:fopen <path>", by hand through the BIOS:
-; pre-header 'B', 0 (a SAVE "tpi:" command), BANK, PMR1 (operation, token),
+; pre-header 'B', 0 (a SAVE "tpi:" command), ROM_ID, PMR1 (operation, token),
 ; PMR2 (session), LEN, XOR; the preloaded status; wait for the Pico; body 'D',
 ; LEN, text, XOR; the status. D = running XOR, E = token, C = command length.
 SEND_FOPEN:
@@ -695,7 +700,8 @@ SEND_FOPEN:
         call    SYNC_WRITE
         xor     a
         call    TXX                ; T-ADDR 0: a command
-        ld      a,(BANK_SV)
+        ld      a,ROM_ID           ; byte 2: which ROM this is (#227); was (BANK_SV), FFh
+        nop                        ;   (keeps every later address where it was)
         call    TXX
         ld      a,(TADDR)
         call    TXX                ; PMR1 low: 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE
@@ -1318,7 +1324,8 @@ CH_SEND:
         call    SYNC_WRITE
         xor     a
         call    TXX                ; T-ADDR 0: a command
-        ld      a,(BANK_SV)
+        ld      a,ROM_ID           ; byte 2: which ROM this is (#227); was (BANK_SV), FFh
+        nop                        ;   (keeps every later address where it was)
         call    TXX
         pop     af
         call    TXX                ; PMR1: the stream
@@ -1425,6 +1432,57 @@ PRELOAD:
         call    BIOS_RX_A          ; IN A,(0Eh) / AND A: Z if 0
         ret     nz
         jp      WF_FAIL            ; A = 0: J (Invalid I/O device)
+
+;------------------------------------------------------------------------------
+; PS_READ -- PRINT_STRING_FROM_PICO for ROM 2.3 (#228). EXROM $045F (functions
+; $81, $82, $86 and, through $86's loop, $88) jumps here. Prints bytes from the
+; Pico until a terminator, as the v1.1 routine at $045F did, with two changes:
+;
+;   - the parameter bytes after a control code (one after INK..OVER, $10-$15;
+;     two after AT and TAB, $16-$17) go straight to RST 10h, so INK 0, PAPER 3,
+;     AT r,0 and the rest can be sent: v1.1 tested every byte, and a 00h or
+;     03h parameter ended the text;
+;   - only 00h and 03h end the text. v1.1 also ended it on any byte of 80h or
+;     more, so block graphics, UDGs and keyword tokens could not be sent.
+;
+; Reads with no ready-wait, like v1.1: the Pico keeps ahead (PROTOCOL.md 5.4).
+; Exits as v1.1 did: 00h -> the caller's AF back, carry clear; 03h -> carry set
+; (v1.1's $21FA: POP AF / SCF / RET), which ends an $86 loop. C carries the
+; parameter count across PRINT_A, which may change any register.
+;------------------------------------------------------------------------------
+PS_READ:
+        push    af                 ; the caller's status
+.next:  call    TSPICO_READ_DATA
+        jr      z,.end             ; 00h: the end of the text or the page
+        cp      $03
+        jr      z,.loopend         ; 03h: the end of an $86/$88 loop
+        cp      $10
+        jr      c,.print
+        cp      $18
+        jr      nc,.print          ; $18 and up, $80-$FF included: print it
+        ld      c,1                ; INK, PAPER, FLASH, BRIGHT, INVERSE, OVER
+        cp      $16
+        jr      c,.code
+        inc     c                  ; AT, TAB: two
+.code:  push    bc
+        call    PRINT_A            ; the code: RST 10h now waits for its parameters
+        pop     bc
+.param: call    TSPICO_READ_DATA   ; a parameter: never a terminator
+        push    bc
+        call    PRINT_A
+        pop     bc
+        dec     c
+        jr      nz,.param
+        jr      .next
+.print: call    PRINT_A
+        jr      .next
+.loopend:
+        pop     af
+        scf
+        ret
+.end:   pop     af
+        and     a
+        ret
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE

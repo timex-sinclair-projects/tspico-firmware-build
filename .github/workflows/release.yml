@@ -208,7 +208,7 @@ jobs:
           cp src/config.ini    "${STAGE}/src/config.ini"
           cp src/words.txt     "${STAGE}/src/words.txt"
           cp src/assets/*.tap  "${STAGE}/src/assets/"
-          cp src/rom/TSPICO-22.ROM "${STAGE}/src/rom/"   # the slot-1 ROM only (flash/manifest.json)
+          cp src/rom/TSPICO-23.ROM "${STAGE}/src/rom/"   # the slot-1 ROM only (flash/manifest.json)
 
           # SD card/: TAP files + help text the firmware reads from the
           # mounted SD card at runtime. Copy recursively so subfolders
@@ -229,7 +229,7 @@ jobs:
 
           1. **Pico firmware** — \`firmware.uf2\` at the zip root.
           2. **Pico flash filesystem** — everything inside \`src/\`.
-          3. **TS-2068 ROM** — \`src/rom/TSPICO-22.ROM\`, ROM 2.2 (flash
+          3. **TS-2068 ROM** — \`src/rom/TSPICO-23.ROM\`, ROM 2.3 (flash
              slot 1).
           4. **SD card** — everything inside the \`SD card/\` folder.
 
@@ -258,8 +258,8 @@ jobs:
           ## 3. Install the TS-2068 ROM
 
           The web updater installs it for you. By hand: copy
-          \`src/rom/TSPICO-22.ROM\` to the SD card's \`TAP\` folder,
-          \`LOAD "tpi:TSPICO-22.ROM"\` then \`LOAD ""\`, and write it to
+          \`src/rom/TSPICO-23.ROM\` to the SD card's \`TAP\` folder,
+          \`LOAD "tpi:TSPICO-23.ROM"\` then \`LOAD ""\`, and write it to
           Flash slot 1 while the 2068 runs from another slot; or program it
           into slot 1 of the flash chip (offset 0x8000) with a ROM
           programmer. The image is a raw 32K binary.

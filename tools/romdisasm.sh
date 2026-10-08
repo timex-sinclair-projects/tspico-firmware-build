@@ -62,7 +62,7 @@ echo
 echo "TSPICO-11-home and TSPICO-15w-home are byte-identical -- only one HOME"
 echo "listing (tspico-home.asm) is produced."
 
-# ---- ROM 2.2, the release ROM (src/rom/TSPICO-22.ROM) ----------------------
+# ---- ROM 2.2 (src/rom/TSPICO-22.ROM at the v2.2.1 tag) ---------------------
 # One 32K file: HOME at offset 0, EXROM at 4000h. The EXROM listing is
 # labelled with the curated symbols above PLUS every label of the ROM 2.0
 # patch (src/rom/patches/tspico-sync.asm, the code at 2300h) and the ROM 2.1
@@ -72,8 +72,11 @@ echo "listing (tspico-home.asm) is produced."
 #
 # The merged symbol file is written next to the listings and is generated:
 # edit docs/rom-analysis/tspico-exrom-symbols.sym or the .asm sources, not it.
-ROM22=src/rom/TSPICO-22.ROM
-if [ -f "$ROM22" ]; then
+# The listings are of ROM 2.2, which docs/reference/rom/ cites; the repo now
+# holds ROM 2.3 (src/rom/TSPICO-23.ROM), so 2.2 comes from its release tag.
+ROM22="$(mktemp)"
+git show v2.2.1:src/rom/TSPICO-22.ROM > "$ROM22" 2>/dev/null || rm -f "$ROM22"
+if [ -s "$ROM22" ]; then
     if command -v sjasmplus >/dev/null; then
         TMP="$(mktemp -d)"
         trap 'rm -rf "$TMP"' EXIT

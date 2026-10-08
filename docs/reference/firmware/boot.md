@@ -319,12 +319,13 @@ Ubuntu 22.04. The steps, in order:
 6. **ROM 2.2**: `tools/build-rom.py --verify` assembles the fdd module and
    splices it onto the SYNC/BREAK layer's image (`src/rom/TSPICO-SYNC.ROM`), failing if any patch's "before" bytes or any
    anchor no longer match ([../rom/overview.md](../rom/overview.md)); then
-   `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-22.ROM`: the
+   `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-23.ROM`: the
    committed slot-1 image must be exactly what the sources build. Then
    `rom_cend_hosttest.py` runs the ROM's BIOS `C_END`, and
-   `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest), and
-   `rom_preload_hosttest.py` the module's pre-load check, in a Z80
-   interpreter.
+   `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest),
+   `rom_preload_hosttest.py` the module's pre-load check, and
+   `rom_fn86_hosttest.py` the string reader and function 86h's loop, in a
+   Z80 interpreter.
    The ROM and its two halves are uploaded as `tspico-fdd-rom`.
 7. **MicroPython v1.29.0**, cloned shallow.
 8. **The build stamp**: `cmp` of `src/TS/tspico.py` with
@@ -384,7 +385,7 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    tests**: the commit is expected to have passed `build.yml` already.
 2. **The bundle** `ts-pico-<tag>.zip`: `firmware.uf2`, a generated
    `DEPLOY.md`, `src/` (`main.py`, `config.ini`, `words.txt`,
-   `assets/*.tap`, `rom/TSPICO-22.ROM`) for the Pico's flash, and
+   `assets/*.tap`, `rom/TSPICO-23.ROM`) for the Pico's flash, and
    `SD card/` (`TAP/` recursively, `help/`, the loose `*.tap` of the card's
    root).
 3. **The 512K flash image** `Pico-<tag>.rom`, if a base image can be
@@ -428,7 +429,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.2 | `src/rom/TSPICO-22.ROM` | `8363E100` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `1338F0D5` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |
@@ -470,7 +471,7 @@ may contain the third-party slots (decided 2026-09-28).
 - **`extract image --out DIR`**: takes a production image apart into slot
   files (used once, to seed the manifest).
 
-The module docstring names `src/rom/TSPICO-22.ROM` for slot 1 and points at
+The module docstring names `src/rom/TSPICO-23.ROM` for slot 1 and points at
 the manifest and this chapter (until #181 it named `TSPICO.ROM` and a
 `FLASH_LAYOUT.md` that does not exist). [`build_flash_hosttest.py`](../../../src/test/build_flash_hosttest.py)
 pins the build's refusals.

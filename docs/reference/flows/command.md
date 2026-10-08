@@ -39,7 +39,7 @@ without sending anything. Nothing reaches the Pico.
 | 3 | 2068 | BUILD_PREHEADER_B (1BA0h) → SYNC_WRITE (2300h) ([../rom/exrom-sync.md](../rom/exrom-sync.md#sync_write-2300h)) | `OUT (0Fh),03h` | | |
 | 4 | Pico | the capture sees a port-0Fh write: `MQ_TO_IDLE` — FIFOs emptied, one 01h staged, READY + IDLE ([../firmware/tspico_io.md](../firmware/tspico_io.md#mq_to_idlemq-recoveredfalse-statustrue-first0x01)) | | [01] / [] / FF | |
 | 5 | 2068 | SYNC_WAIT: up to ~1 s for READY + IDLE | reads 0Fh | | no IDLE in time: carry → Report J |
-| 6 | 2068 | the pre-header, D the XOR | `OUT` 42h ('B'), 00h (TADDR), FFh (bank), 00h 00h (PMR1), 00h 00h (PMR2), 07h 00h (length of `tpi:dir`), XOR | [01] / 10 words / 00 | |
+| 6 | 2068 | the pre-header, D the XOR | `OUT` 42h ('B'), 00h (TADDR), 23h (the ROM's version, which `PROCESS_CMD` keeps as `rom_id`; FFh, the bank, before ROM 2.3), 00h 00h (PMR1), 00h 00h (PMR2), 07h 00h (length of `tpi:dir`), XOR | [01] / 10 words / 00 | |
 | 7 | Pico | the DMA channel (or `RX_CAPTURE`) takes ten words; the dispatcher sees `pre[0] = 'B'`, `pre[1] = 0` → `PROCESS_CMD` ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#process_cmdpre-sa_funct-ext_sa_funct)) | | [01] / [] / 00 | a pre-header that stops short: `MQ_TO_IDLE(recovered=True)`, Y `FB`, the 2068 gets Report T |
 | 8 | 2068 | SEND_DATA_BLOCK_D (223Eh): reads 0Eh at once — **the pre-load** ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#send_data_block_d-223eh)) | `IN` = 01h | [] / [] / 00 | 00h (an empty TX): ERR_9 → Report J |
 | 9 | 2068 | WAIT_PICO_READY: polls 0Fh, ~88 ms a poll, up to ~19.9 s ([../rom/exrom-driver.md](../rom/exrom-driver.md#wait_pico_ready-1a54h)) | reads 0Fh | | |
@@ -83,9 +83,8 @@ status is the result ([../firmware/tspico-messages.md](../firmware/tspico-messag
 
 `RM` checks the name with the card (`SD_CALL(RM_CHECK)`), then
 `SEND_MSG_PROMPT_YN('Remove "name" (y/N)?')`: `86h`, `01h`, `0Dh`, the
-prompt, `00h`. The ROM prints it and sends a key. `N`: the ROM leaves its
-loop and reads nothing more; the firmware sends nothing more either
-(`MQ_READY` only). Anything else: the firmware sends the echo and `03h`,
+prompt, `00h`. The ROM prints it and sends a key, then reads on whatever
+the key (#227): the firmware sends the echo and `03h`,
 and only after the exchange has ended does it remove the file (another
 `SD_CALL`) — so the answer to the question is the whole answer the 2068
 sees; the removal's result goes to the log

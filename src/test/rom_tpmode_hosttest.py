@@ -15,7 +15,7 @@ TPMODE after it:
     tpi:tapex (length 9) -> not a switch word: sent to the Pico
     ROM 2.0, for contrast: tpi:tape from 3 -> 0
 
-Uses the committed slot-1 image, src/rom/TSPICO-22.ROM (CI checks it is
+Uses the committed slot-1 image, src/rom/TSPICO-23.ROM (CI checks it is
 what tools/build-rom.py builds). Run:
     python3 src/test/rom_tpmode_hosttest.py
 """
@@ -29,7 +29,7 @@ sys.path.insert(0, HERE)
 
 from z80core import Z80                                          # noqa: E402
 
-FDD = os.path.join(REPO, "src", "rom", "TSPICO-22.ROM")
+FDD = os.path.join(REPO, "src", "rom", "TSPICO-23.ROM")
 BASE = os.path.join(REPO, "src", "rom", "TSPICO-SYNC.ROM")
 
 TPMODE = 0x5DDB
@@ -68,7 +68,7 @@ def switch(rom, word, tpmode):
 
 def main():
     if not os.path.exists(FDD):
-        print("src/rom/TSPICO-22.ROM missing")
+        print("src/rom/TSPICO-23.ROM missing")
         return 1
     fdd = open(FDD, "rb").read()
     base = open(BASE, "rb").read()

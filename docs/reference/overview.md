@@ -157,7 +157,7 @@ port 0Fh. [rom/overview.md](rom/overview.md).
 | `src/rom/fdd/fddcmd.asm` | 1,398 | the disk module | [exrom-fdd.md](rom/exrom-fdd.md) |
 | `src/rom/patches/tspico-sync.asm` | 318 | the SYNC/BREAK layer | [exrom-sync.md](rom/exrom-sync.md) |
 | `src/rom/patches/tspico-zx48-v3.asm` | 280 | the ZX Spectrum ROM v4 | [zx48.md](rom/zx48.md) |
-| `src/rom/TSPICO-22.ROM` | 32K binary | the release ROM | [rom/overview.md](rom/overview.md) and the EXROM chapters |
+| `src/rom/TSPICO-23.ROM` | 32K binary | the release ROM, 2.3 | [rom/overview.md](rom/overview.md) and the EXROM chapters |
 
 Line counts are those of the sources the stamps in the [README](README.md)
 were taken from; [appendix/index.md](appendix/index.md) has the line of

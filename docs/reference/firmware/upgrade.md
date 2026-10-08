@@ -906,7 +906,7 @@ and `OUT_DIR/updater.tap` (default `OUT_DIR`: `build-upgrade/`).
 The ROM images come from [`flash/manifest.json`](../../../flash/manifest.json),
 so the upgrade installs exactly what the 512K flash image ships
 ([../rom/overview.md](../rom/overview.md), [flash/README.md](../../../flash/README.md)):
-`IMG1` is slot 1's file whole, `src/rom/TSPICO-22.ROM`, 32K, and `IMG0` is
+`IMG1` is slot 1's file whole, `src/rom/TSPICO-23.ROM`, 32K, and `IMG0` is
 the first 16K of slot 0's, `src/rom/TSPICO-ZX48-V4.BIN`; an `assert` pins
 the two lengths. Their crc32s go into the generated file's header comments
 and into `IMG1_CRC` and `IMG0_CRC`, which nothing reads yet.

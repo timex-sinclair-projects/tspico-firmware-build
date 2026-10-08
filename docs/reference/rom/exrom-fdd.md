@@ -1,26 +1,28 @@
 # EXROM 3000h: the disk module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
-1430 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
-at EXROM 3000h–377Eh and spliced into the SYNC layer's image
+1488 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
+at EXROM 3000h–37B4h and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
-`src/rom/TSPICO-22.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
+`src/rom/TSPICO-23.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
 
-The module and its patches are ROM 2.2's last layer. The module gives the
+The module and its patches are ROM 2.3's last layer (2.2's, plus #227 and
+#228: see `PS_READ` and [overview.md](overview.md)). The module gives the
 2068's dormant disk keywords — CAT, MOVE, ERASE, FORMAT — real meanings
 on the SD card; adds
 `SAVE`/`LOAD`/`VERIFY`/`MERGE "f:path"` for plain files; adds file
 channels: `OPEN #n,"f:path","mode"[,reclen]`, `PRINT #`, `INPUT #`,
 `CLOSE #`, and `"d:"` directory listings; adds response function 88h (a
-Y/N prompt on the lower screen); and makes the BIOS C_END report a timeout
-as J, never F. Everything is turned into `tpi:` commands the firmware already
+Y/N prompt on the lower screen); makes the BIOS C_END report a timeout
+as J, never F; and, from ROM 2.3, replaces the string reader every response
+function prints with (`PS_READ`). Everything is turned into `tpi:` commands the firmware already
 answers ([../firmware/tspico-disk.md](../firmware/tspico-disk.md)). The
 design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
 byte-level change list is in [the build history](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
-The module is 1919 bytes. It enters the 2068's code only through a vector
+The module is 1973 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end). It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
@@ -33,21 +35,22 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 34–131 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 138–159 | 3000h–3020h | the vector table |
-| 161–172 | 3021h | `TAPE_MODE` |
-| 187–210 | 3029h | `G_BEEP` |
-| 212–270 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 272–292 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 294–386 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `NONSENSE`, `TOO_LONG` |
-| 388–462 | | the parsing helpers |
-| 464–563 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 565–800 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 802–822 | | `LOWER_LOOP` (function 88h) |
-| 824–1378 | | the channel driver |
-| 1380–1398 | | `HEXDIG`, `STRLEN` |
-| 1400–1412 | to 3777h | the command strings, `MODE_R` |
-| 1414–1429 | 3778h–377Eh | `PRELOAD`, `FDD_END` |
+| 34–136 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 143–164 | 3000h–3020h | the vector table |
+| 166–177 | 3021h | `TAPE_MODE` |
+| 192–215 | 3029h | `G_BEEP` |
+| 217–275 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 277–297 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 299–391 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `NONSENSE`, `TOO_LONG` |
+| 393–467 | | the parsing helpers |
+| 469–568 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 570–806 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 808–828 | | `LOWER_LOOP` (function 88h) |
+| 830–1385 | | the channel driver |
+| 1387–1405 | | `HEXDIG`, `STRLEN` |
+| 1407–1419 | to 3777h | the command strings, `MODE_R` |
+| 1421–1435 | 3778h–377Eh | `PRELOAD` |
+| 1437–1488 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader), `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -90,6 +93,8 @@ ROM that moves one fails instead of jumping into the wrong code
 | `READ_STATUS_BYTE` | EXROM 02B9h | the response function's own status byte (the curated name; `READ_STATUS` until #181) |
 | `OPEN_STREAM` | EXROM 0426h | open stream A (through HOME CHAN-OPEN) |
 | `LOOP_BODY` | EXROM 21E6h | function 86h's loop after its opening |
+| `TSPICO_READ_DATA` | EXROM 2298h | `IN A,(0Eh) / AND A / RET`: one byte from the Pico, no ready-wait, Z for 00h. `PS_READ`'s read |
+| `PRINT_A` | EXROM 05FAh | `LD (IY+52h),FFh` (SCR_CT, so the 2068 never stops with its own "scroll?") then RST 10h through CALL_HOME: what the v1.1 reader printed with. `PS_READ`'s print |
 | `THUNK_HX` | HOME 03FCh | the returning HOME→EXROM thunk (named; the module never calls it — HOME's stubs do) |
 | `H_OUT_STUB` | HOME 14A0h | `DI / LD HL,CH_OUT_VEC / CALL 03FCh / EI / RET` |
 | `H_IN_STUB` | HOME 14A9h | the same for `CH_IN_VEC` |
@@ -112,7 +117,8 @@ ROM that moves one fails instead of jumping into the wrong code
 | `FRAMES` | 5C78h | the session id's seed |
 | `SESSION_ID` | 5DD1h | where the session id is kept |
 | `IY_SYSVARS` | 5C3Ah | what HOME expects in IY (the bank switch clobbers IY) |
-| `BANK_SV` | 5DCFh | pre-header byte 2 |
+| `BANK_SV` | 5DCFh | pre-header byte 2 up to ROM 2.2 (always FFh); no longer read by the module |
+| `ROM_ID` | 23h | not a variable: what ROM 2.3 sends as byte 2 of a command pre-header instead of `BANK_SV`, the same value as its version marker (HOME 0065h). `SEND_FOPEN` and `CH_SEND` send it, and `build-rom.py` patches `BUILD_PREHEADER_B` (1BB5h) to send it too, so the firmware knows which ROM sent each command (`rom_id`, shown by `tpi:info`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id), #227) |
 | `MODE_SV` | 5DDBh | TPMODE; F_HOOK clears bits 7–4 as SESSION_SETUP's non-command exit does; TAPE_MODE clears bit 1 |
 | `MODE_SET_OK` | 2105h | where `tpi:sdcard` and `tpi:picopt` end: `CALL S_MODE` (1862h) with A, `CALL 042Fh`, `JP 1B72h` ("0 OK"); TAPE_MODE jumps here |
 | `CURCHL` | 5C51h | the current channel's record |
@@ -533,7 +539,8 @@ and leaves CH_ADD alone.
 2. The path (past `f:`) and its length B; the command's length C = B +
    `FOPEN_LEN` (under 128).
 3. **The pre-header**, D the running XOR from `'B'`: SYNC_WRITE `'B'`; TADDR
-   0 (a command); BANK; PMR1 low = T-ADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3
+   0 (a command); `ROM_ID` (`LD A,ROM_ID / NOP` where `LD A,(BANK_SV)` was,
+   so no address after it moved); PMR1 low = T-ADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3
    MERGE), PMR1 high = the token; PMR2 = the session id; the length (C, 0);
    the XOR.
 4. `PRELOAD` reads the pre-load: 0 is Report J at once; any other value
@@ -628,7 +635,9 @@ LOWER_LOOP: CALL READ_STATUS_BYTE ; 02B9h: the function's own status
 ```
 
 Exactly 86h's handler (`CALL 01C3h`, which opens stream FEh) with another
-stream. Reached from the function chain's last check at 2213h, which had
+stream, so it has whatever 86h's loop does: from ROM 2.3 that is every key
+sent as typed and `N` going round the loop like any other key, the Pico
+ending it with `03h` (#227, [exrom-chunk1.md](exrom-chunk1.md#fn_86_yn_prompt-21e3h)). Reached from the function chain's last check at 2213h, which had
 been dead (a second `CP 86h`) and the module's patch makes `CP 87h / JP
 Z,3006h / RET` ([exrom-chunk1.md](exrom-chunk1.md#fn_dead_beep-2216h)). On
 1.1 a 88h falls off the chain (Report D), so the firmware sends it only in reply
@@ -835,8 +844,8 @@ after the body, and the caller reads the answer.
    has staged the next pre-load; a SYNC sent before that is lost with the
    pre-header behind it (Report T; hardware, 2026-09-29). This is the
    module's only direct port read.
-3. **The pre-header**, D the running XOR: SYNC_WRITE `'B'`, TADDR 0, BANK,
-   the stream and 0 (PMR1), C and 0 (PMR2), E and 0 (the length), the XOR.
+3. **The pre-header**, D the running XOR: SYNC_WRITE `'B'`, TADDR 0,
+   `ROM_ID` (as in `SEND_FOPEN`), the stream and 0 (PMR1), C and 0 (PMR2), E and 0 (the length), the XOR.
    `PRELOAD` (the pre-load: 0 is J, #179), `BIOS_WF_NPH` (failure →
    `WF_FAIL`).
 4. **The body**: `'D'`, E, 0, the prefix, then each payload byte as two
@@ -885,14 +894,70 @@ stages is a refused header LOAD's error (R or 8), for two seconds after
 the refusal, meant for the LOAD's retry
 ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md)). A
 channel command in that time -- an `ON ERR` handler doing `PRINT #` -- would
-read it and report it as its own. At the end of the module, so that adding
-it moved no other address: the two `CALL BIOS_RX_A`s became `CALL PRELOAD`
+read it and report it as its own. Added at the end of the module, so that
+adding it moved no other address: the two `CALL BIOS_RX_A`s became `CALL PRELOAD`
 in place. [`rom_preload_hosttest.py`](../../../src/test/rom_preload_hosttest.py)
 runs it from the committed image.
 
+### `PS_READ`
+
+ROM 2.3's `PRINT_STRING_FROM_PICO` (#228). `build-rom.py` patches EXROM
+045Fh, the v1.1 routine's first three bytes (`PUSH AF / JR 0465h`), to `JP
+PS_READ`, and checks the module still puts it at 377Fh (`FIXED_SYMS`). Its
+callers all enter at 045Fh: function 81h (027Ah), 82h (219Eh), and 86h's
+loop (21E7h), which 88h joins.
+
+```text
+PS_READ:  PUSH AF                ; the caller's status
+.next:    CALL TSPICO_READ_DATA  ; no ready-wait; Z for 00h
+          JR Z,.end              ; 00h: the end of the text or the page
+          CP 03h / JR Z,.loopend ; 03h: the end of an 86h/88h loop
+          CP 10h / JR C,.print
+          CP 18h / JR NC,.print  ; 18h and up, 80h-FFh included: print it
+          LD C,1                 ; INK..OVER (10h-15h): one value byte
+          CP 16h / JR C,.code
+          INC C                  ; AT, TAB: two
+.code:    PUSH BC / CALL PRINT_A / POP BC
+.param:   CALL TSPICO_READ_DATA  ; a value: never a terminator
+          PUSH BC / CALL PRINT_A / POP BC
+          DEC C / JR NZ,.param
+          JR .next
+.print:   CALL PRINT_A / JR .next
+.loopend: POP AF / SCF / RET     ; as v1.1's 21FAh: ends an 86h loop
+.end:     POP AF / AND A / RET   ; as v1.1's 046Dh: carry clear
+```
+
+What changed from v1.1's reader ([exrom-chunk1.md](exrom-chunk1.md#print_string_from_pico-045fh)),
+and why:
+
+- **A control code's value bytes are not tested.** v1.1 tested every byte,
+  so a `00h` or `03h` after INK, PAPER, FLASH, BRIGHT, INVERSE, OVER, AT or
+  TAB ended the text or the loop: INK 0, PAPER 3 and the like could never
+  be sent. RST 10h already knows a code takes one or two value bytes; the
+  reader now counts them too and hands them on unexamined.
+- **Only `00h` and `03h` end the text.** v1.1's classifier (`068Eh`, `CP
+  80h / CCF`) also ended it on any byte of 80h or more, so block graphics,
+  UDGs and keyword tokens could not be sent. They go to RST 10h now, which
+  prints them as the 2068 always does.
+
+The exits are v1.1's, so every caller sees what it did before: `00h` gives
+the caller's AF back with carry clear, `03h` with carry set (86h's `JP
+C,LOOP_EXIT_ERR` ends its loop on it). The reads still have no
+ready-wait, as before; the extra instructions are a few T-states a byte
+against RST 10h's hundreds, so a Pico that kept ahead of v1.1 keeps ahead
+of this. C carries the count across `PRINT_A`, which goes through HOME
+and may change any register.
+
+The firmware assumes this reader (INK 0, PAPER 3 and the other attribute
+values in `SEND_MSG2`, [../firmware/tspico-messages.md](../firmware/tspico-messages.md));
+to an older ROM those bytes would end the text early. Tested in the Z80
+interpreter against the committed image, with v1.1's reader (from
+`TSPICO-SYNC.ROM`) for contrast:
+[`rom_fn86_hosttest.py`](../../../src/test/rom_fn86_hosttest.py).
+
 ### `FDD_END`
 
-The end of the module, 377Fh; `SAVEBIN` writes `FDD_BASE` to here as
+The end of the module, 37B5h (377Fh in ROM 2.2, before `PS_READ`); `SAVEBIN` writes `FDD_BASE` to here as
 `fddcmd.bin`, which `build-rom.py` splices in after checking that the
 region is all `FFh`.
 

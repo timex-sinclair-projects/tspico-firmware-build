@@ -533,7 +533,7 @@ v1.29 (`~null` does not; `MQ_READY`'s comment). The bit meanings are
 Two other `MQX` strings touch the FIFOs rather than Y: `MQ_TO_IDLE`,
 `ZX_FLUSH_TX`, `CMD_FLUSH`, `FAIL_CMD` and `ZX48_IO` drain TX with
 `pull (noblock)` followed by `mov (osr, null)`, one word per pair, bounded
-at 64 except in `ZX48_IO`, whose two inline drains (tspico.py 7272, 7316)
+at 64 except in `ZX48_IO`, whose two inline drains (tspico.py 7297, 7341)
 loop until TX is empty ([tspico_io.md](tspico_io.md), [tspico-bus.md](tspico-bus.md),
 [tspico-dispatch.md](tspico-dispatch.md)). The `pull` moves a word out of
 the FIFO into the OSR; the `mov` only tidies the OSR.

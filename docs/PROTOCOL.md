@@ -177,7 +177,7 @@ Two layouts share the byte positions:
 |------|-----------------|-------------------------------|
 | 0 | `'B'` | flag: `$00` header, `$FF` data |
 | 1 | TADDR (0 = SAVE, 1–3 = LOAD/VERIFY/MERGE) | TADDR |
-| 2 | bank (`$FF` = HOME); ignored for commands | bank |
+| 2 | the ROM's version, `$23` (ROM 2.3; `$FF`, the bank, before). The firmware keeps it as `rom_id` and shows it in `tpi:info` | bank |
 | 3–4 | PMR1: the first `CODE` number, LE | session id, LE |
 | 5–6 | PMR2: the second `CODE` number, LE | address (IX), LE |
 | 7–8 | length of the command text, LE | block length (DE), LE |
@@ -273,7 +273,7 @@ becomes the command's result.
 | `$83` | PRINT CHARACTER | status, one character | `$21A8` | unused |
 | `$84` | RETURN KEY | status; the Z80 waits for a key, waits READY, OUTs it | `$21BE` | unused |
 | `$85` | GET STATUS | status; the Z80 OUTs a 2-bit mask (b0 keyboard, b1 aux) | `$21CB` | unused |
-| `$86` | PRINT STRING WITH LOOP | status, then pages: text, `$00` → the Z80 waits for a key, waits READY, OUTs the key; `N` ends the loop; any other key: it waits READY and prints the next page. `$03` ends the loop. | `$21E3` (loop `$21E7`, guard `$22A1`) | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
+| `$86` | PRINT STRING WITH LOOP | status, then pages: text, `$00` → the Z80 waits for a key, waits READY, OUTs the key; then, whatever the key, `N` included, it waits READY and prints the next page (#227; ROM 2.2 left the loop on `N`). `$03` ends the loop, so the Pico answers `N` with an echo and `$03`. | `$21E3` (loop `$21E7`, guard `$22A1`) | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | `$87` | (spec: "print n characters") | status | calls HOME `$08A6`, which clears the screen like CLS | unused |
 | `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
 | `$80`, `$89`–`$FF` | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
@@ -284,14 +284,18 @@ Text rules (the ROM's `PRINT_STRING_FROM_PICO`, `$045F`/`$068E`/`$06F2`):
 
 - it reads each character **without a ready-wait**; `RST 10` is slow enough
   that the Pico keeps ahead, provided the first bytes were queued before READY;
-- `$00` ends a string, and so does **any byte ≥ `$80`**; inside a `$86` loop,
-  `$03` ends the loop. `SEND_MSG2` maps bytes ≥ `$80` to `?` and `\*` to `$7F`
-  (©);
-- control codes 16–23 (INK … TAB) consume the bytes after them.
+- `$00` ends a string; inside a `$86` loop, `$03` ends the loop. Nothing else
+  does: ROM 2.3's reader (`$045F` → the module's `PS_READ`, `$377F`, #228)
+  prints bytes ≥ `$80` (block graphics, UDGs, tokens), which ROM 2.2 took for
+  the end. `SEND_MSG2` still maps bytes ≥ `$80` to `?`, and `\*` to `$7F` (©);
+- control codes 16–23 (INK … TAB) consume the bytes after them, and the reader
+  passes those through whatever they are, so INK 0 or PAPER 3 is a value, not
+  an end (ROM 2.2 tested them too).
 
-Keys (`GET_KEY_AND_SEND` `$0471` → `SEND_KEY` `$1C40`): letters are sent **upper
-case**, after a ready-wait. The Pico compares with `78` (`N`) only, so a
-machine-code client must send upper case too. At a `SEND_MSG2` "Scroll?"
+Keys (`GET_KEY_AND_SEND` `$0471` → `SEND_KEY` `$1C40`) are sent after a
+ready-wait, as typed (#227; ROM 2.2 upper-cased letters at `POLL_KEYPRESS`
+`$0572`). The firmware compares `KEY_UP(key)`, so either case works from a
+machine-code client. At a `SEND_MSG2` "Scroll?"
 prompt a digit also sets the page length (`1`–`9` lines, `0` = 10); any other
 key is a full page. The ROM puts a BREAK test in front of the key poll
 (`KEYWAIT`, patched at `$0479`).
@@ -767,8 +771,10 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   orphans; from BASIC they happened to be read by `IN 14`, and the next
   command's SYNC now clears what's left, but on a ROM without SYNC (1.1) they
   became the next command's status. `src/test/extcmd_hosttest.py` checks the fixed ones.
-- **Send `N` in upper case to end a `$86` loop.** The Pico compares with 78;
-  the ROM upper-cases letters, a machine-code client must too.
+- **`N` doesn't end a `$86` loop; the Pico's `$03` does** (#227). A
+  machine-code client that stops reading at its own `N`, as ROM 2.2 did,
+  leaves the Pico's echo and `$03` in TX, to be read as the next command's
+  status.
 - **Byte 23 in a channel write is always a TAB**, in binary mode too (§7).
   Binary data containing `$17` can't go through `tpi:chwr`.
 - **Underscore constants don't cross modules on the Pico.** `_1_OK`,

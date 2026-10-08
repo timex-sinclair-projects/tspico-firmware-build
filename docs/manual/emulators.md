@@ -34,7 +34,7 @@
 | Piece | Where to get it |
 |---|---|
 | `pico_host` | Every [TS-Pico firmware release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest) has `pico_host-macos-arm64.zip`, `pico_host-windows-x86_64.zip` and `pico_host-linux-x86_64.zip`. No Python needed. |
-| The TS-Pico ROM | [`src/rom/`](https://github.com/timex-sinclair-projects/tspico-firmware-build/tree/main/src/rom) in the firmware repository: `TSPICO-22.ROM` for ROM 2.2. It's 32K: a 16K HOME ROM and a 16K EXROM. |
+| The TS-Pico ROM | [`src/rom/`](https://github.com/timex-sinclair-projects/tspico-firmware-build/tree/main/src/rom) in the firmware repository: `TSPICO-23.ROM` for ROM 2.3. It's 32K: a 16K HOME ROM and a 16K EXROM. |
 | An emulator with the TS-Pico | **ZEsarUX:** [zesarux-tspico](https://github.com/timex-sinclair-projects/zesarux-tspico/releases/latest) for macOS (signed), Windows and Linux. **Fuse:** [fuse-for-macos-tspico](https://github.com/timex-sinclair-projects/fuse-for-macos-tspico/releases/latest) for macOS (signed), [fuse-tspico](https://github.com/timex-sinclair-projects/fuse-tspico/releases/latest) for Windows. |
 
 **Which emulator?** Both run the same firmware, so either will do for most work.
@@ -88,11 +88,11 @@ Leave it running. One emulator connects at a time.
 Start it as a TS-2068, on the TS-Pico ROM:
 
 ```
-zesarux --machine TS2068 --romfile /path/to/TSPICO-22.ROM
+zesarux --machine TS2068 --romfile /path/to/TSPICO-23.ROM
 ```
 
 - **macOS:** the app is **ZEsarUX TS-Pico**. Pass the options with
-  `open -a "ZEsarUX TS-Pico" --args --machine TS2068 --romfile /path/to/TSPICO-22.ROM`, or
+  `open -a "ZEsarUX TS-Pico" --args --machine TS2068 --romfile /path/to/TSPICO-23.ROM`, or
   set the machine and the ROM in ZEsarUX's settings and save its configuration.
 - **Windows:** run `zesarux.exe` with the same options, from the folder you unzipped.
 
@@ -108,8 +108,8 @@ on macOS and Linux, `unix:PATH` (`pico_host` also listens on `/tmp/tspico_bridge
 Fuse takes the ROM as two 16K halves:
 
 ```
-head -c 16384 TSPICO-22.ROM > tspico-home.rom
-tail -c 16384 TSPICO-22.ROM > tspico-exrom.rom
+head -c 16384 TSPICO-23.ROM > tspico-home.rom
+tail -c 16384 TSPICO-23.ROM > tspico-exrom.rom
 ```
 
 (On Windows, any tool that can split a file at 16384 bytes will do.)

@@ -14,7 +14,7 @@ new ROM. The slots are listed in flash/manifest.json (docs/reference/firmware/bo
                            --out Pico-v18.rom
 
     # rebuild with a new 2068 ROM in slot 1
-    ./tools/build-flash.py build flash/manifest.json --slot 1=src/rom/TSPICO-22.ROM \
+    ./tools/build-flash.py build flash/manifest.json --slot 1=src/rom/TSPICO-23.ROM \
                            --out Pico-v18.rom
 
     # check a built image against the manifest's checksums
@@ -166,7 +166,7 @@ def cmd_build(args):
 def cmd_check(args):
     """Validate the manifest against the slot files in the repo.
 
-    CI runs this on every push: if src/rom/TSPICO-22.ROM or the ZX ROM
+    CI runs this on every push: if src/rom/TSPICO-23.ROM or the ZX ROM
     changes without the manifest's crc32 being updated, the build fails
     rather than silently shipping an image nobody checked.
     """
