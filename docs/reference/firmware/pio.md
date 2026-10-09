@@ -72,9 +72,10 @@ ground the programs stand on, not something the code states.
 - `StateMachine.exec("…")` writes one encoded instruction into the state
   machine's INSTR register; it executes on the next cycle, even if the
   program is stalled on a `wait`, which then resumes. The firmware's
-  `MQX` does the same write by hand, because `exec()` on MicroPython v1.20
-  re-ran the assembler every call (9.6 ms against 18 µs, measured
-  2026-09-27; see [tspico_io.md](tspico_io.md)).
+  `MQX` does the same write by hand, because `exec()` given text re-runs
+  the assembler every call (9.6 ms against 18 µs on MicroPython v1.20,
+  measured 2026-09-27; still 5.8–7.2 ms on v1.29, measured 2026-10-09;
+  see [tspico_io.md](tspico_io.md)).
 - Restarting a state machine (what `StateMachine(...)` does when it is
   rebuilt) clears the ISR and the shift counters but **not X, Y or the
   OSR**. The firmware found this out for Y: a rebuilt `MQ` inherits

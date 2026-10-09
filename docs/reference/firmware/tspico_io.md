@@ -152,9 +152,13 @@ looks `instr` up in `_ENCODED`, encodes it on a miss with
 `rp2.asm_pio_encode(instr, ss & 7, ss >> 3)`, and writes the code to
 SM0_INSTR.
 
-Why: MicroPython 1.20's `StateMachine.exec()` runs the Python PIO assembler on
-every call, 9.6 ms a call on this Pico against 18 µs for the register write
-(measured 2026-09-27); each LPRINT/LLIST character is a transaction with a few
+Why: `StateMachine.exec()` given text runs the Python PIO assembler on every
+call: 9.6 ms a call on this Pico on MicroPython v1.20 against 18 µs for the
+register write (measured 2026-09-27), and still 5.8–7.2 ms on v1.29, where
+`src/test/mp_timing_bench.py` times a copy of `MQX` at about 33 µs (measured
+2026-10-09, v2.2 board at 270 MHz). v1.29's `exec()` given an already-encoded
+int skips the assembler and takes about 5 µs, a possible simplification not
+taken here. Each LPRINT/LLIST character is a transaction with a few
 execs, so a listing crawled at 30–40 ms a character and looked hung. The
 encoding depends on the loaded program's side-set configuration, hence the
 two-level cache. MQ is always PIO0 state machine 0: the register addresses are
