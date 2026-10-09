@@ -95,13 +95,13 @@ _LOAD_MV = memoryview(_LOAD_BUF)
 
 
 # ─── Fast exec: MQX(MQ, ) without the per-call assembler ───────────────
-# MicroPython 1.20's StateMachine.exec() runs the Python-level PIO
-# assembler (rp2.asm_pio_encode) on EVERY call, string or not: 9.6 ms a
-# call on this Pico (measured 2026-09-27), against 18 us for writing the
-# encoded instruction straight to the state machine's INSTR register --
-# which is all pio_sm_exec() does. Every LPRINT / LLIST character is a
-# whole transaction with a few execs, so a program listing crawled at
-# ~30-40 ms a character and looked hung. MQ is always PIO0 SM0. The
+# StateMachine.exec("text") runs the Python-level PIO assembler
+# (rp2.asm_pio_encode) on EVERY call: 9.6 ms on v1.20 (2026-09-27), still
+# 5.8-7.2 ms on v1.29 (2026-10-09, test/mp_timing_bench.py), against tens
+# of us for writing the encoded instruction to the SM's INSTR register --
+# all pio_sm_exec() does. Every LPRINT / LLIST character is a whole
+# transaction with a few execs, so a program listing crawled at ~30-40 ms
+# a character and looked hung. MQ is always PIO0 SM0. The
 # encoding depends on the loaded program's side-set configuration, so it
 # is cached per (instruction, side-set). On the host (no machine.mem32)
 # MQX falls back to MQX(MQ, ), so the simulated PIO still sees the text.
