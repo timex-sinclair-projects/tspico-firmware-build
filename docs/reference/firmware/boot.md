@@ -30,7 +30,7 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `src/manifest.py` | the freeze manifest: which modules go into the UF2 |
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
-| `.github/workflows/build.yml` | every push: tests, ROM checks, the two UF2s, the user manual PDFs, artifacts |
+| `.github/workflows/build.yml` | every push: tests, ROM checks, the two v2 UF2s, the v3 UF2, the user manual PDFs, artifacts |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
 | `tools/pico-serial.py` | the USB console from a shell |
@@ -304,7 +304,7 @@ Ubuntu 22.04. The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 36 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 40 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)). They pin invariants that
@@ -351,7 +351,17 @@ Ubuntu 22.04. The steps, in order:
     `dev_tspico-mpy`.
 14. On failure, the CMake logs.
 
-A second job, `manual-pdf`, runs alongside: `tools/manual-pdf/ci-setup.sh`
+A second job, `build-v3`, runs alongside: the v3 board's UF2
+([board-v3.md](board-v3.md)). It installs the same tools with the same
+retries, clones MicroPython v1.29.0 itself, builds `mpy-cross`, and runs
+`make submodules` and `make` with
+`BOARD_DIR=$GITHUB_WORKSPACE/src/boards/TSPICO_V3`, so nothing is copied
+into the MicroPython tree. It needs its own clone because step 9 replaces
+the port's `boards/manifest.py`. The UF2, `build-TSPICO_V3/firmware.uf2`,
+is uploaded as `tspico-v3-firmware-uf2`. It has no TS modules yet (phase 3
+of the v3 port plan), and `pico-serial.py flash --branch` does not fetch it.
+
+A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
 the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
 DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,

@@ -48,6 +48,7 @@ from the BASIC keyword to the SD card and back.
 | Firmware | [firmware/printer.md](firmware/printer.md) | `src/TS/printer.py`: the virtual printer, text and BMP |
 | Firmware | [firmware/extcmd.md](firmware/extcmd.md) | `src/TS/extcmd.py`: the external command table |
 | Firmware | [firmware/upgrade.md](firmware/upgrade.md) | `src/upgrade/`: the upgrade UF2, the Z80 updater and its tape, the web updater's part |
+| Firmware | [firmware/board-v3.md](firmware/board-v3.md) | `src/boards/TSPICO_V3/`: the MicroPython board for the v3 card (RP2350B), its safe pin state and default pins |
 | ROM | [rom/overview.md](rom/overview.md) | The images and their lineage, banking, how HOME calls EXROM, version bytes, the ROM build and the listings |
 | ROM | [rom/sysvars.md](rom/sysvars.md) | The TS-Pico system variables at 5Dxxh, and the stock ones the Pico code uses |
 | ROM | [rom/home.md](rom/home.md) | The HOME ROM: every hook and patch |
@@ -172,6 +173,12 @@ behaviour, and the caveat and the issue link go.
 | `src/manifest.py` | `61eaa0d88fb4` | [firmware/boot.md](firmware/boot.md) | — |
 | `src/upgrade/manifest.py` | `ae1e377eaa80` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/upgrade/loader.bas` | `78d09ea9d4fe` | [firmware/upgrade.md](firmware/upgrade.md) | — |
+| `src/boards/TSPICO_V3/mpconfigboard.cmake` | `f584f754d3cb` | [firmware/board-v3.md](firmware/board-v3.md) | — |
+| `src/boards/TSPICO_V3/mpconfigboard.h` | `e700a54f3ede` | [firmware/board-v3.md](firmware/board-v3.md) | — |
+| `src/boards/TSPICO_V3/board_init.c` | `7418784995a7` | [firmware/board-v3.md](firmware/board-v3.md) | — |
+| `src/boards/TSPICO_V3/tspico_v3.h` | `e434a184e4fc` | [firmware/board-v3.md](firmware/board-v3.md) | — |
+| `src/boards/TSPICO_V3/manifest.py` | `f9666f886997` | [firmware/board-v3.md](firmware/board-v3.md) | — |
+| `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-23.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
@@ -181,5 +188,5 @@ behaviour, and the caveat and the issue link go.
 | `tools/build-flash.py` | `e2f58cd4004a` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/build.yml` | `d9c67b47872f` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `36529c8a5192` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `dbd396b21251` | [firmware/boot.md](firmware/boot.md) | — |
