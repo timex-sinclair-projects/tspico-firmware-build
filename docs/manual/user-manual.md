@@ -28,6 +28,8 @@ Appendices
 
 # Chapter 1: Meet the TS-Pico
 
+<!-- keywords: tpi: · VERBOSE · reports -->
+
 ## 1.1 What is the TS-Pico?
 
 Remember loading programs from cassette? You'd press PLAY, wait while the tape warbled, and
@@ -138,6 +140,8 @@ Appendix B has the full list.
 ---
 
 # Chapter 2: Installing Your TS-Pico
+
+<!-- keywords: SD card · jumpers · tpi:dir -->
 
 > **Chapter Preview.** Fitting the board, a tour of its buttons, jumpers and light, getting an
 > SD card ready, what happens when you switch on, and your first command.
@@ -319,6 +323,8 @@ or it may be write-protected, in which case the TS-Pico can't make its `TAP` fol
 ---
 
 # Chapter 3: Getting Around: Files, Folders and Tapes
+
+<!-- keywords: CAT · CD · MOVE TO · PATH · FFW · REW -->
 
 ## 3.1 What's on the card? DIR and CAT
 
@@ -529,6 +535,8 @@ see them all.
 
 # Chapter 4: Loading and Saving
 
+<!-- keywords: LOAD · SAVE · VERIFY · MERGE · APPEND -->
+
 ## 4.1 LOAD, VERIFY and MERGE
 
 Once a TAP is mounted, all the loading commands work exactly as they would with tape:
@@ -622,6 +630,8 @@ tape. Printing stays where it was (Chapter 7). You can check the setting with `P
 
 # Chapter 5: Native Files with `f:`
 
+<!-- keywords: f: · LOAD · SAVE -->
+
 ## 5.1 Why native files?
 
 A TAP file is a whole cassette. Sometimes you just want one file: `advent.bas`, `title.scr`,
@@ -695,6 +705,8 @@ With verbose on, the TS-Pico says which, for example `advent.bas holds a program
 ---
 
 # Chapter 6: Streams and Channels: `OPEN #`
+
+<!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · CLOSE # -->
 
 > Using the 2068's own PRINT #, INPUT # and LIST # statements to write and
 > read text files, keep records you can jump to by number, and read a folder listing into a
@@ -980,6 +992,8 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 
 # Chapter 7: The Virtual Printer
 
+<!-- keywords: LPRINT · LLIST · COPY -->
+
 ## 7.1 Switching the printer
 
 When you switch on, printing goes to a real TS 2040 printer, if you have one. To send it to
@@ -1042,6 +1056,8 @@ These settings last until the TS-Pico is switched off.
 ---
 
 # Chapter 8: ROM Slots, Cartridges and the Flash Chip
+
+<!-- keywords: tpi:boot · tpi:dock · slots -->
 
 ## 8.1 The slots
 
@@ -1157,6 +1173,8 @@ and run `LOAD ""` again.
 
 # Chapter 9: ZX Spectrum Mode
 
+<!-- keywords: tpi:zx48 -->
+
 ## 9.1 Entering Spectrum mode
 
 The 2068 can run Spectrum software with a Spectrum ROM. The TS-Pico keeps one in Flash slot 0,
@@ -1214,6 +1232,8 @@ message (`CODE 1,0`).
 ---
 
 # Chapter 10: Command Reference
+
+<!-- keywords: CAT · ERASE · FORMAT · MOVE · tpi: -->
 
 **How to read an entry.** Messages marked *(verbose)* appear only after
 `SAVE "tpi:verbose" CODE 1,1`; the others always appear. `CODE a,b` values not listed give
@@ -1586,6 +1606,8 @@ with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
 
 # Chapter 11: When Things Don't Go As Expected
 
+<!-- keywords: VERBOSE · tpi:log -->
+
 It's bound to happen. You type a command and the 2068 throws up its digital hands. Don't worry:
 the TS-Pico is difficult, but not impossible, to break, and almost everything here is quick to
 fix.
@@ -1659,6 +1681,8 @@ have:
 ---
 
 # Appendix A: Upgrading Your TS-Pico
+
+<!-- keywords: web updater · ROM · SD card -->
 
 The TS-Pico's software comes in two parts that go together:
 
@@ -1773,6 +1797,8 @@ can put the standard ROM back from the SD card:
 
 # Appendix B: Reports at a Glance
 
+<!-- keywords: reports -->
+
 | Report | From the TS-Pico, it means |
 |---|---|
 | **0 OK** | Done |
@@ -1793,6 +1819,8 @@ can put the standard ROM back from the SD card:
 ---
 
 # Appendix C: Command Quick Reference
+
+<!-- keywords: commands -->
 
 | Task | Keyword | Command |
 |---|---|---|
@@ -1829,6 +1857,8 @@ can put the standard ROM back from the SD card:
 ---
 
 # Appendix D: Settings, `config.ini` and TPMODE
+
+<!-- keywords: config.ini · TPMODE -->
 
 ## D.1 config.ini
 

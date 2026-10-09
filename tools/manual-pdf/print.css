@@ -1,36 +1,124 @@
-/* Half letter, 5.5in x 8.5in; mirrored margins for saddle stitching */
-@page { size: 5.5in 8.5in; margin: 0.55in 0.45in 0.6in 0.6in; }
-@page :left  { margin-left: 0.45in; margin-right: 0.6in;
-  @bottom-left  { content: counter(page); font: 8pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #555; }
-  @top-left     { content: "TS-Pico User Manual"; font: 7pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #888; } }
-@page :right { margin-left: 0.6in; margin-right: 0.45in;
-  @bottom-right { content: counter(page); font: 8pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #555; }
-  @top-right    { content: "Version {{ROM}}"; font: 7pt "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #888; } }
-@page :first { @top-left { content: none; } @top-right { content: none; } @bottom-right { content: none; } }
+/* The manual's pages, 5.5in x 8.5in, after the 1983 Timex Sinclair 2068
+   User Manual: a bold italic slab running head (Arvo) over a heavy rule,
+   chapters that open on a right-hand page with a big heavy italic sans title
+   and number (Inter Display), numbered sections in bold sans (Inter), the chapter's
+   keywords in red at the inner foot of the page, the page number at the
+   outer foot. Margins are mirrored for saddle stitching.
 
-html { font: 9.5pt/1.38 "Charter", "Charis SIL", "Bitstream Charter", Georgia, serif; color: #111; }
+   book.py adds, per chapter, the named page that carries its running head
+   and keywords (@page s1, s2, ...), and the pages "front" (title page and
+   colophon), "toc" and "blank". */
+
+@font-face { font-family: "Arvo"; font-weight: 700; font-style: normal; src: url("{{FONTS}}/Arvo-Bold.ttf"); }
+@font-face { font-family: "Arvo"; font-weight: 700; font-style: italic; src: url("{{FONTS}}/Arvo-BoldItalic.ttf"); }
+@font-face { font-family: "Inter"; font-weight: 700; font-style: normal; src: url("{{FONTS}}/Inter-Bold.ttf"); }
+@font-face { font-family: "Inter Display"; font-weight: 800; font-style: italic;
+  src: url("{{FONTS}}/InterDisplay-ExtraBoldItalic.ttf"); }
+@font-face { font-family: "Poppins"; font-weight: 300; src: url("{{FONTS}}/Poppins-Light.ttf"); }
+@font-face { font-family: "Poppins"; font-weight: 700; src: url("{{FONTS}}/Poppins-Bold.ttf"); }
+
+@page { size: 5.5in 8.5in; margin: 0.82in 0.5in 0.7in 0.62in; }
+@page :left  { margin-left: 0.5in;  margin-right: 0.62in; }
+@page :right { margin-left: 0.62in; margin-right: 0.5in; }
+@page front { margin: 0.6in 0.6in 0.6in 0.62in; }
+
+:root {
+  --ink: #1a1a1a; --rule: #2a2a2a; --red: #d7262e; --grey: #6b6b6b;
+  --slab: "Arvo", "Rockwell", Georgia, serif;
+  --head: "Inter", "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif;
+  --display: "Inter Display", "Inter", "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif;
+  --sans: "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif;
+  --mono: "Menlo", "DejaVu Sans Mono", Consolas, monospace;
+}
+html { font: 9.5pt/1.4 "Charter", "Charis SIL", "Bitstream Charter", Georgia, serif; color: var(--ink); }
 body { margin: 0; }
-h1, h2, h3, h4 { font-family: "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; line-height: 1.2; break-after: avoid; }
-h1 { font-size: 17pt; margin: 0 0 .6em; break-before: page; }
-body > h1:first-of-type { break-before: avoid; font-size: 22pt; margin-top: 1.2in; }
-h2 { font-size: 12pt; margin: 1.2em 0 .4em; }
-h3 { font-size: 10.5pt; margin: 1em 0 .3em; }
-h4 { font-size: 9.5pt; margin: .8em 0 .3em; }
+section.level1 { break-before: page; }
+
+/* Headings: the numbered sections in bold sans, the rest in bold slab */
+h1, h2, h3, h4, .toc, .opener, .preview { font-variant-numeric: lining-nums; }
+h1, h2, h3, h4 { font-family: var(--slab); font-weight: 700; line-height: 1.15; break-after: avoid; }
+h2, h3 { font-family: var(--head); letter-spacing: -.01em; }
+h2 { font-size: 13pt; margin: 1.3em 0 .35em; }
+h3 { font-size: 11pt; margin: 1.1em 0 .25em; }
+h4 { font-size: 10pt; font-style: italic; margin: .9em 0 .25em; }
+h2 .secnum, h3 .secnum { color: var(--grey); font-weight: 700; margin-right: .3em; }
+
+/* Chapter opener: title and number on a heavy rule, then the preview */
+.opener { margin: .15in 0 .3in; break-after: avoid; }
+.opener .top { display: flex; align-items: flex-end; gap: .2in; padding-bottom: .1in;
+  border-bottom: 4.5pt solid var(--rule); }
+.opener h1 { flex: 1; margin: 0; font-family: var(--display); font-weight: 800; font-style: italic; font-size: 24pt;
+  line-height: 1.02; letter-spacing: -.02em; }
+.opener h1 code { font-size: .85em; background: none; padding: 0; }
+.opener .num { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 44pt; letter-spacing: -.02em;
+  line-height: .8; }
+.opener .kind { font-family: var(--slab); font-style: italic; font-weight: 700; font-size: 9pt;
+  color: var(--red); letter-spacing: .02em; margin: 0 0 .06in; }
+.preview { display: flex; gap: .16in; margin: .16in 0 0; }
+.preview .label { flex: 0 0 1.05in; font-family: var(--slab); font-style: italic; font-weight: 700;
+  font-size: 9.5pt; color: var(--red); line-height: 1.3; }
+.preview .text { flex: 1; font-family: var(--slab); font-style: italic; font-weight: 700;
+  font-size: 10pt; line-height: 1.32; }
+.preview .text p { margin: 0 0 .4em; }
+.preview .text code { font-style: normal; }
+
 p, li { orphans: 3; widows: 3; }
-a { color: #1a4f9c; text-decoration: none; }
-code, pre { font-family: "Menlo", "DejaVu Sans Mono", Consolas, monospace; font-size: 8pt; }
-code { background: #f1f3f6; border-radius: 2px; padding: 0 .15em; }
-pre { background: #f4f6f8; border: .5pt solid #d5dae0; border-radius: 3px; padding: 5pt 6pt;
-      white-space: pre-wrap; word-break: break-word; break-inside: avoid; line-height: 1.3; }
+p { margin: 0 0 .55em; }
+ul, ol { padding-left: 1.4em; margin: .4em 0 .7em; }
+li { margin: .15em 0; }
+a { color: inherit; text-decoration: none; }
+strong { font-weight: 700; }
+code, pre { font-family: var(--mono); font-size: 7.9pt; }
+code { background: #eeeeec; border-radius: 2px; padding: 0 .15em; }
+pre { background: #f3f3f1; padding: 5pt 7pt;
+      white-space: pre-wrap; word-break: break-word; break-inside: avoid; line-height: 1.32; margin: .6em 0 .8em; }
 pre code { background: none; padding: 0; }
-blockquote { margin: .6em 0; padding: .2em .8em; border-left: 2pt solid #c8ced6; color: #333; background: #fafbfc; }
-table { border-collapse: collapse; width: 100%; font-size: 7.8pt; line-height: 1.3; margin: .6em 0; break-inside: auto; }
-th, td { border: .5pt solid #c8ced6; padding: 2pt 4pt; vertical-align: top; text-align: left; overflow-wrap: break-word; }
-th { white-space: nowrap; }
-th { background: #eef1f5; }
+blockquote { margin: .8em 0; padding: .45em .7em .1em; border-top: 1.5pt solid var(--rule);
+  border-bottom: .5pt solid var(--rule); background: #f6f6f4; break-inside: avoid; }
+blockquote strong:first-child { font-family: var(--slab); }
+table { border-collapse: collapse; width: 100%; font-size: 7.9pt; line-height: 1.3; margin: .7em 0 .9em; break-inside: auto; }
+th, td { border: 0; border-bottom: .5pt solid #b9b9b6; padding: 2.5pt 4pt; vertical-align: top; text-align: left; overflow-wrap: break-word; }
+th { white-space: nowrap; font-family: var(--slab); font-weight: 700; font-size: 8.5pt;
+     border-bottom: 1.5pt solid var(--rule); }
 tr { break-inside: avoid; }
 thead { display: table-header-group; }
-img { max-width: 100%; height: auto; display: block; margin: .5em auto; break-inside: avoid; }
-figure { margin: .6em 0; break-inside: avoid; }
-figcaption { font-size: 8pt; color: #555; text-align: center; }
-hr { border: 0; border-top: .5pt solid #ccd; }
+img { max-width: min(100%, 3.3in); height: auto; display: block; margin: .5em auto; break-inside: avoid; }
+figure { margin: .7em 0; break-inside: avoid; }
+figcaption { font-size: 7.8pt; color: #444; text-align: center; font-style: italic; }
+hr { border: 0; border-top: .5pt solid #bbb; }
+
+/* Title page and colophon (body pages 1 and 2) */
+.titlepage { page: front; height: 7.25in; display: flex; flex-direction: column; }
+.titlepage .logo { width: 100%; display: block; margin: 0; }
+.stripes { display: flex; gap: 6pt; margin: 9pt 0 0; }
+.stripes i { flex: 1; height: 3.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.stripes i:nth-child(1) { background: #e2322d; } .stripes i:nth-child(2) { background: #3aa93f; }
+.stripes i:nth-child(3) { background: #2ba6de; }
+.titlepage .t1 { font-family: "Poppins", var(--sans); font-weight: 300; font-size: 34pt; line-height: 1;
+  margin: .3in 0 0; letter-spacing: -.01em; }
+.titlepage .t2 { font-family: "Poppins", var(--sans); font-weight: 300; font-size: 21pt; line-height: 1.05;
+  margin: .04in 0 0; text-transform: uppercase; letter-spacing: -.01em; }
+.titlepage .t3 { font-family: "Poppins", var(--sans); font-weight: 700; font-size: 30pt; line-height: 1;
+  margin: .1in 0 0; letter-spacing: -.015em; }
+.titlepage .by { margin-top: auto; font-size: 9pt; line-height: 1.45; }
+.titlepage .by b { font-family: var(--slab); font-size: 10pt; }
+.colophon { page: front; break-before: page; height: 7.25in; display: flex; flex-direction: column;
+  justify-content: flex-end; font-size: 8pt; line-height: 1.45; color: #333; }
+.colophon p { margin: 0 0 .7em; }
+.colophon .sticker { width: 2.2in; margin: 0 0 .25in; }
+
+/* Table of contents, ruled like the 2068 manual's */
+.toc { page: toc; break-before: page; }
+.toc table { font-size: 9pt; margin: 0; border-left: 0; }
+.toc td { border: 0; padding: 0 0 .085in; }
+.toc td.kind { width: 1.0in; font-family: var(--slab); font-weight: 700; padding-right: .1in;
+  border-right: .5pt solid var(--rule); white-space: nowrap; }
+.toc td.title { padding-left: .12in; }
+.toc td.title b { font-family: var(--slab); font-weight: 700; font-size: 10pt; display: block; line-height: 1.2; }
+.toc td.title code { background: none; padding: 0; font-size: .9em; }
+.toc td.title .kw { font-family: var(--mono); font-size: 7.3pt; color: #333; display: block; margin-top: 1.5pt; }
+.toc td.page { width: .3in; text-align: right; font-family: var(--slab); font-weight: 700; }
+.toc tr.part td { padding: .04in 0 .07in; font-family: var(--slab); font-weight: 700; font-size: 10.5pt;
+  border-right: 0; }
+
+.blank { page: blank; break-before: page; height: 1px; }

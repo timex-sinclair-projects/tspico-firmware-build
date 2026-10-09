@@ -1,25 +1,34 @@
+/* Front and back covers, after the cover of the 1983 Timex Sinclair 2068
+   User Manual: warm grey, the Timex Sinclair badge over red, green and blue
+   bars, the title in light and bold geometric capitals, and the computer
+   running in from the left edge: a line drawing (img/ts2068-line.svg, made
+   by draw-cover.py) of a 2068 with a TS-Pico standing behind it. */
+@font-face { font-family: "Poppins"; font-weight: 300; src: url("{{FONTS}}/Poppins-Light.ttf"); }
+@font-face { font-family: "Poppins"; font-weight: 700; src: url("{{FONTS}}/Poppins-Bold.ttf"); }
+@font-face { font-family: "Arvo"; font-weight: 700; font-style: italic; src: url("{{FONTS}}/Arvo-BoldItalic.ttf"); }
 @page { size: 5.5in 8.5in; margin: 0; }
-html, body { margin: 0; height: 100%; }
-body { font-family: "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #15181d; }
-.page { box-sizing: border-box; width: 5.5in; height: 8.5in; padding: 0.4in 0.45in; display: flex; flex-direction: column; }
-.rainbow { height: 7pt; display: flex; border-radius: 2pt; overflow: hidden;
-  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-/* Solid blocks, not a gradient: a PDF gradient stays put when the page is
-   moved onto the right half of a booklet sheet, and only its end shows. */
-.rainbow i { flex: 1; }
-.rainbow i:nth-child(1) { background: #d6273e; } .rainbow i:nth-child(2) { background: #f08a24; }
-.rainbow i:nth-child(3) { background: #f5c518; } .rainbow i:nth-child(4) { background: #2ca24c; }
-.rainbow i:nth-child(5) { background: #1f6fd6; }
-.kicker { margin-top: 0.55in; font-size: 10.5pt; letter-spacing: .14em; text-transform: uppercase; color: #d6273e; font-weight: 600; }
-h1 { font-size: 40pt; line-height: 1; margin: .12in 0 0; letter-spacing: -.01em; }
-h2 { font-size: 22pt; font-weight: 400; margin: .06in 0 0; color: #333; }
-.for { margin-top: .22in; font-size: 11pt; line-height: 1.35; color: #444; max-width: 3.9in; }
-.photo { flex: 1; display: flex; align-items: center; justify-content: center; }
-.photo img { width: 100%; height: auto; }
-.meta { display: flex; justify-content: space-between; align-items: flex-end; font-size: 9pt; color: #444; margin-bottom: .14in; line-height: 1.4; }
-.meta b { color: #15181d; }
-.back .blurb { margin-top: .5in; font-family: "Charter", "Charis SIL", "Bitstream Charter", Georgia, serif; font-size: 11pt; line-height: 1.5; color: #222; }
+html, body { margin: 0; }
+body { font-family: "Poppins", "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif; color: #151515; }
+.page { position: relative; box-sizing: border-box; width: 5.5in; height: 8.5in; overflow: hidden;
+  background: #b4b1ab; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.logo { position: absolute; left: .55in; top: .55in; width: 4.4in; }
+.stripes { position: absolute; left: .55in; width: 4.4in; top: 1.13in; display: flex; gap: 7pt; }
+.stripes i { flex: 1; height: 4pt; }
+.stripes i:nth-child(1) { background: #e2322d; } .stripes i:nth-child(2) { background: #3aa93f; }
+.stripes i:nth-child(3) { background: #2ba6de; }
+.title { position: absolute; left: .53in; top: 1.38in; width: 4.5in; }
+.t1 { color: #fff; font-weight: 300; font-size: 52pt; line-height: .95; letter-spacing: -.02em; }
+.t2 { color: #fff; font-weight: 300; font-size: 29pt; line-height: 1; letter-spacing: -.015em; text-transform: uppercase; margin-top: .04in; }
+.t3 { font-weight: 700; font-size: 41pt; line-height: 1; letter-spacing: -.02em; margin-top: .1in; }
+.for { color: #fff; font-weight: 300; font-size: 10.5pt; margin-top: .14in; letter-spacing: .01em; }
+.drawing { position: absolute; left: -2.35in; top: 4.02in; width: 8in; }
+.drawing img { width: 100%; display: block; }
+
+/* Back */
+.back .stripes { top: .55in; }
+.back .blurb { position: absolute; left: .55in; top: 1.35in; width: 4.4in;
+  font-family: "Charter", "Charis SIL", "Bitstream Charter", Georgia, serif; font-size: 11pt; line-height: 1.5; }
 .back .blurb p { margin: 0 0 .12in; }
-.back .photo img { width: 88%; }
-.back .links { font-size: 8.5pt; line-height: 1.6; color: #333; margin-bottom: .14in; }
-.back .links b { display: inline-block; width: .85in; color: #15181d; }
+.back .blurb b { font-family: "Arvo", Georgia, serif; font-style: italic; }
+.back .links { position: absolute; left: .55in; bottom: .5in; width: 4.4in; font-size: 8pt; line-height: 1.7; }
+.back .links b { display: inline-block; width: .85in; }

@@ -354,13 +354,19 @@ Ubuntu 22.04. The steps, in order:
 A second job, `manual-pdf`, runs alongside: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
 the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
-DejaVu Sans Mono) and `pypdf`; `tools/manual-pdf/make.sh` turns
-`docs/manual/user-manual.md` into HTML with pandoc, prints it and the two
-covers with the runner's Chrome, and assembles the half-letter one-up
-(cover + manual) and the saddle-stitch booklet (covers, blank inside
-covers, padding to a multiple of 4, imposed two up on letter). The cover's
-version comes from `config.ini` and its date from the last commit. The
-script checks the page size and count; the two PDFs are uploaded as
+DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
+Poppins) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` turns
+`docs/manual/user-manual.md` into HTML with pandoc, and
+`tools/manual-pdf/book.py` adds the title page, contents and chapter
+openers, prints the manual and the two covers with the runner's Chrome, and
+assembles the half-letter one-up (cover + manual) and the saddle-stitch
+booklet (covers, blank inside covers, padding to a multiple of 4, imposed
+two up on letter). Chrome ignores `break-before: right`, so the manual is
+printed twice: the first print says where each chapter starts, and a blank
+page goes in before each one that would open on a left-hand page. The
+cover's version comes from `config.ini` and its date from the last commit.
+The script checks the page size and count and that every chapter opens on
+an odd page; the two PDFs are uploaded as
 `tspico-manual-pdf`. Building them on every push means a manual change that
 breaks them fails here, not at release time.
 
