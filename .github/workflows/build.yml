@@ -360,6 +360,73 @@ jobs:
             ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/CMakeFiles/CMakeError.log
           retention-days: 7
 
+  # The v3 board (RP2350B): MicroPython v1.29.0 with the TSPICO_V3 board
+  # definition in src/boards/TSPICO_V3, built from outside the MicroPython
+  # tree with BOARD_DIR. Phase 3 of the v3 port plan (tspico-hardware,
+  # docs/v3-firmware-port-plan.md): no TS modules yet, so the UF2 boots to the
+  # REPL with the bus pins in their safe state. Its own job and its own clone,
+  # because the v2 job replaces the port's boards/manifest.py.
+  build-v3:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # The same retried apt install as the build job.
+      - name: Install build tools
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            if sudo timeout 240 apt-get update \
+               && sudo timeout 240 apt-get install -y \
+                    -o Acquire::Retries=3 -o Acquire::http::Timeout=30 \
+                    git build-essential cmake \
+                    gcc-arm-none-eabi libnewlib-arm-none-eabi \
+                    python3; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed or timed out; retrying"
+            sudo dpkg --configure -a || true
+            sleep 10
+          done
+          echo "::error::apt failed three times"
+          exit 1
+
+      - name: Clone MicroPython v1.29.0
+        run: |
+          git clone --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git ${{ github.workspace }}/micropython
+
+      - name: Build mpy-cross
+        working-directory: ${{ github.workspace }}/micropython
+        run: make -C mpy-cross
+
+      - name: Fetch rp2 submodules
+        working-directory: ${{ github.workspace }}/micropython/ports/rp2
+        run: make BOARD_DIR=${{ github.workspace }}/src/boards/TSPICO_V3 submodules
+
+      - name: Build the TSPICO_V3 firmware
+        working-directory: ${{ github.workspace }}/micropython/ports/rp2
+        run: make -j$(nproc) BOARD_DIR=${{ github.workspace }}/src/boards/TSPICO_V3
+
+      - name: Upload the v3 firmware.uf2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-v3-firmware-uf2
+          path: ${{ github.workspace }}/micropython/ports/rp2/build-TSPICO_V3/firmware.uf2
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-v3-logs
+          path: |
+            ${{ github.workspace }}/micropython/ports/rp2/build-TSPICO_V3/CMakeFiles/CMakeOutput.log
+            ${{ github.workspace }}/micropython/ports/rp2/build-TSPICO_V3/CMakeFiles/CMakeError.log
+          retention-days: 7
+
   # The user manual as PDFs (tools/manual-pdf/make.sh): a half-letter one-up
   # for reading and a saddle-stitch booklet imposed on letter. Built on every
   # push so a manual change that breaks the PDFs shows here, not at release
