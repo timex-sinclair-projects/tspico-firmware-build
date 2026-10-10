@@ -34,6 +34,12 @@ sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 import disk_cmds_hosttest as D                                  # noqa: E402
 
+
+def _hw():
+    """The v2 board module. tspico reaches the hardware through TS/board.py
+    (phase 4 of the v3 port plan), so its constructors are patched there."""
+    return sys.modules["TS.board_v2"]
+
 results = []
 
 
@@ -60,8 +66,8 @@ def test_attempts(t):
             raise OSError(19, "no SD card")
         return types.SimpleNamespace(CID=state["cid"])
     t.SDCard = sdcard
-    t.SPI = lambda *a, **k: object()
-    t.StateMachine = lambda *a, **k: types.SimpleNamespace(active=lambda *x: None)
+    _hw().SPI = lambda *a, **k: object()
+    _hw().StateMachine = lambda *a, **k: types.SimpleNamespace(active=lambda *x: None)
     t.os = types.SimpleNamespace(mount=lambda sd, p: None)
     t.SAVE_LOG = lambda: None
     seen = []
@@ -367,7 +373,8 @@ def main():
     real = {n: getattr(t, n) for n in ("ACTIVATE_SD", "SD_REVALIDATE", "SD_CALL", "SD_PROBE",
                                        "DEACTIVATE_SD", "ACTIVATE_MQ", "LOG", "os",
                                        "SEND_MSG", "SEND_MSG2", "DIR_FILES", "GET_DIRS",
-                                       "MOUNT_FILE", "SDCard", "SPI", "StateMachine")}
+                                       "MOUNT_FILE", "SDCard")}
+    real_hw = {n: getattr(_hw(), n) for n in ("SPI", "StateMachine")}
     logs = []
     t.LOG = lambda msg, level: logs.append((level, msg))
 
@@ -378,6 +385,8 @@ def main():
         test_revalidate(t, root)
         for n, v in real.items():
             setattr(t, n, v)
+        for n, v in real_hw.items():
+            setattr(_hw(), n, v)
         t.LOG = lambda msg, level: logs.append((level, msg))
         test_gate(t)
         test_sd_call(t)

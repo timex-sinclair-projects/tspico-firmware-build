@@ -1,7 +1,7 @@
 import time, utime, sys
 
 from gc import mem_free, collect
-from machine import freq, Pin
+from machine import freq
 
 # ---------------- TELEMETRY SWITCH ----------------
 # "TELEMETRY" in /config.ini: true = full TLM event logging on USB serial
@@ -61,22 +61,10 @@ except ValueError as e:
     from TS.tspico import TS2068_IO
     print("[DEV] /dev_tspico ignored (%s); using frozen TS.tspico" % e)
 
-U6_EN = Pin(12, Pin.OUT, Pin.PULL_UP)
-WAIT = Pin(14, Pin.OUT, Pin.PULL_DOWN)     # TS_IO_DUAL waits on GPIO 14 as /PICOSEL (the name is unverified: hardware.md)
-U10_ENA = Pin(19, Pin.OUT, Pin.PULL_UP)
-U13_ENA = Pin(20, Pin.OUT, Pin.PULL_UP)
-BE = Pin(21, Pin.OUT, Pin.PULL_UP)
-ROSCS = Pin(26, Pin.IN, Pin.PULL_DOWN)
-U10_WE = Pin(27, Pin.OUT, Pin.PULL_UP)
- 
-U6_EN.value(1)
-WAIT.value(1)
-U10_ENA.value(1)
-U13_ENA.value(1)
-BE.value(1)
-U10_WE.value(1)
-
-freq(270_000_000)
+# The board's pins at their idle levels, and its clock (TS/board.py): on v2
+# the bus-control pins and 270 MHz.
+from TS import board
+board.early_init()
 print(freq())
 
 log_msg = ""

@@ -40,3 +40,7 @@ freeze("$(PORT_DIR)/modules", "TS/printer.py")
 freeze("$(PORT_DIR)/modules", "TS/catalog.py")
 freeze("$(PORT_DIR)/modules", "TS/native.py")
 freeze("$(PORT_DIR)/modules", "TS/channels.py")
+# The board layer (phase 4 of the v3 port plan): board.py picks board_v2 on
+# this build. board_v3.py is frozen only into the v3 card's build.
+freeze("$(PORT_DIR)/modules", "TS/board.py")
+freeze("$(PORT_DIR)/modules", "TS/board_v2.py")

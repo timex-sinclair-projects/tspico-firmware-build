@@ -35,6 +35,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 
+
+def _hw():
+    """The v2 board module. tspico reaches the hardware through TS/board.py
+    (phase 4 of the v3 port plan), so its constructors are patched there."""
+    return sys.modules["TS.board_v2"]
+
 READY = "mov(y, invert(null))"
 
 
@@ -131,8 +137,8 @@ def install(t):
         env.blinks += 1
         raise Bricked()
 
-    t.StateMachine = state_machine
-    t.SPI = lambda *a, **k: object()
+    _hw().StateMachine = state_machine
+    _hw().SPI = lambda *a, **k: object()
     t.SDCard = env.card.sdcard
     t.os = env.card.os()
     t.BLINK_ERROR = blink
@@ -229,7 +235,7 @@ def boot_fakes(t, env, inject_pre):
         append=False, tap_idx=0, offset=0, offset_tbl=[], zx48=False,
         VERBOSE=False, sd_present=False, sd_cid=None, sd_listing_ok=False,
         save_no_card=False)
-    t._thread = types.SimpleNamespace(start_new_thread=lambda *a: None)
+    _hw()._thread = types.SimpleNamespace(start_new_thread=lambda *a: None)
     t.gc = types.SimpleNamespace(mem_free=lambda: 0, collect=lambda: None)
     t.REMOVE_DIR = lambda d: None
     t.GET_DIRS = lambda *a, **k: ["/TAP"]

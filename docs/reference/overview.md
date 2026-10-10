@@ -37,7 +37,8 @@ which slot and which chip to present on every Z80 memory cycle.
 **On the Pico.** MicroPython 1.29 with the `TS` package frozen in
 ([firmware/boot.md](firmware/boot.md)):
 
-- `main.py` sets the bus pins to their idle levels, picks the frozen or the
+- `main.py` sets the bus pins to their idle levels (`board.early_init`,
+  [firmware/board.md](firmware/board.md)), picks the frozen or the
   development copy of the firmware, and calls `TS2068_IO()` inside a handler
   that writes any crash to `/activity.log`.
 - `TS2068_IO()` in `TS/tspico.py` is the program. It starts the three state

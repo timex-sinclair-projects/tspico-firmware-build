@@ -131,6 +131,7 @@ jobs:
           python3 src/test/boot_slot_guard_hosttest.py
           python3 src/test/audit_fixes_hosttest.py
           python3 src/test/screen_colour_hosttest.py
+          python3 src/test/board_hosttest.py
           python3 src/test/reference_hosttest.py
       # Fails the build if a ROM in flash/manifest.json changed without its
       # crc32 being updated -- i.e. nobody would notice that the next 512K
@@ -236,6 +237,8 @@ jobs:
           cp src/TS/catalog.py       ${{ github.workspace }}/micropython/ports/rp2/modules/TS/catalog.py
           cp src/TS/native.py        ${{ github.workspace }}/micropython/ports/rp2/modules/TS/native.py
           cp src/TS/channels.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/channels.py
+          cp src/TS/board.py         ${{ github.workspace }}/micropython/ports/rp2/modules/TS/board.py
+          cp src/TS/board_v2.py      ${{ github.workspace }}/micropython/ports/rp2/modules/TS/board_v2.py
 
           # Install our custom frozen-modules manifest in place of the
           # default rp2 manifest. Our manifest explicitly freezes the

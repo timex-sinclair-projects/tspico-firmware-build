@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico_io.py`](../../../src/TS/tspico_io.py) (`sel_bank`,
 `set_ctrl`, `set_dck`, `TS_IO_DUAL`) and
-[`src/TS/tspico.py`](../../../src/TS/tspico.py) (`NULL_SM`).
+[`src/TS/board_v2.py`](../../../src/TS/board_v2.py) (`NULL_SM`).
 
 Five programs run on the RP2040's programmable I/O. Four of them stand
 between the Z80 and the Pico's memory and ports, and are the only code that
@@ -11,7 +11,8 @@ fifth, `NULL_SM`, does nothing, and that is its job. Three state machines
 run them: `MQ` (PIO0, state machine 0) runs `TS_IO_DUAL` and answers the two
 ports 0Eh and 0Fh; `ROM` (state machine 4) runs `set_ctrl` and drives the
 memory enables; `BANK` (state machine 5) runs `sel_bank` and drives the bank
-address lines. `set_dck` is an alternative for `ROM` that the shipped
+address lines. `ROM` and `BANK` are `board_v2`'s `_rom` and `_bank` since
+the board layer ([board.md](board.md)); this chapter keeps the short names. `set_dck` is an alternative for `ROM` that the shipped
 firmware does not use. The wiring the programs assume is in
 [hardware.md](../hardware.md); the Python that builds and drives the state
 machines is in [tspico-bus.md](tspico-bus.md) (`ACTIVATE_MQ`, `ACTIVATE_SD`,
@@ -187,7 +188,7 @@ decides whether the Pico answers at all and what A14_L should be. Runs on
 
 The header comment names the four lines: /BE and A14_L on the set pins,
 `U10_ENA` and `U13_ENA` (flash, SRAM) on the out pins, as
-[`src/main.py`](../../../src/main.py) names GPIO 19 and 20: one enable per
+`board_v2.early_init` ([board.md](board.md)) names GPIO 19 and 20: one enable per
 chip, which is the only way the bit patterns below make sense (a MEM value
 of 2 drives GPIO 19 low and GPIO 20 high; the two pins are never both low
 for a valid word). Until #181 the header called them "/U10_CE /U10_OE".
@@ -206,7 +207,8 @@ No side-set.
 
 ### The word
 
-`ROM.put(TSP.ROM_SM)`. `ROM_SM = dock MEM * 4 + boot MEM`, where MEM is 1
+`ROM.put(TSP.ROM_SM)`, through `board.map_slots` ([board.md](board.md)).
+`ROM_SM = dock MEM * 4 + boot MEM`, where MEM is 1
 for SRAM and 2 for flash (`LOAD_CONFIG`, [tspico-dispatch.md](tspico-dispatch.md));
 the only valid values are 5, 6, 9 and 10, and the default is 10, both from
 flash.
@@ -283,8 +285,8 @@ the code does not say what they were sized against.
   one in progress *(inferred)*.
 - Before the first `put()`, with X = 0 after power-up, a ROM-area access
   with code 0 or 1 drives 00 onto both enables, enabling both chips at once
-  *(inferred)*. `TS2068_IO` puts `ROM_SM` straight after building `BANK`,
-  a few instructions after `ROM.active(1)`.
+  *(inferred)*. `board_v2.start_memory` puts `ROM_SM` straight after
+  building `BANK`, a few instructions after `ROM.active(1)`.
 
 ### Beware
 
@@ -343,12 +345,13 @@ history is [DUAL_PORT_DEVELOPMENT.md](../../DUAL_PORT_DEVELOPMENT.md) §2–3.
 
 Runs on `MQ` (state machine 0, PIO0) at 30 MHz with `out_base=Pin(2,
 Pin.OUT)`, `in_base=Pin(2, Pin.IN)`, `jmp_pin=Pin(11)`,
-`sideset_base=Pin(12, Pin.OUT)`. It is built in four places with those
-same arguments: `ACTIVATE_MQ` ([tspico-bus.md](tspico-bus.md)) for the
-2068 dispatcher, after every SD access; `ENA_MQ_DUAL`
-([tspico_io.md](tspico_io.md)) for the ZX48 handlers after `ENA_SD`;
-`ZX48_IO` ([tspico-dispatch.md](tspico-dispatch.md)) on entering Spectrum
-mode; and [`src/upgrade/main.py`](../../../src/upgrade/main.py). The
+`sideset_base=Pin(12, Pin.OUT)`. It is built in three places with those
+same arguments: `board_v2.make_mq` ([board.md](board.md)), which
+`ACTIVATE_MQ` ([tspico-bus.md](tspico-bus.md)) calls for the 2068
+dispatcher after every SD access, and `ZX48_IO`
+([tspico-dispatch.md](tspico-dispatch.md)) on entering Spectrum mode;
+`ENA_MQ_DUAL` ([tspico_io.md](tspico_io.md)) for the ZX48 handlers after
+`ENA_SD`; and [`src/upgrade/main.py`](../../../src/upgrade/main.py). The
 single-port predecessor `TS_IO` ran at 15 MHz; the 30 MHz is explained in
 `ACTIVATE_MQ`'s comment: the dual-port decode adds about seven cycles to
 the read path.
@@ -587,13 +590,14 @@ in `tspico.py`; `tspico_io.py` is handed it as a parameter.
 
 ## `NULL_SM`
 
-A one-instruction program, `nop()`, that `ACTIVATE_SD` loads onto state
+A one-instruction program, `nop()`, in `board_v2.py`. `board_v2.sd_take_bus`
+([board.md](board.md)), called by `ACTIVATE_SD`, loads it onto state
 machine 0 before giving GPIO 2–4 to the SD card's SPI:
 
 ```python
-MQ = StateMachine(0, NULL_SM, freq=15_000_000)
-MQ.active(1)
-MQ.active(0)
+sm = StateMachine(0, NULL_SM, freq=15_000_000)
+sm.active(1)
+sm.active(0)
 ```
 
 Loading it ends `TS_IO_DUAL`: with the bus program gone, no Z80 cycle can

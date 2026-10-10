@@ -59,6 +59,8 @@ FIRMWARE = (
     "src/TS/extcmd.py",
     "src/TS/native.py",
     "src/TS/printer.py",
+    "src/TS/board.py",
+    "src/TS/board_v2.py",
     "src/upgrade/main.py",
     "src/upgrade/upgrade.py",
 )

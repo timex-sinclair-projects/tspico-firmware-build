@@ -17,8 +17,9 @@ header does not list the fifth change, the 100 ms read-token wait (#131).
 
 The card's SPI lines are GPIO 2 (SCK), GPIO 3 (MOSI) and GPIO 4 (MISO),
 the pins that are D0–D2 of the 2068 data bus through U6; chip select is
-GPIO 28 (`U3_CS`, `Pin.PULL_UP`). `ACTIVATE_SD` builds the bus as
-`SPI(0, sck=Pin(2), mosi=Pin(3), miso=Pin(4))` and holds U6 off (GPIO 12
+GPIO 28 (`U3_CS`, `Pin.PULL_UP`). `ACTIVATE_SD` builds the bus through the
+board layer ([board.md](board.md)), on v2 as
+`SPI(0, sck=Pin(2), mosi=Pin(3), miso=Pin(4))`, and holds U6 off (GPIO 12
 high) first, so the card is only ever used while the bus state machine is
 parked ([flows/sd-handover.md](../flows/sd-handover.md)); `DEACTIVATE_SD`
 drives GPIO 2–4 low and CS high afterwards ([tspico-bus.md](tspico-bus.md)).

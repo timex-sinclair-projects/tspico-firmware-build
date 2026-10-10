@@ -58,21 +58,22 @@ which set up the same pins the same way.
 | 5–9 | — | `TS_IO_DUAL` out pins | PIO out | Z80 D3–D7 through U6. D6 is GPIO 8 (`DEACTIVATE_SD`'s comment) |
 | 10 | `A0` (docstring) | nothing; read by `in_(pins, 9)` | in | address bit 0 of the Z80 I/O cycle: 0 = port 0Eh, 1 = port 0Fh |
 | 11 | `R/W` (docstring) | `TS_IO_DUAL`, `jmp_pin=Pin(11)` | in | 1 = the Z80 is writing (OUT), 0 = reading (IN). The Z80's own /WR is active low, so this is a decoded signal *(inferred)* |
-| 12 | `U6_EN` | `main.py` (out, pull-up, 1); `TS_IO_DUAL` side-set; `ACTIVATE_SD` (out, 1) | out | U6 bus-buffer enable, active low. 1 = the Pico is off the 2068's data bus |
+| 12 | `U6_EN` | `early_init` (out, pull-up, 1); `TS_IO_DUAL` side-set; `ACTIVATE_SD` (out, 1) | out | U6 bus-buffer enable, active low. 1 = the Pico is off the 2068's data bus |
 | 13 | — | nothing; `wait(0/1, gpio, 13)` in `set_ctrl`, `set_dck`, `sel_bank` | in | the memory-access strobe: low for the duration of a 2068 access to the ROM area or the dock *(inferred from the waits)*. Not named anywhere |
-| 14 | `WAIT` (`main.py`); `/PICOSEL` (`TS_IO_DUAL`) | `main.py` (out, pull-down, 1); `wait(0/1, gpio, 14)` in `TS_IO_DUAL` | out in `main.py`, read by the PIO | the chip select for ports 0Eh/0Fh, low during a bus cycle on either port. See [the two names](#the-z80-bus-ports-0eh-and-0fh) |
+| 14 | `WAIT` (`early_init`); `/PICOSEL` (`TS_IO_DUAL`) | `early_init` (out, pull-down, 1); `wait(0/1, gpio, 14)` in `TS_IO_DUAL` | out in `early_init`, read by the PIO | the chip select for ports 0Eh/0Fh, low during a bus cycle on either port. See [the two names](#the-z80-bus-ports-0eh-and-0fh) |
 | 15–18 | — | `sel_bank`, `out_base=Pin(15)` | PIO out | A15–A18 of the flash and SRAM: the 32K slot. GPIO 15 is A15 |
-| 19 | `U10_ENA` | `main.py` (out, pull-up, 1); `set_ctrl` out pin 0 | PIO out | enable of U10, the flash, active low *(inferred)* |
-| 20 | `U13_ENA` | `main.py` (out, pull-up, 1); `set_ctrl` out pin 1 | PIO out | enable of U13, the SRAM, active low *(inferred)* |
-| 21 | `BE` | `main.py` (out, pull-up, 1); `set_ctrl` set pin 0 | PIO out | /BE, driven low by the Pico during a ROM-area access it answers. What it enables is not in the code *(unverified)* |
+| 19 | `U10_ENA` | `early_init` (out, pull-up, 1); `set_ctrl` out pin 0 | PIO out | enable of U10, the flash, active low *(inferred)* |
+| 20 | `U13_ENA` | `early_init` (out, pull-up, 1); `set_ctrl` out pin 1 | PIO out | enable of U13, the SRAM, active low *(inferred)* |
+| 21 | `BE` | `early_init` (out, pull-up, 1); `set_ctrl` set pin 0 | PIO out | /BE, driven low by the Pico during a ROM-area access it answers. What it enables is not in the code *(unverified)* |
 | 22 | — | `set_ctrl` set pin 1 | PIO out | the line `set_ctrl`'s header calls A14_L: high or low by the GPIO 0–1 code on a ROM-area access *(the name is inferred from the comment's order)* |
 | 23, 24 | — | not touched | — | (the Pico board's own SMPS-mode and VBUS-sense pins) |
 | 25 | `led` | `TS2068_IO`, `LOAD_TS`, `LOAD_ZX`, `LOAD_ZX_C` | out | the Pico's on-board LED |
-| 26 | `ROSCS` | `main.py` (in, pull-down); `jmp_pin` of ROM and BANK | in | ROM-area select: high = the access is to the ROM area, low = to the dock *(inferred from the branches)* |
-| 27 | `U10_WE` | `main.py` (out, pull-up, 1) | out | the flash's write enable, held inactive by the Pico; never written again *(inferred: the Z80 programs the flash, see below)* |
+| 26 | `ROSCS` | `early_init` (in, pull-down); `jmp_pin` of ROM and BANK | in | ROM-area select: high = the access is to the ROM area, low = to the dock *(inferred from the branches)* |
+| 27 | `U10_WE` | `early_init` (out, pull-up, 1) | out | the flash's write enable, held inactive by the Pico; never written again *(inferred: the Z80 programs the flash, see below)* |
 | 28 | `U3_CS` | `main.py` (upgrade only), `ACTIVATE_SD`, `ENA_SD`, `DEACTIVATE_SD` (out, pull-up, 1) | out | the SD card's chip select, active low; "nCS = GP28 with a 4K7 pull-up" ([DEVELOPER_GUIDE.md](../DEVELOPER_GUIDE.md) §3) |
 
-`src/main.py` sets up 12, 14, 19, 20, 21, 26 and 27 after importing the
+`src/main.py` calls `board.early_init()` ([firmware/board.md](firmware/board.md)),
+which on v2 sets up 12, 14, 19, 20, 21, 26 and 27, after importing the
 firmware (which runs `tspico_io`'s module level) and before calling
 `TS2068_IO`, all outputs driven high except ROSCS, an input: U6 off, both memory
 chips disabled, /BE and the write enable inactive. `src/upgrade/main.py`
@@ -146,7 +147,8 @@ shapes the firmware's bus handover
 - the Pico cannot talk to the card and the Z80 at the same time. Every SD
   access is bracketed: `ACTIVATE_SD` parks the bus state machine on
   `NULL_SM`, holds U6 off (`Pin(12, Pin.OUT, value=1)`), hands GPIO 2–4 to
-  `SPI(0, …)` and mounts `/sd`; `DEACTIVATE_SD` unmounts, raises `U3_CS`,
+  `SPI(0, …)` (all through `board_v2`, [firmware/board.md](firmware/board.md))
+  and mounts `/sd`; `DEACTIVATE_SD` unmounts, raises `U3_CS`,
   and drives GPIO 2–4 low as plain outputs; `ACTIVATE_MQ` rebuilds
   `TS_IO_DUAL`, which takes 2–9 and 12 back
   ([firmware/tspico-bus.md](firmware/tspico-bus.md));
@@ -287,7 +289,8 @@ of slack on receive and ~190 µs on send (`STREAM_DMA`'s docstring).
 
 Core 0 runs `main.py`, `TS2068_IO` and every handler: all bus traffic,
 all SD work, all command processing. Core 1 runs exactly two things,
-both started with `_thread.start_new_thread`:
+both started with `board.background`, which on v2 is
+`_thread.start_new_thread`:
 
 - `BLINK_LED(0.9)` during the SD mount at boot, stopped with `dead =
   True` and waited for with `while busy` (safe unbounded, as the comment
