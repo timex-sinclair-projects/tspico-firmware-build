@@ -182,7 +182,7 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `781c493b5c9a` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `5ab838575dc4` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `5e3ea03594f3` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `1faa88f642fe` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/micropython.cmake` | `7af5480e6052` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
