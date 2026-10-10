@@ -60,6 +60,12 @@ sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 import disk_cmds_hosttest as D                                  # noqa: E402
 
+
+def _hw():
+    """The v2 board module. tspico reaches the hardware through TS/board.py
+    (phase 4 of the v3 port plan), so its constructors are patched there."""
+    return sys.modules["TS.board_v2"]
+
 results = []
 
 
@@ -417,9 +423,10 @@ def test_ena_sd():
 def test_save_mount(t):
     print("21. SAVE_TS / SAVE_ZX: the write's mount goes through ACTIVATE_SD")
     import TS.tspico_io as io
-    names = ("SDCard", "SPI", "StateMachine", "os", "time", "SAVE_LOG", "SD_REVALIDATE", "TSP", "LOG",
+    names = ("SDCard", "os", "time", "SAVE_LOG", "SD_REVALIDATE", "TSP", "LOG",
              "ACTIVATE_SD")
     real = {n: getattr(t, n) for n in names}
+    real_hw = {n: getattr(_hw(), n) for n in ("SPI", "StateMachine")}
     t.ACTIVATE_SD = REAL["ACTIVATE_SD"]                         # earlier tests stub it
     check(io.SD_MOUNT is t.SAVE_MOUNT, "tspico sets tspico_io.SD_MOUNT to SAVE_MOUNT")
 
@@ -443,8 +450,8 @@ def test_save_mount(t):
         calls.append("mounted")
 
     t.SDCard = sdcard
-    t.SPI = lambda *a, **k: object()
-    t.StateMachine = lambda *a, **k: types.SimpleNamespace(active=lambda *x: None)
+    _hw().SPI = lambda *a, **k: object()
+    _hw().StateMachine = lambda *a, **k: types.SimpleNamespace(active=lambda *x: None)
     t.os = types.SimpleNamespace(mount=mount, umount=umount)
     t.time = P.FakeTime()
     t.SAVE_LOG = lambda: None
@@ -492,6 +499,8 @@ def test_save_mount(t):
     finally:
         for n, v in real.items():
             setattr(t, n, v)
+        for n, v in real_hw.items():
+            setattr(_hw(), n, v)
 
 
 # ---------------------------------------------------------------------------
@@ -650,13 +659,13 @@ def test_activate_mq_busy_first(t):
             if a:
                 order.append("active %d" % a[0])
             return 1
-    real = t.StateMachine, t.ACTIVATE_MQ
-    t.StateMachine = lambda *a, **k: SM()
+    real = _hw().StateMachine, t.ACTIVATE_MQ
+    _hw().StateMachine = lambda *a, **k: SM()
     t.ACTIVATE_MQ = REAL["ACTIVATE_MQ"]                         # earlier tests stub it
     try:
         t.ACTIVATE_MQ()
     finally:
-        t.StateMachine, t.ACTIVATE_MQ = real
+        _hw().StateMachine, t.ACTIVATE_MQ = real
     check(order[:2] == ["exec set(y, 0)", "active 1"],
           "set(y, 0) is executed, then the SM is started -- no window with the old Y (%r)" % order)
 

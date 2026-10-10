@@ -32,6 +32,12 @@ sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 import disk_cmds_hosttest as D                                  # noqa: E402
 
+
+def _hw():
+    """The v2 board module. tspico reaches the hardware through TS/board.py
+    (phase 4 of the v3 port plan), so its constructors are patched there."""
+    return sys.modules["TS.board_v2"]
+
 results = []
 
 
@@ -293,8 +299,8 @@ def main():
         t.open = lambda p, mode="r": open(cfg, mode) if p.lstrip("/") == "config.ini" else card_open(p, mode)
         t.SAVE_LOG = lambda: None
         t.utime = types.SimpleNamespace(sleep=lambda s: None)
-        t.ROM = types.SimpleNamespace(put=lambda v: None)
-        t.BANK = types.SimpleNamespace(put=lambda v: None)
+        _hw()._rom = types.SimpleNamespace(put=lambda v: None)
+        _hw()._bank = types.SimpleNamespace(put=lambda v: None)
         test_newtap(t, root, sent)
         test_rm(t, root, sent)
         test_dir_range(t, sent)

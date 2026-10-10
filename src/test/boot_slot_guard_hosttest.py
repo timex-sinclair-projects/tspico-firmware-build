@@ -23,6 +23,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 
+
+def _hw():
+    """The v2 board module. tspico reaches the hardware through TS/board.py
+    (phase 4 of the v3 port plan), so its constructors are patched there."""
+    return sys.modules["TS.board_v2"]
+
 results = []
 
 
@@ -80,7 +86,7 @@ def setup(t, boot, dock, f_name, image):
     t.TSP = types.SimpleNamespace(
         ROM_SM=boot[0] + dock[0] * 4, bank_sm=boot[1] + dock[1] * 16,
         f_name=f_name, dck_prev_mem=2, dck_prev_slot=0, VERBOSE=False)
-    t.ROM, t.BANK, t.MQ = Rec(), Rec(), Rec()
+    _hw()._rom, _hw()._bank, t.MQ = Rec(), Rec(), Rec()
     t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append((msg, msg1, st, force))
     t.MQ_READY = lambda: None
     t.LOG = lambda *a: None
@@ -178,7 +184,7 @@ def test_rom(t, image):
     check(r[2] == t._4_Q_Parameter, "tpi:memdock CODE 2,4: Report Q (%r)" % (r,))
     check("Flash slot 4" in r[0] and "running from it" in r[1] and r[3],
           "  says why, even with VERBOSE off")
-    check(t.ROM.puts == [] and t.BANK.puts == [] and t.getDock() == (2, 0),
+    check(_hw()._rom.puts == [] and _hw()._bank.puts == [] and t.getDock() == (2, 0),
           "  DOCK left where it was")
     check(len(r[0]) <= 32 and all(len(s) <= 32 for s in r[1].split(chr(13))),
           "  every line fits 32 columns")

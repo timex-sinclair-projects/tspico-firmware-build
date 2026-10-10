@@ -28,6 +28,12 @@ sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 
 
+def _hw():
+    """The v2 board module. tspico reaches the hardware through TS/board.py
+    (phase 4 of the v3 port plan), so its constructors are patched there."""
+    return sys.modules["TS.board_v2"]
+
+
 EIO = OSError(5, "EIO: write fail")
 
 
@@ -183,9 +189,9 @@ def test_boot(t, logs):
     t.PICO_STATUS = lambda _v: types.SimpleNamespace(
         cur_path="/sd/TAP", LOG_LEVEL=0, ROM_SM=0, bank_sm=0, f_name="", append=False,
         sd_present=False, sd_cid=None, sd_listing_ok=False, save_no_card=False)
-    t.StateMachine = lambda *a, **k: types.SimpleNamespace(
+    _hw().StateMachine = lambda *a, **k: types.SimpleNamespace(
         active=lambda *x: None, put=lambda *x: None)
-    t._thread = types.SimpleNamespace(start_new_thread=lambda *a: None)
+    _hw()._thread = types.SimpleNamespace(start_new_thread=lambda *a: None)
     t.gc = types.SimpleNamespace(mem_free=lambda: 0, collect=lambda: None)
     t.REMOVE_DIR = lambda d: None
     # A card mounts: the real first-card setup (SD_REVALIDATE -> DIR_FILES,

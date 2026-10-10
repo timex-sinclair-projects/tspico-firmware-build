@@ -11,7 +11,7 @@ Source: [`src/main.py`](../../../src/main.py) (all of it),
 [`tools/build-flash.py`](../../../tools/build-flash.py).
 
 How the firmware gets onto a Pico and starts: the one file that is not
-frozen (`main.py`, which picks the firmware and sets the pins), the
+frozen (`main.py`, which picks the firmware and has the board set its pins), the
 configuration file it and `LOAD_CONFIG` read, how the UF2 is built and
 stamped, how a developer runs a changed `tspico.py` without rebuilding,
 what CI checks on every push and what a release publishes, and the 512K
@@ -25,7 +25,7 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 
 | Piece | What it is |
 |---|---|
-| `src/main.py` | `/main.py` on the Pico's flash: telemetry switch, the dev override, the pins, the clock, the fatal-error wrapper |
+| `src/main.py` | `/main.py` on the Pico's flash: telemetry switch, the dev override, the board's pins and clock, the fatal-error wrapper |
 | `src/config.ini` | `/config.ini`: nine settings, JSON |
 | `src/manifest.py` | the freeze manifest: which modules go into the UF2 |
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
@@ -40,8 +40,7 @@ Symbols of `src/main.py`, in source order:
 | Symbol | Line |
 |---|---|
 | `_telemetry()` | 27 |
-| `U6_EN`, `WAIT`, `U10_ENA`, `U13_ENA`, `BE`, `ROSCS`, `U10_WE` | 64–70 |
-| `log_msg` | 82 |
+| `log_msg` | 70 |
 
 ## `src/main.py`
 
@@ -76,10 +75,14 @@ What it does, in order:
    upgrade changes the bytecode version) — also falls back to the frozen
    module, with a message; before this a leftover override stopped
    `main.py` before the TS-Pico started.
-4. The seven pins (below), set to their idle levels.
-5. `machine.freq(270_000_000)`: the RP2040 at 270 MHz, printed. The PIO
-   clock dividers are computed from this when `TS2068_IO` builds its state
-   machines.
+4. `board.early_init()` (66–67, [board.md](board.md#early_init)): on v2
+   the seven bus-control pins to their idle levels, then
+   `machine.freq(270_000_000)`, the RP2040 at 270 MHz, which `main.py`
+   prints. The PIO clock dividers are computed from it when `TS2068_IO`
+   builds its state machines. (Until the board layer, step 4.1, the pins
+   and the clock were set here; the pin table is now in
+   [board.md](board.md#early_init).)
+5. `print(freq())`.
 6. `log_msg = ""`.
 7. The run loop: `collect()`, then `TS2068_IO()`.
 
@@ -92,7 +95,7 @@ the same to the console, and **breaks out of the loop**: `main.py` ends and
 MicroPython drops to the REPL. The Pico is then quiescent — the LED stops,
 the 2068 gets Report J on its next command — but the post-mortem is on
 flash, readable with `tpi:log` after a restart or with Thonny. Before the
-wrapper an exception (an `OSError` from `_thread.start_new_thread`, say)
+wrapper an exception (an `OSError` from starting core 1, say)
 left nothing on flash at all. The `break` is there so the same exception
 is not retried for ever. A `BaseException` that is not an `Exception`
 (Ctrl-C from the host, a `CmdAbort` that escaped) is not caught: it ends
@@ -105,38 +108,6 @@ is not retried for ever. A `BaseException` that is not an `Exception`
 anything else, including a missing or broken file. Imports `json` inside
 the function. Read once, at step 2. `LOAD_CONFIG` adds the key with
 `False` when it is missing but never reads it.
-
-### The pins
-
-| Symbol | GPIO | Set to | Meaning |
-|---|---|---|---|
-| `U6_EN` | 12 | out, pull-up, 1 | U6, the data-bus buffer, off: the Pico is off the 2068's data bus until `TS_IO_DUAL` takes the pin as its side-set |
-| `WAIT` | 14 | out, pull-down, 1 | named WAIT here; `TS_IO_DUAL` waits on GPIO 14 as `/PICOSEL`, the port 0Eh/0Fh select, an input to the PIO. See below |
-| `U10_ENA` | 19 | out, pull-up, 1 | U10, the flash, disabled until `set_ctrl` takes the pin |
-| `U13_ENA` | 20 | out, pull-up, 1 | U13, the SRAM, disabled until `set_ctrl` takes the pin |
-| `BE` | 21 | out, pull-up, 1 | /BE inactive until `set_ctrl` drives it |
-| `ROSCS` | 26 | in, pull-down | the ROM-area select, read by the `ROM` and `BANK` state machines as their jump pin |
-| `U10_WE` | 27 | out, pull-up, 1 | the flash's write enable, held inactive; never written again by the firmware (the Z80 programs the flash) |
-
-All high (inactive) but `ROSCS`, an input. The point is that between
-power-on and `TS2068_IO` building its state machines, the Pico drives
-nothing onto the 2068's buses and enables no memory. The meanings of
-U10, U13 and /BE are as [hardware.md](../hardware.md) gives them, partly
-*(inferred)* there.
-
-The variables are module globals that nothing reads after these lines;
-they exist to hold the `Pin` objects. Each pin is later re-claimed by a
-state machine (`TS_IO_DUAL`, `set_ctrl`, `sel_bank`) or, for GPIO 12, by
-`ACTIVATE_SD` ([tspico-bus.md](tspico-bus.md)), which sets it to output 1
-exactly as here.
-
-GPIO 14's two names: `main.py` (this one and `src/upgrade/main.py`) calls
-it `WAIT` and makes it an output driven 1; `TS_IO_DUAL` uses it as an input
-it waits on. Once the PIO program is running, the pin is the PIO's and
-whatever drives it externally is what the program sees. Which name is
-right, and whether driving it at boot matters, is discussed in
-[hardware.md](../hardware.md#the-z80-bus-ports-0eh-and-0fh) and is
-*(unverified)* on a scope.
 
 ### `log_msg`
 
@@ -195,7 +166,9 @@ of RAM (the comment). It freezes:
   start-up, and `rp2.py`, which provides `asm_pio` and `StateMachine`;
 - the `TS` package: `__init__.py`, `tspico.py`, `buildinfo.py`,
   `tspico_io.py`, `sdcard.py`, `extcmd.py`, `printer.py`, `catalog.py`,
-  `native.py`, `channels.py`.
+  `native.py`, `channels.py`, and the board layer, `board.py` and
+  `board_v2.py` ([board.md](board.md)). `board_v3.py` is for the v3 card's
+  build only.
 
 `_boot_fat.py` was frozen once "for the SD card"; it is not SD support —
 it mounts the Pico's own flash as FAT, formatting it if it is not, and
@@ -304,7 +277,7 @@ Ubuntu 22.04. The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 40 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 41 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)). They pin invariants that
@@ -331,7 +304,7 @@ Ubuntu 22.04. The steps, in order:
 8. **The build stamp**: `cmp` of `src/TS/tspico.py` with
    `src/dev_tspico.py` (fails with the first 40 lines of `diff`), then
    `gen-buildinfo.py`.
-9. **Staging**: `src/TS/*.py` (the ten files the manifest names) copied to
+9. **Staging**: `src/TS/*.py` (the twelve files the manifest names) copied to
    `ports/rp2/modules/TS/`, and `src/manifest.py` over
    `ports/rp2/boards/manifest.py`.
 10. `mpy-cross`, `make submodules`, `make clean`, `make` for the default

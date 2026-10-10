@@ -23,6 +23,12 @@ sys.path.insert(0, HERE)
 import process_cmd_hosttest as P                                # noqa: E402
 
 
+def _hw():
+    """The v2 board module. tspico reaches the hardware through TS/board.py
+    (phase 4 of the v3 port plan), so its constructors are patched there."""
+    return sys.modules["TS.board_v2"]
+
+
 class Bricked(BaseException):
     """ACTIVATE_SD called BLINK_ERROR (it no longer should)."""
 
@@ -41,8 +47,8 @@ def main():
 
     t.TLM_ENABLED = False
     t.time = P.FakeTime()
-    t.StateMachine = lambda *a, **k: types.SimpleNamespace(active=lambda *x: None)
-    t.SPI = lambda *a, **k: object()
+    _hw().StateMachine = lambda *a, **k: types.SimpleNamespace(active=lambda *x: None)
+    _hw().SPI = lambda *a, **k: object()
     t.SAVE_LOG = lambda: None
     logs = []
     t.LOG = lambda msg, level: logs.append((level, msg))

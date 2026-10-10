@@ -314,7 +314,6 @@
 
 
 import utime
-import _thread
 import time
 import gc
 import os
@@ -322,10 +321,9 @@ import sys
 import json
 
 from micropython import const
-from rp2 import StateMachine, asm_pio, PIO
-from machine import Pin, freq, SPI
 
 from TS.sdcard import *
+from TS import board                    # the hardware: v2 PIO, or the v3 card's tsbus
 
 # ─── DUAL-PORT MIGRATION (Ryan's tspico.py -> dual-port) ───────────────
 # Three things changed from Ryan's original single-port import:
@@ -387,13 +385,6 @@ PRINT_FLUSH_AT = 4096       # buffered text that forces a flush mid-printout
 #####################
 # SERVICE FUNCTIONS #
 #####################
-
-@asm_pio(
-    autopull=True,
-    pull_thresh=8,
-)
-def NULL_SM():
-    nop()
 
 #######################
 # MODULE-LEVEL CACHES #
@@ -709,19 +700,12 @@ def DEACTIVATE_SD():
     except:
         TLM("  /sd already unmounted")
 
-    U3_CS = Pin(28, Pin.OUT, Pin.PULL_UP)
-    U3_CS.value(1)
-
-    # GPIO 2-4 are the SD card's SPI lines (SCK/MOSI/MISO) and also D0-D2
-    # of the 2068 bus. Leave them driven LOW, not floating, until the bus
-    # state machine takes them back (ACTIVATE_MQ, straight after). Kept
-    # as harmless; whether it's needed at all -- U6 keeps the 2068 off
-    # these pins during SD use since #61 -- needs a scope (audit §4). It is
-    # not the "Report D fix" this comment used to claim: that was about
-    # D6, which is GPIO 8.
-    for p in (2, 3, 4):
-        Pin(p, Pin.OUT).value(0)
-    TLM("DEACTIVATE_SD exit", "GPIO 2-4 clamped LOW, U3_CS=HIGH")
+    # v2: CS high, and GPIO 2-4 (the SD card's SPI lines and also D0-D2 of
+    # the 2068 bus) driven LOW until the bus state machine takes them back
+    # (ACTIVATE_MQ, straight after). It is not the "Report D fix" this
+    # comment used to claim: that was about D6, which is GPIO 8.
+    board.sd_release_bus()
+    TLM("DEACTIVATE_SD exit", "SD bus released")
     return
 
 
@@ -767,9 +751,7 @@ def ACTIVATE_MQ():                                                              
 
     TLM("ACTIVATE_MQ enter")
     sd_active = False
-    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
-                      in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
-                      sideset_base=Pin(12, Pin.OUT))
+    MQ = board.make_mq()
 
     # A new StateMachine keeps the old Y, and a READY left over would let the
     # Z80 read an empty TX as 00. So BUSY first, then start -- an exec runs on
@@ -1103,19 +1085,13 @@ def ACTIVATE_SD(tries=None):                                                    
     TLM("ACTIVATE_SD enter")
     if tries is None:
         tries = 5 if TSP.sd_present else 1
-    MQ = StateMachine(0, NULL_SM, freq=15_000_000)
-    MQ.active(1)
-    MQ.active(0)
+    # v2: GPIO 2-4 are also Z80 data lines D0-D2 through the U6 buffer. SM0
+    # is parked and U6 held off so the bus can't fight the SD card;
+    # ACTIVATE_MQ hands the pins back to the PIO.
+    MQ = board.sd_take_bus()
     sd_active = True
 
-    U3_CS       = Pin(28, Pin.OUT, Pin.PULL_UP)
-    D0          = Pin(2,  Pin.IN)
-    D1          = Pin(3,  Pin.IN)
-    D2          = Pin(4,  Pin.IN)
-    # GPIO 2-4 are also Z80 data lines D0-D2 through the U6 buffer. Hold
-    # U6 off (GPIO 12 high, as main.py sets it at boot) so the bus can't
-    # fight the SD card; ACTIVATE_MQ hands the pin back to the PIO.
-    Pin(12, Pin.OUT, value=1)
+    U3_CS = board.sd_cs()
 
     # A card can refuse to start up at boot and be perfectly happy a few
     # seconds later, so try the whole mount a few times before giving up.
@@ -1133,7 +1109,7 @@ def ACTIVATE_SD(tries=None):                                                    
                 time.ticks_diff(time.ticks_ms(), t_start), attempt))
             break
         try:
-            spi = SPI(0, sck=D0, mosi=D1, miso=D2)
+            spi = board.sd_spi()
             sd = SDCard(spi, U3_CS)
             recovered = getattr(sd, "recovered", None)
             if recovered:
@@ -5008,8 +4984,6 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
 
     global TSP
     
-    global BANK
-    global ROM
     
     TLM("MEMBOOT enter")
     par1, par2 = PARAMS(pre)
@@ -5050,8 +5024,7 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         # to a crash, and nothing measured says it can go.
         utime.sleep(.100)
         
-        ROM.put(TSP.ROM_SM)
-        BANK.put(TSP.bank_sm)
+        board.map_slots(TSP.ROM_SM, TSP.bank_sm)
         
 #         WAIT_TX_RECEIVED()
 
@@ -5112,8 +5085,6 @@ def MEMDOCK(pre, cmd):                                                  # Change
     # SAVE "tpi:dock" CODE 2,m   - Assign flash page m to dock
 
     global TSP
-    global BANK
-    global ROM
     
     TLM("MEMDOCK enter")
     par1, par2 = PARAMS(pre)
@@ -5171,8 +5142,7 @@ def MEMDOCK(pre, cmd):                                                  # Change
         SEND_MSG(msg, msg2, _1_OK)
         LOG("%s. %s" % (msg, msg2), 0)
         
-        ROM.put(TSP.ROM_SM)
-        BANK.put(TSP.bank_sm)
+        board.map_slots(TSP.ROM_SM, TSP.bank_sm)
         
     return 
 
@@ -5883,8 +5853,6 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     
     global TSP
     global MQ
-    global ROM
-    global BANK
     global rom_id
     
     global files
@@ -6182,8 +6150,6 @@ def TS2068_IO():                                                         # Main 
     global log_entries                                                 # log entries to be saved during next loop
     global log_to_serial                                               # If TRUE, all logging messages are printed on the console as well as logged
     
-    global ROM
-    global BANK
     global MQ
     global led
     global TSP
@@ -6199,7 +6165,7 @@ def TS2068_IO():                                                         # Main 
     log_entries = []
     log_to_serial = False
     
-    led = Pin(25, Pin.OUT)
+    led = board.make_led()
 
     init_values = LOAD_CONFIG()
     TSP = PICO_STATUS(init_values)
@@ -6223,19 +6189,7 @@ def TS2068_IO():                                                         # Main 
     SAVE_LOG()
         
 
-#     Uncomment the following two lines, for DCK *AND* ROM mapping
-    ROM = StateMachine(4, set_ctrl, freq=150_000_000, in_base=Pin(0, Pin.IN), jmp_pin=Pin(26), set_base=Pin(21, Pin.OUT), out_base=Pin(19, Pin.OUT))
-    ROM.active(1)
-
-#     Uncomment the following two lines, for DCK access and no ROM mapping
-#     ROM = StateMachine(4, set_dck, freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(19, Pin.OUT))
-#     ROM.active(1)
-
-    BANK = StateMachine(5, sel_bank, freq=150_000_000, jmp_pin=Pin(26), out_base=Pin(15, Pin.OUT))
-    BANK.active(1)
-
-    ROM.put(TSP.ROM_SM)
-    BANK.put(TSP.bank_sm)
+    board.start_memory(TSP.ROM_SM, TSP.bank_sm)                        # the boot and dock slots
     
     LOG("After StateMachine setup, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
@@ -6332,7 +6286,7 @@ def TS2068_IO():                                                         # Main 
     LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
     dead = False
-    _thread.start_new_thread(BLINK_LED, (0.9, ))
+    board.background(BLINK_LED, (0.9, ))
     
     # LOG("After start thread blink, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     # gc.collect()
@@ -6993,7 +6947,7 @@ def TS2068_IO():                                                         # Main 
                                 # `busy` for us, so we clear it ourselves.
                                 busy = True
                                 try:
-                                    _thread.start_new_thread(SAVE_LOG, ())
+                                    board.background(SAVE_LOG, ())
                                 except OSError:
                                     busy = False
 
@@ -7190,11 +7144,8 @@ def ZX48_IO(pre):                                                               
     # stage 1) and even if imported wouldn't work because of the bus
     # protocol mismatch.
     # ─────────────────────────────────────────────────────────────────────
-    MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT), in_base=Pin(2, Pin.IN), jmp_pin=Pin(11), sideset_base=Pin(12, Pin.OUT))
-    MQ.active(0)
-
-    utime.sleep(0.01)
-    MQ.active(1)
+    MQ = board.make_mq()
+    board.restart_mq(MQ)
     MQX(MQ, "mov(y, invert(null))")    # Y = READY for the entire ZX session
 
     TLM("ZX48_IO enter", "par1=%d par2=%d ZX_TAPE_COMPAT=%s" % (
@@ -7299,9 +7250,7 @@ def ZX48_IO(pre):                                                               
                 while MQ.tx_fifo() != 0:
                     MQX(MQ, "pull (noblock)")
                     MQX(MQ, "mov (osr, null)")
-                MQ.active(0)
-                utime.sleep(.01)
-                MQ.active(1)
+                board.restart_mq(MQ)
 
                 LOG("Cleared TX/RX FIFO after unrecognized ZX command: %d %d" % (MQ.tx_fifo(), MQ.rx_fifo()), 0)
 
@@ -7343,9 +7292,7 @@ def ZX48_IO(pre):                                                               
             MQX(MQ, "pull (noblock)")
             MQX(MQ, "mov (osr, null)")
 
-        MQ.active(0)
-        utime.sleep(.01)
-        MQ.active(1)
+        board.restart_mq(MQ)
 
         LOG("TX FIFO succesfully cleared before returning from ZX mode", 0)
 

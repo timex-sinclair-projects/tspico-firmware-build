@@ -595,8 +595,10 @@ control lines /BE, A14_L, `U10_ENA`, `U13_ENA`), `set_dck` (`U10_ENA` and
 instructions, with the auto-busy `mov(y, null)` of issue #14). They are
 explained instruction by instruction, with the Y register contract and the
 FIFOs, in [pio.md](pio.md); the hardware they drive is in
-[../hardware.md](../hardware.md). `TS2068_IO` and `ENA_MQ_DUAL` build
-`TS_IO_DUAL` on state machine 0 at 30 MHz; `src/upgrade/main.py` builds
+[../hardware.md](../hardware.md). `board_v2` ([board.md](board.md)) imports
+`TS_IO_DUAL`, `set_ctrl` and `sel_bank`, and builds the state machines the
+firmware runs them on; `ENA_MQ_DUAL` builds `TS_IO_DUAL` on state machine 0
+at 30 MHz itself (until step 4.2 of the board layer); `src/upgrade/main.py` builds
 `TS_IO_DUAL`, `set_ctrl` (SM 4) and `sel_bank` (SM 5) from this file for the
 upgrade UF2.
 
