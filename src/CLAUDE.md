@@ -434,6 +434,7 @@ slow, lossy, and (see below) easy to get wrong.
 
 ```bash
 python3 tools/pico-serial.py flash --branch my-branch   # CI UF2 -> Pico, no buttons
+python3 tools/pico-serial.py flash --v3 --branch main   # the v3 card's UF2
 python3 tools/pico-serial.py watch --seconds 900        # passive telemetry capture
 python3 tools/pico-serial.py break                      # Ctrl-C -> REPL
 python3 tools/pico-serial.py run "import TS.tspico as T; print(T.files)"
@@ -449,8 +450,13 @@ python3 tools/pico-serial.py softreset                  # Ctrl-D -> main.py agai
   powering does not reset it, and the 2068 boots fine with the Pico
   already powered from USB.
 - **`flash` needs no buttons.** It drops to the REPL and calls
-  `machine.bootloader()`, which reboots the RP2040 into BOOTSEL; then it
-  copies the UF2 and waits for the reboot (~10 s). With `--branch` it
+  `machine.bootloader()`, which reboots the chip into BOOTSEL (`RPI-RP2`
+  on a v2 board, `RP2350` on the v3 card); then it copies the UF2 and
+  waits for the reboot (~10 s). It refuses a UF2 built for the other chip.
+  `--v3` takes the v3 card's artifact (`tspico-v3-firmware-uf2`). A v3 card
+  running the C bring-up firmware has no REPL (its console acts on a
+  line's first character, and `g` releases the 2068): flash that one with
+  `picotool load -f -x`, or BOOTSEL by hand. With `--branch` it
   takes the `tspico-firmware-uf2` artifact from the build.yml run for that
   branch's *current head commit*, and refuses one that hasn't finished or
   didn't pass. `--run N` refuses anything but a successful firmware build:

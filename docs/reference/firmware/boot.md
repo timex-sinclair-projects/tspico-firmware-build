@@ -360,8 +360,8 @@ into the MicroPython tree. It needs its own clone because step 9 replaces
 the port's `boards/manifest.py`. The UF2, `build-TSPICO_V3/firmware.uf2`,
 is uploaded as `tspico-v3-firmware-uf2`. The board brings in the `tsbus`
 module itself (`USER_C_MODULES`), so the job needs no extra arguments. It has
-no TS modules yet (phase 3 of the v3 port plan), and `pico-serial.py flash
---branch` does not fetch it.
+no TS modules yet (phase 3 of the v3 port plan); `pico-serial.py flash --v3
+--branch B` fetches it.
 
 A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
@@ -509,9 +509,13 @@ AI agents who would otherwise ask someone to copy text out of Thonny:
 (Ctrl-C to the REPL — this stops the firmware), `run` (a statement or a
 file in paste mode), `softreset` (Ctrl-D: `main.py` again), `put` and
 `get` (files over the REPL, base64), and `flash` (a UF2 file, or the
-`tspico-firmware-uf2` / `tspico-upgrade-uf2` artifact of a branch's current
-head or of a given successful run, via `gh`; it reboots the Pico into
-BOOTSEL with `machine.bootloader()`, so no buttons). Every command refuses
+`tspico-firmware-uf2` / `tspico-upgrade-uf2` / `tspico-v3-firmware-uf2`
+(`--v3`) artifact of a branch's current head or of a given successful run,
+via `gh`; it reboots the board into BOOTSEL with `machine.bootloader()`, so
+no buttons, and finds either chip's drive, `RPI-RP2` or `RP2350`). Before
+copying, `flash` compares the UF2's family IDs with the drive's
+`INFO_UF2.TXT` Board-ID and refuses a UF2 built for the other chip, leaving
+the board in BOOTSEL. Every command refuses
 to start if another process holds the port. Never `break` while the Pico
 may be in the middle of an SD access: a card left mid-transfer needed a
 power cycle before the driver learned to recover it
