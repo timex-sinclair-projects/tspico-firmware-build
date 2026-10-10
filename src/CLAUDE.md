@@ -439,6 +439,8 @@ python3 tools/pico-serial.py watch --seconds 900        # passive telemetry capt
 python3 tools/pico-serial.py break                      # Ctrl-C -> REPL
 python3 tools/pico-serial.py run "import TS.tspico as T; print(T.files)"
 python3 tools/pico-serial.py run --file snippet.py      # multi-line, paste mode
+python3 tools/pico-serial.py put --sd game.tap /TAP/game.tap  # a test TAP onto the SD card
+python3 tools/pico-serial.py run --sd "print(os.listdir('/sd/TAP'))"
 python3 tools/pico-serial.py softreset                  # Ctrl-D -> main.py again
 ```
 
@@ -464,6 +466,10 @@ python3 tools/pico-serial.py softreset                  # Ctrl-D -> main.py agai
   2026-10-01 `--branch main` could flash a months-old build, because
   `gh run list --branch` doesn't return the newest run first for `main`.) (By hand:
   hold BOOTSEL, tap the TS-Pico's reset button, release BOOTSEL.)
+- **Test TAPs go onto the SD card over USB**, no card reader: `break`, then
+  `put --sd`, then `softreset`. `--sd` mounts the card the way `ACTIVATE_SD`
+  does (through `TS.board`, so on either board) and unmounts it after;
+  `get --sd` and `run --sd` work the same way. The user just types the LOAD.
 - **`break` stops the firmware** -- the 2068 has no TS-Pico until
   `softreset` or a power cycle. Only send it when the Pico is idle, never
   mid-SD access: a half-finished block transfer can wedge the card until
