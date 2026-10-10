@@ -82,8 +82,12 @@ that would be a hang, on a machine with no way to fix it but USB.
 
 The `DOCK` image is 64K: the dock slot's file, then, for an even slot, the
 next slot's file. That is v2's "two consecutive slots numbered by the even
-one". A half with no file is mirrored from the other half, or is zeros if
-neither exists. Slot 0 is the 16K Spectrum ROM, zero-filled to 32K as in
+one". A half with no file is zeros, as an empty v2 slot reads. Not
+mirrored: the AROS cartridges in the base image keep their whole content in
+the upper half (8000h–FFFFh, so F11, F13 and F15 have files and F10, F12 and
+F14 don't), and a mirror would put a copy at 0000h–7FFFh too.
+
+Slot 0 is the 16K Spectrum ROM, zero-filled to 32K as in
 the 512K image, so the dock reads the Spectrum ROM at 0000h–3FFFh, which is
 what ZX48 mode needs. Its upper 32K is slot 1, as two consecutive slots
 would give on v2; ZX48 mode never maps it.

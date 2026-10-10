@@ -19,6 +19,11 @@ new ROM. The slots are listed in flash/manifest.json (docs/reference/firmware/bo
 
     # check a built image against the manifest's checksums
     ./tools/build-flash.py verify flash/manifest.json Pico-v18.rom
+
+    # the v3 card's slot files too: F00.bin ... F15.bin, one per slot that
+    # isn't empty (docs/v3-slots-proposal.md), for the card's /slots
+    ./tools/build-flash.py build flash/manifest.json --base Pico-v15w.rom \
+                           --out Pico-v18.rom --slots slots/
 """
 import argparse, json, os, sys, zlib
 
@@ -144,6 +149,8 @@ def cmd_build(args):
     img, used, missing = assemble(man, root, overrides, args.base)
     open(args.out, "wb").write(img)
     print("%s  %d bytes  crc32 %s" % (args.out, len(img), crc(img)))
+    if args.slots:
+        write_slots(img, args.slots)
     for s in sorted(used):
         path, c, is_override, want = used[s]
         label = path[5:] if path.startswith("base:") else os.path.basename(path)
@@ -161,6 +168,22 @@ def cmd_build(args):
         print("round-trip vs %s: %s" % (man.get("source"), "MATCH" if ok else "MISMATCH"))
         return 0 if ok else 1
     return 0
+
+
+def write_slots(img, out):
+    """The v3 card's slot files: F00.bin ... F15.bin, 32K each, the image cut
+    slot for slot. An empty slot (all FILL) gets no file: on the card a
+    missing file reads as an empty slot. Stale F*.bin files are removed."""
+    os.makedirs(out, exist_ok=True)
+    for s in range(SLOTS):
+        name = os.path.join(out, "F%02d.bin" % s)
+        blk = img[s * SLOT_SIZE:(s + 1) * SLOT_SIZE]
+        if set(blk) == {FILL}:
+            if os.path.exists(name):
+                os.remove(name)
+            continue
+        open(name, "wb").write(blk)
+        print("  %s  crc32 %s" % (name, crc(blk)))
 
 
 def cmd_check(args):
@@ -223,6 +246,7 @@ e = sub.add_parser("extract"); e.add_argument("image"); e.add_argument("--out", 
 b = sub.add_parser("build"); b.add_argument("manifest"); b.add_argument("--out", required=True)
 b.add_argument("--slot", action="append", metavar="N=FILE")
 b.add_argument("--base", help="known-good 512K image supplying the from_base slots")
+b.add_argument("--slots", metavar="DIR", help="also write the v3 card's slot files F00.bin ... F15.bin there")
 b.set_defaults(fn=cmd_build)
 c = sub.add_parser("check"); c.add_argument("manifest"); c.set_defaults(fn=cmd_check)
 v = sub.add_parser("verify"); v.add_argument("manifest"); v.add_argument("image"); v.set_defaults(fn=cmd_verify)

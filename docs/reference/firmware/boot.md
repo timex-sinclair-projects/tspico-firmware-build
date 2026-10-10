@@ -444,7 +444,7 @@ public, but the release job's token can read them), or from the
 has no flash image; it never publishes a partial one. The released image
 may contain the third-party slots (decided 2026-09-28).
 
-[`tools/build-flash.py`](../../../tools/build-flash.py), four commands:
+[`tools/build-flash.py`](../../../tools/build-flash.py), four commands (and `--slots`):
 
 - **`build manifest --out F [--base B] [--slot N=FILE …]`**: a fill-`00h`
   image; every `from_base` slot copied from `B` (which must be exactly
@@ -465,6 +465,14 @@ may contain the third-party slots (decided 2026-09-28).
   its manifest entry fails the build instead of shipping an unchecked image.
 - **`extract image --out DIR`**: takes a production image apart into slot
   files (used once, to seed the manifest).
+- **`build … --slots DIR`** also cuts the built image into the v3 card's
+  slot files, `DIR/F00.bin` … `F15.bin`, 32K each (`write_slots`). A slot
+  that is all `00h` gets no file, and a stale one is removed: on the card a
+  missing file is an empty slot ([board.md](board.md#board_v3py)). From the
+  v15w base this writes F00–F03 and F11, F13, F15, because the AROS
+  cartridges keep their content in their upper half. They go into the
+  card's `/slots` over USB for now
+  ([docs/v3-slots-proposal.md](../../v3-slots-proposal.md)).
 
 The module docstring names `src/rom/TSPICO-23.ROM` for slot 1 and points at
 the manifest and this chapter (until #181 it named `TSPICO.ROM` and a

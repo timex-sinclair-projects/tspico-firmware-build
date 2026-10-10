@@ -173,6 +173,68 @@ def main():
           "EXROM and DOCK chunks served, /BE live")
     check(got.index(("serve", True)) < got.index(("hold", False)), "serving before the release")
 
+    print("the slot files")
+    b3.SLOTS_DIR = os.path.join(d, "slots")
+    os.makedirs(b3.SLOTS_DIR)
+
+    def put_slot(name, fill, n=32768):
+        with open(os.path.join(b3.SLOTS_DIR, name), "wb") as f:
+            f.write(bytes((fill + i) & 0xFF for i in range(n)))
+
+    def loads(got):
+        return {c[1]: c[2] for c in got if c[0] == "load"}
+
+    put_slot("F01.bin", 0x10)                               # ROM 2.3's slot
+    put_slot("F04.bin", 0x40)
+    put_slot("F03.bin", 0x30, 1000)                         # not 32K: not a slot
+    put_slot("F08.bin", 0x80)                               # a cartridge: both halves
+    put_slot("F09.bin", 0x90)
+    put_slot("F11.bin", 0xB0)                               # AROS-style: only the upper half
+    put_slot("S02.bin", 0x22)
+    put_slot("S05.bin", 0x55)
+    take()
+    note = board.start_memory(0x0A, 0x84)                   # flash/flash, dock 8, ROM 4
+    got = loads(take())
+    f04 = open(os.path.join(b3.SLOTS_DIR, "F04.bin"), "rb").read()
+    check(note is None and got[0] == f04[:16384] and got[1] == f04[16384:],
+          "ROM_SM 0Ah, bank_sm 84h: HOME and EXROM from F04.bin, no note")
+    f08 = open(os.path.join(b3.SLOTS_DIR, "F08.bin"), "rb").read()
+    f09 = open(os.path.join(b3.SLOTS_DIR, "F09.bin"), "rb").read()
+    check(got[2] == f08 + f09, "dock 8: F08 then F09, 64K")
+    check(not [n for n in os.listdir(b3.SLOTS_DIR) if n.startswith("S")],
+          "the SRAM slots are deleted at boot")
+    note = board.start_memory(0x0A, 0xA1)                   # dock 10, ROM 1
+    got = loads(take())
+    f11 = open(os.path.join(b3.SLOTS_DIR, "F11.bin"), "rb").read()
+    check(got[2] == bytes(32768) + f11, "dock 10, no F10: zeros below, F11 above, not mirrored")
+    board.start_memory(0x0A, 0x91)                          # dock 9: odd
+    got = loads(take())
+    check(got[2] == f09 + bytes(32768), "an odd dock slot: that slot below, zeros above")
+    board.start_memory(0x0A, 0xE1)                          # dock 14: no files
+    check(loads(take())[2] == bytes(65536), "an empty dock: zeros")
+
+    print("the boot ROM's fallbacks")
+    f01 = open(os.path.join(b3.SLOTS_DIR, "F01.bin"), "rb").read()
+    note = board.start_memory(0x0A, 0x07)                   # flash slot 7: no file
+    got = loads(take())
+    check(got[0] == f01[:16384] and note == "no ROM in flash slot 7: booted flash slot 1",
+          "an empty slot: flash slot 1, and a note (%r)" % note)
+    note = board.start_memory(0x0A, 0x03)
+    take()
+    check(note and "flash slot 3" in note, "a file that isn't 32K counts as empty (%r)" % note)
+    note = board.start_memory(0x09, 0x02)                   # SRAM slot 2: deleted at boot
+    take()
+    check(note == "no ROM in SRAM slot 2: booted flash slot 1", "SRAM boot slots are empty at boot (%r)" % note)
+    os.remove(os.path.join(b3.SLOTS_DIR, "F01.bin"))
+    note = board.start_memory(0x0A, 0x07)
+    got = loads(take())
+    check(got[0] == rom[:16384] and note == "no ROM in flash slot 7 or flash slot 1: booted %s" % b3.ROM_FILE,
+          "no slot 1 either: ROM_FILE, and the note says so (%r)" % note)
+    note = board.start_memory(0x0A, 0x01)
+    take()
+    check(note == "no ROM in flash slot 1: booted %s" % b3.ROM_FILE,
+          "slot 1 asked for and missing: straight to ROM_FILE (%r)" % note)
+
     print("MQ")
     THE_MQ.tx, THE_MQ.rx = [1, 2, 3], [0x41, 0x103]
     mq = board.make_mq()
