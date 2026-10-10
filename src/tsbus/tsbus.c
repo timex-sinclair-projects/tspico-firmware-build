@@ -20,7 +20,7 @@
  *   src/boards/TSPICO_V3/memmap): the byte for (address, slot) is at
  *   IMAGE_REGION + 4 * address + slot. Slots: 0 HOME, 1 EXROM, 2 DOCK.
  *
- * Python API (this step; slots and the MQ object come next):
+ * Python API (slot switching comes next):
  *   tsbus.start()                  250 MHz; claim PIO0, PIO1 and 3 DMA channels;
  *                                  start core 1
  *   tsbus.load(slot, data)         copy data into a slot, repeated to fill 64 KB
@@ -28,6 +28,8 @@
  *   tsbus.exrom(on), tsbus.dock(on) serve the EXROM / DOCK banks' chunks
  *   tsbus.hold(on)                 hold the 2068 in reset, or release it
  *   tsbus.stats()                  counters, as a dict
+ *   tsbus.MQ()                     v2's MQ over core 1's queues: put, get, tx_fifo,
+ *                                  rx_fifo, put_block, status, exec, active
  *
  * Nothing on core 1 may touch flash: LittleFS writes stop execute-in-place,
  * and core 1 is never paused for them (it is not a multicore lockout victim).
@@ -35,6 +37,7 @@
  * inline helpers, which a size-optimised build may leave out of line in flash.
  */
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "py/runtime.h"
@@ -103,8 +106,8 @@ static volatile uint32_t served[3];
 
 // Reply queue for IN 0Eh (empty reads 00h), and the status byte IN 0Fh returns.
 // Any OUT to 0Eh/0Fh makes the status 00h (busy), as v2.1's PIO did, and goes
-// to the receive queue (port 0Fh as 0x100 | data). Nothing reads the queues
-// yet; the MQ object comes next.
+// to the receive queue (port 0Fh as 0x100 | data). Python reaches them through
+// the MQ object (tsbus.MQ()).
 #define TXQ_N 1024
 static volatile uint8_t txq[TXQ_N];
 static volatile uint32_t txq_head, txq_tail;     // head: core 0; tail: core 1
@@ -113,6 +116,9 @@ static volatile uint16_t rxq[RXQ_N];
 static volatile uint32_t rxq_head, rxq_tail;     // head: core 1; tail: core 0
 static volatile uint32_t rxq_lost;
 static volatile uint8_t io_status = 0xff;
+// Core 0 asks core 1 to drop the oldest reply (MQ's "pull (noblock)"): only
+// core 1 advances txq_tail, because its IN handler pops it.
+static volatile bool tx_drop_req;
 
 static volatile uint32_t io_ins, io_in_ours, io_outs_ours, io_in_late, respond_max;
 
@@ -394,6 +400,16 @@ static void __not_in_flash_func(core1_main)(void) {
     const uint32_t snoop_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_snoop);
     const uint32_t write_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_write);
     for (;;) {
+        // A drop request from core 0, with the IN interrupt masked so the
+        // handler can't pop in the middle.
+        if (tx_drop_req) {
+            __asm volatile ("cpsid i" ::: "memory");
+            if ((int32_t)(txq_head - txq_tail) > 0) {
+                txq_tail++;
+            }
+            __asm volatile ("cpsie i" ::: "memory");
+            tx_drop_req = false;
+        }
         // I/O writes: the bank shadow, and OUTs to 0Eh/0Fh.
         if (!(pio_addr->fstat & snoop_empty)) {
             uint32_t w = pio_addr->rxf[sm_snoop];
@@ -583,7 +599,7 @@ static void store(mp_obj_t d, qstr k, mp_uint_t v) {
 
 // tsbus.stats(): the counters, as a dict.
 static mp_obj_t tsbus_stats(void) {
-    mp_obj_t d = mp_obj_new_dict(16);
+    mp_obj_t d = mp_obj_new_dict(19);
     store(d, MP_QSTR_home, served[SLOT_HOME]);
     store(d, MP_QSTR_exrom, served[SLOT_EXROM]);
     store(d, MP_QSTR_dock, served[SLOT_DOCK]);
@@ -600,9 +616,166 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_hsr, sh_hsr);
     store(d, MP_QSTR_ff, sh_ff);
     store(d, MP_QSTR_held, held_2068);
+    store(d, MP_QSTR_status, io_status);
+    store(d, MP_QSTR_tx, txq_head - txq_tail);
+    store(d, MP_QSTR_rx, rxq_head - rxq_tail);
     return d;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_stats_obj, tsbus_stats);
+
+// ---- the MQ object -----------------------------------------------------------------------
+
+// tsbus.MQ(): v2's MQ (an rp2.StateMachine running TS_IO_DUAL) over core 1's
+// queues and status byte, so the protocol code can carry over. One object;
+// every call returns it. Differences from v2: the queues are 1 KB, not 4
+// entries, and tx_fifo()/rx_fifo() report their real levels; put() and get()
+// block like StateMachine's but Ctrl-C can interrupt them; exec() understands
+// only the instructions MQX uses; active() does nothing (the bus pins are
+// dedicated on v3, so there is nothing to stop for SD).
+
+typedef struct {
+    mp_obj_base_t base;
+} tsbus_mq_obj_t;
+
+static const mp_obj_type_t tsbus_mq_type;
+static const tsbus_mq_obj_t tsbus_mq_obj = { { &tsbus_mq_type } };
+
+static mp_obj_t tsbus_mq_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
+    mp_arg_check_num(n_args, n_kw, 0, 0, false);
+    require_started();
+    return MP_OBJ_FROM_PTR(&tsbus_mq_obj);
+}
+
+static inline uint32_t tx_level(void) {
+    return txq_head - txq_tail;
+}
+
+static inline uint32_t rx_level(void) {
+    return rxq_head - rxq_tail;
+}
+
+static void tx_push(uint8_t b) {
+    while (tx_level() >= TXQ_N) {
+        mp_event_handle_nowait();
+    }
+    txq[txq_head % TXQ_N] = b;
+    __dmb();
+    txq_head++;
+}
+
+// put(value): queue a reply for IN 0Eh; blocks while the queue is full.
+static mp_obj_t tsbus_mq_put(mp_obj_t self_in, mp_obj_t value_in) {
+    tx_push((uint8_t)mp_obj_get_int(value_in));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(tsbus_mq_put_obj, tsbus_mq_put);
+
+// get(): the next OUT, as a 9-bit word (0x100 | data for port 0Fh); blocks
+// while the queue is empty.
+static mp_obj_t tsbus_mq_get(mp_obj_t self_in) {
+    while (rx_level() == 0) {
+        mp_event_handle_nowait();
+    }
+    uint16_t w = rxq[rxq_tail % RXQ_N];
+    __dmb();
+    rxq_tail++;
+    return MP_OBJ_NEW_SMALL_INT(w);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_mq_get_obj, tsbus_mq_get);
+
+static mp_obj_t tsbus_mq_tx_fifo(mp_obj_t self_in) {
+    return MP_OBJ_NEW_SMALL_INT(tx_level());
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_mq_tx_fifo_obj, tsbus_mq_tx_fifo);
+
+static mp_obj_t tsbus_mq_rx_fifo(mp_obj_t self_in) {
+    return MP_OBJ_NEW_SMALL_INT(rx_level());
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_mq_rx_fifo_obj, tsbus_mq_rx_fifo);
+
+// put_block(buf): queue a whole block, waiting for room as the Z80 reads it.
+// Python never handles the bytes one by one (v2 used DMA for this).
+static mp_obj_t tsbus_mq_put_block(mp_obj_t self_in, mp_obj_t buf_in) {
+    mp_buffer_info_t buf;
+    mp_get_buffer_raise(buf_in, &buf, MP_BUFFER_READ);
+    const uint8_t *p = buf.buf;
+    for (size_t i = 0; i < buf.len; i++) {
+        tx_push(p[i]);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(tsbus_mq_put_block_obj, tsbus_mq_put_block);
+
+// status(value): what IN 0Fh returns (v2's Y register). An OUT to 0Eh/0Fh
+// sets it to 00h (busy) on its own, as before.
+static mp_obj_t tsbus_mq_status(mp_obj_t self_in, mp_obj_t value_in) {
+    io_status = (uint8_t)mp_obj_get_int(value_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(tsbus_mq_status_obj, tsbus_mq_status);
+
+static void drop_oldest(void) {
+    tx_drop_req = true;
+    while (tx_drop_req) {
+    }
+}
+
+// exec(instr): the instructions MQX sends to TS_IO_DUAL on v2, with the same
+// effect: Y is the status byte; "pull (noblock)" drops the oldest reply (v2's
+// drain loops follow it with "mov (osr, null)", which then has nothing to do).
+// Spaces are ignored.
+static mp_obj_t tsbus_mq_exec(mp_obj_t self_in, mp_obj_t instr_in) {
+    const char *in = mp_obj_str_get_str(instr_in);
+    char t[24];
+    size_t n = 0;
+    for (; *in && n < sizeof t - 1; in++) {
+        if (*in != ' ') {
+            t[n++] = *in;
+        }
+    }
+    t[n] = 0;
+    if (strcmp(t, "mov(y,invert(null))") == 0) {
+        io_status = 0xff;
+    } else if (strcmp(t, "mov(y,invert(y))") == 0) {
+        io_status = (uint8_t)~io_status;
+    } else if (strncmp(t, "set(y,", 6) == 0 && t[n - 1] == ')') {
+        io_status = (uint8_t)(atoi(t + 6) & 0x1f);
+    } else if (strcmp(t, "pull(noblock)") == 0) {
+        drop_oldest();
+    } else if (strcmp(t, "mov(osr,null)") == 0) {
+        // nothing: there is no OSR
+    } else {
+        mp_raise_ValueError(MP_ERROR_TEXT("tsbus.MQ: unsupported instruction"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(tsbus_mq_exec_obj, tsbus_mq_exec);
+
+// active([value]): accepted for v2's code; always True.
+static mp_obj_t tsbus_mq_active(size_t n_args, const mp_obj_t *args) {
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(tsbus_mq_active_obj, 1, 2, tsbus_mq_active);
+
+static const mp_rom_map_elem_t tsbus_mq_locals_table[] = {
+    { MP_ROM_QSTR(MP_QSTR_put), MP_ROM_PTR(&tsbus_mq_put_obj) },
+    { MP_ROM_QSTR(MP_QSTR_get), MP_ROM_PTR(&tsbus_mq_get_obj) },
+    { MP_ROM_QSTR(MP_QSTR_tx_fifo), MP_ROM_PTR(&tsbus_mq_tx_fifo_obj) },
+    { MP_ROM_QSTR(MP_QSTR_rx_fifo), MP_ROM_PTR(&tsbus_mq_rx_fifo_obj) },
+    { MP_ROM_QSTR(MP_QSTR_put_block), MP_ROM_PTR(&tsbus_mq_put_block_obj) },
+    { MP_ROM_QSTR(MP_QSTR_status), MP_ROM_PTR(&tsbus_mq_status_obj) },
+    { MP_ROM_QSTR(MP_QSTR_exec), MP_ROM_PTR(&tsbus_mq_exec_obj) },
+    { MP_ROM_QSTR(MP_QSTR_active), MP_ROM_PTR(&tsbus_mq_active_obj) },
+};
+static MP_DEFINE_CONST_DICT(tsbus_mq_locals, tsbus_mq_locals_table);
+
+static MP_DEFINE_CONST_OBJ_TYPE(
+    tsbus_mq_type,
+    MP_QSTR_MQ,
+    MP_TYPE_FLAG_NONE,
+    make_new, tsbus_mq_make_new,
+    locals_dict, &tsbus_mq_locals
+    );
 
 static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_tsbus) },
@@ -613,6 +786,7 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_dock), MP_ROM_PTR(&tsbus_dock_obj) },
     { MP_ROM_QSTR(MP_QSTR_hold), MP_ROM_PTR(&tsbus_hold_obj) },
     { MP_ROM_QSTR(MP_QSTR_stats), MP_ROM_PTR(&tsbus_stats_obj) },
+    { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },
     { MP_ROM_QSTR(MP_QSTR_HOME), MP_ROM_INT(SLOT_HOME) },
     { MP_ROM_QSTR(MP_QSTR_EXROM), MP_ROM_INT(SLOT_EXROM) },
     { MP_ROM_QSTR(MP_QSTR_DOCK), MP_ROM_INT(SLOT_DOCK) },
