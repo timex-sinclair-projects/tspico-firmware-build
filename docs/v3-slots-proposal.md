@@ -147,15 +147,14 @@ Each step is its own PR, with host tests in the style of
 `board_v3_hosttest.py`: fake files, a fake `tsbus` recording `load` and
 `switch`. Each updates the reference.
 
-## Decisions
+## Decisions (2026-10-10)
 
-1. **SRAM slots:** files deleted at boot (proposed), or no SRAM slots on v3
-   (`MEM 1` refused)?
-2. **`tpi:boot` on v3:** a 200 ms reset into the new ROM (proposed, since a
-   ROM swapped under a running Z80 runs a mix of the two), or emulate v2's
-   live switch?
-3. **Writing a slot:** a v3 updater tape that keeps romupdate's questions
-   and ends in `tpi:blkrcv`, or one direct command
-   (`SAVE "tpi:blkrcv" CODE m,s` with the image mounted)?
-4. **The fallback ROM:** slot 1, then `/rom/TSPICO-23.ROM` (proposed), or
-   refuse to boot and hold the 2068 with an error blink?
+1. **SRAM slots are files, deleted at boot:** `/slots/S00.bin` … `S15.bin`,
+   v2's "lost at power-off".
+2. **`tpi:boot` resets into the new ROM:** 200 ms through `tsbus.switch`, a
+   clean start rather than v2's swap under the running Z80.
+3. **Writing a slot keeps the updater-tape workflow:** a v3 updater tape asks
+   romupdate's questions and ends in `tpi:blkrcv`, and the Pico writes the
+   file.
+4. **The boot falls back** to flash slot 1, then `/rom/TSPICO-23.ROM`,
+   logged. The 2068 is never released into an empty ROM.
