@@ -779,18 +779,50 @@ static mp_obj_t tsbus_mq_rx_fifo(mp_obj_t self_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_mq_rx_fifo_obj, tsbus_mq_rx_fifo);
 
-// put_block(buf): queue a whole block, waiting for room as the Z80 reads it.
-// Python never handles the bytes one by one (v2 used DMA for this).
-static mp_obj_t tsbus_mq_put_block(mp_obj_t self_in, mp_obj_t buf_in) {
+// put_block(buf[, wait_ms]): queue a block as the Z80 reads it; returns how
+// many bytes were queued. Python never handles the bytes one by one (v2 used
+// DMA for this).
+//
+// Without wait_ms: waits for room until the whole block is queued (Ctrl-C
+// still works). With wait_ms >= 0: queues what fits, waits up to wait_ms
+// without progress for more room, and returns early when an OUT is waiting
+// in RX, so the caller can see a BREAK or an echo (tspico_io.STREAM_QUEUE).
+// wait_ms 0 queues what fits now and returns.
+static mp_obj_t tsbus_mq_put_block(size_t n_args, const mp_obj_t *args) {
     mp_buffer_info_t buf;
-    mp_get_buffer_raise(buf_in, &buf, MP_BUFFER_READ);
+    mp_get_buffer_raise(args[1], &buf, MP_BUFFER_READ);
     const uint8_t *p = buf.buf;
-    for (size_t i = 0; i < buf.len; i++) {
-        tx_push(p[i]);
+    if (n_args < 3) {
+        for (size_t i = 0; i < buf.len; i++) {
+            tx_push(p[i]);
+        }
+        return MP_OBJ_NEW_SMALL_INT(buf.len);
     }
-    return mp_const_none;
+    mp_int_t wait_ms = mp_obj_get_int(args[2]);
+    size_t i = 0;
+    uint32_t t0 = mp_hal_ticks_ms();
+    while (i < buf.len) {
+        uint32_t room = TXQ_N - tx_level();
+        if (room) {
+            size_t k = buf.len - i < room ? buf.len - i : room;
+            uint32_t h = txq_head;
+            for (size_t j = 0; j < k; j++) {
+                txq[(h + j) % TXQ_N] = p[i + j];
+            }
+            __dmb();
+            txq_head = h + k;
+            i += k;
+            t0 = mp_hal_ticks_ms();
+            continue;
+        }
+        if (rx_level() || (mp_int_t)(mp_hal_ticks_ms() - t0) >= wait_ms) {
+            break;
+        }
+        mp_event_handle_nowait();
+    }
+    return MP_OBJ_NEW_SMALL_INT(i);
 }
-static MP_DEFINE_CONST_FUN_OBJ_2(tsbus_mq_put_block_obj, tsbus_mq_put_block);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(tsbus_mq_put_block_obj, 2, 3, tsbus_mq_put_block);
 
 // status(value): what IN 0Fh returns (v2's Y register). An OUT to 0Eh/0Fh
 // sets it to 00h (busy) on its own, as before.

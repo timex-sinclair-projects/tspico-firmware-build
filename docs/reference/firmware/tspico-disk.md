@@ -643,7 +643,7 @@ by the ROM. `n = max(1, min(255, PMR2 or 255))`.
    end of the file — then `CH_READY()`. Return.
 3. `gc.collect()` first, so no collection pauses the stream. `x` is the XOR
    of the bytes.
-4. With DMA (`tspico_io._DMA`): the whole reply, `1`, the count, the bytes
+4. With DMA, or the v3 card's queue (`tspico_io.CAN_STREAM()`): the whole reply, `1`, the count, the bytes
    and `x`, is one buffer for `STREAM_DMA(MQ, out, _CMD_ECHO, CMD_STALL_MS,
    CH_READY)` ([tspico_io.md](tspico_io.md)): the channel feeds the TX FIFO
    from hardware and calls `CH_READY` once it is running. A port-0Fh write

@@ -897,7 +897,7 @@ def CMD_SEND(buf, ready):
     prints whatever it reads from an empty one. So the page is built in RAM
     first and, where there is DMA, a channel feeds the FIFO from it whatever
     core0 is doing (STREAM_DMA). Without DMA, CMD_PUT a byte at a time."""
-    if tspico_io._DMA is not None:
+    if tspico_io.CAN_STREAM():
         _CMD_ECHO[0] = 0                    # all of it by DMA, READY once it runs
         r = STREAM_DMA(MQ, buf, _CMD_ECHO, CMD_STALL_MS, MQ_READY if ready else False)
         if r is not None:
@@ -991,7 +991,7 @@ def CMD_RX_FLUSH():
     Report D, and left the Pico sending to nobody until the next command's
     SYNC ended it -- whose pre-header was then lost: Report T (audit §4,
     "RX flushes on entry")."""
-    for _ in range(64):
+    for _ in range(tspico_io.DRAIN_MAX):
         if not MQ.rx_fifo():
             return
         if MQ.get() & PORT_0F:
@@ -1001,12 +1001,12 @@ def CMD_RX_FLUSH():
 def CMD_FLUSH():
     """Empty both FIFOs after a CmdAbort, bounded. No pre-load: the
     caller's tail stages the one 0x01."""
-    for _ in range(64):
+    for _ in range(tspico_io.DRAIN_MAX):
         if MQ.tx_fifo() == 0:
             break
         MQX(MQ, "pull (noblock)")
         MQX(MQ, "mov (osr, null)")
-    for _ in range(64):
+    for _ in range(tspico_io.DRAIN_MAX):
         if MQ.rx_fifo() == 0:
             break
         MQ.get()
@@ -3359,7 +3359,7 @@ def CH_READ(pre, cmd):                                                        # 
     x = 0
     for b in data:
         x ^= b
-    if tspico_io._DMA is not None:
+    if tspico_io.CAN_STREAM():
         # All of it by DMA, CH_READY once the channel runs: the ROM reads it
         # blind (~70 us a byte), and a core0 pause longer than the FIFO's
         # ~280 us would hand it 00s. A port-0Fh write or a stall ends it.
@@ -4035,7 +4035,7 @@ def BLKRCV(pre, cmd):                                                           
         # ends it too: the loop never pauses once it has started, so 3 s of
         # no reads means it has gone.
         data = None
-        if tspico_io._DMA is not None:
+        if tspico_io.CAN_STREAM():
             try:
                 gc.collect()
                 data = bytearray(total)
@@ -5835,12 +5835,12 @@ def FAIL_CMD(status):
     # hang we are trying to prevent. The FIFOs are 4 deep; anything
     # past a few iterations means the SM is not draining and spinning
     # will not help.
-    for _ in range(64):
+    for _ in range(tspico_io.DRAIN_MAX):
         if MQ.tx_fifo() == 0:
             break
         MQX(MQ, "pull (noblock)")
         MQX(MQ, "mov (osr, null)")
-    for _ in range(64):
+    for _ in range(tspico_io.DRAIN_MAX):
         if MQ.rx_fifo() == 0:
             break
         MQ.get()
@@ -6166,6 +6166,7 @@ def TS2068_IO():                                                         # Main 
     log_to_serial = False
     
     led = board.make_led()
+    tspico_io.LED = led                                               # LOAD_TS and the ZX loads light it too
 
     init_values = LOAD_CONFIG()
     TSP = PICO_STATUS(init_values)

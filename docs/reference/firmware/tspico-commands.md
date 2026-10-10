@@ -5,7 +5,7 @@ Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 (`APPEND`, `BLKRCV`), 4230–4767 (`CDIR` … `GETLOG`), 4847–5147
 (`LOGLEVEL` … `MEMDOCK`), 5167–5243 (`REW`), 5383–5610 (`BAD_CODE` …
 `NOP`) and 5722–5798 (the printer settings); the dispatch table
-`SA_funct` at 6210–6260, inside `TS2068_IO`.
+`SA_funct` at 6211–6261, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -80,7 +80,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6207–6208) says (until #181 it
+   trailing space, as the comment above it (6208–6209) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -133,7 +133,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6210) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6211) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -395,7 +395,7 @@ every ~33 µs (117 T-states), until it has the whole image. So the bytes
 are queued long before anything reads them, and must then never run dry:
 an empty FIFO reads as `00h`, and that `00h` goes into the flash.
 
-- **By DMA** (`tspico_io._DMA` is not `None` and the whole image fits in
+- **By DMA**, or the v3 card's queue (`tspico_io.CAN_STREAM()`), when the whole image fits in
   RAM after a `gc.collect()` — a `.DCK` is 64K, v1.29 has about 180K
   free): the file is read into one buffer and sent with
   `STREAM_DMA(MQ, data, _CMD_ECHO, 3000, False, CMD_STALL_MS)` — up to

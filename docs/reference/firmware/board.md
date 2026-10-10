@@ -28,10 +28,14 @@ Who calls what:
 | `make_led()` | `TS2068_IO` (6168) |
 | `background()` | `TS2068_IO`: `BLINK_LED` at boot (6289), `SAVE_LOG` from the idle loop (6950) |
 
-`tspico_io.py` still builds its own state machines and SD pins
-(`ENA_MQ_DUAL`, `ENA_SD`) and writes PIO0 SM0's registers in `MQX`. Those
-move in step 4.2. The upgrade UF2 (`src/upgrade/`) is v2-only, keeps its own
-`main.py`, and doesn't use the board layer.
+`tspico_io.py` can't import the board layer: `board_v2` imports it for the
+PIO programs. So it detects the v3 card itself (step 4.2;
+[tspico_io.md](tspico_io.md#the-v3-card)). There it turns off its PIO
+register writes and DMA, streams blocks through the tsbus queue, keeps `MQ`
+in `ENA_MQ_DUAL`, and takes the LED `TS2068_IO` gives it. On v2 it still
+builds its own state machine and SD pins in `ENA_MQ_DUAL` and `ENA_SD`, for
+ZX48 SAVEs and the upgrade UF2. The upgrade UF2 (`src/upgrade/`) is
+v2-only, keeps its own `main.py`, and doesn't use the board layer.
 
 ## `board.py`
 
@@ -55,8 +59,8 @@ Imports `machine.Pin`, `SPI`, `freq`, `rp2.StateMachine`, `asm_pio`,
 ### `NAME`, `PIO_MQ`
 
 `"v2"`, and `True`: `MQ` is a PIO state machine, so `tspico_io` may write
-its registers and pace DMA on its DREQs. Nothing reads `PIO_MQ` yet (step
-4.2 makes `tspico_io` use it).
+its registers and pace DMA on its DREQs. Nothing reads `PIO_MQ`:
+`tspico_io` makes the same test itself (above).
 
 ### `NULL_SM`
 

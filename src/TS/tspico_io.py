@@ -109,6 +109,47 @@ try:
     from machine import mem32 as _mem32
 except ImportError:
     _mem32 = None
+
+# The v3 card (phase 4 of the v3 port plan): the bus is the tsbus C module,
+# and MQ is tsbus.MQ(), not a PIO state machine. PIO0 SM0 runs the memory
+# program there, so nothing here may write its registers or pace DMA on its
+# DREQs: MQX falls back to MQ.exec() (tsbus understands MQX's instructions),
+# the RX ring and DMA paths are off, and STREAM_DMA streams through the
+# queue (STREAM_QUEUE). Detected here, not through TS.board: board_v2
+# imports this module. Not plain `import tsbus` either: on a host, src/tsbus/
+# imports as an empty package.
+try:
+    from tsbus import MQ as _tsbus_mq
+except ImportError:
+    _tsbus_mq = None
+if _tsbus_mq is not None:
+    _DMA = None
+    _mem32 = None
+
+# The most passes a FIFO flush makes (MQ_TO_IDLE, ZX_FLUSH_TX, tspico's
+# CMD_FLUSH and FAIL_CMD). A PIO FIFO holds 4, so 64 passes is plenty and
+# the bound keeps a stuck state machine from hanging the path; tsbus's
+# queues hold 1024.
+DRAIN_MAX = 64 if _tsbus_mq is None else 1100
+
+# The board's LED, set by tspico (board.make_led()). None: the v2 Pico's
+# GPIO 25, made on first use (the upgrade UF2 has no board layer). On the v3
+# card GPIO 25 is the I2C clock, so it must never be claimed there.
+LED = None
+
+
+def _LED():
+    global LED
+    if LED is None:
+        LED = Pin(25, Pin.OUT)
+    return LED
+
+
+def CAN_STREAM():
+    """True when STREAM_DMA can send a block without Python per byte: DMA
+    into the PIO FIFO (v2), or the tsbus queue (v3)."""
+    return _DMA is not None or _tsbus_mq is not None
+
 _SM0_EXECCTRL = const(0x502000CC)
 _SM0_INSTR = const(0x502000D8)
 _SM0_PINCTRL = const(0x502000DC)
@@ -333,15 +374,16 @@ def MQ_TO_IDLE(MQ, recovered=False, status=True, first=0x01):
     on. After a SYNC the Z80 waits for IDLE: that is the moment to do slow
     work (logging, gc), before setting it -- never after.
 
-    Bounded: the FIFOs are 4 deep, so a few passes are enough; spinning
-    longer means the SM isn't draining, and this path must never hang.
+    Bounded (DRAIN_MAX): the FIFOs are 4 deep on v2, so a few passes are
+    enough; spinning longer means the SM isn't draining, and this path must
+    never hang. tsbus's queues hold 1024.
     """
-    for _ in range(64):
+    for _ in range(DRAIN_MAX):
         if MQ.tx_fifo() == 0:
             break
         MQX(MQ, "pull (noblock)")
         MQX(MQ, "mov (osr, null)")
-    for _ in range(64):
+    for _ in range(DRAIN_MAX):
         if MQ.rx_fifo() == 0:
             break
         MQ.get()
@@ -430,7 +472,11 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready, first_ms=0):
     setting it up takes a few hundred us on v1.29 -- ten of romupdate's
     33 us reads -- so never start this behind a READY the Z80 is already
     acting on. Say READY through `ready` instead (hardware, 2026-10-03: ten
-    empty reads at the start of a romupdate put 00s into the flash)."""
+    empty reads at the start of a romupdate put 00s into the flash).
+
+    On the v3 card there is no FIFO to feed: STREAM_QUEUE, same contract."""
+    if _tsbus_mq is not None:
+        return STREAM_QUEUE(MQ, buf, echo, stall_ms, ready, first_ms)
     if _DMA is None:
         return None
     try:
@@ -477,6 +523,58 @@ def STREAM_DMA(MQ, buf, echo, stall_ms, ready, first_ms=0):
     finally:
         d.close()
     return why, sent, word
+
+
+QUEUE_WAIT_MS = const(10)   # STREAM_QUEUE: how long one put_block call waits for room
+
+
+def STREAM_QUEUE(MQ, buf, echo, stall_ms, ready, first_ms=0):
+    """STREAM_DMA on the v3 card, with its contract: (why, sent, word).
+
+    tsbus's TX queue holds 1024 bytes and core 1 hands them to the Z80 as it
+    reads, so C does the copying: MQ.put_block(buf, wait_ms) queues as much
+    as fits, waiting up to wait_ms for room, and returns how many it took.
+    Python runs once per call (about every QUEUE_WAIT_MS), never per byte,
+    and listens between calls as STREAM_DMA does: echo words kept, a port-0Fh
+    write (why 1), any word in ZX48 mode (why 4), or no room for stall_ms
+    (why 3; first_ms until more than the first few bytes have gone).
+
+    sent counts bytes queued, as STREAM_DMA counts bytes it moved into the
+    FIFO; the Z80 has read sent - MQ.tx_fifo(). On an early return the
+    rest stays queued, and the caller's flush (MQ_TO_IDLE) empties it.
+    """
+    mv = memoryview(buf)
+    n = len(buf)
+    why = 0
+    word = -1
+    pos = MQ.put_block(mv, 0)                     # fill the queue first
+    if ready is True:
+        MQX(MQ, "mov(y, invert(null))")            # READY: the queue is full by now
+    elif ready:
+        ready()
+    limit = first_ms or stall_ms
+    t0 = time.ticks_ms()
+    while pos < n:
+        k = MQ.put_block(mv[pos:], QUEUE_WAIT_MS)
+        if k:
+            pos += k
+            t0 = time.ticks_ms()
+            if pos - MQ.tx_fifo() > 2 * TX_DEPTH:
+                limit = stall_ms                    # the Z80 is reading now
+        if MQ.rx_fifo():
+            w = MQ.get()
+            if echo is None:
+                why = 4
+                word = w
+                break
+            if w & PORT_0F:
+                why = 1
+                break
+            ECHO_KEEP(echo, w)
+        elif not k and time.ticks_diff(time.ticks_ms(), t0) >= limit:
+            why = 3
+            break
+    return why, pos, word
 
 
 def RX_WORD(MQ, stall_ms):
@@ -984,7 +1082,13 @@ def ENA_MQ_DUAL(MQ):
 
     Leaves Y = READY: the PIO drops Y to 0 on every Z80 OUT (issue #14
     auto-busy), and a fresh SM starts with Y undefined.
+
+    On the v3 card the bus is never given up for SD: MQ is kept, and only
+    READY is said.
     """
+    if _tsbus_mq is not None:
+        MQX(MQ, "mov(y, invert(null))")
+        return MQ
     MQ = StateMachine(0, TS_IO_DUAL, freq=30_000_000, out_base=Pin(2, Pin.OUT),
                       in_base=Pin(2, Pin.IN), jmp_pin=Pin(11),
                       sideset_base=Pin(12, Pin.OUT))
@@ -1258,7 +1362,7 @@ def LOAD_TS(pre, MQ, TSP):
         return MQ, TSP, log_entries
 
     # ---- LED on so user sees activity ----
-    led = Pin(25, Pin.OUT)
+    led = _LED()
     led.value(1)
 
     # ---- Choose source file ----
@@ -1804,7 +1908,7 @@ def ZX_FLUSH_TX(MQ):
     """Empty TX: the tail of a block the ROM did not read to the end.
     Bounded, like MQ_TO_IDLE, whose first half this is -- ZX48 mode has no
     status pre-load, so the rest of it does not apply."""
-    for _ in range(64):
+    for _ in range(DRAIN_MAX):
         if MQ.tx_fifo() == 0:
             break
         MQX(MQ, "pull (noblock)")
@@ -1955,7 +2059,7 @@ def LOAD_ZX(MQ, TSP):
     global log_entries
     log_entries = ""
 
-    led = Pin(25, Pin.OUT)
+    led = _LED()
     led.value(1)
 
     if not TSP.f_name or TSP.totlen == 0:
@@ -2150,7 +2254,7 @@ def LOAD_ZX_C(MQ, TSP, buf_size):
 
     put = MQ.put
     txf = MQ.tx_fifo
-    led = Pin(25, Pin.OUT)
+    led = _LED()
     nxt = -1
 
     # Stage the first byte before raising READY — see the same note in

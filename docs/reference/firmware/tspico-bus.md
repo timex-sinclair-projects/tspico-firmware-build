@@ -221,7 +221,7 @@ single-port version; DUAL_PORT_DEVELOPMENT.md tells the story):
   The boot pre-load is staged once, by `TS2068_IO`.
 
 Takes nothing, returns `None`. Writes `MQ` and `sd_active`. Called after every SD access in this
-file (two dozen sites), and at boot by `TS2068_IO` (6329) after the first
+file (two dozen sites), and at boot by `TS2068_IO` (6330) after the first
 card check. `tspico_io` never calls it; its comments name it because the
 dispatcher's call is what ends a SAVE or LOAD there, and ZX48 mode uses
 `ENA_MQ_DUAL` instead.
@@ -317,7 +317,7 @@ swallow it and carry on writing to a Z80 that has gone. Handlers are full
 of `except Exception` (card errors, bad arguments); `GETLOG` relies on
 this (its comment at 4728–4737: `SEND_MSG2` runs outside its `try`, so a
 BREAK at the "Scroll?" prompt passes straight through), and so does
-`TS2068_IO`'s outer loop (6434), which lets BaseExceptions — Ctrl-C from
+`TS2068_IO`'s outer loop (6435), which lets BaseExceptions — Ctrl-C from
 the host, `CmdAbort` — pass. `extcmd.py`'s header (line 21) tells external
 command writers never to catch it ([extcmd.md](extcmd.md)).
 
@@ -353,7 +353,7 @@ characters ([PROTOCOL.md §5.4](../../PROTOCOL.md#54-the-answer-a-response-funct
 the four characters in the FIFO, and the ROM then prints whatever it reads
 from an empty one. So the page is built in RAM first, and:
 
-- **With DMA** (`tspico_io._DMA` is not `None`): zero `_CMD_ECHO[0]`, then
+- **With DMA**, or the v3 card's queue (`tspico_io.CAN_STREAM()`): zero `_CMD_ECHO[0]`, then
   `STREAM_DMA(MQ, buf, _CMD_ECHO, CMD_STALL_MS, MQ_READY if ready else
   False)`. The channel feeds the FIFO from `buf` in hardware whatever core0
   does, and `STREAM_DMA` calls `MQ_READY` once the channel is running. A
@@ -462,16 +462,17 @@ Why: on hardware the Z80 reads the pre-load microseconds after the
 pre-header, so the race was never seen there. In the emulator
 ([tools/emu](../../../tools/emu)), every port access is a round trip, and a
 SAVE whose card check rebuilt the state machine first lost its pre-load and
-gave up on its header (2026-10-04, the comment at 6610–6620). Callers:
-`TS2068_IO` before `PRINT_FLUSH` writes buffered printer text (6564) and
-before the SAVE branch's `SD_PROBE` (6621), both followed by the
+gave up on its header (2026-10-04, the comment at 6611–6621). Callers:
+`TS2068_IO` before `PRINT_FLUSH` writes buffered printer text (6565) and
+before the SAVE branch's `SD_PROBE` (6622), both followed by the
 `if _unread: MQ.put(0x01)`.
 
 ### `CMD_RX_FLUSH()`
 
 Empties RX before a reply that will wait for keys, so an old byte is not
 taken for a key — but a word with `PORT_0F` set found there raises
-`CmdAbort(1)`, as `CMD_KEY` would. Bounded to 64 words.
+`CmdAbort(1)`, as `CMD_KEY` would. Bounded to `tspico_io.DRAIN_MAX` words
+(64; 1100 on v3).
 
 Why it raises instead of draining: a plain drain swallowed the Z80's BREAK
 (or the next command's SYNC). The Z80, waiting in its abort for READY +
@@ -483,7 +484,8 @@ Callers: `SEND_MSG2` (2286), `PROMPT_EACH` (2757), `ListMenu` (3504),
 
 ### `CMD_FLUSH()`
 
-After a `CmdAbort`, empties both FIFOs, each loop bounded to 64 passes.
+After a `CmdAbort`, empties both FIFOs, each loop bounded to
+`tspico_io.DRAIN_MAX` passes (64; 1100 for the v3 card's queues).
 TX is emptied from the state machine's side, as the retired
 `EMPTY_TX_FIFO` did: `pull(noblock)` then `mov(osr, null)` executed by
 `MQX`, which takes a word out of TX into the OSR and then clears the OSR so
@@ -523,7 +525,7 @@ that notices a card has gone, come back, or been swapped, and
 attempts, the revalidation, the no-card gate, `SD_CALL`'s answer and
 `tpi:info`; [`sd_mount_hosttest.py`](../../../src/test/sd_mount_hosttest.py)
 the retry loop at boot (and, as its docstring says, that `TS2068_IO`
-catches the `OSError` and boots without a card, 6301–6305); [`sd_recover_hosttest.py`](../../../src/test/sd_recover_hosttest.py)
+catches the `OSError` and boots without a card, 6302–6306); [`sd_recover_hosttest.py`](../../../src/test/sd_recover_hosttest.py)
 the driver's recovery of a card left mid-transfer, which `ACTIVATE_SD`
 reports ([sdcard.md](sdcard.md)).
 
@@ -588,12 +590,12 @@ nobody. With the 6 s budget the worst case is two such attempts, about
 
 State: writes `MQ`, `sd_active`, `TSP.sd_present`, and through
 `SD_NOTE_CARD` `TSP.sd_cid` and more; the mount table; GPIO 2–4, 12, 28.
-Callers: `TS2068_IO` at boot (6302), `SD_CALL`, `SD_PROBE`,
+Callers: `TS2068_IO` at boot (6303), `SD_CALL`, `SD_PROBE`,
 `LISTING_CHECK`, `REFRESH_LISTING`, `SAVE_MOUNT`, and the functions that
 manage the card themselves: `MOUNT_FILE` (1822), `CATALOG` (2600),
 `ChangeDir` (4148), `GETHELP` (4406), `MDIR` (4934), `PRINT_FLUSH` (5622),
 `COPY_BMP` (5654), `PRN_OPEN` (5728), `TS2068_IO`'s SAVE and LOAD branches
-(6660–6757) and `ZX_TPI` (7046).
+(6661–6758) and `ZX_TPI` (7047).
 
 Beware:
 
@@ -699,7 +701,7 @@ different (`changed` true for a different card).
 Writes `alldirs`, `prev_path`, `prn_path`, `TSP.cur_path`, `TSP.append`,
 `TSP.sd_present`, `TSP.sd_listing_ok`, the mount, the channels, the current
 directory. Called only by `SD_NOTE_CARD`; the comments in `GETINFO` (4168),
-`TS2068_IO` (6296) and `tspico_io`'s SAVE paths (2754, 2897) describe its
+`TS2068_IO` (6297) and `tspico_io`'s SAVE paths (2754, 2897) describe its
 effects. `SAVE_TS` checks one of them: after its mount, `append` gone off
 means the card was swapped during the transfer, and it refuses to append to
 a file of the same name on the new card.
@@ -758,7 +760,7 @@ Clears the flag first, then `ACTIVATE_SD()`, `os.chdir(TSP.cur_path)`,
 `TSP.sd_listing_ok = DIR_FILES()`; an `OSError` (no card) is ignored —
 the command's own card check answers. The `finally` gives the bus back,
 Y BUSY. Callers, both where the Z80 is waiting for READY: the start of
-`PROCESS_CMD` (5993) and `ZX_TPI` before it matches a name (7044, 7063).
+`PROCESS_CMD` (5993) and `ZX_TPI` before it matches a name (7045, 7064).
 
 ### `SD_PROBE(tries=None)`
 
@@ -770,7 +772,7 @@ caller with a pre-load outstanding uses `PRELOAD_READ` first.
 
 Callers: `PROCESS_CMD`'s card gate (6029: a command that needs the card,
 with `sd_present` false, probes once before `NO_CARD_REPLY`, so inserting a
-card is all it takes); the SAVE branch of `TS2068_IO` (6622, which sets
+card is all it takes); the SAVE branch of `TS2068_IO` (6623, which sets
 `TSP.save_no_card` so `SAVE_TS` refuses the header with Report J and the
 program stays in the 2068's memory, instead of "0 OK" and a write that
 fails after it); `GETINFO` (4564, so `tpi:info` reports the card as it is
@@ -789,7 +791,7 @@ that second. Callers: `MOUNT_FILE` when a mount fails at level 2 or above
 (1929), `BLKRCV` when the block asked for runs past the file (4117). The
 single-port firmware also called it in a loop when the boot mount failed
 and after a failed transaction; both are gone (`ACTIVATE_SD` raises
-instead, and the comment at 6852–6859 explains why the dispatcher's
+instead, and the comment at 6853–6860 explains why the dispatcher's
 recovery no longer blinks: the second it blocked was time the Z80 could
 already be sending its next pre-header).
 
@@ -801,8 +803,8 @@ be talking.
 The boot blink, on core1. Sets `busy = True`, sleeps 0.2 s, then blinks —
 on `pause` seconds, off `pause` seconds — until the global `dead` is true;
 then LED off and `busy = False`. `TS2068_IO` starts it with
-`board.background(BLINK_LED, (0.9,))` (6289, core 1 on v2) just before the
-boot's card check and sets `dead = True` after it (6307), then waits
+`board.background(BLINK_LED, (0.9,))` (6290, core 1 on v2) just before the
+boot's card check and sets `dead = True` after it (6308), then waits
 `while busy: pass` for it to finish before core1 is used for anything else
 (the log writes). That wait is unbounded and safe: this function only
 sleeps and toggles, cannot raise, and sees `dead` within one period.
