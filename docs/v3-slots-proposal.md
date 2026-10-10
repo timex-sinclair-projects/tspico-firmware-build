@@ -212,6 +212,20 @@ Each step is its own PR, with host tests in the style of
 `board_v3_hosttest.py`: fake files, a fake `tsbus` recording `load` and
 `switch`. Each updates the reference.
 
+## Progress
+
+- **Step 1** (#248): the card boots from `/slots`. ROM 2.3 boots from F01;
+  an empty one-shot slot falls back to slot 1; slot 2 boots ZX Diagnostics.
+- **Step 2** (#249): `tpi:boot` resets into the new slot, and `tpi:dock` is
+  live. A flash dock is read-only; a RAM dock is kept across a switch. All
+  checked from BASIC.
+- **Step 3: passed** on step 2's firmware, with no code change
+  (2026-10-10). In Spectrum mode on the card: `LOAD "tpi:v3t.tap"`,
+  `tpi:zx48`, `OUT 244,3`, `LOAD ""` (six blocks), `SAVE "zxs3" CODE
+  32768,16384` (byte-identical, `sd_roundtrip.py`'s pattern), `SAVE
+  "tpi:dir"`, and back with `OUT 244,0` and `OUT 14,14`.
+- **Step 4**, writing slots, is next.
+
 ## Decisions (2026-10-10)
 
 1. **SRAM slots are files, deleted at boot:** `/slots/S00.bin` … `S15.bin`,
