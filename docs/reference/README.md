@@ -157,7 +157,7 @@ behaviour, and the caveat and the issue link go.
 |---|---|---|---|
 | `src/main.py` | `162b8f97be26` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/tspico.py` | `2607f59d6873` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
-| `src/TS/tspico_io.py` | `136835436e7c` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) | [flows/boot.md](flows/boot.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/TS/tspico_io.py` | `e34ae2cc847e` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) | [flows/boot.md](flows/boot.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/TS/sdcard.py` | `e1c614de390c` | [firmware/sdcard.md](firmware/sdcard.md) | [flows/sd-handover.md](flows/sd-handover.md) |
 | `src/TS/channels.py` | `5b1d30b1efe4` | [firmware/channels.md](firmware/channels.md) | [flows/channels.md](flows/channels.md) |
 | `src/TS/catalog.py` | `0c79a1e750db` | [firmware/catalog.md](firmware/catalog.md) | — |
@@ -198,5 +198,5 @@ behaviour, and the caveat and the issue link go.
 | `tools/build-flash.py` | `e2f58cd4004a` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/build.yml` | `9ef22e338caa` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `849b5214c8c6` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `57aa6a7ea309` | [firmware/boot.md](firmware/boot.md) | — |

@@ -279,7 +279,7 @@ Ubuntu 22.04. The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 43 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 44 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)). They pin invariants that

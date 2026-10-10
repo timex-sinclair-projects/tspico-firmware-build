@@ -542,6 +542,18 @@ def STREAM_QUEUE(MQ, buf, echo, stall_ms, ready, first_ms=0):
     sent counts bytes queued, as STREAM_DMA counts bytes it moved into the
     FIFO; the Z80 has read sent - MQ.tx_fifo(). On an early return the
     rest stays queued, and the caller's flush (MQ_TO_IDLE) empties it.
+
+    In ZX48 mode (echo None) it goes on listening once the whole block is
+    queued, until no more than TX_DEPTH bytes are left, as STREAM_DMA
+    returns with the FIFO's last few. The Spectrum ROM skips a block by
+    reading 19 bytes and sending its next 'L': on v2 that word ends the
+    stream, here up to 1020 unread bytes would sit behind a return that says
+    "sent", the 'L' unheard and a stopped Z80 never flushed. The stall clock
+    runs while the Z80 drains the queue. Everywhere else the caller's next
+    step is already listening (for the echo, or for the key the ROM waits
+    for), and a key that came in here would be lost in echo: so it returns
+    as soon as the block is queued. deep_queue_hosttest.py runs the Z80
+    models against both.
     """
     mv = memoryview(buf)
     n = len(buf)
@@ -554,10 +566,20 @@ def STREAM_QUEUE(MQ, buf, echo, stall_ms, ready, first_ms=0):
         ready()
     limit = first_ms or stall_ms
     t0 = time.ticks_ms()
-    while pos < n:
-        k = MQ.put_block(mv[pos:], QUEUE_WAIT_MS)
-        if k:
+    last = -1
+    while True:
+        if pos < n:
+            k = MQ.put_block(mv[pos:], QUEUE_WAIT_MS)
             pos += k
+        elif echo is not None:
+            break                                   # all queued; the caller listens next
+        else:                                       # ZX48: wait for the tail
+            q = MQ.tx_fifo()
+            if q <= TX_DEPTH:
+                break
+            k = q != last                           # progress: the Z80 read some
+            last = q
+        if k:
             t0 = time.ticks_ms()
             if pos - MQ.tx_fifo() > 2 * TX_DEPTH:
                 limit = stall_ms                    # the Z80 is reading now
