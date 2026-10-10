@@ -3969,6 +3969,8 @@ def BLKRCV(pre, cmd):                                                           
     global led
 
     TLM("BLKRCV enter")
+    if NO_SLOTS():
+        return
     _BUFSZ = 256
     buf = bytearray(_BUFSZ)
     mv = memoryview(buf)  # Faster indexing than bytearray
@@ -4792,6 +4794,7 @@ def LOAD_CONFIG():
     default_values["VERBOSE"] = False                          # Disable verbosity on commands
     default_values["ZX_TAPE_COMPAT"] = False                   # Use regular tape load routine in zx48 mode
     default_values["TELEMETRY"] = False                        # TLM over USB serial (main.py reads it; developers set true)
+    default_values["LED_BRIGHTNESS"] = 5                       # the v3 card's LED, % of full (board.led_brightness); v2 ignores it
     default_values["FW_VERSION"] = FW_VERSION
     default_values["ROM_VERSION"] = ROM_VERSION                # the ROM this firmware ships with
     # Fill any missing values with the default
@@ -4815,6 +4818,13 @@ def LOAD_CONFIG():
             % (init_values["ROM_SM"], default_values["ROM_SM"]), 2)
         init_values["ROM_SM"] = default_values["ROM_SM"]
         defaulted = True                                                # write the good value back
+
+    b = init_values["LED_BRIGHTNESS"]                                   # a whole number of %, 1-100
+    if type(b) is not int or not 1 <= b <= 100:
+        LOG("Incorrect LED_BRIGHTNESS %r. Using default value of %d instead"
+            % (b, default_values["LED_BRIGHTNESS"]), 2)
+        init_values["LED_BRIGHTNESS"] = default_values["LED_BRIGHTNESS"]
+        defaulted = True
 
     return_ROM_SLOT = -1
     boot_mem = init_values["ROM_SM"] & 3                                # tpi:boot's MEM: 1 SRAM, 2 flash (the default)
@@ -4977,6 +4987,16 @@ def MDIR(pre, cmd):                                                             
     return 
                 
 
+def NO_SLOTS():
+    """The v3 card has no flash/SRAM slots yet (phase 5 of the v3 port plan):
+    tpi:boot, tpi:dock and tpi:blkrcv refuse there, before they change
+    anything. True when the command was refused."""
+    if board.SLOTS:
+        return False
+    SEND_MSG("Not on the v3 card yet", "Slots come in a later update", _3_F_Invalid_file, True)
+    return True
+
+
 def MEMBOOT(pre, cmd):                                           # Changes ROM slot to boot from; either SRAM or Flash
     
     # SAVE "tpi:boot"                # Report the boot setting
@@ -4986,6 +5006,8 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
     
     
     TLM("MEMBOOT enter")
+    if NO_SLOTS():
+        return
     par1, par2 = PARAMS(pre)
     new = "MEM=%d, PAGE=%d" % (par1, par2)
     
@@ -5087,6 +5109,8 @@ def MEMDOCK(pre, cmd):                                                  # Change
     global TSP
     
     TLM("MEMDOCK enter")
+    if NO_SLOTS():
+        return
     par1, par2 = PARAMS(pre)
     mem,  page = getDock()
     old = "MEM=%d, PAGE=%d" % (mem, page)
@@ -6169,6 +6193,7 @@ def TS2068_IO():                                                         # Main 
     tspico_io.LED = led                                               # LOAD_TS and the ZX loads light it too
 
     init_values = LOAD_CONFIG()
+    board.led_brightness(led, init_values.get("LED_BRIGHTNESS", 5))
     TSP = PICO_STATUS(init_values)
     
     try:
@@ -6287,7 +6312,8 @@ def TS2068_IO():                                                         # Main 
     LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
 
     dead = False
-    board.background(BLINK_LED, (0.9, ))
+    if board.HAS_CORE1:                                                # v3: core 1 is tsbus's, no boot blink
+        board.background(BLINK_LED, (0.9, ))
     
     # LOG("After start thread blink, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     # gc.collect()

@@ -17,6 +17,8 @@ from TS.tspico_io import TS_IO_DUAL, set_ctrl, sel_bank
 
 NAME = "v2"
 PIO_MQ = True       # MQ is a PIO state machine: tspico_io may use its registers and DMA
+SLOTS = True        # the 16 flash/SRAM slots: tpi:boot, tpi:dock, tpi:blkrcv
+HAS_CORE1 = True    # core 1 is free for background(): BLINK_LED, SAVE_LOG
 
 # Holds SM0 while the SD card has GPIO 2-4 (sd_take_bus).
 @asm_pio(
@@ -117,6 +119,11 @@ def sd_release_bus():
 def make_led():
     """The LED: GPIO 25."""
     return Pin(25, Pin.OUT)
+
+
+def led_brightness(led, pct):
+    """config.ini's LED_BRIGHTNESS: the Pico's own LED is not dimmed."""
+    pass
 
 
 def background(fn, args):

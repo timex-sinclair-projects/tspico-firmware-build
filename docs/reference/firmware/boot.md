@@ -138,6 +138,7 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | ROM_SLOT | int 0–15 | 1 | BOOT slot at power-on | → `TSP.ROM_SLOT`, `bank_sm` | `LOAD_CONFIG` (the one-shot back to 1), `MEMBOOT` |
 | VERBOSE | bool | `false` | `SEND_MSG` prints messages | → `TSP.VERBOSE` | `LOAD_CONFIG` (default) |
 | TELEMETRY | bool | `false` | the `TLM` trace on USB serial | `_telemetry()` only | `LOAD_CONFIG` (default) |
+| LED_BRIGHTNESS | int 1–100 | 5 | the v3 card's LED brightness, % (the v2 Pico's LED isn't dimmed) | `LOAD_CONFIG` → `board.led_brightness` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced) |
 
 **The one-shot boot.** `tpi:boot CODE m,s` writes `ROM_SLOT = s` and
 `ROM_SM`'s low bits `= m` ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).
@@ -168,7 +169,8 @@ of RAM (the comment). It freezes:
   `tspico_io.py`, `sdcard.py`, `extcmd.py`, `printer.py`, `catalog.py`,
   `native.py`, `channels.py`, and the board layer, `board.py` and
   `board_v2.py` ([board.md](board.md)). `board_v3.py` is for the v3 card's
-  build only.
+  build only, which freezes from `src/` with its own manifest
+  ([board-v3.md](board-v3.md#manifestpy)).
 
 `_boot_fat.py` was frozen once "for the SD card"; it is not SD support —
 it mounts the Pico's own flash as FAT, formatting it if it is not, and
@@ -277,7 +279,7 @@ Ubuntu 22.04. The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 42 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 43 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)). They pin invariants that
@@ -327,14 +329,16 @@ Ubuntu 22.04. The steps, in order:
 A second job, `build-v3`, runs alongside: the v3 board's UF2
 ([board-v3.md](board-v3.md)). It installs the same tools with the same
 retries, clones MicroPython v1.29.0 itself, builds `mpy-cross`, and runs
-`make submodules` and `make` with
+`make submodules`, generates the build stamp (`tools/gen-buildinfo.py`:
+the board's manifest freezes `src/TS/` directly, `buildinfo.py` among them),
+and runs `make` with
 `BOARD_DIR=$GITHUB_WORKSPACE/src/boards/TSPICO_V3`, so nothing is copied
 into the MicroPython tree. It needs its own clone because step 9 replaces
 the port's `boards/manifest.py`. The UF2, `build-TSPICO_V3/firmware.uf2`,
 is uploaded as `tspico-v3-firmware-uf2`. The board brings in the `tsbus`
-module itself (`USER_C_MODULES`), so the job needs no extra arguments. It has
-no TS modules yet (phase 3 of the v3 port plan); `pico-serial.py flash --v3
---branch B` fetches it.
+module itself (`USER_C_MODULES`), so the job needs no extra arguments. The
+UF2 is the whole firmware, `TS.tspico` on `board_v3` (step 4.3 of the v3
+port plan); `pico-serial.py flash --v3 --branch B` fetches it.
 
 A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),

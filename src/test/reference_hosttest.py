@@ -61,6 +61,7 @@ FIRMWARE = (
     "src/TS/printer.py",
     "src/TS/board.py",
     "src/TS/board_v2.py",
+    "src/TS/board_v3.py",
     "src/upgrade/main.py",
     "src/upgrade/upgrade.py",
 )
