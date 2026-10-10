@@ -101,8 +101,37 @@ loaded:
   200 ms and starts cleanly in the new ROM. That's a **behaviour change**
   from v2, which switches under the running Z80. (Decision 2.)
 - **Only the dock changed:** `tsbus.switch(dock=)`, live, as v2.
+- **An empty boot slot** is refused, Report F, before anything changes, so
+  `boot_rom` never falls back to a ROM the user didn't ask for. An empty
+  dock slot is allowed, as v2: an empty cartridge port.
 
-`NO_SLOTS` goes, and with it `board.SLOTS`.
+`NO_SLOTS` stays on `tpi:blkrcv` only, until step 4.
+
+### Writes into the dock
+
+`tsbus` stores every Z80 write that lands in a dock-mapped chunk in the
+DOCK image. Two v2 behaviours follow from that, and step 2 matches them
+(agreed 2026-10-10):
+- **A flash dock is read-only.** v2's flash chip ignores the Z80's writes,
+  so a program can't alter a cartridge such as Flight Simulator in slot
+  10. `tsbus` gains a flag that stops core 1 storing dock writes, and
+  `map_slots` and `start_memory` set it for a MEM 2 dock.
+- **A RAM dock keeps its writes until power-off.** On v2 a program's data
+  in a RAM dock slot survives switching the dock away and back. On v3,
+  before `tpi:dock` leaves a MEM 1 dock, the Pico saves the DOCK image back
+  to `Snn` (and `Snn+1` for an even slot). That's 64K of flash writes, about
+  a second for that one command. A boot still deletes them.
+
+This is how a program gets **64K of RAM in the dock**:
+`tpi:dock CODE 1,s` with an even `s`, an empty RAM slot pair, is 64K of
+zeroed, writable dock that keeps its contents until power-off.
+
+**The dock holds one cartridge at a time, and the Spectrum ROM (slot 0) is
+only the default one.** An AROS cartridge such as Pro/File or the
+programmer's toolkit, docked with `tpi:dock`, takes the dock's place; ZX48
+mode needs `tpi:dock CODE 2,0`, or a power cycle, to get the Spectrum ROM
+back. Nothing is overwritten unless a cartridge is written into slot 0
+itself (step 4 warns). The user manual's v3 section should say this plainly.
 
 ### Writing an image into a slot (`tpi:blkrcv` on v3)
 
@@ -113,6 +142,9 @@ writes the slot file itself, from the image `MOUNT_FILE` already copied to
 - Writing **the booted slot's file is safe** on v3: the 2068 runs from the
   SRAM image, not the file. The new ROM takes effect at the next boot or
   `tpi:boot`. v2's guard can relax on v3 to a warning.
+- Writing **slot 0** replaces the Spectrum ROM, and with it ZX48 mode. The
+  v3 updater warns and asks again before it does, as it would for the
+  booted slot.
 - **How the user asks for it** is decision 3. Either keep the updater-tape
   workflow (mount, `LOAD ""`, answer the questions) with a small v3 updater
   tape that ends in `tpi:blkrcv`, or have one direct command.
@@ -134,15 +166,44 @@ v3 side. ZX48_IO already runs on `tsbus.MQ()`, and the deep-queue host test
 covers its streaming (#243). The phase 4 command list's ZX48 rows get run on
 the card.
 
+### Later (phase 6): both in the dock at once
+
+AROS cartridges live entirely in the dock's upper 32K (8000h–FFFFh), and the
+Spectrum ROM in its lower 16K (0000h–3FFFh). A dock built from slot 0's
+lower half and a cartridge's upper half would hold both at once, so ZX48
+mode and an AROS program wouldn't take turns. v2 can't do this: its dock is
+one slot pair. It's a v3-only feature, not parity, so it belongs in phase 6.
+
+### Later (phase 6): PSRAM, if fitted
+
+proto1 has a footprint for an APS6404L (8 MB QSPI PSRAM) that isn't fitted.
+- **It can't serve the 2068.** It shares the QSPI bus with the flash and
+  sits behind a cache, so its delay isn't steady enough for Z80 memory
+  cycles. The HOME, EXROM and DOCK images stay in the RP2350B's SRAM.
+- **It would hold the RAM slots** (`Snn`, 512K in all) in real RAM: lost at
+  power-off by themselves, no flash wear, and a RAM dock saved before a
+  switch in milliseconds rather than about a second.
+- **It would hold MicroPython's heap.** That's about 190K now, tight with
+  64K slot buffers (a `MemoryError` at boot in step 1's first version).
+- **It could cache slot images** for switches in about 1 ms (the
+  architecture's idea).
+
+The costs: a slower heap for Python, PSRAM and flash taking turns on the
+QSPI bus, and one more part to bring up. Phase 5 doesn't depend on it. The
+RAM-slot storage stays behind `board_v3`'s slot functions, so moving it into
+PSRAM is a change inside the board layer.
+
 ## Order of work
 
 1. **Slot files and booting.** `start_memory` and the dock from `/slots`,
    with the fallbacks. Also `build-flash.py --slots`, and the slots put on
    the card. On the card: boot from F01, a missing slot, the one-shot.
-2. **`tpi:boot` and `tpi:dock`.** `map_slots` through `tsbus.switch`, and
-   `NO_SLOTS` gone. On the card: switch ROMs both ways; a live dock
-   (a cartridge in F08–F15, if the base image has one); SRAM slots cleared
-   at boot.
+2. **`tpi:boot` and `tpi:dock`.** `map_slots` through `tsbus.switch`;
+   `NO_SLOTS` off both. An empty boot slot refused. The dock-write flag in
+   `tsbus`, flash docks read-only, and RAM docks saved back on a switch. On
+   the card: switch ROMs both ways; a live dock (the AROS cartridges in
+   slots 10–14); a write to a flash dock ignored; a RAM dock's data
+   surviving a switch away and back; SRAM slots cleared at boot.
 3. **ZX48 on the card.** The phase 4 ZX48 rows on proto1.
 4. **Writing slots.** Decision 3's flow, then on the card: write a ROM into
    a spare slot, boot it, write the booted slot.
@@ -150,6 +211,20 @@ the card.
 Each step is its own PR, with host tests in the style of
 `board_v3_hosttest.py`: fake files, a fake `tsbus` recording `load` and
 `switch`. Each updates the reference.
+
+## Progress
+
+- **Step 1** (#248): the card boots from `/slots`. ROM 2.3 boots from F01;
+  an empty one-shot slot falls back to slot 1; slot 2 boots ZX Diagnostics.
+- **Step 2** (#249): `tpi:boot` resets into the new slot, and `tpi:dock` is
+  live. A flash dock is read-only; a RAM dock is kept across a switch. All
+  checked from BASIC.
+- **Step 3: passed** on step 2's firmware, with no code change
+  (2026-10-10). In Spectrum mode on the card: `LOAD "tpi:v3t.tap"`,
+  `tpi:zx48`, `OUT 244,3`, `LOAD ""` (six blocks), `SAVE "zxs3" CODE
+  32768,16384` (byte-identical, `sd_roundtrip.py`'s pattern), `SAVE
+  "tpi:dir"`, and back with `OUT 244,0` and `OUT 14,14`.
+- **Step 4**, writing slots, is next.
 
 ## Decisions (2026-10-10)
 

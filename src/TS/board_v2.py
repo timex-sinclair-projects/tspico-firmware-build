@@ -66,6 +66,11 @@ def start_memory(rom_sm, bank_sm):
     map_slots(rom_sm, bank_sm)
 
 
+def rom_slot_empty(mem, slot):
+    """This board can't tell an empty flash or SRAM slot: always False."""
+    return False
+
+
 def map_slots(rom_sm, bank_sm):
     """Switch the boot and dock slots, under a running 2068."""
     _rom.put(rom_sm)

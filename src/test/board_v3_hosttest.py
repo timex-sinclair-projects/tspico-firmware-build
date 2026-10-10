@@ -58,6 +58,7 @@ class FakeMQ:
 
 
 THE_MQ = FakeMQ()
+IMG = [bytearray(65536) for _ in range(3)]  # tsbus's HOME, EXROM and DOCK images
 
 
 def fake_tsbus():
@@ -66,7 +67,31 @@ def fake_tsbus():
     t.MQ = lambda: THE_MQ
     for name in ("start", "hold", "serve", "exrom", "dock"):
         setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
-    t.load = lambda slot, data: CALLS.append(("load", slot, bytes(data)))
+
+    def fill(slot, data):                       # load: repeated to fill 64K
+        data = bytes(data)
+        for i in range(0, 65536, len(data)):
+            IMG[slot][i:i + len(data)] = data[:65536 - i]
+
+    def load(slot, data):
+        CALLS.append(("load", slot, bytes(data)))
+        fill(slot, data)
+
+    def load_at(slot, off, data):
+        assert 0 <= off and off + len(data) <= 65536
+        CALLS.append(("load_at", slot, off, len(data)))
+        IMG[slot][off:off + len(data)] = bytes(data)
+
+    def read(slot, buf, off=0):
+        CALLS.append(("read", slot, off))
+        buf[:] = IMG[slot][off:off + len(buf)]
+
+    def switch(**k):
+        CALLS.append(("switch",) + tuple(sorted((n, bytes(v)) for n, v in k.items())))
+        for n, v in k.items():
+            fill({"home": 0, "exrom": 1, "dock": 2}[n], v)
+    t.load, t.load_at, t.read, t.switch = load, load_at, read, switch
+    t.dock_writes = lambda on: CALLS.append(("dock_writes", bool(on)))
     return t
 
 
@@ -200,18 +225,19 @@ def main():
           "ROM_SM 0Ah, bank_sm 84h: HOME and EXROM from F04.bin, no note")
     f08 = open(os.path.join(b3.SLOTS_DIR, "F08.bin"), "rb").read()
     f09 = open(os.path.join(b3.SLOTS_DIR, "F09.bin"), "rb").read()
-    check(got[2] == f08 + f09, "dock 8: F08 then F09, 64K")
+    check(IMG[2] == f08 + f09, "dock 8: F08 then F09, 64K")
     check(not [n for n in os.listdir(b3.SLOTS_DIR) if n.startswith("S")],
           "the SRAM slots are deleted at boot")
     note = board.start_memory(0x0A, 0xA1)                   # dock 10, ROM 1
-    got = loads(take())
+    take()
     f11 = open(os.path.join(b3.SLOTS_DIR, "F11.bin"), "rb").read()
-    check(got[2] == bytes(32768) + f11, "dock 10, no F10: zeros below, F11 above, not mirrored")
+    check(IMG[2] == bytes(32768) + f11, "dock 10, no F10: zeros below, F11 above, not mirrored")
     board.start_memory(0x0A, 0x91)                          # dock 9: odd
-    got = loads(take())
-    check(got[2] == f09 + bytes(32768), "an odd dock slot: that slot below, zeros above")
+    take()
+    check(IMG[2] == f09 + bytes(32768), "an odd dock slot: that slot below, zeros above")
     board.start_memory(0x0A, 0xE1)                          # dock 14: no files
-    check(loads(take())[2] == bytes(65536), "an empty dock: zeros")
+    take()
+    check(IMG[2] == bytes(65536), "an empty dock: zeros")
 
     print("the boot ROM's fallbacks")
     f01 = open(os.path.join(b3.SLOTS_DIR, "F01.bin"), "rb").read()
@@ -327,10 +353,77 @@ def main():
     sent = []
     t.SEND_MSG = lambda msg, msg2, st, force=False: sent.append((msg, st))
     t.TLM = lambda *a, **k: None
-    for name in ("MEMBOOT", "MEMDOCK", "BLKRCV"):
-        del sent[:]
-        getattr(t, name)(bytes(10), "")
-        check(sent == [("Not on the v3 card yet", t._3_F_Invalid_file)], "%s refuses, Report F" % name)
+    del sent[:]
+    t.BLKRCV(bytes(10), "")
+    check(sent == [("Not on the v3 card yet", t._3_F_Invalid_file)], "BLKRCV refuses, Report F (until step 4)")
+
+    print("tpi:boot and tpi:dock switch slots")
+    os.chdir(d)
+    with open("config.ini", "w") as f:
+        f.write('{"ROM_SLOT": 1, "ROM_SM": 10}')
+    t.TSP = types.SimpleNamespace(ROM_SM=10, bank_sm=0x01, dck_prev_mem=2, dck_prev_slot=0, f_name="")
+    t.LOG = lambda *a: None
+    t.utime = types.SimpleNamespace(sleep=lambda s: None)
+    put_slot("F01.bin", 0x10)
+    board.start_memory(0x0A, 0x01)                          # served: boot F01, dock F00/F01
+    take()
+
+    def pre(m, s):
+        return bytes((0, 0, 0, m & 0xFF, m >> 8, s & 0xFF, s >> 8, 0, 0, 0))
+
+    def switches():
+        return [c for c in take() if c[0] == "switch"]
+
+    del sent[:]
+    t.MEMBOOT(pre(2, 7), "")                                 # F07: no file
+    check(sent and sent[-1][1] == t._3_F_Invalid_file and "No ROM in Flash slot 7" in sent[-1][0],
+          "tpi:boot CODE 2,7 with no F07.bin: Report F (%r)" % sent[-1:])
+    check(t.TSP.bank_sm == 0x01 and not switches(), "  and nothing changed, nothing switched")
+    with open("config.ini") as f:
+        check('"ROM_SLOT": 1' in f.read(), "  config.ini untouched")
+    del sent[:]
+    t.MEMBOOT(pre(2, 4), "")
+    sw = switches()
+    f04 = open(os.path.join(b3.SLOTS_DIR, "F04.bin"), "rb").read()
+    check(sent and sent[-1][1] == t._1_OK and len(sw) == 1 and sw[0][1:] == (("exrom", f04[16384:]), ("home", f04[:16384])),
+          "tpi:boot CODE 2,4: one switch, HOME and EXROM from F04 (a 200 ms reset), the dock untouched")
+    with open("config.ini") as f:
+        check('"ROM_SLOT": 4' in f.read(), "  config.ini: ROM_SLOT 4 (LOAD_CONFIG uses it once)")
+    del sent[:]
+    t.MEMDOCK(pre(2, 8), "")
+    got = take()
+    names = [c[0] for c in got]
+    check(IMG[2] == f08 + f09 and "switch" not in names and "hold" not in names,
+          "tpi:dock CODE 2,8: the dock alone, live (no reset): F08 then F09")
+    check(got.index(("dock", False)) < names.index("load_at") and names.index("load_at") < got.index(("dock", True)),
+          "  DOCK serving off for the copy, on again after")
+    check(all(c[3] <= 32768 for c in got if c[0] == "load_at"), "  in halves of 32K at most: no 64K buffer")
+    t.MEMBOOT(pre(2, 4), "")
+    check(not switches(), "tpi:boot to the slot already booted: no switch, no reset")
+
+    print("writes into the dock")
+    board.start_memory(0x0A, 0x01)
+    check(("dock_writes", False) in take(), "a flash dock at boot: read-only")
+    t.MEMDOCK(pre(1, 4), "")                                 # RAM slots 4 and 5: empty, 64K of RAM
+    got = take()
+    check(("dock_writes", True) in got and not [c for c in got if c[0] == "read"],
+          "tpi:dock CODE 1,4: writes stored; nothing saved on leaving a flash dock")
+    data = bytes(range(256)) * 256
+    IMG[2][:] = data                                         # the program's data, written by the Z80
+    t.MEMDOCK(pre(2, 10), "")
+    got = take()
+    s4 = open(os.path.join(b3.SLOTS_DIR, "S04.bin"), "rb").read()
+    s5 = open(os.path.join(b3.SLOTS_DIR, "S05.bin"), "rb").read()
+    check(s4 + s5 == data, "leaving the RAM dock: its 64K saved to S04 and S05")
+    names = [c[0] for c in got]
+    check(names.index("read") < names.index("load_at") and ("dock_writes", False) in got,
+          "  before the new dock is loaded; the flash dock that follows is read-only")
+    t.MEMDOCK(pre(1, 4), "")
+    take()
+    check(IMG[2] == data, "back to RAM slot 4: the data is there again")
+    board.start_memory(0x0A, 0x01)
+    take()
+    check(not os.path.exists(os.path.join(b3.SLOTS_DIR, "S04.bin")), "and a boot clears it, as v2's power-off")
 
     print("ACTIVATE_SD with the socket empty")
     logs = []
