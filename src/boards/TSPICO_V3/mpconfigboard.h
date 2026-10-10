@@ -6,6 +6,15 @@
 // U22 (APS6404L) is not fitted on proto1: images live in SRAM.
 #define MICROPY_HW_ENABLE_PSRAM (0)
 
+// Core 1 belongs to tsbus (the bus code runs there), so no _thread.
+#define MICROPY_PY_THREAD (0)
+
+// Flash clock at most 84 MHz: divider 3 at 250 MHz, the clock tsbus.start()
+// raises the system to (phase 1's). The board boots at the port's 150 MHz:
+// the SDK sets the boot clock before MicroPython sets the flash divider, so
+// booting at 250 MHz would run the flash at 125 MHz.
+#define MICROPY_HW_FLASH_MAX_FREQ (84000000)
+
 // Default pins for the peripherals, set to what each is wired to on the
 // board. The port's defaults (UART0 on GP0/1, UART1 GP4/5, I2C1 GP6/7, SPI1
 // GP8-11) would put a peripheral created without pins on MD0-MD7 or the

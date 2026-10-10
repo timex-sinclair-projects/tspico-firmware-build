@@ -358,8 +358,10 @@ retries, clones MicroPython v1.29.0 itself, builds `mpy-cross`, and runs
 `BOARD_DIR=$GITHUB_WORKSPACE/src/boards/TSPICO_V3`, so nothing is copied
 into the MicroPython tree. It needs its own clone because step 9 replaces
 the port's `boards/manifest.py`. The UF2, `build-TSPICO_V3/firmware.uf2`,
-is uploaded as `tspico-v3-firmware-uf2`. It has no TS modules yet (phase 3
-of the v3 port plan), and `pico-serial.py flash --branch` does not fetch it.
+is uploaded as `tspico-v3-firmware-uf2`. The board brings in the `tsbus`
+module itself (`USER_C_MODULES`), so the job needs no extra arguments. It has
+no TS modules yet (phase 3 of the v3 port plan), and `pico-serial.py flash
+--branch` does not fetch it.
 
 A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
