@@ -570,8 +570,9 @@ are the FIFO occupancies measured *as* the event fired.
 To capture it without Thonny -- read-only, so the firmware keeps
 running -- use `python3 tools/pico-serial.py watch`. The same tool
 flashes UF2s (`flash --branch <name>`, no BOOTSEL buttons), runs REPL
-snippets (`run`) and interrupts or restarts the firmware (`break`,
-`softreset`); see its docstring and `src/CLAUDE.md`, "Talking to the Pico
+snippets (`run`), copies files on and off the Pico (`put`, `get`; with
+`--sd`, on and off the SD card, so test tapes need no card reader) and
+interrupts or restarts the firmware (`break`, `softreset`); see its docstring and `src/CLAUDE.md`, "Talking to the Pico
 directly". It refuses to share the port, so disconnect Thonny first.
 
 You can flip it from the REPL without rebooting:

@@ -14,9 +14,18 @@ Usage:
     python3 tools/pico-serial.py softreset             # Ctrl-D: rerun main.py
     python3 tools/pico-serial.py put local.py /remote.py   # copy a file onto the Pico
     python3 tools/pico-serial.py get /activity.log out.log # copy one off it
+    python3 tools/pico-serial.py put --sd game.tap /TAP/game.tap  # onto the SD card
+    python3 tools/pico-serial.py get --sd /TAP/game.tap game.tap  # off it
+    python3 tools/pico-serial.py run --sd "print(os.listdir('/sd/TAP'))"
     python3 tools/pico-serial.py flash --branch my-branch   # CI UF2 -> Pico
     python3 tools/pico-serial.py flash --v3 --branch main   # the v3 card's UF2
     python3 tools/pico-serial.py flash path/to/firmware.uf2
+
+`--sd` (put, get, run) mounts the SD card at /sd first, the way the
+firmware's ACTIVATE_SD does (through TS.board, so on the v2 board and the v3
+card alike), and unmounts it after; a put/get path gets /sd in front. Like
+put and get it needs the REPL: `break` first, `softreset` after. The firmware
+re-reads the card's folder at its next command.
 
 `watch` opens the port READ-ONLY and never writes, so it cannot disturb the
 running firmware; it reattaches if the Pico is unplugged and comes back.
@@ -208,7 +217,7 @@ def cmd_run(args):
             write_all(fd, code.encode() + b"\r")
         emit(read_until(fd, args.timeout, PROMPT))
         print()
-    with_port(args, go)
+    with_port(args, on_sd(args, go))
 
 
 def _repl_line(fd, line, timeout=5):
@@ -217,10 +226,57 @@ def _repl_line(fd, line, timeout=5):
     return read_until(fd, timeout, PROMPT)
 
 
+# --sd: the SD card mounted at /sd as ACTIVATE_SD mounts it, through
+# TS.board, so the same lines work on the v2 board and the v3 card. The
+# firmware must be stopped (break) first: it unmounts the card after every
+# command, so /sd is free at the REPL. A leftover mount is dropped first.
+SD_MOUNT = ("import os\r"
+            "from TS import board\r"
+            "from TS.sdcard import SDCard\r"
+            "exec('try:\\n os.umount(\\'/sd\\')\\nexcept OSError:\\n pass')\r"
+            "_sd_mq = board.sd_take_bus(); os.mount(SDCard(board.sd_spi(), board.sd_cs()), '/sd')")
+SD_UNMOUNT = "os.umount('/sd'); board.sd_release_bus(); del _sd_mq"
+
+
+def sd_path(p):
+    """A path on the card: /sd in front unless it is there already."""
+    p = p if p.startswith("/") else "/" + p
+    return p if p == "/sd" or p.startswith("/sd/") else "/sd" + p
+
+
+def sd_mount(fd):
+    out = b""
+    for line in SD_MOUNT.split("\r"):
+        out += _repl_line(fd, line, 10)
+    if b"Traceback" in out:                          # not "Error": the guard line says OSError
+        sys.exit("SD mount failed:\n" + out.decode("utf-8", "replace"))
+
+
+def sd_unmount(fd):
+    out = _repl_line(fd, SD_UNMOUNT)
+    if b"Traceback" in out:
+        print("SD unmount: " + out.decode("utf-8", "replace"))
+
+
+def on_sd(args, go):
+    """Run go(fd) with the card mounted if --sd was given."""
+    if not getattr(args, "sd", False):
+        return go
+
+    def wrapped(fd):
+        read_until(fd, 0.2)
+        sd_mount(fd)
+        try:
+            go(fd)
+        finally:
+            sd_unmount(fd)
+    return wrapped
+
+
 def cmd_put(args):
     import base64
     data = open(args.local, "rb").read()
-    remote = args.remote
+    remote = sd_path(args.remote) if args.sd else args.remote
 
     def go(fd):
         read_until(fd, 0.2)
@@ -241,20 +297,22 @@ def cmd_put(args):
                                         "" if ok else "  SIZE MISMATCH: %r" % out))
         if not ok:
             sys.exit(1)
-    with_port(args, go)
+    with_port(args, on_sd(args, go))
 
 
 def cmd_get(args):
     import base64
 
+    remote = sd_path(args.remote) if args.sd else args.remote
+
     def go(fd):
         read_until(fd, 0.2)
-        out = _repl_line(fd, "import os; print(os.stat(%r)[6])" % args.remote)
+        out = _repl_line(fd, "import os; print(os.stat(%r)[6])" % remote)
         try:
             size = int(out.decode().split("\n")[-2].strip())
         except (ValueError, IndexError):
             sys.exit(out.decode("utf-8", "replace"))
-        _repl_line(fd, "import binascii; _f = open(%r, 'rb')" % args.remote)
+        _repl_line(fd, "import binascii; _f = open(%r, 'rb')" % remote)
         data = b""
         while len(data) < size:
             out = _repl_line(fd, "print(binascii.b2a_base64(_f.read(384)).decode().strip())", 10)
@@ -266,9 +324,9 @@ def cmd_get(args):
             data += chunk
         _repl_line(fd, "_f.close(); del _f")
         open(args.local, "wb").write(data)
-        print("%s -> %s: %d bytes%s" % (args.remote, args.local, len(data),
+        print("%s -> %s: %d bytes%s" % (remote, args.local, len(data),
                                         "" if len(data) == size else "  SHORT (expected %d)" % size))
-    with_port(args, go)
+    with_port(args, on_sd(args, go))
 
 
 def cmd_softreset(args):
@@ -485,6 +543,7 @@ def main():
     r.add_argument("code", nargs="?")
     r.add_argument("--file", help="multi-line snippet, sent in paste mode")
     r.add_argument("--timeout", type=float, default=5)
+    r.add_argument("--sd", action="store_true", help="with the SD card mounted at /sd")
     r.set_defaults(fn=cmd_run)
 
     s = sub.add_parser("softreset", help="Ctrl-D: soft reboot, rerun main.py")
@@ -495,11 +554,13 @@ def main():
     p = sub.add_parser("put", help="copy a local file onto the Pico (REPL at >>>)")
     p.add_argument("local")
     p.add_argument("remote")
+    p.add_argument("--sd", action="store_true", help="REMOTE is on the SD card (/sd added)")
     p.set_defaults(fn=cmd_put)
 
     g = sub.add_parser("get", help="copy a file off the Pico (REPL at >>>)")
     g.add_argument("remote")
     g.add_argument("local")
+    g.add_argument("--sd", action="store_true", help="REMOTE is on the SD card (/sd added)")
     g.set_defaults(fn=cmd_get)
 
     f = sub.add_parser("flash", help="put the Pico in BOOTSEL and copy a UF2")
