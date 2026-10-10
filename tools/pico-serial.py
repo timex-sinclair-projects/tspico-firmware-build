@@ -15,6 +15,7 @@ Usage:
     python3 tools/pico-serial.py put local.py /remote.py   # copy a file onto the Pico
     python3 tools/pico-serial.py get /activity.log out.log # copy one off it
     python3 tools/pico-serial.py flash --branch my-branch   # CI UF2 -> Pico
+    python3 tools/pico-serial.py flash --v3 --branch main   # the v3 card's UF2
     python3 tools/pico-serial.py flash path/to/firmware.uf2
 
 `watch` opens the port READ-ONLY and never writes, so it cannot disturb the
@@ -22,11 +23,15 @@ running firmware; it reattaches if the Pico is unplugged and comes back.
 Plugging USB into a Pico the 2068 is already powering does not reset it.
 
 `flash` needs no buttons: it drops the firmware to the REPL and calls
-machine.bootloader(), which reboots the RP2040 into BOOTSEL (the RPI-RP2
-drive), then copies the UF2 and waits for the Pico to reboot into it. If
-RPI-RP2 is already mounted it just copies. With --branch/--run it downloads
-the `tspico-firmware-uf2` artifact (`--upgrade`: `tspico-upgrade-uf2`) from a
-successful build.yml run via `gh`. `--branch B` takes the run for B's CURRENT
+machine.bootloader(), which reboots the chip into BOOTSEL (the RPI-RP2 drive
+on a v2 board's RP2040, RP2350 on the v3 card), then copies the UF2 and waits
+for the board to reboot into it. If the drive is already mounted it just
+copies. It refuses a UF2 built for the other chip: a v2 build on the v3 card,
+or the reverse, would leave a board that doesn't come up. A v3 card running
+the bring-up firmware (no REPL) or hung needs BOOTSEL by hand. With
+--branch/--run it downloads the `tspico-firmware-uf2` artifact (`--upgrade`:
+`tspico-upgrade-uf2`; `--v3`: `tspico-v3-firmware-uf2`) from a successful
+build.yml run via `gh`. `--branch B` takes the run for B's CURRENT
 head commit on GitHub, so it never flashes an older build; `--run N` refuses
 anything that isn't a finished, successful firmware build (a Pages deploy run
 on the same commit has an id that looks just the same).
@@ -274,11 +279,51 @@ def cmd_softreset(args):
     with_port(args, go)
 
 
+BOOT_DRIVES = ("RPI-RP2", "RP2350")             # the BOOTSEL drives' volume names
+
+
 def rp2_drive():
-    for d in ["/Volumes/RPI-RP2"] + glob.glob("/media/*/RPI-RP2") + \
-            glob.glob("/run/media/*/RPI-RP2"):
-        if os.path.isdir(d):
-            return d
+    for name in BOOT_DRIVES:
+        for d in ["/Volumes/" + name] + glob.glob("/media/*/" + name) + \
+                glob.glob("/run/media/*/" + name):
+            if os.path.isdir(d):
+                return d
+    return None
+
+
+# UF2 family IDs (the field at offset 28 of each 512-byte block, when flag
+# 0x2000 is set). A picotool-built RP2350 UF2 also carries ABSOLUTE blocks.
+UF2_MAGIC = b"UF2\n\x57\x51\x5d\x9e"            # magic 0A324655h, 9E5D5157h
+UF2_FAMILIES = {0xE48BFF56: "RP2040", 0xE48BFF59: "RP2350", 0xE48BFF5A: "RP2350",
+                0xE48BFF5B: "RP2350"}
+
+
+def uf2_chip(path):
+    """The chip a UF2 is built for ("RP2040", "RP2350"), or None if unknown."""
+    with open(path, "rb") as f:
+        data = f.read()
+    chips = set()
+    for off in range(0, len(data) - 511, 512):
+        if data[off:off + 8] != UF2_MAGIC:
+            continue
+        flags = int.from_bytes(data[off + 8:off + 12], "little")
+        if flags & 0x2000:
+            chips.add(UF2_FAMILIES.get(int.from_bytes(data[off + 28:off + 32], "little")))
+    chips.discard(None)
+    return chips.pop() if len(chips) == 1 else None
+
+
+def drive_chip(drive):
+    """The chip behind a BOOTSEL drive, from its INFO_UF2.TXT Board-ID."""
+    try:
+        with open(os.path.join(drive, "INFO_UF2.TXT")) as f:
+            info = f.read()
+    except OSError:
+        return None
+    if "Board-ID: RPI-RP2" in info:
+        return "RP2040"
+    if "Board-ID: RP2350" in info:
+        return "RP2350"
     return None
 
 
@@ -363,8 +408,9 @@ def cmd_flash(args):
         sys.exit("flash: give exactly one of UF2, --branch, --run")
     tmp = tempfile.mkdtemp(prefix="tspico-uf2-")
     try:
-        flash(args, args.uf2 or ci_uf2(args.branch, args.run, tmp,
-                                       "tspico-upgrade-uf2" if args.upgrade else "tspico-firmware-uf2"))
+        artifact = ("tspico-v3-firmware-uf2" if args.v3 else
+                    "tspico-upgrade-uf2" if args.upgrade else "tspico-firmware-uf2")
+        flash(args, args.uf2 or ci_uf2(args.branch, args.run, tmp, artifact))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -389,7 +435,8 @@ def flash(args, uf2):
             time.sleep(0.25)
             drive = rp2_drive()
         if not drive:
-            sys.exit("RPI-RP2 never appeared -- use BOOTSEL + reset by hand, then rerun")
+            sys.exit("no BOOTSEL drive (%s) appeared -- use BOOTSEL + reset by hand, then rerun"
+                     % " or ".join(BOOT_DRIVES))
 
     # The mount point exists before macOS has finished mounting it: copying
     # straight away can fail with EACCES. Wait for the bootloader's own
@@ -397,6 +444,12 @@ def flash(args, uf2):
     end = time.time() + args.timeout
     while not os.path.exists(os.path.join(drive, "INFO_UF2.TXT")) and time.time() < end:
         time.sleep(0.25)
+    want, have = uf2_chip(uf2), drive_chip(drive)
+    if want and have and want != have:
+        hint = ("" if args.uf2 else
+                " Use --v3 for the v3 card." if have == "RP2350" else " Leave out --v3 for a v2 board.")
+        sys.exit("%s is built for the %s, but the board in BOOTSEL is an %s -- not copied"
+                 " (it stays in BOOTSEL).%s" % (uf2, want, have, hint))
     print("Copying %s -> %s" % (uf2, drive))
     while True:
         try:
@@ -453,8 +506,11 @@ def main():
     f.add_argument("uf2", nargs="?", help="local .uf2 file")
     f.add_argument("--branch", help="the CI build of this branch's current head commit")
     f.add_argument("--run", help="a specific CI run id")
-    f.add_argument("--upgrade", action="store_true",
-                   help="the upgrade UF2 (src/upgrade/) instead of the firmware")
+    g2 = f.add_mutually_exclusive_group()
+    g2.add_argument("--upgrade", action="store_true",
+                    help="the upgrade UF2 (src/upgrade/) instead of the firmware")
+    g2.add_argument("--v3", action="store_true",
+                    help="the v3 card's UF2 (board TSPICO_V3) instead of the v2 firmware")
     f.add_argument("--timeout", type=float, default=30)
     f.set_defaults(fn=cmd_flash)
 
