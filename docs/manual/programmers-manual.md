@@ -1932,6 +1932,9 @@ that the link is left idle with exactly one pre-load after every command.
   `tp.LOG(msg, level)` writes to it (0 = info, 3 = critical).
 - **Thonny stops the firmware when it connects.** The 2068 then sees a long pause and Report J.
   Close Thonny, or use `pico-serial.py`, which refuses to share the port.
+- To put a test tape on the SD card without taking the card out: `pico-serial.py break`, then
+  `pico-serial.py put --sd mytest.tap /TAP/mytest.tap`, then `pico-serial.py softreset`.
+  `get --sd` copies a SAVE back off the card the same way.
 
 ## 15.3 On the hardware
 

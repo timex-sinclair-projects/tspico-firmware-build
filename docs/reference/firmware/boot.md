@@ -492,7 +492,13 @@ via `gh`; it reboots the board into BOOTSEL with `machine.bootloader()`, so
 no buttons, and finds either chip's drive, `RPI-RP2` or `RP2350`). Before
 copying, `flash` compares the UF2's family IDs with the drive's
 `INFO_UF2.TXT` Board-ID and refuses a UF2 built for the other chip, leaving
-the board in BOOTSEL. Every command refuses
+the board in BOOTSEL. `--sd` on `put`, `get` and `run` mounts the SD card
+at `/sd` first, as `ACTIVATE_SD` does (`board.sd_take_bus`, `sd_spi`,
+`sd_cs`, then `TS.sdcard.SDCard`; so on either board), and unmounts it and
+calls `board.sd_release_bus` after; a `put`/`get` path gets `/sd` in front.
+That is how test tapes go onto the card without a card reader
+(`src/test/sd_roundtrip.py`). Like `put`, it needs the firmware stopped
+(`break`), and `softreset` after. Every command refuses
 to start if another process holds the port. Never `break` while the Pico
 may be in the middle of an SD access: a card left mid-transfer needed a
 power cycle before the driver learned to recover it
