@@ -24,14 +24,14 @@ Who calls what:
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
 | `start_memory()` | `TS2068_IO` (6236), once |
 | `map_slots()` | `MEMBOOT` (5067), `MEMDOCK` (5187) |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7192) |
-| `restart_mq()` | `ZX48_IO` (7193, 7298, 7340) |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7194) |
+| `restart_mq()` | `ZX48_IO` (7195, 7300, 7342) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
 | `make_led()` | `TS2068_IO` (6210) |
 | `led_brightness()` | `TS2068_IO` (6214), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6334, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (6995) |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6336, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (6997) |
 | `SLOTS` | `NO_SLOTS`, for `MEMBOOT`, `MEMDOCK`, `BLKRCV` ([tspico-commands.md](tspico-commands.md#no_slots)) |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
 
@@ -136,7 +136,7 @@ for state machine 4 (DOCK only, no ROM mapping) is a comment.
 The service-loop restart in `TS2068_IO` leaves these state machines alone on
 purpose. Rebuilding them, or `machine.reset()`, would release the lines that
 select the 2068's ROM bank under the running machine (the comment at
-6468–6477). Host harnesses must never use state machines 4 or 5.
+6470–6479). Host harnesses must never use state machines 4 or 5.
 
 ### `map_slots(rom_sm, bank_sm)`
 
@@ -223,11 +223,25 @@ DREQs to touch. `SLOTS`: no slots until phase 5 of the v3 port plan, so the
 slot commands refuse (`NO_SLOTS`). `HAS_CORE1`: core 1 runs the `tsbus`
 loop, so `background()` runs on core 0 and there is no boot blink.
 
+### `SLOTS_DIR`, `SLOT_SIZE`, `MEM_SRAM`, `MEM_FLASH`
+
+`"/slots"` on the Pico's flash filesystem, 32768, and `ROM_SM`'s two memory
+codes, 1 and 2. v2's two chips of sixteen 32K slots become files (phase 5,
+[docs/v3-slots-proposal.md](../../v3-slots-proposal.md)):
+- `Fnn.bin` is flash slot nn, kept;
+- `Snn.bin` is SRAM slot nn, deleted at every boot, as v2's SRAM loses its
+  contents at power-off.
+
+A missing file, or one that isn't 32K, is an empty slot. A ROM slot is HOME
+(16K) then EXROM (16K). `build-flash.py --slots` makes the flash ones
+([boot.md](boot.md)).
+
 ### `ROM_FILE`
 
-`"/rom/TSPICO-23.ROM"` on the Pico's flash filesystem: HOME (16K), then
-EXROM (16K), the image `src/rom/TSPICO-23.ROM`. Copied there by hand for now
-(the v3 card has no installer yet). Phase 5 replaces it with the slot files.
+`"/rom/TSPICO-23.ROM"` on the Pico's flash filesystem, the image
+`src/rom/TSPICO-23.ROM`. Since phase 5 it is only the last fallback for the
+boot ROM (`boot_rom`): the 2068 is never released into an empty ROM. Copied
+there by hand on the cards that have one.
 
 ### `_SD_CS`, `_SD_SCK`, `_SD_MOSI`, `_SD_MISO`
 
@@ -277,14 +291,78 @@ still too bright on the card (2026-10-10), 5 % is David's choice.
 C at start-up ([board-v3.md](board-v3.md#board_initc)), so there are no pins
 to set here.
 
+### `slot_path(mem, slot)`
+
+`"/slots/Fnn.bin"`, or `"/slots/Snn.bin"` for `MEM_SRAM`.
+
+### `read_slot_into(mem, slot, buf)`
+
+Reads a slot's 32K into `buf` (a 32K `bytearray` or `memoryview`) in place,
+and returns `True`. Returns `False`, `buf` untouched, if there is no file or
+it isn't 32K (`os.stat` first). In place because the heap is about 190K: the
+first version read each slot into a new 32K block, next to a 64K dock image
+and the 32K ROM. On the card that failed at boot with `MemoryError`, and the
+2068 stayed held (2026-10-10).
+
+### `read_slot(mem, slot)`
+
+A slot as a new 32K `bytearray`, or `None`. For callers with no buffer to
+hand; the boot path doesn't use it.
+
+### `clear_sram_slots()`
+
+Deletes every `S*.bin` in `SLOTS_DIR`, quietly if there is none: the SRAM
+slots start empty at every boot.
+
+### `boot_rom(rom_sm, bank_sm)`
+
+The ROM to boot, a 32K `bytearray`, and a note if it isn't the one asked
+for. The memory is `rom_sm` bits 0–1, the slot `bank_sm` bits 0–3.
+
+1. That slot's file.
+2. Missing: flash slot 1, with the note "no ROM in flash slot 7: booted
+   flash slot 1".
+3. Missing too: `ROM_FILE`, "no ROM in … or flash slot 1: booted
+   /rom/TSPICO-23.ROM". If slot 1 itself was asked for, the note just says
+   "no ROM in flash slot 1".
+
+An SRAM boot slot always falls back, because the SRAM slots were just
+cleared. On v2 that boots an empty chip and hangs the 2068. A missing
+`ROM_FILE` at the last step raises.
+
+### `dock_image(rom_sm, bank_sm)`
+
+The 64K DOCK image. The memory is `rom_sm` bits 2–3, the slot `bank_sm`
+bits 4–7. The low 32K is the dock slot. For an even slot the high 32K is
+the next slot: v2's 64K cartridge spans two consecutive slots numbered by
+the even one. Both halves are read in place into one `bytearray`.
+
+A half with no file is zeros, as an empty v2 slot reads, not a mirror of
+the other half. The AROS cartridges in the base image keep everything in
+the upper half (8000h–FFFFh), and a mirror would copy them to 0000h too. An
+odd dock slot fills the low half only. Slot 0 is the 16K Spectrum ROM,
+zero-filled, so the default dock has it at 0000h–3FFFh for ZX48 mode.
+
 ### `start_memory(rom_sm, bank_sm)`
 
-Reads `ROM_FILE` whole, then: `tsbus.hold(True)`; HOME from the first 16K,
-EXROM from the rest (`tsbus.load`); EXROM and DOCK chunks served
-(`exrom(True)`, `dock(True)`); `serve(True)` (/BE live); `hold(False)`, the
-2068 released into the new ROM. Serving is on before the release, so the
-Z80's first fetch is answered. `rom_sm` and `bank_sm` are not used. A
-missing `ROM_FILE` raises, and `main.py` logs it: the 2068 stays in reset.
+`clear_sram_slots()`, then `tsbus.hold(True)`:
+1. `boot_rom`'s ROM into HOME (the first 16K) and EXROM (the rest);
+2. the ROM buffer dropped and `gc.collect()`, so only one big buffer exists
+   at a time;
+3. `dock_image` into DOCK;
+4. EXROM and DOCK chunks served (`exrom(True)`, `dock(True)`),
+   `serve(True)` (/BE live), and `hold(False)`: the 2068 is released into
+   the new ROM.
+
+Serving is on before the release, so the Z80's first fetch is answered.
+Returns `boot_rom`'s note (also printed, `[board] …`), which `TS2068_IO`
+logs at level 2. A missing `ROM_FILE` with no slot to boot raises, and
+`main.py` logs it: the 2068 stays in reset.
+
+Checked on proto1 (2026-10-10), with `/slots` from `build-flash.py --slots`:
+ROM 2.3 boots from `F01.bin`, `CAT` and a LOAD work, a one-shot boot of
+empty slot 7 comes up in ROM 2.3 and `config.ini` goes back to slot 1, and a
+one-shot boot of slot 2 runs ZX Diagnostics.
 
 No shadow boot: the 2068 is held from power-on until here, rather than
 running a ROM while the firmware loads (a choice made 2026-10-10, step 4.3).

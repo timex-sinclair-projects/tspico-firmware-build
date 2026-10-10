@@ -38,8 +38,10 @@ reads on port 0Fh (`FF` READY + IDLE, `00` BUSY).
 On the v3 card ([../firmware/board.md](../firmware/board.md#board_v3py)) step 5 is
 `tsbus.start()` (250 MHz, core 1's bus loop; the 2068 held in reset), step 7
 also sets the LED's brightness (`LED_BRIGHTNESS`, default 5 %), step 8
-loads `/rom/TSPICO-23.ROM` into HOME and EXROM and releases the 2068 (only
-now does it start), step 10 is skipped, and step 11 mounts the card on its
+clears the SRAM slot files, loads the boot slot's file (`/slots/F01.bin` by
+default; slot 1, then `/rom/TSPICO-23.ROM`, if it's missing) into HOME and
+EXROM and the dock slots into DOCK, and releases the 2068 (only now does it
+start), step 10 is skipped, and step 11 mounts the card on its
 own pins without taking the bus. It reads the socket's detect switch first:
 with no card it fails at once, the socket never clocked.
 

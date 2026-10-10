@@ -222,7 +222,7 @@ single-port version; DUAL_PORT_DEVELOPMENT.md tells the story):
   The boot pre-load is staged once, by `TS2068_IO`.
 
 Takes nothing, returns `None`. Writes `MQ` and `sd_active`. Called after every SD access in this
-file (two dozen sites), and at boot by `TS2068_IO` (6374) after the first
+file (two dozen sites), and at boot by `TS2068_IO` (6376) after the first
 card check. `tspico_io` never calls it; its comments name it because the
 dispatcher's call is what ends a SAVE or LOAD there, and ZX48 mode uses
 `ENA_MQ_DUAL` instead.
@@ -318,7 +318,7 @@ swallow it and carry on writing to a Z80 that has gone. Handlers are full
 of `except Exception` (card errors, bad arguments); `GETLOG` relies on
 this (its comment at 4748–4757: `SEND_MSG2` runs outside its `try`, so a
 BREAK at the "Scroll?" prompt passes straight through), and so does
-`TS2068_IO`'s outer loop (6479), which lets BaseExceptions — Ctrl-C from
+`TS2068_IO`'s outer loop (6481), which lets BaseExceptions — Ctrl-C from
 the host, `CmdAbort` — pass. `extcmd.py`'s header (line 21) tells external
 command writers never to catch it ([extcmd.md](extcmd.md)).
 
@@ -463,9 +463,9 @@ Why: on hardware the Z80 reads the pre-load microseconds after the
 pre-header, so the race was never seen there. In the emulator
 ([tools/emu](../../../tools/emu)), every port access is a round trip, and a
 SAVE whose card check rebuilt the state machine first lost its pre-load and
-gave up on its header (2026-10-04, the comment at 6655–6665). Callers:
-`TS2068_IO` before `PRINT_FLUSH` writes buffered printer text (6609) and
-before the SAVE branch's `SD_PROBE` (6666), both followed by the
+gave up on its header (2026-10-04, the comment at 6657–6667). Callers:
+`TS2068_IO` before `PRINT_FLUSH` writes buffered printer text (6611) and
+before the SAVE branch's `SD_PROBE` (6668), both followed by the
 `if _unread: MQ.put(0x01)`.
 
 ### `CMD_RX_FLUSH()`
@@ -526,7 +526,7 @@ that notices a card has gone, come back, or been swapped, and
 attempts, the revalidation, the no-card gate, `SD_CALL`'s answer and
 `tpi:info`; [`sd_mount_hosttest.py`](../../../src/test/sd_mount_hosttest.py)
 the retry loop at boot (and, as its docstring says, that `TS2068_IO`
-catches the `OSError` and boots without a card, 6346–6350); [`sd_recover_hosttest.py`](../../../src/test/sd_recover_hosttest.py)
+catches the `OSError` and boots without a card, 6348–6352); [`sd_recover_hosttest.py`](../../../src/test/sd_recover_hosttest.py)
 the driver's recovery of a card left mid-transfer, which `ACTIVATE_SD`
 reports ([sdcard.md](sdcard.md)).
 
@@ -596,12 +596,12 @@ nobody. With the 6 s budget the worst case is two such attempts, about
 State: writes `MQ`, `sd_active`, `TSP.sd_present`, and through
 `SD_NOTE_CARD` `TSP.sd_cid` and more; the mount table; GPIO 2–4, 12, 28
 (v2), or GPIO 32 and 37–39 and a read of the XL9555 (v3).
-Callers: `TS2068_IO` at boot (6347), `SD_CALL`, `SD_PROBE`,
+Callers: `TS2068_IO` at boot (6349), `SD_CALL`, `SD_PROBE`,
 `LISTING_CHECK`, `REFRESH_LISTING`, `SAVE_MOUNT`, and the functions that
 manage the card themselves: `MOUNT_FILE` (1840), `CATALOG` (2618),
 `ChangeDir` (4168), `GETHELP` (4426), `MDIR` (4962), `PRINT_FLUSH` (5664),
 `COPY_BMP` (5696), `PRN_OPEN` (5770), `TS2068_IO`'s SAVE and LOAD branches
-(6705–6802) and `ZX_TPI` (7091).
+(6707–6804) and `ZX_TPI` (7093).
 
 Beware:
 
@@ -727,7 +727,7 @@ different (`changed` true for a different card).
 Writes `alldirs`, `prev_path`, `prn_path`, `TSP.cur_path`, `TSP.append`,
 `TSP.sd_present`, `TSP.sd_listing_ok`, the mount, the channels, the current
 directory. Called only by `SD_NOTE_CARD`; the comments in `GETINFO` (4188),
-`TS2068_IO` (6341) and `tspico_io`'s SAVE paths (2754, 2897) describe its
+`TS2068_IO` (6343) and `tspico_io`'s SAVE paths (2754, 2897) describe its
 effects. `SAVE_TS` checks one of them: after its mount, `append` gone off
 means the card was swapped during the transfer, and it refuses to append to
 a file of the same name on the new card.
@@ -786,7 +786,7 @@ Clears the flag first, then `ACTIVATE_SD()`, `os.chdir(TSP.cur_path)`,
 `TSP.sd_listing_ok = DIR_FILES()`; an `OSError` (no card) is ignored —
 the command's own card check answers. The `finally` gives the bus back,
 Y BUSY. Callers, both where the Z80 is waiting for READY: the start of
-`PROCESS_CMD` (6035) and `ZX_TPI` before it matches a name (7089, 7108).
+`PROCESS_CMD` (6035) and `ZX_TPI` before it matches a name (7091, 7110).
 
 ### `SD_PROBE(tries=None)`
 
@@ -798,7 +798,7 @@ caller with a pre-load outstanding uses `PRELOAD_READ` first.
 
 Callers: `PROCESS_CMD`'s card gate (6071: a command that needs the card,
 with `sd_present` false, probes once before `NO_CARD_REPLY`, so inserting a
-card is all it takes); the SAVE branch of `TS2068_IO` (6667, which sets
+card is all it takes); the SAVE branch of `TS2068_IO` (6669, which sets
 `TSP.save_no_card` so `SAVE_TS` refuses the header with Report J and the
 program stays in the 2068's memory, instead of "0 OK" and a write that
 fails after it); `GETINFO` (4584, so `tpi:info` reports the card as it is
@@ -817,7 +817,7 @@ that second. Callers: `MOUNT_FILE` when a mount fails at level 2 or above
 (1947), `BLKRCV` when the block asked for runs past the file (4137). The
 single-port firmware also called it in a loop when the boot mount failed
 and after a failed transaction; both are gone (`ACTIVATE_SD` raises
-instead, and the comment at 6897–6904 explains why the dispatcher's
+instead, and the comment at 6899–6906 explains why the dispatcher's
 recovery no longer blinks: the second it blocked was time the Z80 could
 already be sending its next pre-header).
 
@@ -829,9 +829,9 @@ be talking.
 The boot blink, on core1. Sets `busy = True`, sleeps 0.2 s, then blinks —
 on `pause` seconds, off `pause` seconds — until the global `dead` is true;
 then LED off and `busy = False`. `TS2068_IO` starts it with
-`board.background(BLINK_LED, (0.9,))` (6333–6334; only when `board.HAS_CORE1`,
+`board.background(BLINK_LED, (0.9,))` (6335–6336; only when `board.HAS_CORE1`,
 so v2 only) just before the
-boot's card check and sets `dead = True` after it (6352), then waits
+boot's card check and sets `dead = True` after it (6354), then waits
 `while busy: pass` for it to finish before core1 is used for anything else
 (the log writes). That wait is unbounded and safe: this function only
 sleeps and toggles, cannot raise, and sees `dead` within one period.

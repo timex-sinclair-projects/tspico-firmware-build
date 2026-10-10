@@ -6,6 +6,8 @@
 # The SD card has its own SPI pins, so SD never takes the bus; the LED is on
 # the XL9555 expander; core 1 belongs to tsbus. Same names as board_v2.py.
 
+import gc
+import os
 import time
 import tsbus
 from machine import Pin, SPI, I2C, Timer
@@ -15,8 +17,16 @@ PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # no flash/SRAM slots until phase 5: the slot commands refuse
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
-# The ROM the 2068 boots: HOME (16K) then EXROM (16K), on the flash
-# filesystem. Phase 5 replaces this with the slot files.
+# The slots (phase 5, docs/v3-slots-proposal.md): v2's two chips of sixteen
+# 32K slots, as files. Fnn.bin is flash slot nn, kept; Snn.bin is SRAM slot
+# nn, deleted at every boot (v2's SRAM loses its contents at power-off). A
+# missing file is an empty slot. A ROM slot is HOME (16K) then EXROM (16K).
+SLOTS_DIR = "/slots"
+SLOT_SIZE = 32768
+MEM_SRAM, MEM_FLASH = 1, 2      # ROM_SM's two-bit memory codes
+
+# The last fallback for the boot ROM, when neither the boot slot nor flash
+# slot 1 has a file: the 2068 is never released into an empty ROM.
 ROM_FILE = "/rom/TSPICO-23.ROM"
 
 _SD_CS = 37
@@ -56,19 +66,103 @@ def early_init():
     tsbus.start()
 
 
-def start_memory(rom_sm, bank_sm):
-    """Load ROM_FILE into the HOME and EXROM images and release the 2068
-    into it. rom_sm and bank_sm (the v2 slot words) are not used."""
+def slot_path(mem, slot):
+    """The file behind slot `slot` (0-15) of memory `mem` (MEM_FLASH, MEM_SRAM)."""
+    return "%s/%s%02d.bin" % (SLOTS_DIR, "S" if mem == MEM_SRAM else "F", slot)
+
+
+def read_slot_into(mem, slot, buf):
+    """Read a slot's 32K into buf (32K, a bytearray or memoryview), in
+    place: no second copy, which the v3 heap (about 190K) can't spare next
+    to a 64K dock image (hardware, 2026-10-10: MemoryError at boot). False
+    if the slot has no file or the file isn't 32K; buf is then untouched."""
+    path = slot_path(mem, slot)
+    try:
+        if os.stat(path)[6] != SLOT_SIZE:
+            return False
+        with open(path, "rb") as f:
+            f.readinto(buf)
+    except OSError:
+        return False
+    return True
+
+
+def read_slot(mem, slot):
+    """A slot's 32K as a new bytearray, or None (read_slot_into)."""
+    buf = bytearray(SLOT_SIZE)
+    return buf if read_slot_into(mem, slot, buf) else None
+
+
+def clear_sram_slots():
+    """Delete every Snn.bin: the SRAM slots start empty, as v2's chip does."""
+    try:
+        names = os.listdir(SLOTS_DIR)
+    except OSError:
+        return
+    for n in names:
+        if n.startswith("S") and n.endswith(".bin"):
+            try:
+                os.remove(SLOTS_DIR + "/" + n)
+            except OSError:
+                pass
+
+
+def boot_rom(rom_sm, bank_sm):
+    """The ROM to boot, and a note if it isn't the one asked for.
+
+    The boot memory is rom_sm's bits 0-1 and the slot bank_sm's bits 0-3.
+    If that slot has no 32K file: flash slot 1, then ROM_FILE."""
+    mem, slot = rom_sm & 3, bank_sm & 15
+    rom = read_slot(mem, slot)
+    if rom is not None:
+        return rom, None
+    want = "%s slot %d" % ("SRAM" if mem == MEM_SRAM else "flash", slot)
+    if (mem, slot) != (MEM_FLASH, 1):
+        rom = read_slot(MEM_FLASH, 1)
+        if rom is not None:
+            return rom, "no ROM in %s: booted flash slot 1" % want
+    if (mem, slot) != (MEM_FLASH, 1):
+        want += " or flash slot 1"
+    rom = bytearray(SLOT_SIZE)
     with open(ROM_FILE, "rb") as f:
-        rom = f.read()
-    m = memoryview(rom)
+        f.readinto(rom)
+    return rom, "no ROM in %s: booted %s" % (want, ROM_FILE)
+
+
+def dock_image(rom_sm, bank_sm):
+    """The 64K DOCK image: the dock slot, then for an even slot the next
+    one, as v2's 64K cartridge spans two slots numbered by the even one. A
+    half with no file is zeros, as an empty v2 slot reads."""
+    mem, slot = (rom_sm >> 2) & 3, (bank_sm >> 4) & 15
+    img = bytearray(2 * SLOT_SIZE)
+    mv = memoryview(img)
+    read_slot_into(mem, slot, mv[:SLOT_SIZE])
+    if slot % 2 == 0:
+        read_slot_into(mem, slot + 1, mv[SLOT_SIZE:])
+    return img
+
+
+def start_memory(rom_sm, bank_sm):
+    """Clear the SRAM slots, load the boot ROM (HOME, EXROM) and the dock
+    from the slot files (boot_rom, dock_image), and release the 2068 into
+    them. Returns boot_rom's note, for the caller to log, or None."""
+    clear_sram_slots()
     tsbus.hold(True)
+    rom, note = boot_rom(rom_sm, bank_sm)
+    m = memoryview(rom)
     tsbus.load(tsbus.HOME, m[:16384])
     tsbus.load(tsbus.EXROM, m[16384:])
+    rom = m = None                              # one big buffer at a time
+    gc.collect()
+    tsbus.load(tsbus.DOCK, dock_image(rom_sm, bank_sm))
+    gc.collect()
     tsbus.exrom(True)
     tsbus.dock(True)
     tsbus.serve(True)
     tsbus.hold(False)
+    if note:
+        print("[board] " + note)
+    return note
 
 
 def map_slots(rom_sm, bank_sm):

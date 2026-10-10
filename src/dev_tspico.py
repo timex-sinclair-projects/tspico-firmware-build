@@ -6233,7 +6233,9 @@ def TS2068_IO():                                                         # Main 
     SAVE_LOG()
         
 
-    board.start_memory(TSP.ROM_SM, TSP.bank_sm)                        # the boot and dock slots
+    note = board.start_memory(TSP.ROM_SM, TSP.bank_sm)                 # the boot and dock slots
+    if note:                                                           # v3: the boot slot was empty
+        LOG("Boot ROM: " + note, 2)                                   # kept at the default LOG_LEVEL
     
     LOG("After StateMachine setup, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
