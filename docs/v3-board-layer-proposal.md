@@ -156,3 +156,19 @@ the same command list, apart from the slot commands deferred to phase 5.
 5. **`put_block(buf, stall_ms)` in `tsbus`** is the v3 `STREAM_DMA`: C
    streams whole blocks, and Python never handles single bytes on these
    paths.
+
+## Progress
+
+- **4.1** #239, **4.2** #240, **4.3** #241: merged 2026-10-10. On the card
+  after 4.3: ROM 2.3 boots served, `tpi:info`, `CAT` and LOAD from SD work.
+  The v3 LED is dimmed (`LED_BRIGHTNESS` in `config.ini`, default 5 %).
+- **4.4** passed on the card, 2026-10-10, with no firmware change beyond
+  4.3. `src/test/sd_roundtrip.py`: `LOAD "v3t"` (BASIC, SCREEN$, 16K
+  CODE, the 16K block in about 1 s), then `SAVE` of all three and `VERIFY`.
+  The saves read back off the card match exactly (the SCREEN$ scrolled one
+  row by the typing). `tpi:md`, `tpi:cd`, a SAVE into the new folder,
+  `tpi:dir`, `tpi:cd ..`: all good. Card pulled: "No SD card" after five
+  quick attempts (about 5 s), no hang; put back, the next `tpi:dir` reads it,
+  and `LOAD "v3t"` works again. Test TAPs went onto the card over USB with
+  `pico-serial.py put --sd`.
+- **4.5** next.
