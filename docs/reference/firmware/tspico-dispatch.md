@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4768–4845
 (`LOAD_CONFIG`), 5618–5720 (the printer path), 5800–6136 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6144–7302 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+`PROCESS_CMD`) and 6144–7303 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -43,10 +43,10 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 | `FAIL_CMD(status)` | 5800 | a command that failed: one status byte, on a bus in a known state |
 | `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 5852 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
 | `TS2068_IO()` | 6144 | the board setup and the service loop |
-| `ZX_TPI()` | 6991 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7129 | the Spectrum-mode loop |
+| `ZX_TPI()` | 6992 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 7130 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 6987), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 6988), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -246,10 +246,11 @@ What it does:
    in a `try` that ignores any exception. Without this the status would go
    into the parked state machine and the TS-Pico would be deaf for the rest
    of the session ([sd_wedged_hosttest.py](../../../src/test/sd_wedged_hosttest.py)).
-2. Empties TX (`pull (noblock)` / `mov (osr, null)` through `MQX`, at most
-   64 times) and RX (`MQ.get()`, at most 64 times). Bounded on purpose: this
-   is the recovery path, and an unbounded drain here would be the hang it
-   exists to prevent. The FIFOs are four deep.
+2. Empties TX (`pull (noblock)` / `mov (osr, null)` through `MQX`) and RX
+   (`MQ.get()`), each at most `tspico_io.DRAIN_MAX` times (64; 1100 for the
+   v3 card's 1024-entry queues). Bounded on purpose: this is the recovery
+   path, and an unbounded drain here would be the hang it exists to prevent.
+   The v2 FIFOs are four deep.
 3. `MQ.put(status)`; `MQ_READY()`. TX = `[status]`, Y = `0xFF`.
 
 Why not `SEND_MSG`: with `VERBOSE` on it streams text and, if the Z80 has
@@ -483,12 +484,15 @@ It owns `busy` (core1 is writing the log), `dead` (tells `BLINK_LED` to
 stop), `files`, `lista`, `log_entries`,
 `log_to_serial` (initialised `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file),
-`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6418, `RXD`.
+`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6419, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
 
 ### Configuration and the log file
 
-`led = board.make_led()` (on v2 `Pin(25, Pin.OUT)`, [board.md](board.md)).
+`led = board.make_led()` (on v2 `Pin(25, Pin.OUT)`, [board.md](board.md)), and
+`tspico_io.LED = led`: `LOAD_TS` and the ZX loads light the same LED
+([tspico_io.md](tspico_io.md#the-v3-card)) instead of claiming GPIO 25
+themselves.
 `init_values = LOAD_CONFIG()`; `TSP =
 PICO_STATUS(init_values)` — from here `LOG` filters by `TSP.LOG_LEVEL`. If
 `/activity.log` is 64 000 bytes or more it becomes `/activity.old` (the old
@@ -620,7 +624,7 @@ seeds the chain for the life of the session. It must be here and not inside
 that `LOAD ""` will give Report R until the assets are copied. The SD outcome
 is logged (OK / mounted but failing / no card), `SAVE_LOG()`, a `gc.collect()`,
 "TS Pico initialized OK. Waiting for commands...", `SAVE_LOG()` again, LED
-off. `wrt = MQ.put` at line 6403 is assigned and never used.
+off. `wrt = MQ.put` at line 6404 is assigned and never used.
 
 ### The capture buffers and the DMA channel
 
@@ -696,7 +700,7 @@ status read (`RD_STATUS`), not in `SYNC_WAIT`, so a transaction the Pico
 dropped reports T only if its ROM is still waiting for READY when the
 `0xFB` goes up; a later command finds `0xFF` *(inferred from
 [tspico-sync.asm](../../../src/rom/patches/tspico-sync.asm): `SYNC_WAIT`
-masks READY and IDLE only)*. The comments at lines 6431 and 6523 that say
+masks READY and IDLE only)*. The comments at lines 6432 and 6524 that say
 "the next command gets Report T" describe the ROM's own ready-wait of the
 transaction in hand, not a later one.
 

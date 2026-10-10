@@ -346,7 +346,7 @@ after `start()`. The differences from v2:
 | `put(value)` | Queues a reply for IN 0Eh (low 8 bits); waits while the queue is full. Publishes the byte before advancing `txq_head` (`__dmb`) |
 | `get()` | The next OUT as a 9-bit word: `0x100 \| data` for port 0Fh, `data` for 0Eh. Waits while the queue is empty |
 | `tx_fifo()`, `rx_fifo()` | the queue levels |
-| `put_block(buf)` | Queues a whole buffer, waiting for room as the Z80 reads it. For LOAD and BLKRCV blocks, which v2 sends by DMA because Python can't keep a 4-deep FIFO fed |
+| `put_block(buf[, wait_ms])` | Queues a block as the Z80 reads it and returns how many bytes it queued. For LOAD and BLKRCV blocks, which v2 sends by DMA because Python can't keep a 4-deep FIFO fed. Without `wait_ms`: waits for room until the whole block is queued (Ctrl-C still works). With `wait_ms` ≥ 0: queues what fits, copying straight into the ring with one `__dmb` per run, waits up to `wait_ms` without progress for more room, and returns early when an OUT is waiting in RX, so the caller can see a BREAK or an echo. `wait_ms` 0 queues what fits now and returns. `tspico_io.STREAM_QUEUE` uses both forms ([tspico_io.md](tspico_io.md#the-v3-card)) |
 | `status(value)` | Sets what IN 0Fh returns. An OUT to 0Eh/0Fh still makes it 00h on its own (auto-busy) |
 | `exec(instr)` | Spaces ignored. `mov(y,invert(null))` sets FFh; `set(y,N)` sets N; `mov(y,invert(y))` inverts it (so `MQ_STATUS`'s pairs give F7h and FBh); `pull(noblock)` drops the oldest reply through core 1 (`drop_oldest`, which waits for it); `mov(osr,null)` does nothing (there is no OSR). Anything else raises `ValueError` |
 | `active([value])` | Returns True |

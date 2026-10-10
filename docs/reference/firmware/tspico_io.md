@@ -64,34 +64,37 @@ In source order, with line numbers of the file as it is today:
 - 18–43: the two-firmware import rule, as a comment.
 - 45–95: module state and bus constants: `log_entries`, `_nofile_arch`,
   `PORT_0F`, `TX_DEPTH`, `LOAD_CHUNK`, `_LOAD_BUF`, `_LOAD_MV`.
-- 97–157: the fast PIO exec and the status register: `_SM0_EXECCTRL`,
+- 97–150: the v3 card: `_tsbus_mq` (and `_DMA`, `_mem32` switched off),
+  `DRAIN_MAX`, `LED`, `_LED`, `CAN_STREAM`.
+- 153–198: the fast PIO exec and the status register: `_SM0_EXECCTRL`,
   `_SM0_INSTR`, `_SM0_PINCTRL`, `_ENCODED`, `MQX`, `MQ_STATUS`.
-- 159–281: the pre-header capture: `RX_CAPTURE`, class `RxDMA` (`__init__`,
+- 200–322: the pre-header capture: `RX_CAPTURE`, class `RxDMA` (`__init__`,
   `arm`, `waiting`, `stop`, `take`), `RX_DMA`.
-- 284–323: USB stdin: `_stdin_ipoll`, `_stdin_readinto`, `_stdin_byte`,
+- 325–364: USB stdin: `_stdin_ipoll`, `_stdin_readinto`, `_stdin_byte`,
   `DRAIN_STDIN`.
-- 326–351: `MQ_TO_IDLE`.
-- 354–490: sending: `TX_ROOM`, `ECHO_KEEP`, `STREAM_DMA`, `RX_WORD`.
-- 493–649: receiving blocks: `RXB_OK`, `RXB_ABORT`, `RXB_STALL`, `_RING_BITS`,
+- 367–393: `MQ_TO_IDLE`.
+- 396–588: sending: `TX_ROOM`, `ECHO_KEEP`, `STREAM_DMA`, `QUEUE_WAIT_MS`,
+  `STREAM_QUEUE`, `RX_WORD`.
+- 591–747: receiving blocks: `RXB_OK`, `RXB_ABORT`, `RXB_STALL`, `_RING_BITS`,
   `_RING_WORDS`, `_RING_SETUP`, `_ring`, `SAY_READY`, `RX_RING`, `RX_BLOCK`,
   `_SAVE_HDR_RAW`.
-- 652–675: `OPEN_NOFILE_TAP`.
-- 678–943: the four PIO programs `sel_bank`, `set_ctrl`, `set_dck` and
+- 750–773: `OPEN_NOFILE_TAP`.
+- 776–1041: the four PIO programs `sel_bank`, `set_ctrl`, `set_dck` and
   `TS_IO_DUAL`. They are explained instruction by instruction in
   [pio.md](pio.md); this chapter has no entries for them.
-- 946–997: `REWIND_ABORTED_SEARCH`, `ENA_MQ_DUAL`.
-- 1000–1101: the SD card and the log: `SD_MOUNT`, `ENA_SD`, `LOG_ADD`.
-- 1104–1181: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
+- 1044–1101: `REWIND_ABORTED_SEARCH`, `ENA_MQ_DUAL`.
+- 1104–1205: the SD card and the log: `SD_MOUNT`, `ENA_SD`, `LOG_ADD`.
+- 1208–1285: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
   `LOAD_REFUSE`, `FIRST_STATUS`, `LOAD_RETRY_DONE`.
-- 1184–1793: `LOAD_TS`, `LOAD_SERVE`.
-- 1795–1835: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
+- 1288–1897: `LOAD_TS`, `LOAD_SERVE`.
+- 1899–1939: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
   `ZX_BLOCK_GAP_MS`, `ZX_FLUSH_TX`, `ZX_ROOM`.
-- 1838–1918: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
+- 1942–2022: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
   `ZX_STREAM`.
-- 1921–2204: `LOAD_ZX`, `ZX_C_BLOCKS`, `LOAD_ZX_C`.
-- 2207–2313: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
-- 2316–2789: `SAVE_TS`.
-- 2792–2926: `_xor`, `SAVE_ZX`.
+- 2025–2308: `LOAD_ZX`, `ZX_C_BLOCKS`, `LOAD_ZX_C`.
+- 2311–2417: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
+- 2420–2893: `SAVE_TS`.
+- 2896–3030: `_xor`, `SAVE_ZX`.
 
 The last section of this chapter lists the places where a comment, a design
 document and the code disagree.
@@ -125,13 +128,41 @@ data loop reading 00h from an empty TX and give Report J
 
 | Name | Value | What it is |
 |---|---|---|
-| `_DMA` | `rp2.DMA`, or `None` | Set at import inside `try/except ImportError`: `None` on MicroPython v1.20 and under the host tests' fake `rp2`. Every DMA path tests it and falls back to the polling loop it replaced. |
-| `_mem32` | `machine.mem32`, or `None` | `None` on a PC, where `MQX` falls back to `StateMachine.exec` and `_RING_SETUP` returns `None`. |
+| `_DMA` | `rp2.DMA`, or `None` | Set at import inside `try/except ImportError`: `None` on MicroPython v1.20, under the host tests' fake `rp2`, and on the v3 card (below). Every DMA path tests it and falls back to the polling loop it replaced. |
+| `_mem32` | `machine.mem32`, or `None` | `None` on a PC and on the v3 card, where `MQX` falls back to `MQ.exec` and `_RING_SETUP` returns `None`. |
 | `PORT_0F` | `const(0x100)` | Bit 8 of an RX word: A0 was 1, the Z80 wrote port 0Fh. `TS_IO_DUAL` samples nine pins, D0–D7 and A0, on every OUT. Tested by every receive loop in this file; only the ROM's SYNC and BREAK set it. |
 | `TX_DEPTH` | `const(4)` | `TS_IO_DUAL`'s FIFOs are not joined, so TX holds four words. "TX is full" is `MQ.tx_fifo() >= TX_DEPTH` everywhere below. |
 | `LOAD_CHUNK` | `const(256)` | How many bytes a file-streamed LOAD block reads at a time. One `readinto` per byte cost too much on v1.29: the ROMs read blind every ~43–47 µs and the log showed "TX ran dry" in 6914-byte blocks on both the 2068 and ZX48 paths (hardware, 2026-10-02). |
 | `_LOAD_BUF` | `bytearray(LOAD_CHUNK)` | The chunk buffer, made once at import so the stream loops allocate nothing. Used by `LOAD_TS` (the checksum pass and the data stream when the block does not fit in RAM) and `LOAD_ZX`. |
 | `_LOAD_MV` | `memoryview(_LOAD_BUF)` | Sliced (`_LOAD_MV[:left]`) for the tail of a block: one small allocation per block, not per byte. |
+
+## The v3 card
+
+Phase 4 of the v3 port plan (step 4.2; [board.md](board.md),
+[tsbus.md](tsbus.md)). On the v3 card `MQ` is `tsbus.MQ()`, core 1's 1 KB
+queues and status byte, not a PIO state machine. PIO0 SM0 runs the memory
+program there, so this module must not write its registers or pace DMA on
+its DREQs.
+
+| Name | Value | What it is |
+|---|---|---|
+| `_tsbus_mq` | `tsbus.MQ`, or `None` | Set at import: `from tsbus import MQ`. Not `TS.board` (whose `board_v2` imports this module, a cycle), and not plain `import tsbus` (on a host `src/tsbus/` imports as an empty namespace package). When set, `_DMA` and `_mem32` are forced to `None`, though the RP2350 has both. So `MQX` goes through `MQ.exec` (tsbus understands `MQX`'s instruction strings), `_RING_SETUP` makes no ring, `RX_DMA` returns `None`, and `STREAM_DMA` streams through the queue (`STREAM_QUEUE`). |
+| `DRAIN_MAX` | `64`, or `1100` on v3 | The most passes a FIFO flush makes: `MQ_TO_IDLE`, `ZX_FLUSH_TX`, and in `tspico.py` `CMD_RX_FLUSH`, `CMD_FLUSH` and `FAIL_CMD`. A PIO FIFO holds 4, so 64 is plenty, and the bound keeps a stuck state machine from hanging a path that must never hang. A tsbus queue holds 1024 (after an aborted `STREAM_QUEUE`, up to that many bytes). |
+| `LED` | `None` | The board's LED object. `TS2068_IO` sets it to `board.make_led()`'s. `None` means the v2 Pico's GPIO 25, made on first use: the upgrade UF2 has no board layer. On the v3 card GPIO 25 is the I2C clock, so this module must never claim it. |
+
+### `_LED()`
+
+`LED`, made from `Pin(25, Pin.OUT)` first if it is still `None`. `LOAD_TS`,
+`LOAD_ZX` and `LOAD_ZX_C` use it for their `led` (they built `Pin(25)`
+themselves until step 4.2).
+
+### `CAN_STREAM()`
+
+True when `STREAM_DMA` can send a block without Python per byte: DMA into
+the PIO FIFO (`_DMA`, v2) or the tsbus queue (v3). `tspico.py`'s
+`CMD_SEND`, `CH_READ` and `BLKRCV` test it (they tested `_DMA` until step
+4.2, which on v3 would be `None`). A call, not a constant, so a host test's
+`io._DMA = FakeDMA` still counts.
 
 ## The fast PIO exec and the status register
 
@@ -334,9 +365,10 @@ idle loop you add must call DRAIN_STDIN").
 
 The one way back to a known state, whatever happened: TX and RX empty, exactly
 one byte staged for the next command's first status read, and the status idle
-or recovered. It empties TX with up to 64 passes of `pull(noblock)` and
-`mov(osr, null)` (each pulls one word into the OSR and discards it; the loop
-stops as soon as `tx_fifo()` is 0), empties RX with up to 64 `get()`s, puts
+or recovered. It empties TX with up to `DRAIN_MAX` (64; 1100 on v3) passes
+of `pull(noblock)` and `mov(osr, null)` (each pulls one word into the OSR and
+discards it; the loop stops as soon as `tx_fifo()` is 0; on v3 `MQ.exec`
+drops the oldest queued byte), empties RX with up to `DRAIN_MAX` `get()`s, puts
 `first` into TX if there is room, and, if `status`, sets Y to `"recovered"` or
 `"idle"`. Bounded on purpose: the FIFOs are four deep, so a few passes are
 enough, and spinning longer would mean the state machine is not draining;
@@ -457,6 +489,42 @@ counting the bytes actually read, a stall giving RECOVERED, the data byte for
 byte with no "ran dry", and the Python loop when no channel is free;
 [`zx48_io_hosttest.py`](../../../src/test/zx48_io_hosttest.py) does the same
 for `LOAD_ZX`.
+
+On the v3 card (`_tsbus_mq` set) `STREAM_DMA` returns `STREAM_QUEUE`'s
+result instead, with the same contract.
+
+### `QUEUE_WAIT_MS`
+
+`const(10)`: how long one `put_block` call in `STREAM_QUEUE` waits for room
+before Python looks at RX and the stall clock again.
+
+### `STREAM_QUEUE(MQ, buf, echo, stall_ms, ready, first_ms=0)`
+
+`STREAM_DMA` on the v3 card, with its return contract `(why, sent, word)`.
+There is no FIFO to feed: tsbus's TX queue holds 1024 bytes, and core 1
+hands them to the Z80 as it reads. So C does the copying.
+`MQ.put_block(buf, wait_ms)` ([tsbus.md](tsbus.md)) queues as much as fits,
+waits up to `wait_ms` without progress for more room, returns early when an
+OUT is waiting, and returns how many bytes it took.
+
+1. `pos = MQ.put_block(mv, 0)`: the queue is filled first.
+2. READY as `STREAM_DMA` says it (`ready` True: `mov(y, invert(null))`; a
+   function: called; False: nothing).
+3. While `pos < len(buf)`: `k = MQ.put_block(mv[pos:], QUEUE_WAIT_MS)`.
+   - On progress the stall clock restarts. Once more than `2 * TX_DEPTH`
+     bytes have been read (`pos - tx_fifo()`), the limit drops from
+     `first_ms` to `stall_ms`.
+   - An RX word: with `echo` None (ZX48 mode), why 4 with the word; a
+     port-0Fh write, why 1; otherwise `ECHO_KEEP`.
+   - No progress for the limit: why 3.
+
+`sent` is `pos`, the bytes queued. As with DMA, the Z80 has read
+`sent - MQ.tx_fifo()`. On an early return the rest stays queued, and the
+caller's flush (`MQ_TO_IDLE`, with `DRAIN_MAX`) empties it. Python runs once
+per `put_block` call (about every 10 ms while the Z80 reads), never per
+byte. [`tsbus_io_hosttest.py`](../../../src/test/tsbus_io_hosttest.py) runs
+it against a model Z80 on a 1024-byte queue: a 6912-byte block whole and in
+order, a BREAK, a stall, `first_ms`'s grace and ZX48's any-word.
 
 ### `RX_WORD(MQ, stall_ms)`
 
@@ -589,7 +657,7 @@ on `False`, and lazily by `LOAD_TS`.
 
 ## The PIO programs
 
-Lines 678–943 define `sel_bank` (bank selection on A15–A18), `set_ctrl` (the
+Lines 776–1041 define `sel_bank` (bank selection on A15–A18), `set_ctrl` (the
 control lines /BE, A14_L, `U10_ENA`, `U13_ENA`), `set_dck` (`U10_ENA` and
 `U13_ENA` only, for DOCK access without ROM mapping) and `TS_IO_DUAL` (the two ports; 20
 instructions, with the auto-busy `mov(y, null)` of issue #14). They are
@@ -641,6 +709,9 @@ touched the card restores the bus itself. The only caller is `SAVE_ZX`.
 replaced: the single-port `TS_IO` at 15 MHz handed back as the session's state
 machine. [`zx48_io_hosttest.py`](../../../src/test/zx48_io_hosttest.py) covers
 the ZX SAVE that goes through it.
+
+On the v3 card (`_tsbus_mq` set) the bus is never given up for SD, so it
+says READY and returns `MQ` unchanged.
 
 ## The SD card and the log
 
@@ -811,7 +882,7 @@ cached `/assets/nofile.tap`; never the SD card, which is unmounted while the
 dispatcher runs ([../flows/sd-handover.md](../flows/sd-handover.md)).
 
 **Entry.** `log_entries` is reset. `LOAD_RETRY_DONE` returns at once for the
-ROM's retry of a refused header. The LED (`Pin(25)`) goes on; nothing in
+ROM's retry of a refused header. The LED (`_LED()`) goes on; nothing in
 `LOAD_TS` turns it off, the dispatcher's idle heartbeat does *(inferred: no
 `led.value(0)` follows `LOAD_SERVE` in the dispatcher's LOAD branches)*.
 
@@ -1020,8 +1091,8 @@ the middle of the handler's block, to dispatch next, or -1.
 
 ### `ZX_FLUSH_TX(MQ)`
 
-Empties TX: the tail of a block the ROM did not read to the end. Up to 64
-passes of `pull(noblock)` and `mov(osr, null)`, like the first half of
+Empties TX: the tail of a block the ROM did not read to the end. Up to
+`DRAIN_MAX` passes of `pull(noblock)` and `mov(osr, null)`, like the first half of
 `MQ_TO_IDLE`; ZX48 mode has no status pre-load, so the rest of it does not
 apply. Callers: `LOAD_ZX` (before the flag goes in, and after an early stop),
 `LOAD_ZX_C`, `ZX_ARM`, `tspico.py`'s `ZX_TPI`, and `upgrade.py`.
