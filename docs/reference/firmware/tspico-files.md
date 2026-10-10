@@ -1,7 +1,7 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1387–2161,
-2494–2526, 3696–3701, 3857–3916, 4160–4247, 4394–4401, 5074–5117,
+2494–2526, 3696–3701, 3857–3916, 4160–4247, 4394–4401, 5076–5119,
 5192–5206, 5288–5353 and 5508–5524 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
@@ -54,9 +54,9 @@ document it is linked, not restated: the pitfalls are in
 | `public_fname(n=0)` | 3900–3915 | `TSP.f_name` without `/sd`, optionally shortened |
 | `ChangeDir(potential_new_path, SDactive=False)` | 4160–4247 | the rules of `tpi:cd` / `MOVE TO` |
 | `getArgs(cmd)` | 4394–4401 | the text after the command word |
-| `getBoot()` | 5074–5082 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5085–5093 | (memory, slot) in the DOCK |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5096–5116 | would the updater erase the booted slot? |
+| `getBoot()` | 5076–5084 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5087–5095 | (memory, slot) in the DOCK |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5098–5118 | would the updater erase the booted slot? |
 | `REMOVE_DIR(d)` | 5192–5206 | delete a tree (`/TMP` at boot) |
 | `ResolveIndexName(name)` | 5288–5308 | a listing number to its file name |
 | `LOAD_TPI(name, only_tap=False, fresh=False)` | 5311–5353 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |

@@ -5006,8 +5006,8 @@ def MDIR(pre, cmd):                                                             
                 
 
 def NO_SLOTS():
-    """The v3 card has no flash/SRAM slots yet (phase 5 of the v3 port plan):
-    tpi:boot, tpi:dock and tpi:blkrcv refuse there, before they change
+    """tpi:blkrcv can't write a slot on the v3 card yet (phase 5 step 4,
+    docs/v3-slots-proposal.md): it refuses there before it changes
     anything. True when the command was refused."""
     if board.SLOTS:
         return False
@@ -5024,8 +5024,6 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
     
     
     TLM("MEMBOOT enter")
-    if NO_SLOTS():
-        return
     par1, par2 = PARAMS(pre)
     new = "MEM=%d, PAGE=%d" % (par1, par2)
     
@@ -5038,6 +5036,10 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         msg = "Wrong values, %s" % new
         SEND_MSG(msg, "OK values: MEM=1..2, PAGE=0..15", _8_A_Invalid_arg)
         LOG("BOOT: %s. Command ignored" % msg, 1) 
+    elif board.rom_slot_empty(par1, par2):                         # v3: nothing in that slot's file
+        msg = "No ROM in %s slot %d" % ("SRAM" if par1 == 1 else "Flash", par2)
+        SEND_MSG(msg, "Nothing changed", _3_F_Invalid_file, True)
+        LOG("BOOT: %s. Command ignored" % msg, 1)
     else:            
         val1 = TSP.ROM_SM & 12
         TSP.ROM_SM = val1 + par1
@@ -5127,8 +5129,6 @@ def MEMDOCK(pre, cmd):                                                  # Change
     global TSP
     
     TLM("MEMDOCK enter")
-    if NO_SLOTS():
-        return
     par1, par2 = PARAMS(pre)
     mem,  page = getDock()
     old = "MEM=%d, PAGE=%d" % (mem, page)

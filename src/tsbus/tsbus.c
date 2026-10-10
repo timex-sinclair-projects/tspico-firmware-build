@@ -29,6 +29,9 @@
  *   tsbus.reset()                  hold the 2068 for 200 ms, then release it
  *   tsbus.serve(on)                /BE and U3 live (the 2068 must be held)
  *   tsbus.exrom(on), tsbus.dock(on) serve the EXROM / DOCK banks' chunks
+ *   tsbus.dock_writes(on)          store the Z80's dock writes (RAM dock) or ignore them
+ *   tsbus.read(slot, buf[, off])   copy len(buf) of a slot's image, from off, into buf
+ *   tsbus.load_at(slot, off, data) copy data into a slot at off, not repeated
  *   tsbus.hold(on)                 hold the 2068 in reset, or release it
  *   tsbus.stats()                  counters, as a dict
  *   tsbus.MQ()                     v2's MQ over core 1's queues: put, get, tx_fifo,
@@ -87,6 +90,7 @@ static bool started;
 static volatile bool serving;     // /BE and U3 requests live
 static volatile bool exrom_on;    // EXROM-bank chunks served (with /BE)
 static volatile bool dock_on;     // DOCK-bank chunks served (no /BE)
+static volatile bool dock_rw = true; // Z80 writes to the dock stored (a RAM dock); false: read-only, v2's flash
 static volatile bool held_2068 = true;
 static volatile bool core1_ready;
 
@@ -449,7 +453,7 @@ static void __not_in_flash_func(core1_main)(void) {
             uint32_t w = pio_addr->rxf[sm_write];
             uint addr = (w >> 8) & 0xffff;
             mem_writes++;
-            if (dock_on && ((sh_hsr >> (addr >> 13)) & 1) && !(sh_ff & 0x80)) {
+            if (dock_on && dock_rw && ((sh_hsr >> (addr >> 13)) & 1) && !(sh_ff & 0x80)) {
                 ((uint8_t *)TSBUS_IMAGE_REGION)[4 * addr + SLOT_DOCK] = (uint8_t)w;
                 dock_writes++;
             }
@@ -555,6 +559,56 @@ static void load_slot(uint slot, const mp_buffer_info_t *buf) {
     }
 }
 
+// The slot and an offset into it, checked against a length: (slot, offset)
+// for read and load_at.
+static void slot_range(mp_obj_t slot_in, mp_obj_t off_in, size_t len, mp_int_t *slot, mp_int_t *off) {
+    *slot = mp_obj_get_int(slot_in);
+    if (*slot < SLOT_HOME || *slot > SLOT_DOCK) {
+        mp_raise_ValueError(MP_ERROR_TEXT("slot must be 0, 1 or 2"));
+    }
+    *off = off_in == MP_OBJ_NULL ? 0 : mp_obj_get_int(off_in);
+    if (*off < 0 || len == 0 || (size_t)*off + len > 0x10000) {
+        mp_raise_ValueError(MP_ERROR_TEXT("outside the slot's 64 KB"));
+    }
+}
+
+// tsbus.read(slot, buf[, offset]): the slot's image from offset back out,
+// len(buf) bytes: the DOCK with the Z80's writes in it, to save a RAM dock
+// before it is switched away. Python reads it in 32 KB halves (the v3 heap
+// has no 64 KB to spare once the firmware runs). About 0.5 ms a half; core 1
+// may still be writing.
+static mp_obj_t tsbus_read(size_t n_args, const mp_obj_t *args) {
+    mp_buffer_info_t buf;
+    mp_get_buffer_raise(args[1], &buf, MP_BUFFER_WRITE);
+    mp_int_t slot, off;
+    slot_range(args[0], n_args > 2 ? args[2] : MP_OBJ_NULL, buf.len, &slot, &off);
+    uint8_t *dst = buf.buf;
+    const uint8_t *r = (const uint8_t *)TSBUS_IMAGE_REGION;
+    for (uint32_t i = 0; i < buf.len; i++) {
+        dst[i] = r[4 * (off + i) + slot];
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(tsbus_read_obj, 2, 3, tsbus_read);
+
+// tsbus.load_at(slot, offset, data): copy data into the slot at offset, once
+// (load repeats a short image to fill 64 KB; this doesn't). For the DOCK in
+// two 32 KB halves. Takes effect at once, as load: turn the DOCK off for the
+// copy (tsbus.dock(False)), as switch does, if the 2068 is running.
+static mp_obj_t tsbus_load_at(mp_obj_t slot_in, mp_obj_t off_in, mp_obj_t data_in) {
+    mp_buffer_info_t buf;
+    mp_get_buffer_raise(data_in, &buf, MP_BUFFER_READ);
+    mp_int_t slot, off;
+    slot_range(slot_in, off_in, buf.len, &slot, &off);
+    const uint8_t *src = buf.buf;
+    uint8_t *r = (uint8_t *)TSBUS_IMAGE_REGION;
+    for (uint32_t i = 0; i < buf.len; i++) {
+        r[4 * (off + i) + slot] = src[i];
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_3(tsbus_load_at_obj, tsbus_load_at);
+
 static mp_obj_t tsbus_load(mp_obj_t slot_in, mp_obj_t data_in) {
     mp_int_t slot = mp_obj_get_int(slot_in);
     if (slot < SLOT_HOME || slot > SLOT_DOCK) {
@@ -596,6 +650,15 @@ static mp_obj_t tsbus_dock(mp_obj_t on_in) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_dock_obj, tsbus_dock);
+
+// tsbus.dock_writes(on): store the Z80's writes into the DOCK image (a RAM
+// dock, MEM 1), or ignore them (a flash dock, MEM 2: v2's flash chip ignores
+// them too). On at start.
+static mp_obj_t tsbus_dock_writes(mp_obj_t on_in) {
+    dock_rw = mp_obj_is_true(on_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_dock_writes_obj, tsbus_dock_writes);
 
 // tsbus.hold(on): hold the 2068 in reset (RESET_HOLD high), or release it.
 static mp_obj_t tsbus_hold(mp_obj_t on_in) {
@@ -904,6 +967,9 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_serve), MP_ROM_PTR(&tsbus_serve_obj) },
     { MP_ROM_QSTR(MP_QSTR_exrom), MP_ROM_PTR(&tsbus_exrom_obj) },
     { MP_ROM_QSTR(MP_QSTR_dock), MP_ROM_PTR(&tsbus_dock_obj) },
+    { MP_ROM_QSTR(MP_QSTR_dock_writes), MP_ROM_PTR(&tsbus_dock_writes_obj) },
+    { MP_ROM_QSTR(MP_QSTR_read), MP_ROM_PTR(&tsbus_read_obj) },
+    { MP_ROM_QSTR(MP_QSTR_load_at), MP_ROM_PTR(&tsbus_load_at_obj) },
     { MP_ROM_QSTR(MP_QSTR_hold), MP_ROM_PTR(&tsbus_hold_obj) },
     { MP_ROM_QSTR(MP_QSTR_stats), MP_ROM_PTR(&tsbus_stats_obj) },
     { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },

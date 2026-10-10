@@ -174,6 +174,25 @@ lower half and a cartridge's upper half would hold both at once, so ZX48
 mode and an AROS program wouldn't take turns. v2 can't do this: its dock is
 one slot pair. It's a v3-only feature, not parity, so it belongs in phase 6.
 
+### Later (phase 6): PSRAM, if fitted
+
+proto1 has a footprint for an APS6404L (8 MB QSPI PSRAM) that isn't fitted.
+- **It can't serve the 2068.** It shares the QSPI bus with the flash and
+  sits behind a cache, so its delay isn't steady enough for Z80 memory
+  cycles. The HOME, EXROM and DOCK images stay in the RP2350B's SRAM.
+- **It would hold the RAM slots** (`Snn`, 512K in all) in real RAM: lost at
+  power-off by themselves, no flash wear, and a RAM dock saved before a
+  switch in milliseconds rather than about a second.
+- **It would hold MicroPython's heap.** That's about 190K now, tight with
+  64K slot buffers (a `MemoryError` at boot in step 1's first version).
+- **It could cache slot images** for switches in about 1 ms (the
+  architecture's idea).
+
+The costs: a slower heap for Python, PSRAM and flash taking turns on the
+QSPI bus, and one more part to bring up. Phase 5 doesn't depend on it. The
+RAM-slot storage stays behind `board_v3`'s slot functions, so moving it into
+PSRAM is a change inside the board layer.
+
 ## Order of work
 
 1. **Slot files and booting.** `start_memory` and the dock from `/slots`,

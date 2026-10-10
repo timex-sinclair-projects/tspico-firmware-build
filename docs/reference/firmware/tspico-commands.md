@@ -43,7 +43,7 @@ where the manual and the code differ, the entries below say so.
 | `LOGLEVEL(pre, cmd)` | 4875 | `tpi:loglevel` |
 | `MDIR(pre, cmd)` | 4934 | `tpi:md` |
 | `MEMBOOT(pre, cmd)` | 5018 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5119 | `tpi:dock`, `tpi:memdock` |
+| `MEMDOCK(pre, cmd)` | 5121 | `tpi:dock`, `tpi:memdock` |
 | `REW(pre, cmd)` | 5209 | `tpi:rew` |
 | `BAD_CODE(command, par1, par2)` | 5425 | the "Bad CODE" message |
 | `BAD_ARG(command, arg)` | 5430 | the "Bad argument" message |
@@ -357,8 +357,9 @@ to `/TMP/temp.bin` and mounts the updater tape instead
 ([tspico-files.md](tspico-files.md#mount_filef_name-remountingfalse);
 user manual §8.4).
 
-0. **Not on the v3 card.** `NO_SLOTS()` first: it has no slots to write
-   yet, so the command refuses before anything is read.
+0. **Not on the v3 card yet.** `NO_SLOTS()` first: the v3 card can't write
+   a slot until phase 5 step 4, so the command refuses before anything is
+   read.
 1. **An image must be mounted.** Unless `TSP.f_name` ends in `.DCK`,
    `.BIN` or `.ROM` (nothing mounted, a TAP, any other file), answer "No
    ROM image mounted" / "Mount a .ROM, .BIN or .DCK", shown, Report F, and
@@ -686,15 +687,15 @@ The manual's reports for `tpi:md` (8, F, A) match the code
 
 ### `NO_SLOTS()`
 
-The v3 card's refusal for the slot commands, until phase 5 of the v3 port
-plan gives it slots. `board.SLOTS` true (v2): returns `False` and does
-nothing. Otherwise `SEND_MSG("Not on the v3 card yet", "Slots come in a
-later update", _3_F_Invalid_file, True)` — shown, Report F, the usual tail —
-and returns `True`. `MEMBOOT`, `MEMDOCK` and `BLKRCV` call it straight after
-their enter trace and return when it says `True`, so nothing in `TSP`,
-`config.ini` or the bus changes. On v3 `board.map_slots` is a no-op, so the
-refusal is what tells the user ([board.md](board.md#board_v3py)).
-`board_v3_hosttest.py` checks all three refuse with Report F.
+The v3 card's refusal for `tpi:blkrcv`, until phase 5 step 4 gives the card
+a way to write a slot ([docs/v3-slots-proposal.md](../../v3-slots-proposal.md)).
+`board.SLOTS` true (v2): returns `False` and does nothing. Otherwise
+`SEND_MSG("Not on the v3 card yet", "Slots come in a later update",
+_3_F_Invalid_file, True)` — shown, Report F, the usual tail — and returns
+`True`. `BLKRCV` calls it straight after its enter trace and returns when it
+says `True`, so nothing changes. `MEMBOOT` and `MEMDOCK` called it too until
+step 2, when the v3 card got slot switching. `board_v3_hosttest.py` checks
+the refusal.
 
 ### `MEMBOOT(pre, cmd)`
 
@@ -704,12 +705,14 @@ memory (1 SRAM, 2 flash) and slot (0–15). The two settings live in
 and `sel_bank` state machines take ([pio.md](pio.md#set_ctrl),
 [tspico-state.md](tspico-state.md#pico_status__init__self-init_values)).
 
-On the v3 card every form refuses first (`NO_SLOTS`, Report F).
-
 - None: "BOOT is MEM=m, PAGE=s" (`getBoot()`), shown, 0 OK.
 - `CODE 0,s` (s ≠ 0), `CODE m,x` with m > 2, or a slot above 15: "Wrong
   values, MEM=…, PAGE=…" / "OK values: MEM=1..2, PAGE=0..15", Report A,
   logged; nothing changes.
+- `CODE m,s` for an empty slot, where `board.rom_slot_empty(m, s)` is true
+  (the v3 card: no 32K `/slots` file; v2 can't tell and says false): "No
+  ROM in Flash slot s" (or SRAM), "Nothing changed", shown, Report F,
+  logged. `TSP`, `config.ini` and the ROM stay as they were.
 - `CODE m,s`:
   1. `ROM_SM`'s low two bits become `m`, `bank_sm`'s low nibble `s`.
   2. `config.ini` is read, `ROM_SLOT = s` and `ROM_SM`'s low bits = `m`
@@ -724,7 +727,9 @@ On the v3 card every form refuses first (`NO_SLOTS`, Report F).
      waited for TX to empty; the Z80 is still finishing the statement in
      the old ROM. The sleep is kept (audit §4) because nothing measured
      says it can go. The manual's advice — follow it with `NEW` or a reset
-     — is because the 2068 is now running code it did not start in.
+     — is because the 2068 is now running code it did not start in. On the
+     v3 card `map_slots` resets the 2068 into the new ROM instead (200 ms,
+     `tsbus.switch`; [board.md](board.md#board_v3py)), a clean start.
 
 `config.ini` is opened by the relative name `"config.ini"`; this relies on
 the current directory being the flash root, as it is after any SD access
@@ -745,7 +750,9 @@ the slot half-written).
 `tpi:dock` (and `tpi:memdock`): what appears in the 2068's DOCK
 (cartridge) bank — memory in `ROM_SM` bits 2–3, slot in `bank_sm` bits
 4–7. Not saved in `config.ini`: it lasts until power-off. On the v3 card
-every form refuses first (`NO_SLOTS`, Report F).
+the change is live as on v2. A flash dock is read-only there, and a RAM
+dock is saved back to its slot file before it's switched away
+([board.md](board.md#board_v3py)).
 
 | `CODE` | Result |
 |---|---|

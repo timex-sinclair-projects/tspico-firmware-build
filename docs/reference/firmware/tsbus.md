@@ -107,6 +107,7 @@ instruction-by-instruction comments are in the file.
 | `started` | bool, false | `tsbus_start` | makes `start()` a no-op once running, across soft resets |
 | `serving` | volatile bool, false | `set_serving` | /BE and U3 requests live; false is shadow mode |
 | `exrom_on`, `dock_on` | volatile bool, false | `tsbus_exrom`, `tsbus_dock`; `chunk_target` | whether EXROM- and DOCK-bank chunks are served |
+| `dock_rw` | volatile bool, true | `tsbus_dock_writes`; `core1_main` | whether the Z80's writes to the dock are stored: on for a RAM dock, off for a flash one |
 | `held_2068` | volatile bool, true | `hold_2068`; `iord_isr` | INs are ignored while held (nIORD sits low in reset) |
 | `core1_ready` | volatile bool | `core1_main`; `tsbus_start` | core 1's set-up is done |
 | `d_hi`, `d_lo`, `hold_hi`, `hold_lo` | 3, 3, 5, 9 | constants | serve's two waits and addr_read's two hold loops, in 4 ns PIO cycles: phase 1's settings |
@@ -224,7 +225,8 @@ Then forever, polling:
   it changed (for FFh, only bit 7 matters). OUTs to 0Eh/0Fh make the status
   00h (busy, as v2.1's PIO did) and go to `rxq`.
 - **Memory writes** (mem_write): stored in the DOCK image when the shadow
-  maps the chunk to the DOCK and DOCK serving is on.
+  maps the chunk to the DOCK, DOCK serving is on, and `dock_rw` is set (a
+  RAM dock).
 - **Counting** one `addr_log` entry per pass into `served[]`.
 
 ### `hold_2068(hold)`
@@ -268,6 +270,28 @@ fill the slot's 64 KB: a 16 KB HOME ROM or an 8 KB EXROM is mirrored as phase
 1 did. The copy is byte by byte into every fourth byte of the region, about
 1 ms.
 
+### `slot_range(slot_in, off_in, len, slot, off)`
+
+For `read` and `load_at`: the slot (0–2) and the offset (0 if not given),
+checked so that `offset + len` stays inside the slot's 64 KB and `len` isn't
+0 (`ValueError` otherwise).
+
+### `tsbus.read(slot, buf[, offset])`
+
+Copies `len(buf)` bytes of the slot's image, from `offset`, out into `buf`,
+a writable buffer: every fourth byte of the region, about 0.5 ms for 32 KB.
+For the DOCK with the Z80's writes in it, to save a RAM dock before it's
+switched away. Core 1 may still be writing as it copies. `board_v3` reads it
+in 32 KB halves, because the heap has no 64 KB to spare once the firmware
+runs.
+
+### `tsbus.load_at(slot, offset, data)`
+
+Copies `data` into the slot at `offset`, once. `load` repeats a short image
+to fill 64 KB; this doesn't. For the DOCK in two 32 KB halves. Takes effect
+at once, as `load`: if the 2068 is running, turn the DOCK off for the copy
+(`tsbus.dock(False)`), as `switch` does.
+
 ### `tsbus.load(slot, data)`
 
 `load_slot` into slot 0 (`HOME`), 1 (`EXROM`) or 2 (`DOCK`). Takes effect at
@@ -282,7 +306,16 @@ otherwise.
 ### `tsbus.exrom(on)`, `tsbus.dock(on)`
 
 Serve the chunks the bank registers map to the EXROM (with /BE) or the DOCK
-(no /BE; writes stored), and rewrite the table.
+(no /BE; writes stored if `dock_writes` is on), and rewrite the table.
+
+### `tsbus.dock_writes(on)`
+
+`dock_rw`. On, core 1 stores the Z80's writes to dock-mapped chunks in the
+DOCK image (a RAM dock, MEM 1). Off, it ignores them (a flash dock, MEM 2), as
+v2's flash chip ignores them. On at start. `board_v3` sets it with every dock
+it loads ([board.md](board.md#board_v3py)). Checked on proto1: a POKE into a
+flash dock read back unchanged, and into a RAM dock it read back the new
+value.
 
 ### `tsbus.hold(on)`
 

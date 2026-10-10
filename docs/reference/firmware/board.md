@@ -23,7 +23,7 @@ Who calls what:
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
 | `start_memory()` | `TS2068_IO` (6236), once |
-| `map_slots()` | `MEMBOOT` (5067), `MEMDOCK` (5187) |
+| `map_slots()` | `MEMBOOT` (5069), `MEMDOCK` (5187) |
 | `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7194) |
 | `restart_mq()` | `ZX48_IO` (7195, 7300, 7342) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
@@ -32,7 +32,8 @@ Who calls what:
 | `make_led()` | `TS2068_IO` (6210) |
 | `led_brightness()` | `TS2068_IO` (6214), after `LOAD_CONFIG` |
 | `background()` | `TS2068_IO`: `BLINK_LED` at boot (6336, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (6997) |
-| `SLOTS` | `NO_SLOTS`, for `MEMBOOT`, `MEMDOCK`, `BLKRCV` ([tspico-commands.md](tspico-commands.md#no_slots)) |
+| `SLOTS` | `NO_SLOTS`, for `BLKRCV` ([tspico-commands.md](tspico-commands.md#no_slots)) |
+| `rom_slot_empty()` | `MEMBOOT` (5039), before it changes anything |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
@@ -71,8 +72,8 @@ its registers and pace DMA on its DREQs. Nothing reads `PIO_MQ`:
 
 ### `SLOTS`, `HAS_CORE1`
 
-Both `True`. `SLOTS`: the 16 flash and SRAM slots exist, so `tpi:boot`,
-`tpi:dock` and `tpi:blkrcv` run (`NO_SLOTS` lets them through). `HAS_CORE1`:
+Both `True`. `SLOTS`: the slots can be written from the Z80, so
+`tpi:blkrcv` runs (`NO_SLOTS` lets it through). `HAS_CORE1`:
 core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 
 ### `NULL_SM`
@@ -159,6 +160,11 @@ then sets READY.
 `MQ.active(0)`, 10 ms, `MQ.active(1)`. `ZX48_IO` uses it on entry, after an
 unrecognised byte, and on exit, each time after draining the FIFOs.
 
+### `rom_slot_empty(mem, slot)`
+
+Always `False`: this board can't tell an empty flash or SRAM slot, so
+`tpi:boot` behaves as it always has (an empty slot hangs the 2068).
+
 ### `card_present()`, `sd_card_ready()`
 
 This board's socket has no detect switch: `card_present()` is `None`
@@ -219,8 +225,8 @@ bus; the LED is on the XL9555 expander; core 1 belongs to `tsbus`. Imports
 
 `"v3"`, then all `False`. `PIO_MQ`: `MQ` is `tsbus.MQ()`, whose `exec`
 takes only the strings `tspico_io` sends; there are no PIO registers or
-DREQs to touch. `SLOTS`: no slots until phase 5 of the v3 port plan, so the
-slot commands refuse (`NO_SLOTS`). `HAS_CORE1`: core 1 runs the `tsbus`
+DREQs to touch. `SLOTS`: `tpi:blkrcv` can't write a slot until phase 5 step
+4, so it refuses (`NO_SLOTS`); `tpi:boot` and `tpi:dock` work. `HAS_CORE1`: core 1 runs the `tsbus`
 loop, so `background()` runs on core 0 and there is no boot blink.
 
 ### `SLOTS_DIR`, `SLOT_SIZE`, `MEM_SRAM`, `MEM_FLASH`
@@ -291,6 +297,23 @@ still too bright on the card (2026-10-10), 5 % is David's choice.
 C at start-up ([board-v3.md](board-v3.md#board_initc)), so there are no pins
 to set here.
 
+### `_served`, `_keys(rom_sm, bank_sm)`
+
+`_served` is what the 2068 is served now, `((boot mem, slot), (dock mem,
+slot))`, set by `start_memory` and `map_slots`; `None` before the boot.
+`_keys` cuts v2's two words into those pairs: boot from `rom_sm` bits 0–1
+and `bank_sm` bits 0–3, dock from bits 2–3 and 4–7.
+
+### `_buf`, `_zeros`
+
+`_buf` is the one 32K `bytearray` every slot passes through: a ROM, each
+half of the dock, a RAM dock being saved. It is allocated at import, while
+the heap is clean. Once the firmware runs, the heap (about 190K) has no 64K
+block free, and on the card `tpi:dock` failed with `MemoryError` building a
+64K dock image (2026-10-10). Step 1's first version had already failed the
+same way at boot. Nothing in the slot code allocates a big buffer after
+import. `_zeros` is 1K of zeros, loaded 32 times to clear an empty half.
+
 ### `slot_path(mem, slot)`
 
 `"/slots/Fnn.bin"`, or `"/slots/Snn.bin"` for `MEM_SRAM`.
@@ -299,15 +322,13 @@ to set here.
 
 Reads a slot's 32K into `buf` (a 32K `bytearray` or `memoryview`) in place,
 and returns `True`. Returns `False`, `buf` untouched, if there is no file or
-it isn't 32K (`os.stat` first). In place because the heap is about 190K: the
-first version read each slot into a new 32K block, next to a 64K dock image
-and the 32K ROM. On the card that failed at boot with `MemoryError`, and the
-2068 stayed held (2026-10-10).
+it isn't 32K (`os.stat` first).
 
-### `read_slot(mem, slot)`
+### `rom_slot_empty(mem, slot)`
 
-A slot as a new 32K `bytearray`, or `None`. For callers with no buffer to
-hand; the boot path doesn't use it.
+`True` if the slot has no 32K file. `MEMBOOT` asks it first, so that
+`tpi:boot` to an empty slot is refused, rather than `boot_rom` quietly
+falling back to another ROM ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).
 
 ### `clear_sram_slots()`
 
@@ -316,8 +337,9 @@ slots start empty at every boot.
 
 ### `boot_rom(rom_sm, bank_sm)`
 
-The ROM to boot, a 32K `bytearray`, and a note if it isn't the one asked
-for. The memory is `rom_sm` bits 0–1, the slot `bank_sm` bits 0–3.
+Reads the ROM to boot into `_buf`, and returns a note if it isn't the one
+asked for (else `None`). The memory is `rom_sm` bits 0–1, the slot
+`bank_sm` bits 0–3.
 
 1. That slot's file.
 2. Missing: flash slot 1, with the note "no ROM in flash slot 7: booted
@@ -326,43 +348,57 @@ for. The memory is `rom_sm` bits 0–1, the slot `bank_sm` bits 0–3.
    /rom/TSPICO-23.ROM". If slot 1 itself was asked for, the note just says
    "no ROM in flash slot 1".
 
-An SRAM boot slot always falls back, because the SRAM slots were just
-cleared. On v2 that boots an empty chip and hangs the 2068. A missing
+At boot, an SRAM boot slot always falls back, because the SRAM slots were
+just cleared; on v2 that boots an empty chip and hangs the 2068. A missing
 `ROM_FILE` at the last step raises.
 
-### `dock_image(rom_sm, bank_sm)`
+### `load_dock(rom_sm, bank_sm)`
 
-The 64K DOCK image. The memory is `rom_sm` bits 2–3, the slot `bank_sm`
-bits 4–7. The low 32K is the dock slot. For an even slot the high 32K is
-the next slot: v2's 64K cartridge spans two consecutive slots numbered by
-the even one. Both halves are read in place into one `bytearray`.
+Loads the dock slots into the DOCK image, a 32K half at a time through
+`_buf` and `tsbus.load_at`. The memory is `rom_sm` bits 2–3, the slot
+`bank_sm` bits 4–7. The low half is the dock slot. For an even slot the
+high half is the next slot, as v2's 64K cartridge spans two consecutive
+slots numbered by the even one.
 
-A half with no file is zeros, as an empty v2 slot reads, not a mirror of
-the other half. The AROS cartridges in the base image keep everything in
-the upper half (8000h–FFFFh), and a mirror would copy them to 0000h too. An
-odd dock slot fills the low half only. Slot 0 is the 16K Spectrum ROM,
-zero-filled, so the default dock has it at 0000h–3FFFh for ZX48 mode.
+A half with no file is zeros, loaded from `_zeros`, as an empty v2 slot
+reads. It is not a mirror of the other half: the AROS cartridges in the
+base image keep everything in the upper half (8000h–FFFFh), and a mirror
+would copy them to 0000h too. An odd dock slot fills the low half only.
+Slot 0 is the 16K Spectrum ROM, zero-filled, so the default dock has it at
+0000h–3FFFh for ZX48 mode. The caller turns DOCK serving off around it if
+the 2068 is running.
+
+### `save_ram_dock(dock)`
+
+`dock` is a `(mem, slot)` pair. For a RAM dock (`MEM_SRAM`), it writes the
+DOCK image, with the Z80's writes in it, back to `Snn`, and `Snn+1` for an
+even slot. It goes a 32K half at a time, through `tsbus.read` into `_buf`,
+and makes `/slots` if need be. A flash dock: nothing. `map_slots` calls it
+before a dock switch, so switching back finds the data, as v2's SRAM keeps
+it until power-off. About 64K of flash writes, roughly a second.
 
 ### `start_memory(rom_sm, bank_sm)`
 
 `clear_sram_slots()`, then `tsbus.hold(True)`:
-1. `boot_rom`'s ROM into HOME (the first 16K) and EXROM (the rest);
-2. the ROM buffer dropped and `gc.collect()`, so only one big buffer exists
-   at a time;
-3. `dock_image` into DOCK;
-4. EXROM and DOCK chunks served (`exrom(True)`, `dock(True)`),
-   `serve(True)` (/BE live), and `hold(False)`: the 2068 is released into
-   the new ROM.
+1. `boot_rom` into `_buf`, then HOME from its first 16K and EXROM from the
+   rest (`tsbus.load`);
+2. `load_dock`;
+3. `tsbus.dock_writes` on for a RAM dock, off for a flash one (v2's flash
+   chip ignores the Z80's writes);
+4. EXROM and DOCK chunks served (`exrom(True)`, `dock(True)`), then
+   `serve(True)` (/BE live) and `hold(False)`: the 2068 is released into the
+   new ROM.
 
-Serving is on before the release, so the Z80's first fetch is answered.
-Returns `boot_rom`'s note (also printed, `[board] …`), which `TS2068_IO`
-logs at level 2. A missing `ROM_FILE` with no slot to boot raises, and
-`main.py` logs it: the 2068 stays in reset.
+`_served` is set. Serving is on before the release, so the Z80's first
+fetch is answered. Returns `boot_rom`'s note (also printed, `[board] …`),
+which `TS2068_IO` logs at level 2. A missing `ROM_FILE` with no slot to
+boot raises, and `main.py` logs it: the 2068 stays in reset.
 
 Checked on proto1 (2026-10-10), with `/slots` from `build-flash.py --slots`:
-ROM 2.3 boots from `F01.bin`, `CAT` and a LOAD work, a one-shot boot of
-empty slot 7 comes up in ROM 2.3 and `config.ini` goes back to slot 1, and a
-one-shot boot of slot 2 runs ZX Diagnostics.
+- ROM 2.3 boots from `F01.bin`, and `CAT` and a LOAD work;
+- a one-shot boot of empty slot 7 comes up in ROM 2.3, and `config.ini`
+  goes back to slot 1;
+- a one-shot boot of slot 2 runs ZX Diagnostics.
 
 No shadow boot: the 2068 is held from power-on until here, rather than
 running a ROM while the firmware loads (a choice made 2026-10-10, step 4.3).
@@ -372,7 +408,32 @@ or a power cycle *(seen once on hardware)*.
 
 ### `map_slots(rom_sm, bank_sm)`
 
-Nothing: the slot commands refuse (`NO_SLOTS`) before they get here.
+`tpi:boot` and `tpi:dock`: show the 2068 what the two words now say,
+comparing them with `_served` so that only what changed is loaded, through
+`_buf`.
+
+1. **The dock changed:** first `save_ram_dock` for the dock being left.
+   Then `tsbus.dock(False)`, `load_dock`, `tsbus.dock_writes` for the new
+   dock's memory, and `tsbus.dock(True)`. It's live, as v2's `tpi:dock`:
+   the 2068 isn't reset. With DOCK serving off for the copy, a read sees
+   an empty dock, never half the new one, as `tsbus.switch` does.
+2. **The ROM changed:** `boot_rom` into `_buf`, then `tsbus.switch(home=,
+   exrom=)`. The 2068 is held `RESET_MS` (200 ms) and starts cleanly in
+   the new ROM, rather than running a mix of the two (v2 switches under the
+   running Z80; [docs/v3-slots-proposal.md](../../v3-slots-proposal.md),
+   decision 2).
+
+`_served` is updated. Returns `boot_rom`'s note, or `None`. `MEMBOOT` has
+already refused an empty slot.
+
+Checked on proto1 (2026-10-10), from BASIC, reading the dock with
+`OUT 244,16: PRINT PEEK 32770: OUT 244,0`:
+- `tpi:dock CODE 2,10`, `2,12` and `2,0` gave 115, 40 and 17, with no reset;
+- a POKE into the flash dock was ignored;
+- a POKE into RAM dock `1,4` read back 99, and still did after
+  `tpi:dock CODE 2,0` and back;
+- `tpi:boot CODE 2,2` reset into ZX Diagnostics, and `CODE 2,7` was
+  refused.
 
 ### `make_mq()`
 
