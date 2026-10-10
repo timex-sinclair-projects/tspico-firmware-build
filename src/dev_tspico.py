@@ -1077,12 +1077,19 @@ def ACTIVATE_SD(tries=None):                                                    
     kept: on success SD_NOTE_CARD records it and, when the card has just come
     back or is a different card, repairs the state that belonged to the old
     one. On failure TSP.sd_present goes False and OSError(19) is raised.
+
+    The socket's detect switch is asked first (board.sd_card_ready, the v3
+    card; v2 has none): with no card in, no SD line is touched and it fails
+    at once, without the mount's timeouts. A card just put in is left to
+    settle before the first clock.
     """
 
     global MQ
     global sd_active
 
     TLM("ACTIVATE_SD enter")
+    if not board.sd_card_ready():
+        SD_MOUNT_FAILED(0, "no card in the socket (detect switch)")
     if tries is None:
         tries = 5 if TSP.sd_present else 1
     # v2: GPIO 2-4 are also Z80 data lines D0-D2 through the U6 buffer. SM0
@@ -1133,6 +1140,14 @@ def ACTIVATE_SD(tries=None):                                                    
     if sd is not None:
         SD_NOTE_CARD(getattr(sd, "CID", 0))                                    # may repair state; raises if it can't
         return spi
+    SD_MOUNT_FAILED(attempt, err)
+
+
+def SD_MOUNT_FAILED(attempt, err):                                             # ACTIVATE_SD: no card, or it won't mount
+
+    """ACTIVATE_SD's failure: log it (an error if the card was there, a note
+    if none has been seen since power-on), TSP.sd_present False, and raise
+    OSError(19). attempt 0: the detect switch said no card."""
 
     # Raise rather than loop in BLINK_ERROR. This runs inside commands
     # (CD, MD, RM, NEWTAP, HELP, every MOUNT_FILE), and a card that wedges
@@ -1140,8 +1155,11 @@ def ACTIVATE_SD(tries=None):                                                    
     # TS-Pico until power-cycle. Raised, it becomes that one command
     # failing: PROCESS_CMD's handler catches it and FAIL_CMD re-arms the
     # bus (sd_active is still True). At boot TS2068_IO carries on without a
-    # card, and the next command that needs one tries again.
-    if TSP.sd_present:                                                        # it was there: an error
+    # card, and the next command that needs one tries again. (On v3 a switch
+    # refusal comes before any bus change: sd_active stays as it was.)
+    if attempt == 0 and TSP.sd_present:                                       # the switch: taken out, not an error
+        LOG("SD card: taken out (%s)" % err, 1)
+    elif TSP.sd_present:                                                      # it was there: an error
         LOG(f"Mounting SD Card failed in ACTIVATE_SD after {attempt} attempts! {err}", 2)
         SAVE_LOG()
     elif TSP.sd_cid is None:                                                  # none since power-on

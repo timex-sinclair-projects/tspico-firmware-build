@@ -22,15 +22,16 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6218), once |
-| `map_slots()` | `MEMBOOT` (5049), `MEMDOCK` (5169) |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7174) |
-| `restart_mq()` | `ZX48_IO` (7175, 7280, 7322) |
-| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1091, 1094, 1112) |
+| `start_memory()` | `TS2068_IO` (6236), once |
+| `map_slots()` | `MEMBOOT` (5067), `MEMDOCK` (5187) |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7192) |
+| `restart_mq()` | `ZX48_IO` (7193, 7298, 7340) |
+| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
+| `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6192) |
-| `led_brightness()` | `TS2068_IO` (6196), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6316, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (6977) |
+| `make_led()` | `TS2068_IO` (6210) |
+| `led_brightness()` | `TS2068_IO` (6214), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6334, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (6995) |
 | `SLOTS` | `NO_SLOTS`, for `MEMBOOT`, `MEMDOCK`, `BLKRCV` ([tspico-commands.md](tspico-commands.md#no_slots)) |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
 
@@ -135,7 +136,7 @@ for state machine 4 (DOCK only, no ROM mapping) is a comment.
 The service-loop restart in `TS2068_IO` leaves these state machines alone on
 purpose. Rebuilding them, or `machine.reset()`, would release the lines that
 select the 2068's ROM bank under the running machine (the comment at
-6450–6459). Host harnesses must never use state machines 4 or 5.
+6468–6477). Host harnesses must never use state machines 4 or 5.
 
 ### `map_slots(rom_sm, bank_sm)`
 
@@ -157,6 +158,12 @@ then sets READY.
 
 `MQ.active(0)`, 10 ms, `MQ.active(1)`. `ZX48_IO` uses it on entry, after an
 unrecognised byte, and on exit, each time after draining the FIFOs.
+
+### `card_present()`, `sd_card_ready()`
+
+This board's socket has no detect switch: `card_present()` is `None`
+(unknown), and `sd_card_ready()` is always `True`, so `ACTIVATE_SD` finds a
+missing card by its mount failing, as it always has.
 
 ### `sd_take_bus()`
 
@@ -228,12 +235,32 @@ The SD card's own pins: CS 37, SCK 38, MOSI 39, MISO 32, SPI0
 ([board-v3.md](board-v3.md#pinscsv)). GPIO 2–4 are MD2–MD4 on this card,
 the Z80 data bus, and are never touched by SD.
 
-### `_IOX_ADDR`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_NLED`
+### `_IOX_ADDR`, `_IOX_IN1`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_NLED`, `_X_SD_CD`
 
-The XL9555 at I2C address 20h; register 2, output port 0; its safe value
-E0h (no bus request, no NMI, OLED in reset, ESP32 off, LED off), as
-`board_init.c` sets it at start-up; and bit 5 (20h), the LED, active low.
-Lit, port 0 is C0h.
+The XL9555 at I2C address 20h. Register 1 is input port 1 (the joystick,
+nBUSAK_L and the SD card-detect switch); register 2 is output port 0. Its
+safe value is E0h (no bus request, no NMI, OLED in reset, ESP32 off, LED
+off), as `board_init.c` sets it at start-up. Bit 5 of port 0 (20h) is the
+LED, active low: lit, port 0 is C0h. Bit 7 of port 1 (80h) is the detect
+switch: the TF-01A's switch closes to GND with a card in, and R38 pulls it
+up, so low means a card. Read on the card with the socket empty: port 1 FFh.
+
+### `SD_SETTLE_MS`
+
+250. How long a card the switch has only just seen is left before its first
+SPI clock (`sd_card_ready`), so that it is fully seated and powered before
+its lines are driven. A judgement, not a measured figure.
+
+### `_i2c`, `_cd_since`
+
+`_i2c`: `I2C(0)`, made on first use by `_iox()` and shared by the LED and
+the switch read. `_cd_since`: `ticks_ms` when the switch was first seen
+closed, `None` while the socket is empty.
+
+### `_iox()`
+
+`_i2c`, making it first if need be. I2C0 on the board's defaults: SCL 25,
+SDA 24.
 
 ### `LED_PERIOD_US`, `LED_BRIGHTNESS`
 
@@ -280,6 +307,38 @@ itself.
 
 Nothing: core 1 is always serving.
 
+### `card_present()`
+
+The detect switch: `True` with a card in, `False` without, and `None` if the
+expander doesn't answer (an `OSError`), when only a mount can tell. One
+I2C read of input port 1, about 100 µs.
+
+### `sd_card_ready()`
+
+`ACTIVATE_SD` asks this before it touches an SD line.
+
+- `card_present()` is `None`: `True`, and the mount finds out.
+- `False`: `_cd_since` cleared and `False`, so `ACTIVATE_SD` fails at once
+  and the socket is never clocked.
+- `True`: `_cd_since` set if this is the first time the card is seen, then
+  `sleep_ms` for whatever is left of `SD_SETTLE_MS`, then `True`. A card in
+  for longer goes straight through. One taken out and put back settles
+  again.
+
+Why (2026-10-10): two cards died on the card the moment they went into its
+socket, each resetting the RP2350B (and so the 2068). The firmware used to
+find out whether a card was there by trying to start one. It clocked an
+empty socket for about 3.6 s every time it looked, with CS, SCK and MOSI
+driven, and a card going in could meet live lines before its VDD contact
+made, which can power it through its I/O pins. The board measured healthy
+afterwards, and the dead cards read 190 Ω across their supply (a good one
+about 6 kΩ). With this function and `sd_release_bus` in place, three hot
+inserts were clean: USB only with the firmware stopped and with it running,
+and in the 2068. No reset, and the cards stayed cool
+(tspico-hardware [#21](https://github.com/factus10/tspico-hardware/issues/21),
+which keeps the design question open: switched power for the socket). The
+switch is also a faster and surer "no card" than a mount's timeout.
+
 ### `sd_take_bus()`
 
 Returns `tsbus.MQ()` and changes nothing: the SD card has its own pins, so
@@ -287,11 +346,20 @@ the bus, its queue and the 2068 carry on. `ACTIVATE_SD` keeps it as `MQ`.
 
 ### `sd_cs()`, `sd_spi()`
 
-`Pin(37, OUT, PULL_UP)`; `SPI(0, sck=Pin(38), mosi=Pin(39), miso=Pin(32))`.
+`Pin(37, OUT, value=1)`: driven high, so the card is deselected from the
+first instant; `SDCard` drives it from there. And
+`SPI(0, sck=Pin(38), mosi=Pin(39), miso=Pin(32))`.
 
 ### `sd_release_bus()`
 
-CS high. No clamp: nothing else uses these pins.
+After every unmount: CS, SCK, MOSI and MISO become plain inputs with no
+pulls (`Pin(p, IN, pull=None)`), the state `board_init.c` leaves them in at
+power-on. Nothing drives the socket between commands. R34 holds CS high, so
+a card that is in stays deselected, and R35 holds MISO; SCK and MOSI float
+behind their 33 Ω resistors. No pull-downs: RP2350 erratum E9 can latch a
+pad with input and pull-down both on. Making the pins inputs takes them
+from SPI0, which until 2026-10-10 went on driving SCK and MOSI after every
+unmount, while CS was driven high.
 
 ### `ExpanderLED`
 
@@ -305,7 +373,7 @@ C call there stretches a period; that is a flicker, not a fault.
 
 | Method | What |
 |---|---|
-| `ExpanderLED.__init__()` | `I2C(0)` (the board's defaults, SCL 25, SDA 24); off; on-time from `LED_BRIGHTNESS`; the two callbacks bound once, so the timer callbacks allocate nothing |
+| `ExpanderLED.__init__()` | the shared `I2C(0)` (`_iox()`); off; on-time from `LED_BRIGHTNESS`; the two callbacks bound once, so the timer callbacks allocate nothing |
 | `ExpanderLED._write(lit)` | writes port 0 (C0h lit, E0h dark) only when `lit` changes; an `OSError` (no expander) is ignored, the LED is cosmetic |
 | `ExpanderLED._light(t)` | the period timer: lit, and the one-shot re-armed for the on-time |
 | `ExpanderLED._dark(t)` | the one-shot: dark |

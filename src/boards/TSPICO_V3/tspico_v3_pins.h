@@ -21,9 +21,12 @@
 #define PIN_I2C_SDA    24
 #define PIN_I2C_SCL    25
 #define PIN_RESET_HOLD 29  // high (or floating, R1) holds the 2068 in reset
+#define PIN_SD_MISO    32  // SPI0; R35 pulls it up
 #define PIN_OLED_DC    34
 #define PIN_NIOX_INT   35
-#define PIN_SD_CS      37
+#define PIN_SD_CS      37  // R34 pulls it up
+#define PIN_SD_SCK     38
+#define PIN_SD_MOSI    39
 #define PIN_OLED_CS    41
 #define PIN_PSRAM_CS   47
 

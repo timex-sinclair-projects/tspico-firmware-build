@@ -8,6 +8,9 @@ drives the v3 card as phase 4 of the v3 port plan says
   - make_mq empties both queues (a new v2 state machine's FIFOs are empty);
     sd_take_bus keeps MQ (SD has its own pins);
   - the SD card is on SPI0 at 38/39/32 with CS 37, never GPIO 2-4;
+  - the card-detect switch (XL9555 port 1 bit 7) gates every mount: an
+    empty socket is never clocked, a new card settles first, and the lines
+    are released (inputs, no pulls) after every unmount;
   - the LED is the XL9555's bit 5, dimmed (LED_BRIGHTNESS %) by a 10 ms
     timer and a one-shot, written only on a change;
   - background runs on core 0; SLOTS and HAS_CORE1 are off, and tspico's
@@ -72,7 +75,7 @@ class FakePin:
 
     def __init__(self, n, *a, **k):
         self.n = n
-        CALLS.append(("Pin", n) + a)
+        CALLS.append(("Pin", n) + a + tuple("%s=%r" % kv for kv in sorted(k.items())))
 
     def value(self, v=None):
         CALLS.append(("value", self.n, v))
@@ -95,12 +98,37 @@ class FakeTimer:
         self.live = False
 
 
+IN1 = [0xFF]            # the expander's input port 1: bit 7 high = no card
+
+
 class FakeI2C:
     def __init__(self, bus):
         CALLS.append(("I2C", bus))
 
     def writeto_mem(self, addr, reg, data):
         CALLS.append(("i2c", addr, reg, bytes(data)))
+
+    def readfrom_mem(self, addr, reg, n):
+        CALLS.append(("i2c-read", addr, reg))
+        if IN1[0] is None:
+            raise OSError(5, "EIO")
+        return bytes((IN1[0],))
+
+
+class Clock:
+    def __init__(self):
+        self.ms, self.slept = 1000, []
+
+    def ticks_ms(self):
+        return self.ms
+
+    @staticmethod
+    def ticks_diff(a, b):
+        return a - b
+
+    def sleep_ms(self, n):
+        self.slept.append(n)
+        self.ms += n
 
 
 def take():
@@ -156,13 +184,41 @@ def main():
 
     print("the SD card's own pins")
     board.sd_cs()
-    check(take() == [("Pin", 37, "OUT", "PULL_UP")], "CS on GPIO 37")
+    check(take() == [("Pin", 37, "OUT", "value=1")], "CS on GPIO 37, driven high (deselected)")
     board.sd_spi()
     got = take()
     check(("SPI", 0, ("miso", 32), ("mosi", 39), ("sck", 38)) in got, "SPI0: SCK 38, MOSI 39, MISO 32")
     check(not [c for c in got if c[0] == "Pin" and c[1] in (2, 3, 4)], "never GPIO 2-4 (MD2-MD4 on this card)")
     board.sd_release_bus()
-    check(take() == [("Pin", 37, "OUT", "PULL_UP"), ("value", 37, 1)], "release: CS high")
+    check(take() == [("Pin", p, "IN", "pull=None") for p in (37, 38, 39, 32)],
+          "release: CS, SCK, MOSI and MISO back to inputs, no pulls (nothing drives the socket)")
+
+    print("the card-detect switch")
+    clock = Clock()
+    b3.time = clock
+    IN1[0] = 0xFF
+    check(board.card_present() is False, "bit 7 high: no card")
+    take()
+    check(board.sd_card_ready() is False and not clock.slept, "sd_card_ready: False, no wait")
+    IN1[0] = 0x7F
+    check(board.card_present() is True, "bit 7 low: a card")
+    IN1[0] = 0x7F
+    ok = board.sd_card_ready()
+    check(ok is True and clock.slept == [b3.SD_SETTLE_MS], "a card just seen: it settles %d ms first (%r)"
+          % (b3.SD_SETTLE_MS, clock.slept))
+    clock.slept = []
+    check(board.sd_card_ready() is True and not clock.slept, "and not again while it stays in")
+    IN1[0] = 0xFF
+    board.sd_card_ready()
+    IN1[0] = 0x7F
+    clock.ms += 100
+    board.sd_card_ready()
+    check(clock.slept == [b3.SD_SETTLE_MS], "out and in again: it settles again (%r)" % clock.slept)
+    IN1[0] = None
+    check(board.card_present() is None and board.sd_card_ready() is True,
+          "expander not answering: unknown, and the mount decides")
+    IN1[0] = 0xFF
+    take()
 
     print("the LED on the expander, dimmed")
     led = board.make_led()
@@ -213,6 +269,26 @@ def main():
         del sent[:]
         getattr(t, name)(bytes(10), "")
         check(sent == [("Not on the v3 card yet", t._3_F_Invalid_file)], "%s refuses, Report F" % name)
+
+    print("ACTIVATE_SD with the socket empty")
+    logs = []
+    t.LOG = lambda msg, lvl=0: logs.append(msg)
+    t.SAVE_LOG = lambda: None
+    t.TSP = types.SimpleNamespace(sd_present=True, sd_cid=None)
+    t.SDCard = lambda *a: CALLS.append(("SDCard",)) or (_ for _ in ()).throw(AssertionError("SPI on an empty socket"))
+    IN1[0] = 0xFF
+    take()
+    try:
+        t.ACTIVATE_SD()
+        raised = None
+    except OSError as e:
+        raised = e
+    got = take()
+    check(raised is not None and raised.args[0] == 19, "OSError(19), as a failed mount (%r)" % (raised,))
+    check(not [c for c in got if c[0] in ("Pin", "SPI", "SDCard")],
+          "no SD line touched, no SPI: only the switch read (%r)" % got)
+    check(t.TSP.sd_present is False and logs and "detect switch" in logs[-1],
+          "sd_present False; logged as a card that went (%r)" % logs[-1:])
 
     print()
     if FAILS:
