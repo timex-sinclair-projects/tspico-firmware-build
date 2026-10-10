@@ -1,0 +1,23 @@
+/* TS-Pico v3: MicroPython's RP2350 version of this file, with the GC heap
+   ending at 0x20040000 so the top 256 KB of SRAM is left for tsbus's images
+   (src/tsbus/tsbus.c). The C stack is scratch Y only (8 KB): MicroPython's
+   4 KB of extra stack at the top of RAM would fall inside the image region.
+
+   Defines/overrides the following symbols for use by code:
+    __GcHeapStart, __GcHeapEnd
+    __StackLimit
+    __StackBottom
+*/
+
+SECTIONS
+{
+    __StackLimit = __bss_end__ + __micropy_c_heap_size__;
+
+    __GcHeapStart = __StackLimit;
+    __GcHeapEnd = 0x20040000; /* TSBUS_IMAGE_REGION */
+
+    __StackBottom = ORIGIN(SCRATCH_Y);
+
+    ASSERT(__GcHeapStart < __GcHeapEnd, "data and bss reach the tsbus image region")
+    ASSERT((__GcHeapEnd - __GcHeapStart) > 64*1024, "GcHeap is too small")
+}

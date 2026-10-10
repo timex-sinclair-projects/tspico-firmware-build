@@ -1,0 +1,173 @@
+; tsbus's PIO programs: a copy of firmware/bringup/bus_card.pio in the
+; tspico-hardware repo (at abdc02c), without its PIO2 diagnostic (iord_len).
+; Phase 1 proved them on a 2068; keep the two copies the same while the
+; bring-up firmware is still in use.
+;
+; TS-Pico v3 bus programs, second design: the class of every read comes from a
+; shadow of the 2068's bank registers, not from /ROSCS and /EXROM, so /BE can go
+; out as soon as the address's top three bits are known.
+;
+; PIO0 owns MD0-MD7 and BE_REQ (GP11): `serve` reads the address off MD, decides
+; through a chunk table that core 1 rewrites from the bank shadow, pushes the
+; pointer, and drives the byte; `io_drive` puts replies to IN 0Eh/0Fh on MD. PIO1 owns the address-buffer enables (GP8, GP9)
+; and U3's enable (GP10): `addr_read` sequences U2, U1 and U3 for each memory
+; read; `mem_write` reads every memory write (DOCK RAM); `io_snoop` reads every
+; I/O write for the bank shadow. PIO1 is full: 13 + 11 + 8 instructions; PIO0
+; too: 27 + 5.
+;
+; Flags: PIO0 flag 1 (addr_read -> serve: U2 is on); PIO1 flag 2 (serve ->
+; addr_read: enable U3).
+;
+; Programs that share pins must not side-set on an idle `wait`: a stalled
+; instruction keeps asserting its side-set.
+
+.pio_version 1
+
+; -----------------------------------------------------------------------------
+; serve (PIO0, loaded at offset 0): instructions 0-7 are the chunk table, one
+; per 8K chunk, each a jump to path_h, path_e, path_d or tail (not ours). Core 1
+; patches them whenever port F4h or FFh changes; an I/O write lasts over a
+; microsecond, so the table is current before the next read.
+;
+; X = image region prefix. in/out base GP0 (MD, 8 pins); side-set GP11
+; (BE_REQ). ISR shifts left, autopush at 18 (8 + 8 + 2 bits shifted in on top of
+; the prefix); OSR shifts right. Pointer = X << 18 | A15..A0 << 2 | slot; slot 0
+; HOME, 1 EXROM, 2 DOCK. In shadow mode the /BE side-sets on path_e and path_h
+; and the request at `req` are patched out: the byte still goes onto MD, but
+; /BE and U3 stay off.
+; -----------------------------------------------------------------------------
+.program serve
+.side_set 1 opt
+    jmp tail                                ; chunk 0
+    jmp tail                                ; chunk 1
+    jmp tail                                ; chunk 2
+    jmp tail                                ; chunk 3
+    jmp tail                                ; chunk 4
+    jmp tail                                ; chunk 5
+    jmp tail                                ; chunk 6
+    jmp tail                                ; chunk 7
+.wrap_target
+public entry:
+    wait 1 irq 1                      [3]   ; U2 is on; give A15..A8 time (delay patched)
+    mov isr, x                              ; image region; also restarts the shift count,
+                                            ; so a read left half-built by `tail` is dropped
+    in pins, 8                              ; A15..A8
+    mov osr, isr
+    out null, 5
+    out pc, 3                               ; A15..A13: through the table
+public path_e:
+    set y, 1                side 1          ; EXROM: slot 1, /BE on
+    jmp req
+public path_d:
+    set y, 2                                ; DOCK: slot 2, no /BE
+    jmp req
+public path_h:
+    set y, 0                side 1          ; HOME: slot 0, /BE on
+public req:
+    irq next set 2                    [3]   ; ask addr_read for U3; then A7..A0 (delay patched)
+    in pins, 8                              ; A7..A0
+    in y, 2                                 ; slot; autopush the pointer
+    pull block                              ; the byte, from the DMA chain
+    mov pindirs, ~null
+    out pins, 8                             ; onto MD
+public tail:
+    wait 1 gpio 15
+    mov pindirs, null       side 0          ; MD released, /BE off
+.wrap
+
+; -----------------------------------------------------------------------------
+; io_drive (PIO0): for an IN from port 0Eh or 0Fh, core 1 decodes the port
+; (forcing U1 on through a GPIO override), pushes the reply, and forces U3 on;
+; this puts the reply on MD until the I/O read strobe ends. I/O reads leave the
+; Z80 about 600 ns before it samples the data, so the core has time.
+; -----------------------------------------------------------------------------
+.program io_drive
+.wrap_target
+    pull block
+    mov pindirs, ~null
+    out pins, 8
+    wait 1 gpio 17                          ; nIORD
+    mov pindirs, null
+.wrap
+
+; -----------------------------------------------------------------------------
+; addr_read (PIO1): for each memory read, U2 on (and flag serve), hold, U1 on,
+; hold, then enable U3 if serve asks before the strobe ends. serve samples MD
+; inside each window; the holds are patched from C to cover its sample points.
+; jmp pin GP15 (nMEMRD); `mov y, status` reads PIO1 flag 2.
+;
+; side-set GP8 nAEN_LO (bit 0), GP9 nAEN_HI (bit 1), GP10 nDATA_OE (bit 2).
+; -----------------------------------------------------------------------------
+.program addr_read
+.side_set 3 opt
+.wrap_target
+    wait 0 gpio 15                          ; nMEMRD (no side-set while idle)
+    irq prev set 1          side 0b101      ; U2 on; tell serve
+public hi_hold:
+    set y, 5                                ; patched
+hi_wait:
+    jmp y-- hi_wait
+    nop                     side 0b111      ; U2 off
+public lo_hold:
+    set y, 8                side 0b110      ; U1 on (patched)
+lo_wait:
+    jmp y-- lo_wait
+drive_wait:
+    jmp pin cycle_end       side 0b111      ; U1 off; strobe over without a request: not ours
+    mov y, status                           ; flag 2: serve wants U3
+    jmp !y drive_wait
+    nop                     side 0b011      ; U3 on: MD goes to the Z80
+    wait 1 gpio 15
+cycle_end:
+    irq clear 2             side 0b111      ; U3 off; the request is spent (serve raises it
+                                            ; about 60 ns into a read, long before the end)
+.wrap
+
+; -----------------------------------------------------------------------------
+; mem_write (PIO1): on every Z80 memory write, A15..A8 through U2, A7..A0
+; through U1 and the data through U3 (pointing from the Z80 onto MD, since /RD
+; is high). Pushes address << 8 | data for core 1, which stores the byte if the
+; chunk is mapped to the dock. /WR is low for about 250 ns; this takes about
+; 130. ISR shifts left, autopush at 24; RX FIFO joined (8 deep) so it never
+; stalls holding the shared pins.
+; -----------------------------------------------------------------------------
+.program mem_write
+.side_set 3 opt
+.wrap_target
+    wait 0 gpio 16                          ; nMEMWR (no side-set while idle)
+    set y, 7                side 0b101      ; U2: A15..A8
+hi_w:
+    jmp y-- hi_w
+    in pins, 8              side 0b111 [1]  ; U2 off, one cycle clear
+    set y, 7                side 0b110      ; U1: A7..A0
+lo_w:
+    jmp y-- lo_w
+    in pins, 8              side 0b111 [1]  ; U1 off, one cycle clear
+    set y, 7                side 0b011      ; U3: the data
+data_w:
+    jmp y-- data_w
+    in pins, 8              side 0b111      ; U3 off; autopush
+    wait 1 gpio 16
+.wrap
+
+; -----------------------------------------------------------------------------
+; io_snoop (PIO1): on every Z80 I/O write, the port's low address byte through
+; U1 and the data through U3 (pointing from the Z80 onto MD, since /RD is high);
+; pushes port << 8 | data for core 1. I/O cycles have a wait state and plenty of
+; time. ISR shifts left, autopush at 16.
+; -----------------------------------------------------------------------------
+.program io_snoop
+.side_set 3 opt
+.wrap_target
+    wait 0 gpio 18                          ; nIOWR (no side-set while idle)
+    set y, 15               side 0b110      ; U1: the port's A7..A0
+port_wait:
+    jmp y-- port_wait
+    in pins, 8              side 0b111 [1]  ; port; U1 off, one cycle clear
+    set y, 15               side 0b011      ; U3: the Z80's data
+data_wait:
+    jmp y-- data_wait
+    in pins, 8              side 0b111      ; data; U3 off; autopush
+    wait 1 gpio 18
+.wrap
+

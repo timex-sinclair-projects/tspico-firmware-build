@@ -3,27 +3,14 @@
  *
  * The same state as board_safe_init() in the bring-up firmware
  * (firmware/bringup/board.c in tspico-hardware): the three local-bus buffers
- * off, the bus requests deasserted, the 2068 left held in reset.
+ * off, the bus requests deasserted, the 2068 left held in reset, and the
+ * expander's outputs at their safe values.
  */
 
 #include "hardware/gpio.h"
+#include "hardware/i2c.h"
 #include "mpconfigboard.h"
-
-#define PIN_MD0        0   // MD0-MD7 on GP0-GP7
-#define PIN_NAEN_LO    8   // U1 /OE
-#define PIN_NAEN_HI    9   // U2 /OE
-#define PIN_NDATA_OE   10  // U3 /OE
-#define PIN_BE_REQ     11
-#define PIN_WAIT_REQ   12
-#define PIN_Z80_A14    13  // GP13-GP22: inputs from U4 / U6
-#define PIN_TAPE_IN    22
-#define PIN_TAPE_OUT   23
-#define PIN_RESET_HOLD 29
-#define PIN_OLED_DC    34
-#define PIN_NIOX_INT   35
-#define PIN_SD_CS      37
-#define PIN_OLED_CS    41
-#define PIN_PSRAM_CS   47
+#include "tspico_v3_pins.h"
 
 static void out(uint pin, bool v) {
     gpio_init(pin);
@@ -64,4 +51,23 @@ void tspico_v3_safe_init(void) {
     out(PIN_SD_CS, 1);
     out(PIN_OLED_CS, 1);
     out(PIN_OLED_DC, 0);
+
+    // The XL9555's port 0 drives /BUSRQ and /NMI (through the 74LVC06), the
+    // OLED reset, the ESP32's EN and IO9, and the LED. It powers up as inputs
+    // with output register FFh. Output register first, then direction, so the
+    // outputs come up safe (as iox_init() in the bring-up). If the expander
+    // does not answer, carry on: the request lines are pulled low on the board.
+    i2c_init(i2c0, 400 * 1000);
+    gpio_set_function(PIN_I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(PIN_I2C_SCL, GPIO_FUNC_I2C);
+    gpio_disable_pulls(PIN_I2C_SDA);    // R6/R7 are the pull-ups
+    gpio_disable_pulls(PIN_I2C_SCL);
+    const uint8_t regs[][2] = {
+        {IOX_OUT0, IOX_OUT0_SAFE}, {IOX_POL1, 0x00}, {IOX_CFG1, 0xff}, {IOX_CFG0, 0xc0},
+    };
+    for (unsigned i = 0; i < sizeof regs / sizeof regs[0]; i++) {
+        if (i2c_write_timeout_us(i2c0, IOX_ADDR, regs[i], 2, false, 10000) != 2) {
+            break;
+        }
+    }
 }
