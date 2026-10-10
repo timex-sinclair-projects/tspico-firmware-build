@@ -9,9 +9,9 @@ core 1. `tsbus` is that bus code as a MicroPython C module, built into the
 `TSPICO_V3` board ([board-v3.md](board-v3.md)). It is the phase 1 bus test,
 `firmware/bringup/bus_card.c` and `bus_card.pio` in the tspico-hardware repo,
 moved under MicroPython. Phase 3 of the v3 port plan
-(`docs/v3-firmware-port-plan.md` there) builds it in steps. This chapter
-covers step 1: serving the ROMs, banking and DOCK RAM, the IN/OUT machinery
-on core 1, and reset control. Slot switching and the `MQ` object come next.
+(`docs/v3-firmware-port-plan.md` there) builds it in steps. So far: serving
+the ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1, reset
+control, and the `MQ` object over core 1's queues. Slot switching comes next.
 The v2 firmware does not use any of it.
 
 What phase 1 learned, and why the code is shaped this way, is in the
@@ -30,6 +30,7 @@ than repeating it.
 | `tsbus.c`, core 1 | `handle_in`, `iord_isr`, core 1's vector table and stack, `core1_main` |
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `stats`; `HOME`, `EXROM`, `DOCK` |
+| `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
 | `micropython.cmake` | the user-module build |
 
 ## How it fits under MicroPython
@@ -113,9 +114,10 @@ instruction-by-instruction comments are in the file.
 | `ring_seen` | uint32 | `core1_main` | how far core 1 has counted `addr_log` |
 | `sh_hsr`, `sh_ff` | volatile uint8 | `core1_main` (from `io_snoop`), `hold_2068` | the shadow of ports F4h (HSR) and FFh |
 | `io_writes`, `mem_writes`, `dock_writes`, `table_updates`, `served[3]` | volatile uint32 | core 1 | counters for `stats()` |
-| `txq`, `txq_head`, `txq_tail` | 1 KB ring | head: core 0 (from the `MQ` object, next step); tail: core 1 | replies to IN 0Eh; empty reads 00h |
-| `rxq`, `rxq_head`, `rxq_tail`, `rxq_lost` | 1 KB ring of uint16 | head: core 1; tail: core 0 (next step) | OUTs to 0Eh/0Fh, port 0Fh as `0x100 \| data`; `rxq_lost` counts drops when full. Nothing reads it yet |
-| `io_status` | volatile uint8, FFh | core 1 (00h on each OUT); core 0 (next step) | what IN 0Fh returns |
+| `txq`, `txq_head`, `txq_tail` | 1 KB ring | head: core 0 (`MQ.put`, `put_block`); tail: core 1 | replies to IN 0Eh; empty reads 00h |
+| `rxq`, `rxq_head`, `rxq_tail`, `rxq_lost` | 1 KB ring of uint16 | head: core 1; tail: core 0 (`MQ.get`) | OUTs to 0Eh/0Fh, port 0Fh as `0x100 \| data`; `rxq_lost` counts drops when full |
+| `io_status` | volatile uint8, FFh | core 1 (00h on each OUT); core 0 (`MQ.status`, `MQ.exec`) | what IN 0Fh returns: v2's Y register |
+| `tx_drop_req` | volatile bool | set by core 0 (`MQ.exec("pull (noblock)")`), cleared by core 1 | asks core 1 to drop the oldest reply. Only core 1 advances `txq_tail`, because its IN handler pops it |
 | `io_ins`, `io_in_ours`, `io_outs_ours`, `io_in_late`, `respond_max` | volatile uint32 | `handle_in`, `core1_main` | IN and OUT counts; INs past the guard; worst cycles from the handler's entry to U3 on |
 | `core1_vectors` | uint32[`CORE1_NVEC`], 512-byte aligned | `core1_main` | core 1's vector table |
 | `core1_stack` | 4 KB | `multicore_launch_core1_with_stack` | core 1's stack (MicroPython's layout has no core 1 stack: scratch X is 0 bytes) |
@@ -215,6 +217,9 @@ In RAM. Set-up, which may call flash code because core 0 waits in
 
 Then forever, polling:
 
+- **A drop request** (`tx_drop_req`): drops the oldest reply with interrupts
+  masked (`cpsid i`), so `iord_isr` can't pop in the middle, then clears the
+  request.
 - **I/O writes** (io_snoop): F4h and FFh update the shadow, and the table if
   it changed (for FFh, only bit 7 matters). OUTs to 0Eh/0Fh make the status
   00h (busy, as v2.1's PIO did) and go to `rxq`.
@@ -280,15 +285,56 @@ Serve the chunks the bank registers map to the EXROM (with /BE) or the DOCK
 
 A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `mem_writes`, `dock_writes`, `table_updates`, `ins`, `ins_ours`,
-`outs_ours`, `late`, `respond_ns`, `rx_lost`, `hsr`, `ff`, `held`.
+`outs_ours`, `late`, `respond_ns`, `rx_lost`, `hsr`, `ff`, `held`,
+`status` (what IN 0Fh returns), `tx` and `rx` (the queue levels).
 
 ### `store(d, k, v)`
 
 Puts one counter in the dict.
 
-### `tsbus_module`, `HOME`, `EXROM`, `DOCK`
+### The MQ object: `tsbus.MQ()`
 
-The module (`MP_REGISTER_MODULE`) and the slot numbers.
+v2's `MQ`, an `rp2.StateMachine` running `TS_IO_DUAL`
+([pio.md](pio.md)), rebuilt over core 1's queues and status byte so the
+protocol code can carry over (phase 4 puts it behind the board layer). One
+object (`tsbus_mq_obj`, read-only); every call to `tsbus.MQ()` returns it,
+after `start()`. The differences from v2:
+
+- The queues hold 1,024 entries, not 4, and `tx_fifo()` and `rx_fifo()`
+  report their real levels. v2 code that paces itself on a full 4-deep FIFO
+  (`TX_ROOM`, `CMD_PUT`) has to be checked in phase 4.
+- `put()` and `get()` block like `StateMachine`'s, but run
+  `mp_event_handle_nowait()` while they wait, so Ctrl-C interrupts them. It
+  doesn't sleep, so there is no added latency.
+- `exec()` understands only the instructions `MQX` sends.
+- `active()` does nothing: the bus pins are dedicated on v3, so nothing has
+  to stop for SD.
+
+| Method | What |
+|---|---|
+| `put(value)` | Queues a reply for IN 0Eh (low 8 bits); waits while the queue is full. Publishes the byte before advancing `txq_head` (`__dmb`) |
+| `get()` | The next OUT as a 9-bit word: `0x100 \| data` for port 0Fh, `data` for 0Eh. Waits while the queue is empty |
+| `tx_fifo()`, `rx_fifo()` | the queue levels |
+| `put_block(buf)` | Queues a whole buffer, waiting for room as the Z80 reads it. For LOAD and BLKRCV blocks, which v2 sends by DMA because Python can't keep a 4-deep FIFO fed |
+| `status(value)` | Sets what IN 0Fh returns. An OUT to 0Eh/0Fh still makes it 00h on its own (auto-busy) |
+| `exec(instr)` | Spaces ignored. `mov(y,invert(null))` sets FFh; `set(y,N)` sets N; `mov(y,invert(y))` inverts it (so `MQ_STATUS`'s pairs give F7h and FBh); `pull(noblock)` drops the oldest reply through core 1 (`drop_oldest`, which waits for it); `mov(osr,null)` does nothing (there is no OSR). Anything else raises `ValueError` |
+| `active([value])` | Returns True |
+
+Helpers: `tsbus_mq_make_new` (no arguments; `RuntimeError` before `start()`),
+`tx_level`, `rx_level`, `tx_push` (the waiting push `put` and `put_block`
+share), `drop_oldest`, `tsbus_mq_type`, `tsbus_mq_locals_table`.
+
+Checked on proto1 board 1 (2026-10-09), the exit test of phase 3. A Python
+echo on the card (`get`, `put`, then `exec("mov(y, invert(null))")`, the
+`MQX` string `MQ_STATUS("idle")` uses) answered a BASIC loop that sent
+0-255 with `OUT 14`, waited for 255 on `IN 15` and read `IN 14` back:
+`Errors: 0`. 256 OUTs, 512 INs (each byte read after one status poll), none
+late, none lost, worst response 324 ns. `exec`'s status values were checked
+at the REPL: F7h, FBh, FFh and 00h, as on v2.
+
+### `tsbus_module`, `HOME`, `EXROM`, `DOCK`, `MQ`
+
+The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 
