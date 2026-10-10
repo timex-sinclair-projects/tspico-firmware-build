@@ -9,10 +9,10 @@ core 1. `tsbus` is that bus code as a MicroPython C module, built into the
 `TSPICO_V3` board ([board-v3.md](board-v3.md)). It is the phase 1 bus test,
 `firmware/bringup/bus_card.c` and `bus_card.pio` in the tspico-hardware repo,
 moved under MicroPython. Phase 3 of the v3 port plan
-(`docs/v3-firmware-port-plan.md` there) builds it in steps. So far: serving
-the ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1, reset
-control, and the `MQ` object over core 1's queues. Slot switching comes next.
-The v2 firmware does not use any of it.
+(`docs/v3-firmware-port-plan.md` there) built it in three steps: serving the
+ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1 and reset control;
+the `MQ` object over core 1's queues; and switching images. The v2 firmware
+does not use any of it.
 
 What phase 1 learned, and why the code is shaped this way, is in the
 bring-up's `README.md`: the bank shadow, early /BE, the /BE pull-up, the DOCK
@@ -29,7 +29,7 @@ than repeating it.
 | `tsbus.c`, start | `claim_sm`, `add_program`, `claim_dma`, `bus_start` |
 | `tsbus.c`, core 1 | `handle_in`, `iord_isr`, core 1's vector table and stack, `core1_main` |
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
-| `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `stats`; `HOME`, `EXROM`, `DOCK` |
+| `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
 | `micropython.cmake` | the user-module build |
 
@@ -260,12 +260,19 @@ FFh, gives the DMA bus priority over the cores, holds the 2068, runs
 channel is taken, `RuntimeError` otherwise. The 2068 stays held, in shadow
 mode.
 
+### `image_buffer(data, buf)`, `load_slot(slot, buf)`
+
+`image_buffer` gets a bytes-like object's buffer and checks it is 1 to 65536
+bytes (`ValueError` otherwise). `load_slot` copies it into a slot, repeated to
+fill the slot's 64 KB: a 16 KB HOME ROM or an 8 KB EXROM is mirrored as phase
+1 did. The copy is byte by byte into every fourth byte of the region, about
+1 ms.
+
 ### `tsbus.load(slot, data)`
 
-Copies a bytes-like object into slot 0 (`HOME`), 1 (`EXROM`) or 2 (`DOCK`),
-repeated to fill the slot's 64 KB: a 16 KB HOME ROM or an 8 KB EXROM is
-mirrored as phase 1 did. Takes effect at once, so load what the 2068 runs
-only while it is held. 1 to 65536 bytes.
+`load_slot` into slot 0 (`HOME`), 1 (`EXROM`) or 2 (`DOCK`). Takes effect at
+once with nothing held or gated, so load what the 2068 runs only while it is
+held; `switch` does that for you.
 
 ### `tsbus.serve(on)`
 
@@ -280,6 +287,30 @@ Serve the chunks the bank registers map to the EXROM (with /BE) or the DOCK
 ### `tsbus.hold(on)`
 
 `hold_2068(on)`.
+
+### `RESET_MS`, `tsbus.reset()`
+
+200 ms, phase 1's reset pulse. `reset()` holds the 2068 that long and
+releases it; the shadow starts again from the SCLD's power-up state
+(`hold_2068`). The SCLD's own registers are not reset (see `hold_2068`).
+
+### `tsbus.switch(home=None, exrom=None, dock=None)`
+
+Replaces the images given (keyword arguments, bytes-like). Every buffer is
+checked before anything changes.
+
+- **A HOME or EXROM change, with the 2068 running:** hold it, load every image
+  given, release it `RESET_MS` after the hold began (`mp_event_handle_nowait`
+  while waiting). The 2068 starts cleanly in the new ROM: a ROM changed under a
+  running Z80 would run a mix of the two. A 32 KB TS-Pico ROM is two
+  arguments: `home=m[:16384], exrom=m[16384:]` with `m` a `memoryview`. With
+  the 2068 held, the images are loaded and it stays held.
+- **A DOCK change on its own:** live, as v2's `tpi:memdock`. DOCK serving is
+  turned off (`dock_on`, table rewritten) for the copy, so a DOCK read during
+  it sees an empty dock rather than half the new image, then restored. The
+  2068 keeps running and is not reset.
+
+What phase 5's slot files and `tpi:memboot`/`tpi:memdock` will call.
 
 ### `tsbus.stats()`
 
@@ -331,6 +362,19 @@ echo on the card (`get`, `put`, then `exec("mov(y, invert(null))")`, the
 `Errors: 0`. 256 OUTs, 512 INs (each byte read after one status poll), none
 late, none lost, worst response 324 ns. `exec`'s status values were checked
 at the REPL: F7h, FBh, FFh and 00h, as on v2.
+
+### Switching, checked on proto1 board 1 (2026-10-10)
+
+- **Live DOCK switch.** The DOCK image was A5h throughout, and `OUT 244,16:
+  PRINT PEEK 32768: OUT 244,0` printed 165. Then `switch(dock=b"\x5a")`, and
+  the same line printed 90. The 2068 was not reset: the earlier line stayed
+  on screen.
+- **ROM switch.** `switch(home=…, exrom=…)` from the genuine set to TS-Pico
+  ROM 2.3 took 200 ms. The 2068 booted the TS-Pico ROM's screen, with
+  2,314 EXROM reads, the same as phase 1's ROM 2.3 boots. Switching back
+  gave the genuine screen (1,988 EXROM reads). Typing worked in both.
+- **Held.** A switch with the 2068 held left it held, with no reads. An
+  empty buffer was refused before anything was loaded.
 
 ### `tsbus_module`, `HOME`, `EXROM`, `DOCK`, `MQ`
 

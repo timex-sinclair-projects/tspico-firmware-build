@@ -20,10 +20,13 @@
  *   src/boards/TSPICO_V3/memmap): the byte for (address, slot) is at
  *   IMAGE_REGION + 4 * address + slot. Slots: 0 HOME, 1 EXROM, 2 DOCK.
  *
- * Python API (slot switching comes next):
+ * Python API:
  *   tsbus.start()                  250 MHz; claim PIO0, PIO1 and 3 DMA channels;
  *                                  start core 1
  *   tsbus.load(slot, data)         copy data into a slot, repeated to fill 64 KB
+ *   tsbus.switch(home=, exrom=, dock=)  replace images: a ROM change resets the
+ *                                  2068, a DOCK change alone is live
+ *   tsbus.reset()                  hold the 2068 for 200 ms, then release it
  *   tsbus.serve(on)                /BE and U3 live (the 2068 must be held)
  *   tsbus.exrom(on), tsbus.dock(on) serve the EXROM / DOCK banks' chunks
  *   tsbus.hold(on)                 hold the 2068 in reset, or release it
@@ -533,24 +536,33 @@ static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_start_obj, tsbus_start);
 // tsbus.load(slot, data): copy data into slot 0 (HOME), 1 (EXROM) or 2 (DOCK),
 // repeated to fill its 64 KB. Takes effect at once, so load what the 2068 is
 // running only while it is held.
+static void image_buffer(mp_obj_t data_in, mp_buffer_info_t *buf) {
+    mp_get_buffer_raise(data_in, buf, MP_BUFFER_READ);
+    if (buf->len == 0 || buf->len > 0x10000) {
+        mp_raise_ValueError(MP_ERROR_TEXT("data must be 1 to 65536 bytes"));
+    }
+}
+
+// Copy an image into a slot, repeated to fill its 64 KB. About 1 ms.
+static void load_slot(uint slot, const mp_buffer_info_t *buf) {
+    const uint8_t *src = buf->buf;
+    uint8_t *r = (uint8_t *)TSBUS_IMAGE_REGION;
+    for (uint32_t a = 0, i = 0; a < 0x10000; a++) {
+        r[4 * a + slot] = src[i];
+        if (++i == buf->len) {
+            i = 0;
+        }
+    }
+}
+
 static mp_obj_t tsbus_load(mp_obj_t slot_in, mp_obj_t data_in) {
     mp_int_t slot = mp_obj_get_int(slot_in);
     if (slot < SLOT_HOME || slot > SLOT_DOCK) {
         mp_raise_ValueError(MP_ERROR_TEXT("slot must be 0, 1 or 2"));
     }
     mp_buffer_info_t buf;
-    mp_get_buffer_raise(data_in, &buf, MP_BUFFER_READ);
-    if (buf.len == 0 || buf.len > 0x10000) {
-        mp_raise_ValueError(MP_ERROR_TEXT("data must be 1 to 65536 bytes"));
-    }
-    const uint8_t *src = buf.buf;
-    uint8_t *r = (uint8_t *)TSBUS_IMAGE_REGION;
-    for (uint32_t a = 0, i = 0; a < 0x10000; a++) {
-        r[4 * a + slot] = src[i];
-        if (++i == buf.len) {
-            i = 0;
-        }
-    }
+    image_buffer(data_in, &buf);
+    load_slot(slot, &buf);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(tsbus_load_obj, tsbus_load);
@@ -592,6 +604,80 @@ static mp_obj_t tsbus_hold(mp_obj_t on_in) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_hold_obj, tsbus_hold);
+
+#define RESET_MS 200   // the 2068 held in reset this long, as phase 1's 'r'
+
+// tsbus.reset(): hold the 2068 in reset for RESET_MS, then release it. The
+// shadow starts again from the SCLD's power-up state (hold_2068).
+static mp_obj_t tsbus_reset(void) {
+    require_started();
+    hold_2068(true);
+    mp_hal_delay_ms(RESET_MS);
+    hold_2068(false);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_reset_obj, tsbus_reset);
+
+// tsbus.switch(home=None, exrom=None, dock=None): replace the images given.
+//
+// A HOME or EXROM change resets the 2068 if it is running: held, the images
+// loaded, released after RESET_MS, so it starts cleanly in the new ROM. (A ROM
+// changed under a running Z80 would run a mix of the two.) If it is held, the
+// images are loaded and it stays held.
+//
+// A DOCK change on its own is live, as v2's tpi:memdock: DOCK serving is
+// turned off for the copy, so a DOCK read during it sees an empty dock instead
+// of half the new image, then turned back on. The 2068 keeps running.
+static mp_obj_t tsbus_switch(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+    enum { ARG_home, ARG_exrom, ARG_dock };
+    static const mp_arg_t allowed_args[] = {
+        { MP_QSTR_home, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+        { MP_QSTR_exrom, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+        { MP_QSTR_dock, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+    };
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    require_started();
+
+    // Check every buffer before touching anything.
+    mp_buffer_info_t buf[3];
+    bool given[3];
+    for (uint s = 0; s < 3; s++) {
+        given[s] = args[s].u_obj != mp_const_none;
+        if (given[s]) {
+            image_buffer(args[s].u_obj, &buf[s]);
+        }
+    }
+    bool rom = given[SLOT_HOME] || given[SLOT_EXROM];
+    bool running = !held_2068;
+
+    if (rom) {
+        uint32_t t0 = mp_hal_ticks_ms();
+        if (running) {
+            hold_2068(true);
+        }
+        for (uint s = 0; s < 3; s++) {
+            if (given[s]) {
+                load_slot(s, &buf[s]);
+            }
+        }
+        if (running) {
+            while (mp_hal_ticks_ms() - t0 < RESET_MS) {
+                mp_event_handle_nowait();
+            }
+            hold_2068(false);
+        }
+    } else if (given[SLOT_DOCK]) {
+        bool was = dock_on;
+        dock_on = false;
+        write_table();
+        load_slot(SLOT_DOCK, &buf[SLOT_DOCK]);
+        dock_on = was;
+        write_table();
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_KW(tsbus_switch_obj, 0, tsbus_switch);
 
 static void store(mp_obj_t d, qstr k, mp_uint_t v) {
     mp_obj_dict_store(d, MP_OBJ_NEW_QSTR(k), mp_obj_new_int_from_uint(v));
@@ -781,6 +867,8 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_tsbus) },
     { MP_ROM_QSTR(MP_QSTR_start), MP_ROM_PTR(&tsbus_start_obj) },
     { MP_ROM_QSTR(MP_QSTR_load), MP_ROM_PTR(&tsbus_load_obj) },
+    { MP_ROM_QSTR(MP_QSTR_switch), MP_ROM_PTR(&tsbus_switch_obj) },
+    { MP_ROM_QSTR(MP_QSTR_reset), MP_ROM_PTR(&tsbus_reset_obj) },
     { MP_ROM_QSTR(MP_QSTR_serve), MP_ROM_PTR(&tsbus_serve_obj) },
     { MP_ROM_QSTR(MP_QSTR_exrom), MP_ROM_PTR(&tsbus_exrom_obj) },
     { MP_ROM_QSTR(MP_QSTR_dock), MP_ROM_PTR(&tsbus_dock_obj) },
