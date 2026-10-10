@@ -1866,7 +1866,7 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the Pico's own
 the SD card). It's a single line of text:
 
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5}
 ```
 
 | Setting | Meaning | Normally |
@@ -1879,6 +1879,7 @@ the SD card). It's a single line of text:
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
 | `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
+| `LED_BRIGHTNESS` | How bright the LED is on the v3 card, 1-100 (%). The TS-Pico 2.x ignores it | `5` |
 
 You'd normally leave this file alone. To change it, connect the Pico to a computer and use a
 program such as Thonny. If the file is missing or unreadable, the TS-Pico uses the values above.

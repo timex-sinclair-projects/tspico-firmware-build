@@ -25,7 +25,7 @@ reads on port 0Fh (`FF` READY + IDLE, `00` BUSY).
 | 7 | `TS2068_IO` | `LOAD_CONFIG()`: `config.ini` read, defaults filled, the one-shot boot slot taken ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#load_config)); `TSP = PICO_STATUS(...)`; the log rotated at 64 000 bytes | | a corrupt `config.ini`: defaults, logged |
 | 8 | `TS2068_IO` | `board.start_memory`: **ROM** (`set_ctrl`, SM 4) and **BANK** (`sel_bank`, SM 5) started at 150 MHz and given `ROM_SM` and `bank_sm` ([../firmware/pio.md](../firmware/pio.md), [../firmware/board.md](../firmware/board.md)) | | **from here the 2068 has a ROM**: the Pico now answers its memory cycles for the ROM and DOCK areas from the chosen slots |
 | 9 | `TS2068_IO` | `/TMP` removed and made again; `SA_funct` built; `EXT_SA_FUNCT` from `/dev_extcmd.py` or the frozen `TS.extcmd` | | |
-| 10 | `TS2068_IO`, core 1 | `BLINK_LED` on core 1 (`board.background`) blinks the LED while the card is looked for ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#blink_ledpause)) | | |
+| 10 | `TS2068_IO`, core 1 | `BLINK_LED` on core 1 (`board.background`) blinks the LED while the card is looked for; v2 only (`board.HAS_CORE1`), the v3 card has no boot blink ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#blink_ledpause)) | | |
 | 11 | `ACTIVATE_SD(tries=5)` | `MQ` parked on `NULL_SM`, U6 off, the card mounted (up to five tries, at most 6 s); the first card is noted (`SD_NOTE_CARD`) and set up (`SD_REVALIDATE`: `/TAP` made if missing, the folder listed) ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#activate_sdtriesnone)) | no bus program: the Z80 cannot reach the Pico yet | no card, or a wedged one: `TSP.sd_present = False`, logged, and the boot goes on without a card |
 | 12 | `TS2068_IO` | `dead = True`; wait for `BLINK_LED` to stop | | |
 | 13 | `DEACTIVATE_SD`, `ACTIVATE_MQ` | `/sd` unmounted, CS high, GPIO 2–4 clamped low; `TS_IO_DUAL` started on SM 0 at 30 MHz, Y set BUSY ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#activate_mq)) | TX [], RX [], Y `00` | |
@@ -34,6 +34,13 @@ reads on port 0Fh (`FF` READY + IDLE, `00` BUSY).
 | 16 | `TS2068_IO` | `OPEN_NOFILE_TAP()` (the tape `LOAD ""` gets with nothing mounted), the SD outcome logged, `SAVE_LOG`, LED off | | a missing `/assets/nofile.tap`: `LOAD ""` with nothing mounted gives Report R |
 | 17 | `TS2068_IO` | the capture buffers; `RX_DMA` claims a DMA channel for the pre-header, or `None` | | no channel: the loop polls instead |
 | 18 | the service loop | arm the channel, wait for the Z80's first write; meanwhile the idle heartbeat (an LED flash every 2 s, two without a card) and, on core 1, `SAVE_LOG` | TX [01], Y `FF` | |
+
+On the v3 card ([../firmware/board.md](../firmware/board.md#board_v3py)) step 5 is
+`tsbus.start()` (250 MHz, core 1's bus loop; the 2068 held in reset), step 7
+also sets the LED's brightness (`LED_BRIGHTNESS`, default 5 %), step 8
+loads `/rom/TSPICO-23.ROM` into HOME and EXROM and releases the 2068 (only
+now does it start), step 10 is skipped, and step 11 mounts the card on its
+own pins without taking the bus.
 
 From step 15 on the Pico is ready for any transaction. The pre-load at
 step 15 is the only one staged outside a transaction's tail; every

@@ -214,13 +214,19 @@ It asserts that `.bss` ends below the image region and that the heap is over
 ## `manifest.py`
 
 Freezes `_boot.py` (mounts or creates the LittleFS filesystem) and `rp2.py`
-(`asm_pio`, `StateMachine`, `PIO`) from the port's `modules/`, and nothing
-else.
+(`asm_pio`, `StateMachine`, `PIO`) from the port's `modules/`, and the `TS`
+package straight from the repo's `src/` (`$(BOARD_DIR)/../..`): the same
+modules as `src/manifest.py`, with `board_v3.py` in place of `board_v2.py`
+(`board.py` picks `board_v3` on this build, [board.md](board.md#board_v3py)).
+Freezing from `src/` needs no staging step; `TS/buildinfo.py` is generated
+there first (`tools/gen-buildinfo.py`, CI's "Generate the build stamp"
+step), as for the v2 build. A new file under `src/TS/` needs a line here
+too.
 
 Why not `$(PORT_DIR)/boards/manifest.py`, the port's default: CI's v2 job
 replaces that file with `src/manifest.py` (the TS modules), and the stock
 one adds `asyncio`, `onewire`, `ds18x20`, `dht` and `neopixel`, which this
-board has no use for. The TS modules come in with the board layer (phase 4).
+board has no use for.
 
 ## `pins.csv`
 

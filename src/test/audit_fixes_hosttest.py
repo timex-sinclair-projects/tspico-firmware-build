@@ -607,6 +607,18 @@ def test_rom_sm(t, root):
         except Exception as e:                                  # noqa: BLE001
             got = e
         check(got == want, "ROM_SM %r -> %r (%r)" % (value, want, got))
+    print("11b. LOAD_CONFIG: LED_BRIGHTNESS is a whole 1-100, else 5, written back")
+    for value, want in ((5, 5), (1, 1), (100, 100), (40, 40), (0, 5), (101, 5), (5.5, 5),
+                        ("5", 5), (None, 5), (True, 5)):
+        with open(cfg, "w") as f:
+            json.dump({"ROM_SM": 10, "LED_BRIGHTNESS": value}, f)
+        got = t.LOAD_CONFIG()["LED_BRIGHTNESS"]
+        with open(cfg) as f:
+            saved = json.load(f)["LED_BRIGHTNESS"]
+        check(got == want and saved == want, "LED_BRIGHTNESS %r -> %r (%r, file %r)" % (value, want, got, saved))
+    with open(cfg, "w") as f:
+        json.dump({"ROM_SM": 10}, f)
+    check(t.LOAD_CONFIG()["LED_BRIGHTNESS"] == 5, "missing: the default 5")
     t.open = builtins.open
     t.LOG = lambda *a: None
 

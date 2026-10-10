@@ -24,6 +24,12 @@ FIFOs; **Y** the status the Z80 reads on port 0Fh.
 
 ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#the-bus-and-how-it-changes-hands))
 
+The v3 card has no handover: its SD card is on its own pins (SPI0 on GPIO
+38, 39, 32, CS 37), `board.sd_take_bus()` returns `tsbus.MQ()` unchanged and
+`sd_release_bus()` only raises CS, so `tsbus` keeps serving the 2068
+throughout ([../firmware/board.md](../firmware/board.md#board_v3py)). The
+calls in this flow still run; on v3 they leave the bus alone.
+
 ## One handover
 
 | # | Step | Code | Effect | Why |
