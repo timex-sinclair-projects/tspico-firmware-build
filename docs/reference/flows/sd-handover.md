@@ -26,9 +26,12 @@ FIFOs; **Y** the status the Z80 reads on port 0Fh.
 
 The v3 card has no handover: its SD card is on its own pins (SPI0 on GPIO
 38, 39, 32, CS 37), `board.sd_take_bus()` returns `tsbus.MQ()` unchanged and
-`sd_release_bus()` only raises CS, so `tsbus` keeps serving the 2068
-throughout ([../firmware/board.md](../firmware/board.md#board_v3py)). The
-calls in this flow still run; on v3 they leave the bus alone.
+`sd_release_bus()` lets go of the socket's lines (inputs, no pulls), so
+`tsbus` keeps serving the 2068 throughout
+([../firmware/board.md](../firmware/board.md#board_v3py)). The calls in this
+flow still run; on v3 they leave the bus alone. Before any of them,
+`ACTIVATE_SD` reads the socket's detect switch. With no card in, no SD line
+is touched and it fails in about 2 ms. The v2 socket has no switch.
 
 ## One handover
 

@@ -40,7 +40,8 @@ On the v3 card ([../firmware/board.md](../firmware/board.md#board_v3py)) step 5 
 also sets the LED's brightness (`LED_BRIGHTNESS`, default 5 %), step 8
 loads `/rom/TSPICO-23.ROM` into HOME and EXROM and releases the 2068 (only
 now does it start), step 10 is skipped, and step 11 mounts the card on its
-own pins without taking the bus.
+own pins without taking the bus. It reads the socket's detect switch first:
+with no card it fails at once, the socket never clocked.
 
 From step 15 on the Pico is ready for any transaction. The pre-load at
 step 15 is the only one staged outside a transaction's tail; every

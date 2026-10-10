@@ -129,7 +129,10 @@ Steps, in order:
 5. RESET_HOLD (GP29): input, no pulls, so R1 holds the 2068 in reset.
 6. The expander's /INT (GP35): input, no pulls (it has a 10k pull-up).
 7. PSRAM CS (GP47): input with the pull-up.
-8. SD CS and OLED CS: outputs, high. OLED DC: output, low.
+8. The SD socket's four lines (CS 37, SCK 38, MOSI 39, MISO 32): inputs, no
+   pulls. Nothing drives the socket until the firmware has seen a card on
+   the detect switch (`board_v3.sd_card_ready`); R34 holds CS high and R35
+   holds MISO. Then OLED CS: output, high; OLED DC: output, low.
 9. The XL9555 expander, over I2C0 at 400 kHz (GP24/25, internal pulls off;
    R6/R7 pull up): output register `IOX_OUT0_SAFE` first, then port 1's
    polarity 0 and direction all inputs, then port 0's direction (bits 0-5
@@ -158,7 +161,15 @@ never driven here: releasing the 2068 is `tsbus`'s job.
 
 Checked on proto1 board 1 (2026-10-09, REPL): GP8-GP10 out and high, /BE and
 /WAIT requests out and low, RESET_HOLD an input reading 1, SD CS high, PSRAM
-CS pulled up; expander output register E0h, port 0 direction C0h.
+CS pulled up; expander output register E0h, port 0 direction C0h. Until
+2026-10-10 SD CS was driven high here. Now all four SD lines are inputs: read
+back on the card with the socket empty, GP32, 37, 38 and 39 `mode=IN`.
+
+Why the SD lines are not driven: two cards died that day the moment they
+went into the socket, each resetting the RP2350B. A line driven into a card
+before its VDD contact makes can power it through its I/O pins.
+tspico-hardware [#21](https://github.com/factus10/tspico-hardware/issues/21)
+has the hardware side.
 
 ## `tspico_v3_pins.h`
 
@@ -175,7 +186,10 @@ and `tsbus`:
 | `PIN_TAPE_IN`, `PIN_TAPE_OUT` | 22, 23 | tape |
 | `PIN_I2C_SDA`, `PIN_I2C_SCL` | 24, 25 | I2C0: the expander |
 | `PIN_RESET_HOLD` | 29 | high (or floating: R1) holds the 2068 in reset |
-| `PIN_OLED_DC`, `PIN_NIOX_INT`, `PIN_SD_CS`, `PIN_OLED_CS`, `PIN_PSRAM_CS` | 34, 35, 37, 41, 47 | |
+| `PIN_SD_MISO` | 32 | SPI0 MISO; R35 pulls it up |
+| `PIN_OLED_DC`, `PIN_NIOX_INT` | 34, 35 | |
+| `PIN_SD_CS`, `PIN_SD_SCK`, `PIN_SD_MOSI` | 37, 38, 39 | the SD socket's chip select (R34 pulls it up), clock and data out |
+| `PIN_OLED_CS`, `PIN_PSRAM_CS` | 41, 47 | |
 
 And the XL9555's registers and port 0 bits: `IOX_ADDR` (20h), `IOX_OUT0`,
 `IOX_POL1`, `IOX_CFG0`, `IOX_CFG1`; `X_BUSRQ`, `X_NMI_REQ`, `X_NOLED_RST`,

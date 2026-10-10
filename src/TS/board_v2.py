@@ -86,6 +86,16 @@ def restart_mq(MQ):
     MQ.active(1)
 
 
+def card_present():
+    """No detect switch on this board: None, only a mount can tell."""
+    return None
+
+
+def sd_card_ready():
+    """ACTIVATE_SD asks this first: always True here, the mount finds out."""
+    return True
+
+
 def sd_take_bus():
     """Give GPIO 2-4 to the SD card: SM0 parked on NULL_SM (returned, as the
     new MQ), and U6 held off (GPIO 12 high) so the 2068 can't fight the card.

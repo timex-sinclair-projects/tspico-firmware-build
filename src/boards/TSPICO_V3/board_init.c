@@ -47,8 +47,16 @@ void tspico_v3_safe_init(void) {
     // PSRAM is not fitted; keep its CS high anyway.
     gpio_init(PIN_PSRAM_CS);
     gpio_pull_up(PIN_PSRAM_CS);
-    // SPI chip selects idle high.
-    out(PIN_SD_CS, 1);
+    // The SD socket: nothing drives it until the firmware has seen a card
+    // on the detect switch (board_v3.sd_card_ready). A driven line can power
+    // a card through its I/O pins before its VDD contact makes. Plain
+    // inputs: R34 holds CS high (the card deselected), R35 holds MISO, SCK
+    // and MOSI float behind their 33R. No pulls (E9, above).
+    in_nopull(PIN_SD_CS);
+    in_nopull(PIN_SD_SCK);
+    in_nopull(PIN_SD_MOSI);
+    in_nopull(PIN_SD_MISO);
+    // The OLED's chip select idles high.
     out(PIN_OLED_CS, 1);
     out(PIN_OLED_DC, 0);
 

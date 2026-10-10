@@ -6,6 +6,7 @@
 # The SD card has its own SPI pins, so SD never takes the bus; the LED is on
 # the XL9555 expander; core 1 belongs to tsbus. Same names as board_v2.py.
 
+import time
 import tsbus
 from machine import Pin, SPI, I2C, Timer
 
@@ -22,9 +23,25 @@ _SD_CS = 37
 _SD_SCK, _SD_MOSI, _SD_MISO = 38, 39, 32
 
 _IOX_ADDR = 0x20
+_IOX_IN1 = 1            # input port 1: the joystick, nBUSAK_L, SD_CD
 _IOX_OUT0 = 2
 _IOX_OUT0_SAFE = 0xE0   # no bus request, no NMI, OLED in reset, ESP32 off, LED off
 _X_NLED = 0x20          # bit 5, active low
+_X_SD_CD = 0x80         # port 1 bit 7: low = a card in (the TF-01A's switch closes to GND; R38 pulls it up)
+
+# A card the switch has only just seen is left alone this long before the
+# first SPI clock, so it is seated and powered before its lines are driven.
+SD_SETTLE_MS = 250
+
+_i2c = None             # I2C(0), shared by the LED and the card-detect read
+_cd_since = None        # ticks_ms when the switch was first seen closed; None: no card
+
+
+def _iox():
+    global _i2c
+    if _i2c is None:
+        _i2c = I2C(0)               # the board's defaults: SCL 25, SDA 24
+    return _i2c
 
 # The LED dimmer: D4 on R5 (100R) is far too bright at full current, so
 # while it is on it is lit for the first LED_BRIGHTNESS % of every 10 ms
@@ -75,14 +92,44 @@ def restart_mq(MQ):
     pass
 
 
+def card_present():
+    """The socket's detect switch: True with a card in, False without, None
+    if the expander doesn't answer (then only a mount can tell)."""
+    try:
+        return not (_iox().readfrom_mem(_IOX_ADDR, _IOX_IN1, 1)[0] & _X_SD_CD)
+    except OSError:
+        return None
+
+
+def sd_card_ready():
+    """ACTIVATE_SD asks this before it touches an SD line. False: the switch
+    says the socket is empty, so no SPI at all. True: a card is in, and has
+    been for SD_SETTLE_MS (it waits out the rest when the card is new), or
+    the switch can't be read and the mount will find out."""
+    global _cd_since
+    p = card_present()
+    if p is None:
+        return True
+    if not p:
+        _cd_since = None
+        return False
+    now = time.ticks_ms()
+    if _cd_since is None:
+        _cd_since = now
+    wait = SD_SETTLE_MS - time.ticks_diff(now, _cd_since)
+    if wait > 0:
+        time.sleep_ms(wait)
+    return True
+
+
 def sd_take_bus():
     """The SD card has its own pins: the bus stays as it is. Returns MQ."""
     return tsbus.MQ()
 
 
 def sd_cs():
-    """The SD card's chip select: GPIO 37."""
-    return Pin(_SD_CS, Pin.OUT, Pin.PULL_UP)
+    """The SD card's chip select, GPIO 37, driven high (deselected)."""
+    return Pin(_SD_CS, Pin.OUT, value=1)
 
 
 def sd_spi():
@@ -91,8 +138,15 @@ def sd_spi():
 
 
 def sd_release_bus():
-    """After the card is unmounted: CS high."""
-    Pin(_SD_CS, Pin.OUT, Pin.PULL_UP).value(1)
+    """After the card is unmounted: nothing drives the socket. CS, SCK,
+    MOSI and MISO go back to plain inputs, no pulls (RP2350 erratum E9: a
+    pull-down can latch the pad), as board_init.c leaves them at power-on.
+    R34 holds CS high, so a card that is in stays deselected, and R35 holds
+    MISO; SCK and MOSI float behind their 33R. A card going in then
+    meets no driven line, which could power it through its I/O pins before
+    its VDD contact makes."""
+    for p in (_SD_CS, _SD_SCK, _SD_MOSI, _SD_MISO):
+        Pin(p, Pin.IN, pull=None)
 
 
 class ExpanderLED:
@@ -108,7 +162,7 @@ class ExpanderLED:
     safe values (board_init.c)."""
 
     def __init__(self):
-        self._i2c = I2C(0)          # the board's defaults: SCL 25, SDA 24
+        self._i2c = _iox()
         self._v = 0
         self._lit = False
         self._on_us = LED_PERIOD_US * LED_BRIGHTNESS // 100
