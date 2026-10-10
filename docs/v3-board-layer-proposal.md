@@ -184,3 +184,24 @@ the same command list, apart from the slot commands deferred to phase 5.
   on v3, as v2-only: the DMA sections, v2's per-byte TX-dry counter, and
   `tpi:blkrcv` (refused until phase 5). ZX48 itself can't run on the card
   until phase 5 gives it the Spectrum ROM's slot.
+- **The SD socket** (2026-10-10, #244): two cards died going into a running
+  v3 card. The firmware drove CS, SCK and MOSI between commands and clocked
+  an empty socket. Now the socket's detect switch is read before any SD line
+  is touched, and the lines are undriven while no card is mounted. Three hot
+  inserts were clean after the fix (tspico-hardware #21).
+- **Exit check: passed** (2026-10-10, firmware `main` 83b06e1 on both boards,
+  the same SD card with the 1,327-tape library). Each board ran the same list:
+
+  | Test | v2.2 board | v3 card |
+  |---|---|---|
+  | `tpi:info`, `CAT`, `tpi:dir` | ✓ | ✓ |
+  | Round trip (`sd_roundtrip.py`): LOAD, SAVE of BASIC, SCREEN$ and 16K CODE, `VERIFY` | ✓ byte-exact | ✓ byte-exact |
+  | BREAK mid-LOAD (Report D), then a full LOAD | ✓ | ✓ |
+  | `tpi:md`, `tpi:cd`, a SAVE into the folder, `tpi:cd ..` | ✓ | ✓ |
+  | Card pulled and put back | ✓ | ✓ (the detect switch) |
+  | `tpi:picopt`, `LPRINT`, `COPY`, `tpi:clprint`, `tpi:ts2040` | ✓ | ✓ |
+  | `tpi:boot` | works | refuses, Report F (phase 5) |
+  | ZX48: `tpi:zx48`, LOAD, `LOAD "tpi:…"`, `SAVE "tpi:dir"`, SAVE (byte-exact), back | ✓ | phase 5 (no Spectrum ROM slot yet) |
+
+  Phase 4 is done. Phase 5 gives the card slots: `tpi:boot`, `tpi:dock`,
+  `tpi:blkrcv`, and with them ZX48.
