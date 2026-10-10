@@ -52,7 +52,12 @@ class PutWouldBlock(AssertionError):
 
 
 class FakePIO:
-    """TS_IO_DUAL + a Z80 script, advanced one step per FIFO call."""
+    """TS_IO_DUAL + a Z80 script, advanced one step per FIFO call.
+
+    DEPTH is the FIFOs' size: 4 for v2's PIO. deep_queue_hosttest.py sets it
+    to 1024 for the v3 card's tsbus queues, whose tx_fifo()/rx_fifo() then
+    report their real levels, and whose put_block() it models."""
+    DEPTH = 4
 
     def __init__(self):
         self.tx, self.rx = [], []
@@ -67,7 +72,7 @@ class FakePIO:
 
     def rx_fifo(self):
         self.pump()
-        return min(len(self.rx), 4)
+        return min(len(self.rx), self.DEPTH)
 
     def tx_fifo(self):
         self.pump()
@@ -81,10 +86,37 @@ class FakePIO:
         raise AssertionError("get() on an RX FIFO that never filled")
 
     def put(self, b):
-        if len(self.tx) >= 4:
+        if len(self.tx) >= self.DEPTH:
             raise PutWouldBlock("put() into a full TX FIFO blocks forever on a Pico")
         self.tx.append(b & 0xFF)
         self.pump()
+
+    def put_block(self, buf, wait_ms=-1):
+        """tsbus.MQ.put_block: queue what fits; with wait_ms, wait for room
+        while the Z80 reads, and stop early when an OUT is in RX or the Z80
+        makes no progress (wait_ms ran out). Returns the bytes queued."""
+        mv = memoryview(buf)
+        i = 0
+        stuck = 0
+        while i < len(mv):
+            room = self.DEPTH - len(self.tx)
+            if room:
+                k = min(room, len(mv) - i)
+                self.tx.extend(bytes(mv[i:i + k]))
+                i += k
+                stuck = 0
+                continue
+            if wait_ms == 0 or (wait_ms > 0 and self.rx):
+                break
+            before = len(self.tx)
+            self.pump()
+            if len(self.tx) == before:
+                stuck += 1
+                if stuck > 1000:
+                    if wait_ms < 0:
+                        raise PutWouldBlock("put_block() with no wait into a queue nobody reads")
+                    break
+        return i
 
     def exec(self, s):
         t = s.replace(" ", "")
@@ -121,7 +153,7 @@ class FakePIO:
         op = self.pending
         k = op[0]
         if k == "out":
-            if len(self.rx) < 4:
+            if len(self.rx) < self.DEPTH:
                 self.rx.append(op[2] | (0x100 if op[1] == 0x0F else 0))
             else:
                 self.dropped += 1
@@ -177,7 +209,7 @@ class FakeDMA:
         self._move()
 
     def _move(self):
-        while self.on and self.i < self.n and len(self.pio.tx) < 4:
+        while self.on and self.i < self.n and len(self.pio.tx) < getattr(self.pio, "DEPTH", 4):
             self.pio.tx.append(self.buf[self.i])
             self.i += 1
             self.pio.pump()
@@ -341,8 +373,9 @@ def main():
         print("READY only once the block is queued (the R-after-BREAK race)")
         r, _ = load(pio, 0x00, len(header))
         first = pio.tx_at_ready[0] if pio.tx_at_ready else None
-        check(r == "ok" and first and first[0] == 0x00 and len(first) == 4,
-              "header: when the Z80 first sees READY, TX already holds the flag + 3 bytes (%s)" % first)
+        full = min(FakePIO.DEPTH, len(header) + 2)  # v2: flag + 3; v3's queue: the whole block
+        check(r == "ok" and first and first[0] == 0x00 and len(first) == full,
+              "header: when the Z80 first sees READY, TX already holds the first %d bytes (%s)" % (full, first))
         tsp.offset, tsp.tap_idx = 0, 0
         for name in ("TS/tspico.py", "dev_tspico.py"):
             src = open(os.path.join(SRC, name), encoding="utf-8").read().replace("\r", "")
@@ -443,11 +476,12 @@ def main():
         pio.z80_every = 1
         check(r == "ok" and "ran dry" not in log,
               "Z80 slower than the Pico: TX never runs dry, nothing logged (%s)" % r)
-        load(pio, 0x00, len(header))
-        r, log = load(pio, 0xFF, len(data))     # the fake Z80 keeps up with every put
-        check("ERROR: LOAD TX ran dry" in log and "of 3002" in log,
-              "Z80 as fast as the Pico: the near-misses are logged with the first byte (%r)"
-              % log.strip().splitlines()[:1])
+        if FakePIO.DEPTH == 4:                  # v2's per-byte loop counts them; v3 streams in C
+            load(pio, 0x00, len(header))
+            r, log = load(pio, 0xFF, len(data))     # the fake Z80 keeps up with every put
+            check("ERROR: LOAD TX ran dry" in log and "of 3002" in log,
+                  "Z80 as fast as the Pico: the near-misses are logged with the first byte (%r)"
+                  % log.strip().splitlines()[:1])
 
         print("v1.7 LOAD: no port-0Fh writes, nothing changes")
         r0, _ = load(pio, 0x00, len(header))
@@ -612,54 +646,57 @@ def main():
             os.unlink(f)
         tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
 
-        print("by DMA (rp2.DMA, MicroPython v1.22+): the same LOADs")
-        io._DMA = FakeDMA
-        FakeDMA.made.clear()
-        tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
-        r0, _ = load(pio, 0x00, len(header))
-        first = pio.tx_at_ready[0] if pio.tx_at_ready else None
-        r1, log = load(pio, 0xFF, len(data))
-        check(r0 == r1 == "ok" and idle(pio) and len(FakeDMA.made) == 2,
-              "header + data load, each block by its own channel (%s, %s, %d)"
-              % (r0, r1, len(FakeDMA.made)))
-        check(first and first[0] == 0x00 and len(first) == 4,
-              "  READY once TX is full: the flag + 3 bytes waiting (%s)" % first)
-        check(all(getattr(d, "closed", False) for d in FakeDMA.made),
-              "  every channel closed afterwards (they are a shared resource)")
-        load(pio, 0x00, len(header))
-        off = tsp.offset
-        r, log = load(pio, 0xFF, len(data), break_at=1000)
-        check(r == "D" and idle(pio) and "stopped by BREAK" in log and tsp.offset == off,
-              "BREAK mid-block: heard while the DMA runs, Report D, idle (%s)" % r)
-        check(FakeDMA.made[-1].i < len(data), "  the channel was stopped part way (%d of %d)"
-              % (FakeDMA.made[-1].i, len(data) + 1))
-        read = int(log.split("read ")[1].split(" of")[0]) if "read " in log else -1
-        check(0 < read < len(data), "  the log's byte count is where it stopped, not the whole block (%d)" % read)
-        r1, _ = load(pio, 0x00, len(header))
-        r2, _ = load(pio, 0xFF, len(data))
-        check(r1 == r2 == "ok", "  and the next LOAD works first time (%s, %s)" % (r1, r2))
-        load(pio, 0x00, len(header))
-        r, log = load(pio, 0xFF, len(data), stop_at=1500)
-        check(idle(pio, 0xFB) and "stalled -> RECOVERED" in log,
-              "the Z80 goes silent mid-block: the stall is seen, RECOVERED, no hang")
-        tsp.offset, tsp.tap_idx = 0, 0
-        load(pio, 0x00, len(header))
-        pio.z80_every = 3
-        seen = []
-        r, log = load(pio, 0xFF, len(data), seen=seen)
-        pio.z80_every = 1
-        check(r == "ok" and bytes(seen) == data and "ran dry" not in log,
-              "a slow Z80 gets every byte, in order (%s)" % r)
+        if FakePIO.DEPTH == 4:                  # v2 only: the v3 card has no DMA (deep_queue_hosttest)
+            print("by DMA (rp2.DMA, MicroPython v1.22+): the same LOADs")
+            io._DMA = FakeDMA
+            FakeDMA.made.clear()
+            tsp.offset, tsp.tap_idx, tsp.ld_start, tsp.ld_wrapped = 0, 0, -1, False
+            r0, _ = load(pio, 0x00, len(header))
+            first = pio.tx_at_ready[0] if pio.tx_at_ready else None
+            r1, log = load(pio, 0xFF, len(data))
+            check(r0 == r1 == "ok" and idle(pio) and len(FakeDMA.made) == 2,
+                  "header + data load, each block by its own channel (%s, %s, %d)"
+                  % (r0, r1, len(FakeDMA.made)))
+            check(first and first[0] == 0x00 and len(first) == 4,
+                  "  READY once TX is full: the flag + 3 bytes waiting (%s)" % first)
+            check(all(getattr(d, "closed", False) for d in FakeDMA.made),
+                  "  every channel closed afterwards (they are a shared resource)")
+            load(pio, 0x00, len(header))
+            off = tsp.offset
+            r, log = load(pio, 0xFF, len(data), break_at=1000)
+            check(r == "D" and idle(pio) and "stopped by BREAK" in log and tsp.offset == off,
+                  "BREAK mid-block: heard while the DMA runs, Report D, idle (%s)" % r)
+            check(FakeDMA.made[-1].i < len(data), "  the channel was stopped part way (%d of %d)"
+                  % (FakeDMA.made[-1].i, len(data) + 1))
+            read = int(log.split("read ")[1].split(" of")[0]) if "read " in log else -1
+            check(0 < read < len(data), "  the log's byte count is where it stopped, not the whole block (%d)" % read)
+            r1, _ = load(pio, 0x00, len(header))
+            r2, _ = load(pio, 0xFF, len(data))
+            check(r1 == r2 == "ok", "  and the next LOAD works first time (%s, %s)" % (r1, r2))
+            load(pio, 0x00, len(header))
+            r, log = load(pio, 0xFF, len(data), stop_at=1500)
+            check(idle(pio, 0xFB) and "stalled -> RECOVERED" in log,
+                  "the Z80 goes silent mid-block: the stall is seen, RECOVERED, no hang")
+            tsp.offset, tsp.tap_idx = 0, 0
+            load(pio, 0x00, len(header))
+            pio.z80_every = 3
+            seen = []
+            r, log = load(pio, 0xFF, len(data), seen=seen)
+            pio.z80_every = 1
+            check(r == "ok" and bytes(seen) == data and "ran dry" not in log,
+                  "a slow Z80 gets every byte, in order (%s)" % r)
 
-        def no_channel():
-            raise OSError("no free DMA channel")
-        io._DMA = no_channel
-        tsp.offset, tsp.tap_idx = 0, 0
-        r0, _ = load(pio, 0x00, len(header))
-        r1, _ = load(pio, 0xFF, len(data))
-        check(r0 == r1 == "ok", "no free channel: the Python loop, as before (%s, %s)" % (r0, r1))
-        io._DMA = None
-        tsp.offset, tsp.tap_idx = 0, 0
+            def no_channel():
+                raise OSError("no free DMA channel")
+            io._DMA = no_channel
+            tsp.offset, tsp.tap_idx = 0, 0
+            r0, _ = load(pio, 0x00, len(header))
+            r1, _ = load(pio, 0xFF, len(data))
+            check(r0 == r1 == "ok", "no free channel: the Python loop, as before (%s, %s)" % (r0, r1))
+            io._DMA = None
+            tsp.offset, tsp.tap_idx = 0, 0
+        else:
+            print("by DMA: skipped, the v3 card streams through tsbus put_block")
 
         check(pio.dropped == 0, "no RX overflow anywhere (%d)" % pio.dropped)
         print("  PASS  no put() into a full TX FIFO (FakePIO raises if one happens)")

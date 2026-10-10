@@ -73,28 +73,28 @@ In source order, with line numbers of the file as it is today:
 - 325–364: USB stdin: `_stdin_ipoll`, `_stdin_readinto`, `_stdin_byte`,
   `DRAIN_STDIN`.
 - 367–393: `MQ_TO_IDLE`.
-- 396–588: sending: `TX_ROOM`, `ECHO_KEEP`, `STREAM_DMA`, `QUEUE_WAIT_MS`,
+- 396–610: sending: `TX_ROOM`, `ECHO_KEEP`, `STREAM_DMA`, `QUEUE_WAIT_MS`,
   `STREAM_QUEUE`, `RX_WORD`.
-- 591–747: receiving blocks: `RXB_OK`, `RXB_ABORT`, `RXB_STALL`, `_RING_BITS`,
+- 613–769: receiving blocks: `RXB_OK`, `RXB_ABORT`, `RXB_STALL`, `_RING_BITS`,
   `_RING_WORDS`, `_RING_SETUP`, `_ring`, `SAY_READY`, `RX_RING`, `RX_BLOCK`,
   `_SAVE_HDR_RAW`.
-- 750–773: `OPEN_NOFILE_TAP`.
-- 776–1041: the four PIO programs `sel_bank`, `set_ctrl`, `set_dck` and
+- 772–795: `OPEN_NOFILE_TAP`.
+- 798–1063: the four PIO programs `sel_bank`, `set_ctrl`, `set_dck` and
   `TS_IO_DUAL`. They are explained instruction by instruction in
   [pio.md](pio.md); this chapter has no entries for them.
-- 1044–1101: `REWIND_ABORTED_SEARCH`, `ENA_MQ_DUAL`.
-- 1104–1205: the SD card and the log: `SD_MOUNT`, `ENA_SD`, `LOG_ADD`.
-- 1208–1285: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
+- 1066–1123: `REWIND_ABORTED_SEARCH`, `ENA_MQ_DUAL`.
+- 1126–1227: the SD card and the log: `SD_MOUNT`, `ENA_SD`, `LOG_ADD`.
+- 1230–1307: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
   `LOAD_REFUSE`, `FIRST_STATUS`, `LOAD_RETRY_DONE`.
-- 1288–1897: `LOAD_TS`, `LOAD_SERVE`.
-- 1899–1939: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
+- 1310–1919: `LOAD_TS`, `LOAD_SERVE`.
+- 1921–1961: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
   `ZX_BLOCK_GAP_MS`, `ZX_FLUSH_TX`, `ZX_ROOM`.
-- 1942–2022: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
+- 1964–2044: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
   `ZX_STREAM`.
-- 2025–2308: `LOAD_ZX`, `ZX_C_BLOCKS`, `LOAD_ZX_C`.
-- 2311–2417: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
-- 2420–2893: `SAVE_TS`.
-- 2896–3030: `_xor`, `SAVE_ZX`.
+- 2047–2330: `LOAD_ZX`, `ZX_C_BLOCKS`, `LOAD_ZX_C`.
+- 2333–2439: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
+- 2442–2915: `SAVE_TS`.
+- 2918–3052: `_xor`, `SAVE_ZX`.
 
 The last section of this chapter lists the places where a comment, a design
 document and the code disagree.
@@ -510,13 +510,30 @@ OUT is waiting, and returns how many bytes it took.
 1. `pos = MQ.put_block(mv, 0)`: the queue is filled first.
 2. READY as `STREAM_DMA` says it (`ready` True: `mov(y, invert(null))`; a
    function: called; False: nothing).
-3. While `pos < len(buf)`: `k = MQ.put_block(mv[pos:], QUEUE_WAIT_MS)`.
+3. The loop. While `pos < len(buf)`: `k = MQ.put_block(mv[pos:],
+   QUEUE_WAIT_MS)`. Once all of it is queued: with an `echo`, return (why
+   0). In ZX48 mode (`echo` None), go on until `tx_fifo()` is down to
+   `TX_DEPTH`, progress being a fall in the level since the last look.
+   In each pass:
    - On progress the stall clock restarts. Once more than `2 * TX_DEPTH`
      bytes have been read (`pos - tx_fifo()`), the limit drops from
      `first_ms` to `stall_ms`.
    - An RX word: with `echo` None (ZX48 mode), why 4 with the word; a
      port-0Fh write, why 1; otherwise `ECHO_KEEP`.
    - No progress for the limit: why 3.
+
+Why ZX48 waits for the tail: `STREAM_DMA` returns with at most the FIFO's
+four bytes unread, and `LOAD_ZX` counts on it. The Spectrum ROM skips a
+block (`LOAD "name"` passing another file's data) by reading the 19 bytes
+of the header it asked for and sending its next `'L'`, and a BREAK between blocks leaves the
+Z80 silent. On v2 the stream hears both. With a 1024-byte queue most blocks
+fit whole, so a return at "all queued" left up to 1020 unread bytes behind
+it: the `'L'` was only handled at the next block's `ZX_FLUSH_TX`, the log's
+"the ROM read N of M" was never written, and a stopped Z80's bytes were
+never flushed. `deep_queue_hosttest.py` found it (step 4.5). The other
+callers return as soon as the block is queued: their next step already
+listens (`LOAD_TS` for the echo, the command output for the key the ROM
+waits for), and here a key would land in `echo` and be lost.
 
 `sent` is `pos`, the bytes queued. As with DMA, the Z80 has read
 `sent - MQ.tx_fifo()`. On an early return the rest stays queued, and the
@@ -525,6 +542,8 @@ per `put_block` call (about every 10 ms while the Z80 reads), never per
 byte. [`tsbus_io_hosttest.py`](../../../src/test/tsbus_io_hosttest.py) runs
 it against a model Z80 on a 1024-byte queue: a 6912-byte block whole and in
 order, a BREAK, a stall, `first_ms`'s grace and ZX48's any-word.
+[`deep_queue_hosttest.py`](../../../src/test/deep_queue_hosttest.py) runs
+the LOAD, command, SAVE and ZX48 Z80 models through it on 1024-entry queues.
 
 ### `RX_WORD(MQ, stall_ms)`
 
@@ -657,7 +676,7 @@ on `False`, and lazily by `LOAD_TS`.
 
 ## The PIO programs
 
-Lines 776–1041 define `sel_bank` (bank selection on A15–A18), `set_ctrl` (the
+Lines 798–1063 define `sel_bank` (bank selection on A15–A18), `set_ctrl` (the
 control lines /BE, A14_L, `U10_ENA`, `U13_ENA`), `set_dck` (`U10_ENA` and
 `U13_ENA` only, for DOCK access without ROM mapping) and `TS_IO_DUAL` (the two ports; 20
 instructions, with the auto-busy `mov(y, null)` of issue #14). They are

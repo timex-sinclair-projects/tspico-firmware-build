@@ -232,27 +232,30 @@ def main():
             f.write(tap)
         tsp.totlen = len(tap)
 
-        print("by DMA (rp2.DMA, MicroPython v1.22+): the same LOADs")
-        io._DMA = L.FakeDMA
-        L.FakeDMA.made.clear()
-        tsp.offset = tsp.tap_idx = 0
-        r, log = session(z80_load())
-        check(r == ("ok", data_a) and len(L.FakeDMA.made) == 2,
-              "header + data loaded, a channel per block (%s, %d)" % (r[0], len(L.FakeDMA.made)))
-        tsp.offset = tsp.tap_idx = 0
-        del calls[:]
-        r, log = session(z80_load("beta"))
-        check(r == ("ok", data_b) and calls == [76] * 4
-              and "read 19 of 302 bytes, then sent 0x4C" in log,
-              "LOAD \"beta\": the 'L' that ends alpha's data is heard while the DMA runs (%s)" % (r[0],))
-        tsp.offset = tsp.tap_idx = 0
-        r, log = session(z80_load("beta", stop_after_blocks=2))
-        check("then stopped" in log and not pio.tx and tsp.offset == off_b,
-              "the Z80 stops reading mid-block: the stall is seen, TX flushed")
-        r, log = session(z80_load())
-        check(r == ("ok", data_b), "  and the next LOAD works first time (%s)" % (r[0],))
-        check(all(getattr(c, "closed", False) for c in L.FakeDMA.made), "every channel closed afterwards")
-        io._DMA = None
+        if L.FakePIO.DEPTH == 4:  # v2 only: the v3 card has no DMA (deep_queue_hosttest)
+            print("by DMA (rp2.DMA, MicroPython v1.22+): the same LOADs")
+            io._DMA = L.FakeDMA
+            L.FakeDMA.made.clear()
+            tsp.offset = tsp.tap_idx = 0
+            r, log = session(z80_load())
+            check(r == ("ok", data_a) and len(L.FakeDMA.made) == 2,
+                  "header + data loaded, a channel per block (%s, %d)" % (r[0], len(L.FakeDMA.made)))
+            tsp.offset = tsp.tap_idx = 0
+            del calls[:]
+            r, log = session(z80_load("beta"))
+            check(r == ("ok", data_b) and calls == [76] * 4
+                  and "read 19 of 302 bytes, then sent 0x4C" in log,
+                  "LOAD \"beta\": the 'L' that ends alpha's data is heard while the DMA runs (%s)" % (r[0],))
+            tsp.offset = tsp.tap_idx = 0
+            r, log = session(z80_load("beta", stop_after_blocks=2))
+            check("then stopped" in log and not pio.tx and tsp.offset == off_b,
+                  "the Z80 stops reading mid-block: the stall is seen, TX flushed")
+            r, log = session(z80_load())
+            check(r == ("ok", data_b), "  and the next LOAD works first time (%s)" % (r[0],))
+            check(all(getattr(c, "closed", False) for c in L.FakeDMA.made), "every channel closed afterwards")
+            io._DMA = None
+        else:
+            print('by DMA: skipped, the v3 card streams through tsbus put_block')
 
         print("compatible mode (LOAD_ZX_C)")
         tsp.offset = tsp.tap_idx = 0

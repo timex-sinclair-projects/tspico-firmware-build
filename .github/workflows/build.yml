@@ -134,6 +134,7 @@ jobs:
           python3 src/test/board_hosttest.py
           python3 src/test/tsbus_io_hosttest.py
           python3 src/test/board_v3_hosttest.py
+          python3 src/test/deep_queue_hosttest.py
           python3 src/test/reference_hosttest.py
       # Fails the build if a ROM in flash/manifest.json changed without its
       # crc32 being updated -- i.e. nobody would notice that the next 512K

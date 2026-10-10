@@ -58,7 +58,7 @@ class PIO(L.FakePIO):
     def put(self, b):
         if isinstance(b, str):                  # rp2 takes a 1-char str as a buffer
             b = ord(b)
-        if len(self.tx) >= 4:
+        if len(self.tx) >= self.DEPTH:
             self.blocked = True
         return L.FakePIO.put(self, b)
 
@@ -382,14 +382,17 @@ def main():
             pio.finish()
             return pio, (pio.result or ("no result",))
 
-        pio, r = blkrcv_run(z80_blkrcv(P.make_body(b"tpi:blkrcv"), read_n=len(image)))
-        check(r[0] == "ok" and len(r) > 1 and r[1] == image and idle(pio),
-              "the updater's blind read loop gets all %d bytes, in order; back to idle (%s)"
-              % (len(image), r[0]))
-        pio, r = blkrcv_run(z80_blkrcv(P.make_body(b"tpi:blkrcv"), break_first=True))
-        check(r[0] == "D" and not pio.blocked and idle(pio),
-              "BREAK before the write loop starts: Report D, back to idle, no put() into a"
-              " full FIFO (blocked=%s, %s)" % (pio.blocked, r[0]))
+        if t.board.SLOTS:  # v3: refused until phase 5 (board_v3_hosttest)
+            pio, r = blkrcv_run(z80_blkrcv(P.make_body(b"tpi:blkrcv"), read_n=len(image)))
+            check(r[0] == "ok" and len(r) > 1 and r[1] == image and idle(pio),
+                  "the updater's blind read loop gets all %d bytes, in order; back to idle (%s)"
+                  % (len(image), r[0]))
+            pio, r = blkrcv_run(z80_blkrcv(P.make_body(b"tpi:blkrcv"), break_first=True))
+            check(r[0] == "D" and not pio.blocked and idle(pio),
+                  "BREAK before the write loop starts: Report D, back to idle, no put() into a"
+                  " full FIFO (blocked=%s, %s)" % (pio.blocked, r[0]))
+        else:
+            print('  skipped: tpi:blkrcv refuses on the v3 card until phase 5 (slots)')
 
         print("BREAK at a Scroll? prompt (1.8b KEYWAIT)")
         pio, r = run(b"tpi:list", break_at_prompt=2)

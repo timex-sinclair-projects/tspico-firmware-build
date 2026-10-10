@@ -171,4 +171,16 @@ the same command list, apart from the slot commands deferred to phase 5.
   quick attempts (about 5 s), no hang; put back, the next `tpi:dir` reads it,
   and `LOAD "v3t"` works again. Test TAPs went onto the card over USB with
   `pico-serial.py put --sd`.
-- **4.5** next.
+- **4.5** (2026-10-10): `src/test/deep_queue_hosttest.py` runs `load_ts`,
+  `cmd_io`, `save_ts` and `zx48_io` again on 1024-entry queues, with a
+  `tsbus` module present so `tspico_io` takes its v3 paths, and the model
+  Z80 driven by the clock (about 30 bytes a ms, as core 1 serves it whatever
+  Python is doing). It found one bug: in ZX48 mode `STREAM_QUEUE` returned
+  once a block was queued, with up to 1020 bytes unread, so a block the ROM
+  skipped (its next `'L'`) or a Z80 that stopped went unheard and wasn't
+  flushed. Fixed: in ZX48 mode it listens until four bytes are left, as
+  v2's DMA does. Waiting for the tail everywhere was tried and is wrong:
+  the ROM's key press after a page would be swallowed as an echo. Skipped
+  on v3, as v2-only: the DMA sections, v2's per-byte TX-dry counter, and
+  `tpi:blkrcv` (refused until phase 5). ZX48 itself can't run on the card
+  until phase 5 gives it the Spectrum ROM's slot.
