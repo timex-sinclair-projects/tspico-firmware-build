@@ -237,7 +237,8 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 4. GitHub Actions builds a UF2 **for the branch / PR** as well as for
    `main` — you can download the artifact from any PR's checks before
    it merges. (See `.github/workflows/build.yml`.)
-5. Flash to Pico (BOOTSEL + drag-and-drop).
+5. Flash to Pico (BOOTSEL + drag-and-drop, or `tools/pico-serial.py
+   flash --branch my-fix`, below).
 6. The `/main.py`, `/config.ini`, `/assets/*.tap`, `/help/*.txt`, and
    `/words.txt` already on the Pico are preserved — only the firmware
    itself is replaced.
@@ -247,6 +248,25 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 **For quick `tspico.py` / `extcmd.py` tweaks** that don't need a UF2
 rebuild, use the `/dev_tspico.py` / `/dev_extcmd.py` override pattern
 described above — far faster iteration loop.
+
+## Developer tools
+
+**`tools/pico-serial.py`** talks to the Pico over its USB cable from a
+shell, so you don't need Thonny. It uses only Python's standard library.
+
+```bash
+python3 tools/pico-serial.py watch                       # the console and [TLM] trace, read-only
+python3 tools/pico-serial.py flash --branch my-fix       # a branch's CI UF2, no BOOTSEL buttons
+python3 tools/pico-serial.py break                       # stop the firmware, to the REPL
+python3 tools/pico-serial.py put --sd test.tap /TAP/test.tap   # a tape onto the SD card
+python3 tools/pico-serial.py softreset                   # start the firmware again
+```
+
+`run`, `get` and `put` (without `--sd`, onto the Pico's own flash) work at
+the REPL too. `watch` never disturbs the firmware. `break` stops it: the
+2068 has no TS-Pico until `softreset`, so only use it when the 2068 is idle.
+The tool's docstring has every option. Its notes for AI agents are in
+[`src/CLAUDE.md`](src/CLAUDE.md), "Talking to the Pico directly".
 
 ## License
 
