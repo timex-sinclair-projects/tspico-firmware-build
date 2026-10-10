@@ -330,10 +330,14 @@ socket, each resetting the RP2350B (and so the 2068). The firmware used to
 find out whether a card was there by trying to start one. It clocked an
 empty socket for about 3.6 s every time it looked, with CS, SCK and MOSI
 driven, and a card going in could meet live lines before its VDD contact
-made, which can power it through its I/O pins. Whether that killed the cards
-or the socket itself is at fault is open in tspico-hardware
-[#21](https://github.com/factus10/tspico-hardware/issues/21). The switch is
-also a faster and surer "no card" than a mount's timeout.
+made, which can power it through its I/O pins. The board measured healthy
+afterwards, and the dead cards read 190 Ω across their supply (a good one
+about 6 kΩ). With this function and `sd_release_bus` in place, three hot
+inserts were clean: USB only with the firmware stopped and with it running,
+and in the 2068. No reset, and the cards stayed cool
+(tspico-hardware [#21](https://github.com/factus10/tspico-hardware/issues/21),
+which keeps the design question open: switched power for the socket). The
+switch is also a faster and surer "no card" than a mount's timeout.
 
 ### `sd_take_bus()`
 
