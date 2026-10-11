@@ -33,6 +33,33 @@ The user connects, ticks what they need, and presses **Start**:
 
 Every step can be rerun; a Pico left in BOOTSEL is always recoverable.
 
+### The v3 card
+
+The page tells the boards apart: the REPL's machine name ("… with RP2350"), or in
+BOOTSEL the boot ROM's USB product ID (WebUSB) or its `INFO_UF2.TXT` (the
+**RP2350** drive). The v3 card (RP2350B) has no ROM chip: its ROMs and
+cartridges are files on the same flash as the firmware, in `/slots`
+([docs/v3-slots-proposal.md](../docs/v3-slots-proposal.md)). So for it:
+
+- **No wipe.** It would erase the user's ROM slots. A stray `/TS` folder,
+  which the wipe clears on v2, is removed in the files step instead.
+- **No ROM update.** The ROMs are slot files.
+- **Firmware:** `firmware-v3.uf2`. `flasher.js` checks the UF2 is built for
+  the chip it is writing (RP2040 family `E48BFF56`, RP2350 `E48BFF59`), so
+  neither board can get the other's image.
+- **Files:** the same Pico files, then the slot files into `/slots`. Slots 0
+  and 1 (our Spectrum and TS-Pico ROMs) every time; the others only where the
+  card has no such file, so a ROM or cartridge the user put in a slot is
+  never overwritten. All are verified by size.
+
+The payload's `manifest.json` has a `v3` entry (`uf2`, `mp_version`, `slots`
+with each slot's file, size and `always`), or `null` when the channel has
+nothing for the v3 card. Releases carry `firmware-v3.uf2` and `v3-slots.zip`
+(release.yml); the `main/` channel takes the `tspico-v3-firmware-uf2`
+artifact, the third-party slots from the latest release's `v3-slots.zip`,
+and slots 0 and 1 rebuilt from main (pages.yml: the flash-base draft the full
+image needs isn't readable there).
+
 ## Writing a UF2 without dragging
 
 | Path | How | Works on |
@@ -121,6 +148,8 @@ gh run download <run-id> -n tspico-upgrade-uf2 -D /tmp/upg
 CHANNEL=main OUT_DIR=web-updater/main \
   UPGRADE_UF2="$(find /tmp/upg -path '*build-UPGRADE/firmware.uf2')" \
   web-updater/build-payload.sh src main@local /tmp/fw/firmware.uf2
+# ...and the v3 card's part: its firmware and slot files
+#   V3_UF2=/tmp/v3/firmware.uf2 V3_SLOTS=<dir of F*.bin from build-flash.py --slots>
 python3 -m http.server 8000 --directory web-updater
 ```
 
@@ -144,6 +173,7 @@ One-time repo setup: **Settings → Pages → Source → “GitHub Actions”**.
 - [ ] Hardware pass on a 1.1 board and a 1.5 board end to end, on macOS
       (WebUSB). Windows goes through windows-updater/ instead.
 - [ ] Per-file byte-level progress for the file copy.
+- [ ] The v3 card in the Windows updater (windows-updater/).
 
 ## License
 

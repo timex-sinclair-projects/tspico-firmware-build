@@ -145,6 +145,13 @@ jobs:
           if [ -n "$TAG" ]; then
             gh release download "$TAG" --pattern 'firmware.uf2' --dir _rel || true
             gh release download "$TAG" --pattern 'upgrade.uf2'  --dir _rel || true
+            # The v3 card's firmware and slot files (releases from before the
+            # v3 card have neither: the page says so).
+            gh release download "$TAG" --pattern 'firmware-v3.uf2' --dir _rel || true
+            gh release download "$TAG" --pattern 'v3-slots.zip'    --dir _rel || true
+          fi
+          if [ -f _rel/v3-slots.zip ]; then
+            mkdir -p _rel/v3-slots && unzip -q -o _rel/v3-slots.zip -d _rel/v3-slots
           fi
           echo "tag=${TAG:-dev}" >> "$GITHUB_OUTPUT"
           ls -la _rel
@@ -154,6 +161,8 @@ jobs:
           CHANNEL: release
           OUT_DIR: ${{ github.workspace }}/_payload/release
           UPGRADE_UF2: ${{ github.workspace }}/_rel/upgrade.uf2
+          V3_UF2: ${{ github.workspace }}/_rel/firmware-v3.uf2
+          V3_SLOTS: ${{ github.workspace }}/_rel/v3-slots
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.rel.outputs.tag }}
         run: |
           # The Pico files come from the release's own commit when there is
@@ -221,6 +230,7 @@ jobs:
             exit 0
           fi
           gh run download "$ID" -n tspico-upgrade-uf2  -D _main/upg || true
+          gh run download "$ID" -n tspico-v3-firmware-uf2 -D _main/v3 || true
           # The upgrade artifact nests its UF2 under its build path.
           UPG="$(find _main/upg -path '*build-UPGRADE/firmware.uf2' | head -1)"
           echo "run=$ID" >> "$GITHUB_OUTPUT"
@@ -234,11 +244,26 @@ jobs:
           CHANNEL: main
           OUT_DIR: ${{ github.workspace }}/_payload/main
           UPGRADE_UF2: ${{ steps.main.outputs.upg }}
+          V3_UF2: ${{ github.workspace }}/_main/v3/firmware.uf2
+          V3_SLOTS: ${{ github.workspace }}/_main/v3-slots
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.main.outputs.run }}
         run: |
           SHA="${{ steps.main.outputs.sha }}"
           mkdir -p _main/tree
-          git archive "$SHA" src basic tools | tar -x -C _main/tree
+          git archive "$SHA" src basic tools flash 2>/dev/null | tar -x -C _main/tree \
+            || git archive "$SHA" src basic tools | tar -x -C _main/tree
+          # The v3 card's slot files: the third-party ROMs and cartridges from
+          # the latest release's v3-slots.zip (this job can't read the
+          # flash-base draft), then our own slots 0 and 1 rebuilt from this
+          # commit over them. build-flash.py exits 2 without a base, after
+          # writing them.
+          mkdir -p _main/v3-slots
+          if [ -d _rel/v3-slots ]; then cp _rel/v3-slots/F*.bin _main/v3-slots/ 2>/dev/null || true; fi
+          if [ -f _main/tree/flash/manifest.json ] && grep -q -- '--slots' _main/tree/tools/build-flash.py; then
+            ( cd _main/tree && python3 tools/build-flash.py build flash/manifest.json \
+                --out "$RUNNER_TEMP/main-no-base.rom" --slots "$RUNNER_TEMP/main-own-slots" ) || [ $? -eq 2 ]
+            cp "$RUNNER_TEMP"/main-own-slots/F00.bin "$RUNNER_TEMP"/main-own-slots/F01.bin _main/v3-slots/ 2>/dev/null || true
+          fi
           # Build the generated TAPs (nofile/romupdate/dckupdate) for this
           # commit -- they are gitignored, so the archive doesn't have them.
           ./_main/tree/tools/build-basic.sh

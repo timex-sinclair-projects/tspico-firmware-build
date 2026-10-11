@@ -65,6 +65,7 @@ let serial = null        // WebSerial transport, open
 let raw = null           // MpRawMode, while in the raw REPL
 let boot = null          // UsbBootsel | DriveBootsel, while the Pico is in BOOTSEL
 let installed = null     // { fw, ver, from1x, mp } once read
+let board = null         // 'v2' (RP2040: the TS-Pico 2.x) or 'v3' (RP2350B: the v3 card), once known
 let running = false
 
 // ---------------------------------------------------------------------------
@@ -191,23 +192,33 @@ function romBehind() {
     return have[0] < want[0] || (have[0] === want[0] && have[1] < want[1])
 }
 
+// The v3 card (RP2350B) installs differently: no wipe (its ROM slots are
+// files on the same flash as the firmware) and no ROM update (the slots are
+// written as files). docs/v3-slots-proposal.md, and the web updater's v3 plan.
+const isV3 = () => board === 'v3'
+
 function refreshPlan() {
     const m = manifest
+    const v3 = isV3()
+    if (v3) { $('opt-rom').checked = false; $('opt-wipe').checked = false }
     const wantRom = $('opt-rom').checked
     const hint = $('plan-hint')
     let problem = ''
     if (!m) problem = 'No payload loaded for this channel.'
-    else if (!m.uf2) problem = 'This channel has no firmware image. Pick the other channel, or use “Do it by hand”.'
+    else if (v3 && !m.v3) problem = 'This channel has nothing for the v3 card yet. Pick “Latest main build”.'
+    else if (!v3 && !m.uf2) problem = 'This channel has no firmware image. Pick the other channel, or use “Do it by hand”.'
     else if (wantRom && !m.upgrade_uf2) problem = 'This channel has no ROM updater (upgrade.uf2). ' +
         'Pick “Latest main build”, or untick the ROM update.'
     enable($('btn-start'), !problem && !running)
-    enable($('opt-rom'), !!(m && m.upgrade_uf2) && !running)
-    enable($('opt-wipe'), !running && !wantRom)
+    enable($('opt-rom'), !!(m && m.upgrade_uf2) && !running && !v3)
+    enable($('opt-wipe'), !running && !wantRom && !v3)
     if (wantRom) $('opt-wipe').checked = true   // the upgrade UF2 needs an empty filesystem
 
     hint.className = 'hint'
     if (problem) {
         hint.classList.add('warn'); hint.textContent = problem
+    } else if (v3) {
+        hint.textContent = planText()
     } else if (installed && installed.from1x && !wantRom) {
         hint.classList.add('warn')
         hint.textContent = `This board is on ${installed.fw}. Its TS-2068 ROM can't talk to ` +
@@ -227,11 +238,18 @@ function refreshPlan() {
             setStage(name, on ? 'pending' : 'skipped', on ? '' : off)
         }
     }
-    plan('rom', wantRom, 'Not needed.')
-    plan('wipe', $('opt-wipe').checked, 'Keeping what’s on the Pico.')
+    plan('rom', wantRom, v3 ? 'Not on the v3 card: its ROMs are slot files, copied with the files.' : 'Not needed.')
+    plan('wipe', $('opt-wipe').checked, v3 ? 'Never on the v3 card: it would erase your ROM slots.'
+                                            : 'Keeping what’s on the Pico.')
 }
 
 function planText() {
+    if (isV3()) {
+        return `Start will install firmware ${manifest.fw_version} for the v3 card, then copy its ` +
+            'files and its ROM slots. Slots 0 and 1 (the Spectrum and TS-Pico ROMs) are always ' +
+            'replaced; your own ROMs and cartridges in the other slots are kept. Nothing is erased. ' +
+            'Keep the USB cable connected throughout.'
+    }
     const steps = []
     if ($('opt-wipe').checked) steps.push('erase the Pico')
     if ($('opt-rom').checked) steps.push('update the TS-2068 ROM (you’ll type two commands on the 2068)')
@@ -317,6 +335,9 @@ async function readInstalled() {
     if (!/rp2|pico/i.test(info.machine + ' ' + info.sysname)) {
         log('Warning: this does not look like an RP2040/Pico.', 'warn')
     }
+    // "TS-Pico v3 with RP2350" on the v3 card; "... with RP2040" on a Pico.
+    board = /RP2350/i.test(info.machine) ? 'v3' : 'v2'
+    if (board === 'v3') log('This is a TS-Pico v3 card (RP2350B).')
     // The running firmware's own FW_VERSION (2.0 on) wins: Ctrl-C leaves its
     // module loaded, and config.ini can hold a stale one (a 2.0 board may
     // still say "1.00"). 1.x has no such constant, so fall back to
@@ -414,7 +435,7 @@ async function getBootsel(name) {
         if (b) return b
     }
     if (boot && boot.kind === 'drive') {
-        stageMsg(name, 'Waiting for the RPI-RP2 drive…')
+        stageMsg(name, 'Waiting for the boot drive (RPI-RP2, or RP2350 on the v3 card)…')
         if (await boot.waitPresent(20000)) return boot
     }
     if (UsbBootsel.supported() && !DRIVE_ONLY) {
@@ -431,12 +452,13 @@ async function pickBootsel(name) {
     for (;;) {
         const choices = []
         if (usb) choices.push({ label: 'Allow USB access', value: 'usb' })
-        if (drive) choices.push({ label: 'Use the RPI-RP2 drive', value: 'drive' })
+        if (drive) choices.push({ label: 'Use the boot drive', value: 'drive' })
         choices.push({ label: 'Stop', value: 'stop' })
         stageMsg(name, usb
             ? 'The Pico is in BOOTSEL mode. Click “Allow USB access” and pick “RP2 Boot” in the list.'
-            : 'The Pico is in BOOTSEL mode. Click “Use the RPI-RP2 drive”. Chrome then asks you to ' +
-              '“select where this site can save changes”: choose the RPI-RP2 drive itself — on a Mac ' +
+            : 'The Pico is in BOOTSEL mode. Click “Use the boot drive”. Chrome then asks you to ' +
+              '“select where this site can save changes”: choose the RPI-RP2 drive itself (RP2350 on ' +
+              'the v3 card) — on a Mac ' +
               'under Locations, on Windows under This PC — not a folder, click Select, and allow editing.')
         const how = await ask(name, choices)
         if (how === 'stop') throw new Stop()
@@ -609,11 +631,58 @@ async function romUpdate() {
 // ---------------------------------------------------------------------------
 // Files: upload, verify, reboot
 // ---------------------------------------------------------------------------
+/** Python that removes a folder and everything in it, if it exists: a /TS
+ *  folder left on the flash shadows the frozen modules and stops the firmware
+ *  starting. A v2 board is wiped instead; a v3 card is never wiped. */
+const RMTREE = `import os
+def _rm(p):
+ try:
+  m = os.stat(p)[0]
+ except OSError:
+  return 0
+ if m & 0x4000:
+  for n in os.listdir(p):
+   _rm(p + '/' + n)
+  os.rmdir(p)
+ else:
+  os.remove(p)
+ return 1
+print(_rm('/TS'))`
+
+/** The v3 card's slot files: 0 and 1 always (our ROMs, new with each
+ *  release), the others only where the card has no such file, so a ROM or
+ *  cartridge the user put in a slot is never overwritten. */
+async function uploadSlots(onDevice) {
+    const slots = (manifest.v3 && manifest.v3.slots) || []
+    await raw.makePath('/slots')
+    const todo = slots.filter((s) => s.always || !onDevice.has('/' + s.path))
+    for (const s of slots) {
+        if (!todo.includes(s)) log(`  · ${s.path}: already on the card, kept`)
+    }
+    for (let i = 0; i < todo.length; i++) {
+        const s = todo[i]
+        stageMsg('files', `Writing ROM slot ${s.slot} (${i + 1}/${todo.length})…`)
+        const data = await fetchBytes(`${channel}/${s.file}`)
+        await raw.writeFile('/' + s.path, data, 1024)        // 32K: bigger chunks than the default 128
+        log(`  ✓ ${s.path} (${sizeFmt(data.byteLength)})`, 'ok')
+    }
+    return todo.length
+}
+
 async function uploadFiles() {
     setStage('files', 'active', '')
     await reconnectSerial('files', 45000)    // first boot after a wipe formats the filesystem
     stageMsg('files', 'Entering the REPL…')
     await enterRaw()
+
+    let slotsDone = 0
+    if (isV3()) {
+        stageMsg('files', 'Checking for stray files…')
+        if ((await raw.exec(RMTREE)).trim() === '1') log('Removed a stray /TS folder.', 'warn')
+        const onDevice = new Map()
+        flatten(await raw.walkFs(), onDevice)
+        slotsDone = await uploadSlots(onDevice)
+    }
 
     const files = manifest.files
     const totalBytes = files.reduce((n, f) => n + (f.size || 0), 0)
@@ -636,14 +705,17 @@ async function uploadFiles() {
 
     stageMsg('files', 'Restarting the firmware…')
     await execNoReply('import machine\nmachine.reset()')
-    setStage('files', 'done', `All ${files.length} files written and verified. The Pico restarted.`)
+    setStage('files', 'done', `All ${files.length} files` + (isV3() ? ` and ${slotsDone} ROM slot(s)` : '') +
+        ' written and verified. The Pico restarted.')
 }
 
 async function verifyFiles() {
     const onDevice = new Map()
     flatten(await raw.walkFs(), onDevice)
     let bad = 0
-    for (const f of manifest.files) {
+    const want = manifest.files.slice()
+    if (isV3()) want.push(...((manifest.v3 && manifest.v3.slots) || []))     // kept ones are 32K too
+    for (const f of want) {
         const got = onDevice.get('/' + f.path)
         if (got === undefined) { log(`  ✗ missing: ${f.path}`, 'error'); bad++ }
         else if (got !== f.size) { log(`  ✗ size mismatch: ${f.path} (device ${got}, expected ${f.size})`, 'error'); bad++ }
@@ -693,9 +765,10 @@ function uf2MicroPython(bytes) {
  *  "keep what's on the Pico" can't be honoured. */
 async function downgradeOk(wipe) {
     if (!installed || !installed.mp) return true
-    let target = manifest.mp_version
+    let target = isV3() ? manifest.v3.mp_version : manifest.mp_version
     if (!target) {
-        try { target = uf2MicroPython(await fetchBytes(`${channel}/${manifest.uf2}`)) } catch (_e) { target = null }
+        const uf2 = isV3() ? manifest.v3.uf2 : manifest.uf2
+        try { target = uf2MicroPython(await fetchBytes(`${channel}/${uf2}`)) } catch (_e) { target = null }
     }
     if (!target || verCmp(target, installed.mp) >= 0) return true
     log(`MicroPython downgrade: the Pico has v${installed.mp}, this firmware is built on v${target}.`, 'warn')
@@ -708,9 +781,10 @@ async function downgradeOk(wipe) {
 }
 
 async function start() {
-    if (running || !manifest || !manifest.uf2) return
-    const wipe = $('opt-wipe').checked
-    const rom = $('opt-rom').checked
+    if (running || !manifest) return
+    if (isV3() ? !manifest.v3 : !manifest.uf2) return
+    let wipe = $('opt-wipe').checked && !isV3()
+    let rom = $('opt-rom').checked && !isV3()
     if (!serial && !confirm('The Pico isn’t connected over serial. Continue only if it’s already ' +
         'in BOOTSEL mode (the RPI-RP2 drive is showing). Otherwise click Cancel and Connect first.')) return
     if (wipe && !confirm('This erases everything on the Pico — firmware and files — and installs ' +
@@ -723,6 +797,14 @@ async function start() {
     let current = 'bootsel'
     try {
         await enterBootsel()
+        // A board put in BOOTSEL by hand wasn't known until now.
+        if (boot.chip === 'RP2350' && !isV3()) {
+            board = 'v3'
+            log('This is a TS-Pico v3 card (RP2350B): no erase and no ROM update; its ROM slots are files.')
+            if (!manifest.v3) throw new Error('this channel has nothing for the v3 card yet — pick “Latest main build”')
+            wipe = rom = false
+            refreshPlan()
+        }
 
         if (wipe) {
             current = 'wipe'
@@ -742,7 +824,11 @@ async function start() {
         }
 
         current = 'firmware'
-        await writeImage('firmware', `${channel}/${manifest.uf2}`, `firmware ${manifest.fw_version}`)
+        if (isV3()) {
+            await writeImage('firmware', `${channel}/${manifest.v3.uf2}`, `firmware ${manifest.fw_version} for the v3 card`)
+        } else {
+            await writeImage('firmware', `${channel}/${manifest.uf2}`, `firmware ${manifest.fw_version}`)
+        }
         await boot.reboot()
         setStage('firmware', 'done', `Firmware ${manifest.fw_version} installed.`)
 

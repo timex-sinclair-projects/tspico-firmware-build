@@ -376,19 +376,27 @@ major.minor are the ROM's, the patch digit is firmware-only (2.2.1 is
 firmware 2.2.1 on ROM 2.2). The job, at the tag:
 
 1. Builds as `build.yml` does — the stamp check, staging, the firmware
-   UF2, `dev_tspico.mpy`, the upgrade UF2, the BASIC TAPs. **It runs no
-   tests**: the commit is expected to have passed `build.yml` already.
+   UF2, `dev_tspico.mpy`, the upgrade UF2, the v3 card's firmware, the
+   BASIC TAPs. **It runs no tests**: the commit is expected to have passed
+   `build.yml` already. The v3 card's firmware is built in its own
+   MicroPython clone (`$RUNNER_TEMP/mp-v3`), as `build.yml`'s `build-v3`
+   job does, because the steps before it replaced the port's
+   `boards/manifest.py` with the v2 one.
 2. **The bundle** `ts-pico-<tag>.zip`: `firmware.uf2`, a generated
    `DEPLOY.md`, `src/` (`main.py`, `config.ini`, `words.txt`,
    `assets/*.tap`, `rom/TSPICO-23.ROM`) for the Pico's flash, and
    `SD card/` (`TAP/` recursively, `help/`, the loose `*.tap` of the card's
    root).
 3. **The 512K flash image** `Pico-<tag>.rom`, if a base image can be
-   found (below): `build-flash.py check`, `build --base`, `verify`.
+   found (below): `build-flash.py check`, `build --base --slots v3-slots`,
+   `verify`. **The v3 card's slot files**, zipped as `v3-slots.zip`: that
+   image cut slot for slot, or without a base image our own slots 0 and 1
+   alone (`build` exits 2, "INCOMPLETE", after writing them).
 4. **The user manual PDFs**, as `build.yml`'s `manual-pdf` job makes them,
    from the manual at the tag.
 5. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
-   reflash), `upgrade.uf2`, `user-manual-half-letter.pdf`,
+   reflash), `upgrade.uf2`, `firmware-v3.uf2` and `v3-slots.zip` (the v3
+   card's firmware and slots), `user-manual-half-letter.pdf`,
    `user-manual-saddle-stitch-letter.pdf`, and the flash image when there
    is one. If the
    release already exists, the assets are uploaded to it (`--clobber`) and
@@ -407,7 +415,11 @@ reference. It copies the two manuals and this reference into the site
 manual's two PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
 from the Docs page), builds the Jekyll site and mounts the web updater at `/updater/`, with the latest
 release's payload under `/updater/release/` and the latest green `main`
-build under `/updater/main/` — served from the site itself because
+build under `/updater/main/`. Each channel carries the v3 card's firmware
+and slot files too: the release's `firmware-v3.uf2` and `v3-slots.zip`, or
+for `main/` the `tspico-v3-firmware-uf2` artifact, the latest release's
+third-party slots, and slots 0 and 1 rebuilt from `main`
+(`web-updater/README.md`, "The v3 card") — served from the site itself because
 GitHub's release CDN sends no CORS header, so a browser cannot fetch
 release assets from another origin.
 
