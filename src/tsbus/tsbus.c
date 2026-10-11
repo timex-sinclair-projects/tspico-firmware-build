@@ -136,6 +136,7 @@ static volatile uint8_t io_status = 0xff;
 static volatile bool tx_drop_req;
 
 static volatile uint32_t io_ins, io_in_ours, io_outs_ours, io_in_late, respond_max;
+static volatile uint32_t io_in_gone;     // INs whose strobe had ended before core 1 could act
 
 // TSBUS_DIAG (issue #254): IN timing per test phase, for the flash-write
 // status glitch. The table and tsbus.diag*() are always built (MicroPython's
@@ -168,6 +169,16 @@ typedef struct {
 static diag_t diag[DIAG_PHASES];          // all zero in a normal build
 static volatile uint32_t diag_probe[256];  // core 1's SRAM latency probe
 static volatile uint32_t diag_phase;
+// tsbus.diag_trap(): armed, core 1 stops the read log (ch_data no longer
+// chains to ch_log) at the first read it sees of HOME, or of the IM2 table at
+// 7A00h-7B7Dh from the DOCK, so addr_log keeps the 4096 reads that led a
+// crashed cartridge out of the dock (Sinistar on the v3 card, 2026-10-11).
+static volatile uint32_t diag_trap;      // 0 off, 1 armed, 2 fired
+#if TSBUS_DIAG
+// Every I/O write io_snoop decoded, by port; and the data written to F4h (the
+// HSR) and to FFh: what core 1 believes the Z80 wrote.
+static uint32_t diag_port[256], diag_f4[256], diag_ff[256];
+#endif
 
 // ---- serve's table and patches -----------------------------------------------------
 
@@ -187,6 +198,18 @@ static void __not_in_flash_func(write_table)(void) {
     uint hsr = sh_hsr, ff = sh_ff;
     for (uint c = 0; c < 8; c++) {
         pio_serve->instr_mem[c] = chunk_target(c, hsr, ff);
+    }
+    table_updates++;
+}
+
+// The table entries in `mask` only: what a bank switch changed, so the snoop
+// interrupt doesn't rewrite all eight against the DMA's bus priority.
+static void __not_in_flash_func(write_chunks)(uint mask) {
+    uint hsr = sh_hsr, ff = sh_ff;
+    for (uint c = 0; c < 8; c++) {
+        if ((mask >> c) & 1) {
+            pio_serve->instr_mem[c] = chunk_target(c, hsr, ff);
+        }
     }
     table_updates++;
 }
@@ -391,7 +414,8 @@ static void bus_start(void) {
 
 // An IN is in progress (nIORD low). Read the port through U1; for 0Eh/0Fh put
 // the reply on MD (io_drive) and U3 on until the strobe ends. About 600 ns
-// before the Z80 samples the data.
+// before the Z80 samples the data. Only 0Eh/0Fh keep core 1 until the strobe
+// ends (U3 must go off then); other ports return straight away.
 static void __not_in_flash_func(handle_in)(void) {
     uint32_t t0c = m33_hw->dwt_cyccnt;
     io_ins++;
@@ -399,11 +423,24 @@ static void __not_in_flash_func(handle_in)(void) {
     bool low_at_entry = !(sio_hw->gpio_in & IORD_MASK);
     bool ours = false, low_at_drive = false;
     #endif
+    // The enables are PIO1's between INs: addr_read and mem_write sequence them
+    // for every memory cycle. Touch them only while /IORD is low. Entered after
+    // the strobe ended, the Z80 may be in its next memory read, and forcing U1
+    // on (onto U2's address byte) and then all three off (under addr_read's U3)
+    // would hand it a wrong byte.
+    if (sio_hw->gpio_in & IORD_MASK) {
+        io_in_gone++;
+        return;
+    }
     pio_addr->sm[sm_en].instr = EN_U1;                             // U1: A7..A0 onto MD
     (void)pio_addr->fstat;                                         // the store has landed
     busy_wait_at_least_cycles(8);                                  // ~32 ns: U1 enable plus margin
     uint port = sio_hw->gpio_in & 0xff;
     pio_addr->sm[sm_en].instr = EN_OFF;
+    if ((port & 0xfe) == 0x0e && (sio_hw->gpio_in & IORD_MASK)) {
+        io_in_gone++;                                              // ended while we read the port
+        return;
+    }
     if ((port & 0xfe) == 0x0e) {
         uint8_t reply;
         if (port & 1) {
@@ -446,15 +483,18 @@ static void __not_in_flash_func(handle_in)(void) {
         if (dt > respond_max) {
             respond_max = dt;
         }
-    }
-    // Wait for the strobe to end, with a guard so U3 can never stay on.
-    while (!(sio_hw->gpio_in & IORD_MASK)) {
-        if (m33_hw->dwt_cyccnt - t0c > IO_TIMEOUT_CYC) {
-            io_in_late++;
-            break;
+        // Wait for the strobe to end, with a guard so U3 can never stay on.
+        while (!(sio_hw->gpio_in & IORD_MASK)) {
+            if (m33_hw->dwt_cyccnt - t0c > IO_TIMEOUT_CYC) {
+                io_in_late++;
+                break;
+            }
         }
+        pio_addr->sm[sm_en].instr = EN_OFF;
     }
-    pio_addr->sm[sm_en].instr = EN_OFF;
+    // Any other port is the 2068's: nothing is driven, so return at once. Core
+    // 1 used to wait out every IN's strobe, keyboard reads included, and was
+    // deaf to everything else meanwhile.
     #if TSBUS_DIAG
     if (ours) {
         diag_t *g = &diag[diag_phase & (DIAG_PHASES - 1)];
@@ -472,6 +512,52 @@ static void __not_in_flash_func(handle_in)(void) {
         g->hist[b < DIAG_BUCKETS ? b : DIAG_BUCKETS - 1]++;
     }
     #endif
+}
+
+// io_snoop has an I/O write (PIO1 IRQ 0 on its RX FIFO not empty): every one
+// it holds, at once, rather than when core 1's loop next polls (up to a
+// microsecond or more under load). F4h and FFh update the shadow and the
+// chunk-table entries they change; OUTs to 0Eh/0Fh make the status busy and
+// go to rxq. Below the IN interrupt.
+static void __not_in_flash_func(snoop_isr)(void) {
+    const uint32_t empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_snoop);
+    while (!(pio_addr->fstat & empty)) {
+        uint32_t w = pio_addr->rxf[sm_snoop];
+        uint port = (w >> 8) & 0xff, data = w & 0xff;
+        io_writes++;
+        #if TSBUS_DIAG
+        diag_port[port]++;
+        if (port == 0xf4) {
+            diag_f4[data]++;
+        } else if (port == 0xff) {
+            diag_ff[data]++;
+        }
+        #endif
+        uint mask = 0;
+        if (port == 0xf4) {
+            mask = sh_hsr ^ data;
+            sh_hsr = (uint8_t)data;
+        } else if (port == 0xff) {
+            if ((sh_ff ^ data) & 0x80) {
+                mask = sh_hsr;                // the chunks the bank maps
+            }
+            sh_ff = (uint8_t)data;
+        }
+        if (mask) {
+            write_chunks(mask);
+        }
+        if ((port & 0xfe) == 0x0e) {
+            io_status = 0x00;                 // busy until the firmware answers
+            io_outs_ours++;
+            if (rxq_head - rxq_tail < RXQ_N) {
+                rxq[rxq_head % RXQ_N] = (uint16_t)((port & 1) << 8 | data);
+                __dmb();
+                rxq_head++;
+            } else {
+                rxq_lost++;
+            }
+        }
+    }
 }
 
 // A falling edge on nIORD interrupts core 1 wherever its loop is (polling left
@@ -500,6 +586,7 @@ static void __not_in_flash_func(core1_main)(void) {
         core1_vectors[i] = v[i];
     }
     core1_vectors[16 + PIO2_IRQ_0] = (uint32_t)iord_isr;
+    core1_vectors[16 + PIO1_IRQ_0] = (uint32_t)snoop_isr;
     scb_hw->vtor = (uintptr_t)core1_vectors;
     __dsb();
     __isb();
@@ -509,9 +596,12 @@ static void __not_in_flash_func(core1_main)(void) {
     pio_iord->irq = 1u;
     irq_set_priority(PIO2_IRQ_0, 0);
     irq_set_enabled(PIO2_IRQ_0, true);                            // for this core
+    // io_snoop's RX FIFO not empty -> PIO1 IRQ 0, below the IN interrupt.
+    pio_addr->inte0 = 1u << (PIO_INTR_SM0_RXNEMPTY_LSB + sm_snoop);
+    irq_set_priority(PIO1_IRQ_0, 0x40);
+    irq_set_enabled(PIO1_IRQ_0, true);
     core1_ready = true;
 
-    const uint32_t snoop_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_snoop);
     const uint32_t write_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_write);
     #if TSBUS_DIAG
     uint32_t diag_last = m33_hw->dwt_cyccnt;
@@ -560,36 +650,6 @@ static void __not_in_flash_func(core1_main)(void) {
             __asm volatile ("cpsie i" ::: "memory");
             tx_drop_req = false;
         }
-        // I/O writes: the bank shadow, and OUTs to 0Eh/0Fh.
-        if (!(pio_addr->fstat & snoop_empty)) {
-            uint32_t w = pio_addr->rxf[sm_snoop];
-            uint port = (w >> 8) & 0xff, data = w & 0xff;
-            io_writes++;
-            bool changed = false;
-            if (port == 0xf4) {
-                changed = sh_hsr != data;
-                sh_hsr = (uint8_t)data;
-            }
-            if (port == 0xff) {
-                changed = (sh_ff ^ data) & 0x80;
-                sh_ff = (uint8_t)data;
-            }
-            if (changed) {
-                write_table();
-            }
-            if ((port & 0xfe) == 0x0e) {
-                io_status = 0x00;             // busy until the firmware answers
-                io_outs_ours++;
-                if (rxq_head - rxq_tail < RXQ_N) {
-                    rxq[rxq_head % RXQ_N] = (uint16_t)((port & 1) << 8 | data);
-                    __dmb();
-                    rxq_head++;
-                } else {
-                    rxq_lost++;
-                }
-            }
-            continue;
-        }
         // Memory writes: into the DOCK image when the shadow maps the chunk to
         // the dock. The Z80 may read the byte back about a microsecond later.
         if (!(pio_addr->fstat & write_empty)) {
@@ -604,6 +664,18 @@ static void __not_in_flash_func(core1_main)(void) {
         }
         // Count served reads by slot from the log.
         uint32_t now = (dma_hw->ch[ch_log].write_addr - (uint32_t)addr_log) / 4;
+        #if TSBUS_DIAG
+        if (diag_trap == 1) {
+            uint32_t e = addr_log[(now - 1) & (LOG_N - 1)];
+            uint32_t a = (e >> 2) & 0xffff;
+            if ((e & 3) == SLOT_HOME || ((e & 3) == SLOT_DOCK && a >= 0x7a00 && a <= 0x7b7d)) {
+                uint32_t ctrl = dma_hw->ch[ch_data].al1_ctrl;
+                ctrl = (ctrl & ~DMA_CH0_CTRL_TRIG_CHAIN_TO_BITS) | ((uint32_t)ch_data << DMA_CH0_CTRL_TRIG_CHAIN_TO_LSB);
+                dma_hw->ch[ch_data].al1_ctrl = ctrl;          // chain to itself: no more logging
+                diag_trap = 2;
+            }
+        }
+        #endif
         if (ring_seen != now) {
             uint slot = addr_log[ring_seen] & 3;
             if (slot < 3) {
@@ -891,7 +963,7 @@ static void store(mp_obj_t d, qstr k, mp_uint_t v) {
 
 // tsbus.stats(): the counters, as a dict.
 static mp_obj_t tsbus_stats(void) {
-    mp_obj_t d = mp_obj_new_dict(19);
+    mp_obj_t d = mp_obj_new_dict(20);
     store(d, MP_QSTR_home, served[SLOT_HOME]);
     store(d, MP_QSTR_exrom, served[SLOT_EXROM]);
     store(d, MP_QSTR_dock, served[SLOT_DOCK]);
@@ -903,6 +975,7 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_ins_ours, io_in_ours);
     store(d, MP_QSTR_outs_ours, io_outs_ours);
     store(d, MP_QSTR_late, io_in_late);
+    store(d, MP_QSTR_gone, io_in_gone);
     store(d, MP_QSTR_respond_ns, (mp_uint_t)((uint64_t)respond_max * 1000000000u / BUS_CLOCK_HZ));
     store(d, MP_QSTR_rx_lost, rxq_lost);
     store(d, MP_QSTR_hsr, sh_hsr);
@@ -956,6 +1029,51 @@ static mp_obj_t tsbus_diag(mp_obj_t n_in) {
     return mp_obj_new_tuple(12, t);
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_diag_obj, tsbus_diag);
+
+// tsbus.diag_trap(on): arm (or disarm) the trap; returns its state before (0
+// off, 1 armed, 2 fired). Disarming after it fired restores logging. Only the
+// diag build checks it.
+static mp_obj_t tsbus_diag_trap(mp_obj_t on_in) {
+    uint32_t was = diag_trap;
+    if (mp_obj_is_true(on_in)) {
+        diag_trap = 1;
+    } else {
+        diag_trap = 0;
+        if (was == 2) {
+            uint32_t ctrl = dma_hw->ch[ch_data].al1_ctrl;
+            ctrl = (ctrl & ~DMA_CH0_CTRL_TRIG_CHAIN_TO_BITS) | ((uint32_t)ch_log << DMA_CH0_CTRL_TRIG_CHAIN_TO_LSB);
+            dma_hw->ch[ch_data].al1_ctrl = ctrl;
+        }
+    }
+    return MP_OBJ_NEW_SMALL_INT(was);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_diag_trap_obj, tsbus_diag_trap);
+
+// tsbus.diag_io(which): the diag build's counts, nonzero only, as a dict
+// value -> count: 0 ports written, 1 data written to F4h, 2 to FFh. -1 zeroes
+// them. Empty in a normal build.
+static mp_obj_t tsbus_diag_io(mp_obj_t which_in) {
+    mp_obj_t d = mp_obj_new_dict(0);
+    #if TSBUS_DIAG
+    int which = mp_obj_get_int(which_in);
+    if (which < 0) {
+        memset(diag_port, 0, sizeof diag_port);
+        memset(diag_f4, 0, sizeof diag_f4);
+        memset(diag_ff, 0, sizeof diag_ff);
+        return mp_const_none;
+    }
+    const uint32_t *t = which == 0 ? diag_port : which == 1 ? diag_f4 : diag_ff;
+    for (uint i = 0; i < 256; i++) {
+        if (t[i]) {
+            mp_obj_dict_store(d, MP_OBJ_NEW_SMALL_INT(i), mp_obj_new_int_from_uint(t[i]));
+        }
+    }
+    #else
+    (void)which_in;
+    #endif
+    return d;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_diag_io_obj, tsbus_diag_io);
 
 // ---- the MQ object -----------------------------------------------------------------------
 
@@ -1160,6 +1278,8 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_diag), MP_ROM_PTR(&tsbus_diag_obj) },
     { MP_ROM_QSTR(MP_QSTR_diag_phase), MP_ROM_PTR(&tsbus_diag_phase_obj) },
     { MP_ROM_QSTR(MP_QSTR_diag_reset), MP_ROM_PTR(&tsbus_diag_reset_obj) },
+    { MP_ROM_QSTR(MP_QSTR_diag_trap), MP_ROM_PTR(&tsbus_diag_trap_obj) },
+    { MP_ROM_QSTR(MP_QSTR_diag_io), MP_ROM_PTR(&tsbus_diag_io_obj) },
     { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },
     { MP_ROM_QSTR(MP_QSTR_HOME), MP_ROM_INT(SLOT_HOME) },
     { MP_ROM_QSTR(MP_QSTR_EXROM), MP_ROM_INT(SLOT_EXROM) },
