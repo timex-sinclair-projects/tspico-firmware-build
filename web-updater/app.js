@@ -725,7 +725,8 @@ async function verifyFiles() {
         if (got === undefined) { log(`  ✗ missing: ${f.path}`, 'error'); bad++ }
         else if (got !== f.size) { log(`  ✗ size mismatch: ${f.path} (device ${got}, expected ${f.size})`, 'error'); bad++ }
     }
-    if (!bad) log(`Verify passed: ${manifest.files.length} files match.`, 'ok')
+    if (!bad) log(`Verify passed: ${manifest.files.length} files` +
+        (want.length > manifest.files.length ? ` and ${want.length - manifest.files.length} ROM slots` : '') + ' match.', 'ok')
     return bad
 }
 
