@@ -5202,11 +5202,15 @@ def MEMDOCK(pre, cmd):                                                  # Change
         val1 = TSP.bank_sm & 15
         TSP.bank_sm = val1 + (par2 * 16)
 
+        # Switch first, then answer: on the v3 card map_slots copies 64K
+        # (and saves a RAM dock back), ~0.7 s with the DOCK unserved, and a
+        # program's next statement would PEEK an empty dock. On v2 it's two
+        # FIFO puts, so the order changes nothing there.
+        board.map_slots(TSP.ROM_SM, TSP.bank_sm)
+
         msg = "Change DOCK to MEM=%d, PAGE=%d" % (par1, par2)   # after a swap, the setting swapped to (#161)
         SEND_MSG(msg, msg2, _1_OK)
         LOG("%s. %s" % (msg, msg2), 0)
-        
-        board.map_slots(TSP.ROM_SM, TSP.bank_sm)
         
     return 
 

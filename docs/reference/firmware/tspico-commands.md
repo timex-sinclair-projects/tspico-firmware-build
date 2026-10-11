@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2535–2612 (`DIR`), 3451–3860 (`IDIR` … `SA_NOT_IMP`), 3925–4166
-(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4883–5211
-(`LOGLEVEL` … `MEMDOCK`), 5231–5307 (`REW`), 5447–5674 (`BAD_CODE` …
-`NOP`) and 5786–5862 (the printer settings); the dispatch table
-`SA_funct` at 6278–6328, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4883–5215
+(`LOGLEVEL` … `MEMDOCK`), 5235–5311 (`REW`), 5451–5678 (`BAD_CODE` …
+`NOP`) and 5790–5866 (the printer settings); the dispatch table
+`SA_funct` at 6282–6332, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -44,20 +44,20 @@ where the manual and the code differ, the entries below say so.
 | `MDIR(pre, cmd)` | 4942 | `tpi:md` |
 | `MEMBOOT(pre, cmd)` | 5040 | `tpi:boot`, `tpi:memboot` |
 | `MEMDOCK(pre, cmd)` | 5143 | `tpi:dock`, `tpi:memdock` |
-| `REW(pre, cmd)` | 5231 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5447 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5452 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5457 | `tpi:rm` |
-| `RM_CHECK(name)` | 5503 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5521 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5549 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5603 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5657 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5786 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5807 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5818 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5831 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5849 | `tpi:bmp` |
+| `REW(pre, cmd)` | 5235 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5451 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5456 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5461 | `tpi:rm` |
+| `RM_CHECK(name)` | 5507 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5525 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5553 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5607 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5661 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 5790 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 5811 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 5822 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 5835 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 5853 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -80,7 +80,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6275–6276) says (until #181 it
+   trailing space, as the comment above it (6279–6280) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -133,7 +133,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6278) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6282) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -789,9 +789,13 @@ the booted slot is refused: "Can't write Flash slot N:" / "the 2068 is
 running from it. Boot another slot first.", shown, Report Q, nothing
 changed ([tspico-files.md](tspico-files.md#boot_slot_clashmem-page-f_name)).
 Otherwise the old setting becomes the previous one, the new is written
-into `ROM_SM`/`bank_sm`, "Change DOCK to MEM=…, PAGE=…" is sent (not
-shown), and `board.map_slots` (on v2 `ROM.put`, `BANK.put`) switches the
-bank at once.
+into `ROM_SM`/`bank_sm`, `board.map_slots` (on v2 `ROM.put`, `BANK.put`)
+switches the bank, and only then is "Change DOCK to MEM=…, PAGE=…" sent
+(not shown). The order matters on the v3 card, where the switch copies
+64K into SRAM (and saves a RAM dock back) with the DOCK unserved for
+about 0.7 s: answering first let a program's next statement `PEEK` an
+empty dock (found by `tools/hwcheck.py`, 2026-10-10). On v2 the switch is
+two FIFO puts and the order changes nothing.
 
 The message is built from the setting written, so after a swap it names
 the setting swapped to; before #161 it was built from the `CODE` and read
