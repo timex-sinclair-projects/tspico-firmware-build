@@ -23,15 +23,15 @@ than repeating it.
 
 | Piece | What it is |
 |---|---|
-| `tsbus.pio` | the five PIO programs: `serve`, `io_drive` (PIO0); `addr_read`, `mem_write`, `io_snoop` (PIO1) |
+| `tsbus.pio` | the six PIO programs: `serve`, `io_drive` (PIO0); `addr_read`, `mem_write`, `io_snoop` (PIO1); `iord_watch` (PIO2) |
 | `tsbus.c`, constants and state | the image region, the PIO and DMA handles, the switches, counters, the port queues |
 | `tsbus.c`, serve's table and patches | `chunk_target`, `write_table`, `set_serving`, `set_delays` |
 | `tsbus.c`, start | `claim_sm`, `add_program`, `claim_dma`, `bus_start` |
-| `tsbus.c`, core 1 | `handle_in`, `iord_isr`, core 1's vector table and stack, `core1_main` |
+| `tsbus.c`, core 1 | `handle_in`, `iord_isr`, core 1's vector table and stack, `core1_main`; the `TSBUS_DIAG` measurements |
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
-| `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`; `HOME`, `EXROM`, `DOCK` |
+| `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
-| `micropython.cmake` | the user-module build |
+| `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
 
 ## How it fits under MicroPython
 
@@ -45,30 +45,47 @@ two apart:
   measured contention is negligible: SRAM0 48 contested accesses in 3.8
   million, and none on the PIO FIFOs' bus, in 50 ms on 2026-10-09.
 - **Core 1** runs only `core1_main`, from SRAM. `_thread` is off for the
-  board. Core 1 has its own vector table, because MicroPython keeps
-  `machine.Pin`'s shared handler (in flash) on `IO_IRQ_BANK0` in the table
-  the cores start with.
+  board. Core 1 has its own vector table, with `iord_isr` on `PIO2_IRQ_0`:
+  the table the cores start with is core 0's, and MicroPython's handlers in
+  it are in flash.
 - **Flash writes.** LittleFS writes stop execute-in-place. MicroPython pauses
   the other core only if it is a multicore lockout victim, which core 1 is
   not. So core 1's code is all `__not_in_flash_func`, touches PIO, DMA and
   SIO registers directly rather than through SDK inline helpers (a
   size-optimised build may leave those out of line in flash), and makes no
   calls into flash after its set-up. Checked in the v1.29.0 build: only
-  `core1_main`'s three set-up calls go through flash veneers. 256 KB of
+  `core1_main`'s set-up calls go through flash veneers. 256 KB of
   LittleFS writes while serving left the read rate unchanged (591 per ms).
+- **Flash writes stall the APB bridge.** While core 0 erases or programs
+  flash, a read through the APB bridge (IO_BANK0, for one) took up to
+  4 µs, against under 1 µs otherwise; PIO and SRAM did not slow down
+  (issue [#254](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/254),
+  measured 2026-10-11 with the `TSBUS_DIAG` build). An IN gives core 1 about
+  600 ns, so nothing on its IN path may touch APB: a stalled access holds
+  core 1 off the interrupt and queues the stores after it. The cause is
+  inferred, not measured: the ROM's flash routines drive the QMI's
+  direct-mode registers, also behind APB. The IN path used to clear a GPIO
+  edge interrupt and force U1 and U3 with IO_BANK0 output overrides; it now
+  takes a PIO2 interrupt (`iord_watch`) and drives the enables through PIO1's
+  spare state machine (`sm_en`), both over AHB. Before that, the 2068 read
+  wrong status bytes during flash writes (ZX48 `LOAD "tpi:"` failed with
+  "1 NEXT without FOR") and could crash.
 - **PIO and DMA** are claimed through the SDK. MicroPython's `rp2` refuses
   claimed state machines and frees only what it claimed itself at soft
   reset, so `tsbus` keeps running through Ctrl-D (checked). PIO0 and PIO1
-  are full.
+  are full: instruction memory in both, and all four state machines in PIO1
+  (the fourth is `sm_en`, which runs no program). PIO2 has `iord_watch`.
 - **The clock.** 250 MHz with the core at 1.20 V, set by `start()`, not at
   boot (see `bus_clock`).
 
 ## `tsbus.pio`
 
 A copy of `firmware/bringup/bus_card.pio` at tspico-hardware `abdc02c`,
-without its PIO2 diagnostic (`iord_len`). Phase 1 proved the programs on a
-2068; keep the two copies the same while the bring-up is in use. The
-instruction-by-instruction comments are in the file.
+without its PIO2 diagnostic (`iord_len`), plus `iord_watch` (issue #254),
+which the bring-up doesn't have: its core 1 runs no flash writes. Phase 1
+proved the other programs on a 2068; keep those the same in both copies
+while the bring-up is in use. The instruction-by-instruction comments are
+in the file.
 
 | Program | Block, pins | What |
 |---|---|---|
@@ -77,6 +94,7 @@ instruction-by-instruction comments are in the file.
 | `addr_read` | PIO1: side-set the three buffer enables (GP8-10), jmp pin /MEMRD | Sequences U2 (A15..A8) and U1 (A7..A0) onto MD around serve's samples, and turns U3 on when serve asks. `hi_hold` and `lo_hold` are patched by `set_delays` |
 | `mem_write` | PIO1: in MD | Reads every memory write (address through U2 and U1, the data through U3) for the DOCK RAM. RX FIFO joined (8 deep) |
 | `io_snoop` | PIO1: in MD | Reads every I/O write (port and data) for the bank shadow and OUT 0Eh/0Fh |
+| `iord_watch` | PIO2: waits on /IORD (GP17), input synchroniser bypassed | Raises PIO2 IRQ flag 0 on each falling edge of /IORD and waits for it to rise: core 1's IN interrupt (`PIO2_IRQ_0`). It replaced a GPIO edge interrupt, whose acknowledgement goes through APB |
 
 ## `tsbus.c`
 
@@ -92,17 +110,23 @@ instruction-by-instruction comments are in the file.
 | `LOG_N` | 4096 | `addr_log`'s length |
 | `TXQ_N`, `RXQ_N` | 1024 | the port queues' lengths |
 | `SIDE_BITS`, `DELAY_BITS` | `0x1800`, `0x0700` | serve's side-set (opt, value) and delay fields |
-| `FORCE_LOW` | | the IO_BANK0 output-override bits that force a pin low |
-| `IORD_MASK`, `IORD_EDGE_FALL` | | /IORD's bit in SIO's input, and its falling-edge bit in the interrupt registers |
+| `EN_U1`, `EN_U3`, `EN_OFF` | `set pins` 110b, 011b, 111b | the instructions core 1 executes on `sm_en`, over GP8 nAEN_LO, GP9 nAEN_HI, GP10 nDATA_OE (active low): U1 on, U3 on, all off (what PIO1's programs leave between cycles) |
+| `IORD_MASK` | | /IORD's bit in SIO's input |
 | `IO_TIMEOUT_CYC` | 1000 (4 µs) | the IN guard; see `handle_in` |
 | `CORE1_NVEC` | 16 + `NUM_IRQS` | core 1's vector table length |
+| `TSBUS_DIAG` | 0 | 1 builds the measuring in `handle_in` and `core1_main` (see `micropython.cmake`) |
+| `DIAG_PHASES`, `DIAG_BUCKETS` | 16, 8 | the phases `diag` keeps, and each histogram's buckets |
+| `DIAG_DRIVE_MAX` | 250 (1 µs) | how long the diag build watches MD for the reply |
+| `DIAG_APB_PROBE` | 0 | 1 also times an IO_BANK0 read in core 1's loop. Off: that read stalls during flash writes and itself causes late INs |
 
 ### State
 
 | Name | Type, initial | Set by, read by | What |
 |---|---|---|---|
-| `pio_serve`, `pio_addr` | `pio0`, `pio1` | | the two blocks |
+| `pio_serve`, `pio_addr`, `pio_iord` | `pio0`, `pio1`, `pio2` | | the three blocks |
 | `sm_serve`, `sm_iodrv`, `sm_addr`, `sm_write`, `sm_snoop`, `off_addr` | uint | `bus_start` | claimed state machines; addr_read's offset, for `set_delays` |
+| `sm_en` | uint | `bus_start`; `handle_in` | PIO1's fourth state machine: never enabled, set pins GP8-GP10. Core 1 writes `EN_*` into its `INSTR` register to drive U1 and U3 for an IN |
+| `sm_iord` | uint | `bus_start` | `iord_watch`'s state machine in PIO2 |
 | `ch_ptr`, `ch_data`, `ch_log` | int | `bus_start` | the DMA chain's channels |
 | `started` | bool, false | `tsbus_start` | makes `start()` a no-op once running, across soft resets |
 | `serving` | volatile bool, false | `set_serving` | /BE and U3 requests live; false is shadow mode |
@@ -122,6 +146,9 @@ instruction-by-instruction comments are in the file.
 | `io_ins`, `io_in_ours`, `io_outs_ours`, `io_in_late`, `respond_max` | volatile uint32 | `handle_in`, `core1_main` | IN and OUT counts; INs past the guard; worst cycles from the handler's entry to U3 on |
 | `core1_vectors` | uint32[`CORE1_NVEC`], 512-byte aligned | `core1_main` | core 1's vector table |
 | `core1_stack` | 4 KB | `multicore_launch_core1_with_stack` | core 1's stack (MicroPython's layout has no core 1 stack: scratch X is 0 bytes) |
+| `diag_t`, `diag[DIAG_PHASES]` | all 0 | `handle_in`, `core1_main` (diag build); `tsbus_diag_reset`, `tsbus_diag` | per phase: INs to 0Eh/0Fh; `gone` (/IORD already high at the handler's entry); `missed` (high by the time U3 went on); `min_left` (fewest cycles from entry to the strobe's end); `max_gap` (longest core 1 loop pass); `hist` (entry to strobe end, 64 cycles a bucket); `drive_max`, `drive_never`, `dhist` (cycles from the reply's TX write until MD shows it, 8 a bucket); `pio_rd_max`, `apb_rd_max`, `ram_rd_max` (core 1's slowest read of PIO0, of IO_BANK0 when `DIAG_APB_PROBE` is set, of SRAM). Always built, all zero in a normal build |
+| `diag_phase` | volatile uint32, 0 | `tsbus_diag_phase`; core 1 | which `diag` entry the measurements go to |
+| `diag_probe` | volatile uint32[256] | `core1_main` (diag build) | the SRAM core 1 reads for `ram_rd_max` |
 
 ### `chunk_target(chunk, hsr, ff)`
 
@@ -159,8 +186,8 @@ the card.
 
 ### `bus_start()`
 
-Sets up both blocks and the DMA chain as phase 1 did, and starts the five
-state machines:
+Sets up the three blocks and the DMA chain, and starts six state machines
+(`sm_en` is claimed and configured but never started):
 
 1. GPIO base 0 for both blocks.
 2. serve at offset 0 (refuses if anything is there): in/out base MD,
@@ -170,7 +197,10 @@ state machines:
 3. io_drive: out base MD.
 4. addr_read: side-set the three enables (all high: off), jmp pin /MEMRD,
    `mov status` on PIO1 IRQ flag 2. mem_write: in MD, autopush at 24, RX
-   joined. io_snoop: in MD, autopush at 16.
+   joined. io_snoop: in MD, autopush at 16. `sm_en`: set pins GP8-GP10,
+   initialised at PC 0 (PIO1's memory is full; it never runs).
+   `iord_watch` on PIO2 (GPIO base 0, /IORD's synchroniser bypassed), its
+   IRQ flag 0 cleared and routed to `PIO2_IRQ_0` (`inte0`).
 5. `set_delays()`. Input synchronisers bypassed on MD and /MEMRD in PIO0, and
    on those and /IOWR in PIO1.
 6. DMA: `ch_ptr` takes serve's pointer (DREQ on serve's RX) and writes it to
@@ -183,13 +213,15 @@ state machines:
 
 In RAM, inlined into `iord_isr`. An IN is in progress:
 
-1. Forces U1 on with a GPIO override (which works on a PIO-owned pin), waits
-   32 ns, reads A7..A0 off MD, releases U1.
+1. Turns U1 on by executing `EN_U1` on `sm_en` (PIO1's `INSTR` register,
+   over AHB), reads PIO1's `FSTAT` so the store has landed, waits 32 ns,
+   reads A7..A0 off MD, and turns U1 off (`EN_OFF`).
 2. For 0Eh/0Fh: the reply is `io_status` (0Fh), or the next `txq` byte, or
-   00h if it is empty (0Eh). It goes to io_drive, then U3 is forced on.
-   `respond_max` keeps the worst time from entry to here: 288 ns measured
-   under MicroPython (about 600 ns are available).
-3. Waits for /IORD to rise, then releases U3. The guard,
+   00h if it is empty (0Eh). It goes to io_drive, then U3 goes on (`EN_U3`,
+   and `FSTAT` read back). `respond_max` keeps the worst time from entry to
+   here: 288 ns measured under MicroPython with the old IO_BANK0 overrides
+   (about 600 ns are available).
+3. Waits for /IORD to rise, then turns U3 off (`EN_OFF`). The guard,
    `IO_TIMEOUT_CYC` on the cycle counter, only keeps U3 from staying on if
    /IORD sticks low: the 2068's SCLD stops the Z80's clock while it updates
    the screen, which stretches some IN cycles to 2.4 µs. The bring-up's first
@@ -199,11 +231,21 @@ In RAM, inlined into `iord_isr`. An IN is in progress:
 Other ports are left to the 2068; the handler still waits for their strobe
 to end.
 
+Nothing here goes through the APB bridge (issue #254, under "How it fits"):
+it used to force U1 and U3 with IO_BANK0 output overrides, and the bridge
+stalls during flash writes.
+
+In the diag build it also records, for 0Eh/0Fh, whether /IORD was still low
+at entry and when U3 went on, the time from entry to the strobe's end, and,
+after U3 is on, how long MD took to show the reply (it only watches; the
+Z80 sees the same timing).
+
 ### `iord_isr()`
 
-In RAM. Core 1's `IO_IRQ_BANK0` handler: clears /IORD's edge, and runs
-`handle_in()` unless the 2068 is held (nIORD sits low in reset; edges only,
-so that is never taken for INs).
+In RAM. Core 1's `PIO2_IRQ_0` handler: acknowledges `iord_watch`'s IRQ
+flag 0 (a write to PIO2, over AHB), and runs `handle_in()` unless the 2068
+is held (nIORD sits low in reset; `iord_watch` reacts to edges only, so that
+is never taken for INs).
 
 ### `core1_main()`
 
@@ -211,10 +253,10 @@ In RAM. Set-up, which may call flash code because core 0 waits in
 `tsbus.start()` until it is done:
 
 1. Copies the vector table the core started with (core 0's), puts
-   `iord_isr` in `IO_IRQ_BANK0`'s slot, and points core 1's VTOR at the copy.
+   `iord_isr` in `PIO2_IRQ_0`'s slot, and points core 1's VTOR at the copy.
 2. Starts the DWT cycle counter.
-3. Enables /IORD's falling edge for this core, `IO_IRQ_BANK0` at the top
-   priority on core 1's NVIC. Sets `core1_ready`.
+3. Clears PIO2's IRQ flag 0 and enables `PIO2_IRQ_0` at the top priority on
+   core 1's NVIC. Sets `core1_ready`.
 
 Then forever, polling:
 
@@ -228,6 +270,9 @@ Then forever, polling:
   maps the chunk to the DOCK, DOCK serving is on, and `dock_rw` is set (a
   RAM dock).
 - **Counting** one `addr_log` entry per pass into `served[]`.
+- **The diag build** also keeps each pass's length (`max_gap`) and times one
+  read of PIO0 and one of SRAM a pass (and of IO_BANK0 with
+  `DIAG_APB_PROBE`).
 
 ### `hold_2068(hold)`
 
@@ -352,6 +397,16 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `outs_ours`, `late`, `respond_ns`, `rx_lost`, `hsr`, `ff`, `held`,
 `status` (what IN 0Fh returns), `tx` and `rx` (the queue levels).
 
+### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
+
+The issue-#254 measurements (`diag_t`). `diag_reset()` zeroes every phase
+(`min_left` to its maximum); `diag_phase(n)` sends what follows to phase n
+(0-15); `diag(n)` returns phase n as `(ins, gone, missed, min_left, max_gap,
+(hist...), drive_max, drive_never, (dhist...), pio_rd_max, apb_rd_max,
+ram_rd_max)`, cycles at `BUS_CLOCK_HZ`. Always built, because MicroPython's
+QSTR scan doesn't see `TSBUS_DIAG`; without it every count stays 0.
+[`src/test/st254/stress.py`](../../../src/test/st254/stress.py) uses them.
+
 ### `store(d, k, v)`
 
 Puts one counter in the dict.
@@ -427,6 +482,24 @@ phase 1 did) and EXROM, `exrom(True)`, `dock(True)`; a shadow boot
 - Serving went on through a soft reset and 256 KB of LittleFS writes.
 - No IN timed out.
 
+### The IN path off APB, checked on proto1 board 1 (2026-10-11, issue #254)
+
+[`src/test/st254/`](../../../src/test/st254/): `st254.asm` reads `IN 15` as
+fast as the 2068 can and sends every value that isn't 00h back with
+`OUT (0Eh)`; `stress.py` holds the status at 00h and runs ten 8-second
+phases (idle, GC, SD mount, read and write, flash read, erase and write,
+mixed) on the `TSBUS_DIAG` build.
+
+- **Before** (IO_BANK0 overrides and a GPIO interrupt): no bad reads idle;
+  in the first flash-write phase the 2068 read 0Fh (the port, left on MD by
+  U1) four times and crashed. Core 1's IO_BANK0 reads took up to 4,032 ns
+  during flash writes and 1,376 ns during erases; PIO0 and SRAM reads did
+  not slow down.
+- **After** (`iord_watch`, `sm_en`): 7.5 million status reads, no bad values,
+  no gone, missed or late INs, in every phase; the reply reached MD within
+  156 ns at worst (136 ns idle). The 2068 kept running throughout. ZX48
+  `LOAD "tpi:v3t.tap"`, which failed before, mounted, loaded and ran.
+
 ## `micropython.cmake`
 
 The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c`, the
@@ -437,6 +510,12 @@ pioasm header (`pico_generate_pio_header`), and `hardware_dma`,
 `tsbus.c` includes `tsbus.pio.h` only when `NO_QSTR` is not defined:
 MicroPython's QSTR scan preprocesses the file before the header has been
 generated, and needs none of its names.
+
+`TSBUS_DIAG=1` in the environment at build time adds `TSBUS_DIAG=1` to the
+compile definitions (`add_compile_definitions`), for the issue-#254
+diagnostic UF2. Use a separate build directory (`BUILD=build-diag`): CMake
+reads the variable only when it configures, and a normal build's objects
+would otherwise be reused.
 
 ## Where comments and the code disagree
 
