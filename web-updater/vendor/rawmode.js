@@ -179,10 +179,19 @@ o=f.write
         if (direct) {
             await this.exec(`f.close()`)
         } else {
+            // Rename over the old file in one step (LittleFS replaces it); only
+            // a filesystem that refuses with EEXIST (17, FAT) gets the old file
+            // removed first. The original always removed it first, so a rename
+            // that failed for another reason (EPERM: the temp file on another
+            // filesystem, the TS-Pico v3 card, 2026-10-10) left neither file:
+            // /slots/F00.bin was lost that way.
             await this.exec(`f.close()
-try: os.remove('${fn}')
-except: pass
-os.rename('${dest}','${fn}')
+try:
+ os.rename('${dest}','${fn}')
+except OSError as e:
+ if e.args[0] != 17: raise
+ os.remove('${fn}')
+ os.rename('${dest}','${fn}')
 `)
         }
     }

@@ -20,9 +20,12 @@
 #   UPGRADE_UF2  the upgrade UF2 (src/upgrade/) for boards coming from 1.1/1.5
 #   SDCARD_DIR   the SD-card folder to zip (default: SRC_DIR/../SD card)
 #   SOURCE_URL   a link the page shows for where this build came from
+#   V3_UF2       the v3 card's firmware (src/boards/TSPICO_V3), if this channel has one
+#   V3_SLOTS     a folder of the v3 card's slot files, F00.bin ... F15.bin
+#                (tools/build-flash.py build --slots)
 #
 # Output (gitignored): OUT_DIR/{manifest.json, pico/, firmware.uf2,
-# firmware-uf2.zip, upgrade.uf2, sdcard.zip}
+# firmware-uf2.zip, upgrade.uf2, sdcard.zip, firmware-v3.uf2, slots/}
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -35,6 +38,8 @@ CHANNEL="${CHANNEL:-release}"
 UPGRADE_UF2="${UPGRADE_UF2:-}"
 SDCARD_SRC="${SDCARD_DIR:-$(cd "$SRC/.." && pwd)/SD card}"
 SOURCE_URL="${SOURCE_URL:-}"
+V3_UF2="${V3_UF2:-}"
+V3_SLOTS="${V3_SLOTS:-}"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/pico/assets"
@@ -89,6 +94,32 @@ else
   echo "No upgrade UF2 -- the ROM update step is unavailable for this channel"
 fi
 
+# The v3 card (RP2350B): its own firmware, and the slot files that hold its
+# ROMs and cartridges (it has no flash chip; docs/v3-slots-proposal.md). The
+# page writes the firmware through the bootloader and the slot files over the
+# REPL into /slots. Slots 0 and 1 (our Spectrum and TS-Pico ROMs) are always
+# written; the others only where the card has no such file, so a user's own
+# ROM in a slot is never overwritten. It never wipes a v3 card: the slots
+# live on the same flash as the firmware.
+V3_FIELD="null"
+if [ -n "$V3_UF2" ] && [ -f "$V3_UF2" ]; then
+  cp "$V3_UF2" "$OUT/firmware-v3.uf2"
+  mkdir -p "$OUT/slots"
+  if [ -n "$V3_SLOTS" ] && [ -d "$V3_SLOTS" ]; then
+    find "$V3_SLOTS" -maxdepth 1 -name 'F[0-9][0-9].bin' -exec cp {} "$OUT/slots/" \;
+  fi
+  for t in romupd3 dckupd3; do
+    if [ ! -f "$OUT/pico/assets/$t.tap" ]; then
+      echo "build-payload: $SRC/assets/$t.tap is missing -- the v3 card needs it; run tools/build-basic.sh" >&2
+      exit 1
+    fi
+  done
+  V3_FIELD='"firmware-v3.uf2"'
+  echo "Included firmware-v3.uf2 and $(find "$OUT/slots" -name '*.bin' | wc -l | tr -d ' ') slot file(s)"
+else
+  echo "No v3 firmware -- the page will say this channel has nothing for the v3 card"
+fi
+
 # SD card bundle (software testers only): a plain download, with its contents
 # (TAP/, help/) at the zip root so "unzip -> copy to card root" is a direct drag.
 SDCARD_FIELD="null"
@@ -109,21 +140,21 @@ fi
 # manifest.json. File paths are relative to pico/; UF2 and zip paths to the
 # channel directory. Versions come from config.ini, which carries both.
 python3 - "$OUT" "$TAG" "$CHANNEL" "$SOURCE_URL" "$UF2_FIELD" "$UF2_ZIP_FIELD" \
-          "$UPGRADE_FIELD" "$SDCARD_FIELD" > "$OUT/manifest.json" <<'PY'
+          "$UPGRADE_FIELD" "$SDCARD_FIELD" "$V3_FIELD" > "$OUT/manifest.json" <<'PY'
 import json, os, sys
-out, tag, channel, source_url, uf2, uf2_zip, upgrade, sdcard = sys.argv[1:9]
+out, tag, channel, source_url, uf2, uf2_zip, upgrade, sdcard, v3 = sys.argv[1:10]
 cfg = json.load(open(os.path.join(out, 'pico', 'config.ini')))
 opt = lambda v: None if v == 'null' else json.loads(v)
 
 
-def mp_version():
-    """The MicroPython release in firmware.uf2 ("1.29.0"), or None. The
+def mp_version(name='firmware.uf2'):
+    """The MicroPython release in a firmware UF2 ("1.29.0"), or None. The
     page warns before installing an older one over a newer: a newer
     MicroPython's filesystem can't be read by an older one, which then
     formats the Pico's flash on its first boot."""
     import re
     try:
-        d = open(os.path.join(out, 'firmware.uf2'), 'rb').read()
+        d = open(os.path.join(out, name), 'rb').read()
     except OSError:
         return None
     pay = b''.join(d[i + 32:i + 32 + 256] for i in range(0, len(d), 512))
@@ -136,6 +167,16 @@ for root, _dirs, names in os.walk(os.path.join(out, 'pico')):
         rel = os.path.relpath(full, os.path.join(out, 'pico')).replace(os.sep, '/')
         files.append({'path': rel, 'size': os.path.getsize(full)})
 files.sort(key=lambda f: f['path'])
+v3_info = None
+if opt(v3):
+    slots = []
+    for n in sorted(os.listdir(os.path.join(out, 'slots'))):
+        if n.endswith('.bin'):
+            k = int(n[1:3])
+            slots.append({'file': 'slots/' + n, 'path': 'slots/' + n, 'slot': k,
+                          'size': os.path.getsize(os.path.join(out, 'slots', n)),
+                          'always': k in (0, 1)})   # ours: rewritten every time; others only if missing
+    v3_info = {'uf2': opt(v3), 'mp_version': mp_version(opt(v3)), 'slots': slots}
 print(json.dumps({
     'channel': channel,
     'tag': tag,
@@ -148,6 +189,7 @@ print(json.dumps({
     'upgrade_uf2': opt(upgrade),
     'sdcard': opt(sdcard),
     'files': files,
+    'v3': v3_info,
 }, indent=2))
 PY
 
