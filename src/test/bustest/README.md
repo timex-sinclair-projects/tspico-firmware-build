@@ -101,3 +101,16 @@ Findings:
 - **Perturbed timing:** no crash in 7,000 frames with /INT held 0-128
   T-states and up to 2,000 T-states of jitter. The demo returns to the
   title screen's DI wait loop at F8C0h about every 75 s, which isn't a hang.
+
+## ramtest: the 2068's own RAM
+
+`ramtest.asm` (loader `ramtest.bas`) runs March C- with eight data
+backgrounds, plus an address-in-data pass, over 5F00h-FFFFh, forever.
+Interrupts are off and the display is in ECM, Sinistar's conditions. The
+report goes on the screen between passes. On the 2068 used for the
+Sinistar tests it ran 37 passes with 0 errors (2026-10-11): the RAM is
+sound.
+
+Sinistar crashed on the v2.2 board as well, so the problem isn't v3's.
+It looks like the game on real hardware, with timing or SCLD behaviour
+that TSRun doesn't model.
