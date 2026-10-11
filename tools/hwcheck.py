@@ -328,7 +328,8 @@ def manual(board):
         result("the board didn't reset", not reset, "the USB port dropped" if reset else "")
 
         say("ZX48 (Spectrum) mode. On the 2068, one line at a time:\n"
-            '      LOAD "tpi:v3t.tap"\n      SAVE "tpi:zx48"\n      OUT 244,3\n'
+            '      SAVE "tpi:zx48"\n      OUT 244,3\n'
+            '      LOAD "tpi:v3t.tap"              (mounted from ZX48 mode: issue #254)\n'
             '      LOAD ""                         (the stripes, then the 16K block)\n'
             '      SAVE "zxs" CODE 32768,16384\n      SAVE "tpi:dir"\n      OUT 244,0\n      OUT 14,14')
         m = tr.mark()
@@ -337,6 +338,8 @@ def manual(board):
         loads = sum(1 for l in lines if "dispatching LOAD" in l)
         result("ZX48: entered and left", any("ZX48_IO enter" in l for l in lines) and any("exiting ZX48" in l for l in lines))
         result("ZX48: LOAD served the blocks", loads >= 6, "%d LOAD blocks" % loads)
+        result("ZX48: LOAD \"tpi:v3t.tap\" mounted from ZX48 mode",
+               any("ZX_TPI" in l and "op=1" in l and "v3t.tap" in l for l in lines))
         result("ZX48: SAVE and tpi:dir", any("dispatching SAVE" in l for l in lines) and any("name='dir'" in l for l in lines))
     finally:
         tr.stop()
