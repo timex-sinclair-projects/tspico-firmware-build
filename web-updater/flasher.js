@@ -23,17 +23,31 @@ import { Picoboot } from './vendor/picoflash/picoboot.js'
 import { uf2ToFlashBuffer } from './vendor/picoflash/uf2.js'
 
 const FLASH_BASE = 0x10000000
-const FLASH_SIZE = 2 * 1024 * 1024       // the Raspberry Pi Pico's W25Q16
+// Each chip's flash, and the UF2 family its boot ROM takes. The v3 card is an
+// RP2350B with 16 MB (GD25Q128E); the TS-Pico 2.x a Raspberry Pi Pico, an
+// RP2040 with 2 MB.
+const FLASH_SIZE = { RP2040: 2 * 1024 * 1024, RP2350: 16 * 1024 * 1024 }
+const FAMILY = { RP2040: 0xE48BFF56, RP2350: 0xE48BFF59 }   // RP2350: Arm, secure
 const SECTOR = 4096
 const ERASE_CHUNK = 64 * 1024            // one PICOBOOT erase per 64K block: well inside its timeout
 const WRITE_CHUNK = 16 * 1024
-const RP2040_FAMILY = 0xE48BFF56
 const UF2_FLAG_FAMILY = 0x00002000
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/** Check a UF2 is for the RP2040 before either path writes it. */
-export function checkUf2(bytes, name) {
+/** The chip a UF2 is built for ('RP2040', 'RP2350'), or null if it names a
+ *  family neither boot ROM takes, or none. */
+export function uf2Chip(bytes) {
+    if (bytes.length < 512) return null
+    const v = new DataView(bytes.buffer, bytes.byteOffset, 512)
+    if (!(v.getUint32(8, true) & UF2_FLAG_FAMILY)) return null
+    const fam = v.getUint32(28, true)
+    return Object.keys(FAMILY).find((c) => FAMILY[c] === fam) || null
+}
+
+/** Check a UF2 is for this chip before either path writes it: an RP2040
+ *  image on the v3 card, or the reverse, leaves a board that doesn't start. */
+export function checkUf2(bytes, name, chip = 'RP2040') {
     if (bytes.length < 512 || bytes.length % 512) {
         throw new Error(`${name} is not a UF2 (size ${bytes.length})`)
     }
@@ -41,8 +55,8 @@ export function checkUf2(bytes, name) {
     if (v.getUint32(0, true) !== 0x0A324655 || v.getUint32(4, true) !== 0x9E5D5157) {
         throw new Error(`${name} is not a UF2 (bad magic)`)
     }
-    if ((v.getUint32(8, true) & UF2_FLAG_FAMILY) && v.getUint32(28, true) !== RP2040_FAMILY) {
-        throw new Error(`${name} is not an RP2040 UF2`)
+    if ((v.getUint32(8, true) & UF2_FLAG_FAMILY) && v.getUint32(28, true) !== FAMILY[chip]) {
+        throw new Error(`${name} is not an ${chip} UF2`)
     }
 }
 
@@ -88,25 +102,29 @@ export class UsbBootsel {
         this.pb = pb
         this.conn = conn
         this.kind = 'usb'
+        // The boot ROM's USB product ID says which chip: 0003 RP2040, 000F RP2350.
+        this.chip = pb.target && pb.target.type === 'RP2350' ? 'RP2350' : 'RP2040'
     }
 
     describe() {
         return `USB bootloader (${this.pb.getInfo()})`
     }
 
-    /** Erase the whole 2 MB: what flash_nuke does, firmware and filesystem. */
+    /** Erase the whole flash: what flash_nuke does, firmware and filesystem.
+     *  The page never wipes a v3 card: its ROM slots live in that filesystem. */
     async wipe(progress = () => {}) {
-        for (let off = 0; off < FLASH_SIZE; off += ERASE_CHUNK) {
+        const size = FLASH_SIZE[this.chip]
+        for (let off = 0; off < size; off += ERASE_CHUNK) {
             await this.conn.flashErase(FLASH_BASE + off, ERASE_CHUNK)
-            progress((off + ERASE_CHUNK) / FLASH_SIZE)
+            progress((off + ERASE_CHUNK) / size)
         }
     }
 
     /** Erase what the image covers, write it, read it back. */
     async writeUf2(bytes, name, progress = () => {}) {
-        checkUf2(bytes, name)
+        checkUf2(bytes, name, this.chip)
         const { address, data } = uf2ToFlashBuffer(bytes)
-        if (address < FLASH_BASE || address % SECTOR || address + data.length > FLASH_BASE + FLASH_SIZE) {
+        if (address < FLASH_BASE || address % SECTOR || address + data.length > FLASH_BASE + FLASH_SIZE[this.chip]) {
             throw new Error(`${name} doesn't fit the Pico's flash (0x${address.toString(16)}, ${data.length} bytes)`)
         }
         // Pad to whole sectors with 0xFF: the erase is by sector and the
@@ -151,19 +169,19 @@ export class UsbBootsel {
 }
 
 // ---------------------------------------------------------------------------
-// File System Access API: the RPI-RP2 drive
+// File System Access API: the RPI-RP2 drive (RP2040), or RP2350
 // ---------------------------------------------------------------------------
 export class DriveBootsel {
     static supported() {
         return typeof window.showDirectoryPicker === 'function'
     }
 
-    /** Ask the user to pick the RPI-RP2 drive (needs a click). */
+    /** Ask the user to pick the boot drive (needs a click). */
     static async pick() {
         const dir = await window.showDirectoryPicker({ id: 'rpi-rp2', mode: 'readwrite' })
         const d = new DriveBootsel(dir)
         if (!(await d.present())) {
-            throw new Error(`"${dir.name}" isn't the RPI-RP2 drive (no INFO_UF2.TXT with RPI-RP2 in it)`)
+            throw new Error(`"${dir.name}" isn't the RPI-RP2 or RP2350 drive (no INFO_UF2.TXT naming one)`)
         }
         return d
     }
@@ -171,6 +189,7 @@ export class DriveBootsel {
     constructor(dir) {
         this.dir = dir
         this.kind = 'drive'
+        this.chip = 'RP2040'                // set by present() from INFO_UF2.TXT
     }
 
     describe() {
@@ -182,7 +201,10 @@ export class DriveBootsel {
     async present() {
         try {
             const f = await (await this.dir.getFileHandle('INFO_UF2.TXT')).getFile()
-            return /RPI-RP2/.test(await f.text())
+            const text = await f.text()
+            if (/RP2350/.test(text)) { this.chip = 'RP2350'; return true }
+            if (/RPI-RP2/.test(text)) { this.chip = 'RP2040'; return true }
+            return false
         } catch (_e) {
             return false
         }
@@ -213,7 +235,7 @@ export class DriveBootsel {
      *  close/rename of its temp file -- can fail because the drive has gone.
      *  That's success, and the drive vanishing is how we know. */
     async writeUf2(bytes, name, progress = () => {}) {
-        checkUf2(bytes, name)
+        checkUf2(bytes, name, this.chip)
         progress(0.05)
         let err = null
         try {
@@ -231,8 +253,10 @@ export class DriveBootsel {
         progress(1)
     }
 
-    /** flash_nuke.uf2: erases everything, then comes back as RPI-RP2. */
+    /** flash_nuke.uf2: erases everything, then comes back as RPI-RP2. RP2040
+     *  only: the page never wipes a v3 card. */
     async wipe(nukeBytes, progress = () => {}) {
+        if (this.chip !== 'RP2040') throw new Error('no flash_nuke for the ' + this.chip)
         await this.writeUf2(nukeBytes, 'flash_nuke.uf2', (f) => progress(f * 0.5))
         if (!(await this.waitPresent(60000))) {
             throw new Error('the RPI-RP2 drive did not come back after the wipe')

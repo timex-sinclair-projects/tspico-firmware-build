@@ -199,4 +199,4 @@ behaviour, and the caveat and the issue link go.
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/build.yml` | `849b5214c8c6` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/release.yml` | `57aa6a7ea309` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/release.yml` | `cae490dafd9e` | [firmware/boot.md](firmware/boot.md) | — |

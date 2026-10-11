@@ -160,6 +160,21 @@ jobs:
           cp build-UPGRADE/firmware.uf2 "$RUNNER_TEMP/upgrade.uf2"
           ls -la "$RUNNER_TEMP/upgrade.uf2"
 
+      # The v3 card's firmware (src/boards/TSPICO_V3), as build.yml's build-v3
+      # job builds it: in its own MicroPython clone, because the steps above
+      # replaced the port's boards/manifest.py with the v2 one. The board's
+      # manifest freezes the TS modules straight from src/. Published as
+      # firmware-v3.uf2; pages.yml puts it in the updater's release/ channel.
+      - name: Build the v3 card firmware
+        run: |
+          git clone --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp-v3"
+          make -C "$RUNNER_TEMP/mp-v3/mpy-cross"
+          make -C "$RUNNER_TEMP/mp-v3/ports/rp2" BOARD_DIR=${{ github.workspace }}/src/boards/TSPICO_V3 submodules
+          make -C "$RUNNER_TEMP/mp-v3/ports/rp2" -j$(nproc) BOARD_DIR=${{ github.workspace }}/src/boards/TSPICO_V3
+          cp "$RUNNER_TEMP/mp-v3/ports/rp2/build-TSPICO_V3/firmware.uf2" "$RUNNER_TEMP/firmware-v3.uf2"
+          ls -la "$RUNNER_TEMP/firmware-v3.uf2"
+
       # Compile the tracked BASIC sources (basic/*.bas) into TAPs. They land
       # in "SD card/TAP/basic/" (gitignored) and get swept into the bundle by
       # the `cp -R "SD card/TAP/"` below. gcc/make come from build-essential.
@@ -346,9 +361,24 @@ jobs:
           fi
           OUT="Pico-${TAG}.rom"
           python3 tools/build-flash.py build flash/manifest.json \
-                  --base base.rom --out "${OUT}"
+                  --base base.rom --out "${OUT}" --slots v3-slots
           python3 tools/build-flash.py verify flash/manifest.json "${OUT}"
           echo "rom=${OUT}" >> "$GITHUB_OUTPUT"
+
+      # The v3 card's slot files (F00.bin ... F15.bin): the same image cut slot
+      # for slot by --slots above. Without a base image the step above stopped
+      # early, so build our own slots (0 and 1) here instead: build exits 2
+      # ("INCOMPLETE") without a base, after writing them. The updater writes
+      # slots 0 and 1 every time and the rest only where the card has none.
+      - name: Zip the v3 card's slot files
+        id: slots
+        run: |
+          if [ ! -d v3-slots ]; then
+            python3 tools/build-flash.py build flash/manifest.json \
+                    --out "$RUNNER_TEMP/no-base.rom" --slots v3-slots || [ $? -eq 2 ]
+          fi
+          ( cd v3-slots && zip -q "$RUNNER_TEMP/v3-slots.zip" F*.bin )
+          unzip -l "$RUNNER_TEMP/v3-slots.zip"
 
       # The user manual as PDFs (tools/manual-pdf/make.sh, also built by
       # build.yml on every push): the half-letter one-up for reading and the
@@ -372,6 +402,8 @@ jobs:
           # pages.yml publishes firmware.uf2 and upgrade.uf2 to the updater.
           ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)"
                    "${RUNNER_TEMP}/upgrade.uf2#upgrade.uf2 (ROM updater: writes the TS-2068 and ZX ROMs to the flash)" )
+          ASSETS+=( "${RUNNER_TEMP}/firmware-v3.uf2#firmware-v3.uf2 (the TS-Pico v3 card's firmware, RP2350)"
+                    "${RUNNER_TEMP}/v3-slots.zip#v3-slots.zip (the v3 card's ROM and cartridge slot files, for /slots)" )
           ASSETS+=( "${RUNNER_TEMP}/manual-pdf/user-manual-half-letter.pdf#user-manual-half-letter.pdf (the user manual, 5.5 x 8.5 in, for reading)"
                     "${RUNNER_TEMP}/manual-pdf/user-manual-saddle-stitch-letter.pdf#user-manual-saddle-stitch-letter.pdf (the user manual as a booklet: print on letter, double-sided, flip on the short edge; fold and staple)" )
           if [ -n "${FLASH_ROM:-}" ] && [ -f "${FLASH_ROM}" ]; then
