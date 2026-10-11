@@ -1112,11 +1112,11 @@ and you're back to normal.
 
 ## 8.3 Running a cartridge
 
-Cartridges live in the dock. With a cartridge's slot in the dock, start it in any of these ways:
+Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to start it, or press
+**TS Reset**: the 2068 restarts, finds the cartridge and runs it.
 
-- `OUT 244,3`, which switches the 2068 to the cartridge bank;
-- `NEW`;
-- pressing **TS Reset**.
+Don't use `OUT 244,3` for a cartridge. It maps only the first 16K of the dock over the ROM, which is
+how ZX Spectrum mode starts, and a cartridge started that way crashes.
 
 To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
 
