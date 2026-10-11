@@ -41,6 +41,10 @@
  * and core 1 is never paused for them (it is not a multicore lockout victim).
  * Its code is __not_in_flash_func and uses registers directly rather than SDK
  * inline helpers, which a size-optimised build may leave out of line in flash.
+ * Nor may its IN path touch anything behind the APB bridge (IO_BANK0, PADS...):
+ * the bridge stalls for up to 4 us while core 0 erases or programs flash, and
+ * an IN gives core 1 about 600 ns (issue #254). So the IN interrupt comes from
+ * PIO2 (iord_watch) and U1/U3 are driven through PIO1's spare state machine.
  */
 
 #include <stdlib.h>
@@ -80,8 +84,12 @@
 
 extern uint8_t __GcHeapEnd;
 
-static const PIO pio_serve = pio0, pio_addr = pio1;
+static const PIO pio_serve = pio0, pio_addr = pio1, pio_iord = pio2;
 static uint sm_serve, sm_iodrv, sm_addr, sm_write, sm_snoop, off_addr;
+// The IN path stays off APB (issue #254): sm_en, PIO1's spare state machine,
+// never runs; core 1 drives U1 and U3 by writing `set pins` into its INSTR
+// register. sm_iord (PIO2) turns /IORD's falling edge into PIO2 IRQ 0.
+static uint sm_en, sm_iord;
 static int ch_ptr, ch_data, ch_log;
 static bool started;
 
@@ -128,6 +136,38 @@ static volatile uint8_t io_status = 0xff;
 static volatile bool tx_drop_req;
 
 static volatile uint32_t io_ins, io_in_ours, io_outs_ours, io_in_late, respond_max;
+
+// TSBUS_DIAG (issue #254): IN timing per test phase, for the flash-write
+// status glitch. The table and tsbus.diag*() are always built (MicroPython's
+// QSTR scan doesn't see the flag); only the measuring in the IN handler and
+// core 1's loop needs TSBUS_DIAG=1 in the environment at build time
+// (src/tsbus/micropython.cmake). Without it every count stays 0.
+#ifndef TSBUS_DIAG
+#define TSBUS_DIAG 0
+#endif
+#define DIAG_PHASES 16
+#define DIAG_BUCKETS 8
+typedef struct {
+    uint32_t ins;        // INs to 0Eh/0Fh
+    uint32_t gone;       // /IORD already high when the handler started
+    uint32_t missed;     // /IORD high by the time U3 went on: the Z80 read an undriven bus
+    uint32_t min_left;   // fewest cycles from handler entry to the strobe's end
+    uint32_t max_gap;    // longest core 1 loop pass, in cycles (an IN handler included)
+    uint32_t hist[DIAG_BUCKETS];   // cycles from entry to the strobe's end, 64 a bucket
+    uint32_t drive_max;  // most cycles from the reply's TX write to MD showing it
+    uint32_t drive_never;   // MD never showed the reply within DIAG_DRIVE_MAX
+    uint32_t dhist[DIAG_BUCKETS];  // that time, 8 cycles (32 ns) a bucket
+    uint32_t pio_rd_max; // core 1's slowest read of a PIO0 register (AHB), cycles
+    uint32_t apb_rd_max; // ... of an IO_BANK0 register (through the APB bridge)
+    uint32_t ram_rd_max; // ... of SRAM
+} diag_t;
+#define DIAG_DRIVE_MAX 250        // 1 us
+#ifndef DIAG_APB_PROBE
+#define DIAG_APB_PROBE 0          // 1: also time an IO_BANK0 read (it perturbs the IN path)
+#endif
+static diag_t diag[DIAG_PHASES];          // all zero in a normal build
+static volatile uint32_t diag_probe[256];  // core 1's SRAM latency probe
+static volatile uint32_t diag_phase;
 
 // ---- serve's table and patches -----------------------------------------------------
 
@@ -270,6 +310,23 @@ static void bus_start(void) {
     sm_config_set_in_shift(&c, false, true, 16);
     pio_sm_init(pio_addr, sm_snoop, off_snoop, &c);
 
+    // sm_en (PIO1): never enabled; core 1 executes `set pins` on it, over
+    // GP8-GP10 (nAEN_LO, nAEN_HI, nDATA_OE), to drive U1 and U3 for an IN.
+    sm_en = claim_sm(pio_addr);
+    c = pio_get_default_sm_config();
+    sm_config_set_set_pins(&c, PIN_NAEN_LO, 3);
+    pio_sm_init(pio_addr, sm_en, 0, &c);
+
+    // iord_watch (PIO2): /IORD's falling edge -> PIO2 IRQ 0, for core 1.
+    pio_set_gpio_base(pio_iord, 0);
+    sm_iord = claim_sm(pio_iord);
+    uint off_iord = add_program(pio_iord, &iord_watch_program);
+    c = iord_watch_program_get_default_config(off_iord);
+    pio_sm_init(pio_iord, sm_iord, off_iord, &c);
+    pio_iord->input_sync_bypass = 1u << PIN_NIORD;
+    pio_iord->irq = 1u;                                    // nothing pending
+    pio_iord->inte0 = PIO_INTR_SM0_BITS;                   // IRQ flag 0 -> PIO2_IRQ_0
+
     set_delays();
     // Synchronisers bypassed on MD and the read strobe in PIO0; those plus
     // nIOWR in PIO1.
@@ -313,13 +370,17 @@ static void bus_start(void) {
     pio_sm_set_enabled(pio_addr, sm_addr, true);
     pio_sm_set_enabled(pio_addr, sm_write, true);
     pio_sm_set_enabled(pio_addr, sm_snoop, true);
+    pio_sm_set_enabled(pio_iord, sm_iord, true);
 }
 
 // ---- core 1 --------------------------------------------------------------------------
 
-#define FORCE_LOW (1u << (IO_BANK0_GPIO0_CTRL_OUTOVER_LSB + 1))
+// `set pins` for sm_en, over GP8 nAEN_LO, GP9 nAEN_HI, GP10 nDATA_OE (active
+// low): U1 on, U3 on, all off -- what PIO1's programs leave between cycles.
+#define EN_U1  (pio_encode_set(pio_pins, 0b110))
+#define EN_U3  (pio_encode_set(pio_pins, 0b011))
+#define EN_OFF (pio_encode_set(pio_pins, 0b111))
 #define IORD_MASK (1u << PIN_NIORD)
-#define IORD_EDGE_FALL (1u << ((PIN_NIORD % 8) * 4 + 2))
 
 // How long U3 may stay on waiting for the strobe to end, in core cycles from
 // the handler's entry. The SCLD stops the Z80's clock while it updates the
@@ -334,10 +395,15 @@ static void bus_start(void) {
 static void __not_in_flash_func(handle_in)(void) {
     uint32_t t0c = m33_hw->dwt_cyccnt;
     io_ins++;
-    hw_set_bits(&io_bank0_hw->io[PIN_NAEN_LO].ctrl, FORCE_LOW);   // U1: A7..A0 onto MD
+    #if TSBUS_DIAG
+    bool low_at_entry = !(sio_hw->gpio_in & IORD_MASK);
+    bool ours = false, low_at_drive = false;
+    #endif
+    pio_addr->sm[sm_en].instr = EN_U1;                             // U1: A7..A0 onto MD
+    (void)pio_addr->fstat;                                         // the store has landed
     busy_wait_at_least_cycles(8);                                  // ~32 ns: U1 enable plus margin
     uint port = sio_hw->gpio_in & 0xff;
-    hw_clear_bits(&io_bank0_hw->io[PIN_NAEN_LO].ctrl, FORCE_LOW);
+    pio_addr->sm[sm_en].instr = EN_OFF;
     if ((port & 0xfe) == 0x0e) {
         uint8_t reply;
         if (port & 1) {
@@ -348,9 +414,33 @@ static void __not_in_flash_func(handle_in)(void) {
         } else {
             reply = 0x00;
         }
+        #if TSBUS_DIAG
+        uint32_t tw = m33_hw->dwt_cyccnt;
+        #endif
         pio_serve->txf[sm_iodrv] = reply;                              // io_drive: onto MD
         busy_wait_at_least_cycles(4);
-        hw_set_bits(&io_bank0_hw->io[PIN_NDATA_OE].ctrl, FORCE_LOW);  // U3: MD onto the Z80's bus
+        pio_addr->sm[sm_en].instr = EN_U3;                         // U3: MD onto the Z80's bus
+        (void)pio_addr->fstat;
+        #if TSBUS_DIAG
+        low_at_drive = !(sio_hw->gpio_in & IORD_MASK);
+        ours = true;
+        {
+            // How long until MD shows the reply (U3 is already on: this only
+            // measures, it changes nothing the Z80 sees).
+            diag_t *g = &diag[diag_phase & (DIAG_PHASES - 1)];
+            while ((sio_hw->gpio_in & 0xff) != reply && m33_hw->dwt_cyccnt - tw < DIAG_DRIVE_MAX) {
+            }
+            uint32_t dd = m33_hw->dwt_cyccnt - tw;
+            if ((sio_hw->gpio_in & 0xff) != reply) {
+                g->drive_never++;
+            }
+            if (dd > g->drive_max) {
+                g->drive_max = dd;
+            }
+            uint b = dd / 8;
+            g->dhist[b < DIAG_BUCKETS ? b : DIAG_BUCKETS - 1]++;
+        }
+        #endif
         io_in_ours++;
         uint32_t dt = m33_hw->dwt_cyccnt - t0c;
         if (dt > respond_max) {
@@ -364,22 +454,40 @@ static void __not_in_flash_func(handle_in)(void) {
             break;
         }
     }
-    hw_clear_bits(&io_bank0_hw->io[PIN_NDATA_OE].ctrl, FORCE_LOW);
+    pio_addr->sm[sm_en].instr = EN_OFF;
+    #if TSBUS_DIAG
+    if (ours) {
+        diag_t *g = &diag[diag_phase & (DIAG_PHASES - 1)];
+        uint32_t left = m33_hw->dwt_cyccnt - t0c;
+        g->ins++;
+        if (!low_at_entry) {
+            g->gone++;
+        } else if (!low_at_drive) {
+            g->missed++;
+        }
+        if (left < g->min_left) {
+            g->min_left = left;
+        }
+        uint b = left / 64;
+        g->hist[b < DIAG_BUCKETS ? b : DIAG_BUCKETS - 1]++;
+    }
+    #endif
 }
 
 // A falling edge on nIORD interrupts core 1 wherever its loop is (polling left
-// gaps of up to 370 ns, too many for an IN's 600 ns). Edges only, so a line held
-// low in reset is never taken for INs; and never while the 2068 is held.
+// gaps of up to 370 ns, too many for an IN's 600 ns), through iord_watch on
+// PIO2: a GPIO edge interrupt would be acknowledged through APB (issue #254).
+// Edges only, so a line held low in reset is never taken for INs; and never
+// while the 2068 is held.
 static void __not_in_flash_func(iord_isr)(void) {
-    io_bank0_hw->intr[PIN_NIORD / 8] = IORD_EDGE_FALL;
+    pio_iord->irq = 1u;                     // acknowledge PIO2 IRQ flag 0 (AHB, not APB)
     if (!held_2068) {
         handle_in();
     }
 }
 
-// Core 1's own vector table. Both cores start with core 0's, where MicroPython
-// keeps machine.Pin's shared handler on IO_IRQ_BANK0 (in flash); core 1 needs
-// iord_isr there instead. 16 system vectors plus the IRQs, aligned to the next
+// Core 1's own vector table. Both cores start with core 0's, whose handlers
+// MicroPython keeps in flash; core 1 needs iord_isr on PIO2_IRQ_0. 16 system vectors plus the IRQs, aligned to the next
 // power of two above the table's size.
 #define CORE1_NVEC (16 + NUM_IRQS)
 static uint32_t core1_vectors[CORE1_NVEC] __attribute__((aligned(512)));
@@ -391,22 +499,57 @@ static void __not_in_flash_func(core1_main)(void) {
     for (uint i = 0; i < CORE1_NVEC; i++) {
         core1_vectors[i] = v[i];
     }
-    core1_vectors[16 + IO_IRQ_BANK0] = (uint32_t)iord_isr;
+    core1_vectors[16 + PIO2_IRQ_0] = (uint32_t)iord_isr;
     scb_hw->vtor = (uintptr_t)core1_vectors;
     __dsb();
     __isb();
 
     m33_hw->demcr |= M33_DEMCR_TRCENA_BITS;
     m33_hw->dwt_ctrl |= M33_DWT_CTRL_CYCCNTENA_BITS;
-    io_bank0_hw->intr[PIN_NIORD / 8] = IORD_EDGE_FALL;
-    gpio_set_irq_enabled(PIN_NIORD, GPIO_IRQ_EDGE_FALL, true);   // for this core
-    irq_set_priority(IO_IRQ_BANK0, 0);
-    irq_set_enabled(IO_IRQ_BANK0, true);
+    pio_iord->irq = 1u;
+    irq_set_priority(PIO2_IRQ_0, 0);
+    irq_set_enabled(PIO2_IRQ_0, true);                            // for this core
     core1_ready = true;
 
     const uint32_t snoop_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_snoop);
     const uint32_t write_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_write);
+    #if TSBUS_DIAG
+    uint32_t diag_last = m33_hw->dwt_cyccnt;
+    #endif
     for (;;) {
+        #if TSBUS_DIAG
+        {
+            uint32_t now = m33_hw->dwt_cyccnt;
+            uint32_t gap = now - diag_last;
+            diag_t *g = &diag[diag_phase & (DIAG_PHASES - 1)];
+            if (gap > g->max_gap) {
+                g->max_gap = gap;
+            }
+            // Bus latency from core 1, one read of each path a pass. Not
+            // APB: a read that stalls behind the bridge holds core 1 off the
+            // IN interrupt and queues its stores (the cause of #254). The APB
+            // figure is only measured when DIAG_APB_PROBE is set.
+            uint32_t a = m33_hw->dwt_cyccnt;
+            (void)pio_serve->fstat;
+            uint32_t b = m33_hw->dwt_cyccnt;
+            #if DIAG_APB_PROBE
+            (void)io_bank0_hw->io[PIN_NIORD].ctrl;
+            #endif
+            uint32_t c = m33_hw->dwt_cyccnt;
+            (void)diag_probe[(c >> 4) & 255];
+            uint32_t d = m33_hw->dwt_cyccnt;
+            if (b - a > g->pio_rd_max) {
+                g->pio_rd_max = b - a;
+            }
+            if (c - b > g->apb_rd_max) {
+                g->apb_rd_max = c - b;
+            }
+            if (d - c > g->ram_rd_max) {
+                g->ram_rd_max = d - c;
+            }
+            diag_last = m33_hw->dwt_cyccnt;
+        }
+        #endif
         // A drop request from core 0, with the IN interrupt masked so the
         // handler can't pop in the middle.
         if (tx_drop_req) {
@@ -772,6 +915,48 @@ static mp_obj_t tsbus_stats(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_stats_obj, tsbus_stats);
 
+// tsbus.diag_reset(): zero every phase. tsbus.diag_phase(n): count what
+// follows under phase n (0-15). tsbus.diag(n): phase n as (ins, gone, missed,
+// min_left, max_gap, (hist...), drive_max, drive_never, (dhist...),
+// pio_rd_max, apb_rd_max, ram_rd_max), cycles at BUS_CLOCK_HZ.
+static mp_obj_t tsbus_diag_reset(void) {
+    for (uint i = 0; i < DIAG_PHASES; i++) {
+        memset((void *)&diag[i], 0, sizeof diag[i]);
+        diag[i].min_left = 0xffffffffu;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_diag_reset_obj, tsbus_diag_reset);
+
+static mp_obj_t tsbus_diag_phase(mp_obj_t n_in) {
+    diag_phase = (uint32_t)mp_obj_get_int(n_in) & (DIAG_PHASES - 1);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_diag_phase_obj, tsbus_diag_phase);
+
+static mp_obj_t tsbus_diag(mp_obj_t n_in) {
+    diag_t g = diag[mp_obj_get_int(n_in) & (DIAG_PHASES - 1)];
+    mp_obj_t h[DIAG_BUCKETS];
+    for (uint i = 0; i < DIAG_BUCKETS; i++) {
+        h[i] = mp_obj_new_int_from_uint(g.hist[i]);
+    }
+    mp_obj_t dh[DIAG_BUCKETS];
+    for (uint i = 0; i < DIAG_BUCKETS; i++) {
+        dh[i] = mp_obj_new_int_from_uint(g.dhist[i]);
+    }
+    mp_obj_t t[12] = {
+        mp_obj_new_int_from_uint(g.ins), mp_obj_new_int_from_uint(g.gone),
+        mp_obj_new_int_from_uint(g.missed), mp_obj_new_int_from_uint(g.min_left),
+        mp_obj_new_int_from_uint(g.max_gap), mp_obj_new_tuple(DIAG_BUCKETS, h),
+        mp_obj_new_int_from_uint(g.drive_max), mp_obj_new_int_from_uint(g.drive_never),
+        mp_obj_new_tuple(DIAG_BUCKETS, dh),
+        mp_obj_new_int_from_uint(g.pio_rd_max), mp_obj_new_int_from_uint(g.apb_rd_max),
+        mp_obj_new_int_from_uint(g.ram_rd_max),
+    };
+    return mp_obj_new_tuple(12, t);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_diag_obj, tsbus_diag);
+
 // ---- the MQ object -----------------------------------------------------------------------
 
 // tsbus.MQ(): v2's MQ (an rp2.StateMachine running TS_IO_DUAL) over core 1's
@@ -972,6 +1157,9 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_load_at), MP_ROM_PTR(&tsbus_load_at_obj) },
     { MP_ROM_QSTR(MP_QSTR_hold), MP_ROM_PTR(&tsbus_hold_obj) },
     { MP_ROM_QSTR(MP_QSTR_stats), MP_ROM_PTR(&tsbus_stats_obj) },
+    { MP_ROM_QSTR(MP_QSTR_diag), MP_ROM_PTR(&tsbus_diag_obj) },
+    { MP_ROM_QSTR(MP_QSTR_diag_phase), MP_ROM_PTR(&tsbus_diag_phase_obj) },
+    { MP_ROM_QSTR(MP_QSTR_diag_reset), MP_ROM_PTR(&tsbus_diag_reset_obj) },
     { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },
     { MP_ROM_QSTR(MP_QSTR_HOME), MP_ROM_INT(SLOT_HOME) },
     { MP_ROM_QSTR(MP_QSTR_EXROM), MP_ROM_INT(SLOT_EXROM) },

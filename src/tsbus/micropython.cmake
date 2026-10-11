@@ -12,6 +12,12 @@ target_include_directories(usermod_tsbus INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 
+# The issue-#254 diagnostic build: TSBUS_DIAG=1 in the environment (use its
+# own BUILD directory, so the normal build's objects aren't reused).
+if(DEFINED ENV{TSBUS_DIAG})
+    add_compile_definitions(TSBUS_DIAG=$ENV{TSBUS_DIAG})   # the QSTR scan sees it too
+endif()
+
 pico_generate_pio_header(usermod_tsbus ${CMAKE_CURRENT_LIST_DIR}/tsbus.pio)
 
 target_link_libraries(usermod_tsbus INTERFACE

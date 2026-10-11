@@ -171,3 +171,17 @@ data_wait:
     wait 1 gpio 18
 .wrap
 
+
+; -----------------------------------------------------------------------------
+; iord_watch (PIO2): raise PIO2 IRQ 0 on every falling edge of /IORD, for core
+; 1's IN handler. Core 1 used to take a GPIO edge interrupt, but acknowledging
+; that is a write to IO_BANK0, behind the APB bridge, and the bridge stalls for
+; up to 4 us while core 0 erases or programs flash (issue #254); a PIO
+; interrupt is acknowledged over AHB.
+; -----------------------------------------------------------------------------
+.program iord_watch
+.wrap_target
+    wait 0 gpio 17                          ; nIORD falls
+    irq set 0
+    wait 1 gpio 17
+.wrap

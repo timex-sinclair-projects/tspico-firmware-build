@@ -186,9 +186,9 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `72e3910b0f49` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `65921ec38b51` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/tsbus.pio` | `1faa88f642fe` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/micropython.cmake` | `7af5480e6052` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `2d1397a51da0` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.pio` | `8b19f44b1c3f` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/micropython.cmake` | `c2110d2aec86` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-23.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
