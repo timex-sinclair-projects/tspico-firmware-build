@@ -23,6 +23,7 @@ Appendices
 - C. Command Quick Reference
 - D. Settings, `config.ini` and TPMODE
 - E. The TS-Pico Team
+- F. The TS-Pico v3 Card
 
 ---
 
@@ -1119,6 +1120,12 @@ Cartridges live in the dock. With a cartridge's slot in the dock, start it in an
 
 To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
 
+**The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is simply what's in
+the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
+for example, and it takes the Spectrum ROM's place until you change the dock back
+(`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
+slot 0.
+
 ## 8.4 Putting a ROM or cartridge into a slot
 
 You can load your own ROM images and cartridges from the SD card into a slot. Mount the file,
@@ -1917,3 +1924,86 @@ Zoom meetings; and to our families.
 - Source code and releases: <https://github.com/timex-sinclair-projects/tspico-firmware-build>
 - Board design: https://github.com/jburrell7/TSPICO
 - Expansion bus: https://github.com/jburrell7/TS2068_Extender
+
+---
+
+<!-- keywords: v3 card · slots · dock RAM · SD card · LED -->
+
+# Appendix F: The TS-Pico v3 Card
+
+The v3 card is the next TS-Pico board. It runs the same commands as the TS-Pico 2.x, so
+everything in this manual applies, with the differences below. They're mostly about where
+things are kept, because the v3 card has no Flash or RAM chips: it keeps the ROMs and
+cartridges in its own memory and serves them to the 2068 itself.
+
+## F.1 What's different, at a glance
+
+| | TS-Pico 2.x | v3 card |
+|---|---|---|
+| Slots | a 512K Flash chip and 512K of RAM | the same 16 + 16 slots, kept as files in the card's own memory |
+| `tpi:boot` | switches the ROM under the running 2068; follow it with `NEW` | restarts the 2068 in the new ROM by itself |
+| Booting an empty slot | the 2068 hangs | refused: **F**, `No ROM in Flash slot N`, nothing changes |
+| A cartridge in a Flash slot | can't be written by the 2068 | the same |
+| A RAM slot in the dock | keeps what programs write until switch-off | the same: see F.3 |
+| Putting a ROM into a slot | the loader erases and programs the Flash chip | the TS-Pico writes the slot; nothing to erase, no jumper |
+| The slot the 2068 is running from | can't be written | can be: the new ROM runs from the next start |
+| The SD card | in and out between commands | the same, and the card's switch tells the TS-Pico at once |
+| The LED | full brightness | dimmed, and adjustable (`LED_BRIGHTNESS`, Appendix D) |
+
+## F.2 BOOT and DOCK
+
+`SAVE "tpi:boot"` and `SAVE "tpi:dock"` work as in Chapter 8, with the same numbers.
+
+- **`tpi:boot` restarts the 2068** in the new ROM, a fraction of a second after the message.
+  There's no need for `: NEW`. BOOT still lasts for one start, as in 8.2.
+- **A slot with no ROM in it is refused**, so you can't start the 2068 from an empty slot by
+  mistake. If the boot slot is somehow empty at switch-on, the TS-Pico starts the standard ROM
+  from Flash slot 1 instead and notes it in the log (`SAVE "tpi:log"`).
+- **`tpi:dock` changes the dock straight away**, without restarting the 2068, as on the 2.x.
+
+## F.3 64K of RAM in the dock
+
+A pair of RAM slots in the dock gives a program 64K of extra RAM in the cartridge bank:
+
+```basic
+SAVE "tpi:dock" CODE 1,4      : REM RAM slots 4 and 5 in the dock: 64K of RAM
+```
+
+What a program writes there stays put until you switch off, even if you change the dock and come
+back later, just as the 2.x's RAM chip keeps it. Changing the dock away from a RAM slot takes
+about a second while the TS-Pico saves it. A **Flash** slot in the dock can't be written, as on the
+2.x, so a cartridge can't be altered by a program that writes to it.
+
+## F.4 Putting a ROM or cartridge into a slot
+
+Mount the file and `LOAD ""`, exactly as in 8.4. The loader looks the same and asks the same
+questions: RAM or Flash, then the slot, even for a cartridge. The TS-Pico then writes the slot
+itself in a fraction of a second, so the loader has nothing to erase.
+
+Some rules work differently:
+
+- **There's no Flash chip to program**, so the P10 rule in 8.4 doesn't apply.
+- **You can write the slot the 2068 is running from.** The 2068 carries on with the ROM it started
+  with, and the new one runs from the next start, or after `SAVE "tpi:boot"`. The loader tells you
+  so and asks you to confirm.
+- **Flash slot 0 is the Spectrum ROM** that ZX Spectrum mode needs. The loader warns you and asks
+  again before replacing it.
+
+Afterwards the loader offers to start the ROM, or for a cartridge to put it in the dock, as on the
+2.x.
+
+## F.5 The SD card
+
+You can take the card out and put it back between commands, as with the 2.x; just don't pull it
+while a LOAD or SAVE is using it. The v3 card's socket has a switch that tells the TS-Pico whether
+a card is in, so `No SD card` comes back at once rather than after a few seconds of trying.
+
+## F.6 Summary
+
+1. The v3 card runs the same commands as the TS-Pico 2.x. Its slots are files in the card's own
+   memory, numbered as in Chapter 8.
+2. `tpi:boot` restarts the 2068 in the new ROM, and won't boot an empty slot.
+3. `SAVE "tpi:dock" CODE 1,4` gives a program 64K of RAM that keeps its contents until switch-off.
+4. Loading a ROM or cartridge into a slot works as in 8.4, with no Flash chip to program. You can
+   write the slot you're running from, and slot 0 asks twice.
+5. The SD card's switch means a missing card is noticed at once.
