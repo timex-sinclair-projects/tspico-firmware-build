@@ -114,7 +114,7 @@ web-updater/
 ├── test/               host test for flasher.js
 ├── vendor/
 │   ├── transports.js     ViperIDE WebSerial transport (trimmed)
-│   ├── rawmode.js        ViperIDE MpRawMode: raw REPL, writeFile, walkFs…
+│   ├── rawmode.js        ViperIDE MpRawMode: raw REPL, writeFile, walkFs… (changed here: writeFile renames over the old file rather than deleting it first)
 │   ├── utils.js          ViperIDE helpers (trimmed)
 │   └── picoflash/        Pico⚡Flash PICOBOOT library (see its README)
 ├── release/            generated channel (gitignored)

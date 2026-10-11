@@ -674,6 +674,11 @@ async function uploadFiles() {
     await reconnectSerial('files', 45000)    // first boot after a wipe formats the filesystem
     stageMsg('files', 'Entering the REPL…')
     await enterRaw()
+    // rawmode.writeFile writes '.viper.tmp' in the current directory and then
+    // renames it into place. The firmware may have left that directory on the
+    // SD card (/sd/...), and a rename from there to the flash crosses
+    // filesystems: EPERM (the v3 card, 2026-10-10). Start from the flash's root.
+    await raw.exec("import os\nos.chdir('/')")
 
     let slotsDone = 0
     if (isV3()) {
