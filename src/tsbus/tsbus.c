@@ -137,6 +137,29 @@ static volatile bool tx_drop_req;
 
 static volatile uint32_t io_ins, io_in_ours, io_outs_ours, io_in_late, respond_max;
 
+// The 2068 stopped: /MEMRD hasn't changed for IDLE_CYC. A running Z80 reads
+// memory every few T-states (a HALT too), so that is a reset (/MEMRD high) or
+// the 2068 switched off with the card on USB (/MEMRD low). The card can't see
+// /RESET or the 2068's power, so this is how it knows. See core1_main.
+#define IDLE_CYC (BUS_CLOCK_HZ / 10000)  // 100 us
+static volatile bool bus_idle;
+static volatile uint32_t idle_resets;    // times the bus went idle (and was released)
+static volatile uint32_t glitch_writes;  // F4h/FFh writes io_snoop saw while idle: ignored
+
+// The 2068's power. Off, every bus line reads 0 V -- /MEMWR, /IORD and /IOWR
+// all low together, which a running Z80 never does (one strobe at a time).
+// With the card on USB it doesn't restart when the 2068 is switched on, and
+// the 2068 then came up frozen mid-read (white border, black screen) until
+// TS Reset was pressed; held through its power-up and released 100 ms later
+// it boots. So core 1 holds /RESET while the 2068 is off and for
+// POWER_ON_CYC after it comes on (power_held), as v2's 555 does for a card
+// that isn't on USB. held_2068 is core 0's own hold; the pin is either.
+#define POWER_OFF_CYC (BUS_CLOCK_HZ / 1000)   // 1 ms of all-low: off
+#define POWER_ON_CYC  (BUS_CLOCK_HZ / 10)     // 100 ms on before the release
+#define OFF_MASK ((1u << PIN_NMEMWR) | (1u << PIN_NIORD) | (1u << PIN_NIOWR))
+static volatile bool power_held;
+static volatile uint32_t power_resets;   // power-ups the card held the 2068 through
+
 // TSBUS_DIAG (issue #254): IN timing per test phase, for the flash-write
 // status glitch. The table and tsbus.diag*() are always built (MicroPython's
 // QSTR scan doesn't see the flag); only the measuring in the IN handler and
@@ -481,7 +504,7 @@ static void __not_in_flash_func(handle_in)(void) {
 // while the 2068 is held.
 static void __not_in_flash_func(iord_isr)(void) {
     pio_iord->irq = 1u;                     // acknowledge PIO2 IRQ flag 0 (AHB, not APB)
-    if (!held_2068) {
+    if (!held_2068 && !power_held) {
         handle_in();
     }
 }
@@ -516,6 +539,12 @@ static void __not_in_flash_func(core1_main)(void) {
     #if TSBUS_DIAG
     uint32_t diag_last = m33_hw->dwt_cyccnt;
     #endif
+    // serve's `mov pindirs, null side 0`, the instruction after `tail`'s wait:
+    // MD released, /BE off.
+    const uint16_t serve_release = serve_program_instructions[serve_offset_tail + 1];
+    bool memrd_last = sio_hw->gpio_in & (1u << PIN_NMEMRD);
+    uint32_t memrd_change = m33_hw->dwt_cyccnt;
+    uint32_t power_off_at = m33_hw->dwt_cyccnt, power_on_at = power_off_at;
     for (;;) {
         #if TSBUS_DIAG
         {
@@ -560,11 +589,61 @@ static void __not_in_flash_func(core1_main)(void) {
             __asm volatile ("cpsie i" ::: "memory");
             tx_drop_req = false;
         }
+        // A stopped 2068 (in reset, or off with the card on USB): let go of the
+        // bus. With the 2068 off /MEMRD reads low, which serve and addr_read
+        // take for a read that never ends, holding /BE and U3 on into an
+        // unpowered machine. The shadow stays: the SCLD keeps its bank
+        // registers through a reset (see hold_2068); only a power-up clears
+        // them, which the power hold below follows. I/O "writes" while idle
+        // are power-down noise: no Z80 is running to make them.
+        {
+            uint32_t now = m33_hw->dwt_cyccnt;
+            bool rd = sio_hw->gpio_in & (1u << PIN_NMEMRD);
+            if (rd != memrd_last) {
+                memrd_last = rd;
+                memrd_change = now;
+                bus_idle = false;
+            } else if (!bus_idle && now - memrd_change > IDLE_CYC) {
+                bus_idle = true;
+                idle_resets++;
+                pio_addr->sm[sm_en].instr = EN_OFF;            // U1, U2, U3 off
+                pio_serve->sm[sm_serve].instr = serve_release; // MD in, /BE off
+            }
+        }
+        // The 2068's power: hold /RESET while it is off, and for POWER_ON_CYC
+        // after it comes on; then the shadow is clear (it powers up that way)
+        // and core 0's hold, if any, is all that's left.
+        {
+            uint32_t now = m33_hw->dwt_cyccnt;
+            bool off = !(sio_hw->gpio_in & OFF_MASK);
+            if (off) {
+                power_on_at = now;
+                if (!power_held && now - power_off_at > POWER_OFF_CYC) {
+                    power_held = true;
+                    sio_hw->gpio_set = 1u << PIN_RESET_HOLD;
+                }
+            } else {
+                power_off_at = now;
+                if (power_held && now - power_on_at > POWER_ON_CYC) {
+                    sh_hsr = sh_ff = 0;
+                    write_table();
+                    power_held = false;
+                    power_resets++;
+                    if (!held_2068) {
+                        sio_hw->gpio_clr = 1u << PIN_RESET_HOLD;
+                    }
+                }
+            }
+        }
         // I/O writes: the bank shadow, and OUTs to 0Eh/0Fh.
         if (!(pio_addr->fstat & snoop_empty)) {
             uint32_t w = pio_addr->rxf[sm_snoop];
             uint port = (w >> 8) & 0xff, data = w & 0xff;
             io_writes++;
+            if (bus_idle && (port == 0xf4 || port == 0xff)) {
+                glitch_writes++;              // no Z80 is running: power-down noise
+                continue;
+            }
             bool changed = false;
             if (port == 0xf4) {
                 changed = sh_hsr != data;
@@ -623,7 +702,7 @@ static void hold_2068(bool hold) {
         write_table();
     }
     held_2068 = hold;
-    gpio_put(PIN_RESET_HOLD, hold);
+    gpio_put(PIN_RESET_HOLD, hold || power_held);   // core 1 may be holding a powered-off 2068
     gpio_set_dir(PIN_RESET_HOLD, GPIO_OUT);
 }
 
@@ -891,7 +970,7 @@ static void store(mp_obj_t d, qstr k, mp_uint_t v) {
 
 // tsbus.stats(): the counters, as a dict.
 static mp_obj_t tsbus_stats(void) {
-    mp_obj_t d = mp_obj_new_dict(19);
+    mp_obj_t d = mp_obj_new_dict(24);
     store(d, MP_QSTR_home, served[SLOT_HOME]);
     store(d, MP_QSTR_exrom, served[SLOT_EXROM]);
     store(d, MP_QSTR_dock, served[SLOT_DOCK]);
@@ -903,6 +982,11 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_ins_ours, io_in_ours);
     store(d, MP_QSTR_outs_ours, io_outs_ours);
     store(d, MP_QSTR_late, io_in_late);
+    store(d, MP_QSTR_idle_resets, idle_resets);
+    store(d, MP_QSTR_glitch_writes, glitch_writes);
+    store(d, MP_QSTR_idle, bus_idle);
+    store(d, MP_QSTR_power_held, power_held);
+    store(d, MP_QSTR_power_resets, power_resets);
     store(d, MP_QSTR_respond_ns, (mp_uint_t)((uint64_t)respond_max * 1000000000u / BUS_CLOCK_HZ));
     store(d, MP_QSTR_rx_lost, rxq_lost);
     store(d, MP_QSTR_hsr, sh_hsr);

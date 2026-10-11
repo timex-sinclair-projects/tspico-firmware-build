@@ -75,6 +75,16 @@ two apart:
   reset, so `tsbus` keeps running through Ctrl-D (checked). PIO0 and PIO1
   are full: instruction memory in both, and all four state machines in PIO1
   (the fourth is `sm_en`, which runs no program). PIO2 has `iord_watch`.
+- **The 2068's power and resets.** The card can't see /RESET or the 2068's
+  power, and on USB it stays up while the 2068 is switched off and on. Two
+  things followed from that (2026-10-11): the 2068 came up frozen mid-read
+  at power-on (white border, black screen) until TS Reset was pressed, and
+  with it off the card held a never-ending "read" with /BE and U3 on, into
+  an unpowered machine. Core 1 now watches the bus instead. /MEMRD still for
+  `IDLE_CYC` means the 2068 has stopped, and the card lets go of the bus.
+  /MEMWR, /IORD and /IOWR all low together mean it is off, and the card
+  holds /RESET until 100 ms after it comes back, as v2's 555 does for a
+  board not on USB (see `core1_main`).
 - **The clock.** 250 MHz with the core at 1.20 V, set by `start()`, not at
   boot (see `bus_clock`).
 
@@ -112,6 +122,9 @@ in the file.
 | `SIDE_BITS`, `DELAY_BITS` | `0x1800`, `0x0700` | serve's side-set (opt, value) and delay fields |
 | `EN_U1`, `EN_U3`, `EN_OFF` | `set pins` 110b, 011b, 111b | the instructions core 1 executes on `sm_en`, over GP8 nAEN_LO, GP9 nAEN_HI, GP10 nDATA_OE (active low): U1 on, U3 on, all off (what PIO1's programs leave between cycles) |
 | `IORD_MASK` | | /IORD's bit in SIO's input |
+| `IDLE_CYC` | 25,000 (100 µs) | /MEMRD unchanged this long: the 2068 has stopped (a running Z80 reads every few T-states, in HALT too) |
+| `POWER_OFF_CYC`, `POWER_ON_CYC` | 250,000 (1 ms), 25,000,000 (100 ms) | /MEMWR, /IORD, /IOWR all low this long: the 2068 is off; and how long after they come back the card goes on holding /RESET |
+| `OFF_MASK` | | those three strobes' bits in SIO's input |
 | `IO_TIMEOUT_CYC` | 1000 (4 µs) | the IN guard; see `handle_in` |
 | `CORE1_NVEC` | 16 + `NUM_IRQS` | core 1's vector table length |
 | `TSBUS_DIAG` | 0 | 1 builds the measuring in `handle_in` and `core1_main` (see `micropython.cmake`) |
@@ -132,7 +145,10 @@ in the file.
 | `serving` | volatile bool, false | `set_serving` | /BE and U3 requests live; false is shadow mode |
 | `exrom_on`, `dock_on` | volatile bool, false | `tsbus_exrom`, `tsbus_dock`; `chunk_target` | whether EXROM- and DOCK-bank chunks are served |
 | `dock_rw` | volatile bool, true | `tsbus_dock_writes`; `core1_main` | whether the Z80's writes to the dock are stored: on for a RAM dock, off for a flash one |
-| `held_2068` | volatile bool, true | `hold_2068`; `iord_isr` | INs are ignored while held (nIORD sits low in reset) |
+| `held_2068` | volatile bool, true | `hold_2068`; `iord_isr`, `core1_main` | core 0's hold. RESET_HOLD is high while this or `power_held` is set, and INs are ignored (nIORD sits low in reset) |
+| `power_held` | volatile bool | `core1_main`; `hold_2068`, `iord_isr` | core 1 is holding /RESET for a powered-off or just-powered 2068 |
+| `bus_idle` | volatile bool | `core1_main` | /MEMRD has been still for `IDLE_CYC`; while set, io_snoop's F4h/FFh writes are ignored |
+| `idle_resets`, `glitch_writes`, `power_resets` | volatile uint32 | `core1_main` | times the bus went idle (and was released); F4h/FFh writes ignored while idle; power-ups held through |
 | `core1_ready` | volatile bool | `core1_main`; `tsbus_start` | core 1's set-up is done |
 | `d_hi`, `d_lo`, `hold_hi`, `hold_lo` | 3, 3, 5, 9 | constants | serve's two waits and addr_read's two hold loops, in 4 ns PIO cycles: phase 1's settings |
 | `addr_log` | uint32[4096], 16 KB aligned | written by `ch_log` (a DMA ring) | every pointer served, newest at the channel's write address |
@@ -244,8 +260,9 @@ Z80 sees the same timing).
 
 In RAM. Core 1's `PIO2_IRQ_0` handler: acknowledges `iord_watch`'s IRQ
 flag 0 (a write to PIO2, over AHB), and runs `handle_in()` unless the 2068
-is held (nIORD sits low in reset; `iord_watch` reacts to edges only, so that
-is never taken for INs).
+is held, by core 0 (`held_2068`) or by core 1's power check (`power_held`).
+nIORD sits low in reset; `iord_watch` reacts to edges only, so that is never
+taken for INs.
 
 ### `core1_main()`
 
@@ -258,14 +275,33 @@ In RAM. Set-up, which may call flash code because core 0 waits in
 3. Clears PIO2's IRQ flag 0 and enables `PIO2_IRQ_0` at the top priority on
    core 1's NVIC. Sets `core1_ready`.
 
-Then forever, polling:
+Then, with `serve_release` (serve's `mov pindirs, null side 0`, the
+instruction after `tail`'s wait, read from the program while flash may
+still be used) and the times of /MEMRD's last change and of the last
+power-off and power-on readings, forever, polling:
 
+- **The bus going idle.** /MEMRD unchanged for `IDLE_CYC`: the 2068 is in
+  reset or off. Core 1 executes `EN_OFF` on `sm_en` and `serve_release` on
+  serve, so U1-U3 are off, MD is released and /BE let go. With the 2068 off,
+  /MEMRD reads low and serve and addr_read would otherwise sit in a "read"
+  driving its data bus. It sets `bus_idle` (cleared at the next change) and
+  counts `idle_resets`. The shadow is left alone: the SCLD keeps its
+  registers through a reset (`hold_2068`).
+- **The 2068's power.** /MEMWR, /IORD and /IOWR all low (`OFF_MASK`) for
+  `POWER_OFF_CYC`: it is off, so `power_held` is set and RESET_HOLD driven
+  high (`gpio_set`, SIO). Once they have been back for `POWER_ON_CYC`, the
+  shadow is cleared (the SCLD powers up with both registers 0) and the table
+  rewritten. `power_held` is cleared and `power_resets` counted, and
+  RESET_HOLD is released unless core 0 holds (`held_2068`). Without this, a
+  2068 switched on under a card on USB came up frozen mid-read until TS
+  Reset was pressed.
 - **A drop request** (`tx_drop_req`): drops the oldest reply with interrupts
   masked (`cpsid i`), so `iord_isr` can't pop in the middle, then clears the
   request.
 - **I/O writes** (io_snoop): F4h and FFh update the shadow, and the table if
-  it changed (for FFh, only bit 7 matters). OUTs to 0Eh/0Fh make the status
-  00h (busy, as v2.1's PIO did) and go to `rxq`.
+  it changed (for FFh, only bit 7 matters); while `bus_idle` they are
+  power-down noise and are dropped (`glitch_writes`). OUTs to 0Eh/0Fh make
+  the status 00h (busy, as v2.1's PIO did) and go to `rxq`.
 - **Memory writes** (mem_write): stored in the DOCK image when the shadow
   maps the chunk to the DOCK, DOCK serving is on, and `dock_rw` is set (a
   RAM dock).
@@ -276,9 +312,10 @@ Then forever, polling:
 
 ### `hold_2068(hold)`
 
-Drives RESET_HOLD: high holds the 2068 in reset, low releases it. On release,
-the shadow is reset to what the SCLD powers up with (both registers 0) and
-the table rewritten.
+Core 0's hold (`held_2068`). Drives RESET_HOLD high to hold the 2068 in
+reset; on release it stays high while core 1's power check holds
+(`power_held`). On release the shadow is reset to what the SCLD powers up
+with (both registers 0) and the table rewritten.
 
 Beware: the SCLD keeps its bank registers through a Z80 reset. A boot that
 crashes can leave them set (FFh = FFh after one crash), and the next served
@@ -395,7 +432,9 @@ What phase 5's slot files and `tpi:memboot`/`tpi:memdock` will call.
 A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `mem_writes`, `dock_writes`, `table_updates`, `ins`, `ins_ours`,
 `outs_ours`, `late`, `respond_ns`, `rx_lost`, `hsr`, `ff`, `held`,
-`status` (what IN 0Fh returns), `tx` and `rx` (the queue levels).
+`status` (what IN 0Fh returns), `tx` and `rx` (the queue levels),
+`idle` (`bus_idle`), `idle_resets`, `glitch_writes`, `power_held` and
+`power_resets`.
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
 
@@ -499,6 +538,22 @@ mixed) on the `TSBUS_DIAG` build.
   no gone, missed or late INs, in every phase; the reply reached MD within
   156 ns at worst (136 ns idle). The 2068 kept running throughout. ZX48
   `LOAD "tpi:v3t.tap"`, which failed before, mounted, loaded and ran.
+
+### Power cycles and resets on USB, checked on proto1 board 1 (2026-10-11)
+
+With the card on USB, switching the 2068 off and on left it frozen at
+power-on: a white border, a black screen, and /MEMRD held low. TS Reset
+recovered it. With the card holding /RESET through the power-up and
+releasing it afterwards, it booted. With the 2068 off, every bus input read
+0 V, and the card drove nothing toward it once the bus was released.
+
+With the power hold and the idle release:
+
+- **Power cycles:** 4 of 4 booted clean (`power_resets` 4).
+- **Idle and glitches:** the bus went idle and was released 23 times, and 12
+  F4h/FFh glitch writes were ignored.
+- **TS Reset during Sinistar:** a clean boot, through the copyright screen
+  back into the cartridge still in the dock.
 
 ## `micropython.cmake`
 

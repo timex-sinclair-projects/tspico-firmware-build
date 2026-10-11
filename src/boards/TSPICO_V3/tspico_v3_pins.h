@@ -14,6 +14,7 @@
 #define PIN_WAIT_REQ   12  // /WAIT through the 74LVC06
 #define PIN_Z80_A14    13  // GP13-GP22: inputs from U4 / U6
 #define PIN_NMEMRD     15  // /MREQ ORed with /RD
+#define PIN_NMEMWR     16  // /MREQ ORed with /WR (tsbus.pio's mem_write waits on GP16)
 #define PIN_NIORD      17  // /IORQ ORed with /RD
 #define PIN_NIOWR      18  // /IORQ ORed with /WR
 #define PIN_TAPE_IN    22
