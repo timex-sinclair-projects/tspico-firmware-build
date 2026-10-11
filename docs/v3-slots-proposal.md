@@ -224,7 +224,12 @@ Each step is its own PR, with host tests in the style of
   `tpi:zx48`, `OUT 244,3`, `LOAD ""` (six blocks), `SAVE "zxs3" CODE
   32768,16384` (byte-identical, `sd_roundtrip.py`'s pattern), `SAVE
   "tpi:dir"`, and back with `OUT 244,0` and `OUT 14,14`.
-- **Step 4**, writing slots, is next.
+- **Step 4** (2026-10-10): the v3 updaters `romupd3.tap` and `dckupd3.tap`
+  (`basic/assets/`) keep romupdate's questions, warn before slot 0, and end
+  in `tpi:blkrcv CODE m,s`; the Pico writes the slot file (`SLOT_WRITE`,
+  `board.write_slot`). On the card: ZX Diagnostics as a `.ROM` into flash 5
+  (byte-identical, then booted), and Pro/File's `.DCK` into flash 6–7 (ran
+  from the dock). Phase 5's slots are done.
 
 ## Decisions (2026-10-10)
 

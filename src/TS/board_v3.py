@@ -13,7 +13,7 @@ from machine import Pin, SPI, I2C, Timer
 
 NAME = "v3"
 PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
-SLOTS = False       # tpi:blkrcv refuses until phase 5 step 4 (NO_SLOTS); boot and dock work
+SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
 # The slots (phase 5, docs/v3-slots-proposal.md): v2's two chips of sixteen
@@ -177,6 +177,46 @@ def save_ram_dock(dock):
         tsbus.read(tsbus.DOCK, _buf, half * SLOT_SIZE)
         with open(slot_path(mem, s), "wb") as f:
             f.write(_buf)
+
+
+def write_slot(mem, slot, path):
+    """tpi:blkrcv on the v3 card: write the image at path (MOUNT_FILE's
+    /TMP/temp.bin) into slot `slot` of memory `mem`, through _buf. Up to 32K
+    fills one slot, zero-padded; up to 64K (a .DCK image) fills an even slot
+    and the next. If those slots are in the DOCK now, it is reloaded, live.
+    A booted slot isn't touched: the 2068 runs from its SRAM copy, and the
+    new ROM takes effect at the next boot or tpi:boot. Returns what was
+    written, for the message; ValueError if the image doesn't fit."""
+    size = os.stat(path)[6]
+    if size == 0 or size > 2 * SLOT_SIZE:
+        raise ValueError("an image of %d bytes" % size)
+    pair = size > SLOT_SIZE
+    if pair and (slot % 2 or slot > 14):
+        raise ValueError("a 64K image needs an even slot")
+    try:
+        os.mkdir(SLOTS_DIR)
+    except OSError:
+        pass
+    with open(path, "rb") as f:
+        for s in ((slot, slot + 1) if pair else (slot,)):
+            n = f.readinto(_buf) or 0
+            mv = memoryview(_buf)
+            while n < SLOT_SIZE:                    # zero-pad without another buffer
+                k = min(len(_zeros), SLOT_SIZE - n)
+                mv[n:n + k] = _zeros[:k]
+                n += k
+            with open(slot_path(mem, s), "wb") as out:
+                out.write(_buf)
+    if _served is not None:
+        dmem, dslot = _served[1]
+        docked = (dslot, dslot + 1) if dslot % 2 == 0 else (dslot,)
+        if dmem == mem and (slot in docked or (pair and slot + 1 in docked)):
+            tsbus.dock(False)
+            load_dock(dmem * 4, dslot * 16)
+            tsbus.dock(True)
+    what = "%s slot%s %s" % ("SRAM" if mem == MEM_SRAM else "Flash",
+                             "s" if pair else "", "%d-%d" % (slot, slot + 1) if pair else str(slot))
+    return what
 
 
 def start_memory(rom_sm, bank_sm):

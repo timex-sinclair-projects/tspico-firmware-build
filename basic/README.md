@@ -160,7 +160,9 @@ working example.
 ## Migrating existing committed TAPs
 
 Every BASIC program the firmware and the SD card image need is now built from
-source here: `src/assets/` (`nofile`, `romupdate`, `dckupdate`) and the test
+source here: `src/assets/` (`nofile`, `romupdate`, `dckupdate`, and the v3
+card's `romupd3`, `dckupd3`, which have no CODE block: the Pico writes the
+slot itself) and the test
 programs, the last two of which (`factorial`, `RND WORDS`) were rewritten for
 the fixed `tpi:.fact` / `tpi:.rndw` examples. (`rompatch.tap`, a v1.2-era ROM
 patch, was retired with `tpi:rompatch`.) zmakebas is **one-way** -- it can't

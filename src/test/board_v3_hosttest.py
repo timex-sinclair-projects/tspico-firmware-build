@@ -353,9 +353,12 @@ def main():
     sent = []
     t.SEND_MSG = lambda msg, msg2, st, force=False: sent.append((msg, st))
     t.TLM = lambda *a, **k: None
+    t.TSP = types.SimpleNamespace(f_name="")
+    t.MQ = types.SimpleNamespace(put=lambda b: None)
+    t.LOG = lambda *a: None
     del sent[:]
     t.BLKRCV(bytes(10), "")
-    check(sent == [("Not on the v3 card yet", t._3_F_Invalid_file)], "BLKRCV refuses, Report F (until step 4)")
+    check(sent == [("No ROM image mounted", t._3_F_Invalid_file)], "BLKRCV with nothing mounted: Report F, as v2")
 
     print("tpi:boot and tpi:dock switch slots")
     os.chdir(d)
@@ -424,6 +427,70 @@ def main():
     board.start_memory(0x0A, 0x01)
     take()
     check(not os.path.exists(os.path.join(b3.SLOTS_DIR, "S04.bin")), "and a boot clears it, as v2's power-off")
+
+    print("writing slots (tpi:blkrcv on v3)")
+    img = os.path.join(d, "temp.bin")
+
+    def image(n, fill=0x5A):
+        with open(img, "wb") as f:
+            f.write(bytes((fill + i) & 0xFF for i in range(n)))
+        return open(img, "rb").read()
+
+    rom16 = image(16384)
+    take()
+    check(board.write_slot(2, 6, img) == "Flash slot 6", "a 16K .ROM into flash slot 6")
+    f06 = open(os.path.join(b3.SLOTS_DIR, "F06.bin"), "rb").read()
+    check(f06 == rom16 + bytes(16384), "  F06.bin: the image, zero-padded to 32K")
+    dck = image(65536, 0x33)
+    check(board.write_slot(1, 12, img) == "SRAM slots 12-13", "a 64K .DCK into SRAM slots 12-13")
+    s12 = open(os.path.join(b3.SLOTS_DIR, "S12.bin"), "rb").read()
+    s13 = open(os.path.join(b3.SLOTS_DIR, "S13.bin"), "rb").read()
+    check(s12 + s13 == dck, "  S12 and S13: the two halves")
+    for bad, why in ((7, "an odd slot"), (14 + 2, "past slot 15")):
+        try:
+            board.write_slot(2, bad, img)
+            ok = False
+        except ValueError:
+            ok = True
+        check(ok, "a 64K image into %s: ValueError" % why)
+    image(65537)
+    try:
+        board.write_slot(2, 4, img)
+        ok = False
+    except ValueError:
+        ok = True
+    check(ok, "an image over 64K: ValueError")
+    board.start_memory(0x0A, 0xA1)                          # dock flash 10-11 served
+    take()
+    cart = image(65536, 0x77)
+    board.write_slot(2, 10, img)
+    got = take()
+    check(IMG[2] == cart and ("dock", False) in got and ("dock", True) in got,
+          "writing the slots in the DOCK: reloaded there, live")
+    image(32768, 0x11)
+    board.write_slot(2, 1, img)
+    check(not [c for c in take() if c[0] in ("switch", "load", "hold")],
+          "writing the booted slot: the running ROM isn't touched (next boot)")
+
+    sent_w = []
+    t.SEND_MSG = lambda msg, msg2, st, force=False: sent_w.append((msg, msg2, st))
+    t.LOG = lambda *a: None
+    t.TSP = types.SimpleNamespace(f_name="/sd/TAP/game.dck")
+    calls_w = []
+    real_ws = t.board.write_slot
+    t.board.write_slot = lambda m, s_, p: calls_w.append((m, s_, p)) or "Flash slots 4-5"
+    t.BLKRCV(pre(2, 5), "")
+    check(not calls_w and sent_w[-1][2] == t._8_A_Invalid_arg, "BLKRCV, a .DCK into odd slot 5: Report A, nothing written")
+    t.BLKRCV(pre(3, 4), "")
+    check(not calls_w and sent_w[-1][2] == t._8_A_Invalid_arg, "MEM 3: Report A")
+    t.BLKRCV(pre(2, 4), "")
+    check(calls_w == [(2, 4, "/TMP/temp.bin")] and sent_w[-1][:1] == ("Wrote Flash slots 4-5",) and sent_w[-1][2] == t._1_OK,
+          "CODE 2,4: /TMP/temp.bin into flash 4, 0 OK (%r)" % sent_w[-1:])
+    t.board.write_slot = lambda m, s_, p: (_ for _ in ()).throw(OSError(28, "ENOSPC"))
+    t.BLKRCV(pre(2, 4), "")
+    check(sent_w[-1][0] == "Writing the slot failed" and sent_w[-1][2] == t._3_F_Invalid_file,
+          "a write that fails: Report F, said so")
+    t.board.write_slot = real_ws
 
     print("ACTIVATE_SD with the socket empty")
     logs = []
