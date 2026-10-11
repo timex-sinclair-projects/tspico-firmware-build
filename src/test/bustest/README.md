@@ -1,9 +1,11 @@
 # bustest: bus integrity on the v3 card
 
 Written to find out why **Sinistar** (jon0x0/ts2068, `arcade-ports/sinistar`, a
-64K AROS cartridge) crashes within seconds on the v3 card. The game itself
-is known to run in the TSRun emulator, and reportedly on a v2.2 board. Every
-test here passed on the v3 card. The cause is still open (see "What it found").
+64K AROS cartridge) crashed within seconds on the v3 card. It turned out to
+be a fault in that 2068: Sinistar crashed on the v2.2 board with the same
+machine, and ran flawlessly on a second 2068 with the v3 card. Every test
+here passed on the v3 card. They're kept as a bus and RAM check for the
+card and for a 2068.
 
 ## The harness
 
@@ -111,6 +113,8 @@ report goes on the screen between passes. On the 2068 used for the
 Sinistar tests it ran 37 passes with 0 errors (2026-10-11): the RAM is
 sound.
 
-Sinistar crashed on the v2.2 board as well, so the problem isn't v3's.
-It looks like the game on real hardware, with timing or SCLD behaviour
-that TSRun doesn't model.
+Sinistar crashed on the v2.2 board as well, with the same 2068. On a second
+2068 with the v3 card it ran flawlessly (2026-10-11). The fault was in the
+first 2068, and it's pattern-sensitive: it corrupted Sinistar's state, D1 of
+a stack byte included, but passed this RAM test and the bus tests. The v3
+card and the game are fine.
