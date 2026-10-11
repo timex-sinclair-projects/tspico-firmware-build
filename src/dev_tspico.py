@@ -1854,7 +1854,8 @@ def MOUNT_FILE(f_name, remounting=False):                                       
             if f_name[-4:].upper() == ".DCK":
             
                 if DCK_IMAGE():
-                    if not COPY_FILE("/assets/dckupdate.tap", "/TMP/temp.tap"):       # was /TS/dckupdate.tap; moved to /assets/ during dual-port migration to avoid frozen-package shadow
+                    updater = "/assets/dckupdate.tap" if board.SLOTS else "/assets/dckupd3.tap"   # v3: the Pico writes the slots
+                    if not COPY_FILE(updater, "/TMP/temp.tap"):       # was /TS/dckupdate.tap; moved to /assets/ during dual-port migration to avoid frozen-package shadow
                         # The trick here and with romupdate.tap is that we copy this to 
                         # temp.tap but don't change the TSP.f_name, and the next non-tpi
                         # LOAD"" will pull from temp.tap.
@@ -1866,6 +1867,12 @@ def MOUNT_FILE(f_name, remounting=False):                                       
                     err_level = 2
                     msg = "Creating DCK image for %s. See logfile for details" % f_name
                     
+            elif not board.SLOTS:                                        # v3: romupd3 asks, the Pico writes; nothing to patch
+                if not COPY_FILE("/assets/romupd3.tap", "/TMP/temp.tap"):
+                    err_level = 2
+                    msg = "Copying romupd3.tap"
+                    remount = True
+
             else:
                 
                 len_hi = int(totlen / 256)
@@ -3987,8 +3994,6 @@ def BLKRCV(pre, cmd):                                                           
     global led
 
     TLM("BLKRCV enter")
-    if NO_SLOTS():
-        return
     _BUFSZ = 256
     buf = bytearray(_BUFSZ)
     mv = memoryview(buf)  # Faster indexing than bytearray
@@ -4006,6 +4011,9 @@ def BLKRCV(pre, cmd):                                                           
         LOG("BLKRCV: no ROM image mounted (%r). Command refused" % (TSP.f_name,), 1)
         SEND_MSG("No ROM image mounted", "Mount a .ROM, .BIN or .DCK", _3_F_Invalid_file, True)
         return
+
+    if not board.SLOTS:                     # the v3 card: the Pico writes the slot itself
+        return SLOT_WRITE(pre)
 
     # The Z80 erases and writes the DOCK slot as soon as this returns OK.
     # If that slot is the one it boots from, stop here (MEMDOCK normally
@@ -5005,14 +5013,28 @@ def MDIR(pre, cmd):                                                             
     return 
                 
 
-def NO_SLOTS():
-    """tpi:blkrcv can't write a slot on the v3 card yet (phase 5 step 4,
-    docs/v3-slots-proposal.md): it refuses there before it changes
-    anything. True when the command was refused."""
-    if board.SLOTS:
-        return False
-    SEND_MSG("Not on the v3 card yet", "Slots come in a later update", _3_F_Invalid_file, True)
-    return True
+def SLOT_WRITE(pre):
+    """tpi:blkrcv on the v3 card (phase 5 step 4, docs/v3-slots-proposal.md):
+    write the mounted image (/TMP/temp.bin) into slot CODE m,s itself, as
+    romupd3.tap / dckupd3.tap ask (MOUNT_FILE serves them on v3). The v2
+    flow has the Z80 erase and program the flash while the Pico streams;
+    here nothing reaches the Z80 but the message. board.write_slot pads a
+    short image and puts a 64K .DCK into an even slot and the next."""
+    mem, slot = PARAMS(pre)
+    is_dck = TSP.f_name[-4:].upper() == ".DCK"
+    if mem not in (1, 2) or slot > 15 or (is_dck and (slot % 2 or slot > 14)):
+        msg = "Wrong values, MEM=%d, PAGE=%d" % (mem, slot)
+        SEND_MSG(msg, "MEM 1..2, PAGE 0..15 (even for a .DCK)", _8_A_Invalid_arg, True)
+        LOG("BLKRCV: %s. Command ignored" % msg, 1)
+        return
+    try:
+        what = board.write_slot(mem, slot, "/TMP/temp.bin")
+    except (OSError, ValueError) as e:
+        LOG("BLKRCV: writing %s slot %d failed: %r" % ("SRAM" if mem == 1 else "Flash", slot, e), 2)
+        SEND_MSG("Writing the slot failed", str(e)[:31], _3_F_Invalid_file, True)
+        return
+    LOG("BLKRCV: wrote %s to %s" % (TSP.f_name, what), 1)
+    SEND_MSG("Wrote " + what, "", _1_OK)
 
 
 def MEMBOOT(pre, cmd):                                           # Changes ROM slot to boot from; either SRAM or Flash

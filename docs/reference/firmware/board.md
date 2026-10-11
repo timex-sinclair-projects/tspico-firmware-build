@@ -22,18 +22,19 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6236), once |
-| `map_slots()` | `MEMBOOT` (5069), `MEMDOCK` (5187) |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7194) |
-| `restart_mq()` | `ZX48_IO` (7195, 7300, 7342) |
+| `start_memory()` | `TS2068_IO` (6258), once |
+| `map_slots()` | `MEMBOOT` (5091), `MEMDOCK` (5209) |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7216) |
+| `restart_mq()` | `ZX48_IO` (7217, 7322, 7364) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6210) |
-| `led_brightness()` | `TS2068_IO` (6214), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6336, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (6997) |
-| `SLOTS` | `NO_SLOTS`, for `BLKRCV` ([tspico-commands.md](tspico-commands.md#no_slots)) |
-| `rom_slot_empty()` | `MEMBOOT` (5039), before it changes anything |
+| `make_led()` | `TS2068_IO` (6232) |
+| `led_brightness()` | `TS2068_IO` (6236), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6358, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7019) |
+| `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
+| `write_slot()` | `SLOT_WRITE` (5031, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5061), before it changes anything |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
@@ -72,8 +73,8 @@ its registers and pace DMA on its DREQs. Nothing reads `PIO_MQ`:
 
 ### `SLOTS`, `HAS_CORE1`
 
-Both `True`. `SLOTS`: the slots can be written from the Z80, so
-`tpi:blkrcv` runs (`NO_SLOTS` lets it through). `HAS_CORE1`:
+Both `True`. `SLOTS`: the Z80 writes the slots, so `tpi:blkrcv` streams the
+image and `MOUNT_FILE` serves `romupdate.tap`/`dckupdate.tap`. `HAS_CORE1`:
 core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 
 ### `NULL_SM`
@@ -137,7 +138,7 @@ for state machine 4 (DOCK only, no ROM mapping) is a comment.
 The service-loop restart in `TS2068_IO` leaves these state machines alone on
 purpose. Rebuilding them, or `machine.reset()`, would release the lines that
 select the 2068's ROM bank under the running machine (the comment at
-6470–6479). Host harnesses must never use state machines 4 or 5.
+6492–6501). Host harnesses must never use state machines 4 or 5.
 
 ### `map_slots(rom_sm, bank_sm)`
 
@@ -225,8 +226,9 @@ bus; the LED is on the XL9555 expander; core 1 belongs to `tsbus`. Imports
 
 `"v3"`, then all `False`. `PIO_MQ`: `MQ` is `tsbus.MQ()`, whose `exec`
 takes only the strings `tspico_io` sends; there are no PIO registers or
-DREQs to touch. `SLOTS`: `tpi:blkrcv` can't write a slot until phase 5 step
-4, so it refuses (`NO_SLOTS`); `tpi:boot` and `tpi:dock` work. `HAS_CORE1`: core 1 runs the `tsbus`
+DREQs to touch. `SLOTS`: the Pico writes the slots itself (`write_slot`), so
+`tpi:blkrcv` is `SLOT_WRITE` and `MOUNT_FILE` serves `romupd3.tap` and
+`dckupd3.tap`. `HAS_CORE1`: core 1 runs the `tsbus`
 loop, so `background()` runs on core 0 and there is no boot blink.
 
 ### `SLOTS_DIR`, `SLOT_SIZE`, `MEM_SRAM`, `MEM_FLASH`
@@ -376,6 +378,23 @@ even slot. It goes a 32K half at a time, through `tsbus.read` into `_buf`,
 and makes `/slots` if need be. A flash dock: nothing. `map_slots` calls it
 before a dock switch, so switching back finds the data, as v2's SRAM keeps
 it until power-off. About 64K of flash writes, roughly a second.
+
+### `write_slot(mem, slot, path)`
+
+`tpi:blkrcv` on the v3 card, called by `SLOT_WRITE`. It writes the image at
+`path` (`MOUNT_FILE`'s `/TMP/temp.bin`) into slot `slot` of `mem`, 32K at a
+time through `_buf`:
+- up to 32K fills one slot, zero-padded (from `_zeros`, without another
+  buffer);
+- up to 64K (a `.DCK` after `DCK_IMAGE`) fills an even slot and the next;
+- an empty image, one over 64K, or a 64K one for an odd slot or slot 15:
+  `ValueError`, nothing written.
+
+If the slots written are in the dock now (`_served`), it reloads them live:
+`tsbus.dock(False)`, `load_dock`, `tsbus.dock(True)`. A booted slot is left
+running: the 2068 runs from the SRAM copy, and the new ROM takes effect at
+the next boot or `tpi:boot`. Returns what was written for the message
+("Flash slot 5", "SRAM slots 12-13"). Writing a slot took 0.22 s on proto1.
 
 ### `start_memory(rom_sm, bank_sm)`
 
