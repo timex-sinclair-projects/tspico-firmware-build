@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1387–2168,
 2501–2533, 3703–3708, 3864–3923, 4168–4255, 4402–4409, 5098–5141,
-5214–5228, 5310–5375 and 5530–5546 (firmware 2.3).
+5218–5232, 5314–5379 and 5534–5550 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -57,10 +57,10 @@ document it is linked, not restated: the pitfalls are in
 | `getBoot()` | 5098–5106 | (memory, slot) the 2068 boots from |
 | `getDock()` | 5109–5117 | (memory, slot) in the DOCK |
 | `BOOT_SLOT_CLASH(mem, page, f_name)` | 5120–5140 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5214–5228 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5310–5330 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5333–5375 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 5530–5546 | nothing mounted: clear the fields, delete the flash copies |
+| `REMOVE_DIR(d)` | 5218–5232 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5314–5334 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5337–5379 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 5534–5550 | nothing mounted: clear the fields, delete the flash copies |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -425,7 +425,7 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 `NEW_TAP`, [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file and the mount of
 a newly saved file when nothing was mounted ([part 3](tspico-dispatch.md),
-lines 6770 and 6787, inside a `try` because the card may have gone).
+lines 6774 and 6791, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -603,7 +603,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3021); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3021 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7243), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7247), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 

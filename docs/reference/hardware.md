@@ -242,7 +242,7 @@ Two words configure the mapping, both fields of `TSP`
 They are put three times: in `TS2068_IO` at boot, right after the two
 state machines are built; in `MEMBOOT` (`tpi:boot`), after writing the
 new boot setting to `config.ini` and sleeping 0.1 s; and in `MEMDOCK`
-(`tpi:dock`), once `BOOT_SLOT_CLASH` has passed and the reply has been
+(`tpi:dock`), once `BOOT_SLOT_CLASH` has passed and before the reply is
 sent (a refused slot is never put). The upgrade
 firmware puts the defaults, 10 and 1. The state machines keep the last
 word in their X register and apply it to every access until the next
