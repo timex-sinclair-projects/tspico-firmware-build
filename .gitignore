@@ -47,6 +47,8 @@ tools/zmakebas/*.o
 /src/assets/nofile.tap
 /src/assets/romupdate.tap
 /src/assets/dckupdate.tap
+/src/assets/romupd3.tap
+/src/assets/dckupd3.tap
 /SD card/readme.tap
 /SD card/TAP/test/picotest1.tap
 /SD card/TAP/test/picotest2.tap

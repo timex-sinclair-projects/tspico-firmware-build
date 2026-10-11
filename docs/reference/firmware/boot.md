@@ -484,7 +484,11 @@ chip programmer. In the field a slot is rewritten from the 2068 itself:
 mount a `.ROM` or `.DCK` and `LOAD ""` runs `romupdate.tap` or
 `dckupdate.tap`, which pick a slot with `tpi:dock` and stream the image
 with `tpi:blkrcv` ([tspico-commands.md](tspico-commands.md#blkrcvpre-cmd)).
-Never the slot the 2068 booted from: the firmware refuses it.
+Never the slot the 2068 booted from: the firmware refuses it. On the v3
+card the slots are files, and `romupd3.tap` and `dckupd3.tap` ask the same
+questions and end in `tpi:blkrcv CODE m,s`, which writes the file
+(`SLOT_WRITE`). Writing the booted slot is safe there, and slot 0 (the
+Spectrum ROM) asks again first.
 
 ## `tools/pico-serial.py`
 
@@ -520,7 +524,8 @@ power cycle before the driver learned to recover it
 | `/config.ini` | the settings | the same; rewritten by `LOAD_CONFIG` and `MEMBOOT` | `_telemetry`, `LOAD_CONFIG`, the web updater |
 | `/words.txt` | a word list | the same | the example external command `tpi:.rndw` |
 | `/assets/nofile.tap` | the tape `LOAD ""` serves with nothing mounted | `build-basic.sh` → the same | `TS2068_IO` opens it at boot ([tspico_io.md](tspico_io.md#open_nofile_tap)) |
-| `/assets/romupdate.tap`, `/assets/dckupdate.tap` | the slot updaters | `build-basic.sh` → the same | `MOUNT_FILE` for a `.ROM`/`.BIN`/`.DCK` |
+| `/assets/romupdate.tap`, `/assets/dckupdate.tap` | the slot updaters | `build-basic.sh` → the same |
+| `/assets/romupd3.tap`, `/assets/dckupd3.tap` | the v3 card's slot updaters (`basic/assets/romupd3.bas`, `dckupd3.bas`) | `build-basic.sh` → the same | `MOUNT_FILE` for a `.ROM`/`.BIN`/`.DCK` |
 | `/activity.log` | the log | `SAVE_LOG`; `main.py` on a fatal error | `tpi:log`; trimmed to 64 KB at boot |
 | `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6218–6219) | `TS2068_IO` | below |
 | `/TMP/temp.tap` | the mounted TAP, copied from the card (or the updater tape) | `MOUNT_FILE` | `LOAD_TS`, `FWD`/`REW` via the table; removed by `FORGET_MOUNT` |

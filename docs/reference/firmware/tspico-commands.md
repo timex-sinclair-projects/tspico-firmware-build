@@ -1,11 +1,11 @@
 # TS/tspico.py (part 6) — the `tpi:` commands
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
-2528–2605 (`DIR`), 3444–3853 (`IDIR` … `SA_NOT_IMP`), 3918–4158
-(`APPEND`, `BLKRCV`), 4250–4787 (`CDIR` … `GETLOG`), 4875–5189
-(`LOGLEVEL` … `MEMDOCK`), 5209–5285 (`REW`), 5425–5652 (`BAD_CODE` …
-`NOP`) and 5764–5840 (the printer settings); the dispatch table
-`SA_funct` at 6256–6306, inside `TS2068_IO`.
+2535–2612 (`DIR`), 3451–3860 (`IDIR` … `SA_NOT_IMP`), 3925–4166
+(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4883–5211
+(`LOGLEVEL` … `MEMDOCK`), 5231–5307 (`REW`), 5447–5674 (`BAD_CODE` …
+`NOP`) and 5786–5862 (the printer settings); the dispatch table
+`SA_funct` at 6278–6328, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -27,37 +27,37 @@ where the manual and the code differ, the entries below say so.
 
 | Symbol | Line | Command(s) |
 |---|---|---|
-| `DIR(pre, cmd)` | 2528 | `tpi:dir` |
-| `IDIR(pre, cmd)` | 3444 | `tpi:idir` |
-| `PATH(pre, cmd)` | 3671 | `tpi:path` |
-| `TAPDIR(pre, cmd)` | 3703 | `tpi:tapdir` |
-| `NEW_TAP(pre, cmd)` | 3787 | `tpi:newtap` |
-| `SA_NOT_IMP(pre, cmd)` | 3850 | the seven reserved words |
-| `APPEND(pre, cmd)` | 3918 | `tpi:append` |
-| `BLKRCV(pre, cmd)` | 3983 | `tpi:blkrcv` |
-| `CDIR(pre, cmd)` | 4250 | `tpi:cd` |
-| `FWD(pre, cmd)` | 4309 | `tpi:ffw` |
-| `GETHELP(pre, cmd)` | 4404 | `tpi:help` |
-| `GETINFO(pre, cmd)` | 4571 | `tpi:info` |
-| `GETLOG(pre, cmd)` | 4660 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 4875 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 4934 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5018 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5121 | `tpi:dock`, `tpi:memdock` |
-| `REW(pre, cmd)` | 5209 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5425 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5430 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5435 | `tpi:rm` |
-| `RM_CHECK(name)` | 5481 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5499 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5527 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5581 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5635 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5764 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5785 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5796 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5809 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5827 | `tpi:bmp` |
+| `DIR(pre, cmd)` | 2535 | `tpi:dir` |
+| `IDIR(pre, cmd)` | 3451 | `tpi:idir` |
+| `PATH(pre, cmd)` | 3678 | `tpi:path` |
+| `TAPDIR(pre, cmd)` | 3710 | `tpi:tapdir` |
+| `NEW_TAP(pre, cmd)` | 3794 | `tpi:newtap` |
+| `SA_NOT_IMP(pre, cmd)` | 3857 | the seven reserved words |
+| `APPEND(pre, cmd)` | 3925 | `tpi:append` |
+| `BLKRCV(pre, cmd)` | 3990 | `tpi:blkrcv` |
+| `CDIR(pre, cmd)` | 4258 | `tpi:cd` |
+| `FWD(pre, cmd)` | 4317 | `tpi:ffw` |
+| `GETHELP(pre, cmd)` | 4412 | `tpi:help` |
+| `GETINFO(pre, cmd)` | 4579 | `tpi:info` |
+| `GETLOG(pre, cmd)` | 4668 | `tpi:log` |
+| `LOGLEVEL(pre, cmd)` | 4883 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 4942 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 5040 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5143 | `tpi:dock`, `tpi:memdock` |
+| `REW(pre, cmd)` | 5231 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5447 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5452 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5457 | `tpi:rm` |
+| `RM_CHECK(name)` | 5503 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5521 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5549 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5603 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5657 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 5786 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 5807 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 5818 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 5831 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 5849 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -80,7 +80,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6253–6254) says (until #181 it
+   trailing space, as the comment above it (6275–6276) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -133,7 +133,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6256) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6278) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -357,9 +357,6 @@ to `/TMP/temp.bin` and mounts the updater tape instead
 ([tspico-files.md](tspico-files.md#mount_filef_name-remountingfalse);
 user manual §8.4).
 
-0. **Not on the v3 card yet.** `NO_SLOTS()` first: the v3 card can't write
-   a slot until phase 5 step 4, so the command refuses before anything is
-   read.
 1. **An image must be mounted.** Unless `TSP.f_name` ends in `.DCK`,
    `.BIN` or `.ROM` (nothing mounted, a TAP, any other file), answer "No
    ROM image mounted" / "Mount a .ROM, .BIN or .DCK", shown, Report F, and
@@ -367,6 +364,8 @@ user manual §8.4).
    ROM would read the tail's pre-load `01h` as "0 OK" and the updater
    would go on to erase the slot; the refusal stops it at line 280, before
    the erase (#162, #163; [`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)).
+   On the v3 card (`board.SLOTS` false) the rest is `SLOT_WRITE(pre)`: the
+   Pico writes the slot, and none of the steps below apply.
 2. **The boot-slot guard.** `getDock()` is the slot the updater will
    write (the DOCK slot it chose with `tpi:dock`); if
    `BOOT_SLOT_CLASH(mem, page, TSP.f_name)` says it is the slot the 2068
@@ -423,7 +422,7 @@ Z80's loop is running and will read to the end; from there the fast
 `put()` is kept, because `CMD_PUT`'s check on every byte would eat into
 the 33 µs. A 2068 reset in the middle of the write loop still leaves the
 Pico in `put()` on the non-DMA paths — and a half-written slot, which
-needs a power cycle anyway (the comment at 4020–4045).
+needs a power cycle anyway (the comment at 4028–4053).
 
 Beware:
 
@@ -528,7 +527,7 @@ says), `expandKeywords` off.
   then every `SAVE` command with its `CODE` options, 32-column lines,
   three pages with their own headings — and, if external commands are
   loaded, a list of their words. Status 1. The summary is a literal in
-  the code (4487–4540); it must be kept in step with this table by hand.
+  the code (4495–4548); it must be kept in step with this table by hand.
 - **`?`**: the topics: every `*.txt` in `/sd/help` (sorted, without the
   extension, names starting with `.` skipped), packed into 32-column
   lines.
@@ -546,7 +545,7 @@ in a `try`) and gives it back before answering; the card gate has already
 probed for a card, since a topic needs one (`SD_NEEDED`'s special case).
 An error in `os.ilistdir` or `ACTIVATE_SD` reaches `FAIL_CMD`, Report J.
 The help files are written for the 2068's screen: short lines, CR, LF or
-CR LF line ends (the comment at 4409–4411). Error statuses are logged.
+CR LF line ends (the comment at 4417–4419). Error statuses are logged.
 
 ### `GETINFO(pre, cmd)`
 
@@ -627,7 +626,7 @@ middle of a UTF-8 sequence) "Couldn't read the log file", Report Q,
 logged. The buffer is dropped before `SEND_MSG2` builds its pages. LED on,
 off in a `finally`.
 
-Why the `try` covers only the read (the comment at 4741–4759; 2026-09-30
+Why the `try` covers only the read (the comment at 4749–4767; 2026-09-30
 audit): it was a bare `except:` around the read **and** `SEND_MSG2`. A
 BREAK at the "Scroll?" prompt raises `CmdAbort`, a `BaseException`, which
 a bare `except:` catches: `GETLOG` ate the BREAK and then sent "Log file
@@ -685,17 +684,38 @@ was `cmd[10:]`, so a second space after `tpi:md` became part of the name.
 The manual's reports for `tpi:md` (8, F, A) match the code
 ([`commands_hosttest.py`](../../../src/test/commands_hosttest.py)).
 
-### `NO_SLOTS()`
+### `SLOT_WRITE(pre)`
 
-The v3 card's refusal for `tpi:blkrcv`, until phase 5 step 4 gives the card
-a way to write a slot ([docs/v3-slots-proposal.md](../../v3-slots-proposal.md)).
-`board.SLOTS` true (v2): returns `False` and does nothing. Otherwise
-`SEND_MSG("Not on the v3 card yet", "Slots come in a later update",
-_3_F_Invalid_file, True)` — shown, Report F, the usual tail — and returns
-`True`. `BLKRCV` calls it straight after its enter trace and returns when it
-says `True`, so nothing changes. `MEMBOOT` and `MEMDOCK` called it too until
-step 2, when the v3 card got slot switching. `board_v3_hosttest.py` checks
-the refusal.
+`tpi:blkrcv` on the v3 card (phase 5 step 4,
+[docs/v3-slots-proposal.md](../../v3-slots-proposal.md)): the Pico writes
+the mounted image into the slot itself. `BLKRCV` hands over to it once an
+image is known to be mounted and `board.SLOTS` is false. The v2 flow, where
+the Z80 erases and programs the flash while the Pico streams, doesn't exist
+there. `MOUNT_FILE` serves `romupd3.tap` or `dckupd3.tap` on v3, which ask
+romupdate's questions and end in `SAVE "tpi:blkrcv" CODE m,s`.
+
+1. `mem, slot = PARAMS(pre)`. `mem` not 1 or 2, `slot` above 15, or, for a
+   `.DCK`, an odd slot or one above 14: "Wrong values, MEM=…, PAGE=…" / "MEM
+   1..2, PAGE 0..15 (even for a .DCK)", shown, Report A, logged. Nothing
+   written.
+2. `board.write_slot(mem, slot, "/TMP/temp.bin")` ([board.md](board.md#board_v3py)).
+   This pads a short image to 32K, puts a 64K one (a `.DCK` after
+   `DCK_IMAGE`) into the even slot and the next, and reloads the dock if
+   those slots are in it. An `OSError` (a full flash) or `ValueError` (an
+   image that doesn't fit): "Writing the slot failed" and the reason, shown,
+   Report F, logged at level 2.
+3. "Wrote Flash slot N" (or "slots N-M", or SRAM), `SEND_MSG`, 0 OK, logged
+   at level 1. The updater prints its own "OK".
+
+Nothing reaches the Z80 but the message, so v2's stream gate and DMA have no
+counterpart here. A booted slot is written like any other: the 2068 runs
+from the card's SRAM copy, and the new ROM takes effect at the next boot or
+`tpi:boot`. `romupd3` says so before it asks for confirmation, and asks
+again before writing flash slot 0, the Spectrum ROM. Checked on proto1
+(2026-10-10): a 32K `.ROM` written to flash slot 5 matched byte for byte
+and booted with `tpi:boot`, and Pro/File's 16K `.DCK` wrote its chunks 4–5
+into flash slots 6–7 and ran from the dock. `NO_SLOTS`, which refused here
+until then, is gone.
 
 ### `MEMBOOT(pre, cmd)`
 
