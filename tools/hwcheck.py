@@ -349,10 +349,13 @@ def manual(board):
     except (OSError, IndexError):
         result("ZX48: zxs.tap byte for byte", False, "not fetched")
 
-    if board == "v3":
-        say('A restart. On the 2068: SAVE "tpi:boot"\n  The 2068 should reset into the TS-Pico ROM (boot slot 1).')
-        pause("When it's back,")
-        result('SAVE "tpi:boot" restarts the 2068', ask("Did it restart to the copyright screen?"))
+    say('The boot setting. On the 2068: SAVE "tpi:boot"\n  It should show "BOOT is MEM=2, PAGE=1" (flash slot 1) and 0 OK.')
+    tr = Trace()
+    try:
+        pause("When it has shown it,")
+        result('SAVE "tpi:boot" shows the boot setting', any("BOOT is MEM=2, PAGE=1" in l for l in tr.since(0)))
+    finally:
+        tr.stop()
 
     say('A ROM switch. On the 2068: SAVE "tpi:boot" CODE 2,2' + ("" if board == "v3" else ": NEW") +
         "\n  It should start ZX Diagnostics (flash slot 2).")
