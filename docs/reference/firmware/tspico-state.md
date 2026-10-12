@@ -368,7 +368,7 @@ list it as a variable.
 
 ### `FW_VERSION`, `ROM_VERSION`
 
-`"2.3"` and `"2.3"`: the release number of this firmware and the ROM it
+`"2.3.1"` and `"2.3"`: the release number of this firmware and the ROM it
 ships with (and needs). The firmware and its ROM share one `major.minor`,
 and a third part marks a firmware-only release on the same ROM (the
 comment). `PICO_STATUS.__init__` copies `FW_VERSION` into `TSP` unconditionally

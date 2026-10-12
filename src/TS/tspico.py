@@ -544,7 +544,7 @@ except ImportError:
 # tools/build-rom.py (PEEK 101 = 23h), which this firmware needs. tpi:info
 # reports FW_VERSION, and the ROM's own version when it sends one (rom_id);
 # ROM_VERSION is what config.ini and the updaters say the release ROM is.
-FW_VERSION = "2.3"
+FW_VERSION = "2.3.1"
 ROM_VERSION = "2.3"
 # Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
 # when loaded via the dev override __name__ == "dev_tspico". This file is
