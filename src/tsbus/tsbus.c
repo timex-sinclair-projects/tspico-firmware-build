@@ -45,6 +45,8 @@
  *   tsbus.modem_pace(baud)         received characters no faster than baud (0: none)
  *   tsbus.esp_relay(first, idle)   USB <-> the ESP32-C3's UART, byte for byte, to flash
  *                                  Zimodem with the ESP32 ROM's loader (the modem off)
+ *   tsbus.kempston(byte)           answer 1Fh, the Kempston joystick, with byte; None:
+ *                                  leave 1Fh unanswered (core 0 keeps it current)
  *
  * Nothing on core 1 may touch flash: LittleFS writes stop execute-in-place,
  * and core 1 is never paused for them (it is not a multicore lockout victim).
@@ -184,6 +186,11 @@ static int ch_mrx = -1, ch_mtx = -1;
 static uint32_t mrx_off;            // where ch_mrx had got to in line_rx, last pass
 static uint32_t mtx_inflight;       // bytes ch_mtx is sending
 static volatile uint32_t modem_ins; // INs from 73h/77h answered
+// The Kempston joystick at 1Fh (phase 6): core 0 reads the joystick from the
+// expander (I2C, behind APB) when its /INT says something changed, and sets
+// the byte here (tsbus.kempston); core 1 only reads it. -1: 1Fh unanswered.
+static volatile int16_t kempston = -1;
+static volatile uint32_t kemp_ins;  // INs from 1Fh answered
 // Powering the ESP32 is core 0's (the expander is I2C, behind APB): core 1
 // only says what it saw. modem_wake: an OUT to the 8251 (a program started
 // using it); modem_touched: any IN or OUT (it still is). Both are cleared by
@@ -495,6 +502,9 @@ static void __not_in_flash_func(handle_in)(void) {
         reply = (port & 4) ? u8251_status(&usart) : u8251_data_in(&usart);
         modem_ins++;
         modem_touched = true;
+    } else if (port == 0x1f && kempston >= 0) {       // the Kempston joystick: 000FUDLR
+        reply = (uint8_t)kempston;
+        kemp_ins++;
     } else {
         answer = false;
     }
@@ -1190,6 +1200,24 @@ static mp_obj_t tsbus_modem_pace(mp_obj_t baud_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_pace_obj, tsbus_modem_pace);
 
+// tsbus.kempston(byte): from now on an IN from 1Fh (the low address byte;
+// the high byte is ignored, as a Kempston interface ignores it) reads byte.
+// None: 1Fh is left unanswered, as on a 2068 without the interface. One
+// halfword store, so core 1 never sees half a change.
+static mp_obj_t tsbus_kempston(mp_obj_t byte_in) {
+    if (byte_in == mp_const_none) {
+        kempston = -1;
+    } else {
+        mp_int_t b = mp_obj_get_int(byte_in);
+        if (b < 0 || b > 255) {
+            mp_raise_ValueError(MP_ERROR_TEXT("byte"));
+        }
+        kempston = (int16_t)b;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_kempston_obj, tsbus_kempston);
+
 // tsbus.esp_relay(first_ms, idle_ms): the USB serial port and the ESP32-C3's
 // UART0 joined byte for byte, so a host can talk to the ESP32 ROM's serial
 // loader through the card (to install Zimodem; board_v3.esp_boot(True) has
@@ -1285,6 +1313,10 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_m_carrier_lost, modem.carrier_lost);
     store(d, MP_QSTR_m_line_up, modem_line_up);
     store(d, MP_QSTR_m_pace_us, usart.pace / (BUS_CLOCK_HZ / 1000000));
+    // The joystick (1Fh).
+    store(d, MP_QSTR_k_byte, kempston < 0 ? 0 : kempston);
+    store(d, MP_QSTR_k_on, kempston >= 0);
+    store(d, MP_QSTR_k_ins, kemp_ins);
     return d;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_stats_obj, tsbus_stats);
@@ -1540,6 +1572,7 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_modem_poll), MP_ROM_PTR(&tsbus_modem_poll_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_pace), MP_ROM_PTR(&tsbus_modem_pace_obj) },
     { MP_ROM_QSTR(MP_QSTR_esp_relay), MP_ROM_PTR(&tsbus_esp_relay_obj) },
+    { MP_ROM_QSTR(MP_QSTR_kempston), MP_ROM_PTR(&tsbus_kempston_obj) },
     { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },
     { MP_ROM_QSTR(MP_QSTR_HOME), MP_ROM_INT(SLOT_HOME) },
     { MP_ROM_QSTR(MP_QSTR_EXROM), MP_ROM_INT(SLOT_EXROM) },

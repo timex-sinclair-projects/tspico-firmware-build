@@ -20,6 +20,7 @@ PIO_MQ = True       # MQ is a PIO state machine: tspico_io may use its registers
 SLOTS = True        # the 16 flash/SRAM slots: tpi:boot, tpi:dock, tpi:blkrcv
 SD_SLOTS = False    # no MEM 3: slots come from the flash and SRAM chips only
 HAS_MODEM = False   # no TS2050 modem: 73h/77h are not answered
+HAS_JOYSTICK = False  # no joystick socket: 1Fh is not answered
 HAS_CORE1 = True    # core 1 is free for background(): BLINK_LED, SAVE_LOG
 
 # Holds SM0 while the SD card has GPIO 2-4 (sd_take_bus).
