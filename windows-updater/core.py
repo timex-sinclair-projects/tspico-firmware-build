@@ -15,6 +15,9 @@ REPL, an ordinary file copy onto the RPI-RP2 drive for each UF2.
    5. Firmware  copy firmware.uf2.
    6. Files     serial again: main.py, config.ini, words.txt, assets/,
                 verify, machine.reset().
+   7. Modem     the v3 card only: Zimodem on its ESP32-C3, checked over the
+                raw REPL and, if missing or older, written through the
+                card's relay (tsbus.esp_relay) with espflash.py.
 
 The v3 card (RP2350B) skips 3 and 4: its ROMs are slot files on the same
 flash as the firmware, so a wipe would erase the user's slots, and the ROM
@@ -40,6 +43,8 @@ import sys
 import time
 import urllib.request
 
+import espflash
+
 SITE = "https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/"
 CHANNELS = ("release", "main")
 PICO_VID = 0x2E8A
@@ -50,7 +55,7 @@ ROM_FAIL = {
     3: 'The data kept arriving wrong. Type LOAD "" on the 2068 to try again.',
     4: 'A flash write didn\'t take. Type LOAD "" on the 2068 to try again.',
 }
-STAGES = ("connect", "bootsel", "wipe", "rom", "firmware", "files")
+STAGES = ("connect", "bootsel", "wipe", "rom", "firmware", "files", "modem")
 UF2_FAMILY = {"RP2040": 0xE48BFF56, "RP2350": 0xE48BFF59}   # RP2350: Arm, secure
 UF2_FLAG_FAMILY = 0x00002000
 # Python that removes /TS if it's there: a /TS left on the flash shadows the
@@ -70,6 +75,49 @@ def _rm(p):
   os.remove(p)
  return 1
 print(_rm('/TS'))"""
+# The raw REPL's first code. The firmware may have left the current directory
+# on the SD card, and `import os` looks in it first (os, like time, is
+# extensible): a card that was busy when the firmware was stopped fails the
+# import (EIO, ETIMEDOUT). Import os with '' off the path, then start from the
+# flash's root. The web updater's vendor/rawmode.js does the same.
+RAW_START = """import sys
+c = '' in sys.path
+if c: sys.path.remove('')
+import os
+if c: sys.path.insert(0, '')
+os.chdir('/')
+del c"""
+# Python for the v3 card: the modem off, the ESP32 restarted into Zimodem, and
+# the version ATI reports ("4.0.3"), or "-" if nothing answers like Zimodem.
+ESP_PROBE = """import tsbus, time
+from machine import UART, Pin
+from TS import board
+tsbus.modem(False)
+u = UART(0, 115200, tx=Pin(44), rx=Pin(45), timeout=50, rxbuf=2048)
+board.esp_boot(False)
+time.sleep_ms(3000)
+u.read()
+u.write(b'\\rATI\\r')
+time.sleep_ms(800)
+b = u.read() or b''
+u.deinit()
+i = b.find(b'Firmware v')
+print(b[i + 10:b.find(b'\\r', i)].decode() if i >= 0 else '-')"""
+# Python for the v3 card: the ESP32 into its ROM loader and USB joined to its
+# UART until the host has been quiet for 4 s (tsbus.esp_relay). Ctrl-C off
+# meanwhile: 03h is just data.
+ESP_RELAY = """import tsbus, time, micropython
+from TS import board
+tsbus.modem(False)
+board.esp_boot(True)
+time.sleep_ms(300)
+micropython.kbd_intr(-1)
+try:
+    r = tsbus.esp_relay(60000, 4000)
+finally:
+    micropython.kbd_intr(3)
+    board.esp_boot(False)
+print('RELAY', r)"""
 
 
 class Stop(Exception):
@@ -236,6 +284,29 @@ class Port:
         self.buf = b""
 
 
+class _LoaderIO:
+    """The card's port as espflash.py's io: the relay passes bytes both ways."""
+
+    def __init__(self, port):
+        self.port = port
+
+    def write(self, data):
+        # Whole frames at once: Port.write's pauses are for the raw REPL's
+        # small buffer, and would add half a minute over a Zimodem write.
+        self.port.write(data, chunk=len(data) or 1)
+
+    def read(self, timeout):
+        p = self.port
+        if p.buf:
+            data, p.buf = p.buf, b""
+            return data
+        end = time.monotonic() + timeout
+        while True:
+            data = p.read_some()
+            if data or time.monotonic() >= end:
+                return data
+
+
 class RawRepl:
     """MicroPython's raw REPL (Ctrl-A): send code + Ctrl-D, get OK, stdout,
     Ctrl-D, stderr, Ctrl-D, '>'."""
@@ -277,6 +348,18 @@ class RawRepl:
         """Code that resets the board: no reply will come."""
         try:
             self.port.write(code.encode() + b"\x04")
+            time.sleep(0.4)
+        except Gone:
+            pass
+
+    def restart_firmware(self):
+        """Out of the raw REPL (Ctrl-B), then a soft reset (Ctrl-D) from the
+        friendly one, which runs main.py: a soft reset inside the raw REPL
+        comes back to the raw REPL, and the firmware never starts."""
+        try:
+            self.port.write(b"\x02")
+            time.sleep(0.2)
+            self.port.write(b"\x04")
             time.sleep(0.4)
         except Gone:
             pass
@@ -467,7 +550,7 @@ class Updater:
         if not self.raw:
             raw = RawRepl(self.port)
             raw.enter()
-            raw.exec("import sys,os")
+            raw.exec(RAW_START)
             self.raw = raw
         return self.raw
 
@@ -785,6 +868,62 @@ class Updater:
                 "ok")
         return bad
 
+    # --- the modem ---------------------------------------------------------
+    def zimodem(self):
+        """The channel's Zimodem for the v3 card ({file, size, version}), or None."""
+        return (self.manifest.get("v3") or {}).get("zimodem") if self.manifest else None
+
+    def esp_version(self):
+        return self.enter_raw().exec(ESP_PROBE, 15).strip()
+
+    def install_modem(self):
+        """Zimodem on the v3 card's ESP32-C3: checked, and written when it is
+        missing or older than the channel's. The card runs the relay; this end
+        talks to the ESP32's ROM loader through it (espflash.py). Only the
+        image's own area is written, so Zimodem's WiFi and phonebook stay."""
+        ui, z = self.ui, self.zimodem()
+        ui.stage("modem", "active", "")
+        self.wait_port("modem", 45)
+        ui.stage_msg("modem", "Checking the modem module…")
+        have = self.esp_version()
+        ui.log("The modem module has no Zimodem." if have == "-" else
+               "The modem module has Zimodem %s." % have)
+        if have != "-" and z.get("version") and ver_cmp(have, z["version"]) >= 0:
+            self.raw.restart_firmware()
+            self.close_port()
+            ui.stage("modem", "done", "Zimodem %s is already installed." % have)
+            return
+        ui.stage_msg("modem", "Downloading Zimodem %s…" % z.get("version", ""))
+        image = self.channel.fetch(z["file"])
+
+        # The relay runs until this end has been quiet for 4 s; meanwhile the
+        # port carries the loader's SLIP frames, byte for byte.
+        ui.stage_msg("modem", "Starting the modem module’s loader…")
+        p = self.port
+        p.write(ESP_RELAY.encode() + b"\x04")
+        p.read_until(b"OK", 5)
+        esp = espflash.EspRomLoader(_LoaderIO(p))
+        esp.sync()
+        esp.attach()
+        ui.stage_msg("modem", "Writing Zimodem %s (%d KB)…" % (z.get("version", ""), len(image) // 1024))
+        _, blocks, md5 = esp.flash(image, 0, lambda f: ui.progress("modem", f))
+        ui.log("  ✓ zimodem: %d bytes, %d blocks, MD5 %s verified" % (len(image), blocks, md5), "ok")
+
+        # The relay ends 4 s after the last byte, and the raw REPL carries on.
+        ui.stage_msg("modem", "Checking it starts…")
+        p.buf = b""
+        p.read_until(b"\x04", 15)                    # the relay's output: "RELAY n"
+        err = p.read_until(b"\x04", 5)[:-1]
+        p.read_until(b">", 5)
+        if err.strip():
+            raise RuntimeError(err.decode(errors="replace").strip())
+        now = self.esp_version()
+        if now == "-":
+            raise RuntimeError("Zimodem was written but doesn’t answer")
+        self.raw.restart_firmware()
+        self.close_port()
+        ui.stage("modem", "done", "Zimodem %s installed and checked." % now)
+
     # --- the whole run -----------------------------------------------------
     def downgrade_text(self, wipe):
         """A warning before installing an older MicroPython than the Pico runs,
@@ -807,7 +946,7 @@ class Updater:
                     self.installed["mp"], self.manifest["fw_version"], target,
                     "" if wipe else "\n\n“Keep what’s on the Pico” can’t be honoured for this install."))
 
-    def run(self, wipe, rom):
+    def run(self, wipe, rom, modem=True):
         current = "bootsel"
         try:
             self.enter_bootsel()
@@ -826,6 +965,13 @@ class Updater:
             self.firmware()
             current = "files"
             self.files()
+            z = self.zimodem() if self.v3 else None
+            if self.v3 and z and modem:
+                current = "modem"
+                self.install_modem()
+            else:
+                self.ui.stage("modem", "skipped", "Only on the v3 card." if not self.v3 else
+                              "This channel has no modem firmware." if not z else "Not this time.")
             self.ui.log("All done.", "ok")
             return True
         except Stop:

@@ -26,6 +26,7 @@ TITLES = {
     "rom": "Update the TS-2068 ROM",
     "firmware": "Install the firmware",
     "files": "Copy the files",
+    "modem": "Modem firmware",
 }
 MARKS = {"pending": "○", "active": "●", "done": "✓", "skipped": "–", "error": "✗"}
 COLOURS = {"pending": "#888", "active": "#1565c0", "done": "#2e7d32", "skipped": "#aaa", "error": "#c62828"}
@@ -129,6 +130,11 @@ class App:
         self.cb_rom = ttk.Checkbutton(opts, text="Update the TS-2068 ROM", variable=self.opt_rom,
                                       command=self.refresh)
         self.cb_rom.pack(side="left", padx=(12, 0))
+        # The v3 card's modem: shown once a v3 card is known and the channel
+        # has Zimodem for it (refresh).
+        self.opt_modem = tk.BooleanVar(value=True)
+        self.cb_modem = ttk.Checkbutton(opts, text="Modem firmware", variable=self.opt_modem,
+                                        command=self.refresh)
         self.btn_start = ttk.Button(opts, text="Start", command=self.start)
         self.btn_start.pack(side="right")
 
@@ -240,6 +246,7 @@ class App:
             return
         wipe = self.opt_wipe.get() and not self.up.v3
         rom = self.opt_rom.get() and not self.up.v3
+        modem = self.opt_modem.get()
         if wipe and not messagebox.askokcancel(
                 "TS-Pico Updater",
                 "This erases everything on the Pico — firmware and files — and installs firmware %s. "
@@ -254,7 +261,7 @@ class App:
                 if not self.ui.confirm(text):
                     return
             self.q.put(("running",))
-            if self.up.run(wipe, rom):
+            if self.up.run(wipe, rom, modem):
                 self.q.put(("alldone", m["fw_version"]))
         self.work(body)
 
@@ -361,6 +368,12 @@ class App:
             problem = ("This channel has no ROM updater (upgrade.uf2). Pick “Latest main build”, "
                        "or untick the ROM update.")
         idle = not self.busy
+        zim = v3 and bool(self.up.zimodem())
+        if zim and not self.cb_modem.winfo_manager():
+            self.cb_modem.pack(side="left", padx=(12, 0), after=self.cb_rom)
+        elif not zim:
+            self.cb_modem.pack_forget()
+        self.cb_modem.state(["!disabled"] if idle else ["disabled"])
         self.btn_start.state(["!disabled"] if idle and not problem else ["disabled"])
         self.btn_connect.state(["!disabled"] if idle and not self.up.port else ["disabled"])
         self.btn_connect.configure(text="Connected" if self.up.port else "Connect to TS-Pico")
@@ -375,8 +388,12 @@ class App:
             text, colour = ("Start will install firmware %s for the v3 card, then copy its files and "
                             "its ROM slots. Slots 0 and 1 (the Spectrum and TS-Pico ROMs) are always "
                             "replaced; your own ROMs and cartridges in the other slots are kept. "
-                            "Nothing is erased. Keep the USB cable connected throughout." %
-                            m["fw_version"]), "#333"
+                            "Nothing is erased.%s Keep the USB cable connected throughout." % (
+                                m["fw_version"],
+                                " Then it checks the Zimodem on the card's WiFi modem module and "
+                                "installs %s if it's missing or older; its WiFi and phonebook "
+                                "settings are kept." % (self.up.zimodem().get("version") or "this release's")
+                                if zim and self.opt_modem.get() else "")), "#333"
         elif inst and inst["from1x"] and not rom:
             text, colour = ("This board is on %s. Its TS-2068 ROM can't talk to firmware %s — tick "
                             "“Update the TS-2068 ROM” or the 2068 won't work afterwards." % (

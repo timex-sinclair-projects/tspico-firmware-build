@@ -60,7 +60,10 @@ cartridges are files on the same flash as the firmware, in `/slots`
   itself with [espflash.js](espflash.js): SYNC, SPI_ATTACH, the image
   deflated into 1 KB blocks, and the loader's MD5 of what it wrote compared
   with the image's. The relay ends 4 s after the page's last byte, the
-  ESP32 restarts into Zimodem, and the page checks `ATI` again. Only the
+  ESP32 restarts into Zimodem, and the page checks `ATI` again, then leaves
+  the raw REPL (Ctrl-B) and soft-resets from the friendly one (Ctrl-D) so
+  `main.py` runs: a soft reset inside the raw REPL comes back to the raw
+  REPL, and the firmware wouldn't start. Only the
   application area is written, so Zimodem's settings (WiFi, phonebook)
   stay. The checkbox *Modem firmware* skips the step;
   [tools/zimodem-install.py](../tools/zimodem-install.py) is the same thing
