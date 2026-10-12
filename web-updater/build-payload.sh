@@ -23,9 +23,12 @@
 #   V3_UF2       the v3 card's firmware (src/boards/TSPICO_V3), if this channel has one
 #   V3_SLOTS     a folder of the v3 card's slot files, F00.bin ... F15.bin
 #                (tools/build-flash.py build --slots)
+#   V3_ZIMODEM   zimodem-v3.bin, Zimodem for the v3 card's modem (esp32/zimodem),
+#                for the page's "Install the modem firmware" step
 #
 # Output (gitignored): OUT_DIR/{manifest.json, pico/, firmware.uf2,
-# firmware-uf2.zip, upgrade.uf2, sdcard.zip, firmware-v3.uf2, slots/}
+# firmware-uf2.zip, upgrade.uf2, sdcard.zip, firmware-v3.uf2, slots/,
+# zimodem-v3.bin}
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -40,6 +43,7 @@ SDCARD_SRC="${SDCARD_DIR:-$(cd "$SRC/.." && pwd)/SD card}"
 SOURCE_URL="${SOURCE_URL:-}"
 V3_UF2="${V3_UF2:-}"
 V3_SLOTS="${V3_SLOTS:-}"
+V3_ZIMODEM="${V3_ZIMODEM:-}"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/pico/assets"
@@ -115,6 +119,12 @@ if [ -n "$V3_UF2" ] && [ -f "$V3_UF2" ]; then
     fi
   done
   V3_FIELD='"firmware-v3.uf2"'
+  if [ -n "$V3_ZIMODEM" ] && [ -f "$V3_ZIMODEM" ]; then
+    cp "$V3_ZIMODEM" "$OUT/zimodem-v3.bin"
+    echo "Included zimodem-v3.bin ($(wc -c < "$OUT/zimodem-v3.bin" | tr -d ' ') bytes)"
+  else
+    echo "No zimodem-v3.bin -- the page will say this channel has no modem firmware"
+  fi
   echo "Included firmware-v3.uf2 and $(find "$OUT/slots" -name '*.bin' | wc -l | tr -d ' ') slot file(s)"
 else
   echo "No v3 firmware -- the page will say this channel has nothing for the v3 card"
@@ -140,9 +150,9 @@ fi
 # manifest.json. File paths are relative to pico/; UF2 and zip paths to the
 # channel directory. Versions come from config.ini, which carries both.
 python3 - "$OUT" "$TAG" "$CHANNEL" "$SOURCE_URL" "$UF2_FIELD" "$UF2_ZIP_FIELD" \
-          "$UPGRADE_FIELD" "$SDCARD_FIELD" "$V3_FIELD" > "$OUT/manifest.json" <<'PY'
-import json, os, sys
-out, tag, channel, source_url, uf2, uf2_zip, upgrade, sdcard, v3 = sys.argv[1:10]
+          "$UPGRADE_FIELD" "$SDCARD_FIELD" "$V3_FIELD" "$SRC" > "$OUT/manifest.json" <<'PY'
+import json, os, re, sys
+out, tag, channel, source_url, uf2, uf2_zip, upgrade, sdcard, v3, src = sys.argv[1:11]
 cfg = json.load(open(os.path.join(out, 'pico', 'config.ini')))
 opt = lambda v: None if v == 'null' else json.loads(v)
 
@@ -176,7 +186,18 @@ if opt(v3):
             slots.append({'file': 'slots/' + n, 'path': 'slots/' + n, 'slot': k,
                           'size': os.path.getsize(os.path.join(out, 'slots', n)),
                           'always': k in (0, 1)})   # ours: rewritten every time; others only if missing
-    v3_info = {'uf2': opt(v3), 'mp_version': mp_version(opt(v3)), 'slots': slots}
+    v3_info = {'uf2': opt(v3), 'mp_version': mp_version(opt(v3)), 'slots': slots, 'zimodem': None}
+    zim = os.path.join(out, 'zimodem-v3.bin')
+    if os.path.exists(zim):
+        # The version pinned in esp32/zimodem/build.sh, which built it; the
+        # page compares it with what ATI reports.
+        version = None
+        try:
+            m = re.search(r'^ZIMODEM_VERSION=(\S+)', open(os.path.join(src, '..', 'esp32', 'zimodem', 'build.sh')).read(), re.M)
+            version = m.group(1) if m else None
+        except OSError:
+            pass
+        v3_info['zimodem'] = {'file': 'zimodem-v3.bin', 'size': os.path.getsize(zim), 'version': version}
 print(json.dumps({
     'channel': channel,
     'tag': tag,
