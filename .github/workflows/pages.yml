@@ -149,6 +149,17 @@ jobs:
             # v3 card have neither: the page says so).
             gh release download "$TAG" --pattern 'firmware-v3.uf2' --dir _rel || true
             gh release download "$TAG" --pattern 'v3-slots.zip'    --dir _rel || true
+            # Zimodem for the v3 card's modem (releases from before it have none).
+            gh release download "$TAG" --pattern 'zimodem-v3.bin'  --dir _rel || true
+          fi
+          # No Zimodem in the release: the newest zimodem.yml build's, if any.
+          if [ ! -f _rel/zimodem-v3.bin ]; then
+            ZR="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/zimodem.yml/runs?branch=main&status=success&per_page=1" \
+                    --jq '.workflow_runs[0].id // empty' 2>/dev/null)" || ZR=
+            if [ -n "$ZR" ]; then
+              gh run download "$ZR" -n tspico-zimodem -D _zimodem || true
+              cp _zimodem/zimodem-v3.bin _rel/ 2>/dev/null || true
+            fi
           fi
           if [ -f _rel/v3-slots.zip ]; then
             mkdir -p _rel/v3-slots && unzip -q -o _rel/v3-slots.zip -d _rel/v3-slots
@@ -163,6 +174,7 @@ jobs:
           UPGRADE_UF2: ${{ github.workspace }}/_rel/upgrade.uf2
           V3_UF2: ${{ github.workspace }}/_rel/firmware-v3.uf2
           V3_SLOTS: ${{ github.workspace }}/_rel/v3-slots
+          V3_ZIMODEM: ${{ github.workspace }}/_rel/zimodem-v3.bin
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.rel.outputs.tag }}
         run: |
           # The Pico files come from the release's own commit when there is
@@ -246,6 +258,7 @@ jobs:
           UPGRADE_UF2: ${{ steps.main.outputs.upg }}
           V3_UF2: ${{ github.workspace }}/_main/v3/firmware.uf2
           V3_SLOTS: ${{ github.workspace }}/_main/v3-slots
+          V3_ZIMODEM: ${{ github.workspace }}/_rel/zimodem-v3.bin
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.main.outputs.run }}
         run: |
           SHA="${{ steps.main.outputs.sha }}"

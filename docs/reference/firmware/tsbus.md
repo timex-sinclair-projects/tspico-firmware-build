@@ -34,7 +34,7 @@ than repeating it.
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
-| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace` |
+| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`; `tsbus.esp_relay`, to install Zimodem |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
 | `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
@@ -490,8 +490,10 @@ scratch:
    Hayes mode, 0 in 2050 mode until a call connects.
 6. `modem_on` set.
 
-`False`: `modem_on` cleared; 73h/77h are left to the 2068 again. Powering
-the ESP32 is `board_v3.modem_power`'s job, not this one's.
+`False`: `modem_on` cleared; 73h/77h are left to the 2068 again; and the two
+channels aborted (if claimed), so the UART is free for `tsbus.esp_relay` or
+`machine.UART`. Powering the ESP32 is `board_v3.modem_power`'s job, not this
+one's.
 
 ### `tsbus.modem_mode(m)`
 
@@ -521,6 +523,33 @@ A received character becomes RxRDY no sooner than one 10-bit character
 time at `baud` after the last (33.3 ms at 300); 0: as soon as the last is
 read. `usart.pace` in core cycles; kept across `tsbus.modem(True)`
 (`pace_set`). A negative baud is `ValueError`.
+
+### `tsbus.esp_relay(first_ms, idle_ms)`
+
+The USB serial port and the ESP32-C3's UART0 joined byte for byte, on core 0,
+so a host can talk to the ESP32 ROM's serial loader through the card and
+install Zimodem (`tools/zimodem-install.py` runs esptool through it; the web
+updater's modem step does the same in the browser). The caller has put the
+ESP32 in download mode (`board_v3.esp_boot(True)`), switched the modem off
+(`RuntimeError` otherwise) and the REPL's Ctrl-C off (`micropython.kbd_intr(-1)`):
+a 03h in the data would interrupt.
+
+- UART0 initialised at 115200 8N1, FIFOs on, its DMA requests off, GPIO
+  44/45 given to it. 115200 is the loader's own speed, and the relay doesn't
+  follow a change: the host must not ask for one (esptool kept at
+  `--baud 115200` never does).
+- A loop: while `mp_hal_stdio_poll` says the host has sent something and the
+  UART has room, `mp_hal_stdin_rx_chr` into `uart_putc_raw`; then up to 64
+  bytes from the UART, out raw with `mp_hal_stdout_tx_strn`;
+  `mp_event_handle_nowait` (USB, the soft timers). MicroPython's stdin ring
+  leaves the USB endpoint undrained while it is full, so a fast host waits
+  rather than losing bytes.
+- Returns `(to_esp, from_esp)` once the host has been quiet for `idle_ms`
+  after its first byte, or sent nothing for `first_ms`.
+
+On proto1 (2026-10-12) esptool 5.5 wrote the 1,170,544-byte Zimodem image
+(677,456 compressed) through it in 60.7 s, the hash verified, and Zimodem
+came up with its WiFi settings and phonebook kept: `(691977, 1682)`.
 
 ### `tsbus.stats()`
 
@@ -609,7 +638,7 @@ at the REPL: F7h, FBh, FFh and 00h, as on v2.
 
 The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type,
 with the functions above, `modem`, `modem_mode`, `modem_line`,
-`modem_poll` and `modem_pace` among them.
+`modem_poll`, `modem_pace` and `esp_relay` among them.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 

@@ -398,11 +398,18 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    `verify`. **The v3 card's slot files**, zipped as `v3-slots.zip`: that
    image cut slot for slot, or without a base image our own slots 0 and 1
    alone (`build` exits 2, "INCOMPLETE", after writing them).
-4. **The user manual PDFs**, as `build.yml`'s `manual-pdf` job makes them,
+4. **Zimodem for the v3 card's modem**, `zimodem-v3.bin`
+   (`esp32/zimodem/build.sh`, PlatformIO 6.1.19: Zimodem 4.0.3 with the
+   card's patches, merged into one image for flash address 0). The step may
+   fail without failing the release, which then has no `zimodem-v3.bin`.
+   The same build runs in `zimodem.yml` when `esp32/zimodem/` changes, or
+   by hand, as the `tspico-zimodem` artifact.
+5. **The user manual PDFs**, as `build.yml`'s `manual-pdf` job makes them,
    from the manual at the tag.
-5. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
+6. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
    reflash), `upgrade.uf2`, `firmware-v3.uf2` and `v3-slots.zip` (the v3
-   card's firmware and slots), `user-manual-half-letter.pdf`,
+   card's firmware and slots), `zimodem-v3.bin` when it was built,
+   `user-manual-half-letter.pdf`,
    `user-manual-saddle-stitch-letter.pdf`, and the flash image when there
    is one. If the
    release already exists, the assets are uploaded to it (`--clobber`) and
@@ -424,7 +431,9 @@ release's payload under `/updater/release/` and the latest green `main`
 build under `/updater/main/`. Each channel carries the v3 card's firmware
 and slot files too: the release's `firmware-v3.uf2` and `v3-slots.zip`, or
 for `main/` the `tspico-v3-firmware-uf2` artifact, the latest release's
-third-party slots, and slots 0 and 1 rebuilt from `main`
+third-party slots, and slots 0 and 1 rebuilt from `main`; and Zimodem, the
+release's `zimodem-v3.bin`, or when it has none the newest `zimodem.yml`
+artifact, for both channels
 (`web-updater/README.md`, "The v3 card") — served from the site itself because
 GitHub's release CDN sends no CORS header, so a browser cannot fetch
 release assets from another origin.

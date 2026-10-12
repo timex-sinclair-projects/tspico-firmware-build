@@ -1,0 +1,49 @@
+name: Zimodem (v3 modem)
+
+# Zimodem for the v3 card's ESP32-C3, the TS2050 modem's line
+# (docs/v3-modem-proposal.md; esp32/zimodem/build.sh). Built when its build
+# changes, or by hand, and uploaded as the tspico-zimodem artifact:
+# zimodem-v3.bin (one image for flash address 0) and its version. Zimodem is
+# pinned and changes rarely, so this isn't part of every push's build.yml.
+# release.yml builds the same file for each release; pages.yml publishes
+# the release's copy to the updater channels (and this workflow's newest
+# artifact to main/ when the latest release has none).
+
+on:
+  push:
+    paths:
+      - 'esp32/zimodem/**'
+      - '.github/workflows/zimodem.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # PlatformIO's ESP32 platform and toolchain are some hundreds of MB.
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('esp32/zimodem/platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio==6.1.19
+
+      - name: Build Zimodem
+        run: esp32/zimodem/build.sh
+
+      - name: Upload Zimodem
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-zimodem
+          path: esp32/zimodem/out/
+          retention-days: 90

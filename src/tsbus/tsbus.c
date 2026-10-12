@@ -43,6 +43,8 @@
  *   tsbus.modem_line(on)           Zimodem is up (core 0 powered it and waited) or not
  *   tsbus.modem_poll()             what core 0's idle loop needs, as bits (no allocation)
  *   tsbus.modem_pace(baud)         received characters no faster than baud (0: none)
+ *   tsbus.esp_relay(first, idle)   USB <-> the ESP32-C3's UART, byte for byte, to flash
+ *                                  Zimodem with the ESP32 ROM's loader (the modem off)
  *
  * Nothing on core 1 may touch flash: LittleFS writes stop execute-in-place,
  * and core 1 is never paused for them (it is not a multicore lockout victim).
@@ -59,6 +61,7 @@
 
 #include "py/runtime.h"
 #include "py/mphal.h"
+#include "py/stream.h"
 
 #include "pico/multicore.h"
 #include "hardware/clocks.h"
@@ -1079,6 +1082,10 @@ static mp_obj_t tsbus_modem(mp_obj_t on_in) {
     modem_on = false;                       // core 1 leaves usart and the channels alone
     mp_hal_delay_ms(1);                     // ... once it is past its current pass
     if (!mp_obj_is_true(on_in)) {
+        if (ch_mrx >= 0) {                  // and the UART is free (tsbus.esp_relay)
+            dma_channel_abort(ch_mrx);
+            dma_channel_abort(ch_mtx);
+        }
         return mp_const_none;
     }
     if (ch_mrx < 0) {
@@ -1182,6 +1189,57 @@ static mp_obj_t tsbus_modem_pace(mp_obj_t baud_in) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_pace_obj, tsbus_modem_pace);
+
+// tsbus.esp_relay(first_ms, idle_ms): the USB serial port and the ESP32-C3's
+// UART0 joined byte for byte, so a host can talk to the ESP32 ROM's serial
+// loader through the card (to install Zimodem; board_v3.esp_boot(True) has
+// put the ESP32 in download mode). 115200 8N1, the loader's own speed: the
+// host must not ask it to change (esptool --baud 115200 doesn't). The modem
+// must be off (tsbus.modem(False) stops its DMA), and the caller must have
+// switched off the REPL's Ctrl-C (micropython.kbd_intr(-1)): a 03h in the
+// data would otherwise interrupt. Returns, as (to_esp, from_esp), once the
+// host has been quiet for idle_ms after its first byte, or sent nothing for
+// first_ms. Runs on core 0; core 1 goes on serving the 2068.
+static mp_obj_t tsbus_esp_relay(mp_obj_t first_in, mp_obj_t idle_in) {
+    require_started();
+    if (modem_on) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("tsbus: modem on"));
+    }
+    mp_uint_t first_ms = mp_obj_get_int(first_in), idle_ms = mp_obj_get_int(idle_in);
+    uart_init(MODEM_UART, MODEM_BAUD);
+    uart_set_fifo_enabled(MODEM_UART, true);
+    hw_clear_bits(&uart_get_hw(MODEM_UART)->dmacr, UART_UARTDMACR_TXDMAE_BITS | UART_UARTDMACR_RXDMAE_BITS);
+    gpio_set_function(PIN_MODEM_TX, GPIO_FUNC_UART);
+    gpio_set_function(PIN_MODEM_RX, GPIO_FUNC_UART);
+    uint32_t to_esp = 0, from_esp = 0;
+    mp_uint_t last = mp_hal_ticks_ms();
+    char buf[64];
+    for (;;) {
+        // The host's bytes, as many as are waiting, into the UART's FIFO.
+        while ((mp_hal_stdio_poll(MP_STREAM_POLL_RD) & MP_STREAM_POLL_RD) && uart_is_writable(MODEM_UART)) {
+            uart_putc_raw(MODEM_UART, (char)mp_hal_stdin_rx_chr());
+            to_esp++;
+            last = mp_hal_ticks_ms();
+        }
+        // The ESP32's, a FIFO's worth at a time, to the host, raw.
+        size_t n = 0;
+        while (n < sizeof buf && uart_is_readable(MODEM_UART)) {
+            buf[n++] = (char)uart_getc(MODEM_UART);
+        }
+        if (n) {
+            mp_hal_stdout_tx_strn(buf, n);
+            from_esp += n;
+        }
+        mp_uint_t quiet = mp_hal_ticks_ms() - last;
+        if (quiet > (to_esp ? idle_ms : first_ms)) {
+            break;
+        }
+        mp_event_handle_nowait();           // USB and the soft timers (the LED)
+    }
+    mp_obj_t r[2] = { mp_obj_new_int_from_uint(to_esp), mp_obj_new_int_from_uint(from_esp) };
+    return mp_obj_new_tuple(2, r);
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(tsbus_esp_relay_obj, tsbus_esp_relay);
 
 static mp_obj_t tsbus_stats(void) {
     mp_obj_t d = mp_obj_new_dict(43);
@@ -1481,6 +1539,7 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_modem_line), MP_ROM_PTR(&tsbus_modem_line_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_poll), MP_ROM_PTR(&tsbus_modem_poll_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_pace), MP_ROM_PTR(&tsbus_modem_pace_obj) },
+    { MP_ROM_QSTR(MP_QSTR_esp_relay), MP_ROM_PTR(&tsbus_esp_relay_obj) },
     { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },
     { MP_ROM_QSTR(MP_QSTR_HOME), MP_ROM_INT(SLOT_HOME) },
     { MP_ROM_QSTR(MP_QSTR_EXROM), MP_ROM_INT(SLOT_EXROM) },

@@ -415,6 +415,17 @@ connects)`: the ESP32 "off", "starting" (powered, not yet
 `MODEM_BOOT_MS`) or "on"; the line state in 2050 mode, "-" in Hayes mode;
 `m_dials` and `m_connects` from `tsbus.stats()`.
 
+### `esp_boot(download)`
+
+Restart the ESP32-C3: `tsbus.modem_line(False)`, EN low, IO9 set
+(`modem_download`), 50 ms, EN high. With `download` the ESP32's ROM starts
+its serial loader (IO9 low as it leaves reset), for installing Zimodem
+through `tsbus.esp_relay`; without it Zimodem starts. The idle logic's state
+is set to "powered, not up" (`_m_powered`, `_m_up`, the times), so
+`modem_service` neither switches it off at once nor sends to it before
+`MODEM_BOOT_MS`. `tools/zimodem-install.py` and the web updater's modem step
+call it.
+
 ### `modem_download(on)`
 
 IO9 held low (`True`) or released. The ESP32 reads IO9 as it leaves reset,

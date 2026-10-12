@@ -380,6 +380,19 @@ jobs:
           ( cd v3-slots && zip -q "$RUNNER_TEMP/v3-slots.zip" F*.bin )
           unzip -l "$RUNNER_TEMP/v3-slots.zip"
 
+      # Zimodem for the v3 card's modem (esp32/zimodem/build.sh, also built by
+      # zimodem.yml when it changes): zimodem-v3.bin, which pages.yml puts in
+      # the updater's release/ channel for its "Install the modem firmware"
+      # step. Not fatal: a release without it still ships, and the updater
+      # says the channel has no modem firmware.
+      - name: Build Zimodem for the v3 card's modem
+        id: zimodem
+        continue-on-error: true
+        run: |
+          pip install platformio==6.1.19
+          esp32/zimodem/build.sh
+          cp esp32/zimodem/out/zimodem-v3.bin "$RUNNER_TEMP/zimodem-v3.bin"
+
       # The user manual as PDFs (tools/manual-pdf/make.sh, also built by
       # build.yml on every push): the half-letter one-up for reading and the
       # saddle-stitch booklet imposed on letter, both from the manual at the tag.
@@ -406,6 +419,9 @@ jobs:
                     "${RUNNER_TEMP}/v3-slots.zip#v3-slots.zip (the v3 card's ROM and cartridge slot files, for /slots)" )
           ASSETS+=( "${RUNNER_TEMP}/manual-pdf/user-manual-half-letter.pdf#user-manual-half-letter.pdf (the user manual, 5.5 x 8.5 in, for reading)"
                     "${RUNNER_TEMP}/manual-pdf/user-manual-saddle-stitch-letter.pdf#user-manual-saddle-stitch-letter.pdf (the user manual as a booklet: print on letter, double-sided, flip on the short edge; fold and staple)" )
+          if [ -f "${RUNNER_TEMP}/zimodem-v3.bin" ]; then
+            ASSETS+=( "${RUNNER_TEMP}/zimodem-v3.bin#zimodem-v3.bin (Zimodem for the v3 card's modem, the ESP32-C3: one image for address 0)" )
+          fi
           if [ -n "${FLASH_ROM:-}" ] && [ -f "${FLASH_ROM}" ]; then
             ASSETS+=( "${FLASH_ROM}#${FLASH_ROM} (512K flash image, for a chip programmer)" )
           fi

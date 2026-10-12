@@ -183,6 +183,21 @@ def modem_status():
     return _m_mode, esp, line, s["m_dials"], s["m_connects"]
 
 
+def esp_boot(download):
+    """Restart the ESP32-C3: into its ROM's serial loader (download True:
+    IO9 held low as it leaves reset), to install Zimodem through
+    tsbus.esp_relay; or normally. The modem's idle logic is told the ESP32 is
+    on but not up, so it neither switches it off nor sends to it."""
+    global _m_powered, _m_up, _m_power_at, _m_last
+    tsbus.modem_line(False)
+    modem_power(False)
+    modem_download(download)
+    time.sleep_ms(50)
+    modem_power(True)
+    _m_powered, _m_up = True, False
+    _m_power_at = _m_last = time.ticks_ms()
+
+
 def modem_download(on):
     """IO9 held low (on) or released, read by the ESP32 as it leaves reset:
     low boots its ROM's serial downloader (to install Zimodem) instead of
