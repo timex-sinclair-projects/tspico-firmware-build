@@ -16,6 +16,12 @@ REPL, an ordinary file copy onto the RPI-RP2 drive for each UF2.
    6. Files     serial again: main.py, config.ini, words.txt, assets/,
                 verify, machine.reset().
 
+The v3 card (RP2350B) skips 3 and 4: its ROMs are slot files on the same
+flash as the firmware, so a wipe would erase the user's slots, and the ROM
+step is a file copy. Step 5 copies the manifest's v3.uf2 onto the RP2350
+drive; step 6 also writes /slots (0 and 1 always, the others only where the
+card has none).
+
 Everything comes from the same published channel directories the web page
 uses (release/ and main/ under the site's /updater/), so this program never
 needs rebuilding for a new firmware release.
@@ -29,6 +35,7 @@ import json
 import os
 import re
 import string
+import struct
 import sys
 import time
 import urllib.request
@@ -44,6 +51,25 @@ ROM_FAIL = {
     4: 'A flash write didn\'t take. Type LOAD "" on the 2068 to try again.',
 }
 STAGES = ("connect", "bootsel", "wipe", "rom", "firmware", "files")
+UF2_FAMILY = {"RP2040": 0xE48BFF56, "RP2350": 0xE48BFF59}   # RP2350: Arm, secure
+UF2_FLAG_FAMILY = 0x00002000
+# Python that removes /TS if it's there: a /TS left on the flash shadows the
+# frozen modules and stops the firmware starting. A v2 board is wiped instead;
+# a v3 card never is. Prints 1 if it removed one.
+RMTREE = """import os
+def _rm(p):
+ try:
+  m = os.stat(p)[0]
+ except OSError:
+  return 0
+ if m & 0x4000:
+  for n in os.listdir(p):
+   _rm(p + '/' + n)
+  os.rmdir(p)
+ else:
+  os.remove(p)
+ return 1
+print(_rm('/TS'))"""
 
 
 class Stop(Exception):
@@ -104,6 +130,18 @@ def uf2_micropython(data):
     pay = b"".join(data[i + 32:i + 288] for i in range(0, len(data) - 511, 512))
     m = re.search(rb"MicroPython v(\d+\.\d+\.\d+)", pay)
     return m.group(1).decode() if m else None
+
+
+def check_uf2(data, name, chip="RP2040"):
+    """Refuse a UF2 built for the other chip before copying it: an RP2040
+    image on the v3 card, or the reverse, leaves a board that doesn't start."""
+    if len(data) < 512 or len(data) % 512:
+        raise RuntimeError("%s is not a UF2 (size %d)" % (name, len(data)))
+    magic0, magic1, flags = struct.unpack_from("<III", data, 0)
+    if magic0 != 0x0A324655 or magic1 != 0x9E5D5157:
+        raise RuntimeError("%s is not a UF2 (bad magic)" % name)
+    if flags & UF2_FLAG_FAMILY and struct.unpack_from("<I", data, 28)[0] != UF2_FAMILY[chip]:
+        raise RuntimeError("%s is not an %s UF2" % (name, chip))
 
 
 # ---------------------------------------------------------------------------
@@ -263,18 +301,25 @@ class RawRepl:
 
 
 # ---------------------------------------------------------------------------
-# The RPI-RP2 drive
+# The boot drive: RPI-RP2 on a Pico, RP2350 on the v3 card
 # ---------------------------------------------------------------------------
-def _is_rp2(root):
+def drive_chip(root):
+    """"RP2040" or "RP2350" by the drive's INFO_UF2.TXT, or None if it isn't
+    a boot drive."""
     try:
         with open(os.path.join(root, "INFO_UF2.TXT"), "r", errors="replace") as f:
-            return "RPI-RP2" in f.read()
+            text = f.read()
     except OSError:
-        return False
+        return None
+    if "RP2350" in text:
+        return "RP2350"
+    if "RPI-RP2" in text:
+        return "RP2040"
+    return None
 
 
 def find_drive():
-    """The mounted RPI-RP2 drive's root, or None."""
+    """The mounted boot drive's root, or None."""
     if os.name == "nt":
         import ctypes
         k32 = ctypes.windll.kernel32
@@ -286,18 +331,18 @@ def find_drive():
             root = letter + ":\\"
             if k32.GetDriveTypeW(root) != 2:      # DRIVE_REMOVABLE
                 continue
-            if _is_rp2(root):
+            if drive_chip(root):
                 return root
         return None
-    cands = ["/Volumes/RPI-RP2"]
+    cands = ["/Volumes/RPI-RP2", "/Volumes/RP2350"]
     for base in ("/media", "/run/media"):
         try:
             for user in os.listdir(base):
-                cands.append(os.path.join(base, user, "RPI-RP2"))
+                cands += [os.path.join(base, user, n) for n in ("RPI-RP2", "RP2350")]
         except OSError:
             pass
     for c in cands:
-        if _is_rp2(c):
+        if drive_chip(c):
             return c
     return None
 
@@ -355,7 +400,12 @@ class Updater:
         self.port = None
         self.raw = None
         self.installed = None
+        self.board = None                        # "v2" (RP2040) or "v3" (RP2350B), once known
         self.nuke = None                         # flash_nuke.uf2, from the bundle
+
+    @property
+    def v3(self):
+        return self.board == "v3"
 
     # --- channel -----------------------------------------------------------
     def load_channel(self, name):
@@ -373,7 +423,16 @@ class Updater:
         return self.channel.manifest if self.channel else None
 
     def rom_behind(self):
-        return rom_behind(self.installed, self.manifest)
+        return not self.v3 and rom_behind(self.installed, self.manifest)
+
+    def image(self):
+        """(path in the channel, MicroPython release or None) of the firmware
+        for this board."""
+        m = self.manifest
+        if self.v3:
+            v3 = m.get("v3") or {}
+            return v3.get("uf2"), v3.get("mp_version")
+        return m.get("uf2"), m.get("mp_version")
 
     # --- serial ------------------------------------------------------------
     def open_port(self, device):
@@ -436,6 +495,10 @@ class Updater:
         self.ui.log("Device: %s — MicroPython %s" % (info[2], info[1]))
         if not re.search(r"rp2|pico", info[2] + " " + info[0], re.I):
             self.ui.log("Warning: this does not look like an RP2040/Pico.", "warn")
+        # "TS-Pico v3 with RP2350" on the v3 card; "... with RP2040" on a Pico.
+        self.board = "v3" if "RP2350" in info[2].upper() else "v2"
+        if self.v3:
+            self.ui.log("This is a TS-Pico v3 card (RP2350B).")
         # The running firmware's FW_VERSION (2.0 on) wins: Ctrl-C leaves its
         # module loaded, and config.ini can hold a stale one. 1.x has none,
         # so fall back to config.ini: 1.5 wrote FW_VERSION there, 1.1 didn't.
@@ -469,15 +532,15 @@ class Updater:
 
     # --- drive -------------------------------------------------------------
     def wait_drive(self, name, timeout=30.0):
-        self.ui.stage_msg(name, "Waiting for the RPI-RP2 drive…")
+        self.ui.stage_msg(name, "Waiting for the boot drive (RPI-RP2, or RP2350 on the v3 card)…")
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             d = find_drive()
             if d:
                 return d
             time.sleep(0.5)
-        raise RuntimeError("the RPI-RP2 drive didn't appear. Hold BOOTSEL on the Pico while "
-                           "plugging in USB, then press Start again.")
+        raise RuntimeError("the boot drive (RPI-RP2, or RP2350 on the v3 card) didn't appear. "
+                           "Hold BOOTSEL while plugging in USB, then press Start again.")
 
     def wait_drive_gone(self, timeout=20.0):
         end = time.monotonic() + timeout
@@ -505,9 +568,18 @@ class Updater:
             self.ui.stage_msg("bootsel", "Rebooting the Pico into BOOTSEL mode…")
             self.bootloader()
         d = self.wait_drive("bootsel")
-        self.ui.stage("bootsel", "done", "In BOOTSEL mode — the RPI-RP2 drive is %s." % d)
+        # A board put in BOOTSEL by hand wasn't known until now.
+        if drive_chip(d) == "RP2350" and not self.v3:
+            self.board = "v3"
+            self.ui.log("This is a TS-Pico v3 card (RP2350B): no erase and no ROM update; "
+                        "its ROM slots are files.")
+        elif not self.board:
+            self.board = "v2"
+        self.ui.stage("bootsel", "done", "In BOOTSEL mode — the boot drive is %s." % d)
 
     def wipe(self):
+        if self.v3:                              # flash_nuke is RP2040-only, and would take the slots
+            raise RuntimeError("the v3 card is never erased")
         self.ui.stage("wipe", "active", "Erasing the Pico’s flash…")
         if self.nuke is None:
             with open(resource("flash_nuke.uf2"), "rb") as f:
@@ -622,10 +694,43 @@ class Updater:
 
     def firmware(self):
         m = self.manifest
-        self.ui.stage("firmware", "active", "Downloading firmware %s…" % m["fw_version"])
-        data = self.channel.fetch(m["uf2"])
-        self.copy_uf2("firmware", data, "firmware %s" % m["fw_version"], "firmware.uf2")
+        uf2, _ = self.image()
+        if not uf2:
+            raise RuntimeError("this channel has nothing for the v3 card yet — pick "
+                               "“Latest main build”" if self.v3 else "this channel has no firmware image")
+        label = "firmware %s%s" % (m["fw_version"], " for the v3 card" if self.v3 else "")
+        self.ui.stage("firmware", "active", "Downloading %s…" % label)
+        data = self.channel.fetch(uf2)
+        check_uf2(data, uf2, "RP2350" if self.v3 else "RP2040")
+        self.copy_uf2("firmware", data, label, uf2.rsplit("/", 1)[-1])
         self.ui.stage("firmware", "done", "Firmware %s installed." % m["fw_version"])
+
+    def slots(self):
+        return (self.manifest.get("v3") or {}).get("slots") or [] if self.v3 else []
+
+    def sizes(self, paths):
+        """{path: size, or -1 if missing} on the Pico."""
+        return json.loads(self.raw.exec(
+            "import json\nr={}\nfor p in %r:\n try: r[p]=os.stat(p)[6]\n except OSError: r[p]=-1\n"
+            "print(json.dumps(r))" % list(paths)))
+
+    def upload_slots(self):
+        """The v3 card's slot files: 0 and 1 always (our ROMs, new with each
+        release), the others only where the card has no such file, so a ROM or
+        cartridge the user put in a slot is never overwritten."""
+        slots = self.slots()
+        self.raw.make_dirs("/slots")
+        have = self.sizes("/" + s["path"] for s in slots)
+        todo = [s for s in slots if s.get("always") or have["/" + s["path"]] < 0]
+        for s in slots:
+            if s not in todo:
+                self.ui.log("  · %s: already on the card, kept" % s["path"])
+        for i, s in enumerate(todo):
+            self.ui.stage_msg("files", "Writing ROM slot %s (%d/%d)…" % (s["slot"], i + 1, len(todo)))
+            data = self.channel.fetch(s["file"])
+            self.raw.write_file("/" + s["path"], data)
+            self.ui.log("  ✓ %s (%d bytes)" % (s["path"], len(data)), "ok")
+        return len(todo)
 
     def files(self):
         ui = self.ui
@@ -633,6 +738,12 @@ class Updater:
         self.wait_port("files", 45)              # first boot after a wipe formats the filesystem
         ui.stage_msg("files", "Entering the REPL…")
         self.enter_raw()
+        slots = 0
+        if self.v3:
+            ui.stage_msg("files", "Checking for stray files…")
+            if self.raw.exec(RMTREE).strip() == "1":
+                ui.log("Removed a stray /TS folder.", "warn")
+            slots = self.upload_slots()
         files = self.manifest["files"]
         total = sum(f.get("size", 0) for f in files) or 1
         done = 0
@@ -653,15 +764,15 @@ class Updater:
         ui.stage_msg("files", "Restarting the firmware…")
         self.raw.exec_no_reply("import machine\nmachine.reset()")
         self.close_port()
-        ui.stage("files", "done", "All %d files written and verified. The Pico restarted." % len(files))
+        ui.stage("files", "done", "All %d files%s written and verified. The Pico restarted." % (
+            len(files), " and %d ROM slot(s)" % slots if self.v3 else ""))
 
     def verify_files(self):
-        paths = ["/" + f["path"] for f in self.manifest["files"]]
-        got = json.loads(self.raw.exec(
-            "import json\nr={}\nfor p in %r:\n try: r[p]=os.stat(p)[6]\n except OSError: r[p]=-1\n"
-            "print(json.dumps(r))" % paths))
+        files = self.manifest["files"]
+        want = files + self.slots()              # kept slots are 32K too
+        got = self.sizes("/" + f["path"] for f in want)
         bad = 0
-        for f in self.manifest["files"]:
+        for f in want:
             n = got.get("/" + f["path"], -1)
             if n < 0:
                 self.ui.log("  ✗ missing: %s" % f["path"], "error"); bad += 1
@@ -669,7 +780,9 @@ class Updater:
                 self.ui.log("  ✗ size mismatch: %s (device %d, expected %d)" % (f["path"], n, f["size"]),
                             "error"); bad += 1
         if not bad:
-            self.ui.log("Verify passed: %d files match." % len(paths), "ok")
+            self.ui.log("Verify passed: %d files%s match." % (
+                len(files), " and %d ROM slots" % (len(want) - len(files)) if len(want) > len(files) else ""),
+                "ok")
         return bad
 
     # --- the whole run -----------------------------------------------------
@@ -679,10 +792,10 @@ class Updater:
         first boot formats the flash."""
         if not self.installed or not self.installed.get("mp"):
             return None
-        target = self.manifest.get("mp_version")
-        if not target:
+        uf2, target = self.image()
+        if not target and uf2:
             try:
-                target = uf2_micropython(self.channel.fetch(self.manifest["uf2"]))
+                target = uf2_micropython(self.channel.fetch(uf2))
             except Exception:
                 target = None
         if not target or ver_cmp(target, self.installed["mp"]) >= 0:
@@ -698,6 +811,11 @@ class Updater:
         current = "bootsel"
         try:
             self.enter_bootsel()
+            if self.v3:
+                wipe = rom = False
+                self.ui.stage("wipe", "skipped", "Never on the v3 card: it would erase your ROM slots.")
+                self.ui.stage("rom", "skipped", "Not on the v3 card: its ROMs are slot files, "
+                                                "copied with the files.")
             if wipe:
                 current = "wipe"
                 self.wipe()

@@ -1750,7 +1750,9 @@ computer. Leave it alone and press **Start** without connecting.
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
 click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
 release**, then **Connect to TS-Pico**, tick the options, press **Start**, and follow the same
-steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
+steps as above. You don't have to pick a port or a drive. It finds the Pico by itself. It
+updates the v3 card too: it installs the card's firmware and ROM slots, never erases the card,
+and keeps any slots you've filled (Appendix F).
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the
