@@ -176,6 +176,42 @@ On v2 the board has no modem: `tpi:modem` answers "No modem on this board"
 
 Each step is its own PR, tested on proto1, and updates the reference.
 
+## Progress (2026-10-12)
+
+Steps 1-4 are built and merged, and tested on proto1 with Zimodem 4.0.3 and the
+unmodified MTERM/T tape: #266 (port 0 shared), #267 (the 8251, Hayes mode),
+#268 (2050 mode), #269 (`tpi:modem`, the config keys, power on demand). Step 5
+is the v3 user manual's Appendix F, "The Modem", in the manual split by board
+(#270). Step 6, the installer, is still to do.
+
+Where the build settled things differently from the proposal above:
+
+- **The 8251 powers up taking commands** (mode 4Fh), not expecting a mode
+  byte. The datasheet leaves its power-up state undefined; this way a program
+  that reset it before the modem came up carries on, and the BASIC "Modem"
+  dialer's first `OUT 119,31` is the off-hook command it means.
+- **Zimodem gets word results, not numeric:** `ATE0V1X0F1` at off-hook (no
+  echo, word results, a short CONNECT, XON/XOFF), read by
+  `modem2050.c`.
+- **`NO CARRIER` is matched anywhere a line ending follows it,** not only at a
+  line's start: Zimodem printed it straight after a host's `> ` prompt.
+- **Received data is held for 3.5 s after CONNECT,** while DSR rises at once:
+  MTERM/T qualifies the carrier and redraws its screen, dropping what it reads
+  meanwhile. It still loses about 0.75 s of a host's first words, as with a
+  real 2050; hosts that wait for ENTER (as dial-up services did) show whole.
+- **The dial thresholds:** a break under 200 ms is a pulse, 300 ms of DTR on
+  ends a digit, 1.5 s the number (MTERM's own pulses: 58 ms break, 47.5 ms
+  make, 832 ms between digits).
+- **Power:** the ESP32 is switched on by any OUT to the 8251, and the line
+  declared up 2 s later (`MODEM_BOOT_MS`); until then what the 8251 sends waits
+  in the card's ring and what arrives is dropped. A terminal polling the
+  status keeps it on. `MODEM_IDLE_MIN` (10) on-hook and unused switches it off.
+- **`tpi:modem` takes `2050`, `hayes` or `off`** (saved as `MODEM_MODE`); there
+  is no separate on/off for the ESP32's power, which is automatic.
+- **Core 1 never touches flash:** the modem's strings are non-const (`.data`),
+  and nothing compiles to `strlen`/`memcpy`; and nothing is masked around the
+  8251's state, which the IN handler shares with the loop through one flag.
+
 ## Open questions
 
 1. **What RTS does on a 2050** (originate/answer?). MTERM toggles it around
