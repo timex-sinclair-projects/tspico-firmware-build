@@ -186,9 +186,11 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `e4cde52397f6` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `61a6b350eb95` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `0e05b23852d9` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `8b19f44b1c3f` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/micropython.cmake` | `c2110d2aec86` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/usart8251.h` | `3e5262592f41` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/usart8251.c` | `5383b084e42e` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/micropython.cmake` | `ac385050336e` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-23.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
@@ -198,5 +200,5 @@ behaviour, and the caveat and the issue link go.
 | `tools/build-flash.py` | `440cdc45cab9` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/build.yml` | `849b5214c8c6` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `faaf19384a3b` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `cae490dafd9e` | [firmware/boot.md](firmware/boot.md) | — |

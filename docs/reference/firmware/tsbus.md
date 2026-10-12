@@ -1,7 +1,7 @@
 # tsbus: the v3 card's bus
 
 Source: [`src/tsbus/`](../../../src/tsbus/): `tsbus.c`, `tsbus.pio`,
-`micropython.cmake`.
+`usart8251.h`, `usart8251.c`, `micropython.cmake`.
 
 The v3 card (RP2350B) has no memory chips. It answers every 2068 memory read
 it owns from images in its own SRAM, and the TS-Pico ports 0Eh/0Fh from
@@ -11,7 +11,9 @@ core 1. `tsbus` is that bus code as a MicroPython C module, built into the
 moved under MicroPython. Phase 3 of the v3 port plan
 (`docs/v3-firmware-port-plan.md` there) built it in three steps: serving the
 ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1 and reset control;
-the `MQ` object over core 1's queues; and switching images. The v2 firmware
+the `MQ` object over core 1's queues; and switching images. Phase 6 adds
+the TS2050 modem's 8251 at 73h/77h, bridged to the card's ESP32-C3
+([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)). The v2 firmware
 does not use any of it.
 
 What phase 1 learned, and why the code is shaped this way, is in the
@@ -31,6 +33,8 @@ than repeating it.
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
+| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_pace` |
+| `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, the two rings, pacing, XON/XOFF |
 | `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
 
 ## How it fits under MicroPython
@@ -126,6 +130,8 @@ in the file.
 | `POWER_OFF_CYC`, `POWER_ON_CYC` | 250,000 (1 ms), 25,000,000 (100 ms) | /MEMWR, /IORD, /IOWR all low this long: the 2068 is off; and how long after they come back the card goes on holding /RESET |
 | `OFF_MASK` | | those three strobes' bits in SIO's input |
 | `IO_TIMEOUT_CYC` | 1000 (4 µs) | the IN guard; see `handle_in` |
+| `MODEM_UART`, `PIN_MODEM_TX`, `PIN_MODEM_RX`, `MODEM_BAUD` | `uart0`, 44, 45, 115200 | the ESP32-C3's UART0 (its GPIO 20/21) and Zimodem's speed, checked on proto1 2026-10-12. 8N1 |
+| `MODEM_RX_N`, `MODEM_RX_BITS`, `MODEM_TX_N` | 4096, 12, 1024 | the modem's receive ring (a DMA write ring, so aligned to its size) and its log2; the transmit ring |
 | `CORE1_NVEC` | 16 + `NUM_IRQS` | core 1's vector table length |
 | `TSBUS_DIAG` | 0 | 1 builds the measuring in `handle_in` and `core1_main` (see `micropython.cmake`) |
 | `DIAG_PHASES`, `DIAG_BUCKETS` | 16, 8 | the phases `diag` keeps, and each histogram's buckets |
@@ -165,6 +171,14 @@ in the file.
 | `diag_t`, `diag[DIAG_PHASES]` | all 0 | `handle_in`, `core1_main` (diag build); `tsbus_diag_reset`, `tsbus_diag` | per phase: INs to 0Eh/0Fh; `gone` (/IORD already high at the handler's entry); `missed` (high by the time U3 went on); `min_left` (fewest cycles from entry to the strobe's end); `max_gap` (longest core 1 loop pass); `hist` (entry to strobe end, 64 cycles a bucket); `drive_max`, `drive_never`, `dhist` (cycles from the reply's TX write until MD shows it, 8 a bucket); `pio_rd_max`, `apb_rd_max`, `ram_rd_max` (core 1's slowest read of PIO0, of IO_BANK0 when `DIAG_APB_PROBE` is set, of SRAM). Always built, all zero in a normal build |
 | `diag_phase` | volatile uint32, 0 | `tsbus_diag_phase`; core 1 | which `diag` entry the measurements go to |
 | `diag_probe` | volatile uint32[256] | `core1_main` (diag build) | the SRAM core 1 reads for `ram_rd_max` |
+| `modem_rx`, `modem_tx` | uint8[4096] (aligned 4096), uint8[1024] | `ch_mrx` writes `modem_rx`; `usart8251.c` writes `modem_tx`, `ch_mtx` reads it | the 8251's receive and transmit rings |
+| `usart` | `u8251_t` | `tsbus_modem` (init); `core1_main` and `handle_in` | the 8251 (`usart8251.h`) |
+| `modem_on` | volatile bool, false | `tsbus_modem`; `handle_in`, `core1_main` | core 1 answers 73h/77h and services the line. Off, those ports are left to the 2068, as before phase 6 |
+| `pace_set` | bool, false | `tsbus_modem_pace`; `tsbus_modem` | a pace has been set, so `tsbus.modem(True)` keeps it instead of the 300-baud default |
+| `ch_mrx`, `ch_mtx` | int, -1 | `tsbus_modem` (claimed once) | the modem's DMA channels: UART0 → `modem_rx`, endless; a run of `modem_tx` → UART0 |
+| `mrx_off` | uint32 | `core1_main`; `tsbus_modem` (0) | where `ch_mrx` had got to in `modem_rx` on the last pass |
+| `mtx_inflight` | uint32 | `core1_main`; `tsbus_modem` (0) | how many bytes the run `ch_mtx` is sending holds |
+| `modem_ins` | volatile uint32 | `handle_in` | INs from 73h/77h answered |
 
 ### `chunk_target(chunk, hsr, ff)`
 
@@ -244,6 +258,11 @@ In RAM, inlined into `iord_isr`. An IN is in progress:
    2 µs guard was too short for them (tspico-hardware `firmware/bringup/README.md`,
    "Long IN strobes").
 
+While `modem_on`, 73h and 77h are answered the same way, the reply from
+`u8251_data_in` or `u8251_status` (decoded from A0-A7 with `port & FBh ==
+73h`, A2 choosing). With the modem on, the slowest reply from entry to U3 on
+was 412 ns (`respond_ns`, proto1 2026-10-12).
+
 Other ports are left to the 2068; the handler still waits for their strobe
 to end.
 
@@ -298,10 +317,22 @@ power-off and power-on readings, forever, polling:
 - **A drop request** (`tx_drop_req`): drops the oldest reply with interrupts
   masked (`cpsid i`), so `iord_isr` can't pop in the middle, then clears the
   request.
+- **The modem's line**, while `modem_on`: how far `ch_mrx` has got in
+  `modem_rx` (its write address) goes onto `usart.rx_head`; if `ch_mtx` is
+  idle, the run it sent comes off `usart.tx_tail`; then `u8251_poll` (pacing,
+  overflow, XON/XOFF, the status bits); then, if `ch_mtx` is idle and bytes
+  wait, it is started on the next run of `modem_tx`, up to the ring's end
+  (`read_addr`, then `al1_transfer_count_trig`). Only DMA registers, on AHB:
+  the UART's are behind APB (#254). Nothing is masked here: the IN handler
+  must never wait, and the first version, which masked interrupts around the
+  8251 updates, made INs late on the card (a floating bus read as ©, 127,
+  and the character lost). `usart8251.h` says what keeps it safe unmasked.
 - **I/O writes** (io_snoop): F4h and FFh update the shadow, and the table if
   it changed (for FFh, only bit 7 matters); while `bus_idle` they are
   power-down noise and are dropped (`glitch_writes`). OUTs to 0Eh/0Fh make
-  the status 00h (busy, as v2.1's PIO did) and go to `rxq`.
+  the status 00h (busy, as v2.1's PIO did) and go to `rxq`. While
+  `modem_on`, OUTs to 77h go to `u8251_control` and to 73h to
+  `u8251_data_out`.
 - **Memory writes** (mem_write): stored in the DOCK image when the shadow
   maps the chunk to the DOCK, DOCK serving is on, and `dock_rw` is set (a
   RAM dock).
@@ -427,6 +458,35 @@ checked before anything changes.
 
 What phase 5's slot files and `tpi:memboot`/`tpi:memdock` will call.
 
+### `tsbus.modem(on)`
+
+`True`: answer the 8251 at 73h/77h. Every call sets the line up from
+scratch:
+1. `modem_on` cleared and 1 ms waited, so core 1 is past any pass touching
+   `usart` or the channels.
+2. The two channels claimed (the first time only; MicroPython's soft reset
+   frees only channels it claimed itself), both aborted.
+3. UART0 initialised again, 115200 8N1 with its DMA requests on, and GPIO
+   44/45 given to it. Again each time because a MicroPython soft reset calls
+   `uart_deinit` on UART0 whoever set it up.
+4. `ch_mrx` restarted at the top of `modem_rx` (8-bit, a 4096-byte write
+   ring, the UART's RX DREQ, an endless count); `ch_mtx` configured to write
+   the UART's data register on its TX DREQ, not started.
+5. `usart` initialised (`u8251_init`): as at power-up, expecting a mode
+   byte. DSR held at 1 (Hayes mode: a program sees carrier and talks to
+   Zimodem directly). The pace kept if `modem_pace` set one, else 300 baud.
+6. `modem_on` set.
+
+`False`: `modem_on` cleared; 73h/77h are left to the 2068 again. Powering
+the ESP32 is `board_v3.modem_power`'s job, not this one's.
+
+### `tsbus.modem_pace(baud)`
+
+A received character becomes RxRDY no sooner than one 10-bit character
+time at `baud` after the last (33.3 ms at 300); 0: as soon as the last is
+read. `usart.pace` in core cycles; kept across `tsbus.modem(True)`
+(`pace_set`). A negative baud is `ValueError`.
+
 ### `tsbus.stats()`
 
 A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
@@ -434,7 +494,10 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `outs_ours`, `late`, `respond_ns`, `rx_lost`, `hsr`, `ff`, `held`,
 `status` (what IN 0Fh returns), `tx` and `rx` (the queue levels),
 `idle` (`bus_idle`), `idle_resets`, `glitch_writes`, `power_held` and
-`power_resets`.
+`power_resets`. The modem: `m_on`, `m_ins` (INs from 73h/77h), `m_status`
+(the status bits but RxRDY), `m_mode`, `m_cmd`, `m_rx` (characters the
+2068 read), `m_tx` (written to the line), `m_tx_dropped`, `m_rx_lost`,
+`m_rxq` (bytes waiting) and `m_pace_us`.
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
 
@@ -505,7 +568,8 @@ at the REPL: F7h, FBh, FFh and 00h, as on v2.
 
 ### `tsbus_module`, `HOME`, `EXROM`, `DOCK`, `MQ`
 
-The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type.
+The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type,
+with the functions above, `modem` and `modem_pace` among them.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 
@@ -555,12 +619,118 @@ With the power hold and the idle release:
 - **TS Reset during Sinistar:** a clean boot, through the copyright screen
   back into the cartridge still in the dock.
 
+### The modem, checked on proto1 board 1 (2026-10-12)
+
+Zimodem 4.0.3 on the ESP32-C3, powered with `board_v3.modem_power(True)`
+and `tsbus.modem(True)` from the REPL (step 2 has no command yet), and
+`basic/SD/TAP/test/modemtst.bas` on the 2068: the MTERM reset, mode 79
+(8N1), command 55, then a terminal loop on IN 119 / IN 115 / OUT 115.
+- The status read 133 (DSR, TxEMPTY, TxRDY) idle, what the BASIC dialers
+  test for.
+- `AT` came back `OK`, and `ATI`'s five lines and Zimodem's banner, 251
+  characters at 300 baud, arrived whole: `m_rx_lost` 0, `late` 0, the
+  slowest reply 412 ns.
+- The first build masked interrupts around the 8251 updates in core 1's
+  loop. Characters then came through as © (a late IN reads the floating
+  bus, 127) and were lost. Unmasked, none were.
+
+## `usart8251.h`, `usart8251.c`
+
+The TS2050's Intel 8251A as the 2068's software drives it (datasheet
+205222-002; [docs/ts2050-software-notes.md](../../ts2050-software-notes.md)).
+Plain C with no hardware, so the same file runs on core 1 and in
+[`src/test/usart8251_hosttest.py`](../../../src/test/usart8251_hosttest.py),
+which compiles it with `usart8251_shim.c` and drives it through `ctypes`
+with MTERM's, the BASIC dialers' and the 2068 BBS's sequences.
+
+### Placement and the IN handler
+
+`U8251_FN(f)` is `__not_in_flash_func(f)` on the card: `usart8251.c`
+includes `pico.h` when `U8251_ON_PICO` is set (`micropython.cmake`), so
+every function core 1 calls is in RAM (checked in the map: `u8251_*` at
+2000xxxxh; only `u8251_init`, core 0's, is in flash). On the host it is the
+plain name.
+
+The IN handler (`u8251_status`, `u8251_data_in`) interrupts the loop
+(`u8251_control`, `u8251_data_out`, `u8251_poll`) on the same core, and
+nothing is masked. They share only the received character: the loop writes
+`hold`, a compiler barrier, then `hold_full`, and only while it is clear;
+the handler clears `hold_full`, only while it is set. RxRDY is never
+stored: `u8251_status` adds it from `hold_full` and RxE when 77h is read,
+so a status byte can't say a character is waiting after it was read. The
+other bits (`status`) are the loop's, at most one pass old.
+
+### Bits and `u8251_t`
+
+`U8251_TXRDY` … `U8251_DSR` are the status bits, `U8251_C_TXEN` …
+`U8251_C_EH` the command bits, `U8251_XON`/`U8251_XOFF` 11h/13h.
+`u8251_t` holds: what the caller sets (`pace` in ticks of `now`, `dsr`,
+`flow`); the chip (`expect_mode`, `mode`, `cmd` less ER and IR, `mask` from
+the character length, `hold`, `hold_full`, `overrun`, `status`); the
+receive ring (`rx_buf`, `rx_size`, `rx_head` the caller's, `rx_tail` ours,
+`last_release`, `xoff_sent`); the transmit ring (`tx_buf`, `tx_size`,
+`tx_head` ours, `tx_tail` the caller's); and counters (`rx_chars`,
+`tx_chars`, `tx_dropped`, `rx_lost`).
+
+### `BARRIER()`, `update_status(u)`
+
+`BARRIER()` is a compiler barrier: the loop and the handler share a core, so
+program order is all that's needed. `update_status` sets `status`: TxRDY if
+the transmit ring has room (whatever TxEN says, as the chip's status bit);
+TxEMPTY if TxEN is off or the ring is empty (`tx_tail` is advanced only once
+the line has the bytes); OE from `overrun`; DSR from `dsr`. Not RxRDY.
+
+### `u8251_init(u, rx_buf, rx_size, tx_buf, tx_size)`
+
+Everything zero, the rings given, expecting a mode byte (a chip fresh from
+reset), mask FFh.
+
+### `u8251_control(u, b)` (OUT 77h)
+
+Expecting a mode byte: an async one (baud factor 01, 10 or 11) is taken,
+setting `mask` from the length (5-8 bits); a sync one (00) is ignored, so
+the datasheet's reset preamble (00h three times, 40h) ends in "expecting a
+mode byte" from any state. Otherwise a command: IR (bit 6) goes back to
+expecting a mode byte and clears the command, `hold_full` and `overrun`;
+ER (bit 4) clears `overrun`; the rest is kept in `cmd`. So the BASIC
+dialer's first `OUT 119,31` on a fresh chip is a mode byte, as on the real
+8251.
+
+### `u8251_data_out(u, b)` (OUT 73h)
+
+With TxEN and room, `b & mask` into the transmit ring; else counted in
+`tx_dropped`.
+
+### `send_flow(u, b)`
+
+XON or XOFF into the transmit ring, behind what the 2068 queued and
+whatever TxEN says; false if full.
+
+### `u8251_poll(u, now)`
+
+Every loop pass:
+1. If the writer has lapped `rx_tail` (more than `rx_size` waiting), the
+   oldest are dropped, counted in `rx_lost`, and OE set.
+2. If no character is held, one is waiting, RxE is on, and `pace` has
+   passed since the last (or none has been read yet, or `pace` is 0): the
+   next one, masked, into `hold`, then `hold_full`.
+3. With `flow`: XOFF when more than three quarters of the ring is waiting,
+   XON once below a quarter.
+4. `update_status`.
+
+### `u8251_status(u)` (IN 77h), `u8251_data_in(u)` (IN 73h)
+
+`status` plus RxRDY if `hold_full` and RxE. `hold`; if `hold_full`, it is
+cleared and `rx_chars` counted. Reading with nothing held gives the last
+character again, as the chip's data register would.
+
 ## `micropython.cmake`
 
-The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c`, the
-pioasm header (`pico_generate_pio_header`), and `hardware_dma`,
-`hardware_pio`, `hardware_vreg`, `pico_multicore`. The board sets
-`USER_C_MODULES` to this file.
+The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c` and
+`usart8251.c`, the pioasm header (`pico_generate_pio_header`), and
+`hardware_dma`, `hardware_pio`, `hardware_uart`, `hardware_vreg`,
+`pico_multicore`. `U8251_ON_PICO=1` makes `usart8251.c` put core 1's
+functions in RAM. The board sets `USER_C_MODULES` to this file.
 
 `tsbus.c` includes `tsbus.pio.h` only when `NO_QSTR` is not defined:
 MicroPython's QSTR scan preprocesses the file before the header has been

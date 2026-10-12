@@ -93,6 +93,8 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl",
     "src/tsbus/tsbus.c",
     "src/tsbus/tsbus.pio",
+    "src/tsbus/usart8251.h",
+    "src/tsbus/usart8251.c",
     "src/tsbus/micropython.cmake",
     "src/rom/TSPICO.ROM",
     "src/rom/TSPICO-SYNC.ROM",

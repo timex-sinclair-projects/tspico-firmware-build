@@ -6,7 +6,12 @@ add_library(usermod_tsbus INTERFACE)
 
 target_sources(usermod_tsbus INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/tsbus.c
+    ${CMAKE_CURRENT_LIST_DIR}/usart8251.c
 )
+
+# usart8251.c is plain C (a host test compiles it too); on the card it takes
+# __not_in_flash_func from pico.h, so core 1 never runs it from flash.
+target_compile_definitions(usermod_tsbus INTERFACE U8251_ON_PICO=1)
 
 target_include_directories(usermod_tsbus INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}
@@ -23,6 +28,7 @@ pico_generate_pio_header(usermod_tsbus ${CMAKE_CURRENT_LIST_DIR}/tsbus.pio)
 target_link_libraries(usermod_tsbus INTERFACE
     hardware_dma
     hardware_pio
+    hardware_uart
     hardware_vreg
     pico_multicore
 )
