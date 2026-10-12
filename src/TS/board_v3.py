@@ -14,6 +14,7 @@ from machine import Pin, SPI, I2C, Timer
 NAME = "v3"
 PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
+SD_SLOTS = True     # tpi:boot and tpi:dock take MEM 3: a slot file on the SD card
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
 # The slots (phase 5, docs/v3-slots-proposal.md): v2's two chips of sixteen
@@ -22,7 +23,14 @@ HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 # missing file is an empty slot. A ROM slot is HOME (16K) then EXROM (16K).
 SLOTS_DIR = "/slots"
 SLOT_SIZE = 32768
-MEM_SRAM, MEM_FLASH = 1, 2      # ROM_SM's two-bit memory codes
+MEM_SRAM, MEM_FLASH, MEM_SD = 1, 2, 3   # ROM_SM's two-bit memory codes
+
+# MEM 3 (phase 6): slot nn read from /slots/Fnn.bin on the SD card, the same
+# files as the flash slots, so v3-slots.zip unzips straight onto a card. If
+# the card or the file isn't there, flash slot nn stands in. The caller has
+# the card mounted on /sd while a MEM 3 slot is read (tspico.SD_SLOTS_CALL);
+# nothing here mounts it. An SD dock is read-only, as a flash one.
+SD_SLOTS_DIR = "/sd/slots"
 
 # The last fallback for the boot ROM, when neither the boot slot nor flash
 # slot 1 has a file: the 2068 is never released into an empty ROM.
@@ -82,32 +90,53 @@ def _keys(rom_sm, bank_sm):
 
 
 def slot_path(mem, slot):
-    """The file behind slot `slot` (0-15) of memory `mem` (MEM_FLASH, MEM_SRAM)."""
+    """The file behind slot `slot` (0-15) of memory `mem` (MEM_FLASH,
+    MEM_SRAM, MEM_SD: the SD card's file, not its flash stand-in)."""
+    if mem == MEM_SD:
+        return "%s/F%02d.bin" % (SD_SLOTS_DIR, slot)
     return "%s/%s%02d.bin" % (SLOTS_DIR, "S" if mem == MEM_SRAM else "F", slot)
+
+
+def _slot_file(mem, slot):
+    """The 32K file that serves slot `slot` of memory `mem`, or None. MEM_SD
+    falls back to the flash slot of the same number."""
+    for m in ((MEM_SD, MEM_FLASH) if mem == MEM_SD else (mem,)):
+        path = slot_path(m, slot)
+        try:
+            if os.stat(path)[6] == SLOT_SIZE:
+                return path
+        except OSError:
+            pass
+    return None
 
 
 def read_slot_into(mem, slot, buf):
     """Read a slot's 32K into buf (32K, a bytearray or memoryview), in
-    place. False if the slot has no file or the file isn't 32K; buf is then
-    untouched."""
-    path = slot_path(mem, slot)
+    place. Returns the file read, or None if the slot has no 32K file; buf
+    is then untouched. For MEM_SD that may be the flash slot standing in."""
+    path = _slot_file(mem, slot)
+    if path is None:
+        return None
     try:
-        if os.stat(path)[6] != SLOT_SIZE:
-            return False
         with open(path, "rb") as f:
             f.readinto(buf)
     except OSError:
-        return False
-    return True
+        return None
+    return path
+
+
+def _stood_in(mem, slot, path):
+    """A note when a MEM_SD slot was read from flash instead, else None."""
+    if mem == MEM_SD and path and not path.startswith(SD_SLOTS_DIR):
+        return "no SD slot %d: used flash slot %d" % (slot, slot)
+    return None
 
 
 def rom_slot_empty(mem, slot):
-    """True if slot `slot` of memory `mem` has no 32K file: tpi:boot refuses
-    it, rather than boot_rom falling back to another ROM unasked."""
-    try:
-        return os.stat(slot_path(mem, slot))[6] != SLOT_SIZE
-    except OSError:
-        return True
+    """True if slot `slot` of memory `mem` has no 32K file (for MEM_SD,
+    neither on the SD card nor in flash): tpi:boot refuses it, rather than
+    boot_rom falling back to another ROM unasked."""
+    return _slot_file(mem, slot) is None
 
 
 def clear_sram_slots():
@@ -131,9 +160,10 @@ def boot_rom(rom_sm, bank_sm):
     The boot memory is rom_sm's bits 0-1 and the slot bank_sm's bits 0-3.
     If that slot has no 32K file: flash slot 1, then ROM_FILE."""
     mem, slot = rom_sm & 3, bank_sm & 15
-    if read_slot_into(mem, slot, _buf):
-        return None
-    want = "%s slot %d" % ("SRAM" if mem == MEM_SRAM else "flash", slot)
+    path = read_slot_into(mem, slot, _buf)
+    if path:
+        return _stood_in(mem, slot, path)
+    want = "%s slot %d" % (("SRAM", "flash", "SD")[mem - 1], slot)
     if (mem, slot) != (MEM_FLASH, 1):
         if read_slot_into(MEM_FLASH, 1, _buf):
             return "no ROM in %s: booted flash slot 1" % want
@@ -148,15 +178,20 @@ def load_dock(rom_sm, bank_sm):
     _buf (tsbus.load_at): the dock slot, then for an even slot the next one,
     as v2's 64K cartridge spans two slots numbered by the even one. A half
     with no file is zeros, as an empty v2 slot reads. The caller turns DOCK
-    serving off around it if the 2068 is running."""
+    serving off around it if the 2068 is running. Returns a note if a MEM_SD
+    half came from flash instead, else None."""
     mem, slot = (rom_sm >> 2) & 3, (bank_sm >> 4) & 15
+    note = None
     for half, s in ((0, slot), (1, slot + 1 if slot % 2 == 0 else None)):
         base = half * SLOT_SIZE
-        if s is not None and read_slot_into(mem, s, _buf):
+        path = read_slot_into(mem, s, _buf) if s is not None else None
+        if path:
             tsbus.load_at(tsbus.DOCK, base, _buf)
+            note = note or _stood_in(mem, s, path)
         else:
             for off in range(0, SLOT_SIZE, len(_zeros)):
                 tsbus.load_at(tsbus.DOCK, base + off, _zeros)
+    return note
 
 
 def save_ram_dock(dock):
@@ -222,7 +257,8 @@ def write_slot(mem, slot, path):
 def start_memory(rom_sm, bank_sm):
     """Clear the SRAM slots, load the boot ROM (HOME, EXROM) and the dock
     from the slot files (boot_rom, load_dock), and release the 2068 into
-    them. Returns boot_rom's note, for the caller to log, or None."""
+    them. Returns boot_rom's or load_dock's note, for the caller to log, or
+    None."""
     global _served
     clear_sram_slots()
     tsbus.hold(True)
@@ -230,7 +266,7 @@ def start_memory(rom_sm, bank_sm):
     m = memoryview(_buf)
     tsbus.load(tsbus.HOME, m[:16384])
     tsbus.load(tsbus.EXROM, m[16384:])
-    load_dock(rom_sm, bank_sm)
+    note = load_dock(rom_sm, bank_sm) or note
     tsbus.dock_writes((rom_sm >> 2) & 3 == MEM_SRAM)   # a flash dock is read-only, as v2's chip
     tsbus.exrom(True)
     tsbus.dock(True)
@@ -252,9 +288,9 @@ def map_slots(rom_sm, bank_sm):
     stored for a RAM dock and ignored for a flash one (tsbus.dock_writes).
     Then the ROM, which tsbus.switch loads with the 2068 held for RESET_MS
     (200 ms), so it starts cleanly in the new ROM rather than running a mix
-    of the two (docs/v3-slots-proposal.md, decision 2). Returns boot_rom's
-    note if the ROM fell back, else None; MEMBOOT refuses an empty slot
-    first."""
+    of the two (docs/v3-slots-proposal.md, decision 2). Returns a note if
+    the ROM fell back or a MEM_SD slot came from flash, else None; MEMBOOT
+    refuses an empty slot first."""
     global _served
     boot, dock = _keys(rom_sm, bank_sm)
     note = None
@@ -262,11 +298,11 @@ def map_slots(rom_sm, bank_sm):
         if _served is not None:
             save_ram_dock(_served[1])
         tsbus.dock(False)
-        load_dock(rom_sm, bank_sm)
+        note = load_dock(rom_sm, bank_sm)
         tsbus.dock_writes(dock[0] == MEM_SRAM)
         tsbus.dock(True)
     if _served is None or boot != _served[0]:
-        note = boot_rom(rom_sm, bank_sm)
+        note = boot_rom(rom_sm, bank_sm) or note
         m = memoryview(_buf)
         tsbus.switch(home=m[:16384], exrom=m[16384:])
     _served = (boot, dock)

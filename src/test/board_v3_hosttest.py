@@ -19,6 +19,7 @@ drives the v3 card as phase 4 of the v3 port plan says
 Run:  python3 src/test/board_v3_hosttest.py
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -491,6 +492,101 @@ def main():
     check(sent_w[-1][0] == "Writing the slot failed" and sent_w[-1][2] == t._3_F_Invalid_file,
           "a write that fails: Report F, said so")
     t.board.write_slot = real_ws
+
+    print("SD slots (MEM 3, phase 6)")
+    sd_dir = os.path.join(d, "sd", "slots")
+    os.makedirs(sd_dir)
+    b3.SD_SLOTS_DIR = sd_dir
+    check(board.SD_SLOTS is True and t.MEM_MAX() == 3, "the v3 card takes MEM 3")
+
+    def put_sd(name, fill):
+        with open(os.path.join(sd_dir, name), "wb") as f:
+            f.write(bytes((fill + i) & 0xFF for i in range(32768)))
+        return open(os.path.join(sd_dir, name), "rb").read()
+
+    sd08, sd09, sd04 = put_sd("F08.bin", 0xC8), put_sd("F09.bin", 0xC9), put_sd("F04.bin", 0xC4)
+    mounts = []
+    no_card = [False]
+    real_sd = (t.ACTIVATE_SD, t.DEACTIVATE_SD, t.ACTIVATE_MQ)
+
+    def act_sd(tries=None):
+        mounts.append("mount")
+        if no_card[0]:
+            raise OSError(19, "no card")
+    t.ACTIVATE_SD = act_sd
+    t.DEACTIVATE_SD = lambda: mounts.append("umount")
+    t.ACTIVATE_MQ = lambda: mounts.append("mq")
+    sent_d = []
+    t.SEND_MSG = lambda msg, msg2, st, force=False: sent_d.append((msg, msg2, st))
+    t.TSP = types.SimpleNamespace(ROM_SM=10, bank_sm=0x01, dck_prev_mem=2, dck_prev_slot=0, f_name="")
+    board.start_memory(0x0A, 0x01)
+    take()
+    t.MEMDOCK(pre(3, 8), "")
+    got = take()
+    check(IMG[2] == sd08 + sd09 and ("dock_writes", False) in got,
+          "tpi:dock CODE 3,8: SD's F08 then F09, read-only")
+    check(mounts == ["mount", "umount", "mq"], "  the SD card mounted around it, then the MQ back (%r)" % mounts)
+    check(sent_d[-1] == ("Change DOCK to MEM=3, PAGE=8", "", t._1_OK), "  0 OK, nothing stood in (%r)" % sent_d[-1:])
+    del mounts[:]
+    t.MEMDOCK(pre(3, 10), "")                                # no SD F10/F11: flash's 10-11
+    take()
+    check(IMG[2] == cart, "tpi:dock CODE 3,10 with no SD file: flash slots 10-11 stand in")
+    check(sent_d[-1][1] == "No SD slot: used flash", "  and the answer says so (%r)" % sent_d[-1:])
+    del mounts[:]
+    no_card[0] = True
+    os.rename(sd_dir, sd_dir + ".out")                       # the card is out: /sd/slots isn't there
+    t.MEMDOCK(pre(3, 8), "")
+    take()
+    check(IMG[2] == f08 + f09 and mounts == ["mount", "umount", "mq"],
+          "no card: flash slots 8-9, no error, and the MQ still comes back")
+    os.rename(sd_dir + ".out", sd_dir)
+    no_card[0] = False
+    del mounts[:]
+    t.MEMDOCK(pre(2, 8), "")
+    take()
+    check(not mounts and IMG[2] == f08 + f09, "tpi:dock CODE 2,8: flash, as always, no SD mount")
+    t.MEMDOCK(pre(4, 0), "")
+    check(sent_d[-1][2] == t._8_A_Invalid_arg and sent_d[-1][1] == "OK values: MEM=1..3, PAGE=0..15",
+          "MEM 4: Report A, and MEM 1..3 offered (%r)" % sent_d[-1:])
+    del mounts[:]
+    t.MEMBOOT(pre(3, 4), "")
+    sw = switches()
+    check(len(sw) == 1 and sw[0][1:] == (("exrom", sd04[16384:]), ("home", sd04[:16384])),
+          "tpi:boot CODE 3,4: the ROM from the SD card's F04")
+    check(mounts == ["mount", "umount", "mq"] * 2, "  mounted for the check and for the switch (%r)" % mounts)
+    with open("config.ini") as f:
+        cfg = json.load(f)
+    check(cfg["ROM_SLOT"] == 4 and cfg["ROM_SM"] & 3 == 3, "  config.ini: boot MEM 3, slot 4 (once) (%r)" % cfg)
+    t.MEMBOOT(pre(3, 7), "")
+    check(sent_d[-1][0] == "No ROM in SD slot 7" and sent_d[-1][2] == t._3_F_Invalid_file,
+          "tpi:boot CODE 3,7, neither on SD nor in flash: Report F (%r)" % sent_d[-1:])
+    note = board.start_memory(0x0B, 0x07)                   # power-on: boot MEM 3 slot 7, empty
+    take()
+    check(note == "no ROM in SD slot 7: booted flash slot 1", "booting an empty SD slot: flash slot 1 (%r)" % note)
+    note = board.start_memory(0x0B, 0x02)                   # SD slot 2: no file there, nor in flash
+    take()
+    check(note and note.startswith("no ROM in SD slot 2"), "  the same for slot 2 (%r)" % note)
+    put_slot("F02.bin", 0x20)
+    note = board.start_memory(0x0B, 0x02)
+    take()
+    check(note == "no SD slot 2: used flash slot 2", "SD slot 2 missing, flash slot 2 there: it boots, with a note (%r)" % note)
+    board.start_memory(0x0A, 0x01)
+    take()
+    t.ACTIVATE_SD, t.DEACTIVATE_SD, t.ACTIVATE_MQ = real_sd
+    t.SAVE_LOG = lambda: None
+    for rom_sm, ok in ((15, True), (7, True), (13, True), (16, False), (3, False), (12, False)):
+        with open("config.ini", "w") as f:
+            json.dump({"ROM_SLOT": 4, "ROM_SM": rom_sm}, f)
+        got = t.LOAD_CONFIG()["ROM_SM"]
+        check((got == rom_sm) if ok else (got == 10),
+              "LOAD_CONFIG, ROM_SM %d: %s (%r)" % (rom_sm, "used" if ok else "the default", got))
+    with open("config.ini", "w") as f:
+        json.dump({"ROM_SLOT": 4, "ROM_SM": 15}, f)             # boot SD 4, dock SD
+    t.LOAD_CONFIG()
+    with open("config.ini") as f:
+        cfg = json.load(f)
+    check(cfg["ROM_SM"] == 14 and cfg["ROM_SLOT"] == 1,
+          "  an SD boot is one-shot: next time flash slot 1, the SD dock kept (%r)" % cfg)
 
     print("ACTIVATE_SD with the socket empty")
     logs = []

@@ -1110,6 +1110,10 @@ and you're back to normal.
 
 **DOCK resets at switch-on** to the standard setting, Flash slot 0.
 
+> **With the USB cable plugged in**, the TS-Pico stays powered when you switch the 2068 off, so
+> switching off and on isn't a new start for it: the 2068 comes back with the same BOOT and DOCK.
+> To give the TS-Pico a real start, switch the 2068 off, unplug the USB cable, then switch on.
+
 ## 8.3 Running a cartridge
 
 Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to start it, or press
@@ -1382,6 +1386,8 @@ SAVE "tpi:boot"              : REM show: BOOT is MEM=2, PAGE=1
 SAVE "tpi:boot" CODE m,s     : REM m: 1 = RAM, 2 = Flash; s: slot 0-15
 ```
 
+On the v3 card `m` can also be 3, a slot on the SD card (Appendix F.5).
+
 Changes the ROM the 2068 starts from. Takes effect at once, so follow it with `NEW` or TS Reset.
 The choice (RAM or Flash, and the slot) is also used once more the next time the TS-Pico
 starts, then returns to Flash slot 1. RAM loses its contents when the power is off, so only
@@ -1437,6 +1443,8 @@ SAVE "tpi:dock" CODE m,s     : REM m: 1 = RAM, 2 = Flash; s: slot 0-15
 SAVE "tpi:dock" CODE 0,1     : REM show the previous setting
 SAVE "tpi:dock" CODE 0,2     : REM swap with the previous setting
 ```
+
+On the v3 card `m` can also be 3, a slot on the SD card (Appendix F.5).
 
 *(verbose)* `Change DOCK to MEM=2, PAGE=0`, and after a swap `Swapped with previous setting`.
 
@@ -1949,6 +1957,7 @@ cartridges in its own memory and serves them to the 2068 itself.
 | A RAM slot in the dock | keeps what programs write until switch-off | the same: see F.3 |
 | Putting a ROM into a slot | the loader erases and programs the Flash chip | the TS-Pico writes the slot; nothing to erase, no jumper |
 | The slot the 2068 is running from | can't be written | can be: the new ROM runs from the next start |
+| ROMs and cartridges on the SD card | must be loaded into a slot first | can be booted or docked straight from the card: see F.5 |
 | The SD card | in and out between commands | the same, and the card's switch tells the TS-Pico at once |
 | The LED | full brightness | dimmed, and adjustable (`LED_BRIGHTNESS`, Appendix D) |
 
@@ -1994,13 +2003,37 @@ Some rules work differently:
 Afterwards the loader offers to start the ROM, or for a cartridge to put it in the dock, as on the
 2.x.
 
-## F.5 The SD card
+## F.5 Slots on the SD card
+
+The v3 card can also boot or dock a ROM or cartridge straight from the SD card, without loading it
+into a slot first, so a collection can live on the card. Put the slot files in a folder called
+`slots` at the top of the SD card, named as in the card's own memory: `F04.bin` for slot 4, and
+for a cartridge two files, `F08.bin` and `F09.bin` for slots 8 and 9. The release's
+`v3-slots.zip` holds files in that form. Then use memory **3**:
+
+```basic
+SAVE "tpi:dock" CODE 3,8      : REM the cartridge in F08.bin and F09.bin on the SD card
+SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
+```
+
+- **The SD card is read once,** when you give the command. The ROM or cartridge is then in the
+  card's memory, so you can take the SD card out afterwards.
+- **If the file or the SD card isn't there,** the TS-Pico uses the Flash slot of the same number
+  instead, and `tpi:dock` says `No SD slot: used flash`. A slot that is empty on both refuses to
+  boot (**F**), as in F.2.
+- **A cartridge from the SD card can't be written by the 2068,** as with a Flash slot.
+- **BOOT from the SD card lasts for one start,** as any BOOT does: switching off and on twice
+  brings back the standard ROM (with the USB cable unplugged, as 8.2 explains).
+- To put a ROM onto the SD card, copy its file there on a computer. The loader in F.4 writes only
+  RAM and Flash slots.
+
+## F.6 The SD card
 
 You can take the card out and put it back between commands, as with the 2.x; just don't pull it
 while a LOAD or SAVE is using it. The v3 card's socket has a switch that tells the TS-Pico whether
 a card is in, so `No SD card` comes back at once rather than after a few seconds of trying.
 
-## F.6 Summary
+## F.7 Summary
 
 1. The v3 card runs the same commands as the TS-Pico 2.x. Its slots are files in the card's own
    memory, numbered as in Chapter 8.
@@ -2008,4 +2041,6 @@ a card is in, so `No SD card` comes back at once rather than after a few seconds
 3. `SAVE "tpi:dock" CODE 1,4` gives a program 64K of RAM that keeps its contents until switch-off.
 4. Loading a ROM or cartridge into a slot works as in 8.4, with no Flash chip to program. You can
    write the slot you're running from, and slot 0 asks twice.
-5. The SD card's switch means a missing card is noticed at once.
+5. `SAVE "tpi:dock" CODE 3,n` and `SAVE "tpi:boot" CODE 3,n` use slot files in `slots` on the SD
+   card, with the Flash slot as the stand-in.
+6. The SD card's switch means a missing card is noticed at once.

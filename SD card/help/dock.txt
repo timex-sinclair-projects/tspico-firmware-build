@@ -9,6 +9,9 @@ CODE 0,1: Shows previous setting
 CODE 0,2: Swaps with previous
 CODE 1,n: Set as slot n of SRAM
 CODE 2,n: Set as slot n of flash
+CODE 3,n: Slot n of the SD card
+  (v3 card): /slots/Fnn.bin on
+  the SD card, else flash slot n
 The change lasts until the Pico
 restarts. The slot it starts
 with is DCK_SLOT in config.ini
