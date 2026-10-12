@@ -1734,7 +1734,7 @@ Install the firmware and the ROM from the same release: they are made to work to
 8. The page installs the firmware and copies its files to the Pico.
 9. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
    reads `2026 TS-Pico ROM v2.3`. Try `CAT`. `PRINT PEEK 101` gives **35** (ROM 2.3), and
-   `SAVE "tpi:info"` shows firmware 2.3 and ROM 2.3.
+   `SAVE "tpi:info"` shows firmware 2.3.1 and ROM 2.3.
 
 > **Why unplug the USB cable at the end?** It gives the TS-Pico and its SD card a real power-off.
 > A card left powered through a firmware update can be stuck until it loses power (see 2.6).
@@ -1873,7 +1873,7 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the Pico's own
 the SD card). It's a single line of text:
 
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5}
 ```
 
 | Setting | Meaning | Normally |
@@ -1884,7 +1884,7 @@ the SD card). It's a single line of text:
 | `ROM_SLOT` | The BOOT slot. Anything but 1 is used for one start, then set back to 1 | `1` |
 | `ROM_SM` | Whether BOOT and DOCK use Flash or RAM | `10` (both Flash) |
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
-| `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3"` |
+| `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3.1"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
 | `LED_BRIGHTNESS` | How bright the LED is on the v3 card, 1-100 (%). The TS-Pico 2.x ignores it | `5` |
 
