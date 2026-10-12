@@ -1,7 +1,8 @@
 # tsbus: the v3 card's bus
 
 Source: [`src/tsbus/`](../../../src/tsbus/): `tsbus.c`, `tsbus.pio`,
-`usart8251.h`, `usart8251.c`, `micropython.cmake`.
+`usart8251.h`, `usart8251.c`, `modem2050.h`, `modem2050.c`,
+`micropython.cmake`.
 
 The v3 card (RP2350B) has no memory chips. It answers every 2068 memory read
 it owns from images in its own SRAM, and the TS-Pico ports 0Eh/0Fh from
@@ -33,8 +34,9 @@ than repeating it.
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
-| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_pace` |
-| `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, the two rings, pacing, XON/XOFF |
+| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_pace` |
+| `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
+| `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
 | `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
 
 ## How it fits under MicroPython
@@ -131,7 +133,8 @@ in the file.
 | `OFF_MASK` | | those three strobes' bits in SIO's input |
 | `IO_TIMEOUT_CYC` | 1000 (4 µs) | the IN guard; see `handle_in` |
 | `MODEM_UART`, `PIN_MODEM_TX`, `PIN_MODEM_RX`, `MODEM_BAUD` | `uart0`, 44, 45, 115200 | the ESP32-C3's UART0 (its GPIO 20/21) and Zimodem's speed, checked on proto1 2026-10-12. 8N1 |
-| `MODEM_RX_N`, `MODEM_RX_BITS`, `MODEM_TX_N` | 4096, 12, 1024 | the modem's receive ring (a DMA write ring, so aligned to its size) and its log2; the transmit ring |
+| `LINE_RX_N`, `LINE_RX_BITS`, `LINE_TX_N` | 4096, 12, 1024 | the line's receive ring (a DMA write ring, so aligned to its size) and its log2; its transmit ring |
+| `U_RX_N`, `U_TX_N` | 1024, 1024 | the 8251's own rings |
 | `CORE1_NVEC` | 16 + `NUM_IRQS` | core 1's vector table length |
 | `TSBUS_DIAG` | 0 | 1 builds the measuring in `handle_in` and `core1_main` (see `micropython.cmake`) |
 | `DIAG_PHASES`, `DIAG_BUCKETS` | 16, 8 | the phases `diag` keeps, and each histogram's buckets |
@@ -171,12 +174,15 @@ in the file.
 | `diag_t`, `diag[DIAG_PHASES]` | all 0 | `handle_in`, `core1_main` (diag build); `tsbus_diag_reset`, `tsbus_diag` | per phase: INs to 0Eh/0Fh; `gone` (/IORD already high at the handler's entry); `missed` (high by the time U3 went on); `min_left` (fewest cycles from entry to the strobe's end); `max_gap` (longest core 1 loop pass); `hist` (entry to strobe end, 64 cycles a bucket); `drive_max`, `drive_never`, `dhist` (cycles from the reply's TX write until MD shows it, 8 a bucket); `pio_rd_max`, `apb_rd_max`, `ram_rd_max` (core 1's slowest read of PIO0, of IO_BANK0 when `DIAG_APB_PROBE` is set, of SRAM). Always built, all zero in a normal build |
 | `diag_phase` | volatile uint32, 0 | `tsbus_diag_phase`; core 1 | which `diag` entry the measurements go to |
 | `diag_probe` | volatile uint32[256] | `core1_main` (diag build) | the SRAM core 1 reads for `ram_rd_max` |
-| `modem_rx`, `modem_tx` | uint8[4096] (aligned 4096), uint8[1024] | `ch_mrx` writes `modem_rx`; `usart8251.c` writes `modem_tx`, `ch_mtx` reads it | the 8251's receive and transmit rings |
+| `line_rx`, `line_tx` | uint8[4096] (aligned 4096), uint8[1024] | `ch_mrx` writes `line_rx`, `modem` reads it; `modem` writes `line_tx`, `ch_mtx` reads it | the line's rings: Zimodem's bytes, and what goes to it |
+| `u_rx`, `u_tx` | uint8[1024] each | `modem` and `usart` | the 8251's rings: what the 2068 will read, and what it wrote |
 | `usart` | `u8251_t` | `tsbus_modem` (init); `core1_main` and `handle_in` | the 8251 (`usart8251.h`) |
+| `modem` | `m2050_t` | `tsbus_modem` (init); `core1_main` | the line's side (`modem2050.h`) |
+| `modem_mode` | uint8, `M2050_2050` | `tsbus_modem_mode`; `tsbus_modem` | the mode `tsbus.modem(True)` sets up |
 | `modem_on` | volatile bool, false | `tsbus_modem`; `handle_in`, `core1_main` | core 1 answers 73h/77h and services the line. Off, those ports are left to the 2068, as before phase 6 |
 | `pace_set` | bool, false | `tsbus_modem_pace`; `tsbus_modem` | a pace has been set, so `tsbus.modem(True)` keeps it instead of the 300-baud default |
-| `ch_mrx`, `ch_mtx` | int, -1 | `tsbus_modem` (claimed once) | the modem's DMA channels: UART0 → `modem_rx`, endless; a run of `modem_tx` → UART0 |
-| `mrx_off` | uint32 | `core1_main`; `tsbus_modem` (0) | where `ch_mrx` had got to in `modem_rx` on the last pass |
+| `ch_mrx`, `ch_mtx` | int, -1 | `tsbus_modem` (claimed once) | the modem's DMA channels: UART0 → `line_rx`, endless; a run of `line_tx` → UART0 |
+| `mrx_off` | uint32 | `core1_main`; `tsbus_modem` (0) | where `ch_mrx` had got to in `line_rx` on the last pass |
 | `mtx_inflight` | uint32 | `core1_main`; `tsbus_modem` (0) | how many bytes the run `ch_mtx` is sending holds |
 | `modem_ins` | volatile uint32 | `handle_in` | INs from 73h/77h answered |
 
@@ -318,10 +324,11 @@ power-off and power-on readings, forever, polling:
   masked (`cpsid i`), so `iord_isr` can't pop in the middle, then clears the
   request.
 - **The modem's line**, while `modem_on`: how far `ch_mrx` has got in
-  `modem_rx` (its write address) goes onto `usart.rx_head`; if `ch_mtx` is
-  idle, the run it sent comes off `usart.tx_tail`; then `u8251_poll` (pacing,
-  overflow, XON/XOFF, the status bits); then, if `ch_mtx` is idle and bytes
-  wait, it is started on the next run of `modem_tx`, up to the ring's end
+  `line_rx` (its write address) goes onto `modem.lrx_head`; if `ch_mtx` is
+  idle, the run it sent comes off `modem.ltx_tail`; then `m2050_poll` (bytes
+  between the line and the 8251, dialing, results, DSR, flow control) and
+  `u8251_poll` (pacing, the status bits); then, if `ch_mtx` is idle and
+  bytes wait, it is started on the next run of `line_tx`, up to the ring's end
   (`read_addr`, then `al1_transfer_count_trig`). Only DMA registers, on AHB:
   the UART's are behind APB (#254). Nothing is masked here: the IN handler
   must never wait, and the first version, which masked interrupts around the
@@ -469,16 +476,26 @@ scratch:
 3. UART0 initialised again, 115200 8N1 with its DMA requests on, and GPIO
    44/45 given to it. Again each time because a MicroPython soft reset calls
    `uart_deinit` on UART0 whoever set it up.
-4. `ch_mrx` restarted at the top of `modem_rx` (8-bit, a 4096-byte write
+4. `ch_mrx` restarted at the top of `line_rx` (8-bit, a 4096-byte write
    ring, the UART's RX DREQ, an endless count); `ch_mtx` configured to write
    the UART's data register on its TX DREQ, not started.
-5. `usart` initialised (`u8251_init`): as at power-up, expecting a mode
-   byte. DSR held at 1 (Hayes mode: a program sees carrier and talks to
-   Zimodem directly). The pace kept if `modem_pace` set one, else 300 baud.
+5. `usart` initialised (`u8251_init`): as at power-up, taking commands,
+   mode 4Fh. The pace kept if `modem_pace` set one, else 300 baud.
+   `modem` initialised (`m2050_init`) in `modem_mode`, on-hook; DSR 1 in
+   Hayes mode, 0 in 2050 mode until a call connects.
 6. `modem_on` set.
 
 `False`: `modem_on` cleared; 73h/77h are left to the 2068 again. Powering
 the ESP32 is `board_v3.modem_power`'s job, not this one's.
+
+### `tsbus.modem_mode(m)`
+
+0 (`M2050_HAYES`): every byte both ways, DSR held at 1, so a program
+talks to Zimodem directly; for setting it up (`ATW`, `ATP`, `AT&W`). 1
+(`M2050_2050`, the default): a TS2050 to unmodified software
+([`modem2050.c`](#modem2050h-modem2050c)). Kept for later `tsbus.modem(True)`
+calls; with the modem on, it is set up again in the new mode at once
+(on-hook). Anything else is `ValueError`.
 
 ### `tsbus.modem_pace(baud)`
 
@@ -497,7 +514,10 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `power_resets`. The modem: `m_on`, `m_ins` (INs from 73h/77h), `m_status`
 (the status bits but RxRDY), `m_mode`, `m_cmd`, `m_rx` (characters the
 2068 read), `m_tx` (written to the line), `m_tx_dropped`, `m_rx_lost`,
-`m_rxq` (bytes waiting) and `m_pace_us`.
+`m_rxq` (bytes waiting, the line's ring and the 8251's), `m_pace_us`,
+`m_mode_sel` (`modem_mode`), `m_state` (the 2050 state, `M2050_ONHOOK`
+0 … `M2050_HANGUP` 5), `m_dials`, `m_connects` and `m_carrier_lost`.
+`m_rx_lost` is the line's ring overflowing (`modem.rx_lost`).
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
 
@@ -619,7 +639,7 @@ With the power hold and the idle release:
 - **TS Reset during Sinistar:** a clean boot, through the copyright screen
   back into the cartridge still in the dock.
 
-### The modem, checked on proto1 board 1 (2026-10-12)
+### The modem in Hayes mode, checked on proto1 board 1 (2026-10-12)
 
 Zimodem 4.0.3 on the ESP32-C3, powered with `board_v3.modem_power(True)`
 and `tsbus.modem(True)` from the REPL (step 2 has no command yet), and
@@ -633,6 +653,31 @@ and `tsbus.modem(True)` from the REPL (step 2 has no command yet), and
 - The first build masked interrupts around the 8251 updates in core 1's
   loop. Characters then came through as © (a late IN reads the floating
   bus, 127) and were lost. Unmasked, none were.
+
+### 2050 mode with MTERM/T, checked on proto1 board 1 (2026-10-12)
+
+Zimodem joined to WiFi and given phonebook entry 1234 for a test host on
+the Mac (in Hayes mode, from MODEMTST: `ATW`, `AT&W`, `ATP`; Zimodem's
+first `AT&W` prints an `[E] … remove()` log line, harmless). Then the
+unmodified MTERM/T tape from the Timex Sinclair archive, in 2050 mode:
+- MTERM's auto-dial pulsed 1234 on DTR; the card sent `ATD1234`, Zimodem
+  connected, DSR rose, MTERM qualified it and set RTS (command 27h).
+- The host's banner: with no hold after CONNECT, MTERM showed none of it;
+  held 2 s, 25 characters were lost, held 3.5 s, 22, though the 2068 read
+  all 59 (`m_rx`). MTERM drops what it reads while it redraws its screen
+  after connecting, whenever the data starts: the dial-up services waited
+  for ENTER (MTERM's manual: "a double ENTER to wake up"), and with a host
+  that does, the banner came whole. The 3.5 s hold stays: without it the
+  data arrived during MTERM's carrier check and was all lost.
+- Echoed typing both ways.
+- The host hanging up: Zimodem printed `NO CARRIER` straight after the
+  host's `> ` prompt, with no line break before it. The first matcher only
+  looked at a line's start and passed it to the screen; matched anywhere
+  before a line ending, DSR dropped and MTERM hung up by itself.
+- MTERM hanging up: 1.1 s of silence, `+++`, 1.2 s, `ATH`; the host saw
+  the line close. (Zimodem passes the `+++` on, as a modem must before it
+  knows it was an escape.)
+- No late INs, no lost bytes, slowest reply 412 ns.
 
 ## `usart8251.h`, `usart8251.c`
 
@@ -663,12 +708,12 @@ other bits (`status`) are the loop's, at most one pass old.
 ### Bits and `u8251_t`
 
 `U8251_TXRDY` … `U8251_DSR` are the status bits, `U8251_C_TXEN` …
-`U8251_C_EH` the command bits, `U8251_XON`/`U8251_XOFF` 11h/13h.
-`u8251_t` holds: what the caller sets (`pace` in ticks of `now`, `dsr`,
-`flow`); the chip (`expect_mode`, `mode`, `cmd` less ER and IR, `mask` from
-the character length, `hold`, `hold_full`, `overrun`, `status`); the
-receive ring (`rx_buf`, `rx_size`, `rx_head` the caller's, `rx_tail` ours,
-`last_release`, `xoff_sent`); the transmit ring (`tx_buf`, `tx_size`,
+`U8251_C_EH` the command bits, `U8251_XON`/`U8251_XOFF` 11h/13h (used by
+`modem2050.c`). `u8251_t` holds: what the caller sets (`pace` in ticks of
+`now`, `dsr`, which `modem2050.c` sets); the chip (`expect_mode`, `mode`,
+`cmd` less ER and IR, `mask` from the character length, `hold`,
+`hold_full`, `overrun`, `status`); the receive ring (`rx_buf`, `rx_size`,
+`rx_head` the caller's, `rx_tail` ours, `last_release`); the transmit ring (`tx_buf`, `tx_size`,
 `tx_head` ours, `tx_tail` the caller's); and counters (`rx_chars`,
 `tx_chars`, `tx_dropped`, `rx_lost`).
 
@@ -682,8 +727,13 @@ the line has the bytes); OE from `overrun`; DSR from `dsr`. Not RxRDY.
 
 ### `u8251_init(u, rx_buf, rx_size, tx_buf, tx_size)`
 
-Everything zero, the rings given, expecting a mode byte (a chip fresh from
-reset), mask FFh.
+Everything zero, the rings given; taking commands, with mode 4Fh (8N1,
+x64) and mask FFh. The datasheet leaves a chip's state at power-up
+undefined (a mode byte, a sync character or a command). Taking commands
+means a program that reset the 8251 before the modem came up carries on
+(MTERM, started before the modem was switched on, on proto1), and the
+BASIC "Modem" dialer, which never resets it, has its first `OUT 119,31`
+taken as the off-hook command it means.
 
 ### `u8251_control(u, b)` (OUT 77h)
 
@@ -692,19 +742,12 @@ setting `mask` from the length (5-8 bits); a sync one (00) is ignored, so
 the datasheet's reset preamble (00h three times, 40h) ends in "expecting a
 mode byte" from any state. Otherwise a command: IR (bit 6) goes back to
 expecting a mode byte and clears the command, `hold_full` and `overrun`;
-ER (bit 4) clears `overrun`; the rest is kept in `cmd`. So the BASIC
-dialer's first `OUT 119,31` on a fresh chip is a mode byte, as on the real
-8251.
+ER (bit 4) clears `overrun`; the rest is kept in `cmd`.
 
 ### `u8251_data_out(u, b)` (OUT 73h)
 
 With TxEN and room, `b & mask` into the transmit ring; else counted in
 `tx_dropped`.
-
-### `send_flow(u, b)`
-
-XON or XOFF into the transmit ring, behind what the 2068 queued and
-whatever TxEN says; false if full.
 
 ### `u8251_poll(u, now)`
 
@@ -714,9 +757,10 @@ Every loop pass:
 2. If no character is held, one is waiting, RxE is on, and `pace` has
    passed since the last (or none has been read yet, or `pace` is 0): the
    next one, masked, into `hold`, then `hold_full`.
-3. With `flow`: XOFF when more than three quarters of the ring is waiting,
-   XON once below a quarter.
-4. `update_status`.
+3. `update_status`.
+
+(Step 1 can't happen on the card: `modem2050.c` moves bytes in only while
+there is room.)
 
 ### `u8251_status(u)` (IN 77h), `u8251_data_in(u)` (IN 73h)
 
@@ -724,13 +768,132 @@ Every loop pass:
 cleared and `rx_chars` counted. Reading with nothing held gives the last
 character again, as the chip's data register would.
 
+## `modem2050.h`, `modem2050.c`
+
+What stands between the 8251 and the line, plain C like `usart8251.c`,
+driven on the host by
+[`src/test/modem2050_hosttest.py`](../../../src/test/modem2050_hosttest.py)
+(with `modem2050_shim.c`) with MTERM's own timings. `m2050_poll` runs once a
+core 1 pass, never from the IN handler; it moves at most `M2050_BURST` (16)
+bytes each way a pass.
+
+### Rings, constants and `m2050_t`
+
+Two rings each side: the line's (`lrx` written by DMA, the caller
+advancing `lrx_head`; `ltx` read by DMA, the caller advancing `ltx_tail`)
+and the 8251's (this advances `usart`'s `rx_head` and `tx_tail`).
+`M2050_HAYES` 0, `M2050_2050` 1; the states `M2050_ONHOOK` 0, `OFFHOOK`,
+`DIALING`, `CONNECTED`, `DEAD`, `HANGUP` 5. The times, in ms:
+
+| Name | ms | What |
+|---|---|---|
+| `M2050_BREAK_MAX_MS` | 200 | a DTR break shorter than this is a dial pulse (MTERM's: 58 ms) |
+| `M2050_DIGIT_MS` | 300 | DTR on this long after pulses ends a digit (MTERM: 832 ms between digits) |
+| `M2050_NUMBER_MS` | 1500 | ... and this long ends the number (MTERM waits 2.38 s) |
+| `M2050_ONHOOK_MS` | 400 | DTR off this long is on-hook |
+| `M2050_GUARD_MS` | 1100 | Zimodem's `+++` guard time is over 900 ms |
+| `M2050_SETTLE_MS` | 3500 | data held back after CONNECT (above, the MTERM check) |
+
+`m2050_t` holds the mode and `tick_ms`, the line's rings, and 2050 mode's
+state: `state`, `dtr` and `dtr_at` (DTR's last level and when it changed),
+`pulses`, `number` and `ndigits`, `line` and `nline` (a result line being
+read), `match` (characters of NO CARRIER held back), `swallow_lf`,
+`connected_at`, `hang_phase`, `hang_at`, `last_tx_at`, `xoff_sent`; and
+counters `dials`, `connects`, `carrier_lost`, `rx_lost`.
+
+### Strings, `STR`, and flash
+
+`no_carrier`, `s_init` (`ATE0V1X0F1\r`: no echo, word results, a short
+CONNECT, XON/XOFF), `s_ath`, `s_plus` and the result words (`r_connect`,
+`r_answer`, `r_error`, `r_busy`, `r_dialtone`) are deliberately not `const`:
+const data goes to `.rodata` in flash, and core 1 must never read flash,
+which stalls while core 0 writes it (#254). As `.data` they are copied to
+RAM at start-up. Nothing may become a call to `strlen` or `memcpy` either,
+which the compiler makes of simple loops and which are in flash: the first
+build called `strlen` (through a veneer) from `put_line`. So `put_line`
+takes its length (`STR(s)` gives both), and every copy goes through a
+ring's masked index. After a change, check the disassembly of the RAM code
+(`core1_main` through `m2050_poll`) for branches out of RAM: only
+`core1_main`'s set-up may call flash (`irq_set_*`).
+
+### `ms`, `starts`, `put_line`, `put_byte`, `to_2068`
+
+Ticks in n ms; whether a line begins with a word; n bytes for Zimodem if
+all fit (else none), one byte if it fits; a byte into the 8251's receive
+ring. `put_line` and `put_byte` note `last_tx_at`, for the guard time.
+
+### `m2050_init(m, mode, tick_ms, lrx, lrx_size, ltx, ltx_size)`
+
+Everything zero, the mode and rings given, on-hook.
+
+### `go_onhook(m, now)`
+
+DTR has been off `M2050_ONHOOK_MS`. From connected: `HANGUP`, the escape
+to follow (and an XON first if Zimodem was stopped). From dialing: `ATH`
+at once (any character aborts a dial; `ATH` makes sure), then on-hook.
+Otherwise on-hook.
+
+### `follow_dtr(m, u, now)`
+
+2050 mode's hook and dial, from DTR in the 8251's command:
+- DTR rises: from on-hook, off-hook, with `s_init` sent and the number
+  cleared; while off-hook, after a break under `M2050_BREAK_MAX_MS`, one
+  pulse.
+- DTR off for `M2050_ONHOOK_MS` (not already on-hook or hanging up):
+  `go_onhook`.
+- Off-hook, DTR on: after `M2050_DIGIT_MS` a digit (1-9 pulses, 10 is 0;
+  more are ignored); after `M2050_NUMBER_MS` with digits and none pending,
+  `ATD<number>\r` (written a byte at a time; next pass if the ring is
+  full), `DIALING`, `dials` counted. The number goes to Zimodem's
+  phonebook (`ATP`), which maps it to a host.
+
+### `read_result(m, c, now)`
+
+A byte from Zimodem while not connected. Collects a line; at its end,
+while dialing: `CONNECT…` connects (`connects` counted, `connected_at`,
+the LF after the CR swallowed); `NO CARRIER`, `NO ANSWER`, `ERROR`, `BUSY`
+or `NO DIALTONE`: dead. Nothing reaches the 2068.
+
+### `read_data(m, u, c)`
+
+A byte from Zimodem while connected. The LF after CONNECT's CR is
+dropped. `NO CARRIER` is held back as it arrives, anywhere in a line;
+followed by CR or LF it is the far end gone (dead, `carrier_lost`), and
+not shown. On proto1 Zimodem printed it straight after the host's `> `
+prompt, with no line break first. A mismatch passes on what was held
+back, and the byte (which may start a new match). So a host that sends
+the words NO CARRIER and a line ending ends the call.
+
+### `m2050_poll(m, u, now)`
+
+Every pass:
+1. If DMA lapped `lrx_tail`, the lost bytes are counted (`rx_lost`) and
+   the 8251's OE set.
+2. 2050 mode: `follow_dtr`.
+3. Zimodem → the 2068, up to `M2050_BURST`, while the 8251's ring has room
+   for a held NO CARRIER and one more: Hayes, straight; connected, through
+   `read_data`, but not until `M2050_SETTLE_MS` after CONNECT; otherwise
+   `read_result`.
+4. The 2068 → Zimodem, up to `M2050_BURST`: in Hayes mode and while
+   connected, into `ltx` (waiting while it is full); otherwise taken and
+   dropped, so TxRDY stays up.
+5. Connected in 2050 mode: XOFF when `lrx` is over three quarters full,
+   XON below a quarter (`ATF1` is in `s_init`). Not in Hayes mode, where
+   Zimodem's settings are the user's.
+6. Hanging up: once `ltx` is empty and nothing has been sent for
+   `M2050_GUARD_MS`, `+++`; after the guard again, `ATH`, on-hook; if DTR
+   is already back on (a redial), off-hook again with `s_init`.
+7. DSR: 1 in Hayes mode, else only while connected. It never changes
+   while on-hook: MTERM counts DSR changes then as rings, and answers
+   after four.
+
 ## `micropython.cmake`
 
-The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c` and
-`usart8251.c`, the pioasm header (`pico_generate_pio_header`), and
-`hardware_dma`, `hardware_pio`, `hardware_uart`, `hardware_vreg`,
-`pico_multicore`. `U8251_ON_PICO=1` makes `usart8251.c` put core 1's
-functions in RAM. The board sets `USER_C_MODULES` to this file.
+The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c`,
+`usart8251.c` and `modem2050.c`, the pioasm header
+(`pico_generate_pio_header`), and `hardware_dma`, `hardware_pio`,
+`hardware_uart`, `hardware_vreg`, `pico_multicore`. `U8251_ON_PICO=1` makes
+the two plain-C files put core 1's functions in RAM. The board sets `USER_C_MODULES` to this file.
 
 `tsbus.c` includes `tsbus.pio.h` only when `NO_QSTR` is not defined:
 MicroPython's QSTR scan preprocesses the file before the header has been

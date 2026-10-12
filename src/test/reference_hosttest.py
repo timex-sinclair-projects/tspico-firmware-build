@@ -95,6 +95,8 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/tsbus/tsbus.pio",
     "src/tsbus/usart8251.h",
     "src/tsbus/usart8251.c",
+    "src/tsbus/modem2050.h",
+    "src/tsbus/modem2050.c",
     "src/tsbus/micropython.cmake",
     "src/rom/TSPICO.ROM",
     "src/rom/TSPICO-SYNC.ROM",

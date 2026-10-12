@@ -4,11 +4,17 @@
  * for the chip.
  *
  * What is the chip's and what isn't:
- * - The mode byte / command state machine is the datasheet's: after a reset
- *   (power-up, or command bit 6) the next control write is the mode byte,
+ * - The mode byte / command state machine is the datasheet's: after an
+ *   internal reset (command bit 6) the next control write is the mode byte,
  *   then every one is a command. A mode byte with baud factor 00 (sync mode,
  *   not supported) is ignored, so the datasheet's reset preamble (00h three
- *   times, then 40h) ends in "expecting a mode byte" from any state.
+ *   times, then 40h) ends in "expecting a mode byte" from any state. At
+ *   power-up the datasheet leaves the chip's state undefined (a mode byte,
+ *   a sync character or a command); this one starts taking commands, with
+ *   mode 4Fh (8N1, x64) and everything off. So a program that reset the chip
+ *   before the modem came up carries on, and the BASIC "Modem" dialer, which
+ *   never resets it, has its first OUT 119,31 taken as the off-hook command
+ *   it means.
  * - The status bits are the datasheet's status register: TxRDY is "room to
  *   write", whatever CTS or TxEN say; RxRDY is held clear while RxE is off;
  *   TxEMPTY stays set while the transmitter is disabled.
@@ -18,6 +24,7 @@
  *   ring overflows, and cleared, as on the chip, by ER or a reset.
  * - Received characters are paced: one becomes RxRDY no sooner than `pace`
  *   after the last, so a program sees a 300-baud line as a 2050 gave it.
+ * - What comes and goes on the line, and DSR, are modem2050.c's.
  */
 #if U8251_ON_PICO
 #include "pico.h"           // __not_in_flash_func: core 1 runs this from RAM
@@ -52,7 +59,7 @@ void u8251_init(u8251_t *u, uint8_t *rx_buf, uint32_t rx_size, uint8_t *tx_buf, 
     u->rx_size = rx_size;
     u->tx_buf = tx_buf;
     u->tx_size = tx_size;
-    u->expect_mode = 1;          // a chip fresh from reset wants a mode byte
+    u->mode = 0x4f;              // power-up: taking commands, 8N1 (see above)
     u->mask = 0xff;
     update_status(u);
 }
@@ -89,17 +96,6 @@ void U8251_FN(u8251_data_out)(u8251_t *u, uint8_t b) {
     update_status(u);
 }
 
-// A flow-control byte for the line. It goes in the transmit ring behind
-// whatever the 2068 has queued, whatever TxEN says. False if the ring is full.
-static int U8251_FN(send_flow)(u8251_t *u, uint8_t b) {
-    if (u->tx_head - u->tx_tail >= u->tx_size) {
-        return 0;
-    }
-    u->tx_buf[u->tx_head & (u->tx_size - 1)] = b;
-    u->tx_head++;
-    return 1;
-}
-
 void U8251_FN(u8251_poll)(u8251_t *u, uint32_t now) {
     uint32_t level = u->rx_head - u->rx_tail;
     if (level > u->rx_size) {                 // the writer lapped us: those are gone
@@ -115,14 +111,6 @@ void U8251_FN(u8251_poll)(u8251_t *u, uint32_t now) {
         BARRIER();               // the character before the flag
         u->hold_full = 1;
         u->last_release = now;
-        level--;
-    }
-    if (u->flow) {
-        if (!u->xoff_sent && level > u->rx_size / 4 * 3) {
-            u->xoff_sent = (uint8_t)send_flow(u, U8251_XOFF);
-        } else if (u->xoff_sent && level < u->rx_size / 4) {
-            u->xoff_sent = (uint8_t)!send_flow(u, U8251_XON);
-        }
     }
     update_status(u);
 }

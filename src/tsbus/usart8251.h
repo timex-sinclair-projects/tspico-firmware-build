@@ -58,8 +58,7 @@
 typedef struct {
     // Set by the caller.
     uint32_t pace;          // ticks of `now` between received characters; 0: none
-    uint8_t dsr;            // what status bit 7 shows (Hayes mode: 1)
-    uint8_t flow;           // send XOFF/XON to the line as the receive ring fills/drains
+    uint8_t dsr;            // what status bit 7 shows (modem2050.c sets it)
 
     // The chip.
     uint8_t expect_mode;    // the next control write is a mode byte (after any reset)
@@ -71,16 +70,16 @@ typedef struct {
     uint8_t overrun;        // OE: the receive ring overflowed
     volatile uint8_t status;// IN 77h's bits but RxRDY, kept current by every loop call
 
-    // Receive ring: the line's bytes, written by DMA on the card. The caller
-    // advances rx_head; rx_tail is ours. rx_size is a power of two.
+    // Receive ring: the line's bytes for the 2068 (modem2050.c writes them).
+    // The caller advances rx_head; rx_tail is ours. rx_size is a power of two.
     uint8_t *rx_buf;
     uint32_t rx_size;
     uint32_t rx_head, rx_tail;
     uint32_t last_release;  // `now` when the last character became RxRDY
-    uint8_t xoff_sent;
 
     // Transmit ring: the 2068's bytes for the line. tx_head is ours; the
-    // caller advances tx_tail as they go out. tx_size is a power of two.
+    // caller (modem2050.c) advances tx_tail as it takes them. tx_size is a
+    // power of two.
     uint8_t *tx_buf;
     uint32_t tx_size;
     uint32_t tx_head, tx_tail;

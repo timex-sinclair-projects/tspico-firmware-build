@@ -50,7 +50,7 @@ from the BASIC keyword to the SD card and back.
 | Firmware | [firmware/upgrade.md](firmware/upgrade.md) | `src/upgrade/`: the upgrade UF2, the Z80 updater and its tape, the web updater's part |
 | Firmware | [firmware/board.md](firmware/board.md) | `src/TS/board.py`, `board_v2.py`, `board_v3.py`: the board layer, every hardware touch of the firmware behind one module, for the v2 TS-Pico and the v3 card |
 | Firmware | [firmware/board-v3.md](firmware/board-v3.md) | `src/boards/TSPICO_V3/`: the MicroPython board for the v3 card (RP2350B), its safe pin state, default pins, heap and clock settings |
-| Firmware | [firmware/tsbus.md](firmware/tsbus.md) | `src/tsbus/`: the v3 card's bus as a C module: the PIO programs, the DMA chain, core 1, `tsbus.start`/`load`/`serve`/`hold` |
+| Firmware | [firmware/tsbus.md](firmware/tsbus.md) | `src/tsbus/`: the v3 card's bus as a C module: the PIO programs, the DMA chain, core 1, `tsbus.start`/`load`/`serve`/`hold`; the TS2050 modem (`usart8251`, `modem2050`) |
 | ROM | [rom/overview.md](rom/overview.md) | The images and their lineage, banking, how HOME calls EXROM, version bytes, the ROM build and the listings |
 | ROM | [rom/sysvars.md](rom/sysvars.md) | The TS-Pico system variables at 5Dxxh, and the stock ones the Pico code uses |
 | ROM | [rom/home.md](rom/home.md) | The HOME ROM: every hook and patch |
@@ -186,11 +186,13 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `e4cde52397f6` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `0e05b23852d9` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `7609c20492f9` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `8b19f44b1c3f` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/usart8251.h` | `3e5262592f41` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/usart8251.c` | `5383b084e42e` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/micropython.cmake` | `ac385050336e` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/usart8251.h` | `6d0523a0e42a` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/usart8251.c` | `e6812ab5e133` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/modem2050.h` | `a88bb99e6d45` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/modem2050.c` | `c991f1503e6e` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/micropython.cmake` | `e61f97a0ce98` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-23.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
@@ -200,5 +202,5 @@ behaviour, and the caveat and the issue link go.
 | `tools/build-flash.py` | `440cdc45cab9` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/build.yml` | `faaf19384a3b` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `dc1bea10b460` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `cae490dafd9e` | [firmware/boot.md](firmware/boot.md) | — |

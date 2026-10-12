@@ -52,7 +52,8 @@ def main():
 
         print("power-up")
         u.shim_init()
-        check(get("expect_mode") == 1, "a fresh chip expects a mode byte")
+        check(get("expect_mode") == 0 and get("mode") == 0x4F and get("cmd") == 0,
+              "a fresh chip takes commands: mode 4Fh (8N1), everything off")
         check(st() == 0x05, "status TxRDY + TxEMPTY, no DSR (%02Xh)" % st())
 
         print("MTERM's reset: 00h x3, 40h, mode 7Bh, command 15h")
@@ -68,7 +69,7 @@ def main():
 
         print("Hayes mode: DSR held at 1")
         u.shim_init()
-        u.shim_set(0, 1, 0)
+        u.shim_set(0, 1)
         mterm_init()
         u.shim_poll(0)
         check(st() == 0x85, "idle status 85h, what the BASIC dialers' IN 119=133 wants (%02Xh)" % st())
@@ -105,7 +106,7 @@ def main():
         u.shim_control(0x15)
 
         print("receive, paced (MTERM: IN 77h / BIT 1, then IN 73h)")
-        u.shim_set(100, 1, 0)                       # 100 ticks a character
+        u.shim_set(100, 1)                       # 100 ticks a character
         for ch in b"HI\xc8":
             u.shim_line_rx(ch)
         u.shim_poll(1000)
@@ -131,7 +132,7 @@ def main():
         check(st() & 2 and u.shim_data_in() == ord("x"), "RxE on again: the waiting x")
 
         print("overrun")
-        u.shim_set(0, 1, 0)
+        u.shim_set(0, 1)
         for i in range(70):
             u.shim_line_rx(0x20 + i)
         u.shim_poll(0)
@@ -146,31 +147,16 @@ def main():
             u.shim_data_in()
             u.shim_poll(0)
 
-        print("flow control (XOFF at 3/4, XON below 1/4)")
-        u.shim_init()
-        u.shim_set(0, 1, 1)
-        mterm_init()
-        for i in range(50):
-            u.shim_line_rx(0x41)
-        u.shim_poll(0)
-        check(get("xoff_sent") == 1 and u.shim_line_tx() == 0x13, "49 waiting: XOFF to the line")
-        for i in range(34):
-            u.shim_data_in()
-            u.shim_poll(0)
-        check(get("xoff_sent") == 0 and u.shim_line_tx() == 0x11, "drained below 16: XON")
-
         print("the BASIC dialer on a fresh chip")
         u.shim_init()
-        u.shim_set(0, 1, 0)
+        u.shim_set(0, 1)
         u.shim_control(31)                          # Modem's line 15: OUT 119,31
-        check(get("expect_mode") == 0 and get("mode") == 31,
-              "OUT 119,31 is taken as the mode byte, as on a real 8251")
-        u.shim_control(3)
-        check(get("cmd") == 3, "the next write is a command (DTR, TxEN)")
+        check(get("mode") == 0x4F and get("cmd") == 0x0F,
+              "OUT 119,31 is the off-hook command it means (DTR, TxEN, RxE, SBRK; ER a one-shot)")
 
         print("the 2068 BBS: answer sequence after a hang-up")
         u.shim_init()
-        u.shim_set(0, 1, 0)
+        u.shim_set(0, 1)
         mterm_init()
         for b in (64, 0, 0):                        # line 9201: IR, 0, 0
             u.shim_control(b)
