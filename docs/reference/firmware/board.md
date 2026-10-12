@@ -280,12 +280,14 @@ The SD card's own pins: CS 37, SCK 38, MOSI 39, MISO 32, SPI0
 ([board-v3.md](board-v3.md#pinscsv)). GPIO 2–4 are MD2–MD4 on this card,
 the Z80 data bus, and are never touched by SD.
 
-### `_IOX_ADDR`, `_IOX_IN1`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_NLED`, `_X_SD_CD`
+### `_IOX_ADDR`, `_IOX_IN1`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_WIFI_EN`, `_X_WIFI_DL`, `_X_NLED`, `_X_SD_CD`
 
 The XL9555 at I2C address 20h. Register 1 is input port 1 (the joystick,
 nBUSAK_L and the SD card-detect switch); register 2 is output port 0. Its
 safe value is E0h (no bus request, no NMI, OLED in reset, ESP32 off, LED
-off), as `board_init.c` sets it at start-up. Bit 5 of port 0 (20h) is the
+off), as `board_init.c` sets it at start-up. Bit 3 (08h) is the ESP32-C3's
+EN, high to run it; bit 4 (10h), high, pulls its IO9 low through the
+74LVC06, so it boots into its ROM's serial downloader. Bit 5 of port 0 (20h) is the
 LED, active low: lit, port 0 is C0h. Bit 7 of port 1 (80h) is the detect
 switch: the TF-01A's switch closes to GND with a card in, and R38 pulls it
 up, so low means a card. Read on the card with the socket empty: port 1 FFh.
@@ -306,6 +308,47 @@ closed, `None` while the socket is empty.
 
 `_i2c`, making it first if need be. I2C0 on the board's defaults: SCL 25,
 SDA 24.
+
+### `_out0`, `_out0_buf`
+
+Port 0 is shared: the LED (bit 5), the ESP32's EN and IO9 (bits 3 and 4),
+and on proto2 the SD socket's power (bit 6, #262, not yet used). `_out0` is
+the value last written, starting at E0h, what `board_init.c` writes at
+power-up. `_out0_buf` is the one-byte buffer every write sends, so the byte
+on the wire is always a whole value of `_out0`. Before this (until the
+modem's step 1), the LED wrote C0h or E0h on every edge, which would have
+switched the ESP32 off 100 times a second.
+
+### `_port0(mask, bits)`
+
+Sets the bits of port 0 in `mask` to those of `bits`, leaves the others,
+and writes the register only if that changed it. Returns `False` if the
+expander didn't answer; the shadow keeps the new value.
+
+Who can interleave: the LED changes its bit from soft timer callbacks, which
+run on core 0 between bytecodes, never inside the I2C write's C call and
+never inside another callback. So a callback always starts from the newest
+`_out0` and can't undo another bit. A change from the main thread can be
+overtaken by an LED edge between reading `_out0` and storing it; then it
+writes the LED's bit as it was one edge before, and the LED's next edge
+(within 10 ms) puts it right. No other bit can be lost.
+`board_v3_hosttest.py` pins the LED's edges keeping EN set, and a change
+after an edge starting from it.
+
+### `modem_power(on)`
+
+The ESP32-C3 on (EN high: it boots, and Zimodem's banner comes about a
+second later at 115200 baud on GPIO 44/45, checked on proto1 2026-10-12)
+or off (EN low: held in reset, its WiFi silent). Off unless something
+needs it: it draws up to about 350 mA in WiFi bursts from the 2068's 5 V
+rail. Nothing calls it yet; the modem's next steps will
+([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)).
+
+### `modem_download(on)`
+
+IO9 held low (`True`) or released. The ESP32 reads IO9 as it leaves reset,
+so this takes effect at the next `modem_power(True)`: low boots its ROM's
+serial downloader, for installing Zimodem, instead of the firmware.
 
 ### `LED_PERIOD_US`, `LED_BRIGHTNESS`
 
@@ -574,8 +617,8 @@ C call there stretches a period; that is a flicker, not a fault.
 
 | Method | What |
 |---|---|
-| `ExpanderLED.__init__()` | the shared `I2C(0)` (`_iox()`); off; on-time from `LED_BRIGHTNESS`; the two callbacks bound once, so the timer callbacks allocate nothing |
-| `ExpanderLED._write(lit)` | writes port 0 (C0h lit, E0h dark) only when `lit` changes; an `OSError` (no expander) is ignored, the LED is cosmetic |
+| `ExpanderLED.__init__()` | off; on-time from `LED_BRIGHTNESS`; the two callbacks bound once, so the timer callbacks allocate nothing |
+| `ExpanderLED._write(lit)` | only when `lit` changes: bit 5 of port 0 through `_port0`, low for lit, the other bits as they are. A failed write (no expander) is ignored: the LED is cosmetic |
 | `ExpanderLED._light(t)` | the period timer: lit, and the one-shot re-armed for the on-time |
 | `ExpanderLED._dark(t)` | the one-shot: dark |
 | `ExpanderLED._stop()` | both timers stopped and dropped |

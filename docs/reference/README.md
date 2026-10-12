@@ -166,7 +166,7 @@ behaviour, and the caveat and the issue link go.
 | `src/TS/printer.py` | `d8bb84d1d654` | [firmware/printer.md](firmware/printer.md) | [flows/printer.md](flows/printer.md) |
 | `src/TS/board.py` | `76b05c62a1d9` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/board_v2.py` | `d60c9816bd6a` | [firmware/board.md](firmware/board.md), [firmware/pio.md](firmware/pio.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
-| `src/TS/board_v3.py` | `9f02500f4630` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
+| `src/TS/board_v3.py` | `ac53f8ae278b` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
 | `src/upgrade/main.py` | `6ab664e9c744` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/upgrade/upgrade.py` | `5eb55f6dd1fb` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/rom/fdd/fddcmd.asm` | `1ff9cf479f0c` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
