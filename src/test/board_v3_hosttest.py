@@ -342,6 +342,30 @@ def main():
     led.off()
     take()
 
+    print("port 0 shared: the ESP32's EN and IO9 next to the LED")
+    board.led_brightness(led, 5)
+    take()
+    check(board.modem_power(True) is True and take() == [("i2c", 0x20, 2, b"\xe8")],
+          "modem_power(True): EN (bit 3) set, the rest safe (E8h)")
+    check(board.modem_power(True) and take() == [], "  again: no write")
+    led.on()
+    per = [t for t in FakeTimer.made if t.live and t.mode == FakeTimer.PERIODIC][-1]
+    off = [t for t in FakeTimer.made if t.live and t.mode == FakeTimer.ONE_SHOT][-1]
+    off.callback(off)
+    per.callback(per)
+    writes = [c[3] for c in take() if c[0] == "i2c"]
+    check(writes == [b"\xc8", b"\xe8", b"\xc8"], "the LED's edges keep EN set (%r)" % writes)
+    board.modem_download(True)
+    check(take() == [("i2c", 0x20, 2, b"\xd8")], "modem_download(True): bit 4 too, the LED lit kept (D8h)")
+    off.callback(off)                                    # the LED goes dark between
+    board.modem_power(False)                             # a main-thread change
+    writes = [c[3] for c in take() if c[0] == "i2c"]
+    check(writes == [b"\xf8", b"\xf0"], "  a change after an LED edge starts from it (%r)" % writes)
+    board.modem_download(False)
+    led.off()
+    take()
+    check(b3._out0 == 0xE0, "everything off: back to E0h, the power-up value")
+
     print("background and the slot commands")
     ran = []
     board.background(lambda *a: ran.append(a), (1, 2))

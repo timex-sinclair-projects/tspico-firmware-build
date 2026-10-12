@@ -43,6 +43,8 @@ _IOX_ADDR = 0x20
 _IOX_IN1 = 1            # input port 1: the joystick, nBUSAK_L, SD_CD
 _IOX_OUT0 = 2
 _IOX_OUT0_SAFE = 0xE0   # no bus request, no NMI, OLED in reset, ESP32 off, LED off
+_X_WIFI_EN = 0x08       # bit 3: the ESP32-C3's EN, high = powered and running
+_X_WIFI_DL = 0x10       # bit 4: high pulls the ESP32's IO9 low, so it boots into download mode
 _X_NLED = 0x20          # bit 5, active low
 _X_SD_CD = 0x80         # port 1 bit 7: low = a card in (the TF-01A's switch closes to GND; R38 pulls it up)
 
@@ -59,6 +61,52 @@ def _iox():
     if _i2c is None:
         _i2c = I2C(0)               # the board's defaults: SCL 25, SDA 24
     return _i2c
+
+# Port 0 is shared: the LED, the ESP32's EN and IO9, and on proto2 the SD
+# socket's power (#262) each own bits of the one output register. _out0 is
+# what was last written, starting from the value board_init.c writes at
+# power-up; _port0 changes only the bits it is given. The LED changes its
+# bit from soft timer callbacks, which run on core 0 between bytecodes:
+# never inside an I2C write and never inside another callback. So a callback
+# always starts from the newest _out0 and can't undo another bit; the worst a
+# change from the main thread can do is write the LED's bit as it was one
+# edge before, until the LED's next edge (10 ms) writes it again. _out0_buf
+# is the one buffer every write uses, so the byte written is always a whole
+# value of _out0.
+_out0 = _IOX_OUT0_SAFE
+_out0_buf = bytearray(1)
+
+
+def _port0(mask, bits):
+    """Set port 0's bits in mask to those of bits, the others unchanged, and
+    write the register if that changed it. False if the expander didn't
+    answer (the shadow keeps the new value)."""
+    global _out0
+    new = (_out0 & ~mask) | (bits & mask)
+    if new == _out0:
+        return True
+    _out0 = new
+    _out0_buf[0] = new
+    try:
+        _iox().writeto_mem(_IOX_ADDR, _IOX_OUT0, _out0_buf)
+    except OSError:
+        return False
+    return True
+
+
+def modem_power(on):
+    """The ESP32-C3 on (EN high: it boots, about a second to Zimodem's
+    banner) or off (EN low: held in reset, its WiFi silent). It draws up to
+    about 350 mA in WiFi bursts from the 2068's 5 V rail, so it is off unless
+    something needs it. False if the expander didn't answer."""
+    return _port0(_X_WIFI_EN, _X_WIFI_EN if on else 0)
+
+
+def modem_download(on):
+    """IO9 held low (on) or released, read by the ESP32 as it leaves reset:
+    low boots its ROM's serial downloader (to install Zimodem) instead of
+    the firmware. Takes effect at the next modem_power(True)."""
+    return _port0(_X_WIFI_DL, _X_WIFI_DL if on else 0)
 
 # The LED dimmer: D4 on R5 (100R) is far too bright at full current, so
 # while it is on it is lit for the first LED_BRIGHTNESS % of every 10 ms
@@ -391,11 +439,10 @@ class ExpanderLED:
     (about 100 us each) per period, whatever the brightness; none while it
     is off (both timers stopped). At 100 % it is simply lit. The timers'
     callbacks are soft (scheduled on core 0), so a long C call there stretches
-    a period: a flicker, not a fault. The other port 0 bits stay at their
-    safe values (board_init.c)."""
+    a period: a flicker, not a fault. It changes only its own bit of port 0
+    (_port0), so the ESP32's EN and IO9 stay as they were set."""
 
     def __init__(self):
-        self._i2c = _iox()
         self._v = 0
         self._lit = False
         self._on_us = LED_PERIOD_US * LED_BRIGHTNESS // 100
@@ -407,11 +454,7 @@ class ExpanderLED:
     def _write(self, lit):
         if lit != self._lit:
             self._lit = lit
-            out = _IOX_OUT0_SAFE & ~_X_NLED if lit else _IOX_OUT0_SAFE
-            try:
-                self._i2c.writeto_mem(_IOX_ADDR, _IOX_OUT0, bytes((out,)))
-            except OSError:
-                pass                # no expander answering: the LED is cosmetic
+            _port0(_X_NLED, 0 if lit else _X_NLED)   # no expander answering: the LED is cosmetic
 
     def _light(self, t):
         self._write(True)
