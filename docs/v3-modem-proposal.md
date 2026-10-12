@@ -8,6 +8,11 @@ ESP32-C3 running Zimodem as the line. The installer comes last (step 6).
 
 Decisions taken with David on 2026-10-12 are marked **(decided)**.
 
+**Status: done, 2026-10-12.** All six steps are merged and tested on proto1
+with unmodified MTERM/T; see [Progress](#progress) at the end. The user
+side is in the v3 manual's Appendix F, and the code in the reference
+(`firmware/tsbus.md`, `firmware/board.md`).
+
 ## What the 2068's software expects
 
 Found by disassembling MTERM (Westridge, 1984) and the MTERM II cartridge
@@ -145,9 +150,9 @@ On v2 the board has no modem: `tpi:modem` answers "No modem on this board"
 
 ### Not in this proposal
 
-- **Installing Zimodem from the TS-Pico's USB** (step 6). Until then a
-  blank module is flashed as today, with the bring-up `esp_bridge.uf2` and
-  `firmware/zimodem/`.
+- **Installing Zimodem from the TS-Pico's USB** was step 6 (see
+  [Progress](#progress)); before it, a blank module was flashed with the
+  bring-up `esp_bridge.uf2` and `firmware/zimodem/`.
 - **The ESP32 as a WiFi file server** (the `claude/esp32-file-server` sketch
   in tspico-hardware): a different role for the module, later.
 - **Tone dialing, answer mode, the 8251's sync modes and break.**
@@ -188,3 +193,33 @@ Each step is its own PR, tested on proto1, and updates the reference.
 4. **Whether Specterm-64, ZX-Term*80 and the 2068 BBS program** use the
    same ports and bits. The BBS's listing has one `IN A,(116)`, either a
    typo or a sign the 2050 decodes only part of the address.
+
+## Progress
+
+| Step | PR | What landed |
+|---|---|---|
+| Proposal | #264 | this document |
+| Notes | #265 | [ts2050-software-notes.md](ts2050-software-notes.md): MTERM, MTERM II, the BASIC dialers, Zimodem |
+| 1 | #266 | the port-0 shadow; `board.modem_power`, `board.modem_download` |
+| 2 | #267 | the 8251 at 73h/77h in `tsbus` (`usart8251.c`, host-tested), bridged to Zimodem over UART0 by DMA; Hayes mode |
+| 3 | #268 | 2050 mode (`modem2050.c`): pulse dialing to `ATD`, `CONNECT` raises DSR, hang-up both ways |
+| 4 | #269 | `tpi:modem`, `MODEM_MODE`/`MODEM_BAUD`/`MODEM_IDLE_MIN`, power on demand |
+| 5 | #270, #271 | the manual in two builds; the v3 one's Appendix F, The Modem |
+| 6 | #272 | Zimodem 4.0.3 built in CI (`esp32/zimodem/`), published to the updater channels and releases |
+| 6 | #273 | `tsbus.esp_relay`: the card's USB joined to the ESP32's ROM loader; `tools/zimodem-install.py` |
+| 6 | #274, #275 | the web updater and the Windows exe write Zimodem through the relay (`espflash.js`, `espflash.py`), MD5-checked |
+
+What testing changed from the design above:
+
+- **The 8251 powers up taking commands** (mode 4Fh), not in reset: MTERM
+  resets it before the modem is on, and the reset was lost.
+- **Core 1 never masks interrupts.** A `cpsid` around the shared state made
+  INs late, read as 127 (the © MTERM printed); the state is lock-free now.
+- **`NO CARRIER` can arrive mid-line** (after a host's `> `), so it counts
+  anywhere it is followed by a line end.
+- **After `CONNECT`, data is held 3.5 s.** MTERM misses what comes in while
+  it switches screens. Hosts that wait for ENTER before their banner suit it
+  best; MTERM's own manual tells users to press ENTER twice.
+
+Open questions 1 (RTS on a real 2050) and 4 (Specterm-64, ZX-Term*80, the
+2068 BBS) are still open.
