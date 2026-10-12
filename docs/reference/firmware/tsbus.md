@@ -34,7 +34,7 @@ than repeating it.
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
-| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_pace` |
+| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace` |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
 | `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
@@ -185,6 +185,8 @@ in the file.
 | `mrx_off` | uint32 | `core1_main`; `tsbus_modem` (0) | where `ch_mrx` had got to in `line_rx` on the last pass |
 | `mtx_inflight` | uint32 | `core1_main`; `tsbus_modem` (0) | how many bytes the run `ch_mtx` is sending holds |
 | `modem_ins` | volatile uint32 | `handle_in` | INs from 73h/77h answered |
+| `modem_wake`, `modem_touched` | volatile bool | set by `core1_main` (an OUT to 73h/77h: both) and `handle_in` (an IN: `modem_touched`); cleared by `tsbus_modem_poll` and `tsbus_modem` | what core 1 saw since core 0 last asked: a program writing to the 8251, and any use of it |
+| `modem_line_up` | volatile bool, false | `tsbus_modem_line`; `core1_main` | Zimodem is running. Until then core 1 starts no `ch_mtx` run (what is queued waits in `line_tx`) and drops what `ch_mrx` brings (the boot banner, or noise from an ESP32 that is off). Kept across `tsbus.modem(True)` |
 
 ### `chunk_target(chunk, hsr, ff)`
 
@@ -324,11 +326,13 @@ power-off and power-on readings, forever, polling:
   masked (`cpsid i`), so `iord_isr` can't pop in the middle, then clears the
   request.
 - **The modem's line**, while `modem_on`: how far `ch_mrx` has got in
-  `line_rx` (its write address) goes onto `modem.lrx_head`; if `ch_mtx` is
+  `line_rx` (its write address) goes onto `modem.lrx_head`, and while the
+  line isn't up (`modem_line_up`) straight off again; if `ch_mtx` is
   idle, the run it sent comes off `modem.ltx_tail`; then `m2050_poll` (bytes
   between the line and the 8251, dialing, results, DSR, flow control) and
   `u8251_poll` (pacing, the status bits); then, if `ch_mtx` is idle and
-  bytes wait, it is started on the next run of `line_tx`, up to the ring's end
+  bytes wait and the line is up, it is started on the next run of
+  `line_tx`, up to the ring's end
   (`read_addr`, then `al1_transfer_count_trig`). Only DMA registers, on AHB:
   the UART's are behind APB (#254). Nothing is masked here: the IN handler
   must never wait, and the first version, which masked interrupts around the
@@ -481,6 +485,7 @@ scratch:
    the UART's data register on its TX DREQ, not started.
 5. `usart` initialised (`u8251_init`): as at power-up, taking commands,
    mode 4Fh. The pace kept if `modem_pace` set one, else 300 baud.
+   `modem_wake` and `modem_touched` cleared; `modem_line_up` kept.
    `modem` initialised (`m2050_init`) in `modem_mode`, on-hook; DSR 1 in
    Hayes mode, 0 in 2050 mode until a call connects.
 6. `modem_on` set.
@@ -496,6 +501,19 @@ talks to Zimodem directly; for setting it up (`ATW`, `ATP`, `AT&W`). 1
 ([`modem2050.c`](#modem2050h-modem2050c)). Kept for later `tsbus.modem(True)`
 calls; with the modem on, it is set up again in the new mode at once
 (on-hook). Anything else is `ValueError`.
+
+### `tsbus.modem_line(on)`
+
+Zimodem is up (core 0 powered the ESP32 and gave it time to boot:
+`board_v3.modem_service`) or not (`_modem_off`). Sets `modem_line_up`.
+
+### `tsbus.modem_poll()`
+
+For core 0's idle loop, every pass, so a small int and no allocation: bit 0
+an OUT to the 8251 since the last poll (`modem_wake`), bit 1 off-hook (2050
+mode, not `M2050_ONHOOK`), bit 2 any IN or OUT since the last poll
+(`modem_touched`). Bits 0 and 2 are cleared by the read. 0 while the modem
+is off.
 
 ### `tsbus.modem_pace(baud)`
 
@@ -516,7 +534,8 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 2068 read), `m_tx` (written to the line), `m_tx_dropped`, `m_rx_lost`,
 `m_rxq` (bytes waiting, the line's ring and the 8251's), `m_pace_us`,
 `m_mode_sel` (`modem_mode`), `m_state` (the 2050 state, `M2050_ONHOOK`
-0 … `M2050_HANGUP` 5), `m_dials`, `m_connects` and `m_carrier_lost`.
+0 … `M2050_HANGUP` 5), `m_dials`, `m_connects`, `m_carrier_lost` and
+`m_line_up`.
 `m_rx_lost` is the line's ring overflowing (`modem.rx_lost`).
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
@@ -589,7 +608,8 @@ at the REPL: F7h, FBh, FFh and 00h, as on v2.
 ### `tsbus_module`, `HOME`, `EXROM`, `DOCK`, `MQ`
 
 The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type,
-with the functions above, `modem` and `modem_pace` among them.
+with the functions above, `modem`, `modem_mode`, `modem_line`,
+`modem_poll` and `modem_pace` among them.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 

@@ -25,3 +25,5 @@ ROM_SM: memory types, 4 bits:
   2 = flash, 3 = SD card (v3)
   (10 = both flash)
 VERBOSE: See verbose
+MODEM_MODE, MODEM_BAUD,
+  MODEM_IDLE_MIN: See modem (v3)

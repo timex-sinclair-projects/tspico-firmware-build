@@ -22,21 +22,25 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6301), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5120), `MEMDOCK` (5240), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7261) |
-| `restart_mq()` | `ZX48_IO` (7262, 7367, 7409) |
+| `start_memory()` | `TS2068_IO` (6349), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5135), `MEMDOCK` (5255), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7315) |
+| `restart_mq()` | `ZX48_IO` (7316, 7421, 7463) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6269) |
-| `led_brightness()` | `TS2068_IO` (6273), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6403, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7064) |
+| `make_led()` | `TS2068_IO` (6317) |
+| `led_brightness()` | `TS2068_IO` (6321), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6455, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7118) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5033, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5090, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5048, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5105, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
+| `HAS_MODEM` | `TS2068_IO` (6352, at boot; 7047, the idle loop), `MODEM` (5276, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `modem_start()` | `TS2068_IO` (6353), at boot with `config.ini`'s modem keys; `MODEM` (5290), a new mode |
+| `modem_service()` | `TS2068_IO`'s idle loop (7048), every pass with nothing arrived |
+| `modem_status()`, `MODEM_MODES` | `MODEM` (5281, 5284) |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
 PIO programs. So it detects the v3 card itself (step 4.2;
@@ -82,6 +86,11 @@ core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 
 `False`: the slots are the flash and SRAM chips, and `tpi:boot` and
 `tpi:dock` refuse MEM 3 as before (`MEM_MAX` is 2).
+
+### `HAS_MODEM`
+
+`False`: no TS2050 modem. 73h/77h are not answered, `tpi:modem` says "No
+modem on this board", and nothing calls the modem functions.
 
 ### `NULL_SM`
 
@@ -242,6 +251,10 @@ loop, so `background()` runs on core 0 and there is no boot blink.
 `True`: `tpi:boot` and `tpi:dock` take MEM 3, a slot file on the SD card
 (`MEM_SD`, phase 6 of the port plan), and `config.ini`'s `ROM_SM` may hold it.
 
+### `HAS_MODEM`
+
+`True`: the TS2050 modem (`modem_start` below; [docs/v3-modem-proposal.md](../../v3-modem-proposal.md)).
+
 ### `SLOTS_DIR`, `SLOT_SIZE`, `MEM_SRAM`, `MEM_FLASH`, `MEM_SD`
 
 `"/slots"` on the Pico's flash filesystem, 32768, and `ROM_SM`'s memory
@@ -341,8 +354,66 @@ The ESP32-C3 on (EN high: it boots, and Zimodem's banner comes about a
 second later at 115200 baud on GPIO 44/45, checked on proto1 2026-10-12)
 or off (EN low: held in reset, its WiFi silent). Off unless something
 needs it: it draws up to about 350 mA in WiFi bursts from the 2068's 5 V
-rail. Nothing calls it yet; the modem's next steps will
-([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)).
+rail. `modem_service` and `_modem_off` call it.
+
+### `MODEM_BOOT_MS`, `MODEM_MODES`
+
+2000 ms: how long after EN goes high before anything is sent to Zimodem.
+On proto1 its READY came about a second after EN (2026-10-12); the rest is
+margin. The modes `modem_start` and `tpi:modem` take: "2050", "hayes" and
+"off".
+
+### `_m_mode`, `_m_baud`, `_m_idle_ms`, `_m_powered`, `_m_up`, `_m_power_at`, `_m_last`
+
+What `modem_start` set up (mode, the pace, the idle time in ms, default
+"off", 300 and 10 minutes until the boot's call); whether the ESP32 is
+powered (EN high) and whether it has had `MODEM_BOOT_MS` (`tsbus.modem_line`
+told); `ticks_ms` when it was powered, and of the last use of the 8251 or
+the last pass off-hook.
+
+### `modem_start(mode, baud=None, idle_min=None)`
+
+The modem in `mode`, with the pace and idle time if given (else as
+before). Always `tsbus.modem_pace`. "off": `tsbus.modem(False)`, so 73h/77h
+are unanswered, and `_modem_off`. Otherwise `tsbus.modem_mode` (0 Hayes, 1
+2050) and `tsbus.modem(True)`: the 8251 as at power-up, on-hook. The ESP32
+is left as it was: a mode change while it runs keeps it running, and
+`tsbus`'s line state is kept across `tsbus.modem(True)`. `TS2068_IO` calls
+it at boot with `config.ini`'s `MODEM_MODE`, `MODEM_BAUD` and
+`MODEM_IDLE_MIN`; `MODEM` with a new mode.
+
+### `_modem_off()`
+
+`tsbus.modem_line(False)`, then `modem_power(False)`: core 1 stops sending
+to the UART and drops what comes in before the ESP32 goes.
+
+### `modem_service()`
+
+The power-on-demand, from `TS2068_IO`'s idle loop on every pass with
+nothing arrived (so not during a TS-Pico command, nor in ZX48 mode):
+`tsbus.modem_poll()` (a small int, no allocation) and `ticks_ms`, nothing
+else unless something changes.
+- Bits 1 or 2 (off-hook, or any IN or OUT to the 8251): the last use is
+  now. A terminal polling the status counts, so the ESP32 stays on under a
+  running program.
+- Off, and bit 0 (an OUT to the 8251: MTERM's reset, a dialer's
+  off-hook): `modem_power(True)`.
+- On, `MODEM_BOOT_MS` after: `tsbus.modem_line(True)`. What the 8251 sent
+  meanwhile (an off-hook's init) waited in `tsbus`'s ring and goes now.
+- On, not off-hook, and unused for the idle time: `_modem_off`.
+
+Nothing for mode "off". On proto1 (2026-10-12) MTERM/T loaded from the SD
+card, its reset powered the ESP32, and it dialled, connected and hung up
+with no other step. `board_v3_hosttest.py` pins the timing: status polls
+alone don't wake it, the boot delay, polling or off-hook keep it, ten idle
+minutes stop it.
+
+### `_M_STATES`, `modem_status()`
+
+The 2050 states' names, and for `tpi:modem` `(mode, ESP32, line, calls,
+connects)`: the ESP32 "off", "starting" (powered, not yet
+`MODEM_BOOT_MS`) or "on"; the line state in 2050 mode, "-" in Hayes mode;
+`m_dials` and `m_connects` from `tsbus.stats()`.
 
 ### `modem_download(on)`
 

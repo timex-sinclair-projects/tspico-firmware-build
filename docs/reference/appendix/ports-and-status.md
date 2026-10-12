@@ -13,6 +13,12 @@ that explains the code behind it. The byte-level narrative is
 | 0Eh (14) | the next byte of the Pico's TX FIFO, or 00h when it is empty | puts the byte in the RX FIFO as a 9-bit word with bit 8 = 0 | [pio.md](../firmware/pio.md) `TS_IO_DUAL` |
 | 0Fh (15) | the status byte: the PIO's Y register, which no read consumes | puts `0x100 | value` in the RX FIFO; the firmware treats any such write as SYNC / abort | [pio.md](../firmware/pio.md), [tspico_io.md](../firmware/tspico_io.md) `RX_CAPTURE`, `PORT_0F` |
 
+On the v3 card two more ports are answered, by core 1, for the TS2050
+modem (unless `tpi:modem off`): 73h (115), the 8251's data, and 77h (119),
+its status on IN and mode/command on OUT
+([../firmware/tsbus.md](../firmware/tsbus.md#usart8251h-usart8251c)). They
+are not the TS-Pico's protocol, and the ROM never touches them.
+
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which
 the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
