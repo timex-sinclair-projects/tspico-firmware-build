@@ -182,7 +182,7 @@ and `tsbus`:
 | `PIN_NAEN_LO`, `PIN_NAEN_HI`, `PIN_NDATA_OE` | 8, 9, 10 | the /OE of U1 (A7..A0 onto MD), U2 (A15..A8) and U3 (MD onto the Z80's data bus) |
 | `PIN_BE_REQ`, `PIN_WAIT_REQ` | 11, 12 | /BE and /WAIT through the 74LVC06 |
 | `PIN_Z80_A14` | 13 | first of the inputs from U4/U6 (GP13-GP22) |
-| `PIN_NMEMRD`, `PIN_NIORD`, `PIN_NIOWR` | 15, 17, 18 | /MREQ, /IORQ ORed with /RD or /WR: the strobes the PIO programs and core 1 wait on |
+| `PIN_NMEMRD`, `PIN_NMEMWR`, `PIN_NIORD`, `PIN_NIOWR` | 15, 16, 17, 18 | /MREQ, /IORQ ORed with /RD or /WR: the strobes the PIO programs and core 1 wait on. `PIN_NMEMWR` was added for `tsbus`'s power check (all three write/I/O strobes low together: the 2068 is off) |
 | `PIN_TAPE_IN`, `PIN_TAPE_OUT` | 22, 23 | tape |
 | `PIN_I2C_SDA`, `PIN_I2C_SCL` | 24, 25 | I2C0: the expander |
 | `PIN_RESET_HOLD` | 29 | high (or floating: R1) holds the 2068 in reset |
