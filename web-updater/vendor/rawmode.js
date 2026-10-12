@@ -6,10 +6,12 @@
  * This includes no assurances about being fit for any specific purpose.
  *
  * ---------------------------------------------------------------------------
- * Vendored verbatim from ViperIDE (https://github.com/vshymanskyy/ViperIDE),
- * src/rawmode.js, for the TS-Pico Web Updater. The only change from upstream
- * is the import path below (`./utils` -> `./utils.js`) so it loads as a plain
- * ES module from GitHub Pages with no bundler. `MpRawMode` provides the raw
+ * Vendored from ViperIDE (https://github.com/vshymanskyy/ViperIDE),
+ * src/rawmode.js, for the TS-Pico Web Updater. Changes from upstream: the
+ * import path below (`./utils` -> `./utils.js`) so it loads as a plain ES
+ * module from GitHub Pages with no bundler; begin() imports os without the
+ * current directory and changes to / (see there); writeFile renames over
+ * the old file rather than deleting it first. `MpRawMode` provides the raw
  * REPL protocol: enterRawRepl/exec/writeFile/makePath/walkFs/getDeviceInfo.
  * ---------------------------------------------------------------------------
  */
@@ -25,7 +27,18 @@ export class MpRawMode {
         const res = new MpRawMode(port)
         await res.enterRawRepl(soft_reboot)
         try {
-            await res.exec(`import sys,os`)
+            // TS-Pico: the firmware may have left the current directory on
+            // the SD card, and `import os` looks in it first (os, like time,
+            // is extensible): a card that was busy when the firmware was
+            // stopped fails the import (EIO, ETIMEDOUT). Import os with ''
+            // off the path, then start from the flash's root.
+            await res.exec(`import sys
+c = '' in sys.path
+if c: sys.path.remove('')
+import os
+if c: sys.path.insert(0, '')
+os.chdir('/')
+del c`)
         } catch (err) {
             await res.end()
             throw err

@@ -202,5 +202,5 @@ behaviour, and the caveat and the issue link go.
 | `tools/build-flash.py` | `440cdc45cab9` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/build.yml` | `fb41c27269bf` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `e0e363ef600f` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `79954d8fcfd9` | [firmware/boot.md](firmware/boot.md) | — |

@@ -287,7 +287,7 @@ jobs:
         run: |
           DEST=site/_site/updater
           mkdir -p "$DEST"
-          cp web-updater/index.html web-updater/app.js web-updater/flasher.js "$DEST"/
+          cp web-updater/index.html web-updater/app.js web-updater/flasher.js web-updater/espflash.js "$DEST"/
           cp web-updater/flash_nuke.uf2 "$DEST"/flash_nuke.uf2
           cp -r web-updater/vendor "$DEST"/vendor
           cp -r _payload/.        "$DEST"/
