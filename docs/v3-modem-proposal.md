@@ -220,6 +220,20 @@ What testing changed from the design above:
 - **After `CONNECT`, data is held 3.5 s.** MTERM misses what comes in while
   it switches screens. Hosts that wait for ENTER before their banner suit it
   best; MTERM's own manual tells users to press ENTER twice.
+- **Zimodem gets word results, not numeric:** `ATE0V1X0F1` at off-hook (no
+  echo, word results, a short CONNECT, XON/XOFF), read by `modem2050.c`.
+- **The dial thresholds:** a break under 200 ms is a pulse, 300 ms of DTR on
+  ends a digit, 1.5 s the number (MTERM's own pulses: 58 ms break, 47.5 ms
+  make, 832 ms between digits).
+- **Power:** the ESP32 is switched on by any OUT to the 8251, and the line
+  declared up 2 s later (`MODEM_BOOT_MS`); until then what the 8251 sends
+  waits in the card's ring and what arrives is dropped. A terminal polling
+  the status keeps it on; `MODEM_IDLE_MIN` (10) on-hook and unused switches
+  it off.
+- **`tpi:modem` takes `2050`, `hayes` or `off`** (saved as `MODEM_MODE`);
+  there is no separate on/off for the ESP32's power, which is automatic.
+- **Core 1 never reads flash:** the modem's strings are non-const (`.data`),
+  and nothing compiles to `strlen`/`memcpy`.
 
 Open questions 1 (RTS on a real 2050) and 4 (Specterm-64, ZX-Term*80, the
 2068 BBS) are still open.
