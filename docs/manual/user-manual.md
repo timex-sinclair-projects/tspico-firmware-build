@@ -1110,6 +1110,10 @@ and you're back to normal.
 
 **DOCK resets at switch-on** to the standard setting, Flash slot 0.
 
+> **With the USB cable plugged in**, the TS-Pico stays powered when you switch the 2068 off, so
+> switching off and on isn't a new start for it: the 2068 comes back with the same BOOT and DOCK.
+> To give the TS-Pico a real start, switch the 2068 off, unplug the USB cable, then switch on.
+
 ## 8.3 Running a cartridge
 
 Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to start it, or press
@@ -2019,7 +2023,7 @@ SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
   boot (**F**), as in F.2.
 - **A cartridge from the SD card can't be written by the 2068,** as with a Flash slot.
 - **BOOT from the SD card lasts for one start,** as any BOOT does: switching off and on twice
-  brings back the standard ROM.
+  brings back the standard ROM (with the USB cable unplugged, as 8.2 explains).
 - To put a ROM onto the SD card, copy its file there on a computer. The loader in F.4 writes only
   RAM and Flash slots.
 
