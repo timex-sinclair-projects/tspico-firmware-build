@@ -1,0 +1,21 @@
+TS-Pico Command            MODEM
+--------------------------------
+SAVE "tpi:modem"[ mode]
+
+The v3 card's TS2050 modem, the
+8251 at ports 115/119, through
+the card's WiFi (Zimodem).
+No mode: shows the state
+2050:  as a real 2050: programs
+  like MTERM dial (a phonebook
+  number, ATP on Zimodem) and
+  see the carrier
+hayes: talk to Zimodem directly
+  (AT commands, WiFi setup)
+off:   ports 115/119 unanswered
+The mode is saved in config.ini
+(MODEM_MODE). The WiFi part is
+switched on when a program uses
+the modem, and off when unused.
+
+See also: config

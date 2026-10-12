@@ -15,6 +15,7 @@ NAME = "v3"
 PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
 SD_SLOTS = True     # tpi:boot and tpi:dock take MEM 3: a slot file on the SD card
+HAS_MODEM = True    # the TS2050's 8251 at 73h/77h, bridged to the ESP32-C3 (modem_start)
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
 # The slots (phase 5, docs/v3-slots-proposal.md): v2's two chips of sixteen
@@ -100,6 +101,86 @@ def modem_power(on):
     about 350 mA in WiFi bursts from the 2068's 5 V rail, so it is off unless
     something needs it. False if the expander didn't answer."""
     return _port0(_X_WIFI_EN, _X_WIFI_EN if on else 0)
+
+
+# The modem (docs/v3-modem-proposal.md, step 4): tsbus answers the 8251 from
+# boot; the ESP32 is powered only when a program uses it. Core 1 says what
+# it saw (tsbus.modem_poll); the idle loop does the powering, here, since the
+# expander is I2C. MODEM_BOOT_MS: from EN high to Zimodem's READY (about a
+# second on proto1, 2026-10-12), before anything is sent to it.
+MODEM_BOOT_MS = 2000
+MODEM_MODES = ("2050", "hayes", "off")
+_m_mode = "off"          # what modem_start set up
+_m_baud = 300
+_m_idle_ms = 600_000
+_m_powered = False       # the ESP32's EN is high
+_m_up = False            # ... and it has had MODEM_BOOT_MS (tsbus.modem_line)
+_m_power_at = 0          # ticks_ms when it was powered
+_m_last = 0              # ticks_ms of the last 8251 use, or off-hook
+
+
+def modem_start(mode, baud=None, idle_min=None):
+    """The modem in `mode` ("2050", "hayes" or "off"), received characters
+    paced at `baud` (0: none), the ESP32 off after `idle_min` minutes unused.
+    Off: 73h/77h unanswered and the ESP32 off. Otherwise the 8251 is set up
+    as at power-up (tsbus.modem); the ESP32 stays as it was."""
+    global _m_mode, _m_baud, _m_idle_ms
+    if baud is not None:
+        _m_baud = baud
+    if idle_min is not None:
+        _m_idle_ms = idle_min * 60_000
+    _m_mode = mode
+    tsbus.modem_pace(_m_baud)
+    if mode == "off":
+        tsbus.modem(False)
+        _modem_off()
+        return
+    tsbus.modem_mode(0 if mode == "hayes" else 1)
+    tsbus.modem(True)
+
+
+def _modem_off():
+    global _m_powered, _m_up
+    tsbus.modem_line(False)
+    modem_power(False)
+    _m_powered = _m_up = False
+
+
+def modem_service():
+    """Every idle pass of the dispatcher, while the modem is on: power the
+    ESP32 when a program writes to the 8251; tell tsbus the line is up
+    MODEM_BOOT_MS later; power it off after the idle time with no 8251 use
+    (a terminal polling its status counts) and on-hook."""
+    global _m_powered, _m_up, _m_power_at, _m_last
+    if _m_mode == "off":
+        return
+    f = tsbus.modem_poll()
+    now = time.ticks_ms()
+    if f & 6:
+        _m_last = now
+    if not _m_powered:
+        if f & 1:
+            modem_power(True)
+            _m_powered = True
+            _m_power_at = _m_last = now
+        return
+    if not _m_up and time.ticks_diff(now, _m_power_at) >= MODEM_BOOT_MS:
+        tsbus.modem_line(True)
+        _m_up = True
+    if not f & 2 and time.ticks_diff(now, _m_last) > _m_idle_ms:
+        _modem_off()
+
+
+_M_STATES = ("on-hook", "off-hook", "dialling", "connected", "no carrier", "hanging up")
+
+
+def modem_status():
+    """(mode, ESP32 "off"/"starting"/"on", line state, calls, connects) for tpi:modem."""
+    s = tsbus.stats()
+    esp = "on" if _m_up else ("starting" if _m_powered else "off")
+    st = s["m_state"]
+    line = _M_STATES[st] if _m_mode == "2050" and st < len(_M_STATES) else "-"
+    return _m_mode, esp, line, s["m_dials"], s["m_connects"]
 
 
 def modem_download(on):

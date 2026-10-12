@@ -2727,7 +2727,7 @@ SD_FREE = frozenset((
     "TPI:DOCK", "TPI:MEMDOCK", "TPI:ZX48", "TPI:NOP", "TPI:PATH", "TPI:CLOSE",
     "TPI:TAPDIR", "TPI:FFW", "TPI:REW", "TPI:APPEND", "TPI:BLKRCV", "TPI:CHCLOSE",
     "TPI:AUTOLF", "TPI:NOAUTOLF", "TPI:AUTOPG", "TPI:NOAUTOPG", "TPI:BMP", "TPI:PRNSZ",
-    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST",
+    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST", "TPI:MODEM",
     "TPI:MEMINFO", "TPI:STOP"))
 
 # Commands the fdd ROM sends in the middle of a BASIC statement (OPEN #,
@@ -4821,6 +4821,9 @@ def LOAD_CONFIG():
     default_values["ZX_TAPE_COMPAT"] = False                   # Use regular tape load routine in zx48 mode
     default_values["TELEMETRY"] = False                        # TLM over USB serial (main.py reads it; developers set true)
     default_values["LED_BRIGHTNESS"] = 5                       # the v3 card's LED, % of full (board.led_brightness); v2 ignores it
+    default_values["MODEM_MODE"] = "2050"                      # the v3 card's TS2050 modem: "2050", "hayes" or "off" (tpi:modem); v2 ignores it
+    default_values["MODEM_BAUD"] = 300                         # ... received characters paced to this (0: none)
+    default_values["MODEM_IDLE_MIN"] = 10                      # ... the ESP32 off after this many minutes unused
     default_values["FW_VERSION"] = FW_VERSION
     default_values["ROM_VERSION"] = ROM_VERSION                # the ROM this firmware ships with
     # Fill any missing values with the default
@@ -4853,6 +4856,18 @@ def LOAD_CONFIG():
             % (b, default_values["LED_BRIGHTNESS"]), 2)
         init_values["LED_BRIGHTNESS"] = default_values["LED_BRIGHTNESS"]
         defaulted = True
+
+    # The modem's keys (the v3 card, docs/v3-modem-proposal.md): a mode it
+    # knows, a pace from 0 (none) to the line's 115200, an idle time from a
+    # minute to a day. Anything else is logged and replaced, as above.
+    for key, ok in (("MODEM_MODE", lambda v: v in ("2050", "hayes", "off")),
+                    ("MODEM_BAUD", lambda v: type(v) is int and 0 <= v <= 115200),
+                    ("MODEM_IDLE_MIN", lambda v: type(v) is int and 1 <= v <= 1440)):
+        if not ok(init_values[key]):
+            LOG("Incorrect %s %r. Using default value of %r instead"
+                % (key, init_values[key], default_values[key]), 2)
+            init_values[key] = default_values[key]
+            defaulted = True
 
     return_ROM_SLOT = -1
     boot_mem = init_values["ROM_SM"] & 3                                # tpi:boot's MEM: 1 SRAM, 2 flash (the default), 3 SD (v3)
@@ -5246,6 +5261,39 @@ def MEMDOCK(pre, cmd):                                                  # Change
         LOG("%s. %s" % (msg, note or msg2), 0)
         
     return 
+
+
+def MODEM(pre, cmd):                                                  # The v3 card's TS2050 modem
+
+    # SAVE "tpi:modem"         - Show the modem's state
+    # SAVE "tpi:modem 2050"    - 2050 mode: unmodified software dials (DTR pulses), DSR is the call
+    # SAVE "tpi:modem hayes"   - Hayes mode: every byte to Zimodem and back, DSR held on
+    # SAVE "tpi:modem off"     - Ports 73h/77h unanswered, the ESP32 off
+    #
+    # The mode is saved in config.ini (MODEM_MODE). docs/v3-modem-proposal.md.
+
+    TLM("MODEM enter")
+    if not board.HAS_MODEM:
+        SEND_MSG("No modem on this board", "", _3_F_Invalid_file, True)
+        return
+    arg = getArgs(cmd).strip().lower()
+    if arg == "":
+        mode, esp, line, dials, connects = board.modem_status()
+        SEND_MSG("Modem: %s mode, ESP32 %s" % (mode, esp),
+                 "Line %s; %d calls, %d made" % (line, dials, connects), _1_OK, True)
+    elif arg in board.MODEM_MODES:
+        with open("config.ini", "r") as f:
+            init_values = json.load(f)
+        init_values["MODEM_MODE"] = arg
+        with open("config.ini", "w") as f:
+            json.dump(init_values, f)
+        board.modem_start(arg)
+        msg = "Modem: %s mode" % arg
+        SEND_MSG(msg, "", _1_OK)
+        LOG(msg, 0)
+    else:
+        SEND_MSG(BAD_ARG("MODEM", arg), "Use 2050, hayes or off", _8_A_Invalid_arg)
+    return
 
 
 def REMOVE_DIR(d):                                                        # Recursively remove a directory and all its contents
@@ -6301,6 +6349,9 @@ def TS2068_IO():                                                         # Main 
     note = board.start_memory(TSP.ROM_SM, TSP.bank_sm)                 # the boot and dock slots
     if need_sd:
         DEACTIVATE_SD()
+    if board.HAS_MODEM:                                                # v3: the 8251 answered from now; the ESP32 stays off
+        board.modem_start(init_values["MODEM_MODE"], init_values["MODEM_BAUD"],
+                          init_values["MODEM_IDLE_MIN"])
     if note:                                                           # v3: the boot slot was empty
         LOG("Boot ROM: " + note, 2)                                   # kept at the default LOG_LEVEL
     
@@ -6346,6 +6397,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:MEMBOOT" : MEMBOOT,
         "TPI:DOCK" : MEMDOCK,
         "TPI:MEMDOCK" : MEMDOCK,
+        "TPI:MODEM" : MODEM,
         "TPI:NOP" : NOP,                                                                      # This is to test Ryan's new Commander
         "TPI:PATH" : PATH,
         "TPI:REW" : REW,
@@ -6992,6 +7044,8 @@ def TS2068_IO():                                                         # Main 
                     # ──────────────────────────────────────────────────────────────
 
                 else:
+                    if board.HAS_MODEM:                                 # v3: power the ESP32 when a program wants the modem
+                        board.modem_service()
                     # Nothing to do, so check if time to save the log
                     # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap ──
                     # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min).

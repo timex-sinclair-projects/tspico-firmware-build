@@ -40,6 +40,8 @@
  *                                  the ESP32-C3 on UART0 (usart8251.c, modem2050.c);
  *                                  sets up the UART and two DMA channels
  *   tsbus.modem_mode(m)            0 Hayes (pass-through, DSR 1), 1 2050 (the default)
+ *   tsbus.modem_line(on)           Zimodem is up (core 0 powered it and waited) or not
+ *   tsbus.modem_poll()             what core 0's idle loop needs, as bits (no allocation)
  *   tsbus.modem_pace(baud)         received characters no faster than baud (0: none)
  *
  * Nothing on core 1 may touch flash: LittleFS writes stop execute-in-place,
@@ -179,6 +181,13 @@ static int ch_mrx = -1, ch_mtx = -1;
 static uint32_t mrx_off;            // where ch_mrx had got to in line_rx, last pass
 static uint32_t mtx_inflight;       // bytes ch_mtx is sending
 static volatile uint32_t modem_ins; // INs from 73h/77h answered
+// Powering the ESP32 is core 0's (the expander is I2C, behind APB): core 1
+// only says what it saw. modem_wake: an OUT to the 8251 (a program started
+// using it); modem_touched: any IN or OUT (it still is). Both are cleared by
+// tsbus.modem_poll(). modem_line_up: Zimodem is running; until then nothing
+// goes to the UART (it waits in line_tx) and what comes in is dropped (the
+// boot banner, or noise from an ESP that is off).
+static volatile bool modem_wake, modem_touched, modem_line_up;
 
 // The 2068 stopped: /MEMRD hasn't changed for IDLE_CYC. A running Z80 reads
 // memory every few T-states (a HALT too), so that is a reset (/MEMRD high) or
@@ -482,6 +491,7 @@ static void __not_in_flash_func(handle_in)(void) {
     } else if (modem_on && (port & 0xfb) == 0x73) {   // the 8251: 73h data, 77h status
         reply = (port & 4) ? u8251_status(&usart) : u8251_data_in(&usart);
         modem_ins++;
+        modem_touched = true;
     } else {
         answer = false;
     }
@@ -692,6 +702,9 @@ static void __not_in_flash_func(core1_main)(void) {
             mrx_off = off;
             bool idle = !(dma_hw->ch[ch_mtx].ctrl_trig & DMA_CH0_CTRL_TRIG_BUSY_BITS);
             modem.lrx_head += got;
+            if (!modem_line_up) {
+                modem.lrx_tail = modem.lrx_head;      // nobody there yet: drop it
+            }
             if (idle) {
                 modem.ltx_tail += mtx_inflight;
                 mtx_inflight = 0;
@@ -699,7 +712,7 @@ static void __not_in_flash_func(core1_main)(void) {
             uint32_t now = m33_hw->dwt_cyccnt;
             m2050_poll(&modem, &usart, now);           // unmasked, as above
             u8251_poll(&usart, now);
-            if (idle && modem.ltx_head != modem.ltx_tail) {
+            if (idle && modem_line_up && modem.ltx_head != modem.ltx_tail) {
                 uint32_t at = modem.ltx_tail & (LINE_TX_N - 1);
                 uint32_t n = modem.ltx_head - modem.ltx_tail;
                 if (n > LINE_TX_N - at) {
@@ -732,6 +745,7 @@ static void __not_in_flash_func(core1_main)(void) {
                 write_table();
             }
             if (modem_on && (port & 0xfb) == 0x73) {
+                modem_wake = modem_touched = true;
                 // Not masked: the IN handler must never wait (usart8251.h).
                 if (port & 4) {
                     u8251_control(&usart, (uint8_t)data);
@@ -1100,6 +1114,7 @@ static mp_obj_t tsbus_modem(mp_obj_t on_in) {
     usart.dsr = modem_mode == M2050_HAYES;
     mrx_off = 0;
     mtx_inflight = 0;
+    modem_wake = modem_touched = false;
     __dmb();
     modem_on = true;
     return mp_const_none;
@@ -1123,6 +1138,37 @@ static mp_obj_t tsbus_modem_mode(mp_obj_t mode_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_mode_obj, tsbus_modem_mode);
 
+// tsbus.modem_line(on): Zimodem is up (core 0 powered the ESP32 and gave it
+// time to boot), or not. Kept across tsbus.modem(True). While it isn't,
+// core 1 sends nothing to the UART and drops what arrives.
+static mp_obj_t tsbus_modem_line(mp_obj_t on_in) {
+    modem_line_up = mp_obj_is_true(on_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_line_obj, tsbus_modem_line);
+
+// tsbus.modem_poll(): for core 0's idle loop, as a small int (no
+// allocation, it runs every idle pass): bit 0 an OUT to the 8251 since the
+// last poll, bit 1 off-hook (2050 mode, not on-hook), bit 2 any IN or OUT
+// since the last poll. Bits 0 and 2 are cleared by the read.
+static mp_obj_t tsbus_modem_poll(void) {
+    mp_int_t r = 0;
+    if (modem_on) {
+        if (modem_wake) {
+            r |= 1;
+        }
+        if (modem_mode == M2050_2050 && modem.state != M2050_ONHOOK) {
+            r |= 2;
+        }
+        if (modem_touched) {
+            r |= 4;
+        }
+        modem_wake = modem_touched = false;
+    }
+    return MP_OBJ_NEW_SMALL_INT(r);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_modem_poll_obj, tsbus_modem_poll);
+
 // tsbus.modem_pace(baud): a received character becomes RxRDY no sooner than
 // one 10-bit character time at `baud` after the last; 0: as soon as the last
 // is read. Kept across tsbus.modem(True).
@@ -1138,7 +1184,7 @@ static mp_obj_t tsbus_modem_pace(mp_obj_t baud_in) {
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_pace_obj, tsbus_modem_pace);
 
 static mp_obj_t tsbus_stats(void) {
-    mp_obj_t d = mp_obj_new_dict(42);
+    mp_obj_t d = mp_obj_new_dict(43);
     store(d, MP_QSTR_home, served[SLOT_HOME]);
     store(d, MP_QSTR_exrom, served[SLOT_EXROM]);
     store(d, MP_QSTR_dock, served[SLOT_DOCK]);
@@ -1179,6 +1225,7 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_m_dials, modem.dials);
     store(d, MP_QSTR_m_connects, modem.connects);
     store(d, MP_QSTR_m_carrier_lost, modem.carrier_lost);
+    store(d, MP_QSTR_m_line_up, modem_line_up);
     store(d, MP_QSTR_m_pace_us, usart.pace / (BUS_CLOCK_HZ / 1000000));
     return d;
 }
@@ -1431,6 +1478,8 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_diag_reset), MP_ROM_PTR(&tsbus_diag_reset_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem), MP_ROM_PTR(&tsbus_modem_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_mode), MP_ROM_PTR(&tsbus_modem_mode_obj) },
+    { MP_ROM_QSTR(MP_QSTR_modem_line), MP_ROM_PTR(&tsbus_modem_line_obj) },
+    { MP_ROM_QSTR(MP_QSTR_modem_poll), MP_ROM_PTR(&tsbus_modem_poll_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_pace), MP_ROM_PTR(&tsbus_modem_pace_obj) },
     { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },
     { MP_ROM_QSTR(MP_QSTR_HOME), MP_ROM_INT(SLOT_HOME) },

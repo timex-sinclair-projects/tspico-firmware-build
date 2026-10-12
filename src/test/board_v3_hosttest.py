@@ -93,7 +93,16 @@ def fake_tsbus():
             fill({"home": 0, "exrom": 1, "dock": 2}[n], v)
     t.load, t.load_at, t.read, t.switch = load, load_at, read, switch
     t.dock_writes = lambda on: CALLS.append(("dock_writes", bool(on)))
+    # The modem (step 4): what board_v3's modem_* call, and what core 1 says.
+    for name in ("modem", "modem_mode", "modem_pace", "modem_line"):
+        setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
+    t.modem_poll = lambda: POLL[0]
+    t.stats = lambda: {"m_state": STATE[0], "m_dials": 3, "m_connects": 2}
     return t
+
+
+POLL = [0]       # what tsbus.modem_poll() returns
+STATE = [0]      # m_state in tsbus.stats()
 
 
 class FakePin:
@@ -611,6 +620,93 @@ def main():
         cfg = json.load(f)
     check(cfg["ROM_SM"] == 14 and cfg["ROM_SLOT"] == 1,
           "  an SD boot is one-shot: next time flash slot 1, the SD dock kept (%r)" % cfg)
+
+    print("the modem: start, power on demand, idle off (step 4)")
+    check(board.HAS_MODEM is True and t.MEM_MAX() == 3, "the v3 card has the modem")
+    take()
+    board.modem_start("2050", 300, 10)
+    check(take() == [("modem_pace", 300), ("modem_mode", 1), ("modem", True)],
+          "modem_start 2050: pace, mode 1, the 8251 answered")
+
+    def esp_on():
+        return bool(b3._out0 & 0x08)
+
+    check(not esp_on(), "the ESP32 is off at start")
+    POLL[0] = 4                                          # a program polls status only
+    board.modem_service()
+    check(not esp_on() and take() == [], "status polls alone don't power it")
+    POLL[0] = 5                                          # an OUT to the 8251
+    board.modem_service()
+    check(esp_on(), "an OUT to the 8251: the ESP32 on")
+    clock.ms += 1999
+    POLL[0] = 4
+    board.modem_service()
+    check(("modem_line", True) not in take(), "  not up for MODEM_BOOT_MS")
+    clock.ms += 1
+    board.modem_service()
+    check(take() == [("modem_line", True)], "  then the line is up")
+    for _ in range(20):                                  # a terminal polling, 20 minutes
+        clock.ms += 60_000
+        board.modem_service()
+    check(esp_on(), "a program still polling: kept on past the idle time")
+    POLL[0] = 2                                          # off-hook, nothing touched
+    for _ in range(20):
+        clock.ms += 60_000
+        board.modem_service()
+    check(esp_on(), "off-hook (a call): kept on")
+    POLL[0] = 0
+    clock.ms += 9 * 60_000
+    board.modem_service()
+    check(esp_on(), "on-hook and unused 9 minutes: still on")
+    clock.ms += 61_000
+    board.modem_service()
+    check(not esp_on() and ("modem_line", False) in take(), "after 10 minutes: line down, the ESP32 off")
+    POLL[0] = 1
+    board.modem_service()
+    check(esp_on(), "used again: on again")
+    take()
+    board.modem_start("off")
+    check(not esp_on() and take()[:2] == [("modem_pace", 300), ("modem", False)],
+          "modem_start off: ports unanswered, ESP32 off")
+    POLL[0] = 1
+    board.modem_service()
+    check(not esp_on(), "  and an OUT doesn't wake it")
+    POLL[0] = 0
+
+    print("tpi:modem")
+    sent_m = []
+    t.SEND_MSG = lambda msg, msg1, st, force=False: sent_m.append((msg, msg1, st))
+    t.LOG = lambda *a: None
+    with open("config.ini", "w") as f:
+        json.dump({"ROM_SLOT": 1, "ROM_SM": 10}, f)
+    t.MODEM(bytes(10), "tpi:modem hayes")
+    with open("config.ini") as f:
+        cfg = json.load(f)
+    check(sent_m[-1] == ("Modem: hayes mode", "", t._1_OK) and cfg["MODEM_MODE"] == "hayes",
+          "tpi:modem hayes: 0 OK, saved in config.ini (%r)" % (sent_m[-1:],))
+    check(("modem_mode", 0) in take(), "  and the modem set up in Hayes mode")
+    STATE[0] = 3
+    t.MODEM(bytes(10), "tpi:modem")
+    check(sent_m[-1] == ("Modem: hayes mode, ESP32 off", "Line -; 3 calls, 2 made", t._1_OK),
+          "tpi:modem: the state, shown (%r)" % (sent_m[-1:],))
+    board.modem_start("2050")
+    t.MODEM(bytes(10), "tpi:modem")
+    check(sent_m[-1][1] == "Line connected; 3 calls, 2 made", "  2050 mode: the line state (%r)" % (sent_m[-1:],))
+    STATE[0] = 0
+    t.MODEM(bytes(10), "tpi:modem fast")
+    check(sent_m[-1][2] == t._8_A_Invalid_arg and sent_m[-1][1] == "Use 2050, hayes or off",
+          "tpi:modem fast: Report A (%r)" % (sent_m[-1:],))
+    t.board.HAS_MODEM = False
+    t.MODEM(bytes(10), "tpi:modem")
+    check(sent_m[-1] == ("No modem on this board", "", t._3_F_Invalid_file), "no modem (v2): Report F")
+    t.board.HAS_MODEM = True
+    for key, bad, good in (("MODEM_MODE", "fax", "2050"), ("MODEM_BAUD", -1, 300), ("MODEM_IDLE_MIN", 0, 10)):
+        with open("config.ini", "w") as f:
+            json.dump({"ROM_SLOT": 1, "ROM_SM": 10, key: bad}, f)
+        got = t.LOAD_CONFIG()[key]
+        check(got == good, "LOAD_CONFIG: %s %r replaced by %r (%r)" % (key, bad, good, got))
+    board.modem_start("off")
+    take()
 
     print("ACTIVATE_SD with the socket empty")
     logs = []
