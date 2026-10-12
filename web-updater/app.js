@@ -639,6 +639,21 @@ async function romUpdate() {
     boot = await getBootsel('firmware')
 }
 
+/** Restart the TS-Pico firmware: out of the raw REPL (Ctrl-B), then a soft
+ *  reset (Ctrl-D) from the friendly one, which runs main.py. A soft reset
+ *  inside the raw REPL comes back to the raw REPL, and the firmware never
+ *  starts. */
+async function restartFirmware() {
+    try {
+        await raw.port.readUntil('>', 1000).catch(() => {})
+        await raw.port.write('\x02')
+        await sleep(200)
+        await raw.port.write('\x04')
+        await sleep(400)
+    } catch (_e) { /* the port may drop */ }
+    await closeSerial()
+}
+
 // ---------------------------------------------------------------------------
 // The v3 card's modem: Zimodem on the ESP32-C3
 // ---------------------------------------------------------------------------
@@ -690,7 +705,7 @@ async function installModem() {
     const have = await espVersion()
     log(have === '-' ? 'The modem module has no Zimodem.' : `The modem module has Zimodem ${have}.`)
     if (have !== '-' && z.version && verCmp(have, z.version) >= 0) {
-        await execNoReply('import machine\nmachine.soft_reset()')
+        await restartFirmware()
         setStage('modem', 'done', `Zimodem ${have} is already installed.`)
         return
     }
@@ -729,7 +744,7 @@ async function installModem() {
     await sleep(300)
     const now = await espVersion()
     if (now === '-') throw new Error('Zimodem was written but doesn’t answer')
-    await execNoReply('import machine\nmachine.soft_reset()')
+    await restartFirmware()
     setStage('modem', 'done', `Zimodem ${now} installed and checked.`)
 }
 

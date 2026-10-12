@@ -2,7 +2,7 @@
 
 A small Windows program that does what the [web updater](../web-updater/)
 does: erase the Pico, update the TS-2068 ROM, install the firmware and copy
-its files. It handles the TS-Pico 2.x boards (a Raspberry Pi Pico, RP2040) and
+its files, and on the v3 card install the modem's Zimodem. It handles the TS-Pico 2.x boards (a Raspberry Pi Pico, RP2040) and
 the v3 card (RP2350B), which installs differently: see
 [The v3 card](#the-v3-card). It exists because the browser can't finish that job on Windows:
 
@@ -23,7 +23,7 @@ run shows Windows SmartScreen: **More info → Run anyway**.
 
 ## What a run does
 
-The same six steps as the web page, with the same rules. `core.py` follows
+The same seven steps as the web page, with the same rules. `core.py` follows
 `web-updater/app.js` closely, so a change to one usually belongs in the
 other.
 
@@ -42,6 +42,13 @@ other.
    the board's chip. The drive vanishing is the success signal.
 6. **Files**: reopen the COM port, write each file over the raw REPL
    (base64, 1 KB per exec), check names and sizes, then `machine.reset()`.
+7. **Modem**: the v3 card only; see below.
+
+The raw REPL's first code imports `os` with the current directory off
+`sys.path`, then changes to `/`. The firmware can leave the directory on the
+SD card, and MicroPython looks for an extensible module like `os` there
+first, so a card that was busy when the firmware stopped would fail the
+import (`EIO`, `ETIMEDOUT`).
 
 Before a run that would install an older MicroPython than the Pico runs, the
 program warns that the first boot will reformat the filesystem, as the web
@@ -61,6 +68,22 @@ or, for a card put in BOOTSEL by hand, from the RP2350 drive. On the v3 card:
   modules), then writes the slots in `v3.slots`: those marked `always`
   (slots 0 and 1, the Spectrum and TS-Pico ROMs) every time, the others only
   where the card has no such file. Verify checks the slots' sizes as well.
+- **Modem** (a last step of its own): the card's ESP32-C3 modules come
+  blank. The program checks for Zimodem (the modem off, the ESP32 restarted,
+  `ATI` read over UART0) and writes the channel's `v3.zimodem` image
+  (`zimodem-v3.bin`) when it is missing or older. The card runs
+  `tsbus.esp_relay`, which joins its USB port to the ESP32's UART with the
+  ESP32 in its ROM loader, and [`espflash.py`](espflash.py) talks to the
+  loader through the same COM port: SYNC, SPI_ATTACH, the image deflated
+  into 1 KB blocks, and the loader's MD5 of what it wrote compared with the
+  image's (about 85 s). The relay ends 4 s after the last byte, the ESP32
+  restarts into Zimodem, and `ATI` is read again. Only the image's own area
+  is written, so Zimodem's WiFi and phonebook settings stay. The *Modem
+  firmware* checkbox, shown for a v3 card when the channel has Zimodem,
+  skips the step. It ends by leaving the raw REPL (Ctrl-B) and soft-resetting
+  from the friendly one (Ctrl-D), so `main.py` runs: a soft reset inside the
+  raw REPL comes back to the raw REPL. `espflash.py` is the web updater's
+  `espflash.js` in Python; no esptool is bundled.
 
 A channel published before the v3 card has no `v3` key; the program then
 asks for the main channel, as the web page does.
@@ -79,7 +102,8 @@ points at another copy of `/updater/`, either a URL or a local folder such as
 
 ```
 windows-updater/
-├── core.py            the run: serial + raw REPL, drive, the six stages (no GUI)
+├── core.py            the run: serial + raw REPL, drive, the seven stages (no GUI)
+├── espflash.py        the v3 card's modem: ESP32-C3 ROM-loader client (Zimodem)
 ├── app.py             the tkinter window; talks to core only through core.Ui
 ├── requirements.txt   pyserial, pyinstaller (pinned)
 └── test/core_test.py  a whole run against a fake Pico
@@ -105,7 +129,13 @@ against a temporary directory that stands in for the flash. Its RPI-RP2
 firmware, the ROM updater (which replays a full set of `UPG` lines) or the
 flash eraser. A fake v3 card answers as an RP2350, with an RP2350 drive; its
 runs check the skipped steps, the slots kept and written, and that an RP2040
-image is refused.
+image is refused. Its modem probe answers with a fake Zimodem version, and its
+relay hands the port to a fake ESP32-C3 ROM loader that checks every command
+(checksums, block order, the BEGIN words), inflates the blocks into a model
+flash and answers MD5; the modem runs check a blank module written, a
+current one kept, the step skipped, and the firmware restarted after. The
+same fake loader tests `espflash.py` alone: a refused block, a wrong MD5, no
+loader at all.
 
 `core.py` also runs on macOS and Linux (`/Volumes/RPI-RP2` or `RP2350`,
 `/media/*/RPI-RP2` or `RP2350`), so you can try it against a real board without a
