@@ -4,7 +4,25 @@
     {
       "name": "web-updater",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8000", "--directory", "web-updater"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8000",
+        "--directory",
+        "web-updater"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "web-updater-abs",
+      "runtimeExecutable": "/usr/bin/python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8000",
+        "--directory",
+        "/Users/david/Documents/github/tspico-firmware-build/.claude/worktrees/tspico-v3-phase-2-02cd3f/web-updater"
+      ],
       "port": 8000
     }
   ]
