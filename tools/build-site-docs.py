@@ -8,7 +8,9 @@ this script copies
     docs/manual/*.md          -> site/manual/
     docs/manual/images/       -> site/manual/images/
 
-so the website always shows the docs as they are on main. The copies are
+so the website always shows the docs as they are on main. The user manual
+is published as the TS-Pico 2.x's (tools/manual-variants.py, board v2): the
+v3 card's passages are left out until the card is released. The copies are
 generated, never committed (.gitignore), and the docs stay where they are:
 GitHub renders them as before.
 
@@ -49,6 +51,16 @@ EXTRA = {
         "(5.5 &times; 8.5 in), or <a href=\"user-manual-saddle-stitch-letter.pdf\">as a booklet to "
         "print</a> (letter, double-sided, flip on the short edge; fold and staple).</p>",
 }
+
+# Docs published as one board's variant (tools/manual-variants.py).
+VARIANTS = {"docs/manual/user-manual.md": "v2"}
+
+
+def manual_variant(text, board):
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import importlib
+    return importlib.import_module("manual-variants").variant(text, board)
+
 
 LINK = re.compile(r"(!?\[(?:[^\[\]]|\[[^\]]*\])*\])\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
@@ -167,6 +179,8 @@ def build(site_dir):
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(os.path.join(REPO, repo_md), encoding="utf-8") as f:
             text = f.read()
+        if repo_md in VARIANTS:
+            text = manual_variant(text, VARIANTS[repo_md])
         with open(out, "w", encoding="utf-8") as f:
             f.write(convert(text, repo_md, pages))
     for src, dst in COPY_DIRS:
