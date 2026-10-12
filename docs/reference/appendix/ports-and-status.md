@@ -17,7 +17,10 @@ On the v3 card two more ports are answered, by core 1, for the TS2050
 modem (unless `tpi:modem off`): 73h (115), the 8251's data, and 77h (119),
 its status on IN and mode/command on OUT
 ([../firmware/tsbus.md](../firmware/tsbus.md#usart8251h-usart8251c)). They
-are not the TS-Pico's protocol, and the ROM never touches them.
+are not the TS-Pico's protocol, and the ROM never touches them. So is 1Fh
+(31) on IN, the Kempston joystick from the card's DE-9 socket (unless
+`config.ini`'s `KEMPSTON` is false): 000FUDLR, 1 = pressed, the high
+address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep1)).
 
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which

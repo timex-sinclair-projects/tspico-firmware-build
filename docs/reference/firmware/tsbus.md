@@ -14,7 +14,8 @@ moved under MicroPython. Phase 3 of the v3 port plan
 ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1 and reset control;
 the `MQ` object over core 1's queues; and switching images. Phase 6 adds
 the TS2050 modem's 8251 at 73h/77h, bridged to the card's ESP32-C3
-([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)). The v2 firmware
+([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)), and the
+Kempston joystick at 1Fh from a byte core 0 keeps current. The v2 firmware
 does not use any of it.
 
 What phase 1 learned, and why the code is shaped this way, is in the
@@ -35,6 +36,7 @@ than repeating it.
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
 | `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`; `tsbus.esp_relay`, to install Zimodem |
+| `tsbus.c`, the joystick | 1Fh in `handle_in`; `tsbus.kempston` |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
 | `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
@@ -186,6 +188,8 @@ in the file.
 | `mtx_inflight` | uint32 | `core1_main`; `tsbus_modem` (0) | how many bytes the run `ch_mtx` is sending holds |
 | `modem_ins` | volatile uint32 | `handle_in` | INs from 73h/77h answered |
 | `modem_wake`, `modem_touched` | volatile bool | set by `core1_main` (an OUT to 73h/77h: both) and `handle_in` (an IN: `modem_touched`); cleared by `tsbus_modem_poll` and `tsbus_modem` | what core 1 saw since core 0 last asked: a program writing to the 8251, and any use of it |
+| `kempston` | volatile int16, -1 | `tsbus_kempston`; `handle_in` | the byte IN 1Fh reads (the Kempston joystick), or -1: 1Fh unanswered. Core 0 sets it from the expander (`board_v3.joystick`); core 1 only reads it. A halfword store, so core 1 never sees half a change |
+| `kemp_ins` | volatile uint32 | `handle_in` | INs from 1Fh answered |
 | `modem_line_up` | volatile bool, false | `tsbus_modem_line`; `core1_main` | Zimodem is running. Until then core 1 starts no `ch_mtx` run (what is queued waits in `line_tx`) and drops what `ch_mrx` brings (the boot banner, or noise from an ESP32 that is off). Kept across `tsbus.modem(True)` |
 
 ### `chunk_target(chunk, hsr, ff)`
@@ -270,6 +274,11 @@ While `modem_on`, 73h and 77h are answered the same way, the reply from
 `u8251_data_in` or `u8251_status` (decoded from A0-A7 with `port & FBh ==
 73h`, A2 choosing). With the modem on, the slowest reply from entry to U3 on
 was 412 ns (`respond_ns`, proto1 2026-10-12).
+
+1Fh, while `kempston` is 0 or more, is answered with that byte: a compare
+of the low address byte (the high byte is ignored, as a Kempston interface
+ignores it) and a load, no I2C and nothing behind APB. The expander is read
+on core 0 (`board_v3.joystick`).
 
 Other ports are left to the 2068; the handler still waits for their strobe
 to end.
@@ -524,6 +533,13 @@ time at `baud` after the last (33.3 ms at 300); 0: as soon as the last is
 read. `usart.pace` in core cycles; kept across `tsbus.modem(True)`
 (`pace_set`). A negative baud is `ValueError`.
 
+### `tsbus.kempston(byte)`
+
+From now on an IN from 1Fh reads `byte` (0–255; anything else is
+`ValueError`). `None`: 1Fh is left unanswered, as on a 2068 without the
+interface. One store to `kempston`. `board_v3._joy_read` calls it whenever
+the joystick changes, and `board_v3.joystick(False)` with `None`.
+
 ### `tsbus.esp_relay(first_ms, idle_ms)`
 
 The USB serial port and the ESP32-C3's UART0 joined byte for byte, on core 0,
@@ -565,7 +581,8 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `m_mode_sel` (`modem_mode`), `m_state` (the 2050 state, `M2050_ONHOOK`
 0 … `M2050_HANGUP` 5), `m_dials`, `m_connects`, `m_carrier_lost` and
 `m_line_up`.
-`m_rx_lost` is the line's ring overflowing (`modem.rx_lost`).
+`m_rx_lost` is the line's ring overflowing (`modem.rx_lost`). The joystick:
+`k_on` (1Fh answered), `k_byte` (what it reads, 0 while off) and `k_ins`.
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
 
@@ -638,7 +655,7 @@ at the REPL: F7h, FBh, FFh and 00h, as on v2.
 
 The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type,
 with the functions above, `modem`, `modem_mode`, `modem_line`,
-`modem_poll`, `modem_pace` and `esp_relay` among them.
+`modem_poll`, `modem_pace`, `esp_relay` and `kempston` among them.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 
