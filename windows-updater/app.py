@@ -224,15 +224,22 @@ class App:
 
     def start(self):
         m = self.up.manifest
-        if self.busy or not m or not m.get("uf2"):
+        if self.busy or not m:
             return
-        wipe, rom = self.opt_wipe.get(), self.opt_rom.get()
         if not self.up.port:
-            if not core.find_drive():
+            d = core.find_drive()
+            if not d:
                 messagebox.showinfo("TS-Pico Updater", "Connect to the TS-Pico first — or put it in "
                                     "BOOTSEL mode by hand (hold BOOTSEL while plugging in USB, so the "
-                                    "RPI-RP2 drive shows) and press Start again.")
+                                    "RPI-RP2 drive shows, or RP2350 on the v3 card) and press Start again.")
                 return
+            if core.drive_chip(d) == "RP2350":
+                self.up.board = "v3"
+                self.refresh()
+        if not self.up.image()[0]:
+            return
+        wipe = self.opt_wipe.get() and not self.up.v3
+        rom = self.opt_rom.get() and not self.up.v3
         if wipe and not messagebox.askokcancel(
                 "TS-Pico Updater",
                 "This erases everything on the Pico — firmware and files — and installs firmware %s. "
@@ -336,13 +343,19 @@ class App:
 
     def refresh(self):
         m = self.up.manifest
+        v3 = self.up.v3
+        if v3:                                   # its ROM slots are files: never wiped, no ROM step
+            self.opt_wipe.set(False)
+            self.opt_rom.set(False)
         rom = self.opt_rom.get()
         if rom:
             self.opt_wipe.set(True)              # the upgrade UF2 needs an empty filesystem
         problem = ""
         if not m:
             problem = "No payload loaded yet."
-        elif not m.get("uf2"):
+        elif v3 and not m.get("v3"):
+            problem = "This channel has nothing for the v3 card yet. Pick “Latest main build”."
+        elif not v3 and not m.get("uf2"):
             problem = "This channel has no firmware image. Pick the other channel."
         elif rom and not m.get("upgrade_uf2"):
             problem = ("This channel has no ROM updater (upgrade.uf2). Pick “Latest main build”, "
@@ -351,13 +364,19 @@ class App:
         self.btn_start.state(["!disabled"] if idle and not problem else ["disabled"])
         self.btn_connect.state(["!disabled"] if idle and not self.up.port else ["disabled"])
         self.btn_connect.configure(text="Connected" if self.up.port else "Connect to TS-Pico")
-        self.cb_rom.state(["!disabled"] if idle and m and m.get("upgrade_uf2") else ["disabled"])
-        self.cb_wipe.state(["!disabled"] if idle and not rom else ["disabled"])
+        self.cb_rom.state(["!disabled"] if idle and m and m.get("upgrade_uf2") and not v3 else ["disabled"])
+        self.cb_wipe.state(["!disabled"] if idle and not rom and not v3 else ["disabled"])
         for c, b in self.ch_buttons.items():
             b.state(["!disabled"] if idle and c in self.manifests else ["disabled"])
         inst = self.up.installed
         if problem:
             text, colour = problem, "#b26a00"
+        elif v3:
+            text, colour = ("Start will install firmware %s for the v3 card, then copy its files and "
+                            "its ROM slots. Slots 0 and 1 (the Spectrum and TS-Pico ROMs) are always "
+                            "replaced; your own ROMs and cartridges in the other slots are kept. "
+                            "Nothing is erased. Keep the USB cable connected throughout." %
+                            m["fw_version"]), "#333"
         elif inst and inst["from1x"] and not rom:
             text, colour = ("This board is on %s. Its TS-2068 ROM can't talk to firmware %s — tick "
                             "“Update the TS-2068 ROM” or the 2068 won't work afterwards." % (

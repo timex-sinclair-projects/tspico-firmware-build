@@ -2,7 +2,9 @@
 
 A small Windows program that does what the [web updater](../web-updater/)
 does: erase the Pico, update the TS-2068 ROM, install the firmware and copy
-its files. It exists because the browser can't finish that job on Windows:
+its files. It handles the TS-Pico 2.x boards (a Raspberry Pi Pico, RP2040) and
+the v3 card (RP2350B), which installs differently: see
+[The v3 card](#the-v3-card). It exists because the browser can't finish that job on Windows:
 
 - **WebUSB** can't open the RP2040's boot ROM ("RP2 Boot"). Windows binds no
   driver to it, since the boot ROM has no Microsoft OS descriptors, so it needs
@@ -29,21 +31,39 @@ other.
    firmware, raw REPL, read the running `FW_VERSION` (else `/config.ini`'s)
    and the MicroPython release. The ROM step is pre-ticked by `rom_behind()`.
 2. **BOOTSEL**: `machine.bootloader()`, then wait for a removable drive
-   whose `INFO_UF2.TXT` says `RPI-RP2`. A Pico already in BOOTSEL skips
-   step 1.
+   whose `INFO_UF2.TXT` says `RPI-RP2` (or `RP2350`, the v3 card). A Pico
+   already in BOOTSEL skips step 1.
 3. **Wipe**: copy `flash_nuke.uf2`, which the exe carries. The Pico erases
    itself and comes back as RPI-RP2.
 4. **ROM update**: copy the channel's `upgrade.uf2` and follow its
    `UPG {json}` serial lines while the user types `OUT 244,3` and `LOAD ""`
    on the 2068. Then the 2068 goes off and the Pico goes back to BOOTSEL.
-5. **Firmware**: copy `firmware.uf2`. The drive vanishing is the success
-   signal.
+5. **Firmware**: copy `firmware.uf2`, after checking that its UF2 family is
+   the board's chip. The drive vanishing is the success signal.
 6. **Files**: reopen the COM port, write each file over the raw REPL
    (base64, 1 KB per exec), check names and sizes, then `machine.reset()`.
 
 Before a run that would install an older MicroPython than the Pico runs, the
 program warns that the first boot will reformat the filesystem, as the web
 page does.
+
+## The v3 card
+
+The board is known from `os.uname().machine` at Connect ("… with RP2350"),
+or, for a card put in BOOTSEL by hand, from the RP2350 drive. On the v3 card:
+
+- **No wipe and no ROM step.** Its ROMs are slot files in `/slots` on the
+  same flash as the firmware, so `flash_nuke` (RP2040-only anyway) would
+  erase the user's cartridges. The two options are unticked and greyed out.
+- **Firmware** is the manifest's `v3.uf2` (`firmware-v3.uf2`), checked to be
+  an RP2350 UF2, and the downgrade warning uses `v3.mp_version`.
+- **Files** first removes a stray `/TS` folder (it would shadow the frozen
+  modules), then writes the slots in `v3.slots`: those marked `always`
+  (slots 0 and 1, the Spectrum and TS-Pico ROMs) every time, the others only
+  where the card has no such file. Verify checks the slots' sizes as well.
+
+A channel published before the v3 card has no `v3` key; the program then
+asks for the main channel, as the web page does.
 
 ## Where the firmware comes from
 
@@ -83,10 +103,12 @@ The test's fake Pico speaks the raw REPL and runs the code it receives
 against a temporary directory that stands in for the flash. Its RPI-RP2
 "drive" is another directory: a UF2 copied there reboots the fake into
 firmware, the ROM updater (which replays a full set of `UPG` lines) or the
-flash eraser.
+flash eraser. A fake v3 card answers as an RP2350, with an RP2350 drive; its
+runs check the skipped steps, the slots kept and written, and that an RP2040
+image is refused.
 
-`core.py` also runs on macOS and Linux (`/Volumes/RPI-RP2`,
-`/media/*/RPI-RP2`), so you can try it against a real board without a
+`core.py` also runs on macOS and Linux (`/Volumes/RPI-RP2` or `RP2350`,
+`/media/*/RPI-RP2` or `RP2350`), so you can try it against a real board without a
 Windows machine:
 
 ```sh
