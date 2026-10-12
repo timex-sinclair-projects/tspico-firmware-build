@@ -23,7 +23,9 @@ Appendices
 - C. Command Quick Reference
 - D. Settings, `config.ini` and TPMODE
 - E. The TS-Pico Team
+<!-- v3 -->
 - F. The TS-Pico v3 Card
+<!-- /v3 -->
 
 ---
 
@@ -1386,7 +1388,9 @@ SAVE "tpi:boot"              : REM show: BOOT is MEM=2, PAGE=1
 SAVE "tpi:boot" CODE m,s     : REM m: 1 = RAM, 2 = Flash; s: slot 0-15
 ```
 
+<!-- v3 -->
 On the v3 card `m` can also be 3, a slot on the SD card (Appendix F.5).
+<!-- /v3 -->
 
 Changes the ROM the 2068 starts from. Takes effect at once, so follow it with `NEW` or TS Reset.
 The choice (RAM or Flash, and the slot) is also used once more the next time the TS-Pico
@@ -1444,7 +1448,9 @@ SAVE "tpi:dock" CODE 0,1     : REM show the previous setting
 SAVE "tpi:dock" CODE 0,2     : REM swap with the previous setting
 ```
 
+<!-- v3 -->
 On the v3 card `m` can also be 3, a slot on the SD card (Appendix F.5).
+<!-- /v3 -->
 
 *(verbose)* `Change DOCK to MEM=2, PAGE=0`, and after a swap `Swapped with previous setting`.
 
@@ -1758,9 +1764,11 @@ computer. Leave it alone and press **Start** without connecting.
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
 click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
 release**, then **Connect to TS-Pico**, tick the options, press **Start**, and follow the same
-steps as above. You don't have to pick a port or a drive. It finds the Pico by itself. It
-updates the v3 card too: it installs the card's firmware and ROM slots, never erases the card,
-and keeps any slots you've filled (Appendix F).
+steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
+<!-- v3 -->
+It updates the v3 card too: it installs the card's firmware and ROM slots, never erases the
+card, and keeps any slots you've filled (Appendix F).
+<!-- /v3 -->
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the
@@ -1896,7 +1904,12 @@ the SD card). It's a single line of text:
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
 | `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3.1"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
-| `LED_BRIGHTNESS` | How bright the LED is on the v3 card, 1-100 (%). The TS-Pico 2.x ignores it | `5` |
+<!-- v2 -->
+| `LED_BRIGHTNESS` | Not used on the TS-Pico 2.x | `5` |
+<!-- /v2 -->
+<!-- v3 -->
+| `LED_BRIGHTNESS` | How bright the LED is, 1-100 (%) | `5` |
+<!-- /v3 -->
 
 You'd normally leave this file alone. To change it, connect the Pico to a computer and use a
 program such as Thonny. If the file is missing or unreadable, the TS-Pico uses the values above.
@@ -1935,6 +1948,7 @@ Zoom meetings; and to our families.
 - Board design: https://github.com/jburrell7/TSPICO
 - Expansion bus: https://github.com/jburrell7/TS2068_Extender
 
+<!-- v3 -->
 ---
 
 <!-- keywords: v3 card · slots · dock RAM · SD card · LED -->
@@ -2044,3 +2058,4 @@ a card is in, so `No SD card` comes back at once rather than after a few seconds
 5. `SAVE "tpi:dock" CODE 3,n` and `SAVE "tpi:boot" CODE 3,n` use slot files in `slots` on the SD
    card, with the Flash slot as the stand-in.
 6. The SD card's switch means a missing card is noticed at once.
+<!-- /v3 -->

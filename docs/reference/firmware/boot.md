@@ -30,7 +30,7 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `src/manifest.py` | the freeze manifest: which modules go into the UF2 |
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
-| `.github/workflows/build.yml` | every push: tests, ROM checks, the two v2 UF2s, the v3 UF2, the user manual PDFs, artifacts |
+| `.github/workflows/build.yml` | every push: tests, ROM checks, the two v2 UF2s, the v3 UF2, the user manual PDFs (and the v3 card's), artifacts |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
 | `tools/pico-serial.py` | the USB console from a shell |
@@ -279,7 +279,7 @@ Ubuntu 22.04. The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 42 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 43 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)). They pin invariants that
@@ -344,8 +344,11 @@ A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
 the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
 DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
-Poppins) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` turns
-`docs/manual/user-manual.md` into HTML with pandoc, and
+Poppins) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
+one board's manual from `docs/manual/user-manual.md`
+(`tools/manual-variants.py`: passages for one board sit between
+`<!-- v2 -->` or `<!-- v3 -->` marker lines; `BOARD=v2` is the default and
+the published manual), turns it into HTML with pandoc, and
 `tools/manual-pdf/book.py` adds the title page, contents and chapter
 openers, prints the manual and the two covers with the runner's Chrome, and
 assembles the half-letter one-up (cover + manual) and the saddle-stitch
@@ -356,8 +359,11 @@ page goes in before each one that would open on a left-hand page. The
 cover's version comes from `config.ini` and its date from the last commit.
 The script checks the page size and count and that every chapter opens on
 an odd page; the two PDFs are uploaded as
-`tspico-manual-pdf`. Building them on every push means a manual change that
-breaks them fails here, not at release time.
+`tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
+(`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover), uploaded
+with its Markdown as `tspico-manual-v3`; it isn't published (website,
+releases) while the card is unreleased. Building them on every push means a
+manual change that breaks them fails here, not at release time.
 
 Artifacts are kept 30 days. `tools/pico-serial.py flash --branch B`
 downloads the `tspico-firmware-uf2` of B's current head and flashes it

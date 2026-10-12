@@ -32,6 +32,8 @@ W, H = 5.5 * 72, 8.5 * 72
 work = sys.argv[1]
 os.chdir(work)
 FW, ROM, DATE = os.environ["FW"], os.environ["ROM"], os.environ["DATE"]
+TITLE = os.environ.get("TITLE", "TS-Pico User Manual")   # make.sh: the board's manual
+T3 = os.environ.get("T3", "USER MANUAL")
 
 
 def chrome(src, dst):
@@ -114,12 +116,12 @@ def build(blanks, pages):
   <div class="stripes"><i></i><i></i><i></i></div>
   <div class="t1">TS-Pico</div>
   <div class="t2">Mass Storage<br>Interface</div>
-  <div class="t3">USER MANUAL</div>
+  <div class="t3">%s</div>
   <div class="by"><b>The TS-Pico team</b><br>For the Timex Sinclair 2068<br>Version %s · %s</div>
 </div>
 <div class="colophon">
   <img class="sticker" src="img/ts2068-sticker.svg" alt="TS 2068">
-  <p><b>TS-Pico User Manual</b>, version %s (ROM %s, firmware %s), %s.</p>
+  <p><b>%s</b>, version %s (ROM %s, firmware %s), %s.</p>
   <p>© 2021–2026 the TS-Pico team. This manual is licensed under the Creative Commons
   Attribution 4.0 International licence (CC BY 4.0).</p>
   <p>Timex, Sinclair and Timex Sinclair are trademarks of their respective owners. The TS-Pico
@@ -127,7 +129,7 @@ def build(blanks, pages):
   <p>Website: timex-sinclair-projects.github.io/tspico-firmware-build<br>
   Source and releases: github.com/timex-sinclair-projects/tspico-firmware-build</p>
 </div>
-""" % (ROM, DATE, ROM, ROM, FW, DATE))
+""" % (T3, ROM, DATE, TITLE, ROM, ROM, FW, DATE))
     rows, part = [], None
     for ch in chapters:
         if ch["kind"] != part and ch["kind"] == "Appendix":
@@ -206,7 +208,7 @@ for ch in chapters:
 w.insert_page(front, 0)
 for ch in chapters:
     w.add_outline_item("%s %s: %s" % (ch["kind"], ch["num"], text(ch["title"])), pages[ch["id"]])
-w.add_metadata(dict(meta, **{"/Title": "TS-Pico User Manual"}))
+w.add_metadata(dict(meta, **{"/Title": TITLE}))
 w.write("user-manual-half-letter.pdf")
 
 # Booklet: front, blank inside front, the manual, blanks to a multiple of 4,
@@ -223,7 +225,7 @@ for k in range(n // 4):                      # sheet k: front [n-1-2k | 2k], bac
         side.merge_transformed_page(seq[left], pypdf.Transformation())
         side.merge_transformed_page(seq[right], pypdf.Transformation().translate(W, 0))
         w.add_page(side)
-w.add_metadata(dict(meta, **{"/Title": "TS-Pico User Manual (booklet: letter, saddle stitch)"}))
+w.add_metadata(dict(meta, **{"/Title": TITLE + " (booklet: letter, saddle stitch)"}))
 w.write("user-manual-saddle-stitch-letter.pdf")
 assert n % 4 == 0
 print("manual %d pages (%d blank before a chapter); one-up %d pages; booklet %d pages (%d blank padding), "
