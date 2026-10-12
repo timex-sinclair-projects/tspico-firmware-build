@@ -1,6 +1,11 @@
 # TS-Pico User Manual
 
+<!-- v2 -->
 ### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.3
+<!-- /v2 -->
+<!-- v3 -->
+### For the TS-Pico v3 card for the Timex Sinclair 2068 — version 2.3
+<!-- /v3 -->
 
 ## Contents
 
@@ -11,7 +16,12 @@
 5. Native Files with `f:`
 6. Streams and Channels: `OPEN #`
 7. The Virtual Printer
+<!-- v2 -->
 8. ROM Slots, Cartridges and the Flash Chip
+<!-- /v2 -->
+<!-- v3 -->
+8. ROM Slots and Cartridges
+<!-- /v3 -->
 9. ZX Spectrum Mode
 10. Command Reference
 11. When Things Don't Go As Expected
@@ -24,7 +34,7 @@ Appendices
 - D. Settings, `config.ini` and TPMODE
 - E. The TS-Pico Team
 <!-- v3 -->
-- F. The TS-Pico v3 Card
+- F. The Modem
 <!-- /v3 -->
 
 ---
@@ -40,12 +50,26 @@ hope nothing went wrong at minute four. The TS-Pico retires the cassette. It plu
 2068's expansion connector and keeps your programs on a micro SD card, in the same **TAP**
 files that emulators use. A `LOAD ""` that took minutes now takes a moment.
 
+<!-- v2 -->
 Inside is a Raspberry Pi **Pico** running MicroPython. It talks to the 2068 through two I/O
 ports and looks after the SD card. Next to it on the board are:
 
 - **512K of Flash memory**, holding sixteen 32K "slots": the TS-Pico 2068 ROM, a ZX Spectrum
   ROM, a few utility ROMs and cartridges, and room for your own;
 - **512K of static RAM**, sixteen more slots that are lost when the power goes off.
+<!-- /v2 -->
+<!-- v3 -->
+The v3 card is built around a Raspberry Pi **RP2350** chip running MicroPython. It talks to
+the 2068 through two I/O ports, looks after the SD card, and has no memory chips: it serves the
+2068's ROM and cartridges from its own memory. It keeps:
+
+- sixteen 32K **Flash slots** in its own memory: the TS-Pico 2068 ROM, a ZX Spectrum ROM, a
+  few utility ROMs and cartridges, and room for your own;
+- sixteen **RAM slots**, lost when the power goes off.
+
+It also has a **WiFi modem**, which programs written for the Timex TS2050 modem use to reach
+hosts on the internet (Appendix F).
+<!-- /v3 -->
 
 The TS-Pico replaces part of the 2068's own ROM with its own version, so the ordinary
 commands **LOAD**, **SAVE**, **VERIFY** and **MERGE** go to the SD card, and a family of new commands
@@ -59,6 +83,10 @@ lets you look after files and folders.
 - Read and write text and data files from BASIC with `OPEN #`, `PRINT #` and `INPUT #`
 - Capture `LPRINT`, `LLIST` and `COPY` to text and picture files
 - Run cartridges (DCK files) and alternative ROMs from the Flash slots
+<!-- v3 -->
+- Run ROMs and cartridges straight from the SD card
+- Dial bulletin boards over WiFi with TS2050 terminal programs such as MTERM
+<!-- /v3 -->
 - Switch the 2068 into a ZX Spectrum and load Spectrum tapes
 
 ## 1.2 How TS-Pico commands work
@@ -185,6 +213,7 @@ Both connectors are keyed, so they only go in one way. Expect a fair amount of r
 you press the board home. That's normal. If you find yourself forcing it, stop and check that
 the key lines up with the notch.
 
+<!-- v2 -->
 ## 2.3 A tour of the board
 
 **The Pico** is the small green board with a white **BOOTSEL** button and a Micro-USB socket.
@@ -220,6 +249,40 @@ takes its power from the 2068.
 
 **The SD card slot** is at the upper right corner of the TS-Pico board. The card goes in
 contacts first and clicks into place.
+<!-- /v2 -->
+<!-- v3 -->
+## 2.3 A tour of the card
+
+**The edges.** Along the left edge, from the top: the WiFi aerial (part of the modem module),
+a **USB-C** socket, and the **micro SD card** socket. You only need the USB socket to update
+the firmware (Appendix A). In normal use the card takes its power from the 2068; with a USB
+cable connected it can also be powered from the computer.
+
+**The buttons.** Along the top edge, left to right:
+
+- **TS Reset** restarts the 2068, just like its own reset. The TS-Pico keeps its state: the
+  mounted file, the current folder and so on.
+- **NMI** isn't used by the standard ROM.
+- **RUN** restarts the card itself. Use it only as a last resort, and never while a file is
+  being written.
+- **BOOTSEL** is for installing firmware by hand (Appendix A).
+
+There are no jumpers to set on the card.
+
+**The light.** The card's LED (dimmed, set by `LED_BRIGHTNESS`, Appendix D) tells you what it's
+doing:
+
+| What you see | What it means |
+|---|---|
+| A short flash every couple of seconds | Idle and happy, waiting for a command |
+| Steady on | Busy with a command, a SAVE or a listing |
+| Flickering | Copying a file you've just mounted |
+| A burst of fast blinks | Something went wrong, for example a file that wouldn't mount |
+| Two short flashes every couple of seconds | Running without an SD card (see 2.6) |
+
+**The other connectors**, a joystick socket, an audio jack and a display header, are for
+features coming in later firmware.
+<!-- /v3 -->
 
 ## 2.4 The micro SD card
 
@@ -232,15 +295,28 @@ Your card came ready to use. If you set up a new one:
 4. If you like, copy the `help` folder from the TS-Pico release to the top level of the card,
    next to `TAP`. That's where `SAVE "tpi:help word"` finds its help pages.
 
+<!-- v3 -->
+The card goes into the socket on the card's left edge, contacts first, and clicks into place.
+A switch in the socket tells the TS-Pico whether a card is in, so you can take it out and put it
+back between commands.
+<!-- /v3 -->
+
 **Naming files.** Stick to letters, digits, `-` and `_` for anything you'll SAVE from the 2068. The TS-Pico accepts longer names and spaces when *loading*, but a plain `SAVE "name"` only allows letters, digits, `-` and `_`.
 
 ## 2.5 Switching on
 
 Now switch the 2068 on. Here's what happens:
 
+<!-- v2 -->
 1. For a couple of seconds the screen may look frozen or garbled. That's normal: the Pico is
    starting up.
 2. The Pico's LED blinks steadily while it opens the SD card and reads your `TAP` folder.
+<!-- /v2 -->
+<!-- v3 -->
+1. For a moment the screen stays dark: the card holds the 2068 in reset while it loads the ROM
+   into its memory, then lets it start.
+2. The card opens the SD card and reads your `TAP` folder.
+<!-- /v3 -->
 3. The 2068 starts. You'll see the usual copyright lines, plus the TS-Pico's own line, which
    includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
 4. Press **ENTER** and the flashing **K** cursor appears.
@@ -301,7 +377,13 @@ with `OPEN #` are closed.
 If the card still isn't found, give the whole system a fresh start:
 
 1. **Switch the TS 2068 off.**
+<!-- v2 -->
 2. **Unplug the Pico's USB cable**, if it's connected to a computer.
+<!-- /v2 -->
+<!-- v3 -->
+2. **Unplug the card's USB cable**, if it's connected to a computer.
+<!-- /v3 -->
+
 3. **Wait a few seconds, then switch the TS 2068 back on.**
 
 **Why does this happen?** It's most common after a *warm boot*: the TS-Pico restarted while it
@@ -317,7 +399,12 @@ or it may be write-protected, in which case the TS-Pico can't make its `TAP` fol
 
 1. Switch the 2068 off before connecting anything, and remove the BUSISO jumper for the
    TS-Pico's slot on an expansion bus.
+<!-- v2 -->
 2. Keep the P10 jumper fitted.
+<!-- /v2 -->
+<!-- v3 -->
+2. The card has no jumpers of its own.
+<!-- /v3 -->
 3. Your files live in the SD card's `TAP` folder; the TS-Pico makes it on a blank card.
 4. A short LED flash every couple of seconds means all is well.
 5. Two LED flashes mean there's no SD card. Put one in, or reseat it, and type the command
@@ -1058,6 +1145,7 @@ These settings last until the TS-Pico is switched off.
 
 ---
 
+<!-- v2 -->
 # Chapter 8: ROM Slots, Cartridges and the Flash Chip
 
 <!-- keywords: tpi:boot · tpi:dock · slots -->
@@ -1181,6 +1269,162 @@ and run `LOAD ""` again.
 4. BOOT choices last one power cycle; DOCK resets at switch-on.
 5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot, with P10 fitted and never over
    the running ROM.
+<!-- /v2 -->
+<!-- v3 -->
+# Chapter 8: ROM Slots and Cartridges
+
+<!-- keywords: tpi:boot · tpi:dock · slots -->
+
+## 8.1 The slots
+
+The card keeps sixteen 32K **Flash slots**, numbered 0 to 15, in its own memory, and sixteen
+**RAM slots** more. Flash slots keep their contents when the power is off; RAM slots don't.
+
+| Flash slot | What's there |
+|---|---|
+| 0 | The TS-Pico ZX Spectrum ROM (used by ZX Spectrum mode) |
+| 1 | The TS-Pico TS 2068 ROM, the one your 2068 normally starts with |
+| 2 | ZX Diagnostics |
+| 3 | The TK90/95 ROM (Rodolfo Guerra) |
+| 4 to 9 | Free for your own ROMs and cartridges |
+| 10 and 11 | Flight Simulator |
+| 12 and 13 | Crazy Bugs |
+| 14 and 15 | Casino |
+
+A cartridge (a DCK file) takes two slots side by side, starting at an even number.
+
+The TS-Pico uses slots in two ways:
+
+- the **BOOT** slot is the ROM the 2068 starts from;
+- the **DOCK** slot is what appears when a program switches to the 2068's cartridge bank,
+  which is how cartridges run.
+
+## 8.2 BOOT and DOCK
+
+```basic
+SAVE "tpi:boot"                : REM show the boot setting: BOOT is MEM=2, PAGE=1
+SAVE "tpi:dock"                : REM show the dock setting: DOCK is MEM=2, PAGE=0
+```
+
+`MEM` is **1** for RAM, **2** for Flash and **3** for the SD card (8.5); `PAGE` is the slot.
+To change them:
+
+```basic
+SAVE "tpi:boot" CODE 2,4          : REM start the 2068 from Flash slot 4
+SAVE "tpi:dock" CODE 2,12         : REM put Flash slot 12 (Crazy Bugs) in the dock
+SAVE "tpi:dock" CODE 0,1          : REM show the previous dock setting
+SAVE "tpi:dock" CODE 0,2          : REM swap back to it
+```
+
+- **`tpi:boot` restarts the 2068** in the new ROM a moment after the message. There's no need
+  for `: NEW`.
+- **A slot with no ROM in it is refused** (**F**, `No ROM in Flash slot 7`), so you can't start
+  the 2068 from an empty slot by mistake. If the boot slot is somehow empty at switch-on, the
+  card starts the standard ROM from Flash slot 1 instead and notes it in the log.
+- **`tpi:dock` changes the dock straight away**, without restarting the 2068.
+
+**BOOT lasts for one start.** Your choice sticks while the card stays powered, and it's used
+once more the next time you switch on. After that, the card goes back to the standard ROM in
+Flash slot 1. So a ROM you're trying out can never lock you out: switch off and on twice, and
+you're back to normal.
+
+**DOCK resets at switch-on** to the standard setting, Flash slot 0.
+
+> **With the USB cable plugged in**, the card stays powered when you switch the 2068 off, so
+> switching off and on isn't a new start for it: the 2068 comes back with the same BOOT and DOCK.
+> To give the card a real start, switch the 2068 off, unplug the USB cable, then switch on.
+
+**64K of RAM in the dock.** A pair of RAM slots in the dock gives a program 64K of extra RAM in
+the cartridge bank:
+
+```basic
+SAVE "tpi:dock" CODE 1,4      : REM RAM slots 4 and 5 in the dock: 64K of RAM
+```
+
+What a program writes there stays put until you switch off, even if you change the dock and come
+back later. Changing the dock away from a RAM slot takes about a second while the card saves it.
+A **Flash** slot in the dock can't be written, so a program can't alter a cartridge by writing to
+it.
+
+## 8.3 Running a cartridge
+
+Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to start it, or press
+**TS Reset**: the 2068 restarts, finds the cartridge and runs it.
+
+Don't use `OUT 244,3` for a cartridge. It maps only the first 16K of the dock over the ROM, which is
+how ZX Spectrum mode starts, and a cartridge started that way crashes.
+
+To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
+
+**The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is simply what's in
+the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
+for example, and it takes the Spectrum ROM's place until you change the dock back
+(`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
+slot 0.
+
+## 8.4 Putting a ROM or cartridge into a slot
+
+You can load your own ROM images and cartridges from the SD card into a slot. Mount the file,
+then `LOAD ""` runs a small loader program that asks where to put it:
+
+```basic
+LOAD "tpi:myrom.rom"         : REM or .bin, or a cartridge .dck
+LOAD ""
+```
+
+It asks:
+
+1. **SRAM(1) or Flash(2)?** RAM is quick and safe to experiment with, but forgets at switch-off.
+   Flash keeps it.
+2. **Which slot?** For Flash, slots 4 to 9 are free for you; a cartridge goes in an even slot.
+3. The card writes the slot itself, in a fraction of a second, and the loader tells you how to
+   use it, for example `SAVE "tpi:boot" CODE 2,4` for a ROM, and offers to start it now. For a
+   cartridge it offers to put it in the dock.
+
+Some rules:
+
+- **You can write the slot the 2068 is running from.** The 2068 carries on with the ROM it
+  started with, and the new one runs from the next start, or after `SAVE "tpi:boot"`. The
+  loader tells you so and asks you to confirm.
+- **Flash slot 0 is the Spectrum ROM** that ZX Spectrum mode needs. The loader warns you and asks
+  again before replacing it. Slots 1 to 3 hold the other system ROMs.
+
+If the image isn't mounted any more when the loader asks for it (after `tpi:close`, say), the
+loader stops with `No ROM image mounted` and **F**. Mount the file and run `LOAD ""` again.
+
+## 8.5 Slots on the SD card
+
+The card can also boot or dock a ROM or cartridge straight from the SD card, without loading it
+into a slot first, so a collection can live on the card. Put the slot files in a folder called
+`slots` at the top of the SD card, named as in the card's own memory: `F04.bin` for slot 4, and
+for a cartridge two files, `F08.bin` and `F09.bin` for slots 8 and 9. The release's
+`v3-slots.zip` holds files in that form. Then use memory **3**:
+
+```basic
+SAVE "tpi:dock" CODE 3,8      : REM the cartridge in F08.bin and F09.bin on the SD card
+SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
+```
+
+- **The SD card is read once,** when you give the command. The ROM or cartridge is then in the
+  card's memory, so you can take the SD card out afterwards.
+- **If the file or the SD card isn't there,** the card uses the Flash slot of the same number
+  instead, and `tpi:dock` says `No SD slot: used flash`. A slot that is empty on both refuses to
+  boot (**F**).
+- **A cartridge from the SD card can't be written by the 2068,** as with a Flash slot.
+- **BOOT from the SD card lasts for one start,** as any BOOT does.
+- To put a ROM onto the SD card, copy its file there on a computer. The loader in 8.4 writes only
+  RAM and Flash slots.
+
+## 8.6 Summary
+
+1. The card has 16 Flash slots of 32K that survive power-off, and 16 RAM slots that don't.
+2. BOOT is the ROM the 2068 starts from; DOCK is the cartridge bank.
+3. `SAVE "tpi:boot" CODE mem,slot` and `SAVE "tpi:dock" CODE mem,slot` choose them (mem 1 = RAM,
+   2 = Flash, 3 = SD card). `tpi:boot` restarts the 2068 by itself and won't boot an empty slot.
+4. BOOT choices last one start; DOCK resets at switch-on.
+5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot.
+6. A pair of RAM slots in the dock gives a program 64K of RAM.
+<!-- /v3 -->
 
 ---
 
@@ -1389,10 +1633,16 @@ SAVE "tpi:boot" CODE m,s     : REM m: 1 = RAM, 2 = Flash; s: slot 0-15
 ```
 
 <!-- v3 -->
-On the v3 card `m` can also be 3, a slot on the SD card (Appendix F.5).
+`m` can also be 3, a slot on the SD card (8.5).
 <!-- /v3 -->
 
+<!-- v2 -->
 Changes the ROM the 2068 starts from. Takes effect at once, so follow it with `NEW` or TS Reset.
+<!-- /v2 -->
+<!-- v3 -->
+Changes the ROM the 2068 starts from, and restarts the 2068 in it a moment later. An empty slot
+is refused: **F**, `No ROM in Flash slot s`.
+<!-- /v3 -->
 The choice (RAM or Flash, and the slot) is also used once more the next time the TS-Pico
 starts, then returns to Flash slot 1. RAM loses its contents when the power is off, so only
 boot a RAM slot you've loaded since switching on.
@@ -1449,7 +1699,7 @@ SAVE "tpi:dock" CODE 0,2     : REM swap with the previous setting
 ```
 
 <!-- v3 -->
-On the v3 card `m` can also be 3, a slot on the SD card (Appendix F.5).
+`m` can also be 3, a slot on the SD card (8.5).
 <!-- /v3 -->
 
 *(verbose)* `Change DOCK to MEM=2, PAGE=0`, and after a swap `Swapped with previous setting`.
@@ -1530,6 +1780,22 @@ numbers log more. The setting lasts until the TS-Pico is switched off.
 - **F**: `MD: file "x" exists`, or `MD: name not allowed:` for a
   path (use `FORMAT "a/b/"`) or a character the card can't hold. 
 - **A**: no name.
+
+<!-- v3 -->
+### modem
+
+```basic
+SAVE "tpi:modem"             : REM show the modem's state
+SAVE "tpi:modem 2050"        : REM programs dial and see the carrier, as with a TS2050
+SAVE "tpi:modem hayes"       : REM talk to the modem directly, with AT commands
+SAVE "tpi:modem off"         : REM ports 115 and 119 not answered
+```
+
+The modem, Appendix F. The show form gives the mode, whether the WiFi part is on, the line
+(on-hook, connected …) and the calls made, for example `Modem: 2050 mode, ESP32 on` and
+`Line on-hook; 3 calls, 2 made`. A mode is saved for the next start (`MODEM_MODE` in
+`config.ini`). **A**: any other word.
+<!-- /v3 -->
 
 ### newtap: make a new TAP
 
@@ -1653,8 +1919,15 @@ things it couldn't show on the screen, look in its log: `SAVE "tpi:log" CODE 0,1
 1. Look at the LED. A short flash every couple of seconds means the TS-Pico is running; two
    flashes mean it's running without an SD card (see 2.6). If commands that need the card
    are the only ones failing, you'll see "No SD card" first.
+<!-- v2 -->
 2. If a computer is connected by USB, close Thonny or any other program using the Pico's serial
    port. Connecting one can interrupt the TS-Pico.
+<!-- /v2 -->
+<!-- v3 -->
+2. If a computer is connected by USB, close Thonny or any other program using the card's serial
+   port. Connecting one can interrupt the TS-Pico.
+<!-- /v3 -->
+
 3. The firmware and the ROM must come from the same release. An older firmware doesn't
    understand the new ROM, and every command times out after a long pause.
 4. Press **TS Reset**. If that doesn't help, switch off, unplug the USB cable, and switch on again.
@@ -1684,10 +1957,19 @@ into another folder and back.
 itself is damaged, you can boot another slot and write it back from the SD card: see
 Appendix A.
 
+<!-- v2 -->
 **The Pico doesn't show up on your computer's USB.** Hold the white **BOOTSEL** button on the
 Pico while you plug in the USB cable. If an `RPI-RP2` drive appears, the cable and computer are
 fine and you can reinstall the firmware (Appendix A). If nothing appears, try another cable;
 some cables only carry power.
+<!-- /v2 -->
+<!-- v3 -->
+**The card doesn't show up on your computer's USB.** Hold the card's **BOOTSEL** button, press
+and release **RUN**, then let go. If an `RP2350` drive appears, the cable and computer are fine
+and you can reinstall the firmware (Appendix A). If nothing appears, try another cable; some
+cables only carry power.
+<!-- /v3 -->
+
 
 ## 11.3 Asking for help
 
@@ -1701,6 +1983,7 @@ have:
 
 ---
 
+<!-- v2 -->
 # Appendix A: Upgrading Your TS-Pico
 
 <!-- keywords: web updater · ROM · SD card -->
@@ -1765,10 +2048,6 @@ and run it. There's nothing to install. Windows may warn that it doesn't know th
 click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
 release**, then **Connect to TS-Pico**, tick the options, press **Start**, and follow the same
 steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
-<!-- v3 -->
-It updates the v3 card too: it installs the card's firmware and ROM slots, never erases the
-card, and keeps any slots you've filled (Appendix F).
-<!-- /v3 -->
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the
@@ -1817,6 +2096,101 @@ can put the standard ROM back from the SD card:
 3. Unplug the USB cable before switching the 2068 on at the end.
 4. Keep the P10 jumper fitted.
 5. Never write the slot the 2068 is running from.
+<!-- /v2 -->
+<!-- v3 -->
+# Appendix A: Upgrading Your TS-Pico
+
+<!-- keywords: web updater · ROM · SD card -->
+
+The card's software comes in two parts that go together:
+
+- the **firmware**, the program the card runs;
+- the **ROM**, the 2068 ROM in Flash slot 1, and the Spectrum ROM in slot 0.
+
+Both come in the same release, and the updater installs them together: the ROMs are files in
+the card's memory, written like any other file.
+
+## A.1 Before you start
+
+- A computer with **Google Chrome** or **Microsoft Edge**. The updater uses features only they
+  have. **On Windows, use the TS-Pico Updater program instead** (see the end of A.2).
+- A **USB-C cable** that carries data, not just power.
+- About five minutes.
+
+> **Keep the 2068 switched off while the card is being updated.** The USB cable powers the card
+> by itself.
+
+## A.2 The web updater
+
+1. Leave the card plugged into the 2068, and **switch the 2068 off**.
+2. Connect the card's USB-C socket to your computer. Close Thonny or anything else that might be
+   using it.
+3. Open the TS-Pico web updater,
+   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Latest release**.
+4. Press **Connect to TS-Pico** and choose the card in the list. The page sees that it's a v3
+   card.
+5. Press **Start**, and follow the page. It puts the card into its update mode by itself. If
+   your browser asks you to pick a drive, choose **RP2350**.
+6. The page installs the firmware, then copies its files and the ROM slots. Slots 0 and 1, the
+   Spectrum and TS-Pico ROMs, are always replaced; your own ROMs and cartridges in the other
+   slots are kept. Nothing is erased.
+7. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
+   reads `2026 TS-Pico ROM v2.3`. Try `CAT`. `SAVE "tpi:info"` shows the firmware and ROM
+   versions.
+
+**If the page can't connect,** put the card into update mode by hand: hold its **BOOTSEL**
+button, press and release **RUN**, then let go. A drive called **RP2350** appears on your
+computer. Leave it alone and press **Start** without connecting.
+
+**On Windows**, the browser can't put the firmware onto the card. Download
+**TS-Pico-Updater.exe** from the
+[latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
+and run it. There's nothing to install. Windows may warn that it doesn't know the program:
+click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
+release**, then **Connect to TS-Pico**, press **Start**, and follow the same steps as above.
+You don't have to pick a port or a drive. It finds the card by itself.
+
+**Doing it by hand.** Put the card in update mode (BOOTSEL and RUN) and drag `firmware-v3.uf2`
+from the release onto the RP2350 drive. A card being set up for the first time also needs its
+ROM slots: `v3-slots.zip` holds them, for copying into `/slots` on the card with Thonny or
+`mpremote` (the card's memory isn't a USB drive). The web updater does both for you.
+
+## A.3 Updating the SD card
+
+New releases can also bring new help pages and programs for the SD card. The web updater page
+has them in its **SD card files** section, as a `.zip`. Unzip it and copy the `TAP` and `help`
+folders to the top level of your card, replacing the old ones. Your own files in `TAP` are
+safe as long as you don't delete the folder first.
+
+## A.4 Installing a new ROM into a spare slot
+
+To try a new ROM without touching slot 1 (a test release, for example), put it in a
+spare Flash slot and boot it from there:
+
+1. Copy the ROM file (say `NEWROM.ROM`) to the `TAP` folder on the SD card.
+2. `LOAD "tpi:NEWROM.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **4**.
+3. `SAVE "tpi:boot" CODE 2,4` starts the 2068 from slot 4.
+
+To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1`. You can rewrite slot 4 while
+the 2068 is running from it: the new version runs from the next start.
+
+You can also try a ROM without loading it at all: copy it to the SD card's `slots` folder and
+boot it from there (8.5).
+
+## A.5 If slot 1 gets damaged
+
+If the 2068 starts with coloured stripes and TS Reset doesn't help, the ROM in slot 1 may be
+damaged. Run the web updater (A.2): it always rewrites slots 0 and 1. Or, if another slot
+boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`), into
+**Flash(2)** slot **1** as in A.4, and confirm that you're sure.
+
+## A.6 Summary
+
+1. Use the web updater in Chrome or Edge (on Windows, TS-Pico-Updater.exe), with the 2068
+   switched off.
+2. It installs the firmware and the ROM slots together, and keeps your own slots.
+3. Unplug the USB cable before switching the 2068 on at the end.
+<!-- /v3 -->
 
 ---
 
@@ -1875,9 +2249,17 @@ can put the standard ROM back from the SD card:
 | The log |  | `SAVE "tpi:log"` |
 | Cassette / SD card |  | `SAVE "tpi:tape"` / `SAVE "tpi:sdcard"` |
 | Printer to card / printer |  | `SAVE "tpi:picopt"` / `SAVE "tpi:ts2040"` |
+<!-- v2 -->
 | Boot a ROM slot |  | `SAVE "tpi:boot" CODE 2,s: NEW` |
+<!-- /v2 -->
+<!-- v3 -->
+| Boot a ROM slot |  | `SAVE "tpi:boot" CODE 2,s` |
+<!-- /v3 -->
 | Dock a slot |  | `SAVE "tpi:dock" CODE 2,s` |
 | Spectrum mode |  | `SAVE "tpi:zx48"`, then `OUT 244,3` |
+<!-- v3 -->
+| Modem state and mode |  | `SAVE "tpi:modem"`, `SAVE "tpi:modem 2050"` |
+<!-- /v3 -->
 
 ---
 
@@ -1887,12 +2269,24 @@ can put the standard ROM back from the SD card:
 
 ## D.1 config.ini
 
+<!-- v2 -->
 The TS-Pico keeps a few settings in a file called `config.ini` in the Pico's own memory (not on
+<!-- /v2 -->
+<!-- v3 -->
+The TS-Pico keeps a few settings in a file called `config.ini` in the card's own memory (not on
+<!-- /v3 -->
 the SD card). It's a single line of text:
 
+<!-- v2 -->
 ```
 {"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5}
 ```
+<!-- /v2 -->
+<!-- v3 -->
+```
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10}
+```
+<!-- /v3 -->
 
 | Setting | Meaning | Normally |
 |---|---|---|
@@ -1900,7 +2294,12 @@ the SD card). It's a single line of text:
 | `LOG_LEVEL` | How much goes in the log, 0-4 | `2` |
 | `DCK_SLOT` | The DOCK slot at switch-on | `0` |
 | `ROM_SLOT` | The BOOT slot. Anything but 1 is used for one start, then set back to 1 | `1` |
+<!-- v2 -->
 | `ROM_SM` | Whether BOOT and DOCK use Flash or RAM | `10` (both Flash) |
+<!-- /v2 -->
+<!-- v3 -->
+| `ROM_SM` | Whether BOOT and DOCK use Flash, RAM or the SD card | `10` (both Flash) |
+<!-- /v3 -->
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
 | `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3.1"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
@@ -1909,9 +2308,17 @@ the SD card). It's a single line of text:
 <!-- /v2 -->
 <!-- v3 -->
 | `LED_BRIGHTNESS` | How bright the LED is, 1-100 (%) | `5` |
+| `MODEM_MODE` | The modem: `"2050"`, `"hayes"` or `"off"` (Appendix F) | `"2050"` |
+| `MODEM_BAUD` | How fast the modem passes received text to programs; 0 is as fast as they read | `300` |
+| `MODEM_IDLE_MIN` | Minutes unused before the modem's WiFi part switches off | `10` |
 <!-- /v3 -->
 
+<!-- v2 -->
 You'd normally leave this file alone. To change it, connect the Pico to a computer and use a
+<!-- /v2 -->
+<!-- v3 -->
+You'd normally leave this file alone. To change it, connect the card to a computer and use a
+<!-- /v3 -->
 program such as Thonny. If the file is missing or unreadable, the TS-Pico uses the values above.
 
 ## D.2 TPMODE
@@ -1951,111 +2358,113 @@ Zoom meetings; and to our families.
 <!-- v3 -->
 ---
 
-<!-- keywords: v3 card · slots · dock RAM · SD card · LED -->
+<!-- keywords: modem · WiFi · MTERM · tpi:modem -->
 
-# Appendix F: The TS-Pico v3 Card
+# Appendix F: The Modem
 
-The v3 card is the next TS-Pico board. It runs the same commands as the TS-Pico 2.x, so
-everything in this manual applies, with the differences below. They're mostly about where
-things are kept, because the v3 card has no Flash or RAM chips: it keeps the ROMs and
-cartridges in its own memory and serves them to the 2068 itself.
+The v3 card has a WiFi modem. To the 2068 it looks like the **Timex TS2050**, the modem Timex
+sold for the 2068 in 1984, so terminal programs written for the 2050, such as **MTERM**, work
+unchanged. Instead of a telephone line it reaches hosts on the internet: the bulletin boards
+that are still running, reached by telnet, or your own.
 
-## F.1 What's different, at a glance
+## F.1 How it works
 
-| | TS-Pico 2.x | v3 card |
-|---|---|---|
-| Slots | a 512K Flash chip and 512K of RAM | the same 16 + 16 slots, kept as files in the card's own memory |
-| `tpi:boot` | switches the ROM under the running 2068; follow it with `NEW` | restarts the 2068 in the new ROM by itself |
-| Booting an empty slot | the 2068 hangs | refused: **F**, `No ROM in Flash slot N`, nothing changes |
-| A cartridge in a Flash slot | can't be written by the 2068 | the same |
-| A RAM slot in the dock | keeps what programs write until switch-off | the same: see F.3 |
-| Putting a ROM into a slot | the loader erases and programs the Flash chip | the TS-Pico writes the slot; nothing to erase, no jumper |
-| The slot the 2068 is running from | can't be written | can be: the new ROM runs from the next start |
-| ROMs and cartridges on the SD card | must be loaded into a slot first | can be booted or docked straight from the card: see F.5 |
-| The SD card | in and out between commands | the same, and the card's switch tells the TS-Pico at once |
-| The LED | full brightness | dimmed, and adjustable (`LED_BRIGHTNESS`, Appendix D) |
+The 2050 was a 300-baud modem. Programs drove it through ports 115 and 119, dialled by pulsing
+the line, and watched for the carrier. The card answers those ports the same way. When a
+program dials, the card looks the number up in the modem's **phonebook**, where you have
+written the host it stands for, and connects. When the host hangs up, the program sees the
+carrier drop, as it would have on the phone line.
 
-## F.2 BOOT and DOCK
+The modem part is switched off until a program uses it. Starting a program like MTERM
+switches it on, and it takes a couple of seconds to be ready. It switches itself off again
+after ten minutes unused.
 
-`SAVE "tpi:boot"` and `SAVE "tpi:dock"` work as in Chapter 8, with the same numbers.
+## F.2 Setting up WiFi and the phonebook
 
-- **`tpi:boot` restarts the 2068** in the new ROM, a fraction of a second after the message.
-  There's no need for `: NEW`. BOOT still lasts for one start, as in 8.2.
-- **A slot with no ROM in it is refused**, so you can't start the 2068 from an empty slot by
-  mistake. If the boot slot is somehow empty at switch-on, the TS-Pico starts the standard ROM
-  from Flash slot 1 instead and notes it in the log (`SAVE "tpi:log"`).
-- **`tpi:dock` changes the dock straight away**, without restarting the 2068, as on the 2.x.
-
-## F.3 64K of RAM in the dock
-
-A pair of RAM slots in the dock gives a program 64K of extra RAM in the cartridge bank:
+You do this once. The modem has a second mode, **Hayes mode**, in which a program talks to it
+directly with "AT" commands, as with any modem of the 1990s. The SD card has a small program
+for this, MODEMTST:
 
 ```basic
-SAVE "tpi:dock" CODE 1,4      : REM RAM slots 4 and 5 in the dock: 64K of RAM
+SAVE "tpi:modem hayes"       : REM talk to the modem directly
+SAVE "tpi:cd test"
+LOAD "tpi:modemtst.tap"
+LOAD ""
+RUN
 ```
 
-What a program writes there stays put until you switch off, even if you change the dock and come
-back later, just as the 2.x's RAM chip keeps it. Changing the dock away from a RAM slot takes
-about a second while the TS-Pico saves it. A **Flash** slot in the dock can't be written, as on the
-2.x, so a cartridge can't be altered by a program that writes to it.
+It shows `Status 133`. Turn on CAPS LOCK; type each command and press ENTER:
 
-## F.4 Putting a ROM or cartridge into a slot
+1. `ATW"yournetwork,yourpassword"` joins your WiFi. The modem answers `OK` after a few seconds.
+2. `AT&W` saves it. (The first time, the modem may print a line starting `[E]` before `OK`. That
+   is harmless.)
+3. `ATP"1234=bbs.example.com:23,MY BBS"` writes a phonebook entry: dialling **1234** reaches
+   that host and port. Add as many as you like, each with its own number. `ATP` on its own lists
+   them.
+4. `ATI` shows the modem's state, including the WiFi network.
 
-Mount the file and `LOAD ""`, exactly as in 8.4. The loader looks the same and asks the same
-questions: RAM or Flash, then the slot, even for a cartridge. The TS-Pico then writes the slot
-itself in a fraction of a second, so the loader has nothing to erase.
-
-Some rules work differently:
-
-- **There's no Flash chip to program**, so the P10 rule in 8.4 doesn't apply.
-- **You can write the slot the 2068 is running from.** The 2068 carries on with the ROM it started
-  with, and the new one runs from the next start, or after `SAVE "tpi:boot"`. The loader tells you
-  so and asks you to confirm.
-- **Flash slot 0 is the Spectrum ROM** that ZX Spectrum mode needs. The loader warns you and asks
-  again before replacing it.
-
-Afterwards the loader offers to start the ROM, or for a cartridge to put it in the dock, as on the
-2.x.
-
-## F.5 Slots on the SD card
-
-The v3 card can also boot or dock a ROM or cartridge straight from the SD card, without loading it
-into a slot first, so a collection can live on the card. Put the slot files in a folder called
-`slots` at the top of the SD card, named as in the card's own memory: `F04.bin` for slot 4, and
-for a cartridge two files, `F08.bin` and `F09.bin` for slots 8 and 9. The release's
-`v3-slots.zip` holds files in that form. Then use memory **3**:
+Then switch back:
 
 ```basic
-SAVE "tpi:dock" CODE 3,8      : REM the cartridge in F08.bin and F09.bin on the SD card
-SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
+SAVE "tpi:modem 2050"
 ```
 
-- **The SD card is read once,** when you give the command. The ROM or cartridge is then in the
-  card's memory, so you can take the SD card out afterwards.
-- **If the file or the SD card isn't there,** the TS-Pico uses the Flash slot of the same number
-  instead, and `tpi:dock` says `No SD slot: used flash`. A slot that is empty on both refuses to
-  boot (**F**), as in F.2.
-- **A cartridge from the SD card can't be written by the 2068,** as with a Flash slot.
-- **BOOT from the SD card lasts for one start,** as any BOOT does: switching off and on twice
-  brings back the standard ROM (with the USB cable unplugged, as 8.2 explains).
-- To put a ROM onto the SD card, copy its file there on a computer. The loader in F.4 writes only
-  RAM and Flash slots.
+You can also try a host in Hayes mode before giving it a number: `ATDT"bbs.example.com:23"`
+connects, and the host's text appears.
 
-## F.6 The SD card
+## F.3 Dialling with MTERM
 
-You can take the card out and put it back between commands, as with the 2.x; just don't pull it
-while a LOAD or SAVE is using it. The v3 card's socket has a switch that tells the TS-Pico whether
-a card is in, so `No SD card` comes back at once rather than after a few seconds of trying.
+1. Load MTERM from the SD card and start it.
+2. Use its dial command and enter a phonebook number, for example **1234**. MTERM dials it
+   (you'll hear nothing: the card listens to the dialling), waits for the carrier and connects.
+3. Many hosts wait for you before they say anything: press **ENTER**, or ENTER twice, as
+   MTERM's own manual suggests.
+4. To finish, hang up with MTERM's own command. If the host hangs up first, MTERM notices that
+   the carrier has gone.
+
+Received text arrives at the 2050's speed, about 30 characters a second, so MTERM keeps up.
+`MODEM_BAUD` in `config.ini` changes that for programs that can take more (Appendix D).
+
+## F.4 The `tpi:modem` command
+
+```basic
+SAVE "tpi:modem"             : REM the modem's state
+SAVE "tpi:modem 2050"        : REM as a TS2050 (the normal mode)
+SAVE "tpi:modem hayes"       : REM AT commands, straight to the modem
+SAVE "tpi:modem off"         : REM ports 115 and 119 not answered
+```
+
+The state shows the mode, whether the WiFi part is on, the line and the calls made:
+
+```
+Modem: 2050 mode, ESP32 on
+Line connected; 3 calls, 2 made
+```
+
+The mode is kept for the next start (`MODEM_MODE` in `config.ini`).
+
+## F.5 If it doesn't connect
+
+- **Nothing happens when you dial.** Check the number is in the phonebook (`ATP` in Hayes mode).
+  A number the phonebook doesn't know never connects.
+- **It dials but doesn't connect.** Check the WiFi (`ATI` in Hayes mode), and that the host is
+  up: try it with `ATDT"host:port"` in Hayes mode.
+- **It connects but the screen stays empty.** Press ENTER once or twice.
+- **A program that worked with a real 2050 doesn't see the modem.** Check `SAVE "tpi:modem"`
+  says 2050 mode, not off.
+
+## F.6 Writing your own programs
+
+The modem is an Intel 8251 serial chip at port 115 (data) and 119 (status, mode and command),
+as on the 2050. Status bit 0 means a character can be sent, bit 1 that one has arrived, and bit
+7 is the carrier. In Hayes mode the carrier bit is always set and a program sends the modem AT
+commands itself. The details, and what MTERM does, are in the developer notes,
+`docs/ts2050-software-notes.md`, on the project's GitHub.
 
 ## F.7 Summary
 
-1. The v3 card runs the same commands as the TS-Pico 2.x. Its slots are files in the card's own
-   memory, numbered as in Chapter 8.
-2. `tpi:boot` restarts the 2068 in the new ROM, and won't boot an empty slot.
-3. `SAVE "tpi:dock" CODE 1,4` gives a program 64K of RAM that keeps its contents until switch-off.
-4. Loading a ROM or cartridge into a slot works as in 8.4, with no Flash chip to program. You can
-   write the slot you're running from, and slot 0 asks twice.
-5. `SAVE "tpi:dock" CODE 3,n` and `SAVE "tpi:boot" CODE 3,n` use slot files in `slots` on the SD
-   card, with the Flash slot as the stand-in.
-6. The SD card's switch means a missing card is noticed at once.
+1. The modem looks like a TS2050 to the 2068: MTERM and other 2050 programs work as they are.
+2. Set up WiFi and the phonebook once, in Hayes mode, with `ATW`, `AT&W` and `ATP`.
+3. Dial a phonebook number from the program; press ENTER if the host is quiet.
+4. `SAVE "tpi:modem"` shows the state and sets the mode.
 <!-- /v3 -->
