@@ -316,6 +316,11 @@ jobs:
           name: tspico-upgrade-uf2
           path: |
             ${{ github.workspace }}/micropython/ports/rp2/build-UPGRADE/firmware.uf2
+
+      # The modem stage's ESP32-C3 ROM-loader client against a fake loader:
+      # SLIP, checksums, block order, deflate, and the MD5 check.
+      - name: Test the web updater's ESP32 flasher
+        run: node web-updater/test/espflash.test.mjs
             ${{ runner.temp }}/upgrade/updater.tap
           retention-days: 30
 

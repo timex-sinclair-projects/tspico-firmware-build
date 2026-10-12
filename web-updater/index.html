@@ -89,6 +89,7 @@
   .danger { color: var(--error); }
   /* The guided run */
   .choice { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+  .choice[hidden] { display: none; }
   .choice input { margin-top: 4px; }
   .choice small { display: block; color: var(--muted); font-size: 13px; }
   ol.stages { list-style: none; margin: 16px 0 0; padding: 0; counter-reset: st; }
@@ -226,6 +227,11 @@
                  page loads a small updater onto the 2068 and walks you through it. Some boards
                  need the <strong>P10 jumper</strong> fitted so the chip can be written — leave it fitted
                  afterwards too: writing DOCK images to the flash needs it.</small></span></label>
+          <label class="choice" id="opt-modem-row" hidden><input type="checkbox" id="opt-modem" checked>
+            <span>Modem firmware (v3 card)
+              <small>Checks the Zimodem on the card’s WiFi modem module and installs this
+                 release’s if it’s missing or older. It goes through the card’s own USB and takes
+                 about a minute and a half. Your WiFi settings and phonebook are kept.</small></span></label>
           <div class="hint" id="plan-hint" hidden></div>
           <div class="row" style="margin-top:12px;">
             <button id="btn-start" class="primary" disabled>Start</button>
@@ -269,6 +275,11 @@
         </li>
         <li class="stage" id="st-files" data-state="pending">
           <div class="title">Copy the files</div>
+          <div class="msg"></div><div class="actions"></div>
+          <div class="progress" hidden><div></div></div>
+        </li>
+        <li class="stage" id="st-modem" data-state="pending">
+          <div class="title">Modem firmware</div>
           <div class="msg"></div><div class="actions"></div>
           <div class="progress" hidden><div></div></div>
         </li>

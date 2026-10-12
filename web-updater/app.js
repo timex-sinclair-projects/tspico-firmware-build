@@ -15,6 +15,9 @@
  *   5. Firmware  write firmware.uf2 and reboot.
  *   6. Files     Web Serial again: main.py, config.ini, words.txt, assets/,
  *                verify, reboot.
+ *   7. Modem     the v3 card only: Zimodem on its ESP32-C3, checked over the
+ *                raw REPL and, if missing or older, written through the
+ *                card's relay (tsbus.esp_relay) with espflash.js.
  *
  * Everything is fetched same-origin from a channel directory (release/ or
  * main/), built by build-payload.sh and published by pages.yml.
@@ -24,6 +27,7 @@ import { WebSerial } from './vendor/transports.js'
 import { MpRawMode } from './vendor/rawmode.js'
 import { sizeFmt, splitPath, setReporter } from './vendor/utils.js'
 import { UsbBootsel, DriveBootsel, sleep } from './flasher.js'
+import { EspRomLoader, RawSerialIO } from './espflash.js'
 
 // ---------------------------------------------------------------------------
 // DOM helpers
@@ -72,7 +76,7 @@ let running = false
 // Stages: each <li class="stage" id="st-..."> has .msg, .actions and a
 // progress bar. The run marks them active/done/skipped/error as it goes.
 // ---------------------------------------------------------------------------
-const STAGES = ['connect', 'bootsel', 'wipe', 'rom', 'firmware', 'files']
+const STAGES = ['connect', 'bootsel', 'wipe', 'rom', 'firmware', 'files', 'modem']
 
 function stage(name) { return $('st-' + name) }
 
@@ -239,6 +243,11 @@ function refreshPlan() {
         }
     }
     plan('rom', wantRom, v3 ? 'Not on the v3 card: its ROMs are slot files, copied with the files.' : 'Not needed.')
+    const zim = m && m.v3 && m.v3.zimodem
+    show($('opt-modem-row'), v3 && !!zim)
+    enable($('opt-modem'), !running)
+    plan('modem', v3 && !!zim && $('opt-modem').checked,
+        !v3 ? 'Only on the v3 card.' : !zim ? 'This channel has no modem firmware.' : 'Not this time.')
     plan('wipe', $('opt-wipe').checked, v3 ? 'Never on the v3 card: it would erase your ROM slots.'
                                             : 'Keeping what’s on the Pico.')
 }
@@ -248,6 +257,8 @@ function planText() {
         return `Start will install firmware ${manifest.fw_version} for the v3 card, then copy its ` +
             'files and its ROM slots. Slots 0 and 1 (the Spectrum and TS-Pico ROMs) are always ' +
             'replaced; your own ROMs and cartridges in the other slots are kept. Nothing is erased. ' +
+            (wantModem() ? `Then it checks the modem module and installs Zimodem ${manifest.v3.zimodem.version || ''} ` +
+                'if it’s missing or older. ' : '') +
             'Keep the USB cable connected throughout.'
     }
     const steps = []
@@ -629,6 +640,100 @@ async function romUpdate() {
 }
 
 // ---------------------------------------------------------------------------
+// The v3 card's modem: Zimodem on the ESP32-C3
+// ---------------------------------------------------------------------------
+const wantModem = () => isV3() && !!(manifest && manifest.v3 && manifest.v3.zimodem) && $('opt-modem').checked
+
+/** Python for the card: the modem off, the ESP32 restarted into Zimodem, and
+ *  the version ATI reports ("4.0.3"), or "-" if nothing answers like Zimodem. */
+const ESP_PROBE = `import tsbus, time
+from machine import UART, Pin
+from TS import board
+tsbus.modem(False)
+u = UART(0, 115200, tx=Pin(44), rx=Pin(45), timeout=50, rxbuf=2048)
+board.esp_boot(False)
+time.sleep_ms(3000)
+u.read()
+u.write(b'\\rATI\\r')
+time.sleep_ms(800)
+b = u.read() or b''
+u.deinit()
+i = b.find(b'Firmware v')
+print(b[i + 10:b.find(b'\\r', i)].decode() if i >= 0 else '-')`
+
+/** Python for the card: the ESP32 into its ROM loader and USB joined to its
+ *  UART until the page has been quiet for 4 s (tsbus.esp_relay). Ctrl-C off
+ *  meanwhile: 03h is just data. */
+const ESP_RELAY = `import tsbus, time, micropython
+from TS import board
+tsbus.modem(False)
+board.esp_boot(True)
+time.sleep_ms(300)
+micropython.kbd_intr(-1)
+try:
+    r = tsbus.esp_relay(60000, 4000)
+finally:
+    micropython.kbd_intr(3)
+    board.esp_boot(False)
+print('RELAY', r)`
+
+async function espVersion() {
+    await enterRaw()
+    return (await raw.exec(ESP_PROBE, 15000)).trim()
+}
+
+async function installModem() {
+    const z = manifest.v3.zimodem
+    setStage('modem', 'active', '')
+    await reconnectSerial('modem', 45000)
+    stageMsg('modem', 'Checking the modem module…')
+    const have = await espVersion()
+    log(have === '-' ? 'The modem module has no Zimodem.' : `The modem module has Zimodem ${have}.`)
+    if (have !== '-' && z.version && verCmp(have, z.version) >= 0) {
+        await execNoReply('import machine\nmachine.soft_reset()')
+        setStage('modem', 'done', `Zimodem ${have} is already installed.`)
+        return
+    }
+    stageMsg('modem', `Downloading Zimodem ${z.version || ''}…`)
+    const image = new Uint8Array(await fetchBytes(`${channel}/${z.file}`))
+
+    // Start the relay (it runs until the page goes quiet), then take the port
+    // back raw: the usual transport decodes text, which would mangle the
+    // loader's replies.
+    stageMsg('modem', 'Starting the modem module’s loader…')
+    await raw.port.readUntil('>', 2000)       // the prompt after the probe
+    await raw.port.write(ESP_RELAY)
+    await raw.port.write('\x04')
+    const ok = await raw.port.readExactly(2, 5000)
+    if (ok !== 'OK') throw new Error(`the card didn't start the relay (${ok})`)
+    const port = serial.port
+    await closeSerial()
+    const io = new RawSerialIO(port)
+    await io.open()
+    try {
+        const esp = new EspRomLoader(io)
+        await esp.sync()
+        await esp.attach()
+        stageMsg('modem', `Writing Zimodem ${z.version || ''} (${sizeFmt(image.length)})…`)
+        const r = await esp.flash(image, 0, (f) => stageProgress('modem', f))
+        log(`  ✓ zimodem: ${sizeFmt(image.length)}, ${r.blocks} blocks, MD5 ${r.md5} verified`, 'ok')
+    } finally {
+        await io.close()
+    }
+
+    // The relay ends 4 s after the page's last byte; then check Zimodem starts.
+    stageMsg('modem', 'Checking it starts…')
+    await sleep(5500)
+    serial = await openSerial(port)
+    await serial.write('\x02')                // out of the raw REPL the relay ran in
+    await sleep(300)
+    const now = await espVersion()
+    if (now === '-') throw new Error('Zimodem was written but doesn’t answer')
+    await execNoReply('import machine\nmachine.soft_reset()')
+    setStage('modem', 'done', `Zimodem ${now} installed and checked.`)
+}
+
+// ---------------------------------------------------------------------------
 // Files: upload, verify, reboot
 // ---------------------------------------------------------------------------
 /** Python that removes a folder and everything in it, if it exists: a /TS
@@ -841,6 +946,11 @@ async function start() {
         current = 'files'
         await uploadFiles()
 
+        if (wantModem()) {
+            current = 'modem'
+            await installModem()
+        }
+
         $('installed-version').textContent = manifest.fw_version
         log('All done.', 'ok')
         show($('done'), true)
@@ -915,6 +1025,7 @@ async function init() {
     $('btn-start').addEventListener('click', start)
     $('opt-wipe').addEventListener('change', refreshPlan)
     $('opt-rom').addEventListener('change', refreshPlan)
+    $('opt-modem').addEventListener('change', refreshPlan)
     for (const c of CHANNELS) {
         $('ch-' + c).addEventListener('change', () => loadChannel(c))
     }

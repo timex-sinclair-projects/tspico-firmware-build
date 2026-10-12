@@ -51,9 +51,25 @@ cartridges are files on the same flash as the firmware, in `/slots`
   and 1 (our Spectrum and TS-Pico ROMs) every time; the others only where the
   card has no such file, so a ROM or cartridge the user put in a slot is
   never overwritten. All are verified by size.
+- **Modem** (a step of its own, last): the card's ESP32-C3 modules come
+  blank, so the page checks for Zimodem (the modem off, the ESP32 restarted,
+  `ATI` read over UART0) and writes the channel's `zimodem-v3.bin` when it is
+  missing or older. The card runs `tsbus.esp_relay`, which joins its USB
+  port to the ESP32's UART with the ESP32 in its ROM loader; the page then
+  closes its text transport, opens the port raw and talks to the loader
+  itself with [espflash.js](espflash.js): SYNC, SPI_ATTACH, the image
+  deflated into 1 KB blocks, and the loader's MD5 of what it wrote compared
+  with the image's. The relay ends 4 s after the page's last byte, the
+  ESP32 restarts into Zimodem, and the page checks `ATI` again. Only the
+  application area is written, so Zimodem's settings (WiFi, phonebook)
+  stay. The checkbox *Modem firmware* skips the step;
+  [tools/zimodem-install.py](../tools/zimodem-install.py) is the same thing
+  with esptool. A host test runs espflash.js against a fake loader:
+  `node test/espflash.test.mjs [zimodem-v3.bin]`.
 
 The payload's `manifest.json` has a `v3` entry (`uf2`, `mp_version`, `slots`
-with each slot's file, size and `always`), or `null` when the channel has
+with each slot's file, size and `always`, and `zimodem` with its file, size
+and version, or `null`), or `null` when the channel has
 nothing for the v3 card. Releases carry `firmware-v3.uf2` and `v3-slots.zip`
 (release.yml); the `main/` channel takes the `tspico-v3-firmware-uf2`
 artifact, the third-party slots from the latest release's `v3-slots.zip`,
@@ -109,12 +125,13 @@ web-updater/
 ├── index.html          page + styling
 ├── app.js              the guided run (serial, stages, ROM-update monitor)
 ├── flasher.js          BOOTSEL writing: UsbBootsel (WebUSB) + DriveBootsel (drive)
+├── espflash.js         the v3 card's modem: ESP32-C3 ROM-loader client (Zimodem)
 ├── flash_nuke.uf2      Raspberry Pi flash-erase image (drive path + manual download)
 ├── build-payload.sh    assembles one channel directory
-├── test/               host test for flasher.js
+├── test/               host tests for flasher.js and espflash.js
 ├── vendor/
 │   ├── transports.js     ViperIDE WebSerial transport (trimmed)
-│   ├── rawmode.js        ViperIDE MpRawMode: raw REPL, writeFile, walkFs… (changed here: writeFile renames over the old file rather than deleting it first)
+│   ├── rawmode.js        ViperIDE MpRawMode: raw REPL, writeFile, walkFs… (changed here: begin() starts from / with os imported off the current directory, which may be on the SD card; writeFile renames over the old file rather than deleting it first)
 │   ├── utils.js          ViperIDE helpers (trimmed)
 │   └── picoflash/        Pico⚡Flash PICOBOOT library (see its README)
 ├── release/            generated channel (gitignored)
