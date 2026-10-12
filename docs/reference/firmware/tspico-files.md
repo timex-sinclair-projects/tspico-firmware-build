@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1387–2168,
-2501–2533, 3703–3708, 3864–3923, 4168–4255, 4402–4409, 5098–5141,
-5218–5232, 5314–5379 and 5534–5550 (firmware 2.3).
+2501–2533, 3703–3708, 3864–3923, 4168–4255, 4402–4409, 5129–5172,
+5251–5265, 5347–5412 and 5567–5583 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -54,13 +54,13 @@ document it is linked, not restated: the pitfalls are in
 | `public_fname(n=0)` | 3907–3922 | `TSP.f_name` without `/sd`, optionally shortened |
 | `ChangeDir(potential_new_path, SDactive=False)` | 4168–4255 | the rules of `tpi:cd` / `MOVE TO` |
 | `getArgs(cmd)` | 4402–4409 | the text after the command word |
-| `getBoot()` | 5098–5106 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5109–5117 | (memory, slot) in the DOCK |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5120–5140 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5218–5232 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5314–5334 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5337–5379 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 5534–5550 | nothing mounted: clear the fields, delete the flash copies |
+| `getBoot()` | 5129–5137 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5140–5148 | (memory, slot) in the DOCK |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5151–5171 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 5251–5265 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5347–5367 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5370–5412 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 5567–5583 | nothing mounted: clear the fields, delete the flash copies |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -425,7 +425,7 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 `NEW_TAP`, [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file and the mount of
 a newly saved file when nothing was mounted ([part 3](tspico-dispatch.md),
-lines 6774 and 6791, inside a `try` because the card may have gone).
+lines 6815 and 6832, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -603,7 +603,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3021); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3021 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7247), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7288), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
@@ -775,7 +775,8 @@ for the two-letter `md`.
 The bit scheme the two helpers share: `TSP.ROM_SM` holds the memory types,
 bits 0–1 for BOOT and bits 2–3 for DOCK, 1 = SRAM and 2 = flash, so the
 valid values are 5, 6, 9 and 10 (`LOAD_CONFIG` refuses the rest —
-[part 3](tspico-dispatch.md)); `TSP.bank_sm` holds the slots, bits 0–3 for
+[part 3](tspico-dispatch.md)); on the v3 card 3 = a slot on the SD card,
+which adds 7, 11 and 13–15; `TSP.bank_sm` holds the slots, bits 0–3 for
 BOOT (`ROM_SLOT`) and bits 4–7 for DOCK (`DCK_SLOT`), built by
 [`PICO_STATUS.__init__`](tspico-state.md) as `DCK_SLOT * 16 + ROM_SLOT`. The
 two values are the words written to the bank state machines by

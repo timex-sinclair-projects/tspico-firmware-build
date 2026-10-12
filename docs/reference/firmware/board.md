@@ -22,19 +22,20 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6258), once |
-| `map_slots()` | `MEMBOOT` (5091), `MEMDOCK` (5209) |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7216) |
-| `restart_mq()` | `ZX48_IO` (7217, 7322, 7364) |
+| `start_memory()` | `TS2068_IO` (6301), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5120), `MEMDOCK` (5240), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7261) |
+| `restart_mq()` | `ZX48_IO` (7262, 7367, 7409) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6232) |
-| `led_brightness()` | `TS2068_IO` (6236), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6358, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7019) |
+| `make_led()` | `TS2068_IO` (6269) |
+| `led_brightness()` | `TS2068_IO` (6273), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6403, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7064) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5031, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5061), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5033, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5090, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
@@ -76,6 +77,11 @@ its registers and pace DMA on its DREQs. Nothing reads `PIO_MQ`:
 Both `True`. `SLOTS`: the Z80 writes the slots, so `tpi:blkrcv` streams the
 image and `MOUNT_FILE` serves `romupdate.tap`/`dckupdate.tap`. `HAS_CORE1`:
 core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
+
+### `SD_SLOTS`
+
+`False`: the slots are the flash and SRAM chips, and `tpi:boot` and
+`tpi:dock` refuse MEM 3 as before (`MEM_MAX` is 2).
 
 ### `NULL_SM`
 
@@ -231,10 +237,15 @@ DREQs to touch. `SLOTS`: the Pico writes the slots itself (`write_slot`), so
 `dckupd3.tap`. `HAS_CORE1`: core 1 runs the `tsbus`
 loop, so `background()` runs on core 0 and there is no boot blink.
 
-### `SLOTS_DIR`, `SLOT_SIZE`, `MEM_SRAM`, `MEM_FLASH`
+### `SD_SLOTS`
 
-`"/slots"` on the Pico's flash filesystem, 32768, and `ROM_SM`'s two memory
-codes, 1 and 2. v2's two chips of sixteen 32K slots become files (phase 5,
+`True`: `tpi:boot` and `tpi:dock` take MEM 3, a slot file on the SD card
+(`MEM_SD`, phase 6 of the port plan), and `config.ini`'s `ROM_SM` may hold it.
+
+### `SLOTS_DIR`, `SLOT_SIZE`, `MEM_SRAM`, `MEM_FLASH`, `MEM_SD`
+
+`"/slots"` on the Pico's flash filesystem, 32768, and `ROM_SM`'s memory
+codes: 1 and 2, and 3 for a slot on the SD card (below). v2's two chips of sixteen 32K slots become files (phase 5,
 [docs/v3-slots-proposal.md](../../v3-slots-proposal.md)):
 - `Fnn.bin` is flash slot nn, kept;
 - `Snn.bin` is SRAM slot nn, deleted at every boot, as v2's SRAM loses its
@@ -243,6 +254,18 @@ codes, 1 and 2. v2's two chips of sixteen 32K slots become files (phase 5,
 A missing file, or one that isn't 32K, is an empty slot. A ROM slot is HOME
 (16K) then EXROM (16K). `build-flash.py --slots` makes the flash ones
 ([boot.md](boot.md)).
+
+### `SD_SLOTS_DIR`
+
+`"/sd/slots"`: the SD card's slots for `MEM_SD`, the same `Fnn.bin` files as
+the flash slots, so the release's `v3-slots.zip` or `build-flash.py
+--slots` output can go straight onto a card. If the card or the file isn't
+there, flash slot nn stands in (`_slot_file`): the plan's rule that booting
+never depends on the SD card. Nothing in the board layer mounts the card:
+`tspico.py` has it on `/sd` while a MEM 3 slot is read (`SD_SLOTS_CALL`, and
+`TS2068_IO` at boot). An SD dock is read-only, as a flash one: only
+`MEM_SRAM` turns on `tsbus.dock_writes`. There are no SD SRAM slots, and
+`tpi:blkrcv` doesn't write to the card (`SLOT_WRITE` takes MEM 1 or 2).
 
 ### `ROM_FILE`
 
@@ -318,17 +341,33 @@ import. `_zeros` is 1K of zeros, loaded 32 times to clear an empty half.
 
 ### `slot_path(mem, slot)`
 
-`"/slots/Fnn.bin"`, or `"/slots/Snn.bin"` for `MEM_SRAM`.
+`"/slots/Fnn.bin"`, `"/slots/Snn.bin"` for `MEM_SRAM`, or
+`"/sd/slots/Fnn.bin"` for `MEM_SD` (the card's own file, not the flash slot
+that may stand in for it).
+
+### `_slot_file(mem, slot)`
+
+The path of the 32K file that serves the slot, or `None`. For `MEM_SD` it
+tries the SD card's file, then flash slot nn. A file that isn't 32K counts
+as missing (`os.stat`).
 
 ### `read_slot_into(mem, slot, buf)`
 
 Reads a slot's 32K into `buf` (a 32K `bytearray` or `memoryview`) in place,
-and returns `True`. Returns `False`, `buf` untouched, if there is no file or
-it isn't 32K (`os.stat` first).
+and returns the path it read (`_slot_file`). Returns `None`, `buf`
+untouched, if there is no 32K file. For `MEM_SD` the path tells the callers
+whether flash stood in.
+
+### `_stood_in(mem, slot, path)`
+
+The note "no SD slot n: used flash slot n" when a `MEM_SD` slot was read
+from flash (its path isn't under `SD_SLOTS_DIR`), else `None`. `boot_rom`
+and `load_dock` return it.
 
 ### `rom_slot_empty(mem, slot)`
 
-`True` if the slot has no 32K file. `MEMBOOT` asks it first, so that
+`True` if the slot has no 32K file; for `MEM_SD`, neither on the SD card
+nor in flash. `MEMBOOT` asks it first, so that
 `tpi:boot` to an empty slot is refused, rather than `boot_rom` quietly
 falling back to another ROM ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).
 
@@ -343,9 +382,10 @@ Reads the ROM to boot into `_buf`, and returns a note if it isn't the one
 asked for (else `None`). The memory is `rom_sm` bits 0–1, the slot
 `bank_sm` bits 0–3.
 
-1. That slot's file.
+1. That slot's file. For `MEM_SD`, flash slot nn if the card has none,
+   with `_stood_in`'s note.
 2. Missing: flash slot 1, with the note "no ROM in flash slot 7: booted
-   flash slot 1".
+   flash slot 1" ("SD slot 7" for MEM 3).
 3. Missing too: `ROM_FILE`, "no ROM in … or flash slot 1: booted
    /rom/TSPICO-23.ROM". If slot 1 itself was asked for, the note just says
    "no ROM in flash slot 1".
@@ -368,7 +408,9 @@ base image keep everything in the upper half (8000h–FFFFh), and a mirror
 would copy them to 0000h too. An odd dock slot fills the low half only.
 Slot 0 is the 16K Spectrum ROM, zero-filled, so the default dock has it at
 0000h–3FFFh for ZX48 mode. The caller turns DOCK serving off around it if
-the 2068 is running.
+the 2068 is running. Returns `_stood_in`'s note if a `MEM_SD` half came
+from flash, else `None`. Each half is looked up on its own, so a 64K
+cartridge can have one half on the SD card and the other from flash.
 
 ### `save_ram_dock(dock)`
 
@@ -409,8 +451,8 @@ the next boot or `tpi:boot`. Returns what was written for the message
    new ROM.
 
 `_served` is set. Serving is on before the release, so the Z80's first
-fetch is answered. Returns `boot_rom`'s note (also printed, `[board] …`),
-which `TS2068_IO` logs at level 2. A missing `ROM_FILE` with no slot to
+fetch is answered. Returns `load_dock`'s note, else `boot_rom`'s (also
+printed, `[board] …`), which `TS2068_IO` logs at level 2. A missing `ROM_FILE` with no slot to
 boot raises, and `main.py` logs it: the 2068 stays in reset.
 
 Checked on proto1 (2026-10-10), with `/slots` from `build-flash.py --slots`:
@@ -442,8 +484,9 @@ comparing them with `_served` so that only what changed is loaded, through
    running Z80; [docs/v3-slots-proposal.md](../../v3-slots-proposal.md),
    decision 2).
 
-`_served` is updated. Returns `boot_rom`'s note, or `None`. `MEMBOOT` has
-already refused an empty slot.
+`_served` is updated. Returns `boot_rom`'s note, else `load_dock`'s, or
+`None`: `MEMDOCK` turns a note into its second line, "No SD slot: used
+flash". `MEMBOOT` has already refused an empty slot.
 
 Checked on proto1 (2026-10-10), from BASIC, reading the dock with
 `OUT 244,16: PRINT PEEK 32770: OUT 244,0`:

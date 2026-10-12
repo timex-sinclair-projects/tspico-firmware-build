@@ -4837,9 +4837,11 @@ def LOAD_CONFIG():
     # A value that isn't a number at all (e.g. "10" in quotes, from a
     # hand-edited config.ini) made the `<=` raise TypeError and stopped the
     # boot. `in` never raises, so anything else now falls back to the
-    # default. (2026-09-30 audit.)
+    # default. (2026-09-30 audit.) On the v3 card MEM 3 (a slot on the SD
+    # card, phase 6) is a third choice for each, so 7, 11 and 13-15 too.
     # ─────────────────────────────────────────────────────────────────────
-    if init_values["ROM_SM"] not in (5, 6, 9, 10):
+    mems = range(1, MEM_MAX() + 1)
+    if init_values["ROM_SM"] not in [d * 4 + b for d in mems for b in mems]:
         LOG("Incorrect initial ROM_SM value %r. Using default value of %d instead"
             % (init_values["ROM_SM"], default_values["ROM_SM"]), 2)
         init_values["ROM_SM"] = default_values["ROM_SM"]
@@ -4853,7 +4855,7 @@ def LOAD_CONFIG():
         defaulted = True
 
     return_ROM_SLOT = -1
-    boot_mem = init_values["ROM_SM"] & 3                                # tpi:boot's MEM: 1 SRAM, 2 flash (the default)
+    boot_mem = init_values["ROM_SM"] & 3                                # tpi:boot's MEM: 1 SRAM, 2 flash (the default), 3 SD (v3)
     if init_values["ROM_SLOT"] != default_values["ROM_SLOT"] or boot_mem != 2:
                                                                         # If we started with a non-default boot slot, we use it on this run,
                                                                         # but reverse back to default hard-wired flash slot 1 for next boot
@@ -5037,6 +5039,33 @@ def SLOT_WRITE(pre):
     SEND_MSG("Wrote " + what, "", _1_OK)
 
 
+MEM_NAME = (None, "SRAM", "Flash", "SD")                          # tpi:boot / tpi:dock MEM codes
+
+
+def MEM_MAX():
+    """The highest MEM tpi:boot and tpi:dock take: 3 (a slot file on the SD
+    card) where the board has SD slots (the v3 card), else 2."""
+    return 3 if board.SD_SLOTS else 2
+
+
+def SD_SLOTS_CALL(need, fn, *args):
+    """fn(*args), with the SD card mounted on /sd if `need` (a MEM 3 slot is
+    about to be read). A card that won't mount isn't an error here: the
+    board then reads the flash slot of the same number instead
+    (board_v3._slot_file), and says so in its note."""
+    if not need:
+        return fn(*args)
+    try:
+        ACTIVATE_SD()
+    except OSError:
+        pass
+    try:
+        return fn(*args)
+    finally:
+        DEACTIVATE_SD()
+        ACTIVATE_MQ()
+
+
 def MEMBOOT(pre, cmd):                                           # Changes ROM slot to boot from; either SRAM or Flash
     
     # SAVE "tpi:boot"                # Report the boot setting
@@ -5054,12 +5083,12 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         mem, page = getBoot()
         SEND_MSG("BOOT is MEM=%d, PAGE=%d" % (mem, page), "", _1_OK, True)
 
-    elif (par1 == 0 or par1 > 2 or par2 > 15):
+    elif (par1 == 0 or par1 > MEM_MAX() or par2 > 15):
         msg = "Wrong values, %s" % new
-        SEND_MSG(msg, "OK values: MEM=1..2, PAGE=0..15", _8_A_Invalid_arg)
+        SEND_MSG(msg, "OK values: MEM=1..%d, PAGE=0..15" % MEM_MAX(), _8_A_Invalid_arg)
         LOG("BOOT: %s. Command ignored" % msg, 1) 
-    elif board.rom_slot_empty(par1, par2):                         # v3: nothing in that slot's file
-        msg = "No ROM in %s slot %d" % ("SRAM" if par1 == 1 else "Flash", par2)
+    elif SD_SLOTS_CALL(par1 == 3, board.rom_slot_empty, par1, par2):  # v3: nothing in that slot's file
+        msg = "No ROM in %s slot %d" % (MEM_NAME[par1], par2)
         SEND_MSG(msg, "Nothing changed", _3_F_Invalid_file, True)
         LOG("BOOT: %s. Command ignored" % msg, 1)
     else:            
@@ -5088,7 +5117,9 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         # to a crash, and nothing measured says it can go.
         utime.sleep(.100)
         
-        board.map_slots(TSP.ROM_SM, TSP.bank_sm)
+        note = SD_SLOTS_CALL(par1 == 3, board.map_slots, TSP.ROM_SM, TSP.bank_sm)
+        if note:                                                       # v3: an SD slot came from flash
+            LOG("BOOT: " + note, 1)
         
 #         WAIT_TX_RECEIVED()
 
@@ -5156,9 +5187,9 @@ def MEMDOCK(pre, cmd):                                                  # Change
     old = "MEM=%d, PAGE=%d" % (mem, page)
     new = "MEM=%d, PAGE=%d" % (par1, par2)
 
-    if (par1 > 2 or par2 > 15):
+    if (par1 > MEM_MAX() or par2 > 15):
         msg = "Wrong values, %s" % new
-        SEND_MSG(msg, "OK values: MEM=1..2, PAGE=0..15", _8_A_Invalid_arg)
+        SEND_MSG(msg, "OK values: MEM=1..%d, PAGE=0..15" % MEM_MAX(), _8_A_Invalid_arg)
         LOG("DOCK: %s. Command ignored" % new, 1) 
     
     elif par1 == 0 and par2 == 0:
@@ -5206,11 +5237,13 @@ def MEMDOCK(pre, cmd):                                                  # Change
         # (and saves a RAM dock back), ~0.7 s with the DOCK unserved, and a
         # program's next statement would PEEK an empty dock. On v2 it's two
         # FIFO puts, so the order changes nothing there.
-        board.map_slots(TSP.ROM_SM, TSP.bank_sm)
+        note = SD_SLOTS_CALL(par1 == 3, board.map_slots, TSP.ROM_SM, TSP.bank_sm)
+        if note and not msg2:                                          # v3: an SD slot came from flash
+            msg2 = "No SD slot: used flash"
 
         msg = "Change DOCK to MEM=%d, PAGE=%d" % (par1, par2)   # after a swap, the setting swapped to (#161)
         SEND_MSG(msg, msg2, _1_OK)
-        LOG("%s. %s" % (msg, msg2), 0)
+        LOG("%s. %s" % (msg, note or msg2), 0)
         
     return 
 
@@ -6259,7 +6292,15 @@ def TS2068_IO():                                                         # Main 
     SAVE_LOG()
         
 
+    need_sd = 3 in (TSP.ROM_SM & 3, TSP.ROM_SM >> 2)                    # v3: a boot or dock slot on the SD card
+    if need_sd:
+        try:
+            ACTIVATE_SD(tries=5)                                       # a cold card can take a few tries
+        except OSError:
+            pass                                                       # the flash slots stand in
     note = board.start_memory(TSP.ROM_SM, TSP.bank_sm)                 # the boot and dock slots
+    if need_sd:
+        DEACTIVATE_SD()
     if note:                                                           # v3: the boot slot was empty
         LOG("Boot ROM: " + note, 2)                                   # kept at the default LOG_LEVEL
     

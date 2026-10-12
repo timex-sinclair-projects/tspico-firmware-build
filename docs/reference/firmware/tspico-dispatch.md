@@ -1,8 +1,8 @@
 # TS/tspico.py (part 3) — the dispatcher
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4796–4881
-(`LOAD_CONFIG`), 5686–5788 (the printer path), 5868–6204 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6212–7375 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4796–4883
+(`LOAD_CONFIG`), 5719–5821 (the printer path), 5901–6237 (`FAIL_CMD`,
+`PROCESS_CMD`) and 6245–7416 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -37,16 +37,16 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 | Symbol | Line | Role |
 |---|---|---|
 | `LOAD_CONFIG()` | 4796 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
-| `PRINT_FLUSH()` | 5686 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
-| `COPY_BMP(scr, mode, colour)` | 5718 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
-| `PRINT_IO(pre)` | 5739 | one printer transaction: an LPRINT character, or COPY |
-| `FAIL_CMD(status)` | 5868 | a command that failed: one status byte, on a bus in a known state |
-| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 5920 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
-| `TS2068_IO()` | 6212 | the board setup and the service loop |
-| `ZX_TPI()` | 7064 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7202 | the Spectrum-mode loop |
+| `PRINT_FLUSH()` | 5719 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
+| `COPY_BMP(scr, mode, colour)` | 5751 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
+| `PRINT_IO(pre)` | 5772 | one printer transaction: an LPRINT character, or COPY |
+| `FAIL_CMD(status)` | 5901 | a command that failed: one status byte, on a bus in a known state |
+| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 5953 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
+| `TS2068_IO()` | 6245 | the board setup and the service loop |
+| `ZX_TPI()` | 7105 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 7243 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 7060), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 7101), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -71,7 +71,7 @@ What it does:
    |---|---|---|
    | DCK_SLOT | `0` | flash/SRAM slot of the DOCK image at start-up |
    | ROM_SLOT | `1` | slot of the ROM image at start-up |
-   | ROM_SM | `10` | the word `set_ctrl` is given: DOCK memory × 4 + boot memory, 1 = SRAM, 2 = flash |
+   | ROM_SM | `10` | the word `set_ctrl` is given: DOCK memory × 4 + boot memory, 1 = SRAM, 2 = flash, 3 = SD (the v3 card) |
    | LOG_LEVEL | `2` | `LOG` keeps entries at this level and above (0 info … 3 critical) |
    | VERBOSE | `False` | `SEND_MSG` prints its text only when true or forced |
    | ZX_TAPE_COMPAT | `False` | ZX48 mode: `LOAD_ZX_C` (the whole tape in RAM) instead of `LOAD_ZX` |
@@ -85,15 +85,16 @@ What it does:
    carries a second copy of the defaults (it does, as `try/except` fallbacks)
    and that there should be one; there are still two.
 3. `ROM_SM` must be one of 5, 6, 9, 10 — the four combinations `tpi:boot`
-   and `tpi:dock` can set, since MEM 3 was refused in #91. Anything else
-   (7, 11, a string from a hand-edited file) is logged at level 2 and
-   replaced by 10. The old test was `<= 4 or 8 or 12` and raised
+   and `tpi:dock` can set, since MEM 3 was refused in #91. On the v3 card,
+   where `MEM_MAX()` is 3 (a slot on the SD card), also 7, 11, 13, 14 and
+   15: the list is built from `MEM_MAX()`. Anything else (7 on v2, 16, a
+   string from a hand-edited file) is logged at level 2 and replaced by 10. The old test was `<= 4 or 8 or 12` and raised
    `TypeError` on a string, which stopped the boot (audit §2 #18;
    `test_rom_sm` in the audit test).
    `LED_BRIGHTNESS` must be an `int` from 1 to 100; anything else (0, 5.5,
    `"5"`) is logged at level 2 and replaced by 5, and written back.
 4. The one-shot. `boot_mem = ROM_SM & 3`. If `ROM_SLOT` is not 1 or
-   `boot_mem` is not 2 (flash), the configured pair is remembered, the
+   `boot_mem` is not 2 (flash; so an SD boot too), the configured pair is remembered, the
    dictionary is rewritten with `ROM_SLOT = 1` and `ROM_SM = (ROM_SM & 12) + 2`
    (the DOCK bits kept), and `defaulted` set.
 5. If anything was defaulted, the dictionary is written back with
@@ -298,7 +299,7 @@ The pre-header fields as the ROM builds them
 |---|---|---|
 | 0 | `'B'` (42h) | — (the dispatcher chose this handler on it) |
 | 1 | TADDR | `load_cmd`: 0 = `SAVE "tpi:…"` command, 1–3 = `LOAD "tpi:name"`, a mount |
-| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (5930), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
+| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (5963), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
 | 3–4 | PMR1, the first `CODE` number, little-endian | the handlers' `par1` (`PARAMS(pre)`) |
 | 5–6 | PMR2, the second `CODE` number | `par2` |
 | 7–8 | length of the command text | the body size |
@@ -487,7 +488,7 @@ It owns `busy` (core1 is writing the log), `dead` (tells `BLINK_LED` to
 stop), `files`, `lista`, `log_entries`,
 `log_to_serial` (initialised `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file),
-`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6491, `RXD`.
+`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6532, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
 
 ### Configuration and the log file
@@ -510,8 +511,14 @@ one removed first) and a level-3 "Starting new log file" opens the new one.
 `note = board.start_memory(TSP.ROM_SM, TSP.bank_sm)` ([board.md](board.md)).
 On the v3 card it loads the boot ROM and the dock from the slot files, and
 returns a note when the boot slot was empty and it fell back (slot 1, or
-`/rom/`). The note is logged at level 2, "Boot ROM: …", so the default
-`LOG_LEVEL` keeps it. v2 returns `None`. On v2
+`/rom/`), or when flash stood in for an SD slot. The note is logged at
+level 2, "Boot ROM: …", so the default `LOG_LEVEL` keeps it. v2 returns
+`None`. If either memory is 3 (only possible on the v3 card), the SD card
+is mounted first, `ACTIVATE_SD(tries=5)` as for the boot's own mount
+below, and unmounted after (`DEACTIVATE_SD`; the boot's `ACTIVATE_MQ`
+comes later). A card that doesn't mount is ignored: the flash slots stand
+in. So with an SD slot the card is mounted twice at boot, here and at the
+card check below. On v2
 it builds `set_ctrl` on state machine 4 and `sel_bank` on state machine 5 at
 150 MHz. Both are started, then given one word each: `ROM.put(TSP.ROM_SM)` — which
 memory (flash or SRAM) answers DOCK and ROM accesses, the 5/6/9/10 value
@@ -637,7 +644,7 @@ seeds the chain for the life of the session. It must be here and not inside
 that `LOAD ""` will give Report R until the assets are copied. The SD outcome
 is logged (OK / mounted but failing / no card), `SAVE_LOG()`, a `gc.collect()`,
 "TS Pico initialized OK. Waiting for commands...", `SAVE_LOG()` again, LED
-off. `wrt = MQ.put` at line 6476 is assigned and never used.
+off. `wrt = MQ.put` at line 6517 is assigned and never used.
 
 ### The capture buffers and the DMA channel
 
@@ -713,7 +720,7 @@ status read (`RD_STATUS`), not in `SYNC_WAIT`, so a transaction the Pico
 dropped reports T only if its ROM is still waiting for READY when the
 `0xFB` goes up; a later command finds `0xFF` *(inferred from
 [tspico-sync.asm](../../../src/rom/patches/tspico-sync.asm): `SYNC_WAIT`
-masks READY and IDLE only)*. The comments at lines 6504 and 6596 that say
+masks READY and IDLE only)*. The comments at lines 6545 and 6637 that say
 "the next command gets Report T" describe the ROM's own ready-wait of the
 transaction in hand, not a later one.
 

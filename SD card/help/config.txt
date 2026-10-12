@@ -22,5 +22,6 @@ DCK_SLOT: See dock
 ROM_SLOT: See boot
 ROM_SM: memory types, 4 bits:
   DOCK*4 + BOOT, each 1 = SRAM,
-  2 = flash (10 = both flash)
+  2 = flash, 3 = SD card (v3)
+  (10 = both flash)
 VERBOSE: See verbose

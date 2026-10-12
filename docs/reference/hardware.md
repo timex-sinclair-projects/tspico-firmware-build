@@ -232,7 +232,9 @@ Two words configure the mapping, both fields of `TSP`
 ([firmware/tspico-state.md](firmware/tspico-state.md)):
 
 - **`ROM_SM`**, put to the `ROM` state machine: `dock MEM * 4 + boot MEM`,
-  MEM 1 = SRAM, 2 = flash. Valid values 5, 6, 9, 10; default 10 (binary
+  MEM 1 = SRAM, 2 = flash. Valid values 5, 6, 9, 10 (the v3 card, which
+  has no `ROM` state machine, also takes MEM 3, a slot on the SD card:
+  [firmware/board.md](firmware/board.md#sd_slots_dir)); default 10 (binary
   1010, "both assigned to Flash"). Bits 0–1 go to the enables on a
   ROM-area access, bits 2–3 on a dock access.
 - **`bank_sm`**, put to `BANK`: `DCK_SLOT * 16 + ROM_SLOT`, four bits

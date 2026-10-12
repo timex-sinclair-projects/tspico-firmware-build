@@ -8,6 +8,9 @@ slot the 2068 boots its ROM from
 No CODE: Shows the setting
 CODE 1,n: SRAM slot n (0-15)
 CODE 2,n: Flash slot n (0-15)
+CODE 3,n: SD card slot n (v3
+  card): /slots/Fnn.bin on the
+  SD card, else flash slot n
 The change is immediate: reset
 the 2068 (or NEW) to boot it.
 It is also saved in config.ini

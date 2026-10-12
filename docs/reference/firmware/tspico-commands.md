@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2535–2612 (`DIR`), 3451–3860 (`IDIR` … `SA_NOT_IMP`), 3925–4166
-(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4883–5215
-(`LOGLEVEL` … `MEMDOCK`), 5235–5311 (`REW`), 5451–5678 (`BAD_CODE` …
-`NOP`) and 5790–5866 (the printer settings); the dispatch table
-`SA_funct` at 6282–6332, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4885–5248
+(`LOGLEVEL` … `MEMDOCK`), 5268–5344 (`REW`), 5484–5711 (`BAD_CODE` …
+`NOP`) and 5823–5899 (the printer settings); the dispatch table
+`SA_funct` at 6323–6373, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -40,24 +40,24 @@ where the manual and the code differ, the entries below say so.
 | `GETHELP(pre, cmd)` | 4412 | `tpi:help` |
 | `GETINFO(pre, cmd)` | 4579 | `tpi:info` |
 | `GETLOG(pre, cmd)` | 4668 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 4883 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 4942 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5040 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5143 | `tpi:dock`, `tpi:memdock` |
-| `REW(pre, cmd)` | 5235 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5451 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5456 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5461 | `tpi:rm` |
-| `RM_CHECK(name)` | 5507 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5525 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5553 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5607 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5661 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5790 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5811 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5822 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5835 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5853 | `tpi:bmp` |
+| `LOGLEVEL(pre, cmd)` | 4885 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 4944 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 5069 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5174 | `tpi:dock`, `tpi:memdock` |
+| `REW(pre, cmd)` | 5268 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5484 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5489 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5494 | `tpi:rm` |
+| `RM_CHECK(name)` | 5540 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5558 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5586 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5640 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5694 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 5823 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 5844 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 5855 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 5868 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 5886 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -80,7 +80,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6279–6280) says (until #181 it
+   trailing space, as the comment above it (6320–6321) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -133,7 +133,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6282) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6323) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -717,22 +717,48 @@ and booted with `tpi:boot`, and Pro/File's 16K `.DCK` wrote its chunks 4–5
 into flash slots 6–7 and ran from the dock. `NO_SLOTS`, which refused here
 until then, is gone.
 
+### `MEM_NAME`
+
+`(None, "SRAM", "Flash", "SD")`: the MEM codes' names for `MEMBOOT`'s "No
+ROM in … slot s".
+
+### `MEM_MAX()`
+
+The highest MEM that `tpi:boot` and `tpi:dock` take: 3 where
+`board.SD_SLOTS` is true (the v3 card: a slot file on the SD card), else 2.
+`MEMBOOT` and `MEMDOCK` check against it and name it in "OK values:
+MEM=1..n", and `LOAD_CONFIG` builds its valid `ROM_SM` values from it.
+
+### `SD_SLOTS_CALL(need, fn, *args)`
+
+`fn(*args)`, with the SD card mounted on `/sd` around it if `need` (a MEM 3
+slot is about to be read; [board.md](board.md#sd_slots_dir)). The mount is
+`ACTIVATE_SD()`; one that fails (no card, or it won't mount) is ignored,
+because the board then reads the flash slot of the same number and returns
+a note saying so. Afterwards, whatever happened, `DEACTIVATE_SD()` and
+`ACTIVATE_MQ()`, as `SD_CALL` does. Unlike `SD_CALL` it turns no error into
+a message: `fn`'s own errors pass through. `MEMBOOT` uses it for
+`rom_slot_empty` and `map_slots`, `MEMDOCK` for `map_slots`; a command not
+on MEM 3 calls `fn` straight, with no mount.
+
 ### `MEMBOOT(pre, cmd)`
 
 `tpi:boot` (and `tpi:memboot`): which ROM the 2068 runs — the BOOT
-memory (1 SRAM, 2 flash) and slot (0–15). The two settings live in
+memory (1 SRAM, 2 flash, and on the v3 card 3 SD) and slot (0–15). The two settings live in
 `TSP.ROM_SM` bits 0–1 and `TSP.bank_sm` bits 0–3, the words the `set_ctrl`
 and `sel_bank` state machines take ([pio.md](pio.md#set_ctrl),
 [tspico-state.md](tspico-state.md#pico_status__init__self-init_values)).
 
 - None: "BOOT is MEM=m, PAGE=s" (`getBoot()`), shown, 0 OK.
-- `CODE 0,s` (s ≠ 0), `CODE m,x` with m > 2, or a slot above 15: "Wrong
-  values, MEM=…, PAGE=…" / "OK values: MEM=1..2, PAGE=0..15", Report A,
-  logged; nothing changes.
+- `CODE 0,s` (s ≠ 0), `CODE m,x` with m > `MEM_MAX()` (2, or 3 on the v3
+  card), or a slot above 15: "Wrong values, MEM=…, PAGE=…" / "OK values:
+  MEM=1..2, PAGE=0..15" (1..3 on v3), Report A, logged; nothing changes.
 - `CODE m,s` for an empty slot, where `board.rom_slot_empty(m, s)` is true
-  (the v3 card: no 32K `/slots` file; v2 can't tell and says false): "No
-  ROM in Flash slot s" (or SRAM), "Nothing changed", shown, Report F,
-  logged. `TSP`, `config.ini` and the ROM stay as they were.
+  (the v3 card: no 32K `/slots` file, and for MEM 3 none on the SD card
+  either; v2 can't tell and says false): "No ROM in Flash slot s" (or SRAM,
+  SD), "Nothing changed", shown, Report F, logged. `TSP`, `config.ini` and
+  the ROM stay as they were. For MEM 3 the check runs in `SD_SLOTS_CALL`,
+  with the card mounted.
 - `CODE m,s`:
   1. `ROM_SM`'s low two bits become `m`, `bank_sm`'s low nibble `s`.
   2. `config.ini` is read, `ROM_SLOT = s` and `ROM_SM`'s low bits = `m`
@@ -749,14 +775,19 @@ and `sel_bank` state machines take ([pio.md](pio.md#set_ctrl),
      says it can go. The manual's advice — follow it with `NEW` or a reset
      — is because the 2068 is now running code it did not start in. On the
      v3 card `map_slots` resets the 2068 into the new ROM instead (200 ms,
-     `tsbus.switch`; [board.md](board.md#board_v3py)), a clean start.
+     `tsbus.switch`; [board.md](board.md#board_v3py)), a clean start. For
+     MEM 3 `map_slots` runs in `SD_SLOTS_CALL`, and its note ("no SD slot
+     s: used flash slot s") is logged at level 1; the answer has gone
+     already.
 
 `config.ini` is opened by the relative name `"config.ini"`; this relies on
 the current directory being the flash root, as it is after any SD access
 *(inferred, as for `GETINFO`)*. A failure to write it raises and reaches
 `FAIL_CMD` (Report J) — after `TSP` has changed but before the ROM switch.
 `commands_hosttest.py` pins that both halves are saved, that `LOAD_CONFIG`
-uses them once, and that MEM 3 is refused. The single-port code's
+uses them once, and that MEM 3 is refused on v2;
+`board_v3_hosttest.py` that the v3 card takes it, from the SD card or
+flash, and that an SD boot is one-shot too. The single-port code's
 `WAIT_TX_RECEIVED()` after the switch is left commented out.
 
 Beware: never boot a slot that has not been written since power-on (SRAM
@@ -772,7 +803,9 @@ the slot half-written).
 4–7. Not saved in `config.ini`: it lasts until power-off. On the v3 card
 the change is live as on v2. A flash dock is read-only there, and a RAM
 dock is saved back to its slot file before it's switched away
-([board.md](board.md#board_v3py)).
+([board.md](board.md#board_v3py)). The v3 card also takes MEM 3, slot s
+from the SD card's `/slots/Fnn.bin`, read-only, with flash slot s standing
+in for a missing file or card ([board.md](board.md#sd_slots_dir)).
 
 | `CODE` | Result |
 |---|---|
@@ -780,8 +813,8 @@ dock is saved back to its slot file before it's switched away
 | `0,1` | "DOCK was previously:" and `TSP.dck_prev_mem`/`dck_prev_slot`, shown, 0 OK |
 | `0,2` | swap to the previous setting (as `CODE prev_mem,prev_slot` below): "Change DOCK to MEM=m, PAGE=s" naming the setting swapped to, and "Swapped with previous setting" |
 | `0,3`…`0,15` | `BAD_CODE`, Report A |
-| `m,s` (m 1–2) | change, below |
-| `m` > 2 or `s` > 15 | "Wrong values, …", Report A |
+| `m,s` (m 1–2, or 1–3 on v3) | change, below |
+| `m` > `MEM_MAX()` or `s` > 15 | "Wrong values, …" / "OK values: MEM=1..n, PAGE=0..15", Report A |
 
 The change: `BOOT_SLOT_CLASH(m, s, TSP.f_name)` — with a ROM or DCK image
 mounted, this is the updater choosing the slot it is about to erase, and
@@ -791,7 +824,9 @@ changed ([tspico-files.md](tspico-files.md#boot_slot_clashmem-page-f_name)).
 Otherwise the old setting becomes the previous one, the new is written
 into `ROM_SM`/`bank_sm`, `board.map_slots` (on v2 `ROM.put`, `BANK.put`)
 switches the bank, and only then is "Change DOCK to MEM=…, PAGE=…" sent
-(not shown). The order matters on the v3 card, where the switch copies
+(not shown). For MEM 3 `map_slots` runs in `SD_SLOTS_CALL`, and if flash
+stood in for the SD card its note makes the second line "No SD slot: used
+flash" (unless a swap already filled it); the log line carries the note. The order matters on the v3 card, where the switch copies
 64K into SRAM (and saves a RAM dock back) with the DOCK unserved for
 about 0.7 s: answering first let a program's next statement `PEEK` an
 empty dock (found by `tools/hwcheck.py`, 2026-10-10). On v2 the switch is

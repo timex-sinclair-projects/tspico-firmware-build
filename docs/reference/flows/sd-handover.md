@@ -53,7 +53,10 @@ handlers get all of it from **`SD_CALL(fn, *args)`**, which runs `fn` with
 the card and always gives the pins back in a `finally`, turning an SD error
 into ("SD card error", F) and a missing card into the no-card answer (J)
 ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#sd_callfn-args)).
-`SD_PROBE`, `LISTING_CHECK` and `REFRESH_LISTING` are the same shape.
+`SD_PROBE`, `LISTING_CHECK` and `REFRESH_LISTING` are the same shape, and
+so is `SD_SLOTS_CALL` (the v3 card's MEM 3 slots, `tpi:boot` and `tpi:dock`),
+except that a mount that fails is ignored: the flash slot stands in
+([../firmware/tspico-commands.md](../firmware/tspico-commands.md#sd_slots_callneed-fn-args)).
 
 **If a handler raises with the card in hand**, `PROCESS_CMD`'s `except`
 calls `FAIL_CMD`, which sees `sd_active` still `True` and does steps 7–8
