@@ -12,7 +12,7 @@ void shim_data_out(int b) { u8251_data_out(&u, (uint8_t)b); }
 void shim_poll(unsigned now) { u8251_poll(&u, now); }
 int shim_status(void) { return u8251_status(&u); }
 int shim_data_in(void) { return u8251_data_in(&u); }
-void shim_set(unsigned pace, int dsr, int flow) { u.pace = pace; u.dsr = (uint8_t)dsr; u.flow = (uint8_t)flow; }
+void shim_set(unsigned pace, int dsr) { u.pace = pace; u.dsr = (uint8_t)dsr; }
 /* the line sends a byte (DMA into the receive ring) */
 void shim_line_rx(int b) { rx[u.rx_head & (sizeof rx - 1)] = (uint8_t)b; u.rx_head++; }
 /* the line takes a byte from the transmit ring (DMA out); -1 if empty */
@@ -29,6 +29,5 @@ int shim_get(const char *k) {
     if (!strcmp(k, "tx_chars")) return (int)u.tx_chars;
     if (!strcmp(k, "tx_dropped")) return (int)u.tx_dropped;
     if (!strcmp(k, "rx_lost")) return (int)u.rx_lost;
-    if (!strcmp(k, "xoff_sent")) return u.xoff_sent;
     return -999;
 }
