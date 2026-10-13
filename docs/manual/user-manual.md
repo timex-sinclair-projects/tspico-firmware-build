@@ -420,6 +420,9 @@ recovers once it loses power, which taking the card out, or switching everything
 
 <!-- keywords: CAT · CD · MOVE TO · PATH · FFW · REW -->
 
+> **Chapter Preview.** List what's on the card, move between folders, and mount a TAP file so
+> that `LOAD ""` reads from it.
+
 ## 3.1 What's on the card? DIR and CAT
 
 You've already met the directory listing:
@@ -520,14 +523,14 @@ FORMAT "tools/"      : REM the same (note the slash)
 
 ## 3.3 Mounting a TAP file
 
-A TAP file is a recording of a cassette: a series of blocks, just as they'd appear on tape.
+A TAP file is a recording of a cassette: a series of blocks, as they'd appear on tape.
 To use one, you **mount** it. Think of it as putting the cassette in the player:
 
 ```basic
 LOAD "tpi:frogger.tap"
 ```
 
-Now `LOAD ""` loads from that file, one program after another, just as a tape would. The
+Now `LOAD ""` loads from that file, one program after another, as a tape would. The
 TS-Pico copies the TAP into its own memory while it mounts it. The LED flickers for a moment,
 and big files take a second or two.
 
@@ -578,7 +581,7 @@ the next `LOAD` will start from.
 
 ## 3.5 Winding the tape: FFW and REW
 
-Just like a cassette, you can wind the tape forward or back:
+Like a cassette, the tape winds forward and back:
 
 ```basic
 SAVE "tpi:ffw"             : REM forward one block
@@ -630,7 +633,28 @@ is, so it doesn't matter which folder you're in later. At switch-on you're still
 folder. If the file has gone from the card, you get the built-in menu. `SAVE "tpi:automount"`
 shows the file, and `SAVE "tpi:automount off"` goes back to the built-in menu.
 
-## 3.8 Summary
+## 3.8 Try it: from the listing to a running program
+
+You'll need a TAP file on the card. These steps use `frogger.tap`; use the name of one of yours.
+
+1. Type `CAT` and press **ENTER**.
+
+   You should see the current folder, with an index number beside each file you can mount.
+2. Type `LOAD "tpi:frogger.tap"` and press **ENTER**.
+
+   You should see **0 OK**, after the LED flickers while the TS-Pico copies the file.
+3. Type `CAT ""` and press **ENTER**.
+
+   You should see the blocks inside `frogger.tap`, with the tape pointer `>` on the first one.
+4. Type `LOAD ""` and press **ENTER**.
+
+   You should see the first program load, as from a tape. A program saved with `LINE` starts by
+   itself.
+5. Type `SAVE "tpi:close"` and press **ENTER**.
+
+   You should see **0 OK**. With nothing mounted, the next `LOAD ""` loads the menu (3.7).
+
+## 3.9 Summary
 
 1. `CAT` (or `SAVE "tpi:dir"`) lists files; patterns such as `"*.tap"` narrow it down.
 2. `MOVE TO "folder"` (or `SAVE "tpi:cd folder"`) changes folder; `..`, `/` and `-` help you move.
@@ -644,6 +668,9 @@ shows the file, and `SAVE "tpi:automount off"` goes back to the built-in menu.
 # Chapter 4: Loading and Saving
 
 <!-- keywords: LOAD · SAVE · VERIFY · MERGE · APPEND -->
+
+> **Chapter Preview.** Load from and save to the SD card with the 2068's own commands, and keep
+> several programs in one TAP.
 
 ## 4.1 LOAD, VERIFY and MERGE
 
@@ -727,7 +754,29 @@ SAVE "tpi:sdcard"    : REM back to the TS-Pico (the setting at switch-on)
 `tpi:` commands keep working in tape mode; only plain LOAD, SAVE, VERIFY and MERGE go to
 tape. Printing stays where it was (Chapter 7). You can check the setting with `PRINT PEEK 24027`; see Appendix D.
 
-## 4.5 Summary
+## 4.5 A program that keeps its pictures on a tape
+
+This program draws three pictures and saves each one into a new TAP, then loads them back by
+name and shows them in turn:
+
+```basic
+10 FORMAT "pics.tap"
+20 FOR i=1 TO 3
+30 CLS: CIRCLE 128,88,20*i
+40 SAVE "pic"+STR$ i SCREEN$
+50 NEXT i
+60 SAVE "tpi:append off"
+70 FOR i=1 TO 3
+80 LOAD "pic"+STR$ i SCREEN$
+90 PAUSE 50
+100 NEXT i
+```
+
+Line 10 makes `pics.tap`, mounts it and turns append on, so lines 30 to 50 add `pic1`, `pic2` and
+`pic3` to it instead of making three files. Line 80 finds each picture by its tape name. Run it
+once: on a second RUN, line 10 stops with **F**, because FORMAT never replaces a file.
+
+## 4.6 Summary
 
 1. LOAD, VERIFY and MERGE read the mounted TAP from the tape pointer, wrapping once.
 2. SAVE writes `name.tap` in the current folder; names are letters, digits, `-` and `_`.
@@ -740,9 +789,12 @@ tape. Printing stays where it was (Chapter 7). You can check the setting with `P
 
 <!-- keywords: f: · LOAD · SAVE -->
 
+> **Chapter Preview.** Save and load single files, such as a program, a picture or an array, that
+> you can copy to and from a computer.
+
 ## 5.1 Why native files?
 
-A TAP file is a whole cassette. Sometimes you just want one file: `advent.bas`, `title.scr`,
+A TAP file is a whole cassette. Sometimes you want one file: `advent.bas`, `title.scr`,
 `sprites.bin`. You can copy it to and from your computer, and it doesn't disturb the mounted
 TAP or its tape pointer. That's what the `f:` prefix is for. Put it in front of a name, and
 SAVE and LOAD talk straight to a file on the card:
@@ -803,7 +855,22 @@ loaded as CODE: `LOAD "f:font.bin" CODE 60000` puts the whole file at 60000.
 
 With verbose on, the TS-Pico says which, for example `advent.bas holds a program`.
 
-## 5.5 Summary
+## 5.5 A high-score table in a file
+
+```basic
+10 DIM s(5)
+20 FOR i=1 TO 5: LET s(i)=600-i*100: NEXT i
+30 SAVE "f:scores.dat" DATA s()
+40 DIM s(5)
+50 LOAD "f:scores.dat" DATA s()
+60 FOR i=1 TO 5: PRINT i;". ";s(i): NEXT i
+```
+
+Line 30 saves the array, line 40 empties it, and line 50 brings the scores back. A game would
+save at line 30 when it ends and load at line 50 when it starts. The second time you RUN this,
+line 30 asks `Replace scores.dat? (Y/N)`: press **Y**.
+
+## 5.6 Summary
 
 1. `SAVE "f:name"` and `LOAD "f:name"` work with a single file, not a TAP.
 2. Every kind of SAVE and LOAD works: programs, CODE, SCREEN$, DATA, VERIFY and MERGE.
@@ -816,9 +883,8 @@ With verbose on, the TS-Pico says which, for example `advent.bas holds a program
 
 <!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · CLOSE # -->
 
-> Using the 2068's own PRINT #, INPUT # and LIST # statements to write and
-> read text files, keep records you can jump to by number, and read a folder listing into a
-> program. Each idea comes with a short program to try.
+> **Chapter Preview.** Write and read text files with the 2068's own `PRINT #` and `INPUT #`,
+> keep records you can jump to by number, and read a folder listing into a program.
 
 ## 6.1 Streams in a nutshell
 
@@ -906,8 +972,7 @@ A simple way to know when to stop is to write a marker line yourself:
 
 Line 10 uses mode `"a"`, so the marker goes on the end of the file instead of replacing it.
 
-Numbers work too: `INPUT #4;n` reads a line and turns it into a number, just as if you'd typed
-it.
+Numbers work too: `INPUT #4;n` reads a line and turns it into a number, as if you'd typed it.
 
 ## 6.4 One character at a time: INKEY$ #
 
@@ -946,8 +1011,8 @@ instead:
 50 PRINT "Back on the screen"
 ```
 
-`CLOSE #2` gives the screen back. The comma in line 30 becomes spaces to the next column, just
-as on the screen.
+`CLOSE #2` gives the screen back. The comma in line 30 becomes spaces to the next column, as
+on the screen.
 
 ## 6.7 Records: jumping straight to what you want
 
@@ -995,7 +1060,7 @@ A few things to notice:
 - Writing past the end makes the file longer. Any records you skip are filled with spaces.
 - `PRINT` without `TAB` writes the *next* record, and `INPUT` without `TAB` reads the next one.
 
-**Changing a record** is just writing it again:
+**To change a record**, write it again:
 
 ```basic
 10 OPEN #4,"f:people.dat","u",20
@@ -1034,8 +1099,8 @@ a `PRINT #4` or `INPUT #4` without `TAB` carries on from where the last one stop
 
 ## 6.8 Listing files into a program: `d:`
 
-`OPEN #` with `"d:"` gives you a folder listing, one name at a time. It's just what you need
-for a menu of games:
+`OPEN #` with `"d:"` gives you a folder listing, one name at a time, for a menu of games for
+example:
 
 ```basic
 10 OPEN #4,"d:*.tap"
@@ -1066,8 +1131,8 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 
 ## 6.9 Good to know
 
-- `CLOSE #` on a stream that isn't open does nothing, just as on a standard 2068.
-- After `NEW` or a reset, open streams are forgotten; just OPEN them again. `CLEAR` and `RUN`
+- `CLOSE #` on a stream that isn't open does nothing, as on a standard 2068.
+- After `NEW` or a reset, open streams are forgotten; OPEN them again. `CLEAR` and `RUN`
   keep them open.
 - An `INPUT #4;"prompt";a$` on a file stream doesn't show its prompt on the screen. On a
   `"u"` file the prompt text is written into the file, so leave prompts out when reading files.
@@ -1101,6 +1166,8 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 # Chapter 7: The Virtual Printer
 
 <!-- keywords: LPRINT · LLIST · COPY -->
+
+> **Chapter Preview.** Send `LPRINT`, `LLIST` and `COPY` to text and picture files on the card.
 
 ## 7.1 Switching the printer
 
@@ -1155,7 +1222,23 @@ COPY understands the 2068's other screen modes too: the second screen, hi-colour
 
 These settings last until the TS-Pico is switched off.
 
-## 7.4 Summary
+## 7.4 A printout and a picture from a program
+
+```basic
+10 SAVE "tpi:picopt"
+20 LPRINT "Squares"
+30 FOR i=1 TO 10: LPRINT i,i*i: NEXT i
+40 SAVE "tpi:clprint"
+50 CLS: CIRCLE 128,88,60
+60 COPY
+70 SAVE "tpi:ts2040"
+```
+
+Lines 20 and 30 go into a new text file in `/VLPRINT`, and line 40 finishes it. Line 60 saves
+the circle as a picture in `/VSCREEN`. Line 70 sends printing back to the real printer. Put the
+card in your computer to see both files.
+
+## 7.5 Summary
 
 1. `SAVE "tpi:picopt"` sends printing to the card; `SAVE "tpi:ts2040"` sends it back to the printer.
 2. LPRINT and LLIST go to numbered `.TXT` files in `/VLPRINT`; COPY goes to `.BMP` files in `/VSCREEN`.
