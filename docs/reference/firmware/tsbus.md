@@ -37,6 +37,7 @@ than repeating it.
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
 | `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`; `tsbus.esp_relay`, to install Zimodem |
+| `tsbus.c`, flash writes | `apb_dma_pause`, `apb_dma_resume`, `__wrap_flash_range_erase`, `__wrap_flash_range_program` |
 | `tsbus.c`, speech | the ring, its DMA and timer, `speech_pass` on core 1, ports 17 and 37 in `handle_in` and `core1_main`; `tsbus.speech`, `tsbus.say`, `tsbus.speech_volume`, `tsbus.speaking`, `tsbus.speech_ports`. The chip itself is `sp0256.c` ([speech.md](speech.md)) |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
@@ -79,6 +80,18 @@ two apart:
   spare state machine (`sm_en`), both over AHB. Before that, the 2068 read
   wrong status bytes during flash writes (ZX48 `LOAD "tpi:"` failed with
   "1 NEXT without FOR") and could crash.
+- **Nor may the DMA write to APB during a flash write.** The 2068's memory
+  reads are answered by DMA (`ch_ptr`, `ch_data`), and a DMA write held at
+  the stalled bridge holds those channels up with it. The speech channels
+  write the PWM 10,000 times a second whenever speech is on (silence too),
+  and the modem's write and read the UART. With speech on, any flash write
+  (`tpi:modem`, `tpi:greet`, a mount's copy) crashed or locked up the 2068;
+  on board 1 (2026-10-13), five 8K writes from the REPL locked up a 2068
+  running a BASIC loop, and with `tsbus.speech(False)` the same writes did
+  nothing. So every flash erase and program goes through
+  `__wrap_flash_range_erase` / `__wrap_flash_range_program`, which pause
+  those channels for the write (below). With them, 15 writes, ten of them
+  while the card was speaking, left the loop running and the speech clean.
 - **PIO and DMA** are claimed through the SDK. MicroPython's `rp2` refuses
   claimed state machines and frees only what it claimed itself at soft
   reset, so `tsbus` keeps running through Ctrl-D (checked). PIO0 and PIO1
@@ -613,6 +626,32 @@ aborted and the pins left at `SPK_MID`. Off stops there. On:
 Raises "tsbus not started" before `tsbus.start()`, and `OSError` if no DMA
 timer is free. `board_v3.speech_start` calls it at boot.
 
+### Flash writes: `apb_dma_pause()`, `apb_dma_resume(paused)`, `__wrap_flash_range_erase`, `__wrap_flash_range_program`
+
+The link wraps the SDK's `flash_range_erase` and `flash_range_program`
+(`-Wl,--wrap`, `micropython.cmake`), so MicroPython's flash writes
+(`rp2_flash.c`: LittleFS, through `rp2_flash_writeblocks` and
+`rp2_flash_ioctl`) call these first, already inside its critical section
+(interrupts off). Each one calls `apb_dma_pause`, the real function
+(`__real_…`), then `apb_dma_resume`. All four are `__not_in_flash_func`:
+the real functions turn execute-in-place off.
+
+- `apb_dma_pause`: for each of `ch_spk_l`, `ch_spk_r`, `ch_mrx`, `ch_mtx`
+  that is claimed and enabled, clears `EN` through the non-triggering
+  `al1_ctrl` alias, which stops new transfers and keeps the sequence where
+  it is; returns the paused channels as a bit mask. If any, it waits 1000
+  cycles (4 µs at 250 MHz) so a transfer already issued finishes before the
+  flash goes busy.
+- `apb_dma_resume`: sets `EN` again on those channels; they carry on.
+
+What it costs: speech holds its last level for the write (a sector erase
+is tens of milliseconds) while core 1 keeps filling the ring, so the
+voice is late by that much, not cut *(inferred; it sounded clean on board 1)*.
+The modem's receive channel stops reading the UART, whose 32-byte FIFO can
+overflow during a long erase at 115200 baud and lose bytes *(inferred, not
+tested)*. The 2068-facing channels (`ch_ptr`, `ch_data`, `ch_log`) and
+`RX_DMA`'s are never paused: they touch only PIO and SRAM.
+
 ### `tsbus.say(allophones)`
 
 Queue AL2 allophone numbers (bytes-like; each masked to 0-63) after what is
@@ -1057,7 +1096,9 @@ Every pass:
 The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c`,
 `usart8251.c`, `modem2050.c` and `sp0256.c`, the pioasm header
 (`pico_generate_pio_header`), and `hardware_dma`, `hardware_pio`,
-`hardware_pwm`, `hardware_uart`, `hardware_vreg`, `pico_multicore`.
+`hardware_pwm`, `hardware_uart`, `hardware_vreg`, `pico_multicore`, and
+the link options `-Wl,--wrap=flash_range_erase` and
+`-Wl,--wrap=flash_range_program` (the flash-write wrappers in `tsbus.c`).
 `U8251_ON_PICO=1` makes the three plain-C files put core 1's functions in
 RAM (and `sp0256.c` its tables, `SP0256_DATA`). The board sets `USER_C_MODULES` to this file.
 
