@@ -211,5 +211,5 @@ behaviour, and the caveat and the issue link go.
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/sp0256-port.py` | `c6ee937adb2b` | [firmware/speech.md](firmware/speech.md) | — |
 | `tools/speech-rules.py` | `b58417ce8921` | [firmware/speech.md](firmware/speech.md) | — |
-| `.github/workflows/build.yml` | `e0e363ef600f` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `0f0730578659` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `79954d8fcfd9` | [firmware/boot.md](firmware/boot.md) | — |
