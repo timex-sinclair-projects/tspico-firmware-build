@@ -1,8 +1,8 @@
 # TS/tspico.py (part 3) — the dispatcher
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4796–4898
-(`LOAD_CONFIG`), 5767–5869 (the printer path), 5949–6285 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6293–7470 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4796–4904
+(`LOAD_CONFIG`), 5803–5905 (the printer path), 5985–6321 (`FAIL_CMD`,
+`PROCESS_CMD`) and 6329–7515 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -37,16 +37,16 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 | Symbol | Line | Role |
 |---|---|---|
 | `LOAD_CONFIG()` | 4796 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
-| `PRINT_FLUSH()` | 5767 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
-| `COPY_BMP(scr, mode, colour)` | 5799 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
-| `PRINT_IO(pre)` | 5820 | one printer transaction: an LPRINT character, or COPY |
-| `FAIL_CMD(status)` | 5949 | a command that failed: one status byte, on a bus in a known state |
-| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6001 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
-| `TS2068_IO()` | 6293 | the board setup and the service loop |
-| `ZX_TPI()` | 7159 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7297 | the Spectrum-mode loop |
+| `PRINT_FLUSH()` | 5803 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
+| `COPY_BMP(scr, mode, colour)` | 5835 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
+| `PRINT_IO(pre)` | 5856 | one printer transaction: an LPRINT character, or COPY |
+| `FAIL_CMD(status)` | 5985 | a command that failed: one status byte, on a bus in a known state |
+| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6037 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
+| `TS2068_IO()` | 6329 | the board setup and the service loop |
+| `ZX_TPI()` | 7204 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 7342 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 7155), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 7200), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -80,11 +80,14 @@ What it does:
    | MODEM_MODE | `"2050"` | the v3 card's TS2050 modem: `"2050"`, `"hayes"` or `"off"` (`board.modem_start`, `tpi:modem`); v2 ignores it |
    | MODEM_BAUD | `300` | the modem's received characters paced to this; 0, none |
    | MODEM_IDLE_MIN | `10` | the ESP32 off after this many minutes unused and on-hook |
+   | SPEECH_VOLUME | `35` | the v3 card's speech: volume, % (`board.speech_start`); v2 ignores the speech keys |
+   | SPEECH_RATE | `100` | ... the chip's speed, % (50-150): its pitch moves with it |
+   | SPEECH_PORTS | `True` | ... OUT 17 / IN 37 answered, as David's Pico Speech Synth 2068 board |
    | FW_VERSION | the module's `FW_VERSION` | written for information; `PICO_STATUS` ignores the file's value |
    | ROM_VERSION | the module's `ROM_VERSION` | the ROM this firmware ships with; shown by `tpi:info`, nothing else reads it |
 
    The shipped [`src/config.ini`](../../../src/config.ini) holds exactly
-   these thirteen keys. The comment at line 4809 notes that `PICO_STATUS`
+   these sixteen keys. The comment at line 4809 notes that `PICO_STATUS`
    carries a second copy of the defaults (it does, as `try/except` fallbacks)
    and that there should be one; there are still two.
 3. `ROM_SM` must be one of 5, 6, 9, 10 — the four combinations `tpi:boot`
@@ -97,7 +100,9 @@ What it does:
    `LED_BRIGHTNESS` must be an `int` from 1 to 100; anything else (0, 5.5,
    `"5"`) is logged at level 2 and replaced by 5, and written back. So must
    the modem's: `MODEM_MODE` one of the three, `MODEM_BAUD` an `int` from 0
-   to 115200, `MODEM_IDLE_MIN` an `int` from 1 to 1440.
+   to 115200, `MODEM_IDLE_MIN` an `int` from 1 to 1440; and speech's:
+   `SPEECH_VOLUME` an `int` from 0 to 100, `SPEECH_RATE` from 50 to 150,
+   `SPEECH_PORTS` a `bool`.
 4. The one-shot. `boot_mem = ROM_SM & 3`. If `ROM_SLOT` is not 1 or
    `boot_mem` is not 2 (flash; so an SD boot too), the configured pair is remembered, the
    dictionary is rewritten with `ROM_SLOT = 1` and `ROM_SM = (ROM_SM & 12) + 2`
@@ -304,7 +309,7 @@ The pre-header fields as the ROM builds them
 |---|---|---|
 | 0 | `'B'` (42h) | — (the dispatcher chose this handler on it) |
 | 1 | TADDR | `load_cmd`: 0 = `SAVE "tpi:…"` command, 1–3 = `LOAD "tpi:name"`, a mount |
-| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6011), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
+| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6047), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
 | 3–4 | PMR1, the first `CODE` number, little-endian | the handlers' `par1` (`PARAMS(pre)`) |
 | 5–6 | PMR2, the second `CODE` number | `par2` |
 | 7–8 | length of the command text | the body size |
@@ -493,7 +498,7 @@ It owns `busy` (core1 is writing the log), `dead` (tells `BLINK_LED` to
 stop), `files`, `lista`, `log_entries`,
 `log_to_serial` (initialised `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file),
-`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6584, `RXD`.
+`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6629, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
 
 ### Configuration and the log file
@@ -526,7 +531,11 @@ in. So with an SD slot the card is mounted twice at boot, here and at the
 card check below. Then, where `board.HAS_MODEM` (the v3 card),
 `board.modem_start` with `config.ini`'s `MODEM_MODE`, `MODEM_BAUD` and
 `MODEM_IDLE_MIN`: from here the 8251 at 73h/77h is answered (unless the
-mode is "off"); the ESP32 stays off until a program uses it. On v2
+mode is "off"); the ESP32 stays off until a program uses it. Then, where
+`board.HAS_SPEECH`, `board.speech_start` with `SPEECH_VOLUME`, `SPEECH_RATE`
+and `SPEECH_PORTS`: the chip on core 1, silent until `tpi:say`, ports 17/37
+answered, `/speech.txt` read ([board.md](board.md#speech_startvolume-rate-portstrue)).
+Anything it raises is logged at level 2 and the boot goes on. On v2
 it builds `set_ctrl` on state machine 4 and `sel_bank` on state machine 5 at
 150 MHz. Both are started, then given one word each: `ROM.put(TSP.ROM_SM)` — which
 memory (flash or SRAM) answers DOCK and ROM accesses, the 5/6/9/10 value
@@ -652,7 +661,7 @@ seeds the chain for the life of the session. It must be here and not inside
 that `LOAD ""` will give Report R until the assets are copied. The SD outcome
 is logged (OK / mounted but failing / no card), `SAVE_LOG()`, a `gc.collect()`,
 "TS Pico initialized OK. Waiting for commands...", `SAVE_LOG()` again, LED
-off. `wrt = MQ.put` at line 6569 is assigned and never used.
+off. `wrt = MQ.put` at line 6614 is assigned and never used.
 
 ### The capture buffers and the DMA channel
 
@@ -728,7 +737,7 @@ status read (`RD_STATUS`), not in `SYNC_WAIT`, so a transaction the Pico
 dropped reports T only if its ROM is still waiting for READY when the
 `0xFB` goes up; a later command finds `0xFF` *(inferred from
 [tspico-sync.asm](../../../src/rom/patches/tspico-sync.asm): `SYNC_WAIT`
-masks READY and IDLE only)*. The comments at lines 6597 and 6689 that say
+masks READY and IDLE only)*. The comments at lines 6642 and 6734 that say
 "the next command gets Report T" describe the ROM's own ready-wait of the
 transaction in hand, not a later one.
 

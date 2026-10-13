@@ -16,6 +16,7 @@ PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
 SD_SLOTS = True     # tpi:boot and tpi:dock take MEM 3: a slot file on the SD card
 HAS_MODEM = True    # the TS2050's 8251 at 73h/77h, bridged to the ESP32-C3 (modem_start)
+HAS_SPEECH = True   # the SP0256-AL2 on core 1, out of the audio jack (speech_start)
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
 # The slots (phase 5, docs/v3-slots-proposal.md): v2's two chips of sixteen
@@ -203,6 +204,35 @@ def modem_download(on):
     low boots its ROM's serial downloader (to install Zimodem) instead of
     the firmware. Takes effect at the next modem_power(True)."""
     return _port0(_X_WIFI_DL, _X_WIFI_DL if on else 0)
+
+# Speech (docs/v3-speech-proposal.md): the SP0256-AL2 emulated on core 1
+# (tsbus, sp0256.c), out of the audio jack. Text becomes allophone numbers
+# on core 0 (TS/speech.py); tsbus queues them, and the chip speaks them while
+# the 2068 carries on.
+
+def speech_start(volume, rate, ports=True):
+    """Speech on: the chip at `rate` % of its speed (50-150; its pitch moves
+    with it), at `volume` % (0-100), answering OUT 17 / IN 37 as David's Pico
+    Speech Synth 2068 board does (`ports`), and /speech.txt's words added to
+    the exception list. Returns how many words that was."""
+    from TS import speech
+    tsbus.speech(True, rate)
+    tsbus.speech_volume(volume)
+    tsbus.speech_ports(ports)
+    return speech.load_exceptions()
+
+
+def say(text):
+    """Speak text (English, or allophone names in [brackets]) after whatever
+    is queued; returns (allophones queued, allophones in the text). Empty
+    text stops speech at once. ValueError for an unknown allophone name."""
+    from TS import speech
+    if not text.strip():
+        tsbus.say(None)
+        return 0, 0
+    al = speech.allophones(text)
+    return tsbus.say(al), len(al)
+
 
 # The LED dimmer: D4 on R5 (100R) is far too bright at full current, so
 # while it is on it is lit for the first LED_BRIGHTNESS % of every 10 ms

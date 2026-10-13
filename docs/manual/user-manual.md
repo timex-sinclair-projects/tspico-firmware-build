@@ -35,6 +35,7 @@ Appendices
 - E. The TS-Pico Team
 <!-- v3 -->
 - F. The Modem
+- G. Speech
 <!-- /v3 -->
 
 ---
@@ -280,8 +281,9 @@ doing:
 | A burst of fast blinks | Something went wrong, for example a file that wouldn't mount |
 | Two short flashes every couple of seconds | Running without an SD card (see 2.6) |
 
-**The other connectors**, a joystick socket, an audio jack and a display header, are for
-features coming in later firmware.
+**The audio jack** gives the card's speech (Appendix G), mixed with the 2068's own sound.
+**The other connectors**, a joystick socket and a display header, are for features coming in
+later firmware.
 <!-- /v3 -->
 
 ## 2.4 The micro SD card
@@ -1851,6 +1853,19 @@ Press **Y** to remove it. A folder must be empty.
   mounted; tpi:close it first`, `Directory not empty`, `RM: Can't remove the current directory`.
 - **A**: no name, or a CODE other than 255,0.
 
+<!-- v3 -->
+### say: speak
+
+```basic
+SAVE "tpi:say HELLO, I AM YOUR TIMEX"   : REM speak English
+SAVE "tpi:say [HH1 EH LL OW]"           : REM speak allophones by name
+SAVE "tpi:say"                          : REM stop speaking
+```
+
+Speech, Appendix G. The card speaks while the 2068 carries on; another `tpi:say` waits its
+turn. **A**: a name in `[...]` that isn't an allophone.
+<!-- /v3 -->
+
 ### tapdir: look inside the mounted TAP
 
 ```basic
@@ -2259,6 +2274,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Spectrum mode |  | `SAVE "tpi:zx48"`, then `OUT 244,3` |
 <!-- v3 -->
 | Modem state and mode |  | `SAVE "tpi:modem"`, `SAVE "tpi:modem 2050"` |
+| Speak |  | `SAVE "tpi:say HELLO"`, `SAVE "tpi:say"` to stop |
 <!-- /v3 -->
 
 ---
@@ -2284,7 +2300,7 @@ the SD card). It's a single line of text:
 <!-- /v2 -->
 <!-- v3 -->
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true}
 ```
 <!-- /v3 -->
 
@@ -2311,6 +2327,9 @@ the SD card). It's a single line of text:
 | `MODEM_MODE` | The modem: `"2050"`, `"hayes"` or `"off"` (Appendix F) | `"2050"` |
 | `MODEM_BAUD` | How fast the modem passes received text to programs; 0 is as fast as they read | `300` |
 | `MODEM_IDLE_MIN` | Minutes unused before the modem's WiFi part switches off | `10` |
+| `SPEECH_VOLUME` | How loud the speech is, 0-100 (%) | `35` |
+| `SPEECH_RATE` | The speech's speed, 50-150 (%); its pitch moves with it | `100` |
+| `SPEECH_PORTS` | Programs can speak through ports 17 and 37 (Appendix G) | `true` |
 <!-- /v3 -->
 
 <!-- v2 -->
@@ -2467,4 +2486,119 @@ commands itself. The details, and what MTERM does, are in the developer notes,
 2. Set up WiFi and the phonebook once, in Hayes mode, with `ATW`, `AT&W` and `ATP`.
 3. Dial a phonebook number from the program; press ENTER if the host is quiet.
 4. `SAVE "tpi:modem"` shows the state and sets the mode.
+
+---
+
+<!-- keywords: speech · tpi:say · SP0256 · allophones -->
+
+# Appendix G: Speech
+
+The v3 card talks. It has the voice of the **General Instrument SP0256-AL2**, the speech chip
+in the Currah µSpeech and many 1980s speech kits, recreated from the chip's own ROM. Plug
+headphones or an amplified speaker into the card's audio jack; the 2068's own sound comes out
+there too.
+
+## G.1 Saying something
+
+```basic
+SAVE "tpi:say HELLO, I AM YOUR TIMEX SINCLAIR 2068."
+```
+
+The card speaks while the 2068 carries on, so a program doesn't wait. A second `tpi:say`
+waits its turn; `SAVE "tpi:say"` on its own stops at once. A program can say a string:
+
+```basic
+10 LET A$="GAME OVER"
+20 SAVE "tpi:say "+A$
+```
+
+Numbers are spoken as words (`2068` is "two thousand and sixty eight"). A full stop, `!`, `?`
+or `;` makes a long pause, a comma a shorter one.
+
+## G.2 When a word comes out wrong
+
+The card turns spelling into sounds with a set of rules, which get about one word in ten
+wrong. Two ways round it:
+
+- **Spell it as it sounds**: `SAVE "tpi:say ZEEBRA"`.
+- **Give the sounds themselves**, the chip's *allophones*, in square brackets (G.4):
+  `SAVE "tpi:say [ZZ IY BB1 RR2 AX]"`. Brackets and words mix: `SAVE "tpi:say HELLO [PA4] THERE"`.
+
+To fix a word for good, put it in a file called `speech.txt` in the Pico's own memory (with
+Thonny), one word a line, with its sounds in the rules' codes (G.5):
+
+```
+# my words
+SPECTRUM = spEHktrAXm
+ZEBRA = zIYbrAX
+```
+
+The card reads it when it starts.
+
+## G.3 Speed, pitch and volume
+
+`SPEECH_VOLUME` (0-100, normally 35) and `SPEECH_RATE` (50-150, normally 100) in `config.ini`
+(Appendix D). The chip's speed and pitch go together, as they did when its clock was changed:
+80 gives a slower, deeper voice.
+
+## G.4 The allophones
+
+| | | | | | |
+|---|---|---|---|---|---|
+| `PA1` pause 10 ms | `PA2` pause 30 ms | `PA3` pause 50 ms | `PA4` pause 100 ms | `PA5` pause 200 ms | `OY` b**oy** |
+| `AY` sk**y** | `EH` **e**nd | `KK3` **c**omb | `PP` **p**ow | `JH` do**dg**e | `NN1` thi**n** |
+| `IH` s**i**t | `TT2` **t**o | `RR1` **r**ural | `AX` s**u**cceed | `MM` **m**ilk | `TT1` par**t** |
+| `DH1` **th**ey | `IY` s**ee** | `EY` b**ei**ge | `DD1` coul**d** | `UW1` t**o** | `AO` **au**ght |
+| `AA` h**o**t | `YY2` **y**es | `AE` h**a**t | `HH1` **h**e | `BB1` **b**usiness | `TH` **th**in |
+| `UH` b**oo**k | `UW2` f**oo**d | `AW` **ou**t | `DD2` **d**o | `GG3` wi**g** | `VV` **v**est |
+| `GG1` **g**ot | `SH` **sh**ip | `ZH` a**z**ure | `RR2` b**r**ain | `FF` **f**ood | `KK2` s**k**y |
+| `KK1` **c**an't | `ZZ` **z**oo | `NG` a**n**chor | `LL` **l**ake | `WW` **w**ool | `XR` rep**air** |
+| `WH` **wh**ig | `YY1` **y**es | `CH` **ch**urch | `ER1` f**ir** | `ER2` f**ir** (longer) | `OW` b**eau** |
+| `DH2` **th**ey | `SS` ve**s**t | `NN2` **n**o | `HH2` **h**oe | `OR` st**or**e | `AR` al**ar**m |
+| `YR` cl**ear** | `GG2` **g**uest | `EL` sadd**le** | `BB2` **b**usiness | | |
+
+Some sounds come in two or three versions for different places in a word: `TT2` at the start
+of a word, `TT1` at the end or after S; `KK1` before E, I and A as in "cat", `KK3` before O and
+U, `KK2` at the end; `DD2` at the start, `DD1` at the end. End a phrase with a pause (`PA4` or
+`PA5`).
+
+## G.5 The rules' sound codes, for `speech.txt`
+
+Two letters in capitals: `IY` b**ee**t, `IH` b**i**t, `EY` g**a**te, `EH` g**e**t, `AE` f**a**t,
+`AA` f**a**ther, `AO` l**aw**n, `OW` l**o**ne, `UH` f**u**ll, `UW` f**oo**l, `ER` m**ur**d**er**,
+`AX` **a**bout, `AH` b**u**t, `AY` h**i**de, `AW` h**ow**, `OY` t**oy**, `TH` e**th**er, `DH`
+ei**th**er, `SH` lea**sh**, `ZH` lei**s**ure, `HH` **h**ow, `NG` su**ng**, `CH` **ch**ar, `WH`
+**wh**ere. One letter in small letters: `p` `t` `k` `b` `d` `g` `f` `v` `s` `z` `m` `n` `l` `w`
+`y` `r` and `j` (**j**ar).
+
+## G.6 Programs written for a speech board
+
+The card answers the ports the Pico Speech Synth 2068 board uses (a Pico version of Wilf
+Rigter's ZX Voice), so programs written for it speak through the card: `OUT 17,n` speaks allophone `n` (the numbers in G.4's
+order, `PA1` = 0 to `BB2` = 63), and `IN 37` is 128 or more while the card is still busy. They
+work in Spectrum mode too. Set `SPEECH_PORTS` to `false` if something else on your 2068 uses
+those ports.
+
+```basic
+10 FOR I=1 TO 5: READ A
+20 IF IN 37>=128 THEN GO TO 20
+30 OUT 17,A: NEXT I
+40 DATA 27,7,45,53,4: REM HH1 EH LL OW PA5
+```
+
+## G.7 Where the voice comes from
+
+The SP0256-AL2's ROM is copyright Microchip Technology Inc., which retains the rights to the
+algorithms and data it contains, and allows its distribution with this acknowledgment. The
+chip is recreated by MAME's SP0256 emulation (Joseph Zbiciak and Tim Lindner, BSD-3-Clause
+licence). The spelling-to-sound rules are the US Naval Research Laboratory's (NRL Report
+7948, 1976), as John A. Wasser coded them in 1985; both are public domain. The details are in
+the `NOTICE` file on the project's GitHub.
+
+## G.8 Summary
+
+1. `SAVE "tpi:say TEXT"` speaks, while the 2068 carries on; `SAVE "tpi:say"` stops.
+2. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
+3. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
+4. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
 <!-- /v3 -->

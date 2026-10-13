@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2535–2612 (`DIR`), 3451–3860 (`IDIR` … `SA_NOT_IMP`), 3925–4166
-(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4900–5263
-(`LOGLEVEL` … `MEMDOCK`), 5266–5296 (`MODEM`), 5316–5392 (`REW`), 5532–5759 (`BAD_CODE` …
-`NOP`) and 5871–5947 (the printer settings); the dispatch table
-`SA_funct` at 6374–6425, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4906–5269
+(`LOGLEVEL` … `MEMDOCK`), 5272–5332 (`MODEM`), 5352–5428 (`REW`), 5568–5795 (`BAD_CODE` …
+`NOP`) and 5907–5983 (the printer settings); the dispatch table
+`SA_funct` at 6418–6470, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -40,25 +40,26 @@ where the manual and the code differ, the entries below say so.
 | `GETHELP(pre, cmd)` | 4412 | `tpi:help` |
 | `GETINFO(pre, cmd)` | 4579 | `tpi:info` |
 | `GETLOG(pre, cmd)` | 4668 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 4900 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 4959 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5084 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5189 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 5266 | `tpi:modem` |
-| `REW(pre, cmd)` | 5316 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5532 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5537 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5542 | `tpi:rm` |
-| `RM_CHECK(name)` | 5588 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5606 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5634 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5688 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5742 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5871 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5892 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5903 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5916 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5934 | `tpi:bmp` |
+| `LOGLEVEL(pre, cmd)` | 4906 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 4965 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 5090 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5195 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 5272 | `tpi:modem` |
+| `SAY(pre, cmd)` | 5305 | `tpi:say` |
+| `REW(pre, cmd)` | 5352 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5568 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5573 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5578 | `tpi:rm` |
+| `RM_CHECK(name)` | 5624 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5642 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5670 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5724 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5778 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 5907 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 5928 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 5939 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 5952 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 5970 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -81,7 +82,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6371–6372) says (until #181 it
+   trailing space, as the comment above it (6415–6416) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -134,7 +135,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6374) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6418) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 48 words, 31 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -167,6 +168,7 @@ applies (the word is not in `SD_FREE`).
 | `tpi:dock` | MEMDOCK | no | no `CODE`: show; `CODE 0,1`: the previous; `CODE 0,2`: swap; `CODE mem,slot` | `SEND_MSG` |
 | `tpi:memdock` | MEMDOCK | no | the same | the same |
 | `tpi:modem` | MODEM | no | none: show; `tpi:modem 2050`, `hayes` or `off` | `SEND_MSG`; the show form shown |
+| `tpi:say` | SAY | no | text, `[allophones]`, or nothing (stop) | `SEND_MSG` (not shown, unless an error) |
 | `tpi:nop` | NOP | no | — | `01h` |
 | `tpi:path` | PATH | no | no `CODE`: the folder; `CODE 1,0`: the mounted file | `SEND_MSG`, shown |
 | `tpi:rew` | REW | no | as `tpi:ffw`, backwards | as `tpi:ffw` |
@@ -868,6 +870,33 @@ gate (`SD_FREE`): it needs no card.
 
 There is no `CODE` form. `board_v3_hosttest.py` pins the four answers and
 the saved key.
+
+### `SAY(pre, cmd)`
+
+`tpi:say`: the v3 card's speech ([speech.md](speech.md),
+[docs/v3-speech-proposal.md](../../v3-speech-proposal.md)). Speaks English,
+or SP0256-AL2 allophones by name in `[brackets]`, after anything still being
+said, and returns at once: the card speaks while the 2068 carries on. Not in
+the card gate (`SD_FREE`).
+
+- No `board.HAS_SPEECH` (v2): "No speech on this board", shown, Report F.
+- The text after the word (`getArgs`, case kept; any length: the command's
+  length field is 16 bits, so `SAVE "tpi:say "+A$` works) goes to
+  `board.say`, which turns it into allophones (`speech.allophones`) and
+  queues them (`tsbus.say`). Empty text stops speech at once and drops the
+  queue: "Stopped".
+- "Saying *n* sounds" (`SEND_MSG`, not shown unless verbose), 0 OK. If the
+  1024-allophone queue filled: "Said the first *q* of *n* sounds" / "The
+  rest didn't fit", 0 OK.
+- A `[NAME]` that isn't an allophone: `BAD_ARG("SAY", name)` / "Not an SP0256
+  allophone", Report A, nothing queued.
+- `OSError` (speech didn't start at boot): "Speech is off" and the error,
+  shown, Report F.
+
+There is no `CODE` form; the volume and the rate are `config.ini`'s
+(`SPEECH_VOLUME`, `SPEECH_RATE`). `board_v3_hosttest.py` pins `board.say`;
+the command from BASIC is untested *(unverified)*: it waits for the card in a
+2068.
 
 ### `REW(pre, cmd)`
 

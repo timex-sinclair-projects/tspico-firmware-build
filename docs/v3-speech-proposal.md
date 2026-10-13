@@ -7,6 +7,10 @@ It began as an entry on the future-features list (2026-10-12).
 
 Decisions taken with David on 2026-10-12 are marked **(decided)**.
 
+**Status (2026-10-12):** built on branch `v3-speech`, everything but the
+tests that need the card in a 2068; see [Progress](#progress). The speech
+channel (`s:`) was dropped: the ROM can't reach it.
+
 ## What the prototypes settled
 
 Three voices were rendered on the Mac and compared by ear: SAM (the 1982
@@ -98,10 +102,11 @@ Why core 1, and what it costs:
   behind the first. `SAVE "tpi:say"` with nothing after it stops speech.
 - **Allophones by name,** for exact control: `SAVE "tpi:say [HH1 EH LL OW]"`.
   The square brackets mark allophones rather than English.
-- **A speech channel:** `OPEN #4,"s:"`, then `PRINT #4;"GAME OVER"`. Each
-  line printed is spoken, so an existing program can be made to talk by
-  redirecting a stream. It sits beside `d:` in `CH_OPEN`, so the ROM needs no
-  change. It's write-only, as `d:` is read-only.
+- ~~**A speech channel:** `OPEN #4,"s:"`, then `PRINT #4;"GAME OVER"`.~~
+  **Dropped (decided):** the ROM's `CH_OPEN_HOOK` claims only `d:` and `f:`
+  specs and gives the rest to the stock 2068 code, where `s` is the screen,
+  so `OPEN #4,"s:"` never reaches the Pico. It would need a ROM change. The
+  firmware side was built and tested, then removed.
 - **Waiting for speech to finish:** `IN 37`, bit 7, as on David's board
   (below).
 
@@ -121,9 +126,10 @@ something else on the 2068 uses them. They work in ZX48 mode too, where
 
 ### Settings
 
-- `config.ini`: `SPEECH_PORTS` (true), `SPEECH_RATE` (100: the chip's
-  speed in %, since the AL2's speed and pitch are both its clock; 80 gives
-  the slower, lower voice of the cpcwiki recordings).
+- `config.ini`: `SPEECH_VOLUME` (35, %: asked for once the speech was heard),
+  `SPEECH_RATE` (100: the chip's speed in %, since the AL2's speed and pitch
+  are both its clock; 80 gives the slower, lower voice of the cpcwiki
+  recordings), `SPEECH_PORTS` (true).
 - On v2 there is no audio output: `tpi:say` answers "No speech on this board"
   (Report F), and ports 17 and 37 stay unanswered.
 
@@ -141,7 +147,7 @@ something else on the 2068 uses them. They work in ZX48 mode too, where
 3. **Text:** the rules table and its build tool, the matcher, numbers, the
    exception dictionary and `/speech.txt`, and `tpi:say` (text and
    `[allophones]`). Host test: known words to known allophones.
-4. **The `s:` channel.**
+4. ~~**The `s:` channel.**~~ Dropped (above).
 5. **Ports 17 and 37,** tested with a program written for David's board.
 6. **Docs:** the reference, the v3 manual (an appendix, "Speech": `tpi:say`,
    the channel, the ports, the allophone table, adding words), and `NOTICE`
@@ -161,6 +167,26 @@ Each step is its own PR, tested on the card, and updates the reference.
    but speed would change with it. Leave it out unless asked for.
 4. **The Currah µSpeech** (Spectrum games in ZX48 mode). Its interface needs
    checking against its documentation, and it's a later step.
-5. **Port numbers 17 and 37:** confirm with David's board's documentation
-   that these are the full decode (any high byte), and that nothing else on a
-   2068 setup uses them.
+5. ~~**Port numbers 17 and 37**~~ (settled from the board's schematic): its
+   74HC138 decodes A4, A5 and /RD with A7 low, so the board answers OUTs to
+   10h-1Fh and 50h-5Fh and INs from 20h-2Fh and 60h-6Fh. Programs use 17 and
+   37, so the card decodes exactly those, leaving 1Fh (Kempston) alone. IN 37
+   reads FFh busy, 7Fh ready: bit 7 is the board's /LRQ on D7, and the
+   rest copy the 2068's floating bus.
+
+## Progress
+
+On branch `v3-speech` (2026-10-12):
+
+| Step | State |
+|---|---|
+| 1. The audio path | **Done** on board 2, on USB power with no 2068: tones on each channel at the jack, and the ROM speech played by DMA at 10 kHz |
+| 2. The chip in `tsbus` | **Done.** `sp0256.c` (MAME's core via `tools/sp0256-port.py`), checked bit for bit against MAME's C++ (`sp0256_hosttest.py`). Core 1 runs it into a ring that two DMA channels play to GP46/GP30. Core 1 never reads flash: the tables had to be placed in RAM by name, because GCC put them in `.rodata` even without `const`. On board 2: 80,157 samples for two sentences, exactly MAME's count, never late |
+| 3. Text and `tpi:say` | **Done.** `speech.py`, the rules generated from Wasser's `english.c`, `/speech.txt`, `tpi:say`, and speech started at boot with `SPEECH_VOLUME`/`SPEECH_RATE`/`SPEECH_PORTS` |
+| 4. The `s:` channel | **Dropped**: needs a ROM change |
+| 5. Ports 17 and 37 | **Done** in the firmware; untested from a 2068 |
+| 6. Docs | **Done**: the reference (`firmware/speech.md`, `tsbus.md`, `board.md` and others), the v3 manual's Appendix G, `NOTICE` |
+
+Still to do, with the card in a 2068: `tpi:say` from BASIC, a program
+written for the speech board (OUT 17 / IN 37), and the IN timing while speech
+plays (`respond_ns`, no late INs).
