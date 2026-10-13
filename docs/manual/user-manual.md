@@ -344,18 +344,18 @@ You'll need the TS-Pico fitted (2.2) and an SD card in its socket (2.4).
 
    ```
    Path:/TAP
-   SD: 7.4453GB; free: 7.2109GB
+   SD: 7.4 GB; free: 7.2 GB
    File Name                   Size
    --------------------------------
    <GAMES>                      0 B
-   000 frogger.tap         12.00 kB
+   000 frogger.tap            12 kB
        notes.txt              300 B
    ```
 
 Your TS-Pico is working. Plain `CAT` gives the same listing.
 
-Folders come first, in angle brackets. Each file the TS-Pico can mount (TAP, DCK, ROM, BIN)
-gets a three-digit **index number**. Other files, such as `notes.txt`, are listed without one.
+Folders come first, in angle brackets. Each TAP, TZX, DCK, ROM or BIN file gets a three-digit
+**index number**. Other files, such as `notes.txt`, are listed without one.
 
 ## 2.6 If the SD card isn't found
 
@@ -401,8 +401,8 @@ recovers once it loses power, which taking the card out, or switching everything
 
 ## 2.7 Summary
 
-1. Switch the 2068 off before connecting anything, and remove the BUSISO jumper for the
-   TS-Pico's slot on an expansion bus.
+1. Switch the 2068 off before connecting anything, and set the BUSISO bypass for the TS-Pico's
+   slot on an expansion bus.
 <!-- v2 -->
 2. Keep the P10 jumper fitted.
 <!-- /v2 -->
@@ -545,8 +545,8 @@ LOAD "tpi:12"
 
 - Mounting only looks in the **current folder**. Use `MOVE TO` or `tpi:cd` first.
 - Only TAP, DCK, ROM and BIN files can be mounted. DCK, ROM and BIN files are cartridges and
-  ROM images; they're covered in Chapter 8. TZX files are listed, but the TS-Pico can't mount
-  them.
+  ROM images; they're covered in Chapter 8. TZX files are listed with an index number, but the
+  TS-Pico can't mount them: you'll get **Q Parameter error**.
 - If the name isn't found, you'll get **F Invalid file name**. A file you've just copied onto
   the card from a computer is found without a restart.
 - **Type a `?` where the listing shows one.** `LOAD "tpi:?game?.tap"` mounts `{game}.tap`. A
@@ -557,8 +557,8 @@ LOAD "tpi:12"
 
   ![LOAD "tpi:*.tap" with several matches: the count, and Report F](images/load-several-match.png)
 
-**Picking a file from a list.** `SAVE "tpi:idir"` shows the mountable files as a menu, using
-the same keys as `tpi:cd`, and mounts the one you pick.
+**Picking a file from a list.** `SAVE "tpi:idir"` shows the indexed files as a menu, using the
+same keys as `tpi:cd`, and mounts the one you pick.
 
 ## 3.4 Looking inside a TAP
 
@@ -590,9 +590,10 @@ SAVE "tpi:ffw" CODE 2,1    : REM forward to the next program or file
 SAVE "tpi:rew" CODE 3,2    : REM back two files, then show the tape
 ```
 
-With verbose on you'll see `Moved ahead to block # 4`. The tape stops at either end: you'll
-get `Can't FWD. Already at end.` rather than a wrap-around, or `Can't FWD. No later file.` when
-you skip by files from the last program.
+The tape stops at either end rather than wrapping round. With verbose on you'll see
+`Moved ahead to block # 4`, `Can't FWD. Already at end.`, `Can't REW. Already at start.`, or
+`Can't FWD. No later file.` when you skip by files from the last program. With verbose off
+each of these is **0 OK**.
 
 ## 3.6 Ejecting the tape: CLOSE
 
@@ -612,6 +613,7 @@ If nothing is mounted and you type `LOAD ""`, the TS-Pico loads a little menu pr
 - **F** starts the **TS-Pico Commander**, a full-screen file manager;
 - **R** shows your ROM version;
 - **I** shows TS-Pico information;
+- **V** has settings for the Pico Video board;
 - **Q** quits.
 
 To get the menu back at any time: `SAVE "tpi:close"` then `LOAD ""`.
@@ -711,9 +713,9 @@ SAVE "code" CODE 32768,1000
 - If nothing was mounted, the new file becomes the mounted file.
 - An empty program gives **A Invalid argument**.
 
-> **Note:** the TS-Pico says "0 OK" as soon as it has your data, and then writes it to the
-> card. If the card fails at that moment (for example because it was pulled out), the error
-> goes to the TS-Pico's log (`SAVE "tpi:log"`), not to the screen.
+> **Note:** the TS-Pico answers once your data is on the card. If the card fails while it's
+> writing (for example because it was pulled out), you get **J Invalid I/O device** instead of
+> **0 OK**, and nothing is saved.
 
 ## 4.3 Adding to a TAP: APPEND and NEWTAP
 
@@ -772,6 +774,7 @@ name and shows them in turn:
 100 NEXT i
 ```
 
+<!-- CHECK: does an ordinary SAVE to the TS-Pico still wait for a key ("press any key") on ROM 2.3? The ROM disassembly suggests the stock wait remains at EXROM 22AEh. If so, this program pauses at each SAVE. -->
 Line 10 makes `pics.tap`, mounts it and turns append on, so lines 30 to 50 add `pic1`, `pic2` and
 `pic3` to it instead of making three files. Line 80 finds each picture by its tape name. Run it
 once: on a second RUN, line 10 stops with **F**, because FORMAT never replaces a file.
