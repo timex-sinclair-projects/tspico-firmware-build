@@ -185,3 +185,27 @@ data_wait:
     irq set 0
     wait 1 gpio 17
 .wrap
+
+; -----------------------------------------------------------------------------
+; spk_pwm (PIO2, one state machine per audio pin): PWM for the speech, as the
+; pico-examples `pwm` program, fed by DMA through the TX FIFO. The PWM block
+; can't be used: it sits behind the APB bridge, and a DMA write held there
+; holds up the channels that answer the 2068's memory reads (proved on board
+; 1, 2026-10-13). The FIFO is on AHB, like serve's. ISR holds the period
+; (SPK_TOP), loaded once; each 16-bit level arrives in both halves of a FIFO
+; word, and `out x, 16` takes one. With nothing new in the FIFO, `pull
+; noblock` copies X back, so the last level holds. Three cycles a count:
+; (SPK_TOP + 1) * 3 + 3 cycles a period.
+; -----------------------------------------------------------------------------
+.program spk_pwm
+.side_set 1 opt
+    pull noblock    side 0                  ; a new level, or X again
+    out x, 16
+    mov y, isr                              ; the period
+countloop:
+    jmp x!=y noset                          ; high from the count that equals the level
+    jmp skip        side 1
+noset:
+    nop
+skip:
+    jmp y-- countloop

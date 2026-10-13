@@ -31,10 +31,17 @@ pico_generate_pio_header(usermod_tsbus ${CMAKE_CURRENT_LIST_DIR}/tsbus.pio)
 target_link_libraries(usermod_tsbus INTERFACE
     hardware_dma
     hardware_pio
-    hardware_pwm
     hardware_uart
     hardware_vreg
     pico_multicore
+)
+
+# Every flash erase and program goes through tsbus.c's wrappers, which pause
+# the modem's DMA channels (they touch APB) meanwhile (the 2068's memory reads are
+# answered by DMA, and a stalled APB write holds the DMA up).
+target_link_options(usermod_tsbus INTERFACE
+    -Wl,--wrap=flash_range_erase
+    -Wl,--wrap=flash_range_program
 )
 
 target_link_libraries(usermod INTERFACE usermod_tsbus)

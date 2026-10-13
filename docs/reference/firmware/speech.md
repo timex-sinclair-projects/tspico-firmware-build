@@ -44,7 +44,7 @@ OUT 17,n  -------------------------- core 1 io_snoop -->  spk_pq (64)
                     core 1 speech_pass: when the chip's LRQ says so, the next
                     allophone into sp0256_ald; sp0256_sample() per 10 kHz tick
                                        v
-                    spk_ring (1024 levels) --DMA, timer-paced--> PWM GP46, GP30
+                    spk_ring (1024 levels) --DMA, timer-paced--> PIO2 spk_pwm --> GP46, GP30
 ```
 
 ## `speech.py`
@@ -305,6 +305,12 @@ the file names NRL Report 7948, and maps Wasser's `Anything`/`Nothing`/
 
 - **The audio path:** tones from each PWM channel at the jack, and the ROM
   speech by DMA, sounded as the WAVs did on the Mac.
+- **On board 1 in a 2068 (2026-10-13)** the DMA into the PWM block crashed
+  the 2068 during flash writes and `tpi:` commands that slept on core 0, so
+  the audio moved to two PIO2 state machines (`spk_pwm`: 11 bits, about
+  41 kHz, instead of the PWM block's 12 bits at 61 kHz). It sounded the same
+  to David, and a `tpi:modem` loop then ran 419 commands without a fault
+  ([tsbus.md](tsbus.md#speech)).
 - **The firmware's own speech** (`tsbus.speech`, `tsbus.say` from the REPL):
   two sentences gave 80,157 samples, exactly MAME's count for them, and
   `s_late` stayed 0. Volume 70 % and 15 % were heard, and `say(None)` was
