@@ -619,6 +619,19 @@ The Commander lets you browse with the cursor keys, press **ENTER** to go into a
 mount a file, and use single keys for most TS-Pico commands. Press **?** in the Commander to
 see them all.
 
+**Your own menu.** To have `LOAD ""` load a program of your own at switch-on instead, perhaps
+a menu you've written, save it in a TAP on the card and make that TAP the *auto-mount* file:
+
+```basic
+SAVE "tpi:automount mymenu.tap"
+```
+
+From then on the TS-Pico mounts `mymenu.tap` each time it starts, so the first `LOAD ""` loads
+your program. The name is looked for in the current folder, and the TS-Pico remembers where it
+is, so it doesn't matter which folder you're in later. At switch-on you're still in the top
+folder. If the file has gone from the card, you get the built-in menu. `SAVE "tpi:automount"`
+shows the file, and `SAVE "tpi:automount off"` goes back to the built-in menu.
+
 ## 3.8 Summary
 
 1. `CAT` (or `SAVE "tpi:dir"`) lists files; patterns such as `"*.tap"` narrow it down.
@@ -626,6 +639,7 @@ see them all.
 3. `LOAD "tpi:name.tap"` mounts a file, by name or by index number.
 4. `CAT ""` (or `SAVE "tpi:tapdir"`) shows what's inside the mounted TAP.
 5. `SAVE "tpi:ffw"` and `SAVE "tpi:rew"` move the tape pointer; `SAVE "tpi:close"` ejects.
+6. `SAVE "tpi:automount name.tap"` makes `LOAD ""` load your own program at switch-on.
 
 ---
 
@@ -1627,6 +1641,18 @@ SAVE "tpi:append" CODE 1,0   : REM off (or SAVE "tpi:append off")
 With append on, SAVEs are added to the end of the mounted TAP. **Q**: `No .tap mounted. Append
 failed.` Mounting a file turns append off. See 4.3.
 
+### automount: your own LOAD "" at switch-on
+
+```basic
+SAVE "tpi:automount mymenu.tap"   : REM mount this file at switch-on
+SAVE "tpi:automount"              : REM show it
+SAVE "tpi:automount off"          : REM back to the built-in menu
+```
+
+The file is found from the current folder (`.tap` is added if you leave it out) and kept with
+its whole path; the current folder at switch-on is still the top one. Nothing is mounted now.
+See 3.7. **F**: `Not found:`. **J**: no SD card. The name can be up to 17 characters (1.2).
+
 ### autolf, noautolf, autopg, noautopg, bmp, clprint, opprint, prnsz
 
 The virtual printer's settings. See Chapter 7.
@@ -1727,6 +1753,18 @@ SAVE "tpi:ffw" CODE 3,n      : REM n files, then show the tape
 `tpi:rew` works the same way, backwards. *(verbose)* `Moved ahead to block # 4`,
 `Can't FWD. Already at end.`, `Can't FWD. No later file.`, `No .tap file mounted`. All of these
 are **0 OK**, even with nothing mounted: with verbose off, nothing tells you the tape didn't move.
+
+<!-- v3 -->
+### greet: a greeting at switch-on
+
+```basic
+SAVE "tpi:greet HELLO DAVID"   : REM say this at switch-on (and now)
+SAVE "tpi:greet"               : REM show it
+SAVE "tpi:greet off"           : REM no greeting
+```
+
+Speech, G.8. **A**: a name in `[...]` that isn't an allophone.
+<!-- /v3 -->
 
 ### help
 
@@ -2258,6 +2296,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:3"` |
 | Pick a file to mount |  | `SAVE "tpi:idir"` |
 | Unmount |  | `SAVE "tpi:close"` |
+| Your own `LOAD ""` at switch-on |  | `SAVE "tpi:automount menu.tap"` |
 | Wind the tape |  | `SAVE "tpi:ffw"` / `SAVE "tpi:rew"` |
 | Add SAVEs to the mounted TAP |  | `SAVE "tpi:append on"` |
 | Save a single file | `SAVE "f:x.bas"` |  |
@@ -2280,6 +2319,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 <!-- v3 -->
 | Modem state and mode |  | `SAVE "tpi:modem"`, `SAVE "tpi:modem 2050"` |
 | Speak |  | `SAVE "tpi:say HELLO"`, `SAVE "tpi:say"` to stop |
+| A greeting at switch-on |  | `SAVE "tpi:greet HELLO"`, `SAVE "tpi:greet off"` |
 <!-- /v3 -->
 
 ---
@@ -2300,12 +2340,12 @@ the SD card). It's a single line of text:
 
 <!-- v2 -->
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": ""}
 ```
 <!-- /v2 -->
 <!-- v3 -->
 ```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": ""}
 ```
 <!-- /v3 -->
 
@@ -2324,6 +2364,7 @@ the SD card). It's a single line of text:
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
 | `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3.1"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
+| `AUTOMOUNT` | The TAP mounted at switch-on, so `LOAD ""` loads it (3.7); `""` is none | `""` |
 <!-- v2 -->
 | `LED_BRIGHTNESS` | Not used on the TS-Pico 2.x | `5` |
 <!-- /v2 -->
@@ -2335,6 +2376,7 @@ the SD card). It's a single line of text:
 | `SPEECH_VOLUME` | How loud the speech is, 0-100 (%) | `35` |
 | `SPEECH_RATE` | The speech's speed, 50-150 (%); its pitch moves with it | `100` |
 | `SPEECH_PORTS` | Programs can speak through ports 17 and 37 (Appendix G) | `true` |
+| `SPEECH_GREETING` | What the card says at switch-on (G.8); `""` is nothing | `""` |
 <!-- /v3 -->
 
 <!-- v2 -->
@@ -2610,10 +2652,26 @@ licence). The spelling-to-sound rules are the US Naval Research Laboratory's (NR
 7948, 1976), as John A. Wasser coded them in 1985; both are public domain. The details are in
 the `NOTICE` file on the project's GitHub.
 
-## G.8 Summary
+## G.8 A greeting at switch-on
+
+The card can say something each time the 2068 starts:
+
+```basic
+SAVE "tpi:greet HELLO DAVID"
+```
+
+You hear it at once, and from then on at every switch-on. It's said only when the 2068 starts
+its own ROM: not after `tpi:boot` has picked another ROM for one start, and not with a
+cartridge in the DOCK slot (Chapter 8). `SAVE "tpi:greet"` shows it, and
+`SAVE "tpi:greet off"` stops it; there's no greeting until you set one. From BASIC it can be
+about 22 characters (1.2); for a longer one, set `SPEECH_GREETING` in `config.ini`
+(Appendix D).
+
+## G.9 Summary
 
 1. `SAVE "tpi:say TEXT"` speaks, while the 2068 carries on; `SAVE "tpi:say"` stops.
 2. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
 3. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
 4. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
+5. `SAVE "tpi:greet TEXT"` makes the card say hello at switch-on.
 <!-- /v3 -->

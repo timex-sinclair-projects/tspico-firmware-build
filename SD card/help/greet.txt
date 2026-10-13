@@ -1,0 +1,18 @@
+TS-Pico Command            GREET
+--------------------------------
+SAVE "tpi:greet"[ text]
+
+The v3 card's greeting: said at
+switch-on when the 2068 starts
+its own ROM (not after a one-
+shot tpi:boot or with a
+cartridge in the DOCK).
+text: say it now, and from now
+  on at switch-on
+off:  no greeting (the default)
+No text: shows the greeting
+Saved in config.ini
+(SPEECH_GREETING), which takes a
+longer one than BASIC can send.
+
+See also: config

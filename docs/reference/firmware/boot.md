@@ -117,7 +117,7 @@ because the `with` block assigns it; nothing reads it. Harmless.
 ## `config.ini`
 
 `/config.ini` on the Pico's flash, JSON despite the extension — one
-object, sixteen keys. The shipped file is
+object, eighteen keys. The shipped file is
 [`src/config.ini`](../../../src/config.ini); the web updater writes it to
 the flash with the other Pico files (`web-updater/build-payload.sh`), as
 the release bundle's instructions do — replacing whatever settings the
@@ -145,6 +145,8 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | SPEECH_VOLUME | int 0–100 | 35 | the v3 card's speech volume, % (v2 ignores the speech keys) | `LOAD_CONFIG` → `board.speech_start` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced) |
 | SPEECH_RATE | int 50–150 | 100 | the speech chip's speed, %; its pitch moves with it | as `SPEECH_VOLUME` | as `SPEECH_VOLUME` |
 | SPEECH_PORTS | bool | `true` | OUT 17 / IN 37 answered, as David's speech board | as `SPEECH_VOLUME` | as `SPEECH_VOLUME` |
+| SPEECH_GREETING | str | `""` | said at power-on when the 2068 starts its own ROM (flash slot 1, default DOCK, no one-shot); `""`, none | `TS2068_IO`, after `board.speech_start` | `LOAD_CONFIG` (default, or a non-string replaced), `GREET` (`tpi:greet`) |
+| AUTOMOUNT | str | `""` | a `.tap` mounted at power-on, its path from the card's top folder (`/GAMES/menu.tap`), so `LOAD ""` loads it instead of the menu; `""`, none. Both boards | `TS2068_IO` → `AUTO_MOUNT` | `LOAD_CONFIG` (default, or a non-string replaced), `AUTOMOUNT` (`tpi:automount`) |
 
 **The one-shot boot.** `tpi:boot CODE m,s` writes `ROM_SLOT = s` and
 `ROM_SM`'s low bits `= m` ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).

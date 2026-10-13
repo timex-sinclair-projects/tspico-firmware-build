@@ -1,11 +1,11 @@
 # TS/tspico.py (part 6) — the `tpi:` commands
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
-2535–2612 (`DIR`), 3451–3860 (`IDIR` … `SA_NOT_IMP`), 3925–4166
-(`APPEND`, `BLKRCV`), 4258–4795 (`CDIR` … `GETLOG`), 4906–5269
-(`LOGLEVEL` … `MEMDOCK`), 5272–5332 (`MODEM`), 5352–5428 (`REW`), 5568–5795 (`BAD_CODE` …
-`NOP`) and 5907–5983 (the printer settings); the dispatch table
-`SA_funct` at 6418–6470, inside `TS2068_IO`.
+2535–2612 (`DIR`), 3452–3861 (`IDIR` … `SA_NOT_IMP`), 3926–4167
+(`APPEND`, `BLKRCV`), 4259–4797 (`CDIR` … `GETLOG`), 4912–5275
+(`LOGLEVEL` … `MEMDOCK`), 5278–5338 (`MODEM`), 5439–5515 (`REW`), 5655–5914 (`BAD_CODE` …
+`NOP`) and 6026–6102 (the printer settings); the dispatch table
+`SA_funct` at 6543–6597, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -28,38 +28,40 @@ where the manual and the code differ, the entries below say so.
 | Symbol | Line | Command(s) |
 |---|---|---|
 | `DIR(pre, cmd)` | 2535 | `tpi:dir` |
-| `IDIR(pre, cmd)` | 3451 | `tpi:idir` |
-| `PATH(pre, cmd)` | 3678 | `tpi:path` |
-| `TAPDIR(pre, cmd)` | 3710 | `tpi:tapdir` |
-| `NEW_TAP(pre, cmd)` | 3794 | `tpi:newtap` |
-| `SA_NOT_IMP(pre, cmd)` | 3857 | the seven reserved words |
-| `APPEND(pre, cmd)` | 3925 | `tpi:append` |
-| `BLKRCV(pre, cmd)` | 3990 | `tpi:blkrcv` |
-| `CDIR(pre, cmd)` | 4258 | `tpi:cd` |
-| `FWD(pre, cmd)` | 4317 | `tpi:ffw` |
-| `GETHELP(pre, cmd)` | 4412 | `tpi:help` |
-| `GETINFO(pre, cmd)` | 4579 | `tpi:info` |
-| `GETLOG(pre, cmd)` | 4668 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 4906 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 4965 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5090 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5195 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 5272 | `tpi:modem` |
-| `SAY(pre, cmd)` | 5305 | `tpi:say` |
-| `REW(pre, cmd)` | 5352 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5568 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5573 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5578 | `tpi:rm` |
-| `RM_CHECK(name)` | 5624 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5642 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5670 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5724 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5778 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 5907 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 5928 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 5939 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 5952 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 5970 | `tpi:bmp` |
+| `IDIR(pre, cmd)` | 3452 | `tpi:idir` |
+| `PATH(pre, cmd)` | 3679 | `tpi:path` |
+| `TAPDIR(pre, cmd)` | 3711 | `tpi:tapdir` |
+| `NEW_TAP(pre, cmd)` | 3795 | `tpi:newtap` |
+| `SA_NOT_IMP(pre, cmd)` | 3858 | the seven reserved words |
+| `APPEND(pre, cmd)` | 3926 | `tpi:append` |
+| `BLKRCV(pre, cmd)` | 3991 | `tpi:blkrcv` |
+| `CDIR(pre, cmd)` | 4259 | `tpi:cd` |
+| `FWD(pre, cmd)` | 4318 | `tpi:ffw` |
+| `GETHELP(pre, cmd)` | 4413 | `tpi:help` |
+| `GETINFO(pre, cmd)` | 4581 | `tpi:info` |
+| `GETLOG(pre, cmd)` | 4670 | `tpi:log` |
+| `LOGLEVEL(pre, cmd)` | 4912 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 4971 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 5096 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5201 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 5278 | `tpi:modem` |
+| `SAY(pre, cmd)` | 5311 | `tpi:say` |
+| `GREET(pre, cmd)` | 5341 | `tpi:greet` |
+| `AUTOMOUNT(pre, cmd)` | 5380 | `tpi:automount` |
+| `REW(pre, cmd)` | 5439 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5655 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5660 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5665 | `tpi:rm` |
+| `RM_CHECK(name)` | 5711 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5729 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5789 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5843 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5897 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6026 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6047 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6058 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6071 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 6089 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -82,7 +84,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6415–6416) says (until #181 it
+   trailing space, as the comment above it (6540–6541) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -135,8 +137,8 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6418) as a literal dictionary; `PROCESS_CMD`
-receives it as an argument. 48 words, 31 handlers here and 9 in
+Built in `TS2068_IO` (6543) as a literal dictionary; `PROCESS_CMD`
+receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
 
@@ -169,6 +171,8 @@ applies (the word is not in `SD_FREE`).
 | `tpi:memdock` | MEMDOCK | no | the same | the same |
 | `tpi:modem` | MODEM | no | none: show; `tpi:modem 2050`, `hayes` or `off` | `SEND_MSG`; the show form shown |
 | `tpi:say` | SAY | no | text, `[allophones]`, or nothing (stop) | `SEND_MSG` (not shown, unless an error) |
+| `tpi:greet` | GREET | no | none: show; text, or `off` | `SEND_MSG`; the show form shown |
+| `tpi:automount` | AUTOMOUNT | no (looks itself) | none: show; a `.tap` name or path, or `off` | `SEND_MSG`; the show form shown |
 | `tpi:nop` | NOP | no | — | `01h` |
 | `tpi:path` | PATH | no | no `CODE`: the folder; `CODE 1,0`: the mounted file | `SEND_MSG`, shown |
 | `tpi:rew` | REW | no | as `tpi:ffw`, backwards | as `tpi:ffw` |
@@ -426,7 +430,7 @@ Z80's loop is running and will read to the end; from there the fast
 `put()` is kept, because `CMD_PUT`'s check on every byte would eat into
 the 33 µs. A 2068 reset in the middle of the write loop still leaves the
 Pico in `put()` on the non-DMA paths — and a half-written slot, which
-needs a power cycle anyway (the comment at 4028–4053).
+needs a power cycle anyway (the comment at 4029–4054).
 
 Beware:
 
@@ -531,7 +535,7 @@ says), `expandKeywords` off.
   then every `SAVE` command with its `CODE` options, 32-column lines,
   three pages with their own headings — and, if external commands are
   loaded, a list of their words. Status 1. The summary is a literal in
-  the code (4495–4548); it must be kept in step with this table by hand.
+  the code (4496–4550); it must be kept in step with this table by hand.
 - **`?`**: the topics: every `*.txt` in `/sd/help` (sorted, without the
   extension, names starting with `.` skipped), packed into 32-column
   lines.
@@ -549,7 +553,7 @@ in a `try`) and gives it back before answering; the card gate has already
 probed for a card, since a topic needs one (`SD_NEEDED`'s special case).
 An error in `os.ilistdir` or `ACTIVATE_SD` reaches `FAIL_CMD`, Report J.
 The help files are written for the 2068's screen: short lines, CR, LF or
-CR LF line ends (the comment at 4417–4419). Error statuses are logged.
+CR LF line ends (the comment at 4418–4420). Error statuses are logged.
 
 ### `GETINFO(pre, cmd)`
 
@@ -630,7 +634,7 @@ middle of a UTF-8 sequence) "Couldn't read the log file", Report Q,
 logged. The buffer is dropped before `SEND_MSG2` builds its pages. LED on,
 off in a `finally`.
 
-Why the `try` covers only the read (the comment at 4749–4767; 2026-09-30
+Why the `try` covers only the read (the comment at 4751–4769; 2026-09-30
 audit): it was a bare `except:` around the read **and** `SEND_MSG2`. A
 BREAK at the "Scroll?" prompt raises `CmdAbort`, a `BaseException`, which
 a bare `except:` catches: `GETLOG` ate the BREAK and then sent "Log file
@@ -902,6 +906,56 @@ There is no `CODE` form; the volume and the rate are `config.ini`'s
 (`SPEECH_VOLUME`, `SPEECH_RATE`). `board_v3_hosttest.py` pins `board.say`;
 the command from BASIC is untested *(unverified)*: it waits for the card in a
 2068.
+
+### `GREET(pre, cmd)`
+
+`tpi:greet`: what the v3 card says at power-on, `config.ini`'s
+`SPEECH_GREETING`. `TS2068_IO` says it only when the 2068 is starting its
+own ROM: flash slot 1, the default DOCK, not a one-shot `tpi:boot`
+([tspico-dispatch.md](tspico-dispatch.md#the-rom-and-bank-state-machines)).
+Not in the card gate (`SD_FREE`). Off by default (David, 2026-10-13).
+
+- No `board.HAS_SPEECH` (v2): "No speech on this board", shown, Report F.
+- No argument: "Greeting: *text*", or "Greeting: off", shown, 0 OK.
+- `off` (any case): saved as `""`.
+- Any other text (`getArgs`, stripped, case kept) is said now with
+  `board.say`, so it is heard and a `[NAME]` that isn't an allophone is
+  caught: `BAD_ARG("GREET", name)` / "Not an SP0256 allophone", Report A,
+  nothing saved. If speech didn't start (`OSError`), it is saved all the
+  same.
+- Saved as `SPEECH_GREETING` (`config.ini` read, changed, written back, as
+  `MODEM`): "Greeting: *text*" or "Greeting: off", `SEND_MSG` (not shown),
+  logged at 0, 0 OK.
+
+From BASIC the greeting is limited by the ROM's 31-character `tpi:` name:
+about 22 characters. `config.ini` takes a longer one. There is no `CODE`
+form. `board_v3_hosttest.py` pins the answers and the saved key.
+
+### `AUTOMOUNT(pre, cmd)`
+
+`tpi:automount`: the `.tap` mounted at power-on, `config.ini`'s
+`AUTOMOUNT`, so the first `LOAD ""` loads it instead of the built-in menu;
+a user's own menu program, say. Both boards. `AUTO_MOUNT` mounts it at
+boot ([tspico-files.md](tspico-files.md#auto_mountname)). In `SD_FREE`:
+showing and switching off need no card, and setting one looks for the file
+through `SD_CALL` itself.
+
+- No argument: "Auto-mount: *path*", or "Auto-mount: off", shown, 0 OK.
+- `off` (any case): saved as `""`.
+- A name or a path: `.tap` added if it doesn't end so (any case), then
+  resolved from the current folder (`catalog.resolve(TSP.cur_path, …)`).
+  With the card (`SD_CALL`), it must exist: "Not found: " and the name,
+  Report F, nothing saved; a path out of the top folder is the same. No
+  card: `SD_CALL`'s `NO_CARD_MSG`, Report J. Saved as its public path from
+  the top folder (`catalog.public`, `/GAMES/menu.tap`), so it doesn't
+  depend on the current folder at boot.
+- Saved as `AUTOMOUNT`: "Auto-mount: *path*" or "Auto-mount: off",
+  `SEND_MSG` (not shown), logged at 0, 0 OK.
+
+It doesn't mount the file now and doesn't change the current folder. From
+BASIC the name is limited by the ROM's 31-character `tpi:` name: 17
+characters. There is no `CODE` form. `board_v3_hosttest.py` pins the
+answers, the saved path and the card handling.
 
 ### `REW(pre, cmd)`
 
