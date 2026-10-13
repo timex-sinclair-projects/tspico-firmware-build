@@ -214,7 +214,7 @@ static volatile bool modem_wake, modem_touched, modem_line_up;
 #define SPK_MID (SPK_TOP / 2)
 #define SPK_AHEAD (SPK_RING_N - 32)          // how far ahead of the DMA core 1 fills
 #define SPK_PER_PASS 4                       // samples per pass of core 1's loop, at most
-#define SPK_Q_N 256
+#define SPK_Q_N 1024                         // allophones queued: about 100 s of speech
 static uint16_t spk_ring[SPK_RING_N] __attribute__((aligned(1u << SPK_RING_BITS)));
 static uint32_t spk_fill;                    // core 1: the ring index it writes next (free-running)
 static sp0256_t spk_chip;                    // core 1's, once speech_on

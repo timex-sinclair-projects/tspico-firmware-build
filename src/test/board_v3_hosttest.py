@@ -97,11 +97,20 @@ def fake_tsbus():
     for name in ("modem", "modem_mode", "modem_pace", "modem_line"):
         setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
     t.modem_poll = lambda: POLL[0]
+    # Speech: what board_v3's speech_start and say call.
+    for name in ("speech", "speech_volume"):
+        setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
+
+    def say(al):
+        CALLS.append(("say", None if al is None else bytes(al)))
+        return 0 if al is None else min(len(al), SAY_ROOM[0])
+    t.say = say
     t.stats = lambda: {"m_state": STATE[0], "m_dials": 3, "m_connects": 2}
     return t
 
 
 POLL = [0]       # what tsbus.modem_poll() returns
+SAY_ROOM = [1024]  # how many allophones tsbus.say() takes
 STATE = [0]      # m_state in tsbus.stats()
 
 
@@ -727,6 +736,33 @@ def main():
           "no SD line touched, no SPI: only the switch read (%r)" % got)
     check(t.TSP.sd_present is False and logs and "detect switch" in logs[-1],
           "sd_present False; logged as a card that went (%r)" % logs[-1:])
+
+    # Speech: speech_start turns the chip on at a rate and volume and reads
+    # /speech.txt; say converts text and queues it, or stops.
+    print("speech")
+    sys.path.insert(0, os.path.join(HERE, ".."))
+    from TS import speech
+    take()
+    n = b3.speech_start(40, 90)
+    got = take()
+    check(got == [("speech", True, 90), ("speech_volume", 40)] and n == 0,
+          "speech_start: tsbus.speech(True, rate), then the volume; no /speech.txt (%r)" % got)
+    q, n = b3.say("Hello.")
+    got = take()
+    check(got == [("say", bytes(speech.allophones("Hello.")))] and q == n == len(speech.allophones("Hello.")),
+          "say: the text's allophones, queued (%d)" % n)
+    check(b3.say("  ") == (0, 0) and take() == [("say", None)], "say with nothing: stop now")
+    SAY_ROOM[0] = 3
+    q, n = b3.say("Press any key to continue.")
+    take()
+    check(q == 3 and n > 3, "a full queue: (queued, in the text) tells the caller (%d of %d)" % (q, n))
+    SAY_ROOM[0] = 1024
+    try:
+        b3.say("[HH1 NOPE]")
+        raised = False
+    except ValueError:
+        raised = True
+    check(raised and take() == [], "an unknown allophone name: ValueError, nothing queued")
 
     print()
     if FAILS:

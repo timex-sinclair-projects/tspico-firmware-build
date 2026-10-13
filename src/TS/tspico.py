@@ -2727,7 +2727,7 @@ SD_FREE = frozenset((
     "TPI:DOCK", "TPI:MEMDOCK", "TPI:ZX48", "TPI:NOP", "TPI:PATH", "TPI:CLOSE",
     "TPI:TAPDIR", "TPI:FFW", "TPI:REW", "TPI:APPEND", "TPI:BLKRCV", "TPI:CHCLOSE",
     "TPI:AUTOLF", "TPI:NOAUTOLF", "TPI:AUTOPG", "TPI:NOAUTOPG", "TPI:BMP", "TPI:PRNSZ",
-    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST", "TPI:MODEM",
+    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST", "TPI:MODEM", "TPI:SAY",
     "TPI:MEMINFO", "TPI:STOP"))
 
 # Commands the fdd ROM sends in the middle of a BASIC statement (OPEN #,
@@ -4824,6 +4824,8 @@ def LOAD_CONFIG():
     default_values["MODEM_MODE"] = "2050"                      # the v3 card's TS2050 modem: "2050", "hayes" or "off" (tpi:modem); v2 ignores it
     default_values["MODEM_BAUD"] = 300                         # ... received characters paced to this (0: none)
     default_values["MODEM_IDLE_MIN"] = 10                      # ... the ESP32 off after this many minutes unused
+    default_values["SPEECH_VOLUME"] = 35                       # the v3 card's speech (tpi:say): volume, % (v2 ignores both)
+    default_values["SPEECH_RATE"] = 100                        # ... the chip's speed, %: 50-150; its pitch moves with it
     default_values["FW_VERSION"] = FW_VERSION
     default_values["ROM_VERSION"] = ROM_VERSION                # the ROM this firmware ships with
     # Fill any missing values with the default
@@ -4862,7 +4864,9 @@ def LOAD_CONFIG():
     # minute to a day. Anything else is logged and replaced, as above.
     for key, ok in (("MODEM_MODE", lambda v: v in ("2050", "hayes", "off")),
                     ("MODEM_BAUD", lambda v: type(v) is int and 0 <= v <= 115200),
-                    ("MODEM_IDLE_MIN", lambda v: type(v) is int and 1 <= v <= 1440)):
+                    ("MODEM_IDLE_MIN", lambda v: type(v) is int and 1 <= v <= 1440),
+                    ("SPEECH_VOLUME", lambda v: type(v) is int and 0 <= v <= 100),
+                    ("SPEECH_RATE", lambda v: type(v) is int and 50 <= v <= 150)):
         if not ok(init_values[key]):
             LOG("Incorrect %s %r. Using default value of %r instead"
                 % (key, init_values[key], default_values[key]), 2)
@@ -5293,6 +5297,36 @@ def MODEM(pre, cmd):                                                  # The v3 c
         LOG(msg, 0)
     else:
         SEND_MSG(BAD_ARG("MODEM", arg), "Use 2050, hayes or off", _8_A_Invalid_arg)
+    return
+
+
+def SAY(pre, cmd):                                                    # The v3 card's speech
+
+    # SAVE "tpi:say HELLO, I AM YOUR TIMEX"  - Speak English, after anything still being said
+    # SAVE "tpi:say [HH1 EH LL OW]"          - Speak SP0256-AL2 allophones by name
+    # SAVE "tpi:say"                         - Stop speaking at once
+    #
+    # Returns at once: the card speaks while the 2068 carries on.
+    # docs/v3-speech-proposal.md.
+
+    TLM("SAY enter")
+    if not board.HAS_SPEECH:
+        SEND_MSG("No speech on this board", "", _3_F_Invalid_file, True)
+        return
+    text = getArgs(cmd)
+    try:
+        queued, n = board.say(text)
+    except ValueError as e:                                           # [NAME] that isn't an allophone
+        SEND_MSG(BAD_ARG("SAY", str(e)), "Not an SP0256 allophone", _8_A_Invalid_arg)
+        return
+    except OSError as e:                                              # speech didn't start at boot
+        SEND_MSG("Speech is off", repr(e), _3_F_Invalid_file, True)
+        return
+    if queued < n:
+        SEND_MSG("Said the first %d of %d sounds" % (queued, n), "The rest didn't fit", _1_OK)
+    else:
+        SEND_MSG("Stopped" if n == 0 else "Saying %d sounds" % n, "", _1_OK)
+    TLM("SAY exit", "queued=%d of %d" % (queued, n))
     return
 
 
@@ -6352,6 +6386,13 @@ def TS2068_IO():                                                         # Main 
     if board.HAS_MODEM:                                                # v3: the 8251 answered from now; the ESP32 stays off
         board.modem_start(init_values["MODEM_MODE"], init_values["MODEM_BAUD"],
                           init_values["MODEM_IDLE_MIN"])
+    if board.HAS_SPEECH:                                               # v3: the speech chip on core 1, silent until tpi:say
+        try:
+            n = board.speech_start(init_values["SPEECH_VOLUME"], init_values["SPEECH_RATE"])
+            if n:
+                LOG("Speech: %d words from /speech.txt" % n, 1)
+        except Exception as e:                                         # never stops the boot
+            LOG("Speech not started: %r" % e, 2)
     if note:                                                           # v3: the boot slot was empty
         LOG("Boot ROM: " + note, 2)                                   # kept at the default LOG_LEVEL
     
@@ -6398,6 +6439,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:DOCK" : MEMDOCK,
         "TPI:MEMDOCK" : MEMDOCK,
         "TPI:MODEM" : MODEM,
+        "TPI:SAY" : SAY,
         "TPI:NOP" : NOP,                                                                      # This is to test Ryan's new Commander
         "TPI:PATH" : PATH,
         "TPI:REW" : REW,
