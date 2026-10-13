@@ -165,12 +165,19 @@ Other characters are dropped.
 
 ### `allophones(text)`
 
-Text to a `bytearray` of allophone numbers, always ending in PA5:
+Text to a `bytearray` of allophone numbers, always ending in a pause:
 - `[...]` gives the names inside it, as they are (spaces or commas between
   them, any case); a name that isn't an allophone is `ValueError`;
 - `. ! ? ;` gives PA5, `,` PA4;
 - PA2 goes between words, unless a pause is already there;
-- each word goes through `word_phonemes`, `phonemes` and `word_allophones`.
+- each word goes through `word_phonemes`, `phonemes` and `word_allophones`;
+- the end: nothing more if the last thing is already a pause (PA5 after
+  `. ! ? ;`, PA4 after `,`, or a pause in `[...]`); after a word, PA2,
+  the gap between words; nothing at all to say, PA5. So text sent in
+  pieces, as BASIC must (a `tpi:` name holds 23 characters of it), joins as
+  the whole sentence would: `"Press any key"` then `"to continue."` gives
+  the same allophones as the sentence in one (`speech_hosttest.py`). Until
+  2026-10-13 every piece ended in PA5, a 200 ms gap at each join.
 
 On the card a sentence takes 20–40 ms (MicroPython from source on board 2,
 2026-10-12; frozen bytecode is quicker). On 5,000 dictionary words it gives
