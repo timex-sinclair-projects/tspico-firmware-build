@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1387–2168,
-2501–2533, 3703–3708, 3864–3923, 4168–4255, 4402–4409, 5150–5193,
-5335–5349, 5431–5496 and 5651–5667 (firmware 2.3).
+2501–2533, 3704–3709, 3865–3924, 4169–4256, 4403–4410, 5155–5198,
+5421–5435, 5517–5582 and 5737–5753 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -47,20 +47,21 @@ document it is linked, not restated: the pitfalls are in
 | `CLEAR_LOG()` | 2148–2166 | truncate `/activity.log` |
 | `WALK(top)` | 2501–2514 | recursive folder walk (generator) |
 | `GET_DIRS(path='/sd/TAP')` | 2517–2532 | every folder on the card, sorted, as public paths |
-| `isTapMounted()` | 3703–3707 | is the mounted file a `.tap`? |
-| `dir_exists(filename)` | 3864–3868 | `os.stat` says directory |
-| `file_exists(filename)` | 3871–3875 | `os.stat` says not a directory |
-| `public_path(n=0)` | 3892–3904 | `TSP.cur_path` without `/sd`, optionally shortened |
-| `public_fname(n=0)` | 3907–3922 | `TSP.f_name` without `/sd`, optionally shortened |
-| `ChangeDir(potential_new_path, SDactive=False)` | 4168–4255 | the rules of `tpi:cd` / `MOVE TO` |
-| `getArgs(cmd)` | 4402–4409 | the text after the command word |
-| `getBoot()` | 5150–5158 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5161–5169 | (memory, slot) in the DOCK |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5172–5192 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5335–5349 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5431–5451 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5454–5496 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 5651–5667 | nothing mounted: clear the fields, delete the flash copies |
+| `isTapMounted()` | 3704–3708 | is the mounted file a `.tap`? |
+| `dir_exists(filename)` | 3865–3869 | `os.stat` says directory |
+| `file_exists(filename)` | 3872–3876 | `os.stat` says not a directory |
+| `public_path(n=0)` | 3893–3905 | `TSP.cur_path` without `/sd`, optionally shortened |
+| `public_fname(n=0)` | 3908–3923 | `TSP.f_name` without `/sd`, optionally shortened |
+| `ChangeDir(potential_new_path, SDactive=False)` | 4169–4256 | the rules of `tpi:cd` / `MOVE TO` |
+| `getArgs(cmd)` | 4403–4410 | the text after the command word |
+| `getBoot()` | 5155–5163 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5166–5174 | (memory, slot) in the DOCK |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5177–5197 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 5421–5435 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5517–5537 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5540–5582 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 5737–5753 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 5756–5785 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -425,7 +426,7 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 `NEW_TAP`, [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file and the mount of
 a newly saved file when nothing was mounted ([part 3](tspico-dispatch.md),
-lines 6912 and 6929, inside a `try` because the card may have gone).
+lines 6912 and 7057, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -601,9 +602,9 @@ and the user retries; waiting for ever costs the session. The caller picks
 the limit from what the Z80 tolerates at that point; a normal log write takes
 a few tens of milliseconds.
 
-Callers: `COPY_FILE` (3021); the main loop before a SAVE, a LOAD and a
-headerless LOAD (3021 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7387), because the ZX ROM waits
+Callers: `COPY_FILE` (3022); the main loop before a SAVE, a LOAD and a
+headerless LOAD (3022 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
+inline 3 s wait of the same shape (line 7515), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
@@ -913,9 +914,43 @@ Nothing is mounted any more: `TSP.f_name = ""`, `TSP.offset_tbl = []`,
 is missing must not keep the other. Sends nothing and touches only the
 Pico's flash.
 
-Callers: `UNMOUNT` (`tpi:close`), and [`SD_REVALIDATE`](tspico-bus.md) when
-the mounted file is not on the card that has just appeared.
+Callers: `UNMOUNT` (`tpi:close`), [`SD_REVALIDATE`](tspico-bus.md) when
+the mounted file is not on the card that has just appeared, and
+`AUTO_MOUNT` when its file can't be mounted.
 
 Beware: `TSP.totlen` keeps its old value *(inferred)*. After it `TSP.f_name`
 is `""`, not the boot-time `[]`; both are falsy, and `BOOT_SLOT_CLASH`'s
 `isinstance(f_name, str)` then falls through on the extension test instead.
+
+### `AUTO_MOUNT(name)`
+
+Mounts `config.ini`'s `AUTOMOUNT` at boot, so the first `LOAD ""` loads that
+file instead of the flash's `nofile.tap` menu. `name` is a path from the
+card's top folder, as `tpi:automount` saves it (`/GAMES/menu.tap`); a
+hand-edited one without the leading `/` resolves the same way.
+
+Called once, from `TS2068_IO`, with the card mounted and the MQ not yet
+started, after `BLINK_LED` has stopped
+([tspico-dispatch.md](tspico-dispatch.md)). It does what `MOUNT_FILE` does
+for a `.tap`, but sends nothing and leaves the SD and the MQ alone:
+`MOUNT_FILE` ends with `DEACTIVATE_SD`/`ACTIVATE_MQ`, and when a mount fails
+with nothing mounted it calls `UNMOUNT`, whose `SEND_MSG("Unmounting file.
+")` would be an orphan ahead of the boot's status pre-load.
+
+1. `catalog.resolve(catalog.ROOT, name)`. `None` (a path out of the top
+   folder), a name not ending `.TAP` (any case), or no such file: fails.
+2. The first 7 bytes are `ZXTape!` (a TZX): fails.
+3. `COPY_FILE(real, "/TMP/temp.tap")`; `False`: fails.
+4. `TSP.f_name = real`, `TSP.totlen` the file's size, `TSP.append = False`,
+   `OFF_TABLE()`: the block table, pointer at 0.
+
+Any failure (an exception from any step too) calls `FORGET_MOUNT` and logs
+"Auto-mount *name*: *why*; LOAD "" gives the menu" at level 1; returns
+`False`. Success logs "Auto-mounted *name*" at 0 and returns `True`.
+`TSP.cur_path` is not touched: the current folder at power-on stays the
+top one (David's choice, 2026-10-13).
+
+Beware: a file renamed or deleted on the card afterwards is caught by
+`SD_REVALIDATE` only when the card is seen to change; until then the
+flash copy loads *(inferred)*. `board_v3_hosttest.py` pins the mount, the
+failures and that nothing reaches the MQ.

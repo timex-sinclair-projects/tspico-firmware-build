@@ -764,6 +764,100 @@ def main():
         raised = True
     check(raised and take() == [], "an unknown allophone name: ValueError, nothing queued")
 
+    # The greeting and the auto-mount (config.ini's SPEECH_GREETING and
+    # AUTOMOUNT, set by tpi:greet and tpi:automount; TS2068_IO uses both).
+    print("tpi:greet")
+    sent_g = []
+    t.SEND_MSG = lambda msg, msg1, st, force=False: sent_g.append((msg, msg1, st))
+    t.board = board
+
+    def cfg():
+        with open("config.ini") as f:
+            return json.load(f)
+
+    with open("config.ini", "w") as f:
+        json.dump({"ROM_SLOT": 1, "ROM_SM": 10}, f)
+    t.GREET(bytes(10), "tpi:greet")
+    check(sent_g[-1] == ("Greeting: off", "", t._1_OK), "no greeting: shown as off (%r)" % sent_g[-1:])
+    take()
+    t.GREET(bytes(10), "tpi:greet Hello David")
+    check(cfg()["SPEECH_GREETING"] == "Hello David" and sent_g[-1] == ("Greeting: Hello David", "", t._1_OK),
+          "tpi:greet TEXT: saved, 0 OK (%r)" % sent_g[-1:])
+    check(take() == [("say", bytes(speech.allophones("Hello David")))], "  and said now")
+    t.GREET(bytes(10), "tpi:greet")
+    check(sent_g[-1][0] == "Greeting: Hello David", "tpi:greet: shown")
+    t.GREET(bytes(10), "tpi:greet [HH1 NOPE]")
+    check(sent_g[-1][2] == t._8_A_Invalid_arg and cfg()["SPEECH_GREETING"] == "Hello David",
+          "an unknown allophone: Report A, the greeting kept")
+    t.GREET(bytes(10), "tpi:greet OFF")
+    check(cfg()["SPEECH_GREETING"] == "" and sent_g[-1][0] == "Greeting: off", "tpi:greet off: none")
+    take()
+    for key, bad, good in (("SPEECH_GREETING", 5, ""), ("AUTOMOUNT", None, "")):
+        with open("config.ini", "w") as f:
+            json.dump({"ROM_SLOT": 1, "ROM_SM": 10, key: bad}, f)
+        got = t.LOAD_CONFIG()[key]
+        check(got == good, "LOAD_CONFIG: %s %r replaced by %r" % (key, bad, got))
+
+    print("tpi:automount")
+    tap_root = os.path.join(d, "TAP")
+    os.makedirs(os.path.join(tap_root, "GAMES"))
+    menu = bytes([19, 0, 0]) + bytes(20)
+    with open(os.path.join(tap_root, "GAMES", "menu.tap"), "wb") as f:
+        f.write(menu)
+    with open(os.path.join(tap_root, "x.tap"), "wb") as f:
+        f.write(b"ZXTape!\x1a")
+    t.catalog.ROOT = tap_root
+    t.TSP = types.SimpleNamespace(cur_path=os.path.join(tap_root, "GAMES"), sd_present=True, f_name="",
+                                  offset_tbl=[], offset=0, tap_idx=0, append=True, totlen=0)
+    saved_sd = (t.ACTIVATE_SD, t.DEACTIVATE_SD, t.ACTIVATE_MQ)
+    t.ACTIVATE_SD = act_sd
+    t.DEACTIVATE_SD = lambda: mounts.append("umount")
+    t.ACTIVATE_MQ = lambda: mounts.append("mq")
+    mounts[:] = []
+    t.AUTOMOUNT(bytes(10), "tpi:automount")
+    check(sent_g[-1] == ("Auto-mount: off", "", t._1_OK), "none: shown as off")
+    t.AUTOMOUNT(bytes(10), "tpi:automount menu")
+    check(cfg()["AUTOMOUNT"] == "/GAMES/menu.tap" and sent_g[-1] == ("Auto-mount: /GAMES/menu.tap", "", t._1_OK),
+          "tpi:automount menu: .tap added, saved from the top folder (%r)" % sent_g[-1:])
+    check(mounts == ["mount", "umount", "mq"], "  the card looked at, then the bus back to the MQ (%r)" % mounts)
+    t.AUTOMOUNT(bytes(10), "tpi:automount nope.tap")
+    check(sent_g[-1] == ("Not found: ", "nope.tap", t._3_F_Invalid_file) and cfg()["AUTOMOUNT"] == "/GAMES/menu.tap",
+          "a file that isn't there: Report F, the setting kept")
+    t.AUTOMOUNT(bytes(10), "tpi:automount ../../../x.tap")
+    check(sent_g[-1][2] == t._3_F_Invalid_file, "  nor a path out of the card's top folder")
+    no_card[0] = True
+    t.TSP.sd_present = False                                # as ACTIVATE_SD leaves it
+    t.AUTOMOUNT(bytes(10), "tpi:automount menu.tap")
+    check(sent_g[-1][2] == t._10_J_Invalid_IO, "no card: Report J (%r)" % sent_g[-1:])
+    no_card[0] = False
+    t.TSP.sd_present = True
+    t.AUTOMOUNT(bytes(10), "tpi:automount off")
+    check(cfg()["AUTOMOUNT"] == "" and sent_g[-1][0] == "Auto-mount: off", "tpi:automount off: none")
+
+    print("AUTO_MOUNT at boot")
+    copies = []
+    real_copy, real_off = t.COPY_FILE, t.OFF_TABLE
+    t.COPY_FILE = lambda a, b: copies.append((a, b)) or True
+    t.OFF_TABLE = lambda: setattr(t.TSP, "offset_tbl", ["tbl"])
+    del sent_g[:]
+    puts = []
+    t.MQ = types.SimpleNamespace(put=puts.append)
+    ok = t.AUTO_MOUNT("/GAMES/menu.tap")
+    check(ok and copies == [(os.path.join(tap_root, "GAMES", "menu.tap"), "/TMP/temp.tap")],
+          "the file copied to /TMP/temp.tap (%r)" % copies)
+    check(t.TSP.f_name.endswith("/GAMES/menu.tap") and t.TSP.totlen == len(menu) and t.TSP.append is False
+          and t.TSP.offset_tbl == ["tbl"], "mounted: f_name, totlen, append off, the offset table")
+    check(t.TSP.cur_path == os.path.join(tap_root, "GAMES"), "  the current folder unchanged")
+    for name, why in (("/nope.tap", "a missing file"), ("/x.tap", "a TZX"), ("/GAMES", "not a .tap"),
+                      ("/../x.tap", "a path out of the top")):
+        t.TSP.f_name = "old"
+        check(not t.AUTO_MOUNT(name) and t.TSP.f_name == "", "%s: nothing mounted" % why)
+    t.COPY_FILE = lambda a, b: False
+    check(not t.AUTO_MOUNT("/GAMES/menu.tap") and t.TSP.f_name == "", "a failed copy: nothing mounted")
+    check(sent_g == [] and puts == [], "nothing sent to the 2068, ever: no orphan bytes")
+    t.COPY_FILE, t.OFF_TABLE = real_copy, real_off
+    t.ACTIVATE_SD, t.DEACTIVATE_SD, t.ACTIVATE_MQ = saved_sd
+
     print()
     if FAILS:
         print("%d FAILED" % len(FAILS))
