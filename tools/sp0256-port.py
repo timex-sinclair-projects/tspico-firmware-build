@@ -14,8 +14,8 @@ turned from a C++ class into plain C mechanically: the class members become
 fields of an sp0256_t (s->...) and the filter's of an lpc12_t (f->...), the
 one lambda a function, LOG calls dropped. Two changes beyond that:
 - Core 1 never reads flash (docs/reference/firmware/tsbus.md): every
-  function is wrapped in SP0256_RAM(), the tables lose their const (so they
-  go in RAM), and the ROM is read through sp0256_rom() from a 2 KB table
+  function is wrapped in SP0256_RAM(), the tables are placed in RAM by
+  name (SP0256_DATA), and the ROM is read through sp0256_rom() from a 2 KB table
   instead of MAME's 64 KB address space.
 - Nothing else. src/test/sp0256_hosttest.py checks the result sample for
   sample against reference renderings.
@@ -89,10 +89,14 @@ core = re.sub(r"\bLOG(FIFO)?\((?:[^;]|\n)*?\);", "", core)
 # const so they land in .data, in RAM.
 for fn in ("lpc12_limit", "lpc12_update", "lpc12_iq", "lpc12_regdec", "bitrev32", "bitrev8", "sp0256_getb", "sp0256_micro"):
     core = re.sub(r"(\n(?:static )?(?:inline )?(?:int16_t|int|void|uint32_t|uint8_t) )%s\(" % fn, r"\1SP0256_RAM(%s)(" % fn, core)
-core = core.replace("static const int16_t qtbl[128]", "static int16_t qtbl[128]")
-core = core.replace("static const int stage_map[6]", "static int stage_map[6]")
-core = core.replace("static const uint16_t sp0256_datafmt[]", "static uint16_t sp0256_datafmt[]")
-core = core.replace("static const int16_t sp0256_df_idx[16 * 8]", "static int16_t sp0256_df_idx[16 * 8]")
+# Not const isn't enough: GCC puts tables nothing writes in .rodata anyway
+# (in flash), so they're placed in RAM by name (SP0256_DATA).
+core = core.replace("static const int16_t qtbl[128]", "static int16_t SP0256_DATA qtbl[128]")
+core = core.replace("static const int stage_map[6]", "static int SP0256_DATA stage_map[6]")
+core = core.replace("static const uint16_t sp0256_datafmt[]", "static uint16_t SP0256_DATA sp0256_datafmt[]")
+core = core.replace("static const int16_t sp0256_df_idx[16 * 8]", "static int16_t SP0256_DATA sp0256_df_idx[16 * 8]")
+for t in ("qtbl[128]", "stage_map[6]", "sp0256_datafmt[]", "sp0256_df_idx[16 * 8]"):
+    assert "SP0256_DATA " + t in core, t
 core = core.replace("static inline int16_t SP0256_RAM(lpc12_iq)(const int16_t *qtbl, uint8_t x)", "static inline int16_t SP0256_RAM(lpc12_iq)(int16_t *qtbl, uint8_t x)")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "tsbus")
 with open(os.path.join(OUT, "sp0256_mame.inc"), "w") as f:

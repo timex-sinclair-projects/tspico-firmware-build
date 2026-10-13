@@ -35,6 +35,16 @@
 #define SP0256_ROM_AT 0x1000        // where the AL2's ROM sits in the chip's address space
 #define SP0256_ROM_N  2048
 
+// Tables core 1 reads: in RAM by name. Without this GCC puts a table that
+// nothing writes in .rodata, in flash, even when it isn't const.
+#ifndef SP0256_DATA
+#if U8251_ON_PICO
+#define SP0256_DATA __attribute__((section(".data.sp0256")))
+#else
+#define SP0256_DATA
+#endif
+#endif
+
 typedef struct {
     int       rpt, cnt;             // repeat counter, period down-counter
     uint32_t  per, rng;             // period, noise generator
@@ -65,12 +75,16 @@ typedef struct {
 
 // Reset, with the ROM at `rom` (SP0256_ROM_N bytes; sp0256_al2 for the AL2).
 void sp0256_init(sp0256_t *s, uint8_t *rom);
+// Stop speaking at once: silence from the next sample, ready for an
+// allophone. Field stores only, for core 1 (sp0256_init uses memset).
+void sp0256_stop(sp0256_t *s);
 // Load allophone n (0-63 on the AL2). False if the chip can't take one now
 // (LRQ busy): the load is dropped, as the chip drops it.
 bool sp0256_ald(sp0256_t *s, uint8_t n);
 // The chip can take an allophone (LRQ).
 bool sp0256_lrq(sp0256_t *s);
-// The next sample, -8192..8191 (14 bits, MAME's HIGH_QUALITY limiter).
+// The next sample: MAME's HIGH_QUALITY limiter (-8192..8191), shifted left
+// 2, so -32768..32764. Speech peaks near 6000.
 int16_t sp0256_sample(sp0256_t *s);
 // Nothing loaded and nothing left to say.
 bool sp0256_idle(sp0256_t *s);

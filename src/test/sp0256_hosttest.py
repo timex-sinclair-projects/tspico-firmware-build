@@ -108,8 +108,8 @@ def main():
         while not c.shim_idle() and spoken < 3000:
             peak = max(peak, abs(c.shim_sample()))
             spoken += 1
-        check(0 < peak <= 8191 and c.shim_idle() == 1 and abs(spoken + k - ALL64_LENS[27]) <= 2,
-              "HH1 spoken (peak %d, in 14 bits; %d samples, as alone), then idle" % (peak, spoken + k))
+        check(0 < peak <= 32767 and c.shim_idle() == 1 and abs(spoken + k - ALL64_LENS[27]) <= 2,
+              "HH1 spoken (peak %d; %d samples, as alone), then idle" % (peak, spoken + k))
     finally:
         shutil.rmtree(d)
     print()

@@ -165,7 +165,7 @@ static void SP0256_RAM(lpc12_regdec)(lpc12_t *f)
 		/*  qtbl  -- Coefficient Quantization Table.  This comes from a             */
 		/*              SP0250 data sheet, and should be correct for SP0256.        */
 		/* ======================================================================== */
-		static int16_t qtbl[128] =
+		static int16_t SP0256_DATA qtbl[128] =
 		{
 			0,      9,      17,     25,     33,     41,     49,     57,
 			65,     73,     81,     89,     97,     105,    113,    121,
@@ -185,7 +185,7 @@ static void SP0256_RAM(lpc12_regdec)(lpc12_t *f)
 			504,    505,    506,    507,    508,    509,    510,    511
 		};
 
-		static int stage_map[6] = { 0, 1, 2, 3, 4, 5 };
+		static int SP0256_DATA stage_map[6] = { 0, 1, 2, 3, 4, 5 };
 
 		
 
@@ -232,7 +232,7 @@ static void SP0256_RAM(lpc12_regdec)(lpc12_t *f)
 
 enum { AM = 0, PR, B0, F0, B1, F1, B2, F2, B3, F3, B4, F4, B5, F5, IA, IP };
 
-static uint16_t sp0256_datafmt[] =
+static uint16_t SP0256_DATA sp0256_datafmt[] =
 {
 	/* -------------------------------------------------------------------- */
 	/*  OPCODE 1111: PAUSE                                                  */
@@ -506,7 +506,7 @@ static uint16_t sp0256_datafmt[] =
 	/*  176 */  CR( 5,  0,  IP, 0,  0,  0,  0),     /*  Per. Intr.  */
 };
 
-static int16_t sp0256_df_idx[16 * 8] =
+static int16_t SP0256_DATA sp0256_df_idx[16 * 8] =
 {
 	/*  OPCODE 0000 */      -1, -1,     -1, -1,     -1, -1,     -1, -1,
 	/*  OPCODE 1000 */      -1, -1,     -1, -1,     -1, -1,     -1, -1,

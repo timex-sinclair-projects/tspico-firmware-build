@@ -10,6 +10,13 @@
 
 #include "sp0256.h"
 
+// Core 1 runs this from RAM, and GCC would turn MAME's small zeroing loops
+// (r[16], z_data) into memset calls, which are in flash. Not on the host's
+// clang, which doesn't know the option.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC optimize("no-tree-loop-distribute-patterns")
+#endif
+
 // MAME's constants (sp0256.cpp, lines 33-43).
 #define CLOCK_DIVIDER (6*4*13)
 #define HIGH_QUALITY
@@ -24,7 +31,7 @@
 #endif
 
 // The AL2's ROM. Not const: core 1 reads it, so it must be in RAM.
-uint8_t sp0256_al2[SP0256_ROM_N] = {
+uint8_t SP0256_DATA sp0256_al2[SP0256_ROM_N] = {
 #include "sp0256_al2.inc"
 };
 
@@ -47,6 +54,19 @@ void sp0256_init(sp0256_t *s, uint8_t *rom) {
     s->page = 0x1000 << 3;
     s->silent = 1;
     s->sby_line = 1;
+}
+
+void SP0256_RAM(sp0256_stop)(sp0256_t *s) {
+    // Silence now, mid-allophone: halted, ready for the next, nothing to
+    // repeat. Plain stores (no memset), for core 1.
+    s->halted = 1;
+    s->lrq = 1;
+    s->ald = 0;
+    s->pc = 0;
+    s->stack = 0;
+    s->silent = 1;
+    s->sby_line = 1;
+    s->filt.rpt = -1;
 }
 
 bool SP0256_RAM(sp0256_ald)(sp0256_t *s, uint8_t n) {

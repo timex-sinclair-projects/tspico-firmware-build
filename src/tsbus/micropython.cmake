@@ -8,9 +8,10 @@ target_sources(usermod_tsbus INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/tsbus.c
     ${CMAKE_CURRENT_LIST_DIR}/usart8251.c
     ${CMAKE_CURRENT_LIST_DIR}/modem2050.c
+    ${CMAKE_CURRENT_LIST_DIR}/sp0256.c
 )
 
-# usart8251.c and modem2050.c are plain C (host tests compile them too); on
+# usart8251.c, modem2050.c and sp0256.c are plain C (host tests compile them too); on
 # the card they take __not_in_flash_func from pico.h, so core 1 never runs
 # them from flash.
 target_compile_definitions(usermod_tsbus INTERFACE U8251_ON_PICO=1)
@@ -30,6 +31,7 @@ pico_generate_pio_header(usermod_tsbus ${CMAKE_CURRENT_LIST_DIR}/tsbus.pio)
 target_link_libraries(usermod_tsbus INTERFACE
     hardware_dma
     hardware_pio
+    hardware_pwm
     hardware_uart
     hardware_vreg
     pico_multicore
