@@ -44,6 +44,9 @@ Appendices
 
 <!-- keywords: tpi: · VERBOSE · reports -->
 
+> **Chapter Preview.** Know what the TS-Pico does, give it a command, and read the reports it
+> gives back.
+
 ## 1.1 What is the TS-Pico?
 
 Remember loading programs from cassette? You'd press PLAY, wait while the tape warbled, and
@@ -123,16 +126,15 @@ That's the directory command. The rules are simple:
   SAVE "tpi:dir" CODE 1,5
   ```
 
-  Nothing is saved. The two numbers (we'll call them *a* and *b*) are just passed to the
-  command, and each command says what they mean. Leaving `CODE` off is the same as `CODE 0,0`.
+  Nothing is saved. The two numbers (we'll call them *a* and *b*) are passed to the command,
+  and each command says what they mean. Leaving `CODE` off is the same as `CODE 0,0`.
 
 The disk commands also have their own keywords, so you can type `CAT` instead of
 `SAVE "tpi:dir"`. We'll use both as we go.
 
 ## 1.3 Quiet or chatty: VERBOSE
 
-Out of the box, most TS-Pico commands work quietly: a successful command just gives you
-**0 OK**, and a failed one gives you a report such as **F Invalid file name**. That keeps
+Out of the box, most TS-Pico commands work quietly: a successful command gives you **0 OK**, and a failed one gives you a report such as **F Invalid file name**. That keeps
 programs tidy. While you're learning, you'll probably want to see what's going on:
 
 ```basic
@@ -161,7 +163,7 @@ of its familiar reports at the bottom of the screen:
 | **6 Number too big** | A number out of range, such as a file index |
 | **D BREAK - CONT repeats** | You pressed BREAK, or answered N to a "Replace?" question |
 | **J Invalid I/O device** | The TS-Pico didn't answer. See Chapter 11 |
-| **T TS-Pico reset, try again** | The TS-Pico gave up on a transfer and reset itself. Just try again |
+| **T TS-Pico reset, try again** | The TS-Pico gave up on a transfer and reset itself. Try again |
 
 Appendix B has the full list.
 
@@ -179,8 +181,8 @@ Appendix B has the full list.
 
 <!-- keywords: SD card · jumpers · tpi:dir -->
 
-> **Chapter Preview.** Fitting the board, a tour of its buttons, jumpers and light, getting an
-> SD card ready, what happens when you switch on, and your first command.
+> **Chapter Preview.** Fit the TS-Pico, read its light and buttons, prepare an SD card, and run
+> your first command.
 
 ## 2.1 Before you begin
 
@@ -191,8 +193,8 @@ You'll need:
 - an expansion bus board, if you use one (the TS-Pico can also plug straight into the 2068);
 - a micro SD card. Your TS-Pico came with one, already set up.
 
-**Always switch the 2068 off before you connect or disconnect anything**, and take out any
-cartridge in the 2068's cartridge slot.
+> **Warning.** Switch the 2068 off before you connect or disconnect anything, and take out any
+> cartridge in the 2068's cartridge slot.
 
 ## 2.2 Fitting the board
 
@@ -204,15 +206,14 @@ right of the 2068 and sticks out behind it.
 **On an expansion bus.** The bus board plugs into the 2068, and the TS-Pico plugs into one of
 its slots. Any slot works; many people use the one nearest the 2068.
 
-> **Important: the BUSISO jumpers/switches.** The expansion bus has "BUSISO bypass" jumpers 
-> or switches on its
-> right-hand side, between the card-edge connectors. 
+> **Warning.** On an expansion bus, set the TS-Pico's slot's BUSISO bypass, or the TS-Pico
+> won't work. The bus has "BUSISO bypass" jumpers or switches on its right-hand side, between
+> the card-edge connectors.
 >
-> On expansion boards with a jumper, the jumper for the TS-Pico's slot **must be removed**, or 
-> the TS-Pico won't work. Park the jumper on a single pin so it doesn't get lost.
->
-> On expansion boards with switches, slide the BUSISO switch towards the 2068. The other switches should 
-> be towards the back of the board, away from the 2068.
+> - With jumpers: remove the jumper for the TS-Pico's slot. Park it on a single pin so it
+>   doesn't get lost.
+> - With switches: slide the BUSISO switch towards the 2068. The other switches stay towards the
+>   back of the board, away from the 2068.
 
 Both connectors are keyed, so they only go in one way. Expect a fair amount of resistance when
 you press the board home. That's normal. If you find yourself forcing it, stop and check that
@@ -227,7 +228,7 @@ takes its power from the 2068.
 
 **The buttons.** The TS-Pico has three pushbuttons:
 
-- **TS Reset** restarts the 2068, just like its own reset. The TS-Pico keeps its state: the
+- **TS Reset** restarts the 2068, as its own reset does. The TS-Pico keeps its state: the
   mounted file, the current folder and so on.
 - **Pico Reset** restarts the Pico. Use it only as a last resort, and never while a file is
   being written.
@@ -237,7 +238,7 @@ takes its power from the 2068.
 
 | What you see | What it means |
 |---|---|
-| A short flash every couple of seconds | Idle and happy, waiting for a command |
+| A short flash every couple of seconds | Idle, waiting for a command |
 | Steady on | Busy with a command, a SAVE or a listing |
 | Flickering | Copying a file you've just mounted |
 | A burst of fast blinks | Something went wrong, for example a file that wouldn't mount |
@@ -265,7 +266,7 @@ cable connected it can also be powered from the computer.
 
 **The buttons.** Along the top edge, left to right:
 
-- **TS Reset** restarts the 2068, just like its own reset. The TS-Pico keeps its state: the
+- **TS Reset** restarts the 2068, as its own reset does. The TS-Pico keeps its state: the
   mounted file, the current folder and so on.
 - **NMI** isn't used by the standard ROM.
 - **RUN** restarts the card itself. Use it only as a last resort, and never while a file is
@@ -279,7 +280,7 @@ doing:
 
 | What you see | What it means |
 |---|---|
-| A short flash every couple of seconds | Idle and happy, waiting for a command |
+| A short flash every couple of seconds | Idle, waiting for a command |
 | Steady on | Busy with a command, a SAVE or a listing |
 | Flickering | Copying a file you've just mounted |
 | A burst of fast blinks | Something went wrong, for example a file that wouldn't mount |
@@ -295,8 +296,8 @@ later firmware.
 Your card came ready to use. If you set up a new one:
 
 1. Format it **FAT32** on your computer. Cards up to 16GB work.
-2. Create a folder called **`TAP`** at the top level of the card. This is essential: the
-   TS-Pico treats `TAP` as its root folder, and won't start without it.
+2. Create a folder called **`TAP`** at the top level of the card. The TS-Pico treats `TAP` as
+   its root folder. (It makes the folder on a card that doesn't have one.)
 3. Copy your `.tap` files into `TAP`, or into folders inside it.
 4. If you like, copy the `help` folder from the TS-Pico release to the top level of the card,
    next to `TAP`. That's where `SAVE "tpi:help word"` finds its help pages.
@@ -307,72 +308,6 @@ A switch in the socket tells the TS-Pico whether a card is in, so you can take i
 back between commands.
 <!-- /v3 -->
 
-**Naming files.** Stick to letters, digits, `-` and `_` for anything you'll SAVE from the 2068. The TS-Pico accepts longer names and spaces when *loading*, but a plain `SAVE "name"` only allows letters, digits, `-` and `_`.
-
-## 2.5 Switching on
-
-Now switch the 2068 on. Here's what happens:
-
-<!-- v2 -->
-1. For a couple of seconds the screen may look frozen or garbled. That's normal: the Pico is
-   starting up.
-2. The Pico's LED blinks steadily while it opens the SD card and reads your `TAP` folder.
-<!-- /v2 -->
-<!-- v3 -->
-1. For a moment the screen stays dark: the card holds the 2068 in reset while it loads the ROM
-   into its memory, then lets it start.
-2. The card opens the SD card and reads your `TAP` folder.
-<!-- /v3 -->
-3. The 2068 starts. You'll see the usual copyright lines, plus the TS-Pico's own line, which
-   includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
-4. Press **ENTER** and the flashing **K** cursor appears.
-
-Let's make sure everything's talking:
-
-```basic
-SAVE "tpi:dir"
-```
-
-You should see a listing of your `TAP` folder, even if it's empty:
-
-```
-Path:/TAP
-SD: 7.4453GB; free: 7.2109GB
-File Name                   Size
---------------------------------
-<GAMES>                      0 B
-000 frogger.tap         12.00 kB
-    notes.txt              300 B
-```
-
-Folders come first, in angle brackets. Each file the TS-Pico can mount (TAP, DCK, ROM, BIN)
-gets a three-digit **index number**. Other files, such as `notes.txt`, are listed without one.
-
-How about that? Your TS-Pico is working. Plain `CAT` does the same thing.
-
-## 2.6 If the SD card isn't found
-
-The TS-Pico keeps running without an SD card. You'll know there isn't one because the LED
-gives **two** short flashes every couple of seconds instead of one, and any command that needs
-the card says so:
-
-```
-No SD card. Insert one and
-try again.
-J Invalid I/O device, 0:1
-```
-
-Commands that don't need the card, such as `SAVE "tpi:info"`, keep working, and so does
-`LOAD ""` from a TAP you mounted earlier. A `SAVE` is refused before anything is sent, so your
-program is still in memory: put a card in and SAVE again.
-
-1. **Put the card in, or take it out and push it back in.** Pulling the card out switches it
-   off, and it wakes up fresh when you put it back.
-2. **Type the command again.** The TS-Pico looks for the card every time, so there's nothing
-   else to do. You should see your directory listing.
-
-A freshly formatted card works too: the TS-Pico makes the `TAP` folder on it.
-
 **Swapping cards.** You can change cards while the 2068 is on. The next command that reads the
 card (a `CAT` or `SAVE "tpi:dir"` will do) notices it's a different card and reads it
 afresh. You stay in the same folder if the new card has it, and the mounted TAP stays mounted
@@ -380,26 +315,89 @@ if the new card has that file too; otherwise you're back at the top, with nothin
 Append is switched off, so a SAVE can't land in a file on the other card, and any files open
 with `OPEN #` are closed.
 
-If the card still isn't found, give the whole system a fresh start:
+**Naming files.** Stick to letters, digits, `-` and `_` for anything you'll SAVE from the 2068. The TS-Pico accepts longer names and spaces when *loading*, but a plain `SAVE "name"` only allows letters, digits, `-` and `_`.
 
-1. **Switch the TS 2068 off.**
+## 2.5 Switching on
+
+You'll need the TS-Pico fitted (2.2) and an SD card in its socket (2.4).
+
+1. Switch the 2068 on.
 <!-- v2 -->
-2. **Unplug the Pico's USB cable**, if it's connected to a computer.
+
+   You should see the screen look frozen or garbled for a couple of seconds while the Pico
+   starts, and the Pico's LED blinking while it opens the SD card and reads your `TAP` folder.
+   Then the 2068 starts, with the usual copyright lines and the TS-Pico's own line, which
+   includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
 <!-- /v2 -->
 <!-- v3 -->
-2. **Unplug the card's USB cable**, if it's connected to a computer.
+
+   You should see the screen stay dark for a moment while the card loads the ROM into its
+   memory and opens the SD card. Then the 2068 starts, with the usual copyright lines and the
+   TS-Pico's own line, which includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
 <!-- /v3 -->
+2. Press **ENTER**.
 
-3. **Wait a few seconds, then switch the TS 2068 back on.**
+   You should see the flashing **K** cursor.
+3. Type `SAVE "tpi:dir"` and press **ENTER**.
 
-**Why does this happen?** It's most common after a *warm boot*: the TS-Pico restarted while it
-stayed powered, for example after a firmware update with the USB cable connected. The SD card
-stays powered through the restart and can be left waiting for something that never arrives. It
-only recovers once it loses power. Taking the card out, or switching everything off, does
-exactly that.
+   You should see a listing of your `TAP` folder, even if it's empty:
 
-If a card still isn't found after that, try it in a computer: it may need formatting (FAT32),
+   ```
+   Path:/TAP
+   SD: 7.4453GB; free: 7.2109GB
+   File Name                   Size
+   --------------------------------
+   <GAMES>                      0 B
+   000 frogger.tap         12.00 kB
+       notes.txt              300 B
+   ```
+
+Your TS-Pico is working. Plain `CAT` gives the same listing.
+
+Folders come first, in angle brackets. Each file the TS-Pico can mount (TAP, DCK, ROM, BIN)
+gets a three-digit **index number**. Other files, such as `notes.txt`, are listed without one.
+
+## 2.6 If the SD card isn't found
+
+**Symptom.** The LED gives **two** short flashes every couple of seconds instead of one, and any
+command that needs the card says so:
+
+```
+No SD card. Insert one and
+try again.
+J Invalid I/O device, 0:1
+```
+
+The TS-Pico keeps running without a card. Commands that don't need it, such as
+`SAVE "tpi:info"`, keep working, and so does `LOAD ""` from a TAP you mounted earlier. A `SAVE`
+is refused before anything is sent, so your program is still in memory.
+
+**Fix.**
+
+1. Put the card in, or take it out and push it back in.
+2. Type the command again.
+
+   You should see your directory listing. The TS-Pico looks for the card every time, so there's
+   nothing else to do. A freshly formatted card works too: the TS-Pico makes its `TAP` folder.
+
+**Fallback.** If the card still isn't found, give the whole system a fresh start:
+
+1. Switch the 2068 off.
+<!-- v2 -->
+2. Unplug the Pico's USB cable, if it's connected to a computer.
+<!-- /v2 -->
+<!-- v3 -->
+2. Unplug the card's USB cable, if it's connected to a computer.
+<!-- /v3 -->
+3. Wait a few seconds, then switch the 2068 back on.
+
+If the card still isn't found after that, try it in a computer: it may need formatting (FAT32),
 or it may be write-protected, in which case the TS-Pico can't make its `TAP` folder.
+
+**Likely cause.** It's most common after a *warm boot*: the TS-Pico restarted while it stayed
+powered, for example after a firmware update with the USB cable connected. The SD card stays
+powered through the restart and can be left waiting for something that never arrives. It only
+recovers once it loses power, which taking the card out, or switching everything off, does.
 
 ## 2.7 Summary
 
