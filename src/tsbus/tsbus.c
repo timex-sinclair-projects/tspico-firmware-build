@@ -61,10 +61,6 @@
  * the bridge stalls for up to 4 us while core 0 erases or programs flash, and
  * an IN gives core 1 about 600 ns (issue #254). So the IN interrupt comes from
  * PIO2 (iord_watch) and U1/U3 are driven through PIO1's spare state machine.
- * The DMA must not touch APB during a flash write either: the 2068's memory
- * reads are answered by DMA (ch_ptr, ch_data), and a DMA write held by the
- * stalled bridge holds them up with it. The speech and modem channels write
- * the PWM and the UART, so the flash wrappers below pause them.
  */
 
 #include <stdlib.h>
@@ -1376,60 +1372,6 @@ static mp_obj_t tsbus_speech(size_t n_args, const mp_obj_t *args) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(tsbus_speech_obj, 1, 2, tsbus_speech);
-
-// ---- flash writes ----------------------------------------------------------------------
-//
-// MicroPython erases and programs flash (LittleFS: config.ini, the log, a
-// mounted tape's copy) through flash_range_erase and flash_range_program.
-// The link wraps both (-Wl,--wrap, micropython.cmake), so every flash write
-// comes here first. While the flash is busy the APB bridge stalls, and a DMA
-// write held there holds up the DMA's other channels too, including the ones
-// that answer the 2068's memory reads: it reads late bytes and crashes. Proved
-// on board 1, 2026-10-13: with speech on, five 8K writes to the Pico's flash
-// locked up a 2068 running a BASIC loop; with speech off, nothing happened.
-// So the channels that touch APB (the speech PWM, the modem UART) are paused
-// for the length of the write: EN cleared (no new transfers; the sequence is
-// kept), a moment for one already issued to finish, then the write, then EN
-// set again. Speech holds its level meanwhile; the modem's UART FIFO (32
-// bytes) fills and may overflow during a long erase (inferred).
-
-void __real_flash_range_erase(uint32_t flash_offs, size_t count);
-void __real_flash_range_program(uint32_t flash_offs, const uint8_t *data, size_t count);
-
-static uint32_t __not_in_flash_func(apb_dma_pause)(void) {
-    int chs[4] = {ch_spk_l, ch_spk_r, ch_mrx, ch_mtx};
-    uint32_t paused = 0;
-    for (int i = 0; i < 4; i++) {
-        if (chs[i] >= 0 && (dma_hw->ch[chs[i]].al1_ctrl & DMA_CH0_CTRL_TRIG_EN_BITS)) {
-            hw_clear_bits(&dma_hw->ch[chs[i]].al1_ctrl, DMA_CH0_CTRL_TRIG_EN_BITS);
-            paused |= 1u << chs[i];
-        }
-    }
-    if (paused) {
-        busy_wait_at_least_cycles(1000);    // 4 us at 250 MHz: anything issued is done
-    }
-    return paused;
-}
-
-static void __not_in_flash_func(apb_dma_resume)(uint32_t paused) {
-    for (uint ch = 0; paused; ch++, paused >>= 1) {
-        if (paused & 1) {
-            hw_set_bits(&dma_hw->ch[ch].al1_ctrl, DMA_CH0_CTRL_TRIG_EN_BITS);
-        }
-    }
-}
-
-void __not_in_flash_func(__wrap_flash_range_erase)(uint32_t flash_offs, size_t count) {
-    uint32_t paused = apb_dma_pause();
-    __real_flash_range_erase(flash_offs, count);
-    apb_dma_resume(paused);
-}
-
-void __not_in_flash_func(__wrap_flash_range_program)(uint32_t flash_offs, const uint8_t *data, size_t count) {
-    uint32_t paused = apb_dma_pause();
-    __real_flash_range_program(flash_offs, data, count);
-    apb_dma_resume(paused);
-}
 
 // tsbus.say(allophones): queue AL2 allophone numbers (bytes-like, each 0-63)
 // to be spoken after what is queued already; returns how many were queued

@@ -189,7 +189,7 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `e4cde52397f6` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `aa153b1b9310` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `7e77ca3b4095` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `8b19f44b1c3f` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.h` | `6d0523a0e42a` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.c` | `e6812ab5e133` | [firmware/tsbus.md](firmware/tsbus.md) | — |
@@ -199,7 +199,7 @@ behaviour, and the caveat and the issue link go.
 | `src/tsbus/sp0256.c` | `1966bed583e8` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256_mame.inc` | `134bd8726488` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256_al2.inc` | `20293f3cd4a0` | [firmware/speech.md](firmware/speech.md) | — |
-| `src/tsbus/micropython.cmake` | `3933b5384c8c` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/micropython.cmake` | `91dbdf2fbfcf` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-23.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
