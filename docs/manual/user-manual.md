@@ -2695,6 +2695,26 @@ as on the 2050. Status bit 0 means a character can be sent, bit 1 that one has a
 commands itself. The details, and what MTERM does, are in the developer notes,
 `docs/ts2050-software-notes.md`, on the project's GitHub.
 
+MODEMTST, the program in F.2, is a complete terminal in ten lines:
+
+```basic
+10 REM TS2050 8251 test terminal
+20 FOR i=1 TO 3: OUT 119,0: NEXT i: OUT 119,64: OUT 119,79: OUT 119,55
+30 PRINT "Status ";IN 119;" (133 = ready)"
+40 LET k$=INKEY$: IF k$="" THEN GO TO 70
+50 OUT 115,CODE k$
+60 IF INKEY$<>"" THEN GO TO 60
+70 LET s=IN 119: IF INT (s/2)-2*INT (s/4)=0 THEN GO TO 40
+80 LET c=IN 115: IF c=13 THEN PRINT
+90 IF c>31 AND c<128 THEN PRINT CHR$ c;
+100 GO TO 40
+```
+
+Line 20 resets the 8251 and sets it up as MTERM does: three zeros and 64 reset it, mode 79 is
+8 bits, no parity and one stop bit, and command 55 turns sending and receiving on. Lines 40 to
+60 send a key you press. Line 70 tests status bit 1, and lines 80 and 90 print a character that
+has arrived.
+
 ## F.7 Summary
 
 1. The modem looks like a TS2050 to the 2068: MTERM and other 2050 programs work as they are.
@@ -2735,6 +2755,17 @@ A program can say a string the same way, keeping each piece to 23 characters:
 ```basic
 10 LET A$="GAME OVER"
 20 SAVE "tpi:say "+A$
+```
+
+A countdown, spoken as it's shown:
+
+```basic
+10 FOR i=10 TO 1 STEP -1
+20 PRINT AT 10,15;i;" "
+30 SAVE "tpi:say "+STR$ i
+40 PAUSE 50
+50 NEXT i
+60 SAVE "tpi:say LIFT OFF!"
 ```
 
 Numbers are spoken as words (`2068` is "two thousand and sixty eight"). A full stop, `!`, `?`
