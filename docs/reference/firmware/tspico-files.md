@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1387–2168,
 2501–2533, 3704–3709, 3865–3924, 4169–4256, 4403–4410, 5156–5199,
-5422–5436, 5518–5583 and 5738–5754 (firmware 2.3).
+5422–5436, 5518–5583 and 5741–5757 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -60,8 +60,8 @@ document it is linked, not restated: the pitfalls are in
 | `REMOVE_DIR(d)` | 5422–5436 | delete a tree (`/TMP` at boot) |
 | `ResolveIndexName(name)` | 5518–5538 | a listing number to its file name |
 | `LOAD_TPI(name, only_tap=False, fresh=False)` | 5541–5583 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 5738–5754 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 5757–5786 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `FORGET_MOUNT()` | 5741–5757 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 5760–5789 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -426,7 +426,7 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 `NEW_TAP`, [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file and the mount of
 a newly saved file when nothing was mounted ([part 3](tspico-dispatch.md),
-lines 6912 and 7058, inside a `try` because the card may have gone).
+lines 6912 and 7061, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -604,7 +604,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3022); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3022 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7516), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7519), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
