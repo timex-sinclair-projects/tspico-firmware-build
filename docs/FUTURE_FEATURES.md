@@ -74,58 +74,6 @@ state machine on GP23, refilled by core 0 from the SD card.
 3. **Control:** commands first; whether automatic start and stop is worth it
    later.
 
-## Speech: the 2068 talks
-
-*Added 2026-10-12. David's particular interest.*
-
-Text in, speech out of the card's audio jack (GP30/GP46 PWM, the filter and
-mixer, J4), from BASIC.
-
-**From BASIC,** in ways that suit the 2068:
-- **A command:** `SAVE "tpi:say HELLO, I AM YOUR TIMEX"`.
-- **A channel:** `OPEN #4,"s:"`, then `PRINT #4;"GAME OVER"`. Anything a
-  program prints to it is spoken, so existing programs can be made to talk by
-  redirecting a stream, as `OPEN #` already does for files and the printer
-  (Chapter 6 of the manual).
-- **Phonemes for exact control:** a prefix or a second channel that takes
-  phoneme codes rather than English, as the speech units of the time did,
-  for words the rules get wrong and for pitch and stress.
-
-**How it might work.** Two stages:
-1. **Text to phonemes.** The US Naval Research Laboratory's letter-to-sound
-   rules (Elovitz et al., 1976) are a US-government report, the classic choice
-   for small machines: a few hundred rules, a few KB.
-2. **Phonemes to sound.** Three candidates, each with a different character:
-   - **A formant synthesiser** (Klatt-style): clear, adjustable pitch and
-     speed, small; the robot voice of the period done well.
-   - **SAM-style** (Software Automatic Mouth, C64/Atari/Apple, 1982): the
-     most "8-bit" voice. Open reconstructions of it exist, but its licence is
-     unclear (the original is proprietary), so it needs checking before use.
-   - **SP0256-AL2 allophones** (the chip in the Currah µSpeech and many
-     period units): the authentic Spectrum-era sound, built from 59
-     allophones. It needs either the chip's allophone data, whose licence
-     needs checking, or a model of the chip.
-
-Generation runs in C, faster than real time. The whole utterance (about
-11 KB a second at 11 kHz, 8-bit) goes into a buffer, and DMA plays it to the
-PWM pins in the background. So `tpi:say` returns at once and the 2068 carries
-on while the card speaks, and core 1 isn't involved.
-
-**Later, for Spectrum software in ZX48 mode:** Currah µSpeech compatibility.
-As far as I know, the unit was driven by Z80 memory accesses in the ROM
-area, which the card sees because it serves the ROM. That needs checking
-against the unit's documentation, along with which games used it. It's a
-separate step, after the native speech works.
-
-**To settle first:**
-1. **The audio check** (as for the AY, below): a tone at the jack from each
-   channel, and the 2068's BEEP through the mix.
-2. **The voice:** formant, SAM-like or SP0256. Prototypes of each are cheap
-   enough to listen to side by side.
-3. **The interface:** `tpi:say`, an `s:` channel, phoneme input, or all
-   three.
-4. **Licences** for whatever synthesiser code or data is used.
-
 ## Sounds and music from the SD card
 
 *Added 2026-10-12.*
@@ -142,7 +90,8 @@ the PWM pins, the same output path as speech. Compressed formats (ADPCM,
 perhaps MP3) are a later question.
 
 **To settle first:**
-- **The audio check.**
+- **The audio check** (step 1 of the speech proposal; this would share its
+  output path).
 - **Whether the SD card can be shared** while it streams: the protocol uses
   the same card for LOAD and SAVE, so background music during a LOAD needs
   the reads interleaved, or the file read into RAM first.
@@ -190,6 +139,10 @@ through the mix. Then measure core 1's headroom with the diag build's
   (`docs/PROTOCOL_V2_PROPOSAL.md`) and need a ROM revision.
 
 ## Elsewhere
+
+- **Speech** has left this list: it has a proposal,
+  [v3-speech-proposal.md](v3-speech-proposal.md) (the SP0256-AL2 emulated from
+  its ROM, `tpi:say`, an `s:` channel, and David's speech board's ports).
 
 - **The OLED status display** and **the Kempston joystick** wait on hardware:
   [v3-oled-proposal.md](v3-oled-proposal.md), and the `v3-kempston` branch.
