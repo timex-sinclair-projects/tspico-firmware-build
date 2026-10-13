@@ -112,8 +112,9 @@ PWM pins in the background. So `tpi:say` returns at once and the 2068 carries
 on while the card speaks, and core 1 isn't involved.
 
 **Later, for Spectrum software in ZX48 mode:** Currah µSpeech compatibility.
-Its games (Ultimate's among them) speak by reading particular ROM-area
-addresses, and the card serves the ROM, so it could see those reads. It's a
+As far as I know, the unit was driven by Z80 memory accesses in the ROM
+area, which the card sees because it serves the ROM. That needs checking
+against the unit's documentation, along with which games used it. It's a
 separate step, after the native speech works.
 
 **To settle first:**
