@@ -113,6 +113,10 @@ That's the directory command. The rules are simple:
 - **Upper or lower case doesn't matter** in the command word: `tpi:DIR`, `tpi:dir` and `TPI:Dir`
   all work.
 - **Anything after a space is the argument:** `SAVE "tpi:cd games"`.
+- **The whole name, `tpi:` included, must fit in 31 characters.** The 2068 accepts a longer one
+  when you type the line, but stops with **C Nonsense in BASIC** when it runs. Watch for this
+  when a program builds the name from a string: `SAVE "tpi:cd "+d$` works only while `d$` is
+  at most 24 characters.
 - **Some commands take numbers** after the name, written the way you'd save a block of code:
 
   ```basic
@@ -1863,7 +1867,8 @@ SAVE "tpi:say"                          : REM stop speaking
 ```
 
 Speech, Appendix G. The card speaks while the 2068 carries on; another `tpi:say` waits its
-turn. **A**: a name in `[...]` that isn't an allophone.
+turn. At most 23 characters of text (the whole name fits in 31): say longer text in pieces.
+**A**: a name in `[...]` that isn't an allophone. **C**: a longer name.
 <!-- /v3 -->
 
 ### tapdir: look inside the mounted TAP
@@ -2221,7 +2226,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **6 Number too big** | A file index out of range |
 | **8 End of file** | Read past the end; nothing matched on the tape; the folder already exists (`tpi:md`) |
 | **A Invalid argument** | A `CODE a,b` or argument the command doesn't accept; an empty program SAVE |
-| **C Nonsense in BASIC** | An unknown `tpi:` word; a command not yet implemented; extra words after an argument |
+| **C Nonsense in BASIC** | An unknown `tpi:` word; a command not yet implemented; extra words after an argument; a `tpi:` name longer than 31 characters (1.2) |
 | **D BREAK - CONT repeats** | You pressed BREAK, or declined "Replace?" |
 | **F Invalid file name** | Not found; not allowed; already exists (FORMAT, MOVE, ren) |
 | **J Invalid I/O device** | The TS-Pico didn't answer, or an SD card that won't mount |
@@ -2501,11 +2506,21 @@ there too.
 ## G.1 Saying something
 
 ```basic
-SAVE "tpi:say HELLO, I AM YOUR TIMEX SINCLAIR 2068."
+SAVE "tpi:say HELLO, I AM YOUR TIMEX"
 ```
 
 The card speaks while the 2068 carries on, so a program doesn't wait. A second `tpi:say`
-waits its turn; `SAVE "tpi:say"` on its own stops at once. A program can say a string:
+waits its turn; `SAVE "tpi:say"` on its own stops at once.
+
+Like any `tpi:` command (1.2), the whole name must fit in 31 characters, which leaves **23
+characters** for what to say. Say longer text in pieces, one after another:
+
+```basic
+10 SAVE "tpi:say HELLO, I AM YOUR"
+20 SAVE "tpi:say TIMEX SINCLAIR 2068."
+```
+
+A program can say a string the same way, keeping each piece to 23 characters:
 
 ```basic
 10 LET A$="GAME OVER"
