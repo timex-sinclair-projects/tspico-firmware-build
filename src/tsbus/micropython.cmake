@@ -37,4 +37,12 @@ target_link_libraries(usermod_tsbus INTERFACE
     pico_multicore
 )
 
+# Every flash erase and program goes through tsbus.c's wrappers, which pause
+# the DMA channels that touch APB meanwhile (the 2068's memory reads are
+# answered by DMA, and a stalled APB write holds the DMA up).
+target_link_options(usermod_tsbus INTERFACE
+    -Wl,--wrap=flash_range_erase
+    -Wl,--wrap=flash_range_program
+)
+
 target_link_libraries(usermod INTERFACE usermod_tsbus)
