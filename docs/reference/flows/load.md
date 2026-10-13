@@ -103,6 +103,12 @@ screen with a menu, which chains to TS-Pico Commander, a file browser
 (`basic/assets/nofile.bas`). If that file is missing from the Pico's flash, the LOAD is
 refused with Report R ([../firmware/boot.md](../firmware/boot.md#the-picos-flash-filesystem-at-run-time)).
 
+With `config.ini`'s `AUTOMOUNT` set (`tpi:automount`), the boot has
+already mounted that file (`AUTO_MOUNT`,
+[../firmware/tspico-files.md](../firmware/tspico-files.md#auto_mountname)), so the
+first `LOAD ""` after power-on loads it as any mounted tape; the menu only
+comes if it couldn't be mounted.
+
 ### `LOAD "f:file"`
 
 The disk module's F_HOOK sends `tpi:fopen file` first, with the statement's

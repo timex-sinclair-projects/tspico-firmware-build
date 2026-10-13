@@ -4539,6 +4539,7 @@ def GETHELP(pre, cmd):                                                 # Shows T
         M.append('"tpi:erase <name or pattern>"')
         M.append('"tpi:format <name.tap or dir/>"')
         M.append('"tpi:ren <old> <new>"')
+        M.append('"tpi:automount [name.tap/off]"')
         M.append('"tpi:opprint"  "tpi:clprint"')
         M.append('"tpi:autolf"   "tpi:noautolf"')
         M.append('"tpi:autopg"   "tpi:noautopg"')
