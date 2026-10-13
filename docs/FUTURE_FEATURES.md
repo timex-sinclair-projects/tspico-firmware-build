@@ -74,6 +74,39 @@ state machine on GP23, refilled by core 0 from the SD card.
 3. **Control:** commands first; whether automatic start and stop is worth it
    later.
 
+## An emulated AY at the Spectrum 128's ports
+
+*Added 2026-10-12; was phase 7 of the v3 port plan.*
+
+An AY-3-8910 at $FFFD (register select, and read-back on IN) and $BFFD
+(data), synthesised on core 1 and played through the card's PWM audio
+(GP30 right, GP46 left) to the 3.5 mm jack.
+
+**Why it's not scheduled.** The 2068 has a real AY at $F5/$F6, so 2068
+software doesn't need one. The emulated AY only helps in ZX48 mode, for
+Spectrum software that writes to the 128's ports: 48K games and demos with
+128-style AY music. True 128K games still won't run, because the 2068 can't
+page the 128's memory. It's a narrow audience.
+
+**Cycles are not the obstacle.** A sample (three tone counters, noise,
+envelope, mix) is roughly 100-200 cycles, so a 31 kHz stream is about 2-3 %
+of core 1 at 250 MHz. Constraints:
+- **Small chunks:** the work goes in a few samples per loop pass, since the
+  loop drains the OUT and dock-write FIFOs, which fill in about 15-25 µs.
+- **RAM only:** the code runs from RAM, without masking interrupts, as the
+  modem does.
+- **Output by DMA:** a RAM buffer fed by DMA to the PWM pins, so the CPU
+  never touches APB.
+
+The register OUTs reach core 1 through io_snoop already; read-back at $FFFD
+is one compare in `handle_in`.
+
+**To settle first:** the audio path is untested. It runs PWM, a two-stage RC
+filter, an MCP6002 mixer with the 2068's SOUND line, then the jack. The
+check: a test tone from each channel at the jack, and the 2068's own BEEP
+through the mix. Then measure core 1's headroom with the diag build's
+`max_gap`.
+
 ## Dropped, unless it becomes a reported problem
 
 - **Blocking reads through /WAIT** (port plan, phase 6; dropped 2026-10-12).
@@ -84,8 +117,6 @@ state machine on GP23, refilled by core 0 from the SD card.
 
 ## Elsewhere
 
-- **AY sound** at $FFFD/$BFFD, with PWM audio: phase 7 of the v3 port plan
-  (tspico-hardware `docs/v3-firmware-port-plan.md`).
 - **The OLED status display** and **the Kempston joystick** wait on hardware:
   [v3-oled-proposal.md](v3-oled-proposal.md), and the `v3-kempston` branch.
 - **The ESP32 as a WiFi file server:** a different role for the modem module,
