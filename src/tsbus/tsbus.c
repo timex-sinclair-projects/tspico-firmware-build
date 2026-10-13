@@ -61,6 +61,11 @@
  * the bridge stalls for up to 4 us while core 0 erases or programs flash, and
  * an IN gives core 1 about 600 ns (issue #254). So the IN interrupt comes from
  * PIO2 (iord_watch) and U1/U3 are driven through PIO1's spare state machine.
+ * The DMA must not touch APB during a flash write either: the 2068's memory
+ * reads are answered by DMA (ch_ptr, ch_data), and a DMA write held by the
+ * stalled bridge holds them up with it. So speech plays through PIO2
+ * (spk_pwm), not the PWM block, and the modem's channels, which must use the
+ * UART, are paused by the flash wrappers below.
  */
 
 #include <stdlib.h>
@@ -76,11 +81,11 @@
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
-#include "hardware/pwm.h"
 #include "hardware/uart.h"
 #include "hardware/structs/busctrl.h"
 #include "hardware/structs/io_bank0.h"
 #include "hardware/structs/m33.h"
+#include "hardware/structs/nvic.h"
 #include "hardware/structs/scb.h"
 #include "hardware/structs/sio.h"
 #include "hardware/vreg.h"
@@ -203,8 +208,10 @@ static volatile bool modem_wake, modem_touched, modem_line_up;
 
 // Speech (docs/v3-speech-proposal.md): the SP0256-AL2 emulated on core 1
 // (sp0256.c), a few samples per pass of its loop, into a ring of PWM levels
-// that two DMA channels play, paced by a DMA timer, to the audio pins (both
-// the same: GP46 left, GP30 right). Core 0 only queues allophone numbers
+// that two DMA channels play, paced by a DMA timer, into two spk_pwm state
+// machines on PIO2 driving the audio pins (both the same: GP46 left, GP30
+// right). Not the PWM block: the DMA must not write behind the APB bridge
+// (see spk_pwm in tsbus.pio). Core 0 only queues allophone numbers
 // (tsbus.say); core 1 loads the next into the chip when its LRQ says it can
 // take one, as a program on the real chip does. The chip's 10 kHz is the
 // timer's rate; `rate` scales it, and the chip's pitch with it.
@@ -212,7 +219,7 @@ static volatile bool modem_wake, modem_touched, modem_line_up;
 #define PIN_AUDIO_R 30
 #define SPK_RING_BITS 11                     // 2 KB: 1024 levels, 100 ms at 10 kHz
 #define SPK_RING_N (1u << (SPK_RING_BITS - 1))
-#define SPK_TOP 4095                         // PWM wrap: 12 bits, a 61 kHz carrier at 250 MHz
+#define SPK_TOP 2047                         // spk_pwm's period: 11 bits, a 41 kHz carrier at 250 MHz
 #define SPK_MID (SPK_TOP / 2)
 #define SPK_AHEAD (SPK_RING_N - 32)          // how far ahead of the DMA core 1 fills
 #define SPK_PER_PASS 4                       // samples per pass of core 1's loop, at most
@@ -225,6 +232,7 @@ static volatile uint32_t spk_q_head, spk_q_tail;   // head: core 0; tail: core 1
 static volatile bool speech_on, spk_stop_req;
 static volatile int32_t spk_scale;           // sample * scale >> 15, added to SPK_MID
 static int ch_spk_l = -1, ch_spk_r = -1, spk_timer = -1;
+static int sm_spk_l = -1, sm_spk_r = -1;     // spk_pwm on PIO2
 static volatile uint32_t spk_allophones, spk_samples, spk_late;
 // David's Pico Speech Synth 2068 board's ports: OUT 17 loads an allophone, IN
 // 37 reads the chip's LRQ on bit 7 (1: busy). Its 74HC138 decodes A4, A5 and
@@ -241,7 +249,10 @@ static volatile uint8_t spk_pq[SPK_PQ_N];
 static volatile uint32_t spk_pq_head, spk_pq_tail;   // both core 1's
 static volatile uint32_t spk_port_outs, spk_port_ins;
 
-// The 2068 stopped: /MEMRD hasn't changed for IDLE_CYC. A running Z80 reads
+// The 2068 stopped: no memory read for IDLE_CYC. Each read latches PIO0_IRQ_1
+// pending in core 1's NVIC (see bus_start); sampling /MEMRD once a pass used
+// to alias with tight Z80 loops: 199 false "stopped" in 150 commands on board
+// 1 (2026-10-13), each releasing MD and dropping bank switches. A running Z80 reads
 // memory every few T-states (a HALT too), so that is a reset (/MEMRD high) or
 // the 2068 switched off with the card on USB (/MEMRD low). The card can't see
 // /RESET or the 2068's power, so this is how it knows. See core1_main.
@@ -405,6 +416,11 @@ static void bus_start(void) {
     sm_config_set_out_shift(&c, true, false, 32);
     pio_sm_init(pio_serve, sm_iodrv, off_iodrv, &c);
 
+    // Every memory read: addr_read raises PIO0's flag 1 (serve clears it at
+    // once). Routed to PIO0_IRQ_1, which no core enables, it still latches
+    // the line's pending bit in core 1's NVIC: core 1's idle test.
+    pio_serve->inte1 = PIO_INTR_SM1_BITS;
+
     // addr_read, mem_write, io_snoop (PIO1): the three buffer enables, all off.
     const uint32_t en = (1u << PIN_NAEN_LO) | (1u << PIN_NAEN_HI) | (1u << PIN_NDATA_OE);
     sm_addr = claim_sm(pio_addr);
@@ -445,12 +461,12 @@ static void bus_start(void) {
     pio_sm_init(pio_addr, sm_en, 0, &c);
 
     // iord_watch (PIO2): /IORD's falling edge -> PIO2 IRQ 0, for core 1.
-    pio_set_gpio_base(pio_iord, 0);
+    pio_set_gpio_base(pio_iord, 16);                       // GP16-47: /IORD and the audio pins (spk_pwm)
     sm_iord = claim_sm(pio_iord);
     uint off_iord = add_program(pio_iord, &iord_watch_program);
     c = iord_watch_program_get_default_config(off_iord);
     pio_sm_init(pio_iord, sm_iord, off_iord, &c);
-    pio_iord->input_sync_bypass = 1u << PIN_NIORD;
+    pio_iord->input_sync_bypass = 1u << (PIN_NIORD - 16);  // the window's bit, not the GPIO's
     pio_iord->irq = 1u;                                    // nothing pending
     pio_iord->inte0 = PIO_INTR_SM0_BITS;                   // IRQ flag 0 -> PIO2_IRQ_0
 
@@ -700,7 +716,7 @@ static void __not_in_flash_func(core1_main)(void) {
     // serve's `mov pindirs, null side 0`, the instruction after `tail`'s wait:
     // MD released, /BE off.
     const uint16_t serve_release = serve_program_instructions[serve_offset_tail + 1];
-    bool memrd_last = sio_hw->gpio_in & (1u << PIN_NMEMRD);
+    const uint32_t memrd_bit = 1u << (PIO0_IRQ_1 & 31);
     uint32_t memrd_change = m33_hw->dwt_cyccnt;
     uint32_t power_off_at = m33_hw->dwt_cyccnt, power_on_at = power_off_at;
     for (;;) {
@@ -756,9 +772,8 @@ static void __not_in_flash_func(core1_main)(void) {
         // are power-down noise: no Z80 is running to make them.
         {
             uint32_t now = m33_hw->dwt_cyccnt;
-            bool rd = sio_hw->gpio_in & (1u << PIN_NMEMRD);
-            if (rd != memrd_last) {
-                memrd_last = rd;
+            if (nvic_hw->ispr[PIO0_IRQ_1 / 32] & memrd_bit) {  // a memory read since the last pass
+                nvic_hw->icpr[PIO0_IRQ_1 / 32] = memrd_bit;
                 memrd_change = now;
                 bus_idle = false;
             } else if (!bus_idle && now - memrd_change > IDLE_CYC) {
@@ -1183,14 +1198,22 @@ static void store(mp_obj_t d, qstr k, mp_uint_t v) {
 // mode byte, and the modem is on-hook in modem_mode (tsbus.modem_mode). The
 // channels are claimed once and kept. Powering the ESP32 is
 // board_v3.modem_power's job.
+// Stop a channel: EN cleared first, then the abort. On the RP2350 an abort
+// alone can let the channel trigger again (erratum RP2350-E5; the SDK's
+// dma_channel_abort documents it, and MicroPython's DMA.close does this).
+static void stop_dma(int ch) {
+    hw_clear_bits(&dma_hw->ch[ch].al1_ctrl, DMA_CH0_CTRL_TRIG_EN_BITS);
+    dma_channel_abort(ch);
+}
+
 static mp_obj_t tsbus_modem(mp_obj_t on_in) {
     require_started();
     modem_on = false;                       // core 1 leaves usart and the channels alone
     mp_hal_delay_ms(1);                     // ... once it is past its current pass
     if (!mp_obj_is_true(on_in)) {
         if (ch_mrx >= 0) {                  // and the UART is free (tsbus.esp_relay)
-            dma_channel_abort(ch_mrx);
-            dma_channel_abort(ch_mtx);
+            stop_dma(ch_mrx);
+            stop_dma(ch_mtx);
         }
         return mp_const_none;
     }
@@ -1198,8 +1221,8 @@ static mp_obj_t tsbus_modem(mp_obj_t on_in) {
         ch_mrx = claim_dma();
         ch_mtx = claim_dma();
     }
-    dma_channel_abort(ch_mrx);
-    dma_channel_abort(ch_mtx);
+    stop_dma(ch_mrx);
+    stop_dma(ch_mtx);
     uart_init(MODEM_UART, MODEM_BAUD);     // 8N1, FIFOs on, DMA requests on
     gpio_set_function(PIN_MODEM_TX, GPIO_FUNC_UART);
     gpio_set_function(PIN_MODEM_RX, GPIO_FUNC_UART);
@@ -1301,26 +1324,43 @@ static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_pace_obj, tsbus_modem_pace);
 // ring to them, paced by a DMA timer at the chip's 10 kHz times rate / 100
 // (50-150). Off: core 1 stops filling, the DMA stops, the pins rest at the
 // middle level. Calling it again with on restarts it (a new rate).
-static void spk_pin(uint pin) {
-    gpio_set_function(pin, GPIO_FUNC_PWM);
-    uint slice = pwm_gpio_to_slice_num(pin);
-    pwm_config c = pwm_get_default_config();
-    pwm_config_set_wrap(&c, SPK_TOP);
-    pwm_config_set_clkdiv_int(&c, 1);
-    pwm_init(slice, &c, true);
-    pwm_set_gpio_level(pin, SPK_MID);
+// Set up an spk_pwm state machine on the pin: the period in ISR, the pin
+// driven by side-set, the middle level, running.
+static int spk_sm(uint pin, uint off) {
+    int sm = claim_sm(pio_iord);
+    pio_gpio_init(pio_iord, pin);
+    pio_sm_set_consecutive_pindirs(pio_iord, sm, pin, 1, true);
+    pio_sm_config c = spk_pwm_program_get_default_config(off);
+    sm_config_set_sideset_pins(&c, pin);
+    sm_config_set_out_shift(&c, true, false, 32);
+    pio_sm_init(pio_iord, sm, off, &c);
+    pio_sm_put(pio_iord, sm, SPK_TOP);
+    pio_sm_exec(pio_iord, sm, pio_encode_pull(false, false));
+    pio_sm_exec(pio_iord, sm, pio_encode_out(pio_isr, 32));
+    pio_sm_put(pio_iord, sm, SPK_MID | SPK_MID << 16);
+    pio_sm_set_enabled(pio_iord, sm, true);
+    return sm;
 }
 
-static void spk_dma(int ch, uint pin) {
+// Both pins to the middle level now (speech off): what is queued in the
+// FIFOs is dropped.
+static void spk_rest(void) {
+    pio_sm_clear_fifos(pio_iord, sm_spk_l);
+    pio_sm_clear_fifos(pio_iord, sm_spk_r);
+    pio_sm_put(pio_iord, sm_spk_l, SPK_MID | SPK_MID << 16);
+    pio_sm_put(pio_iord, sm_spk_r, SPK_MID | SPK_MID << 16);
+}
+
+static void spk_dma(int ch, int sm) {
     dma_channel_config c = dma_channel_get_default_config(ch);
     channel_config_set_transfer_data_size(&c, DMA_SIZE_16);
     channel_config_set_read_increment(&c, true);
     channel_config_set_write_increment(&c, false);
     channel_config_set_ring(&c, false, SPK_RING_BITS);
     channel_config_set_dreq(&c, dma_get_timer_dreq(spk_timer));
-    // A 16-bit write to CC is copied into both halves: channel A (the pin)
-    // and B (unused) get the level.
-    dma_channel_configure(ch, &c, &pwm_hw->slice[pwm_gpio_to_slice_num(pin)].cc, spk_ring,
+    // A 16-bit write to the FIFO arrives in both halves of the word;
+    // spk_pwm takes the low one.
+    dma_channel_configure(ch, &c, &pio_iord->txf[sm], spk_ring,
         dma_encode_endless_transfer_count(), false);
 }
 
@@ -1329,10 +1369,9 @@ static mp_obj_t tsbus_speech(size_t n_args, const mp_obj_t *args) {
     speech_on = false;                      // core 1 leaves the chip and the ring alone
     mp_hal_delay_ms(1);                     // ... once it is past its current pass
     if (ch_spk_l >= 0) {
-        dma_channel_abort(ch_spk_l);
-        dma_channel_abort(ch_spk_r);
-        pwm_set_gpio_level(PIN_AUDIO_L, SPK_MID);
-        pwm_set_gpio_level(PIN_AUDIO_R, SPK_MID);
+        stop_dma(ch_spk_l);
+        stop_dma(ch_spk_r);
+        spk_rest();
     }
     if (!mp_obj_is_true(args[0])) {
         return mp_const_none;
@@ -1348,14 +1387,15 @@ static mp_obj_t tsbus_speech(size_t n_args, const mp_obj_t *args) {
         if (spk_timer < 0) {
             mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("tsbus: no free DMA timer"));
         }
+        uint off = add_program(pio_iord, &spk_pwm_program);
+        sm_spk_l = spk_sm(PIN_AUDIO_L, off);
+        sm_spk_r = spk_sm(PIN_AUDIO_R, off);
         if (spk_scale == 0) {
             spk_scale = 35 * 4 * SPK_MID / 100;   // 35 %, until tsbus.speech_volume
         }
     }
     // The timer gives clk_sys * X / Y; at 250 MHz, Y = 25000 for 10 kHz.
     dma_timer_set_fraction(spk_timer, 1, (uint16_t)(BUS_CLOCK_HZ / (SP0256_RATE * (uint32_t)rate / 100)));
-    spk_pin(PIN_AUDIO_L);
-    spk_pin(PIN_AUDIO_R);
     for (uint i = 0; i < SPK_RING_N; i++) {
         spk_ring[i] = SPK_MID;
     }
@@ -1364,14 +1404,68 @@ static mp_obj_t tsbus_speech(size_t n_args, const mp_obj_t *args) {
     spk_pq_head = spk_pq_tail = 0;
     spk_stop_req = false;
     spk_fill = SPK_RING_N / 2;              // half a ring of silence ahead of the DMA
-    spk_dma(ch_spk_l, PIN_AUDIO_L);
-    spk_dma(ch_spk_r, PIN_AUDIO_R);
+    spk_dma(ch_spk_l, sm_spk_l);
+    spk_dma(ch_spk_r, sm_spk_r);
     dma_start_channel_mask((1u << ch_spk_l) | (1u << ch_spk_r));
     __dmb();
     speech_on = true;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(tsbus_speech_obj, 1, 2, tsbus_speech);
+
+// ---- flash writes ----------------------------------------------------------------------
+//
+// MicroPython erases and programs flash (LittleFS: config.ini, the log, a
+// mounted tape's copy) through flash_range_erase and flash_range_program.
+// The link wraps both (-Wl,--wrap, micropython.cmake), so every flash write
+// comes here first. While the flash is busy the APB bridge stalls, and a DMA
+// write held there holds up the DMA's other channels too, including the ones
+// that answer the 2068's memory reads: it reads late bytes and crashes. Proved
+// on board 1, 2026-10-13, when speech still played to the PWM block: five 8K
+// writes to the Pico's flash locked up a 2068 running a BASIC loop. Speech
+// now plays through PIO2 (spk_pwm), off APB; the modem's two channels must
+// use the UART, so they are paused for the length of the write: EN cleared
+// (no new transfers; the sequence is kept), a moment for one already issued
+// to finish, then the write, then EN set again. The UART FIFO (32 bytes)
+// fills and may overflow during a long erase (inferred).
+
+void __real_flash_range_erase(uint32_t flash_offs, size_t count);
+void __real_flash_range_program(uint32_t flash_offs, const uint8_t *data, size_t count);
+
+static uint32_t __not_in_flash_func(apb_dma_pause)(void) {
+    int chs[2] = {ch_mrx, ch_mtx};
+    uint32_t paused = 0;
+    for (int i = 0; i < 2; i++) {
+        if (chs[i] >= 0 && (dma_hw->ch[chs[i]].al1_ctrl & DMA_CH0_CTRL_TRIG_EN_BITS)) {
+            hw_clear_bits(&dma_hw->ch[chs[i]].al1_ctrl, DMA_CH0_CTRL_TRIG_EN_BITS);
+            paused |= 1u << chs[i];
+        }
+    }
+    if (paused) {
+        busy_wait_at_least_cycles(1000);    // 4 us at 250 MHz: anything issued is done
+    }
+    return paused;
+}
+
+static void __not_in_flash_func(apb_dma_resume)(uint32_t paused) {
+    for (uint ch = 0; paused; ch++, paused >>= 1) {
+        if (paused & 1) {
+            hw_set_bits(&dma_hw->ch[ch].al1_ctrl, DMA_CH0_CTRL_TRIG_EN_BITS);
+        }
+    }
+}
+
+void __not_in_flash_func(__wrap_flash_range_erase)(uint32_t flash_offs, size_t count) {
+    uint32_t paused = apb_dma_pause();
+    __real_flash_range_erase(flash_offs, count);
+    apb_dma_resume(paused);
+}
+
+void __not_in_flash_func(__wrap_flash_range_program)(uint32_t flash_offs, const uint8_t *data, size_t count) {
+    uint32_t paused = apb_dma_pause();
+    __real_flash_range_program(flash_offs, data, count);
+    apb_dma_resume(paused);
+}
 
 // tsbus.say(allophones): queue AL2 allophone numbers (bytes-like, each 0-63)
 // to be spoken after what is queued already; returns how many were queued

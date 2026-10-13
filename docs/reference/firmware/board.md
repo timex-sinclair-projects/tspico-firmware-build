@@ -449,8 +449,8 @@ serial downloader, for installing Zimodem, instead of the firmware.
 
 Speech on, from `TS2068_IO` at boot with `config.ini`'s `SPEECH_VOLUME`,
 `SPEECH_RATE` and `SPEECH_PORTS`:
-1. `tsbus.speech(True, rate)`: the chip reset, the PWM pins and the two DMA
-   channels set up, core 1 filling the ring ([tsbus.md](tsbus.md#speech)).
+1. `tsbus.speech(True, rate)`: the chip reset, the two `spk_pwm` state
+   machines on PIO2 (the audio pins) and the two DMA channels set up, core 1 filling the ring ([tsbus.md](tsbus.md#speech)).
 2. `tsbus.speech_volume(volume)`.
 3. `tsbus.speech_ports(ports)`: OUT 17 / IN 37 as David's speech board.
 4. `speech.load_exceptions()`: `/speech.txt`'s words.
