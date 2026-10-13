@@ -928,7 +928,7 @@ Not in the card gate (`SD_FREE`). Off by default (David, 2026-10-13).
   logged at 0, 0 OK.
 
 From BASIC the greeting is limited by the ROM's 31-character `tpi:` name:
-about 22 characters. `config.ini` takes a longer one. There is no `CODE`
+21 characters. `config.ini` takes a longer one. There is no `CODE`
 form. `board_v3_hosttest.py` pins the answers and the saved key.
 
 ### `AUTOMOUNT(pre, cmd)`
