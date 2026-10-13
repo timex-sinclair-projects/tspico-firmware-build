@@ -2075,9 +2075,7 @@ with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
 
 <!-- keywords: VERBOSE · tpi:log -->
 
-It's bound to happen. You type a command and the 2068 throws up its digital hands. Don't worry:
-the TS-Pico is difficult, but not impossible, to break, and almost everything here is quick to
-fix.
+> **Chapter Preview.** Find out why a command failed, and fix the problems people meet most often.
 
 ## 11.1 First, turn on the messages
 
@@ -2092,64 +2090,97 @@ things it couldn't show on the screen, look in its log: `SAVE "tpi:log" CODE 0,1
 
 ## 11.2 Common problems
 
-**The SD card isn't found.** Reseat the card, or switch off with the USB cable unplugged. See 2.6.
+### The SD card isn't found
 
-**J Invalid I/O device on every command.** The TS-Pico isn't answering.
+**Fix.** Take the card out and push it back in, then type the command again.
+**Fallback.** Switch the 2068 off, unplug the USB cable, and switch on again.
+**Likely cause.** The card was left waiting after a restart with the power on. See 2.6.
 
-1. Look at the LED. A short flash every couple of seconds means the TS-Pico is running; two
-   flashes mean it's running without an SD card (see 2.6). If commands that need the card
-   are the only ones failing, you'll see "No SD card" first.
+### J Invalid I/O device on every command
+
+**Fix.** Look at the LED. A short flash every couple of seconds means the TS-Pico is running;
+two flashes mean it's running without an SD card (2.6), and commands that need the card show
+"No SD card" first. If a computer is connected by USB, close Thonny or any other program
 <!-- v2 -->
-2. If a computer is connected by USB, close Thonny or any other program using the Pico's serial
-   port. Connecting one can interrupt the TS-Pico.
+using the Pico's serial port.
 <!-- /v2 -->
 <!-- v3 -->
-2. If a computer is connected by USB, close Thonny or any other program using the card's serial
-   port. Connecting one can interrupt the TS-Pico.
+using the card's serial port.
 <!-- /v3 -->
+**Fallback.** Press **TS Reset**. If that doesn't help, switch off, unplug the USB cable, and
+switch on again.
+**Likely cause.** A program on the computer interrupted the TS-Pico, or the firmware and the ROM
+come from different releases: an older firmware doesn't understand the new ROM, and every
+command times out after a long pause (Appendix A).
 
-3. The firmware and the ROM must come from the same release. An older firmware doesn't
-   understand the new ROM, and every command times out after a long pause.
-4. Press **TS Reset**. If that doesn't help, switch off, unplug the USB cable, and switch on again.
+### T TS-Pico reset, try again
 
-**T TS-Pico reset, try again.** The TS-Pico noticed a transfer had gone wrong and reset itself
-to be ready for the next one. Just type the command again.
+**Fix.** Type the command again.
+**Likely cause.** The TS-Pico noticed a transfer had gone wrong and reset itself to be ready for
+the next one.
 
-**D BREAK - CONT repeats after a SAVE "f:..."** You answered something other than **Y** to
-`Replace? (Y/N)`. The file is untouched.
+### D BREAK - CONT repeats after a SAVE "f:..."
 
-**F on a SAVE.** A plain SAVE name may only use letters, digits, `-` and `_`. Try
-`SAVE "f:any name.bas"` for other names.
+**Fix.** SAVE again and press **Y** at `Replace? (Y/N)`.
+**Likely cause.** You answered something other than **Y**. The file is untouched.
 
-**LOAD "tpi:dir" gives F.** That's version 1.1's command. Use `SAVE "tpi:dir"`, or `CAT`.
+### F on a SAVE
 
-**8 End of file on a LOAD.** Nothing on the mounted tape matches what you asked for. Check the
-name with `CAT ""`, or rewind with `SAVE "tpi:rew" CODE 0,99`.
+**Fix.** Use only letters, digits, `-` and `_` in a plain SAVE name.
+**Fallback.** Save it as a single file, which allows other names: `SAVE "f:any name.bas"`.
+**Likely cause.** The name has a space or another character a plain SAVE doesn't allow.
 
-**A mounted file can't be erased or renamed.** Unmount it first with `SAVE "tpi:close"`.
+### LOAD "tpi:dir" gives F
 
-**A new file doesn't show in the listing.** A file copied from a computer shows up once you go
-into another folder and back.
+**Fix.** Use `SAVE "tpi:dir"`, or `CAT`.
+**Likely cause.** `LOAD "tpi:dir"` is version 1.1's command; it now tries to mount a file
+called `dir`.
 
-**The screen is garbled with coloured stripes at switch-on, and TS Reset doesn't help.** The
-2068 isn't getting a good ROM from the BOOT slot. If you'd been trying out a ROM with
-`tpi:boot`, switch off and on twice to get back to the standard ROM. If the standard ROM (slot 1)
-itself is damaged, you can boot another slot and write it back from the SD card: see
-Appendix A.
+### 8 End of file on a LOAD
+
+**Fix.** Check the name with `CAT ""`.
+**Fallback.** Mount the TAP that holds the program.
+**Likely cause.** Nothing on the mounted tape matches what you asked for. LOAD has already gone
+all the way round the tape (4.1).
+
+### A mounted file can't be erased or renamed
+
+**Fix.** Unmount it first with `SAVE "tpi:close"`.
+**Likely cause.** The TS-Pico refuses to change the file it's reading from (**Q**, `File is
+mounted`).
+
+### A new file doesn't show in the listing
+
+**Fix.** Type `CAT` again: the TS-Pico re-reads a folder that has changed on the card.
+**Fallback.** Go into another folder and back.
+**Likely cause.** The file was copied onto the card from a computer after the last listing.
+
+### The screen is garbled with coloured stripes at switch-on, and TS Reset doesn't help
+
+**Fix.** If you'd been trying out a ROM with `tpi:boot`, switch off and on twice to get back to
+the standard ROM.
+**Fallback.** If the standard ROM (slot 1) itself is damaged, boot another slot and write it back
+from the SD card (Appendix A).
+**Likely cause.** The 2068 isn't getting a good ROM from the BOOT slot.
 
 <!-- v2 -->
-**The Pico doesn't show up on your computer's USB.** Hold the white **BOOTSEL** button on the
-Pico while you plug in the USB cable. If an `RPI-RP2` drive appears, the cable and computer are
-fine and you can reinstall the firmware (Appendix A). If nothing appears, try another cable;
-some cables only carry power.
+### The Pico doesn't show up on your computer's USB
+
+**Fix.** Hold the white **BOOTSEL** button on the Pico while you plug in the USB cable. If an
+`RPI-RP2` drive appears, the cable and computer are fine and you can reinstall the firmware
+(Appendix A).
+**Fallback.** Try another cable.
+**Likely cause.** Some cables only carry power.
 <!-- /v2 -->
 <!-- v3 -->
-**The card doesn't show up on your computer's USB.** Hold the card's **BOOTSEL** button, press
-and release **RUN**, then let go. If an `RP2350` drive appears, the cable and computer are fine
-and you can reinstall the firmware (Appendix A). If nothing appears, try another cable; some
-cables only carry power.
-<!-- /v3 -->
+### The card doesn't show up on your computer's USB
 
+**Fix.** Hold the card's **BOOTSEL** button, press and release **RUN**, then let go. If an
+`RP2350` drive appears, the cable and computer are fine and you can reinstall the firmware
+(Appendix A).
+**Fallback.** Try another cable.
+**Likely cause.** Some cables only carry power.
+<!-- /v3 -->
 
 ## 11.3 Asking for help
 
