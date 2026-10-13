@@ -884,8 +884,7 @@ said, and returns at once: the card speaks while the 2068 carries on. Not in
 the card gate (`SD_FREE`).
 
 - No `board.HAS_SPEECH` (v2): "No speech on this board", shown, Report F.
-- The text after the word (`getArgs`, case kept; any length: the command's
-  length field is 16 bits, so `SAVE "tpi:say "+A$` works) goes to
+- The text after the word (`getArgs`, case kept) goes to
   `board.say`, which turns it into allophones (`speech.allophones`) and
   queues them (`tsbus.say`). Empty text stops speech at once and drops the
   queue: "Stopped".
@@ -896,6 +895,12 @@ the card gate (`SD_FREE`).
   allophone", Report A, nothing queued.
 - `OSError` (speech didn't start at boot): "Speech is off" and the error,
   shown, Report F.
+
+From BASIC the text is at most 23 characters: the ROM sends a `SAVE
+"tpi:..."` name of up to 31 characters and raises Report C at run time for
+32-255 ([../rom/exrom-driver.md](../rom/exrom-driver.md), the gate), so
+longer text goes in several `tpi:say`s. The command's own length field is 16
+bits; only machine code can send more.
 
 There is no `CODE` form; the volume and the rate are `config.ini`'s
 (`SPEECH_VOLUME`, `SPEECH_RATE`). `board_v3_hosttest.py` pins `board.say`;
