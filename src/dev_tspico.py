@@ -5075,19 +5075,19 @@ def MEM_MAX():
     return 3 if board.SD_SLOTS else 2
 
 
-def SD_SLOTS_CALL(need, fn, *args):
-    """fn(*args), with the SD card mounted on /sd if `need` (a MEM 3 slot is
+def SD_SLOTS_CALL(need, fn, *args, **kw):
+    """fn(*args, **kw), with the SD card mounted on /sd if `need` (a MEM 3 slot is
     about to be read). A card that won't mount isn't an error here: the
     board then reads the flash slot of the same number instead
     (board_v3._slot_file), and says so in its note."""
     if not need:
-        return fn(*args)
+        return fn(*args, **kw)
     try:
         ACTIVATE_SD()
     except OSError:
         pass
     try:
-        return fn(*args)
+        return fn(*args, **kw)
     finally:
         DEACTIVATE_SD()
         ACTIVATE_MQ()
@@ -5144,7 +5144,9 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         # to a crash, and nothing measured says it can go.
         utime.sleep(.100)
         
-        note = SD_SLOTS_CALL(par1 == 3, board.map_slots, TSP.ROM_SM, TSP.bank_sm)
+        # reboot: on v3, a boot slot tpi:blkrcv rewrote is loaded again even
+        # if it's the one booted now (romupd3's "Boot to ROM ... NOW").
+        note = SD_SLOTS_CALL(par1 == 3, board.map_slots, TSP.ROM_SM, TSP.bank_sm, reboot=True)
         if note:                                                       # v3: an SD slot came from flash
             LOG("BOOT: " + note, 1)
         

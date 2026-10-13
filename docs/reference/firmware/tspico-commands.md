@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2535–2612 (`DIR`), 3452–3861 (`IDIR` … `SA_NOT_IMP`), 3926–4167
-(`APPEND`, `BLKRCV`), 4259–4797 (`CDIR` … `GETLOG`), 4912–5275
-(`LOGLEVEL` … `MEMDOCK`), 5278–5338 (`MODEM`), 5439–5515 (`REW`), 5655–5914 (`BAD_CODE` …
-`NOP`) and 6026–6102 (the printer settings); the dispatch table
-`SA_funct` at 6543–6597, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4259–4797 (`CDIR` … `GETLOG`), 4912–5277
+(`LOGLEVEL` … `MEMDOCK`), 5280–5340 (`MODEM`), 5441–5517 (`REW`), 5657–5916 (`BAD_CODE` …
+`NOP`) and 6028–6104 (the printer settings); the dispatch table
+`SA_funct` at 6545–6599, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -43,25 +43,25 @@ where the manual and the code differ, the entries below say so.
 | `LOGLEVEL(pre, cmd)` | 4912 | `tpi:loglevel` |
 | `MDIR(pre, cmd)` | 4971 | `tpi:md` |
 | `MEMBOOT(pre, cmd)` | 5096 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5201 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 5278 | `tpi:modem` |
-| `SAY(pre, cmd)` | 5311 | `tpi:say` |
-| `GREET(pre, cmd)` | 5341 | `tpi:greet` |
-| `AUTOMOUNT(pre, cmd)` | 5380 | `tpi:automount` |
-| `REW(pre, cmd)` | 5439 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5655 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5660 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5665 | `tpi:rm` |
-| `RM_CHECK(name)` | 5711 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5729 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5789 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5843 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5897 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6026 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6047 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6058 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6071 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6089 | `tpi:bmp` |
+| `MEMDOCK(pre, cmd)` | 5203 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 5280 | `tpi:modem` |
+| `SAY(pre, cmd)` | 5313 | `tpi:say` |
+| `GREET(pre, cmd)` | 5343 | `tpi:greet` |
+| `AUTOMOUNT(pre, cmd)` | 5382 | `tpi:automount` |
+| `REW(pre, cmd)` | 5441 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5657 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5662 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5667 | `tpi:rm` |
+| `RM_CHECK(name)` | 5713 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5731 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5791 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5845 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5899 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6028 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6049 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6060 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6073 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 6091 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -84,7 +84,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6540–6541) says (until #181 it
+   trailing space, as the comment above it (6542–6543) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -137,7 +137,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6543) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6545) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -718,7 +718,8 @@ romupdate's questions and end in `SAVE "tpi:blkrcv" CODE m,s`.
 Nothing reaches the Z80 but the message, so v2's stream gate and DMA have no
 counterpart here. A booted slot is written like any other: the 2068 runs
 from the card's SRAM copy, and the new ROM takes effect at the next boot or
-`tpi:boot`. `romupd3` says so before it asks for confirmation, and asks
+`tpi:boot`, also a `tpi:boot` to the slot booted now (`write_slot` marks
+it stale, `MEMBOOT` passes `reboot=True`). `romupd3` says so before it asks for confirmation, and asks
 again before writing flash slot 0, the Spectrum ROM. Checked on proto1
 (2026-10-10): a 32K `.ROM` written to flash slot 5 matched byte for byte
 and booted with `tpi:boot`, and Pro/File's 16K `.DCK` wrote its chunks 4–5
@@ -737,9 +738,9 @@ The highest MEM that `tpi:boot` and `tpi:dock` take: 3 where
 `MEMBOOT` and `MEMDOCK` check against it and name it in "OK values:
 MEM=1..n", and `LOAD_CONFIG` builds its valid `ROM_SM` values from it.
 
-### `SD_SLOTS_CALL(need, fn, *args)`
+### `SD_SLOTS_CALL(need, fn, *args, **kw)`
 
-`fn(*args)`, with the SD card mounted on `/sd` around it if `need` (a MEM 3
+`fn(*args, **kw)`, with the SD card mounted on `/sd` around it if `need` (a MEM 3
 slot is about to be read; [board.md](board.md#sd_slots_dir)). The mount is
 `ACTIVATE_SD()`; one that fails (no card, or it won't mount) is ignored,
 because the board then reads the flash slot of the same number and returns
@@ -775,7 +776,8 @@ and `sel_bank` state machines take ([pio.md](pio.md#set_ctrl),
      puts flash slot 1 back ([tspico-dispatch.md](tspico-dispatch.md#load_config)):
      a ROM that hangs the 2068 can be escaped by a power cycle.
   3. "Change ROM to MEM=m, PAGE=s", `SEND_MSG` (not shown), logged.
-  4. 0.1 s sleep, then `board.map_slots(TSP.ROM_SM, TSP.bank_sm)`, on v2
+  4. 0.1 s sleep, then `board.map_slots(TSP.ROM_SM, TSP.bank_sm,
+     reboot=True)`, on v2
      `ROM.put(TSP.ROM_SM)` and `BANK.put(TSP.bank_sm)` ([board.md](board.md)):
      the ROM changes under the running 2068 at once. `SEND_MSG` has only
      waited for TX to empty; the Z80 is still finishing the statement in
@@ -783,7 +785,10 @@ and `sel_bank` state machines take ([pio.md](pio.md#set_ctrl),
      says it can go. The manual's advice — follow it with `NEW` or a reset
      — is because the 2068 is now running code it did not start in. On the
      v3 card `map_slots` resets the 2068 into the new ROM instead (200 ms,
-     `tsbus.switch`; [board.md](board.md#board_v3py)), a clean start. For
+     `tsbus.switch`; [board.md](board.md#board_v3py)), a clean start;
+     `reboot` makes it load the slot even when it is the one booted now,
+     if `tpi:blkrcv` has rewritten it since (otherwise the same slot loads
+     nothing and doesn't reset). For
      MEM 3 `map_slots` runs in `SD_SLOTS_CALL`, and its note ("no SD slot
      s: used flash slot s") is logged at level 1; the answer has gone
      already.
