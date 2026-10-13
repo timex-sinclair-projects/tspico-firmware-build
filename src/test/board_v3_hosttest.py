@@ -98,7 +98,7 @@ def fake_tsbus():
         setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
     t.modem_poll = lambda: POLL[0]
     # Speech: what board_v3's speech_start and say call.
-    for name in ("speech", "speech_volume"):
+    for name in ("speech", "speech_volume", "speech_ports"):
         setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
 
     def say(al):
@@ -745,8 +745,8 @@ def main():
     take()
     n = b3.speech_start(40, 90)
     got = take()
-    check(got == [("speech", True, 90), ("speech_volume", 40)] and n == 0,
-          "speech_start: tsbus.speech(True, rate), then the volume; no /speech.txt (%r)" % got)
+    check(got == [("speech", True, 90), ("speech_volume", 40), ("speech_ports", True)] and n == 0,
+          "speech_start: tsbus.speech(True, rate), the volume, ports 17/37 on; no /speech.txt (%r)" % got)
     q, n = b3.say("Hello.")
     got = take()
     check(got == [("say", bytes(speech.allophones("Hello.")))] and q == n == len(speech.allophones("Hello.")),

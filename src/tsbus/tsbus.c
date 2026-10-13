@@ -50,6 +50,8 @@
  *   tsbus.say(allophones)          queue AL2 allophone numbers (bytes); None: stop now
  *   tsbus.speech_volume(pct)       0-100
  *   tsbus.speaking()               allophones queued or being spoken
+ *   tsbus.speech_ports(on)         also answer OUT 17 (an allophone) and IN 37 (bit 7:
+ *                                  busy), as David's Pico Speech Synth 2068 board does
  *
  * Nothing on core 1 may touch flash: LittleFS writes stop execute-in-place,
  * and core 1 is never paused for them (it is not a multicore lockout victim).
@@ -224,6 +226,20 @@ static volatile bool speech_on, spk_stop_req;
 static volatile int32_t spk_scale;           // sample * scale >> 15, added to SPK_MID
 static int ch_spk_l = -1, ch_spk_r = -1, spk_timer = -1;
 static volatile uint32_t spk_allophones, spk_samples, spk_late;
+// David's Pico Speech Synth 2068 board's ports: OUT 17 loads an allophone, IN
+// 37 reads the chip's LRQ on bit 7 (1: busy). Its 74HC138 decodes A4, A5 and
+// /RD with A7 low, so it answers more of the port range; programs use 17 and
+// 37, and the card decodes exactly those, leaving the rest of that range
+// free (1Fh, the Kempston port, is in it). Answered only while speech is
+// on. Allophones from OUT 17 go in their own queue, which core 1
+// both fills (io_snoop) and empties (speech_pass), so it needs no lock.
+#define SPK_PORT_OUT 0x11
+#define SPK_PORT_IN  0x25
+#define SPK_PQ_N 64
+static volatile bool spk_ports_on;
+static volatile uint8_t spk_pq[SPK_PQ_N];
+static volatile uint32_t spk_pq_head, spk_pq_tail;   // both core 1's
+static volatile uint32_t spk_port_outs, spk_port_ins;
 
 // The 2068 stopped: /MEMRD hasn't changed for IDLE_CYC. A running Z80 reads
 // memory every few T-states (a HALT too), so that is a reset (/MEMRD high) or
@@ -528,6 +544,10 @@ static void __not_in_flash_func(handle_in)(void) {
         reply = (port & 4) ? u8251_status(&usart) : u8251_data_in(&usart);
         modem_ins++;
         modem_touched = true;
+    } else if (spk_ports_on && speech_on && port == SPK_PORT_IN) {   // speech: bit 7 busy, the rest as the floating bus (7Fh)
+        bool busy = spk_pq_head != spk_pq_tail || spk_q_head != spk_q_tail || !spk_chip.lrq;
+        reply = busy ? 0xff : 0x7f;
+        spk_port_ins++;
     } else {
         answer = false;
     }
@@ -623,15 +643,22 @@ static void __not_in_flash_func(speech_pass)(void) {
     if (spk_stop_req) {
         sp0256_stop(&spk_chip);
         spk_q_tail = spk_q_head;
+        spk_pq_tail = spk_pq_head;
         spk_stop_req = false;
     }
     for (int k = 0; k < SPK_PER_PASS && lead < SPK_AHEAD; k++, lead++) {
-        bool queued = spk_q_tail != spk_q_head;
+        bool from_port = spk_pq_tail != spk_pq_head;
+        bool queued = from_port || spk_q_tail != spk_q_head;
         int32_t v = SPK_MID;
         if (queued || !sp0256_idle(&spk_chip)) {
             if (queued && sp0256_lrq(&spk_chip)) {
-                sp0256_ald(&spk_chip, spk_q[spk_q_tail % SPK_Q_N]);
-                spk_q_tail++;
+                if (from_port) {
+                    sp0256_ald(&spk_chip, spk_pq[spk_pq_tail % SPK_PQ_N]);
+                    spk_pq_tail++;
+                } else {
+                    sp0256_ald(&spk_chip, spk_q[spk_q_tail % SPK_Q_N]);
+                    spk_q_tail++;
+                }
                 spk_allophones++;
             }
             v += (sp0256_sample(&spk_chip) * spk_scale) >> 15;
@@ -827,6 +854,13 @@ static void __not_in_flash_func(core1_main)(void) {
                 } else {
                     u8251_data_out(&usart, (uint8_t)data);
                 }
+            }
+            if (spk_ports_on && speech_on && port == SPK_PORT_OUT) {
+                if (spk_pq_head - spk_pq_tail < SPK_PQ_N) {
+                    spk_pq[spk_pq_head % SPK_PQ_N] = (uint8_t)(data & 63);
+                    spk_pq_head++;
+                }
+                spk_port_outs++;
             }
             if ((port & 0xfe) == 0x0e) {
                 io_status = 0x00;             // busy until the firmware answers
@@ -1327,6 +1361,7 @@ static mp_obj_t tsbus_speech(size_t n_args, const mp_obj_t *args) {
     }
     sp0256_init(&spk_chip, sp0256_al2);
     spk_q_head = spk_q_tail = 0;
+    spk_pq_head = spk_pq_tail = 0;
     spk_stop_req = false;
     spk_fill = SPK_RING_N / 2;              // half a ring of silence ahead of the DMA
     spk_dma(ch_spk_l, PIN_AUDIO_L);
@@ -1374,9 +1409,17 @@ static mp_obj_t tsbus_speech_volume(mp_obj_t pct_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_speech_volume_obj, tsbus_speech_volume);
 
+// tsbus.speech_ports(on): answer OUT 17 and IN 37 too (while speech is on).
+static mp_obj_t tsbus_speech_ports(mp_obj_t on_in) {
+    spk_ports_on = mp_obj_is_true(on_in);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_speech_ports_obj, tsbus_speech_ports);
+
 // tsbus.speaking(): allophones queued, or the chip still speaking.
 static mp_obj_t tsbus_speaking(void) {
-    return mp_obj_new_bool(speech_on && (spk_q_head != spk_q_tail || !spk_chip.halted || !spk_chip.lrq));
+    return mp_obj_new_bool(speech_on && (spk_q_head != spk_q_tail || spk_pq_head != spk_pq_tail
+        || !spk_chip.halted || !spk_chip.lrq));
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_speaking_obj, tsbus_speaking);
 
@@ -1481,6 +1524,9 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_s_samples, spk_samples);
     store(d, MP_QSTR_s_late, spk_late);
     store(d, MP_QSTR_s_queued, spk_q_head - spk_q_tail);
+    store(d, MP_QSTR_s_ports, spk_ports_on);
+    store(d, MP_QSTR_s_port_outs, spk_port_outs);
+    store(d, MP_QSTR_s_port_ins, spk_port_ins);
     return d;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(tsbus_stats_obj, tsbus_stats);
@@ -1740,6 +1786,7 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_say), MP_ROM_PTR(&tsbus_say_obj) },
     { MP_ROM_QSTR(MP_QSTR_speech_volume), MP_ROM_PTR(&tsbus_speech_volume_obj) },
     { MP_ROM_QSTR(MP_QSTR_speaking), MP_ROM_PTR(&tsbus_speaking_obj) },
+    { MP_ROM_QSTR(MP_QSTR_speech_ports), MP_ROM_PTR(&tsbus_speech_ports_obj) },
     { MP_ROM_QSTR(MP_QSTR_MQ), MP_ROM_PTR(&tsbus_mq_type) },
     { MP_ROM_QSTR(MP_QSTR_HOME), MP_ROM_INT(SLOT_HOME) },
     { MP_ROM_QSTR(MP_QSTR_EXROM), MP_ROM_INT(SLOT_EXROM) },

@@ -138,6 +138,7 @@ def main():
 
     stage2(err)
     stage3(err)
+    speech(err)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
@@ -235,6 +236,33 @@ def stage3(err):
     check(ch.read(5, 255) == b"", "no names: the first read is end of file")
     ch.write(5, tab(0))
     check(ch.read(5, 255) == b"0\r", "  and TAB 0 says 0")
+
+
+def speech(err):
+    print("speech: s: channels")
+    said = []
+
+    def say(text):
+        if "[NOPE]" in text:
+            raise ValueError("NOPE")             # as speech.allophones does
+        said.append(text)
+        return len(text), len(text)
+    ch = C.Channels(MemFS())
+    ch.open_speech(4, say)
+    check(ch.speaking(4) and not ch.speaking(5), "speaking(): the s: stream, no other")
+    ch.write(4, b"HELLO")
+    check(said == [], "no CR yet: nothing said")
+    ch.write(4, b" THERE\r")
+    check(said == ["HELLO THERE"], "a CR says the line (%r)" % said)
+    ch.write(4, b"\xf5 2\r\r")                  # PRINT, a keyword token; then an empty line
+    check(said[1:] == ["PRINT  2"], "keywords are spelt out; an empty line says nothing (%r)" % said[1:])
+    ch.write(4, tab(9) + b"BYE")
+    ch.close(4)
+    check(said[2:] == ["BYE"] and not ch.speaking(4), "TAB ignored; CLOSE says the unfinished line")
+    ch.open_speech(4, say)
+    check(err(lambda: ch.read(4, 10)) == "Q", "s: can't be read: Q")
+    check(err(lambda: ch.write(4, b"[NOPE]\r")) == "Q", "an unknown allophone name: Q")
+    ch.close(4)
 
 
 if __name__ == "__main__":

@@ -210,13 +210,15 @@ def modem_download(on):
 # on core 0 (TS/speech.py); tsbus queues them, and the chip speaks them while
 # the 2068 carries on.
 
-def speech_start(volume, rate):
+def speech_start(volume, rate, ports=True):
     """Speech on: the chip at `rate` % of its speed (50-150; its pitch moves
-    with it), at `volume` % (0-100), and /speech.txt's words added to the
-    exception list."""
+    with it), at `volume` % (0-100), answering OUT 17 / IN 37 as David's Pico
+    Speech Synth 2068 board does (`ports`), and /speech.txt's words added to
+    the exception list. Returns how many words that was."""
     from TS import speech
     tsbus.speech(True, rate)
     tsbus.speech_volume(volume)
+    tsbus.speech_ports(ports)
     return speech.load_exceptions()
 
 
