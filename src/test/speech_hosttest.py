@@ -48,14 +48,14 @@ def main():
           "Press any key to continue.")
 
     print("allophones by context")
-    for text, want in (("cat", "KK1 AE TT1 PA5"),          # K before a front vowel
-                       ("cool", "KK3 UW2 LL PA5"),         # ... before a back vowel
-                       ("back", "BB2 AE KK2 PA5"),         # final K
-                       ("game", "GG1 EY MM PA5"),
-                       ("dog", "DD2 AA GG3 PA5"),          # the rules' American "o"
-                       ("car", "KK3 AR PA5"),              # r-coloured vowels
-                       ("sink", "SS IH NG KK2 PA5"),       # N before K
-                       ("the", "DH1 AX PA5")):
+    for text, want in (("cat", "KK1 AE TT1 PA2"),          # K before a front vowel
+                       ("cool", "KK3 UW2 LL PA2"),         # ... before a back vowel
+                       ("back", "BB2 AE KK2 PA2"),         # final K
+                       ("game", "GG1 EY MM PA2"),
+                       ("dog", "DD2 AA GG3 PA2"),          # the rules' American "o"
+                       ("car", "KK3 AR PA2"),              # r-coloured vowels
+                       ("sink", "SS IH NG KK2 PA2"),       # N before K
+                       ("the", "DH1 AX PA2")):
         check(names(text) == want, "%-5s -> %s (%s)" % (text, want, names(text)))
 
     print("numbers")
@@ -66,7 +66,7 @@ def main():
     check(speech.allophones("2068") == speech.allophones("two thousand and sixty eight"), "digits in text are spoken")
 
     print("exceptions")
-    check(names("brown") == "BB1 RR2 AW NN1 PA5", "BROWN from the list, not the rules (%s)" % names("brown"))
+    check(names("brown") == "BB1 RR2 AW NN1 PA2", "BROWN from the list, not the rules (%s)" % names("brown"))
     d = tempfile.mkdtemp()
     try:
         p = os.path.join(d, "speech.txt")
@@ -85,9 +85,9 @@ def main():
         os.rmdir(d)
 
     print("[allophones] in text")
-    check(names("[HH1 EH LL OW]") == "HH1 EH LL OW PA5", "names taken as they are; a closing PA5 added")
+    check(names("[HH1 EH LL OW]") == "HH1 EH LL OW PA2", "names taken as they are; a word gap added")
     check(names("[hh1, eh, ll, ow, pa5]") == "HH1 EH LL OW PA5", "lower case and commas")
-    check(names("hi [PA4] there").split()[:6] == ["HH2", "AY", "PA4", "DH1", "XR", "PA5"],
+    check(names("hi [PA4] there").split()[:6] == ["HH2", "AY", "PA4", "DH1", "XR", "PA2"],
           "mixed with words (%s)" % names("hi [PA4] there"))
     try:
         speech.allophones("[HH1 XYZ]")
@@ -97,9 +97,20 @@ def main():
     check(raised, "an unknown allophone name is ValueError")
 
     print("pauses")
-    check(names("yes, no") == "YY2 EH SS PA4 NN2 OW PA5", "a comma: PA4 (%s)" % names("yes, no"))
+    check(names("yes, no") == "YY2 EH SS PA4 NN2 OW PA2", "a comma: PA4 (%s)" % names("yes, no"))
     check(names("yes. no!") == "YY2 EH SS PA5 NN2 OW PA5", "a full stop and !: PA5")
+    check(names("yes;") == "YY2 EH SS PA5" and names("yes?") == "YY2 EH SS PA5", "; and ?: PA5")
+    check(names("yes,") == "YY2 EH SS PA4", "ending in a comma: PA4, nothing more")
     check(names("") == "PA5", "nothing to say: one pause")
+
+    print("text in pieces")
+    # tpi:say holds 23 characters, so a long sentence goes in pieces. A piece
+    # ending in a word gets only the gap between words, so the pieces join
+    # as the whole sentence does; the end of a sentence still pauses.
+    whole = "Press any key to continue."
+    check(speech.allophones("Press any key") + speech.allophones("to continue.") == speech.allophones(whole),
+          "two pieces say exactly what the whole sentence does")
+    check(names("[HH1 EH LL OW PA3]") == "HH1 EH LL OW PA3", "[...] ending in a pause: nothing added")
 
     print()
     if FAILS:

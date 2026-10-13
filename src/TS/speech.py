@@ -311,7 +311,13 @@ def _words(text):
 
 def allophones(text):
     """Text to AL2 allophone numbers, a bytearray, ending in a pause. A name
-    in [brackets] that isn't an allophone raises ValueError."""
+    in [brackets] that isn't an allophone raises ValueError.
+
+    The pause at the end is the text's own: PA5 after . ! ? or ;, PA4 after
+    a comma, and after a word only PA2, the gap between words, so text sent
+    in pieces (a tpi: name holds 23 characters of it) runs on into the next
+    piece as one sentence. Allophones in [brackets] that already end in a
+    pause get nothing more."""
     out = bytearray()
     for tok in _words(text):
         if tok[0] == "[":
@@ -331,6 +337,8 @@ def allophones(text):
             out.append(PA2)
         for a in word_allophones(phonemes(word_phonemes(tok))):
             out.append(NUMBER[a])
-    if not out or out[-1] != PA5:
+    if not out:
         out.append(PA5)
+    elif out[-1] > PA5:                     # a sound, not PA1-PA5: a word gap
+        out.append(PA2)
     return out

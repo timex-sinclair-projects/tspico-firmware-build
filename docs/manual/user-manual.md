@@ -2570,7 +2570,9 @@ A program can say a string the same way, keeping each piece to 23 characters:
 ```
 
 Numbers are spoken as words (`2068` is "two thousand and sixty eight"). A full stop, `!`, `?`
-or `;` makes a long pause, a comma a shorter one.
+or `;` makes a long pause, a comma a shorter one. Text that ends in a word, with no punctuation,
+runs straight on into the next `tpi:say`, so a sentence said in pieces sounds as it would in
+one.
 
 ## G.2 When a word comes out wrong
 
