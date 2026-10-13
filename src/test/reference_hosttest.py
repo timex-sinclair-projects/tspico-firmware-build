@@ -62,6 +62,8 @@ FIRMWARE = (
     "src/TS/board.py",
     "src/TS/board_v2.py",
     "src/TS/board_v3.py",
+    "src/TS/speech.py",
+    "src/TS/speech_rules.py",
     "src/upgrade/main.py",
     "src/upgrade/upgrade.py",
 )
@@ -97,6 +99,10 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/tsbus/usart8251.c",
     "src/tsbus/modem2050.h",
     "src/tsbus/modem2050.c",
+    "src/tsbus/sp0256.h",
+    "src/tsbus/sp0256.c",
+    "src/tsbus/sp0256_mame.inc",
+    "src/tsbus/sp0256_al2.inc",
     "src/tsbus/micropython.cmake",
     "src/rom/TSPICO.ROM",
     "src/rom/TSPICO-SYNC.ROM",
@@ -107,6 +113,8 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "tools/build-flash.py",
     "tools/build-upgrade.py",
     "tools/gen-buildinfo.py",
+    "tools/sp0256-port.py",
+    "tools/speech-rules.py",
     ".github/workflows/build.yml",
     ".github/workflows/release.yml",
 )

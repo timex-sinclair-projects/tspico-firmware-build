@@ -2736,16 +2736,12 @@ SD_FREE = frozenset((
 SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:FOPEN"))
 
 
-def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # does this command need the card?
+def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct):                        # does this command need the card?
 
     if load_cmd:
         return True                                                           # LOAD "tpi:name": mount a file
     if cmd_word == "TPI:HELP":
         return cmd_exec.strip() != cmd_word                                   # a topic is a file on the card
-    if cmd_word == "TPI:CHOPEN" and CH_SPEECH_PATH(cmd_exec):
-        return False                                                          # OPEN #n,"s:": speech, no file
-    if cmd_word == "TPI:CHWR" and stream is not None and CHANNELS.speaking(stream):
-        return False                                                          # PRINT # to a speech channel
     return cmd_word in SA_funct and cmd_word not in SD_FREE
 
 
@@ -3329,15 +3325,6 @@ def CH_OPEN(pre, cmd):                                                        # 
     k = arg.find(' ')
     mode, path = (arg[:k], arg[k + 1:].strip()) if k > 0 else ("r", arg)
     TLM("CH_OPEN", "stream=%d mode=%r path=%r reclen=%d" % (stream, mode, path, reclen))
-    if path[:2].lower() == "s:":                                              # the v3 card's speech: no file
-        if not board.HAS_SPEECH:
-            CH_REPLY(_3_F_Invalid_file)
-        elif reclen:
-            CH_REPLY(_4_Q_Parameter)                                          # s: is a stream (any mode: it is only written)
-        else:
-            CHANNELS.open_speech(stream, lambda text: board.say(text))
-            CH_REPLY(_1_OK)
-        return
     if path[:2].lower() == "d:":                                              # stage 3: a directory listing
         def op():
             if mode.lower() != "r" or reclen:
@@ -3365,16 +3352,6 @@ def CH_OPEN(pre, cmd):                                                        # 
     CH_REPLY(st)
 
 
-def CH_SPEECH_PATH(cmd):                                                      # tpi:chopen <mode> s:
-
-    """Is this tpi:chopen for OPEN #n,"s:" (the v3 card's speech)?"""
-
-    arg = getArgs(cmd).strip()
-    k = arg.find(' ')
-    path = arg[k + 1:].strip() if k > 0 else arg
-    return path[:2].lower() == "s:"
-
-
 def CH_WRITE(pre, cmd):                                                       # tpi:chwr <hex>
 
     stream = PARAMS(pre)[0] & 0xFF
@@ -3383,17 +3360,6 @@ def CH_WRITE(pre, cmd):                                                       # 
         data = bytes(int(hx[i:i + 2], 16) for i in range(0, len(hx), 2))
     except ValueError:
         CH_REPLY(_5_C_Nonsense)
-        return
-    if CHANNELS.speaking(stream):                                             # s:: no card, so no SD_CALL
-        try:
-            CHANNELS.write(stream, data)
-            st = _1_OK
-        except channels.ChannelError as e:
-            st = CH_STATUS.get(e.args[1], _4_Q_Parameter)
-        except OSError as e:                                                  # speech off
-            LOG("PRINT # to speech: %r" % e, 1)
-            st = _10_J_Invalid_IO
-        CH_REPLY(st)
         return
     msg, st = CH_CALL(CHANNELS.write, stream, data)
     CH_REPLY(st)
@@ -6244,7 +6210,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         # No card: a command that needs one gets told so, once, clearly. The
         # card is looked for again first (one quick try), so putting one in
         # is all it takes; one that has come back is set up on the way.
-        if SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, PARAMS(pre)[0] & 0xFF) and not TSP.sd_present \
+        if SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct) and not TSP.sd_present \
                 and not SD_PROBE():
             NO_CARD_REPLY(cmd_word)
 

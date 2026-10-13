@@ -15,9 +15,6 @@
 # stream: TAB n is byte n.
 # Stage 3 (spec §4): OPEN #n,"d:pattern" is a directory listing, held in memory:
 # one name per line (a directory's ends in '/'), TAB 0 the number of names.
-# The v3 card's speech: OPEN #n,"s:" is write-only, with no file: each line
-# printed to it (up to a CR) is spoken (docs/v3-speech-proposal.md). It never
-# needs the card (speaking).
 #
 # The card is unmounted between commands (its pins are shared with the 2068
 # link), so no file stays open: every operation opens the file, seeks to the
@@ -196,8 +193,6 @@ class Channel:
         self.query = False                           # TAB 0: the next read is the count
         self.mem = None                              # a listing (d:): the bytes, not a file
         self.count = None                            # ... and how many names
-        self.say = None                              # speech (s:): a function given each line
-        self.line = bytearray()                      # ... and the line so far
 
     def pad(self):
         return b"\0" if self.binary else b" "
@@ -258,42 +253,6 @@ class Channels:
         ch.count = len(names)
         self.table[stream] = ch
 
-    def open_speech(self, stream, say):
-        """OPEN #n,"s:": a write-only channel with no file. say(text) is
-        called with each line printed to it, when its CR arrives."""
-
-        self.table.pop(stream, None)
-        ch = Channel(None, "w", False, 0, 0)
-        ch.say = say
-        self.table[stream] = ch
-
-    def speaking(self, stream):
-        """Is stream a speech channel? (It needs no card.)"""
-
-        ch = self.table.get(stream)
-        return ch is not None and ch.say is not None
-
-    def _speak(self, ch, final=False):
-        """Say the complete lines in ch.line (and, at close, the rest)."""
-
-        while True:
-            k = ch.line.find(b"\n")
-            if k < 0:
-                break
-            text, ch.line = bytes(ch.line[:k]), ch.line[k + 1:]
-            self._say(ch, text)
-        if final and ch.line.strip():
-            text, ch.line = bytes(ch.line), bytearray()
-            self._say(ch, text)
-
-    def _say(self, ch, text):
-        if not text.strip():
-            return
-        try:
-            ch.say(text.decode())
-        except ValueError:                           # [NAME] that isn't an allophone
-            raise ChannelError("Not an allophone", "Q")
-
     def _size(self, ch):
         return len(ch.mem) if ch.mem is not None else self.fs.size(ch.path)
 
@@ -341,10 +300,6 @@ class Channels:
 
         if ch.mode == "r":
             return                                   # INPUT #'s prompt items: dropped
-        if ch.say is not None:
-            ch.line.extend(ch.text_out.feed(data))   # words, CR -> newline
-            self._speak(ch)
-            return
         if ch.query:
             raise ChannelError("TAB 0 is only for reading", "Q")
         if not ch.reclen:
@@ -379,8 +334,7 @@ class Channels:
                 if len(ch.tab) == 2:
                     n = ch.tab[0] | ch.tab[1] << 8
                     ch.tab = None
-                    if ch.say is None:               # TAB means nothing to speech
-                        self._seek(ch, n)
+                    self._seek(ch, n)
             elif b == 23:
                 if run:
                     self._data(ch, run)
@@ -446,11 +400,6 @@ class Channels:
         ch = self.table.get(stream)
         if ch is not None and ch.reclen:
             self._end_record(ch)                     # PRINT #4;...; left one open
-        if ch is not None and ch.say is not None:
-            try:
-                self._speak(ch, final=True)          # PRINT #4;"bye"; then CLOSE #4
-            except ChannelError:
-                pass                                 # closing still closes
         self.table.pop(stream, None)
 
     def close_writes(self, stream):

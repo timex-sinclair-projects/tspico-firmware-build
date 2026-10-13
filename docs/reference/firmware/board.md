@@ -22,25 +22,28 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6349), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5135), `MEMDOCK` (5255), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7315) |
-| `restart_mq()` | `ZX48_IO` (7316, 7421, 7463) |
+| `start_memory()` | `TS2068_IO` (6385), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5141), `MEMDOCK` (5261), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7360) |
+| `restart_mq()` | `ZX48_IO` (7361, 7466, 7508) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6317) |
-| `led_brightness()` | `TS2068_IO` (6321), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6455, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7118) |
+| `make_led()` | `TS2068_IO` (6353) |
+| `led_brightness()` | `TS2068_IO` (6357), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6500, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7163) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5048, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5105, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5054, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5111, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `HAS_MODEM` | `TS2068_IO` (6352, at boot; 7047, the idle loop), `MODEM` (5276, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
-| `modem_start()` | `TS2068_IO` (6353), at boot with `config.ini`'s modem keys; `MODEM` (5290), a new mode |
-| `modem_service()` | `TS2068_IO`'s idle loop (7048), every pass with nothing arrived |
-| `modem_status()`, `MODEM_MODES` | `MODEM` (5281, 5284) |
+| `HAS_MODEM` | `TS2068_IO` (6388, at boot; 7092, the idle loop), `MODEM` (5282, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `modem_start()` | `TS2068_IO` (6389), at boot with `config.ini`'s modem keys; `MODEM` (5296), a new mode |
+| `modem_service()` | `TS2068_IO`'s idle loop (7093), every pass with nothing arrived |
+| `HAS_SPEECH` | `TS2068_IO` (6391, at boot), `SAY` (5315, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
+| `speech_start()` | `TS2068_IO` (6393), at boot with `config.ini`'s speech keys |
+| `say()` | `SAY` (5320, `tpi:say`) |
+| `modem_status()`, `MODEM_MODES` | `MODEM` (5287, 5290) |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
 PIO programs. So it detects the v3 card itself (step 4.2;
@@ -91,6 +94,11 @@ core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 
 `False`: no TS2050 modem. 73h/77h are not answered, `tpi:modem` says "No
 modem on this board", and nothing calls the modem functions.
+
+### `HAS_SPEECH`
+
+`False`: no audio output. `tpi:say` says "No speech on this board", and
+ports 17/37 stay unanswered.
 
 ### `NULL_SM`
 
@@ -254,6 +262,11 @@ loop, so `background()` runs on core 0 and there is no boot blink.
 ### `HAS_MODEM`
 
 `True`: the TS2050 modem (`modem_start` below; [docs/v3-modem-proposal.md](../../v3-modem-proposal.md)).
+
+### `HAS_SPEECH`
+
+`True`: speech, the SP0256-AL2 on core 1 out of the audio jack (`speech_start`
+below; [speech.md](speech.md)).
 
 ### `SLOTS_DIR`, `SLOT_SIZE`, `MEM_SRAM`, `MEM_FLASH`, `MEM_SD`
 
@@ -431,6 +444,29 @@ call it.
 IO9 held low (`True`) or released. The ESP32 reads IO9 as it leaves reset,
 so this takes effect at the next `modem_power(True)`: low boots its ROM's
 serial downloader, for installing Zimodem, instead of the firmware.
+
+### `speech_start(volume, rate, ports=True)`
+
+Speech on, from `TS2068_IO` at boot with `config.ini`'s `SPEECH_VOLUME`,
+`SPEECH_RATE` and `SPEECH_PORTS`:
+1. `tsbus.speech(True, rate)`: the chip reset, the PWM pins and the two DMA
+   channels set up, core 1 filling the ring ([tsbus.md](tsbus.md#speech)).
+2. `tsbus.speech_volume(volume)`.
+3. `tsbus.speech_ports(ports)`: OUT 17 / IN 37 as David's speech board.
+4. `speech.load_exceptions()`: `/speech.txt`'s words.
+
+Returns how many words step 4 read. `TS2068_IO` catches anything it raises
+(logged at level 2), so speech can never stop the boot. `TS.speech` is
+imported here, not at the top, so it only loads on a board with speech.
+
+### `say(text)`
+
+`tpi:say`'s speaker. Empty or blank text calls
+`tsbus.say(None)`: silence at once, the queue dropped. Otherwise
+`speech.allophones(text)` goes to `tsbus.say`. Returns `(queued, in the
+text)`; fewer queued means the 1024-allophone queue was full. An unknown
+`[NAME]` raises `ValueError` from `speech.allophones` before anything is
+queued. `OSError` if speech isn't on (`tsbus`'s "speech off").
 
 ### `LED_PERIOD_US`, `LED_BRIGHTNESS`
 
