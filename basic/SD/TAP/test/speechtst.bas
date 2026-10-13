@@ -2,7 +2,9 @@
 # The v3 card's speech (docs/v3-speech-proposal.md, user manual Appendix G):
 # a menu of tests. The ROM takes a SAVE "tpi:..." name of at most 31
 # characters (32 or more is Report C at run time), so tpi:say carries at
-# most 23 characters of text: longer text goes in pieces. 1-3 and 5-6 use tpi:say; 4 drives ports 17 and 37 as a
+# most 23 characters of text: longer text goes in pieces. A piece that ends
+# in a word runs straight on into the next (#289), so 2's pieces sound like
+# one sentence. 1-3 and 5-6 use tpi:say; 4 drives ports 17 and 37 as a
 # program for the Pico Speech Synth 2068 board does (OUT 17 an allophone,
 # IN 37 bit 7 busy), and counts the IN 37 polls that read busy.
 10 REM TS-Pico speech test
@@ -43,7 +45,7 @@
 600 REM 5: stop after about a second and a half
 610 SAVE "tpi:say ONE TWO THREE FOUR FIVE": SAVE "tpi:say SIX SEVEN EIGHT NINE": SAVE "tpi:say TEN."
 620 PAUSE 75: SAVE "tpi:say"
-630 PRINT "Stopped: should be cut off": PRINT "around three or four."
+630 PRINT "Stopped: should be cut off": PRINT "around four or five."
 640 RETURN
 700 REM 6: a TS-Pico command while the card talks
 710 SAVE "tpi:say THE TS-PICO CAN TALK": SAVE "tpi:say AND WORK AT THE SAME": SAVE "tpi:say TIME. THIS SENTENCE": SAVE "tpi:say KEEPS GOING WHILE IT": SAVE "tpi:say ANSWERS."
