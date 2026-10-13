@@ -141,7 +141,7 @@ await check('a refused block is an EspError', async () => {
     const rom = new FakeRom({ deafSyncs: 0, badSeqAt: 2 })
     const esp = new EspRomLoader(rom)
     await esp.sync(); await esp.attach()
-    await assert.rejects(esp.flash(image.slice(0, 64 * 1024)), EspError)
+    await assert.rejects(esp.flash(image), EspError)          // block 2: the patterned image has only 3
 })
 
 await check('an MD5 that differs is an EspError', async () => {
