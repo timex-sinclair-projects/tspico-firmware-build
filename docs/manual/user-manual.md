@@ -1251,6 +1251,9 @@ card in your computer to see both files.
 
 <!-- keywords: tpi:boot · tpi:dock · slots -->
 
+> **Chapter Preview.** Choose the ROM the 2068 starts from and the cartridge in its dock, and put
+> your own ROMs and cartridges into slots.
+
 ## 8.1 The slots
 
 The TS-Pico's 512K Flash chip is divided into sixteen 32K **slots**, numbered 0 to 15. Its
@@ -1315,7 +1318,7 @@ how ZX Spectrum mode starts, and a cartridge started that way crashes.
 
 To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
 
-**The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is simply what's in
+**The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is what's in
 the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
 for example, and it takes the Spectrum ROM's place until you change the dock back
 (`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
@@ -1323,44 +1326,57 @@ slot 0.
 
 ## 8.4 Putting a ROM or cartridge into a slot
 
-You can load your own ROM images and cartridges from the SD card into a slot. Mount the file,
-then `LOAD ""` runs a small loader program that asks where to put it:
+You'll need the ROM image (`.rom` or `.bin`) or cartridge (`.dck`) in the current folder on the
+SD card, and the P10 jumper fitted (2.3).
 
-```basic
-LOAD "tpi:myrom.rom"         : REM or .bin, or a cartridge .dck
-LOAD ""
-```
+> **Warning.** The slot you choose is erased before it's written. You can't write the slot the
+> 2068 is running from: erasing it would pull the ROM out from under the running 2068 and hang
+> both machines. The TS-Pico refuses with **Q Parameter error**:
+>
+> ```
+> Can't write Flash slot 4:
+> the 2068 is running from it.
+> Boot another slot first.
+> ```
+>
+> Start the 2068 from its normal ROM first (switch off and on, or
+> `SAVE "tpi:boot" CODE 2,1: NEW`), then load the new image.
 
-The loader shows a warning, because the slot you pick is erased first. It then asks:
+1. Type `LOAD "tpi:myrom.rom"` and press **ENTER**.
 
-1. **SRAM(1) or Flash(2)?** RAM is quick and safe to experiment with, but forgets at switch-off.
-   Flash keeps it.
-2. **Which slot?** For Flash, slots 4 to 14 are free for you. Slots 0 to 3 hold the system ROMs,
-   and the loader makes you confirm that you're ABSOLUTELY SURE before writing them.
-3. When it's done, it tells you how to use the slot, for example `SAVE "tpi:boot" CODE 2,4:NEW`
-   for a ROM, and offers to start it now.
+   You should see **0 OK**.
+2. Type `LOAD ""` and press **ENTER**.
+
+   You should see the ROM Loader, its warning that the slot will be erased, and
+   `Press any key ...`.
+3. Press any key.
+
+   You should see `Use SRAM(1) or Flash(2)?`.
+4. Type **2** for Flash, or **1** for RAM, and press **ENTER**.
+
+   You should see `Select slot (4..14)?` for Flash, or `Select slot (0..14)?` for RAM.
+5. Type the slot number, **4** for example, and press **ENTER**.
+
+   You should see `Any changes (y/N)?`.
+6. Press **ENTER**.
+
+   You should see `>Erasing slot 4 of Flash` and `>Writing slot 4 of Flash`, each followed by
+   `OK`, the commands that use the slot, `SAVE "tpi:boot"CODE 2,4:NEW` and
+   `SAVE "tpi:dock"CODE 2,4`, and `Boot to ROM 2,4 NOW (y/N)?`.
+7. Type **Y** and press **ENTER** to start the 2068 from the new ROM now, or press **ENTER** to
+   stay in the ROM you're using.
+
+RAM is quick and safe to experiment with, but forgets at switch-off; Flash keeps it. Slots 0 to
+3 hold the system ROMs, and the loader makes you confirm that you're ABSOLUTELY SURE before
+writing them.
 
 A cartridge loads the same way, into an even slot; the loader then offers to put it in the dock
 and restart.
 
 If the image isn't mounted any more when the loader asks for it (after `tpi:close`, say), the
 loader stops with `No ROM image mounted` and **F** before it erases anything. Mount the file
-and run `LOAD ""` again.
-
-**Two important rules:**
-
-- **Keep the P10 jumper fitted.** Without it the Flash can't be written, and the loader will say so.
-- **You can't write the slot the 2068 is running from.** Erasing it would pull the ROM out from
-  under the running 2068 and hang both machines. The TS-Pico refuses with **Q Parameter error**:
-
-  ```
-  Can't write Flash slot 4:
-  the 2068 is running from it.
-  Boot another slot first.
-  ```
-
-  Start the 2068 from its normal ROM first (switch off and on, or
-  `SAVE "tpi:boot" CODE 2,1: NEW`), then load the new image.
+and run `LOAD ""` again. Without the P10 jumper the Flash can't be written, and the loader says
+so.
 
 ## 8.5 Summary
 
@@ -1375,6 +1391,9 @@ and run `LOAD ""` again.
 # Chapter 8: ROM Slots and Cartridges
 
 <!-- keywords: tpi:boot · tpi:dock · slots -->
+
+> **Chapter Preview.** Choose the ROM the 2068 starts from and the cartridge in its dock, and put
+> your own ROMs and cartridges into slots.
 
 ## 8.1 The slots
 
@@ -1457,7 +1476,7 @@ how ZX Spectrum mode starts, and a cartridge started that way crashes.
 
 To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
 
-**The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is simply what's in
+**The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is what's in
 the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
 for example, and it takes the Spectrum ROM's place until you change the dock back
 (`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
@@ -1465,30 +1484,42 @@ slot 0.
 
 ## 8.4 Putting a ROM or cartridge into a slot
 
-You can load your own ROM images and cartridges from the SD card into a slot. Mount the file,
-then `LOAD ""` runs a small loader program that asks where to put it:
+You'll need the ROM image (`.rom` or `.bin`) or cartridge (`.dck`) in the current folder on the
+SD card.
 
-```basic
-LOAD "tpi:myrom.rom"         : REM or .bin, or a cartridge .dck
-LOAD ""
-```
+1. Type `LOAD "tpi:myrom.rom"` and press **ENTER**.
 
-It asks:
+   You should see **0 OK**.
+2. Type `LOAD ""` and press **ENTER**.
 
-1. **SRAM(1) or Flash(2)?** RAM is quick and safe to experiment with, but forgets at switch-off.
-   Flash keeps it.
-2. **Which slot?** For Flash, slots 4 to 9 are free for you; a cartridge goes in an even slot.
-3. The card writes the slot itself, in a fraction of a second, and the loader tells you how to
-   use it, for example `SAVE "tpi:boot" CODE 2,4` for a ROM, and offers to start it now. For a
-   cartridge it offers to put it in the dock.
+   You should see the ROM Loader, its warning that the slot you choose is replaced, and
+   `Press any key ...`.
+3. Press any key.
 
-Some rules:
+   You should see `Use SRAM(1) or Flash(2)?`.
+4. Type **2** for Flash, or **1** for RAM, and press **ENTER**.
+
+   You should see `Select slot (4..15)?` for Flash, or `Select slot (0..15)?` for RAM.
+5. Type the slot number, **4** for example, and press **ENTER**.
+
+   You should see `Any changes (y/N)?`.
+6. Press **ENTER**.
+
+   You should see `>Writing slot 4 of Flash`, then `OK` a fraction of a second later, the command
+   that uses it, `SAVE "tpi:boot"CODE 2,4`, and `Boot to ROM 2,4 NOW (y/N)?`.
+7. Type **Y** and press **ENTER** to start the 2068 from the new ROM now, or press **ENTER** to
+   stay in the ROM you're using.
+
+RAM is quick and safe to experiment with, but forgets at switch-off; Flash keeps it. Flash slots
+4 to 9 are free for you. A cartridge loads the same way, into an even slot (the DCK Loader asks
+`Select slot (even 4..14)?`), and offers to put it in the dock.
 
 - **You can write the slot the 2068 is running from.** The 2068 carries on with the ROM it
   started with, and the new one runs from the next start, or after `SAVE "tpi:boot"`. The
   loader tells you so and asks you to confirm.
 - **Flash slot 0 is the Spectrum ROM** that ZX Spectrum mode needs. The loader warns you and asks
-  again before replacing it. Slots 1 to 3 hold the other system ROMs.
+  again before replacing it. Slots 1 to 3 hold the other system ROMs, and the loader makes you
+  confirm that you're ABSOLUTELY SURE before writing them.
 
 If the image isn't mounted any more when the loader asks for it (after `tpi:close`, say), the
 loader stops with `No ROM image mounted` and **F**. Mount the file and run `LOAD ""` again.
@@ -1533,21 +1564,27 @@ SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
 
 <!-- keywords: tpi:zx48 -->
 
+> **Chapter Preview.** Turn the 2068 into a ZX Spectrum, load Spectrum tapes from the SD card,
+> and come back.
+
 ## 9.1 Entering Spectrum mode
 
 The 2068 can run Spectrum software with a Spectrum ROM. The TS-Pico keeps one in Flash slot 0,
 modified so that its LOAD and SAVE use the SD card.
 
-1. **Mount a TAP of Spectrum programs first:** `LOAD "tpi:spectrum.tap"`.
-2. Tell the TS-Pico to switch modes:
+You'll need a TAP of Spectrum programs on the card. These steps use `spectrum.tap`.
 
-   ```basic
-   SAVE "tpi:zx48"
-   ```
+1. Type `LOAD "tpi:spectrum.tap"` and press **ENTER**.
+
+   You should see **0 OK**.
+2. Type `SAVE "tpi:zx48"` and press **ENTER**.
+
+   You should see this message:
 
    ![The message SAVE "tpi:zx48" prints](images/zx48-switch.png)
+3. Type `OUT 244,3` and press **ENTER**.
 
-3. Type `OUT 244,3`. You're now at the Spectrum's © 1982 Sinclair Research screen.
+   You should see the Spectrum's © 1982 Sinclair Research screen.
 
 ## 9.2 What works in Spectrum mode
 
@@ -1555,9 +1592,9 @@ modified so that its LOAD and SAVE use the SD card.
 - `SAVE "name"` saves a new `name.tap` in the current folder, replacing any file of that name.
 - `LOAD "tpi:name.tap"` and `LOAD "tpi:nnn"` mount another TAP from the current folder, by name or
   index number.
-- `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068, with `scroll?` for a long
-  one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too. 
-  
+- With the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068,
+  with `scroll?` for a long one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too.
+
   ![SAVE "tpi:dir" on the Spectrum: the same listing as CAT on the 2068](images/zx48-dir.png)
 - Other `tpi:` commands aren't available, and give **Q Parameter error**.
 
@@ -1574,8 +1611,9 @@ message (`CODE 1,0`).
 
 ## 9.3 Back to the 2068
 
-1. `OUT 244,0` switches back to the 2068 ROM.
-2. `OUT 14,14` tells the TS-Pico to leave Spectrum mode.
+<!-- CHECK: what does the screen show after each step? The guide wants a "You should see" line under each. -->
+1. Type `OUT 244,0` and press **ENTER**. This switches back to the 2068 ROM.
+2. Type `OUT 14,14` and press **ENTER**. This tells the TS-Pico to leave Spectrum mode.
 
 > **Note:** older instructions say `OUT 10,100`. That no longer works: use `OUT 14,14`.
 
