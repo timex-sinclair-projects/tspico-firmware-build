@@ -706,6 +706,9 @@ SAVE "pic" SCREEN$
 SAVE "code" CODE 32768,1000
 ```
 
+As with tape, SAVE prints `Start tape, then press any key.` and waits: press a key, and the
+program goes to the card.
+
 **Remember:**
 
 - A plain SAVE name may only use **letters, digits, `-` and `_`**. Spaces or other symbols give
@@ -775,10 +778,9 @@ name and shows them in turn:
 100 NEXT i
 ```
 
-<!-- CHECK: does an ordinary SAVE to the TS-Pico still wait for a key ("press any key") on ROM 2.3? The ROM disassembly suggests the stock wait remains at EXROM 22AEh. If so, this program pauses at each SAVE. -->
 Line 10 makes `pics.tap`, mounts it and turns append on, so lines 30 to 50 add `pic1`, `pic2` and
-`pic3` to it instead of making three files. Line 80 finds each picture by its tape name. Run it
-once: on a second RUN, line 10 stops with **F**, because FORMAT never replaces a file.
+`pic3` to it instead of making three files. Each SAVE in line 40 waits for you to press a key, as
+any SAVE does. Line 80 finds each picture by its tape name. Run it once: on a second RUN, line 10 stops with **F**, because FORMAT never replaces a file.
 
 ## 4.6 Summary
 
@@ -808,6 +810,7 @@ SAVE "f:advent.bas" LINE 10
 LOAD "f:advent.bas"
 ```
 
+SAVE prints `Start tape, then press any key.` and waits for a key, as it does for tape.
 Everything you can save to tape, you can save this way:
 
 ```basic
@@ -869,7 +872,8 @@ With verbose on, the TS-Pico says which, for example `advent.bas holds a program
 60 FOR i=1 TO 5: PRINT i;". ";s(i): NEXT i
 ```
 
-Line 30 saves the array, line 40 empties it, and line 50 brings the scores back. A game would
+Line 30 saves the array (press a key when it asks), line 40 empties it, and line 50 brings the
+scores back. A game would
 save at line 30 when it ends and load at line 50 when it starts. The second time you RUN this,
 line 30 asks `Replace scores.dat? (Y/N)`: press **Y**.
 
@@ -1157,13 +1161,110 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 | **O Invalid stream** | The stream is already open to a file |
 | **4 Out of memory** | No room for another open file (each takes 512 bytes) |
 
-## 6.10 Summary
+## 6.10 More ways to use files
+
+These patterns come up in most programs that keep data. Each one was run on a 2068 with the
+TS-Pico firmware.
+
+**Reading a file of any length.** You don't need to know how many lines a file holds. Let the
+2068's **ON ERR** catch the **8 End of file** at the end:
+
+```basic
+10 OPEN #4,"f:shopping.txt","w"
+20 PRINT #4;"Eggs": PRINT #4;"Milk": PRINT #4;"Bread"
+30 CLOSE #4
+40 ON ERR GO TO 100
+50 OPEN #4,"f:shopping.txt"
+60 LET n=0
+70 INPUT #4;a$
+80 LET n=n+1: PRINT n;". ";a$
+90 GO TO 70
+100 ON ERR RESET
+110 CLOSE #4
+120 PRINT n;" lines"
+```
+
+```
+1. Eggs
+2. Milk
+3. Bread
+3 lines
+```
+
+`ON ERR GO TO 100` sends any report to line 100, so a file that isn't there lands there too,
+with `n` still 0. `ON ERR RESET` turns the trap off again.
+
+**Several fields to an entry.** Write each field on its own line, with `'` between them, and
+read them back with one `INPUT #`:
+
+```basic
+10 OPEN #4,"f:scores.txt","w"
+20 FOR i=1 TO 3: READ n$,s
+30 PRINT #4;n$'s
+40 NEXT i
+50 CLOSE #4
+60 DATA "Alice",120,"Bob",95,"Carol",150
+70 OPEN #4,"f:scores.txt"
+80 FOR i=1 TO 3
+90 INPUT #4;n$,s
+100 PRINT n$,s
+110 NEXT i
+120 CLOSE #4
+```
+
+`INPUT #4;n$,s` reads two lines: a name into `n$` and a score into `s`.
+
+**Numbers.** A number you `PRINT #` comes back as a number with `INPUT #`:
+
+```basic
+10 OPEN #4,"f:numbers.txt","w"
+20 FOR i=1 TO 5: PRINT #4;i*1.5: NEXT i
+30 CLOSE #4
+40 LET t=0
+50 OPEN #4,"f:numbers.txt"
+60 FOR i=1 TO 5: INPUT #4;x: LET t=t+x: NEXT i
+70 CLOSE #4
+80 PRINT "Total: ";t
+```
+
+This prints `Total: 22.5`.
+
+**Copying a file.** Two streams can be open at once, one reading and one writing:
+
+```basic
+10 ON ERR GO TO 60
+20 OPEN #4,"f:shopping.txt": OPEN #5,"f:copy.txt","w"
+30 INPUT #4;a$: PRINT #5;a$
+40 GO TO 30
+60 ON ERR RESET
+70 CLOSE #4: CLOSE #5
+80 PRINT "Copied."
+```
+
+**A file for a spreadsheet.** A text file with commas between the values (a CSV file) opens in
+any spreadsheet on your computer:
+
+```basic
+10 OPEN #4,"f:squares.csv","w"
+20 PRINT #4;"n,square,cube"
+30 FOR i=1 TO 5
+40 PRINT #4;i;",";i*i;",";i*i*i
+50 NEXT i
+60 CLOSE #4
+```
+
+`squares.csv` holds `n,square,cube`, then `1,1,1`, `2,4,8` and so on. Put the commas in quotes,
+as in line 40: a comma on its own between PRINT items moves to the next column, and goes into
+the file as spaces.
+
+## 6.11 Summary
 
 1. `OPEN #n,"f:name","mode"` connects a stream to a file: r, w, a or u, plus b for binary.
 2. `PRINT #`, `INPUT #`, `INKEY$ #` and `LIST #` work as they do with any stream.
 3. Always CLOSE a file you've written to.
 4. A record length (`OPEN #4,"f:x","u",20`) makes TAB jump to a record; `TAB 0` counts them.
 5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT.
+6. `ON ERR GO TO` catches the **8 End of file** at the end of a file of any length.
 
 ---
 
@@ -1618,9 +1719,12 @@ message (`CODE 1,0`).
 
 ## 9.3 Back to the 2068
 
-<!-- CHECK: what does the screen show after each step? The guide wants a "You should see" line under each. -->
 1. Type `OUT 244,0` and press **ENTER**. This switches back to the 2068 ROM.
+
+   You should see the 2068's three copyright lines.
 2. Type `OUT 14,14` and press **ENTER**. This tells the TS-Pico to leave Spectrum mode.
+
+   You should see **0 OK**.
 
 > **Note:** older instructions say `OUT 10,100`. That no longer works: use `OUT 14,14`.
 
