@@ -71,6 +71,17 @@ def main():
     print("the website")
     site = importlib.import_module("build-site-docs")
     check(site.VARIANTS.get("docs/manual/user-manual.md") == "v2", "build-site-docs publishes the v2 manual")
+    import fnmatch
+    imgs = os.listdir(os.path.join(REPO, "docs", "manual", "images"))
+    kept = [f for f in imgs if not any(fnmatch.fnmatch(f, p) for p in site.COPY_IGNORE)]
+    check("info-v3.png" not in kept and "info.png" in kept,
+          "the site copies the v2 pictures, not the v3 manual's (*-v3.*)")
+    for name, out in (("v2", v2), ("v3", v3)):
+        refs = set(re.findall(r"\(images/([^)]+)\)", out))
+        v3_refs = sorted(r for r in refs if "-v3." in r)
+        check(all(os.path.exists(os.path.join(REPO, "docs", "manual", "images", r)) for r in refs)
+              and v3_refs == ([] if name == "v2" else ["info-v3.png"]),
+              "%s: every picture exists; -v3 pictures %s" % (name, v3_refs))
 
     print()
     if FAILS:

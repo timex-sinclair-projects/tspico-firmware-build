@@ -568,6 +568,10 @@ def main():
     fs = HostFS(args.root)
     fw = install_firmware(fs)
     fw.TLM_ENABLED = not args.quiet
+    # The host always runs board_v2. TSPICO_BOARD_LABEL changes only what
+    # tpi:info's Board line says (the v3 manual's picture, manual_screens.py --v3).
+    if _os.environ.get("TSPICO_BOARD_LABEL"):
+        fw.board.LABEL = _os.environ["TSPICO_BOARD_LABEL"]
     if fw.BUILD_VERSION.startswith("unknown") and not FROZEN:   # Build, as the CI stamp would show it
         try:
             import subprocess

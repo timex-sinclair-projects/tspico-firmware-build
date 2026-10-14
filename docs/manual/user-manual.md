@@ -2025,7 +2025,12 @@ your 2068 is running, free memory, Flash and
 SD card space (or `SD card: none`), the BOOT and DOCK slots, append and verbose, the mounted file and tape position,
 the current folder and how many files are in it.
 
+<!-- v2 -->
 ![tpi:info: a cyan TS-Pico badge on a blue strip, then the status lines](images/info.png)
+<!-- /v2 -->
+<!-- v3 -->
+![tpi:info: a cyan TS-Pico badge on a blue strip, then the status lines](images/info-v3.png)
+<!-- /v3 -->
 
 With no SD card, the strip and the card's `none` turn red.
 
