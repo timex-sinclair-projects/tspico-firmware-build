@@ -52,10 +52,11 @@
  1100 INPUT "Remember, slots are 32K in size,"'"and cartridges use two slots.   ";(w$)'"Slots 0..3 are for the system."''"Select slot (even 4..14)? ";sl
  1110 IF sl<0 OR sl>14 OR sl<>INT sl OR sl/2<>INT (sl/2) THEN GO TO 1100
  1120 IF sl>=4 THEN GO TO 1160
- 1130 IF sl<>0 THEN GO TO 1140
-#                                                                                                01234567890123456789012345678901 01234567890123456789012345678901
- 1132 INPUT " "; PAPER wb; BRIGHT 1; INK 9;"** WARNING!!! ** WARNING!!! **"' BRIGHT 0; PAPER bd;"Flash slot 0 is the Spectrum ROMthat Spectrum mode needs."''"Replace it (y/N)? ";c$
- 1134 IF c$<>"y" AND c$<>"Y" THEN GO TO 1000
+ 1130 IF sl>0 THEN GO TO 1140
+# Flash 0, the Spectrum ROM: the firmware refuses it (SYSTEM_SLOT_LOCK), so
+# say so here instead of asking. Slot 1 (the 2068 ROM) is asked about below.
+ 1132 INPUT "Flash slot 0 is locked: it holdsthe Spectrum ROM, which Spectrummode needs."''"Press ENTER ";c$
+ 1134 GO TO 1100
  1140 INPUT " "; PAPER wb; BRIGHT 1; INK 9;"** WARNING!!! ** WARNING!!! **"' BRIGHT 0; PAPER bd;"Are you "; INK wb;"ABSOLUTELY SURE"; INK 9;" you wantto write to system area slot ";(sl);"?"'"This is HIGHLY "; INK wb;"NOT"; INK 9;" RECOMMENDED"''"Please confirm (y/N)? ";c$
  1150 IF c$<>"y" AND c$<>"Y" THEN GO TO 1000
  1160 IF loc<>loc0 OR (sl<>sl0 AND sl+1<>sl0) THEN GO TO 1200

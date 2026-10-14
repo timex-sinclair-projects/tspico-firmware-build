@@ -81,7 +81,9 @@ status is the result ([../firmware/tspico-messages.md](../firmware/tspico-messag
 
 ### A Y/N question (`tpi:rm name`)
 
-`RM` checks the name with the card (`SD_CALL(RM_CHECK)`), then
+`RM` checks the name with the card (`SD_CALL(RM_CHECK)`: missing, mounted,
+the current folder, a folder that isn't empty; each refused here, with its
+own status), then
 `SEND_MSG_PROMPT_YN('Remove "name" (y/N)?')`: `86h`, `01h`, `0Dh`, the
 prompt, `00h`. The ROM prints it and sends a key, then reads on whatever
 the key (#227): the firmware sends the echo and `03h`,

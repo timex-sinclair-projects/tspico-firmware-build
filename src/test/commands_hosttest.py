@@ -128,6 +128,19 @@ def test_rm(t, root, sent):
     del sent[:]
     run(t, t.RM, "tpi:rm full", 255)
     check(D.on_card(root, "FULL") and sent[-1][3] == t._4_Q_Parameter, "a folder with files in it is Q")
+    del sent[:], asked[:]
+    run(t, t.RM, "tpi:rm full")
+    check(D.on_card(root, "FULL") and not asked and sent and sent[-1][1] == "RM: Directory not empty"
+          and sent[-1][3] == t._4_Q_Parameter,
+          "and without CODE: Q, \"Directory not empty\", before any prompt (%r)" % (sent[-1:],))
+
+    with open(os.path.join(root, "EMPTY", "DIRINFO.TAP"), "wb") as f:
+        f.write(b"d")
+    del sent[:], asked[:]
+    run(t, t.RM, "tpi:rm empty")
+    check(asked and not D.on_card(root, "EMPTY") and not sent,
+          "a folder holding only its dirinfo.tap counts as empty: asked, Y removes it")
+    os.makedirs(os.path.join(root, "EMPTY"))
 
     del sent[:]
     run(t, t.RM, "tpi:rm empty", 255)
