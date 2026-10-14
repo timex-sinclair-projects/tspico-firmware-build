@@ -177,12 +177,20 @@ _M_STATES = ("on-hook", "off-hook", "dialling", "connected", "no carrier", "hang
 
 
 def modem_status():
-    """(mode, ESP32 "off"/"starting"/"on", line state, calls, connects) for tpi:modem."""
+    """(mode, ESP32 "off"/"starting"/"on", line state, calls, connects, Hayes
+    flow control on) for tpi:modem."""
     s = tsbus.stats()
     esp = "on" if _m_up else ("starting" if _m_powered else "off")
     st = s["m_state"]
     line = _M_STATES[st] if _m_mode == "2050" and st < len(_M_STATES) else "-"
-    return _m_mode, esp, line, s["m_dials"], s["m_connects"]
+    return _m_mode, esp, line, s["m_dials"], s["m_connects"], bool(s.get("m_flow"))
+
+
+def modem_flow(on):
+    """Hayes mode: the card pauses Zimodem with XOFF when its receive ring is
+    3/4 full and resumes it with XON (tsbus.modem_flow). For a program that
+    has sent Zimodem ATF1; not saved, and off again after any modem_start."""
+    tsbus.modem_flow(on)
 
 
 def esp_boot(download):

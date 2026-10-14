@@ -5302,8 +5302,11 @@ def MODEM(pre, cmd):                                                  # The v3 c
     # SAVE "tpi:modem 2050"    - 2050 mode: unmodified software dials (DTR pulses), DSR is the call
     # SAVE "tpi:modem hayes"   - Hayes mode: every byte to Zimodem and back, DSR held on
     # SAVE "tpi:modem off"     - Ports 73h/77h unanswered, the ESP32 off
+    # SAVE "tpi:modem flow on" - Hayes mode: XON/XOFF toward Zimodem, for a
+    # SAVE "tpi:modem flow off"  program that has sent it ATF1 (#301)
     #
-    # The mode is saved in config.ini (MODEM_MODE). docs/v3-modem-proposal.md.
+    # The mode is saved in config.ini (MODEM_MODE); flow isn't, and any mode
+    # change turns it off. docs/v3-modem-proposal.md.
 
     TLM("MODEM enter")
     if not board.HAS_MODEM:
@@ -5311,9 +5314,10 @@ def MODEM(pre, cmd):                                                  # The v3 c
         return
     arg = getArgs(cmd).strip().lower()
     if arg == "":
-        mode, esp, line, dials, connects = board.modem_status()
+        mode, esp, line, dials, connects, flow = board.modem_status()
+        first = ("Flow %s" % ("on" if flow else "off")) if mode == "hayes" else ("Line %s" % line)
         SEND_MSG("Modem: %s mode, ESP32 %s" % (mode, esp),
-                 "Line %s; %d calls, %d made" % (line, dials, connects), _1_OK, True)
+                 "%s; %d calls, %d made" % (first, dials, connects), _1_OK, True)
     elif arg in board.MODEM_MODES:
         with open("config.ini", "r") as f:
             init_values = json.load(f)
@@ -5324,8 +5328,13 @@ def MODEM(pre, cmd):                                                  # The v3 c
         msg = "Modem: %s mode" % arg
         SEND_MSG(msg, "", _1_OK)
         LOG(msg, 0)
+    elif arg in ("flow on", "flow off"):
+        board.modem_flow(arg == "flow on")
+        msg = "Modem: flow %s" % arg[5:]
+        SEND_MSG(msg, "", _1_OK)
+        LOG(msg, 0)
     else:
-        SEND_MSG(BAD_ARG("MODEM", arg), "Use 2050, hayes or off", _8_A_Invalid_arg)
+        SEND_MSG(BAD_ARG("MODEM", arg), "2050, hayes, off or flow on/off", _8_A_Invalid_arg)
     return
 
 

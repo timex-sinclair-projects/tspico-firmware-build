@@ -36,7 +36,7 @@ than repeating it.
 | `tsbus.c`, the 2068 and the clock | `hold_2068`, `bus_clock` |
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
-| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`; `tsbus.esp_relay`, to install Zimodem |
+| `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`, `tsbus.modem_flow`; `tsbus.esp_relay`, to install Zimodem |
 | `tsbus.c`, flash writes | `apb_dma_pause`, `apb_dma_resume`, `__wrap_flash_range_erase`, `__wrap_flash_range_program` |
 | `tsbus.c`, speech | the ring, its DMA and timer, `speech_pass` on core 1, ports 17 and 37 in `handle_in` and `core1_main`; `tsbus.speech`, `tsbus.say`, `tsbus.speech_volume`, `tsbus.speaking`, `tsbus.speech_ports`. The chip itself is `sp0256.c` ([speech.md](speech.md)) |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
@@ -621,6 +621,18 @@ time at `baud` after the last (33.3 ms at 300); 0: as soon as the last is
 read. `usart.pace` in core cycles; kept across `tsbus.modem(True)`
 (`pace_set`). A negative baud is `ValueError`.
 
+### `tsbus.modem_flow(on)`
+
+Hayes mode's flow control (#301): sets `modem.flow_want`, which
+`m2050_poll` copies into `flow` on its next pass, so core 1 alone sends
+XOFF/XON. On, the card pauses Zimodem with XOFF when the line's ring is
+over three quarters full and resumes it with XON below a quarter, as 2050
+mode does while connected. For a program that has sent Zimodem `ATF1`
+itself: with Zimodem's flow control off, XOFF and XON would reach the host
+as data. Every `tsbus.modem(True)` (`m2050_init` zeroes the struct) turns
+it off again. Why: PicoTerm's 64-column flood at full speed (`MODEM_BAUD`
+0) lost 9,798 bytes (`m_rx_lost`) with no flow control in Hayes mode.
+
 ### Speech
 
 The chip runs on core 1 (`speech_pass`), and two DMA channels play
@@ -754,7 +766,8 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `idle` (`bus_idle`), `idle_resets`, `glitch_writes`, `power_held` and
 `power_resets`. The modem: `m_on`, `m_ins` (INs from 73h/77h), `m_status`
 (the status bits but RxRDY), `m_mode`, `m_cmd`, `m_rx` (characters the
-2068 read), `m_tx` (written to the line), `m_tx_dropped`, `m_rx_lost`,
+2068 read), `m_tx` (written to the line), `m_tx_dropped`, `m_rx_lost`, `m_flow` (Hayes flow control on, `modem.flow`),
+`m_xoff` (XOFF sent, not yet XON: `modem.xoff_sent`),
 `m_rxq` (bytes waiting, the line's ring and the 8251's), `m_pace_us`,
 `m_mode_sel` (`modem_mode`), `m_state` (the 2050 state, `M2050_ONHOOK`
 0 … `M2050_HANGUP` 5), `m_dials`, `m_connects`, `m_carrier_lost` and
@@ -1044,7 +1057,9 @@ and the 8251's (this advances `usart`'s `rx_head` and `tx_tail`).
 state: `state`, `dtr` and `dtr_at` (DTR's last level and when it changed),
 `pulses`, `number` and `ndigits`, `line` and `nline` (a result line being
 read), `match` (characters of NO CARRIER held back), `swallow_lf`,
-`connected_at`, `hang_phase`, `hang_at`, `last_tx_at`, `xoff_sent`; and
+`connected_at`, `hang_phase`, `hang_at`, `last_tx_at`, `xoff_sent`;
+`flow_want` (volatile: core 0's request, `tsbus.modem_flow`) and `flow`
+(core 1's copy, which Hayes mode's flow control follows); and
 counters `dials`, `connects`, `carrier_lost`, `rx_lost`.
 
 ### Strings, `STR`, and flash
@@ -1123,9 +1138,13 @@ Every pass:
 4. The 2068 → Zimodem, up to `M2050_BURST`: in Hayes mode and while
    connected, into `ltx` (waiting while it is full); otherwise taken and
    dropped, so TxRDY stays up.
-5. Connected in 2050 mode: XOFF when `lrx` is over three quarters full,
-   XON below a quarter (`ATF1` is in `s_init`). Not in Hayes mode, where
-   Zimodem's settings are the user's.
+5. Flow control: first `flow` follows `flow_want`, and turning it off
+   in Hayes mode while Zimodem is stopped sends XON, so it isn't left
+   stopped. Then XOFF
+   when `lrx` is over three quarters full, XON below a quarter: in 2050
+   mode while connected (`ATF1` is in `s_init`); in Hayes mode only with
+   `flow` on, since there Zimodem's settings are the program's
+   (`tsbus.modem_flow`).
 6. Hanging up: once `ltx` is empty and nothing has been sent for
    `M2050_GUARD_MS`, `+++`; after the guard again, `ATH`, on-hook; if DTR
    is already back on (a redial), off-hook again with `s_init`.

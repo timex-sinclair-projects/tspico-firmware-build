@@ -3,9 +3,9 @@
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2535–2612 (`DIR`), 3452–3861 (`IDIR` … `SA_NOT_IMP`), 3926–4167
 (`APPEND`, `BLKRCV`), 4259–4797 (`CDIR` … `GETLOG`), 4912–5296
-(`LOGLEVEL` … `MEMDOCK`), 5299–5359 (`MODEM`), 5460–5536 (`REW`), 5676–5938 (`BAD_CODE` …
-`NOP`) and 6050–6126 (the printer settings); the dispatch table
-`SA_funct` at 6567–6621, inside `TS2068_IO`.
+(`LOGLEVEL` … `MEMDOCK`), 5299–5368 (`MODEM`), 5469–5545 (`REW`), 5685–5947 (`BAD_CODE` …
+`NOP`) and 6059–6135 (the printer settings); the dispatch table
+`SA_funct` at 6576–6630, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -45,23 +45,23 @@ where the manual and the code differ, the entries below say so.
 | `MEMBOOT(pre, cmd)` | 5101 | `tpi:boot`, `tpi:memboot` |
 | `MEMDOCK(pre, cmd)` | 5222 | `tpi:dock`, `tpi:memdock` |
 | `MODEM(pre, cmd)` | 5299 | `tpi:modem` |
-| `SAY(pre, cmd)` | 5332 | `tpi:say` |
-| `GREET(pre, cmd)` | 5362 | `tpi:greet` |
-| `AUTOMOUNT(pre, cmd)` | 5401 | `tpi:automount` |
-| `REW(pre, cmd)` | 5460 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5676 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5681 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5686 | `tpi:rm` |
-| `RM_CHECK(name)` | 5732 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5753 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5813 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5867 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5921 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6050 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6071 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6082 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6095 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6113 | `tpi:bmp` |
+| `SAY(pre, cmd)` | 5341 | `tpi:say` |
+| `GREET(pre, cmd)` | 5371 | `tpi:greet` |
+| `AUTOMOUNT(pre, cmd)` | 5410 | `tpi:automount` |
+| `REW(pre, cmd)` | 5469 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5685 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5690 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5695 | `tpi:rm` |
+| `RM_CHECK(name)` | 5741 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5762 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5822 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5876 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5930 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6059 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6080 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6091 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6104 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 6122 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -84,7 +84,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6564–6565) says (until #181 it
+   trailing space, as the comment above it (6573–6574) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -137,7 +137,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6567) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6576) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -169,7 +169,7 @@ applies (the word is not in `SD_FREE`).
 | `tpi:memboot` | MEMBOOT | no | the same | the same |
 | `tpi:dock` | MEMDOCK | no | no `CODE`: show; `CODE 0,1`: the previous; `CODE 0,2`: swap; `CODE mem,slot` | `SEND_MSG` |
 | `tpi:memdock` | MEMDOCK | no | the same | the same |
-| `tpi:modem` | MODEM | no | none: show; `tpi:modem 2050`, `hayes` or `off` | `SEND_MSG`; the show form shown |
+| `tpi:modem` | MODEM | no | none: show; `tpi:modem 2050`, `hayes` or `off`; `flow on`, `flow off` | `SEND_MSG`; the show form shown |
 | `tpi:say` | SAY | no | text, `[allophones]`, or nothing (stop) | `SEND_MSG` (not shown, unless an error) |
 | `tpi:greet` | GREET | no | none: show; text, or `off` | `SEND_MSG`; the show form shown |
 | `tpi:automount` | AUTOMOUNT | no (looks itself) | none: show; a `.tap` name or path, or `off` | `SEND_MSG`; the show form shown |
@@ -876,19 +876,25 @@ gate (`SD_FREE`): it needs no card.
 - No `board.HAS_MODEM` (v2): "No modem on this board", shown, Report F.
 - No argument: `board.modem_status()` as "Modem: *mode* mode, ESP32
   *off/starting/on*" / "Line *state*; *n* calls, *m* made", shown, 0 OK.
-  The line state is the 2050 one (on-hook, dialling, connected …), "-" in
-  Hayes mode.
+  The line state is the 2050 one (on-hook, dialling, connected …); in
+  Hayes mode the second line starts "Flow on" or "Flow off" instead.
 - `2050`, `hayes` or `off` (any case): saved as `MODEM_MODE` in
   `config.ini` (read, changed, written back, as `MEMBOOT` does), then
   `board.modem_start(mode)`: "Modem: *mode* mode", `SEND_MSG` (not shown),
   logged at 0. "off" leaves 73h/77h unanswered and switches the ESP32 off;
   the others set the 8251 up again as at power-up, on-hook, and leave the
   ESP32 as it was.
-- Anything else: `BAD_ARG("MODEM", arg)` and "Use 2050, hayes or off",
-  Report A.
+- `flow on` or `flow off` (any case): `board.modem_flow`, Hayes mode's
+  XON/XOFF toward Zimodem, for a program that has sent it `ATF1` (#301).
+  "Modem: flow on" or "Modem: flow off", `SEND_MSG` (not shown), logged
+  at 0. Not saved: any mode change, or the next start, turns it off. In
+  2050 mode it has no effect (2050 mode's own flow control runs while
+  connected).
+- Anything else: `BAD_ARG("MODEM", arg)` and "2050, hayes, off or flow
+  on/off", Report A.
 
-There is no `CODE` form. `board_v3_hosttest.py` pins the four answers and
-the saved key.
+There is no `CODE` form. `board_v3_hosttest.py` pins the answers, the saved key,
+and that flow isn't saved.
 
 ### `SAY(pre, cmd)`
 

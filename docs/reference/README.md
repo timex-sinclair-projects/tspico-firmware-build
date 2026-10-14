@@ -157,7 +157,7 @@ behaviour, and the caveat and the issue link go.
 | Source | Checked at | Chapter | Flows and appendices |
 |---|---|---|---|
 | `src/main.py` | `162b8f97be26` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
-| `src/TS/tspico.py` | `6b1235280875` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/TS/tspico.py` | `4e4e131001a3` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/TS/tspico_io.py` | `e34ae2cc847e` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) | [flows/boot.md](flows/boot.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/TS/sdcard.py` | `e1c614de390c` | [firmware/sdcard.md](firmware/sdcard.md) | [flows/sd-handover.md](flows/sd-handover.md) |
 | `src/TS/channels.py` | `5b1d30b1efe4` | [firmware/channels.md](firmware/channels.md) | [flows/channels.md](flows/channels.md) |
@@ -167,7 +167,7 @@ behaviour, and the caveat and the issue link go.
 | `src/TS/printer.py` | `d8bb84d1d654` | [firmware/printer.md](firmware/printer.md) | [flows/printer.md](flows/printer.md) |
 | `src/TS/board.py` | `76b05c62a1d9` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/board_v2.py` | `07f49f9004a9` | [firmware/board.md](firmware/board.md), [firmware/pio.md](firmware/pio.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
-| `src/TS/board_v3.py` | `adc39feea81b` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
+| `src/TS/board_v3.py` | `021cb17a8f84` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
 | `src/TS/speech.py` | `4271ff5c0029` | [firmware/speech.md](firmware/speech.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/speech_rules.py` | `3e16e980652d` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/upgrade/main.py` | `6ab664e9c744` | [firmware/upgrade.md](firmware/upgrade.md) | — |
@@ -189,12 +189,12 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `e4cde52397f6` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `b7bf281b3d12` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `4a49e581e783` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `bc7ecb0f0c84` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.h` | `6d0523a0e42a` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.c` | `e6812ab5e133` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/modem2050.h` | `a88bb99e6d45` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/modem2050.c` | `c991f1503e6e` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/modem2050.h` | `ec21b502da31` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/modem2050.c` | `db5d7ad32334` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/sp0256.h` | `51c74dea5123` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256.c` | `1966bed583e8` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256_mame.inc` | `134bd8726488` | [firmware/speech.md](firmware/speech.md) | — |
