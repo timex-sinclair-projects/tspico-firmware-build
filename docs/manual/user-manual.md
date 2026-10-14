@@ -1254,8 +1254,9 @@ The loader shows a warning, because the slot you pick is erased first. It then a
 
 1. **SRAM(1) or Flash(2)?** RAM is quick and safe to experiment with, but forgets at switch-off.
    Flash keeps it.
-2. **Which slot?** For Flash, slots 4 to 14 are free for you. Slots 0 to 3 hold the system ROMs,
-   and the loader makes you confirm that you're ABSOLUTELY SURE before writing them.
+2. **Which slot?** For Flash, slots 4 to 14 are free for you. Slots 0 to 3 hold the system ROMs.
+   Flash slot 0, the Spectrum ROM, is locked: the loader asks for another slot. For slots 1 to 3
+   it makes you confirm that you're ABSOLUTELY SURE.
 3. When it's done, it tells you how to use the slot, for example `SAVE "tpi:boot" CODE 2,4:NEW`
    for a ROM, and offers to start it now.
 
@@ -1407,8 +1408,10 @@ Some rules:
   started with, and the new one runs from the next start, or after `SAVE "tpi:boot"`, even a
   `tpi:boot` to the slot it's running from. Answering **Y** to the loader's `Boot to ROM ... NOW`
   does that. The loader tells you so and asks you to confirm before it writes.
-- **Flash slot 0 is the Spectrum ROM** that ZX Spectrum mode needs. The loader warns you and asks
-  again before replacing it. Slots 1 to 3 hold the other system ROMs.
+- **Flash slot 0 is locked.** It holds the Spectrum ROM that ZX Spectrum mode needs. The loader
+  asks for another slot, and the card refuses it anyway (**Q**). The web updater puts a fresh
+  copy there. Slots 1 to 3 hold the other system ROMs, and the loader makes you confirm that
+  you're ABSOLUTELY SURE before writing them.
 
 If the image isn't mounted any more when the loader asks for it (after `tpi:close`, say), the
 loader stops with `No ROM image mounted` and **F**. Mount the file and run `LOAD ""` again.

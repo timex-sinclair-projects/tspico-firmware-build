@@ -96,6 +96,10 @@ to restore it.
   set the boot slot — and `tpi:boot` is a one-shot override that `LOAD_CONFIG`
   resets to 1 on the next power-up, so a permanent change means writing slot 1
   itself.
+- **Slot 0, the Spectrum ROM, can't be written this way.** ZX Spectrum mode
+  and the 1.x upgrade need it, so the loader won't offer it and `tpi:blkrcv`
+  refuses it (Report Q, "Can't write Flash slot 0: the Spectrum ROM.") before
+  anything is erased. Burn a whole image to change it.
 - **You can't update the slot you booted from.** The Z80 erases the slot it's
   writing, so it would erase the ROM it's running on, and both machines hang
   with the slot half-written. With a `.ROM`/`.BIN`/`.DCK` mounted, the firmware
