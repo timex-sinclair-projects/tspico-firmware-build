@@ -305,9 +305,11 @@
         <ol class="steps">
           <li><a href="flash_nuke.uf2" download="flash_nuke.uf2">flash_nuke.uf2</a> — erases the
               Pico; it comes back as RPI-RP2 by itself.</li>
-          <li>From 1.1 only: <a id="dl-upgrade" class="disabled" download="upgrade.uf2">upgrade.uf2</a>
-              — then turn the 2068 on, type <code>OUT 244,3</code> and <code>LOAD ""</code>, wait for
-              DONE, and switch the 2068 off again.</li>
+          <li>Unless the board already has this release’s ROM:
+              <a id="dl-upgrade" class="disabled" download="upgrade.uf2">upgrade.uf2</a>
+              — then fit the P10 jumper if your board has one (and leave it fitted), turn the 2068
+              on, type <code>OUT 244,3</code> and <code>LOAD ""</code>, wait for DONE, and switch the
+              2068 off again. The firmware needs its matching ROM.</li>
           <li><a id="dl-uf2" class="disabled" download="firmware.uf2">firmware.uf2</a>
               (or <a id="dl-uf2-zip" class="disabled" download="firmware-uf2.zip">as a .zip</a>, if
               Windows blocks the <code>.uf2</code>).</li>
