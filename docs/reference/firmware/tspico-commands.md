@@ -3,9 +3,9 @@
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2535–2612 (`DIR`), 3452–3861 (`IDIR` … `SA_NOT_IMP`), 3926–4167
 (`APPEND`, `BLKRCV`), 4259–4797 (`CDIR` … `GETLOG`), 4912–5277
-(`LOGLEVEL` … `MEMDOCK`), 5280–5340 (`MODEM`), 5441–5517 (`REW`), 5657–5916 (`BAD_CODE` …
-`NOP`) and 6028–6104 (the printer settings); the dispatch table
-`SA_funct` at 6545–6599, inside `TS2068_IO`.
+(`LOGLEVEL` … `MEMDOCK`), 5280–5340 (`MODEM`), 5441–5517 (`REW`), 5657–5919 (`BAD_CODE` …
+`NOP`) and 6031–6107 (the printer settings); the dispatch table
+`SA_funct` at 6548–6602, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -53,15 +53,15 @@ where the manual and the code differ, the entries below say so.
 | `BAD_ARG(command, arg)` | 5662 | the "Bad argument" message |
 | `RM(pre, cmd)` | 5667 | `tpi:rm` |
 | `RM_CHECK(name)` | 5713 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5731 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5791 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5845 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5899 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6028 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6049 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6060 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6073 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6091 | `tpi:bmp` |
+| `UNMOUNT(pre, cmd)` | 5734 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5794 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5848 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5902 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6031 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6052 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6063 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6076 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 6094 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -84,7 +84,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6542–6543) says (until #181 it
+   trailing space, as the comment above it (6545–6546) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -137,7 +137,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6545) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6548) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -1002,12 +1002,16 @@ name in the current folder, a path (relative, or from `/`, the card's
 3. No `CODE`: `SEND_MSG_PROMPT_YN('Remove "name" (y/N)?')`. `Y`: 
    `SD_CALL(DISK_ERASE_ONE, name)` — the same removal as `ERASE`
    ([tspico-disk.md](tspico-disk.md#disk_erase_onearg)) — with the result
-   only logged, since the question was the answer. Anything else: logged
-   at 0, nothing removed.
+   only logged, since the question was the answer. That is why a folder
+   that isn't empty is refused in step 2: `DISK_ERASE_ONE`'s own refusal
+   would reach only the log, and the user would see 0 OK with the folder
+   still there. Anything else: logged at 0, nothing removed.
 4. `CODE 255,0`: the removal at once, and its message sent with its status.
 
 A folder's name gets a `/` before `DISK_ERASE_ONE`, which removes only an
-empty one ("Directory not empty", Q). `REMOVE_DIR`, the recursive removal
+empty one; `RM_CHECK` has already refused any other ("RM: Directory not
+empty", Q), so `DISK_ERASE_ONE`'s "Directory not empty" is only reached if
+the folder filled between the check and the removal. `REMOVE_DIR`, the recursive removal
 in the same file, is not used by `RM`. [`commands_hosttest.py`](../../../src/test/commands_hosttest.py)
 pins all of this.
 
@@ -1020,6 +1024,10 @@ pins all of this.
   itself: "RM: Not found: name", F;
 - a folder that contains the current folder (`catalog.within`): "RM:
   Can't remove the current directory", Q;
+- a folder with anything in it but `dirinfo.tap` (`os.ilistdir`, the name
+  compared lower-cased): "RM: Directory not empty", Q. `dirinfo.tap` is
+  `DIR_FILES`' own listing, which `DISK_ERASE_ONE` deletes before its
+  `rmdir`, so it doesn't count here either;
 - not a file either: "RM: Not found", F;
 - the mounted file (compared upper-cased): "RM: File is mounted;
   tpi:close it first", Q.
