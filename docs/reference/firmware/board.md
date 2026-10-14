@@ -22,22 +22,22 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6509), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5149, `reboot=True`), `MEMDOCK` (5269), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7494) |
-| `restart_mq()` | `ZX48_IO` (7495, 7600, 7642) |
+| `start_memory()` | `TS2068_IO` (6528), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5154, `reboot=True`), `MEMDOCK` (5288), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7513) |
+| `restart_mq()` | `ZX48_IO` (7514, 7619, 7661) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6477) |
-| `led_brightness()` | `TS2068_IO` (6481), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6632, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7297) |
+| `make_led()` | `TS2068_IO` (6496) |
+| `led_brightness()` | `TS2068_IO` (6500), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6651, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7316) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5060, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5117, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5065, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5122, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `HAS_MODEM` | `TS2068_IO` (6512, at boot; 7226, the idle loop), `MODEM` (5290, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `HAS_MODEM` | `TS2068_IO` (6531, at boot; 7245, the idle loop), `MODEM` (5309, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
 | `modem_start()` | `TS2068_IO` (6389), at boot with `config.ini`'s modem keys; `MODEM` (5296), a new mode |
 | `modem_service()` | `TS2068_IO`'s idle loop (7093), every pass with nothing arrived |
 | `HAS_SPEECH` | `TS2068_IO` (6391, at boot), `SAY` (5315, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |

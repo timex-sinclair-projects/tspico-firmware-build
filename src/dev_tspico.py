@@ -4020,7 +4020,7 @@ def BLKRCV(pre, cmd):                                                           
     # If that slot is the one it boots from, stop here (MEMDOCK normally
     # refused it already): report Q, nothing streamed, nothing erased.
     mem, page = getDock()
-    clash = BOOT_SLOT_CLASH(mem, page, TSP.f_name)
+    clash = SYSTEM_SLOT_LOCK(mem, page) or BOOT_SLOT_CLASH(mem, page, TSP.f_name)
     if clash:
         LOG("BLKRCV: %s Command refused" % clash[0], 1)
         SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
@@ -5056,6 +5056,11 @@ def SLOT_WRITE(pre):
         SEND_MSG(msg, "MEM 1..2, PAGE 0..15 (even for a .DCK)", _8_A_Invalid_arg, True)
         LOG("BLKRCV: %s. Command ignored" % msg, 1)
         return
+    lock = SYSTEM_SLOT_LOCK(mem, slot)
+    if lock:
+        LOG("BLKRCV: %s Command refused" % lock[0], 1)
+        SEND_MSG(lock[0], lock[1], _4_Q_Parameter, True)
+        return
     try:
         what = board.write_slot(mem, slot, "/TMP/temp.bin")
     except (OSError, ValueError) as e:
@@ -5175,6 +5180,20 @@ def getDock():
     val1 = TSP.bank_sm & 15
     page = (TSP.bank_sm - val1) // 16
     return mem, page
+
+
+def SYSTEM_SLOT_LOCK(mem, page):
+    """Would tpi:blkrcv write flash slot 0, the Spectrum ROM that ZX
+    Spectrum mode and the 1.x upgrade need? Returns the refusal (msg, msg1),
+    or None. A 64K .DCK at slot 0 (0 and 1) is refused too. A flash image
+    (and on the v3 card the web updater) installs slot 0, never this
+    command. Slot 1, the 2068 ROM, stays writable behind the loader's
+    question: reloading it from the SD card is the manual's recovery for a
+    damaged slot 1 (A.5). SRAM slots are scratch."""
+
+    if mem != 2 or page != 0:
+        return None
+    return ("Can't write Flash slot 0:", "the Spectrum ROM.")
 
 
 def BOOT_SLOT_CLASH(mem, page, f_name):

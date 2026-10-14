@@ -555,6 +555,16 @@ def main():
     t.BLKRCV(pre(2, 4), "")
     check(calls_w == [(2, 4, "/TMP/temp.bin")] and sent_w[-1][:1] == ("Wrote Flash slots 4-5",) and sent_w[-1][2] == t._1_OK,
           "CODE 2,4: /TMP/temp.bin into flash 4, 0 OK (%r)" % sent_w[-1:])
+    del calls_w[:]
+    t.TSP.f_name = "/sd/TAP/test.rom"
+    t.BLKRCV(pre(2, 0), "")
+    check(not calls_w and sent_w[-1][2] == t._4_Q_Parameter and "Flash slot 0" in sent_w[-1][0],
+          "CODE 2,0 (the Spectrum ROM): Report Q, nothing written (%r)" % (sent_w[-1:],))
+    t.BLKRCV(pre(2, 1), "")
+    t.BLKRCV(pre(1, 0), "")
+    check(calls_w == [(2, 1, "/TMP/temp.bin"), (1, 0, "/TMP/temp.bin")],
+          "CODE 2,1 (the 2068 ROM, the manual's A.5) and CODE 1,0 (SRAM): written")
+    t.TSP.f_name = "/sd/TAP/game.dck"
     t.board.write_slot = lambda m, s_, p: (_ for _ in ()).throw(OSError(28, "ENOSPC"))
     t.BLKRCV(pre(2, 4), "")
     check(sent_w[-1][0] == "Writing the slot failed" and sent_w[-1][2] == t._3_F_Invalid_file,
