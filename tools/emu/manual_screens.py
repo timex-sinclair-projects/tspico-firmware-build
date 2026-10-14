@@ -4,6 +4,11 @@ printing the real firmware's replies (tools/emu, issue #35). Writes
 docs/manual/images/<name>.png, 2x, the 2068's whole display with border.
 
     python3 tools/emu/manual_screens.py
+    python3 tools/emu/manual_screens.py --v3    # just info-v3.png, the v3 manual's
+
+--v3 runs the same v2 firmware with the Board line saying V3
+(TSPICO_BOARD_LABEL, pico_host.py); every other line is the emulator's, as
+in the v2 picture. The site leaves *-v3.png out (build-site-docs.py).
 
 The Spectrum-side picture (zx48-dir.png) still comes from
 tools/render_screens.py: the emulator has no ZX v4 ROM in the DOCK bank.
@@ -61,8 +66,31 @@ def fresh_screen(s):
     s.run(0xFB)                                               # CLS
 
 
+def info(s, name):
+    """tpi:info with Manic.tap mounted and the pointer at block 02."""
+    s.run(S.LOAD, '"tpi:Manic.tap"')
+    s.run(S.SAVE, '"tpi:ffw"')
+    s.run(S.SAVE, '"tpi:ffw"')
+    fresh_screen(s)
+    s.run(S.SAVE, '"tpi:info"')
+    shot(s, name)
+
+
+def main_v3():
+    os.environ["TSPICO_BOARD_LABEL"] = "V3"
+    card()
+    s = S.Session(sd=SEED)
+    try:
+        fresh_screen(s)
+        info(s, "info-v3")
+    finally:
+        s.close()
+
+
 def main():
     os.environ["TSPICO_BRANCH"] = "main"                      # tpi:info's Build line, as users see it
+    if "--v3" in sys.argv[1:]:
+        return main_v3()
     card()
     s = S.Session(sd=SEED)
     try:

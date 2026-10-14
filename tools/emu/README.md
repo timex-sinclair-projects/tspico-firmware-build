@@ -101,7 +101,7 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 | `smoke.py` | The end-to-end check. |
 | `fuse_smoke.py` | The same idea in Fuse (below). |
 | `build_standalone.sh` | The standalone `pico_host` (PyInstaller). |
-| `manual_screens.py` | The user manual's 2068 screen pictures, captured. |
+| `manual_screens.py` | The user manual's 2068 screen pictures, captured. `--v3` makes `info-v3.png`, the v3 manual's `tpi:info`, with `TSPICO_BOARD_LABEL=V3`: `pico_host.py` still runs the v2 firmware and only the Board line changes. |
 
 The original exploration, notes and probe scripts are in the lab
 (`~/Documents/github/zesarux-tspico-lab`, `NOTES.md`).
