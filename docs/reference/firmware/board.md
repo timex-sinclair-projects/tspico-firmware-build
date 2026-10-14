@@ -22,22 +22,22 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6385), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5141), `MEMDOCK` (5261), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7360) |
-| `restart_mq()` | `ZX48_IO` (7361, 7466, 7508) |
+| `start_memory()` | `TS2068_IO` (6509), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5149, `reboot=True`), `MEMDOCK` (5269), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7494) |
+| `restart_mq()` | `ZX48_IO` (7495, 7600, 7642) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6353) |
-| `led_brightness()` | `TS2068_IO` (6357), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6500, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7163) |
+| `make_led()` | `TS2068_IO` (6477) |
+| `led_brightness()` | `TS2068_IO` (6481), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6632, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7297) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5054, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5111, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5060, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5117, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `HAS_MODEM` | `TS2068_IO` (6388, at boot; 7092, the idle loop), `MODEM` (5282, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `HAS_MODEM` | `TS2068_IO` (6512, at boot; 7226, the idle loop), `MODEM` (5290, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
 | `modem_start()` | `TS2068_IO` (6389), at boot with `config.ini`'s modem keys; `MODEM` (5296), a new mode |
 | `modem_service()` | `TS2068_IO`'s idle loop (7093), every pass with nothing arrived |
 | `HAS_SPEECH` | `TS2068_IO` (6391, at boot), `SAY` (5315, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
@@ -163,12 +163,15 @@ purpose. Rebuilding them, or `machine.reset()`, would release the lines that
 select the 2068's ROM bank under the running machine (the comment at
 6492–6501). Host harnesses must never use state machines 4 or 5.
 
-### `map_slots(rom_sm, bank_sm)`
+### `map_slots(rom_sm, bank_sm, reboot=False)`
 
 `_rom.put(rom_sm)`, `_bank.put(bank_sm)`: one word each through the TX
 FIFOs, which switch the boot and dock slots under the running 2068.
 `MEMBOOT` sleeps 0.1 s before calling it (the Z80 is still finishing the
-statement in the old ROM).
+statement in the old ROM). `reboot`, which `MEMBOOT` passes, is unused
+here: the 2068 reads the slot's chip directly, so a rewritten slot is
+already what it reads. It is in the signature so `tspico.py` can call
+either board the same way (v3's `map_slots` uses it).
 
 ### `make_mq()`
 
@@ -483,10 +486,15 @@ still too bright on the card (2026-10-10), 5 % is David's choice.
 C at start-up ([board-v3.md](board-v3.md#board_initc)), so there are no pins
 to set here.
 
-### `_served`, `_keys(rom_sm, bank_sm)`
+### `_served`, `_boot_stale`, `_keys(rom_sm, bank_sm)`
 
 `_served` is what the 2068 is served now, `((boot mem, slot), (dock mem,
 slot))`, set by `start_memory` and `map_slots`; `None` before the boot.
+`_boot_stale` is true once `write_slot` has rewritten the file of the slot
+booted now, so the 2068 runs an older copy of it than the file holds;
+`start_memory` and the ROM reload in `map_slots` clear it. It is a flag
+apart from `_served`, not a `None` boot pair there, so that a `tpi:dock`
+(which also calls `map_slots`) leaves the ROM alone.
 `_keys` cuts v2's two words into those pairs: boot from `rom_sm` bits 0–1
 and `bank_sm` bits 0–3, dock from bits 2–3 and 4–7.
 
@@ -582,6 +590,14 @@ and makes `/slots` if need be. A flash dock: nothing. `map_slots` calls it
 before a dock switch, so switching back finds the data, as v2's SRAM keeps
 it until power-off. About 64K of flash writes, roughly a second.
 
+### `_reads(served_mem, mem)`
+
+True if a slot served from `served_mem` may have come from a file of
+`mem`: the same memory, or `MEM_SD`, whose flash slot of the same number
+stands in when the SD card has none (`_slot_file`). `write_slot` asks it
+of the dock and the boot slot. For `MEM_SD` it can be true when the SD
+file was the one read; reloading then costs a copy and changes nothing.
+
 ### `write_slot(mem, slot, path)`
 
 `tpi:blkrcv` on the v3 card, called by `SLOT_WRITE`. It writes the image at
@@ -593,10 +609,17 @@ time through `_buf`:
 - an empty image, one over 64K, or a 64K one for an odd slot or slot 15:
   `ValueError`, nothing written.
 
-If the slots written are in the dock now (`_served`), it reloads them live:
-`tsbus.dock(False)`, `load_dock`, `tsbus.dock(True)`. A booted slot is left
-running: the 2068 runs from the SRAM copy, and the new ROM takes effect at
-the next boot or `tpi:boot`. Returns what was written for the message
+If the slots written are in the dock now (`_served`, `_reads`), it reloads
+them live: `tsbus.dock(False)`, `load_dock`, `tsbus.dock(True)`. A booted
+slot is left running: the 2068 runs from the SRAM copy, and the new ROM
+takes effect at the next boot or `tpi:boot`. For the `tpi:boot`,
+`write_slot` sets `_boot_stale` when the booted slot (`_served[0]`, again
+through `_reads`) is one it wrote: `MEMBOOT`'s `map_slots(…, reboot=True)`
+then loads the slot even when it names the slot booted now, which is what
+`romupd3`'s "Boot to ROM m,s NOW" and `dckupd3`'s warning promise. Until
+2026-10-13 nothing did, and the old ROM ran until a power cycle. If the
+fallback ROM is running instead (the booted slot was empty, `boot_rom`),
+writing flash slot 1 doesn't set it *(an edge left alone)*. Returns what was written for the message
 ("Flash slot 5", "SRAM slots 12-13"). Writing a slot took 0.22 s on proto1.
 
 ### `start_memory(rom_sm, bank_sm)`
@@ -611,8 +634,8 @@ the next boot or `tpi:boot`. Returns what was written for the message
    `serve(True)` (/BE live) and `hold(False)`: the 2068 is released into the
    new ROM.
 
-`_served` is set. Serving is on before the release, so the Z80's first
-fetch is answered. Returns `load_dock`'s note, else `boot_rom`'s (also
+`_served` is set and `_boot_stale` cleared. Serving is on before the
+release, so the Z80's first fetch is answered. Returns `load_dock`'s note, else `boot_rom`'s (also
 printed, `[board] …`), which `TS2068_IO` logs at level 2. A missing `ROM_FILE` with no slot to
 boot raises, and `main.py` logs it: the 2068 stays in reset.
 
@@ -628,7 +651,7 @@ The cost: SCLD bank registers survive a Z80 reset, so a card swapped in
 under a running 2068 can boot to a blank screen until the 2068's own reset
 or a power cycle *(seen once on hardware)*.
 
-### `map_slots(rom_sm, bank_sm)`
+### `map_slots(rom_sm, bank_sm, reboot=False)`
 
 `tpi:boot` and `tpi:dock`: show the 2068 what the two words now say,
 comparing them with `_served` so that only what changed is loaded, through
@@ -639,11 +662,16 @@ comparing them with `_served` so that only what changed is loaded, through
    dock's memory, and `tsbus.dock(True)`. It's live, as v2's `tpi:dock`:
    the 2068 isn't reset. With DOCK serving off for the copy, a read sees
    an empty dock, never half the new one, as `tsbus.switch` does.
-2. **The ROM changed:** `boot_rom` into `_buf`, then `tsbus.switch(home=,
-   exrom=)`. The 2068 is held `RESET_MS` (200 ms) and starts cleanly in
+2. **The ROM changed**, or `reboot` (`MEMBOOT` passes it) with
+   `_boot_stale` set (`write_slot` rewrote the slot booted now): `boot_rom`
+   into `_buf`, then `tsbus.switch(home=, exrom=)`, and `_boot_stale` is
+   cleared. The 2068 is held `RESET_MS` (200 ms) and starts cleanly in
    the new ROM, rather than running a mix of the two (v2 switches under the
    running Z80; [docs/v3-slots-proposal.md](../../v3-slots-proposal.md),
-   decision 2).
+   decision 2). A `tpi:boot` to the slot booted now with nothing rewritten
+   loads nothing and doesn't reset. `MEMDOCK` leaves `reboot` off, so a
+   dock change after a write to the booted slot doesn't reset the 2068
+   into the new ROM unasked.
 
 `_served` is updated. Returns `boot_rom`'s note, else `load_dock`'s, or
 `None`: `MEMDOCK` turns a note into its second line, "No SD slot: used

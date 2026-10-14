@@ -1404,8 +1404,9 @@ It asks:
 Some rules:
 
 - **You can write the slot the 2068 is running from.** The 2068 carries on with the ROM it
-  started with, and the new one runs from the next start, or after `SAVE "tpi:boot"`. The
-  loader tells you so and asks you to confirm.
+  started with, and the new one runs from the next start, or after `SAVE "tpi:boot"`, even a
+  `tpi:boot` to the slot it's running from. Answering **Y** to the loader's `Boot to ROM ... NOW`
+  does that. The loader tells you so and asks you to confirm before it writes.
 - **Flash slot 0 is the Spectrum ROM** that ZX Spectrum mode needs. The loader warns you and asks
   again before replacing it. Slots 1 to 3 hold the other system ROMs.
 
