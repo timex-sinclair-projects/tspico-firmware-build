@@ -2121,13 +2121,12 @@ SAVE "tpi:rm 3"              : REM by index number
 SAVE "tpi:rm old.tap" CODE 255,0   : REM without asking
 ```
 
-Press **Y** to remove it. A folder must be empty: in this form a folder that isn't empty is
-left as it is, with **0 OK**; with `CODE 255,0` you get the **Q** below.
-<!-- CHECK: firmware issue: the asking form hides the Directory not empty refusal. -->
+Press **Y** to remove it. A folder must be empty: one that isn't is refused with the **Q**
+below before you're asked, the same with or without `CODE 255,0`.
 
 - **F**: `RM: Not found:`. 
 - **Q**: `RM: File is
-  mounted; tpi:close it first`, `Directory not empty`, `RM: Can't remove the current directory`.
+  mounted; tpi:close it first`, `RM: Directory not empty`, `RM: Can't remove the current directory`.
 - **A**: no name, or a CODE other than 255,0.
 
 <!-- v3 -->
