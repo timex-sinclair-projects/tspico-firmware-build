@@ -1,0 +1,20 @@
+TS-Pico Command        AUTOMOUNT
+--------------------------------
+SAVE "tpi:automount"[ name]
+
+The TAP mounted at switch-on, so
+the first LOAD "" loads it
+instead of the built-in menu:
+your own menu program, say.
+name: a TAP in the current
+  folder, or a path (.tap is
+  added if left out). Kept with
+  its whole path; at switch-on
+  the folder is still the top.
+off:  back to the built-in menu
+No name: shows the file
+Saved in config.ini (AUTOMOUNT).
+If the file has gone, LOAD ""
+gives the built-in menu.
+
+See also: config, close

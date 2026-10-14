@@ -247,6 +247,28 @@ def test_plain_dock(t, image):
     check(r[2] == t._1_OK, "a .TAP mounted: not an update, allowed")
 
 
+def test_system_slots(t, image):
+    print("Flash slot 0, the Spectrum ROM, is never written (SYSTEM_SLOT_LOCK)")
+    sent = setup(t, (2, 4), (2, 0), "/sd/TAP/TEST.ROM", image)
+    r = blkrcv(t, sent)
+    check(r is not None and r[2] == t._4_Q_Parameter and r[0] == "Can't write Flash slot 0:"
+          and r[1] == "the Spectrum ROM." and r[3], "tpi:blkrcv with DOCK on Flash 0: Report Q (%r)" % (r,))
+    check(t.MQ.puts == [], "  nothing streamed, so the Z80 erases nothing")
+    check(len(r[0]) <= 32 and len(r[1]) <= 32, "  both lines fit 32 columns")
+    sent = setup(t, (2, 4), (2, 0), "/sd/TAP/GAME.DCK", image)
+    r = blkrcv(t, sent)
+    check(r is not None and r[2] == t._4_Q_Parameter and t.MQ.puts == [], "a .DCK at Flash 0 (0+1): Report Q")
+    sent = setup(t, (2, 4), (2, 1), "/sd/TAP/TEST.ROM", image)
+    r = blkrcv(t, sent)
+    check(r is None and t.MQ.puts[:1] == [t._1_OK],
+          "Flash slot 1 while booted from 4: allowed (the manual's A.5 recovery)")
+    sent = setup(t, (2, 1), (1, 0), "/sd/TAP/TEST.ROM", image)
+    r = blkrcv(t, sent)
+    check(r is None and t.MQ.puts[:1] == [t._1_OK], "SRAM slot 0: allowed (scratch)")
+    check(t.SYSTEM_SLOT_LOCK(2, 1) is None and t.SYSTEM_SLOT_LOCK(1, 0) is None
+          and t.SYSTEM_SLOT_LOCK(2, 0) is not None, "SYSTEM_SLOT_LOCK: flash 0 only")
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -266,6 +288,7 @@ def main():
         test_sram_boot(t, image)
         test_dck(t, image)
         test_plain_dock(t, image)
+        test_system_slots(t, image)
     finally:
         os.remove(image)
     ok = all(results)

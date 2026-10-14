@@ -117,7 +117,7 @@ because the `with` block assigns it; nothing reads it. Harmless.
 ## `config.ini`
 
 `/config.ini` on the Pico's flash, JSON despite the extension — one
-object, fourteen keys. The shipped file is
+object, nineteen keys. The shipped file is
 [`src/config.ini`](../../../src/config.ini); the web updater writes it to
 the flash with the other Pico files (`web-updater/build-payload.sh`), as
 the release bundle's instructions do — replacing whatever settings the
@@ -142,6 +142,11 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | MODEM_MODE | `"2050"`, `"hayes"`, `"off"` | `"2050"` | the v3 card's TS2050 modem (v2 ignores it) | `LOAD_CONFIG` → `board.modem_start` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced), `MODEM` (`tpi:modem`) |
 | MODEM_BAUD | int 0–115200 | 300 | the modem's received characters paced to this; 0, none | as `MODEM_MODE` | `LOAD_CONFIG` (default, or a bad value replaced) |
 | MODEM_IDLE_MIN | int 1–1440 | 10 | the ESP32 off after this many minutes unused and on-hook | as `MODEM_MODE` | `LOAD_CONFIG` (default, or a bad value replaced) |
+| SPEECH_VOLUME | int 0–100 | 35 | the v3 card's speech volume, % (v2 ignores the speech keys) | `LOAD_CONFIG` → `board.speech_start` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced) |
+| SPEECH_RATE | int 50–150 | 100 | the speech chip's speed, %; its pitch moves with it | as `SPEECH_VOLUME` | as `SPEECH_VOLUME` |
+| SPEECH_PORTS | bool | `true` | OUT 17 / IN 37 answered, as David's speech board | as `SPEECH_VOLUME` | as `SPEECH_VOLUME` |
+| SPEECH_GREETING | str | `""` | said at power-on when the 2068 starts its own ROM (flash slot 1, default DOCK, no one-shot); `""`, none | `TS2068_IO`, after `board.speech_start` | `LOAD_CONFIG` (default, or a non-string replaced), `GREET` (`tpi:greet`) |
+| AUTOMOUNT | str | `""` | a `.tap` mounted at power-on, its path from the card's top folder (`/GAMES/menu.tap`), so `LOAD ""` loads it instead of the menu; `""`, none. Both boards | `TS2068_IO` → `AUTO_MOUNT` | `LOAD_CONFIG` (default, or a non-string replaced), `AUTOMOUNT` (`tpi:automount`) |
 | KEMPSTON | bool | `true` | the v3 card's DE-9 joystick answered at 1Fh (v2 ignores it) | `LOAD_CONFIG` → `board.joystick` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced) |
 
 **The one-shot boot.** `tpi:boot CODE m,s` writes `ROM_SLOT = s` and
@@ -228,7 +233,7 @@ a UF2 ([DEVELOPER_GUIDE.md §5–6](../../DEVELOPER_GUIDE.md#6-the-dev-override-
   Inside it, `from TS.tspico_io import …` and the other `TS` imports still
   resolve to the frozen modules.
 - **`/dev_extcmd.py`** replaces the frozen `TS.extcmd`: `TS2068_IO` tries
-  `from dev_extcmd import EXT_SA_FUNCT` first (6444;
+  `from dev_extcmd import EXT_SA_FUNCT` first (6641;
   [extcmd.md](extcmd.md)).
 - To go back: delete the file and restart.
 
@@ -563,7 +568,7 @@ power cycle before the driver learned to recover it
 | `/assets/romupdate.tap`, `/assets/dckupdate.tap` | the slot updaters | `build-basic.sh` → the same |
 | `/assets/romupd3.tap`, `/assets/dckupd3.tap` | the v3 card's slot updaters (`basic/assets/romupd3.bas`, `dckupd3.bas`) | `build-basic.sh` → the same | `MOUNT_FILE` for a `.ROM`/`.BIN`/`.DCK` |
 | `/activity.log` | the log | `SAVE_LOG`; `main.py` on a fatal error | `tpi:log`; trimmed to 64 KB at boot |
-| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6367–6368) | `TS2068_IO` | below |
+| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6561–6562) | `TS2068_IO` | below |
 | `/TMP/temp.tap` | the mounted TAP, copied from the card (or the updater tape) | `MOUNT_FILE` | `LOAD_TS`, `FWD`/`REW` via the table; removed by `FORGET_MOUNT` |
 | `/TMP/temp.bin` | the mounted ROM or DCK image (a DCK rebuilt to a full 64K by `DCK_IMAGE`) | `MOUNT_FILE`, `DCK_IMAGE` | `BLKRCV`; removed by `FORGET_MOUNT` |
 | `/TMP/native.tap` | the one-shot tape for `LOAD "f:…"` | `NATIVE_LOAD_PREP` | `LOAD_TS` |

@@ -12,11 +12,13 @@ import tsbus
 from machine import Pin, SPI, I2C, Timer
 
 NAME = "v3"
+LABEL = "V3"        # tpi:info's Board line (6 columns at most)
 PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
 SD_SLOTS = True     # tpi:boot and tpi:dock take MEM 3: a slot file on the SD card
 HAS_MODEM = True    # the TS2050's 8251 at 73h/77h, bridged to the ESP32-C3 (modem_start)
 HAS_JOYSTICK = True # the DE-9 socket, answered as a Kempston interface at 1Fh (joystick)
+HAS_SPEECH = True   # the SP0256-AL2 on core 1, out of the audio jack (speech_start)
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
 # The slots (phase 5, docs/v3-slots-proposal.md): v2's two chips of sixteen
@@ -259,6 +261,33 @@ def joystick_service():
     when nothing else has read it: harmless, the same byte is set again."""
     if _joy_pin is not None and not _joy_pin.value():
         _joy_read()
+# Speech (docs/v3-speech-proposal.md): the SP0256-AL2 emulated on core 1
+# (tsbus, sp0256.c), out of the audio jack. Text becomes allophone numbers
+# on core 0 (TS/speech.py); tsbus queues them, and the chip speaks them while
+# the 2068 carries on.
+
+def speech_start(volume, rate, ports=True):
+    """Speech on: the chip at `rate` % of its speed (50-150; its pitch moves
+    with it), at `volume` % (0-100), answering OUT 17 / IN 37 as David's Pico
+    Speech Synth 2068 board does (`ports`), and /speech.txt's words added to
+    the exception list. Returns how many words that was."""
+    from TS import speech
+    tsbus.speech(True, rate)
+    tsbus.speech_volume(volume)
+    tsbus.speech_ports(ports)
+    return speech.load_exceptions()
+
+
+def say(text):
+    """Speak text (English, or allophone names in [brackets]) after whatever
+    is queued; returns (allophones queued, allophones in the text). Empty
+    text stops speech at once. ValueError for an unknown allophone name."""
+    from TS import speech
+    if not text.strip():
+        tsbus.say(None)
+        return 0, 0
+    al = speech.allophones(text)
+    return tsbus.say(al), len(al)
 
 
 # The LED dimmer: D4 on R5 (100R) is far too bright at full current, so
@@ -275,6 +304,7 @@ def early_init():
 
 
 _served = None      # ((boot mem, slot), (dock mem, slot)) the 2068 is served now
+_boot_stale = False  # write_slot rewrote the boot slot: tpi:boot loads it again
 
 # The one buffer every slot passes through: a ROM, each half of the dock, a
 # RAM dock being saved. Allocated here, at import, while the heap is clean:
@@ -415,14 +445,23 @@ def save_ram_dock(dock):
             f.write(_buf)
 
 
+def _reads(served_mem, mem):
+    """True if a slot served from served_mem may come from a file of mem:
+    the same memory, or MEM_SD, whose flash slot stands in (_slot_file)."""
+    return served_mem == mem or served_mem == MEM_SD
+
+
 def write_slot(mem, slot, path):
     """tpi:blkrcv on the v3 card: write the image at path (MOUNT_FILE's
     /TMP/temp.bin) into slot `slot` of memory `mem`, through _buf. Up to 32K
     fills one slot, zero-padded; up to 64K (a .DCK image) fills an even slot
     and the next. If those slots are in the DOCK now, it is reloaded, live.
     A booted slot isn't touched: the 2068 runs from its SRAM copy, and the
-    new ROM takes effect at the next boot or tpi:boot. Returns what was
-    written, for the message; ValueError if the image doesn't fit."""
+    new ROM takes effect at the next boot or tpi:boot: _boot_stale is set,
+    so map_slots(..., reboot=True) loads it again although the two words
+    still name it. Returns what was written, for the message; ValueError if
+    the image doesn't fit."""
+    global _boot_stale
     size = os.stat(path)[6]
     if size == 0 or size > 2 * SLOT_SIZE:
         raise ValueError("an image of %d bytes" % size)
@@ -443,13 +482,16 @@ def write_slot(mem, slot, path):
                 n += k
             with open(slot_path(mem, s), "wb") as out:
                 out.write(_buf)
+    written = (slot, slot + 1) if pair else (slot,)
     if _served is not None:
-        dmem, dslot = _served[1]
+        boot, (dmem, dslot) = _served
         docked = (dslot, dslot + 1) if dslot % 2 == 0 else (dslot,)
-        if dmem == mem and (slot in docked or (pair and slot + 1 in docked)):
+        if _reads(dmem, mem) and any(s in docked for s in written):
             tsbus.dock(False)
             load_dock(dmem * 4, dslot * 16)
             tsbus.dock(True)
+        if _reads(boot[0], mem) and boot[1] in written:
+            _boot_stale = True
     what = "%s slot%s %s" % ("SRAM" if mem == MEM_SRAM else "Flash",
                              "s" if pair else "", "%d-%d" % (slot, slot + 1) if pair else str(slot))
     return what
@@ -460,7 +502,7 @@ def start_memory(rom_sm, bank_sm):
     from the slot files (boot_rom, load_dock), and release the 2068 into
     them. Returns boot_rom's or load_dock's note, for the caller to log, or
     None."""
-    global _served
+    global _served, _boot_stale
     clear_sram_slots()
     tsbus.hold(True)
     note = boot_rom(rom_sm, bank_sm)
@@ -474,12 +516,13 @@ def start_memory(rom_sm, bank_sm):
     tsbus.serve(True)
     tsbus.hold(False)
     _served = _keys(rom_sm, bank_sm)
+    _boot_stale = False
     if note:
         print("[board] " + note)
     return note
 
 
-def map_slots(rom_sm, bank_sm):
+def map_slots(rom_sm, bank_sm, reboot=False):
     """tpi:boot and tpi:dock: show the 2068 what the two words now say.
 
     Only what changed is loaded, through _buf. The dock first, live, as
@@ -491,8 +534,13 @@ def map_slots(rom_sm, bank_sm):
     (200 ms), so it starts cleanly in the new ROM rather than running a mix
     of the two (docs/v3-slots-proposal.md, decision 2). Returns a note if
     the ROM fell back or a MEM_SD slot came from flash, else None; MEMBOOT
-    refuses an empty slot first."""
-    global _served
+    refuses an empty slot first.
+
+    reboot is tpi:boot's: it also reloads a boot slot that hasn't changed
+    in the words but has on disk (write_slot set _boot_stale), as the
+    loaders romupd3/dckupd3 promise. tpi:dock leaves it off, so writing the
+    booted slot never resets the 2068 behind a dock change."""
+    global _served, _boot_stale
     boot, dock = _keys(rom_sm, bank_sm)
     note = None
     if _served is None or dock != _served[1]:
@@ -502,10 +550,11 @@ def map_slots(rom_sm, bank_sm):
         note = load_dock(rom_sm, bank_sm)
         tsbus.dock_writes(dock[0] == MEM_SRAM)
         tsbus.dock(True)
-    if _served is None or boot != _served[0]:
+    if _served is None or boot != _served[0] or (reboot and _boot_stale):
         note = boot_rom(rom_sm, bank_sm) or note
         m = memoryview(_buf)
         tsbus.switch(home=m[:16384], exrom=m[16384:])
+        _boot_stale = False
     _served = (boot, dock)
     return note
 

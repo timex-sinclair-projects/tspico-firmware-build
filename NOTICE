@@ -1,0 +1,62 @@
+TS-Pico firmware: third-party material
+======================================
+
+The TS-Pico's own code is under the MIT License (LICENSE), and its
+documentation under CC BY 4.0 (LICENSE-docs.txt). These parts are others',
+used under their own terms.
+
+
+The SP0256-AL2 speech ROM  (src/tsbus/sp0256_al2.inc)
+-----------------------------------------------------
+
+The General Instrument SP0256-AL2 ROM image. Microchip Technology Inc. holds
+the copyright to the SP0256-AL2 ROM image and retains the intellectual
+property rights to the algorithms and data it contains. In 2007 Microchip's
+legal department allowed its distribution "so long as you acknowledge
+Microchip's ownership of the algorithms" (correspondence published with the
+image at http://spatula-city.org/~im14u2c/sp0256-al2/). This notice is that
+acknowledgment.
+
+
+The SP0256 emulation  (src/tsbus/sp0256_mame.inc, made by tools/sp0256-port.py)
+--------------------------------------------------------------------------------
+
+From MAME's src/devices/sound/sp0256.cpp.
+
+    license:BSD-3-Clause
+    copyright-holders: Joseph Zbiciak, Tim Lindner
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are
+    met:
+
+    1. Redistributions of source code must retain the above copyright
+       notice, this list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright
+       notice, this list of conditions and the following disclaimer in the
+       documentation and/or other materials provided with the distribution.
+    3. Neither the name of the copyright holder nor the names of its
+       contributors may be used to endorse or promote products derived from
+       this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+    IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+    TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+    PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+    HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+    TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+    PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+    LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+The letter-to-sound rules  (src/TS/speech_rules.py, made by tools/speech-rules.py)
+-----------------------------------------------------------------------------------
+
+From NRL Report 7948, "Automatic Translation of English Text to Phonetics by
+Means of Letter-to-Sound Rules" (Naval Research Laboratory, 1976), as John A.
+Wasser coded them in english.c (1985, the CMU AI Repository's eng2phon
+package). Both are public domain: a US-government report, and Wasser's own
+"this is all public domain and I make no copyright claims on it".

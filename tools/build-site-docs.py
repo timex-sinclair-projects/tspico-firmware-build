@@ -42,6 +42,8 @@ BRANCH = "main"
 # repo path prefix -> site folder
 SOURCES = [("docs/reference", "reference"), ("docs/manual", "manual")]
 COPY_DIRS = [("docs/manual/images", "manual/images")]
+# The v3 manual's pictures stay off the site with the rest of the v3 card.
+COPY_IGNORE = ["*-v3.*"]
 
 # Lines added under a page's "From ... on GitHub" note. The user manual's
 # PDFs are built into the same folder by tools/manual-pdf/make.sh in pages.yml.
@@ -184,7 +186,8 @@ def build(site_dir):
         with open(out, "w", encoding="utf-8") as f:
             f.write(convert(text, repo_md, pages))
     for src, dst in COPY_DIRS:
-        shutil.copytree(os.path.join(REPO, src), os.path.join(site_dir, dst))
+        shutil.copytree(os.path.join(REPO, src), os.path.join(site_dir, dst),
+                        ignore=shutil.ignore_patterns(*COPY_IGNORE))
     return pages
 
 

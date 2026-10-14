@@ -16,11 +16,13 @@ from rp2 import StateMachine, asm_pio
 from TS.tspico_io import TS_IO_DUAL, set_ctrl, sel_bank
 
 NAME = "v2"
+LABEL = "V2.2"      # tpi:info's Board line (6 columns at most)
 PIO_MQ = True       # MQ is a PIO state machine: tspico_io may use its registers and DMA
 SLOTS = True        # the 16 flash/SRAM slots: tpi:boot, tpi:dock, tpi:blkrcv
 SD_SLOTS = False    # no MEM 3: slots come from the flash and SRAM chips only
 HAS_MODEM = False   # no TS2050 modem: 73h/77h are not answered
 HAS_JOYSTICK = False  # no joystick socket: 1Fh is not answered
+HAS_SPEECH = False  # no audio output: tpi:say answers "No speech on this board"
 HAS_CORE1 = True    # core 1 is free for background(): BLINK_LED, SAVE_LOG
 
 # Holds SM0 while the SD card has GPIO 2-4 (sd_take_bus).
@@ -74,8 +76,9 @@ def rom_slot_empty(mem, slot):
     return False
 
 
-def map_slots(rom_sm, bank_sm):
-    """Switch the boot and dock slots, under a running 2068."""
+def map_slots(rom_sm, bank_sm, reboot=False):
+    """Switch the boot and dock slots, under a running 2068. reboot (tpi:boot
+    sets it) means nothing here: the 2068 reads the slot's chip directly."""
     _rom.put(rom_sm)
     _bank.put(bank_sm)
 

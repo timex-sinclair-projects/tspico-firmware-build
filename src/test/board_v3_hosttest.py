@@ -97,11 +97,20 @@ def fake_tsbus():
     for name in ("modem", "modem_mode", "modem_pace", "modem_line"):
         setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
     t.modem_poll = lambda: POLL[0]
+    # Speech: what board_v3's speech_start and say call.
+    for name in ("speech", "speech_volume", "speech_ports"):
+        setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
+
+    def say(al):
+        CALLS.append(("say", None if al is None else bytes(al)))
+        return 0 if al is None else min(len(al), SAY_ROOM[0])
+    t.say = say
     t.stats = lambda: {"m_state": STATE[0], "m_dials": 3, "m_connects": 2}
     return t
 
 
 POLL = [0]       # what tsbus.modem_poll() returns
+SAY_ROOM = [1024]  # how many allophones tsbus.say() takes
 STATE = [0]      # m_state in tsbus.stats()
 
 
@@ -501,10 +510,36 @@ def main():
     got = take()
     check(IMG[2] == cart and ("dock", False) in got and ("dock", True) in got,
           "writing the slots in the DOCK: reloaded there, live")
-    image(32768, 0x11)
+    new_rom = image(32768, 0x11)
     board.write_slot(2, 1, img)
     check(not [c for c in take() if c[0] in ("switch", "load", "hold")],
           "writing the booted slot: the running ROM isn't touched (next boot)")
+    board.map_slots(0x0A, 0x31)                              # tpi:dock CODE 2,3, boot still 2,1
+    check(not [c for c in take() if c[0] == "switch"],
+          "  a tpi:dock after it: no switch, no reset into the new ROM")
+    board.map_slots(0x0A, 0x31, reboot=True)                 # tpi:boot CODE 2,1, the slot booted now
+    sw = [c for c in take() if c[0] == "switch"]
+    check(len(sw) == 1 and sw[0][1:] == (("exrom", new_rom[16384:]), ("home", new_rom[:16384])),
+          "  then tpi:boot to the same slot: the new ROM, one switch (romupd3's \"Boot ... NOW\")")
+    board.map_slots(0x0A, 0x31, reboot=True)
+    check(not [c for c in take() if c[0] == "switch"], "  and once loaded, a second tpi:boot there: no switch")
+    board.write_slot(2, 6, img)                              # not the booted slot
+    board.map_slots(0x0A, 0x31, reboot=True)
+    check(not [c for c in take() if c[0] == "switch"], "writing another slot: tpi:boot to the booted one still no switch")
+    board.start_memory(0x0A, 0x01)
+    board.write_slot(2, 1, img)
+    board.start_memory(0x0A, 0x01)                           # a power cycle loads it anyway
+    take()
+    board.map_slots(0x0A, 0x01, reboot=True)
+    check(not [c for c in take() if c[0] == "switch"], "a boot after the write clears it: tpi:boot then no switch")
+    board.start_memory(0x0B, 0x01)                           # boot SD slot 1: no SD file, flash F01 stands in
+    take()
+    newer = image(32768, 0x44)
+    board.write_slot(2, 1, img)
+    board.map_slots(0x0B, 0x01, reboot=True)
+    sw = [c for c in take() if c[0] == "switch"]
+    check(len(sw) == 1 and sw[0][1:] == (("exrom", newer[16384:]), ("home", newer[:16384])),
+          "booted from SD slot 1 standing in for flash 1: writing flash 1 reloads it too")
 
     sent_w = []
     t.SEND_MSG = lambda msg, msg2, st, force=False: sent_w.append((msg, msg2, st))
@@ -520,6 +555,16 @@ def main():
     t.BLKRCV(pre(2, 4), "")
     check(calls_w == [(2, 4, "/TMP/temp.bin")] and sent_w[-1][:1] == ("Wrote Flash slots 4-5",) and sent_w[-1][2] == t._1_OK,
           "CODE 2,4: /TMP/temp.bin into flash 4, 0 OK (%r)" % sent_w[-1:])
+    del calls_w[:]
+    t.TSP.f_name = "/sd/TAP/test.rom"
+    t.BLKRCV(pre(2, 0), "")
+    check(not calls_w and sent_w[-1][2] == t._4_Q_Parameter and "Flash slot 0" in sent_w[-1][0],
+          "CODE 2,0 (the Spectrum ROM): Report Q, nothing written (%r)" % (sent_w[-1:],))
+    t.BLKRCV(pre(2, 1), "")
+    t.BLKRCV(pre(1, 0), "")
+    check(calls_w == [(2, 1, "/TMP/temp.bin"), (1, 0, "/TMP/temp.bin")],
+          "CODE 2,1 (the 2068 ROM, the manual's A.5) and CODE 1,0 (SRAM): written")
+    t.TSP.f_name = "/sd/TAP/game.dck"
     t.board.write_slot = lambda m, s_, p: (_ for _ in ()).throw(OSError(28, "ENOSPC"))
     t.BLKRCV(pre(2, 4), "")
     check(sent_w[-1][0] == "Writing the slot failed" and sent_w[-1][2] == t._3_F_Invalid_file,
@@ -736,6 +781,126 @@ def main():
           "kempston_byte: up 8, down 4, left 2, right 1, fire 16, fire 2 16")
     check(k(0xFF) == 0 and k(0x3F) == 0 and k(0xC0) == 0x1F,
           "kempston_byte: nothing pressed 0 whatever bits 6-7 say; all pressed 1Fh")
+    # Speech: speech_start turns the chip on at a rate and volume and reads
+    # /speech.txt; say converts text and queues it, or stops.
+    print("speech")
+    sys.path.insert(0, os.path.join(HERE, ".."))
+    from TS import speech
+    take()
+    n = b3.speech_start(40, 90)
+    got = take()
+    check(got == [("speech", True, 90), ("speech_volume", 40), ("speech_ports", True)] and n == 0,
+          "speech_start: tsbus.speech(True, rate), the volume, ports 17/37 on; no /speech.txt (%r)" % got)
+    q, n = b3.say("Hello.")
+    got = take()
+    check(got == [("say", bytes(speech.allophones("Hello.")))] and q == n == len(speech.allophones("Hello.")),
+          "say: the text's allophones, queued (%d)" % n)
+    check(b3.say("  ") == (0, 0) and take() == [("say", None)], "say with nothing: stop now")
+    SAY_ROOM[0] = 3
+    q, n = b3.say("Press any key to continue.")
+    take()
+    check(q == 3 and n > 3, "a full queue: (queued, in the text) tells the caller (%d of %d)" % (q, n))
+    SAY_ROOM[0] = 1024
+    try:
+        b3.say("[HH1 NOPE]")
+        raised = False
+    except ValueError:
+        raised = True
+    check(raised and take() == [], "an unknown allophone name: ValueError, nothing queued")
+
+    # The greeting and the auto-mount (config.ini's SPEECH_GREETING and
+    # AUTOMOUNT, set by tpi:greet and tpi:automount; TS2068_IO uses both).
+    print("tpi:greet")
+    sent_g = []
+    t.SEND_MSG = lambda msg, msg1, st, force=False: sent_g.append((msg, msg1, st))
+    t.board = board
+
+    def cfg():
+        with open("config.ini") as f:
+            return json.load(f)
+
+    with open("config.ini", "w") as f:
+        json.dump({"ROM_SLOT": 1, "ROM_SM": 10}, f)
+    t.GREET(bytes(10), "tpi:greet")
+    check(sent_g[-1] == ("Greeting: off", "", t._1_OK), "no greeting: shown as off (%r)" % sent_g[-1:])
+    take()
+    t.GREET(bytes(10), "tpi:greet Hello David")
+    check(cfg()["SPEECH_GREETING"] == "Hello David" and sent_g[-1] == ("Greeting: Hello David", "", t._1_OK),
+          "tpi:greet TEXT: saved, 0 OK (%r)" % sent_g[-1:])
+    check(take() == [("say", bytes(speech.allophones("Hello David")))], "  and said now")
+    t.GREET(bytes(10), "tpi:greet")
+    check(sent_g[-1][0] == "Greeting: Hello David", "tpi:greet: shown")
+    t.GREET(bytes(10), "tpi:greet [HH1 NOPE]")
+    check(sent_g[-1][2] == t._8_A_Invalid_arg and cfg()["SPEECH_GREETING"] == "Hello David",
+          "an unknown allophone: Report A, the greeting kept")
+    t.GREET(bytes(10), "tpi:greet OFF")
+    check(cfg()["SPEECH_GREETING"] == "" and sent_g[-1][0] == "Greeting: off", "tpi:greet off: none")
+    take()
+    for key, bad, good in (("SPEECH_GREETING", 5, ""), ("AUTOMOUNT", None, "")):
+        with open("config.ini", "w") as f:
+            json.dump({"ROM_SLOT": 1, "ROM_SM": 10, key: bad}, f)
+        got = t.LOAD_CONFIG()[key]
+        check(got == good, "LOAD_CONFIG: %s %r replaced by %r" % (key, bad, got))
+
+    print("tpi:automount")
+    tap_root = os.path.join(d, "TAP")
+    os.makedirs(os.path.join(tap_root, "GAMES"))
+    menu = bytes([19, 0, 0]) + bytes(20)
+    with open(os.path.join(tap_root, "GAMES", "menu.tap"), "wb") as f:
+        f.write(menu)
+    with open(os.path.join(tap_root, "x.tap"), "wb") as f:
+        f.write(b"ZXTape!\x1a")
+    t.catalog.ROOT = tap_root
+    t.TSP = types.SimpleNamespace(cur_path=os.path.join(tap_root, "GAMES"), sd_present=True, f_name="",
+                                  offset_tbl=[], offset=0, tap_idx=0, append=True, totlen=0)
+    saved_sd = (t.ACTIVATE_SD, t.DEACTIVATE_SD, t.ACTIVATE_MQ)
+    t.ACTIVATE_SD = act_sd
+    t.DEACTIVATE_SD = lambda: mounts.append("umount")
+    t.ACTIVATE_MQ = lambda: mounts.append("mq")
+    mounts[:] = []
+    t.AUTOMOUNT(bytes(10), "tpi:automount")
+    check(sent_g[-1] == ("Auto-mount: off", "", t._1_OK), "none: shown as off")
+    t.AUTOMOUNT(bytes(10), "tpi:automount menu")
+    check(cfg()["AUTOMOUNT"] == "/GAMES/menu.tap" and sent_g[-1] == ("Auto-mount: /GAMES/menu.tap", "", t._1_OK),
+          "tpi:automount menu: .tap added, saved from the top folder (%r)" % sent_g[-1:])
+    check(mounts == ["mount", "umount", "mq"], "  the card looked at, then the bus back to the MQ (%r)" % mounts)
+    t.AUTOMOUNT(bytes(10), "tpi:automount nope.tap")
+    check(sent_g[-1] == ("Not found: ", "nope.tap", t._3_F_Invalid_file) and cfg()["AUTOMOUNT"] == "/GAMES/menu.tap",
+          "a file that isn't there: Report F, the setting kept")
+    t.AUTOMOUNT(bytes(10), "tpi:automount ../../../x.tap")
+    check(sent_g[-1][2] == t._3_F_Invalid_file, "  nor a path out of the card's top folder")
+    no_card[0] = True
+    t.TSP.sd_present = False                                # as ACTIVATE_SD leaves it
+    t.AUTOMOUNT(bytes(10), "tpi:automount menu.tap")
+    check(sent_g[-1][2] == t._10_J_Invalid_IO, "no card: Report J (%r)" % sent_g[-1:])
+    no_card[0] = False
+    t.TSP.sd_present = True
+    t.AUTOMOUNT(bytes(10), "tpi:automount off")
+    check(cfg()["AUTOMOUNT"] == "" and sent_g[-1][0] == "Auto-mount: off", "tpi:automount off: none")
+
+    print("AUTO_MOUNT at boot")
+    copies = []
+    real_copy, real_off = t.COPY_FILE, t.OFF_TABLE
+    t.COPY_FILE = lambda a, b: copies.append((a, b)) or True
+    t.OFF_TABLE = lambda: setattr(t.TSP, "offset_tbl", ["tbl"])
+    del sent_g[:]
+    puts = []
+    t.MQ = types.SimpleNamespace(put=puts.append)
+    ok = t.AUTO_MOUNT("/GAMES/menu.tap")
+    check(ok and copies == [(os.path.join(tap_root, "GAMES", "menu.tap"), "/TMP/temp.tap")],
+          "the file copied to /TMP/temp.tap (%r)" % copies)
+    check(t.TSP.f_name.endswith("/GAMES/menu.tap") and t.TSP.totlen == len(menu) and t.TSP.append is False
+          and t.TSP.offset_tbl == ["tbl"], "mounted: f_name, totlen, append off, the offset table")
+    check(t.TSP.cur_path == os.path.join(tap_root, "GAMES"), "  the current folder unchanged")
+    for name, why in (("/nope.tap", "a missing file"), ("/x.tap", "a TZX"), ("/GAMES", "not a .tap"),
+                      ("/../x.tap", "a path out of the top")):
+        t.TSP.f_name = "old"
+        check(not t.AUTO_MOUNT(name) and t.TSP.f_name == "", "%s: nothing mounted" % why)
+    t.COPY_FILE = lambda a, b: False
+    check(not t.AUTO_MOUNT("/GAMES/menu.tap") and t.TSP.f_name == "", "a failed copy: nothing mounted")
+    check(sent_g == [] and puts == [], "nothing sent to the 2068, ever: no orphan bytes")
+    t.COPY_FILE, t.OFF_TABLE = real_copy, real_off
+    t.ACTIVATE_SD, t.DEACTIVATE_SD, t.ACTIVATE_MQ = saved_sd
 
     print()
     if FAILS:

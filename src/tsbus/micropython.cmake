@@ -8,9 +8,10 @@ target_sources(usermod_tsbus INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/tsbus.c
     ${CMAKE_CURRENT_LIST_DIR}/usart8251.c
     ${CMAKE_CURRENT_LIST_DIR}/modem2050.c
+    ${CMAKE_CURRENT_LIST_DIR}/sp0256.c
 )
 
-# usart8251.c and modem2050.c are plain C (host tests compile them too); on
+# usart8251.c, modem2050.c and sp0256.c are plain C (host tests compile them too); on
 # the card they take __not_in_flash_func from pico.h, so core 1 never runs
 # them from flash.
 target_compile_definitions(usermod_tsbus INTERFACE U8251_ON_PICO=1)
@@ -33,6 +34,14 @@ target_link_libraries(usermod_tsbus INTERFACE
     hardware_uart
     hardware_vreg
     pico_multicore
+)
+
+# Every flash erase and program goes through tsbus.c's wrappers, which pause
+# the modem's DMA channels (they touch APB) meanwhile (the 2068's memory reads are
+# answered by DMA, and a stalled APB write holds the DMA up).
+target_link_options(usermod_tsbus INTERFACE
+    -Wl,--wrap=flash_range_erase
+    -Wl,--wrap=flash_range_program
 )
 
 target_link_libraries(usermod INTERFACE usermod_tsbus)

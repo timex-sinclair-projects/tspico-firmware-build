@@ -2727,7 +2727,8 @@ SD_FREE = frozenset((
     "TPI:DOCK", "TPI:MEMDOCK", "TPI:ZX48", "TPI:NOP", "TPI:PATH", "TPI:CLOSE",
     "TPI:TAPDIR", "TPI:FFW", "TPI:REW", "TPI:APPEND", "TPI:BLKRCV", "TPI:CHCLOSE",
     "TPI:AUTOLF", "TPI:NOAUTOLF", "TPI:AUTOPG", "TPI:NOAUTOPG", "TPI:BMP", "TPI:PRNSZ",
-    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST", "TPI:MODEM",
+    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST", "TPI:MODEM", "TPI:SAY",
+    "TPI:GREET", "TPI:AUTOMOUNT",
     "TPI:MEMINFO", "TPI:STOP"))
 
 # Commands the fdd ROM sends in the middle of a BASIC statement (OPEN #,
@@ -4019,7 +4020,7 @@ def BLKRCV(pre, cmd):                                                           
     # If that slot is the one it boots from, stop here (MEMDOCK normally
     # refused it already): report Q, nothing streamed, nothing erased.
     mem, page = getDock()
-    clash = BOOT_SLOT_CLASH(mem, page, TSP.f_name)
+    clash = SYSTEM_SLOT_LOCK(mem, page) or BOOT_SLOT_CLASH(mem, page, TSP.f_name)
     if clash:
         LOG("BLKRCV: %s Command refused" % clash[0], 1)
         SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
@@ -4538,6 +4539,7 @@ def GETHELP(pre, cmd):                                                 # Shows T
         M.append('"tpi:erase <name or pattern>"')
         M.append('"tpi:format <name.tap or dir/>"')
         M.append('"tpi:ren <old> <new>"')
+        M.append('"tpi:automount [name.tap/off]"')
         M.append('"tpi:opprint"  "tpi:clprint"')
         M.append('"tpi:autolf"   "tpi:noautolf"')
         M.append('"tpi:autopg"   "tpi:noautopg"')
@@ -4614,7 +4616,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
     M.append(lab("ROM") + ("%d.%d" % (rom_id >> 4, rom_id & 0x0F) if rom_id != 0xFF   # what the ROM said (#227)
                            else TSP.ROM_VERSION) + nl)
     M.append(lab("Build") + BUILD_FIT(BUILD_VERSION, 22) + nl)        # 10 + 22: the 32-col line
-    M.append(lab("Board") + "V2.2  " + INK_ + "\x01" + "Log level " + INK_ + "\x08" + "%d" % TSP.LOG_LEVEL + nl)
+    M.append(lab("Board") + "%-6s" % board.LABEL[:6] + INK_ + "\x01" + "Log level " + INK_ + "\x08" + "%d" % TSP.LOG_LEVEL + nl)
     M.append(lab("Free RAM") + "%d kB" % (gc.mem_free() >> 10) + nl)
     M.append(lab("Flash") + "%s, %s free" % catalog.space_pair(fl_tot, fl_free) + nl)
     if TSP.sd_present and sd_space:
@@ -4825,6 +4827,11 @@ def LOAD_CONFIG():
     default_values["MODEM_BAUD"] = 300                         # ... received characters paced to this (0: none)
     default_values["MODEM_IDLE_MIN"] = 10                      # ... the ESP32 off after this many minutes unused
     default_values["KEMPSTON"] = True                          # the v3 card's DE-9 joystick answered at 1Fh; v2 ignores it
+    default_values["SPEECH_VOLUME"] = 35                       # the v3 card's speech (tpi:say): volume, % (v2 ignores both)
+    default_values["SPEECH_RATE"] = 100                        # ... the chip's speed, %: 50-150; its pitch moves with it
+    default_values["SPEECH_PORTS"] = True                      # ... OUT 17 / IN 37 answered, as David's speech board
+    default_values["SPEECH_GREETING"] = ""                     # ... said at power-on into the 2068's own ROM (tpi:greet); "": none
+    default_values["AUTOMOUNT"] = ""                           # a .tap mounted at power-on, from the card's top (tpi:automount); "": none
     default_values["FW_VERSION"] = FW_VERSION
     default_values["ROM_VERSION"] = ROM_VERSION                # the ROM this firmware ships with
     # Fill any missing values with the default
@@ -4860,12 +4867,18 @@ def LOAD_CONFIG():
 
     # The modem's keys (the v3 card, docs/v3-modem-proposal.md): a mode it
     # knows, a pace from 0 (none) to the line's 115200, an idle time from a
-    # minute to a day; and the joystick's on/off. Anything else is logged and
-    # replaced, as above.
+    # minute to a day; the joystick's on/off; speech's volume, rate and ports,
+    # the greeting and the auto-mount. Anything else is logged and replaced, as
+    # above.
     for key, ok in (("MODEM_MODE", lambda v: v in ("2050", "hayes", "off")),
                     ("MODEM_BAUD", lambda v: type(v) is int and 0 <= v <= 115200),
                     ("MODEM_IDLE_MIN", lambda v: type(v) is int and 1 <= v <= 1440),
-                    ("KEMPSTON", lambda v: type(v) is bool)):
+                    ("KEMPSTON", lambda v: type(v) is bool),
+                    ("SPEECH_VOLUME", lambda v: type(v) is int and 0 <= v <= 100),
+                    ("SPEECH_RATE", lambda v: type(v) is int and 50 <= v <= 150),
+                    ("SPEECH_PORTS", lambda v: type(v) is bool),
+                    ("SPEECH_GREETING", lambda v: type(v) is str),
+                    ("AUTOMOUNT", lambda v: type(v) is str)):
         if not ok(init_values[key]):
             LOG("Incorrect %s %r. Using default value of %r instead"
                 % (key, init_values[key], default_values[key]), 2)
@@ -5047,6 +5060,11 @@ def SLOT_WRITE(pre):
         SEND_MSG(msg, "MEM 1..2, PAGE 0..15 (even for a .DCK)", _8_A_Invalid_arg, True)
         LOG("BLKRCV: %s. Command ignored" % msg, 1)
         return
+    lock = SYSTEM_SLOT_LOCK(mem, slot)
+    if lock:
+        LOG("BLKRCV: %s Command refused" % lock[0], 1)
+        SEND_MSG(lock[0], lock[1], _4_Q_Parameter, True)
+        return
     try:
         what = board.write_slot(mem, slot, "/TMP/temp.bin")
     except (OSError, ValueError) as e:
@@ -5066,19 +5084,19 @@ def MEM_MAX():
     return 3 if board.SD_SLOTS else 2
 
 
-def SD_SLOTS_CALL(need, fn, *args):
-    """fn(*args), with the SD card mounted on /sd if `need` (a MEM 3 slot is
+def SD_SLOTS_CALL(need, fn, *args, **kw):
+    """fn(*args, **kw), with the SD card mounted on /sd if `need` (a MEM 3 slot is
     about to be read). A card that won't mount isn't an error here: the
     board then reads the flash slot of the same number instead
     (board_v3._slot_file), and says so in its note."""
     if not need:
-        return fn(*args)
+        return fn(*args, **kw)
     try:
         ACTIVATE_SD()
     except OSError:
         pass
     try:
-        return fn(*args)
+        return fn(*args, **kw)
     finally:
         DEACTIVATE_SD()
         ACTIVATE_MQ()
@@ -5135,7 +5153,9 @@ def MEMBOOT(pre, cmd):                                           # Changes ROM s
         # to a crash, and nothing measured says it can go.
         utime.sleep(.100)
         
-        note = SD_SLOTS_CALL(par1 == 3, board.map_slots, TSP.ROM_SM, TSP.bank_sm)
+        # reboot: on v3, a boot slot tpi:blkrcv rewrote is loaded again even
+        # if it's the one booted now (romupd3's "Boot to ROM ... NOW").
+        note = SD_SLOTS_CALL(par1 == 3, board.map_slots, TSP.ROM_SM, TSP.bank_sm, reboot=True)
         if note:                                                       # v3: an SD slot came from flash
             LOG("BOOT: " + note, 1)
         
@@ -5164,6 +5184,20 @@ def getDock():
     val1 = TSP.bank_sm & 15
     page = (TSP.bank_sm - val1) // 16
     return mem, page
+
+
+def SYSTEM_SLOT_LOCK(mem, page):
+    """Would tpi:blkrcv write flash slot 0, the Spectrum ROM that ZX
+    Spectrum mode and the 1.x upgrade need? Returns the refusal (msg, msg1),
+    or None. A 64K .DCK at slot 0 (0 and 1) is refused too. A flash image
+    (and on the v3 card the web updater) installs slot 0, never this
+    command. Slot 1, the 2068 ROM, stays writable behind the loader's
+    question: reloading it from the SD card is the manual's recovery for a
+    damaged slot 1 (A.5). SRAM slots are scratch."""
+
+    if mem != 2 or page != 0:
+        return None
+    return ("Can't write Flash slot 0:", "the Spectrum ROM.")
 
 
 def BOOT_SLOT_CLASH(mem, page, f_name):
@@ -5296,6 +5330,117 @@ def MODEM(pre, cmd):                                                  # The v3 c
         LOG(msg, 0)
     else:
         SEND_MSG(BAD_ARG("MODEM", arg), "Use 2050, hayes or off", _8_A_Invalid_arg)
+    return
+
+
+def SAY(pre, cmd):                                                    # The v3 card's speech
+
+    # SAVE "tpi:say HELLO, I AM YOUR TIMEX"  - Speak English, after anything still being said
+    # SAVE "tpi:say [HH1 EH LL OW]"          - Speak SP0256-AL2 allophones by name
+    # SAVE "tpi:say"                         - Stop speaking at once
+    #
+    # Returns at once: the card speaks while the 2068 carries on.
+    # docs/v3-speech-proposal.md.
+
+    TLM("SAY enter")
+    if not board.HAS_SPEECH:
+        SEND_MSG("No speech on this board", "", _3_F_Invalid_file, True)
+        return
+    text = getArgs(cmd)
+    try:
+        queued, n = board.say(text)
+    except ValueError as e:                                           # [NAME] that isn't an allophone
+        SEND_MSG(BAD_ARG("SAY", str(e)), "Not an SP0256 allophone", _8_A_Invalid_arg)
+        return
+    except OSError as e:                                              # speech didn't start at boot
+        SEND_MSG("Speech is off", repr(e), _3_F_Invalid_file, True)
+        return
+    if queued < n:
+        SEND_MSG("Said the first %d of %d sounds" % (queued, n), "The rest didn't fit", _1_OK)
+    else:
+        SEND_MSG("Stopped" if n == 0 else "Saying %d sounds" % n, "", _1_OK)
+    TLM("SAY exit", "queued=%d of %d" % (queued, n))
+    return
+
+
+def GREET(pre, cmd):                                                  # The v3 card's greeting at power-on
+
+    # SAVE "tpi:greet HELLO DAVID"  - Say this at power-on, and now
+    # SAVE "tpi:greet"              - Show the greeting
+    # SAVE "tpi:greet off"          - No greeting (the default)
+    #
+    # Saved in config.ini (SPEECH_GREETING), where it can be longer than a
+    # tpi: name allows. TS2068_IO says it only when the 2068 starts its own
+    # ROM: not after a one-shot tpi:boot, nor with another DOCK slot.
+
+    TLM("GREET enter")
+    if not board.HAS_SPEECH:
+        SEND_MSG("No speech on this board", "", _3_F_Invalid_file, True)
+        return
+    text = getArgs(cmd).strip()
+    with open("config.ini", "r") as f:
+        init_values = json.load(f)
+    if text == "":
+        SEND_MSG("Greeting: %s" % (init_values.get("SPEECH_GREETING") or "off"), "", _1_OK, True)
+        return
+    if text.lower() == "off":
+        text = ""
+    else:
+        try:
+            board.say(text)                                           # hear it; and a bad [NAME] isn't saved
+        except ValueError as e:
+            SEND_MSG(BAD_ARG("GREET", str(e)), "Not an SP0256 allophone", _8_A_Invalid_arg)
+            return
+        except OSError:                                               # speech didn't start: save it all the same
+            pass
+    init_values["SPEECH_GREETING"] = text
+    with open("config.ini", "w") as f:
+        json.dump(init_values, f)
+    msg = "Greeting: %s" % (text or "off")
+    SEND_MSG(msg, "", _1_OK)
+    LOG(msg, 0)
+    return
+
+
+def AUTOMOUNT(pre, cmd):                                              # the .tap mounted at power-on
+
+    # SAVE "tpi:automount menu.tap"  - Mount this file (in the current folder) at power-on
+    # SAVE "tpi:automount"           - Show the file
+    # SAVE "tpi:automount off"       - None: LOAD "" gives the built-in menu (the default)
+    #
+    # Saved in config.ini (AUTOMOUNT) as its path from the card's top
+    # folder; AUTO_MOUNT mounts it at boot. The current folder at power-on
+    # stays the top one.
+
+    TLM("AUTOMOUNT enter")
+    arg = getArgs(cmd).strip()
+    with open("config.ini", "r") as f:
+        init_values = json.load(f)
+    if arg == "":
+        SEND_MSG("Auto-mount: %s" % (init_values.get("AUTOMOUNT") or "off"), "", _1_OK, True)
+        return
+    name = ""
+    if arg.lower() != "off":
+        if not arg.lower().endswith(".tap"):
+            arg += ".tap"
+        real = catalog.resolve(TSP.cur_path, arg)
+
+        def look():
+            if real is None or not file_exists(real):
+                return "Not found: ", _3_F_Invalid_file
+            return "", _1_OK
+
+        msg, st = SD_CALL(look)
+        if st != _1_OK:
+            SEND_MSG(msg, arg if msg == "Not found: " else "", st)
+            return
+        name = catalog.public(real)
+    init_values["AUTOMOUNT"] = name
+    with open("config.ini", "w") as f:
+        json.dump(init_values, f)
+    msg = "Auto-mount: %s" % (name or "off")
+    SEND_MSG(msg, "", _1_OK)
+    LOG(msg, 0)
     return
 
 
@@ -5598,6 +5743,9 @@ def RM_CHECK(name):                                                           # 
     if dir_exists(real):
         if catalog.within(TSP.cur_path, real):
             return "RM: Can't remove the current directory", _4_Q_Parameter
+        for item in os.ilistdir(real):                                        # here, not after the Y: the prompt
+            if item[0].lower() != "dirinfo.tap":                              # is the answer, so a later failure
+                return "RM: Directory not empty", _4_Q_Parameter              # could only reach the log
         return "dir", _1_OK
     if not file_exists(real):
         return "RM: Not found: %s" % name, _3_F_Invalid_file
@@ -5632,6 +5780,38 @@ def FORGET_MOUNT():                                                            #
             pass
 
     return
+
+
+def AUTO_MOUNT(name):                                                          # config.ini's AUTOMOUNT, at boot
+
+    """Mount name (config.ini's AUTOMOUNT, a path from the card's top folder)
+    at boot, so the first LOAD "" loads it instead of the built-in menu.
+    Runs with the card mounted, before the MQ starts, and sends nothing:
+    MOUNT_FILE hands the bus to the MQ, and when a mount fails with nothing
+    mounted it calls UNMOUNT, whose "Unmounting file." would be an orphan
+    ahead of the boot's status pre-load. The current folder isn't changed.
+    No such file, not a .tap, a TZX, or no room in flash: logged, nothing
+    mounted, and LOAD "" gives the menu. True if mounted."""
+
+    real = catalog.resolve(catalog.ROOT, name)
+    try:
+        if real is None or real[-4:].upper() != ".TAP" or not file_exists(real):
+            raise OSError("no such .tap on the card")
+        with open(real, "rb") as f:
+            if f.read(7) == b"ZXTape!":
+                raise OSError("a TZX file")
+        if not COPY_FILE(real, "/TMP/temp.tap"):
+            raise OSError("can't copy it to flash")
+        TSP.f_name = real
+        TSP.totlen = os.stat(real)[6]                                         # the copy's size
+        TSP.append = False
+        OFF_TABLE()
+    except Exception as e:
+        FORGET_MOUNT()
+        LOG("Auto-mount %s: %s; LOAD \"\" gives the menu" % (name, e), 1)
+        return False
+    LOG("Auto-mounted %s" % name, 0)
+    return True
 
 
 def VERB_TOGGLE(pre, cmd):                                                                               # Toggle commands verbosity ON/OFF 
@@ -6357,6 +6537,20 @@ def TS2068_IO():                                                         # Main 
                           init_values["MODEM_IDLE_MIN"])
     if board.HAS_JOYSTICK:                                             # v3: the DE-9 answered at 1Fh (Kempston)
         board.joystick(init_values["KEMPSTON"])
+    if board.HAS_SPEECH:                                               # v3: the speech chip on core 1, silent until tpi:say
+        try:
+            n = board.speech_start(init_values["SPEECH_VOLUME"], init_values["SPEECH_RATE"],
+                                   init_values["SPEECH_PORTS"])
+            if n:
+                LOG("Speech: %d words from /speech.txt" % n, 1)
+        except Exception as e:                                         # never stops the boot
+            LOG("Speech not started: %r" % e, 2)
+        greet = init_values.get("SPEECH_GREETING")
+        if greet and TSP.ROM_SLOT == 1 and TSP.ROM_SM == 10 and TSP.DCK_SLOT == 0:
+            try:                                                       # the 2068's own ROM only: not a one-shot
+                board.say(greet)                                       # tpi:boot, another ROM or a cartridge
+            except Exception as e:
+                LOG("Greeting not said: %r" % e, 1)
     if note:                                                           # v3: the boot slot was empty
         LOG("Boot ROM: " + note, 2)                                   # kept at the default LOG_LEVEL
     
@@ -6403,6 +6597,9 @@ def TS2068_IO():                                                         # Main 
         "TPI:DOCK" : MEMDOCK,
         "TPI:MEMDOCK" : MEMDOCK,
         "TPI:MODEM" : MODEM,
+        "TPI:SAY" : SAY,
+        "TPI:GREET" : GREET,
+        "TPI:AUTOMOUNT" : AUTOMOUNT,
         "TPI:NOP" : NOP,                                                                      # This is to test Ryan's new Commander
         "TPI:PATH" : PATH,
         "TPI:REW" : REW,
@@ -6485,6 +6682,8 @@ def TS2068_IO():                                                         # Main 
         pass
 
     sd_ok = TSP.sd_present and TSP.sd_listing_ok
+    if TSP.sd_present and init_values.get("AUTOMOUNT"):                    # after BLINK_LED: COPY_FILE waits for core1
+        AUTO_MOUNT(init_values["AUTOMOUNT"])                           # the card is still mounted; sends nothing
     LOG("After the SD card setup, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)
     gc.collect()
     LOG("After gc.collect, gc.memfree()=%.1f" % (gc.mem_free() >> 10), 0)

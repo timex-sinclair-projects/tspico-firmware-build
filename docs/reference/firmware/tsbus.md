@@ -14,8 +14,10 @@ moved under MicroPython. Phase 3 of the v3 port plan
 ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1 and reset control;
 the `MQ` object over core 1's queues; and switching images. Phase 6 adds
 the TS2050 modem's 8251 at 73h/77h, bridged to the card's ESP32-C3
-([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)), and the
-Kempston joystick at 1Fh from a byte core 0 keeps current. The v2 firmware
+([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)); the Kempston
+joystick at 1Fh from a byte core 0 keeps current; and speech: the
+SP0256-AL2 emulated on core 1 and played by DMA through two PIO2 state
+machines to the audio pins ([speech.md](speech.md)). The v2 firmware
 does not use any of it.
 
 What phase 1 learned, and why the code is shaped this way, is in the
@@ -36,6 +38,8 @@ than repeating it.
 | `tsbus.c`, Python | `tsbus.start`, `load`, `serve`, `exrom`, `dock`, `hold`, `reset`, `switch`, `stats`, `diag`, `diag_phase`, `diag_reset`; `HOME`, `EXROM`, `DOCK` |
 | `tsbus.c`, the MQ object | `tsbus.MQ`: `put`, `get`, `tx_fifo`, `rx_fifo`, `put_block`, `status`, `exec`, `active` |
 | `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`; `tsbus.esp_relay`, to install Zimodem |
+| `tsbus.c`, flash writes | `apb_dma_pause`, `apb_dma_resume`, `__wrap_flash_range_erase`, `__wrap_flash_range_program` |
+| `tsbus.c`, speech | the ring, its DMA and timer, `speech_pass` on core 1, ports 17 and 37 in `handle_in` and `core1_main`; `tsbus.speech`, `tsbus.say`, `tsbus.speech_volume`, `tsbus.speaking`, `tsbus.speech_ports`. The chip itself is `sp0256.c` ([speech.md](speech.md)) |
 | `tsbus.c`, the joystick | 1Fh in `handle_in`; `tsbus.kempston` |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
@@ -78,18 +82,34 @@ two apart:
   spare state machine (`sm_en`), both over AHB. Before that, the 2068 read
   wrong status bytes during flash writes (ZX48 `LOAD "tpi:"` failed with
   "1 NEXT without FOR") and could crash.
+- **Nor may the DMA write to APB while it matters.** The 2068's memory
+  reads are answered by DMA (`ch_ptr`, `ch_data`), and a DMA write held at
+  the bridge holds those channels up with it. Speech first played by DMA
+  into the PWM block, 10,000 writes a second whenever speech was on
+  (silence too), and the 2068 crashed (board 1, 2026-10-13): five 8K flash
+  writes from the REPL locked up a 2068 running a BASIC loop, and a
+  `tpi:` command that slept on core 0 (`tpi:modem`'s 1 ms waits in
+  `tsbus.modem`, even a bare `time.sleep_ms(2)`) crashed it at once. With
+  speech's DMA disabled, or pointed at RAM instead of the PWM, neither did.
+  Why a sleep on core 0 holds an APB write up is not known *(open)*. So
+  speech now plays through PIO2 (`spk_pwm`, on AHB), and the modem's
+  channels, which have to use the UART, are paused around every flash
+  erase and program (`__wrap_flash_range_erase`, below). A `tpi:modem 2050`
+  loop then ran 419 commands without a fault (it had failed at once).
 - **PIO and DMA** are claimed through the SDK. MicroPython's `rp2` refuses
   claimed state machines and frees only what it claimed itself at soft
   reset, so `tsbus` keeps running through Ctrl-D (checked). PIO0 and PIO1
-  are full: instruction memory in both, and all four state machines in PIO1
-  (the fourth is `sm_en`, which runs no program). PIO2 has `iord_watch`.
+  are full: instruction memory in both (32 of 32), and all four state
+  machines in PIO1 (the fourth is `sm_en`, which runs no program). PIO2,
+  at GPIO base 16 (GP16-47: /IORD and both audio pins), has `iord_watch`
+  and `spk_pwm`.
 - **The 2068's power and resets.** The card can't see /RESET or the 2068's
   power, and on USB it stays up while the 2068 is switched off and on. Two
   things followed from that (2026-10-11): the 2068 came up frozen mid-read
   at power-on (white border, black screen) until TS Reset was pressed, and
   with it off the card held a never-ending "read" with /BE and U3 on, into
-  an unpowered machine. Core 1 now watches the bus instead. /MEMRD still for
-  `IDLE_CYC` means the 2068 has stopped, and the card lets go of the bus.
+  an unpowered machine. Core 1 now watches the bus instead. No memory read
+  for `IDLE_CYC` means the 2068 has stopped, and the card lets go of the bus.
   /MEMWR, /IORD and /IOWR all low together mean it is off, and the card
   holds /RESET until 100 ms after it comes back, as v2's 555 does for a
   board not on USB (see `core1_main`).
@@ -112,7 +132,8 @@ in the file.
 | `addr_read` | PIO1: side-set the three buffer enables (GP8-10), jmp pin /MEMRD | Sequences U2 (A15..A8) and U1 (A7..A0) onto MD around serve's samples, and turns U3 on when serve asks. `hi_hold` and `lo_hold` are patched by `set_delays` |
 | `mem_write` | PIO1: in MD | Reads every memory write (address through U2 and U1, the data through U3) for the DOCK RAM. RX FIFO joined (8 deep) |
 | `io_snoop` | PIO1: in MD | Reads every I/O write (port and data) for the bank shadow and OUT 0Eh/0Fh |
-| `iord_watch` | PIO2: waits on /IORD (GP17), input synchroniser bypassed | Raises PIO2 IRQ flag 0 on each falling edge of /IORD and waits for it to rise: core 1's IN interrupt (`PIO2_IRQ_0`). It replaced a GPIO edge interrupt, whose acknowledgement goes through APB |
+| `iord_watch` | PIO2: waits on /IORD (GP17), input synchroniser bypassed | Raises PIO2 IRQ flag 0 on each falling edge of /IORD and waits for it to rise: core 1's IN interrupt (`PIO2_IRQ_0`). It replaced a GPIO edge interrupt, whose acknowledgement goes through APB. PIO2's GPIO base is 16; the SDK adjusts `wait gpio 17` when it loads the program |
+| `spk_pwm` | PIO2, one state machine per audio pin: side-set the pin (GP46, GP30) | PWM for the speech, as the pico-examples `pwm` program: ISR holds the period (`SPK_TOP`), `pull noblock` takes a new level from the FIFO or keeps X, `out x, 16` takes the low half (the DMA's 16-bit writes arrive in both halves), and the pin is high from the count equal to the level down to 0. Three cycles a count: (`SPK_TOP` + 1) × 3 + 3 cycles a period, about 41 kHz |
 
 ## `tsbus.c`
 
@@ -130,7 +151,7 @@ in the file.
 | `SIDE_BITS`, `DELAY_BITS` | `0x1800`, `0x0700` | serve's side-set (opt, value) and delay fields |
 | `EN_U1`, `EN_U3`, `EN_OFF` | `set pins` 110b, 011b, 111b | the instructions core 1 executes on `sm_en`, over GP8 nAEN_LO, GP9 nAEN_HI, GP10 nDATA_OE (active low): U1 on, U3 on, all off (what PIO1's programs leave between cycles) |
 | `IORD_MASK` | | /IORD's bit in SIO's input |
-| `IDLE_CYC` | 25,000 (100 µs) | /MEMRD unchanged this long: the 2068 has stopped (a running Z80 reads every few T-states, in HALT too) |
+| `IDLE_CYC` | 25,000 (100 µs) | no memory read this long: the 2068 has stopped (a running Z80 reads every few T-states, in HALT too) |
 | `POWER_OFF_CYC`, `POWER_ON_CYC` | 250,000 (1 ms), 25,000,000 (100 ms) | /MEMWR, /IORD, /IOWR all low this long: the 2068 is off; and how long after they come back the card goes on holding /RESET |
 | `OFF_MASK` | | those three strobes' bits in SIO's input |
 | `IO_TIMEOUT_CYC` | 1000 (4 µs) | the IN guard; see `handle_in` |
@@ -158,7 +179,7 @@ in the file.
 | `dock_rw` | volatile bool, true | `tsbus_dock_writes`; `core1_main` | whether the Z80's writes to the dock are stored: on for a RAM dock, off for a flash one |
 | `held_2068` | volatile bool, true | `hold_2068`; `iord_isr`, `core1_main` | core 0's hold. RESET_HOLD is high while this or `power_held` is set, and INs are ignored (nIORD sits low in reset) |
 | `power_held` | volatile bool | `core1_main`; `hold_2068`, `iord_isr` | core 1 is holding /RESET for a powered-off or just-powered 2068 |
-| `bus_idle` | volatile bool | `core1_main` | /MEMRD has been still for `IDLE_CYC`; while set, io_snoop's F4h/FFh writes are ignored |
+| `bus_idle` | volatile bool | `core1_main` | no memory read for `IDLE_CYC`; while set, io_snoop's F4h/FFh writes are ignored |
 | `idle_resets`, `glitch_writes`, `power_resets` | volatile uint32 | `core1_main` | times the bus went idle (and was released); F4h/FFh writes ignored while idle; power-ups held through |
 | `core1_ready` | volatile bool | `core1_main`; `tsbus_start` | core 1's set-up is done |
 | `d_hi`, `d_lo`, `hold_hi`, `hold_lo` | 3, 3, 5, 9 | constants | serve's two waits and addr_read's two hold loops, in 4 ns PIO cycles: phase 1's settings |
@@ -191,6 +212,24 @@ in the file.
 | `kempston` | volatile int16, -1 | `tsbus_kempston`; `handle_in` | the byte IN 1Fh reads (the Kempston joystick), or -1: 1Fh unanswered. Core 0 sets it from the expander (`board_v3.joystick`); core 1 only reads it. A halfword store, so core 1 never sees half a change |
 | `kemp_ins` | volatile uint32 | `handle_in` | INs from 1Fh answered |
 | `modem_line_up` | volatile bool, false | `tsbus_modem_line`; `core1_main` | Zimodem is running. Until then core 1 starts no `ch_mtx` run (what is queued waits in `line_tx`) and drops what `ch_mrx` brings (the boot banner, or noise from an ESP32 that is off). Kept across `tsbus.modem(True)` |
+| `PIN_AUDIO_L`, `PIN_AUDIO_R` | 46, 30 | `spk_sm` | the audio outputs, driven by `spk_pwm` on PIO2, to the filter, the MCP6002 mixer and the jack; both play the same |
+| `SPK_RING_BITS`, `SPK_RING_N` | 11, 1024 | | the ring: 1024 16-bit levels, 2 KB, aligned to its size for the DMA's ring mode; 100 ms at 10 kHz |
+| `SPK_TOP`, `SPK_MID` | 2047, 1023 | | `spk_pwm`'s period (11 bits: about a 41 kHz carrier at 250 MHz, far above the filter) and silence. It was the PWM block's wrap, 4095 (12 bits, 61 kHz), until speech moved to PIO2 |
+| `SPK_AHEAD`, `SPK_PER_PASS` | 992, 4 | `speech_pass` | core 1 fills the ring up to `SPK_AHEAD` ahead of the DMA, at most `SPK_PER_PASS` samples a pass, so a pass stays short (the OUT and dock-write FIFOs fill in about 15-25 µs) |
+| `SPK_Q_N` | 1024 | | the allophone queue: about 100 s of speech |
+| `spk_ring` | uint16[1024] | written by `speech_pass`; read by the DMA | the levels to play |
+| `spk_fill` | uint32 | `speech_pass`; `tsbus_speech` (half a ring ahead) | the ring index core 1 writes next, free-running |
+| `spk_chip` | `sp0256_t` | `speech_pass` (core 1); `tsbus_speech` resets it with speech off; `handle_in` and `tsbus_speaking` read its LRQ | the chip |
+| `spk_q`, `spk_q_head`, `spk_q_tail` | volatile | head: `tsbus_say` (core 0); tail: `speech_pass` (core 1) | the allophones `tsbus.say` queued, one writer each end |
+| `sm_spk_l`, `sm_spk_r` | int, -1 | `tsbus_speech` (claimed once, `spk_sm`); `spk_dma`, `spk_rest` | the `spk_pwm` state machines on PIO2 for GP46 and GP30 |
+| `speech_on`, `spk_stop_req` | volatile bool | `tsbus_speech`; `tsbus_say(None)`, cleared by `speech_pass` | core 1 runs `speech_pass`; stop now |
+| `spk_scale` | volatile int32 | `tsbus_speech_volume` (35 % until called) | sample × scale >> 15 is added to `SPK_MID` |
+| `ch_spk_l`, `ch_spk_r`, `spk_timer` | int, -1 | `tsbus_speech`, claimed once | the two DMA channels and the DMA timer that paces them |
+| `spk_allophones`, `spk_samples`, `spk_late` | volatile uint32 | `speech_pass` | allophones loaded, samples made, and passes that found the DMA caught up (a gap of stale levels) |
+| `SPK_PORT_OUT`, `SPK_PORT_IN`, `SPK_PQ_N` | 11h (17), 25h (37), 64 | | David's Pico Speech Synth 2068 board's ports, and their queue |
+| `spk_ports_on` | volatile bool | `tsbus_speech_ports` | answer ports 17 and 37 (while `speech_on`) |
+| `spk_pq`, `spk_pq_head`, `spk_pq_tail` | volatile | both core 1's: head `core1_main` (OUT 17), tail `speech_pass` | the allophones OUT 17 wrote; one core both ends, so no lock |
+| `spk_port_outs`, `spk_port_ins` | volatile uint32 | `core1_main`, `handle_in` | OUTs to 17 and INs from 37 answered |
 
 ### `chunk_target(chunk, hsr, ff)`
 
@@ -231,7 +270,7 @@ the card.
 Sets up the three blocks and the DMA chain, and starts six state machines
 (`sm_en` is claimed and configured but never started):
 
-1. GPIO base 0 for both blocks.
+1. GPIO base 0 for PIO0 and PIO1.
 2. serve at offset 0 (refuses if anything is there): in/out base MD,
    side-set BE_REQ, ISR shifting left with autopush at 18, OSR right; /BE an
    output, low; MD inputs; X loaded with `IMAGE_PREFIX`. Table written, shadow
@@ -241,8 +280,13 @@ Sets up the three blocks and the DMA chain, and starts six state machines
    `mov status` on PIO1 IRQ flag 2. mem_write: in MD, autopush at 24, RX
    joined. io_snoop: in MD, autopush at 16. `sm_en`: set pins GP8-GP10,
    initialised at PC 0 (PIO1's memory is full; it never runs).
-   `iord_watch` on PIO2 (GPIO base 0, /IORD's synchroniser bypassed), its
-   IRQ flag 0 cleared and routed to `PIO2_IRQ_0` (`inte0`).
+   `iord_watch` on PIO2 (GPIO base 16, so its window holds /IORD and the
+   audio pins; /IORD's synchroniser bypassed, bit `PIN_NIORD - 16` of the
+   window), its IRQ flag 0 cleared and routed to `PIO2_IRQ_0` (`inte0`).
+   PIO0's IRQ flag 1, which addr_read raises at the start of every memory
+   read and serve clears, is routed to `PIO0_IRQ_1` (`inte1`). No core
+   enables that interrupt; the line only latches its pending bit in core
+   1's NVIC, which core 1's idle test reads.
 5. `set_delays()`. Input synchronisers bypassed on MD and /MEMRD in PIO0, and
    on those and /IOWR in PIO1.
 6. DMA: `ch_ptr` takes serve's pointer (DREQ on serve's RX) and writes it to
@@ -280,6 +324,14 @@ of the low address byte (the high byte is ignored, as a Kempston interface
 ignores it) and a load, no I2C and nothing behind APB. The expander is read
 on core 0 (`board_v3.joystick`).
 
+While `spk_ports_on` and `speech_on`, 25h (37) is answered: FFh while
+speech is busy (allophones in either queue, or the chip's LRQ not ready),
+7Fh when it can take one. That's bit 7 as David's board's /LRQ on D7. The
+board leaves the other bits undriven, so they read as the 2068's floating
+bus, which on the card's own late INs read 7Fh. The board's 74HC138 decodes
+A4, A5 and /RD with A7 low, so it also answers 20h-2Fh and 60h-6Fh; the card
+answers 25h only.
+
 Other ports are left to the 2068; the handler still waits for their strobe
 to end.
 
@@ -300,6 +352,26 @@ is held, by core 0 (`held_2068`) or by core 1's power check (`power_held`).
 nIORD sits low in reset; `iord_watch` reacts to edges only, so that is never
 taken for INs.
 
+### `speech_pass()`
+
+In RAM. One pass of speech on core 1:
+1. **How far ahead core 1 is:** the DMA's read address (`ch_spk_l`), which is
+   on the bus fabric like the modem's DMA registers, not behind APB. A lead
+   of 0 means the DMA caught up: `spk_late` is counted.
+2. **A stop request** (`spk_stop_req`) silences the chip (`sp0256_stop`) and
+   drops both queues.
+3. **Up to `SPK_PER_PASS` samples, while the lead is under `SPK_AHEAD`:**
+   - when an allophone waits (port 17's queue first, then `tsbus.say`'s) and
+     the chip's LRQ allows, it is loaded (`sp0256_ald`), counted in
+     `spk_allophones`;
+   - if anything is queued or being spoken, `sp0256_sample` × `spk_scale` >>
+     15 is added to `SPK_MID` and clamped to 0..`SPK_TOP`; otherwise the
+     level is `SPK_MID`, with no work;
+   - the level goes into `spk_ring`.
+
+The chip's code and tables are in RAM (`SP0256_RAM`, `SP0256_DATA`;
+[speech.md](speech.md)), so nothing here reads flash.
+
 ### `core1_main()`
 
 In RAM. Set-up, which may call flash code because core 0 waits in
@@ -313,11 +385,20 @@ In RAM. Set-up, which may call flash code because core 0 waits in
 
 Then, with `serve_release` (serve's `mov pindirs, null side 0`, the
 instruction after `tail`'s wait, read from the program while flash may
-still be used) and the times of /MEMRD's last change and of the last
+still be used) and the times of the last memory read seen and of the last
 power-off and power-on readings, forever, polling:
 
-- **The bus going idle.** /MEMRD unchanged for `IDLE_CYC`: the 2068 is in
-  reset or off. Core 1 executes `EN_OFF` on `sm_en` and `serve_release` on
+- **The bus going idle.** A memory read since the last pass shows as
+  `PIO0_IRQ_1` pending in core 1's NVIC (see `bus_start`); core 1 clears it
+  and notes the time. None for `IDLE_CYC`: the 2068 is in reset or off.
+  This used to sample /MEMRD once a pass, and a tight, regular Z80 loop
+  (the ROM waiting for a reply) could alias with a regular pass so that
+  every sample saw the same level: 199 false "stopped" in about 150
+  `tpi:modem` commands on board 1 (2026-10-13), each releasing MD
+  mid-read and ignoring bank writes until the next change, and the 2068
+  crashed. With the latch, 3 in 419 commands, all at the power-on *(the
+  NVIC latching a pulse a few cycles long is the Cortex-M33's documented
+  behaviour; the board shows it working)*. Core 1 executes `EN_OFF` on `sm_en` and `serve_release` on
   serve, so U1-U3 are off, MD is released and /BE let go. With the 2068 off,
   /MEMRD reads low and serve and addr_read would otherwise sit in a "read"
   driving its data bus. It sets `bus_idle` (cleared at the next change) and
@@ -347,12 +428,15 @@ power-off and power-on readings, forever, polling:
   must never wait, and the first version, which masked interrupts around the
   8251 updates, made INs late on the card (a floating bus read as ©, 127,
   and the character lost). `usart8251.h` says what keeps it safe unmasked.
+- **Speech**, while `speech_on`: `speech_pass`.
 - **I/O writes** (io_snoop): F4h and FFh update the shadow, and the table if
   it changed (for FFh, only bit 7 matters); while `bus_idle` they are
   power-down noise and are dropped (`glitch_writes`). OUTs to 0Eh/0Fh make
   the status 00h (busy, as v2.1's PIO did) and go to `rxq`. While
   `modem_on`, OUTs to 77h go to `u8251_control` and to 73h to
-  `u8251_data_out`.
+  `u8251_data_out`. While `spk_ports_on` and `speech_on`, an OUT to 11h
+  (17) puts its low 6 bits in `spk_pq`, if there is room, and counts
+  `spk_port_outs`: an allophone for the chip, as on David's board.
 - **Memory writes** (mem_write): stored in the DOCK image when the shadow
   maps the chunk to the DOCK, DOCK serving is on, and `dock_rw` is set (a
   RAM dock).
@@ -485,7 +569,7 @@ scratch:
 1. `modem_on` cleared and 1 ms waited, so core 1 is past any pass touching
    `usart` or the channels.
 2. The two channels claimed (the first time only; MicroPython's soft reset
-   frees only channels it claimed itself), both aborted.
+   frees only channels it claimed itself), both stopped (`stop_dma`).
 3. UART0 initialised again, 115200 8N1 with its DMA requests on, and GPIO
    44/45 given to it. Again each time because a MicroPython soft reset calls
    `uart_deinit` on UART0 whoever set it up.
@@ -500,9 +584,22 @@ scratch:
 6. `modem_on` set.
 
 `False`: `modem_on` cleared; 73h/77h are left to the 2068 again; and the two
-channels aborted (if claimed), so the UART is free for `tsbus.esp_relay` or
+channels stopped (if claimed), so the UART is free for `tsbus.esp_relay` or
 `machine.UART`. Powering the ESP32 is `board_v3.modem_power`'s job, not this
 one's.
+
+The 1 ms wait in step 1 sleeps core 0 (`mp_hal_delay_ms`), and while speech
+still played into the PWM block that sleep, inside a `tpi:modem` command,
+crashed the 2068 (under "How it fits"); it no longer does.
+
+### `stop_dma(ch)`
+
+Stops a channel for good: `EN` cleared through the non-triggering
+`al1_ctrl` alias, then `dma_channel_abort`. On the RP2350 an abort alone can
+let the channel trigger again (erratum RP2350-E5, in the SDK's
+`dma_channel_abort` documentation; MicroPython's `DMA.close` does the same).
+Used by `tsbus.modem` and `tsbus.speech` for their channels. It was added
+while chasing the crashes above, and on its own it didn't stop them.
 
 ### `tsbus.modem_mode(m)`
 
@@ -539,6 +636,103 @@ From now on an IN from 1Fh reads `byte` (0–255; anything else is
 `ValueError`). `None`: 1Fh is left unanswered, as on a 2068 without the
 interface. One store to `kempston`. `board_v3._joy_read` calls it whenever
 the joystick changes, and `board_v3.joystick(False)` with `None`.
+
+### Speech
+
+The chip runs on core 1 (`speech_pass`), and two DMA channels play
+`spk_ring` into the TX FIFOs of two `spk_pwm` state machines on PIO2, one
+per audio pin. A DMA timer paces them at the chip's 10 kHz, so core 0 only
+queues allophones. Core 0 sets it all up in `tsbus.speech`, once. Nothing
+the DMA writes is behind APB: the PWM block was, and its writes crashed the
+2068 (under "How it fits"). Board 2 (USB only,
+2026-10-12) spoke two sentences from the REPL: 80,157 samples, exactly
+MAME's count for them, with `s_late` 0 ([speech.md](speech.md)).
+
+### `spk_sm(pin, off)`, `spk_rest()`, `spk_dma(ch, sm)`
+
+`tsbus.speech`'s helpers:
+- `spk_sm`: claims a PIO2 state machine for `spk_pwm` at `off`, the pin to
+  PIO2 and an output, side-set on it, OUT shifting right; loads the period
+  (`SPK_TOP`, through `pull` and `out isr, 32`), queues `SPK_MID` and
+  starts it. Returns the state machine.
+- `spk_rest`: both FIFOs cleared and `SPK_MID` queued: the pins at the
+  middle level at once (speech off).
+- `spk_dma`: a channel moving 16-bit levels from `spk_ring` (read ring of
+  `SPK_RING_BITS`, endless) to the state machine's TX FIFO, paced by
+  `spk_timer`'s DREQ. A 16-bit write arrives in both halves of the FIFO
+  word; `spk_pwm` takes the low one. The state machine drains the FIFO
+  four times faster than the timer fills it, holding each level until the
+  next.
+
+### `tsbus.speech(on[, rate])`
+
+Speech on or off. First `speech_on` is cleared and core 1 given a
+millisecond to leave its pass; if speech was set up, both channels are
+stopped (`stop_dma`) and the pins left at `SPK_MID` (`spk_rest`). Off stops
+there. On:
+1. `rate` (50-150, % of the chip's speed; `ValueError` otherwise) sets the
+   timer: clk_sys × 1 / (250 MHz / (10 kHz × rate / 100)), 25000 at 100 %.
+   The chip's pitch moves with its speed, as on the real chip's clock.
+2. The two channels and the timer are claimed the first time, `spk_pwm`
+   loaded into PIO2 and its two state machines started (`spk_sm`); the
+   volume starts at 35 % if `tsbus.speech_volume` hasn't been called.
+3. The ring filled with `SPK_MID`, the chip reset
+   (`sp0256_init`, with `memset`, on core 0 while core 1 is out), both queues
+   emptied, `spk_fill` half a ring ahead (50 ms of silence first).
+4. Both channels started together (`dma_start_channel_mask`), then
+   `speech_on` set.
+
+Raises "tsbus not started" before `tsbus.start()`, and `OSError` if no DMA
+timer is free. `board_v3.speech_start` calls it at boot.
+
+### Flash writes: `apb_dma_pause()`, `apb_dma_resume(paused)`, `__wrap_flash_range_erase`, `__wrap_flash_range_program`
+
+The link wraps the SDK's `flash_range_erase` and `flash_range_program`
+(`-Wl,--wrap`, `micropython.cmake`), so MicroPython's flash writes
+(`rp2_flash.c`: LittleFS, through `rp2_flash_writeblocks` and
+`rp2_flash_ioctl`) call these first, already inside its critical section
+(interrupts off). Each one calls `apb_dma_pause`, the real function
+(`__real_…`), then `apb_dma_resume`. All four are `__not_in_flash_func`:
+the real functions turn execute-in-place off.
+
+- `apb_dma_pause`: for each of `ch_mrx` and `ch_mtx` (the modem's: they
+  read and write UART0) that is claimed and enabled, clears `EN` through the non-triggering
+  `al1_ctrl` alias, which stops new transfers and keeps the sequence where
+  it is; returns the paused channels as a bit mask. If any, it waits 1000
+  cycles (4 µs at 250 MHz) so a transfer already issued finishes before the
+  flash goes busy.
+- `apb_dma_resume`: sets `EN` again on those channels; they carry on.
+
+What it costs: the modem's receive channel stops reading the UART, whose
+32-byte FIFO can overflow during a long erase at 115200 baud and lose
+bytes *(inferred, not tested)*. The 2068-facing channels (`ch_ptr`,
+`ch_data`, `ch_log`) and speech's are never paused: they touch only PIO and
+SRAM. Speech's were paused too while they wrote the PWM block; that cured
+the flash writes but not the sleeps (under "How it fits").
+
+### `tsbus.say(allophones)`
+
+Queue AL2 allophone numbers (bytes-like; each masked to 0-63) after what is
+queued already, until the queue is full; returns how many were queued.
+`None` asks core 1 to stop now and drop both queues (`spk_stop_req`), and
+returns 0. `OSError` ("speech off") unless `speech_on`.
+
+### `tsbus.speech_volume(pct)`
+
+0-100 (`ValueError` otherwise): `spk_scale = pct × 4 × SPK_MID / 100`. Speech
+peaks near 6000 of the chip's ±32764, so 100 % takes peaks to about 73 % of
+the swing from `SPK_MID` to either end; 35 % (the default) to about 26 %,
+the level of the first tests on board 2. Takes effect from the next sample.
+
+### `tsbus.speech_ports(on)`
+
+Answer ports 17 and 37 (OUT 17 an allophone, IN 37 bit 7 busy) while speech
+is on. `board_v3.speech_start` passes `config.ini`'s `SPEECH_PORTS`.
+
+### `tsbus.speaking()`
+
+True while speech is on and something is queued (either queue) or the chip
+isn't halted and ready: the end of what was said, for a program that waits.
 
 ### `tsbus.esp_relay(first_ms, idle_ms)`
 
@@ -583,6 +777,9 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `m_line_up`.
 `m_rx_lost` is the line's ring overflowing (`modem.rx_lost`). The joystick:
 `k_on` (1Fh answered), `k_byte` (what it reads, 0 while off) and `k_ins`.
+Speech: `s_on`, `s_allophones`, `s_samples`, `s_late` (passes that found the
+DMA caught up), `s_queued` (`tsbus.say`'s queue), `s_ports`, `s_port_outs`,
+`s_port_ins`.
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
 
@@ -655,7 +852,8 @@ at the REPL: F7h, FBh, FFh and 00h, as on v2.
 
 The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type,
 with the functions above, `modem`, `modem_mode`, `modem_line`,
-`modem_poll`, `modem_pace`, `esp_relay` and `kempston` among them.
+`modem_poll`, `modem_pace`, `esp_relay`, `kempston`, `speech`, `say`,
+`speech_volume`, `speaking` and `speech_ports` among them.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 
@@ -956,10 +1154,14 @@ Every pass:
 ## `micropython.cmake`
 
 The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c`,
-`usart8251.c` and `modem2050.c`, the pioasm header
+`usart8251.c`, `modem2050.c` and `sp0256.c`, the pioasm header
 (`pico_generate_pio_header`), and `hardware_dma`, `hardware_pio`,
-`hardware_uart`, `hardware_vreg`, `pico_multicore`. `U8251_ON_PICO=1` makes
-the two plain-C files put core 1's functions in RAM. The board sets `USER_C_MODULES` to this file.
+`hardware_uart`, `hardware_vreg`, `pico_multicore` (not `hardware_pwm`
+since speech moved to PIO2), and
+the link options `-Wl,--wrap=flash_range_erase` and
+`-Wl,--wrap=flash_range_program` (the flash-write wrappers in `tsbus.c`).
+`U8251_ON_PICO=1` makes the three plain-C files put core 1's functions in
+RAM (and `sp0256.c` its tables, `SP0256_DATA`). The board sets `USER_C_MODULES` to this file.
 
 `tsbus.c` includes `tsbus.pio.h` only when `NO_QSTR` is not defined:
 MicroPython's QSTR scan preprocesses the file before the header has been

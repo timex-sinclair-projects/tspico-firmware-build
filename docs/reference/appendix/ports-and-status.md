@@ -17,8 +17,12 @@ On the v3 card two more ports are answered, by core 1, for the TS2050
 modem (unless `tpi:modem off`): 73h (115), the 8251's data, and 77h (119),
 its status on IN and mode/command on OUT
 ([../firmware/tsbus.md](../firmware/tsbus.md#usart8251h-usart8251c)). They
-are not the TS-Pico's protocol, and the ROM never touches them. So is 1Fh
-(31) on IN, the Kempston joystick from the card's DE-9 socket (unless
+are not the TS-Pico's protocol, and the ROM never touches them. So are 11h
+(17) on OUT and 25h (37) on IN, while speech is on and `SPEECH_PORTS` is
+true: an allophone for the speech chip, and its busy bit (bit 7: FFh busy,
+7Fh ready), as David's Pico Speech Synth 2068 board
+([../firmware/tsbus.md](../firmware/tsbus.md#speech)).
+1Fh (31) on IN is the Kempston joystick from the card's DE-9 socket (unless
 `config.ini`'s `KEMPSTON` is false): 000FUDLR, 1 = pressed, the high
 address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep1)).
 
