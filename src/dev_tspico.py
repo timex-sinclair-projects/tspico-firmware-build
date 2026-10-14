@@ -5718,6 +5718,9 @@ def RM_CHECK(name):                                                           # 
     if dir_exists(real):
         if catalog.within(TSP.cur_path, real):
             return "RM: Can't remove the current directory", _4_Q_Parameter
+        for item in os.ilistdir(real):                                        # here, not after the Y: the prompt
+            if item[0].lower() != "dirinfo.tap":                              # is the answer, so a later failure
+                return "RM: Directory not empty", _4_Q_Parameter              # could only reach the log
         return "dir", _1_OK
     if not file_exists(real):
         return "RM: Not found: %s" % name, _3_F_Invalid_file
