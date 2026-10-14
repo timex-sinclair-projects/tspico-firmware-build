@@ -1474,8 +1474,9 @@ SD card, and the P10 jumper fitted (2.3).
    stay in the ROM you're using.
 
 RAM is quick and safe to experiment with, but forgets at switch-off; Flash keeps it. Slots 0 to
-3 hold the system ROMs. Flash slot 0, the Spectrum ROM, is locked: the loader asks for another
-slot. For slots 1 to 3 it makes you confirm that you're ABSOLUTELY SURE.
+3 hold the system ROMs. Flash slot 0, the Spectrum ROM, is locked: the loader says so and asks for
+another slot. For slots 1 to 3 it makes you confirm that you're ABSOLUTELY SURE before writing
+them.
 
 A cartridge loads the same way, into an even slot; the loader then offers to put it in the dock
 and restart.
@@ -1621,13 +1622,13 @@ RAM is quick and safe to experiment with, but forgets at switch-off; Flash keeps
 `Select slot (even 4..14)?`), and offers to put it in the dock.
 
 - **You can write the slot the 2068 is running from.** The 2068 carries on with the ROM it
-  started with, and the new one runs from the next start, or after `SAVE "tpi:boot"`, even a
-  `tpi:boot` to the slot it's running from. Answering **Y** to the loader's `Boot to ROM ... NOW`
-  does that. The loader tells you so and asks you to confirm before it writes.
+  started with, and the new one runs from the next switch-on, or straight away after
+  `SAVE "tpi:boot"`, even a `tpi:boot` to the slot it's running from. Typing **Y** in step 7
+  does that. The loader asks you to confirm before it writes.
 - **Flash slot 0 is locked.** It holds the Spectrum ROM that ZX Spectrum mode needs. The loader
-  asks for another slot, and the card refuses it anyway (**Q**). The web updater puts a fresh
-  copy there. Slots 1 to 3 hold the other system ROMs, and the loader makes you confirm that
-  you're ABSOLUTELY SURE before writing them.
+  says `Flash slot 0 is locked` and asks for another slot, and the card refuses it anyway (**Q**).
+  The web updater puts a fresh copy there. Slots 1 to 3 hold the other system ROMs, and the
+  loader makes you confirm that you're ABSOLUTELY SURE before writing them.
 
 If the image isn't mounted any more when the loader asks for it (after `tpi:close`, say), the
 loader stops with `No ROM image mounted` and **F**. Mount the file and run `LOAD ""` again.
