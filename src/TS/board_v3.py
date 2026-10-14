@@ -12,6 +12,7 @@ import tsbus
 from machine import Pin, SPI, I2C, Timer
 
 NAME = "v3"
+LABEL = "V3"        # tpi:info's Board line (6 columns at most)
 PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
 SD_SLOTS = True     # tpi:boot and tpi:dock take MEM 3: a slot file on the SD card

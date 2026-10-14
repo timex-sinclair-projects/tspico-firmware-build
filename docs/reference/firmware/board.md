@@ -44,6 +44,7 @@ Who calls what:
 | `speech_start()` | `TS2068_IO` (6393), at boot with `config.ini`'s speech keys |
 | `say()` | `SAY` (5320, `tpi:say`) |
 | `modem_status()`, `MODEM_MODES` | `MODEM` (5287, 5290) |
+| `LABEL` | `GETINFO` (4619, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
 PIO programs. So it detects the v3 card itself (step 4.2;
@@ -78,6 +79,13 @@ Imports `machine.Pin`, `SPI`, `freq`, `rp2.StateMachine`, `asm_pio`,
 `"v2"`, and `True`: `MQ` is a PIO state machine, so `tspico_io` may write
 its registers and pace DMA on its DREQs. Nothing reads `PIO_MQ`:
 `tspico_io` makes the same test itself (above).
+
+### `LABEL`
+
+`"V2.2"`: the board's name on `tpi:info`'s Board line, which `GETINFO`
+pads (and cuts) to six columns so "Log level" stays where it is. It is the
+text the line always had: the v2 manual and site show this screen, and
+it stays as they show it.
 
 ### `SLOTS`, `HAS_CORE1`
 
@@ -253,6 +261,11 @@ DREQs to touch. `SLOTS`: the Pico writes the slots itself (`write_slot`), so
 `tpi:blkrcv` is `SLOT_WRITE` and `MOUNT_FILE` serves `romupd3.tap` and
 `dckupd3.tap`. `HAS_CORE1`: core 1 runs the `tsbus`
 loop, so `background()` runs on core 0 and there is no boot blink.
+
+### `LABEL`
+
+`"V3"`: `tpi:info`'s Board line. Until it came from here the line was the
+literal `V2.2` on both boards, so the v3 card said it was a v2.2 board.
 
 ### `SD_SLOTS`
 

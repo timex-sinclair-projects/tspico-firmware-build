@@ -14,6 +14,8 @@ SD sizes in units that fit the card (2026-10-02).
     cyan chips; any other text goes through unchanged.
   * GETINFO: the cyan badge on a blue strip; with no SD card the strip
     and the card's "none" turn red. Nothing mounted is not a warning.
+    The Board line comes from the board module (board.LABEL): the v2
+    board's line is unchanged, the v3 card no longer says V2.2.
 
 Run:  python3 src/test/screen_colour_hosttest.py
 """
@@ -197,6 +199,40 @@ def test_info(t):
           "card in, nothing mounted: blue strip, no red")
 
 
+def test_info_board(t):
+    print("GETINFO: the Board line from board.LABEL")
+    import ast
+    sent = []
+    t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: sent.append(msg)
+    t.TSP = types.SimpleNamespace(FW_VERSION="2.3.1", ROM_VERSION="2.3", LOG_LEVEL=2, sd_present=True,
+                                  append=False, VERBOSE=False, f_name="", tap_idx=0, offset_tbl=[])
+
+    def board_line(board):
+        saved, t.board = t.board, board
+        try:
+            del sent[:]
+            t.GETINFO(bytearray(10), "D..tpi:info")
+        finally:
+            t.board = saved
+        lines = [l for l in screen(sent[-1]) if l.startswith("Board")]
+        return lines[0] if len(lines) == 1 else lines
+
+    check(t.board.NAME == "v2", "on the host tspico gets board_v2 (%r)" % t.board.NAME)
+    got = board_line(t.board)
+    check(got == "Board     V2.2  Log level 2", "v2: the line as it always was (%r)" % got)
+
+    # board_v3 imports tsbus, so its LABEL is read from the source.
+    src = open(os.path.join(HERE, "..", "TS", "board_v3.py")).read()
+    v3 = [n.value.value for n in ast.parse(src).body if isinstance(n, ast.Assign)
+          and [getattr(x, "id", None) for x in n.targets] == ["LABEL"]]
+    check(v3 == ["V3"], "board_v3.LABEL is V3 (%r)" % v3)
+    got = board_line(types.SimpleNamespace(LABEL=v3[0] if v3 else "?"))
+    check(got == "Board     V3    Log level 2", "v3: its own name, Log level in the same column (%r)" % got)
+    got = board_line(types.SimpleNamespace(LABEL="V12.345"))
+    check(got == "Board     V12.34Log level 2" and len(got) <= 32,
+          "a label longer than 6 is cut: the line still fits 32 columns (%r)" % got)
+
+
 def test_tapdir(t):
     print("CAT \"\" (TAPDIR_COLOUR)")
     head = ("File:%-27s" % "/GAMES/manic.tap") + "Pointer at block: 02, Append:off"
@@ -271,6 +307,7 @@ def main():
     test_send_msg2(t)
     test_cat_colour(t)
     test_info(t)
+    test_info_board(t)
     test_tapdir(t)
     test_listmenu(t)
     test_polish(t)

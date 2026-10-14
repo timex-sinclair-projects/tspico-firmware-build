@@ -576,7 +576,7 @@ CR LF line ends (the comment at 4418–4420). Error statuses are logged.
    | Firmware | `TSP.FW_VERSION`, and "uPython" with MicroPython's version |
    | ROM | what the ROM said: `rom_id` from this command's pre-header as major.minor (`23h` → "2.3", #227); `TSP.ROM_VERSION` from `config.ini` only for a ROM that sends `FFh` ([tspico-state.md](tspico-state.md#rom_id)) |
    | Build | `BUILD_FIT(BUILD_VERSION, 22)` |
-   | Board | the literal `V2.2`, and the log level |
+   | Board | `board.LABEL` padded to six columns (`V2.2` on the v2 board, `V3` on the v3 card; [board.md](board.md#label)), and the log level |
    | Free RAM | `gc.mem_free()` in kB |
    | Flash | size and free space |
    | SD card | size and free space (`sd_space`, from the last listing), or `none` in red |
@@ -597,7 +597,9 @@ line of 34 characters wrapped "ck" onto a line of its own (the emulator,
 `tools/emu`, 2026-10-04); now the name gives way, not the type.
 
 No card needed (`SD_FREE`): it is the command to run when the card is the
-problem. `sd_state_hosttest.py`'s `test_info` pins the card lines.
+problem. `sd_state_hosttest.py`'s `test_info` pins the card lines;
+`screen_colour_hosttest.py`'s `test_info_board` pins the Board line on
+both boards.
 
 ### `GETLOG(pre, cmd)`
 

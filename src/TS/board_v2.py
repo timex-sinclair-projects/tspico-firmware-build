@@ -16,6 +16,7 @@ from rp2 import StateMachine, asm_pio
 from TS.tspico_io import TS_IO_DUAL, set_ctrl, sel_bank
 
 NAME = "v2"
+LABEL = "V2.2"      # tpi:info's Board line (6 columns at most)
 PIO_MQ = True       # MQ is a PIO state machine: tspico_io may use its registers and DMA
 SLOTS = True        # the 16 flash/SRAM slots: tpi:boot, tpi:dock, tpi:blkrcv
 SD_SLOTS = False    # no MEM 3: slots come from the flash and SRAM chips only
