@@ -75,8 +75,9 @@ def rom_slot_empty(mem, slot):
     return False
 
 
-def map_slots(rom_sm, bank_sm):
-    """Switch the boot and dock slots, under a running 2068."""
+def map_slots(rom_sm, bank_sm, reboot=False):
+    """Switch the boot and dock slots, under a running 2068. reboot (tpi:boot
+    sets it) means nothing here: the 2068 reads the slot's chip directly."""
     _rom.put(rom_sm)
     _bank.put(bank_sm)
 

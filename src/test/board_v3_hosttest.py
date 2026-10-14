@@ -510,10 +510,36 @@ def main():
     got = take()
     check(IMG[2] == cart and ("dock", False) in got and ("dock", True) in got,
           "writing the slots in the DOCK: reloaded there, live")
-    image(32768, 0x11)
+    new_rom = image(32768, 0x11)
     board.write_slot(2, 1, img)
     check(not [c for c in take() if c[0] in ("switch", "load", "hold")],
           "writing the booted slot: the running ROM isn't touched (next boot)")
+    board.map_slots(0x0A, 0x31)                              # tpi:dock CODE 2,3, boot still 2,1
+    check(not [c for c in take() if c[0] == "switch"],
+          "  a tpi:dock after it: no switch, no reset into the new ROM")
+    board.map_slots(0x0A, 0x31, reboot=True)                 # tpi:boot CODE 2,1, the slot booted now
+    sw = [c for c in take() if c[0] == "switch"]
+    check(len(sw) == 1 and sw[0][1:] == (("exrom", new_rom[16384:]), ("home", new_rom[:16384])),
+          "  then tpi:boot to the same slot: the new ROM, one switch (romupd3's \"Boot ... NOW\")")
+    board.map_slots(0x0A, 0x31, reboot=True)
+    check(not [c for c in take() if c[0] == "switch"], "  and once loaded, a second tpi:boot there: no switch")
+    board.write_slot(2, 6, img)                              # not the booted slot
+    board.map_slots(0x0A, 0x31, reboot=True)
+    check(not [c for c in take() if c[0] == "switch"], "writing another slot: tpi:boot to the booted one still no switch")
+    board.start_memory(0x0A, 0x01)
+    board.write_slot(2, 1, img)
+    board.start_memory(0x0A, 0x01)                           # a power cycle loads it anyway
+    take()
+    board.map_slots(0x0A, 0x01, reboot=True)
+    check(not [c for c in take() if c[0] == "switch"], "a boot after the write clears it: tpi:boot then no switch")
+    board.start_memory(0x0B, 0x01)                           # boot SD slot 1: no SD file, flash F01 stands in
+    take()
+    newer = image(32768, 0x44)
+    board.write_slot(2, 1, img)
+    board.map_slots(0x0B, 0x01, reboot=True)
+    sw = [c for c in take() if c[0] == "switch"]
+    check(len(sw) == 1 and sw[0][1:] == (("exrom", newer[16384:]), ("home", newer[:16384])),
+          "booted from SD slot 1 standing in for flash 1: writing flash 1 reloads it too")
 
     sent_w = []
     t.SEND_MSG = lambda msg, msg2, st, force=False: sent_w.append((msg, msg2, st))
@@ -529,6 +555,16 @@ def main():
     t.BLKRCV(pre(2, 4), "")
     check(calls_w == [(2, 4, "/TMP/temp.bin")] and sent_w[-1][:1] == ("Wrote Flash slots 4-5",) and sent_w[-1][2] == t._1_OK,
           "CODE 2,4: /TMP/temp.bin into flash 4, 0 OK (%r)" % sent_w[-1:])
+    del calls_w[:]
+    t.TSP.f_name = "/sd/TAP/test.rom"
+    t.BLKRCV(pre(2, 0), "")
+    check(not calls_w and sent_w[-1][2] == t._4_Q_Parameter and "Flash slot 0" in sent_w[-1][0],
+          "CODE 2,0 (the Spectrum ROM): Report Q, nothing written (%r)" % (sent_w[-1:],))
+    t.BLKRCV(pre(2, 1), "")
+    t.BLKRCV(pre(1, 0), "")
+    check(calls_w == [(2, 1, "/TMP/temp.bin"), (1, 0, "/TMP/temp.bin")],
+          "CODE 2,1 (the 2068 ROM, the manual's A.5) and CODE 1,0 (SRAM): written")
+    t.TSP.f_name = "/sd/TAP/game.dck"
     t.board.write_slot = lambda m, s_, p: (_ for _ in ()).throw(OSError(28, "ENOSPC"))
     t.BLKRCV(pre(2, 4), "")
     check(sent_w[-1][0] == "Writing the slot failed" and sent_w[-1][2] == t._3_F_Invalid_file,

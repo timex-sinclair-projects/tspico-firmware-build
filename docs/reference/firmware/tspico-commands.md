@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2535–2612 (`DIR`), 3452–3861 (`IDIR` … `SA_NOT_IMP`), 3926–4167
-(`APPEND`, `BLKRCV`), 4259–4797 (`CDIR` … `GETLOG`), 4912–5275
-(`LOGLEVEL` … `MEMDOCK`), 5278–5338 (`MODEM`), 5439–5515 (`REW`), 5655–5914 (`BAD_CODE` …
-`NOP`) and 6026–6102 (the printer settings); the dispatch table
-`SA_funct` at 6543–6597, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4259–4797 (`CDIR` … `GETLOG`), 4912–5296
+(`LOGLEVEL` … `MEMDOCK`), 5299–5359 (`MODEM`), 5460–5536 (`REW`), 5676–5938 (`BAD_CODE` …
+`NOP`) and 6050–6126 (the printer settings); the dispatch table
+`SA_funct` at 6567–6621, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -17,7 +17,7 @@ handlers of the ROM's disk keywords and channels (`DISK_*`,
 `NATIVE_OPEN`, `CH_*`) are in [tspico-disk.md](tspico-disk.md); mounting
 (`LOAD "tpi:name"`, `MOUNT_FILE`, `LOAD_TPI`) and the helpers the handlers
 share (`getArgs`, `PARAMS`, `ChangeDir`, `getBoot`, `getDock`,
-`BOOT_SLOT_CLASH`, `FORGET_MOUNT`, `ResolveIndexName`) in
+`SYSTEM_SLOT_LOCK`, `BOOT_SLOT_CLASH`, `FORGET_MOUNT`, `ResolveIndexName`) in
 [tspico-files.md](tspico-files.md); external commands in
 [extcmd.md](extcmd.md). For the user's view of each command see the
 [user manual, chapter 10](../../manual/user-manual.md#103-the-tpi-commands);
@@ -42,32 +42,32 @@ where the manual and the code differ, the entries below say so.
 | `GETLOG(pre, cmd)` | 4670 | `tpi:log` |
 | `LOGLEVEL(pre, cmd)` | 4912 | `tpi:loglevel` |
 | `MDIR(pre, cmd)` | 4971 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5096 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5201 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 5278 | `tpi:modem` |
-| `SAY(pre, cmd)` | 5311 | `tpi:say` |
-| `GREET(pre, cmd)` | 5341 | `tpi:greet` |
-| `AUTOMOUNT(pre, cmd)` | 5380 | `tpi:automount` |
-| `REW(pre, cmd)` | 5439 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5655 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5660 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5665 | `tpi:rm` |
-| `RM_CHECK(name)` | 5711 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5729 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5789 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5843 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 5897 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6026 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6047 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6058 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6071 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6089 | `tpi:bmp` |
+| `MEMBOOT(pre, cmd)` | 5101 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5222 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 5299 | `tpi:modem` |
+| `SAY(pre, cmd)` | 5332 | `tpi:say` |
+| `GREET(pre, cmd)` | 5362 | `tpi:greet` |
+| `AUTOMOUNT(pre, cmd)` | 5401 | `tpi:automount` |
+| `REW(pre, cmd)` | 5460 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5676 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5681 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5686 | `tpi:rm` |
+| `RM_CHECK(name)` | 5732 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5753 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5813 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5867 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 5921 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6050 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6071 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6082 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6095 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 6113 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
 `isTapMounted`, `dir_exists`, `file_exists`, `public_path`,
 `public_fname`, `ChangeDir`, `getArgs`, `LOAD_CONFIG`, `getBoot`,
-`getDock`, `BOOT_SLOT_CLASH`, `REMOVE_DIR`, `ResolveIndexName`,
+`getDock`, `SYSTEM_SLOT_LOCK`, `BOOT_SLOT_CLASH`, `REMOVE_DIR`, `ResolveIndexName`,
 `LOAD_TPI`, `FORGET_MOUNT` ([tspico-files.md](tspico-files.md),
 [tspico-dispatch.md](tspico-dispatch.md)), `xchr`, `xstr`, `BUILD_FIT`,
 `SEND_MSG_PROMPT_YN` ([tspico-messages.md](tspico-messages.md)).
@@ -84,7 +84,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6540–6541) says (until #181 it
+   trailing space, as the comment above it (6564–6565) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -137,7 +137,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6543) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6567) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -374,8 +374,11 @@ user manual §8.4).
    the erase (#162, #163; [`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)).
    On the v3 card (`board.SLOTS` false) the rest is `SLOT_WRITE(pre)`: the
    Pico writes the slot, and none of the steps below apply.
-2. **The boot-slot guard.** `getDock()` is the slot the updater will
-   write (the DOCK slot it chose with `tpi:dock`); if
+2. **The system slots and the boot-slot guard.** `getDock()` is the slot
+   the updater will write (the DOCK slot it chose with `tpi:dock`). If
+   `SYSTEM_SLOT_LOCK(mem, page)` says it is flash slot 0 ("Can't write
+   Flash slot 0:" / "the Spectrum ROM."), Report Q, and stop the same
+   way; the loader has refused it already. Slot 1 goes through. If
    `BOOT_SLOT_CLASH(mem, page, TSP.f_name)` says it is the slot the 2068
    is running from (for a `.DCK`, either of its two 32K slots), answer
    "Can't write Flash slot N:" / "the 2068 is running from it. Boot
@@ -708,20 +711,26 @@ romupdate's questions and end in `SAVE "tpi:blkrcv" CODE m,s`.
    `.DCK`, an odd slot or one above 14: "Wrong values, MEM=…, PAGE=…" / "MEM
    1..2, PAGE 0..15 (even for a .DCK)", shown, Report A, logged. Nothing
    written.
-2. `board.write_slot(mem, slot, "/TMP/temp.bin")` ([board.md](board.md#board_v3py)).
+2. `SYSTEM_SLOT_LOCK(mem, slot)` ([tspico-files.md](tspico-files.md)): flash
+   slot 0 (or a `.DCK` there), "Can't write Flash slot 0:" / "the Spectrum
+   ROM.", shown, Report Q, logged at level 1. Nothing written. Flash slot 1
+   and SRAM slot 0 are written as any other.
+3. `board.write_slot(mem, slot, "/TMP/temp.bin")` ([board.md](board.md#board_v3py)).
    This pads a short image to 32K, puts a 64K one (a `.DCK` after
    `DCK_IMAGE`) into the even slot and the next, and reloads the dock if
    those slots are in it. An `OSError` (a full flash) or `ValueError` (an
    image that doesn't fit): "Writing the slot failed" and the reason, shown,
    Report F, logged at level 2.
-3. "Wrote Flash slot N" (or "slots N-M", or SRAM), `SEND_MSG`, 0 OK, logged
+4. "Wrote Flash slot N" (or "slots N-M", or SRAM), `SEND_MSG`, 0 OK, logged
    at level 1. The updater prints its own "OK".
 
 Nothing reaches the Z80 but the message, so v2's stream gate and DMA have no
 counterpart here. A booted slot is written like any other: the 2068 runs
 from the card's SRAM copy, and the new ROM takes effect at the next boot or
-`tpi:boot`. `romupd3` says so before it asks for confirmation, and asks
-again before writing flash slot 0, the Spectrum ROM. Checked on proto1
+`tpi:boot`, also a `tpi:boot` to the slot booted now (`write_slot` marks
+it stale, `MEMBOOT` passes `reboot=True`). `romupd3` says so before it asks for confirmation. It
+won't offer flash slot 0 ("locked"), and asks "ABSOLUTELY SURE" before
+slots 1 to 3. Checked on proto1
 (2026-10-10): a 32K `.ROM` written to flash slot 5 matched byte for byte
 and booted with `tpi:boot`, and Pro/File's 16K `.DCK` wrote its chunks 4–5
 into flash slots 6–7 and ran from the dock. `NO_SLOTS`, which refused here
@@ -739,9 +748,9 @@ The highest MEM that `tpi:boot` and `tpi:dock` take: 3 where
 `MEMBOOT` and `MEMDOCK` check against it and name it in "OK values:
 MEM=1..n", and `LOAD_CONFIG` builds its valid `ROM_SM` values from it.
 
-### `SD_SLOTS_CALL(need, fn, *args)`
+### `SD_SLOTS_CALL(need, fn, *args, **kw)`
 
-`fn(*args)`, with the SD card mounted on `/sd` around it if `need` (a MEM 3
+`fn(*args, **kw)`, with the SD card mounted on `/sd` around it if `need` (a MEM 3
 slot is about to be read; [board.md](board.md#sd_slots_dir)). The mount is
 `ACTIVATE_SD()`; one that fails (no card, or it won't mount) is ignored,
 because the board then reads the flash slot of the same number and returns
@@ -777,7 +786,8 @@ and `sel_bank` state machines take ([pio.md](pio.md#set_ctrl),
      puts flash slot 1 back ([tspico-dispatch.md](tspico-dispatch.md#load_config)):
      a ROM that hangs the 2068 can be escaped by a power cycle.
   3. "Change ROM to MEM=m, PAGE=s", `SEND_MSG` (not shown), logged.
-  4. 0.1 s sleep, then `board.map_slots(TSP.ROM_SM, TSP.bank_sm)`, on v2
+  4. 0.1 s sleep, then `board.map_slots(TSP.ROM_SM, TSP.bank_sm,
+     reboot=True)`, on v2
      `ROM.put(TSP.ROM_SM)` and `BANK.put(TSP.bank_sm)` ([board.md](board.md)):
      the ROM changes under the running 2068 at once. `SEND_MSG` has only
      waited for TX to empty; the Z80 is still finishing the statement in
@@ -785,7 +795,10 @@ and `sel_bank` state machines take ([pio.md](pio.md#set_ctrl),
      says it can go. The manual's advice — follow it with `NEW` or a reset
      — is because the 2068 is now running code it did not start in. On the
      v3 card `map_slots` resets the 2068 into the new ROM instead (200 ms,
-     `tsbus.switch`; [board.md](board.md#board_v3py)), a clean start. For
+     `tsbus.switch`; [board.md](board.md#board_v3py)), a clean start;
+     `reboot` makes it load the slot even when it is the one booted now,
+     if `tpi:blkrcv` has rewritten it since (otherwise the same slot loads
+     nothing and doesn't reset). For
      MEM 3 `map_slots` runs in `SD_SLOTS_CALL`, and its note ("no SD slot
      s: used flash slot s") is logged at level 1; the answer has gone
      already.
@@ -930,7 +943,7 @@ Not in the card gate (`SD_FREE`). Off by default (David, 2026-10-13).
   logged at 0, 0 OK.
 
 From BASIC the greeting is limited by the ROM's 31-character `tpi:` name:
-about 22 characters. `config.ini` takes a longer one. There is no `CODE`
+21 characters. `config.ini` takes a longer one. There is no `CODE`
 form. `board_v3_hosttest.py` pins the answers and the saved key.
 
 ### `AUTOMOUNT(pre, cmd)`
@@ -999,12 +1012,16 @@ name in the current folder, a path (relative, or from `/`, the card's
 3. No `CODE`: `SEND_MSG_PROMPT_YN('Remove "name" (y/N)?')`. `Y`: 
    `SD_CALL(DISK_ERASE_ONE, name)` — the same removal as `ERASE`
    ([tspico-disk.md](tspico-disk.md#disk_erase_onearg)) — with the result
-   only logged, since the question was the answer. Anything else: logged
-   at 0, nothing removed.
+   only logged, since the question was the answer. That is why a folder
+   that isn't empty is refused in step 2: `DISK_ERASE_ONE`'s own refusal
+   would reach only the log, and the user would see 0 OK with the folder
+   still there. Anything else: logged at 0, nothing removed.
 4. `CODE 255,0`: the removal at once, and its message sent with its status.
 
 A folder's name gets a `/` before `DISK_ERASE_ONE`, which removes only an
-empty one ("Directory not empty", Q). `REMOVE_DIR`, the recursive removal
+empty one; `RM_CHECK` has already refused any other ("RM: Directory not
+empty", Q), so `DISK_ERASE_ONE`'s "Directory not empty" is only reached if
+the folder filled between the check and the removal. `REMOVE_DIR`, the recursive removal
 in the same file, is not used by `RM`. [`commands_hosttest.py`](../../../src/test/commands_hosttest.py)
 pins all of this.
 
@@ -1017,6 +1034,10 @@ pins all of this.
   itself: "RM: Not found: name", F;
 - a folder that contains the current folder (`catalog.within`): "RM:
   Can't remove the current directory", Q;
+- a folder with anything in it but `dirinfo.tap` (`os.ilistdir`, the name
+  compared lower-cased): "RM: Directory not empty", Q. `dirinfo.tap` is
+  `DIR_FILES`' own listing, which `DISK_ERASE_ONE` deletes before its
+  `rmdir`, so it doesn't count here either;
 - not a file either: "RM: Not found", F;
 - the mounted file (compared upper-cased): "RM: File is mounted;
   tpi:close it first", Q.
