@@ -1621,8 +1621,9 @@ RAM is quick and safe to experiment with, but forgets at switch-off; Flash keeps
 `Select slot (even 4..14)?`), and offers to put it in the dock.
 
 - **You can write the slot the 2068 is running from.** The 2068 carries on with the ROM it
-  started with, and the new one runs from the next switch-on. The loader asks you to confirm.
-  <!-- CHECK: the loader's own text says the new ROM also runs after tpi:boot, but tpi:boot to the slot already booted doesn't reload it (board_v3.map_slots). Firmware issue. -->
+  started with, and the new one runs from the next switch-on, or straight away after
+  `SAVE "tpi:boot"`, even a `tpi:boot` to the slot it's running from. Typing **Y** in step 7
+  does that. The loader asks you to confirm before it writes.
 - **Flash slot 0 is the Spectrum ROM** that ZX Spectrum mode needs. The loader warns you and asks
   again before replacing it. Slots 1 to 3 hold the other system ROMs, and the loader makes you
   confirm that you're ABSOLUTELY SURE before writing them.
