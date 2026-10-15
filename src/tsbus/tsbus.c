@@ -699,7 +699,6 @@ static void __not_in_flash_func(speech_pass)(void) {
 }
 
 static void __not_in_flash_func(core1_main)(void) {
-    // Setup may call flash code: core 0 waits in tsbus.start() until it is done.
     const uint32_t *v = (const uint32_t *)scb_hw->vtor;
     for (uint i = 0; i < CORE1_NVEC; i++) {
         core1_vectors[i] = v[i];
@@ -712,8 +711,13 @@ static void __not_in_flash_func(core1_main)(void) {
     m33_hw->demcr |= M33_DEMCR_TRCENA_BITS;
     m33_hw->dwt_ctrl |= M33_DWT_CTRL_CYCCNTENA_BITS;
     pio_iord->irq = 1u;
-    irq_set_priority(PIO2_IRQ_0, 0);
-    irq_set_enabled(PIO2_IRQ_0, true);                            // for this core
+    // PIO2_IRQ_0 at priority 0 and enabled, for this core: the NVIC directly,
+    // as irq_set_priority and irq_set_enabled do, since those are in flash
+    // (tools/check-core1-ram.py fails the build on any flash call).
+    const uint32_t iord_bit = 1u << (PIO2_IRQ_0 % 32);
+    nvic_hw->ipr[PIO2_IRQ_0 / 4] &= ~(0xffu << (8 * (PIO2_IRQ_0 % 4)));
+    nvic_hw->icpr[PIO2_IRQ_0 / 32] = iord_bit;
+    nvic_hw->iser[PIO2_IRQ_0 / 32] = iord_bit;
     core1_ready = true;
 
     const uint32_t snoop_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_snoop);

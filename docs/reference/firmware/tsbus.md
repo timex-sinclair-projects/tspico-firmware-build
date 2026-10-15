@@ -63,8 +63,11 @@ two apart:
   not. So core 1's code is all `__not_in_flash_func`, touches PIO, DMA and
   SIO registers directly rather than through SDK inline helpers (a
   size-optimised build may leave those out of line in flash), and makes no
-  calls into flash after its set-up. Checked in the v1.29.0 build: only
-  `core1_main`'s set-up calls go through flash veneers. 256 KB of
+  calls into flash and reads no flash data, its set-up included. CI checks
+  that in the linked ELF on every push (`tools/check-core1-ram.py`,
+  [boot.md](boot.md#toolscheck-core1-rampy)): every function reachable from
+  `core1_main` and `iord_isr` in RAM, none of them holding a flash
+  address. 256 KB of
   LittleFS writes while serving left the read rate unchanged (591 per ms).
 - **Flash writes stall the APB bridge.** While core 0 erases or programs
   flash, a read through the APB bridge (IO_BANK0, for one) took up to
@@ -366,18 +369,23 @@ The chip's code and tables are in RAM (`SP0256_RAM`, `SP0256_DATA`;
 
 ### `core1_main()`
 
-In RAM. Set-up, which may call flash code because core 0 waits in
-`tsbus.start()` until it is done:
+In RAM, set-up included, which calls no flash code either (core 0 waits in
+`tsbus.start()` until it is done, but nothing stops a flash write after
+that while core 1 is still on its way into the loop):
 
 1. Copies the vector table the core started with (core 0's), puts
    `iord_isr` in `PIO2_IRQ_0`'s slot, and points core 1's VTOR at the copy.
 2. Starts the DWT cycle counter.
 3. Clears PIO2's IRQ flag 0 and enables `PIO2_IRQ_0` at the top priority on
-   core 1's NVIC. Sets `core1_ready`.
+   core 1's NVIC, through the NVIC's registers (`ipr`, `icpr`, `iser`), as
+   `irq_set_priority` and `irq_set_enabled` do: those two are in flash, and
+   until `tools/check-core1-ram.py` found them core 1 called them here,
+   through veneers. Sets `core1_ready`.
 
 Then, with `serve_release` (serve's `mov pindirs, null side 0`, the
-instruction after `tail`'s wait, read from the program while flash may
-still be used) and the times of the last memory read seen and of the last
+instruction after `tail`'s wait; `serve_program_instructions` is in
+`.rodata`, but gcc folds the read into a constant, and the check would fail
+if it didn't) and the times of the last memory read seen and of the last
 power-off and power-on readings, forever, polling:
 
 - **The bus going idle.** A memory read since the last pass shows as
@@ -1093,9 +1101,12 @@ others are passed to `put_line` and `starts`, which keeps them in `.data`. Nothi
 which the compiler makes of simple loops and which are in flash: the first
 build called `strlen` (through a veneer) from `put_line`. So `put_line`
 takes its length (`STR(s)` gives both), and every copy goes through a
-ring's masked index. After a change, check the disassembly of the RAM code
-(`core1_main` through `m2050_poll`) for branches out of RAM: only
-`core1_main`'s set-up may call flash (`irq_set_*`).
+ring's masked index. `tools/check-core1-ram.py` checks all of this in
+the linked ELF on every push (`build-v3`,
+[boot.md](boot.md#toolscheck-core1-rampy)): it fails on any call out of
+RAM and on any read of `.rodata` from the code core 1 reaches, so a string
+gcc moves to flash, or a loop it turns into `strlen`, fails the build. Run
+it by hand on a local build's `firmware.elf` after a change.
 
 ### `ms`, `starts`, `put_line`, `put_byte`, `to_2068`
 

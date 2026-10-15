@@ -428,6 +428,13 @@ jobs:
         working-directory: ${{ github.workspace }}/micropython/ports/rp2
         run: make -j$(nproc) BOARD_DIR=${{ github.workspace }}/src/boards/TSPICO_V3
 
+      # Core 1 must never touch flash, which stalls while core 0 writes it
+      # (#254): every function it reaches in RAM, and none of them holding a
+      # flash address (a call, or .rodata). Read from the linked ELF, since
+      # gcc decides what lands where (#305's s_ready went to .rodata).
+      - name: Check core 1 stays in RAM
+        run: python3 tools/check-core1-ram.py -v micropython/ports/rp2/build-TSPICO_V3/firmware.elf
+
       - name: Upload the v3 firmware.uf2 artifact
         uses: actions/upload-artifact@v4
         with:

@@ -4,6 +4,7 @@ Source: [`src/main.py`](../../../src/main.py) (all of it),
 [`src/config.ini`](../../../src/config.ini),
 [`src/manifest.py`](../../../src/manifest.py),
 [`tools/gen-buildinfo.py`](../../../tools/gen-buildinfo.py),
+[`tools/check-core1-ram.py`](../../../tools/check-core1-ram.py),
 [`src/build-dev-mpy.sh`](../../../src/build-dev-mpy.sh),
 [`.github/workflows/build.yml`](../../../.github/workflows/build.yml),
 [`.github/workflows/release.yml`](../../../.github/workflows/release.yml),
@@ -30,6 +31,7 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `src/manifest.py` | the freeze manifest: which modules go into the UF2 |
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
+| `tools/check-core1-ram.py` | `build-v3`'s check that the v3 card's core 1 never touches flash, from the linked ELF |
 | `.github/workflows/build.yml` | every push: tests, ROM checks, the two v2 UF2s, the v3 UF2, the user manual PDFs (and the v3 card's), artifacts |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
@@ -347,7 +349,9 @@ the board's manifest freezes `src/TS/` directly, `buildinfo.py` among them),
 and runs `make` with
 `BOARD_DIR=$GITHUB_WORKSPACE/src/boards/TSPICO_V3`, so nothing is copied
 into the MicroPython tree. It needs its own clone because step 9 replaces
-the port's `boards/manifest.py`. The UF2, `build-TSPICO_V3/firmware.uf2`,
+the port's `boards/manifest.py`. Then `tools/check-core1-ram.py -v` reads
+`build-TSPICO_V3/firmware.elf` and fails the job if anything core 1 reaches
+is in flash (below). The UF2, `build-TSPICO_V3/firmware.uf2`,
 is uploaded as `tspico-v3-firmware-uf2`. The board brings in the `tsbus`
 module itself (`USER_C_MODULES`), so the job needs no extra arguments. The
 UF2 is the whole firmware, `TS.tspico` on `board_v3` (step 4.3 of the v3
@@ -387,6 +391,67 @@ A second workflow, `emu-host.yml`, builds the standalone emulator host
 (`tools/emu`) for each platform on pushes that touch `src/`, `basic/` or
 the emulator, and attaches the binaries to a release
 ([docs/EMULATOR_BRIDGE.md](../../EMULATOR_BRIDGE.md)).
+
+## `tools/check-core1-ram.py`
+
+`python3 tools/check-core1-ram.py [-v] [--tools PREFIX] firmware.elf`, from
+`build-v3` after the build. The v3 card's core 1 serves the 2068's bus, the
+modem and speech, and must never fetch an instruction or read data from
+flash: flash reads stall while core 0 erases or programs it (#254), and an
+IN gives core 1 about 600 ns ([tsbus.md](tsbus.md#how-it-fits-under-micropython)). The source
+marks its code `__not_in_flash_func` and its data non-`const` or
+`SP0256_DATA`, but what lands where is gcc's decision: in #305 a
+`static char s_ready[]` that nothing wrote went to `.rodata` anyway, and
+`core1_main`'s set-up called `irq_set_priority` and `irq_set_enabled`,
+which are in flash, until this check found them. So it reads the linked
+ELF with binutils (`objdump -t` for the symbols, `objdump -d` for the code;
+`.data` is marked as code, so its `.time_critical` functions are
+disassembled with it).
+
+From `ROOTS` it follows every direct branch out of a function into the
+function it lands in, and every literal-pool word or `movw`/`movt` pair that
+is a function's start with the Thumb bit set (a function pointer, or a
+linker veneer's target). Every function reached must be at `RAM_LO` or
+above, and none may use an address from `FLASH_LO` to `FLASH_HI`: a call to
+flash (an SDK helper left out of line, `memcpy`, `__aeabi_*`, through a
+veneer or not) or a read of flash data (`.rodata`, `.flashdata`, a PIO
+program's instructions). Each one is a `FLASH:` line naming the function,
+the address and what is there, and the exit status is 1. `-v` lists the
+functions reached and the RAM data they address, with each object's
+section.
+
+What it can't see: a flash address that only exists at run time (a pointer
+core 0 stores in a struct core 1 reads; today every such pointer, the
+rings and `sp0256_al2`, is to RAM), indirect calls (`blx`/`bx` to a
+register: listed as `note:` and not followed; there are none), and the
+`TSBUS_DIAG` build, which CI doesn't make. Core 1's exception vectors other
+than `PIO2_IRQ_0` are core 0's, in flash; a fault on core 1 is already the
+end. A value that only looks like a flash address (a constant `0x10000000`
+loaded from a pool) would be reported too; there is none, and the answer
+would be to load it differently, not to allow it.
+
+Checked against the v1.29.0 build (gcc 13.3, 2026-10-15): before the
+`core1_main` change it reported the two `irq_set_*` veneers; with
+`s_ready`'s `volatile` taken out it reported `m2050_wait_ready` reading
+`s_ready` in `.rodata`; as committed, 22 functions and no flash address.
+
+| Symbol | What it is |
+|---|---|
+| `ROOTS` | core 1's entry points: `core1_main` (`multicore_launch_core1`) and `iord_isr` (core 1's own vector table) |
+| `FLASH_LO`, `FLASH_HI` | 10000000h–1FFFFFFFh: every XIP alias of the flash (cached, uncached, maintenance, cache-as-SRAM) |
+| `RAM_LO` | 20000000h: SRAM's start; a function below it is in flash |
+| `FUNC_RE`, `INSN_RE` | a function's label line and an instruction line in `objdump -d` |
+| `BRANCH_RE`, `TARGET_RE` | a direct branch's mnemonic (`b`, `bl`, `blx`, `b<cond>`, `cbz`…) and its `<addr> <symbol>` target |
+| `MOVW_RE` | a `movw`/`movt` operand: the register and the 16-bit value |
+| `run(cmd)` | a command's standard output; fails on a non-zero exit |
+| `is_flash(a)` | `a` is in `FLASH_LO`..`FLASH_HI` |
+| `Elf` | the ELF as binutils shows it |
+| `Elf.__init__(path, prefix)` | reads `objdump -t` (every defined symbol's address, size and section; which are functions, `F`) and `objdump -d`, cut into functions at function symbols only, since `.data`'s variables get labels too |
+| `Elf.sym(a)` | the symbol `a` is in, as name+offset and section |
+| `Elf.name(a)` | the same name, or `?` |
+| `Elf.refs(fname)` | every address a function uses: branch targets, pool words, `movw`/`movt` constants, and its indirect branches |
+| `Elf.func_of(a)` | the function `a` is in |
+| `main()` | the walk, the report and the exit status |
 
 ## Releases: `release.yml`
 
