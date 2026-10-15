@@ -140,8 +140,8 @@ def main():
         check(sent.startswith(b"ATE0V1X0F1\r"), "off-hook: Zimodem's init (%r)" % sent[:12])
         check(r.get("state") == OFFHOOK and sent == b"ATE0V1X0F1\r", "after the digits, not dialled yet")
         r.run(1600)
-        check(r.take_sent() == b"ATD12\r" and r.get("state") == DIALING and r.u.shim_number() == b"12",
-              "1.5 s after the last digit: ATD12")
+        check(r.take_sent() == b"ATDX12\r" and r.get("state") == DIALING and r.u.shim_number() == b"12",
+              "1.5 s after the last digit: ATDX12 (X: the call obeys XOFF, #302)")
         r.zimodem(b"\r\nCONNECT\r\nWelcome to the BBS\r\n")
         check(r.get("state") == CONNECTED and r.dsr(), "CONNECT: connected, DSR 1 at once")
         r.run(3300)
@@ -276,7 +276,7 @@ def main():
                     r.cmd(e, 5)
             r.run(500)                    # PAUSE 25
         r.run(1600)
-        check(r.u.shim_number() == b"27" and r.take_sent().endswith(b"ATD27\r"),
+        check(r.u.shim_number() == b"27" and r.take_sent().endswith(b"ATDX27\r"),
               "dials 27 (%r)" % r.u.shim_number())
     finally:
         shutil.rmtree(d)

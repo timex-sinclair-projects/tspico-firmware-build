@@ -1111,9 +1111,13 @@ Otherwise on-hook.
   `go_onhook`.
 - Off-hook, DTR on: after `M2050_DIGIT_MS` a digit (1-9 pulses, 10 is 0;
   more are ignored); after `M2050_NUMBER_MS` with digits and none pending,
-  `ATD<number>\r` (written a byte at a time; next pass if the ring is
+  `ATDX<number>\r` (written a byte at a time; next pass if the ring is
   full), `DIALING`, `dials` counted. The number goes to Zimodem's
-  phonebook (`ATP`), which maps it to a host.
+  phonebook (`ATP`), which maps it to a host. The X makes the call obey
+  XON/XOFF (step 5 of `m2050_poll`): Zimodem 4.0.3 uses only the modifiers
+  saved with a phonebook entry, so our build (4.0.3.1,
+  `esp32/zimodem/build.sh`) adds the dial's own; on a stock 4.0.3 the X is
+  ignored and the card's XOFF/XON reach the host as data (#302).
 
 ### `read_result(m, c, now)`
 
@@ -1148,8 +1152,9 @@ Every pass:
 5. Flow control: first `flow` follows `flow_want`, and turning it off
    in Hayes mode while Zimodem is stopped sends XON, so it isn't left
    stopped. Then XOFF when `lrx` is over half full, XON below a quarter:
-   in 2050 mode while connected (`ATF1` is in `s_init`, but Zimodem obeys
-   it only if the phonebook entry has X, #302); in Hayes mode only with
+   in 2050 mode while connected (`ATF1` is in `s_init`, and the dial is
+   `ATDX`, which Zimodem 4.0.3.1 keeps on a phonebook dial, #302); in
+   Hayes mode only with
    `flow` on, since there Zimodem's settings are the program's
    (`tsbus.modem_flow`).
 6. Hanging up: once `ltx` is empty and nothing has been sent for

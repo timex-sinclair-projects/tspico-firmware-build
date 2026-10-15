@@ -148,10 +148,11 @@ def major_of(v):
 
 
 def ver_cmp(a, b):
-    """"1.29.0" vs "1.20.0": <0, 0 or >0."""
-    pa = [int(x) for x in re.findall(r"\d+", str(a))[:3]] + [0, 0, 0]
-    pb = [int(x) for x in re.findall(r"\d+", str(b))[:3]] + [0, 0, 0]
-    for x, y in zip(pa[:3], pb[:3]):
+    """"1.29.0" vs "1.20.0": <0, 0 or >0. Four parts: our Zimodem builds are
+    4.0.3.1 and on (esp32/zimodem/build.sh)."""
+    pa = [int(x) for x in re.findall(r"\d+", str(a))[:4]] + [0, 0, 0, 0]
+    pb = [int(x) for x in re.findall(r"\d+", str(b))[:4]] + [0, 0, 0, 0]
+    for x, y in zip(pa[:4], pb[:4]):
         if x != y:
             return x - y
     return 0

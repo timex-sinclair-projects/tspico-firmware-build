@@ -6,7 +6,7 @@
  *   results, short CONNECT, XON/XOFF), so its results are known lines.
  * - A DTR break under M2050_BREAK_MAX_MS, then DTR back: one pulse. DTR on
  *   for M2050_DIGIT_MS after pulses: a digit (10 pulses are 0). On for
- *   M2050_NUMBER_MS after the last digit: ATD<number>, dialing.
+ *   M2050_NUMBER_MS after the last digit: ATDX<number>, dialing.
  * - Dialing, Zimodem's result line: CONNECT... connects (DSR 1); NO
  *   CARRIER, NO ANSWER, ERROR, BUSY or NO DIALTONE: dead (DSR stays 0).
  * - Connected: DSR at once, but the data held back for M2050_SETTLE_MS:
@@ -154,12 +154,13 @@ static void U8251_FN(follow_dtr)(m2050_t *m, u8251_t *u, uint32_t now) {
         m->pulses = 0;
     }
     if (!m->pulses && m->ndigits && held > ms(m, M2050_NUMBER_MS)) {
-        if (m->ltx_size - (m->ltx_head - m->ltx_tail) < m->ndigits + 4u) {
+        if (m->ltx_size - (m->ltx_head - m->ltx_tail) < m->ndigits + 5u) {
             return;                       // the line is full: next pass
         }
-        put_byte(m, 'A', now);            // ATD<number>, a byte at a time (see above)
-        put_byte(m, 'T', now);
-        put_byte(m, 'D', now);
+        put_byte(m, 'A', now);            // ATDX<number>, a byte at a time (see above).
+        put_byte(m, 'T', now);            // X: the call obeys the XOFF/XON below; our
+        put_byte(m, 'D', now);            // Zimodem adds it to the phonebook entry's
+        put_byte(m, 'X', now);            // modifiers, stock 4.0.3 ignores it (#302)
         for (uint32_t i = 0; i < m->ndigits; i++) {
             put_byte(m, (uint8_t)m->number[i], now);
         }
@@ -269,7 +270,8 @@ void U8251_FN(m2050_poll)(m2050_t *m, u8251_t *u, uint32_t now) {
     }
 
     // Flow control toward Zimodem: in 2050 mode while connected (ATF1 is in
-    // its init); in Hayes mode only when the program has turned it on
+    // its init, and it dials ATDX, which our Zimodem 4.0.3.1 keeps on a
+    // phonebook dial); in Hayes mode only when the program has turned it on
     // (flow_want, tsbus.modem_flow) and set Zimodem up for it itself. Zimodem
     // obeys XOFF only with ATF1 and on a connection dialled with X (ATDTX);
     // otherwise XOFF and XON reach the host as data (#301, #302). Turning it

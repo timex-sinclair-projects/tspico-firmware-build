@@ -194,7 +194,7 @@ behaviour, and the caveat and the issue link go.
 | `src/tsbus/usart8251.h` | `6d0523a0e42a` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.c` | `e6812ab5e133` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/modem2050.h` | `ec21b502da31` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/modem2050.c` | `096d779f9cb4` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/modem2050.c` | `4ec2268ae5d7` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/sp0256.h` | `51c74dea5123` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256.c` | `1966bed583e8` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256_mame.inc` | `134bd8726488` | [firmware/speech.md](firmware/speech.md) | — |
