@@ -188,8 +188,9 @@ def modem_status():
 
 def modem_flow(on):
     """Hayes mode: the card pauses Zimodem with XOFF when its receive ring is
-    3/4 full and resumes it with XON (tsbus.modem_flow). For a program that
-    has sent Zimodem ATF1; not saved, and off again after any modem_start."""
+    half full and resumes it with XON (tsbus.modem_flow). For a program that
+    has sent Zimodem ATF1 and dials with X (ATDTX); not saved, and off again
+    after any modem_start."""
     tsbus.modem_flow(on)
 
 

@@ -218,10 +218,16 @@ def main():
         r.run(1600)
         r.zimodem(b"\r\nCONNECT\r\n")
         r.take_sent()
-        ok = all(lib.shim_line_rx(0x41) == 0 for i in range(60))
+        n = 0
+        while r.get("lrx_level") < 32 and n < 64:
+            lib.shim_line_rx(0x41); n += 1
+            r.run(10, read=False)
+        check(r.get("lrx_level") == 32 and r.get("xoff_sent") == 0 and r.take_sent() == b"",
+              "the 2068 not reading: a ring exactly half full (32 of 64) is no XOFF yet")
+        ok = all(lib.shim_line_rx(0x41) == 0 for i in range(60 - n))
         r.run(10, read=False)
         check(ok and r.get("xoff_sent") == 1 and r.take_sent() == b"\x13",
-              "the 2068 not reading: XOFF once the line ring is over 3/4 full (%d)" % r.get("lrx_level"))
+              "  over half full: XOFF, so Zimodem's 4 KB buffer still fits after it (%d)" % r.get("lrx_level"))
         ok = all(lib.shim_line_rx(0x42) == 0 for i in range(3))   # the LF after CONNECT waits too
         r.run(4000)
         check(ok and r.get("xoff_sent") == 0 and r.take_sent() == b"\x11", "read down below 1/4: XON")
@@ -243,7 +249,7 @@ def main():
         ok = all(lib.shim_line_rx(0x43) == 0 for i in range(60))
         r.run(10, read=False)
         check(ok and r.get("xoff_sent") == 1 and r.take_sent() == b"\x13",
-              "on: XOFF once the line ring is over 3/4 full, as 2050 mode (%d)" % r.get("lrx_level"))
+              "on: XOFF once the line ring is over half full, as 2050 mode (%d)" % r.get("lrx_level"))
         r.run(4000)
         check(r.get("xoff_sent") == 0 and r.take_sent() == b"\x11", "  read down below 1/4: XON")
         check(r.take_shown() == b"C" * 60, "  nothing lost or reordered")

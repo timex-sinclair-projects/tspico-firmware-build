@@ -43,8 +43,8 @@
  *   tsbus.modem_line(on)           Zimodem is up (core 0 powered it and waited) or not
  *   tsbus.modem_poll()             what core 0's idle loop needs, as bits (no allocation)
  *   tsbus.modem_pace(baud)         received characters no faster than baud (0: none)
- *   tsbus.modem_flow(on)           Hayes mode: XON/XOFF toward Zimodem (the program has
- *                                  sent it ATF1); off again at every tsbus.modem(True)
+ *   tsbus.modem_flow(on)           Hayes mode: XON/XOFF toward Zimodem (the program sent
+ *                                  ATF1 and dials with X); off at every tsbus.modem(True)
  *   tsbus.esp_relay(first, idle)   USB <-> the ESP32-C3's UART, byte for byte, to flash
  *                                  Zimodem with the ESP32 ROM's loader (the modem off)
  *   tsbus.speech(on[, rate])       the SP0256-AL2 (sp0256.c) on core 1, played by DMA
@@ -183,8 +183,11 @@ static volatile uint32_t io_ins, io_in_ours, io_outs_ours, io_in_late, respond_m
 #define PIN_MODEM_TX 44
 #define PIN_MODEM_RX 45
 #define MODEM_BAUD 115200
-#define LINE_RX_N 4096
-#define LINE_RX_BITS 12
+// 16 KB, not 4: after XOFF Zimodem can still send up to its whole 4 KB
+// serial buffer (it copies from the socket without looking for XOFF), so
+// the card sends XOFF at half full and keeps 8 KB free (#301).
+#define LINE_RX_N 16384
+#define LINE_RX_BITS 14
 #define LINE_TX_N 1024
 #define U_RX_N 1024
 #define U_TX_N 1024
@@ -1322,10 +1325,10 @@ static mp_obj_t tsbus_modem_pace(mp_obj_t baud_in) {
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_pace_obj, tsbus_modem_pace);
 
 // tsbus.modem_flow(on): in Hayes mode, pause Zimodem with XOFF when the
-// receive ring is 3/4 full and resume it with XON below 1/4, as 2050 mode
-// does while connected. Only for a program that has sent Zimodem ATF1:
-// with Zimodem's flow control off, XOFF and XON would reach the host as
-// data. Core 1 takes the request on its next pass (modem.flow_want); every
+// receive ring is half full and resume it with XON below 1/4, as 2050 mode
+// does while connected. Only for a program that has set Zimodem up for it
+// (ATF1, and X in the dial: ATDTX): otherwise XOFF and XON reach the host
+// as data. Core 1 takes the request on its next pass (modem.flow_want); every
 // tsbus.modem(True) (a mode change, the boot) turns it off again.
 static mp_obj_t tsbus_modem_flow(mp_obj_t on_in) {
     modem.flow_want = mp_obj_is_true(on_in) ? 1 : 0;

@@ -5303,7 +5303,7 @@ def MODEM(pre, cmd):                                                  # The v3 c
     # SAVE "tpi:modem hayes"   - Hayes mode: every byte to Zimodem and back, DSR held on
     # SAVE "tpi:modem off"     - Ports 73h/77h unanswered, the ESP32 off
     # SAVE "tpi:modem flow on" - Hayes mode: XON/XOFF toward Zimodem, for a
-    # SAVE "tpi:modem flow off"  program that has sent it ATF1 (#301)
+    # SAVE "tpi:modem flow off"  program that sends ATF1 and dials ATDTX (#301)
     #
     # The mode is saved in config.ini (MODEM_MODE); flow isn't, and any mode
     # change turns it off. docs/v3-modem-proposal.md.
