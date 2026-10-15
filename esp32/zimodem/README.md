@@ -6,9 +6,16 @@ modem the card emulates at ports 73h/77h
 ([docs/v3-modem-proposal.md](../../docs/v3-modem-proposal.md)). The modules
 come blank; the web updater installs this build through the card's own USB.
 
-- `build.sh` fetches Zimodem at a pinned commit (4.0.3), patches the C3
-  configuration's unconnected DTR (IO5) and pulse-dial (IO7) inputs to pull
-  up, builds it with PlatformIO, and merges the bootloader, partition table,
+- `build.sh` fetches Zimodem at a pinned commit (4.0.3) and patches it:
+  - the C3 configuration's unconnected DTR (IO5) and pulse-dial (IO7)
+    inputs pull up;
+  - a phonebook dial (`ATD1234`) keeps the dial's own modifiers as well as
+    the entry's. The card's 2050 mode dials `ATDX1234`, so the call obeys
+    XON/XOFF and the card can pause Zimodem when its ring fills (#302);
+  - the version becomes **4.0.3.1**, which `ATI` reports, so the updaters
+    (which compare four parts) install it over a stock 4.0.3.
+
+  Then it builds it with PlatformIO, and merges the bootloader, partition table,
   `boot_app0` and the app into `out/zimodem-v3.bin`, one image for flash
   address 0. The image ends with the app, so writing it leaves Zimodem's
   SPIFFS, with the user's WiFi settings and phonebook, as it was.

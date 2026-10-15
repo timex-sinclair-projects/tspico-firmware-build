@@ -493,7 +493,7 @@ Each code is preceded by and followed by the end-of-line string. **With ATX1, `C
 | `ATDT"host:port"` | Connect with telnet negotiation for this session (or set `S62=1`) |
 | `ATDX"host:port"` | Enable XON/XOFF for this session |
 | `ATP"5551212=host:port,notes"` | Add a phonebook entry |
-| `ATD5551212` | Dial a phonebook entry by number |
+| `ATD5551212` | Dial a phonebook entry by number (with the entry's saved modifiers only; the card's 4.0.3.1 build adds the dial's own, so 2050 mode's `ATDX5551212` obeys XON/XOFF) |
 | `ATH` | Hang up all connections |
 | `ATO` | Resume the stream |
 

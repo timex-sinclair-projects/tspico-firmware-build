@@ -413,7 +413,9 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    alone (`build` exits 2, "INCOMPLETE", after writing them).
 4. **Zimodem for the v3 card's modem**, `zimodem-v3.bin`
    (`esp32/zimodem/build.sh`, PlatformIO 6.1.19: Zimodem 4.0.3 with the
-   card's patches, merged into one image for flash address 0). The step may
+   card's patches, which make it 4.0.3.1 (IO5/IO7 pulled up; a phonebook
+   dial keeps the dial's own modifiers, #302), merged into one image for
+   flash address 0). The step may
    fail without failing the release, which then has no `zimodem-v3.bin`.
    The same build runs in `zimodem.yml` when `esp32/zimodem/` changes, or
    by hand, as the `tspico-zimodem` artifact.

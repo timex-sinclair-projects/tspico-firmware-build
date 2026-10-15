@@ -862,8 +862,9 @@ function flatten(nodes, map) {
 // ---------------------------------------------------------------------------
 /** "1.29.0" -> [1, 29, 0]; compare two such. */
 function verCmp(a, b) {
+    // Four parts: our Zimodem builds are 4.0.3.1 and on (esp32/zimodem/build.sh)
     const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number)
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
         const d = (pa[i] || 0) - (pb[i] || 0)
         if (d) return d
     }
