@@ -207,7 +207,8 @@ in the file.
 | `mtx_inflight` | uint32 | `core1_main`; `tsbus_modem` (0) | how many bytes the run `ch_mtx` is sending holds |
 | `modem_ins` | volatile uint32 | `handle_in` | INs from 73h/77h answered |
 | `modem_wake`, `modem_touched` | volatile bool | set by `core1_main` (an OUT to 73h/77h: both) and `handle_in` (an IN: `modem_touched`); cleared by `tsbus_modem_poll` and `tsbus_modem` | what core 1 saw since core 0 last asked: a program writing to the 8251, and any use of it |
-| `modem_line_up` | volatile bool, false | `tsbus_modem_line`; `core1_main` | Zimodem is running. Until then core 1 starts no `ch_mtx` run (what is queued waits in `line_tx`) and drops what `ch_mrx` brings (the boot banner, or noise from an ESP32 that is off). Kept across `tsbus.modem(True)` |
+| `modem_line_up` | volatile bool, false | `tsbus_modem_line`; `core1_main` (sets it on Zimodem's `READY.`) | Zimodem is running. Until then core 1 starts no `ch_mtx` run (what is queued waits in `line_tx`) and drops what `ch_mrx` brings (the boot banner, or noise from an ESP32 that is off), looking in it for `READY.` (`m2050_wait_ready`, #300). Kept across `tsbus.modem(True)` |
+| `modem_readies` | volatile uint32, 0 | `core1_main` | times the line came up on `READY.` (`m_readies`) |
 | `PIN_AUDIO_L`, `PIN_AUDIO_R` | 46, 30 | `spk_sm` | the audio outputs, driven by `spk_pwm` on PIO2, to the filter, the MCP6002 mixer and the jack; both play the same |
 | `SPK_RING_BITS`, `SPK_RING_N` | 11, 1024 | | the ring: 1024 16-bit levels, 2 KB, aligned to its size for the DMA's ring mode; 100 ms at 10 kHz |
 | `SPK_TOP`, `SPK_MID` | 2047, 1023 | | `spk_pwm`'s period (11 bits: about a 41 kHz carrier at 250 MHz, far above the filter) and silence. It was the PWM block's wrap, 4095 (12 bits, 61 kHz), until speech moved to PIO2 |
@@ -408,7 +409,8 @@ power-off and power-on readings, forever, polling:
   request.
 - **The modem's line**, while `modem_on`: how far `ch_mrx` has got in
   `line_rx` (its write address) goes onto `modem.lrx_head`, and while the
-  line isn't up (`modem_line_up`) straight off again; if `ch_mtx` is
+  line isn't up (`modem_line_up`) through `m2050_wait_ready`, which drops
+  it but brings the line up when Zimodem's `READY.` is in it; if `ch_mtx` is
   idle, the run it sent comes off `modem.ltx_tail`; then `m2050_poll` (bytes
   between the line and the 8251, dialing, results, DSR, flow control) and
   `u8251_poll` (pacing, the status bits); then, if `ch_mtx` is idle and
@@ -603,16 +605,20 @@ calls; with the modem on, it is set up again in the new mode at once
 
 ### `tsbus.modem_line(on)`
 
-Zimodem is up (core 0 powered the ESP32 and gave it time to boot:
-`board_v3.modem_service`) or not (`_modem_off`). Sets `modem_line_up`.
+Zimodem is up or not: sets `modem_line_up`. Core 0 says False when it
+powers the ESP32 off or restarts it (`_modem_off`, `esp_boot`), and True
+only as the fallback, when Zimodem hasn't said `READY.` within
+`MODEM_BOOT_MS` (`board_v3.modem_service`); normally core 1 sets it on
+`READY.`.
 
 ### `tsbus.modem_poll()`
 
 For core 0's idle loop, every pass, so a small int and no allocation: bit 0
 an OUT to the 8251 since the last poll (`modem_wake`), bit 1 off-hook (2050
 mode, not `M2050_ONHOOK`), bit 2 any IN or OUT since the last poll
-(`modem_touched`). Bits 0 and 2 are cleared by the read. 0 while the modem
-is off.
+(`modem_touched`), bit 3 the line up (`modem_line_up`, which core 1 sets on
+Zimodem's `READY.`). Bits 0 and 2 are cleared by the read. 0 while the
+modem is off.
 
 ### `tsbus.modem_pace(baud)`
 
@@ -777,8 +783,8 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `m_xoff` (XOFF sent, not yet XON: `modem.xoff_sent`),
 `m_rxq` (bytes waiting, the line's ring and the 8251's), `m_pace_us`,
 `m_mode_sel` (`modem_mode`), `m_state` (the 2050 state, `M2050_ONHOOK`
-0 … `M2050_HANGUP` 5), `m_dials`, `m_connects`, `m_carrier_lost` and
-`m_line_up`.
+0 … `M2050_HANGUP` 5), `m_dials`, `m_connects`, `m_carrier_lost`,
+`m_line_up` and `m_readies` (times the line came up on Zimodem's `READY.`).
 `m_rx_lost` is the line's ring overflowing (`modem.rx_lost`). Speech: `s_on`,
 `s_allophones`, `s_samples`, `s_late` (passes that found the DMA caught up),
 `s_queued` (`tsbus.say`'s queue), `s_ports`, `s_port_outs`, `s_port_ins`.
@@ -1066,8 +1072,10 @@ state: `state`, `dtr` and `dtr_at` (DTR's last level and when it changed),
 read), `match` (characters of NO CARRIER held back), `swallow_lf`,
 `connected_at`, `hang_phase`, `hang_at`, `last_tx_at`, `xoff_sent`;
 `flow_want` (volatile: core 0's request, `tsbus.modem_flow`) and `flow`
-(core 1's copy, which Hayes mode's flow control follows); and
-counters `dials`, `connects`, `carrier_lost`, `rx_lost`.
+(core 1's copy, which Hayes mode's flow control follows); `ready_match`
+and `eol_swallow` (`m2050_wait_ready`: characters of `READY.` matched, and
+line-ending bytes after it still to drop); and counters `dials`,
+`connects`, `carrier_lost`, `rx_lost`.
 
 ### Strings, `STR`, and flash
 
@@ -1076,7 +1084,12 @@ CONNECT, XON/XOFF), `s_ath`, `s_plus` and the result words (`r_connect`,
 `r_answer`, `r_error`, `r_busy`, `r_dialtone`) are deliberately not `const`:
 const data goes to `.rodata` in flash, and core 1 must never read flash,
 which stalls while core 0 writes it (#254). As `.data` they are copied to
-RAM at start-up. Nothing may become a call to `strlen` or `memcpy` either,
+RAM at start-up. `s_ready` (`READY.`) is `volatile` as well: not being
+const isn't always enough, since gcc moves a static array that nothing
+writes or passes on into `.rodata` anyway, and this one is only read in
+`m2050_wait_ready` (the first build of #300 had it in `.rodata`;
+`arm-none-eabi-objdump -t` on `modem2050.o` shows `.data` now). The
+others are passed to `put_line` and `starts`, which keeps them in `.data`. Nothing may become a call to `strlen` or `memcpy` either,
 which the compiler makes of simple loops and which are in flash: the first
 build called `strlen` (through a veneer) from `put_line`. So `put_line`
 takes its length (`STR(s)` gives both), and every copy goes through a
@@ -1136,11 +1149,28 @@ prompt, with no line break first. A mismatch passes on what was held
 back, and the byte (which may start a new match). So a host that sends
 the words NO CARRIER and a line ending ends the call.
 
+### `m2050_wait_ready(m)`
+
+While the line is down (core 1 calls it instead of dropping what came):
+drops what has arrived in `lrx`, but looks through it for the `READY.`
+that ends Zimodem's start-up message (`showInitMessage`, printed after it
+has tried its WiFi, joined or not). 1 when it has come, `lrx_tail` just
+after it so what follows is kept, and `eol_swallow` 2; else 0, all of it
+dropped. The match carries across calls (`ready_match`), and a mismatch
+that is itself an R starts it again. `core1_main` then sets
+`modem_line_up`. Why: the line used to come up a fixed 2 s after power-up,
+and with a WiFi join Zimodem took longer, so a terminal's first `AT` was
+lost (#300). `modem2050_hosttest.py` feeds it the ESP32 ROM's lines and the
+banner, a split `READY.`, false starts, a CR-only line ending, and no
+`READY.` at all.
+
 ### `m2050_poll(m, u, now)`
 
 Every pass:
 1. If DMA lapped `lrx_tail`, the lost bytes are counted (`rx_lost`) and
-   the 8251's OE set.
+   the 8251's OE set. Then the line ending after Zimodem's `READY.` is
+   dropped (`eol_swallow`: up to two CR or LF bytes, stopping at anything
+   else), so a program's screen doesn't start with a blank line.
 2. 2050 mode: `follow_dtr`.
 3. Zimodem → the 2068, up to `M2050_BURST`, while the 8251's ring has room
    for a held NO CARRIER and one more: Hayes, straight; connected, through
