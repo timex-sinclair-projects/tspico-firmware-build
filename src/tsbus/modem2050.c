@@ -51,6 +51,10 @@ static char r_answer[] = "NO ANSWER";
 static char r_error[] = "ERROR";
 static char r_busy[] = "BUSY";
 static char r_dialtone[] = "NO DIALTONE";
+// Volatile as well: gcc moves a static array that nothing writes or passes
+// on into .rodata (flash) even when it isn't const, and this one is only
+// read here (checked with arm-none-eabi-objdump -t: .data).
+static volatile char s_ready[] = "READY.";
 #define STR(s) (s), (sizeof (s) - 1)
 
 static uint32_t U8251_FN(ms)(m2050_t *m, uint32_t n) {
@@ -224,12 +228,46 @@ static void U8251_FN(read_data)(m2050_t *m, u8251_t *u, uint8_t c) {
     to_2068(u, c);
 }
 
+// While the line is down (Zimodem powered but not yet heard from), what has
+// arrived is dropped, but looked through for the "READY." that ends
+// Zimodem's start-up message (showInitMessage, after it has tried its
+// WiFi): 1 when it has come, lrx_tail just after it, so what follows is
+// kept (m2050_poll drops the line ending); else 0, everything dropped. So
+// the line comes up the moment Zimodem listens, however long its WiFi join
+// takes (#300).
+int U8251_FN(m2050_wait_ready)(m2050_t *m) {
+    while (m->lrx_tail != m->lrx_head) {
+        char c = (char)m->lrx[m->lrx_tail++ & (m->lrx_size - 1)];
+        if (c == s_ready[m->ready_match]) {
+            if (++m->ready_match == sizeof s_ready - 1) {
+                m->ready_match = 0;
+                m->eol_swallow = 2;
+                return 1;
+            }
+        } else {
+            m->ready_match = c == s_ready[0];
+        }
+    }
+    return 0;
+}
+
 void U8251_FN(m2050_poll)(m2050_t *m, u8251_t *u, uint32_t now) {
     uint32_t level = m->lrx_head - m->lrx_tail;
     if (level > m->lrx_size) {            // DMA lapped us: those are gone
         m->rx_lost += level - m->lrx_size;
         m->lrx_tail = m->lrx_head - m->lrx_size;
         u->overrun = 1;
+    }
+    // The line ending after Zimodem's READY. (m2050_wait_ready): dropped,
+    // so a program's screen doesn't start with a blank line.
+    while (m->eol_swallow && m->lrx_tail != m->lrx_head) {
+        uint8_t c = m->lrx[m->lrx_tail & (m->lrx_size - 1)];
+        if (c != '\r' && c != '\n') {
+            m->eol_swallow = 0;
+            break;
+        }
+        m->lrx_tail++;
+        m->eol_swallow--;
     }
     int hayes = m->mode == M2050_HAYES;
     if (!hayes) {

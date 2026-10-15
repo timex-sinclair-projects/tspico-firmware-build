@@ -233,6 +233,40 @@ def main():
         check(ok and r.get("xoff_sent") == 0 and r.take_sent() == b"\x11", "read down below 1/4: XON")
         check(r.take_shown() == b"A" * 60 + b"B" * 3, "nothing lost or reordered; CONNECT's LF swallowed")
 
+        print("waiting for Zimodem's READY. (#300)")
+
+        def feed(r, data):
+            """Zimodem's bytes as they arrive, core 1 looking every 16 (the
+            ring is 64) until READY. comes: did it?"""
+            up = False
+            for i, b in enumerate(data):
+                assert r.u.shim_line_rx(b) == 0
+                if i % 16 == 15 and not up:
+                    up = lib.shim_wait_ready() == 1
+            return up or lib.shim_wait_ready() == 1
+
+        r = Rig(lib, 0)
+        mterm_reset(r)
+        r.take_shown()
+        up = feed(r, b"ESP-ROM:esp32c3\r\nentry 0x403cc710\r\n\r\nZimodem ESP32 Firmware v4.0.3.1\r\n"
+                     b"CONNECTED TO home (192.168.1.229)\r\nREA")
+        check(not up and r.get("lrx_level") == 0,
+              "the ROM's lines and the banner, READY. not yet whole: no, and all dropped")
+        check(feed(r, b"DY.\r\nOK\r\n") and r.get("lrx_level") == 6 and r.get("eol_swallow") == 2,
+              "  the rest of it: yes, matched across calls; what follows READY. kept")
+        r.run(200)
+        check(r.take_shown() == b"OK\r\n", "  its line ending dropped, the rest reaches the 2068")
+        r = Rig(lib, 0)
+        mterm_reset(r)
+        r.take_shown()
+        check(feed(r, b"READYREADY.\rAT"), "a false start (READY without the dot) then READY.: yes")
+        r.run(200)
+        check(r.take_shown() == b"AT", "  a CR-only line ending dropped too, then the 2068 sees AT")
+        r = Rig(lib, 0)
+        check(feed(r, b"RREADY."), "RREADY.: the second R starts the match again")
+        r = Rig(lib, 0)
+        check(not feed(r, b"READY\r\nNOT READY\r\n") and r.get("lrx_level") == 0, "no READY. at all: no, all dropped")
+
         print("flow control in Hayes mode (#301)")
         r = Rig(lib, 0)
         mterm_reset(r)
