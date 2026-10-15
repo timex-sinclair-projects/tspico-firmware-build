@@ -2724,8 +2724,9 @@ written the host it stands for, and connects. When the host hangs up, the progra
 carrier drop, as it would have on the phone line.
 
 The modem part is switched off until a program uses it. Starting a program like MTERM
-switches it on, and it takes a couple of seconds to be ready. It switches itself off again
-after ten minutes unused.
+switches it on, and it takes a few seconds to be ready, a little longer while it joins your
+WiFi. What a program sends in the meantime waits on the card and goes as soon as the modem is
+ready. It switches itself off again after ten minutes unused.
 
 ## F.2 Setting up WiFi and the phonebook
 

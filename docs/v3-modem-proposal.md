@@ -226,8 +226,10 @@ What testing changed from the design above:
   ends a digit, 1.5 s the number (MTERM's own pulses: 58 ms break, 47.5 ms
   make, 832 ms between digits).
 - **Power:** the ESP32 is switched on by any OUT to the 8251, and the line
-  declared up 2 s later (`MODEM_BOOT_MS`); until then what the 8251 sends
-  waits in the card's ring and what arrives is dropped. A terminal polling
+  declared up when Zimodem prints `READY.` (core 1 watches for it; 8 s,
+  `MODEM_BOOT_MS`, is the fallback; it was a fixed 2 s until #300); until
+  then what the 8251 sends waits in the card's ring and what arrives is
+  dropped. A terminal polling
   the status keeps it on; `MODEM_IDLE_MIN` (10) on-hook and unused switches
   it off.
 - **`tpi:modem` takes `2050`, `hayes` or `off`** (saved as `MODEM_MODE`);

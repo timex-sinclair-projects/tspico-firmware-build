@@ -40,7 +40,7 @@
  *                                  the ESP32-C3 on UART0 (usart8251.c, modem2050.c);
  *                                  sets up the UART and two DMA channels
  *   tsbus.modem_mode(m)            0 Hayes (pass-through, DSR 1), 1 2050 (the default)
- *   tsbus.modem_line(on)           Zimodem is up (core 0 powered it and waited) or not
+ *   tsbus.modem_line(on)           Zimodem is up or not (core 1 also sets it on READY.)
  *   tsbus.modem_poll()             what core 0's idle loop needs, as bits (no allocation)
  *   tsbus.modem_pace(baud)         received characters no faster than baud (0: none)
  *   tsbus.modem_flow(on)           Hayes mode: XON/XOFF toward Zimodem (the program sent
@@ -208,8 +208,11 @@ static volatile uint32_t modem_ins; // INs from 73h/77h answered
 // using it); modem_touched: any IN or OUT (it still is). Both are cleared by
 // tsbus.modem_poll(). modem_line_up: Zimodem is running; until then nothing
 // goes to the UART (it waits in line_tx) and what comes in is dropped (the
-// boot banner, or noise from an ESP that is off).
+// boot banner, or noise from an ESP that is off), except that core 1 looks
+// in it for Zimodem's READY. and brings the line up itself then
+// (m2050_wait_ready, #300). Core 0 brings it up after MODEM_BOOT_MS if not.
 static volatile bool modem_wake, modem_touched, modem_line_up;
+static volatile uint32_t modem_readies;   // times the line came up on READY.
 
 // Speech (docs/v3-speech-proposal.md): the SP0256-AL2 emulated on core 1
 // (sp0256.c), a few samples per pass of its loop, into a ring of PWM levels
@@ -821,8 +824,11 @@ static void __not_in_flash_func(core1_main)(void) {
             mrx_off = off;
             bool idle = !(dma_hw->ch[ch_mtx].ctrl_trig & DMA_CH0_CTRL_TRIG_BUSY_BITS);
             modem.lrx_head += got;
-            if (!modem_line_up) {
-                modem.lrx_tail = modem.lrx_head;      // nobody there yet: drop it
+            // Nobody there yet: dropped, but looked through for Zimodem's
+            // READY., which brings the line up (what follows it is kept).
+            if (!modem_line_up && m2050_wait_ready(&modem)) {
+                modem_line_up = true;
+                modem_readies++;
             }
             if (idle) {
                 modem.ltx_tail += mtx_inflight;
@@ -1279,9 +1285,11 @@ static mp_obj_t tsbus_modem_mode(mp_obj_t mode_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_mode_obj, tsbus_modem_mode);
 
-// tsbus.modem_line(on): Zimodem is up (core 0 powered the ESP32 and gave it
-// time to boot), or not. Kept across tsbus.modem(True). While it isn't,
-// core 1 sends nothing to the UART and drops what arrives.
+// tsbus.modem_line(on): Zimodem is up, or not: core 0 says so when it powers
+// the ESP32 off or restarts it (False), or when Zimodem hasn't said READY.
+// within MODEM_BOOT_MS (True); core 1 sets it itself on READY. Kept across
+// tsbus.modem(True). While it isn't, core 1 sends nothing to the UART and
+// drops what arrives, looking only for READY.
 static mp_obj_t tsbus_modem_line(mp_obj_t on_in) {
     modem_line_up = mp_obj_is_true(on_in);
     return mp_const_none;
@@ -1291,7 +1299,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_line_obj, tsbus_modem_line);
 // tsbus.modem_poll(): for core 0's idle loop, as a small int (no
 // allocation, it runs every idle pass): bit 0 an OUT to the 8251 since the
 // last poll, bit 1 off-hook (2050 mode, not on-hook), bit 2 any IN or OUT
-// since the last poll. Bits 0 and 2 are cleared by the read.
+// since the last poll, bit 3 the line up (core 1 sets it on Zimodem's
+// READY.). Bits 0 and 2 are cleared by the read.
 static mp_obj_t tsbus_modem_poll(void) {
     mp_int_t r = 0;
     if (modem_on) {
@@ -1303,6 +1312,9 @@ static mp_obj_t tsbus_modem_poll(void) {
         }
         if (modem_touched) {
             r |= 4;
+        }
+        if (modem_line_up) {
+            r |= 8;                     // set by core 1 on Zimodem's READY. too
         }
         modem_wake = modem_touched = false;
     }
@@ -1630,6 +1642,7 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_m_connects, modem.connects);
     store(d, MP_QSTR_m_carrier_lost, modem.carrier_lost);
     store(d, MP_QSTR_m_line_up, modem_line_up);
+    store(d, MP_QSTR_m_readies, modem_readies);
     store(d, MP_QSTR_m_pace_us, usart.pace / (BUS_CLOCK_HZ / 1000000));
     // Speech.
     store(d, MP_QSTR_s_on, speech_on);

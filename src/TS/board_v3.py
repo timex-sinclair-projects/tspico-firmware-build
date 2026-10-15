@@ -108,15 +108,17 @@ def modem_power(on):
 # The modem (docs/v3-modem-proposal.md, step 4): tsbus answers the 8251 from
 # boot; the ESP32 is powered only when a program uses it. Core 1 says what
 # it saw (tsbus.modem_poll); the idle loop does the powering, here, since the
-# expander is I2C. MODEM_BOOT_MS: from EN high to Zimodem's READY (about a
-# second on proto1, 2026-10-12), before anything is sent to it.
-MODEM_BOOT_MS = 2000
+# expander is I2C. The line comes up when Zimodem prints READY. (core 1 sees
+# it: tsbus.modem_poll bit 3, #300), which took about 1 s on proto1
+# (2026-10-12) and over 2 s with a WiFi join (2026-10-14). MODEM_BOOT_MS:
+# the fallback, from EN high, for a Zimodem that never says it.
+MODEM_BOOT_MS = 8000
 MODEM_MODES = ("2050", "hayes", "off")
 _m_mode = "off"          # what modem_start set up
 _m_baud = 300
 _m_idle_ms = 600_000
 _m_powered = False       # the ESP32's EN is high
-_m_up = False            # ... and it has had MODEM_BOOT_MS (tsbus.modem_line)
+_m_up = False            # ... and Zimodem said READY., or MODEM_BOOT_MS passed
 _m_power_at = 0          # ticks_ms when it was powered
 _m_last = 0              # ticks_ms of the last 8251 use, or off-hook
 
@@ -150,8 +152,9 @@ def _modem_off():
 
 def modem_service():
     """Every idle pass of the dispatcher, while the modem is on: power the
-    ESP32 when a program writes to the 8251; tell tsbus the line is up
-    MODEM_BOOT_MS later; power it off after the idle time with no 8251 use
+    ESP32 when a program writes to the 8251; note the line is up once core 1
+    has seen Zimodem's READY. (bit 3), or tell tsbus so MODEM_BOOT_MS after
+    power-up if it hasn't; power it off after the idle time with no 8251 use
     (a terminal polling its status counts) and on-hook."""
     global _m_powered, _m_up, _m_power_at, _m_last
     if _m_mode == "off":
@@ -166,9 +169,12 @@ def modem_service():
             _m_powered = True
             _m_power_at = _m_last = now
         return
-    if not _m_up and time.ticks_diff(now, _m_power_at) >= MODEM_BOOT_MS:
-        tsbus.modem_line(True)
-        _m_up = True
+    if not _m_up:
+        if f & 8:
+            _m_up = True                 # core 1 saw READY. and brought it up
+        elif time.ticks_diff(now, _m_power_at) >= MODEM_BOOT_MS:
+            tsbus.modem_line(True)
+            _m_up = True
     if not f & 2 and time.ticks_diff(now, _m_last) > _m_idle_ms:
         _modem_off()
 

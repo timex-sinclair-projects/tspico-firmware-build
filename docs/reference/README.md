@@ -167,7 +167,7 @@ behaviour, and the caveat and the issue link go.
 | `src/TS/printer.py` | `d8bb84d1d654` | [firmware/printer.md](firmware/printer.md) | [flows/printer.md](flows/printer.md) |
 | `src/TS/board.py` | `76b05c62a1d9` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/board_v2.py` | `07f49f9004a9` | [firmware/board.md](firmware/board.md), [firmware/pio.md](firmware/pio.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
-| `src/TS/board_v3.py` | `e6a9b1587fe0` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
+| `src/TS/board_v3.py` | `0d10d1882402` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
 | `src/TS/speech.py` | `4271ff5c0029` | [firmware/speech.md](firmware/speech.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/speech_rules.py` | `3e16e980652d` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/upgrade/main.py` | `6ab664e9c744` | [firmware/upgrade.md](firmware/upgrade.md) | — |
@@ -189,12 +189,12 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `e4cde52397f6` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `32d674b48d7b` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `1a25c71b28fc` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `bc7ecb0f0c84` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.h` | `6d0523a0e42a` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.c` | `e6812ab5e133` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/modem2050.h` | `ec21b502da31` | [firmware/tsbus.md](firmware/tsbus.md) | — |
-| `src/tsbus/modem2050.c` | `4ec2268ae5d7` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/modem2050.h` | `873a09d78e75` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/modem2050.c` | `2f187f469510` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/sp0256.h` | `51c74dea5123` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256.c` | `1966bed583e8` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256_mame.inc` | `134bd8726488` | [firmware/speech.md](firmware/speech.md) | — |

@@ -684,13 +684,16 @@ def main():
     POLL[0] = 5                                          # an OUT to the 8251
     board.modem_service()
     check(esp_on(), "an OUT to the 8251: the ESP32 on")
-    clock.ms += 1999
+    clock.ms += 1500
     POLL[0] = 4
     board.modem_service()
-    check(("modem_line", True) not in take(), "  not up for MODEM_BOOT_MS")
-    clock.ms += 1
+    check(("modem_line", True) not in take() and board.modem_status()[1] == "starting",
+          "  Zimodem not heard from yet: not up, ESP32 starting")
+    POLL[0] = 4 | 8                                      # core 1 saw READY.
     board.modem_service()
-    check(take() == [("modem_line", True)], "  then the line is up")
+    check(take() == [] and board.modem_status()[1] == "on",
+          "  core 1 saw READY. (bit 3) and brought the line up: on, nothing to tell tsbus")
+    POLL[0] = 4
     for _ in range(20):                                  # a terminal polling, 20 minutes
         clock.ms += 60_000
         board.modem_service()
@@ -711,6 +714,13 @@ def main():
     board.modem_service()
     check(esp_on(), "used again: on again")
     take()
+    POLL[0] = 4
+    clock.ms += 7999
+    board.modem_service()
+    check(("modem_line", True) not in take(), "  no READY.: not up for MODEM_BOOT_MS (8 s)")
+    clock.ms += 1
+    board.modem_service()
+    check(take() == [("modem_line", True)], "  then up anyway (the fallback)")
     board.modem_start("off")
     check(not esp_on() and take()[:2] == [("modem_pace", 300), ("modem", False)],
           "modem_start off: ports unanswered, ESP32 off")

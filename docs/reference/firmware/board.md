@@ -387,17 +387,21 @@ rail. `modem_service` and `_modem_off` call it.
 
 ### `MODEM_BOOT_MS`, `MODEM_MODES`
 
-2000 ms: how long after EN goes high before anything is sent to Zimodem.
-On proto1 its READY came about a second after EN (2026-10-12); the rest is
-margin. The modes `modem_start` and `tpi:modem` take: "2050", "hayes" and
+8000 ms: the fallback. The line normally comes up as soon as Zimodem prints
+`READY.`, which core 1 watches for (`m2050_wait_ready` in
+[tsbus.md](tsbus.md#m2050_wait_readym)); if it hasn't by then, `modem_service`
+brings it up anyway. Why: it was a fixed 2000 ms until #300. On proto1
+`READY.` came about a second after EN (2026-10-12), but on board 1 with a
+WiFi join it took over 2 s (2026-10-14), and PicoTerm's first `AT` went out
+before Zimodem listened and was lost. The modes `modem_start` and `tpi:modem` take: "2050", "hayes" and
 "off".
 
 ### `_m_mode`, `_m_baud`, `_m_idle_ms`, `_m_powered`, `_m_up`, `_m_power_at`, `_m_last`
 
 What `modem_start` set up (mode, the pace, the idle time in ms, default
 "off", 300 and 10 minutes until the boot's call); whether the ESP32 is
-powered (EN high) and whether it has had `MODEM_BOOT_MS` (`tsbus.modem_line`
-told); `ticks_ms` when it was powered, and of the last use of the 8251 or
+powered (EN high) and whether the line is up (core 1 saw `READY.`, or
+`MODEM_BOOT_MS` passed and `tsbus.modem_line` was told); `ticks_ms` when it was powered, and of the last use of the 8251 or
 the last pass off-hook.
 
 ### `modem_start(mode, baud=None, idle_min=None)`
@@ -427,21 +431,24 @@ else unless something changes.
   running program.
 - Off, and bit 0 (an OUT to the 8251: MTERM's reset, a dialer's
   off-hook): `modem_power(True)`.
-- On, `MODEM_BOOT_MS` after: `tsbus.modem_line(True)`. What the 8251 sent
-  meanwhile (an off-hook's init) waited in `tsbus`'s ring and goes now.
+- On, line not up: bit 3 (core 1 saw Zimodem's `READY.` and brought the
+  line up itself) marks it up; failing that, `MODEM_BOOT_MS` after power-up
+  `tsbus.modem_line(True)`. What the 8251 sent meanwhile (an off-hook's
+  init, a terminal's `AT`) waited in `tsbus`'s ring and goes as the line
+  comes up.
 - On, not off-hook, and unused for the idle time: `_modem_off`.
 
 Nothing for mode "off". On proto1 (2026-10-12) MTERM/T loaded from the SD
 card, its reset powered the ESP32, and it dialled, connected and hung up
 with no other step. `board_v3_hosttest.py` pins the timing: status polls
-alone don't wake it, the boot delay, polling or off-hook keep it, ten idle
-minutes stop it.
+alone don't wake it, bit 3 brings the line up with nothing told to tsbus,
+the 8 s fallback, polling or off-hook keep it, ten idle minutes stop it.
 
 ### `_M_STATES`, `modem_status()`
 
 The 2050 states' names, and for `tpi:modem` `(mode, ESP32, line, calls,
-connects, flow)`: the ESP32 "off", "starting" (powered, not yet
-`MODEM_BOOT_MS`) or "on"; the line state in 2050 mode, "-" in Hayes mode;
+connects, flow)`: the ESP32 "off", "starting" (powered, the line not yet
+up) or "on"; the line state in 2050 mode, "-" in Hayes mode;
 `m_dials` and `m_connects` from `tsbus.stats()`; flow is `m_flow` as a
 bool, Hayes mode's flow control (`modem_flow`).
 
@@ -460,7 +467,7 @@ its serial loader (IO9 low as it leaves reset), for installing Zimodem
 through `tsbus.esp_relay`; without it Zimodem starts. The idle logic's state
 is set to "powered, not up" (`_m_powered`, `_m_up`, the times), so
 `modem_service` neither switches it off at once nor sends to it before
-`MODEM_BOOT_MS`. `tools/zimodem-install.py` and the web updater's modem step
+Zimodem's `READY.` (or `MODEM_BOOT_MS`). `tools/zimodem-install.py` and the web updater's modem step
 call it.
 
 ### `modem_download(on)`
