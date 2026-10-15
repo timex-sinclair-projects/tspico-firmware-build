@@ -218,14 +218,54 @@ def main():
         r.run(1600)
         r.zimodem(b"\r\nCONNECT\r\n")
         r.take_sent()
-        ok = all(lib.shim_line_rx(0x41) == 0 for i in range(60))
+        n = 0
+        while r.get("lrx_level") < 32 and n < 64:
+            lib.shim_line_rx(0x41); n += 1
+            r.run(10, read=False)
+        check(r.get("lrx_level") == 32 and r.get("xoff_sent") == 0 and r.take_sent() == b"",
+              "the 2068 not reading: a ring exactly half full (32 of 64) is no XOFF yet")
+        ok = all(lib.shim_line_rx(0x41) == 0 for i in range(60 - n))
         r.run(10, read=False)
         check(ok and r.get("xoff_sent") == 1 and r.take_sent() == b"\x13",
-              "the 2068 not reading: XOFF once the line ring is over 3/4 full (%d)" % r.get("lrx_level"))
+              "  over half full: XOFF, so Zimodem's 4 KB buffer still fits after it (%d)" % r.get("lrx_level"))
         ok = all(lib.shim_line_rx(0x42) == 0 for i in range(3))   # the LF after CONNECT waits too
         r.run(4000)
         check(ok and r.get("xoff_sent") == 0 and r.take_sent() == b"\x11", "read down below 1/4: XON")
         check(r.take_shown() == b"A" * 60 + b"B" * 3, "nothing lost or reordered; CONNECT's LF swallowed")
+
+        print("flow control in Hayes mode (#301)")
+        r = Rig(lib, 0)
+        mterm_reset(r)
+        r.take_sent()
+        ok = all(lib.shim_line_rx(0x41) == 0 for i in range(60))
+        r.run(10, read=False)
+        check(ok and r.get("xoff_sent") == 0 and r.take_sent() == b"",
+              "off (the default): a full ring sends Zimodem nothing (%d)" % r.get("lrx_level"))
+        r.run(2000)
+        check(r.take_shown() == b"A" * 60, "  and the 2068 reads it all")
+        lib.shim_flow(1)
+        r.run(10)
+        check(r.get("flow") == 1 and r.take_sent() == b"", "tsbus.modem_flow(True): taken on the next pass, nothing sent")
+        ok = all(lib.shim_line_rx(0x43) == 0 for i in range(60))
+        r.run(10, read=False)
+        check(ok and r.get("xoff_sent") == 1 and r.take_sent() == b"\x13",
+              "on: XOFF once the line ring is over half full, as 2050 mode (%d)" % r.get("lrx_level"))
+        r.run(4000)
+        check(r.get("xoff_sent") == 0 and r.take_sent() == b"\x11", "  read down below 1/4: XON")
+        check(r.take_shown() == b"C" * 60, "  nothing lost or reordered")
+        ok = all(lib.shim_line_rx(0x44) == 0 for i in range(60))
+        r.run(10, read=False)
+        check(ok and r.get("xoff_sent") == 1 and r.take_sent() == b"\x13", "stopped again...")
+        lib.shim_flow(0)
+        r.run(10, read=False)
+        check(r.get("flow") == 0 and r.get("xoff_sent") == 0 and r.take_sent() == b"\x11",
+              "  ...turned off while stopped: XON first, so Zimodem isn't left stopped")
+        r.run(4000)
+        r.take_shown()
+        lib.shim_flow(1)
+        r.run(10)
+        lib.shim_init(0)
+        check(r.get("flow") == 0, "a fresh m2050_init (tsbus.modem(True): a mode change, the boot) turns it off")
 
         print("a BASIC dialer (Loader V): OUT 3/4/1/2 a pulse, no pauses")
         r = Rig(lib, 1)

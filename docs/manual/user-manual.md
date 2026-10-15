@@ -2074,12 +2074,15 @@ SAVE "tpi:modem"             : REM show the modem's state
 SAVE "tpi:modem 2050"        : REM programs dial and see the carrier, as with a TS2050
 SAVE "tpi:modem hayes"       : REM talk to the modem directly, with AT commands
 SAVE "tpi:modem off"         : REM ports 115 and 119 not answered
+SAVE "tpi:modem flow on"     : REM Hayes mode: the card pauses the modem when it falls behind
+SAVE "tpi:modem flow off"
 ```
 
 The modem, Appendix F. The show form gives the mode, whether the WiFi part is on, the line
 (on-hook, connected …) and the calls made, for example `Modem: 2050 mode, ESP32 on` and
-`Line on-hook; 3 calls, 2 made`. A mode is saved for the next start (`MODEM_MODE` in
-`config.ini`). **A**: any other word.
+`Line on-hook; 3 calls, 2 made`; in Hayes mode the second line starts `Flow on` or `Flow off`
+instead. A mode is saved for the next start (`MODEM_MODE` in `config.ini`); flow isn't, and a
+mode change turns it off (F.6). **A**: any other word.
 <!-- /v3 -->
 
 ### newtap: make a new TAP
@@ -2777,6 +2780,8 @@ SAVE "tpi:modem"             : REM the modem's state
 SAVE "tpi:modem 2050"        : REM as a TS2050 (the normal mode)
 SAVE "tpi:modem hayes"       : REM AT commands, straight to the modem
 SAVE "tpi:modem off"         : REM ports 115 and 119 not answered
+SAVE "tpi:modem flow on"     : REM Hayes mode: pause the modem when the card falls behind
+SAVE "tpi:modem flow off"
 ```
 
 The state shows the mode, whether the WiFi part is on, the line and the calls made:
@@ -2786,7 +2791,9 @@ Modem: 2050 mode, ESP32 on
 Line connected; 3 calls, 2 made
 ```
 
-The mode is kept for the next start (`MODEM_MODE` in `config.ini`).
+In Hayes mode the second line shows the flow control instead of the line: `Flow off; 3 calls,
+2 made`. The mode is kept for the next start (`MODEM_MODE` in `config.ini`). Flow control is
+for programs (F.6): it isn't kept, and any mode change turns it off.
 
 ## F.5 If it doesn't connect
 
@@ -2825,6 +2832,16 @@ Line 20 resets the 8251 and sets it up as MTERM does: three zeros and 64 reset i
 8 bits, no parity and one stop bit, and command 55 turns sending and receiving on. Lines 40 to
 60 send a key you press. Line 70 tests status bit 1, and lines 80 and 90 print a character that
 has arrived.
+
+A program in Hayes mode that reads faster text than BASIC, such as a terminal at 64 columns,
+can fall behind the modem. The card holds 16 KB; past that, characters are lost. Send the
+modem `ATF1` (XON/XOFF flow control), then `SAVE "tpi:modem flow on"`, and dial with an X
+after the D or DT, for example `ATDTX"bbs.example.com:23"`. The card then sends the modem XOFF
+(character 19) when its store is half full, and XON (17) once the program has read it down.
+The modem obeys them only on a call dialled with the X; on any other call it passes them on
+to the host as data. On an X call the modem also takes any 19 or 17 the program sends as
+XOFF or XON, so don't send binary data that contains them. `SAVE "tpi:modem flow off"` turns
+it off again.
 
 ## F.7 Summary
 

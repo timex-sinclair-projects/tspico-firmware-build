@@ -268,11 +268,22 @@ void U8251_FN(m2050_poll)(m2050_t *m, u8251_t *u, uint32_t now) {
         }
     }
 
-    // Flow control toward Zimodem (2050 mode, connected: ATF1 is in its
-    // init; in Hayes mode Zimodem's settings are the user's).
-    if (!hayes && m->state == M2050_CONNECTED) {
+    // Flow control toward Zimodem: in 2050 mode while connected (ATF1 is in
+    // its init); in Hayes mode only when the program has turned it on
+    // (flow_want, tsbus.modem_flow) and set Zimodem up for it itself. Zimodem
+    // obeys XOFF only with ATF1 and on a connection dialled with X (ATDTX);
+    // otherwise XOFF and XON reach the host as data (#301, #302). Turning it
+    // off in Hayes mode while Zimodem is stopped sends XON first.
+    if (m->flow != m->flow_want) {
+        if (hayes && !m->flow_want && m->xoff_sent) {
+            put_byte(m, U8251_XON, now);
+            m->xoff_sent = 0;
+        }
+        m->flow = m->flow_want;
+    }
+    if (hayes ? m->flow : m->state == M2050_CONNECTED) {
         level = m->lrx_head - m->lrx_tail;
-        if (!m->xoff_sent && level > m->lrx_size / 4 * 3) {
+        if (!m->xoff_sent && level > m->lrx_size / 2) {
             put_byte(m, U8251_XOFF, now);
             m->xoff_sent = 1;
         } else if (m->xoff_sent && level < m->lrx_size / 4) {

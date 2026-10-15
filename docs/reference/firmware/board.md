@@ -440,9 +440,17 @@ minutes stop it.
 ### `_M_STATES`, `modem_status()`
 
 The 2050 states' names, and for `tpi:modem` `(mode, ESP32, line, calls,
-connects)`: the ESP32 "off", "starting" (powered, not yet
+connects, flow)`: the ESP32 "off", "starting" (powered, not yet
 `MODEM_BOOT_MS`) or "on"; the line state in 2050 mode, "-" in Hayes mode;
-`m_dials` and `m_connects` from `tsbus.stats()`.
+`m_dials` and `m_connects` from `tsbus.stats()`; flow is `m_flow` as a
+bool, Hayes mode's flow control (`modem_flow`).
+
+### `modem_flow(on)`
+
+`tsbus.modem_flow(on)`, for `tpi:modem flow on`/`off`: in Hayes mode the
+card pauses Zimodem with XOFF when its receive ring is half full and
+resumes it with XON. For a program that has sent Zimodem `ATF1` and dials
+with X (`ATDTX`; PicoTerm). Not saved, and off again after any `modem_start` (#301).
 
 ### `esp_boot(download)`
 
