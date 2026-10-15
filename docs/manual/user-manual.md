@@ -2834,12 +2834,14 @@ Line 20 resets the 8251 and sets it up as MTERM does: three zeros and 64 reset i
 has arrived.
 
 A program in Hayes mode that reads faster text than BASIC, such as a terminal at 64 columns,
-can fall behind the modem. The card holds 4 KB; past that, characters are lost. Send the modem
-`ATF1` (XON/XOFF flow control), then `SAVE "tpi:modem flow on"`. The card then sends the modem
-XOFF (character 19) when its store is three quarters full, and XON (17) once the program has
-read it down. Don't turn it on without `ATF1`: the modem would pass those two characters on
-to the host as data. `SAVE "tpi:modem flow off"` turns it off again. In 2050 mode the card
-does this by itself while connected.
+can fall behind the modem. The card holds 16 KB; past that, characters are lost. Send the
+modem `ATF1` (XON/XOFF flow control), then `SAVE "tpi:modem flow on"`, and dial with an X
+after the D or DT, for example `ATDTX"bbs.example.com:23"`. The card then sends the modem XOFF
+(character 19) when its store is half full, and XON (17) once the program has read it down.
+The modem obeys them only on a call dialled with the X; on any other call it passes them on
+to the host as data. On an X call the modem also takes any 19 or 17 the program sends as
+XOFF or XON, so don't send binary data that contains them. `SAVE "tpi:modem flow off"` turns
+it off again.
 
 ## F.7 Summary
 

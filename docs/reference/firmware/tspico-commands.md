@@ -885,11 +885,12 @@ gate (`SD_FREE`): it needs no card.
   the others set the 8251 up again as at power-up, on-hook, and leave the
   ESP32 as it was.
 - `flow on` or `flow off` (any case): `board.modem_flow`, Hayes mode's
-  XON/XOFF toward Zimodem, for a program that has sent it `ATF1` (#301).
+  XON/XOFF toward Zimodem, for a program that has sent it `ATF1` and
+  dials with X (`ATDTX`, #301).
   "Modem: flow on" or "Modem: flow off", `SEND_MSG` (not shown), logged
   at 0. Not saved: any mode change, or the next start, turns it off. In
   2050 mode it has no effect (2050 mode's own flow control runs while
-  connected).
+  connected; #302).
 - Anything else: `BAD_ARG("MODEM", arg)` and "2050, hayes, off or flow
   on/off", Report A.
 

@@ -448,9 +448,9 @@ bool, Hayes mode's flow control (`modem_flow`).
 ### `modem_flow(on)`
 
 `tsbus.modem_flow(on)`, for `tpi:modem flow on`/`off`: in Hayes mode the
-card pauses Zimodem with XOFF when its receive ring is three quarters full
-and resumes it with XON. For a program that has sent Zimodem `ATF1`
-(PicoTerm). Not saved, and off again after any `modem_start` (#301).
+card pauses Zimodem with XOFF when its receive ring is half full and
+resumes it with XON. For a program that has sent Zimodem `ATF1` and dials
+with X (`ATDTX`; PicoTerm). Not saved, and off again after any `modem_start` (#301).
 
 ### `esp_boot(download)`
 
