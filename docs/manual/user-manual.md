@@ -194,6 +194,8 @@ You'll need:
 - an expansion bus board, if you use one (the TS-Pico can also plug straight into the 2068);
 - a micro SD card. Your TS-Pico came with one, already set up.
 
+![The Timex Sinclair 2068, seen from the front left](images/ts2068.svg)
+
 > **Warning.** Switch the 2068 off before you connect or disconnect anything, and take out any
 > cartridge in the 2068's cartridge slot.
 
@@ -204,8 +206,23 @@ There are two ways to connect the TS-Pico.
 **Direct connection.** The TS-Pico plugs straight into the expansion connector at the back
 right of the 2068 and sticks out behind it.
 
+![The back of the 2068: the expansion connector is the wide slot at the lower left](images/ts2068-rear.svg)
+
+*The back of the 2068. Seen from behind, the expansion connector is the wide slot on the left.*
+<!-- v2 -->
+
+![A TS-Pico plugged straight into the 2068, standing up behind it](images/ts2068-tspico.svg)
+
+*The TS-Pico plugged straight into the 2068.*
+<!-- /v2 -->
+
 **On an expansion bus.** The bus board plugs into the 2068, and the TS-Pico plugs into one of
 its slots. Any slot works; many people use the one nearest the 2068.
+
+![An expansion bus board: the long connector at the front goes into the 2068, and cards go into its four slots](images/bus-expansion.svg)
+
+*An expansion bus board. The connector at the front goes into the 2068; the TS-Pico goes into
+one of the four slots.*
 
 > **Warning.** On an expansion bus, set the TS-Pico's slot's BUSISO bypass, or the TS-Pico
 > won't work. The bus has "BUSISO bypass" jumpers or switches on its right-hand side, between
@@ -222,6 +239,10 @@ the key lines up with the notch.
 
 <!-- v2 -->
 ## 2.3 A tour of the board
+
+![The TS-Pico board: the Pico at the upper left, the SD card slot at the upper right, the three buttons below it with JP5, JP3 and JP2, P10 near the top and JP4 and JP1 at the lower right](images/tspico-board.svg)
+
+*The TS-Pico board, component side. The labels match the jumpers described below.*
 
 **The Pico** is the small green board with a white **BOOTSEL** button and a Micro-USB socket.
 You only need the USB socket for updating the firmware (Appendix A). In normal use the TS-Pico
