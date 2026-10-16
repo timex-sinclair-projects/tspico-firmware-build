@@ -39,8 +39,9 @@
 // at start-up (.data). For the same reason nothing here may become a call to
 // strlen or memcpy, which the compiler makes of simple loops and which are
 // in flash: put_line is given its length (STR), and every copy goes through
-// a ring's masked index, which isn't a memcpy. Check the disassembly after a
-// change (docs/reference/firmware/tsbus.md, "Placement").
+// a ring's masked index, which isn't a memcpy. CI checks the linked ELF for
+// both (tools/check-core1-ram.py; docs/reference/firmware/tsbus.md,
+// "Strings, STR, and flash").
 static char no_carrier[] = "NO CARRIER";
 #define NO_CARRIER_LEN 10
 static char s_init[] = "ATE0V1X0F1\r";
