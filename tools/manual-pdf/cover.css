@@ -2,7 +2,7 @@
    User Manual: warm grey, the Timex Sinclair badge over red, green and blue
    bars, the title in light and bold geometric capitals, and the computer
    running in from the left edge: a line drawing (img/ts2068-line.svg, made
-   by draw-cover.py) of a 2068 with a TS-Pico standing behind it. */
+   by draw-cover.py, then retouched by hand) of a 2068 with a TS-Pico standing behind it. */
 @font-face { font-family: "Poppins"; font-weight: 300; src: url("{{FONTS}}/Poppins-Light.ttf"); }
 @font-face { font-family: "Poppins"; font-weight: 700; src: url("{{FONTS}}/Poppins-Bold.ttf"); }
 @font-face { font-family: "Arvo"; font-weight: 700; font-style: italic; src: url("{{FONTS}}/Arvo-BoldItalic.ttf"); }
