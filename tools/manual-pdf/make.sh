@@ -74,6 +74,7 @@ if pandoc --help | grep -q -- --embed-resources; then EMBED=--embed-resources; e
 python3 "$REPO/tools/manual-variants.py" "$BOARD" "$REPO/docs/manual/user-manual.md" "$WORK/user-manual.md"
 pandoc "$WORK/user-manual.md" -f gfm -t html5 --standalone --section-divs $EMBED \
        --resource-path="$REPO/docs/manual" --metadata pagetitle="$TITLE" \
+       --lua-filter "$HERE/manual.lua" \
        --css "$WORK/print.css" -o "$WORK/manual.html"
 
 # The rest (title page, contents, chapter openers on right-hand pages, the

@@ -366,7 +366,10 @@ colophon) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
 one board's manual from `docs/manual/user-manual.md`
 (`tools/manual-variants.py`: passages for one board sit between
 `<!-- v2 -->` or `<!-- v3 -->` marker lines; `BOARD=v2` is the default and
-the published manual), turns it into HTML with pandoc, and
+the published manual), turns it into HTML with pandoc and
+`tools/manual-pdf/manual.lua` (program listings laid out as the 2068 lists
+them: line numbers in four columns, every line cut at 32; and a lead-in
+paragraph kept on one page with the code, picture or short list after it), and
 `tools/manual-pdf/book.py` adds the title page, contents and chapter
 openers, prints the manual and the two covers with the runner's Chrome, and
 assembles the half-letter one-up (cover + manual) and the saddle-stitch

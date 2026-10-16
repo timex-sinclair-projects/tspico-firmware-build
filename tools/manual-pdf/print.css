@@ -74,12 +74,20 @@ code { background: #eeeeec; border-radius: 2px; padding: 0 .15em; }
 pre { background: #f3f3f1; padding: 5pt 7pt;
       white-space: pre-wrap; word-break: break-word; break-inside: avoid; line-height: 1.32; margin: .6em 0 .8em; }
 pre code { background: none; padding: 0; font-family: inherit; font-size: inherit; }
-/* What the 2068 shows and what you type on it, in the 2068's own characters.
-   They are wide (1.14 em), so a line holds about 42 and longer ones wrap,
-   as they do on the 2068's 32-column screen. Files you edit on a computer
-   (```text) keep the ordinary monospace. */
-pre { font-family: "Timex TS2068", var(--mono); font-size: 6.3pt; line-height: 1.55; }
-pre.text { font-family: var(--mono); font-size: 7.9pt; line-height: 1.32; }
+/* What the 2068 shows and what you type on it, in the 2068's own characters,
+   in a box 32 columns wide like its screen (the font is wide: 1 ch = 1.14 em,
+   so 7.5pt fits a list item's width). Program listings (manual.lua) are
+   already cut at 32 columns with their line numbers in four, so they don't
+   wrap again; other 2068 text wraps at a space. Files you edit on a computer
+   (```text) keep the ordinary monospace, full width. */
+pre { font-family: "Timex TS2068", var(--mono); font-size: 7.5pt; line-height: 1.5;
+      width: 32ch; max-width: calc(100% - 14pt); }
+pre.listing, pre.listing code { white-space: pre; word-break: normal; }  /* pandoc's template sets code { white-space: pre-wrap } */
+
+/* A lead-in ("Two things to watch:", "**The jumpers.**") and the code,
+   picture or short list after it, kept on one page (manual.lua). */
+.keep { break-inside: avoid; }
+pre.text { font-family: var(--mono); font-size: 7.9pt; line-height: 1.32; width: auto; max-width: none; }
 blockquote { margin: .8em 0; padding: .45em .7em .1em; border-top: 1.5pt solid var(--rule);
   border-bottom: .5pt solid var(--rule); background: #f6f6f4; break-inside: avoid; }
 blockquote strong:first-child { font-family: var(--slab); }
@@ -101,9 +109,9 @@ hr { border: 0; border-top: .5pt solid #bbb; }
 .stripes i { flex: 1; height: 3.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .stripes i:nth-child(1) { background: #e2322d; } .stripes i:nth-child(2) { background: #3aa93f; }
 .stripes i:nth-child(3) { background: #2ba6de; }
-.titlepage .t1 { font-family: "Poppins", var(--sans); font-weight: 300; font-size: 34pt; line-height: 1;
+.titlepage .t1 { font-family: "Poppins", var(--sans); font-weight: 700; font-size: 34pt; line-height: 1;
   margin: .3in 0 0; letter-spacing: -.01em; }
-.titlepage .t2 { font-family: "Poppins", var(--sans); font-weight: 300; font-size: 21pt; line-height: 1.05;
+.titlepage .t2 { font-family: "Poppins", var(--sans); font-weight: 700; font-size: 21pt; line-height: 1.05;
   margin: .04in 0 0; text-transform: uppercase; letter-spacing: -.01em; }
 .titlepage .t3 { font-family: "Poppins", var(--sans); font-weight: 700; font-size: 30pt; line-height: 1;
   margin: .1in 0 0; letter-spacing: -.015em; }
