@@ -1422,7 +1422,9 @@ Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to 
 Don't use `OUT 244,3` for a cartridge. It maps only the first 16K of the dock over the ROM, which is
 how ZX Spectrum mode starts, and a cartridge started that way crashes.
 
-To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
+**To start in BASIC instead**, hold down **D** while you switch on or press **TS Reset**, and keep
+it down until the copyright message appears. The 2068 skips the cartridge. The cartridge stays in
+the dock, so the next restart runs it unless you change the dock.
 
 **The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is what's in
 the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
@@ -1493,6 +1495,7 @@ and run `LOAD ""` again. Without the P10 jumper the Flash can't be written.
 4. BOOT choices last one power cycle; DOCK resets at switch-on.
 5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot, with P10 fitted and never over
    the running ROM.
+6. Hold **D** while the 2068 starts to skip the cartridge in the dock.
 <!-- /v2 -->
 <!-- v3 -->
 # Chapter 8: ROM Slots and Cartridges
@@ -1581,7 +1584,9 @@ Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to 
 Don't use `OUT 244,3` for a cartridge. It maps only the first 16K of the dock over the ROM, which is
 how ZX Spectrum mode starts, and a cartridge started that way crashes.
 
-To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
+**To start in BASIC instead**, hold down **D** while you switch on or press **TS Reset**, and keep
+it down until the copyright message appears. The 2068 skips the cartridge. The cartridge stays in
+the dock, so the next restart runs it unless you change the dock.
 
 **The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is what's in
 the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
@@ -1665,6 +1670,7 @@ SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
 4. BOOT choices last one start; DOCK resets at switch-on.
 5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot.
 6. A pair of RAM slots in the dock gives a program 64K of RAM.
+7. Hold **D** while the 2068 starts to skip the cartridge in the dock.
 <!-- /v3 -->
 
 ---
@@ -2287,6 +2293,15 @@ the standard ROM.
 from the SD card (Appendix A).
 **Likely cause.** The 2068 isn't getting a good ROM from the BOOT slot.
 
+### A cartridge starts every time the 2068 does
+
+**Fix.** Hold down **D** while you switch on or press **TS Reset**, until the copyright message
+appears. The 2068 starts in BASIC.
+**Fallback.** Put the Spectrum ROM back in the dock: `SAVE "tpi:dock" CODE 2,0`. If the cartridge
+is back after every switch-on, check `DCK_SLOT` in `config.ini` (Appendix D).
+**Likely cause.** The cartridge's slot is in the dock, from `tpi:dock`, from the DCK Loader or
+from `DCK_SLOT`.
+
 <!-- v2 -->
 ### The Pico doesn't show up on your computer's USB
 
@@ -2595,6 +2610,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Boot a ROM slot |  | `SAVE "tpi:boot" CODE 2,s` |
 <!-- /v3 -->
 | Dock a slot |  | `SAVE "tpi:dock" CODE 2,s` |
+| Start without the docked cartridge |  | hold **D** at switch-on or **TS Reset** |
 | Spectrum mode |  | `SAVE "tpi:zx48"`, then `OUT 244,3` |
 <!-- v3 -->
 | Modem state and mode |  | `SAVE "tpi:modem"`, `SAVE "tpi:modem 2050"` |
