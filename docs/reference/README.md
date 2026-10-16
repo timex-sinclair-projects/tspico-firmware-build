@@ -51,7 +51,7 @@ from the BASIC keyword to the SD card and back.
 | Firmware | [firmware/board.md](firmware/board.md) | `src/TS/board.py`, `board_v2.py`, `board_v3.py`: the board layer, every hardware touch of the firmware behind one module, for the v2 TS-Pico and the v3 card |
 | Firmware | [firmware/board-v3.md](firmware/board-v3.md) | `src/boards/TSPICO_V3/`: the MicroPython board for the v3 card (RP2350B), its safe pin state, default pins, heap and clock settings |
 | Firmware | [firmware/speech.md](firmware/speech.md) | `src/TS/speech.py`, `speech_rules.py`, `src/tsbus/sp0256.*`: speech, English to the SP0256-AL2's allophones and the chip emulated from its ROM; the tools that generate them |
-| Firmware | [firmware/tsbus.md](firmware/tsbus.md) | `src/tsbus/`: the v3 card's bus as a C module: the PIO programs, the DMA chain, core 1, `tsbus.start`/`load`/`serve`/`hold`; the TS2050 modem (`usart8251`, `modem2050`) |
+| Firmware | [firmware/tsbus.md](firmware/tsbus.md) | `src/tsbus/`: the v3 card's bus as a C module: the PIO programs, the DMA chain, core 1, `tsbus.start`/`load`/`serve`/`hold`; the TS2050 modem (`usart8251`, `modem2050`); the TS-2068 Megabank's owner table (`megabank`) |
 | ROM | [rom/overview.md](rom/overview.md) | The images and their lineage, banking, how HOME calls EXROM, version bytes, the ROM build and the listings |
 | ROM | [rom/sysvars.md](rom/sysvars.md) | The TS-Pico system variables at 5Dxxh, and the stock ones the Pico code uses |
 | ROM | [rom/home.md](rom/home.md) | The HOME ROM: every hook and patch |
@@ -189,7 +189,7 @@ behaviour, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/pins.csv` | `a7c2e2d202a2` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `e4cde52397f6` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `8e7a55db197f` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `8f31ef7c2665` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `bc7ecb0f0c84` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.h` | `6d0523a0e42a` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.c` | `e6812ab5e133` | [firmware/tsbus.md](firmware/tsbus.md) | — |
@@ -199,7 +199,9 @@ behaviour, and the caveat and the issue link go.
 | `src/tsbus/sp0256.c` | `1966bed583e8` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256_mame.inc` | `134bd8726488` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/tsbus/sp0256_al2.inc` | `20293f3cd4a0` | [firmware/speech.md](firmware/speech.md) | — |
-| `src/tsbus/micropython.cmake` | `1d4dbf48eb63` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/megabank.h` | `0c8b41094844` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/megabank.c` | `9a30035bec1d` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/micropython.cmake` | `6c24b5bf5b11` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-23.ROM` | `035016a30efc` | [rom/overview.md](rom/overview.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
@@ -212,5 +214,5 @@ behaviour, and the caveat and the issue link go.
 | `tools/check-core1-ram.py` | `c512cd36652b` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/sp0256-port.py` | `c6ee937adb2b` | [firmware/speech.md](firmware/speech.md) | — |
 | `tools/speech-rules.py` | `b58417ce8921` | [firmware/speech.md](firmware/speech.md) | — |
-| `.github/workflows/build.yml` | `a593c2972990` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `a89bd4321a7b` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `79954d8fcfd9` | [firmware/boot.md](firmware/boot.md) | — |

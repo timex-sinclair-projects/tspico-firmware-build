@@ -135,6 +135,7 @@ jobs:
           python3 src/test/tsbus_io_hosttest.py
           python3 src/test/usart8251_hosttest.py
           python3 src/test/modem2050_hosttest.py
+          python3 src/test/megabank_hosttest.py
           python3 src/test/manual_variants_hosttest.py
           python3 src/test/board_v3_hosttest.py
           python3 src/test/deep_queue_hosttest.py

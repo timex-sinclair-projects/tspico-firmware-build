@@ -9,9 +9,10 @@ target_sources(usermod_tsbus INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/usart8251.c
     ${CMAKE_CURRENT_LIST_DIR}/modem2050.c
     ${CMAKE_CURRENT_LIST_DIR}/sp0256.c
+    ${CMAKE_CURRENT_LIST_DIR}/megabank.c
 )
 
-# usart8251.c, modem2050.c and sp0256.c are plain C (host tests compile them too); on
+# usart8251.c, modem2050.c, sp0256.c and megabank.c are plain C (host tests compile them too); on
 # the card they take __not_in_flash_func from pico.h, so core 1 never runs
 # them from flash.
 target_compile_definitions(usermod_tsbus INTERFACE U8251_ON_PICO=1)

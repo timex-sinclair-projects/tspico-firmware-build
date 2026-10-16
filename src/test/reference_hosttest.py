@@ -101,6 +101,8 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/tsbus/modem2050.c",
     "src/tsbus/sp0256.h",
     "src/tsbus/sp0256.c",
+    "src/tsbus/megabank.h",
+    "src/tsbus/megabank.c",
     "src/tsbus/sp0256_mame.inc",
     "src/tsbus/sp0256_al2.inc",
     "src/tsbus/micropython.cmake",

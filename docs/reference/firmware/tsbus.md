@@ -1,8 +1,8 @@
 # tsbus: the v3 card's bus
 
 Source: [`src/tsbus/`](../../../src/tsbus/): `tsbus.c`, `tsbus.pio`,
-`usart8251.h`, `usart8251.c`, `modem2050.h`, `modem2050.c`,
-`micropython.cmake`.
+`usart8251.h`, `usart8251.c`, `modem2050.h`, `modem2050.c`, `megabank.h`,
+`megabank.c`, `micropython.cmake`.
 
 The v3 card (RP2350B) has no memory chips. It answers every 2068 memory read
 it owns from images in its own SRAM, and the TS-Pico ports 0Eh/0Fh from
@@ -41,6 +41,7 @@ than repeating it.
 | `tsbus.c`, speech | the ring, its DMA and timer, `speech_pass` on core 1, ports 17 and 37 in `handle_in` and `core1_main`; `tsbus.speech`, `tsbus.say`, `tsbus.speech_volume`, `tsbus.speaking`, `tsbus.speech_ports`. The chip itself is `sp0256.c` ([speech.md](speech.md)) |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
+| `megabank.h`, `megabank.c` | the TS-2068 Megabank's owner table, followed from its port writes, as plain C: which chunks the card must yield |
 | `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
 
 ## How it fits under MicroPython
@@ -187,6 +188,7 @@ in the file.
 | `addr_log` | uint32[4096], 16 KB aligned | written by `ch_log` (a DMA ring) | every pointer served, newest at the channel's write address |
 | `ring_seen` | uint32 | `core1_main` | how far core 1 has counted `addr_log` |
 | `sh_hsr`, `sh_ff` | volatile uint8 | `core1_main` (from `io_snoop`), `hold_2068` | the shadow of ports F4h (HSR) and FFh |
+| `mb` | `mb_shadow_t` | `core1_main` (`mb_out` from `io_snoop`; `mb_clear` when the bus goes idle and at power-up), `hold_2068` (`mb_clear`) | the TS-2068 Megabank's owner table (`megabank.h`): `mb.owned` is the chunks a Megabank bank owns, which the card doesn't serve. Not volatile: core 1 reads it after calls into `megabank.c`, which the compiler can't see through |
 | `io_writes`, `mem_writes`, `dock_writes`, `table_updates`, `served[3]` | volatile uint32 | core 1 | counters for `stats()` |
 | `txq`, `txq_head`, `txq_tail` | 1 KB ring | head: core 0 (`MQ.put`, `put_block`); tail: core 1 | replies to IN 0Eh; empty reads 00h |
 | `rxq`, `rxq_head`, `rxq_tail`, `rxq_lost` | 1 KB ring of uint16 | head: core 1; tail: core 0 (`MQ.get`) | OUTs to 0Eh/0Fh, port 0Fh as `0x100 \| data`; `rxq_lost` counts drops when full |
@@ -231,20 +233,23 @@ in the file.
 | `spk_pq`, `spk_pq_head`, `spk_pq_tail` | volatile | both core 1's: head `core1_main` (OUT 17), tail `speech_pass` | the allophones OUT 17 wrote; one core both ends, so no lock |
 | `spk_port_outs`, `spk_port_ins` | volatile uint32 | `core1_main`, `handle_in` | OUTs to 17 and INs from 37 answered |
 
-### `chunk_target(chunk, hsr, ff)`
+### `chunk_target(chunk, hsr, ff, owned)`
 
-In RAM. The serve address for one 8K chunk: if the HSR bit for the chunk is
+In RAM. The serve address for one 8K chunk: if a Megabank bank owns the
+chunk (bit `chunk` of `owned`, from `mb.owned`), not ours (`tail`) whatever
+F4h and FFh say: the board pulls /BE and answers, and /BE switches off the
+2068's memory but not this card. Otherwise, if the HSR bit for the chunk is
 set, the chunk is banked out, to the EXROM if FFh bit 7 is set and the EXROM
 is served (`path_e`), else to the DOCK if served (`path_d`), else not ours
 (`tail`). Unbanked chunks 0-1 are HOME (`path_h`); 2-7 are RAM (`tail`).
 
 ### `write_table()`
 
-In RAM. Writes the eight chunk-table instructions into PIO0 from the shadow.
-serve is at offset 0, so an unconditional jmp encodes as just its target.
-Called by core 1 when F4h or FFh changes (an I/O write lasts over a
-microsecond, so the table is current before the next read), and by
-`exrom`, `dock` and `hold_2068` on core 0. Both cores compute the same
+In RAM. Writes the eight chunk-table instructions into PIO0 from the shadow
+and `mb.owned`. serve is at offset 0, so an unconditional jmp encodes as just
+its target. Called by core 1 when F4h or FFh changes, or the Megabank's owned
+chunks do (an I/O write lasts over a microsecond, so the table is current
+before the next read), and by `exrom`, `dock` and `hold_2068` on core 0. Both cores compute the same
 entries, so a race between them is harmless.
 
 ### `set_serving(on)`
@@ -403,12 +408,16 @@ power-off and power-on readings, forever, polling:
   /MEMRD reads low and serve and addr_read would otherwise sit in a "read"
   driving its data bus. It sets `bus_idle` (cleared at the next change) and
   counts `idle_resets`. The shadow is left alone: the SCLD keeps its
-  registers through a reset (`hold_2068`).
+  registers through a reset (`hold_2068`). The Megabank's owner table is
+  not: the board clears it on /RESET, which the card can't see, so this is
+  where the card follows it (`mb_clear`, and the table rewritten if any
+  chunk was owned). Without it, a reset under ROM 2.3, which never writes
+  the owner table, would leave the card yielding chunks nobody serves.
 - **The 2068's power.** /MEMWR, /IORD and /IOWR all low (`OFF_MASK`) for
   `POWER_OFF_CYC`: it is off, so `power_held` is set and RESET_HOLD driven
   high (`gpio_set`, SIO). Once they have been back for `POWER_ON_CYC`, the
-  shadow is cleared (the SCLD powers up with both registers 0) and the table
-  rewritten. `power_held` is cleared and `power_resets` counted, and
+  shadow is cleared (the SCLD powers up with both registers 0), and the
+  Megabank's owner table (`mb_clear`), and the table rewritten. `power_held` is cleared and `power_resets` counted, and
   RESET_HOLD is released unless core 0 holds (`held_2068`). Without this, a
   2068 switched on under a card on USB came up frozen mid-read until TS
   Reset was pressed.
@@ -430,17 +439,20 @@ power-off and power-on readings, forever, polling:
   8251 updates, made INs late on the card (a floating bus read as ©, 127,
   and the character lost). `usart8251.h` says what keeps it safe unmasked.
 - **Speech**, while `speech_on`: `speech_pass`.
-- **I/O writes** (io_snoop): F4h and FFh update the shadow, and the table if
-  it changed (for FFh, only bit 7 matters); while `bus_idle` they are
-  power-down noise and are dropped (`glitch_writes`). OUTs to 0Eh/0Fh make
+- **I/O writes** (io_snoop): F4h and FFh update the shadow, and every write
+  goes to `mb_out` for the Megabank's FDh/FCh; the table is rewritten if
+  either changed what the card serves (for FFh, only bit 7 matters; for
+  the Megabank, which chunks banks 1-253 own). While `bus_idle` writes to
+  F4h, FFh, FCh and FDh are power-down noise and are dropped
+  (`glitch_writes`). OUTs to 0Eh/0Fh make
   the status 00h (busy, as v2.1's PIO did) and go to `rxq`. While
   `modem_on`, OUTs to 77h go to `u8251_control` and to 73h to
   `u8251_data_out`. While `spk_ports_on` and `speech_on`, an OUT to 11h
   (17) puts its low 6 bits in `spk_pq`, if there is room, and counts
   `spk_port_outs`: an allophone for the chip, as on David's board.
 - **Memory writes** (mem_write): stored in the DOCK image when the shadow
-  maps the chunk to the DOCK, DOCK serving is on, and `dock_rw` is set (a
-  RAM dock).
+  maps the chunk to the DOCK, no Megabank bank owns it (the write is the
+  board's), DOCK serving is on, and `dock_rw` is set (a RAM dock).
 - **Counting** one `addr_log` entry per pass into `served[]`.
 - **The diag build** also keeps each pass's length (`max_gap`) and times one
   read of PIO0 and one of SRAM a pass (and of IO_BANK0 with
@@ -451,7 +463,8 @@ power-off and power-on readings, forever, polling:
 Core 0's hold (`held_2068`). Drives RESET_HOLD high to hold the 2068 in
 reset; on release it stays high while core 1's power check holds
 (`power_held`). On release the shadow is reset to what the SCLD powers up
-with (both registers 0) and the table rewritten.
+with (both registers 0), the Megabank's owner table is cleared (`mb_clear`:
+the board clears it on every reset) and the table rewritten.
 
 Beware: the SCLD keeps its bank registers through a Z80 reset. A boot that
 crashes can leave them set (FFh = FFh after one crash), and the next served
@@ -782,7 +795,8 @@ came up with its WiFi settings and phonebook kept: `(691977, 1682)`.
 
 A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `mem_writes`, `dock_writes`, `table_updates`, `ins`, `ins_ours`,
-`outs_ours`, `late`, `respond_ns`, `rx_lost`, `hsr`, `ff`, `held`,
+`outs_ours`, `late`, `respond_ns`, `rx_lost`, `hsr`, `ff`, `mb_owned`
+(`mb.owned`: the chunks a Megabank bank owns, bit 0 chunk 0), `held`,
 `status` (what IN 0Fh returns), `tx` and `rx` (the queue levels),
 `idle` (`bus_idle`), `idle_resets`, `glitch_writes`, `power_held` and
 `power_resets`. The modem: `m_on`, `m_ins` (INs from 73h/77h), `m_status`
@@ -1205,16 +1219,68 @@ Every pass:
    while on-hook: MTERM counts DSR changes then as rings, and answers
    after four.
 
+## `megabank.h`, `megabank.c`
+
+The card's shadow of the [TS-2068
+Megabank](https://github.com/timex-sinclair-projects/TS-2068-Megabank)'s
+owner table (its spec, "Sharing the bus"). The Megabank is a RAM card that
+answers the memory cycles of any 8K chunk one of its expansion banks owns,
+pulling /BE. /BE switches off the 2068's own memory but not this card, so
+without this a DOCK chunk would have two drivers, and a HOME or EXROM chunk
+would be served by both cards. The card follows the board's register writes
+the way it follows F4h and FFh. Plain C, so the same file runs on core 1
+and in `src/test/megabank_hosttest.py` (through ctypes). It includes
+`pico.h` when `U8251_ON_PICO` is set (`micropython.cmake`) before its own
+header, so `MB_FN` puts both functions in RAM; on the host `MB_FN(f)` is
+just `f`.
+
+### `MB_FN`, `MB_PORT_DATA`, `MB_PORT_SELECT`
+
+`MB_FN(f)` is `__not_in_flash_func(f)` when `pico.h` has defined it, else
+`f`. `MB_PORT_SELECT` is FDh (OUT selects a register) and `MB_PORT_DATA`
+FCh (reads or writes it); the board decodes both from A7-A0, and so does
+`mb_out` (it is given the port's low byte).
+
+### `mb_shadow_t`
+
+`select`, the register the last OUT (FDh) selected; `own[8]`, OWN0-OWN7 as
+last written (registers 00h-07h, the owner of chunk 0-7); `owned`, bit *c*
+set when chunk *c*'s owner is an expansion bank 1-253. `owned` is all
+`tsbus.c` uses (`chunk_target`, the DOCK writes, `tsbus.stats()`'s
+`mb_owned`).
+
+### `mb_clear(s)`
+
+In RAM. No owners, nothing owned, register 0 selected: what the board does
+on /RESET (its RAM is kept, which the card doesn't model). Called at
+power-up, when the bus goes idle (a reset) and when core 0 releases its hold
+(`core1_main`, `hold_2068`).
+
+### `mb_out(s, port, data)`
+
+In RAM. An OUT the card saw, by the port's low byte. FDh stores `data` as
+the selected register and returns 0. FCh with register 00h-07h selected
+stores the owner and sets or clears the chunk's bit in `owned`: set for
+1-253, clear for 0, FEh and FFh (none). Returns 1 only when `owned`
+changed, so the chunk table is rewritten only then (a new owner for an
+owned chunk, which the board would serve from another page, changes nothing
+for the card). Every other port and register (`SUB0`-`SUB7`, `WPROT`, the
+read-only ones) is ignored: the board has no auto-increment, so the
+selected register stays until the next OUT (FDh), and a device watching the
+writes needs nothing else. It yields any chunk a bank 1-253 owns, on this
+board or another, or on none: the Megabank spec's rule, under which a chunk
+owned by an absent bank is served by nobody.
+
 ## `micropython.cmake`
 
 The user module: an INTERFACE library `usermod_tsbus` with `tsbus.c`,
-`usart8251.c`, `modem2050.c` and `sp0256.c`, the pioasm header
+`usart8251.c`, `modem2050.c`, `sp0256.c` and `megabank.c`, the pioasm header
 (`pico_generate_pio_header`), and `hardware_dma`, `hardware_pio`,
 `hardware_uart`, `hardware_vreg`, `pico_multicore` (not `hardware_pwm`
 since speech moved to PIO2), and
 the link options `-Wl,--wrap=flash_range_erase` and
 `-Wl,--wrap=flash_range_program` (the flash-write wrappers in `tsbus.c`).
-`U8251_ON_PICO=1` makes the three plain-C files put core 1's functions in
+`U8251_ON_PICO=1` makes the four plain-C files put core 1's functions in
 RAM (and `sp0256.c` its tables, `SP0256_DATA`). The board sets `USER_C_MODULES` to this file.
 
 `tsbus.c` includes `tsbus.pio.h` only when `NO_QSTR` is not defined:

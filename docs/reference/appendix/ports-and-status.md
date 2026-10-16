@@ -22,6 +22,10 @@ are not the TS-Pico's protocol, and the ROM never touches them. So are 11h
 true: an allophone for the speech chip, and its busy bit (bit 7: FFh busy,
 7Fh ready), as David's Pico Speech Synth 2068 board
 ([../firmware/tsbus.md](../firmware/tsbus.md#speech)).
+The v3 card also watches, without answering, OUTs to FDh and FCh: the
+TS-2068 Megabank's register select and data. A chunk one of its banks owns
+is the board's, and the card stops serving it
+([../firmware/tsbus.md](../firmware/tsbus.md#megabankh-megabankc)).
 
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which
