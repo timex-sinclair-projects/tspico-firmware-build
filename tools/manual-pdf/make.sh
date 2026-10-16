@@ -27,7 +27,8 @@
 # path if it isn't found), and Python 3 with pypdf. The version on the cover
 # and in the page headers comes from src/config.ini; the date is the month of
 # the last commit. The heading and cover fonts (Arvo, Inter, Poppins; SIL OFL)
-# are in fonts/; CI (build.yml, release.yml) installs the Linux fonts the
+# and the code font (Timex TS2068; CC BY 3.0, credited in the colophon) are in
+# fonts/; CI (build.yml, release.yml) installs the Linux fonts the
 # stylesheets fall back to for the rest: Charis SIL, Nimbus Sans, DejaVu Sans
 # Mono.
 set -e

@@ -2619,14 +2619,14 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the card's own
 the SD card). It's a single line of text:
 
 <!-- v2 -->
-```json
+```text
 {"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": ""}
 ```
 
 The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 <!-- /v2 -->
 <!-- v3 -->
-```json
+```text
 {"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": ""}
 ```
 <!-- /v3 -->

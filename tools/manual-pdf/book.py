@@ -124,6 +124,7 @@ def build(blanks, pages):
   <p><b>%s</b>, version %s (ROM %s, firmware %s), %s.</p>
   <p>© 2021–2026 the TS-Pico team. This manual is licensed under the Creative Commons
   Attribution 4.0 International licence (CC BY 4.0).</p>
+  <p>Code is set in Timex TS2068 by jonnybgood (FontStruct), licensed CC BY 3.0.</p>
   <p>Timex, Sinclair and Timex Sinclair are trademarks of their respective owners. The TS-Pico
   is a community project, not a product of Timex Computer Corporation or Sinclair Research.</p>
   <p>Website: timex-sinclair-projects.github.io/tspico-firmware-build<br>

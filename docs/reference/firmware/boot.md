@@ -361,7 +361,8 @@ A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
 the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
 DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
-Poppins) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
+Poppins) and the code-block font (Timex TS2068, CC BY 3.0, credited in the
+colophon) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
 one board's manual from `docs/manual/user-manual.md`
 (`tools/manual-variants.py`: passages for one board sit between
 `<!-- v2 -->` or `<!-- v3 -->` marker lines; `BOARD=v2` is the default and

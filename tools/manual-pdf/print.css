@@ -14,6 +14,7 @@
 @font-face { font-family: "Inter"; font-weight: 700; font-style: normal; src: url("{{FONTS}}/Inter-Bold.ttf"); }
 @font-face { font-family: "Inter Display"; font-weight: 800; font-style: italic;
   src: url("{{FONTS}}/InterDisplay-ExtraBoldItalic.ttf"); }
+@font-face { font-family: "Timex TS2068"; src: url("{{FONTS}}/TimexTS2068.otf"); }  /* jonnybgood, CC BY 3.0 */
 @font-face { font-family: "Poppins"; font-weight: 300; src: url("{{FONTS}}/Poppins-Light.ttf"); }
 @font-face { font-family: "Poppins"; font-weight: 700; src: url("{{FONTS}}/Poppins-Bold.ttf"); }
 
@@ -72,7 +73,13 @@ code, pre { font-family: var(--mono); font-size: 7.9pt; }
 code { background: #eeeeec; border-radius: 2px; padding: 0 .15em; }
 pre { background: #f3f3f1; padding: 5pt 7pt;
       white-space: pre-wrap; word-break: break-word; break-inside: avoid; line-height: 1.32; margin: .6em 0 .8em; }
-pre code { background: none; padding: 0; }
+pre code { background: none; padding: 0; font-family: inherit; font-size: inherit; }
+/* What the 2068 shows and what you type on it, in the 2068's own characters.
+   They are wide (1.14 em), so a line holds about 42 and longer ones wrap,
+   as they do on the 2068's 32-column screen. Files you edit on a computer
+   (```text) keep the ordinary monospace. */
+pre { font-family: "Timex TS2068", var(--mono); font-size: 6.3pt; line-height: 1.55; }
+pre.text { font-family: var(--mono); font-size: 7.9pt; line-height: 1.32; }
 blockquote { margin: .8em 0; padding: .45em .7em .1em; border-top: 1.5pt solid var(--rule);
   border-bottom: .5pt solid var(--rule); background: #f6f6f4; break-inside: avoid; }
 blockquote strong:first-child { font-family: var(--slab); }
