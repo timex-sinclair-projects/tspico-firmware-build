@@ -182,7 +182,9 @@ ports: they test VIDMOD (5CC2h) and jump to the bank-switch code **in RAM**
 second display file; [DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md)). The port work is in
 `BANK_ENABLE`, genuine code at EXROM 1299h that the 2068 copies to RAM at
 6499h at boot; the TS-Pico widened its HSR masks from chunk 0 to chunks 0+1
-(three hunks). The routines in RAM keep a **bank stack** whose pointer is
+(three hunks). One more byte of the copied code differs from the genuine
+ROM: CALL_BANK's read of its parameter count, a bug fix
+([exrom-driver.md](exrom-driver.md#call_bank-13d0h)). The routines in RAM keep a **bank stack** whose pointer is
 the word at 65CEh; the returning thunks push a frame there and pop it on
 the way back. System variables: [sysvars.md](sysvars.md).
 

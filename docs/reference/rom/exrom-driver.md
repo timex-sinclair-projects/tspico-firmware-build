@@ -1,8 +1,9 @@
 # EXROM 1800h–1BFFh: the Pico driver
 
 Source: [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm),
-EXROM 1800h–1C8Fh and the chunk-0 routines the driver stands on (0000h–
-0060h, 00F8h, 03DDh, 0655h–06B0h, 0F99h); names from
+EXROM 1800h–1CADh and the chunk-0 routines the driver stands on (0000h–
+0060h, 00F8h, 03DDh, 0655h–06B0h, 0F99h, and CALL_BANK at 13D0h–1440h,
+which runs from RAM); names from
 [`docs/rom-analysis/tspico-exrom-symbols.sym`](../../rom-analysis/tspico-exrom-symbols.sym).
 ROM 2.2. Every routine was read in the listing; how the 1.1 EXROM differs
 from the genuine one, byte by byte, is in [DIFF_EXROM_vs_STOCK.md](../../rom-analysis/DIFF_EXROM_vs_STOCK.md).
@@ -43,6 +44,7 @@ mean the later layer changed it.
 | 069Fh | `CHECK_BREAK` | 1.1 |
 | 06AAh | `BREAK_ABORT` | 1.1; SYNC layer |
 | 0F99h | `BANK_SWITCH` (CALL_B) | genuine |
+| 13D0h | `CALL_BANK`, run from its RAM copy at 65D0h | genuine; 1.1 (one byte, 1410h) |
 | 1800h–183Bh | the tail of the printer path (COPY-LINE's loop, the UDG sender, 1828h) | 1.1; [exrom-chunk1.md](exrom-chunk1.md) |
 | 183Ch–183Fh | `FFh` | |
 | 1840h | `BIOS_TABLE` | 1.1; SYNC layer, disk module |
@@ -62,7 +64,8 @@ mean the later layer changed it.
 | 1BF3h | `STATUS_TO_REPORT` and the report targets (1C16h–1C3Fh) | 1.1 |
 | 1C23h | `STATUS_OK` | 1.1 |
 | 1C40h | `SEND_KEY` | 1.1 |
-| 1C49h–1C8Fh | the boot message | 1.1; SYNC layer, disk module |
+| 1C49h–1C85h | the boot message | 1.1; SYNC layer, disk module |
+| 1C86h–1CADh | `BOOT_DOCK_CHECK`: the D key skips the DOCK cartridge | 1.1 |
 
 The listing also shows names at some of these addresses from the SYNC
 layer's and the disk module's sources (`C_END_VEC`, `BIOS_WF_NPH`, `F_HOOK_VEC`, `SYNC_WRITE`,
@@ -115,6 +118,43 @@ JP FD90h` (64-column video) or `POP AF / JP 65D0h` — the RAM copy of the
 2068's CALL_BANK. Touches no ports itself. 0F8Ah is the no-return
 GOTO_B (to FD32h/6572h). HOME keeps a byte-for-byte copy at 040Dh
 ([home.md](home.md#03fch-into-the-exrom-and-back-v11)).
+
+### `CALL_BANK` (13D0h)
+
+The 2068's call into another bank, genuine code apart from one byte. HOME's
+boot copies EXROM 1000h–162Fh to RAM 6200h ([home.md](home.md#0e0ch-a-16k-exrom)),
+so this runs at 65D0h, where `BANK_SWITCH` jumps. The caller pushes the target address, the bank word, a
+parameter count and a second word, then calls it, as `CALL_HOME` does with
+`0, 0`. Step by step (RAM addresses, EXROM address − 6200h + 1000h):
+
+1. 65D0h–65EEh: the return address and the last word pushed go onto the
+   bank stack, whose pointer is the word at 65CEh.
+2. 65EFh–6609h: `PUSH DE / PUSH BC / PUSH AF`; SP is lowered by the byte at
+   6315h + 2; IX = the old SP, DE = the new one. From IX the frame is AF
+   (+0), BC (+2), DE (+4), HL (+6), the parameter count (+8), the bank word
+   (+0Ah), the target (+0Ch).
+3. 660Bh–6619h: `LD C,(IX+08h) / LD B,(IX+09h)`, add 0Eh, `LDIR`: the
+   14-byte frame and that many parameter bytes move down to the new SP.
+4. 661Dh on: `CALL 651Eh`, then the bank word goes to BANK_ENABLE (6499h,
+   the port writes), the registers are popped, and `CALL 658Ch`, which
+   reaches the target *(the code from 6639h on was not decoded for this
+   entry)*.
+
+**1410h (RAM 6610h): the TS-Pico's one change.** The genuine bytes are `DD
+46 08`, `LD B,(IX+08h)`: the count's low byte was read into both C and B.
+Every TS-Pico ROM from 1.1 on has `DD 46 09`, `LD B,(IX+09h)`, the high
+byte (compared with `ROMs/GENUINE-2068-exrom.bin`: the same in the 1.1,
+1.5w and 1.7 EXROMs in `ROMs/` and in `src/rom/TSPICO.ROM`,
+`TSPICO-SYNC.ROM` and `TSPICO-23.ROM`; `build-rom.py` does not touch it). With the genuine
+byte a count of 0 works, but a count of n from 1 to 255 makes the `LDIR`
+copy 257·n + 14 bytes instead of n + 14, moving memory above the frame
+down over itself *(inferred from the code)*. No caller in the TS-Pico ROM
+passes a non-zero count that we know of: `CALL_HOME` and HOME's thunks
+push 0 *(the 2068's other callers were not checked)*. Wes Brzozowski's
+"Mystery of the Missing 253" series on timexsinclair.com describes a
+CALL_BANK typo at 6610h; this is the byte. The copy for 64-column video at
+FD90h is moved from the same code, so presumably carries the fix too
+*(inferred, not checked)*.
 
 ### `READ_STATUS` (0655h)
 
@@ -567,14 +607,60 @@ TPMODE and BANK, [sysvars.md](sysvars.md)):
    of the table at 5B0Bh.
 3. The table (1C68h): `80h` (the dummy entry), `0Dh 0Dh`, `7Fh` (©), and
    " 2026 TS-Pico ROM v2.2   " with bit 7 set on the last space.
-4. `LD HL,5EEAh / JP 1C86h`: the rest of the genuine EXTINIT, displaced
-   from 08E7h when that became `JP 01BCh`.
+4. `LD HL,5EEAh / JP 1C86h`: the genuine EXTINIT's first instruction,
+   displaced from 08E7h when that became `JP 01BCh`, and
+   [`BOOT_DOCK_CHECK`](#boot_dock_check-1c86h), where the boot goes on.
 
 The text is copied to RAM because PO-MSG runs in HOME and reads the table
 with HOME paged: a table in the EXROM would be invisible to it. The SYNC
 layer rewrote the text (1C70h–1C85h, from the base image's "2025 Timex
 Pico Interface"); the disk module's patches set the version digits at
 1C7Eh to "v2.2".
+
+## `BOOT_DOCK_CHECK` (1C86h)
+
+Lets the user boot to BASIC without running the cartridge mounted in the
+DOCK: hold **D** at power-on and the cartridge is ignored. This is new
+code (the genuine EXROM has zeros here), in every TS-Pico ROM from 1.1 on;
+the name is ours.
+
+```text
+1C86h   LD (5CBCh),HL         ; HL = 5EEAh: SYSCON (the genuine 08EAh)
+        XOR A
+        LD (5CBEh),A / LD (6315h),A
+        LD A,FDh / IN A,(FEh) ; keyboard row A S D F G
+        BIT 2,A               ; D
+        JP NZ,08EAh           ; not held: the genuine EXTINIT
+        XOR A                 ; held:
+        LD (HL),A             ; SYSCON+0
+        INC HL / LD (HL),A    ; SYSCON+1
+        LD DE,7 / ADD HL,DE
+        LD (HL),A             ; SYSCON+8
+        LD (5CC6h),A
+1CA8h   CALL 0A3Eh
+        JP 0918h
+```
+
+- **D not held**: 08EAh is the genuine EXTINIT from its second instruction:
+  store SYSCON again, `CALL 09F4h`, which reads the DOCK's LROS header
+  into SYSCON+8 and its AROS header into SYSCON+0 with XFER_BYTES (RAM
+  6722h), zeroing the type byte (+8, +1) when it is not 01h or 02h, then
+  falls into the bank search at 0A3Eh; back at 08F0h an LROS (SYSCON+8 =
+  1) is started through GOTO_BANK, otherwise an AROS is checked for and
+  the boot goes on to BASIC.
+- **D held**: the header read is skipped. The two type bytes and SYSCON+0
+  are cleared instead, so no LROS or AROS is seen *(inferred from the
+  tests at 08F8h and 0914h)*, and 5CC6h is cleared. `CALL 0A3Eh` runs
+  the part of 09F4h after the header reads, the bank search; then `JP
+  0918h` joins the genuine boot where it goes when there is no AROS:
+  `CALL 096Ch` (the BASIC pointers) and `JP 099Ah`, which goes back to
+  HOME at 0E2Fh through GOTO_BANK *(099Ah–09F3h not decoded in full)*.
+
+5CBEh and 6315h are cleared on both paths; 221Fh had already cleared them
+([exrom-chunk1.md](exrom-chunk1.md#smaller-pieces-of-chunk-1)), and
+09F4h clears them again on the D-not-held path. On the TS-Pico the
+"cartridge" is whatever dock slot images the Pico serves into the DOCK
+([../flows/boot.md](../flows/boot.md)).
 
 ## Where comments, documents and the code disagree
 

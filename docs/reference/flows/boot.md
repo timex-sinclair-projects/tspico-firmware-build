@@ -60,7 +60,7 @@ transaction after it ends by staging the next.
 | 5 | HOME 0E05h | EXTINIT, EXROM 08E7h, called through the RAM bank code | |
 | 6 | EXROM 08E7h → 01BCh | the TS-Pico's EXTINIT: `CALL 221Fh` — **TPMODE = 2** (LOAD and SAVE to the Pico, printer to the 2068), 5CBEh and 6315h cleared — then BANK (5DCFh) = FFh ([../rom/sysvars.md](../rom/sysvars.md#5ddbh-tpmode-peek-24027)) | |
 | 7 | EXROM 1C49h | the banner: 41 bytes copied to the printer buffer at 5B00h and printed through HOME's PO-MSG: "© 2026 TS-Pico ROM v2.2" ([../rom/exrom-driver.md](../rom/exrom-driver.md#the-boot-message-1c49h)) | |
-| 8 | EXROM 1C86h | the rest of the genuine EXTINIT; back to HOME | |
+| 8 | EXROM 1C86h | `BOOT_DOCK_CHECK`: with **D** held the DOCK's LROS/AROS headers are not read, so a mounted cartridge is not run; otherwise the genuine EXTINIT (08EAh) reads them and starts an LROS if there is one; then back to HOME ([../rom/exrom-driver.md](../rom/exrom-driver.md#boot_dock_check-1c86h)) | a cartridge image in the dock slots that crashes runs at every boot: hold D |
 | 9 | HOME | the copyright message, the BASIC prompt | |
 
 Nothing in the 2068's boot talks to the Pico through ports 0Eh/0Fh: the

@@ -156,7 +156,10 @@ chunk, `1` = chunk from the external bank. **`IN`/`OUT (0FFh)` bit 7**: `0` = DO
 > `0x0F99` (`CALL_B`) and `0x0F8A` (`GOTO_B`) are **byte-identical to genuine** and
 > touch **no ports** — they are 15-byte `VIDMOD` dispatchers that jump to the
 > RAM-resident `CALL_BANK`/`GOTO_BANK`. The RAM copies (`EXROM 0x13D0`/`0x1372`) are
-> also byte-identical to genuine. See
+> byte-identical to genuine but for one byte: `0x1410` (RAM `0x6610`), `DD 46 08`
+> `LD B,(IX+08h)` → `DD 46 09` `LD B,(IX+09h)`, so CALL_BANK reads its parameter
+> count's high byte instead of the low byte twice (a bug fix, present from 1.1;
+> [docs/reference/rom/exrom-driver.md](../reference/rom/exrom-driver.md#call_bank-13d0h)). See
 > [DIFF_HOME_vs_STOCK.md](DIFF_HOME_vs_STOCK.md#call_exrom--the-homeexrom-thunk-at-0x3ce3).
 
 ## Other chunk-0 functional changes
@@ -173,7 +176,8 @@ chunk, `1` = chunk from the external bank. **`IN`/`OUT (0FFh)` bit 7**: `0` = DO
 | `0x02B7-02E8` | `READ_STATUS_BYTE` at `0x02B9`. |
 | `0x0655-065D` | `READ_STATUS` — `IN A,(0Fh)` behind the BREAK guard. **The only status read in the ROM.** |
 | `0x069F-06AB` | `CHECK_BREAK` + `BREAK_ABORT`. |
-| `0x08E7` | `EXTINIT`, the EXROM boot entry (HOME `0x0E05` loads it). `21 ea 5e` (`LD HL,5EEA`) → `c3 bc 01` (`JP 01BC`), which does `CALL 221F` then `JP 03F6`. |
+| `0x08E7` | `EXTINIT`, the EXROM boot entry (HOME `0x0E05` loads it). `21 ea 5e` (`LD HL,5EEA`) → `c3 bc 01` (`JP 01BC`), which does `CALL 221F` then `JP 03F6`, and on through the banner (`0x1C49`) to `0x1C86`. |
+| `0x1C86-1CAD` | New code in the genuine zeros: the rest of EXTINIT with a **D**-key test. D not held: `JP 08EA`, the genuine path (the DOCK's LROS/AROS headers read, an LROS run). D held: the header read skipped, `CALL 0A3E` / `JP 0918`, so a mounted cartridge is not run. |
 | `0x0A52-0A59` | Register reallocation: `CB F9` `SET 7,C` → `CB F8` `SET 7,B`, `71` `LD (HL),C` → `70` `LD (HL),B`. Frees `C` — consistent with the dead `LD C,0Eh` remnant at `0x227F`. |
 | `0x0AD4-0AD6` | `2b 36 80` → `cd 82 20` — call into chunk 1. |
 
