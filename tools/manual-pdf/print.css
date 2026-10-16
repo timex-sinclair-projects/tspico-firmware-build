@@ -51,7 +51,7 @@ h2 .secnum, h3 .secnum { color: var(--grey); font-weight: 700; margin-right: .3e
   line-height: 1.02; letter-spacing: -.02em; }
 .opener h1 code { font-size: .85em; background: none; padding: 0; }
 .opener .num { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 44pt; letter-spacing: -.02em;
-  line-height: .8; }
+  line-height: .8; padding-right: .1em; }   /* the italic's slant overhangs its box; Chrome clips it at the margin */
 .opener .kind { font-family: var(--slab); font-style: italic; font-weight: 700; font-size: 9pt;
   color: var(--red); letter-spacing: .02em; margin: 0 0 .06in; }
 .preview { display: flex; gap: .16in; margin: .16in 0 0; }

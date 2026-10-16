@@ -962,23 +962,46 @@ card in your computer and open `shopping.txt`: three lines of plain text.
 
 Each `INPUT #4` reads one line. What if you don't know how many lines there are? Try changing
 line 20 to `FOR i=1 TO 10`. After the third line, the program stops with
-**8 End of file**: you've read past the end. Type `CLOSE #4` to tidy up.
+**8 End of file**: you've read past the end. The file is still open, so type `CLOSE #4` to
+tidy up.
 
-A simple way to know when to stop is to write a marker line yourself:
+Reaching the end of a file isn't really a mistake, and it doesn't have to stop the program.
+The 2068's **ON ERR GO TO** catches the report instead, and the program carries on at the line
+you name. This version reads a file of any length:
 
 ```basic
-10 OPEN #4,"f:shopping.txt","a"
-20 PRINT #4;"*END*"
-30 CLOSE #4
-40 OPEN #4,"f:shopping.txt"
-50 INPUT #4;a$
-60 IF a$="*END*" THEN GO TO 90
-70 PRINT a$
-80 GO TO 50
-90 CLOSE #4
+10 ON ERR GO TO 100
+20 LET n=0
+30 OPEN #4,"f:shopping.txt"
+40 INPUT #4;a$
+50 LET n=n+1: PRINT n;". ";a$
+60 GO TO 40
+100 LET e=PEEK 23739
+110 ON ERR RESET
+120 CLOSE #4
+130 IF e=8 THEN PRINT n;" lines"
+140 IF e<>8 THEN PRINT "Can't read the file: report ";CHR$ (e+48+7*(e>9))
 ```
 
-Line 10 uses mode `"a"`, so the marker goes on the end of the file instead of replacing it.
+```
+1. Eggs
+2. Milk
+3. Bread, 2 loaves
+3 lines
+```
+
+Lines 40 to 60 loop until the `INPUT #4` after the last line gives **8 End of file**. Instead of
+stopping, the program goes to line 100:
+
+- **Line 100** finds out which report it was. `PEEK 23739` gives its number: 8 for End of file,
+  and 10 to 27 for the letter reports A to R. Read it first, before anything else can change it.
+- **Line 110** turns the trap off with `ON ERR RESET`, so a mistake later in the program stops it
+  with a report as usual.
+- **Line 120** closes the file. A `CLOSE #4` on a stream that didn't open does no harm.
+- **Lines 130 and 140** tell the end of the file from a real problem. Delete `shopping.txt`
+  from the card and run the program again: you get `Can't read the file: report F`, and the
+  program still finishes cleanly. Line 140 turns the number back into the report's digit or
+  letter.
 
 Numbers work too: `INPUT #4;n` reads a line and turns it into a number, as if you'd typed it.
 
@@ -1166,34 +1189,6 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 These patterns come up in most programs that keep data. Each one was run on a 2068 with the
 TS-Pico firmware.
 
-**Reading a file of any length.** You don't need to know how many lines a file holds. Let the
-2068's **ON ERR** catch the **8 End of file** at the end:
-
-```basic
-10 OPEN #4,"f:shopping.txt","w"
-20 PRINT #4;"Eggs": PRINT #4;"Milk": PRINT #4;"Bread"
-30 CLOSE #4
-40 ON ERR GO TO 100
-50 OPEN #4,"f:shopping.txt"
-60 LET n=0
-70 INPUT #4;a$
-80 LET n=n+1: PRINT n;". ";a$
-90 GO TO 70
-100 ON ERR RESET
-110 CLOSE #4
-120 PRINT n;" lines"
-```
-
-```
-1. Eggs
-2. Milk
-3. Bread
-3 lines
-```
-
-`ON ERR GO TO 100` sends any report to line 100, so a file that isn't there lands there too,
-with `n` still 0. `ON ERR RESET` turns the trap off again.
-
 **Several fields to an entry.** Write each field on its own line, with `'` between them, and
 read them back with one `INPUT #`:
 
@@ -1236,10 +1231,14 @@ This prints `Total: 22.5`.
 20 OPEN #4,"f:shopping.txt": OPEN #5,"f:copy.txt","w"
 30 INPUT #4;a$: PRINT #5;a$
 40 GO TO 30
-60 ON ERR RESET
+60 LET e=PEEK 23739: ON ERR RESET
 70 CLOSE #4: CLOSE #5
-80 PRINT "Copied."
+80 IF e=8 THEN PRINT "Copied."
+90 IF e<>8 THEN PRINT "Copy failed: report ";CHR$ (e+48+7*(e>9))
 ```
+
+The loop ends the way the one in 6.3 does: **8 End of file** after the last line means the copy
+is complete, and any other report means it isn't.
 
 **A file for a spreadsheet.** A text file with commas between the values (a CSV file) opens in
 any spreadsheet on your computer:
@@ -1264,7 +1263,8 @@ the file as spaces.
 3. Always CLOSE a file you've written to.
 4. A record length (`OPEN #4,"f:x","u",20`) makes TAB jump to a record; `TAB 0` counts them.
 5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT.
-6. `ON ERR GO TO` catches the **8 End of file** at the end of a file of any length.
+6. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
+   `PEEK 23739` says which report it caught.
 
 ---
 
@@ -2619,14 +2619,14 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the card's own
 the SD card). It's a single line of text:
 
 <!-- v2 -->
-```
+```json
 {"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": ""}
 ```
 
 The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 <!-- /v2 -->
 <!-- v3 -->
-```
+```json
 {"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": ""}
 ```
 <!-- /v3 -->
@@ -2914,7 +2914,7 @@ wrong. Two ways round it:
 To fix a word for good, put it in a file called `speech.txt` in the card's own memory (with
 Thonny), one word a line, with its sounds in the rules' codes (G.5):
 
-```
+```text
 # my words
 SPECTRUM = spEHktrAXm
 ZEBRA = zIYbrAX
