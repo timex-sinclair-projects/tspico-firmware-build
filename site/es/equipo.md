@@ -3,7 +3,7 @@ layout: page
 title: El equipo
 lang: es
 permalink: /es/equipo/
-description: Las personas detrás del TS Pico — Ricardo, Gustavo, Jeff, Tim y David.
+description: Las personas detrás del TS Pico — Ricardo, Gustavo, Jeff, Tim, Ryan, Joe y David.
 ---
 
 ## Ricardo Calcagno
@@ -59,6 +59,14 @@ Tim H, a diferencia de los demás miembros del equipo, es un recién llegado a l
 En los últimos años, Tim adquirió un TS 2068 y se volvió activo en la comunidad internacional de TS, ayudando a preservar y mejorar el hardware diseñado por entusiastas de TS en el pasado, incluida una placa de captura de video desarrollada por miembros del grupo de usuarios de TS a fines de la década de 1980.
 
 Tim se unió inicialmente al equipo y ofreció su soporte de diseño de software y hardware para el proyecto.
+
+## Ryan Gray
+
+[Ryan](https://graytrek.com/) se unió al equipo para trabajar en el firmware. Agregó el TS-Pico Commander, los archivos de ayuda y los programas de prueba, y contribuye al código fuente en MicroPython.
+
+## Joe Vandezande
+
+Joe diseñó los gabinetes impresos en 3D del TS-Pico, del PicoVideo y de la placa de expansión del bus. También ayuda con las pruebas y la resolución de problemas.
 
 ## David Anderson
 

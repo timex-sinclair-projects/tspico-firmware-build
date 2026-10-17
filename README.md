@@ -298,7 +298,7 @@ Markdown files. You may share and adapt them, with credit to the TS-Pico team.
   `web-updater/flash_nuke.uf2` (Raspberry Pi, BSD-3-Clause).
 
 **The TS-Pico team:** Ricardo Calcagno, Gustavo Pane, Jeff Burrell, Ryan Gray,
-Tim H and David Anderson. The board design is in
+Tim H, Joe Vandezande and David Anderson. The board design is in
 [jburrell7/TSPICO](https://github.com/jburrell7/TSPICO).
 
 Thanks to Paul Anderson, David Green and Adam Trionfo for beta testing.

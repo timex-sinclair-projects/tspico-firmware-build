@@ -2708,7 +2708,10 @@ decided to learn MicroPython on the new Raspberry Pi Pico. His friend **Gustavo 
 developed the "tpi" system back in 1985, and adapted it for the TS-Pico. Ricardo
 contacted **David Anderson**, who hosted international Zoom meetings for Timex Sinclair fans
 and introduced Ricardo to **Tim H** of New Zealand and **Jeff Burrell** of the United States,
-who designed the hardware. **Ryan Gray** joined the team to work on the firmware and additional features.
+who designed the hardware. **Ryan Gray** joined the team to work on the firmware: he added the
+TS-Pico Commander, the help files and the test programs, and contributes to the MicroPython source.
+**Joe Vandezande** designed the 3D-printed enclosures for the TS-Pico, the PicoVideo and the
+expansion bus board, and helps with testing and troubleshooting.
 
 Thanks to **Paul Anderson**, **David Green** and **Adam Trionfo** for beta testing.
 

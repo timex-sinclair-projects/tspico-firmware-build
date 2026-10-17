@@ -2,7 +2,7 @@
 layout: page
 title: The Team
 lang: en
-description: The people behind the TS Pico — Ricardo, Gustavo, Jeff, Tim and David.
+description: The people behind the TS Pico — Ricardo, Gustavo, Jeff, Tim, Ryan, Joe and David.
 ---
 
 ## Ricardo Calcagno
@@ -61,7 +61,11 @@ Tim joined the team early, offering his software and hardware design support to 
 
 ## Ryan Gray
 
-[Ryan](https://graytrek.com/) joined the team to develop tools like the Commander and help with firmware on the Pico.
+[Ryan](https://graytrek.com/) joined the team to work on the firmware. He added the TS-Pico Commander, the help files and the test programs, and contributes to the MicroPython source.
+
+## Joe Vandezande
+
+Joe designed the 3D-printed enclosures for the TS-Pico, the PicoVideo and the expansion bus board, and helps with testing and troubleshooting.
 
 ## David Anderson
 
