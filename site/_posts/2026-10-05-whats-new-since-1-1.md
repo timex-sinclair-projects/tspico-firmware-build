@@ -28,8 +28,8 @@ come from that.
   LOAD or SAVE. The two-port link cures it, and LOAD now streams each block straight from
   the Pico's memory.
 - **LOAD gives up when there's nothing to find.** `LOAD "name"` searches the mounted tape
-  from the tape pointer and wraps round once. If nothing matches, you get **8 End of file**
-  instead of an endless wait.
+  from the tape pointer and wraps round once. If nothing matches, you get **R Tape loading
+  error** instead of an endless wait.
 - **A damaged TAP file gives Report R Tape loading error**, the same report a bad cassette
   gives.
 - **SAVE checks the name first.** A plain SAVE name can use letters, digits, `-` and `_`.

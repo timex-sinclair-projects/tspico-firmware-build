@@ -159,8 +159,8 @@ of its familiar reports at the bottom of the screen:
 | **Q Parameter error** | The command understood you but can't do it (file in use, not empty, wrong mode…) |
 | **A Invalid argument** | A `CODE a,b` or an argument the command doesn't accept |
 | **C Nonsense in BASIC** | An unknown `tpi:` command, or extra words the command doesn't expect |
-| **R Tape loading error** | Data was damaged on the way, or a TAP file is damaged |
-| **8 End of file** | You read past the end of a file, or a LOAD found nothing matching |
+| **R Tape loading error** | Data was damaged on the way, a TAP file is damaged, or a LOAD found nothing matching |
+| **8 End of file** | You read past the end of a file |
 | **6 Number too big** | A number out of range, such as a file index |
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or answered N to a "Replace?" question |
 | **J Invalid I/O device** | The TS-Pico didn't answer. See Chapter 11 |
@@ -691,8 +691,9 @@ MERGE ""
 
 The TS-Pico starts at the tape pointer and skips blocks that don't match what you asked for.
 When it reaches the end, it goes back to the start, like rewinding. If it goes all the way
-round without finding a match, you get **8 End of file**, instead of the endless wait you'd
-get with a real tape.
+round without finding a match, you get **R Tape loading error**, instead of the endless wait
+you'd get with a real tape. On the way, the 2068 shows the name of each block it passes, as it
+does with a cassette.
 
 ## 4.2 SAVE
 
@@ -2266,12 +2267,12 @@ the next one.
 **Likely cause.** `LOAD "tpi:dir"` is version 1.1's command; it now tries to mount a file
 called `dir`.
 
-### 8 End of file on a LOAD
+### R Tape loading error after a LOAD shows other names
 
 **Fix.** Check the name with `CAT ""`.
 **Fallback.** Mount the TAP that holds the program.
 **Likely cause.** Nothing on the mounted tape matches what you asked for. LOAD has already gone
-all the way round the tape (4.1).
+all the way round the tape (4.1), showing the name of each block it passed.
 
 ### A mounted file can't be erased or renamed
 
@@ -2557,7 +2558,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **2 Variable not found** | A string variable in a keyword's argument doesn't exist |
 | **4 Out of memory** | No room to build a command, or for another open file |
 | **6 Number too big** | A file index out of range |
-| **8 End of file** | Read past the end; nothing matched on the tape; the folder already exists (`tpi:md`) |
+| **8 End of file** | Read past the end; the folder already exists (`tpi:md`) |
 | **A Invalid argument** | A `CODE a,b` or argument the command doesn't accept; an empty program SAVE |
 | **C Nonsense in BASIC** | An unknown `tpi:` word; a command not yet implemented; extra words after an argument; a `tpi:` name longer than 31 characters (1.2) |
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or declined "Replace?" |
@@ -2565,7 +2566,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **J Invalid I/O device** | The TS-Pico didn't answer, or an SD card that won't mount |
 | **O Invalid stream** | OPEN # of a stream that's already open to a file |
 | **Q Parameter error** | Can't be done right now: mounted, not empty, wrong mode, wrong type, too long, booted slot |
-| **R Tape loading error** | Data damaged in transit, or a damaged TAP or file |
+| **R Tape loading error** | Data damaged in transit; a damaged TAP or file; nothing on the tape matched a LOAD |
 | **T TS-Pico reset, try again** | The TS-Pico reset a transfer that went wrong. Try again. |
 
 ---

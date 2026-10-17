@@ -141,6 +141,10 @@ Anything ≥ 80h is a response function (next table). Everything else goes to
 | 11–127 | ≥ 10 | D BREAK - CONT repeats | 0Ch | `_11_D_Break` | 00F8h |
 | READY with bit 2 low | — | T TS-Pico reset, try again | 1Ch | — | `RD_STATUS` |
 
+A LOAD's refusal doesn't go through this table: the tape path at 196Dh turns any
+refused LOAD into R, so status 7 after a search that found nothing shows as R,
+not 8 ([../flows/load.md](../flows/load.md), #311).
+
 The ROM's BIOS `C_END` returns these on failure with carry set: A = status − 1
 for an error status, 09h for a timeout, 0Ch for
 BREAK, 1Ch for a Pico reset ([exrom-fdd.md](../rom/exrom-fdd.md) `C_END2`).

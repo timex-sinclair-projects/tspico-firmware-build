@@ -1472,8 +1472,8 @@ def LOAD_TS(pre, MQ, TSP):
         # never close the module-owned cached nofile handle.
         if arch is not _nofile_arch:
             arch.close()
-        LOAD_REFUSE(pre, MQ, 0x07)               # status 7: Report 8 where the ROM maps it;
-                                                 # a 2.1 header search shows R
+        LOAD_REFUSE(pre, MQ, 0x07)               # status 7; ROMs 2.1-2.3 show it as R
+                                                 # (EXROM 196Dh: any refused LOAD is R, #311)
         return MQ, TSP, log_entries
 
     # ---- Read the TAP block prefix [len_lo, len_hi, type] ----
