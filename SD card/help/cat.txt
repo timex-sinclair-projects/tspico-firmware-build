@@ -12,9 +12,11 @@ CAT "g.tap" the blocks in a
             .tap file
 CAT ""      the mounted .tap
 
-Files LOAD "tpi:n" can use come
-first, with their number n. All
-other files follow, unnumbered.
+Files LOAD "tpi:nn" can use come
+first, with their number (type
+two digits or more: "tpi:03").
+All other files follow,
+unnumbered.
 name can be any string
 expression, e.g.
 CAT d$+"/*.tap". A name that is
