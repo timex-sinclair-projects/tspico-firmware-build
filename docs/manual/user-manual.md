@@ -538,9 +538,12 @@ and big files take a second or two.
 You can also mount a file by the **index number** shown in the listing:
 
 ```basic
-LOAD "tpi:0"         : REM the file listed as 000
+LOAD "tpi:00"        : REM the file listed as 000
 LOAD "tpi:12"
 ```
+
+Use at least two digits. `LOAD "tpi:3"` is too short for the 2068 to take it as a TS-Pico
+command: it's an ordinary LOAD of a program called `tpi:3`. Type `LOAD "tpi:03"`.
 
 **Remember:**
 
@@ -1851,7 +1854,7 @@ See Chapter 6.
 
 ```basic
 LOAD "tpi:frogger.tap"    : REM mount by name (current folder only)
-LOAD "tpi:3"              : REM mount by index number
+LOAD "tpi:03"             : REM mount by index number (two digits or more)
 LOAD "tpi:myrom.rom"      : REM mount a ROM image; then LOAD "" runs the ROM loader
 LOAD "tpi:game.dck"       : REM mount a cartridge; then LOAD "" runs the cartridge loader
 LOAD "tpi:dirinfo.tap"    : REM mount the folder listing as a tape (see below)
@@ -2589,7 +2592,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Delete a file | `ERASE "a"` | `SAVE "tpi:erase a"` |
 | Delete matching files | `ERASE "*.bak"` | `SAVE "tpi:erase *.bak"` |
 | New empty TAP | `FORMAT "x.tap"` | `SAVE "tpi:format x.tap"` |
-| Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:3"` |
+| Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:03"` |
 | Pick a file to mount |  | `SAVE "tpi:idir"` |
 | Unmount |  | `SAVE "tpi:close"` |
 | Your own `LOAD ""` at switch-on |  | `SAVE "tpi:automount menu.tap"` |
