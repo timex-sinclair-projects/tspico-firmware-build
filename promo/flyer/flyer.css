@@ -1,0 +1,103 @@
+/* The TS-Pico 2.3 flyer: letter, front and back. The look is the user
+   manual's (tools/manual-pdf): the warm gray of the 1983 TS 2068 User Manual's
+   cover, the Timex Sinclair badge over red, green and blue bars, Poppins for
+   display type, Arvo for the slab heads, Charter for the text. Screens are
+   2068 screenshots cropped to the paper with a thin border (.scr). */
+@font-face { font-family: "Poppins"; font-weight: 300; src: url("{{FONTS}}/Poppins-Light.ttf"); }
+@font-face { font-family: "Poppins"; font-weight: 700; src: url("{{FONTS}}/Poppins-Bold.ttf"); }
+@font-face { font-family: "Arvo"; font-weight: 700; font-style: normal; src: url("{{FONTS}}/Arvo-Bold.ttf"); }
+@font-face { font-family: "Arvo"; font-weight: 700; font-style: italic; src: url("{{FONTS}}/Arvo-BoldItalic.ttf"); }
+@font-face { font-family: "Inter"; font-weight: 700; src: url("{{FONTS}}/Inter-Bold.ttf"); }
+@font-face { font-family: "Inter Display"; font-weight: 800; font-style: italic;
+  src: url("{{FONTS}}/InterDisplay-ExtraBoldItalic.ttf"); }
+
+@page { size: 8.5in 11in; margin: 0; }
+:root {
+  --gray: #b4b1ab; --paper: #f4f2ee; --ink: #151515; --soft: #4a4a4a;
+  --red: #e2322d; --green: #3aa93f; --blue: #2ba6de;
+  --display: "Poppins", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --slab: "Arvo", Rockwell, Georgia, serif;
+  --head: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --text: "Charter", "Charis SIL", "Bitstream Charter", Georgia, serif;
+  --mono: Menlo, "DejaVu Sans Mono", Consolas, monospace;
+}
+html, body { margin: 0; }
+body { font: 10pt/1.42 var(--text); color: var(--ink); }
+.page { position: relative; box-sizing: border-box; width: 8.5in; height: 11in; overflow: hidden;
+  break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page:last-child { break-after: auto; }
+code { font-family: var(--mono); font-size: .86em; }
+b { font-family: var(--head); font-size: .95em; }
+
+/* The bars, as on the manual's cover */
+.stripes { display: flex; gap: 8pt; }
+.stripes i { flex: 1; height: 5pt; }
+.stripes i:nth-child(1) { background: var(--red); }
+.stripes i:nth-child(2) { background: var(--green); }
+.stripes i:nth-child(3) { background: var(--blue); }
+
+/* A 2068 screen: the screenshot is 704 x 608 with the 512 x 384 paper at
+   (96, 112); show the paper and 16 px of border round it (544 x 416). */
+.scr { overflow: hidden; aspect-ratio: 544 / 416; border-radius: 3pt; background: #c0c0c0;
+  box-shadow: 0 1.5pt 4pt rgba(0,0,0,.28); }
+.scr img { display: block; width: calc(704 / 544 * 100%); margin: calc(-96 / 544 * 100%) 0 0 calc(-80 / 544 * 100%);
+  image-rendering: pixelated; }
+
+/* ---------- Front ---------- */
+.front { background: var(--gray); }
+.front .masthead { position: absolute; left: .6in; right: .6in; top: .5in; }
+.front .logo { width: 3.2in; display: block; }
+.front .stripes { margin-top: .16in; }
+.front .kicker { position: absolute; right: 0; top: .02in; font: 700 9pt/1.2 var(--display); letter-spacing: .14em;
+  text-transform: uppercase; color: #fff; background: var(--ink); padding: 5pt 9pt 4pt; }
+.front .hero { position: absolute; left: .6in; right: .6in; top: 1.42in; }
+.front h1 { margin: 0; font: 700 50pt/.95 var(--display); letter-spacing: -.025em; color: var(--ink); }
+.front h1 span { display: block; color: #fff; font-weight: 300; font-size: 38pt; line-height: 1.02; margin-top: .06in; }
+.front .lede { margin: .2in 0 0; width: 4.2in; font: 300 13.5pt/1.38 var(--display); color: var(--ink); }
+.front .lede b { font: 700 1em var(--display); }
+.front .shot { z-index: 1; position: absolute; right: .6in; top: 3.42in; width: 2.7in; }
+.front .shot .cap, .tile .cap { font: italic 700 7.5pt/1.3 var(--slab); color: var(--soft); margin-top: 5pt; }
+.front .drawing { position: absolute; left: -1.5in; top: 4.22in; width: 6.3in; }
+.front .drawing img { width: 100%; display: block; }
+
+.tiles { position: absolute; left: .6in; right: .6in; top: 6.86in; display: grid;
+  grid-template-columns: 1fr 1fr; gap: .16in .3in; }
+.tile { background: var(--paper); padding: .13in .18in .12in; border-top: 4pt solid var(--ink); }
+.tile h2 { margin: 0 0 4pt; font: italic 800 14pt/1.1 "Inter Display", var(--head); letter-spacing: -.01em; }
+.tile p { margin: 0; font-size: 9.4pt; line-height: 1.38; }
+.tile pre { margin: 5pt 0 0; font: 8.3pt/1.35 var(--mono); background: #e4e1db; padding: 4pt 6pt; }
+.front .foot { position: absolute; left: .6in; right: .6in; bottom: .38in; display: flex;
+  justify-content: space-between; font: 700 8.5pt var(--display); letter-spacing: .04em; color: var(--ink); }
+
+/* ---------- Back ---------- */
+.back { background: #fff; }
+.back .top { position: absolute; left: .6in; right: .6in; top: .5in; }
+.back .top .stripes { margin-bottom: .14in; }
+.back h2.big { margin: 0; font: italic 800 24pt/1.05 "Inter Display", var(--head); letter-spacing: -.02em; }
+.back .cols { position: absolute; left: .6in; right: .6in; top: 1.28in; display: grid;
+  grid-template-columns: 1fr 1fr; gap: 0 .32in; }
+.feature { margin: 0 0 .15in; }
+.feature h3 { margin: 0 0 2pt; font: 700 10.5pt/1.2 var(--head); }
+.feature p { margin: 0; font-size: 9.4pt; line-height: 1.38; }
+.back .tilerow { position: absolute; left: .6in; right: .6in; top: 3.82in; display: grid;
+  grid-template-columns: 1fr 1fr 1fr; gap: .22in; }
+.back .tilerow .cap { font: italic 700 7.5pt/1.3 var(--slab); color: var(--soft); margin-top: 5pt; }
+
+.fixed { position: absolute; left: .6in; right: .6in; top: 5.93in; background: var(--gray); padding: .16in .2in .1in; }
+.fixed h2 { margin: 0 0 6pt; font: 700 15pt/1 var(--display); letter-spacing: -.01em; }
+.fixed h2 span { font-weight: 300; }
+.fixed ul { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: .3in; }
+.fixed li { break-inside: avoid; margin: 0 0 5pt; padding-left: 13pt; position: relative; font-size: 9.2pt; line-height: 1.35; }
+.fixed li::before { content: ""; position: absolute; left: 0; top: .42em; width: 6pt; height: 6pt; background: var(--green); }
+.fixed .note { margin: 4pt 0 6pt; padding-top: 6pt; border-top: 1pt solid rgba(0,0,0,.25); font-size: 9.2pt; }
+
+.get { position: absolute; left: .6in; right: .6in; bottom: .5in; display: grid;
+  grid-template-columns: 1fr 1.25in; gap: .3in; align-items: start; }
+.get h2 { margin: 0 0 4pt; font: 700 17pt/1 var(--display); letter-spacing: -.01em; }
+.get h2 span { font-weight: 300; }
+.get ol { margin: 0; padding-left: 1.3em; font-size: 9.4pt; line-height: 1.4; }
+.get li { margin: 0 0 3pt; }
+.get .links { margin-top: 7pt; font: 7.8pt/1.6 var(--display); color: var(--soft); }
+.get .links b { display: inline-block; width: .95in; font: 700 1em var(--display); color: var(--ink); }
+.get .qr img { width: 1.25in; display: block; }
+.get .qr div { font: italic 700 7.5pt/1.25 var(--slab); color: var(--soft); margin-top: 5pt; text-align: center; }

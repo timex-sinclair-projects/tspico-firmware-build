@@ -5,6 +5,9 @@
 
   OUTDIR/TAP/<CATEGORY>[/<COLLECTION>]/<name>.tap   the tapes that load and start
   OUTDIR/help/                                       the help files from "SD card/"
+  OUTDIR/TAP/tour.tap, art.tap, multi.tap, hello.tap,
+             library/                                the TS-Pico guided tour and the
+                                                     tapes it uses, from "SD card/TAP"
   OUTDIR/catalog.csv                                 every tape: where it is, what
                                                      it is, how to load it, why one
                                                      is left out
@@ -25,6 +28,8 @@ import sys
 import common as C
 
 ECM = "GRAPHICS/ECMVIEW"
+TOUR = ("tour.tap", "art.tap", "multi.tap", "hello.tap")    # promo/demo; the tour uses
+TOUR_DIRS = ("library",)                                    # these from the top folder
 
 
 def results(name):
@@ -97,6 +102,21 @@ def main():
                          converted_from=e["src"] if e["src"] != "tap" else "",
                          also_listed_as="; ".join(e["also"]), page=C.public(e["page"]), download=e["url"]))
     shutil.copytree(os.path.join(C.REPO, "SD card", "help"), os.path.join(out, "help"))
+    # The guided tour (promo/demo) at the top of TAP, where CAT starts, as on
+    # the repo's own card. It needs its companion tapes beside it.
+    sd_tap = os.path.join(C.REPO, "SD card", "TAP")
+    for n in TOUR:
+        shutil.copyfile(os.path.join(sd_tap, n), os.path.join(out, "TAP", n))
+    for n in TOUR_DIRS:
+        shutil.copytree(os.path.join(sd_tap, n), os.path.join(out, "TAP", n))
+    tour = dict.fromkeys(rows[0], "")
+    tour.update(on_card="yes", folder="TAP", file="tour.tap", title="TS-Pico 2.3 guided tour",
+                summary="A tour of what's new in the TS-Pico since version 1.1, one feature per chapter.",
+                description="Twelve chapters: CAT, folders, copies, f: files, streams, the virtual "
+                            "printer, tapes, reports, BREAK and help. It uses art.tap, multi.tap, "
+                            "hello.tap and the library folder, and tidies up after itself.",
+                load='LOAD ""', note="from the TS-Pico project (promo/demo), not the archive")
+    rows.append(tour)
     rows.sort(key=lambda x: (x["folder"], x["file"]))
     for d in (out, left):
         with open(os.path.join(d, "catalog.csv"), "w", newline="") as f:
