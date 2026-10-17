@@ -117,7 +117,7 @@ come out as keywords only while FLAGS bit 4 is clear: HOME's print routine
 `PRINT CHR$ 123` shows `{` (checked in ZEsarUX; see
 [the reference](../reference/firmware/tspico-messages.md)).
 Verify with a hex dump of the generated `.tap` if a program misbehaves — a
-keyword `zmakebas` failed to recognise shows up as plain ASCII letters.
+keyword `zmakebas` failed to recognize shows up as plain ASCII letters.
 
 ## How to re-derive this
 

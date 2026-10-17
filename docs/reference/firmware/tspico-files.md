@@ -815,7 +815,7 @@ from another slot, is the manual's recovery for a damaged slot 1 (A.5),
 the one that needs no computer. It stays behind the loader's
 "ABSOLUTELY SURE" question, as slots 2 and 3 do. The loaders (`romupdate`,
 `dckupdate`, `romupd3`, `dckupd3`) say "Flash slot 0 is locked" and ask
-for another slot, so this refusal is the second line of defence.
+for another slot, so this refusal is the second line of defense.
 `boot_slot_guard_hosttest.py` (v2) and `board_v3_hosttest.py` pin both:
 slot 0 refused, slot 1 and SRAM 0 written.
 

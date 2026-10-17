@@ -91,7 +91,7 @@ are all already solved.
    exactly one USB CDC interface and it *is* the REPL — stdin/stdout.
    There's no second data endpoint. See §4.
 2. **Making the ~10 SD-touching commands backend-agnostic** without
-   destabilising them. Mechanical, but it's ~8 `ACTIVATE_SD()`
+   destabilizing them. Mechanical, but it's ~8 `ACTIVATE_SD()`
    callsites plus `ENA_SD()` in `SAVE_TS`.
 3. **Booting with no SD card at all.** *(Done, #43: the Pico now boots
    and runs without a card.)* A failed SD mount used to drop
@@ -115,7 +115,7 @@ protocol exchange.
 
 ## 2. Feature set
 
-Organised by tier so we can ship something useful early.
+Organized by tier so we can ship something useful early.
 
 ### Tier 1 — Parity with the SD card (the actual product)
 
@@ -164,14 +164,14 @@ These are the reasons to want this beyond "no card shuffling":
   on save, and publishes the resulting TAP into the served folder. Edit
   on the Pi 400, `LOAD ""` on the 2068, run. No export step, no card.
 - **Reverse path: SAVE → readable source.** A `SAVE` from the 2068
-  lands as a `.tap` in the host folder; the host optionally detokenises
+  lands as a `.tap` in the host folder; the host optionally detokenizes
   it to `.bas` alongside. ⚠️ zmakebas is **one-way** (text → TAP);
-  a detokeniser has to be written or vendored. See §7 Q5.
+  a detokenizer has to be written or vendored. See §7 Q5.
 - **File previewer.** Host-side, before mounting:
   - `SCREEN$` (6912-byte CODE block at 16384) → PNG, correct Spectrum
     palette + attribute handling;
   - TAP block map (header type, name, length, autostart line);
-  - BASIC listing (needs the same detokeniser as above);
+  - BASIC listing (needs the same detokenizer as above);
   - hex view for CODE blocks.
 - **Format conversion on the fly.** `.tzx` → `.tap`, `.z80`/`.sna` →
   loadable image, zip members surfaced as if they were loose files. The
@@ -195,14 +195,14 @@ Grabbing from
   they're a feature, not noise.
 - **Long-filename mapping.** TOSEC names
   (`Ant Attack (1983)(Quicksilva)[a2].tap`) exceed what's comfortable
-  on a 32-column display and violate the SAVE-side filename sanitiser
+  on a 32-column display and violate the SAVE-side filename sanitizer
   (`SAVE_TS` allows only alphanumerics, `-`, `_` —
   [tspico_io.py:1216](../src/TS/tspico_io.py:1216)). The host keeps the
   long name and serves a short display alias; `shorten_filename()`
   ([tspico.py:998](../src/TS/tspico.py:998)) already handles the
   display side.
 - **Local cache** so the archive works offline and we're polite to
-  archive.org (cache aggressively, no bulk crawling, honour rate
+  archive.org (cache aggressively, no bulk crawling, honor rate
   limits).
 - **2068-side navigator.** `ListMenu` already gives paged selection
   (16/page, `B`/`F`/`N`) and `IDIR` already uses it. So a *shortlist*
@@ -314,7 +314,7 @@ Both directions, so the host app can also be the telemetry console:
 0xAA 0x55 | seq(1) | opcode(1) | len(2, LE) | payload… | crc16(2)
 ```
 
-The host resynchronises on the `AA 55` magic and treats any
+The host resynchronizes on the `AA 55` magic and treats any
 non-conforming bytes as plain console text — which means MicroPython
 tracebacks, boot banners and stray `print()`s land in the log pane
 instead of corrupting the stream. That robustness is worth the two
@@ -379,7 +379,7 @@ outcomes the user cares about:
 | Framing errors | App present, version mismatch | `Fileserver version mismatch` |
 
 `tpi:reconnect` re-runs the probe on demand and reports the result —
-the direct analogue of `tpi:remount` for the SD side. The probe also
+the direct analog of `tpi:remount` for the SD side. The probe also
 runs automatically on `tpi:usb` (mode switch) and is cached, so
 `tpi:info` and the mount path can report status without a round-trip
 on every command.
@@ -448,7 +448,7 @@ repeatedly proven is unforgiving of latency, in exchange for saving
 ~200 ms of staging and some flash wear on a transfer that is already
 gated by the Z80 at ~47 µs/byte. Stage to `temp.tap`, keep `LOAD_TS`
 byte-for-byte unchanged, and revisit streaming later as a measured
-optimisation with its own harness.
+optimization with its own harness.
 
 ---
 
@@ -514,7 +514,7 @@ local cache, "stage a shortlist for the 2068" flow, `ListMenu`-based
 
 ### Phase 4 — Reverse toolchain
 
-TAP → BASIC detokeniser (new code — see §7 Q5), SAVE-side auto-export,
+TAP → BASIC detokenizer (new code — see §7 Q5), SAVE-side auto-export,
 round-trip tests.
 
 **Estimate: 1–2 weeks.**
@@ -549,7 +549,7 @@ mode so Thonny can't interrupt it" discoverable rather than
 mystifying? Suggestion: host app owns an explicit release button, plus
 a note in `tpi:info` and the docs.
 
-**Q5. Detokeniser — write, vendor, or skip?** zmakebas is one-way. The
+**Q5. Detokenizer — write, vendor, or skip?** zmakebas is one-way. The
 reverse path (TAP → readable `.bas`) is what makes the round trip feel
 finished, but it's real work and there may be an existing MIT/GPL
 tool worth vendoring the way we vendored zmakebas.

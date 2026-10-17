@@ -384,7 +384,7 @@ the `RxDMA`, and only then says idle, because the pre-header follows IDLE at
 once.
 
 Callers: the idle loop (a SYNC; a partial pre-header, with `recovered=True`;
-an unrecognised pre-header; the service-loop restart), `PROCESS_CMD`'s and
+an unrecognized pre-header; the service-loop restart), `PROCESS_CMD`'s and
 `PRINT_IO`'s body aborts, `LOAD_TS`'s abort path, `LOAD_REFUSE` and
 `LOAD_RETRY_DONE`. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
 pins TX = `[01]`, RX empty, the three status choices. Why one byte and not
@@ -426,7 +426,7 @@ hardware probes behind the allocation rule.
 Keeps the low byte of the Z80's word `w` in `echo = [count, block type, CRC]`:
 the first goes to `echo[1]`, the second to `echo[2]`, anything after the
 second is dropped, and `echo[0]` counts. No allocation. `LOAD_TS` reads
-`echo[1]` as the block-type acknowledgement and `echo[2]` as the Z80's
+`echo[1]` as the block-type acknowledgment and `echo[2]` as the Z80's
 computed CRC; it stores both and checks neither.
 
 ### `STREAM_DMA(MQ, buf, echo, stall_ms, ready, first_ms=0)`
@@ -1189,7 +1189,7 @@ updater is not yet running.
 ### `LOAD_ZX(MQ, TSP)`
 
 Sends one TAP block to the Spectrum ROM: after the `'L'` that `ZX48_IO`
-consumed and the ROM's poll of 0Fh for READY (the customised ZX ROM, not the original in slot 0; up to
+consumed and the ROM's poll of 0Fh for READY (the customized ZX ROM, not the original in slot 0; up to
 ~3.8 s, then Report R), the response is exactly `totbytes` bytes, flag +
 content + CRC, with no status byte and no pre-load. The LED goes on. The source
 is `/assets/nofile.tap` with no mount (`f_name` empty or `totlen` 0; a WARNING

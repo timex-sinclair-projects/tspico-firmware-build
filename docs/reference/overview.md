@@ -1,6 +1,6 @@
 # The TS-Pico ecosystem on one page
 
-Source: the whole of [`src/`](../../src/), summarised. Part of the
+Source: the whole of [`src/`](../../src/), summarized. Part of the
 [programmer's reference](README.md).
 
 The TS-Pico is two computers sharing one narrow door. On one side a Timex
@@ -26,7 +26,7 @@ port). The TS-Pico replaces all three sources:
   and the disk and channel module at 3000h. [rom/overview.md](rom/overview.md)
   and the four EXROM chapters.
 - **DOCK** is whatever cartridge page the Pico selects: a `.dck` image, or
-  the customised ZX Spectrum ROM that `tpi:zx48` switches to. [rom/zx48.md](rom/zx48.md).
+  the customized ZX Spectrum ROM that `tpi:zx48` switches to. [rom/zx48.md](rom/zx48.md).
 
 The ROM images live on a 512K flash chip (and can be copied into a 512K
 SRAM) on the TS-Pico board, in sixteen 32K slots; a 2068 ROM fills one (16K

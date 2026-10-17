@@ -23,7 +23,7 @@ machines is in [tspico-bus.md](tspico-bus.md) (`ACTIVATE_MQ`, `ACTIVATE_SD`,
 The programs are read here instruction by instruction. Cycle counts and
 nanoseconds computed in this chapter come from the instruction listings and
 the clock each state machine is given; none has been measured, and the
-2026-09-30 audit left the settle delays as "a logic-analyser job"
+2026-09-30 audit left the settle delays as "a logic-analyzer job"
 ([AUDIT-2026-09-30.md](../../AUDIT-2026-09-30.md) §4). Every such number is
 marked *(unverified)*.
 
@@ -66,7 +66,7 @@ ground the programs stand on, not something the code states.
   label)` jumps when the state machine's one configured `jmp_pin` is high.
   `jmp(not_x, …)` tests X for zero; `jmp(y_dec, …)` jumps if Y is non-zero
   and decrements it either way. GPIO inputs pass through a two-cycle
-  synchroniser before the state machine sees them.
+  synchronizer before the state machine sees them.
 - A **side-set** writes extra pins on the same cycle as the instruction. A
   **delay** `[n]` idles n cycles *after* the instruction has executed, not
   before.
@@ -147,7 +147,7 @@ this program and in `set_ctrl` do not describe the pin level.
 
 At 150 MHz a cycle is 6.67 ns. From the cycle in which the strobe is seen
 low, the DOCK slot is on the pins after instructions 4–6, three cycles
-(20 ns); the ROM slot after 4 and 8, two cycles (13 ns). The synchroniser
+(20 ns); the ROM slot after 4 and 8, two cycles (13 ns). The synchronizer
 adds about two cycles before the low is seen. *(unverified: computed from
 the listing)*. The lines are **not** released when the strobe rises: they
 hold the last slot until the next access changes it.
@@ -417,12 +417,12 @@ instruction: the sample is taken when 16 begins, and the two cycles idle
 afterwards, delaying the push and the BUSY. The settling before the sample
 is instructions 2 and 15. The effect on the bus is the same either way
 (U6 is on from 15); this is one of the settle delays left to a logic
-analyser (audit §4).
+analyzer (audit §4).
 
 ### Timing
 
 At 30 MHz a cycle is 33.3 ns. From the cycle in which /PICOSEL is seen low
-(about two cycles after it falls, the synchroniser) *(all unverified:
+(about two cycles after it falls, the synchronizer) *(all unverified:
 computed from the listing)*:
 
 | Cycle | Which | What |
@@ -563,7 +563,7 @@ done. So:
    Z80 reads 00h (Report J);
 2. after the Z80's last `OUT` of a phase Y is 0 by 18, and only Python can
    raise it;
-3. a blind read that outruns TX reads 00h with no error signalled anywhere;
+3. a blind read that outruns TX reads 00h with no error signaled anywhere;
    the LOAD paths keep TX fed by DMA for that reason.
 
 ### State and effects

@@ -422,10 +422,10 @@ file offset = Z80 address):
 
 | File | What |
 |---|---|
-| `tspico-22-exrom.labelled.asm` | **ROM 2.2's EXROM, labelled. The one this reference cites.** |
+| `tspico-22-exrom.labelled.asm` | **ROM 2.2's EXROM, labeled. The one this reference cites.** |
 | `tspico-22-exrom-symbols.sym` | its labels, generated: the curated names of `docs/rom-analysis/tspico-exrom-symbols.sym`, plus every label of `tspico-sync.asm` (2300h) and `fddcmd.asm` (3000h) from a fresh sjasmplus assembly, EXROM addresses (0100h–3FFFh) only, less the `EQU`s a source marks `; HOME` (a HOME address is not an EXROM label; until #183 `H_EXPT_STR` named EXROM 1BEFh). Edit the sources, not this |
 | `tspico-22-home.asm`, `.sym` | ROM 2.2's HOME, a raw sweep with `z80dasm`'s own `lXXXXh` labels |
-| `tspico-11-exrom.labelled.asm`, `tspico-15w-exrom.labelled.asm` | 1.1's EXROM and an intermediate one on the way to the base image, labelled with the curated names |
+| `tspico-11-exrom.labelled.asm`, `tspico-15w-exrom.labelled.asm` | 1.1's EXROM and an intermediate one on the way to the base image, labeled with the curated names |
 | `tspico-11-exrom.asm`, `tspico-15w-exrom.asm`, `tspico-home.asm`, `genuine-2068-*.asm` (+ `.sym`) | raw sweeps |
 
 How to use them:
@@ -436,7 +436,7 @@ How to use them:
   instruction is not found, so try the bytes before it.
 - **They are linear sweeps.** Text, tables and `FFh` filler disassemble as
   nonsense, and a sweep that starts inside an instruction stays out of
-  step until it happens to resynchronise. Find a known label first and
+  step until it happens to resynchronize. Find a known label first and
   read from there. The hand-checked listings in the Markdown documents
   outrank the sweeps.
 - **Status − 1.** The function chain reads the Pico's first byte, does

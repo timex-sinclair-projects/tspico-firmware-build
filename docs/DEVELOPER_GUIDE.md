@@ -689,7 +689,7 @@ The `BUILD_VERSION` print near the top tells you which **UF2** is on the
 board: `tools/gen-buildinfo.py` writes it from git at build time, so it
 reads e.g. `654d3db (main)`, with `+dirty` when the tree it was built from
 had uncommitted changes. There is nothing to bump by hand — it used to be a
-literal and it rotted, describing behaviour the firmware no longer had.
+literal and it rotted, describing behavior the firmware no longer had.
 
 For "is *my edit* the one running", read the `[DEV]` line, not this one: a
 dev override is a `.py` on the Pico's flash, while `buildinfo` is frozen

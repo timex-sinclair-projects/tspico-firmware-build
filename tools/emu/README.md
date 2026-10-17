@@ -82,7 +82,7 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 ```
 
 - **Lines:** `run()` takes BASIC tokens (`S.SAVE`, `S.LOAD`, `S.CAT`, …) and text. It types
-  placeholders, then writes the tokenised line into the edit line, which is more reliable
+  placeholders, then writes the tokenized line into the edit line, which is more reliable
   than typing keywords over ZRCP.
 - **Resetting:** to restart the 2068 while a program is running, send ZRCP `reset-cpu`.
   `hard-reset-cpu` doesn't reliably restart the TS-2068 in that state.
