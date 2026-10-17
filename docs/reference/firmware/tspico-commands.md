@@ -220,7 +220,7 @@ listings `DIR` sends.
 
 | Form | What it does |
 |---|---|
-| no `CODE`, no argument | `LISTING_CHECK()` — one mount (~0.2 s) to see that the card is still the one listed and the folder unchanged ([tspico-bus.md](tspico-bus.md#listing_check)) — then `SEND_MSG2(CAT_COLOUR(lista), 1, False, True)`: the cached listing in CAT's colours. No card: `NO_CARD_REPLY`, Report J |
+| no `CODE`, no argument | `LISTING_CHECK()` — one mount (~0.2 s) to see that the card is still the one listed and the folder unchanged ([tspico-bus.md](tspico-bus.md#listing_check)) — then `SEND_MSG2(CAT_COLOUR(lista), 1, False, True)`: the cached listing in CAT's colors. No card: `NO_CARD_REPLY`, Report J |
 | no `CODE`, `tpi:dir arg` | `CATALOG(arg)`: exactly `CAT "arg"` — another folder, a pattern, a TAP's contents ([tspico-disk.md](tspico-disk.md#catalogarg)) |
 | `CODE 1,n` | `SEND_MSG("Path: <folder>", "File: <name>", 1, True)`: file `n`'s full name, shown |
 | `CODE 2,n` | every file from `n` on, numbered, full names, one to a line: a blue bar with the path, a cyan title row with the count, each number on a cyan chip; `SEND_MSG2(…, 1, True, True)` |

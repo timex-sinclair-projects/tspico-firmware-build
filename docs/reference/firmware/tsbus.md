@@ -62,7 +62,7 @@ two apart:
   the other core only if it is a multicore lockout victim, which core 1 is
   not. So core 1's code is all `__not_in_flash_func`, touches PIO, DMA and
   SIO registers directly rather than through SDK inline helpers (a
-  size-optimised build may leave those out of line in flash), and makes no
+  size-optimized build may leave those out of line in flash), and makes no
   calls into flash and reads no flash data, its set-up included. CI checks
   that in the linked ELF on every push (`tools/check-core1-ram.py`,
   [boot.md](boot.md#toolscheck-core1-rampy)): every function reachable from
@@ -133,7 +133,7 @@ in the file.
 | `addr_read` | PIO1: side-set the three buffer enables (GP8-10), jmp pin /MEMRD | Sequences U2 (A15..A8) and U1 (A7..A0) onto MD around serve's samples, and turns U3 on when serve asks. `hi_hold` and `lo_hold` are patched by `set_delays` |
 | `mem_write` | PIO1: in MD | Reads every memory write (address through U2 and U1, the data through U3) for the DOCK RAM. RX FIFO joined (8 deep) |
 | `io_snoop` | PIO1: in MD | Reads every I/O write (port and data) for the bank shadow and OUT 0Eh/0Fh |
-| `iord_watch` | PIO2: waits on /IORD (GP17), input synchroniser bypassed | Raises PIO2 IRQ flag 0 on each falling edge of /IORD and waits for it to rise: core 1's IN interrupt (`PIO2_IRQ_0`). It replaced a GPIO edge interrupt, whose acknowledgement goes through APB. PIO2's GPIO base is 16; the SDK adjusts `wait gpio 17` when it loads the program |
+| `iord_watch` | PIO2: waits on /IORD (GP17), input synchronizer bypassed | Raises PIO2 IRQ flag 0 on each falling edge of /IORD and waits for it to rise: core 1's IN interrupt (`PIO2_IRQ_0`). It replaced a GPIO edge interrupt, whose acknowledgment goes through APB. PIO2's GPIO base is 16; the SDK adjusts `wait gpio 17` when it loads the program |
 | `spk_pwm` | PIO2, one state machine per audio pin: side-set the pin (GP46, GP30) | PWM for the speech, as the pico-examples `pwm` program: ISR holds the period (`SPK_TOP`), `pull noblock` takes a new level from the FIFO or keeps X, `out x, 16` takes the low half (the DMA's 16-bit writes arrive in both halves), and the pin is high from the count equal to the level down to 0. Three cycles a count: (`SPK_TOP` + 1) × 3 + 3 cycles a period, about 41 kHz |
 
 ## `tsbus.c`
@@ -279,15 +279,15 @@ Sets up the three blocks and the DMA chain, and starts six state machines
 4. addr_read: side-set the three enables (all high: off), jmp pin /MEMRD,
    `mov status` on PIO1 IRQ flag 2. mem_write: in MD, autopush at 24, RX
    joined. io_snoop: in MD, autopush at 16. `sm_en`: set pins GP8-GP10,
-   initialised at PC 0 (PIO1's memory is full; it never runs).
+   initialized at PC 0 (PIO1's memory is full; it never runs).
    `iord_watch` on PIO2 (GPIO base 16, so its window holds /IORD and the
-   audio pins; /IORD's synchroniser bypassed, bit `PIN_NIORD - 16` of the
+   audio pins; /IORD's synchronizer bypassed, bit `PIN_NIORD - 16` of the
    window), its IRQ flag 0 cleared and routed to `PIO2_IRQ_0` (`inte0`).
    PIO0's IRQ flag 1, which addr_read raises at the start of every memory
    read and serve clears, is routed to `PIO0_IRQ_1` (`inte1`). No core
    enables that interrupt; the line only latches its pending bit in core
    1's NVIC, which core 1's idle test reads.
-5. `set_delays()`. Input synchronisers bypassed on MD and /MEMRD in PIO0, and
+5. `set_delays()`. Input synchronizers bypassed on MD and /MEMRD in PIO0, and
    on those and /IOWR in PIO1.
 6. DMA: `ch_ptr` takes serve's pointer (DREQ on serve's RX) and writes it to
    `ch_data`'s read-address trigger, with the ENDLESS count; `ch_data` copies
@@ -398,7 +398,7 @@ power-off and power-on readings, forever, polling:
   mid-read and ignoring bank writes until the next change, and the 2068
   crashed. With the latch, 3 in 419 commands, all at the power-on *(the
   NVIC latching a pulse a few cycles long is the Cortex-M33's documented
-  behaviour; the board shows it working)*. Core 1 executes `EN_OFF` on `sm_en` and `serve_release` on
+  behavior; the board shows it working)*. Core 1 executes `EN_OFF` on `sm_en` and `serve_release` on
   serve, so U1-U3 are off, MD is released and /BE let go. With the 2068 off,
   /MEMRD reads low and serve and addr_read would otherwise sit in a "read"
   driving its data bus. It sets `bus_idle` (cleared at the next change) and
@@ -571,16 +571,16 @@ scratch:
    `usart` or the channels.
 2. The two channels claimed (the first time only; MicroPython's soft reset
    frees only channels it claimed itself), both stopped (`stop_dma`).
-3. UART0 initialised again, 115200 8N1 with its DMA requests on, and GPIO
+3. UART0 initialized again, 115200 8N1 with its DMA requests on, and GPIO
    44/45 given to it. Again each time because a MicroPython soft reset calls
    `uart_deinit` on UART0 whoever set it up.
 4. `ch_mrx` restarted at the top of `line_rx` (8-bit, a 16 KB write
    ring, the UART's RX DREQ, an endless count); `ch_mtx` configured to write
    the UART's data register on its TX DREQ, not started.
-5. `usart` initialised (`u8251_init`): as at power-up, taking commands,
+5. `usart` initialized (`u8251_init`): as at power-up, taking commands,
    mode 4Fh. The pace kept if `modem_pace` set one, else 300 baud.
    `modem_wake` and `modem_touched` cleared; `modem_line_up` kept.
-   `modem` initialised (`m2050_init`) in `modem_mode`, on-hook; DSR 1 in
+   `modem` initialized (`m2050_init`) in `modem_mode`, on-hook; DSR 1 in
    Hayes mode, 0 in 2050 mode until a call connects.
 6. `modem_on` set.
 
@@ -642,13 +642,13 @@ Hayes mode's flow control (#301): sets `modem.flow_want`, which
 XOFF/XON. On, the card pauses Zimodem with XOFF when the line's ring is
 over half full and resumes it with XON below a quarter, as 2050 mode does
 while connected. For a program that has set Zimodem up for it: Zimodem 4.0.3
-obeys XOFF only with `ATF1` (its serial side) *and* on a connection dialled
+obeys XOFF only with `ATF1` (its serial side) *and* on a connection dialed
 with the `X` modifier (`ATDTX"host:port"`; the connection's own flag).
 Otherwise XOFF and XON reach the host as data. Every `tsbus.modem(True)`
 (`m2050_init` zeroes the struct) turns it off again. Why: PicoTerm's
 64-column flood at full speed (`MODEM_BAUD` 0) lost 9,798 bytes
 (`m_rx_lost`) with no flow control in Hayes mode. On board 1 (2026-10-15):
-with `ATF1` alone the test server received the XOFF/XON; dialled with X and
+with `ATF1` alone the test server received the XOFF/XON; dialed with X and
 a 4 KB ring with XOFF at 3/4, 825 bytes were still lost, since Zimodem copies
 from the socket up to its 4 KB buffer before it looks for XOFF; with the
 16 KB ring and XOFF at half, the flood arrived whole (`m_rx_lost` 0, 29.4 s
@@ -761,7 +761,7 @@ ESP32 in download mode (`board_v3.esp_boot(True)`), switched the modem off
 (`RuntimeError` otherwise) and the REPL's Ctrl-C off (`micropython.kbd_intr(-1)`):
 a 03h in the data would interrupt.
 
-- UART0 initialised at 115200 8N1, FIFOs on, its DMA requests off, GPIO
+- UART0 initialized at 115200 8N1, FIFOs on, its DMA requests off, GPIO
   44/45 given to it. 115200 is the loader's own speed, and the relay doesn't
   follow a change: the host must not ask for one (esptool kept at
   `--baud 115200` never does).

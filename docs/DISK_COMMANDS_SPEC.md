@@ -25,7 +25,7 @@ accepts and what it does. The ROM mechanism is in
 The HOME ROM gives us **six keywords** to work with. The rest of the TOS
 command set can't be copied without `*`.
 
-| Keyword | Token | Stock behaviour | After the hook |
+| Keyword | Token | Stock behavior | After the hook |
 |---|---|---|---|
 | `CAT` | `$CF` | Syntax needs `CAT "x",…`, then Report J at run time | We parse everything after the keyword |
 | `FORMAT` | `$D0` | Same | Same |
@@ -80,7 +80,7 @@ through keyword-inside-argument forms (§3), or stay on `SAVE "tpi:..."`.
 
 ---
 
-## 2. `CAT` — catalogue
+## 2. `CAT` — catalog
 
 **Implemented** (ROM `fddcmd.asm` v4, firmware `CATALOG` + `TS/catalog.py`).
 `CAT` is a front end for `tpi:dir`, so **`SAVE "tpi:dir <arg>"` behaves the same
@@ -371,7 +371,7 @@ So random access needs **no new statements and no parser changes**:
 
 The rules:
 
-| Situation | Behaviour |
+| Situation | Behavior |
 |---|---|
 | Record numbering | **1-based**, like TOS and BASIC arrays. Record n starts at byte `(n-1) × reclen` |
 | No record length given | `reclen` = 1, so `TAB n` is "byte n" and a stream file can still be read at any byte. The 16-bit limit caps this at the first 64 KB. A fixed record length reaches further (65535 × reclen) |
@@ -549,7 +549,7 @@ container is the same. The header's issue/version bytes can mark a file as
     dropped. The comma control becomes spaces up to the next 16-column tab stop.
 - **Binary mode** passes every byte through unchanged.
 - **Long deferred: loading a text listing as a program**, i.e. `MERGE` from `.txt`.
-  That needs a tokeniser, which is zmakebas-sized work in MicroPython. The file
+  That needs a tokenizer, which is zmakebas-sized work in MicroPython. The file
   format doesn't rule it out. It isn't on the build order.
 
 ### What changes elsewhere

@@ -25,7 +25,7 @@ the ROM's disk commands and the channels.
 | 319–374 | Imports; the dual-port migration note on what changed from the single-port import |
 | 380–383 | The virtual printer's state: `PRT`, `prn_path`, `bmp_size`, `PRINT_FLUSH_AT` |
 | 395–422 | Module-level caches: `LISTMENU_CHOICES`, `LOG_LABELS`, `sd_active`, `prev_path`, `files`, `files_upper`, `dirs`, `dirs_upper`, `lista`, `alldirs`, `sd_space` |
-| 433–438 | Colour codes for `SEND_MSG2`: `INK_`, `PAPER_`, `ATTR_VALUES`, `NORMAL_` |
+| 433–438 | Color codes for `SEND_MSG2`: `INK_`, `PAPER_`, `ATTR_VALUES`, `NORMAL_` |
 | 440–453 | `RXD`, `rom_id`, `NO_CARD_MSG` |
 | 463–477 | The protocol bytes by name: `FN_*`, `STR_END`, `LOOP_END`, `PRE_*` |
 | 480–490 | The eleven status codes `_1_OK` … `_11_D_Break` |
@@ -66,7 +66,7 @@ processor: the flash and SRAM update path and `ROMPATCH`; the activity log
 with its levels; mounting a TAP, appending to it, the offset table, `ffw`
 and `rew`; the move of `DIR`, `TAPDIR` and `PATH` from `LOAD` to `SAVE`, so
 that `LOAD "tpi:…"` only mounts; `SEND_MSG2`'s paging, line endings, keyword
-expansion and colour-free text rules; the interactive `ListMenu` with
+expansion and color-free text rules; the interactive `ListMenu` with
 sixteen choices; help files on the card; external commands from
 `extcmd.py`; the status-code constants and the renumbering that followed a
 ROM error-code bug; the `dead`/`busy` handshake with a thread on core1;
@@ -212,7 +212,7 @@ dictionary that `tpi:rm` used, and no reader is left.
 `str`, `""` at import and in `TS2068_IO`. The text of the plain directory
 listing: `DIR_HEADER`'s four 32-column lines (path, card line, column
 titles) followed by one row per folder, indexed file and unindexed file,
-each 32 characters, with colour codes added at print time by `CAT_COLOUR`.
+each 32 characters, with color codes added at print time by `CAT_COLOUR`.
 `LIST_DIR_FILES` builds it (1742–1744); on a card error `DIR_FILES` replaces
 it with a header and `SD card error: reseat the card` (1645). `DIR` sends it
 (2569) and `CDIR` after a change with `CODE 2,0` (4304). It is the cached
@@ -239,10 +239,10 @@ the end of `LIST_DIR_FILES` (1736) and to `None` by `DIR_FILES` on error
 
 | Name | Value | Meaning |
 |---|---|---|
-| `INK_` | `"\x10"` | the 2068's INK control code; the next byte is the colour |
+| `INK_` | `"\x10"` | the 2068's INK control code; the next byte is the color |
 | `PAPER_` | `"\x11"` | the PAPER control code |
 | `ATTR_VALUES` | a tuple of six tuples | the values RST 10h takes after INK and PAPER (0–9), FLASH and BRIGHT (0, 1, 8), INVERSE and OVER (0, 1), indexed by the code − 10h |
-| `NORMAL_` | `PAPER_ + "\x08" + INK_ + "\x08"` | colour 8 for both: back to the screen's own colours |
+| `NORMAL_` | `PAPER_ + "\x08" + INK_ + "\x08"` | color 8 for both: back to the screen's own colors |
 
 The comment above them says which values can travel. ROM 2.3's string
 reader passes a code's value bytes through

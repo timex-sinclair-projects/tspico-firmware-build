@@ -64,7 +64,7 @@ never printed.
 2068 output bytes → text-file bytes: UTF-8, LF line ends. One per
 `Channel`, created in `Channel.__init__`; stateful, because a control
 code's parameters can arrive in the next `tpi:chwr`. The rules (its
-docstring): keywords are spelt out with spaces around them as LIST shows
+docstring): keywords are spelled out with spaces around them as LIST shows
 them; the comma control (6) becomes spaces to the next 16-column stop; INK
 … OVER (one parameter) and AT / TAB (two) are dropped with their
 parameters; other control codes are dropped; block graphics and UDGs
@@ -100,7 +100,7 @@ Pinned by `channels_hosttest.py`: a LIST line comes out as `  10 PRINT
 with their parameters, also when split across chunks; pound becomes UTF-8
 and graphics `?`; code 123 is `ON ERR `.
 
-Beware: 123–127 are spelt as keywords on the way out but kept as bytes on
+Beware: 123–127 are spelled as keywords on the way out but kept as bytes on
 the way in (`TextIn`), so text written with `PRINT #4;"a|b"` reads back as
 `a STICK b`. That is what the 2068 itself prints for `|` (the note on
 `UNSHOWABLE` in [catalog.md](catalog.md)); byte-for-byte round trips need

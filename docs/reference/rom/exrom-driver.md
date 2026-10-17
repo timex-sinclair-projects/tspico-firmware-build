@@ -486,7 +486,7 @@ A `tpi:` command's pre-header, then its body, then the answer.
         LD A,'B' / LD D,A      ; D = the XOR, seeded with the first byte
 1BAAh   CALL SYNC_WRITE        ; SYNC layer: SYNC, wait READY+IDLE, then OUT 'B'
         T_ADDR    (0 SAVE, 1 LOAD: the mount)
-1BB5h   BANK      (5DCDh's neighbour 5DCFh: FFh); ROM 2.3: 23h
+1BB5h   BANK      (5DCDh's neighbor 5DCFh: FFh); ROM 2.3: 23h
         PMR1 lo, hi
         PMR2 lo, hi
         length lo (B), length hi (5DCEh)
@@ -664,6 +664,6 @@ the name is ours.
 
 ## Where comments, documents and the code disagree
 
-None known: #182 corrected SYMBOLS.md, and #183 stopped the labelled
+None known: #182 corrected SYMBOLS.md, and #183 stopped the labeled
 listing naming EXROM addresses after HOME routines (EXROM 1BEFh was
 `H_EXPT_STR`).

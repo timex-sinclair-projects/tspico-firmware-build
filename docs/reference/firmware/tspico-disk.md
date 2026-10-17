@@ -131,7 +131,7 @@ implementation behind CAT x$ and `SAVE "tpi:dir x"` (spec
 3. In `finally`: `DEACTIVATE_SD()`, `ACTIVATE_MQ()`. The bus state machine is
    rebuilt with Y = BUSY and an empty TX FIFO.
 4. Status 1: `SEND_MSG2(CAT_COLOUR(msg), 1, False, True)` — function 86h,
-   the listing in CAT's colours, keywords not expanded, paged with "Scroll?".
+   the listing in CAT's colors, keywords not expanded, paged with "Scroll?".
    Any other status: the message is logged (level 1) and `SEND_MSG(msg, arg,
    st)` answers with the status byte, or with function 81h and
    `msg`, CR, `arg` when VERBOSE is on.
@@ -193,7 +193,7 @@ Builds the listing text for `CATALOG`. The SD card must be active. Returns
 Names pass through `xstr` ([tspico-files.md](tspico-files.md)), which is
 `catalog.screen_name`: a character the 2068 cannot print or type becomes
 `?`. The rows carry no CR: the 32-column screen wraps them, and
-`CAT_COLOUR` recognises the layout by the `Path:` prefix and the 128-byte
+`CAT_COLOUR` recognizes the layout by the `Path:` prefix and the 128-byte
 header. A TAP listing starts `File:` and goes through `CAT_COLOUR`
 unchanged.
 
@@ -623,7 +623,7 @@ in the command text (the body must be text, and 9 + 128 characters stay
 under the 256-byte command). The pairs are decoded with `int(.., 16)`; a
 bad digit is `CH_REPLY(5)` (C) and nothing is written.
 `CH_CALL(CHANNELS.write, stream, data)` mounts the card, stores the bytes
-at the stream's position with the TAB escape (23, lo, hi) honoured and
+at the stream's position with the TAB escape (23, lo, hi) honored and
 text translated, and gives the card back; a stream that is not open is
 `O` → J, `TAB 0` followed by data or a record overrun `Q`.
 `CH_REPLY(st)`. Output to a read stream is accepted and dropped — INPUT #'s

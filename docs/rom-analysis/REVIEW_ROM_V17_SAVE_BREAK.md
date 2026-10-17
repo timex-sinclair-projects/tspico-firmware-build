@@ -145,7 +145,7 @@ driver). So the stock machine runs **two break conventions on purpose**:
 | Tape SAVE / LOAD / VERIFY | **SPACE alone** | `D BREAK - CONT repeats` |
 
 After V17, SPACE aborts nothing — not at the SAVE prompt, not during a cassette
-`LOAD`, not on the way out of a block. And because `BREAK_KEY` honours the
+`LOAD`, not on the way out of a block. And because `BREAK_KEY` honors the
 inhibit flag (bit 6 of `$5CB7`, set by HOME at `$0E9B`), tape aborts become
 suppressible in a way the stock tape code never was.
 
@@ -216,7 +216,7 @@ EXROM half  CRC32  9176F1AD
 HOME half   CRC32  C2B6CBF6   (unchanged from V17)
 ```
 
-**Resulting behaviour**, compared with stock and with V17:
+**Resulting behavior**, compared with stock and with V17:
 
 | Action | Original TS2068 | V17 | Recommended |
 |---|---|---|---|
@@ -229,7 +229,7 @@ HOME half   CRC32  C2B6CBF6   (unchanged from V17)
 
 Still out of scope, and unchanged by any of this: a break *during* a Pico transfer
 (after `$0893`) still leaves the Pico mid-transaction. The firmware bounds that
-itself now, and signalling it in ROM is a separate piece of work.
+itself now, and signaling it in ROM is a separate piece of work.
 
 **Verifying a rebuilt image:**
 
@@ -429,7 +429,7 @@ stock, and SPACE stays the tape BREAK key everywhere it always was (§2).
                                          ; -> RST 8 / DEFB $0C = Report D
 ```
 
-§5 suggested simply neutralising the `POP HL` and letting the `RST 8` handler
+§5 suggested simply neutralizing the `POP HL` and letting the `RST 8` handler
 reset `SP` from `ERR_SP`. V17h instead consumes the data pointer explicitly,
 which is what `POP IX` at `$08A5` would have done on the normal path — the same
 result with the stack left tidy either way.
@@ -445,11 +445,11 @@ result with the stack left tidy either way.
 22FC  1F C9        RRA : RET        ; carry clear = SPACE down = BREAK
 ```
 
-SPACE alone, honouring the inhibit flag — and CAPS+SPACE aborts too, since SPACE
+SPACE alone, honoring the inhibit flag — and CAPS+SPACE aborts too, since SPACE
 is part of it. The ordering fix survives: the test runs at `$0886`, before the
 `CALL $0068` at `$0893`, so an abort reaches the Pico as nothing at all.
 
-### Behaviour note: tap vs hold
+### Behavior note: tap vs hold
 
 The 12-frame (~0.2 s) `HALT` grace between the key detection and the break test
 is still there. It existed because CAPS needed time to land alongside SPACE; with

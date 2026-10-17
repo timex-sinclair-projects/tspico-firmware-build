@@ -67,7 +67,7 @@ through the returning thunk.
 3. Pico: `CH_WRITE` decodes the hex (a bad digit: C, nothing written) and
    `CH_CALL(CHANNELS.write, 4, data)`: the card mounted, the bytes appended
    at the stream's position with the text translated (the 2068's CR to the
-   file's line ending; the TAB escape `17h lo hi` honoured), the card given
+   file's line ending; the TAB escape `17h lo hi` honored), the card given
    back. `CH_REPLY(st)` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#ch_writepre-cmd),
    [../firmware/channels.md](../firmware/channels.md)).
 4. 2068: `CH_STATUS`.

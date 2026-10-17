@@ -867,7 +867,7 @@ return; the handler then answers with `SEND_MSG(msg, "", status)` or
 `CH_REPLY(status)` on a bus that is the MQ's again, Y BUSY. An `OSError`
 from the mount itself (no card: `ACTIVATE_SD` has cleared `sd_present`)
 becomes the no-card answer, Report J, with the very `NO_CARD_MSG` object
-that `SEND_MSG` recognises and always shows
+that `SEND_MSG` recognizes and always shows
 ([tspico-state.md](tspico-state.md#no_card_msg)); an `OSError` from `fn`
 with the card present (a read or write failure, a full card) becomes "SD
 card error", Report F, logged at level 2. Anything else `fn` raises passes
