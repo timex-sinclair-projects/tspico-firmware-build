@@ -20,7 +20,7 @@ want to **use** it, start elsewhere:
 
 Those documents stay where they are. This one explains the code they describe.
 
-## How it is organised
+## How it is organized
 
 Each chapter follows **one source file, in source order**, so you can read the
 file and the chapter side by side, and so a diff of the file maps onto a diff
@@ -37,7 +37,7 @@ from the BASIC keyword to the SD card and back.
 | Firmware | [firmware/tspico-state.md](firmware/tspico-state.md) | `src/TS/tspico.py` part 1: module constants and globals, the caches, `PICO_STATUS`, telemetry |
 | Firmware | [firmware/tspico-bus.md](firmware/tspico-bus.md) | part 2: who owns the bus: `ACTIVATE_MQ`, `ACTIVATE_SD`, `MQ_READY`, the `CMD_*` command I/O, the SD card state |
 | Firmware | [firmware/tspico-dispatch.md](firmware/tspico-dispatch.md) | part 3: `TS2068_IO`, `PROCESS_CMD`, `FAIL_CMD`, the printer path, `ZX48_IO`, `ZX_TPI`, `LOAD_CONFIG` |
-| Firmware | [firmware/tspico-messages.md](firmware/tspico-messages.md) | part 4: everything that prints on the 2068: `SEND_MSG`, `SEND_MSG2`, the prompts, `ListMenu`, colour |
+| Firmware | [firmware/tspico-messages.md](firmware/tspico-messages.md) | part 4: everything that prints on the 2068: `SEND_MSG`, `SEND_MSG2`, the prompts, `ListMenu`, color |
 | Firmware | [firmware/tspico-files.md](firmware/tspico-files.md) | part 5: mounting, the folder caches, TAP helpers, the activity log, path helpers |
 | Firmware | [firmware/tspico-commands.md](firmware/tspico-commands.md) | part 6: every `tpi:` command handler and the dispatch table |
 | Firmware | [firmware/tspico-disk.md](firmware/tspico-disk.md) | part 7: the ROM's disk commands on the Pico: CAT, MOVE, ERASE, FORMAT, `f:` files, the channels |
@@ -150,7 +150,7 @@ contributors and AI agents is in [`CLAUDE.md`](../../CLAUDE.md).
 
 A fix for a [`reference-followup`](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup)
 issue also updates the chapters that cite it: the entry says the new
-behaviour, and the caveat and the issue link go.
+behavior, and the caveat and the issue link go.
 
 ### Stamps
 

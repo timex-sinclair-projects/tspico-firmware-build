@@ -1,7 +1,7 @@
 # TS/tspico.py (part 4) — what the 2068 prints
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1519–1608
-(`shorten_filename`, `DIR_HEADER`, the colour helpers), 2169–2500
+(`shorten_filename`, `DIR_HEADER`, the color helpers), 2169–2500
 (`MSG_BYTE`, `SEND_MSG`, `SEND_MSG2`), 2765–2803 (`PROMPT_EACH`),
 3484–3676 (`ListMenu`), 3879–3891 (`xchr`, `xstr`), 4567–4579
 (`BUILD_FIT`) and 5616–5683 (`SEND_MSG_PROMPT_YN`).
@@ -19,7 +19,7 @@ FIFO through the never-blocking command I/O of
 [tspico-bus.md](tspico-bus.md) (`CMD_PUT`, `CMD_SEND`, `CmdOut`,
 `CMD_KEY`); the ROM code at the other end is the function chain in
 [../rom/exrom-chunk1.md](../rom/exrom-chunk1.md). The protocol constants
-(`FN_PRINT_STRING` … `LOOP_END`), the colour codes (`INK_`, `PAPER_`,
+(`FN_PRINT_STRING` … `LOOP_END`), the color codes (`INK_`, `PAPER_`,
 `NORMAL_`), `LISTMENU_CHOICES` and `NO_CARD_MSG` are module variables:
 [tspico-state.md](tspico-state.md).
 
@@ -29,8 +29,8 @@ FIFO through the never-blocking command I/O of
 |---|---|---|
 | `shorten_filename(nom, l)` | 1519 | a name cut to `l` characters in the middle, extension kept |
 | `DIR_HEADER(sd_stat, path=None)` | 1540 | the four 32-column header rows of a folder listing |
-| `CAT_COLOUR(text)` | 1546 | a plain folder listing → CAT's colours |
-| `TAPDIR_COLOUR(text, headers)` | 1582 | `tpi:tapdir`'s listing → CAT's colours |
+| `CAT_COLOUR(text)` | 1546 | a plain folder listing → CAT's colors |
+| `TAPDIR_COLOUR(text, headers)` | 1582 | `tpi:tapdir`'s listing → CAT's colors |
 | `MSG_BYTE(m)` | 2169 | one character of a `SEND_MSG` text → one byte |
 | `SEND_MSG(msg, msg1, st, forceDisplay=False)` | 2193 | a bare status, or `81h` and a message |
 | `SEND_MSG2(msg, st, expandKeywords=True, colour=False)` | 2253 | `86h`: long text in pages, "Scroll? (Y/n)" between them |
@@ -79,7 +79,7 @@ The text rules, which the builders all keep
   take the next byte or two as their value, and the reader passes those
   straight to `RST 10h`, so a `00h` or `03h` value (INK 0, PAPER 3) is a
   value, not an end. ROM 2.2 tested them too, so those values could not be
-  sent. So far `SEND_MSG2`'s colour codes are the firmware's only use of
+  sent. So far `SEND_MSG2`'s color codes are the firmware's only use of
   either; it still sends `?` for bytes of `80h` and above.
 - `0Dh` is a new line; `08h` moves back one column.
 - Codes 124 (`|`) and 126 (`~`) print as the TS2068 keywords STICK and
@@ -170,7 +170,7 @@ The rows are not separated: on a 32-column screen each fills a line and
 the next starts on the following one. The fixed layout is what
 `CAT_COLOUR` (and the tests of `dirinfo` and `tpi:info`) rely on. Callers:
 `DIR_FILES` (1645, with `"SD: card error"`), `LIST_DIR_FILES` (1739), and
-`CATALOG_TEXT` (2694, with the catalogued folder as `path`)
+`CATALOG_TEXT` (2694, with the cataloged folder as `path`)
 ([tspico-files.md](tspico-files.md), [tspico-disk.md](tspico-disk.md)).
 
 ### `CAT_COLOUR(text)`
@@ -192,21 +192,21 @@ shows, chosen 2026-10-02:
 
 Text that does not start with `Path:` or is shorter than 128 characters
 (a TAP's block list, "Directory is empty") is returned unchanged. Every
-row starts by setting its own colours, so a "Scroll?" prompt in the middle
+row starts by setting its own colors, so a "Scroll?" prompt in the middle
 changes nothing; and no row ends with a code after its 32nd character,
-which would hide the line's end from `SEND_MSG2`'s column count. Colour 8
+which would hide the line's end from `SEND_MSG2`'s column count. Color 8
 (`NORMAL_`, "transparent": the screen's own) and 9 ("contrast") are the
 only values used beyond 1, 5 and 7, so none is `00h` or `03h` (see the
 text rules). Send the result with `SEND_MSG2(…, colour=True)`; without
 `colour` the codes are stripped. Callers: `DIR` (2569), `CATALOG` (2635),
 `CDIR` (4304), `ZX_TPI`'s listing (7431).
 
-`lista` and `dirinfo.tap` keep the plain text; the colour is added only on
+`lista` and `dirinfo.tap` keep the plain text; the color is added only on
 the way out.
 
 ### `TAPDIR_COLOUR(text, headers)`
 
-`tpi:tapdir`'s listing in the same colours (agreed 2026-10-02). `text` is
+`tpi:tapdir`'s listing in the same colors (agreed 2026-10-02). `text` is
 `TAPDIR`'s: four 32-character header rows (`File:` …, the pointer and
 append line, the titles, the dashes), then 32-character block rows whose
 first character is `>` (the block `LOAD ""` reads next) or a space and
@@ -248,7 +248,7 @@ and many messages build their lines with `chr(13)` (`tpi:zx48`,
 `tpi:info`, the `romupdate` refusal). Replacing it as well (#107) printed
 every one of those line breaks as `?`.
 
-So colour codes cannot be sent through `SEND_MSG`; `SEND_MSG2` has its own
+So color codes cannot be sent through `SEND_MSG`; `SEND_MSG2` has its own
 rules. `|` and `~` (124, 126) pass, and print as STICK and FREE.
 
 ### `SEND_MSG(msg, msg1, st, forceDisplay=False)`
@@ -504,7 +504,7 @@ After a choice: `chosen`, `0Dh`, the entry, `0Dh`, `03h`; `send()`;
 and `-1`. Before this guard an empty list skipped the page loop and sent
 only the final `03h`: the Z80 read it as the command's status, Report F
 (`SAVE "tpi:cd"` in a folder with no subfolders). `IDIR` and `CDIR` take
-`-1` as "cancelled".
+`-1` as "canceled".
 
 Beware:
 
@@ -513,7 +513,7 @@ Beware:
   reporting errors to the 2068 ("Can't set or show error now").
 - The entries are printed as they are, so the caller must make them
   32-column safe (`IDIR` passes `"%03d " + shorten_filename(xstr(f), 26)`).
-- The colours (blue bar `PAPER 1 INK 7`, cyan `PAPER 5 INK 9`, blue ink
+- The colors (blue bar `PAPER 1 INK 7`, cyan `PAPER 5 INK 9`, blue ink
   `INK 1`) are sent with `CmdOut` a byte at a time; none is `00h` or `03h`.
 
 ### `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)`

@@ -1309,9 +1309,9 @@ SAVE "tpi:opprint"     : REM finish this file and start the next one now
 The next LPRINT after a `tpi:clprint` starts a new file automatically.
 
 The text file is plain text, with a few conventions for things plain text can't show. The
-2068's block graphics, user-defined graphics and colour codes are written with backslashes, the
+2068's block graphics, user-defined graphics and color codes are written with backslashes, the
 same way the popular `zmakebas` tool writes them: for example `\::` for a solid block, `\A`
-for user-defined graphic A, and `\{INK 2}` for a colour change. Print positions are written the
+for user-defined graphic A, and `\{INK 2}` for a color change. Print positions are written the
 same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©` is written
 `\*`, and a backslash itself as `\\`.
 
@@ -1324,7 +1324,7 @@ same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©
 | `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default) |
 | `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. |
 
-COPY understands the 2068's other screen modes too: the second screen, hi-colour, and the
+COPY understands the 2068's other screen modes too: the second screen, hi-color, and the
 512-column hi-res mode.
 
 These settings last until the TS-Pico is switched off.
@@ -2286,7 +2286,7 @@ mounted`).
 **Fallback.** Go into another folder and back.
 **Likely cause.** The file was copied onto the card from a computer after the last listing.
 
-### The screen is garbled with coloured stripes at switch-on, and TS Reset doesn't help
+### The screen is garbled with colored stripes at switch-on, and TS Reset doesn't help
 
 **Fix.** If you'd been trying out a ROM with `tpi:boot`, switch off and on twice to get back to
 the standard ROM.
@@ -2430,7 +2430,7 @@ To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1: NEW`. You can
 
 ## A.5 If slot 1 gets damaged
 
-If the 2068 starts with coloured stripes and TS Reset doesn't help, but another slot boots, you
+If the 2068 starts with colored stripes and TS Reset doesn't help, but another slot boots, you
 can put the standard ROM back from the SD card:
 
 1. Copy the ROM file, `TSPICO-23.ROM`, to the card's `TAP` folder. It's in the release
@@ -2533,7 +2533,7 @@ boot it from there (8.5).
 
 ## A.5 If slot 1 gets damaged
 
-If the 2068 starts with coloured stripes and TS Reset doesn't help, the ROM in slot 1 may be
+If the 2068 starts with colored stripes and TS Reset doesn't help, the ROM in slot 1 may be
 damaged. Run the web updater (A.2): it always rewrites slots 0 and 1. Or, if another slot
 boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`), into
 **Flash(2)** slot **1** as in A.4, and confirm that you're sure.
@@ -2734,7 +2734,7 @@ that are still running, reached by telnet, or your own.
 
 ## F.1 How it works
 
-The 2050 was a 300-baud modem. Programs drove it through ports 115 and 119, dialled by pulsing
+The 2050 was a 300-baud modem. Programs drove it through ports 115 and 119, dialed by pulsing
 the line, and watched for the carrier. The card answers those ports the same way. When a
 program dials, the card looks the number up in the modem's **phonebook**, where you have
 written the host it stands for, and connects. When the host hangs up, the program sees the
@@ -2764,7 +2764,7 @@ It shows `Status 133`. Turn on **CAPS LOCK**; type each command and press **ENTE
 1. `ATW"yournetwork,yourpassword"` joins your WiFi. The modem answers `OK` after a few seconds.
 2. `AT&W` saves it. (The first time, the modem may print a line starting `[E]` before `OK`. That
    is harmless.)
-3. `ATP"1234=bbs.example.com:23,MY BBS"` writes a phonebook entry: dialling **1234** reaches
+3. `ATP"1234=bbs.example.com:23,MY BBS"` writes a phonebook entry: dialing **1234** reaches
    that host and port. Add as many as you like, each with its own number. `ATP` on its own lists
    them.
 4. `ATI` shows the modem's state, including the WiFi network.
@@ -2778,11 +2778,11 @@ SAVE "tpi:modem 2050"
 You can also try a host in Hayes mode before giving it a number: `ATDT"bbs.example.com:23"`
 connects, and the host's text appears.
 
-## F.3 Dialling with MTERM
+## F.3 Dialing with MTERM
 
 1. Load MTERM from the SD card and start it.
 2. Use its dial command and enter a phonebook number, for example **1234**. MTERM dials it
-   (you'll hear nothing: the card listens to the dialling), waits for the carrier and connects.
+   (you'll hear nothing: the card listens to the dialing), waits for the carrier and connects.
 3. Many hosts wait for you before they say anything: press **ENTER**, or **ENTER** twice, as
    MTERM's own manual suggests.
 4. To finish, hang up with MTERM's own command. If the host hangs up first, MTERM notices that
@@ -2856,7 +2856,7 @@ can fall behind the modem. The card holds 16 KB; past that, characters are lost.
 modem `ATF1` (XON/XOFF flow control), then `SAVE "tpi:modem flow on"`, and dial with an X
 after the D or DT, for example `ATDTX"bbs.example.com:23"`. The card then sends the modem XOFF
 (character 19) when its store is half full, and XON (17) once the program has read it down.
-The modem obeys them only on a call dialled with the X; on any other call it passes them on
+The modem obeys them only on a call dialed with the X; on any other call it passes them on
 to the host as data. On an X call the modem also takes any 19 or 17 the program sends as
 XOFF or XON, so don't send binary data that contains them. `SAVE "tpi:modem flow off"` turns
 it off again.
@@ -2995,7 +2995,7 @@ those ports.
 The SP0256-AL2's ROM is copyright Microchip Technology Inc., which retains the rights to the
 algorithms and data it contains, and allows its distribution with this acknowledgment. The
 chip is recreated by MAME's SP0256 emulation (Joseph Zbiciak and Tim Lindner, BSD-3-Clause
-licence). The spelling-to-sound rules are the US Naval Research Laboratory's (NRL Report
+license). The spelling-to-sound rules are the US Naval Research Laboratory's (NRL Report
 7948, 1976), as John A. Wasser coded them in 1985; both are public domain. The details are in
 the `NOTICE` file on the project's GitHub.
 

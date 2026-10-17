@@ -83,7 +83,7 @@ Ten bytes open every transaction. Byte 0 picks the kind
 | 42h `'B'` | 4, 5, 6 | printer: COPY (4, 6), one LPRINT character (5) | `PRINT_IO` |
 | 42h `'B'` | 0 | `SAVE "tpi:…"`: a command | `PROCESS_CMD` → `SA_funct` / `EXT_SA_FUNCT` |
 | 42h `'B'` | 1–3 | `LOAD "tpi:name"`: mount | `PROCESS_CMD` → `LOAD_TPI` |
-| anything else | — | unrecognised: FIFOs emptied, one 01h staged, status FBh | `MQ_TO_IDLE(recovered=True)` |
+| anything else | — | unrecognized: FIFOs emptied, one 01h staged, status FBh | `MQ_TO_IDLE(recovered=True)` |
 
 | Byte | Command (`'B'`) | Block (00h / FFh) |
 |---|---|---|

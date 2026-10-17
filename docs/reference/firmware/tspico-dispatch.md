@@ -184,7 +184,7 @@ TX empty, Y BUSY.
 
 Takes: `scr`, a `memoryview` of the screen bytes from the body (6912 bytes
 for mode 0, 15104 for the others: both screens, 4000h–7AFFh); `mode`, the
-pre-header's `pre[4]`; `colour`, `pre[3]`, the hi-res colour byte. Reads
+pre-header's `pre[4]`; `colour`, `pre[3]`, the hi-res color byte. Reads
 `bmp_size` (default `(512, 384)`; `PRN_BMP` sets it). Only caller:
 `PRINT_IO`. The test writes the default size and checks 98422 bytes.
 
@@ -197,7 +197,7 @@ the wire format, captured on hardware, is in [printer.py](../../../src/TS/printe
 header).
 
 The pre-header's fields here: `pre[1]` 5 = a character, 4 or 6 = COPY;
-`pre[3]` the character (TADDR 5) or the hi-res colour byte (COPY); `pre[4]`
+`pre[3]` the character (TADDR 5) or the hi-res color byte (COPY); `pre[4]`
 the screen mode (COPY); `pre[7..8]` the body length, 0 for a plain character,
 8 for a character of 80h or more (its pattern), 6912 or 15104 for COPY.
 
@@ -499,7 +499,7 @@ it.
 
 It owns `busy` (core1 is writing the log), `dead` (tells `BLINK_LED` to
 stop), `files`, `lista`, `log_entries`,
-`log_to_serial` (initialised `False`; nothing in the module sets it `True` —
+`log_to_serial` (initialized `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file),
 `MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6791, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
@@ -794,7 +794,7 @@ the flag — Report R, seen on hardware after a BREAK (#51, #64). For SAVE,
 `PROCESS_CMD` (above). The condition used to be Ryan's
 `not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)`, which still gave a
 headerless LOAD (TADDR ≥ 10) the early READY (audit §2 #11, 2026-09-30).
-As the code stands the early READY is reached only by an unrecognised
+As the code stands the early READY is reached only by an unrecognized
 pre-header, whose branch then goes to `MQ_TO_IDLE` anyway.
 [load_ts_hosttest.py](../../../src/test/load_ts_hosttest.py) and
 [save_ts_hosttest.py](../../../src/test/save_ts_hosttest.py) each check the
@@ -981,7 +981,7 @@ re-arms), [dir_files_eio_hosttest.py](../../../src/test/dir_files_eio_hosttest.p
 (the pre-header goes through `RX_CAPTURE` in both copies of the module),
 [stdin_drain_hosttest.py](../../../src/test/stdin_drain_hosttest.py) (both
 heartbeats drain stdin), [printer_io_hosttest.py](../../../src/test/printer_io_hosttest.py)
-(the flush before other commands). The phase-by-phase byte behaviour of the
+(the flush before other commands). The phase-by-phase byte behavior of the
 branches is pinned by the handlers' own tests
 (`load_ts_hosttest`, `save_ts_hosttest`, `cmd_io_hosttest`), each of which
 "does what the dispatcher does" around the handler.
@@ -1034,7 +1034,7 @@ What it does:
    listing stale; `ACTIVATE_SD()`; `text, st = CATALOG_TEXT(rest[3:].strip())`
    ([tspico-disk.md](tspico-disk.md)); `DEACTIVATE_SD()`, `ACTIVATE_MQ()`
    (Y BUSY); an `OSError` is "SD card error", `_3_F_Invalid_file`. On
-   success `listing = CAT_COLOUR(text)` — the Spectrum has the same colour
+   success `listing = CAT_COLOUR(text)` — the Spectrum has the same color
    codes — and `stall = CMD_STALL_MS` (600 s), because the ROM's `PR_STRING`
    stops at its own "scroll?" for as long as the user likes and only a new
    command ends it.
@@ -1088,7 +1088,7 @@ view: [user-manual.md 9.2](../../manual/user-manual.md#92-what-works-in-spectrum
 ## `ZX48_IO(pre)`
 
 The loop the firmware runs while the 2068 is a ZX Spectrum: after
-`SAVE "tpi:zx48"` and `OUT 244,3` the customised Spectrum ROM in flash slot
+`SAVE "tpi:zx48"` and `OUT 244,3` the customized Spectrum ROM in flash slot
 0 talks a protocol with no status port, no pre-header, no pre-load and no
 echo ([PROTOCOL.md §10](../../PROTOCOL.md#10-zx48-mode),
 [flows/zx48.md](../flows/zx48.md)). `pre` is the `tpi:zx48` command's

@@ -14,7 +14,7 @@ channel (`s:`) was dropped: the ROM can't reach it.
 ## What the prototypes settled
 
 Three voices were rendered on the Mac and compared by ear: SAM (the 1982
-C64/Atari voice), the SP0256-AL2, and a formant synthesiser written for the
+C64/Atari voice), the SP0256-AL2, and a formant synthesizer written for the
 comparison.
 
 - **The voice: the SP0256-AL2 (decided),** emulated from its ROM. A first
@@ -22,13 +22,13 @@ comparison.
   (from cpcwiki, as David's board uses). It popped at the joins, because many
   recordings start or end with a full-scale click. Measured against the ROM,
   the recordings also run about 25 % slow (every allophone 1.25 times the
-  ROM's length, as from 8 kHz material labelled 10 kHz), and several are
+  ROM's length, as from 8 kHz material labeled 10 kHz), and several are
   mis-cut (PP, GG2, HH1, HH2). Emulated from the ROM, the chip plays a
   sentence as one continuous stream: no joins, 4–5 times fewer large sample
   steps, and the speed of a real AL2 on its 3.12 MHz crystal. "Way better"
   (David).
 - **SAM is out:** the only source is a reconstruction of proprietary code with
-  no licence.
+  no license.
 - **The formant voice** worked and could do intonation (questions, and
   "Canadian" uptalk), but the SP0256 is the character wanted. Its code stays
   with the prototypes.
@@ -41,7 +41,7 @@ The prototype tools (`sentences.py`, `t2a.py`, `sp0256_rom.cpp`,
 | Part | Source | Terms |
 |---|---|---|
 | The AL2's allophone data | `al2.bin`, 2 KB, the chip's ROM ([spatula-city.org/~im14u2c/sp0256-al2](http://spatula-city.org/~im14u2c/sp0256-al2/); bit-reversed relative to MAME's `sp0256-al2.bin`, SHA-1 `e60fcb5f…` once reversed) | Copyright Microchip Technology Inc. In 2007 Microchip's legal department told Joe Zbiciak he may distribute the ROM data "so long as you acknowledge Microchip's ownership of the algorithms". MAME and others ship it with that acknowledgment, and so would we. |
-| The chip emulation | MAME's `src/devices/sound/sp0256.cpp` (Joseph Zbiciak, Tim Lindner) | BSD-3-Clause: fine beside the firmware's MIT licence. GmEsoft's SP0256/CTS256A emulator is GPL-3, so we don't take code from it. |
+| The chip emulation | MAME's `src/devices/sound/sp0256.cpp` (Joseph Zbiciak, Tim Lindner) | BSD-3-Clause: fine beside the firmware's MIT license. GmEsoft's SP0256/CTS256A emulator is GPL-3, so we don't take code from it. |
 | English to phonemes | The US Naval Research Laboratory's letter-to-sound rules (NRL Report 7948, 1976) as John A. Wasser coded them (`english.c`, 1985, CMU AI Repository) | Public domain: a US-government report, and Wasser's own "all public domain and I make no copyright claims on it". |
 
 The acknowledgments go in a `NOTICE` file and the manual. Strictly,
@@ -65,7 +65,7 @@ As `t2a.py` does:
 4. **Phonemes to AL2 allophones** by context, as the datasheet describes:
    - word-initial and final variants (TT2/TT1, DD2/DD1, DH1/DH2, BB2/BB1);
    - KK1/KK3/KK2 and GG1/GG2/GG3 by the following vowel;
-   - the r-coloured vowels (AR, OR, XR, YR) and NG before K or G;
+   - the r-colored vowels (AR, OR, XR, YR) and NG before K or G;
    - pauses for spaces and punctuation.
 
 A line of text takes milliseconds, so it can run inside a command.

@@ -57,7 +57,7 @@ a final status — TX [status, 01]. The pattern is read and not used; a bad
 XOR is logged as a warning, and the character is printed anyway (#180).
 
 **The buffer.** `PRT` turns the stream into zmakebas text: ENTER a line
-end (`\n`, or `\r\n` with AUTOLF), the colour controls as `\{INK n}` and
+end (`\n`, or `\r\n` with AUTOLF), the color controls as `\{INK n}` and
 so on with their parameters, a comma as `\{COMMA}`, wrapping at PRNSZ's
 columns, a form feed every PRNSZ lines with AUTOPG
 ([../firmware/printer.md](../firmware/printer.md#textcapturefeedself-c)).
@@ -91,10 +91,10 @@ transaction ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#the-printer-path-16
 
 | # | Side | What happens |
 |---|---|---|
-| 1 | 2068 | SYNC; `'B'`; TADDR 4 or 6 (from T_ADDR: the screen mode as the stock code encodes it); BANK; PMR1 low = the hi-res colour byte (from a table, by port FFh bits 3–5), high = the screen mode (port FFh bits 0–2, 6 sent as 3); PMR2; the length, 1B00h (6912) or 3B00h (15 104 for the larger screens); XOR |
+| 1 | 2068 | SYNC; `'B'`; TADDR 4 or 6 (from T_ADDR: the screen mode as the stock code encodes it); BANK; PMR1 low = the hi-res color byte (from a table, by port FFh bits 3–5), high = the screen mode (port FFh bits 0–2, 6 sent as 3); PMR2; the length, 1B00h (6912) or 3B00h (15 104 for the larger screens); XOR |
 | 2 | Pico | `PRINT_IO`: `RX_BLOCK(…, "mid")` listening, Y `F7` |
 | 3 | 2068 | SEND_DATA_BLOCK_D from 4000h: the pre-load, a ready-wait, `'D'`, the length, the screen bytes, the XOR |
-| 4 | Pico | the body captured (DMA ring); its XOR checked; `COPY_BMP` — the card mounted, `next_name` → `/VSCREEN/SCRnnnn.BMP`, the screen decoded (normal, dual or hi-res, with its colours) and written at `tpi:bmp`'s size, 4 bits a pixel ([../firmware/printer.md](../firmware/printer.md#write_bmpf-scr-mode-hires_colour-sx-sy)); then the final status and the next pre-load, READY + IDLE |
+| 4 | Pico | the body captured (DMA ring); its XOR checked; `COPY_BMP` — the card mounted, `next_name` → `/VSCREEN/SCRnnnn.BMP`, the screen decoded (normal, dual or hi-res, with its colors) and written at `tpi:bmp`'s size, 4 bits a pixel ([../firmware/printer.md](../firmware/printer.md#write_bmpf-scr-mode-hires_colour-sx-sy)); then the final status and the next pre-load, READY + IDLE |
 | 5 | 2068 | the final status: 1 → done; 2 → Report R (a bad body, no card, a failed write) |
 
 With TPMODE bit 0 clear the stock COPY runs (176 pixel lines to a ZX

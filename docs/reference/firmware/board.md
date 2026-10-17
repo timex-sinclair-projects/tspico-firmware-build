@@ -193,7 +193,7 @@ then sets READY.
 ### `restart_mq(MQ)`
 
 `MQ.active(0)`, 10 ms, `MQ.active(1)`. `ZX48_IO` uses it on entry, after an
-unrecognised byte, and on exit, each time after draining the FIFOs.
+unrecognized byte, and on exit, each time after draining the FIFOs.
 
 ### `rom_slot_empty(mem, slot)`
 
@@ -338,7 +338,7 @@ up, so low means a card. Read on the card with the socket empty: port 1 FFh.
 
 250. How long a card the switch has only just seen is left before its first
 SPI clock (`sd_card_ready`), so that it is fully seated and powered before
-its lines are driven. A judgement, not a measured figure.
+its lines are driven. A judgment, not a measured figure.
 
 ### `_i2c`, `_cd_since`
 
@@ -439,7 +439,7 @@ else unless something changes.
 - On, not off-hook, and unused for the idle time: `_modem_off`.
 
 Nothing for mode "off". On proto1 (2026-10-12) MTERM/T loaded from the SD
-card, its reset powered the ESP32, and it dialled, connected and hung up
+card, its reset powered the ESP32, and it dialed, connected and hung up
 with no other step. `board_v3_hosttest.py` pins the timing: status polls
 alone don't wake it, bit 3 brings the line up with nothing told to tsbus,
 the 8 s fallback, polling or off-hook keep it, ten idle minutes stop it.

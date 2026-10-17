@@ -329,7 +329,7 @@ command's result. The firmware uses these:
 
 Text ends at 00h, and an 86h listing at 03h; every other byte is printed with `RST 10h`. That
 includes bytes of 80h and more (block graphics, UDGs, keywords), and the value bytes after a
-control code: INK 0 is a colour, and AT 3,0 a position, not the end of the text. The ROM also
+control code: INK 0 is a color, and AT 3,0 a position, not the end of the text. The ROM also
 understands 82h–85h and 87h, but the firmware never sends them. Any other code gives
 **Report D**, with the rest of the answer left unread.
 
@@ -1375,7 +1375,7 @@ BREAK and 1Ch if the Pico reset the transaction.
 To call C_END safely, catch any report on the way out. BASIC finds its error handler through
 ERR_SP (5C3Dh). Point ERR_SP at a trap of your own for the length of the call, and the trap
 can put the bank stack right before passing the error on. The ROM's disk commands do exactly
-this. Here's the same idea for a RAM program. It's modelled on the ROM's code, but it is
+this. Here's the same idea for a RAM program. It's modeled on the ROM's code, but it is
 **untested**, so try it carefully:
 
 ```asm
@@ -1454,7 +1454,7 @@ in RAM, with no bank switching at all.
 
 # Chapter 10: Inside the Firmware
 
-> **Chapter Preview.** How the firmware is organised, what happens between the 2068's last
+> **Chapter Preview.** How the firmware is organized, what happens between the 2068's last
 > byte and the Pico's answer, and the one rule every command must follow.
 
 ## 10.1 The pieces
