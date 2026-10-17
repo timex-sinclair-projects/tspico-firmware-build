@@ -807,8 +807,8 @@ path. `ticks_us()` wraps after ~71 minutes.
 ### `LOAD_REFUSE(pre, MQ, st)`
 
 Ends a LOAD with an error instead of a block: status `st`, 2 for Report R, 7
-for "End of file" (Report 8 where the ROM maps it; ROM 2.2's header search
-shows it as R). Returns 0, or `TX_ROOM`'s 1 or 3 after a BREAK or a stall,
+for "End of file". On a LOAD the ROM shows both as R: EXROM 196Dh turns any
+refused LOAD into R (ROMs 2.1 to 2.3; the user manual said 8 until #311). Returns 0, or `TX_ROOM`'s 1 or 3 after a BREAK or a stall,
 having gone back to idle.
 
 The status cannot simply be written first. The ROM reads a LOAD's first
@@ -922,8 +922,8 @@ request with no search in progress (`ld_start < 0`) starts one at the current
 `offset` and `tap_idx`, with `ld_wrapped = False`. A header request after the
 tape has wrapped (`ld_wrapped`) and come back to or past `ld_start` is a full
 lap with nothing accepted: the search ends, the file is closed if it is not the
-cached handle, and the LOAD is refused with status 7 ("End of file"; ROM 2.2
-shows R). One lap is allowed deliberately, because a program that
+cached handle, and the LOAD is refused with status 7 ("End of file"; ROMs 2.1
+to 2.3 show R). One lap is allowed deliberately, because a program that
 legitimately needs to wrap cannot rewind — it does not speak TPI — and a second
 lap would only repeat the first. Then the end of the tape: `arch_len` is the
 file's size, and an `offset` at or past it is reset to block 0 with
