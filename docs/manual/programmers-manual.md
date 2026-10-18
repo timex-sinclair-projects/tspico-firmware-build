@@ -53,6 +53,10 @@
 - R4. Answers
 - R5. The picolib Routines
 - R6. The Pico BIOS
+- R7. System Variables and ROM Addresses
+- R8. The Channels
+- R9. The External-Command Contract
+- R10. Firmware Helpers
 
 **Appendices**
 
@@ -988,7 +992,8 @@ harm is done: the next command's SYNC clears them.
 # Chapter 6: Files as Streams: the Channel Commands
 
 > **Chapter Preview.** The four commands behind `OPEN #`, `PRINT #`, `INPUT #` and `CLOSE #`,
-> and how your machine code can use them directly.
+> and how your machine code can use them directly. Chapter R8 has every rule, error and
+> limit.
 
 ## 6.1 The four commands
 
@@ -1198,7 +1203,7 @@ BIOS:   di                      ; the bank switch is not interrupt-safe
 40 POKE 60009,2: RANDOMIZE USR 60006: REM the same as SAVE "tpi:sdcard"
 ```
 
-You should see version 33.
+You should see version 35: 0023h, ROM 2.3.
 
 ## 8.3 The danger: errors inside the EXROM
 
@@ -1357,10 +1362,12 @@ both FIFOs. Again the tail runs.
 > **A handler gives exactly one answer, and never writes the 01h pre-load.**
 
 One answer means one status byte, or one response function with its data, or one data answer
-in a format your 2068 code expects. **Not zero:** the 2068 waits, then gives J. **Not two:**
-the second answer's bytes sit in the FIFO and are read as part of the next command, which
-usually shows up as Report R one command later. **And no pre-load:** the tail writes it. A
-second 01h is an orphan byte with the same effect.
+in a format your 2068 code expects. **Not zero:** the 2068 reads the tail's pre-load as the
+status, and reports 0 OK as if the command had worked. **Not two:** the second answer's bytes
+sit in the FIFO. The tail waits three seconds for someone to read them, and the next command's
+SYNC throws them away; a client that doesn't SYNC first reads them as part of its next command,
+which usually shows up as Report R one command later. **And no pre-load:** the tail writes it.
+A second 01h is an orphan byte with the same effect.
 
 Because a mistake shows up one command *later*, these bugs are confusing to chase. Test for
 them (Chapter 15).
@@ -1539,7 +1546,8 @@ def LINES(MQ, TSP, pre, cmd):
 The SD card shares pins with the 2068's data bus, so the card and the ports can't be active at
 the same time. **Always use `SD_CALL`** for SD work. It switches the pins to the card, runs
 your function, and switches them back, even if the function fails. An `OSError` comes back as
-`("SD card error", 3)`. Do all your SD work first, and only then queue the answer and say
+a message and a status: `("SD card error", 3)`, or status 10 if there's no card at all. Do all
+your SD work first, and only then queue the answer and say
 READY.
 
 `catalog.resolve` turns what the user typed into a real path. It follows the same rules as
@@ -1785,10 +1793,11 @@ that the link is left idle with exactly one pre-load after every command.
 ## 15.2 Watching the Pico
 
 - `python3 tools/pico-serial.py watch` shows the Pico's USB console with timestamps, without
-  disturbing it. With telemetry on (it is, in `main.py`), each command step prints a `[TLM ...]`
-  line showing the time and the FIFO levels.
+  disturbing it. With telemetry on (`"TELEMETRY": true` in the Pico's `/config.ini`; releases
+  ship with it off), each command step prints a `[TLM ...]` line showing the time and the FIFO
+  levels.
 - `SAVE "tpi:log"` on the 2068 shows the log (`/activity.log` on the flash), and
-  `tp.LOG(msg, level)` writes to it (0 = info, 3 = critical).
+  `tp.LOG(msg, level)` adds to it (0 = info, 3 = critical; R10.18).
 - **Thonny stops the firmware when it connects.** The 2068 then sees a long pause and Report J.
   Close Thonny, or use `pico-serial.py`, which refuses to share the port.
 - To put a test tape on the SD card without taking the card out: `pico-serial.py break`, then
@@ -1838,10 +1847,6 @@ program can call, with what it takes, what it gives back and what it costs. Each
 with a quick list, then has one entry per routine, numbered so the rest of the book can cite it
 ("R5.3"). For the reasons behind a routine, follow the "Background" link at the end of its
 entry.
-
-> **Work in progress.** This part is new in this edition. R1 to R6 are written. R7 to R10
-> (system variables, the channels, the external-command contract and the firmware helpers) will
-> follow. Until they do, that material is in Chapters 6 and 11 and Appendices B and C.
 
 ---
 
@@ -2197,7 +2202,7 @@ yourself instead (R6.2, section 7.3).
 | | |
 |---|---|
 | **When** | after the Pico's handler has finished |
-| **The Pico** | waits (up to 10 minutes) until you've read everything it queued, empties its receive FIFO, queues the next pre-load (01h), and says FFh, or FBh if you stopped reading |
+| **The Pico** | waits up to 3 seconds for you to read everything it queued, empties its receive FIFO, queues the next pre-load (01h), and says FFh. It says FBh instead if the command gave up because you stopped reading for 10 minutes. |
 | **The 2068** | nothing to send. The next command's SYNC waits for IDLE, which is the tail's end. |
 
 **Description.** The tail is why a command's answer can say READY before the transaction is
@@ -3223,6 +3228,1185 @@ short (section 8.3). Use `MAP_STATUS` and `RAISE` (R5.11, R5.12) instead. It giv
 
 ---
 
+# Chapter R7: System Variables and ROM Addresses
+
+The memory a machine-code program may read, write or call, besides the ports: the TS-Pico's
+system variables, the 2068's own that `picolib` uses, and a few fixed HOME ROM addresses.
+Background: Chapter 8 and Appendix F.
+
+The addresses were checked against ROM 2.2's listing. ROM 2.3 changed only the version numbers
+among them, as far as the sources show.
+
+| No. | Address | Name | Use it to |
+|---|---|---|---|
+| R7.1 | 5DDBh (24027) | TPMODE | read or set the TS-Pico's two switches |
+| R7.2 | HOME 0065h (101) | the version byte | tell which ROM is running |
+| R7.3 | 5DCDh (24013) | the thunk's HL | pass HL to an EXROM routine |
+| R7.4 | 65CEh (26062) | BANK_SP | put the bank stack right in an error trap |
+| R7.5 | 5D37h (23863) | the NMI vector | handle the NMI yourself |
+| R7.6 | 5DCFh–5DDAh | the TS-Pico's other variables | nothing: they're internal |
+| R7.7 | 5C08h–5C51h | the 2068's variables | read keys, trap errors, find channels |
+| R7.8 | HOME 1230h | CHAN-OPEN | select a stream for `RST 10h` |
+| R7.9 | HOME 03FCh | the EXROM call | reach the EXROM from a RAM program |
+
+## R7.1 TPMODE (5DDBh, 24027)
+
+| | |
+|---|---|
+| **Size** | 1 byte |
+| **At power-on** | 2: LOAD and SAVE go to the Pico, the printer is the 2068's own |
+| **Read** | `PEEK 24027`, or the BIOS's `G_MODE` (R6.1), which masks it to bits 0–3 |
+| **Write** | `SAVE "tpi:sdcard"` and the other switch words, or the BIOS's `S_MODE` (R6.2), or `SET`/`RES` on the bit |
+
+| Bit | 1 means | Set by | Cleared by |
+|---|---|---|---|
+| 0 | LPRINT, LLIST and COPY go to the Pico | `SAVE "tpi:picopt"` | `SAVE "tpi:ts2040"` |
+| 1 | LOAD, SAVE, VERIFY and MERGE go to the Pico | `SAVE "tpi:sdcard"`, power-on | `SAVE "tpi:tape"` |
+| 2–5 | (unused) | | |
+| 6–7 | the ROM's own flags while it reads a name (`tpi:`, `net:`) | the ROM | the ROM, before the statement ends |
+
+**Description.** The two switches the ROM checks before every LOAD, SAVE and printer
+operation. The four switch words are handled by the ROM itself and never reach the Pico, so
+from machine code you set the bits yourself.
+
+**Example.**
+
+```asm
+        ld hl,5DDBh
+        set 1,(hl)              ; the same as SAVE "tpi:sdcard"
+```
+
+**Notes.** Change only the bit you mean. Bits 6 and 7 are clear between statements, but
+`S_MODE` clears them whatever they were.
+
+**See also.** R6.1, R6.2. Background: section 7.3.
+
+## R7.2 The version byte (HOME 0065h, 101)
+
+| | |
+|---|---|
+| **Size** | 1 byte, in the HOME ROM |
+| **Read** | `PEEK 101`, or `ld a,(0065h)` with HOME paged in |
+
+| Value | ROM |
+|---|---|
+| 21 (15h) | 1.1 |
+| 34 (22h) | 2.2 |
+| 35 (23h) | 2.3 |
+
+**Description.** The high digit of the hex value is the major version and the low digit the
+minor. The BIOS's `G_VERS` (R6.3) returns the same number in BC, and ROM 2.3 sends it to the
+Pico as pre-header byte 2 (R3.4).
+
+**Notes.** A genuine 2068 has FFh here.
+
+**See also.** R6.3. Background: section 1.4.
+
+## R7.3 The thunk's HL (5DCDh, 24013)
+
+| | |
+|---|---|
+| **Size** | 2 bytes |
+| **Write** | the HL an EXROM routine should get, just before `CALL 03FCh` (R7.9) |
+| **Also used by** | the EXROM, as the byte count of a block it's sending |
+
+**Description.** The call into the EXROM uses HL for the routine's address, so the routine's
+HL comes from here instead. Store it immediately before the call.
+
+**Notes.** Don't rely on what's here afterwards: every call through 03FCh, and every block the
+EXROM sends, can change it.
+
+**See also.** R6 (calling the BIOS), R7.9.
+
+## R7.4 BANK_SP (65CEh, 26062)
+
+| | |
+|---|---|
+| **Size** | 2 bytes |
+| **Holds** | the pointer of the bank-switching code's own stack, which takes 4 bytes for every call through 03FCh |
+| **Read and write** | only to save it before an EXROM call and restore it in an error trap |
+
+**Description.** The 2068 copies its bank-switching code into RAM at 6000h–65FFh when it
+starts (FD32h–FDFFh in 64-column mode), and keeps a small stack there. A report raised inside
+the EXROM unwinds the Z80's stack but not this one, so every such error leaves it 4 bytes
+short; after about sixteen, it overwrites the bank-switching code and the machine crashes. An
+error trap that saves BANK_SP before the call and puts it back afterwards prevents that.
+
+**Notes.** Never write to 6000h–65FFh itself.
+
+**See also.** R6.6 `C_END`. Background: sections 8.3 and 8.4, where the trap `XTRAP` does
+this.
+
+## R7.5 The NMI vector (5D37h, 23863)
+
+| | |
+|---|---|
+| **Size** | 2 bytes |
+| **Holds** | the address the EXROM's NMI routine jumps to; 0 means none |
+| **Write** | your NMI handler's address |
+
+**Description.** The TS-Pico ROMs fix the NMI routine's test (the Spectrum's tests the wrong
+way round) and give it this vector in place of the Spectrum's NMIADD. No ROM code writes it.
+
+**Notes.** Its value at power-on hasn't been checked. Set it before you rely on it.
+
+## R7.6 The TS-Pico's other variables
+
+| Address | Size | Holds |
+|---|---|---|
+| 5DCFh | 1 | BANK: always FFh. The firmware ignores it. |
+| 5DD1h | 2 | the session id: never 0 during a BASIC statement's LOAD or SAVE; 0 between |
+| 5DD3h | 2 | the address of a command's text |
+| 5DD5h | 2 | the length of a command's text |
+| 5DD7h | 2 | PMR1: the first CODE number of a `tpi:` command |
+| 5DD9h | 2 | PMR2: the second |
+
+**Description.** The ROM's working storage for a command or a transfer. Reading them is
+harmless; writing them while the ROM is using them isn't. A machine-code program that talks to
+the Pico through the ports needs none of them: `picolib`'s `PMR1` and `PMR2` are its own.
+
+## R7.7 The 2068's variables
+
+The 2068 system variables a program that talks to the Pico is likely to use. IY must hold 5C3Ah
+whenever the ROM runs, as it does under `USR`.
+
+| Address | Name | Size | Use |
+|---|---|---|---|
+| 5C08h (23560) | LAST_K | 1 | the last key pressed |
+| 5C10h (23568) | STRMS | 38 | two bytes per stream, −3 to 15: stream *n* is at 23568 + 2(*n* + 3). 0 means closed; anything else is the channel's offset in CHANS, plus 1. |
+| 5C3Ah (23610) | ERR_NR | 1 | the report code − 1, while a report is being raised. IY points here. |
+| 5C3Bh (23611) | FLAGS | 1 | bit 5: a new key is in LAST_K. Bit 7: 1 when a program runs, 0 while a line's syntax is checked. |
+| 5C3Dh (23613) | ERR_SP | 2 | where BASIC's error handling finds its frame. Point it at your own trap to catch a report (section 8.4). |
+| 5C4Fh (23631) | CHANS | 2 | the start of the channel records; 6840h on a fresh 2068 |
+| 5C51h (23633) | CURCHL | 2 | the current channel's record: what `RST 10h` prints to |
+
+**See also.** R5.9 `GETKEY` (LAST_K and FLAGS), R8.9 (an `F` channel's record). Background:
+Appendix F.
+
+## R7.8 CHAN-OPEN (HOME 1230h)
+
+| | |
+|---|---|
+| **Purpose** | Select a stream, so `RST 10h` prints to its channel. |
+| **Call** | `ld a,`*stream* / `call 1230h` |
+| **On entry** | A = the stream, −3 to 15 (2 is the main screen, 3 the printer). |
+| **If it fails** | Report O, if the stream isn't open. |
+
+**Example** (from `picocmd.asm`)
+
+```asm
+RUN:    ld a,2
+        call CHAN_OPEN          ; anything the Pico prints goes to the screen
+```
+
+**Notes.** It treats a STRMS entry whose bytes ORed together come to 80h or more as one of the
+2068's own bank channels, so a channel record of your own needs an offset with both bytes
+below 80h (Appendix F).
+
+**See also.** R5.7 `GET_REPLY`.
+
+## R7.9 The EXROM call (HOME 03FCh)
+
+| | |
+|---|---|
+| **Purpose** | Call a routine in the EXROM from a program running with HOME paged in. |
+| **Call** | `[ld (5DCDh),hl]` / `ld hl,`*address* / `di` / `call 03FCh` / `ei` |
+| **On entry** | A, F, BC and DE for the routine; its HL at 5DCDh (R7.3). |
+| **If OK** | the routine's A, F, BC, DE and HL. |
+| **Always** | IX corrupt. |
+| **Stack** | 4 bytes of the bank stack (R7.4), and at least 10 of the Z80's, plus the routine's |
+
+**Description.** Pages the EXROM in, calls the routine, and pages HOME back. Interrupts must
+be off: the switch is two port writes, and an interrupt between them lands in empty memory.
+
+**See also.** Chapter R6. Background: section 8.2.
+
+---
+
+# Chapter R8: The Channels
+
+The commands behind BASIC's `OPEN #`, `PRINT #`, `INPUT #` and `CLOSE #` for the `f:` and
+`d:` channels, and how they behave. A program can send them itself, with `SEND_CMD`. Background:
+Chapter 6, and Appendix F for how the ROM's channel works.
+
+| No. | Entry | |
+|---|---|---|
+| R8.1 | `tpi:chopen` | open a file or a folder listing |
+| R8.2 | `tpi:chwr` | write bytes, or move |
+| R8.3 | `tpi:chrd` | read bytes |
+| R8.4 | `tpi:chclose` | close |
+| R8.5 | TAB | move to a byte or record, or ask for a count |
+| R8.6 | Text mode | what's translated, each way |
+| R8.7 | Record files | fixed-length records |
+| R8.8 | `d:` listings | a folder as a channel |
+| R8.9 | From BASIC | `OPEN #`, and the channel's record |
+| R8.10 | What survives | BREAK, NEW, a reset, a new card |
+
+**For all four commands:**
+
+- CODE *a* is the **stream number**: the Pico's label for the channel. Only its low byte counts,
+  so it's 0 to 255. BASIC uses 0 to 15; a program of your own should use higher numbers, so it
+  can't close one of BASIC's (the examples use 200 to 202).
+- The answer is a bare status (or, for `tpi:chrd`, a data answer), and the status byte then
+  reads **F7h**, not FFh: the ROM's channel driver sends its next command at once. The tail's
+  FFh follows. Wait for IDLE before the next SYNC (R3.2).
+- The errors:
+
+| Status | Report | When |
+|---|---|---|
+| 3 | F | not found, a bad path, an SD card error |
+| 4 | Q | a bad mode, record length or request |
+| 5 | C | `tpi:chwr` text that isn't hex |
+| 10 | J | the stream isn't open, or there's no SD card |
+
+## R8.1 `tpi:chopen`
+
+| | |
+|---|---|
+| **Syntax** | `tpi:chopen` *mode* *path*, or `tpi:chopen r d:`*pattern* |
+| **CODE *a*** | the stream, 0–255 |
+| **CODE *b*** | the record length: 0 for a plain stream, 1–254 for a record file (R8.7) |
+| **Answer** | a status |
+
+| Mode | Opens | If the file doesn't exist | Starts at |
+|---|---|---|---|
+| `r` | to read | F | the start |
+| `w` | to write, emptying the file | it's made | the start |
+| `a` | to append | it's made | the end |
+| `u` | to read and write | it's made | the start |
+
+Add `b`, anywhere, for binary: no text translation (R8.6). Upper or lower case.
+
+**Description.** Opens *path* on *stream*. The path follows the same rules as every other
+command: relative to the current folder, `/` for the top of the card's `/TAP` folder, `..` for
+the folder above, and no climbing above `/TAP`. A path with no mode in front of it is opened
+`r`; so a path with a space in it needs its mode.
+
+**Errors.** F: an empty path, `/` itself, a file that isn't there (`r`), or a folder that isn't
+there. Q: a path that's a folder, a mode that isn't `r`, `w`, `a` or `u`, or a record length
+over 254.
+
+**Example** (from `loadfile.asm`)
+
+```asm
+OPEN_T: db "tpi:chopen rb "     ; rb = read, binary (no text translation)
+```
+
+**Notes.** Opening a stream that's already open replaces it, without closing the old file
+first. If that old channel had a record half written, it isn't padded out. Nothing stops one
+file being open on two streams.
+
+**See also.** R8.4, R8.8. Background: sections 6.1 and 6.2.
+
+## R8.2 `tpi:chwr`
+
+| | |
+|---|---|
+| **Syntax** | `tpi:chwr` *hex*: the bytes, two hex digits each |
+| **CODE *a*** | the stream |
+| **CODE *b*** | ignored |
+| **Answer** | a status |
+
+**Description.** Writes the bytes at the channel's position, and moves on past them. Byte 23 is
+always the start of a TAB (R8.5), in binary mode too. In text mode the bytes are translated
+first (R8.6). Writing past the end of the file fills the gap with padding.
+
+The ROM sends at most 64 bytes (128 digits) at a time. The firmware sets no limit, but keep to
+the same.
+
+**Errors.** C: a pair that isn't hex. J: the stream isn't open. Q: too much for a record (R8.7),
+or data after a TAB 0.
+
+**Example** (from `countdir.asm`)
+
+```asm
+TAB0_T: db "tpi:chwr 170000"    ; 23, 0, 0: TAB 0
+```
+
+**Notes.** An odd number of digits isn't an error: the last digit becomes a byte of its own,
+00h to 0Fh. On a channel opened `r` (or `d:`) the data is thrown away with status 1, though a
+TAB still moves.
+
+**See also.** R8.5, R8.6. Background: section 6.3.
+
+## R8.3 `tpi:chrd`
+
+| | |
+|---|---|
+| **Syntax** | `tpi:chrd` |
+| **CODE *a*** | the stream |
+| **CODE *b*** | the most bytes you want, 1–255. 0, or anything over 255, means 255. |
+| **Answer** | a data answer (R4.6): 1, *n*, *n* bytes, XOR. Or 7 at the end of the file, or an error status. |
+
+**Description.** Reads from the channel's position and moves on. The answer may hold fewer
+bytes than you asked for:
+
+- a **text stream** returns up to *n* bytes after translation, so often fewer; one opened `u`
+  returns one line at a time;
+- a **record file** returns one whole record and a carriage return, whatever you asked for
+  (R8.7);
+- after **TAB 0**, the next read returns a count as text (R8.5).
+
+At the end of a text file whose last line has no newline, one more read returns a carriage
+return before the end-of-file answer.
+
+**Errors.** Q: the channel was opened `w` or `a`. J: the stream isn't open.
+
+**Example** (from `loadfile.asm`)
+
+```asm
+        ld (PMR2),hl            ; CODE stream, how many bytes
+        ld hl,RD_T
+        ld bc,RD_L
+        call SEND_CMD
+        jr c,.fail
+        ld hl,(DEST)
+        ld de,(TOTAL)
+        add hl,de
+        call GET_DATA           ; NC Z: E bytes arrived
+        jr c,.fail
+        jr nz,.full             ; end of the file
+```
+
+**See also.** R4.6, R5.10 `GET_DATA`. Background: section 6.1, and 5.2.
+
+## R8.4 `tpi:chclose`
+
+| | |
+|---|---|
+| **Syntax** | `tpi:chclose` |
+| **CODE *a*** | the stream |
+| **CODE *b*** | ignored |
+| **Answer** | a status |
+
+**Description.** Closes the channel. A record left half written is padded out first (R8.7).
+Closing a stream that isn't open is fine: status 1.
+
+**Notes.** If padding a record fails (F or J), the stream stays open, and you can try again.
+Close your channels even when something else went wrong, as `loadfile` does.
+
+**Example** (from `loadfile.asm`)
+
+```asm
+.fail:  push af                 ; close the channel, then report the error
+        call CLOSE
+        pop af
+        jp RAISE
+```
+
+**See also.** R8.1.
+
+## R8.5 TAB
+
+| | |
+|---|---|
+| **Bytes** | 23, *n* low, *n* high, in a `tpi:chwr` |
+| **TAB *n*** | moves to byte *n* of the file (1 is the first), or to record *n* of a record file |
+| **TAB 0** | asks for a count: the next `tpi:chrd` answers with it, as digits and a carriage return |
+
+| Channel | TAB 0's count |
+|---|---|
+| a `d:` listing | the number of names |
+| a record file | the number of records: the file's length ÷ the record length, rounded up |
+| any other file | its length in bytes |
+
+**Description.** This is how `PRINT #s;TAB n;` works from BASIC, and how machine code seeks.
+TAB counts bytes as they're stored in the file, after text translation. It works on every
+channel, `r` and `d:` included.
+
+**Notes.** Byte 23 always starts a TAB, in binary mode too, so binary data containing 23 can't
+be written as it is. After a TAB 0, read the count before you write anything: a write gives Q.
+
+**See also.** R8.2, R8.3. Background: section 6.3, and `countdir` in section 5.4.
+
+## R8.6 Text mode
+
+A channel opened without `b` is in text mode.
+
+**Writing** (`tpi:chwr`):
+
+| The 2068 sends | The file gets |
+|---|---|
+| 13 (ENTER) | a newline (10) |
+| a keyword token, A5h–FFh, and 12, 123–127 | the keyword, spelled out, with spaces round it |
+| 6 (the comma in PRINT) | spaces to the next 16-column stop |
+| 16–22 (INK … AT) | nothing: the code and its values are dropped |
+| 96 | £ |
+| 128–164 (block graphics, UDGs) | `?` |
+| any other code below 32 | nothing |
+
+**Reading** (`tpi:chrd`):
+
+| The file has | The 2068 gets |
+|---|---|
+| a CR, LF or CR LF | 13 |
+| a tab | a space |
+| £, © | 96, 127 |
+| any other byte of 80h or more | `?` |
+| any other control code | nothing |
+
+**Notes.** Keywords are spelled out on the way in but not put back on the way out: they come
+back as text.
+
+**See also.** R8.1. Background: section 6.2.
+
+## R8.7 Record files
+
+| | |
+|---|---|
+| **Opened with** | CODE *b* = the record length, 1–254 (R8.1). From BASIC: `OPEN #n,"f:name","mode",`*length*. |
+| **A write** | fills the current record. A carriage return ends it, and the rest is padded: with spaces in text mode, 00h in binary. The carriage return isn't stored. |
+| **A read** | returns one record and a carriage return, padded if the last one is short |
+| **TAB *n*** | record *n* (R8.5) |
+
+**Errors.** Q: writing more than a record holds. Q: reading a record file opened `w` or `a`.
+7 (end of file): reading past the last record.
+
+**Notes.** A record with no carriage return yet (a `PRINT #` ending in `;`) stays open until
+the next TAB, read or close.
+
+**See also.** R8.5. Background: section 6.4, and the address book in the User Manual's
+Chapter 6.
+
+## R8.8 `d:` listings
+
+| | |
+|---|---|
+| **Opened with** | `tpi:chopen r d:`*pattern*, CODE *b* = 0 |
+| **Reads as** | text: one name a line, ending in a carriage return; a folder's name ends in `/` |
+| **Order** | folders first, then files, each sorted without regard to case |
+
+**Description.** The names `CAT "`*pattern*`"` would list. A pattern can have `*` and `?` in its
+last part. A file named on its own lists itself. Names starting with a dot are listed only if
+the pattern starts with one. The list is made when the channel is opened.
+
+**Errors.** Q: a mode other than `r` (`rb` included), or a record length. F: a folder that
+isn't there, or a file followed by a pattern. A pattern that matches nothing opens, and the
+first read answers 7.
+
+**Example** (from `countdir.asm`)
+
+```asm
+OPEN_T: db "tpi:chopen r d:"
+```
+
+**See also.** R8.5 (TAB 0 gives the count). Background: section 6.5.
+
+## R8.9 From BASIC
+
+```
+OPEN #n,"f:name"[,"mode"[,length]]
+OPEN #n,"d:pattern"
+```
+
+**Description.** The ROM turns `OPEN #` into a `tpi:chopen` with CODE *a* = *n*. The mode is
+one to three characters (four or more is Q); left out, it's `r`. The name may be up to 64
+characters. A length over 255 is sent as 255, which the Pico refuses (Q). The ROM checks it has
+room for the channel (512 bytes) before it asks the Pico, and gives Report 4 if it hasn't.
+
+The ROM buffers what `PRINT #` writes, 64 bytes at a time, and sends it when the buffer fills,
+at each carriage return in a record file, before each read, and at `CLOSE #`. It reads 255 bytes
+at a time.
+
+**The channel's record.** An `f:` or `d:` channel's record in CHANS (R7.7) is 330 bytes, in a
+512-byte allocation. Its first five bytes are the 2068's usual channel header:
+
+| Offset | Holds |
+|---|---|
+| 0 | the output routine: HOME 14A0h |
+| 2 | the input routine: HOME 14A9h |
+| 4 | `'F'` |
+| 5 | the stream number the Pico knows the channel by |
+| 6 | the bytes before the record in its allocation (0–128) |
+| 7 | the bytes waiting to be written |
+| 8 | the bytes read ahead |
+| 9 | the next of those to hand out |
+| 10 | bit 0: a record file |
+| 11 | the write buffer, 64 bytes |
+| 75 | the read buffer, 255 bytes |
+
+**Notes.** Look at it, but don't change it. A channel with letter `F` and output routine 14A0h
+is the TS-Pico's. `CLOSE #` of one channel moves the records after it down by 512 bytes.
+
+**See also.** Appendix F, which builds a channel of its own.
+
+## R8.10 What survives
+
+| Event | The channels |
+|---|---|
+| BREAK, a SYNC, a failed command | stay open |
+| NEW, or a 2068 reset | the Pico still has them, but the 2068 has forgotten them. Harmless: the next `OPEN #` of that stream replaces the Pico's. |
+| `CLEAR`, `RUN` | stay open |
+| a Pico reset or power loss | gone: the next read or write gives J |
+| a different SD card | all closed |
+
+---
+
+# Chapter R9: The External-Command Contract
+
+What the firmware promises a command you add without rebuilding it, and what it expects in
+return. Background: Chapters 10 and 11.
+
+| No. | Entry | |
+|---|---|---|
+| R9.1 | The file | where external commands live, and how they're loaded |
+| R9.2 | `EXT_SA_FUNCT` | the table of command words |
+| R9.3 | The handler | its arguments |
+| R9.4 | The rules | one answer, and what happens when a handler breaks them |
+| R9.5 | Importing the helpers | and the status codes |
+
+## R9.1 The file
+
+| | |
+|---|---|
+| **On the Pico** | `/dev_extcmd.py` on the flash, if there is one; otherwise `TS/extcmd.py`, built into the firmware |
+| **Loaded** | once, when the firmware starts. Changing the file needs a restart. |
+| **Install** | with the 2068 switched off: `pico-serial.py break`, `put` the file as `/dev_extcmd.py`, `softreset` (section 11.6) |
+| **Remove** | delete `/dev_extcmd.py` and restart |
+| **Check** | `SAVE "tpi:help"` ends with the external commands it loaded |
+
+**Description.** The firmware tries `from dev_extcmd import EXT_SA_FUNCT`. If that raises
+`ImportError`, it falls back to the built-in table.
+
+**Notes.**
+
+- **Any other error in your file stops the Pico.** A syntax error, or an exception while the
+  file is loading, is not caught: the firmware halts at start-up, and the 2068 gets no answers.
+  Test the file on a PC first (Chapter 15).
+- **An `ImportError` inside your file is swallowed.** If your file imports something that isn't
+  there, the firmware quietly uses the built-in table instead, and your commands are
+  "Unrecognized". `tpi:help` shows which table loaded.
+- Don't put a `/TS/` folder on the flash: it hides the whole of the built-in `TS` package.
+
+**See also.** R9.2. Background: section 10.4.
+
+## R9.2 `EXT_SA_FUNCT`
+
+| | |
+|---|---|
+| **Type** | a `dict`: command word → handler |
+| **Keys** | the command word **in upper case, with its `TPI:`**, and no spaces: `"TPI:.HELLO"` |
+| **Looked up** | after the built-in table, so a built-in command of the same name always wins |
+
+**Description.** The firmware upper-cases the text up to its first space and looks it up: first
+in the built-in table, then in this one. A word in neither gets "Unrecognized command", status 5
+(C).
+
+By convention external commands start with a dot, which keeps them clear of every built-in name,
+present and future.
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+EXT_SA_FUNCT = {
+    "TPI:.HELLO": HELLO,
+    "TPI:.FACT": FACT,
+    "TPI:.LINES": LINES,
+}
+```
+
+**Notes.** Only `SAVE "tpi:..."` runs a command. `LOAD "tpi:..."` mounts a file, and never
+reaches this table.
+
+**See also.** R9.3. Background: section 11.1.
+
+## R9.3 The handler
+
+```python
+def HANDLER(MQ, TSP, pre, cmd):
+```
+
+| Argument | Type | What it is |
+|---|---|---|
+| `MQ` | `rp2.StateMachine` | the port state machine *at the time of the call*. Any SD card work replaces it, so don't use this one: use the helpers (R10), which always use the live one. |
+| `TSP` | the firmware's settings object | the fields below |
+| `pre` | 10 bytes | the pre-header (R3.4). `tp.PARAMS(pre)` gives the two CODE numbers. |
+| `cmd` | `str` | `"D.."` + the command's text, case kept. `cmd[7:]` is everything after `tpi:`; `tp.getArgs(cmd)` is everything after the first space. |
+
+**Returns.** Nothing. The answer goes to the 2068 through the helpers.
+
+**The useful `TSP` fields:**
+
+| Field | Holds |
+|---|---|
+| `TSP.cur_path` | the current folder, as a real path: `/sd/TAP` at the top |
+| `TSP.f_name` | the mounted file, or `""` |
+| `TSP.VERBOSE` | True when the user wants messages (`tpi:verbose`) |
+| `TSP.LOG_LEVEL` | 0–4: log entries below it are dropped |
+| `TSP.sd_present` | whether the last attempt to mount the card worked |
+| `TSP.FW_VERSION` | the firmware's version, as text |
+
+**Description.** By the time your handler runs, the firmware has checked the body's XOR and
+decoded the text. The status byte reads 00h (busy) and stays so until you say READY.
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+def LINES(MQ, TSP, pre, cmd):
+    """SD card work, then a message: how many lines a text file has."""
+    name = tp.getArgs(cmd).strip()
+    real = catalog.resolve(TSP.cur_path, name) if name else None
+```
+
+**See also.** R9.4, R10. Background: section 11.1.
+
+## R9.4 The rules
+
+> **A handler gives exactly one answer, and never writes the 01h pre-load.**
+
+| If the handler | The 2068 sees |
+|---|---|
+| gives one answer | the answer |
+| gives none | the tail's pre-load, 01h, read as the status: "0 OK", as if the command had worked |
+| gives two | the first; the second waits in the FIFO until the next command's SYNC throws it away |
+| raises an exception | Report J: the firmware throws away anything queued and sends status 10 |
+| is stopped by BREAK | Report D: the helper it was in raises `CmdAbort`, and the firmware empties both FIFOs |
+| writes a 01h at the end | an orphan byte, like a second answer |
+
+**After the handler returns**, the firmware runs the tail (R3.6) whatever happened: it waits up
+to 3 seconds for the 2068 to read what's queued, empties the receive FIFO, queues the pre-load
+and says FFh.
+
+**Also:**
+
+- **Do SD card work inside `SD_CALL`** (R10.15), and finish it before you queue the answer. The
+  card shares pins with the 2068's bus.
+- **Check for the card yourself.** The firmware checks before a built-in command that needs it,
+  but not before an external one. `SD_CALL` returns status 10 if there's no card.
+- **Never catch `CmdAbort`.** It's a `BaseException`, so `except Exception:` lets it through;
+  a bare `except:` doesn't.
+- **Answer errors with a status** (R4.1), so the user gets a report that means something.
+  Anything you don't catch becomes J.
+
+**See also.** R9.3, R10. Background: sections 10.3 and 12.6.
+
+## R9.5 Importing the helpers
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+try:
+    import dev_tspico as tp
+except ImportError:
+    import TS.tspico as tp
+
+from TS import catalog
+
+# Status codes. tspico's own names (_1_OK and so on) are underscore const()s,
+# which MicroPython builds into tspico and never stores on the module, so
+# tp._1_OK works on a PC but fails on the Pico. Keep your own.
+OK = 1                                          # 0 OK
+F_BAD_NAME = 3                                  # F Invalid file name
+NUM_TOO_BIG = 6                                 # 6 Number too big
+```
+
+**Description.** Import the *module*, not names from it, so you always call the helpers of the
+firmware that's running: `/dev_tspico.py` if it's there, otherwise the built-in `TS.tspico`.
+
+**Notes.** Define the status codes yourself, as above: `tp._1_OK` raises `AttributeError` on
+the Pico, and the user gets J. R10.23 lists them all.
+
+**See also.** R10. Background: section 11.2.
+
+---
+
+# Chapter R10: Firmware Helpers
+
+The firmware functions an external command calls, by job. Each is in `TS.tspico` (imported as
+`tp`, R9.5) unless the entry says otherwise. Background: Chapters 11 and 12.
+
+**`CmdAbort`.** Every helper that waits for the 2068 raises `CmdAbort` when it gives up: with
+1 if the 2068 sent a SYNC (BREAK), 3 if it stopped reading for 10 minutes (`CMD_STALL_MS`) or
+didn't answer a key prompt for a day (`KEY_WAIT_MS`). Let it go: the firmware handles it (R9.4).
+
+| No. | Helper | Purpose |
+|---|---|---|
+| | **Whole answers** | |
+| R10.1 | `SEND_STATUS(st)` | a status, never printed |
+| R10.2 | `SEND_MSG(msg, msg1, st, forceDisplay=False)` | a status, or a message (81h) |
+| R10.3 | `SEND_MSG2(msg, st, expandKeywords=True, colour=False)` | a listing (86h) |
+| R10.4 | `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | a question; returns the key |
+| R10.5 | `CH_REPLY(st)` | a status, READY but not IDLE |
+| | **Bytes of your own** | |
+| R10.6 | `CMD_PUT(b)` | queue one byte |
+| R10.7 | `CMD_SEND(buf, ready)` | queue many bytes |
+| R10.8 | `CMD_DRAIN()` | wait until the 2068 has read everything |
+| R10.9 | `CMD_KEY()` | wait for a key from the 2068 |
+| R10.10 | `KEY_UP(ch)` | a key in upper case |
+| | **The status byte** | |
+| R10.11 | `MQ_READY()` | say READY and IDLE (FFh) |
+| R10.12 | `CH_READY()` | say READY, not IDLE (F7h) |
+| | **The command** | |
+| R10.13 | `PARAMS(pre)` | the two CODE numbers |
+| R10.14 | `getArgs(cmd)` | the text after the command word |
+| | **The SD card** | |
+| R10.15 | `SD_CALL(fn, *args)` | run a function with the card active |
+| R10.16 | `catalog.resolve(cur, arg)` | a user's path → a real path |
+| R10.17 | `catalog.public(real)` | a real path → the user's view of it |
+| | **Diagnostics** | |
+| R10.18 | `LOG(msg, level)` | the activity log |
+| R10.19 | `TLM(action, detail="")` | a telemetry line |
+| | **Low level** | |
+| R10.20 | `tspico_io.MQX(MQ, instr)` | run one PIO instruction |
+| R10.21 | `tspico_io.RX_CAPTURE(MQ, raw, n, stall_ms, ready=None)` | capture bytes from the 2068 |
+| R10.22 | `tspico_io.DRAIN_STDIN(MQ, limit=1024)` | keep Ctrl-C working |
+| R10.23 | Constants | the status codes and the timeouts |
+
+## R10.1 `SEND_STATUS`
+
+```python
+tp.SEND_STATUS(st)
+```
+
+| | |
+|---|---|
+| **Purpose** | Answer with a bare status, whatever VERBOSE says. |
+| **Parameters** | `st` (int, 1–127): the status (R4.1) |
+| **Wire** | `st` |
+| **Status byte** | FFh |
+| **Returns** | `None`, once the 2068 has read it |
+| **Raises** | `CmdAbort` |
+
+**Description.** `CMD_PUT(st)`, `MQ_READY()`, `CMD_DRAIN()`. For an answer that must never
+print: `SAVE "f:x" SCREEN$` uses it, so no message lands in the picture it's saving.
+
+**See also.** R10.2, R10.5.
+
+## R10.2 `SEND_MSG`
+
+```python
+tp.SEND_MSG(msg, msg1, st, forceDisplay=False)
+```
+
+| | |
+|---|---|
+| **Purpose** | Answer with a status, and a message if the user wants messages. |
+| **Parameters** | `msg` (str): the first line. `msg1` (str): a second line, or `""`. `st` (int, 1–127): the status. `forceDisplay` (bool): send the message even with VERBOSE off. |
+| **Wire** | with a message: 81h, `st`, 0Dh, *msg*, [0Dh, *msg1*,] 0Dh, 00h. Without: `st`. |
+| **Status byte** | FFh |
+| **Returns** | `None`, once the 2068 has read every byte |
+| **Raises** | `CmdAbort` |
+| **Reads** | `TSP.VERBOSE` |
+
+**Description.** The message goes out when VERBOSE is on, when `forceDisplay` is True, or when
+it's the firmware's "no SD card" message, which everyone must see. Each character that isn't
+printable ASCII or a carriage return is sent as `?`.
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+def HELLO(MQ, TSP, pre, cmd):
+    """A message answer: function 81h, printed by the ROM."""
+    tp.SEND_MSG("Hello from the TS-Pico!", "", OK, True)
+```
+
+**Notes.** It's a whole answer: send nothing after it.
+
+**See also.** R4.2, R10.1. Background: section 12.2.
+
+## R10.3 `SEND_MSG2`
+
+```python
+tp.SEND_MSG2(msg, st, expandKeywords=True, colour=False)
+```
+
+| | |
+|---|---|
+| **Purpose** | Answer with text of any length, a screenful at a time. |
+| **Parameters** | `msg` (str): the text; a carriage return or a newline ends a line. `st` (int): the status. `expandKeywords` (bool): count codes 124 and 126 as the keywords STICK and FREE they print as. `colour` (bool): pass INK, PAPER and the other attribute codes through. |
+| **Wire** | 86h, `st`, 0Dh, 0Dh, then pages (R4.3), each ending `(nn%) Scroll? (Y/n)`, 00h; the last ending 03h |
+| **Returns** | `None` |
+| **Raises** | `CmdAbort` |
+
+**Description.** Splits the text into pages of 21 lines of 32 columns, and waits for a key
+between them: `N` ends the listing, `1`–`9` sets the next page's length in lines, `0` ten, and
+anything else a full page. It empties the receive FIFO first and last, so stray keys don't
+linger.
+
+**Notes.** Bytes of 128 and up are sent as `?`, and so are control codes, unless `colour` lets
+the attribute codes through. `\*` in the text prints as ©. It's a whole answer.
+
+**See also.** R4.3. Background: section 12.3.
+
+## R10.4 `SEND_MSG_PROMPT_YN`
+
+```python
+key = tp.SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)
+```
+
+| | |
+|---|---|
+| **Purpose** | Ask a question, and get one key back. |
+| **Parameters** | `prompt` (str): the question. `echo` (bool): print the key after the question. `lower` (bool): ask on the lower screen, with function 88h. |
+| **Wire** | 86h (88h with `lower`), 01h, [0Dh,] *prompt*, 00h; the key comes back; then the echo and 03h |
+| **Returns** | the key's code, in upper case (`ord("Y")` for `y` or `Y`) |
+| **Raises** | `CmdAbort` |
+
+**Description.** The question *is* the answer: the status is always 1, and once it returns the
+exchange is over. Act on the key quietly. If something then fails, the 2068 has already moved
+on: record it with `LOG`.
+
+**Notes.** Function 88h belongs to the ROM's disk-command module. Use `lower=True` only for a
+command that module sends.
+
+**See also.** R4.3, R4.4. Background: section 12.4.
+
+## R10.5 `CH_REPLY`
+
+```python
+tp.CH_REPLY(st)
+```
+
+| | |
+|---|---|
+| **Purpose** | Answer with a bare status, and say READY but not IDLE. |
+| **Parameters** | `st` (int): the status |
+| **Wire** | `st` |
+| **Status byte** | F7h |
+| **Returns** | `None`, at once: it doesn't wait for the 2068 to read |
+| **Raises** | `CmdAbort` |
+
+**Description.** The answer of the channel commands, which run in the middle of a BASIC
+statement. It never prints: a message would move the ROM's current channel to the screen.
+F7h tells a client the tail is still to come, so it waits for IDLE before its next SYNC.
+
+**See also.** R10.12, Chapter R8.
+
+## R10.6 `CMD_PUT`
+
+```python
+tp.CMD_PUT(b)
+```
+
+| | |
+|---|---|
+| **Purpose** | Queue one byte for the 2068. |
+| **Parameters** | `b` (int, 0–255) |
+| **Returns** | `None`, once the byte is in the FIFO |
+| **Raises** | `CmdAbort`: a SYNC while it waits (1), or 10 minutes with the FIFO full (3) |
+
+**Description.** Puts the byte in the transmit FIFO, waiting while the FIFO is full. It doesn't
+change the status byte: say READY yourself, once the first bytes are queued.
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+    tp.CMD_PUT(1)                               # status: data follows
+    tp.CMD_PUT(len(digits))                     # the count
+    tp.MQ_READY()                               # data in TX first, then READY
+    for b in digits:
+        tp.CMD_PUT(b)                           # waits while TX is full
+    tp.CMD_PUT(x)
+```
+
+**Notes.** Use this, never `MQ.put`: `MQ.put` waits for ever on a full FIFO, and doesn't hear
+BREAK.
+
+**See also.** R10.7, R10.11. Background: section 12.5.
+
+## R10.7 `CMD_SEND`
+
+```python
+tp.CMD_SEND(buf, ready)
+```
+
+| | |
+|---|---|
+| **Purpose** | Queue a whole answer, for a 2068 that reads it without waiting. |
+| **Parameters** | `buf` (bytes or bytearray): the answer. `ready` (bool): say READY once the first bytes are queued. |
+| **Returns** | `None`, once the last byte is in the FIFO |
+| **Raises** | `CmdAbort` |
+
+**Description.** Puts the first four bytes in the FIFO, says READY (if `ready`), and feeds the
+rest as the 2068 reads, by DMA where the board has it. The ROM reads text blind, a byte at a
+time, so this is how the firmware's message builders send.
+
+**See also.** R10.6, R10.8.
+
+## R10.8 `CMD_DRAIN`
+
+```python
+tp.CMD_DRAIN()
+```
+
+| | |
+|---|---|
+| **Purpose** | Wait until the 2068 has read everything queued. |
+| **Returns** | `None` |
+| **Raises** | `CmdAbort`: a SYNC (1), or 10 minutes with bytes still queued (3) |
+
+**Notes.** It reads and throws away anything else the 2068 sends meanwhile.
+
+**See also.** R10.6.
+
+## R10.9 `CMD_KEY`
+
+```python
+key = tp.CMD_KEY()
+```
+
+| | |
+|---|---|
+| **Purpose** | Wait for the key the 2068 sends at the end of a page (R4.3). |
+| **Returns** | the key's code, as typed (ROM 2.3 sends lower case as lower case) |
+| **Raises** | `CmdAbort`: a SYNC (1), or no key for a day (3) |
+
+**See also.** R10.10.
+
+## R10.10 `KEY_UP`
+
+```python
+tp.KEY_UP(ch)
+```
+
+| | |
+|---|---|
+| **Purpose** | A key in upper case. |
+| **Parameters** | `ch` (int): a key's code |
+| **Returns** | `ch` − 32 for `a`–`z`; anything else unchanged |
+
+## R10.11 `MQ_READY`
+
+```python
+tp.MQ_READY()
+```
+
+| | |
+|---|---|
+| **Purpose** | Say READY and IDLE: the status byte reads FFh. |
+| **Returns** | `None` |
+
+**Description.** The 2068 reads port 14 the moment it sees READY, so queue the first bytes of
+your answer *first*, then call this (R2.3). Said with an empty FIFO, the 2068 reads 00h: J.
+
+**See also.** R10.12, R2.2.
+
+## R10.12 `CH_READY`
+
+```python
+tp.CH_READY()
+```
+
+| | |
+|---|---|
+| **Purpose** | Say READY but not IDLE: the status byte reads F7h. |
+| **Returns** | `None` |
+
+**Description.** For an answer the 2068 follows straight away with another command. The tail's
+FFh comes later, and a client that waits for IDLE before its SYNC won't send it while the tail
+is still running.
+
+**See also.** R10.5, R10.11.
+
+## R10.13 `PARAMS`
+
+```python
+a, b = tp.PARAMS(pre)
+```
+
+| | |
+|---|---|
+| **Purpose** | The two CODE numbers of the command. |
+| **Parameters** | `pre`: the pre-header |
+| **Returns** | `(a, b)`, each 0–65 535: `SAVE "tpi:..." CODE a,b` |
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+    n, _ = tp.PARAMS(pre)
+```
+
+## R10.14 `getArgs`
+
+```python
+args = tp.getArgs(cmd)
+```
+
+| | |
+|---|---|
+| **Purpose** | The text after the command word. |
+| **Parameters** | `cmd`: the handler's `cmd` |
+| **Returns** | everything after the first space, case kept, or `""` if there's no space |
+
+**Notes.** Spaces after the first one are kept: `.strip()` the result if you don't want them.
+
+## R10.15 `SD_CALL`
+
+```python
+result = tp.SD_CALL(fn, *args)
+```
+
+| | |
+|---|---|
+| **Purpose** | Run a function with the SD card active, and give the pins back to the 2068's bus afterwards. |
+| **Parameters** | `fn`: the function. `args`: its arguments. |
+| **Returns** | whatever `fn` returns. On an `OSError`: `(message, 10)` if there's no card, `("SD card error", 3)` otherwise. |
+| **Raises** | any other exception `fn` raises (which then becomes J, R9.4) |
+
+**Description.** The SD card shares pins with the 2068's data bus, so the card and the ports
+can't be active at once. `SD_CALL` switches the pins to the card, runs `fn`, and switches them
+back, even if `fn` fails. The second element of an error tuple is a status, ready to send.
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+    n = tp.SD_CALL(count)                       # gives the bus back afterwards
+    if isinstance(n, tuple):                    # SD_CALL's (message, status)
+        tp.SEND_MSG("Can't read " + name, "", n[1])
+        return
+```
+
+**Notes.** Finish your SD work before you queue the answer, and never wait for a key inside
+`fn`. If `fn` itself can return a tuple, you can't tell its result from an error: return
+something else.
+
+**See also.** Background: section 11.5.
+
+## R10.16 `catalog.resolve`
+
+```python
+real = catalog.resolve(cur, arg)
+```
+
+| | |
+|---|---|
+| **Purpose** | Turn a path the user typed into a real path. |
+| **Parameters** | `cur` (str): the current folder, `TSP.cur_path`. `arg` (str): what the user typed. |
+| **Returns** | the real path (under `/sd/TAP`), or `None` if it would climb above `/sd/TAP` |
+
+**Description.** The same rules as every command: relative to `cur`; `/` at the start for the
+top of the card's `/TAP` folder; `.` and `..` as usual. It doesn't check the path exists.
+
+**Example** (from `dev_extcmd.py`)
+
+```python
+    real = catalog.resolve(TSP.cur_path, name) if name else None
+```
+
+**See also.** R10.17.
+
+## R10.17 `catalog.public`
+
+```python
+shown = catalog.public(real)
+```
+
+| | |
+|---|---|
+| **Purpose** | A real path as the user sees it. |
+| **Returns** | the path with `/sd/TAP` taken off the front; `/` for `/sd/TAP` itself |
+
+## R10.18 `LOG`
+
+```python
+tp.LOG(msg, level)
+```
+
+| | |
+|---|---|
+| **Purpose** | Add an entry to the activity log. |
+| **Parameters** | `msg` (str). `level` (int): 0 INFO, 1 WARNING, 2 ERROR, 3 CRITICAL, 4 SPECIAL. |
+| **Returns** | `None` |
+
+**Description.** Entries below `TSP.LOG_LEVEL` (2, ERROR, unless `config.ini` says otherwise)
+are dropped. The rest are kept in memory and written to `/activity.log` on the flash later,
+when the firmware is idle. `SAVE "tpi:log"` shows the log.
+
+**Notes.** Keep it out of anything time-critical.
+
+## R10.19 `TLM`
+
+```python
+tp.TLM(action, detail="")
+```
+
+| | |
+|---|---|
+| **Purpose** | Print a telemetry line on the USB console. |
+| **Parameters** | `action` (str): what's happening. `detail` (str): anything else. |
+| **Prints** | `[TLM <µs> dt=<µs> tx=<n> rx=<n>] action: detail` |
+
+**Description.** Does nothing unless the Pico's `/config.ini` has `"TELEMETRY": true`.
+Releases ship with it off. `tools/pico-serial.py watch` shows the lines.
+
+**Notes.** A line takes 5–10 ms to print: never in a fast path.
+
+**See also.** Background: section 15.2.
+
+## R10.20 `MQX`
+
+```python
+tspico_io.MQX(MQ, instr)
+```
+
+| | |
+|---|---|
+| **Purpose** | Run one PIO instruction on the port state machine, fast. |
+| **Parameters** | `instr` (str): the instruction, as `rp2` writes it: `"pull (noblock)"` |
+
+**Description.** The same as `MQ.exec(instr)`, about 500 times faster once it has seen the
+instruction. For test harnesses and the firmware's own FIFO handling; a command handler
+shouldn't need it.
+
+## R10.21 `RX_CAPTURE`
+
+```python
+got = tspico_io.RX_CAPTURE(MQ, raw, n, stall_ms, ready=None)
+```
+
+| | |
+|---|---|
+| **Purpose** | Capture up to `n` words from the 2068. |
+| **Parameters** | `raw` (`array("I")`): where they go, nine bits each (bit 8 set for a write to port 15). `n`: how many. `stall_ms`: the silence to give up after. |
+| **Returns** | `n` if all arrived; *k* if *k* arrived and then the 2068 went quiet; −*k* if a write to port 15 (a SYNC) came after *k* |
+
+**Description.** The firmware's own capture loop, used for every pre-header. Its loop only moves
+words: no other Python runs while bytes arrive. For test harnesses (`src/CLAUDE.md`, "the
+two-phase capture rule").
+
+## R10.22 `DRAIN_STDIN`
+
+```python
+tspico_io.DRAIN_STDIN(MQ, limit=1024)
+```
+
+| | |
+|---|---|
+| **Purpose** | Throw away text sent to the Pico over USB, so that a later Ctrl-C still gets through. |
+| **Returns** | the number of bytes thrown away |
+
+**Description.** MicroPython only notices Ctrl-C while it moves USB bytes into a 512-byte
+buffer. The firmware never reads that buffer, so once it fills, Ctrl-C can't reach the Pico
+until it's reset. Call this from an idle loop that runs for a long time.
+
+## R10.23 Constants
+
+**Status codes.** In `TS.tspico`, but **define your own** (R9.5):
+
+| Name in `tspico` | Value | Report |
+|---|---|---|
+| `_1_OK` | 1 | 0 OK |
+| `_2_R_Tape_load` | 2 | R Tape loading error |
+| `_3_F_Invalid_file` | 3 | F Invalid file name |
+| `_4_Q_Parameter` | 4 | Q Parameter error |
+| `_5_C_Nonsense` | 5 | C Nonsense in BASIC |
+| `_6_6_Num2Big` | 6 | 6 Number too big |
+| `_7_8_EOF` | 7 | 8 End of file |
+| `_8_A_Invalid_arg` | 8 | A Invalid argument |
+| `_9_9_STOP` | 9 | 9 STOP statement |
+| `_10_J_Invalid_IO` | 10 | J Invalid I/O device |
+| `_11_D_Break` | 11 | D BREAK - CONT repeats |
+
+**Timeouts:**
+
+| Name | Value | |
+|---|---|---|
+| `CMD_STALL_MS` | 600 000 (10 minutes) | how long a helper waits for the 2068 to read |
+| `KEY_WAIT_MS` | 86 400 000 (a day) | how long `CMD_KEY` waits for a key |
+| `tspico_io.TX_DEPTH` | 4 | the transmit FIFO's depth |
+
+---
+
 # Appendix A: Protocol Quick Reference
 
 **Ports:** 0Eh data (IN: next byte, 00h if empty; OUT: a byte to the Pico). 0Fh status (IN)
@@ -3273,7 +4457,7 @@ exchange, 03h at the end), 88h (86h on the lower screen). Other codes are Report
 
 # Appendix B: The Pico BIOS and Useful ROM Addresses
 
-Chapter R6 has a full entry for each EXROM routine here.
+Chapter R6 has a full entry for each EXROM routine here, and Chapter R7 for the rest.
 
 | Where | Address | What |
 |---|---|---|
@@ -3300,24 +4484,28 @@ Never call EXROM 2003h, 2006h or 2027h–203Ch: they loop for ever.
 
 # Appendix C: Firmware Helper Reference
 
+Chapter R10 has a full entry for each.
+
 | Name | Module | Purpose |
 |---|---|---|
 | `PARAMS(pre)` | tspico | the two CODE numbers |
 | `getArgs(cmd)` | tspico | text after the command word |
+| `SEND_STATUS(st)` | tspico | a bare status, never printed |
 | `SEND_MSG(msg, msg1, st, forceDisplay=False)` | tspico | status, or 81h message |
-| `SEND_MSG2(text, st)` | tspico | 86h scrolling text |
-| `SEND_MSG_PROMPT_YN(prompt)` | tspico | 86h prompt; returns the key |
-| `CMD_PUT(b)` / `CMD_KEY()` / `CMD_DRAIN()` | tspico | answer bytes, a key, wait until read; BREAK raises `CmdAbort` |
+| `SEND_MSG2(msg, st, expandKeywords=True, colour=False)` | tspico | 86h scrolling text |
+| `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | tspico | 86h (or 88h) prompt; returns the key |
+| `CMD_PUT(b)` / `CMD_SEND(buf, ready)` | tspico | queue answer bytes |
+| `CMD_KEY()` / `KEY_UP(ch)` / `CMD_DRAIN()` | tspico | a key, in upper case; wait until read. BREAK raises `CmdAbort` |
 | `MQ_READY()` | tspico | status FFh |
 | `CH_READY()` / `CH_REPLY(st)` | tspico | status F7h / a bare status with F7h |
 | `SD_CALL(fn, *args)` | tspico | run `fn` with the SD card active |
-| `LOG(msg, level)` | tspico | write to `/activity.log` |
-| `TLM(action, detail)` | tspico | a telemetry line on the USB console |
+| `LOG(msg, level)` | tspico | add to the activity log |
+| `TLM(action, detail="")` | tspico | a telemetry line on the USB console |
 | `catalog.resolve(cur, arg)` | catalog | the real path for a user's path |
 | `catalog.public(real)` | catalog | the path as the user sees it |
 | `MQX(MQ, instr)` | tspico_io | run one PIO instruction, fast |
-| `RX_CAPTURE(MQ, buf, n, ms)` | tspico_io | capture n bytes; negative on a SYNC |
-| `DRAIN_STDIN(MQ)` | tspico_io | keep Ctrl-C reachable in idle loops |
+| `RX_CAPTURE(MQ, raw, n, stall_ms, ready=None)` | tspico_io | capture n words; negative on a SYNC |
+| `DRAIN_STDIN(MQ, limit=1024)` | tspico_io | keep Ctrl-C reachable in idle loops |
 
 # Appendix D: Further Reading in the Repository
 
