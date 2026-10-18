@@ -48,6 +48,9 @@
 **Part 3: Reference**
 
 - R1. Notation
+- R2. Ports and the Status Byte
+- R3. The Transaction, Byte by Byte
+- R4. Answers
 - R5. The picolib Routines
 - R6. The Pico BIOS
 
@@ -142,7 +145,8 @@ The ROM also tells the Pico: from 2.3 it sends its version in every command's pr
 # Chapter 2: The Hardware: Two Ports and a Status Byte
 
 > **Chapter Preview.** The two I/O ports, what each bit of the status byte means, the
-> "auto-busy" rule, and how fast you can send and receive.
+> "auto-busy" rule, and how fast you can send and receive. Chapter R2 has the same facts as
+> reference entries, with the timeouts on both sides.
 
 ## 2.1 The ports
 
@@ -220,7 +224,8 @@ it reads. R5.4 and R5.6 work out what that comes to.
 
 > **Chapter Preview.** What happens, byte by byte, when the 2068 sends `SAVE "tpi:path"`: the
 > SYNC, the pre-load byte, the pre-header, the body, and the answer. Then the status codes and
-> the "response functions" that let the Pico print on your screen.
+> the "response functions" that let the Pico print on your screen. Chapters R3 and R4 have
+> every byte as reference entries.
 
 ## 3.1 The shape of a transaction
 
@@ -1108,9 +1113,10 @@ Pico, they're "Unrecognized command" (**C**). From machine code, set the bits yo
 
 - **Pre-header byte 1 of 4, 5 or 6.** Those are the printer (COPY and LPRINT) and aren't
   commands.
-- **A first byte other than `'B'`.** 00h and FFh are the ROM's LOAD and SAVE blocks, `'A'` is
-  an old leftover, and anything else is thrown away *without* the pre-load byte being put back.
-  If you then send a command without a SYNC, you get J.
+- **A first byte other than `'B'`.** 00h and FFh are the ROM's LOAD and SAVE blocks, and
+  anything else (`'A'` included, an old leftover) is thrown away. The Pico empties its FIFOs,
+  puts the pre-load back, and sets RECOVERED (status FBh). The next command's SYNC clears it;
+  a command sent without a SYNC gets T. R3.7 has the table.
 - **ZX48 mode.** After `tpi:zx48` the Pico speaks a different, Spectrum-style protocol with no
   status port. The only way back from the 2068 is `OUT 14,14`. Don't send commands while it's
   in that mode.
@@ -1833,10 +1839,9 @@ with a quick list, then has one entry per routine, numbered so the rest of the b
 ("R5.3"). For the reasons behind a routine, follow the "Background" link at the end of its
 entry.
 
-> **Work in progress.** This part is new in this edition. R1, R5 and R6 are written. R2 to R4
-> (the ports, the transaction byte by byte, and the answers) and R7 to R10 (system variables,
-> the channels, the external-command contract and the firmware helpers) will follow. Until they
-> do, that material is in Chapters 2, 3, 6 and 11 and Appendices A to C.
+> **Work in progress.** This part is new in this edition. R1 to R6 are written. R7 to R10
+> (system variables, the channels, the external-command contract and the firmware helpers) will
+> follow. Until they do, that material is in Chapters 6 and 11 and Appendices B and C.
 
 ---
 
@@ -1869,6 +1874,10 @@ take care if you've used it.)
 Then come the **Description**, numbered steps under **How to use**, an **Example**, **Notes**
 (the traps), **Bugs** (known faults), and **See also**.
 
+Ports, byte layouts and answers (R2 to R4) aren't routines, so their tables name their own
+fields: what reading and writing a port does, who sends a group of bytes and when, its length,
+its checksum, and what goes wrong. A layout is drawn as a strip of boxes, byte 0 on the left.
+
 **Examples** say which file they come from. Every one is copied from a file in the `examples`
 folder, and `test_examples.py` checks that the copy still matches.
 
@@ -1878,6 +1887,580 @@ again:
 - a delay loop `ld b,n` / `djnz $` takes 7 + 13*n* − 5 T-states;
 - a polling loop that can run *n* times, at *T* T-states a pass, gives up after
   *n* × *T* ÷ 3 500 000 seconds.
+
+---
+
+# Chapter R2: Ports and the Status Byte
+
+The TS-Pico's two I/O ports, the bits of its status byte, and how fast you may talk to it.
+Background: Chapter 2.
+
+| No. | Entry | |
+|---|---|---|
+| R2.1 | Port 14 (0Eh) | data, both ways |
+| R2.2 | Port 15 (0Fh) | the status byte; SYNC |
+| R2.3 | Auto-busy | every `OUT` makes the Pico busy |
+| R2.4 | Timing | the paces and the timeouts, on both sides |
+
+## R2.1 Port 14 (0Eh): data
+
+| | |
+|---|---|
+| **`IN`** | the next byte of the Pico's transmit FIFO, or **00h if it's empty** |
+| **`OUT`** | puts the byte in the Pico's receive FIFO |
+| **FIFOs** | four bytes each way, separate. There's no wait line: the Z80 is never held up. |
+| **From BASIC** | `IN 14`, `OUT 14,n` |
+
+**Description.** Every byte of a command, an answer and a key goes through this port. Because
+the Z80 can't be held up, two things can go wrong without any sign:
+
+- a read with nothing queued gives 00h, which looks like data;
+- a byte sent while the receive FIFO is full is lost.
+
+So every read and write is paced: by waiting for READY (R2.2), or by a gap the Pico is known to
+keep up with (R2.4).
+
+**Notes.** 00h is never a real status or a real answer code, which is how a read of an empty
+FIFO is caught at the start of an answer. Inside data, only a checksum catches it.
+
+**See also.** R2.2, R2.4, R3.1.
+
+## R2.2 Port 15 (0Fh): status, and SYNC
+
+| | |
+|---|---|
+| **`IN`** | the status byte. Reading it takes nothing from either FIFO. |
+| **`OUT`** | any value: **SYNC**. The Pico drops whatever it was doing (R3.2). The ROM writes 03h. |
+| **From BASIC** | `PRINT IN 15` |
+
+| Bit | Name | 1 means | 0 means |
+|---|---|---|---|
+| 7 | — | (reserved) | |
+| 6 | READY | the Pico has an answer queued, or is ready for your next bytes | busy |
+| 5–4 | — | (reserved) | |
+| 3 | IDLE | no transaction is open | a command is in progress |
+| 2 | RECOVERED | normal | the Pico gave up on the last transaction by itself. Only meaningful when READY is 1. |
+| 1–0 | — | (reserved) | |
+
+The reserved bits read as 1 except when the Pico is busy, and the firmware only ever sets four
+values:
+
+| Value | Bits set | You'll see it |
+|---|---|---|
+| FFh | READY, IDLE | between transactions: send a new command |
+| F7h | READY | in the middle of a command: after the pre-header, or after an answer the Pico is still finishing (the channel commands) |
+| FBh | READY, IDLE, not RECOVERED | after the Pico abandoned a transaction. The ROM reports **T TS-Pico reset, try again**. The next SYNC clears it. |
+| 00h | none | busy: straight after every `OUT` (R2.3), until the Pico says READY again |
+
+**Description.** To wait for an answer, poll until bit 6 is set; then, and only then, test bit
+2. To wait for the end of a command, poll until bits 6 and 3 are both set: `AND 48h` / `CP 48h`.
+
+The Pico gives up on a transaction, and sets RECOVERED, when:
+
+- a pre-header or a body stops arriving for **1 second** in the middle;
+- a pre-header starts with a byte it doesn't know (R3.7);
+- the 2068 stops reading an answer for **10 minutes**, or doesn't answer a "Scroll?" prompt for
+  a day.
+
+**Notes.** Busy, 00h, has bit 2 clear too, so a RECOVERED test made before READY is set always
+"finds" one.
+
+**See also.** R2.3, R3.2, R5.1, R5.3. Background: section 2.2.
+
+## R2.3 Auto-busy
+
+| | |
+|---|---|
+| **Rule** | Every `OUT`, to either port, makes the status byte read 00h until the Pico's firmware says READY again. |
+| **Done by** | the Pico's interface hardware (its PIO), the moment the byte arrives |
+
+**Description.** The firmware queues its answer *first* and says READY *after*. So once you've
+sent the last byte of a phase, waiting for READY means you can't read too early. It's the most
+useful rule in the protocol.
+
+Inside a block (the ten bytes of a pre-header, or a body) you don't wait for READY between
+bytes: you send at a safe pace (R2.4) and wait once at the end.
+
+**See also.** R2.2, R2.4. Background: section 2.3.
+
+## R2.4 Timing
+
+**The pace inside a block, with no handshake:**
+
+| Direction | The ROM | `picolib` | Safe |
+|---|---|---|---|
+| Z80 → Pico | a byte every ~30 µs (~43 µs in SAVE data) | every 62–72 µs (R5.4) | 30 µs or slower |
+| Pico → Z80, data answers (`tpi:chrd`) | a byte every ~75 µs | every ~87 µs (R5.10) | ~75 µs or slower |
+| Pico → Z80, LOAD data | a byte every ~44–50 µs | — | — |
+| Pico → Z80, message text | as fast as `RST 10h` prints | the same (R5.8) | — |
+
+Never `OTIR` or `INIR`: they're about 21 T-states a byte, 6 µs.
+
+**The timeouts:**
+
+| Who waits | For what | How long |
+|---|---|---|
+| the Pico | the rest of a pre-header or body | 1 s of silence, then it gives up (RECOVERED) |
+| the Pico | the 2068 to read an answer | 10 minutes |
+| the Pico | a key at a "Scroll?" prompt | a day |
+| the ROM | READY | ~19.9 s: 226 polls, each through a debounced BREAK test |
+| the ROM | READY and IDLE after a SYNC | ~1.05 s |
+| `picolib` | READY | ~20.9 s (R5.3) |
+| `picolib` | READY and IDLE | ~1.05 s (R5.1) |
+
+**Working it out.** At 3.5 MHz, a byte every *t* µs is a byte every 3.5*t* T-states. A loop that
+sends a byte takes the T-states of its instructions plus its delay loop; `ld b,n` / `djnz $`
+adds 7 + 13*n* − 5 (R1). Slower is always safe, as long as no gap inside a block reaches a
+second.
+
+**See also.** R5.4, R5.6. Background: section 2.4.
+
+---
+
+# Chapter R3: The Transaction, Byte by Byte
+
+Every command is one transaction: a SYNC, a pre-header, the pre-load byte, a body, an answer,
+and the Pico's tail. This chapter gives each part's bytes. Background: Chapter 3.
+
+| No. | Entry | |
+|---|---|---|
+| R3.1 | The transaction | the steps, in order |
+| R3.2 | SYNC | start fresh |
+| R3.3 | The pre-load byte | the 01h that's always waiting |
+| R3.4 | The pre-header | ten bytes: what kind of transaction, and the CODE numbers |
+| R3.5 | The body | the command's text |
+| R3.6 | The tail | how the Pico ends a transaction |
+| R3.7 | What not to send | pre-headers that aren't commands |
+
+## R3.1 The transaction
+
+| Step | The 2068 | Waits for | The Pico | If it goes wrong |
+|---|---|---|---|---|
+| 1 | — | IDLE (status bits 6 and 3), up to ~1 s | finishing the last command | — (the SYNC goes anyway) |
+| 2 | `OUT (0Fh),03h`: SYNC (R3.2) | READY and IDLE, up to ~1 s | empties both FIFOs, queues one 01h, says FFh | — |
+| 3 | `OUT` the pre-header, 10 bytes (R3.4) | nothing between bytes | goes busy after each byte | a gap of 1 s: the Pico gives up (FBh) |
+| 4 | `IN (0Eh)`: the pre-load, at once (R3.3) | nothing | — | not 01h: **J** |
+| 5 | — | READY, up to ~20 s | says F7h: "send the body" | no READY: **J** |
+| 6 | `OUT` the body (R3.5) | nothing between bytes | checks the XOR, runs the command | wrong XOR: status 2, **R** |
+| 7 | — | READY, up to ~20 s | queues its answer, then says READY | no READY: **J**; RECOVERED: **T** |
+| 8 | `IN (0Eh)`: the answer (Chapter R4), and any bytes after it | as the answer says | — | 00h: **J** |
+| 9 | — | — | the tail (R3.6): queues the next 01h, says FFh | — |
+
+BREAK at any wait: `OUT (0Fh),03h`, wait for IDLE, and stop with **D**. The Pico hears the SYNC
+wherever it is, and abandons the command.
+
+**See also.** R5.5 (`SEND_CMD` does steps 1 to 6), R5.7 and R5.10 (step 8). Background: section
+3.1.
+
+## R3.2 SYNC
+
+| | |
+|---|---|
+| **Bytes** | `OUT (0Fh),`*any value*. The ROM sends 03h; so does `picolib`. |
+| **When** | before every pre-header, and to abandon a command (BREAK) |
+| **Before it** | wait for IDLE, up to a second |
+| **After it** | wait for READY and IDLE, up to a second |
+| **The Pico** | drops whatever it was doing, empties its transmit and receive FIFOs, queues exactly one 01h (the pre-load), clears RECOVERED, and says FFh |
+
+**Description.** A SYNC puts the link in a known state, whatever came before: a half-sent
+command, an answer nobody read, a program that crashed. The Pico listens for it all the time,
+even while it's sending a long listing.
+
+**Notes.** Wait for IDLE *before* the SYNC. An answer that says READY without IDLE (F7h, the
+channel commands) means the Pico is still finishing behind it, and a SYNC sent then can be lost
+together with the pre-header that follows: the result is **T**.
+
+The 1.1 firmware doesn't know SYNC. It reads the SYNC as the first byte of a pre-header and
+loses its place.
+
+**See also.** R2.2, R5.2 `PICO_SYNC`, R6.8 `SYNC_WRITE`. Background: section 3.2.
+
+## R3.3 The pre-load byte
+
+| | |
+|---|---|
+| **Bytes** | one 01h, waiting in the Pico's transmit FIFO between transactions |
+| **Read** | with `IN A,(0Eh)` straight after the tenth pre-header byte, **without** waiting for READY |
+| **Queued by** | every SYNC, and the tail of every transaction (R3.6) |
+| **If it isn't 01h** | 00h means nothing was there: **J**. Anything else means the link is out of step: SYNC and start again. |
+
+**Description.** The pre-load is how a command finds out at once that the Pico heard the
+pre-header. The ROM reads it blind, and so does `picolib`. A program that SYNCs first always
+finds it.
+
+**See also.** R3.2, R3.6. Background: section 3.3.
+
+## R3.4 The pre-header
+
+| | |
+|---|---|
+| **Sent by** | the 2068, after the SYNC |
+| **Length** | 10 bytes, no handshake between them |
+| **Checksum** | byte 9 = *b*0 XOR *b*1 XOR … XOR *b*8. The Pico doesn't check it for a command, but send it right. |
+| **Next** | read the pre-load (R3.3) |
+
+```
+  0      1      2      3    4      5    6      7    8      9
++------+------+------+-----------+-----------+-----------+------+
+| 'B'  | kind | ROM  |  CODE a   |  CODE b   |  length   | XOR  |
+| 42h  |  0   | 23h  | low  high | low  high | low  high | 0-8  |
++------+------+------+-----------+-----------+-----------+------+
+```
+
+| Byte | Name | Value | Meaning |
+|---|---|---|---|
+| 0 | type | 42h (`'B'`) | a command |
+| 1 | kind | 0 | `SAVE "tpi:..."`: run a command |
+| | | 1, 2, 3 | `LOAD`, `VERIFY`, `MERGE "tpi:name"`: mount the file named in the body |
+| 2 | ROM | 23h | the ROM's version, as `PEEK 101` gives it. The Pico keeps it and shows it in `tpi:info`. |
+| 3–4 | CODE *a* | 0–65 535 | the first number after `CODE`, low byte first. 0 if there's none. |
+| 5–6 | CODE *b* | 0–65 535 | the second number after `CODE`, low byte first |
+| 7–8 | length | 1–65 535 | the number of characters in the body's text, low byte first |
+| 9 | XOR | | bytes 0 to 8 XORed together |
+
+**Description.** The pre-header says what kind of transaction this is, and carries the two
+numbers a BASIC program writes after `CODE`. For a command, the Pico's handler gets them as
+`PARAMS(pre)` (Part 2). What they mean depends on the command: the stream number and the byte
+count for the channel commands (Chapter 6), *n* for `tpi:.fact`.
+
+**Example** (from `picolib.asm`)
+
+```asm
+        ld d,0                  ; running XOR
+        ld a,'B'
+        call TXX                ; 0: block type 'B' (a command)
+        xor a
+        call TXX                ; 1: 0 = SAVE "tpi:..."
+        ld a,23h
+        call TXX                ; 2: the ROM's version, as ROM 2.3 sends it
+```
+
+**Notes.** Mounting (kind 1–3) has been followed through the firmware's dispatcher, not tested
+from machine code (section 7.2).
+
+**See also.** R3.5, R3.7, R5.5. Background: section 3.4.
+
+## R3.5 The body
+
+| | |
+|---|---|
+| **Sent by** | the 2068, after the pre-load and a wait for READY |
+| **Length** | the text's length + 4 |
+| **Checksum** | the last byte = 44h XOR *length low* XOR *length high* XOR every byte of the text. **The Pico checks it.** |
+| **Next** | wait for READY, then read the answer (Chapter R4) |
+| **If it goes wrong** | a wrong XOR: status 2, **R**, and the command isn't run. Text that isn't valid ASCII: status 5, **C**. An unknown command: status 5, **C**. A gap of a second: the Pico gives up (FBh). |
+
+```
++------+-----------+------------------------------+------+
+| 'D'  |  length   |  text: "tpi:" + the command  | XOR  |
+| 44h  | low  high |  (length bytes)              |      |
++------+-----------+------------------------------+------+
+```
+
+**The text.** It starts with `tpi:`, in either case. The command word runs up to the first
+space and is matched in upper case (`TPI:DIR`), so `tpi:dir`, `TPI:DIR` and `Tpi:Dir` are the
+same command. Everything after the first space is the argument, with its case kept. For a
+mount (pre-header kind 1–3), the text is `tpi:` and the file's name.
+
+**Length.** The length is 16 bits. From BASIC the ROM only sends names of 6 to 31 characters as
+commands; keep yours under 256 and you're where the ROM's code has been tested.
+
+**Example** (from `picolib.asm`)
+
+```asm
+        ld d,0
+        ld a,'D'
+        call TXX                ; the body: 'D', length, text, XOR
+        ld a,c
+        call TXX
+        ld a,b
+        call TXX
+.body:  ld a,(hl)
+        inc hl
+        call TXX
+        dec bc
+        ld a,b
+        or c
+        jr nz,.body
+        ld a,d
+        call TXX                ; the Pico checks this one: Report R if wrong
+```
+
+**Notes.** `tpi:tape`, `tpi:sdcard`, `tpi:picopt` and `tpi:ts2040` are handled by the ROM and
+never reach the Pico. Sent from machine code, they're unknown commands (**C**). Set TPMODE
+yourself instead (R6.2, section 7.3).
+
+**See also.** R3.4, R4.1. Background: section 3.5.
+
+## R3.6 The tail
+
+| | |
+|---|---|
+| **When** | after the Pico's handler has finished |
+| **The Pico** | waits (up to 10 minutes) until you've read everything it queued, empties its receive FIFO, queues the next pre-load (01h), and says FFh, or FBh if you stopped reading |
+| **The 2068** | nothing to send. The next command's SYNC waits for IDLE, which is the tail's end. |
+
+**Description.** The tail is why a command's answer can say READY before the transaction is
+over, and why the next command waits for IDLE before it sends its SYNC.
+
+**Notes.** Read every byte of an answer, keys and all. A byte left in the FIFO is read by the
+next command as its status, unless that command SYNCs first.
+
+**See also.** R2.2, R3.2, R3.3. Background: section 3.8.
+
+## R3.7 What not to send
+
+| First byte | Kind (byte 1) | What it is | What the Pico does |
+|---|---|---|---|
+| 42h `'B'` | 4, 5, 6 | the printer: COPY (4, 6) and one LPRINT character (5) | treats it as printer output |
+| 00h, FFh | 1–3, 10 and up | a LOAD, VERIFY or MERGE block | serves the mounted file |
+| 00h | 0 | a SAVE header block | starts a SAVE |
+| anything else | — | nothing | empties both FIFOs, queues one 01h and says **FBh** (RECOVERED) |
+
+**Description.** Only `'B'` with kind 0 to 3 is a command. The ROM's own LOAD and SAVE use the
+other first bytes, with their own exchanges (`docs/PROTOCOL.md`, section 6, in the firmware
+repository). A program that sends them is pretending to be the ROM's tape routines.
+
+**Notes.** After an unknown first byte the Pico is in a clean state, but RECOVERED is set. A
+command that SYNCs first clears it; one that doesn't sees READY with RECOVERED, and gets **T**.
+
+**See also.** R3.4. Background: section 7.4.
+
+---
+
+# Chapter R4: Answers
+
+What the Pico sends back after a command's body: a status, a response function, or data. The
+first byte says which:
+
+| First byte | Answer | Entry |
+|---|---|---|
+| 00h | nothing was queued: **J** | R4.1 |
+| 01h–7Fh | a status | R4.1 |
+| 81h | a message | R4.2 |
+| 86h | a listing, in pages, with a key between them | R4.3 |
+| 88h | a listing on the lower screen | R4.4 |
+| 80h, 82h–85h, 87h, 89h–FFh | functions the firmware doesn't send | R4.5 |
+
+A data answer (R4.6) starts with a status too, but only for commands that send data, and you
+have to know which ones those are. Background: sections 3.6 and 3.7.
+
+| No. | Entry | |
+|---|---|---|
+| R4.1 | Status codes | the result of a command, and its report |
+| R4.2 | Function 81h | a message |
+| R4.3 | Function 86h | a listing |
+| R4.4 | Function 88h | a listing on the lower screen |
+| R4.5 | The other function codes | |
+| R4.6 | Data answers | bytes for your program |
+| R4.7 | Text in answers | what ends text, and what doesn't |
+
+## R4.1 Status codes
+
+| | |
+|---|---|
+| **Bytes** | one byte, 01h to 7Fh |
+| **Read** | after READY |
+| **Then** | nothing more: the transaction is over (R3.6) |
+
+| Status | Report | Code for `RST 8` | Firmware name |
+|---|---|---|---|
+| 0 | J Invalid I/O device (an empty FIFO: no answer at all) | 12h | — |
+| 1 | 0 OK | — | `_1_OK` |
+| 2 | R Tape loading error | 1Ah | `_2_R_Tape_load` |
+| 3 | F Invalid file name | 0Eh | `_3_F_Invalid_file` |
+| 4 | Q Parameter error | 19h | `_4_Q_Parameter` |
+| 5 | C Nonsense in BASIC | 0Bh | `_5_C_Nonsense` |
+| 6 | 6 Number too big | 05h | `_6_6_Num2Big` |
+| 7 | 8 End of file | 07h | `_7_8_EOF` |
+| 8 | A Invalid argument | 09h | `_8_A_Invalid_arg` |
+| 9 | 9 STOP statement | 08h | `_9_9_STOP` |
+| 10 | J Invalid I/O device | 12h | `_10_J_Invalid_IO` |
+| 11–127 | D BREAK - CONT repeats | 0Ch | `_11_D_Break` (11) |
+| RECOVERED | T TS-Pico reset, try again | 1Ch | — (status bit 2, not a byte) |
+
+**Description.** Status 1 is success. Every other status is the report BASIC gives when the
+same command fails from `SAVE "tpi:..."`. The code column is the byte after `RST 8`, one less
+than the report's number; `picolib`'s `MAP_STATUS` (R5.11) does the conversion, using the
+same table as the ROM. The ROM's own `STATUS_TO_REPORT` (R6.10) takes status − 1.
+
+**Notes.** A status is also how a response function and a data answer begin: each carries
+its own status byte, which becomes the command's result (R4.2, R4.6). Most commands answer with
+a bare status unless VERBOSE is on, when they send a message (81h) instead.
+
+**See also.** R4.2, R5.11, R6.10. Background: section 3.6.
+
+## R4.2 Function 81h: a message
+
+| | |
+|---|---|
+| **Bytes** | 81h, *status*, the text, 00h |
+| **Read** | the 81h after READY; the rest straight after, one byte at a time, with no wait |
+| **Result** | *status* (R4.1) |
+| **Sent by** | the firmware's `SEND_MSG`, when VERBOSE is on or the message is one everyone must see |
+
+**Description.** Print the text, then use the status as the command's result. The firmware
+starts and ends the text with a carriage return (0Dh), and puts one between two lines:
+
+```
+81h, st, 0Dh, line 1, [0Dh, line 2,] 0Dh, 00h
+```
+
+**How to use**
+
+1. Read the 81h and the status. Keep the status.
+2. Read bytes and print them until a 00h (R4.7 says what counts).
+3. The status is the command's result.
+
+**See also.** R4.7, R5.7 `GET_REPLY`. Background: section 3.7.
+
+## R4.3 Function 86h: a listing
+
+| | |
+|---|---|
+| **Bytes** | 86h, *status*, then pages. A page is text ending in 00h; the listing ends with 03h. |
+| **Read** | the 86h after READY; each page straight after, with no wait |
+| **The 2068 sends** | a key at the end of each page |
+| **Result** | *status* (R4.1) |
+| **Sent by** | the firmware's `SEND_MSG2` (long text: `tpi:dir`, `tpi:help`, `tpi:info`), and its menus and questions |
+
+**Description.** A listing is text too long for one screen. At the end of each page the Pico
+waits for a key:
+
+1. Read the 86h and the status. Keep the status.
+2. Read and print until 00h (the end of a page) or 03h (the end of the listing).
+3. At 00h: wait for a key, wait for READY, and `OUT (0Eh)` the key as typed. Then wait for
+   READY again and go back to step 2. **Whatever the key was.**
+4. At 03h: the status is the command's result.
+
+**The key is the Pico's to interpret**, in either case. At a "Scroll?" prompt:
+
+| Key | The Pico |
+|---|---|
+| `N` | stops: it sends the key back as an echo, then 03h |
+| `1`–`9` | shows that many lines before the next prompt |
+| `0` | shows ten lines |
+| anything else | shows a full page (21 lines) |
+
+At a question, such as the one ERASE asks about each file, the question is the page and the
+key is the answer: `N` skips that file.
+
+In the firmware's long listings, the next page starts by rubbing out the prompt: backspace,
+space, backspace, once for each character of it.
+
+**Notes.** Keep reading after `N`. The Pico still sends at least the echo and the 03h, and a
+client that stops at its own `N` leaves those bytes for the next command to read as its status.
+
+BREAK at the key wait: `OUT (0Fh),03h`, as at any wait (R3.1).
+
+**See also.** R4.4, R4.7, R5.7 `GET_REPLY`, R5.9 `GETKEY`. Background: section 3.7.
+
+## R4.4 Function 88h: a listing on the lower screen
+
+| | |
+|---|---|
+| **Bytes** | as 86h (R4.3), with no carriage return at the start |
+| **Sent by** | only `tpi:fopen`, for the "Replace NAME? (Y/N)" question of `SAVE "f:..."` |
+
+**Description.** The same exchange as 86h, printed on the lower screen (the ROM's stream
+−3), so a question doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save. A
+program that never sends `tpi:fopen` never sees one.
+
+**See also.** R4.3.
+
+## R4.5 The other function codes
+
+| Code | In the ROM | The firmware |
+|---|---|---|
+| 82h | print a string, then send a key | never sends it |
+| 83h | print one character | never sends it |
+| 84h | send a key | never sends it |
+| 85h | send a two-bit keyboard mask | never sends it |
+| 87h | clear the screen | never sends it |
+| 80h, 89h–FFh | none: Report **D**, with the rest of the answer unread | never sends them |
+
+**Description.** The ROM understands 81h to 88h. The firmware uses only 81h, 86h and 88h, so a
+client need only handle those three. Treat anything else as an error, and SYNC so that the Pico
+doesn't wait for you to read an answer you don't understand (that's what `GET_REPLY` does).
+
+**See also.** R5.7.
+
+## R4.6 Data answers
+
+| | |
+|---|---|
+| **Bytes** | 01h, *n* (1–255), *n* bytes, XOR. Or a status alone: 07h for the end of the file, or an error. |
+| **Read** | the status after READY; the rest straight after, one byte about every 75 µs, with no wait |
+| **Checksum** | the last byte = the *n* data bytes XORed together (not the status or *n*) |
+| **Status after** | F7h (READY, not IDLE) for `tpi:chrd`, which the ROM's channel driver follows at once |
+| **Sent by** | `tpi:chrd` (Chapter 6), and the example command `tpi:.fact` (Chapter 11) |
+
+**Description.** Bytes for your program, not for the screen. The first byte is a status, but
+it means something different here: 1 is "data follows", 7 is "the end of the file, no data",
+and anything else is an error status as in R4.1.
+
+For `tpi:chrd`, the second CODE number says how many bytes you want, 1 to 255 (0 means 255).
+The answer may hold fewer.
+
+**How to use**
+
+1. Read the status. 7: the end. Not 1: an error.
+2. Read *n*, then *n* bytes, keeping the XOR.
+3. Read the checksum and compare. A mismatch means a byte was lost or changed: treat it as
+   **R**.
+
+**Example** (from `picolib.asm`)
+
+```asm
+.data:  call RXP
+        ld e,a                  ; n
+        ld b,a
+        ld c,0                  ; XOR
+.byte:  call RXP
+        ld (hl),a
+        inc hl
+        xor c
+        ld c,a
+        djnz .byte
+        call RXP
+        cp c
+```
+
+**Notes.** An empty FIFO reads 00h at any point, without complaint. The checksum is what
+catches it, except when every byte read was 00h (R5.10, Bugs).
+
+**See also.** R5.10 `GET_DATA`. Background: Chapter 6, and section 4.5.
+
+## R4.7 Text in answers
+
+**What ends text:**
+
+| Byte | In an 81h message | In an 86h or 88h listing |
+|---|---|---|
+| 00h | the end of the message | the end of a page: a key comes next |
+| 03h | the end (`GET_REPLY` accepts it; the firmware never sends it in a message) | the end of the listing |
+
+Nothing else ends text.
+
+**What's printed:** every other byte, with `RST 10h`:
+
+| Bytes | Meaning |
+|---|---|
+| 0Dh | a new line |
+| 08h | back one column |
+| 10h–15h (INK, PAPER, FLASH, BRIGHT, INVERSE, OVER) | a color or attribute; the **next byte** is its value |
+| 16h (AT), 17h (TAB) | a position; the **next two bytes** are its values |
+| 20h–7Fh | characters. 7Ch and 7Eh print as the keywords STICK and FREE; 7Fh is ©. |
+| 80h and up | block graphics, UDGs and keywords (ROM 2.3) |
+
+**Description.** A control code's value bytes are values, whatever they are: INK 0 sends 10h,
+00h, and that 00h doesn't end the text. A reader must print a control code's values along with
+it before it looks for 00h or 03h again.
+
+**Notes.** ROM 2.2 stopped at any byte of 80h or more, and at a 00h or 03h value. The firmware
+still sends `?` in place of bytes of 80h and up in long listings.
+
+**See also.** R5.8 `TEXT`. Background: section 3.7, and 4.4.
 
 ---
 
