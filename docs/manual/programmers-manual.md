@@ -8,7 +8,7 @@
 >
 > **Every example is in the `examples` folder next to this manual.** Each machine-code example
 > was assembled with sjasmplus. It was then run in the firmware repository's Z80 interpreter
-> against a simulated TS-Pico: that's `test_examples.py`, with 111 checks, all passing. Some of
+> against a simulated TS-Pico: that's `test_examples.py`, with 114 checks, all passing. Some of
 > those check this book: that the code it quotes from the examples still matches them. The
 > Pico-side examples were run through the firmware's real command dispatcher by
 > `test_extcmd_host.py`. **None of them has yet run on a real 2068.** `picoex.tap` holds all the
