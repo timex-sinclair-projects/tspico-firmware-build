@@ -862,7 +862,10 @@ instead.
 > **Remember:** BREAK works while the program is waiting for the Pico (in `WAIT_READY`): you
 > get Report D, and the next command works normally. At a "Scroll?" prompt the program is
 > waiting for *you*, and `GETKEY` doesn't watch for BREAK, so press **N** to stop a listing:
-> the Pico echoes it and ends the listing.
+> the Pico echoes it and ends the listing. A BASIC program that catches the D with `ON ERR GO
+> TO` should wait until CAPS SHIFT and SPACE are let go before it goes on: keys still down give
+> L BREAK into program at its next statement, or D again at its next command (User Manual,
+> 11.2).
 
 ## 5.2 Loading any file into memory: `loadfile`
 
