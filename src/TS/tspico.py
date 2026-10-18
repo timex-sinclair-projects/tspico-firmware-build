@@ -2250,6 +2250,17 @@ def SEND_MSG(msg, msg1, st: int, forceDisplay=False):                           
     return
 
 
+def SEND_STATUS(st: int):                                                       # the bare status: never prints
+
+    # SEND_MSG's answer with VERBOSE off, whatever VERBOSE says: for an answer
+    # that must not reach the screen. SAVE "f:x" SCREEN$ saves the display,
+    # so a "Saving to" message printed first would be saved in the picture (#314).
+    CMD_PUT(st)                 # Return code (< 0x80) -- IS the D-block status
+    MQ_READY()                  # one-byte status is in TX; signal ready
+    TLM("SEND_STATUS", "st=%d" % st)
+    CMD_DRAIN()
+
+
 def SEND_MSG2(msg, st: int, expandKeywords = True, colour = False):                                           # Sends a SCROLLING status message 
                                                                                               # once a command is finished
     # msg: a string of the message (no bytearrays)
@@ -3143,7 +3154,10 @@ def NATIVE_OPEN(pre, cmd):                                                     #
                                     % shorten_filename(xstr(catalog.basename(real)), 16), lower=True)    # 31 + the key echo = one line
             TSP.native["refuse"] = ch not in (89, 121)                         # SAVE_TS refuses it: Report D
             return
-        SEND_MSG("Saving to %s" % catalog.public(real), "", _1_OK)
+        if mod == MOD_SCREEN:                                                  # the message would be in the picture (#314)
+            SEND_STATUS(_1_OK)
+        else:
+            SEND_MSG("Saving to %s" % catalog.public(real), "", _1_OK)
         return
     res, st = SD_CALL(NATIVE_LOAD_PREP, path, op, mod)
     if st != _1_OK:
