@@ -6,6 +6,9 @@
 WORKDIR holds manual.html (pandoc, --section-divs), print.css, front.html,
 back.html and mask.html with their placeholders filled; the PDFs are written
 there. $CHROME is the browser; $FW, $ROM, $DATE go on the title page.
+With $PRINT set it also writes the files for printing on demand (see the
+end): print-interior.pdf, kdp-cover.pdf and lulu-coil-cover.pdf ($PAPER,
+white or cream, sets the KDP spine).
 
 What it does to the HTML:
   - drops the Markdown's own title and contents list, and puts in a title
@@ -198,16 +201,25 @@ n_body = len(body_reader.pages)
 assert n_body > 20, "the manual came out as %d pages" % n_body
 meta = {"/Author": "The TS-Pico team"}
 
-# One-up: the cover, then the manual (its page 1 is the title page), with
-# the running heads painted out on the opener pages and a bookmark for each
-# chapter. append() keeps the contents' links.
-w = pypdf.PdfWriter()
-w.append("body.pdf")
-for ch in chapters:
-    w.pages[pages[ch["id"]] - 1].merge_page(mask)
-w.insert_page(front, 0)
-for ch in chapters:
-    w.add_outline_item("%s %s: %s" % (ch["kind"], ch["num"], text(ch["title"])), pages[ch["id"]])
+
+def one_up(cover):
+    """The manual (its page 1 is the title page), with the running heads
+    painted out on the opener pages and a bookmark for each chapter, after
+    the cover page if there is one. append() keeps the contents' links."""
+    w = pypdf.PdfWriter()
+    w.append("body.pdf")
+    for ch in chapters:
+        w.pages[pages[ch["id"]] - 1].merge_page(mask)
+    if cover is not None:
+        w.insert_page(cover, 0)
+    for ch in chapters:
+        w.add_outline_item("%s %s: %s" % (ch["kind"], ch["num"], text(ch["title"])),
+                           pages[ch["id"]] - (cover is None))
+    return w
+
+
+# One-up: the cover, then the manual.
+w = one_up(front)
 w.add_metadata(dict(meta, **{"/Title": TITLE}))
 w.write("user-manual-half-letter.pdf")
 
@@ -230,3 +242,74 @@ w.write("user-manual-saddle-stitch-letter.pdf")
 assert n % 4 == 0
 print("manual %d pages (%d blank before a chapter); one-up %d pages; booklet %d pages (%d blank padding), "
       "%d letter sheets" % (n_body, len(blanks), n_body + 1, n, pad, n // 4))
+
+if not os.environ.get("PRINT"):
+    sys.exit(0)
+
+# For printing on demand ($PRINT set): the interior, the manual without the
+# cover, padded to an even page count, the same for both printers (its 0.62
+# in inside margin is what Lulu recommends for a 61-150 page paperback and
+# KDP's minimum is 0.375 in; coil needs no gutter); and a cover for each,
+# one sheet: bleed, back, spine, front, bleed, 0.125 in of bleed all round
+# (the cover art runs out to it). Lulu's coil cover has no spine; KDP's
+# spine is the page count times the paper's thickness, and KDP puts the
+# barcode at the foot of the back cover by the spine, so the back's links
+# move up out of its way. Spine text only where it fits with 0.125 in clear
+# each side (Lulu's figure; KDP's is 1/16 in): about 0.35 in of spine.
+BLEED, SAFE = 0.125, 0.125
+PAPER = os.environ.get("PAPER") or "white"
+KDP_PAGE = {"white": 0.002252, "cream": 0.0025}[PAPER]     # inches per page
+w = one_up(None)
+if len(w.pages) % 2:
+    w.add_blank_page(width=W, height=H)
+n_int = len(w.pages)
+w.add_metadata(dict(meta, **{"/Title": TITLE}))
+w.write("print-interior.pdf")
+
+
+def page_div(f):
+    """The <div class="page ..."> of a filled-in cover page."""
+    return re.search(r'(?s)<body>(.*)</body>', open(f, encoding="utf-8").read()).group(1)
+
+
+def wrap(name, spine, kdp):
+    cw, ch = 2 * (BLEED + 5.5) + spine, 8.5 + 2 * BLEED
+    spine_text = ""
+    room = spine - 2 * SAFE
+    if room >= 0.1:
+        spine_text = ('<div class="spine-text" style="font-size: %.1fpt">TS-Pico &nbsp; %s</div>'
+                      % (min(room * 72 * 0.8, 13), T3))
+    doc = """<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="cover.css">
+<title>%s</title><style>
+@page { size: %.4fin %.4fin; margin: 0; }
+.wrap { position: relative; width: %.4fin; height: %.4fin; overflow: hidden; background: #b4b1ab;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.panel { position: absolute; top: 0; width: %.4fin; height: 100%%; overflow: hidden; }
+.panel .page { position: absolute; top: %.4fin; overflow: visible; background: none; }
+.p-back { left: 0; } .p-back .page { left: %.4fin; }
+.p-front { right: 0; } .p-front .page { left: 0; }
+.kdp .page.back .links { bottom: 1.7in; }
+.spine { position: absolute; top: 0; left: %.4fin; width: %.4fin; height: 100%%;
+  display: flex; align-items: center; justify-content: center; }
+.spine-text { writing-mode: vertical-rl; white-space: nowrap; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; line-height: 1; }
+</style></head><body><div class="wrap%s">
+<div class="panel p-back">%s</div>
+<div class="spine">%s</div>
+<div class="panel p-front">%s</div>
+</div></body></html>
+""" % (TITLE, cw, ch, cw, ch, BLEED + 5.5, BLEED, BLEED, BLEED + 5.5, spine,
+       " kdp" if kdp else "", page_div("back.html"), spine_text, page_div("front.html"))
+    open(name + ".html", "w", encoding="utf-8").write(doc)
+    chrome(name + ".html", name + ".pdf")
+    r = pypdf.PdfReader(name + ".pdf")
+    p = r.pages[0]
+    got = float(p.mediabox.width) / 72, float(p.mediabox.height) / 72
+    assert len(r.pages) == 1 and abs(got[0] - cw) < .01 and abs(got[1] - ch) < .01, \
+        "%s is %d pages, %.3f x %.3f in, not %.3f x %.3f" % (name, len(r.pages), got[0], got[1], cw, ch)
+    print("%s: %.3f x %.3f in, spine %.3f in%s" % (name, cw, ch, spine, ", spine text" if spine_text else ""))
+
+
+wrap("lulu-coil-cover", 0, False)
+wrap("kdp-cover", n_int * KDP_PAGE, True)
+print("interior %d pages (KDP: %s paper)" % (n_int, PAPER))

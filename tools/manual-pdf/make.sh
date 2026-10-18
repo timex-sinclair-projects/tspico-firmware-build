@@ -10,9 +10,24 @@
 #                                         double-sided (flip on the short edge)
 #                                         and stapling on the fold
 #
-# Usage: [BOARD=v2|v3] tools/manual-pdf/make.sh [OUTDIR]  (default build/manual-pdf)
-#        Only the two PDFs go into OUTDIR. pages.yml builds them into
-#        site/manual for the website; release.yml attaches them.
+# Usage: [BOARD=v2|v3] [PRINT=1 [PAPER=white|cream]] tools/manual-pdf/make.sh [OUTDIR]
+#        (default build/manual-pdf). Only the two PDFs go into OUTDIR.
+#        pages.yml builds them into site/manual for the website;
+#        release.yml attaches them.
+#
+# PRINT=1 makes the files for printing on demand instead, the paperback
+# on Amazon KDP and the coil-bound book on Lulu (build.yml's artifact):
+#
+#   user-manual-print-interior.pdf   the manual without its cover, 5.5 x 8.5
+#                                    in, an even number of pages: the
+#                                    interior for both
+#   user-manual-kdp-cover.pdf        back, spine and front on one sheet with
+#                                    0.125 in of bleed all round; the spine
+#                                    is the page count times KDP's paper
+#                                    thickness (PAPER, white by default:
+#                                    pick the same paper in KDP)
+#   user-manual-lulu-coil-cover.pdf  back and front, no spine, with bleed:
+#                                    11.25 x 8.75 in
 #
 # BOARD picks the manual (tools/manual-variants.py: user-manual.md holds
 # both boards' passages between <!-- v2 --> / <!-- v3 --> markers): v2, the
@@ -77,7 +92,13 @@ pandoc "$WORK/user-manual.md" -f gfm -t html5 --standalone --section-divs $EMBED
 
 # The rest (title page, contents, chapter openers on right-hand pages, the
 # covers, the one-up PDF and the booklet) is book.py's.
-CHROME="$CHROME" FW="$FW" ROM="$ROM" DATE="$DATE" TITLE="$TITLE" T3="$T3" python3 "$HERE/book.py" "$WORK"
+PRINT="$PRINT" PAPER="$PAPER" CHROME="$CHROME" FW="$FW" ROM="$ROM" DATE="$DATE" TITLE="$TITLE" T3="$T3" python3 "$HERE/book.py" "$WORK"
+if [ -n "$PRINT" ]; then
+  for f in print-interior kdp-cover lulu-coil-cover; do
+    cp "$WORK/$f.pdf" "$OUT/$NAME-$f.pdf"; echo "$OUT/$NAME-$f.pdf"
+  done
+  exit 0
+fi
 cp "$WORK/user-manual-half-letter.pdf" "$OUT/$NAME-half-letter.pdf"
 cp "$WORK/user-manual-saddle-stitch-letter.pdf" "$OUT/$NAME-saddle-stitch-letter.pdf"
 echo "$OUT/$NAME-half-letter.pdf"
