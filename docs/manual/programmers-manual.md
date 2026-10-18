@@ -323,7 +323,7 @@ command's result. The firmware uses these:
 
 | Code | What follows | What the 2068 does |
 |---|---|---|
-| 81h | status, text, 00h | prints the text (it usually starts with a carriage return) |
+| 81h | status, text, 00h | prints the text (the TS-Pico's start and end with a carriage return) |
 | 86h | status, then pages of text. Each page ends in 00h, and the whole thing ends in 03h. | prints each page. At each 00h it waits for a key, waits for READY, and sends the key, then waits for READY again and reads on, whatever the key was. Only the 03h ends it. |
 | 88h | as 86h, on the lower screen | only for `tpi:fopen` (the "Replace?" question of `SAVE "f:..."`) |
 
@@ -1754,7 +1754,8 @@ would move the ROM's current channel to the screen), and it says READY without I
 tp.SEND_MSG("First line", "Second line", OK, True)
 ```
 
-The ROM prints a carriage return, the first line, a carriage return, then the second. Keep
+The ROM prints a carriage return, the first line, a carriage return, the second line, and a
+carriage return to end it, so a program's next `PRINT` starts on a new line. Keep
 the text to plain ASCII: a byte of 128 or more prints as a 2068 graphic, UDG or keyword. The
 control codes 16–23 (INK, PAPER, AT, TAB…) take the bytes that follow them as their values.
 
@@ -1912,7 +1913,7 @@ body, and records every byte the firmware sends back. This book's
 
 ```python
 log = send("tpi:.hello")
-h.check(msg(log) == b"\x81\x01\rHello from the TS-Pico!\x00\x01",
+h.check(msg(log) == b"\x81\x01\rHello from the TS-Pico!\r\x00\x01",
         "81h message, then one pre-load")
 ```
 
