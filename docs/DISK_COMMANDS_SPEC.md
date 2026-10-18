@@ -186,9 +186,10 @@ expression, up to 64 characters.
   - `FORMAT` of a name that isn't `.tap`.
 - **Report F is for names:** a missing file, a path above the root, an empty name, or a name
   longer than 64 characters (checked in the ROM, and nothing is sent).
-- **Why N stops instead of skipping.** The ROM's function-`$86` prompt loop ends the whole exchange on N,
-  so N can't mean "skip this one". Other keys skip. The erasing happens after the
-  exchange, because the SD card and the 2068 link share pins. That means the
+- **N skips, like any key but Y.** Since ROM 2.3 (#227) the function-`$86` prompt loop sends
+  every key, N included, to the TS-Pico, so N means "not this one" and the questions go on.
+  (ROM 2.2 ended the whole exchange on N, so there N stopped asking.) The erasing happens
+  after the exchange, because the SD card and the 2068 link share pins. That means the
   per-file results aren't printed; errors go to the log.
 - **No more 31-character limit.** The module sends through `TPI_SEND`, which is
   SESSION_SETUP entered past its 5–31 character name gate. Everything past the

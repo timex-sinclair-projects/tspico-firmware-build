@@ -75,7 +75,7 @@ message, step 16 is `CMD_PUT(st)` / `MQ_READY()`: TX [st]. Step 17 reads it:
 ### A message (81h)
 
 VERBOSE on, or a forced message (`NO_CARD_MSG`, `tpi:path`, the show forms):
-TX gets `81h`, the status, `0Dh`, the text, `00h`. The ROM's function 81h
+TX gets `81h`, the status, `0Dh`, the text, `0Dh`, `00h`. The ROM's function 81h
 reads its status, opens the main screen and prints to the `00h`; the
 status is the result ([../firmware/tspico-messages.md](../firmware/tspico-messages.md#send_msgmsg-msg1-st-forcedisplayfalse)).
 

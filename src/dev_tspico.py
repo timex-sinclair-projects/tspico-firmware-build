@@ -2234,6 +2234,7 @@ def SEND_MSG(msg, msg1, st: int, forceDisplay=False):                           
             put(0x0D)
             for m in msg1:
                 put(MSG_BYTE(m))
+        put(0x0D)               # End the line too, so a program's next PRINT starts afresh (#316)
         put(STR_END)            # 0x00: end of string
         CMD_SEND(ob, True)      # header in TX, READY, the rest as the Z80 reads
 
@@ -2907,7 +2908,7 @@ def DISK_ERASE(pre, cmd):                                                     # 
 
     # SAVE "tpi:erase name"    - delete a file, no prompt (silent unless verbose)
     # SAVE "tpi:erase *.bak"   - delete matching files, Erase <name> (Y/N)? each:
-    #                            Y erases, N stops, any other key skips
+    #                            Y erases; any other key, N included, skips that file (#227)
     # SAVE "tpi:erase dir/"    - remove an empty directory
 
     TLM("DISK_ERASE enter")

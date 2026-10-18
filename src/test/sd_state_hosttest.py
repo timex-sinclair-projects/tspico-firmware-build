@@ -271,7 +271,7 @@ def test_gate(t):
     del ran[:]
     tx, probes = run(t, "tpi:dir", sa)
     check(ran == [] and probes == [1], "tpi:dir: looks for the card once, handler not run")
-    check(tx == [0x81, 10, 0x0D] + msg + [0, 0x01],
+    check(tx == [0x81, 10, 0x0D] + msg + [0x0D, 0, 0x01],
           "the message is shown even with VERBOSE off, then Report J, then one pre-load")
 
     del ran[:]

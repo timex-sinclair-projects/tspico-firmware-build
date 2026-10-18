@@ -115,6 +115,7 @@ class Pico:
                 self.put(0x0D)
                 for c in msg1.encode():
                     self.put(c)
+            self.put(0x0D)
             self.put(0)
         else:
             self.put(st)
@@ -454,7 +455,7 @@ def main():
     poke_text(pk, 60010, 60012, b"tpi:path", word=True)
     r = run("picocmd", p, pk)
     check(r["returned"] and r["bc"] == 0, "returns 0 = OK (bc=%d)" % r["bc"])
-    check(r["text"] == b"\rCurrent working dir is: \r/", "printed the message (%r)" % bytes(r["text"]))
+    check(r["text"] == b"\rCurrent working dir is: \r/\r", "printed the message (%r)" % bytes(r["text"]))
     link_ok(p, "path")
 
     print("picocmd: tpi:dir, two pages, Y at the prompt")
