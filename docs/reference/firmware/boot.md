@@ -381,7 +381,8 @@ an odd page; the two PDFs are uploaded as
 with its Markdown as `tspico-manual-v3`; it isn't published (website,
 releases) while the card is unreleased. Then `PRINT=1` makes the files for
 printing on demand, uploaded as `tspico-manual-print` and taken from there
-by hand to Amazon KDP (paperback) and Lulu (coil bound, which lies flat):
+by hand to Amazon KDP (paperback) and Lulu (coil bound, which lies flat;
+run locally with no output folder, `make.sh` puts them on the Desktop):
 `user-manual-print-interior.pdf`, the one-up without its cover padded to an
 even page count, the interior for both (its 0.62 in inside margin is Lulu's
 recommendation for a 61 to 150 page paperback, KDP's minimum is 0.375 in,

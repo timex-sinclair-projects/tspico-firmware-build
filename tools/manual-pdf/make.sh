@@ -16,7 +16,9 @@
 #        release.yml attaches them.
 #
 # PRINT=1 makes the files for printing on demand instead, the paperback
-# on Amazon KDP and the coil-bound book on Lulu (build.yml's artifact):
+# on Amazon KDP and the coil-bound book on Lulu (build.yml's artifact). With
+# no OUTDIR they go on the Desktop, ready to upload (build/manual-print if
+# there is no ~/Desktop):
 #
 #   user-manual-print-interior.pdf   the manual without its cover, 5.5 x 8.5
 #                                    in, an even number of pages: the
@@ -48,7 +50,10 @@
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-OUT="${1:-$REPO/build/manual-pdf}"
+if [ -n "$1" ]; then OUT="$1"
+elif [ -n "$PRINT" ] && [ -d "$HOME/Desktop" ]; then OUT="$HOME/Desktop"   # ready to upload
+elif [ -n "$PRINT" ]; then OUT="$REPO/build/manual-print"
+else OUT="$REPO/build/manual-pdf"; fi
 BOARD="${BOARD:-v2}"
 case "$BOARD" in
   v2) TITLE="TS-Pico User Manual"; T3="USER MANUAL"; NAME=user-manual ;;
