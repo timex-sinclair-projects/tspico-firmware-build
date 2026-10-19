@@ -2735,7 +2735,7 @@ TS-Pico Commander, the help files and the test programs, and contributes to the 
 **Joe Vandezande** designed the 3D-printed enclosures for the TS-Pico, the PicoVideo and the
 expansion bus board, and helps with testing and troubleshooting.
 
-Thanks to **Paul Anderson**, **David Green** and **Adam Trionfo** for beta testing.
+Thanks to **Paul Anderson**, **David Green**, **François Lanciault** and **Adam Trionfo** for beta testing.
 
 Special thanks to the people of Timex Computer Corporation; to Johan "Dr Beep" Koelman, whose
 PC-ZX interface inspired the TS-Pico; to the members of the TS2068 list at groups.io and the
