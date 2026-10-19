@@ -14,9 +14,21 @@ accepts and what it does. The ROM mechanism is in
 **Non-goals:**
 
 - FDD-3 compatibility.
-- The `*` suffix and the RST 8 vector.
-- Microdrive-style device arguments (`"m";1;"name"`).
+- The RST 8 vector.
+- `*` as a general command suffix (TOS's `GO SUB *`, `DRAW *` and the rest).
 - Drive letters, serial ports (SCPs), the TOS directory stack (`GO SUB *` and `DRAW *`), and `ATTR *` protection.
+
+**Planned, not yet specified: the Interface 1 microdrive forms** on mounted `.MDR`
+images ([#330](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/330)):
+
+- `LOAD`/`SAVE`/`VERIFY`/`MERGE *"m";n;"name"`;
+- `CAT n`;
+- `ERASE "m";n;"name"` and `FORMAT "m";n;"name"`;
+- later, `MOVE` and `OPEN #s;"m";n;"name"`.
+
+They are added alongside `f:`, which doesn't change, and they come in through the
+existing SAVE-ETC, `FDD_DISPATCH` and `OPEN #` hooks, not the RST 8 vector. Their
+contract gets its own section here when #330 is designed.
 
 ---
 
@@ -311,7 +323,8 @@ The design choices:
 - **The `f:` prefix.** Stock `OPEN #` accepts only one-letter channel names (K/S/P). A
   prefix keeps `OPEN #4,"p"` meaning the printer, and leaves room for other
   devices. The Interface 1 precedent is `"m";1;"name"`, but a prefix inside one
-  string is simpler and is still a single string expression.
+  string is simpler and is still a single string expression. The IF1 forms are
+  planned alongside it for microdrive images (#330); `f:` stays the SD card's syntax.
 - **Random access** uses `TAB` as the record pointer. See §4b. EOF shows up as Report 8 on
   `INPUT #`, as it does for tape reads today.
 - **Any stream 0–15**, as stock `OPEN #` allows. Streams 4–15 are the usual choice;
