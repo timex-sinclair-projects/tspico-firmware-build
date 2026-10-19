@@ -154,12 +154,11 @@ The ROM also tells the Pico: from 2.3 it sends its version in every command's pr
 
 ## 2.1 The ports
 
-The TS-Pico answers on two Z80 I/O ports:
-
-| Port | Decimal | `IN` gives you | `OUT` does |
-|---|---|---|---|
-| 0Eh | 14 | the next byte from the Pico's transmit FIFO, or **00h if it's empty** | puts a byte in the Pico's receive FIFO |
-| 0Fh | 15 | the **status byte**. Reading it takes nothing from the FIFO. | **SYNC / abort**: the firmware treats any write here as "stop whatever you're doing and start fresh" |
+The TS-Pico answers on two Z80 I/O ports. **Port 14 (0Eh)** carries data both ways: an `IN`
+gives you the next byte from the Pico's transmit FIFO, or **00h if it's empty**, and an `OUT`
+puts a byte in its receive FIFO. **Port 15 (0Fh)** gives you the **status byte** when you read
+it, and reading it takes nothing from the FIFO. Writing to it is a **SYNC**: the firmware treats
+any write there as "stop whatever you're doing and start fresh". R2.1 and R2.2 have the details.
 
 Each FIFO holds only **four bytes**. There's no wait line: the Z80 is never held up. This has
 two consequences you'll meet again and again:
@@ -173,22 +172,14 @@ leave a short gap between bytes that the Pico is known to keep up with.
 
 ## 2.2 The status byte
 
-Port 15 reads a status byte. Three bits matter:
+Port 15 reads a status byte, and three of its bits matter. **READY** (bit 6) means the Pico has
+its answer, or is ready for your next bytes. **IDLE** (bit 3) means no transaction is open.
+**RECOVERED** (bit 2) is active low: 0 means the Pico gave up on a transaction by itself.
 
-| Bit | Name | Meaning |
-|---|---|---|
-| 6 | READY | 1 = the Pico has its answer (or is ready for your next bytes) |
-| 3 | IDLE | 1 = no transaction is open |
-| 2 | RECOVERED | **0** = the Pico gave up on a transaction by itself (active low) |
-
-The other bits are reserved. In practice you'll see four values:
-
-| Value | Meaning |
-|---|---|
-| FFh | ready and idle: the Pico is waiting for a new command |
-| F7h | ready, but the command isn't finished yet (IDLE is clear) |
-| FBh | ready and idle, but RECOVERED: the Pico abandoned the last transaction. The ROM reports this as **T TS-Pico reset, try again** |
-| 00h | busy |
+So in practice you'll see four values: **FFh** (ready and idle: send a new command), **F7h**
+(ready, but the command isn't finished yet), **FBh** (ready and idle, but the Pico abandoned the
+last transaction, which the ROM reports as **T TS-Pico reset, try again**) and **00h** (busy).
+R2.2 has the bit table, and says when the Pico gives up.
 
 Test RECOVERED only when READY is set: the busy value, 00h, has bit 2 clear too.
 
@@ -203,15 +194,15 @@ before you read the answer, and you can't read too early.
 
 ## 2.4 How fast?
 
-| Direction | Safe pace | Notes |
-|---|---|---|
-| Z80 → Pico, inside a command | a byte every 30–50 µs | the ROM sends every ~30 µs. Our library sends one every 62–72 µs. Never use `OTIR`. |
-| Pico → Z80, data answers | a byte every ~75 µs | the ROM's own channel driver reads every ~75 µs. Our library reads one every ~87 µs. Never use `INIR`. |
-| Gaps | up to 1 second | the Pico gives up on a half-received command after **1 s** of silence |
+Inside a block of bytes, such as the ten bytes that open a command, there's no handshake: the
+Z80 sends or reads at a pace the Pico is known to keep up with. The ROM sends a byte about every
+30 µs and reads data about every 75 µs. Our library is a little slower both ways, and slower is
+always safe, with one limit: the Pico gives up on a half-received command after **1 second** of
+silence. Never use `OTIR` or `INIR`: at about 6 µs a byte they're far too fast.
 
-Slower is always safe, up to that one-second limit. At 3.5 MHz, 1 µs is 3.5 T-states. The
-library pauses with a `DJNZ` loop: 11 times round before each byte it sends, 16 before each byte
-it reads. R5.4 and R5.6 work out what that comes to.
+At 3.5 MHz, 1 µs is 3.5 T-states. The library pauses with a `DJNZ` loop: 11 times round before
+each byte it sends, 16 before each byte it reads. R2.4 lists every pace and timeout on both
+sides, and R5.4 and R5.6 work out what the library's loops come to.
 
 ## 2.5 Summary
 
@@ -284,15 +275,16 @@ Because every SYNC puts a fresh 01h in place, a program that SYNCs first always 
 
 Ten bytes, sent one at a time:
 
-| Byte | Contents | Notes |
-|---|---|---|
-| 0 | `'B'` (42h) | a command |
-| 1 | 0 | 0 = a `SAVE "tpi:..."` command. 1, 2 or 3 = `LOAD`/`VERIFY`/`MERGE "tpi:name"`, which mounts a file. **4, 5 and 6 are printer traffic: never send them.** |
-| 2 | 23h | the ROM's version, as `PEEK 101` gives it. The ROM sends 23h; send the same. The Pico keeps it and shows it in `tpi:info`. |
-| 3, 4 | first CODE number, low byte first | `SAVE "tpi:..." CODE a,b` sends *a* here; 0 without CODE |
-| 5, 6 | second CODE number, low byte first | *b* |
-| 7, 8 | length of the command text, low byte first | |
-| 9 | XOR of bytes 0–8 | the Pico doesn't check this one, but send it right |
+```
+'B', 0, 23h, CODE a (low, high), CODE b (low, high), length (low, high), XOR
+```
+
+`'B'` (42h) says this is a command. The 0 says it's a `SAVE "tpi:..."` command; 1, 2 or 3 would
+mount a file instead, as `LOAD`, `VERIFY` or `MERGE "tpi:name"` do, and **4, 5 and 6 are printer
+traffic: never send them.** 23h is the ROM's version, as `PEEK 101` gives it: the Pico keeps it
+and shows it in `tpi:info`. Then come the two numbers a BASIC program writes after `CODE` (0
+without), the length of the command's text, and the XOR of the nine bytes before it. The Pico
+doesn't check that one, but send it right. R3.4 draws it byte by byte.
 
 ## 3.5 The body
 
@@ -316,51 +308,37 @@ must be plain ASCII. Anything that isn't valid text gives Report C.
 ## 3.6 The answer: a status byte
 
 After the body, wait for READY and read one byte. For most commands, that byte is a
-**status**:
+**status**. 1 means OK. 2 to 11 are the reports BASIC already knows: R, F, Q, C, 6, 8, A, 9, J and
+D, in that order, so status 3 is "F Invalid file name". 00h isn't a status at all: it's an empty
+FIFO, and the ROM reports J. And the RECOVERED bit, which isn't a byte, gives T.
 
-| Status | Report | Error code (for `RST 8`) |
-|---|---|---|
-| 00h | J Invalid I/O device (nothing there) | 12h |
-| 1 | OK | — |
-| 2 | R Tape loading error | 1Ah |
-| 3 | F Invalid file name | 0Eh |
-| 4 | Q Parameter error | 19h |
-| 5 | C Nonsense in BASIC | 0Bh |
-| 6 | 6 Number too big | 05h |
-| 7 | 8 End of file | 07h |
-| 8 | A Invalid argument | 09h |
-| 9 | 9 STOP statement | 08h |
-| 10 | J Invalid I/O device | 12h |
-| 11–127 | D BREAK - CONT repeats | 0Ch |
-| (RECOVERED bit) | T TS-Pico reset, try again | 1Ch |
-
-The "error code" column is the byte that follows `RST 8` in the ROM. Put it there and BASIC
-stops with that report, exactly as if a BASIC command had failed.
+Each report has an error code: the byte that follows `RST 8` in the ROM. Put it there and BASIC
+stops with that report, exactly as if a BASIC command had failed. R4.1 has every status with its
+report and code, and `picolib`'s `MAP_STATUS` (R5.11) does the conversion.
 
 ## 3.7 The answer: a response function
 
 A first byte of 80h or more isn't a status. It's a **response function**: a request for the 2068
 to do something, usually print. Each function carries its own status byte, which becomes the
-command's result. The firmware uses these:
+command's result. The firmware uses three:
 
-| Code | What follows | What the 2068 does |
-|---|---|---|
-| 81h | status, text, 00h | prints the text (the TS-Pico's start and end with a carriage return) |
-| 86h | status, then pages of text. Each page ends in 00h, and the whole thing ends in 03h. | prints each page. At each 00h it waits for a key, waits for READY, and sends the key, then waits for READY again and reads on, whatever the key was. Only the 03h ends it. |
-| 88h | as 86h, on the lower screen | only for `tpi:fopen` (the "Replace?" question of `SAVE "f:..."`) |
+- **81h**, a message: the status, then text ending in 00h. The 2068 prints it.
+- **86h**, a listing: the status, then pages of text, each ending in 00h, and a 03h at the very
+  end. At each 00h the 2068 waits for a key, waits for READY, sends the key, then waits for READY
+  again and reads on, whatever the key was. Only the 03h ends it.
+- **88h**, the same on the lower screen, sent only for `tpi:fopen`.
 
 Text ends at 00h, and an 86h listing at 03h; every other byte is printed with `RST 10h`. That
 includes bytes of 80h and more (block graphics, UDGs, keywords), and the value bytes after a
 control code: INK 0 is a color, and AT 3,0 a position, not the end of the text. The ROM also
-understands 82h–85h and 87h, but the firmware never sends them. Any other code gives
-**Report D**, with the rest of the answer left unread.
+understands a few other codes, which the firmware never sends; anything it doesn't know gives
+**Report D**, with the rest of the answer left unread. Chapter R4 has every code and byte.
 
-**The key is the Pico's to interpret.** Keys go back as typed, in either case, and the Pico
-decides what each one means at that prompt. At a "Scroll?" prompt `N` stops, a digit 1–9 shows
-that many lines before the next prompt, `0` shows ten, and anything else shows a full page; at an
-ERASE question `N` skips that file. Whatever the key, **keep reading**: after `N` the Pico still
-sends something, at least an echo of the key and the closing 03h. A client that stops at its own
-`N` leaves those bytes behind, and the next command reads them as its status.
+**The key is the Pico's to interpret.** Keys go back as typed, and the Pico decides what each
+one means at that prompt: at a "Scroll?" prompt `N` stops and a digit sets the page length; at
+an ERASE question `N` skips that file. Whatever the key, **keep reading**: after `N` the Pico
+still sends something, at least an echo of the key and the closing 03h. A client that stops at
+its own `N` leaves those bytes behind, and the next command reads them as its status.
 
 ## 3.8 The tail
 
@@ -997,13 +975,17 @@ harm is done: the next command's SYNC clears them.
 
 ## 6.1 The four commands
 
-| Command text | First CODE | Second CODE | Answer |
-|---|---|---|---|
-| `tpi:chopen <mode> <path>` | stream (0–255) | record length (0 = a plain stream, 1–254) | a status |
-| `tpi:chopen r d:<pattern>` | stream | 0 | a status; the channel reads a folder listing |
-| `tpi:chwr <hex>` | stream | 0 | a status |
-| `tpi:chrd` | stream | the most bytes you want (1–255; 0 means 255) | a **data answer**: `1, n, bytes, XOR`, or 7 at the end of the file |
-| `tpi:chclose` | stream | 0 | a status (closing a stream that isn't open is fine) |
+- **`tpi:chopen <mode> <path>`** opens a file. CODE *a* is the stream, and CODE *b* is 0 for a
+  plain stream or a record length (section 6.4). `tpi:chopen r d:<pattern>` opens a folder
+  listing instead (6.5). The answer is a status.
+- **`tpi:chwr <hex>`** writes bytes, sent as hex digits. CODE *a* is the stream. The answer is
+  a status.
+- **`tpi:chrd`** reads. CODE *a* is the stream, and CODE *b* the most bytes you want, up to 255
+  (0 means 255). The answer is a **data answer**: `1, n, bytes, XOR`, or 7 at the end of the
+  file.
+- **`tpi:chclose`** closes. CODE *a* is the stream. Closing a stream that isn't open is fine.
+
+R8.1 to R8.4 give each one's errors and limits.
 
 **The stream number is just a label** the Pico files the channel under. Any number from 0 to
 255 will do. If your program runs alongside BASIC programs that use `OPEN #`,
@@ -1014,18 +996,17 @@ command at once. That's why `PICO_SYNC` waits for IDLE first.
 
 ## 6.2 Modes
 
-| Mode | Meaning |
-|---|---|
-| `r` | read; the file must exist (**F** if not) |
-| `w` | write; makes the file, or empties it |
-| `a` | append; makes the file if needed, then writes at its end |
-| `u` | update: read and write |
+There are four: `r` reads, and the file must exist (**F** if not); `w` writes, making the file or
+emptying it; `a` appends, making the file if it's needed; and `u` reads and writes. R8.1 says
+where each one starts.
 
 Add `b` for **binary** (`rb`, `wb`, `ab`, `ub`). Without it, a channel is in **text** mode:
 
 - **writing**, a carriage return (13) becomes a newline in the file, and the 2068's keyword
   tokens are spelled out as text;
 - **reading**, newlines become carriage returns, so `INPUT #` sees lines.
+
+R8.6 has the full translation, both ways.
 
 Binary mode passes the bytes through unchanged, with one exception: in a write, **byte 23 is
 always the start of a TAB**, in either mode (next section). Paths work as they do everywhere
@@ -1034,7 +1015,7 @@ else: relative to the current folder, or from the card's `/TAP` folder if they s
 ## 6.3 TAB: seeking
 
 A write of the three bytes `23, n low, n high` moves the channel to byte *n* of the file (1 is
-the first byte). This is how `PRINT #s;TAB n;` works, and it's how your machine code
+the first byte), or to record *n* of a record file (6.4). This is how `PRINT #s;TAB n;` works, and it's how your machine code
 seeks: `tpi:chwr 17` followed by the two bytes in hex.
 
 **TAB 0** (`tpi:chwr 170000`) is a question. The next `tpi:chrd` answers it with a count, as
