@@ -32,18 +32,20 @@
   140 PRINT 'TAB 8; INVERSE 1;"F"; INVERSE 0;"ile manager"
   145 PRINT 'TAB 8; INVERSE 1;"R"; INVERSE 0;"OM version"
   150 PRINT 'TAB 8; INVERSE 1;"I"; INVERSE 0;"nfo"
-  155 PRINT 'TAB 8; "Pico "; INVERSE 1;"V"; INVERSE 0;"ideo ..."
-  160 PRINT 'TAB 8; INVERSE 1;"Q"; INVERSE 0;"uit"
+  155 PRINT 'TAB 8; INVERSE 1;"T"; INVERSE 0;"iny Pico menu"
+  160 PRINT 'TAB 8;"Pico "; INVERSE 1;"V"; INVERSE 0;"ideo ..."
+  165 PRINT 'TAB 8; INVERSE 1;"Q"; INVERSE 0;"uit"
   200 LET k$=INKEY$
-  210 IF k$="" THEN GO TO 200
-  220 IF k$="q" THEN GO TO 400
-  230 IF k$="f" THEN LOAD ""
-  240 IF k$="h" THEN GO TO 1000
-  250 IF k$="p" THEN GO TO 2000
-  260 IF k$="c" THEN GO TO 1100
-  270 IF k$="i" THEN GO TO 1200
-  280 IF k$="r" THEN GO SUB 2100: GO TO 20
-  285 IF k$="v" THEN GO TO 1300
+  205 IF k$="" THEN GO TO 200
+  210 IF k$="q" THEN GO TO 400
+  220 IF k$="f" THEN LOAD ""
+  230 IF k$="h" THEN GO TO 1000
+  240 IF k$="p" THEN GO TO 2000
+  250 IF k$="c" THEN GO TO 1100
+  260 IF k$="i" THEN GO TO 1200
+  270 IF k$="r" THEN GO SUB 2100: GO TO 20
+  280 IF k$="v" THEN GO TO 1300
+  285 IF k$="t" THEN GO SUB 9000: GO TO 30
   290 GO TO 200
 #
   400 FOR a=4 TO 21
@@ -99,17 +101,94 @@
  1210 SAVE "tpi:info"
  1220 INPUT "Press Enter:";k$
  1230 GO TO 30
- 1300 CLS
+#
+# Pico Video menu
+#
+ 1300 CLS 
  1310 GO SUB 500
  1312 PRINT AT 4,0;
- 1320 PRINT ' INVERSE 1;"0"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0; " Bright "; BRIGHT 0;" black off"
- 1330 PRINT ' INVERSE 1;"1"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0; " Bright "; BRIGHT 0;" black on"
- 1340 PRINT ' INVERSE 1;"X"; INVERSE 0;" back"
+ 1314 PRINT INK 1;"Pico Video board options"
+ 1316 PRINT ' INVERSE 1;"0"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0;" Bright "; BRIGHT 0;" black off"
+ 1318 PRINT ' INVERSE 1;"1"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0;" Bright "; BRIGHT 0;" black on"
+ 1320 OUT 48955,64: LET u=IN 65339
+ 1322 OUT 48955,64: OUT 65339,1: OUT 48955,64: LET uu=IN 65339: IF uu<>1 THEN GO TO 1328
+ 1324 OUT 48955,64: OUT 65339,0: OUT 48955,64: LET uu=IN 65339: IF uu<>0 THEN GO TO 1328
+ 1326 OUT 48955,64: OUT 65339,u: GO TO 1330
+ 1328 PRINT ' INK 2;"ULA Plus support not detected": GO TO 1349
+ 1330 PRINT ' INVERSE 1;"U"; INVERSE 0;"LA Plus On (ULA+ is ";"ON" AND u;"OFF" AND NOT u;") "
+ 1332 PRINT "ULA Plus "; INVERSE 1;"O"; INVERSE 0;"ff"
+ 1334 PRINT '"ULA Plus Load "; INVERSE 1;"S"; INVERSE 0;"tandard palette"
+ 1336 PRINT "ULA Plus Load "; INVERSE 1;"E"; INVERSE 0;"nhanced palette"
+ 1345 PRINT "ULA Plus Select sub-"; INVERSE 1;"p"; INVERSE 0;"alette"
+ 1346 PRINT "ULA Plus "; INVERSE 1;"T"; INVERSE 0;"weak colors"
+ 1348 PRINT INVERSE 1;"D"; INVERSE 0;"emonstrate palette"
+ 1349 PRINT ' INVERSE 1;"X"; INVERSE 0;" back"
  1350 LET k$=INKEY$
- 1360 IF k$="0" THEN OUT 48955,66: OUT 65339,1: GO TO 1350
- 1370 IF k$="1" THEN OUT 48955,66: OUT 65339,0: GO TO 1350
+ 1360 IF k$="0" THEN OUT 48955,66: OUT 65339,1: BEEP 0.05,0: BEEP 0.05,10
+ 1362 IF k$="1" THEN OUT 48955,66: OUT 65339,0: BEEP 0.05,10: BEEP 0.05,0
+ 1370 IF k$="u" THEN OUT 48955,64: OUT 65339,1: GO TO 1312
+ 1372 IF k$="o" THEN OUT 48955,64: OUT 65339,0: GO TO 1312
+ 1374 IF k$="s" THEN GO SUB 1400
+ 1375 IF k$="e" THEN GO SUB 1450
+ 1376 IF k$="d" THEN GO SUB 1500: GO TO 1300
  1380 IF k$="x" THEN GO TO 30
+ 1386 IF k$="p" THEN GO SUB 8400
+ 1388 IF k$="t" THEN GO SUB 8300
  1390 GO TO 1350
+ 1400 REM Load standard colors into ULA Plus palette
+ 1402 PRINT #0;"Loading standard palette..."
+ 1410 RESTORE 1400
+ 1412 FOR p=0 TO 7: FOR c=0 TO 7
+ 1414 READ u
+ 1416 OUT 48955,p*8+c: OUT 65339,u
+ 1418 NEXT c: NEXT p
+ 1420 INPUT "": RETURN 
+# F0B0 Dim ink/dim paper
+ 1430 DATA 0,2,16,18,128,130,144,146
+ 1431 DATA 0,2,16,18,128,130,144,146
+# F0B1 Bright ink/bright paper
+ 1432 DATA 37,3,28,31,224,227,252,255
+ 1433 DATA 37,3,28,31,224,227,252,255
+# Option for no bright black paper on F0B1
+# 1433 DATA 0,3,28,31,224,227,252,255
+# F1B0 Dim ink/bright paper
+ 1434 DATA 0,2,16,18,128,130,144,146
+ 1435 DATA 37,3,28,31,224,227,252,255
+# F1B1 Bright ink/dim paper
+ 1436 DATA 37,3,28,31,224,227,252,255
+ 1437 DATA 0,2,16,18,128,130,144,146
+#
+ 1449 REM LOAD Enhanced colors into ULA Plus palette
+ 1450 RESTORE 1450
+ 1452 PRINT #0;"Loading enhanced palette..."
+ 1454 GO TO 1412
+# F0B0 Dim ink/dim paper
+ 1460 DATA 0,33,8,41,68,102,153,146
+ 1461 DATA 0,33,8,41,68,102,153,146
+# F0B1 Bright ink/bright paper
+ 1462 DATA 73,70,20,126,177,203,221,219
+ 1463 DATA 73,70,20,126,177,203,221,219
+# Option for no bright black paper on F0B1
+# 1463 DATA 0,70,20,126,177,203,221,219
+# F1B0 Dim ink/bright paper
+ 1464 DATA 0,33,8,41,68,102,153,146
+ 1465 DATA 73,70,20,126,177,203,221,219
+# F1B1 Bright ink/dim paper
+ 1466 DATA 73,70,20,126,177,203,221,219
+ 1467 DATA 0,33,8,41,68,102,153,146
+#
+ 1500 REM Demonstrate palette
+ 1510 CLS 
+ 1520 FOR p=0 TO 7: FOR b=0 TO 1
+ 1530 FOR f=0 TO 1: FOR i=0 TO 7
+ 1540 PRINT INK i; PAPER p; BRIGHT b; FLASH f;"XX";
+ 1550 NEXT i: NEXT f
+ 1560 NEXT b: NEXT p
+ 1570 INPUT "Press Enter:";a$
+ 1590 RETURN 
+#
+# Pick file
+#
  2000 CLS 
  2010 SAVE "tpi:cd"CODE 0,1
 # 2012 LET k$=SCREEN$ (20,0)
@@ -134,7 +213,7 @@
  2130 LET n=v-16*m
  2140 PRINT "You appear to have ROM v";m;".";n
  2150 INPUT "Press Enter to continue:.... ";a$
- 2160 RETURN
+ 2160 RETURN 
 #
  3000 REM Determine ROM version
  3020 LET PROG=PEEK 23635+256*PEEK 23636
@@ -156,6 +235,247 @@
  3510 IF PEEK 40002=234 THEN LET v$="TS-Pico ROM v1.4b": LET s$="(2ch min command)"
  3520 IF PEEK 40002=134 THEN LET v$="TS-Pico ROM v1.4c": LET s$="(disable DCK at boot)"
  3530 RETURN 
+#
+# Some of the ULA Plus utility routines
+#
+#
+ 8300 REM Tweak ULA+ Color
+#
+ 8302 LET wc=0: LET wf=0: LET wn=0: LET wi=0: LET wp=0
+ 8303 LET wz=-1: LET w$=""
+ 8305 IF w$="?" THEN INPUT "": PRINT #0;AT 1,0;"Keys:v b x/c 0-7 ed ws qa u Ent.";: PAUSE 0
+ 8306 INPUT "": PRINT #0;"ULA+ F0B0Ink\' \''C0:g0 r0 b0(000) ?";
+ 8310 LET wp=((wf*2+wn)*2+wi)*8+wc
+ 8312 OUT 48955,wp: LET wu=IN 65339
+ 8313 LET wz=wu
+ 8314 LET wg=INT (wu/32)
+ 8316 LET wb=wu-wg*32
+ 8318 LET wr=INT (wb/4)
+ 8319 LET wb=wb-wr*4
+ 8320 PRINT #0;AT 1,6;wf;"B";wn;"Ink\' " AND NOT wi;"Pap\. " AND wi; FLASH wf; BRIGHT wn; INK wc; PAPER wc;"\''";
+ 8322 PRINT #0;AT 1,15;wc;":g";wg;" r";wr;" b";wb;"(";"0" AND wu<10;"0" AND wu<100;wu;") ?";
+ 8330 LET w$=INKEY$: IF w$="" THEN GO TO 8330
+ 8331 INPUT "": IF w$=CHR$ 13 THEN RETURN 
+ 8332 IF w$>="0" AND w$<="7" THEN LET wc=CODE w$-48: GO TO 8310
+ 8333 IF w$="x" THEN LET wi=0: GO TO 8310
+ 8334 IF w$="c" THEN LET wi=1: GO TO 8310
+ 8335 IF w$="v" THEN LET wf=NOT wf: GO TO 8310
+ 8336 IF w$="b" THEN LET wn=NOT wn: GO TO 8310
+ 8337 IF w$="q" AND wb<3 THEN LET wb=wb+1: GO TO 8350
+ 8338 IF w$="a" AND wb>0 THEN LET wb=wb-1: GO TO 8350
+ 8339 IF w$="w" AND wr<7 THEN LET wr=wr+1: GO TO 8350
+ 8340 IF w$="s" AND wr>0 THEN LET wr=wr-1: GO TO 8350
+ 8341 IF w$="e" AND wg<7 THEN LET wg=wg+1: GO TO 8350
+ 8342 IF w$="d" AND wg>0 THEN LET wg=wg-1: GO TO 8350
+ 8343 IF w$="u" THEN LET wu=wz: GO TO 8354
+ 8344 IF w$="?" THEN GO TO 8305
+ 8349 GO TO 8310
+ 8350 LET wp=((wf*2+wn)*2+wi)*8+wc
+ 8352 LET wu=wg*32+wr*4+wb
+ 8354 OUT 48955,wp: OUT 65339,wu
+ 8356 GO TO 8320
+#
+ 8400 LET w$="": REM View & switch palettes
+ 8401 LET wp=PEEK 23693: LET wn=INT (wp/64)
+ 8402 LET wf=INT (wn/2): LET wn=wn-2*wf
+ 8403 LET wi=wp-wf*128-wn*64: LET wp=INT (wi/8): LET wi=wi-wp*8
+ 8406 LET w$=""
+ 8408 IF w$="?" THEN INPUT "": PRINT #0; "\{0x14}\{0x01}B\{0x14}\{0x00}order, \{0x14}\{0x01}f\{0x14}\{0x00}lash/\{0x14}\{0x01}b\{0x14}\{0x00}right pal., Enter";: PAUSE 0: INPUT "": PRINT #0; "\{0x14}\{0x01}0-7\{0x14}\{0x00} ink, \{0x14}\{0x01}<-\::->\{0x14}\{0x00} paper, \{0x14}\{0x01}Enter\{0x14}\{0x00} quit";: PAUSE 0
+ 8410 INPUT "": PRINT #0;"ULA+Pal F";wf;"B";wn;" ";
+ 8420 FOR w=0 TO 7
+ 8421 IF w=wi THEN PRINT #0;"i";
+ 8422 IF w=wp THEN PRINT #0;"p";
+ 8423 PRINT #0; FLASH wf; BRIGHT wn; INK w; PAPER w;"\''\' ";
+ 8424 NEXT w
+ 8429 PRINT #0;"?";
+ 8430 LET w$=INKEY$: IF w$="" THEN GO TO 8430
+ 8431 IF w$=CHR$ 13 THEN FLASH wf: BRIGHT wn: INK wi: PAPER wp: RETURN 
+ 8434 IF w$="B" THEN GO SUB 8450: GO TO 8401
+ 8435 IF w$="v" OR w$="f" THEN LET wf=NOT wf: GO TO 8410
+ 8436 IF w$="b" THEN LET wn=NOT wn: GO TO 8410
+ 8437 IF w$>="0" AND w$<="7" THEN LET wi=CODE w$-48: GO TO 8410
+ 8438 IF w$=CHR$ 8 AND wp>0 THEN LET wp=wp-1: GO TO 8410
+ 8439 IF w$=CHR$ 9 AND wp<7 THEN LET wp=wp+1: GO TO 8410
+ 8444 IF w$="?" THEN GO TO 8408
+ 8449 GO TO 8430
+#
+ 8450 REM Border picker
+#
+# Numbers to change border color, Enter to exit
+# b to toggle bright for the lower area
+# v or f to toggle flash for the lower area
+#
+# Variables used:
+# wp=paper/border, wi=ink, wn=bright, wf=flash,
+# w$=key input, w=loop var, wu=undo attrib
+#
+# The Border and lower screen attributes are stored in the system variable 
+# BORDCR in the normal attrib format: bit 7=flash, 6=bright, 5-3=paper, 2-0=ink
+# The BORDER command sets the paper color from which the border and paper of the 
+# lower screen get their color. The border itself is limited to the non-bright 
+# colors. The ink for the lower area is like 9 (contrasting), but is set to 0 or 
+# 7 when the border is set, white for borders 0-3, and black for 4-7. However,
+# you can set the BORDCR value in order to make use of other ink colors as well 
+# as the bright and flash bits. Just remember that those get reset when a BORDER 
+# command is given. Also, when you POKE 23624 with a value, only the lower 
+# screen default colors change, not the border. You have to give the BORDER 
+# command to make the new border color take effect, which will reset the other 
+# attributes, so you need to first call BORDER, then do the POKE.
+#
+ 8452 LET wp=PEEK 23624: LET wn=INT (wp/64): LET wf=INT (wn/2): LET wn=wn-2*wf: LET wi=wp-wf*128-wn*64: LET wp=INT (wi/8): LET wi=wi-wp*8: LET wu=wp: LET w$=""
+ 8456 IF w$="?" THEN INPUT "": PRINT #0;"\{0x14}\{0x01}0-7\{0x14}\{0x00}color \{0x14}\{0x01}f\{0x14}\{0x00}lash \{0x14}\{0x01}b\{0x14}\{0x00}right \{0x14}\{0x01}Enter\{0x14}\{0x00} quit";: PAUSE 0
+ 8458 INPUT "": PRINT #0;" F";wf;"B";wn;" ";
+ 8460 FOR w=0 TO 7
+ 8463 PRINT #0;" "; FLASH 0; BRIGHT 0; INK w; PAPER w;"\::"; FLASH wf; BRIGHT wn; INK (7 AND w<4);w;
+ 8464 NEXT w: PRINT #0;" ?";
+ 8465 PRINT #0;AT 0,0;"Border                        ";AT 0,3*wp+8;"*";
+ 8470 LET w$=INKEY$: IF w$="" THEN GO TO 8470
+ 8472 IF w$>="0" AND w$<="7" THEN LET wp=CODE w$-48: BORDER wp: GO TO 8484
+ 8474 IF w$=CHR$ 13 THEN INPUT "": RETURN 
+ 8476 IF w$="?" THEN GO TO 8456
+ 8478 IF w$="u" THEN LET wp=wu: BORDER wu: GO TO 8484
+ 8479 IF w$="v" OR w$="f" THEN LET wf=NOT wf: GO TO 8484
+ 8480 IF w$="b" THEN LET wn=NOT wn: GO TO 8484
+ 8482 GO TO 8470
+# Ink is 0 or 7 based on the border/paper color. BORDER command resets the ink.
+# You can poke BORDCR to set any ink 0-7 after a BORDER command.
+ 8484 LET wi=7: IF wp>3 THEN LET wi=0
+# Only get the auto ink from BORDCR so when we poke, it preserves it
+# 8484 LET wp=PEEK 23624: LET wi=wp-8*INT (wp/8)
+ 8486 POKE 23624,((wf*2+wn)*8+wp)*8+wi: GO TO 8458
+#
+# The TS-Pico one-line menu utility
+#
+# Wait for key release before menu
+ 9000 LET z$=INKEY$: IF z$<>"" THEN GO TO 9000: REM Call w/GOSUB 9000
+ 9001 INPUT "": PRINT #0;"\{0x14}\{0x01}tpi:\{0x14}\{0x00}c\{0x14}\{0x01}d \{0x14}\{0x00}d\{0x14}\{0x01}ir \{0x14}\{0x00}t\{0x14}\{0x01}ap \{0x14}\{0x00}h\{0x14}\{0x01}elp \{0x14}\{0x00}i\{0x14}\{0x01}nfo \{0x14}\{0x00}s\{0x14}\{0x01}ys \{0x14}\{0x00}l\{0x14}\{0x01}og\{0x14}\{0x00}"
+ 9002 LET z$=INKEY$: IF z$="" THEN GO TO 9002
+ 9003 INPUT "": IF z$=CHR$ 13 THEN RETURN 
+ 9004 IF z$="i" THEN SAVE "tpi:info"
+ 9005 GO TO 9000+(20 AND z$="c")+(30 AND z$="d")+(50 AND z$="t")+(60 AND (z$="?" OR z$=" "))+(63 AND z$="l")+(70 AND z$="h")+(80 AND z$="s")
+#
+# Append
+#
+ 9006 LET z$=INKEY$: IF z$<>"" THEN GO TO 9006
+ 9007 INPUT "": PRINT #0;"\{0x14}\{0x01}Append: \{0x14}\{0x00}0\{0x14}\{0x01}:off \{0x14}\{0x00}1\{0x14}\{0x01}:on \{0x14}\{0x00}s\{0x14}\{0x01}how \{0x14}\{0x00}"
+ 9008 LET z$=INKEY$: IF z$=CHR$ 13 THEN INPUT "": GO TO 9050
+ 9009 IF z$="s" OR z$="0" OR z$="1" THEN INPUT "": SAVE "tpi:append"CODE z$<>"s",z$="1": GO TO 9050
+ 9010 GO TO 9008
+#
+# Print/File
+#
+ 9011 LET z$=INKEY$: IF z$<>"" THEN GO TO 9011
+ 9012 INPUT "": PRINT #0;"\{0x14}\{0x01}I/O: ts\{0x14}\{0x00}2\{0x14}\{0x01}040 \{0x14}\{0x00}p\{0x14}\{0x01}icopt \{0x14}\{0x00}t\{0x14}\{0x01}ape \{0x14}\{0x00}s\{0x14}\{0x01}dcard \{0x14}\{0x00}"
+ 9013 LET z$=INKEY$: IF z$="" THEN GO TO 9013
+ 9014 INPUT "": IF z$=CHR$ 13 THEN GO TO 9080
+ 9015 IF z$="2" THEN SAVE "tpi:ts2040": GO TO 9080
+ 9016 IF z$="p" THEN SAVE "tpi:picopt": GO TO 9080
+ 9017 IF z$="t" THEN INPUT "": SAVE "tpi:tape": GO TO 9080
+ 9018 IF z$="s" THEN INPUT "": SAVE "tpi:sdcard": GO TO 9080
+ 9019 GO TO 9011
+#
+# CD
+#
+ 9020 INPUT "": PRINT #0;"\{0x14}\{0x01}CD: c\{0x14}\{0x00}d\{0x14}\{0x01} \{0x14}\{0x00}i\{0x14}\{0x01}nteractive \{0x14}\{0x00}.\{0x14}\{0x01}. \{0x14}\{0x00}a\{0x14}\{0x01}ll \{0x14}\{0x00}p\{0x14}\{0x01}ath  \{0x14}\{0x00}": LET z$=INKEY$: IF z$<>"" THEN GO TO 9020
+ 9021 LET z$=INKEY$: IF z$="" THEN GO TO 9021
+ 9022 INPUT "": IF z$=CHR$ 13 THEN GO TO 9000
+ 9023 IF z$="d" THEN INPUT "Directory: ";z$: SAVE "tpi:cd "+z$CODE 1,0
+ 9024 IF z$="i" THEN SAVE "tpi:cd"
+ 9025 IF z$="." THEN SAVE "tpi:cd .."CODE 2,0
+ 9026 IF z$="a" THEN SAVE "tpi:cd"CODE 0,1
+ 9027 IF z$="p" THEN SAVE "tpi:path"
+ 9029 GO TO 9020
+#
+# DIR
+#
+ 9030 LET z$=INKEY$: IF z$<>"" THEN GO TO 9030
+ 9031 INPUT "": PRINT #0;"\{0x14}\{0x01}DIR: \{0x14}\{0x00}d\{0x14}\{0x01}ir \{0x14}\{0x00}i\{0x14}\{0x01}nteractive \{0x14}\{0x00}f\{0x14}\{0x01}iles \{0x14}\{0x00}m\{0x14}\{0x01}d \{0x14}\{0x00}r\{0x14}\{0x01}m\{0x14}\{0x00}"
+ 9032 LET z$=INKEY$: IF z$="" THEN GO TO 9032
+ 9033 INPUT "": IF z$=CHR$ 13 THEN GO TO 9000
+ 9034 IF z$="d" THEN SAVE "tpi:dir"
+ 9035 IF z$="i" THEN SAVE "tpi:idir"
+ 9036 IF z$="f" THEN SAVE "tpi:dir"CODE 2,0
+ 9037 IF z$="m" THEN GO TO 9040
+ 9038 IF z$="r" THEN GO TO 9042
+ 9039 GO TO 9030
+ 9040 INPUT "New directory name:";z$: IF z$<>"" THEN SAVE "tpi:md "+z$CODE 1,0
+ 9041 GO TO 9030
+ 9042 INPUT "Name or number to remove:";z$: IF z$<>"" THEN SAVE "tpi:rm "+z$
+ 9043 GO TO 9030
+# 9044
+#
+# Verbose
+#
+ 9045 LET z$=INKEY$: IF z$<>"" THEN GO TO 9045
+ 9046 INPUT "": PRINT #0;"\{0x14}\{0x01}Verbose: \{0x14}\{0x00}0\{0x14}\{0x01}:off \{0x14}\{0x00}1\{0x14}\{0x01}:on \{0x14}\{0x00}s\{0x14}\{0x01}how \{0x14}\{0x00}"
+ 9047 LET z$=INKEY$: IF z$=CHR$ 13 THEN INPUT "": GO TO 9080
+ 9048 IF z$="s" OR z$="0" OR z$="1" THEN INPUT "": SAVE "tpi:verbose"CODE z$<>"s",z$="1": GO TO 9080
+ 9049 GO TO 9047
+#
+# TAP
+#
+ 9050 LET z$=INKEY$: IF z$<>"" THEN GO TO 9050
+ 9051 INPUT "": PRINT #0;"\{0x14}\{0x01}TAP:\{0x14}\{0x00}d\{0x14}\{0x01}ir \{0x14}\{0x00}a\{0x14}\{0x01}ppend \{0x14}\{0x00}n\{0x14}\{0x01}ew \{0x14}\{0x00}f\{0x14}\{0x01}fw \{0x14}\{0x00}r\{0x14}\{0x01}ew\{0x14}\{0x00}"
+ 9052 LET z$=INKEY$: IF z$="" THEN GO TO 9052
+ 9053 INPUT "": IF z$=CHR$ 13 THEN GO TO 9000
+ 9054 IF z$="d" THEN SAVE "tpi:tapdir"
+ 9055 IF z$="a" THEN GO TO 9006
+ 9056 IF z$="n" THEN INPUT "Name of new TAP file:";z$: IF z$<>"" THEN SAVE "tpi:newtap "+z$
+ 9057 IF z$="f" THEN SAVE "tpi:ffw"CODE 1,1
+ 9058 IF z$="r" THEN SAVE "tpi:rew"CODE 1,1
+ 9059 GO TO 9050
+#
+# Menu help
+#
+ 9060 INPUT "": PRINT #0; INVERSE 1;"Key for item or Enter to go back": LET z$=INKEY$: IF z$<>"" THEN GO TO 9060
+ 9061 LET z$=INKEY$: IF z$="" THEN GO TO 9061
+ 9062 GO TO 9000
+#
+# LOG
+#
+ 9063 LET z$=INKEY$: IF z$<>"" THEN GO TO 9063
+ 9064 INPUT "": PRINT #0;"\{0x14}\{0x01}LOG: \{0x14}\{0x00}s\{0x14}\{0x01}how \{0x14}\{0x00}c\{0x14}\{0x01}lear \{0x14}\{0x00}l\{0x14}\{0x01}oglevel \{0x14}\{0x00}"
+ 9065 LET z$=INKEY$: IF z$="" THEN GO TO 9065
+ 9066 INPUT "": IF z$=CHR$ 13 THEN GO TO 9000
+ 9067 IF z$="s" OR z$="c" THEN SAVE "tpi:log"+" clear" AND z$="c"
+ 9068 IF z$="l" THEN INPUT "Log level(0-3,empty to show)";z$: SAVE "tpi:loglevel "+z$
+ 9069 GO TO 9063
+#
+# HELP
+#
+ 9070 LET z$=INKEY$: IF z$<>"" THEN GO TO 9070
+ 9071 INPUT "": PRINT #0;"\{0x14}\{0x01}HELP: \{0x14}\{0x00}p\{0x14}\{0x01}ico \{0x14}\{0x00}t\{0x14}\{0x01}opic \{0x14}\{0x00}l\{0x14}\{0x01}ist           \{0x14}\{0x00}"
+ 9072 LET z$=INKEY$: IF z$="" THEN GO TO 9072
+ 9073 INPUT "": IF z$=CHR$ 13 THEN GO TO 9000
+ 9074 IF z$="p" THEN SAVE "tpi:help"
+ 9075 IF z$="t" THEN GO TO 9078
+ 9076 IF z$="l" THEN SAVE "tpi:help ?"
+ 9077 GO TO 9070
+ 9078 INPUT "Help topic:";z$: IF z$<>"" THEN SAVE "tpi:help "+z$
+ 9079 GO TO 9070
+#
+# SYS
+#
+ 9080 LET z$=INKEY$: IF z$<>"" THEN GO TO 9080
+ 9081 INPUT "": PRINT #0;"\{0x14}\{0x01}SYS: \{0x14}\{0x00}b\{0x14}\{0x01}oot \{0x14}\{0x00}d\{0x14}\{0x01}ock \{0x14}\{0x00}z\{0x14}\{0x01}x48 \{0x14}\{0x00}i\{0x14}\{0x01}/o \{0x14}\{0x00}v\{0x14}\{0x01}erbose \{0x14}\{0x00}"
+ 9082 LET z$=INKEY$: IF z$="" THEN GO TO 9082
+ 9083 IF z$=CHR$ 13 THEN INPUT "": GO TO 9000
+ 9084 IF z$="b" THEN LET z$="Boot": GO TO 9090
+ 9085 IF z$="d" THEN LET z$="Dock": GO TO 9090
+ 9086 IF z$="z" THEN SAVE "tpi:zx48": RETURN 
+ 9087 IF z$="i" THEN GO TO 9011
+ 9088 IF z$="v" THEN GO TO 9045
+ 9089 GO TO 9080
+#
+# Boot/Dock
+#
+ 9090 INPUT (z$);": 0:show 1:SRAM 2:Flash: ";zm
+ 9091 IF zm=0 THEN LET zs=0: GO TO 9095
+ 9092 IF zm=1 OR zm=2 THEN GO TO 9094
+ 9093 GO TO 9080
+ 9094 INPUT (z$);" slot (0-15):";zs
+ 9095 IF zs>=0 AND zs<=15 THEN SAVE "tpi:"+z$CODE zm,zs
+ 9096 GO TO 9080
 
 #! zmakebas -n tc -a 1
     1 REM TS-Pico Commander
