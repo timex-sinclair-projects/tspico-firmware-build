@@ -62,7 +62,11 @@ Tim se unió inicialmente al equipo y ofreció su soporte de diseño de software
 
 ## Ryan Gray
 
-[Ryan](https://graytrek.com/) se unió al equipo para trabajar en el firmware. Agregó el TS-Pico Commander, los archivos de ayuda y los programas de prueba, y contribuye al código fuente en MicroPython.
+[Ryan](https://graytrek.com/) empezó con las TRS-80 Model I que tenía la escuela secundaria, de las que había unas pocas, y pronto se quedaba después de clase e iba a Radio Shack los fines de semana. Ahorró para comprarse una ZX81, la versión de EE. UU., con nada menos que 16K. Después consiguió una Timex Sinclair 2068, justo antes de que Timex abandonara el negocio. Pasó unos años demostrándoles a sus amigos que era superior a sus computadoras. También fue miembro del grupo de usuarios Timex/Sinclair de Fort Worth.
+
+Para la universidad pasó a otro sistema condenado al fracaso, la IBM PCjr. Después de estudiar ingeniería y ciencias de la computación, consiguió un trabajo profesional escribiendo y usando software de simulación de ingeniería para calcular cosas importantes.
+
+Ryan descubrió el grupo de Timex, recuperó sus viejos programas de cinta y de inmediato siguió trabajando en ellos. Se unió al equipo para desarrollar herramientas como el Commander y ayudar con el firmware en la Pico.
 
 ## Joe Vandezande
 
