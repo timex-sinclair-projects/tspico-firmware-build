@@ -458,7 +458,8 @@ jobs:
   # push so a manual change that breaks the PDFs shows here, not at release
   # time; release.yml attaches the same two files to each release. Also the
   # v3 card's manual (BOARD=v3, tools/manual-variants.py), PDFs and Markdown,
-  # as its own artifact: not published while the card is unreleased.
+  # as its own artifact: not published while the card is unreleased; and the
+  # print-on-demand files (PRINT=1) for KDP and Lulu.
   manual-pdf:
     runs-on: ubuntu-22.04
     steps:
@@ -477,6 +478,18 @@ jobs:
         with:
           name: tspico-manual-pdf
           path: ${{ runner.temp }}/manual-pdf/*.pdf
+
+      # The files for printing on demand (PRINT=1): the interior and the
+      # covers for the Amazon KDP paperback and the Lulu coil-bound book.
+      # Uploaded by hand to KDP and Lulu; not on the website or releases.
+      - name: Build the print-on-demand files
+        run: PRINT=1 tools/manual-pdf/make.sh "${{ runner.temp }}/manual-print"
+
+      - name: Upload the print-on-demand files
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-manual-print
+          path: ${{ runner.temp }}/manual-print/*.pdf
 
       - name: Build the v3 card's manual
         run: |

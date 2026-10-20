@@ -14,9 +14,21 @@ accepts and what it does. The ROM mechanism is in
 **Non-goals:**
 
 - FDD-3 compatibility.
-- The `*` suffix and the RST 8 vector.
-- Microdrive-style device arguments (`"m";1;"name"`).
+- The RST 8 vector.
+- `*` as a general command suffix (TOS's `GO SUB *`, `DRAW *` and the rest).
 - Drive letters, serial ports (SCPs), the TOS directory stack (`GO SUB *` and `DRAW *`), and `ATTR *` protection.
+
+**Planned, not yet specified: the Interface 1 microdrive forms** on mounted `.MDR`
+images ([#330](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/330)):
+
+- `LOAD`/`SAVE`/`VERIFY`/`MERGE *"m";n;"name"`;
+- `CAT n`;
+- `ERASE "m";n;"name"` and `FORMAT "m";n;"name"`;
+- later, `MOVE` and `OPEN #s;"m";n;"name"`.
+
+They are added alongside `f:`, which doesn't change, and they come in through the
+existing SAVE-ETC, `FDD_DISPATCH` and `OPEN #` hooks, not the RST 8 vector. Their
+contract gets its own section here when #330 is designed.
 
 ---
 
@@ -186,9 +198,10 @@ expression, up to 64 characters.
   - `FORMAT` of a name that isn't `.tap`.
 - **Report F is for names:** a missing file, a path above the root, an empty name, or a name
   longer than 64 characters (checked in the ROM, and nothing is sent).
-- **Why N stops instead of skipping.** The ROM's function-`$86` prompt loop ends the whole exchange on N,
-  so N can't mean "skip this one". Other keys skip. The erasing happens after the
-  exchange, because the SD card and the 2068 link share pins. That means the
+- **N skips, like any key but Y.** Since ROM 2.3 (#227) the function-`$86` prompt loop sends
+  every key, N included, to the TS-Pico, so N means "not this one" and the questions go on.
+  (ROM 2.2 ended the whole exchange on N, so there N stopped asking.) The erasing happens
+  after the exchange, because the SD card and the 2068 link share pins. That means the
   per-file results aren't printed; errors go to the log.
 - **No more 31-character limit.** The module sends through `TPI_SEND`, which is
   SESSION_SETUP entered past its 5–31 character name gate. Everything past the
@@ -310,7 +323,8 @@ The design choices:
 - **The `f:` prefix.** Stock `OPEN #` accepts only one-letter channel names (K/S/P). A
   prefix keeps `OPEN #4,"p"` meaning the printer, and leaves room for other
   devices. The Interface 1 precedent is `"m";1;"name"`, but a prefix inside one
-  string is simpler and is still a single string expression.
+  string is simpler and is still a single string expression. The IF1 forms are
+  planned alongside it for microdrive images (#330); `f:` stays the SD card's syntax.
 - **Random access** uses `TAB` as the record pointer. See §4b. EOF shows up as Report 8 on
   `INPUT #`, as it does for tape reads today.
 - **Any stream 0–15**, as stock `OPEN #` allows. Streams 4–15 are the usual choice;

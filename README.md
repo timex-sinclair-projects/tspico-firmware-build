@@ -301,4 +301,4 @@ Markdown files. You may share and adapt them, with credit to the TS-Pico team.
 Tim H, Joe Vandezande and David Anderson. The board design is in
 [jburrell7/TSPICO](https://github.com/jburrell7/TSPICO).
 
-Thanks to Paul Anderson, David Green and Adam Trionfo for beta testing.
+Thanks to Paul Anderson, David Green, François Lanciault and Adam Trionfo for beta testing.

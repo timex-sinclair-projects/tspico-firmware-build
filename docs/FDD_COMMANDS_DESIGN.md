@@ -14,6 +14,10 @@ side of the wire.
 > **Scope note.** We are *not* reproducing the FDD 3000's command syntax, which
 > is derived from the ZX Interface 1 and carries a device-type argument
 > (`"m";1;"name"`). The TS-PICO has one storage device. Syntax is ours to choose.
+> *(2026-10-18: the Interface 1 forms are now planned as well, for mounted `.MDR`
+> microdrive images, alongside the SD card's `f:` syntax; see
+> [#330](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/330)
+> and the non-goals in [`DISK_COMMANDS_SPEC.md`](DISK_COMMANDS_SPEC.md).)*
 
 ## Start here
 

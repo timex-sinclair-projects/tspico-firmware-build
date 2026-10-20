@@ -710,13 +710,15 @@ SAVE "pic" SCREEN$
 SAVE "code" CODE 32768,1000
 ```
 
-As with tape, SAVE prints `Start tape, then press any key.` and waits: press a key, and the
-program goes to the card.
+As with tape, SAVE prints `Start tape, then press any key.` and waits: press **ENTER**, and the
+program goes to the card. Don't use SPACE here. It's the tape routines' BREAK key, and the
+TS-Pico starts at once, so a SPACE still held down stops the save with **D BREAK - CONT
+repeats**.
 
 **Remember:**
 
 - A plain SAVE name may only use **letters, digits, `-` and `_`**. Spaces or other symbols give
-  **F Invalid file name** before anything is written.
+  **F Invalid file name**. The F comes after the `Start tape` key, but nothing is written.
 - Saving over an existing name **replaces that file without asking**.
 - If nothing was mounted, the new file becomes the mounted file.
 - An empty program gives **A Invalid argument**.
@@ -814,7 +816,8 @@ SAVE "f:advent.bas" LINE 10
 LOAD "f:advent.bas"
 ```
 
-SAVE prints `Start tape, then press any key.` and waits for a key, as it does for tape.
+SAVE prints `Start tape, then press any key.` and waits for a key, as it does for tape. Press
+**ENTER** (see 4.2).
 Everything you can save to tape, you can save this way:
 
 ```basic
@@ -2255,8 +2258,24 @@ the next one.
 
 ### D BREAK - CONT repeats after a SAVE "f:..."
 
-**Fix.** SAVE again and press **Y** at `Replace? (Y/N)`.
-**Likely cause.** You answered something other than **Y**. The file is untouched.
+**Fix.** SAVE again and press **Y** at `Replace? (Y/N)`, and **ENTER** at `Start tape`.
+**Likely cause.** You answered something other than **Y**, or SPACE was still down when the save
+started (SPACE is BREAK to the tape routines). The file is untouched.
+
+### L BREAK into program just after a program caught BREAK
+
+**Fix.** Make the program wait until the keys are let go. At the line your `ON ERR GO TO`
+jumps to (here 100), set the trap again and wait for the keyboard to go quiet:
+
+```basic
+100 ON ERR GO TO 100
+110 IF INKEY$<>"" THEN GO TO 110
+120 PAUSE 25: ON ERR RESET
+```
+
+**Likely cause.** The program caught the **D** from **BREAK** and carried on while CAPS SHIFT
+and SPACE were still down. The 2068 checks for BREAK between statements, so the next one stops
+with **L BREAK into program**, or the next TS-Pico command gives **D** again.
 
 ### F on a SAVE
 
@@ -2716,7 +2735,7 @@ TS-Pico Commander, the help files and the test programs, and contributes to the 
 **Joe Vandezande** designed the 3D-printed enclosures for the TS-Pico, the PicoVideo and the
 expansion bus board, and helps with testing and troubleshooting.
 
-Thanks to **Paul Anderson**, **David Green** and **Adam Trionfo** for beta testing.
+Thanks to **Paul Anderson**, **David Green**, **François Lanciault** and **Adam Trionfo** for beta testing.
 
 Special thanks to the people of Timex Computer Corporation; to Johan "Dr Beep" Koelman, whose
 PC-ZX interface inspired the TS-Pico; to the members of the TS2068 list at groups.io and the
