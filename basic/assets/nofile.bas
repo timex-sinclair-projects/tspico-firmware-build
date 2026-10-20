@@ -243,8 +243,8 @@
 #
  8302 LET wc=0: LET wf=0: LET wn=0: LET wi=0: LET wp=0
  8303 LET wz=-1: LET w$=""
- 8305 IF w$="?" THEN INPUT "": PRINT #0;AT 1,0;"Keys:v b x/c 0-7 ed ws qa u Ent.";: PAUSE 0
- 8306 INPUT "": PRINT #0;"ULA+ F0B0Ink\' \''C0:g0 r0 b0(000) ?";
+ 8305 INPUT "": PRINT #0; INVERSE 1;"Keys:v b x/c 0-7 ed ws qa (u)ndo";
+ 8306 PRINT #0;AT 0,0;"ULA+ F0B0Ink\' \''C0:g0 r0 b0(000)  ";
  8310 LET wp=((wf*2+wn)*2+wi)*8+wc
  8312 OUT 48955,wp: LET wu=IN 65339
  8313 LET wz=wu
@@ -252,10 +252,10 @@
  8316 LET wb=wu-wg*32
  8318 LET wr=INT (wb/4)
  8319 LET wb=wb-wr*4
- 8320 PRINT #0;AT 1,6;wf;"B";wn;"Ink\' " AND NOT wi;"Pap\. " AND wi; FLASH wf; BRIGHT wn; INK wc; PAPER wc;"\''";
- 8322 PRINT #0;AT 1,15;wc;":g";wg;" r";wr;" b";wb;"(";"0" AND wu<10;"0" AND wu<100;wu;") ?";
+ 8320 PRINT #0;AT 0,6;wf;"B";wn;"Ink\' " AND NOT wi;"Pap\. " AND wi; FLASH wf; BRIGHT wn; INK wc; PAPER wc;"\''";
+ 8322 PRINT #0;AT 0,15;wc;":g";wg;" r";wr;" b";wb;"(";"0" AND wu<10;"0" AND wu<100;wu;")  ";
  8330 LET w$=INKEY$: IF w$="" THEN GO TO 8330
- 8331 INPUT "": IF w$=CHR$ 13 THEN RETURN 
+ 8331 IF w$=CHR$ 13 THEN INPUT "": RETURN 
  8332 IF w$>="0" AND w$<="7" THEN LET wc=CODE w$-48: GO TO 8310
  8333 IF w$="x" THEN LET wi=0: GO TO 8310
  8334 IF w$="c" THEN LET wi=1: GO TO 8310
@@ -268,7 +268,6 @@
  8341 IF w$="e" AND wg<7 THEN LET wg=wg+1: GO TO 8350
  8342 IF w$="d" AND wg>0 THEN LET wg=wg-1: GO TO 8350
  8343 IF w$="u" THEN LET wu=wz: GO TO 8354
- 8344 IF w$="?" THEN GO TO 8305
  8349 GO TO 8310
  8350 LET wp=((wf*2+wn)*2+wi)*8+wc
  8352 LET wu=wg*32+wr*4+wb
@@ -289,7 +288,7 @@
  8424 NEXT w
  8429 PRINT #0;"?";
  8430 LET w$=INKEY$: IF w$="" THEN GO TO 8430
- 8431 IF w$=CHR$ 13 THEN FLASH wf: BRIGHT wn: INK wi: PAPER wp: RETURN 
+ 8431 IF w$=CHR$ 13 THEN FLASH wf: BRIGHT wn: INK wi: PAPER wp: INPUT "": RETURN 
  8434 IF w$="B" THEN GO SUB 8450: GO TO 8401
  8435 IF w$="v" OR w$="f" THEN LET wf=NOT wf: GO TO 8410
  8436 IF w$="b" THEN LET wn=NOT wn: GO TO 8410
