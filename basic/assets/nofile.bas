@@ -22,6 +22,7 @@
 \{0x42}\{0x9C}\{0xF1}\{0xD3}\{0xFF}\{0xAF}\{0xD3}\{0xF4}\{0xF1}\{0xFB}\
 \{0xC9}\{0x00}\{0x00}\{0x00}\{0x00}
     2 REM No file mounted!
+   10 LET up=0
    20 PAPER 7: INK 0: BORDER 7: FLASH 0: INVERSE 0: BRIGHT 0
    30 CLS 
   100 GO SUB 500
@@ -30,7 +31,6 @@
   120 PRINT 'TAB 8; INVERSE 1;"C"; INVERSE 0;"ommand help"
   130 PRINT 'TAB 8; INVERSE 1;"P"; INVERSE 0;"ick a file"
   140 PRINT 'TAB 8; INVERSE 1;"F"; INVERSE 0;"ile manager"
-  145 PRINT 'TAB 8; INVERSE 1;"R"; INVERSE 0;"OM version"
   150 PRINT 'TAB 8; INVERSE 1;"I"; INVERSE 0;"nfo"
   155 PRINT 'TAB 8; INVERSE 1;"T"; INVERSE 0;"iny Pico menu"
   160 PRINT 'TAB 8;"Pico "; INVERSE 1;"V"; INVERSE 0;"ideo ..."
@@ -43,7 +43,6 @@
   240 IF k$="p" THEN GO TO 2000
   250 IF k$="c" THEN GO TO 1100
   260 IF k$="i" THEN GO TO 1200
-  270 IF k$="r" THEN GO SUB 2100: GO TO 20
   280 IF k$="v" THEN GO TO 1300
   285 IF k$="t" THEN GO SUB 9000: GO TO 30
   290 GO TO 200
@@ -61,7 +60,7 @@
   470 PRINT ,,,"Enjoy!"
   490 STOP 
   500 REM Draw titlebar
-  510 PRINT INK 5; PAPER 0;" TIMEX "; INK 0; PAPER 7; BRIGHT 1;"               "; BRIGHT 0; INK 5; PAPER 0;" TS-Pico "
+  510 PRINT INK 5; PAPER 0; BRIGHT 0;" TIMEX "; INK 0; PAPER 7; BRIGHT 1;"               "; BRIGHT 0; INK 5; PAPER 0;" TS-Pico "
   520 PRINT 
   530 PRINT INK 7; PAPER 2;"    -- No file mounted! --     "
   540 PRINT 
@@ -100,17 +99,17 @@
  1200 CLS 
  1210 SAVE "tpi:info"
  1220 INPUT "Press Enter:";k$
- 1230 GO TO 30
+ 1230 GO SUB 2100
+ 1240 GO TO 30
 #
 # Pico Video menu
 #
  1300 CLS 
- 1302 LET up=0
  1310 GO SUB 500
  1312 PRINT AT 4,0;
  1314 PRINT INK 1;"Pico Video board options"
- 1316 PRINT ' INVERSE 1;"0"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0;" Bright "; BRIGHT 0;" black off"
- 1318 PRINT ' INVERSE 1;"1"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0;" Bright "; BRIGHT 0;" black on"
+ 1316 PRINT ' INVERSE 1;"0"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0;" Bright "; BRIGHT 8; FLASH 8;" black off "; PAPER 8; INK 1;" No effect"
+ 1318 PRINT ' INVERSE 1;"1"; INVERSE 0;" "; BRIGHT 1; INK 7; PAPER 0;" Bright "; BRIGHT 8; FLASH 8;" black on  "; PAPER 8; INK 1;" if ULA+ on"
  1320 OUT 48955,64: LET u=IN 65339
  1322 OUT 48955,64: OUT 65339,1: OUT 48955,64: LET uu=IN 65339: IF uu<>1 THEN GO TO 1328
  1324 OUT 48955,64: OUT 65339,0: OUT 48955,64: LET uu=IN 65339: IF uu<>0 THEN GO TO 1328
@@ -118,29 +117,31 @@
  1328 PRINT ' INK 2;"ULA Plus support not detected": GO TO 1349
  1330 PRINT ' INVERSE 1;"U"; INVERSE 0;"LA Plus On (ULA+ is ";"ON" AND u;"OFF" AND NOT u;") "
  1332 PRINT "ULA Plus "; INVERSE 1;"O"; INVERSE 0;"ff"
- 1334 PRINT '"ULA Plus Load "; INVERSE 1;"S"; INVERSE 0;"tandard palette"
- 1336 PRINT "ULA Plus Load "; INVERSE 1;"E"; INVERSE 0;"nhanced palette"
- 1345 PRINT "ULA Plus Select sub-"; INVERSE 1;"p"; INVERSE 0;"alette"
- 1346 PRINT "ULA Plus "; INVERSE 1;"T"; INVERSE 0;"weak colors"
- 1348 PRINT INVERSE 1;"D"; INVERSE 0;"emonstrate palette"
- 1349 PRINT ' INVERSE 1;"X"; INVERSE 0;" back"
+ 1334 PRINT '"  - Load "; INVERSE 1;"S"; INVERSE 0;"tandard palette"
+ 1336 PRINT "  - Load "; INVERSE 1;"E"; INVERSE 0;"nhanced palette"
+ 1345 PRINT "  - Select sub-"; INVERSE 1;"p"; INVERSE 0;"alette"
+ 1346 PRINT "  - Select "; INVERSE 1;"B"; INVERSE 0;"order & lower screen"
+ 1347 PRINT "  - "; INVERSE 1;"T"; INVERSE 0;"weak colors"
+ 1348 PRINT "  - "; INVERSE 1;"D"; INVERSE 0;"emonstrate palette"
+ 1349 PRINT ' INVERSE 1;"X"; INVERSE 0;" back"; AT 20,0;
  1350 LET k$=INKEY$
  1360 IF k$="0" THEN OUT 48955,66: OUT 65339,1: BEEP 0.05,10: BEEP 0.05,0
  1362 IF k$="1" THEN OUT 48955,66: OUT 65339,0: BEEP 0.05,0: BEEP 0.05,10
  1370 IF k$="u" THEN GO TO 1392
  1372 IF k$="o" THEN OUT 48955,64: OUT 65339,0: BEEP 0.05,10: BEEP 0.05,0: GO TO 1312
+ 1373 IF k$="b" THEN GO SUB 8450
  1374 IF k$="s" THEN GO SUB 1400
  1375 IF k$="e" THEN GO SUB 1450
  1376 IF k$="d" THEN GO SUB 1500: GO TO 1300
  1380 IF k$="x" THEN GO TO 30
- 1386 IF k$="p" THEN GO SUB 8400
+ 1386 IF k$="p" THEN LET wa=0: GO SUB 8401: GO TO 1300
  1388 IF k$="t" THEN GO SUB 8300
  1390 GO TO 1350
  1392 IF up THEN GO TO 1396
  1394 INPUT "If no palette is loaded, it willbe all black. Turn on (y/n):";k$
  1395 IF k$<>"y" THEN GO TO 1350
  1396 OUT 48955,64: OUT 65339,1: BEEP 0.05,0: BEEP 0.05,10
- 1398 LET up=1: GO TO 1312
+ 1398 GO TO 1312
  1400 REM Load standard colors into ULA Plus palette
  1402 PRINT #0;"Loading standard palette..."
  1404 LET up=1
@@ -168,8 +169,8 @@
  1449 REM LOAD Enhanced colors into ULA Plus palette
  1450 RESTORE 1450
  1452 PRINT #0;"Loading enhanced palette..."
- 1454 GO TO 1412
- 1456 LET up=1
+ 1454 LET up=1
+ 1456 GO TO 1412
 # F0B0 Dim ink/dim paper
  1460 DATA 0,33,8,41,68,102,153,146
  1461 DATA 0,33,8,41,68,102,153,146
@@ -219,6 +220,7 @@
  2115 IF v=255 THEN GO TO 3000
  2120 LET m=INT (v/16)
  2130 LET n=v-16*m
+ 2132 IF (m>=2 AND n>=3) OR m>=3 THEN RETURN : REM ROM ver in tpi:info
  2140 PRINT "You appear to have ROM v";m;".";n
  2150 INPUT "Press Enter to continue:.... ";a$
  2160 RETURN 
@@ -282,7 +284,7 @@
  8354 OUT 48955,wp: OUT 65339,wu
  8356 GO TO 8320
 #
- 8400 LET w$="": REM View & switch palettes
+ 8400 LET wa=1: REM View & switch palettes
  8401 LET wp=PEEK 23693: LET wn=INT (wp/64)
  8402 LET wf=INT (wn/2): LET wn=wn-2*wf
  8403 LET wi=wp-wf*128-wn*64: LET wp=INT (wi/8): LET wi=wi-wp*8
@@ -290,8 +292,8 @@
  8408 IF w$="?" THEN INPUT "": PRINT #0; "\{0x14}\{0x01}B\{0x14}\{0x00}order, \{0x14}\{0x01}f\{0x14}\{0x00}lash/\{0x14}\{0x01}b\{0x14}\{0x00}right pal., Enter";: PAUSE 0: INPUT "": PRINT #0; "\{0x14}\{0x01}0-7\{0x14}\{0x00} ink, \{0x14}\{0x01}<-\::->\{0x14}\{0x00} paper, \{0x14}\{0x01}Enter\{0x14}\{0x00} quit";: PAUSE 0
  8410 INPUT "": PRINT #0;"ULA+Pal F";wf;"B";wn;" ";
  8420 FOR w=0 TO 7
- 8421 IF w=wi THEN PRINT #0;"i";
- 8422 IF w=wp THEN PRINT #0;"p";
+ 8421 IF wa AND w=wi THEN PRINT #0;"i";
+ 8422 IF wa AND w=wp THEN PRINT #0;"p";
  8423 PRINT #0; FLASH wf; BRIGHT wn; INK w; PAPER w;"\''\' ";
  8424 NEXT w
  8429 PRINT #0;"?";
@@ -301,8 +303,8 @@
  8435 IF w$="v" OR w$="f" THEN LET wf=NOT wf: GO TO 8410
  8436 IF w$="b" THEN LET wn=NOT wn: GO TO 8410
  8437 IF w$>="0" AND w$<="7" THEN LET wi=CODE w$-48: GO TO 8410
- 8438 IF w$=CHR$ 8 AND wp>0 THEN LET wp=wp-1: GO TO 8410
- 8439 IF w$=CHR$ 9 AND wp<7 THEN LET wp=wp+1: GO TO 8410
+ 8438 IF wa AND w$=CHR$ 8 AND wp>0 THEN LET wp=wp-1: GO TO 8410
+ 8439 IF wa AND w$=CHR$ 9 AND wp<7 THEN LET wp=wp+1: GO TO 8410
  8444 IF w$="?" THEN GO TO 8408
  8449 GO TO 8430
 #
@@ -444,7 +446,7 @@
  9064 INPUT "": PRINT #0;"\{0x14}\{0x01}LOG: \{0x14}\{0x00}s\{0x14}\{0x01}how \{0x14}\{0x00}c\{0x14}\{0x01}lear \{0x14}\{0x00}l\{0x14}\{0x01}oglevel \{0x14}\{0x00}"
  9065 LET z$=INKEY$: IF z$="" THEN GO TO 9065
  9066 INPUT "": IF z$=CHR$ 13 THEN GO TO 9000
- 9067 IF z$="s" OR z$="c" THEN SAVE "tpi:log"+" clear" AND z$="c"
+ 9067 IF z$="s" OR z$="c" THEN SAVE "tpi:log"+(" clear" AND z$="c")
  9068 IF z$="l" THEN INPUT "Log level(0-3,empty to show)";z$: SAVE "tpi:loglevel "+z$
  9069 GO TO 9063
 #
