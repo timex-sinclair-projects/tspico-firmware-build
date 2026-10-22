@@ -42,6 +42,7 @@ on:
       - 'docs/manual/images/**'
       - 'tools/build-site-docs.py'
       - 'tools/manual-pdf/**'
+      - 'promo/flyer/**'
       - '.github/workflows/pages.yml'
   release:
     types: [published]
@@ -112,6 +113,14 @@ jobs:
 
       - name: Build the user manual PDFs into the site
         run: tools/manual-pdf/make.sh site/manual
+
+      # The 2.3 flyer (promo/flyer/make.sh), linked from the "Still on 1.1?"
+      # post, and the manual cover's drawing, which the post shows. Uses the
+      # manual's fonts and the Chrome above; generated, never committed.
+      - name: Build the flyer PDF into the site
+        run: |
+          promo/flyer/make.sh site/assets/flyer
+          cp tools/manual-pdf/img/ts2068-line.svg site/assets/flyer/
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1

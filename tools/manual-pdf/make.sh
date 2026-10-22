@@ -10,9 +10,27 @@
 #                                         double-sided (flip on the short edge)
 #                                         and stapling on the fold
 #
-# Usage: [BOARD=v2|v3] tools/manual-pdf/make.sh [OUTDIR]  (default build/manual-pdf)
-#        Only the two PDFs go into OUTDIR. pages.yml builds them into
-#        site/manual for the website; release.yml attaches them.
+# Usage: [BOARD=v2|v3] [PRINT=1 [PAPER=white|cream]] tools/manual-pdf/make.sh [OUTDIR]
+#        (default build/manual-pdf). Only the two PDFs go into OUTDIR.
+#        pages.yml builds them into site/manual for the website;
+#        release.yml attaches them.
+#
+# PRINT=1 makes the files for printing on demand instead, the paperback
+# on Amazon KDP and the coil-bound book on Lulu (build.yml's artifact). With
+# no OUTDIR they go on the Desktop, ready to upload (build/manual-print if
+# there is no ~/Desktop):
+#
+#   user-manual-print-interior.pdf   the manual without its cover, 5.5 x 8.5
+#                                    in, an even number of pages: the
+#                                    interior for both, with a wider inside
+#                                    margin for the binding (GUTTER=0.8 in)
+#   user-manual-kdp-cover.pdf        back, spine and front on one sheet with
+#                                    0.125 in of bleed all round; the spine
+#                                    is the page count times KDP's paper
+#                                    thickness (PAPER, white by default:
+#                                    pick the same paper in KDP)
+#   user-manual-lulu-coil-cover.pdf  back and front, no spine, with bleed:
+#                                    11.25 x 8.75 in
 #
 # BOARD picks the manual (tools/manual-variants.py: user-manual.md holds
 # both boards' passages between <!-- v2 --> / <!-- v3 --> markers): v2, the
@@ -27,13 +45,17 @@
 # path if it isn't found), and Python 3 with pypdf. The version on the cover
 # and in the page headers comes from src/config.ini; the date is the month of
 # the last commit. The heading and cover fonts (Arvo, Inter, Poppins; SIL OFL)
-# are in fonts/; CI (build.yml, release.yml) installs the Linux fonts the
+# and the code font (Timex TS2068; CC BY 3.0, credited in the colophon) are in
+# fonts/; CI (build.yml, release.yml) installs the Linux fonts the
 # stylesheets fall back to for the rest: Charis SIL, Nimbus Sans, DejaVu Sans
 # Mono.
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-OUT="${1:-$REPO/build/manual-pdf}"
+if [ -n "$1" ]; then OUT="$1"
+elif [ -n "$PRINT" ] && [ -d "$HOME/Desktop" ]; then OUT="$HOME/Desktop"   # ready to upload
+elif [ -n "$PRINT" ]; then OUT="$REPO/build/manual-print"
+else OUT="$REPO/build/manual-pdf"; fi
 BOARD="${BOARD:-v2}"
 case "$BOARD" in
   v2) TITLE="TS-Pico User Manual"; T3="USER MANUAL"; NAME=user-manual ;;
@@ -67,17 +89,34 @@ fill() {
       "$HERE/$1" > "$WORK/$1"
 }
 for f in print.css cover.css front.html back.html mask.html; do fill $f; done
+# A perfect-bound paperback loses some of the inside margin into the spine,
+# so the print interior gets a wider gutter (GUTTER, inches; 0.8 by default
+# against the reading PDF's 0.62) and a slightly narrower outside margin.
+if [ -n "$PRINT" ]; then
+  GUTTER="${GUTTER:-0.8}"
+  sed -i.bak -e "s|^@page :left  { margin-left: 0.5in;  margin-right: 0.62in; }|@page :left  { margin-left: 0.45in; margin-right: ${GUTTER}in; }|" \
+             -e "s|^@page :right { margin-left: 0.62in; margin-right: 0.5in; }|@page :right { margin-left: ${GUTTER}in; margin-right: 0.45in; }|" \
+             "$WORK/print.css"
+  grep -q "margin-right: ${GUTTER}in" "$WORK/print.css" || { echo "GUTTER: print.css margins not found" >&2; exit 1; }
+fi
 cp -R "$HERE/img" "$WORK/img"
 
 if pandoc --help | grep -q -- --embed-resources; then EMBED=--embed-resources; else EMBED=--self-contained; fi
 python3 "$REPO/tools/manual-variants.py" "$BOARD" "$REPO/docs/manual/user-manual.md" "$WORK/user-manual.md"
 pandoc "$WORK/user-manual.md" -f gfm -t html5 --standalone --section-divs $EMBED \
        --resource-path="$REPO/docs/manual" --metadata pagetitle="$TITLE" \
+       --lua-filter "$HERE/manual.lua" \
        --css "$WORK/print.css" -o "$WORK/manual.html"
 
 # The rest (title page, contents, chapter openers on right-hand pages, the
 # covers, the one-up PDF and the booklet) is book.py's.
-CHROME="$CHROME" FW="$FW" ROM="$ROM" DATE="$DATE" TITLE="$TITLE" T3="$T3" python3 "$HERE/book.py" "$WORK"
+PRINT="$PRINT" PAPER="$PAPER" CHROME="$CHROME" FW="$FW" ROM="$ROM" DATE="$DATE" TITLE="$TITLE" T3="$T3" python3 "$HERE/book.py" "$WORK"
+if [ -n "$PRINT" ]; then
+  for f in print-interior kdp-cover lulu-coil-cover; do
+    cp "$WORK/$f.pdf" "$OUT/$NAME-$f.pdf"; echo "$OUT/$NAME-$f.pdf"
+  done
+  exit 0
+fi
 cp "$WORK/user-manual-half-letter.pdf" "$OUT/$NAME-half-letter.pdf"
 cp "$WORK/user-manual-saddle-stitch-letter.pdf" "$OUT/$NAME-saddle-stitch-letter.pdf"
 echo "$OUT/$NAME-half-letter.pdf"

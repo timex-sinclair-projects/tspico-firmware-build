@@ -178,7 +178,7 @@ nibble, so they never see or set the prefix flags.
 
 The NET: device: Gustavo's provision for networking from the 2068 (an
 extended ZX Interface 1 network, as the project understands it; no spec
-describes it). SESSION_NAMED recognises the prefix, and the only readers of
+describes it). SESSION_NAMED recognizes the prefix, and the only readers of
 bit 6 are the switch words (20B0h, 20F2h, 2140h, 217Dh), which refuse a
 `NET:` name, so it goes to the Pico as an ordinary command with `net:` at
 the start of the text. That is all the ROM needs: no firmware implements a
@@ -224,7 +224,7 @@ routine at 22AEh (clear the lower screen).
 | 5C4Fh | CHANS | the channel area, where OPEN # adds an `F` record | 342Dh, 3480h, 34BBh |
 | 5C51h | CURCHL | the current channel's record: the `F` record's routines find their record through it | 3033h, 350Dh, 3568h, 35A7h, 3641h, 3649h |
 | 5C53h | PROG | the end of the channel area | 3422h |
-| 5C48h | BORDCR | the border colour, which BEEPER keeps | 2051h, 22DAh |
+| 5C48h | BORDCR | the border color, which BEEPER keeps | 2051h, 22DAh |
 | 5CCBh | (OPEN/CLOSE # stream) | the stream number the stock OPEN/CLOSE # code stores at 140Fh, which the module reads | 340Fh, 3471h, 34A9h |
 
 The channel record's own layout is in [exrom-fdd.md](exrom-fdd.md).
@@ -240,7 +240,7 @@ are in that copy, not variables in the usual sense.
 | 6499h | BANK_ENABLE, copied from EXROM 1299h at boot | the bank switch |
 | 6572h, 65D0h | the RAM CALL_BANK/GOTO_BANK targets | the thunks |
 | 65CEh | the bank stack pointer (BANK_SP) | the returning thunks push and pop through it; GUARDED (3067h) records it and H_TRAP (HOME 14B2h) restores it after an error ([overview.md](overview.md#banking-how-home-and-the-exrom-reach-each-other)) |
-| 5CBEh, 6315h | two 2068 variables cleared at EXTINIT by 221Fh, together with the TPMODE set-up; 6315h is also tested by BANK_ENABLE (1299h). These are the genuine EXTINIT's displaced instructions *(inferred: the patched EXTINIT jumps here instead of doing them itself)*; their meaning on a stock 2068 is not established here | 2226h, 2229h |
+| 5CBEh, 6315h | two 2068 variables cleared at EXTINIT by 221Fh, together with the TPMODE set-up, and again by `BOOT_DOCK_CHECK` (1C8Dh, 1C90h) and, unless D is held, by the genuine 09F4h, which is where the stock 2068 clears them ([exrom-driver.md](exrom-driver.md#boot_dock_check-1c86h)); 6315h is also tested by BANK_ENABLE (1299h), and CALL_BANK lowers SP by its value + 2 (13F8h). Their meaning on a stock 2068 is not established here | 2226h, 2229h, 1C8Dh, 1C90h |
 
 ## The ZX Spectrum ROM's variables
 

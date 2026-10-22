@@ -12,7 +12,7 @@ the wire format, captured on hardware on 2026-09-27 and
 unchanged in ROM 2.2: an LPRINT or LLIST character is one transaction, the
 10-byte pre-header `42 05 FF <char> 01|02 <flags> <ATTR_P> LL HH <xor>`,
 with an 8-byte body (the character's pattern) for characters of 80h and
-above; LLIST arrives already detokenised, and ENTER is 0Dh. COPY is
+above; LLIST arrives already detokenized, and ENTER is 0Dh. COPY is
 `42 04 FF <hires colour> <mode> 20 18|40 18 LL HH <xor>` followed by a body
 of display memory from 4000h: 6912 bytes in mode 0, 15104 bytes
 (4000h–7AFFh, both screens) in the other modes ([PROTOCOL.md §8](../../PROTOCOL.md)).
@@ -30,7 +30,7 @@ globals, [tspico-commands.md](tspico-commands.md) for `PRN_OPEN`,
 `PRN_CLOSE`, `PRN_FLAG`, `PRN_SIZE` and `PRN_BMP`). The whole path from
 `LPRINT` to the file is [flows/printer.md](../flows/printer.md); the user's
 view is [user-manual.md ch 7](../../manual/user-manual.md). The module came
-with #70; the hi-res colour table with #138.
+with #70; the hi-res color table with #138.
 
 Two tests pin it: [`src/test/printer_hosttest.py`](../../../src/test/printer_hosttest.py)
 imports this module alone and checks every conversion, the file naming and
@@ -52,7 +52,7 @@ follows the EXROM's sequences, with the SD card as a temp folder.
 | 112–128 | `next_name` |
 | 131–139 | `_PALETTE` |
 | 142–149 | `_pix_addr`, `screen_size` |
-| 152–168 | `HIRES_K`, `hires_ink_paper`: the ROM's 64-column colour byte |
+| 152–168 | `HIRES_K`, `hires_ink_paper`: the ROM's 64-column color byte |
 | 171–206 | `row_colours`: the four screen modes |
 | 209–243 | `write_bmp`: the file |
 
@@ -85,7 +85,7 @@ chosen so a capture reads like a zmakebas source listing. Pinned by
 
 ## `CONTROLS`
 
-The six one-parameter colour controls, byte to name: 10h INK, 11h PAPER,
+The six one-parameter color controls, byte to name: 10h INK, 11h PAPER,
 12h FLASH, 13h BRIGHT, 14h INVERSE, 15h OVER. `TextCapture.feed` writes them
 as `\{INK n}` and so on. 16h AT (two parameters) and 17h TAB (one) are
 handled by `feed` itself and are not in the dict; `feed` only indexes
@@ -194,9 +194,9 @@ missing folder gives `PRN0001.TXT` and exists afterwards; with `PRN0001.TXT`,
 
 ## `_PALETTE`
 
-The 16-colour BMP palette, 64 bytes built at import: entry `i` is `(B, G,
+The 16-color BMP palette, 64 bytes built at import: entry `i` is `(B, G,
 R, 0)`, with each channel either 0 or `v`, where `v` is D7h for the normal
-colours 0–7 and FFh for the bright ones 8–15; blue comes from bit 0, red
+colors 0–7 and FFh for the bright ones 8–15; blue comes from bit 0, red
 from bit 1 and green from bit 2 of `i & 7`, the Spectrum numbering (1 blue,
 2 red, 4 green, 7 white). The loop's `_i`, `_v`, `_c` stay as module
 variables with leading underscores. Pinned: entry 7 is `D7 D7 D7 00`.
@@ -221,7 +221,7 @@ the scale factors.
 
 The ROM's COPY (EXROM `sub_16f3h` in the listing, which opens with
 `ld a,042h` and `SYNC_WRITE`) reads port FFh and, in 64-column mode, sends
-the colour choice `k` (bits 3–5 of the port) not as `k` but as the `k`-th
+the color choice `k` (bits 3–5 of the port) not as `k` but as the `k`-th
 byte of the table at EXROM 16EBh, `07 16 43 52 25 34 61 70` (the listing's
 `l16ebh`, disassembled as instructions). `HIRES_K` maps each byte back to
 `k`. On the screen, choice `k` is ink `k` on paper `7 - k`, the complement
@@ -229,15 +229,15 @@ the 2068 makes: black on white, blue on yellow, red on cyan, magenta on
 green, green on magenta, cyan on red, yellow on blue, white on black.
 Established on hardware on 2026-10-03 with the eight COPYs of
 `basic/SD/TAP/test/hirescopy.bas` against the TV (#138; audit §4's open item
-"hi-res COPY colours from the pre-header byte"). The comment explains why
-the bytes cannot be read as two colour nibbles: they hold two colours a
+"hi-res COPY colors from the pre-header byte"). The comment explains why
+the bytes cannot be read as two color nibbles: they hold two colors a
 nibble each, but with red and green swapped in the middle four, so a lookup
 is the only safe reading. Pinned by `printer_hosttest.py`: the eight bytes
 give the eight TV pairs, in that order.
 
 ## `hires_ink_paper(c)`
 
-`(ink, paper)` of a 64-column COPY from the pre-header's colour byte
+`(ink, paper)` of a 64-column COPY from the pre-header's color byte
 (`pre[3]`): `HIRES_K[c]` gives `k` and the answer is `(k, 7 - k)`; a byte not
 in the table, from a ROM that does not use it, is read as a nibble each,
 `((c >> 4) & 7, c & 7)`. Only `row_colours` calls it. Before #138 the
@@ -245,7 +245,7 @@ firmware read every byte as nibbles and the test fed it a made-up byte.
 
 ## `row_colours(scr, mode, y, hires_colour, out)`
 
-Fills `out`, a `bytearray` of the picture's width, with the colour index
+Fills `out`, a `bytearray` of the picture's width, with the color index
 (0–15) of every pixel of row `y`. `scr` is the COPY body, display memory from
 4000h, so offset 0 is 4000h, 1800h is 5800h, 2000h is 6000h and 3800h is
 7800h. `pa = _pix_addr(y)`, then by mode:
@@ -257,7 +257,7 @@ Fills `out`, a `bytearray` of the picture's width, with the colour index
   pixels in all.
 - **1, the second screen:** bitmap at `0x2000 + pa`, attributes at
   `0x3800 + (y >> 3) * 32` (6000h and 7800h).
-- **2, hi-colour:** bitmap at `pa`, one attribute byte per pixel row at
+- **2, hi-color:** bitmap at `pa`, one attribute byte per pixel row at
   `0x2000 + pa`, the same offset in the second bank.
 - **anything else, including 0:** bitmap at `pa`, attributes at
   `0x1800 + (y >> 3) * 32` (5800h).
@@ -270,7 +270,7 @@ modes: single pixels set in the fixture land where the TV would put them.
 
 ## `write_bmp(f, scr, mode, hires_colour, sx, sy)`
 
-Writes the COPY body to the open file `f` as a 4-bit, 16-colour BMP with
+Writes the COPY body to the open file `f` as a 4-bit, 16-color BMP with
 each screen pixel `sx` wide and `sy` tall, one row at a time, so no
 whole-picture buffer exists ("2048x1536 would not fit": that picture is
 1.5 MB at 4 bits a pixel). Returns `(w, h)`, the picture size in pixels.
@@ -282,8 +282,8 @@ whole-picture buffer exists ("2048x1536 would not fit": that picture is
 2. The header, little-endian: `BM`; the file size at 2; `off` at 10; 40 at
    14 (the info header's size); `w` at 18; `h` at 22, positive, so the rows
    are stored bottom-up; 1 plane at 26; 4 bits per pixel at 28; the image
-   size at 34; 2835 pixels per metre (72 dpi) at 38 and 42; 16 colours at
-   46; the compression field at 30 and the "important colours" at 50 stay
+   size at 34; 2835 pixels per meter (72 dpi) at 38 and 42; 16 colors at
+   46; the compression field at 30 and the "important colors" at 50 stay
    0. `_PALETTE` at 54.
 3. For `y` from `h0 - 1` down to 0: `row_colours` into `cols`; pack `sx`
    copies of each index into `row`, the high nibble of a byte for an even
@@ -295,7 +295,7 @@ The default `bmp_size` of 512×384 makes `COPY_BMP` pass `sx = sy = 2` for a
 heights of 192, 384, 768 or 1536, with 1596 read as 1536 as the manual
 misprints it (`PRN_BMP`). Pinned by `printer_hosttest.py`: a 512×384 file is
 14 + 40 + 64 + 256 × 384 = 98,422 bytes with a consistent header, 4 bpp and
-16 colours; a pixel at (x, y) lands at (2x, 2y) doubled; the bottom-right
+16 colors; a pixel at (x, y) lands at (2x, 2y) doubled; the bottom-right
 pixel is in the bottom-right; 1× gives 256×192; and
 `printer_io_hosttest.py` checks the 98,422-byte `SCR0001.BMP` from a real
 COPY transaction, and that a BREAK in the middle of the body leaves no file.

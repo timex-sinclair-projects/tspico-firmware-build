@@ -131,7 +131,7 @@ hardware *(unverified beyond that)*.
 
 The card is on SPI0: SCK on GPIO 2, MOSI on 3, MISO on 4, chip select on
 GPIO 28 (`U3_CS`). The driver ([firmware/sdcard.md](firmware/sdcard.md))
-clocks it at 100 kHz to initialise and 5 MHz after
+clocks it at 100 kHz to initialize and 5 MHz after
 (`SDCard(spi, cs, baudrate=5_000_000)`); the audit kept the 5 MHz
 ([AUDIT-2026-09-30.md](../AUDIT-2026-09-30.md) §5). U3, the card socket or
 its level shifter, runs off the Pico's 3V3 rail with a 4K7 pull-up on nCS,
@@ -276,11 +276,11 @@ its own ROMs.
 
 | Clock | Value | Set by | Why |
 |---|---|---|---|
-| CPU (both cores) | 270 MHz | `freq(270_000_000)` in both `main.py`s; printed at boot | not stated beyond the PIO rate below. The RP2040's rated maximum is 133 MHz (datasheet); the audit lists "270 MHz" with the PIO settle delays as "bus timing, logic analyser only; leave them" (§4) |
+| CPU (both cores) | 270 MHz | `freq(270_000_000)` in both `main.py`s; printed at boot | not stated beyond the PIO rate below. The RP2040's rated maximum is 133 MHz (datasheet); the audit lists "270 MHz" with the PIO settle delays as "bus timing, logic analyzer only; leave them" (§4) |
 | the bus state machine (MQ, running TS_IO_DUAL) | 30 MHz | `StateMachine(0, …, freq=30_000_000)` | the dual-port decode added ~7 cycles to the read path over the single-port program's 15 MHz; 30 MHz "keeps the total under the Z80's data setup window with margin" (`TS_IO_DUAL`'s docstring, `ACTIVATE_MQ`'s comment). A cycle is 33 ns; a read is answered in 9 cycles *(computed, unverified)* |
 | the memory state machines (ROM and BANK) | 150 MHz | `StateMachine(4/5, …, freq=150_000_000)` | not stated. A cycle is 6.7 ns; the ROM path's enables follow the strobe by up to 22 cycles *(computed, unverified)*. This exceeds the "half the system clock" the `TS_IO_DUAL` docstring gives as the PIO's limit; the datasheet's divider goes down to 1, so the code, not the comment, is right |
 | the parked bus state machine (NULL_SM) | 15 MHz | `ACTIVATE_SD` | the old single-port rate; irrelevant for a `nop` |
-| SPI0 | 100 kHz, then 5 MHz | `sdcard.py` | the SD initialisation sequence needs a slow clock; 5 MHz kept by the audit (§5) |
+| SPI0 | 100 kHz, then 5 MHz | `sdcard.py` | the SD initialization sequence needs a slow clock; 5 MHz kept by the audit (§5) |
 
 The Z80 side is not in the code. What it imposes is in
 [PROTOCOL.md](../PROTOCOL.md) §3.3: an `OUT` every ~30 µs inside a block,

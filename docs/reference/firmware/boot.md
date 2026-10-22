@@ -361,11 +361,15 @@ A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
 the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
 DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
-Poppins) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
+Poppins) and the code-block font (Timex TS2068, CC BY 3.0, credited in the
+colophon) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
 one board's manual from `docs/manual/user-manual.md`
 (`tools/manual-variants.py`: passages for one board sit between
 `<!-- v2 -->` or `<!-- v3 -->` marker lines; `BOARD=v2` is the default and
-the published manual), turns it into HTML with pandoc, and
+the published manual), turns it into HTML with pandoc and
+`tools/manual-pdf/manual.lua` (program listings laid out as the 2068 lists
+them: line numbers in four columns, every line cut at 32; and a lead-in
+paragraph kept on one page with the code, picture or short list after it), and
 `tools/manual-pdf/book.py` adds the title page, contents and chapter
 openers, prints the manual and the two covers with the runner's Chrome, and
 assembles the half-letter one-up (cover + manual) and the saddle-stitch
@@ -379,8 +383,26 @@ an odd page; the two PDFs are uploaded as
 `tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
 (`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover), uploaded
 with its Markdown as `tspico-manual-v3`; it isn't published (website,
-releases) while the card is unreleased. Building them on every push means a
-manual change that breaks them fails here, not at release time.
+releases) while the card is unreleased. Then `PRINT=1` makes the files for
+printing on demand, uploaded as `tspico-manual-print` and taken from there
+by hand to Amazon KDP (paperback) and Lulu (coil bound, which lies flat;
+run locally with no output folder, `make.sh` puts them on the Desktop):
+`user-manual-print-interior.pdf`, the one-up without its cover padded to an
+even page count, the interior for both, printed with a wider inside margin
+than the reading PDF (`GUTTER`, 0.8 in by default against 0.62 in, and 0.45
+in outside against 0.5: the KDP proof's perfect binding swallowed too much
+of 0.62 in, which is Lulu's minimum for a 61 to 150 page paperback; KDP's
+is 0.375 in, and coil needs no gutter); `user-manual-kdp-cover.pdf`, back, spine and front
+on one sheet with 0.125 in of bleed all round, the spine the page count
+times KDP's paper thickness (`PAPER=white`, the default, or `cream`), and
+the back cover's links raised out of the corner where KDP prints the
+barcode; and `user-manual-lulu-coil-cover.pdf`, back and front with bleed
+and no spine (11.25 x 8.75 in). The cover art (`cover.css`) runs into the
+bleed. Spine text goes on only where it fits with 0.125 in clear each side
+(Lulu's figure; KDP asks for 1/16 in), about 0.35 in of spine or 155 pages
+on white paper; the manual is far short of that. `book.py` checks each
+cover's size. Building them on every push means a manual change that breaks
+them fails here, not at release time.
 
 Artifacts are kept 30 days. `tools/pico-serial.py flash --branch B`
 downloads the `tspico-firmware-uf2` of B's current head and flashes it

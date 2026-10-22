@@ -3,7 +3,7 @@ layout: page
 title: El equipo
 lang: es
 permalink: /es/equipo/
-description: Las personas detrás del TS Pico — Ricardo, Gustavo, Jeff, Tim y David.
+description: Las personas detrás del TS Pico — Ricardo, Gustavo, Jeff, Tim, Ryan, Joe y David.
 ---
 
 ## Ricardo Calcagno
@@ -59,6 +59,18 @@ Tim H, a diferencia de los demás miembros del equipo, es un recién llegado a l
 En los últimos años, Tim adquirió un TS 2068 y se volvió activo en la comunidad internacional de TS, ayudando a preservar y mejorar el hardware diseñado por entusiastas de TS en el pasado, incluida una placa de captura de video desarrollada por miembros del grupo de usuarios de TS a fines de la década de 1980.
 
 Tim se unió inicialmente al equipo y ofreció su soporte de diseño de software y hardware para el proyecto.
+
+## Ryan Gray
+
+[Ryan](https://graytrek.com/) empezó con las TRS-80 Model I que tenía la escuela secundaria, de las que había unas pocas, y pronto se quedaba después de clase e iba a Radio Shack los fines de semana. Ahorró para comprarse una ZX81, la versión de EE. UU., con nada menos que 16K. Después consiguió una Timex Sinclair 2068, justo antes de que Timex abandonara el negocio. Pasó unos años demostrándoles a sus amigos que era superior a sus computadoras. También fue miembro del grupo de usuarios Timex/Sinclair de Fort Worth.
+
+Para la universidad pasó a otro sistema condenado al fracaso, la IBM PCjr. Después de estudiar ingeniería y ciencias de la computación, consiguió un trabajo profesional escribiendo y usando software de simulación de ingeniería para calcular cosas importantes.
+
+Ryan descubrió el grupo de Timex, recuperó sus viejos programas de cinta y de inmediato siguió trabajando en ellos. Se unió al equipo para desarrollar herramientas como el Commander y ayudar con el firmware en la Pico.
+
+## Joe Vandezande
+
+Joe diseñó los gabinetes impresos en 3D del TS-Pico, del PicoVideo y de la placa de expansión del bus. También ayuda con las pruebas y la resolución de problemas.
 
 ## David Anderson
 

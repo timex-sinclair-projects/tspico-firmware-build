@@ -259,7 +259,7 @@ next `command>` prompt. The commands you'll use most:
 | `reset-cpu` | restart the 2068 |
 
 **Typing BASIC.** Keying in TS-2068 keywords over ZRCP is fiddly. What works reliably: type a
-placeholder line of the right length with `send-keys-ascii`, write the tokenised line into
+placeholder line of the right length with `send-keys-ascii`, write the tokenized line into
 the edit line with `write-memory` (its address is in the system variable `E_LINE`, 23641),
 then press ENTER. Before ENTER, poke 255 into `ERR_NR` (23610); a report then shows up
 there as anything but 255.

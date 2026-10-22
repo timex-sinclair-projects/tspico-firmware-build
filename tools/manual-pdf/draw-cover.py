@@ -8,7 +8,13 @@ into perspective with two homographies measured from a photograph of the
 machine (the top of the case, and the face of the board): four corners each,
 in the photo's pixels. Everything else (the keys, the panel, the vent, the
 chips) is drawn in the flat model, so the lines come out straight and evenly
-spaced. Run it again after changing anything here; the SVG is checked in.
+spaced. The SVG is checked in.
+
+img/ts2068-line.svg is no longer this script's output as it stands: it was
+retouched by hand in Affinity (2026-10-16; the board's angle, the keys and the
+case seam). Running this script over it loses those changes. Edit the SVG
+instead, keeping its 1528 x 960 canvas so the drawing stays where cover.css
+puts it.
 """
 import numpy as np
 

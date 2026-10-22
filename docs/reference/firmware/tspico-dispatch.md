@@ -1,8 +1,8 @@
 # TS/tspico.py (part 3) — the dispatcher
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4798–4910
-(`LOAD_CONFIG`), 5955–6057 (the printer path), 6137–6473 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6481–7677 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4813–4925
+(`LOAD_CONFIG`), 5970–6072 (the printer path), 6152–6488 (`FAIL_CMD`,
+`PROCESS_CMD`) and 6496–7692 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -36,17 +36,17 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 
 | Symbol | Line | Role |
 |---|---|---|
-| `LOAD_CONFIG()` | 4798 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
-| `PRINT_FLUSH()` | 5955 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
-| `COPY_BMP(scr, mode, colour)` | 5987 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
-| `PRINT_IO(pre)` | 6008 | one printer transaction: an LPRINT character, or COPY |
-| `FAIL_CMD(status)` | 6137 | a command that failed: one status byte, on a bus in a known state |
-| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6189 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
-| `TS2068_IO()` | 6481 | the board setup and the service loop |
-| `ZX_TPI()` | 7366 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7504 | the Spectrum-mode loop |
+| `LOAD_CONFIG()` | 4813 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
+| `PRINT_FLUSH()` | 5970 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
+| `COPY_BMP(scr, mode, colour)` | 6002 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
+| `PRINT_IO(pre)` | 6023 | one printer transaction: an LPRINT character, or COPY |
+| `FAIL_CMD(status)` | 6152 | a command that failed: one status byte, on a bus in a known state |
+| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6204 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
+| `TS2068_IO()` | 6496 | the board setup and the service loop |
+| `ZX_TPI()` | 7381 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 7519 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 7362), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 7377), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -89,7 +89,7 @@ What it does:
    | ROM_VERSION | the module's `ROM_VERSION` | the ROM this firmware ships with; shown by `tpi:info`, nothing else reads it |
 
    The shipped [`src/config.ini`](../../../src/config.ini) holds exactly
-   these eighteen keys. The comment at line 4811 notes that `PICO_STATUS`
+   these eighteen keys. The comment at line 4826 notes that `PICO_STATUS`
    carries a second copy of the defaults (it does, as `try/except` fallbacks)
    and that there should be one; there are still two.
 3. `ROM_SM` must be one of 5, 6, 9, 10 — the four combinations `tpi:boot`
@@ -184,7 +184,7 @@ TX empty, Y BUSY.
 
 Takes: `scr`, a `memoryview` of the screen bytes from the body (6912 bytes
 for mode 0, 15104 for the others: both screens, 4000h–7AFFh); `mode`, the
-pre-header's `pre[4]`; `colour`, `pre[3]`, the hi-res colour byte. Reads
+pre-header's `pre[4]`; `colour`, `pre[3]`, the hi-res color byte. Reads
 `bmp_size` (default `(512, 384)`; `PRN_BMP` sets it). Only caller:
 `PRINT_IO`. The test writes the default size and checks 98422 bytes.
 
@@ -197,7 +197,7 @@ the wire format, captured on hardware, is in [printer.py](../../../src/TS/printe
 header).
 
 The pre-header's fields here: `pre[1]` 5 = a character, 4 or 6 = COPY;
-`pre[3]` the character (TADDR 5) or the hi-res colour byte (COPY); `pre[4]`
+`pre[3]` the character (TADDR 5) or the hi-res color byte (COPY); `pre[4]`
 the screen mode (COPY); `pre[7..8]` the body length, 0 for a plain character,
 8 for a character of 80h or more (its pattern), 6912 or 15104 for COPY.
 
@@ -312,7 +312,7 @@ The pre-header fields as the ROM builds them
 |---|---|---|
 | 0 | `'B'` (42h) | — (the dispatcher chose this handler on it) |
 | 1 | TADDR | `load_cmd`: 0 = `SAVE "tpi:…"` command, 1–3 = `LOAD "tpi:name"`, a mount |
-| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6199), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
+| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6214), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
 | 3–4 | PMR1, the first `CODE` number, little-endian | the handlers' `par1` (`PARAMS(pre)`) |
 | 5–6 | PMR2, the second `CODE` number | `par2` |
 | 7–8 | length of the command text | the body size |
@@ -499,9 +499,9 @@ it.
 
 It owns `busy` (core1 is writing the log), `dead` (tells `BLINK_LED` to
 stop), `files`, `lista`, `log_entries`,
-`log_to_serial` (initialised `False`; nothing in the module sets it `True` —
+`log_to_serial` (initialized `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file),
-`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6791, `RXD`.
+`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6806, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
 
 ### Configuration and the log file
@@ -676,7 +676,7 @@ seeds the chain for the life of the session. It must be here and not inside
 that `LOAD ""` will give Report R until the assets are copied. The SD outcome
 is logged (OK / mounted but failing / no card), `SAVE_LOG()`, a `gc.collect()`,
 "TS Pico initialized OK. Waiting for commands...", `SAVE_LOG()` again, LED
-off. `wrt = MQ.put` at line 6776 is assigned and never used.
+off. `wrt = MQ.put` at line 6791 is assigned and never used.
 
 ### The capture buffers and the DMA channel
 
@@ -752,7 +752,7 @@ status read (`RD_STATUS`), not in `SYNC_WAIT`, so a transaction the Pico
 dropped reports T only if its ROM is still waiting for READY when the
 `0xFB` goes up; a later command finds `0xFF` *(inferred from
 [tspico-sync.asm](../../../src/rom/patches/tspico-sync.asm): `SYNC_WAIT`
-masks READY and IDLE only)*. The comments at lines 6804 and 6896 that say
+masks READY and IDLE only)*. The comments at lines 6819 and 6911 that say
 "the next command gets Report T" describe the ROM's own ready-wait of the
 transaction in hand, not a later one.
 
@@ -794,7 +794,7 @@ the flag — Report R, seen on hardware after a BREAK (#51, #64). For SAVE,
 `PROCESS_CMD` (above). The condition used to be Ryan's
 `not ((pre[0] == 0 or pre[0] == 255) and pre[1] < 10)`, which still gave a
 headerless LOAD (TADDR ≥ 10) the early READY (audit §2 #11, 2026-09-30).
-As the code stands the early READY is reached only by an unrecognised
+As the code stands the early READY is reached only by an unrecognized
 pre-header, whose branch then goes to `MQ_TO_IDLE` anyway.
 [load_ts_hosttest.py](../../../src/test/load_ts_hosttest.py) and
 [save_ts_hosttest.py](../../../src/test/save_ts_hosttest.py) each check the
@@ -981,7 +981,7 @@ re-arms), [dir_files_eio_hosttest.py](../../../src/test/dir_files_eio_hosttest.p
 (the pre-header goes through `RX_CAPTURE` in both copies of the module),
 [stdin_drain_hosttest.py](../../../src/test/stdin_drain_hosttest.py) (both
 heartbeats drain stdin), [printer_io_hosttest.py](../../../src/test/printer_io_hosttest.py)
-(the flush before other commands). The phase-by-phase byte behaviour of the
+(the flush before other commands). The phase-by-phase byte behavior of the
 branches is pinned by the handlers' own tests
 (`load_ts_hosttest`, `save_ts_hosttest`, `cmd_io_hosttest`), each of which
 "does what the dispatcher does" around the handler.
@@ -1034,7 +1034,7 @@ What it does:
    listing stale; `ACTIVATE_SD()`; `text, st = CATALOG_TEXT(rest[3:].strip())`
    ([tspico-disk.md](tspico-disk.md)); `DEACTIVATE_SD()`, `ACTIVATE_MQ()`
    (Y BUSY); an `OSError` is "SD card error", `_3_F_Invalid_file`. On
-   success `listing = CAT_COLOUR(text)` — the Spectrum has the same colour
+   success `listing = CAT_COLOUR(text)` — the Spectrum has the same color
    codes — and `stall = CMD_STALL_MS` (600 s), because the ROM's `PR_STRING`
    stops at its own "scroll?" for as long as the user likes and only a new
    command ends it.
@@ -1088,7 +1088,7 @@ view: [user-manual.md 9.2](../../manual/user-manual.md#92-what-works-in-spectrum
 ## `ZX48_IO(pre)`
 
 The loop the firmware runs while the 2068 is a ZX Spectrum: after
-`SAVE "tpi:zx48"` and `OUT 244,3` the customised Spectrum ROM in flash slot
+`SAVE "tpi:zx48"` and `OUT 244,3` the customized Spectrum ROM in flash slot
 0 talks a protocol with no status port, no pre-header, no pre-load and no
 echo ([PROTOCOL.md §10](../../PROTOCOL.md#10-zx48-mode),
 [flows/zx48.md](../flows/zx48.md)). `pre` is the `tpi:zx48` command's

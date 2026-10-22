@@ -228,7 +228,7 @@ the Pico: the ROM handles them (they set TPMODE, `$5DDB` = 24027: bit 1
 LOAD/SAVE to the Pico, bit 0 printer to the Pico). Sent raw, they are
 "Unrecognized command".
 
-The ROM also recognises a second prefix, `net:`: Gustavo's provision for
+The ROM also recognizes a second prefix, `net:`: Gustavo's provision for
 networking from the 2068, meant as an extended ZX Interface 1 network. A
 `net:` name goes to the Pico like a `tpi:` command (it is never a switch
 word), with `net:` at the start of the text. No firmware implements it yet:
@@ -452,7 +452,7 @@ examples; most programs are better off driving the ports directly.
 
 ## 10. ZX48 mode
 
-After `tpi:zx48` the Pico serves the customised Spectrum ROM (flash slot 0) and
+After `tpi:zx48` the Pico serves the customized Spectrum ROM (flash slot 0) and
 speaks its protocol: no status port, no pre-header, no echo. `'L'` → flag +
 content + CRC; `'S'` → a block; `'T'` → `LOAD "tpi:name"`, or, on the ZX v4
 ROM, `SAVE "tpi:dir"`, flagged by bit 7 of the op byte, with the reply in
@@ -688,7 +688,7 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   `GETLOG` had this until the audit: BREAK at its Scroll? prompt was
   answered with "Log file too large".
 - **ZX48 mode is a different protocol — don't apply the V6 chain to
-  it.** The customised Spectrum ROM in flash slot 0 has no status port,
+  it.** The customized Spectrum ROM in flash slot 0 has no status port,
   no pre-header and no echo phase: after `'L'` it reads exactly
   `flag + content + CRC` and returns, and after `'S'` it writes the
   block and returns. A status byte or pre-load `0x01` written by a ZX

@@ -278,7 +278,8 @@ text with the keywords spelled out, where the ZX Printer received dots.
 
 Part of the boot code at 0E0Bh–0E27h, which pages the EXROM in and copies
 EXROM 1000h–162Fh to RAM 6200h (`LDIR`, BC = 0630h): the 2068's
-bank-switch code, run from RAM ever after. 0E0Bh `LD A,01h` (HSR: chunk 0)
+bank-switch code, run from RAM ever after (one byte of it, CALL_BANK's
+at 6610h, is a TS-Pico fix: [exrom-driver.md](exrom-driver.md#call_bank-13d0h)). 0E0Bh `LD A,01h` (HSR: chunk 0)
 became `LD A,03h` (chunks 0 and 1), so the copy is made with both halves of
 the 16K EXROM paged. With the same change in the EXROM's own boot path and
 in BANK_ENABLE, this one byte is why the TS-Pico EXROM can be 16K.
@@ -447,7 +448,7 @@ where the genuine stub jumped, is untouched.
 
 | Statement | HOME path | EXROM |
 |---|---|---|
-| power-on | 0E0Bh (16K EXROM paged, bank code copied); EXTINIT | EXROM 08E7h → 01BCh: TPMODE = 2, BANK = FFh ([sysvars.md](sysvars.md)) |
+| power-on | 0E0Bh (16K EXROM paged, bank code copied); EXTINIT | EXROM 08E7h → 01BCh: TPMODE = 2, BANK = FFh ([sysvars.md](sysvars.md)); 1C86h: the D key skips the DOCK cartridge ([exrom-driver.md](exrom-driver.md#boot_dock_check-1c86h)) |
 | SAVE, LOAD, VERIFY, MERGE | class 0Bh → 2548h → 3CE3h; helpers 254Fh, 2558h, 24C7h | 01ABh … 01D2h ([exrom-driver.md](exrom-driver.md)) |
 | `SAVE "tpi:…"` | the same | SESSION_SETUP → BUILD_PREHEADER_B |
 | CAT, FORMAT, MOVE, ERASE | syntax offsets 1946h → 25C8h–25D4h → 25D6h | the module, 3000h |
