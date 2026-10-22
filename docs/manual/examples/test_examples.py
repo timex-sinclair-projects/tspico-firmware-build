@@ -12,10 +12,15 @@ Not simulated: the ROM (RST 10h prints into a list, CHAN_OPEN returns, RST 8
 stops the run and records the report), the BIOS thunk (bios.asm), timing
 beyond T-state counts, the 4-deep FIFOs.
 
+It also checks the manual against these files (check_manual): every name in
+picolib.asm has its entry in Chapter R5, every code block introduced "from
+`file.asm`" is still in that file, and Appendix G is picolib.asm.
+
 Run:  python3 docs/manual/examples/test_examples.py
 """
 
 import os
+import re
 import subprocess
 import sys
 import types
@@ -93,6 +98,7 @@ class Pico:
         self.tail = False
         self.underruns = 0
         self.commands = []
+        self.rom_ids = []                        # pre-header byte 2 of each command
         self.keys_seen = []
         self.syncs = 0
         self.stray = 0
@@ -115,6 +121,7 @@ class Pico:
                 self.put(0x0D)
                 for c in msg1.encode():
                     self.put(c)
+            self.put(0x0D)
             self.put(0)
         else:
             self.put(st)
@@ -146,6 +153,7 @@ class Pico:
             self.buf.append(v)
             if len(self.buf) == 10:
                 self.pre = self.buf
+                self.rom_ids.append(self.pre[2])
                 self.need = self.pre[7] + 256 * self.pre[8] + 4
                 self.buf = []
                 self.state = "body"
@@ -366,6 +374,69 @@ EXT = dev_extcmd.EXT_SA_FUNCT
 BASIC_RET = 0x2D2B                               # anywhere in the ROM will do
 
 
+# ---------------------------------------------------------------------------
+# The manual
+# ---------------------------------------------------------------------------
+
+MANUAL = os.path.join(HERE, "..", "programmers-manual.md")
+
+
+def in_order(block, src):
+    """Each run of the block's lines between "..." lines is in src, in order."""
+    runs, run = [], []
+    for line in block:
+        if line.strip() == "...":
+            runs.append(run)
+            run = []
+        else:
+            run.append(line.rstrip())
+    runs.append(run)
+    at = 0
+    for run in filter(None, runs):
+        for i in range(at, len(src) - len(run) + 1):
+            if src[i:i + len(run)] == run:
+                at = i + len(run)
+                break
+        else:
+            return False
+    return True
+
+
+def check_manual():
+    text = open(MANUAL).read()
+    lines = text.split("\n")
+    lib = open(os.path.join(HERE, "picolib.asm")).read()
+
+    r5 = text[text.index("# Chapter R5:"):text.index("# Chapter R6:")]
+    names = re.findall(r"^([A-Za-z_]\w*)(?::|\s+equ\b)", lib, re.M)
+    missing = [n for n in names if "`%s`" % n not in r5]
+    check(not missing, "Chapter R5 describes every name in picolib.asm %s" % (missing or ""))
+    entries = re.findall(r"^## R5\.\d+ `(\w+)`", r5, re.M)
+    check(entries and all(n in names for n in entries),
+          "every R5 entry is a routine in picolib.asm (%d entries)" % len(entries))
+
+    blocks = 0
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith("```") and lines[i] != "```":
+            j = lines.index("```", i + 1)
+            prev = next((l for l in reversed(lines[:i]) if l.strip()), "")
+            m = re.search(r"[Ff]rom `([\w.]+\.asm)`", prev)
+            if m:
+                src = open(os.path.join(HERE, m.group(1))).read().split("\n")
+                src = [l.rstrip() for l in src]
+                blocks += 1
+                check(in_order(lines[i + 1:j], src),
+                      "manual line %d: the excerpt is in %s" % (i + 2, m.group(1)))
+            i = j
+        i += 1
+    check(blocks >= 16, "%d excerpts checked" % blocks)
+
+    g = text.index("# Appendix G:")
+    a = text.index("```asm\n", g) + len("```asm\n")
+    check(text[a:text.index("\n```", a)] == lib.rstrip("\n"), "Appendix G is picolib.asm")
+
+
 def run(name, pico, pokes=None, keys=(), limit_t=400_000_000):
     image, syms = build(name)
     mem = bytearray(65536)
@@ -432,6 +503,8 @@ def run(name, pico, pokes=None, keys=(), limit_t=400_000_000):
 def link_ok(pico, what):
     check(pico.underruns == 0, "%s: never read an empty FIFO" % what)
     check(pico.stray == 0, "%s: no stray bytes" % what)
+    check(pico.rom_ids and set(pico.rom_ids) == {0x23},
+          "%s: pre-header byte 2 is the ROM version, 23h (%r)" % (what, pico.rom_ids))
     check(list(pico.tx) == [1] and pico.y == Pico.IDLE,
           "%s: link left idle with one pre-load (tx=%r y=%02X)" % (what, list(pico.tx), pico.y))
 
@@ -454,7 +527,7 @@ def main():
     poke_text(pk, 60010, 60012, b"tpi:path", word=True)
     r = run("picocmd", p, pk)
     check(r["returned"] and r["bc"] == 0, "returns 0 = OK (bc=%d)" % r["bc"])
-    check(r["text"] == b"\rCurrent working dir is: \r/", "printed the message (%r)" % bytes(r["text"]))
+    check(r["text"] == b"\rCurrent working dir is: \r/\r", "printed the message (%r)" % bytes(r["text"]))
     link_ok(p, "path")
 
     print("picocmd: tpi:dir, two pages, Y at the prompt")
@@ -597,6 +670,9 @@ def main():
     r = run("fact", p, {60003: 33})
     check(r["report"] == 0x05, "33: Report 6 (%r)" % r["report"])
     link_ok(p, "fact 33")
+
+    print("the manual")
+    check_manual()
 
     print()
     print("%d FAILED" % len(FAILS) if FAILS else "all passed")

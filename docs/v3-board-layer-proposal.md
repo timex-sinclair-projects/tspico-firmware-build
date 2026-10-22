@@ -3,7 +3,7 @@
 Status: agreed 2026-10-10 (decisions at the end), in progress. Phase 4 of the v3 port plan
 (tspico-hardware `docs/v3-firmware-port-plan.md`): one source tree that builds
 for the v2 board (RP2040) and the v3 card (RP2350B, `tsbus`), with every
-hardware touch behind `TS/board.py`. v2 behaviour must not change: the host
+hardware touch behind `TS/board.py`. v2 behavior must not change: the host
 tests stay green and a v2.2 board passes its hardware checks.
 
 This comes from a read-through of `main.py`, `tspico.py`, `tspico_io.py`, the

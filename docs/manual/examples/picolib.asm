@@ -1,6 +1,6 @@
 ; picolib.asm -- talk to the TS-Pico from machine code, through its ports.
 ;
-; For ROM 2.0 (and 2.1) with firmware 2.0 or later. Include this file at the
+; For ROM 2.3 with firmware 2.3 or later. Include this file at the
 ; end of your program; the program must define two words, PMR1 and PMR2, which
 ; carry the two CODE numbers of the command (SAVE "tpi:..." CODE PMR1,PMR2).
 ;
@@ -136,8 +136,8 @@ SEND_CMD:
         call TXX                ; 0: block type 'B' (a command)
         xor a
         call TXX                ; 1: 0 = SAVE "tpi:..."
-        ld a,0FFh
-        call TXX                ; 2: bank (FFh = HOME)
+        ld a,23h
+        call TXX                ; 2: the ROM's version, as ROM 2.3 sends it
         ld a,(PMR1)
         call TXX                ; 3-4: first CODE number
         ld a,(PMR1+1)

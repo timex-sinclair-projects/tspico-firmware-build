@@ -182,7 +182,9 @@ ports: they test VIDMOD (5CC2h) and jump to the bank-switch code **in RAM**
 second display file; [DIFF_HOME_vs_STOCK.md](../../rom-analysis/DIFF_HOME_vs_STOCK.md)). The port work is in
 `BANK_ENABLE`, genuine code at EXROM 1299h that the 2068 copies to RAM at
 6499h at boot; the TS-Pico widened its HSR masks from chunk 0 to chunks 0+1
-(three hunks). The routines in RAM keep a **bank stack** whose pointer is
+(three hunks). One more byte of the copied code differs from the genuine
+ROM: CALL_BANK's read of its parameter count, a bug fix
+([exrom-driver.md](exrom-driver.md#call_bank-13d0h)). The routines in RAM keep a **bank stack** whose pointer is
 the word at 65CEh; the returning thunks push a frame there and pop it on
 the way back. System variables: [sysvars.md](sysvars.md).
 
@@ -420,10 +422,10 @@ file offset = Z80 address):
 
 | File | What |
 |---|---|
-| `tspico-22-exrom.labelled.asm` | **ROM 2.2's EXROM, labelled. The one this reference cites.** |
+| `tspico-22-exrom.labelled.asm` | **ROM 2.2's EXROM, labeled. The one this reference cites.** |
 | `tspico-22-exrom-symbols.sym` | its labels, generated: the curated names of `docs/rom-analysis/tspico-exrom-symbols.sym`, plus every label of `tspico-sync.asm` (2300h) and `fddcmd.asm` (3000h) from a fresh sjasmplus assembly, EXROM addresses (0100h–3FFFh) only, less the `EQU`s a source marks `; HOME` (a HOME address is not an EXROM label; until #183 `H_EXPT_STR` named EXROM 1BEFh). Edit the sources, not this |
 | `tspico-22-home.asm`, `.sym` | ROM 2.2's HOME, a raw sweep with `z80dasm`'s own `lXXXXh` labels |
-| `tspico-11-exrom.labelled.asm`, `tspico-15w-exrom.labelled.asm` | 1.1's EXROM and an intermediate one on the way to the base image, labelled with the curated names |
+| `tspico-11-exrom.labelled.asm`, `tspico-15w-exrom.labelled.asm` | 1.1's EXROM and an intermediate one on the way to the base image, labeled with the curated names |
 | `tspico-11-exrom.asm`, `tspico-15w-exrom.asm`, `tspico-home.asm`, `genuine-2068-*.asm` (+ `.sym`) | raw sweeps |
 
 How to use them:
@@ -434,7 +436,7 @@ How to use them:
   instruction is not found, so try the bytes before it.
 - **They are linear sweeps.** Text, tables and `FFh` filler disassemble as
   nonsense, and a sweep that starts inside an instruction stays out of
-  step until it happens to resynchronise. Find a known label first and
+  step until it happens to resynchronize. Find a known label first and
   read from there. The hand-checked listings in the Markdown documents
   outrank the sweeps.
 - **Status − 1.** The function chain reads the Pico's first byte, does

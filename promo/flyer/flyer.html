@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TS-Pico 2.3 Upgrade</title>
+<link rel="stylesheet" href="flyer.css">
+</head><body>
+
+<!-- ======================= FRONT ======================= -->
+<div class="page front">
+  <div class="masthead">
+    <img class="logo" src="{{TOOLS}}/img/timex-sinclair-logo.svg" alt="Timex Sinclair">
+    <div class="kicker">Free update for TS-Pico owners</div>
+    <div class="stripes"><i></i><i></i><i></i></div>
+  </div>
+
+  <div class="hero">
+    <h1>TS-Pico 2.3<span>CAT. MOVE. ERASE. FORMAT.</span></h1>
+    <p class="lede">The disk keywords Timex built into the 2068 and never finished <b>now work</b>, on
+      your TS-Pico's SD card. Version 2.3 replaces 1.1, and installs from a web browser in about
+      fifteen minutes.</p>
+  </div>
+
+  <div class="shot">
+    <div class="scr"><img src="{{IMG}}/whats-new/cat.png" alt="CAT listing a folder in color"></div>
+    <div class="cap">CAT: the folder in color, with the card's size and free space.</div>
+  </div>
+
+  <div class="drawing"><img src="{{TOOLS}}/img/ts2068-line.svg" alt="A TS 2068 with a TS-Pico behind it"></div>
+
+  <div class="tiles">
+    <div class="tile">
+      <h2>Disk commands in BASIC</h2>
+      <p><b>CAT</b> lists the card, <b>MOVE</b> copies files and changes folder, <b>ERASE</b> deletes,
+        and <b>FORMAT</b> makes a new tape or folder. Wildcards and paths included.</p>
+      <pre>CAT "games/b*"
+MOVE "*.tap" TO "backup"</pre>
+    </div>
+    <div class="tile">
+      <h2>Single files with <code>f:</code></h2>
+      <p>LOAD, SAVE, VERIFY and MERGE a file of its own, outside any TAP. Screens save as the plain
+        6,912 bytes your computer's picture tools can open.</p>
+      <pre>SAVE "f:advent.bas" LINE 10
+LOAD "f:title.scr" SCREEN$</pre>
+    </div>
+    <div class="tile">
+      <h2>Files your programs can read and write</h2>
+      <p><code>OPEN #</code>, <code>PRINT #</code> and <code>INPUT #</code> work with files on the card:
+        high-score tables, notes, logs, record files with <code>TAB</code>, even a folder listing.</p>
+      <pre>OPEN #4,"f:notes.txt","w"</pre>
+    </div>
+    <div class="tile">
+      <h2>A printer on the card</h2>
+      <p>LPRINT and LLIST go to text files on the card, and COPY saves the screen as a BMP picture:
+        second screen, hi-color and 512 columns included.</p>
+      <pre>SAVE "tpi:picopt"
+COPY</pre>
+    </div>
+  </div>
+
+  <div class="foot"><span>TS-Pico Mass Storage Interface · Version 2.3</span><span>Over →</span></div>
+</div>
+
+<!-- ======================= BACK ======================= -->
+<div class="page back">
+  <div class="top">
+    <div class="stripes"><i></i><i></i><i></i></div>
+    <h2 class="big">And there's more on the card.</h2>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="feature"><h3>A menu when nothing is mounted</h3>
+        <p><code>LOAD ""</code> with no tape mounted loads a menu: help on every command, a file picker,
+          and the <b>TS-Pico Commander</b>, a full-screen file manager you drive with the cursor keys.</p></div>
+      <div class="feature"><h3>1,327 programs, ready to copy</h3>
+        <p>The TS-2068 Software Library: every program test-loaded with the TS-Pico firmware, sorted into folders, with
+          short names you can type and a catalog. Free, from archive.org.</p></div>
+      <div class="feature"><h3>Help on the card</h3>
+        <p>A help page for every TS-Pico command and BASIC keyword, right on the 2068.</p></div>
+    </div>
+    <div>
+      <div class="feature"><h3>Inside a tape</h3>
+        <p><code>CAT ""</code> lists the blocks in the mounted TAP and shows where the tape pointer is.
+          <code>FORMAT "songs.tap"</code> starts a new, empty tape.</p></div>
+      <div class="feature"><h3>ZX Spectrum mode</h3>
+        <p>Mount another tape and list the folder without leaving Spectrum mode, with the new Spectrum
+          ROM in flash slot 0.</p></div>
+      <div class="feature"><h3>Manuals and open source</h3>
+        <p>A new User Manual, as a PDF to read or a booklet to print, and a Programmer's Manual. The
+          firmware is open source (MIT) on GitHub.</p></div>
+    </div>
+  </div>
+
+  <div class="tilerow">
+    <div><div class="scr"><img src="{{IMG}}/whats-new/tapdir.png" alt=""></div>
+      <div class="cap">CAT "": the blocks on the mounted tape; the next one is highlighted.</div></div>
+    <div><div class="scr"><img src="{{MAN}}/cd-menu.png" alt=""></div>
+      <div class="cap">SAVE "tpi:cd": pick a folder by its number.</div></div>
+    <div><div class="scr"><img src="{{MAN}}/info.png" alt=""></div>
+      <div class="cap">SAVE "tpi:info": firmware, ROM and card at a glance.</div></div>
+  </div>
+
+  <div class="fixed">
+    <h2>Fixed since <span>1.1</span></h2>
+    <ul>
+      <li><b>No more Report D or J on big files.</b> A rebuilt two-port link with a real ready/busy handshake.</li>
+      <li><b>BREAK works.</b> CAPS SHIFT + SPACE stops any TS-Pico command, and the next one works normally.</li>
+      <li><b>No twenty-second hangs.</b> If a transfer goes wrong you get <b>T TS-Pico reset, try again</b> at once.</li>
+      <li><b>Swap SD cards freely.</b> New files show up without a restart; the TS-Pico runs without a card.</li>
+      <li><b>LOAD gives up when there's nothing to find.</b> One pass of the tape, then R Tape loading error, instead of an endless wait.</li>
+      <li><b>Flash slots are safer.</b> The TS-Pico refuses to overwrite the ROM the 2068 is running.</li>
+    </ul>
+    <p class="note"><b>One change to know.</b> TS-Pico commands are now SAVE commands:
+      <code>SAVE "tpi:dir"</code>, <code>SAVE "tpi:info"</code>. <code>LOAD "tpi:name.tap"</code> mounts a file.</p>
+  </div>
+
+  <div class="get">
+    <div>
+      <h2>Upgrade in fifteen minutes. <span>It's free.</span></h2>
+      <ol>
+        <li>Switch the TS 2068 off. Keep the TS-Pico's <b>P10 jumper</b> fitted.</li>
+        <li>Open the <b>web updater</b> in Chrome or Edge, connect the TS-Pico by USB, choose
+          <b>Latest release</b>. On Windows you can run <b>TS-Pico-Updater.exe</b> instead.</li>
+        <li>Coming from 1.1, leave <b>Erase the Pico first</b> and <b>Update the TS-2068 ROM</b> ticked,
+          and follow the steps. Afterwards <code>PRINT PEEK 101</code> gives <b>35</b>.</li>
+      </ol>
+      <div class="links">
+        <b>Web updater</b> timex-sinclair-projects.github.io/tspico-firmware-build/updater<br>
+        <b>What's new</b> timex-sinclair-projects.github.io/tspico-firmware-build/updates<br>
+        <b>Source</b> github.com/timex-sinclair-projects/tspico-firmware-build
+      </div>
+    </div>
+    <div class="qr"><img src="qr-updater.svg" alt="QR code for the web updater"><div>Scan for the web updater</div></div>
+  </div>
+</div>
+
+</body></html>

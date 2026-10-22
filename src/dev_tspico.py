@@ -2234,6 +2234,7 @@ def SEND_MSG(msg, msg1, st: int, forceDisplay=False):                           
             put(0x0D)
             for m in msg1:
                 put(MSG_BYTE(m))
+        put(0x0D)               # End the line too, so a program's next PRINT starts afresh (#316)
         put(STR_END)            # 0x00: end of string
         CMD_SEND(ob, True)      # header in TX, READY, the rest as the Z80 reads
 
@@ -2248,6 +2249,17 @@ def SEND_MSG(msg, msg1, st: int, forceDisplay=False):                           
     CMD_DRAIN()
     TLM("SEND_MSG exit")
     return
+
+
+def SEND_STATUS(st: int):                                                       # the bare status: never prints
+
+    # SEND_MSG's answer with VERBOSE off, whatever VERBOSE says: for an answer
+    # that must not reach the screen. SAVE "f:x" SCREEN$ saves the display,
+    # so a "Saving to" message printed first would be saved in the picture (#314).
+    CMD_PUT(st)                 # Return code (< 0x80) -- IS the D-block status
+    MQ_READY()                  # one-byte status is in TX; signal ready
+    TLM("SEND_STATUS", "st=%d" % st)
+    CMD_DRAIN()
 
 
 def SEND_MSG2(msg, st: int, expandKeywords = True, colour = False):                                           # Sends a SCROLLING status message 
@@ -2896,7 +2908,7 @@ def DISK_ERASE(pre, cmd):                                                     # 
 
     # SAVE "tpi:erase name"    - delete a file, no prompt (silent unless verbose)
     # SAVE "tpi:erase *.bak"   - delete matching files, Erase <name> (Y/N)? each:
-    #                            Y erases, N stops, any other key skips
+    #                            Y erases; any other key, N included, skips that file (#227)
     # SAVE "tpi:erase dir/"    - remove an empty directory
 
     TLM("DISK_ERASE enter")
@@ -3143,7 +3155,10 @@ def NATIVE_OPEN(pre, cmd):                                                     #
                                     % shorten_filename(xstr(catalog.basename(real)), 16), lower=True)    # 31 + the key echo = one line
             TSP.native["refuse"] = ch not in (89, 121)                         # SAVE_TS refuses it: Report D
             return
-        SEND_MSG("Saving to %s" % catalog.public(real), "", _1_OK)
+        if mod == MOD_SCREEN:                                                  # the message would be in the picture (#314)
+            SEND_STATUS(_1_OK)
+        else:
+            SEND_MSG("Saving to %s" % catalog.public(real), "", _1_OK)
         return
     res, st = SD_CALL(NATIVE_LOAD_PREP, path, op, mod)
     if st != _1_OK:

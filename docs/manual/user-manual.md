@@ -159,8 +159,8 @@ of its familiar reports at the bottom of the screen:
 | **Q Parameter error** | The command understood you but can't do it (file in use, not empty, wrong mode…) |
 | **A Invalid argument** | A `CODE a,b` or an argument the command doesn't accept |
 | **C Nonsense in BASIC** | An unknown `tpi:` command, or extra words the command doesn't expect |
-| **R Tape loading error** | Data was damaged on the way, or a TAP file is damaged |
-| **8 End of file** | You read past the end of a file, or a LOAD found nothing matching |
+| **R Tape loading error** | Data was damaged on the way, a TAP file is damaged, or a LOAD found nothing matching |
+| **8 End of file** | You read past the end of a file |
 | **6 Number too big** | A number out of range, such as a file index |
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or answered N to a "Replace?" question |
 | **J Invalid I/O device** | The TS-Pico didn't answer. See Chapter 11 |
@@ -538,9 +538,12 @@ and big files take a second or two.
 You can also mount a file by the **index number** shown in the listing:
 
 ```basic
-LOAD "tpi:0"         : REM the file listed as 000
+LOAD "tpi:00"        : REM the file listed as 000
 LOAD "tpi:12"
 ```
+
+Use at least two digits. `LOAD "tpi:3"` is too short for the 2068 to take it as a TS-Pico
+command: it's an ordinary LOAD of a program called `tpi:3`. Type `LOAD "tpi:03"`.
 
 **Remember:**
 
@@ -691,8 +694,9 @@ MERGE ""
 
 The TS-Pico starts at the tape pointer and skips blocks that don't match what you asked for.
 When it reaches the end, it goes back to the start, like rewinding. If it goes all the way
-round without finding a match, you get **8 End of file**, instead of the endless wait you'd
-get with a real tape.
+round without finding a match, you get **R Tape loading error**, instead of the endless wait
+you'd get with a real tape. On the way, the 2068 shows the name of each block it passes, as it
+does with a cassette.
 
 ## 4.2 SAVE
 
@@ -706,13 +710,15 @@ SAVE "pic" SCREEN$
 SAVE "code" CODE 32768,1000
 ```
 
-As with tape, SAVE prints `Start tape, then press any key.` and waits: press a key, and the
-program goes to the card.
+As with tape, SAVE prints `Start tape, then press any key.` and waits: press **ENTER**, and the
+program goes to the card. Don't use SPACE here. It's the tape routines' BREAK key, and the
+TS-Pico starts at once, so a SPACE still held down stops the save with **D BREAK - CONT
+repeats**.
 
 **Remember:**
 
 - A plain SAVE name may only use **letters, digits, `-` and `_`**. Spaces or other symbols give
-  **F Invalid file name** before anything is written.
+  **F Invalid file name**. The F comes after the `Start tape` key, but nothing is written.
 - Saving over an existing name **replaces that file without asking**.
 - If nothing was mounted, the new file becomes the mounted file.
 - An empty program gives **A Invalid argument**.
@@ -810,7 +816,8 @@ SAVE "f:advent.bas" LINE 10
 LOAD "f:advent.bas"
 ```
 
-SAVE prints `Start tape, then press any key.` and waits for a key, as it does for tape.
+SAVE prints `Start tape, then press any key.` and waits for a key, as it does for tape. Press
+**ENTER** (see 4.2).
 Everything you can save to tape, you can save this way:
 
 ```basic
@@ -1308,9 +1315,9 @@ SAVE "tpi:opprint"     : REM finish this file and start the next one now
 The next LPRINT after a `tpi:clprint` starts a new file automatically.
 
 The text file is plain text, with a few conventions for things plain text can't show. The
-2068's block graphics, user-defined graphics and colour codes are written with backslashes, the
+2068's block graphics, user-defined graphics and color codes are written with backslashes, the
 same way the popular `zmakebas` tool writes them: for example `\::` for a solid block, `\A`
-for user-defined graphic A, and `\{INK 2}` for a colour change. Print positions are written the
+for user-defined graphic A, and `\{INK 2}` for a color change. Print positions are written the
 same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©` is written
 `\*`, and a backslash itself as `\\`.
 
@@ -1323,7 +1330,7 @@ same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©
 | `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default) |
 | `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. |
 
-COPY understands the 2068's other screen modes too: the second screen, hi-colour, and the
+COPY understands the 2068's other screen modes too: the second screen, hi-color, and the
 512-column hi-res mode.
 
 These settings last until the TS-Pico is switched off.
@@ -1422,7 +1429,9 @@ Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to 
 Don't use `OUT 244,3` for a cartridge. It maps only the first 16K of the dock over the ROM, which is
 how ZX Spectrum mode starts, and a cartridge started that way crashes.
 
-To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
+**To start in BASIC instead**, hold down **D** while you switch on or press **TS Reset**, and keep
+it down until the copyright message appears. The 2068 skips the cartridge. The cartridge stays in
+the dock, so the next restart runs it unless you change the dock.
 
 **The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is what's in
 the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
@@ -1493,6 +1502,7 @@ and run `LOAD ""` again. Without the P10 jumper the Flash can't be written.
 4. BOOT choices last one power cycle; DOCK resets at switch-on.
 5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot, with P10 fitted and never over
    the running ROM.
+6. Hold **D** while the 2068 starts to skip the cartridge in the dock.
 <!-- /v2 -->
 <!-- v3 -->
 # Chapter 8: ROM Slots and Cartridges
@@ -1581,7 +1591,9 @@ Cartridges live in the dock. With a cartridge's slot in the dock, type `NEW` to 
 Don't use `OUT 244,3` for a cartridge. It maps only the first 16K of the dock over the ROM, which is
 how ZX Spectrum mode starts, and a cartridge started that way crashes.
 
-To stop a cartridge from starting when the 2068 boots, **hold down D** while it starts.
+**To start in BASIC instead**, hold down **D** while you switch on or press **TS Reset**, and keep
+it down until the copyright message appears. The 2068 skips the cartridge. The cartridge stays in
+the dock, so the next restart runs it unless you change the dock.
 
 **The dock holds one cartridge at a time.** The Spectrum ROM in Flash slot 0 is what's in
 the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in the dock, Pro/File
@@ -1665,6 +1677,7 @@ SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
 4. BOOT choices last one start; DOCK resets at switch-on.
 5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot.
 6. A pair of RAM slots in the dock gives a program 64K of RAM.
+7. Hold **D** while the 2068 starts to skip the cartridge in the dock.
 <!-- /v3 -->
 
 ---
@@ -1844,7 +1857,7 @@ See Chapter 6.
 
 ```basic
 LOAD "tpi:frogger.tap"    : REM mount by name (current folder only)
-LOAD "tpi:3"              : REM mount by index number
+LOAD "tpi:03"             : REM mount by index number (two digits or more)
 LOAD "tpi:myrom.rom"      : REM mount a ROM image; then LOAD "" runs the ROM loader
 LOAD "tpi:game.dck"       : REM mount a cartridge; then LOAD "" runs the cartridge loader
 LOAD "tpi:dirinfo.tap"    : REM mount the folder listing as a tape (see below)
@@ -2245,8 +2258,24 @@ the next one.
 
 ### D BREAK - CONT repeats after a SAVE "f:..."
 
-**Fix.** SAVE again and press **Y** at `Replace? (Y/N)`.
-**Likely cause.** You answered something other than **Y**. The file is untouched.
+**Fix.** SAVE again and press **Y** at `Replace? (Y/N)`, and **ENTER** at `Start tape`.
+**Likely cause.** You answered something other than **Y**, or SPACE was still down when the save
+started (SPACE is BREAK to the tape routines). The file is untouched.
+
+### L BREAK into program just after a program caught BREAK
+
+**Fix.** Make the program wait until the keys are let go. At the line your `ON ERR GO TO`
+jumps to (here 100), set the trap again and wait for the keyboard to go quiet:
+
+```basic
+100 ON ERR GO TO 100
+110 IF INKEY$<>"" THEN GO TO 110
+120 PAUSE 25: ON ERR RESET
+```
+
+**Likely cause.** The program caught the **D** from **BREAK** and carried on while CAPS SHIFT
+and SPACE were still down. The 2068 checks for BREAK between statements, so the next one stops
+with **L BREAK into program**, or the next TS-Pico command gives **D** again.
 
 ### F on a SAVE
 
@@ -2260,12 +2289,12 @@ the next one.
 **Likely cause.** `LOAD "tpi:dir"` is version 1.1's command; it now tries to mount a file
 called `dir`.
 
-### 8 End of file on a LOAD
+### R Tape loading error after a LOAD shows other names
 
 **Fix.** Check the name with `CAT ""`.
 **Fallback.** Mount the TAP that holds the program.
 **Likely cause.** Nothing on the mounted tape matches what you asked for. LOAD has already gone
-all the way round the tape (4.1).
+all the way round the tape (4.1), showing the name of each block it passed.
 
 ### A mounted file can't be erased or renamed
 
@@ -2279,13 +2308,22 @@ mounted`).
 **Fallback.** Go into another folder and back.
 **Likely cause.** The file was copied onto the card from a computer after the last listing.
 
-### The screen is garbled with coloured stripes at switch-on, and TS Reset doesn't help
+### The screen is garbled with colored stripes at switch-on, and TS Reset doesn't help
 
 **Fix.** If you'd been trying out a ROM with `tpi:boot`, switch off and on twice to get back to
 the standard ROM.
 **Fallback.** If the standard ROM (slot 1) itself is damaged, boot another slot and write it back
 from the SD card (Appendix A).
 **Likely cause.** The 2068 isn't getting a good ROM from the BOOT slot.
+
+### A cartridge starts every time the 2068 does
+
+**Fix.** Hold down **D** while you switch on or press **TS Reset**, until the copyright message
+appears. The 2068 starts in BASIC.
+**Fallback.** Put the Spectrum ROM back in the dock: `SAVE "tpi:dock" CODE 2,0`. If the cartridge
+is back after every switch-on, check `DCK_SLOT` in `config.ini` (Appendix D).
+**Likely cause.** The cartridge's slot is in the dock, from `tpi:dock`, from the DCK Loader or
+from `DCK_SLOT`.
 
 <!-- v2 -->
 ### The Pico doesn't show up on your computer's USB
@@ -2414,7 +2452,7 @@ To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1: NEW`. You can
 
 ## A.5 If slot 1 gets damaged
 
-If the 2068 starts with coloured stripes and TS Reset doesn't help, but another slot boots, you
+If the 2068 starts with colored stripes and TS Reset doesn't help, but another slot boots, you
 can put the standard ROM back from the SD card:
 
 1. Copy the ROM file, `TSPICO-23.ROM`, to the card's `TAP` folder. It's in the release
@@ -2517,7 +2555,7 @@ boot it from there (8.5).
 
 ## A.5 If slot 1 gets damaged
 
-If the 2068 starts with coloured stripes and TS Reset doesn't help, the ROM in slot 1 may be
+If the 2068 starts with colored stripes and TS Reset doesn't help, the ROM in slot 1 may be
 damaged. Run the web updater (A.2): it always rewrites slots 0 and 1. Or, if another slot
 boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`), into
 **Flash(2)** slot **1** as in A.4, and confirm that you're sure.
@@ -2542,7 +2580,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **2 Variable not found** | A string variable in a keyword's argument doesn't exist |
 | **4 Out of memory** | No room to build a command, or for another open file |
 | **6 Number too big** | A file index out of range |
-| **8 End of file** | Read past the end; nothing matched on the tape; the folder already exists (`tpi:md`) |
+| **8 End of file** | Read past the end; the folder already exists (`tpi:md`) |
 | **A Invalid argument** | A `CODE a,b` or argument the command doesn't accept; an empty program SAVE |
 | **C Nonsense in BASIC** | An unknown `tpi:` word; a command not yet implemented; extra words after an argument; a `tpi:` name longer than 31 characters (1.2) |
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or declined "Replace?" |
@@ -2550,7 +2588,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **J Invalid I/O device** | The TS-Pico didn't answer, or an SD card that won't mount |
 | **O Invalid stream** | OPEN # of a stream that's already open to a file |
 | **Q Parameter error** | Can't be done right now: mounted, not empty, wrong mode, wrong type, too long, booted slot |
-| **R Tape loading error** | Data damaged in transit, or a damaged TAP or file |
+| **R Tape loading error** | Data damaged in transit; a damaged TAP or file; nothing on the tape matched a LOAD |
 | **T TS-Pico reset, try again** | The TS-Pico reset a transfer that went wrong. Try again. |
 
 ---
@@ -2573,7 +2611,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Delete a file | `ERASE "a"` | `SAVE "tpi:erase a"` |
 | Delete matching files | `ERASE "*.bak"` | `SAVE "tpi:erase *.bak"` |
 | New empty TAP | `FORMAT "x.tap"` | `SAVE "tpi:format x.tap"` |
-| Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:3"` |
+| Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:03"` |
 | Pick a file to mount |  | `SAVE "tpi:idir"` |
 | Unmount |  | `SAVE "tpi:close"` |
 | Your own `LOAD ""` at switch-on |  | `SAVE "tpi:automount menu.tap"` |
@@ -2595,6 +2633,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Boot a ROM slot |  | `SAVE "tpi:boot" CODE 2,s` |
 <!-- /v3 -->
 | Dock a slot |  | `SAVE "tpi:dock" CODE 2,s` |
+| Start without the docked cartridge |  | hold **D** at switch-on or **TS Reset** |
 | Spectrum mode |  | `SAVE "tpi:zx48"`, then `OUT 244,3` |
 <!-- v3 -->
 | Modem state and mode |  | `SAVE "tpi:modem"`, `SAVE "tpi:modem 2050"` |
@@ -2691,9 +2730,12 @@ decided to learn MicroPython on the new Raspberry Pi Pico. His friend **Gustavo 
 developed the "tpi" system back in 1985, and adapted it for the TS-Pico. Ricardo
 contacted **David Anderson**, who hosted international Zoom meetings for Timex Sinclair fans
 and introduced Ricardo to **Tim H** of New Zealand and **Jeff Burrell** of the United States,
-who designed the hardware. **Ryan Gray** joined the team to work on the firmware and additional features.
+who designed the hardware. **Ryan Gray** joined the team to work on the firmware: he added the
+TS-Pico Commander, the help files and the test programs, and contributes to the MicroPython source.
+**Joe Vandezande** designed the 3D-printed enclosures for the TS-Pico, the PicoVideo and the
+expansion bus board, and helps with testing and troubleshooting.
 
-Thanks to **Paul Anderson**, **David Green** and **Adam Trionfo** for beta testing.
+Thanks to **Paul Anderson**, **David Green**, **François Lanciault** and **Adam Trionfo** for beta testing.
 
 Special thanks to the people of Timex Computer Corporation; to Johan "Dr Beep" Koelman, whose
 PC-ZX interface inspired the TS-Pico; to the members of the TS2068 list at groups.io and the
@@ -2717,7 +2759,7 @@ that are still running, reached by telnet, or your own.
 
 ## F.1 How it works
 
-The 2050 was a 300-baud modem. Programs drove it through ports 115 and 119, dialled by pulsing
+The 2050 was a 300-baud modem. Programs drove it through ports 115 and 119, dialed by pulsing
 the line, and watched for the carrier. The card answers those ports the same way. When a
 program dials, the card looks the number up in the modem's **phonebook**, where you have
 written the host it stands for, and connects. When the host hangs up, the program sees the
@@ -2747,7 +2789,7 @@ It shows `Status 133`. Turn on **CAPS LOCK**; type each command and press **ENTE
 1. `ATW"yournetwork,yourpassword"` joins your WiFi. The modem answers `OK` after a few seconds.
 2. `AT&W` saves it. (The first time, the modem may print a line starting `[E]` before `OK`. That
    is harmless.)
-3. `ATP"1234=bbs.example.com:23,MY BBS"` writes a phonebook entry: dialling **1234** reaches
+3. `ATP"1234=bbs.example.com:23,MY BBS"` writes a phonebook entry: dialing **1234** reaches
    that host and port. Add as many as you like, each with its own number. `ATP` on its own lists
    them.
 4. `ATI` shows the modem's state, including the WiFi network.
@@ -2761,11 +2803,11 @@ SAVE "tpi:modem 2050"
 You can also try a host in Hayes mode before giving it a number: `ATDT"bbs.example.com:23"`
 connects, and the host's text appears.
 
-## F.3 Dialling with MTERM
+## F.3 Dialing with MTERM
 
 1. Load MTERM from the SD card and start it.
 2. Use its dial command and enter a phonebook number, for example **1234**. MTERM dials it
-   (you'll hear nothing: the card listens to the dialling), waits for the carrier and connects.
+   (you'll hear nothing: the card listens to the dialing), waits for the carrier and connects.
 3. Many hosts wait for you before they say anything: press **ENTER**, or **ENTER** twice, as
    MTERM's own manual suggests.
 4. To finish, hang up with MTERM's own command. If the host hangs up first, MTERM notices that
@@ -2839,7 +2881,7 @@ can fall behind the modem. The card holds 16 KB; past that, characters are lost.
 modem `ATF1` (XON/XOFF flow control), then `SAVE "tpi:modem flow on"`, and dial with an X
 after the D or DT, for example `ATDTX"bbs.example.com:23"`. The card then sends the modem XOFF
 (character 19) when its store is half full, and XON (17) once the program has read it down.
-The modem obeys them only on a call dialled with the X; on any other call it passes them on
+The modem obeys them only on a call dialed with the X; on any other call it passes them on
 to the host as data. On an X call the modem also takes any 19 or 17 the program sends as
 XOFF or XON, so don't send binary data that contains them. `SAVE "tpi:modem flow off"` turns
 it off again.
@@ -2978,7 +3020,7 @@ those ports.
 The SP0256-AL2's ROM is copyright Microchip Technology Inc., which retains the rights to the
 algorithms and data it contains, and allows its distribution with this acknowledgment. The
 chip is recreated by MAME's SP0256 emulation (Joseph Zbiciak and Tim Lindner, BSD-3-Clause
-licence). The spelling-to-sound rules are the US Naval Research Laboratory's (NRL Report
+license). The spelling-to-sound rules are the US Naval Research Laboratory's (NRL Report
 7948, 1976), as John A. Wasser coded them in 1985; both are public domain. The details are in
 the `NOTICE` file on the project's GitHub.
 

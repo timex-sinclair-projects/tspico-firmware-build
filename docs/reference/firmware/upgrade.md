@@ -306,7 +306,7 @@ comes back on both paths.
 Wait, at most `ms`, for the Z80 to read what is left in TX; returns whether
 TX is empty. Called by `serve` after an `'X'` with 200 ms, before it
 re-arms the tape: `ZX_ARM` begins with `ZX_FLUSH_TX`, and if the 1-byte
-`'S'` acknowledgement were flushed before the Z80's `IN`, that `IN` would
+`'S'` acknowledgment were flushed before the Z80's `IN`, that `IN` would
 take the tape's first byte instead and the next `LOAD ""` would start one
 byte in *(inferred)*.
 
@@ -343,9 +343,9 @@ Then, by what `w` is:
 1. **A port-0Eh write** (`not w & PORT_0F`):
    - `w == 0x4C`, the Spectrum ROM's `'L'`. Its bytes are already queued, so
      the only action is `MQX(MQ, "mov(y, invert(null))")`, READY, for a
-     board that already has the customised ZX ROM in slot 0: it waits for READY
+     board that already has the customized ZX ROM in slot 0: it waits for READY
      after `'L'` ([../rom/zx48.md](../rom/zx48.md)), the original does not
-     look. (An older customised ZX ROM cannot run the upgrade: its `WAIT_RDY` counts in D and
+     look. (An older customized ZX ROM cannot run the upgrade: its `WAIT_RDY` counts in D and
      breaks every LOAD, [PATCH_ZX48_HANDSHAKE.md](../../rom-analysis/PATCH_ZX48_HANDSHAKE.md).)
      In service mode an `'L'` means the 2068 was reset and `LOAD ""` typed
      again: `service = False`, `pos = ZX_ARM(...)`, `report("tape",
@@ -398,7 +398,7 @@ Beware:
 
 What the tests pin: `upgrade_hosttest.py` runs this function against a
 scripted LD-BYTES and then the real `updater.bin` in `z80core`, with and
-without the P10 jumper, and once with the customised ZX ROM's READY wait after `'L'`;
+without the P10 jumper, and once with the customized ZX ROM's READY wait after `'L'`;
 it checks the lines `waiting, tape, updater, P 1 ... 192 W ... D`, the
 flash's final contents, and that after `X 2` TX holds the tape's first four
 bytes again. Since 2026-10-06 it runs the whole upgrade once more with every
@@ -802,7 +802,7 @@ text (rows 16–17) appears below the bars.
 
 The page shows its own wording for the same reasons (`ROM_FAIL` in
 `app.js`); `updater_hosttest.py` reads rows 16, 17 and 21 back off the
-modelled screen through the font copy.
+modeled screen through the font copy.
 
 ### The variables
 
@@ -1101,5 +1101,5 @@ the 2068 on, and to leave P10 fitted.
 The README still lists an end-to-end hardware pass on a 1.1 board, among
 others, on macOS and Windows, as to do; the repo's own record of the
 updater on a board is the harness that proved the tape path on a real
-flash chip. Nothing in this chapter about the page's behaviour on a real board
+flash chip. Nothing in this chapter about the page's behavior on a real board
 goes beyond what the code says *(unverified)*.

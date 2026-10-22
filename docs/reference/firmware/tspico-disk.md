@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, MOVE, ERASE, FORMAT, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2616–3451.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2628–3466.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -23,14 +23,14 @@ module's patches.
 
 | Lines | What | Chapter |
 |---|---|---|
-| 2616–2695 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
-| 2704–2803 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 2806–3100 | `DISK_COPY` … `DISK_REN_WORK` — MOVE, ERASE, FORMAT and `tpi:ren` | here |
-| 3110–3113 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3116–3222 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3236–3263 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3266–3298 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3301–3451 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2628–2707 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
+| 2716–2815 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
+| 2818–3112 | `DISK_COPY` … `DISK_REN_WORK` — MOVE, ERASE, FORMAT and `tpi:ren` | here |
+| 3122–3125 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 3128–3237 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 3251–3278 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3281–3313 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3316–3466 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -131,7 +131,7 @@ implementation behind CAT x$ and `SAVE "tpi:dir x"` (spec
 3. In `finally`: `DEACTIVATE_SD()`, `ACTIVATE_MQ()`. The bus state machine is
    rebuilt with Y = BUSY and an empty TX FIFO.
 4. Status 1: `SEND_MSG2(CAT_COLOUR(msg), 1, False, True)` — function 86h,
-   the listing in CAT's colours, keywords not expanded, paged with "Scroll?".
+   the listing in CAT's colors, keywords not expanded, paged with "Scroll?".
    Any other status: the message is logged (level 1) and `SEND_MSG(msg, arg,
    st)` answers with the status byte, or with function 81h and
    `msg`, CR, `arg` when VERBOSE is on.
@@ -193,7 +193,7 @@ Builds the listing text for `CATALOG`. The SD card must be active. Returns
 Names pass through `xstr` ([tspico-files.md](tspico-files.md)), which is
 `catalog.screen_name`: a character the 2068 cannot print or type becomes
 `?`. The rows carry no CR: the 32-column screen wraps them, and
-`CAT_COLOUR` recognises the layout by the `Path:` prefix and the 128-byte
+`CAT_COLOUR` recognizes the layout by the `Path:` prefix and the 128-byte
 header. A TAP listing starts `File:` and goes through `CAT_COLOUR`
 unchanged.
 
@@ -208,7 +208,7 @@ the parent unindexed.
 
 ## MOVE, ERASE, FORMAT and tpi:ren
 
-The comment at line 2821 states the rules all four share: paths resolve
+The comment at line 2833 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -297,8 +297,8 @@ a pattern (a Y/N prompt each), or an empty directory (`dir/`).
 
 The order — list, then ask, then erase — is forced by the pins: the card
 and the 2068 link cannot be active at once, so the whole prompt exchange
-happens between two SD sessions (spec §3, "Why N stops instead of
-skipping"). Pinned by `disk_cmds_hosttest.py` (`test_erase`): a file goes
+happens between two SD sessions (spec §3, "N skips, like any key but
+Y"). Pinned by `disk_cmds_hosttest.py` (`test_erase`): a file goes
 with no prompt and a `SEND_MSG` answer; missing F; a directory without `/`
 Q and kept; a non-empty directory Q; an empty directory (bar `dirinfo.tap`)
 removed and dropped from `alldirs`; the current directory's parent Q; the
@@ -407,7 +407,7 @@ itself Q, the mounted file Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3103 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 3115 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -439,7 +439,10 @@ the SAVE or LOAD that follows in the same session.
    `Y` if unprintable), a CR and 03h. `refuse` becomes true for
    any key but `Y`/`y`. The function returns without another `SEND_MSG`:
    the 88h exchange's status was the command's answer. A new file:
-   `SEND_MSG("Saving to <public>", "", 1)`.
+   `SEND_MSG("Saving to <public>", "", 1)`, except for a SCREEN$ (`mod ==
+   MOD_SCREEN`), which gets `SEND_STATUS(1)`: the bare status, even with
+   VERBOSE on, because a line printed now would be saved in the picture
+   (#314).
 3. **LOAD, VERIFY, MERGE (op 1–3).** `SD_CALL(NATIVE_LOAD_PREP, path, op,
    mod)` returns the one-shot tape's length or an error (logged, sent). The
    arm is `dict(op=op, session=session, tap=NATIVE_TAP, totlen=res)` and
@@ -459,8 +462,12 @@ prompt on the main screen would be in the picture (spec §4a, PROTOCOL
 prompt is cut to 31 characters so that it and the key echo fit one
 lower-screen line. `TPI:FOPEN` is in `SD_QUIET`, so a missing card gets
 the bare status J; the handler itself answers with `SEND_MSG`, which prints
-when VERBOSE is on, and that is harmless here because SAVE and LOAD are not
-inside PRINT # or INPUT #.
+when VERBOSE is on. That is harmless for the channel reason (SAVE and LOAD
+are not inside PRINT # or INPUT #), but not for a SCREEN$ save, whose
+picture is the screen: until #314 a new SCREEN$ file was saved with
+`Saving to <path>` across its top line when VERBOSE was on. Hence
+`SEND_STATUS` for that case. `LOAD "f:x" SCREEN$`'s `Loading <path>` is
+left as it is: the picture it loads covers it.
 
 Beware: the arm is set before the prompt, so a BREAK at the prompt
 (`CmdAbort` out of `SEND_MSG_PROMPT_YN`) leaves `TSP.native` armed with
@@ -468,7 +475,9 @@ Beware: the arm is set before the prompt, so a BREAK at the prompt
 session follows, and the next SAVE or LOAD of any other session drops it.
 
 Pinned by `disk_cmds_hosttest.py` (`test_native_open`): a new file arms
-`op=0` for the session; an existing file asks `Replace advent.tap? (Y/N)`
+`op=0` for the session; a new SCREEN$ file arms it too and answers with
+`SEND_STATUS` alone even with VERBOSE on, while another new file still
+says `Saving to` (#314); an existing file asks `Replace advent.tap? (Y/N)`
 on the lower screen and Y arms to overwrite, N to refuse; a long name is
 cut to fit; a directory Q; no such directory, a name FAT can't hold, no
 name F, nothing armed; the mounted file Q; a +3DOS program arms a one-shot
@@ -521,7 +530,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
 
-The comment at line 3225 lists the four commands. The ROM's channel driver
+The comment at line 3240 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -623,7 +632,7 @@ in the command text (the body must be text, and 9 + 128 characters stay
 under the 256-byte command). The pairs are decoded with `int(.., 16)`; a
 bad digit is `CH_REPLY(5)` (C) and nothing is written.
 `CH_CALL(CHANNELS.write, stream, data)` mounts the card, stores the bytes
-at the stream's position with the TAB escape (23, lo, hi) honoured and
+at the stream's position with the TAB escape (23, lo, hi) honored and
 text translated, and gives the card back; a stream that is not open is
 `O` → J, `TAB 0` followed by data or a record overrun `Q`.
 `CH_REPLY(st)`. Output to a read stream is accepted and dropped — INPUT #'s
@@ -680,7 +689,7 @@ so: `CH_CALL(CHANNELS.close, stream)`, which mounts the card; an error
 (no card: J; an SD error: F) is logged and sent, and the stream stays in
 `CHANNELS`.
 
-The long comment at line 3413 is the history. When channels arrived (#83)
+The long comment at line 3428 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

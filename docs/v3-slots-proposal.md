@@ -98,7 +98,7 @@ These are the same commands, refusals and `config.ini` handling as v2.
 `board_v3.map_slots(rom_sm, bank_sm)` compares the new words with what is
 loaded:
 - **The ROM changed:** `tsbus.switch(home=, exrom=)`. The 2068 is held
-  200 ms and starts cleanly in the new ROM. That's a **behaviour change**
+  200 ms and starts cleanly in the new ROM. That's a **behavior change**
   from v2, which switches under the running Z80. (Decision 2.)
 - **Only the dock changed:** `tsbus.switch(dock=)`, live, as v2.
 - **An empty boot slot** is refused, Report F, before anything changes, so
@@ -110,7 +110,7 @@ loaded:
 ### Writes into the dock
 
 `tsbus` stores every Z80 write that lands in a dock-mapped chunk in the
-DOCK image. Two v2 behaviours follow from that, and step 2 matches them
+DOCK image. Two v2 behaviors follow from that, and step 2 matches them
 (agreed 2026-10-10):
 - **A flash dock is read-only.** v2's flash chip ignores the Z80's writes,
   so a program can't alter a cartridge such as Flight Simulator in slot

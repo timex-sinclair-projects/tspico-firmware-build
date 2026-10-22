@@ -188,7 +188,7 @@ everywhere (the middle replaced by `>`). Every name goes through
 20 plus `>` — 1 + 21 + 10. A file: `"%s %-18s%10s"` — a three-digit index
 or three spaces, a space, the name shortened to 18, `size_text` in 10. The
 caller (`CATALOG_TEXT`) puts `DIR_HEADER`'s four rows in front;
-`CAT_COLOUR` recognises the rows by their first characters (`<`, three
+`CAT_COLOUR` recognizes the rows by their first characters (`<`, three
 digits, four spaces). Pinned: dirs, indexed and unindexed files; every row
 32 characters; `{x}.TAP` shown as `?x?.TAP`.
 
