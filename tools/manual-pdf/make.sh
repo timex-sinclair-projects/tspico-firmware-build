@@ -22,7 +22,8 @@
 #
 #   user-manual-print-interior.pdf   the manual without its cover, 5.5 x 8.5
 #                                    in, an even number of pages: the
-#                                    interior for both
+#                                    interior for both, with a wider inside
+#                                    margin for the binding (GUTTER=0.8 in)
 #   user-manual-kdp-cover.pdf        back, spine and front on one sheet with
 #                                    0.125 in of bleed all round; the spine
 #                                    is the page count times KDP's paper
@@ -44,7 +45,8 @@
 # path if it isn't found), and Python 3 with pypdf. The version on the cover
 # and in the page headers comes from src/config.ini; the date is the month of
 # the last commit. The heading and cover fonts (Arvo, Inter, Poppins; SIL OFL)
-# are in fonts/; CI (build.yml, release.yml) installs the Linux fonts the
+# and the code font (Timex TS2068; CC BY 3.0, credited in the colophon) are in
+# fonts/; CI (build.yml, release.yml) installs the Linux fonts the
 # stylesheets fall back to for the rest: Charis SIL, Nimbus Sans, DejaVu Sans
 # Mono.
 set -e
@@ -87,12 +89,23 @@ fill() {
       "$HERE/$1" > "$WORK/$1"
 }
 for f in print.css cover.css front.html back.html mask.html; do fill $f; done
+# A perfect-bound paperback loses some of the inside margin into the spine,
+# so the print interior gets a wider gutter (GUTTER, inches; 0.8 by default
+# against the reading PDF's 0.62) and a slightly narrower outside margin.
+if [ -n "$PRINT" ]; then
+  GUTTER="${GUTTER:-0.8}"
+  sed -i.bak -e "s|^@page :left  { margin-left: 0.5in;  margin-right: 0.62in; }|@page :left  { margin-left: 0.45in; margin-right: ${GUTTER}in; }|" \
+             -e "s|^@page :right { margin-left: 0.62in; margin-right: 0.5in; }|@page :right { margin-left: ${GUTTER}in; margin-right: 0.45in; }|" \
+             "$WORK/print.css"
+  grep -q "margin-right: ${GUTTER}in" "$WORK/print.css" || { echo "GUTTER: print.css margins not found" >&2; exit 1; }
+fi
 cp -R "$HERE/img" "$WORK/img"
 
 if pandoc --help | grep -q -- --embed-resources; then EMBED=--embed-resources; else EMBED=--self-contained; fi
 python3 "$REPO/tools/manual-variants.py" "$BOARD" "$REPO/docs/manual/user-manual.md" "$WORK/user-manual.md"
 pandoc "$WORK/user-manual.md" -f gfm -t html5 --standalone --section-divs $EMBED \
        --resource-path="$REPO/docs/manual" --metadata pagetitle="$TITLE" \
+       --lua-filter "$HERE/manual.lua" \
        --css "$WORK/print.css" -o "$WORK/manual.html"
 
 # The rest (title page, contents, chapter openers on right-hand pages, the

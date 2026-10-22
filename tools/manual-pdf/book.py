@@ -127,6 +127,7 @@ def build(blanks, pages):
   <p><b>%s</b>, version %s (ROM %s, firmware %s), %s.</p>
   <p>© 2021–2026 the TS-Pico team. This manual is licensed under the Creative Commons
   Attribution 4.0 International licence (CC BY 4.0).</p>
+  <p>Code is set in Timex TS2068 by jonnybgood (FontStruct), licensed CC BY 3.0.</p>
   <p>Timex, Sinclair and Timex Sinclair are trademarks of their respective owners. The TS-Pico
   is a community project, not a product of Timex Computer Corporation or Sinclair Research.</p>
   <p>Website: timex-sinclair-projects.github.io/tspico-firmware-build<br>
@@ -247,9 +248,11 @@ if not os.environ.get("PRINT"):
     sys.exit(0)
 
 # For printing on demand ($PRINT set): the interior, the manual without the
-# cover, padded to an even page count, the same for both printers (its 0.62
-# in inside margin is what Lulu recommends for a 61-150 page paperback and
-# KDP's minimum is 0.375 in; coil needs no gutter); and a cover for each,
+# cover, padded to an even page count, the same for both printers (make.sh
+# widens its inside margin to GUTTER, 0.8 in by default: the KDP proof's
+# perfect binding swallowed too much of the reading PDF's 0.62 in, which is
+# Lulu's minimum for 61-150 pages; KDP's is 0.375 in, and coil needs no
+# gutter, so the extra room costs the coil book nothing); and a cover for each,
 # one sheet: bleed, back, spine, front, bleed, 0.125 in of bleed all round
 # (the cover art runs out to it). Lulu's coil cover has no spine; KDP's
 # spine is the page count times the paper's thickness, and KDP puts the
