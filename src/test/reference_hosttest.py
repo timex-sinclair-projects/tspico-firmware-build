@@ -117,6 +117,7 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "tools/sp0256-port.py",
     "tools/speech-rules.py",
     ".github/workflows/build.yml",
+    ".github/workflows/manual.yml",
     ".github/workflows/release.yml",
 )
 

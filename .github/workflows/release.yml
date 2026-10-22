@@ -394,7 +394,7 @@ jobs:
           cp esp32/zimodem/out/zimodem-v3.bin "$RUNNER_TEMP/zimodem-v3.bin"
 
       # The user manual as PDFs (tools/manual-pdf/make.sh, also built by
-      # build.yml on every push): the half-letter one-up for reading and the
+      # manual.yml on pushes that touch the manual): the half-letter one-up for reading and the
       # saddle-stitch booklet imposed on letter, both from the manual at the tag.
       - name: Install pandoc, the PDF fonts and pypdf
         timeout-minutes: 10
