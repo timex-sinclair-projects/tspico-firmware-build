@@ -388,9 +388,11 @@ printing on demand, uploaded as `tspico-manual-print` and taken from there
 by hand to Amazon KDP (paperback) and Lulu (coil bound, which lies flat;
 run locally with no output folder, `make.sh` puts them on the Desktop):
 `user-manual-print-interior.pdf`, the one-up without its cover padded to an
-even page count, the interior for both (its 0.62 in inside margin is Lulu's
-recommendation for a 61 to 150 page paperback, KDP's minimum is 0.375 in,
-and coil needs no gutter); `user-manual-kdp-cover.pdf`, back, spine and front
+even page count, the interior for both, printed with a wider inside margin
+than the reading PDF (`GUTTER`, 0.8 in by default against 0.62 in, and 0.45
+in outside against 0.5: the KDP proof's perfect binding swallowed too much
+of 0.62 in, which is Lulu's minimum for a 61 to 150 page paperback; KDP's
+is 0.375 in, and coil needs no gutter); `user-manual-kdp-cover.pdf`, back, spine and front
 on one sheet with 0.125 in of bleed all round, the spine the page count
 times KDP's paper thickness (`PAPER=white`, the default, or `cream`), and
 the back cover's links raised out of the corner where KDP prints the

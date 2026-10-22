@@ -248,9 +248,11 @@ if not os.environ.get("PRINT"):
     sys.exit(0)
 
 # For printing on demand ($PRINT set): the interior, the manual without the
-# cover, padded to an even page count, the same for both printers (its 0.62
-# in inside margin is what Lulu recommends for a 61-150 page paperback and
-# KDP's minimum is 0.375 in; coil needs no gutter); and a cover for each,
+# cover, padded to an even page count, the same for both printers (make.sh
+# widens its inside margin to GUTTER, 0.8 in by default: the KDP proof's
+# perfect binding swallowed too much of the reading PDF's 0.62 in, which is
+# Lulu's minimum for 61-150 pages; KDP's is 0.375 in, and coil needs no
+# gutter, so the extra room costs the coil book nothing); and a cover for each,
 # one sheet: bleed, back, spine, front, bleed, 0.125 in of bleed all round
 # (the cover art runs out to it). Lulu's coil cover has no spine; KDP's
 # spine is the page count times the paper's thickness, and KDP puts the
