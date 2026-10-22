@@ -98,6 +98,7 @@ th { white-space: nowrap; font-family: var(--slab); font-weight: 700; font-size:
 tr { break-inside: avoid; }
 thead { display: table-header-group; }
 img { max-width: min(100%, 3.3in); height: auto; display: block; margin: .5em auto; break-inside: avoid; }
+img.wide { max-width: 100%; width: 100%; }   /* manual.lua: drawings with small labels */
 figure { margin: .7em 0; break-inside: avoid; }
 figcaption { font-size: 7.8pt; color: #444; text-align: center; font-style: italic; }
 hr { border: 0; border-top: .5pt solid #bbb; }
