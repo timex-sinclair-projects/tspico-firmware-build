@@ -14,8 +14,8 @@ v3 card's passages are left out until the card is released. The copies are
 generated, never committed (.gitignore), and the docs stay where they are:
 GitHub renders them as before.
 
-Each page gets front matter (the site's `page` layout, its first heading as
-the title, Liquid off) and a line saying where it comes from. Its links are
+Each page gets front matter (the site's `page` layout, `doc: true` for the
+slash over the title, its first heading as the title, Liquid off) and a line saying where it comes from. Its links are
 rewritten for the site:
 
   * a link to another published doc becomes a link to its page (.md -> .html,
@@ -160,7 +160,7 @@ def convert(text, repo_md, pages):
     # An explicit permalink: the site's own `permalink: /updates/:title/` would
     # otherwise turn every page into a folder, and these links name .html files.
     link = "/" + (site_md[:-len("index.md")] if site_md.endswith("index.md") else html_of(site_md))
-    front = ["---", "layout: page", "title: %s" % yaml_str(title), "permalink: %s" % link,
+    front = ["---", "layout: page", "doc: true", "title: %s" % yaml_str(title), "permalink: %s" % link,
              "render_with_liquid: false", "---", ""]
     note = ("<p class=\"doc-source\">From <a href=\"%s/blob/%s/%s\"><code>%s</code></a> on GitHub, "
             "as it is on <code>%s</code>.</p>" % (GITHUB, BRANCH, repo_md, repo_md, BRANCH))

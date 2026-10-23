@@ -2,6 +2,7 @@
 layout: page
 title: Documentation
 lang: en
+doc: true
 description: The TS-Pico user manual, the programmer's manual and the programmer's reference.
 ---
 

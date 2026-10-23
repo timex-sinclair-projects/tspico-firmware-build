@@ -2,6 +2,7 @@
 layout: default
 ---
 <article class="wrap page">
+  {% if page.doc %}<div class="slash" aria-hidden="true"></div>{% endif %}
   {% if page.title %}<h1 class="page-title">{{ page.title }}</h1>{% endif %}
   {{ content }}
 </article>

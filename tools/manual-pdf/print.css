@@ -44,8 +44,13 @@ h3 { font-size: 11pt; margin: 1.1em 0 .25em; }
 h4 { font-size: 10pt; font-style: italic; margin: .9em 0 .25em; }
 h2 .secnum, h3 .secnum { color: var(--grey); font-weight: 700; margin-right: .3em; }
 
-/* Chapter opener: title and number on a heavy rule, then the preview */
+/* Chapter opener: the slash, title and number on a heavy rule, then the preview.
+   The slash is the docs' mark, the same four bars over every doc page's title
+   on the website (site/assets/css/style.css) */
 .opener { margin: .15in 0 .3in; break-after: avoid; }
+.opener::before { content: ""; display: block; width: .6in; height: 4pt; margin: 0 0 .1in 2pt;
+  transform: skewX(-30deg); -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  background: linear-gradient(90deg, #e2322d 0 25%, #f2b51d 25% 50%, #3aa93f 50% 75%, #2ba6de 75% 100%); }
 .opener .top { display: flex; align-items: flex-end; gap: .2in; padding-bottom: .1in;
   border-bottom: 4.5pt solid var(--rule); }
 .opener h1 { flex: 1; margin: 0; font-family: var(--display); font-weight: 800; font-style: italic; font-size: 24pt;
