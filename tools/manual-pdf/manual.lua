@@ -14,6 +14,20 @@
 --    and pictures, which never break anyway; a list or table only joins its
 --    lead-in when it's short, so a long one can still run over a page.
 
+-- 3. Pictures that need the full text width: the board drawing, whose jumper
+--    labels are too small to read at the usual 3.3 in. They get class "wide"
+--    (print.css); --embed-resources turns src into data, so the class has to
+--    go on here.
+
+local WIDE = { ["tspico-board.svg"] = true }
+
+function Image(img)
+  if WIDE[img.src:match("[^/]+$")] then
+    img.classes:insert("wide")
+    return img
+  end
+end
+
 local WIDTH = 32
 
 local function utf8_chars(s)

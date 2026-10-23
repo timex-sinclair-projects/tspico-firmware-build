@@ -369,7 +369,9 @@ one board's manual from `docs/manual/user-manual.md`
 the published manual), turns it into HTML with pandoc and
 `tools/manual-pdf/manual.lua` (program listings laid out as the 2068 lists
 them: line numbers in four columns, every line cut at 32; and a lead-in
-paragraph kept on one page with the code, picture or short list after it), and
+paragraph kept on one page with the code, picture or short list after it;
+and the board drawing printed at the full text width, not the usual 3.3 in,
+so its jumper labels can be read), and
 `tools/manual-pdf/book.py` adds the title page, contents and chapter
 openers, prints the manual and the two covers with the runner's Chrome, and
 assembles the half-letter one-up (cover + manual) and the saddle-stitch
