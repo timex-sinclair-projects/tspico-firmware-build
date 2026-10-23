@@ -7,6 +7,7 @@ Source: [`src/main.py`](../../../src/main.py) (all of it),
 [`tools/check-core1-ram.py`](../../../tools/check-core1-ram.py),
 [`src/build-dev-mpy.sh`](../../../src/build-dev-mpy.sh),
 [`.github/workflows/build.yml`](../../../.github/workflows/build.yml),
+[`.github/workflows/manual.yml`](../../../.github/workflows/manual.yml),
 [`.github/workflows/release.yml`](../../../.github/workflows/release.yml),
 [`flash/manifest.json`](../../../flash/manifest.json),
 [`tools/build-flash.py`](../../../tools/build-flash.py).
@@ -32,7 +33,8 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
 | `tools/check-core1-ram.py` | `build-v3`'s check that the v3 card's core 1 never touches flash, from the linked ELF |
-| `.github/workflows/build.yml` | every push: tests, ROM checks, the two v2 UF2s, the v3 UF2, the user manual PDFs (and the v3 card's), artifacts |
+| `.github/workflows/build.yml` | every push that touches the firmware's inputs, and weekly on `main`: tests, ROM checks, the two v2 UF2s, the v3 UF2, artifacts |
+| `.github/workflows/manual.yml` | every push that touches the user manual: the manual PDFs (and the v3 card's) |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
 | `tools/pico-serial.py` | the USB console from a shell |
@@ -275,8 +277,21 @@ boot. That is why the overrides and the assets live at the root and in
 
 ## CI: `build.yml`
 
-Runs on every push to any branch, on pull requests to `main`, and by hand;
-Ubuntu 22.04. The steps, in order:
+Runs on pushes to any branch and pull requests to `main` that touch
+something the build reads, every Monday on `main`, and by hand; Ubuntu
+22.04. "Something the build reads" is every path except the ones the
+`paths` filter negates: `site/`, `promo/`, `archive/`, `esp32/` and
+`windows-updater/` (which have workflows of their own), the root and
+`docs/` Markdown, `.claude/`, the release notes, and the user manual and
+its tools, which `manual.yml` builds. `docs/manual/examples/` (tested in
+step 5), `docs/reference/` (step 3) and `docs/rom-analysis/` (step 6) are
+read by the build and stay in. Until 2026-10 it ran on every push, and the
+Actions storage and runner time that cost are why it doesn't. The weekly run
+exists for Pages: the `main/` channel takes the newest green `main` build
+whose `tspico-firmware-uf2` hasn't expired, and without it a month of
+docs-only commits would leave none. A branch whose head commit was
+docs-only has no run for that commit; `pico-serial.py flash --branch`
+says so (below). The steps, in order:
 
 1. **Build tools**: `git`, `build-essential`, `cmake`,
    `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi`, `python3` from apt.
@@ -292,7 +307,8 @@ Ubuntu 22.04. The steps, in order:
 3. **Host tests**: 43 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
-   ([README](../README.md#keeping-it-current)). They pin invariants that
+   ([README](../README.md#keeping-it-current)); the manual's
+   `manual_variants_hosttest.py` runs in `manual.yml` instead. They pin invariants that
    used to be checked only by flashing a UF2; they do not observe the Z80
    bus.
 4. **The flash manifest**: `tools/build-flash.py check flash/manifest.json`
@@ -357,7 +373,11 @@ module itself (`USER_C_MODULES`), so the job needs no extra arguments. The
 UF2 is the whole firmware, `TS.tspico` on `board_v3` (step 4.3 of the v3
 port plan); `pico-serial.py flash --v3 --branch B` fetches it.
 
-A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
+The user manual is built by its own workflow, `manual.yml`, on pushes and
+pull requests that touch `docs/manual/`, `tools/manual-pdf/`,
+`tools/manual-variants.py`, `tools/build-site-docs.py`, `src/config.ini`
+(the cover's version) or `site/assets/img/`. Its one job, `manual-pdf`,
+first runs `manual_variants_hosttest.py`, then `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
 the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
 DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
@@ -403,10 +423,13 @@ and no spine (11.25 x 8.75 in). The cover art (`cover.css`) runs into the
 bleed. Spine text goes on only where it fits with 0.125 in clear each side
 (Lulu's figure; KDP asks for 1/16 in), about 0.35 in of spine or 155 pages
 on white paper; the manual is far short of that. `book.py` checks each
-cover's size. Building them on every push means a manual change that breaks
-them fails here, not at release time.
+cover's size. Building them on every push that touches the manual means a
+change that breaks them fails here, not at release time.
 
-Artifacts are kept 30 days. `tools/pico-serial.py flash --branch B`
+`build.yml`'s artifacts are kept 30 days (its failure logs 7); `manual.yml`'s
+three are kept 7 days, since they preview a change: releases build their
+own PDFs, and the print-on-demand files are taken by hand soon after the
+build. `tools/pico-serial.py flash --branch B`
 downloads the `tspico-firmware-uf2` of B's current head and flashes it
 (below). The list of host tests in step 3 is the authority on what CI
 runs; a new test needs a line there.
@@ -508,7 +531,7 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    fail without failing the release, which then has no `zimodem-v3.bin`.
    The same build runs in `zimodem.yml` when `esp32/zimodem/` changes, or
    by hand, as the `tspico-zimodem` artifact.
-5. **The user manual PDFs**, as `build.yml`'s `manual-pdf` job makes them,
+5. **The user manual PDFs**, as `manual.yml`'s `manual-pdf` job makes them,
    from the manual at the tag.
 6. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
    reflash), `upgrade.uf2`, `firmware-v3.uf2` and `v3-slots.zip` (the v3
@@ -635,7 +658,10 @@ via `gh`; it reboots the board into BOOTSEL with `machine.bootloader()`, so
 no buttons, and finds either chip's drive, `RPI-RP2` or `RP2350`). Before
 copying, `flash` compares the UF2's family IDs with the drive's
 `INFO_UF2.TXT` Board-ID and refuses a UF2 built for the other chip, leaving
-the board in BOOTSEL. `--sd` on `put`, `get` and `run` mounts the SD card
+the board in BOOTSEL. `--branch` finds the run by the branch's head
+commit, so when that commit touched nothing `build.yml` reads (a docs-only
+commit) there is no run and `flash` stops, saying so; pass `--run` with the
+branch's last firmware build. `--sd` on `put`, `get` and `run` mounts the SD card
 at `/sd` first, as `ACTIVATE_SD` does (`board.sd_take_bus`, `sd_spi`,
 `sd_cs`, then `TS.sdcard.SDCard`; so on either board), and unmounts it and
 calls `board.sd_release_bus` after; a `put`/`get` path gets `/sd` in front.

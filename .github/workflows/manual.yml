@@ -1,0 +1,81 @@
+name: Build TS-Pico Manual
+
+# The user manual, split out of build.yml so a manual change doesn't rebuild
+# the firmware and a firmware change doesn't rebuild the manual.
+on:
+  push:
+    branches: ['**']
+    paths: &manual_paths
+      - 'docs/manual/**'
+      - 'tools/manual-pdf/**'
+      - 'tools/manual-variants.py'
+      - 'tools/build-site-docs.py'
+      - 'src/config.ini'          # the cover's version
+      - 'site/assets/img/**'      # images make.sh takes from the site
+      - 'src/test/manual_variants_hosttest.py'
+      - '.github/workflows/manual.yml'
+  pull_request:
+    branches: [main]
+    paths: *manual_paths
+  workflow_dispatch:
+
+jobs:
+  # The user manual as PDFs (tools/manual-pdf/make.sh): a half-letter one-up
+  # for reading and a saddle-stitch booklet imposed on letter. Built on every
+  # push that touches the manual so a change that breaks the PDFs shows here, not at release
+  # time; release.yml attaches the same two files to each release. Also the
+  # v3 card's manual (BOARD=v3, tools/manual-variants.py), PDFs and Markdown,
+  # as its own artifact: not published while the card is unreleased; and the
+  # print-on-demand files (PRINT=1) for KDP and Lulu.
+  manual-pdf:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # The two boards' manuals (tools/manual-variants.py). Ran in
+      # build.yml's firmware job until the manual got its own workflow.
+      - name: Check the manual variants
+        run: python3 src/test/manual_variants_hosttest.py
+
+      - name: Install pandoc, the PDF fonts and pypdf
+        timeout-minutes: 10
+        run: tools/manual-pdf/ci-setup.sh
+
+      - name: Build the user manual PDFs
+        run: tools/manual-pdf/make.sh "${{ runner.temp }}/manual-pdf"
+
+      # Artifacts here are kept 7 days: they preview a change. Releases
+      # build and attach their own PDFs (release.yml), and the KDP/Lulu
+      # files are downloaded by hand soon after the build that made them.
+      - name: Upload the manual PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-manual-pdf
+          path: ${{ runner.temp }}/manual-pdf/*.pdf
+          retention-days: 7
+
+      # The files for printing on demand (PRINT=1): the interior and the
+      # covers for the Amazon KDP paperback and the Lulu coil-bound book.
+      # Uploaded by hand to KDP and Lulu; not on the website or releases.
+      - name: Build the print-on-demand files
+        run: PRINT=1 tools/manual-pdf/make.sh "${{ runner.temp }}/manual-print"
+
+      - name: Upload the print-on-demand files
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-manual-print
+          path: ${{ runner.temp }}/manual-print/*.pdf
+          retention-days: 7
+
+      - name: Build the v3 card's manual
+        run: |
+          BOARD=v3 tools/manual-pdf/make.sh "${{ runner.temp }}/manual-v3"
+          python3 tools/manual-variants.py v3 docs/manual/user-manual.md "${{ runner.temp }}/manual-v3/user-manual-v3.md"
+
+      - name: Upload the v3 card's manual
+        uses: actions/upload-artifact@v4
+        with:
+          name: tspico-manual-v3
+          path: ${{ runner.temp }}/manual-v3/
+          retention-days: 7
