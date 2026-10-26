@@ -517,13 +517,19 @@ def test_channels(t, root):
     r = cmd(t.CH_OPEN, "tpi:chopen x notes.txt", 6)
     check(r[-1] == t._4_Q_Parameter, "chopen with a bad mode: Q")
     r = cmd(t.CH_OPEN, "tpi:chopen wb data.bin", 7)
-    data = bytes(b for b in range(121) if b != 23)            # 23 is TAB
+    data = bytes(range(121))                                  # 23 too: TAB is tpi:chseek (#347)
     cmd(t.CH_WRITE, "tpi:chwr " + data.hex(), 7)
-    check(open(os.path.join(root, "data.bin"), "rb").read() == data, "binary: bytes as sent")
+    check(open(os.path.join(root, "data.bin"), "rb").read() == data, "binary: bytes as sent, 23 included")
     r = cmd(t.CH_OPEN, "tpi:chopen u recs.dat", 8, 6)          # PMR2: the record length
-    cmd(t.CH_WRITE, "tpi:chwr " + (bytes([23, 2, 0]) + b"two\r").hex(), 8)
+    r = cmd(t.CH_SEEK, "tpi:chseek 0200", 8)
+    check(r[-1] == t._1_OK, "chseek 0200: TAB 2, OK")
+    cmd(t.CH_WRITE, "tpi:chwr " + b"two\r".hex(), 8)
     check(open(os.path.join(root, "recs.dat"), "rb").read() == b"      two   ",
           "chopen u with PMR2 = 6: TAB 2 writes record 2, padded (stage 2)")
+    r = cmd(t.CH_SEEK, "tpi:chseek 02", 8)
+    check(r[-1] == t._5_C_Nonsense, "chseek with one byte: C")
+    r = cmd(t.CH_SEEK, "tpi:chseek 0100", 3)
+    check(r[-1] == t._10_J_Invalid_IO, "chseek on a stream that isn't open: J")
     r = cmd(t.CH_OPEN, "tpi:chopen u recs.dat", 8, 255)
     check(r[-1] == t._4_Q_Parameter, "a record length over 254: Q")
 

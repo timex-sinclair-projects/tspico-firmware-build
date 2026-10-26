@@ -94,7 +94,8 @@ R_PAD           EQU 6              ; bytes before the record in its allocation
 R_OUTN          EQU 7              ; bytes waiting in R_OUTBUF
 R_INN           EQU 8              ; bytes in R_INBUF
 R_INP           EQU 9              ; the next one to hand out
-R_FLAGS         EQU 10             ; bit 0: a record file (OPEN # gave a length)
+R_FLAGS         EQU 10             ; bit 0: a record file (OPEN # gave a length);
+                                   ;   bits 2-1: TAB bytes still to swallow (CH_TAB)
 R_OUTBUF        EQU 11
 OUTMAX          EQU 64             ; tpi:chwr sends them as hex: 9 + 128 < 256
 R_INBUF         EQU R_OUTBUF+OUTMAX
@@ -134,6 +135,7 @@ TOK_CAT         EQU $CF
 TOK_FORMAT      EQU $D0
 TOK_MOVE        EQU $D1
 TOK_ERASE       EQU $D2
+TOK_TAB         EQU $AD            ; not a statement: HOME's TAB item ($21B8) passes it
 
         ORG     FDD_BASE
 
@@ -234,7 +236,7 @@ G_BEEP: ld      a,h
 ;
 ; HL = the routine; A, F, BC and DE reach it, and it returns AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
-G_MAIN: ld      hl,FDD_MAIN
+G_MAIN: ld      hl,FDD_TAB_MAIN    ; was FDD_MAIN: the TAB item comes this way too
         jr      GUARDED
 G_OUT:  ld      hl,CH_OUT
         jr      GUARDED
@@ -1162,10 +1164,13 @@ CH_OUT:
         push    ix
         ld      ix,(CURCHL)
         ld      c,a
-        cp      23                 ; TAB (stage 2): a seek, so what was read
-        jr      nz,.put            ;   ahead is no longer next
-        ld      (ix+R_INN),0
-        ld      (ix+R_INP),0
+        ld      a,(ix+R_FLAGS)     ; every byte is data, 23 included (#347),
+        and     6                  ;   but for the 23, low, high HOME prints
+        jp      nz,CH_SKIP         ;   after a TAB CH_TAB has already sent
+        nop                        ; (keeps every later address where it was)
+        nop
+        nop
+        nop
 .put:   ld      a,(ix+R_OUTN)
         push    ix
         pop     hl
@@ -1195,7 +1200,7 @@ CH_IN:
 .again: ld      a,(ix+R_INP)
         cp      (ix+R_INN)
         jr      c,.have
-        call    CH_FLUSH           ; what was printed first (INPUT #4;TAB n: the seek)
+        call    CH_FLUSH           ; what was printed first
         call    CH_FETCH           ; NZ: end of file
         jr      z,.again
         pop     ix
@@ -1483,6 +1488,66 @@ PS_READ:
 .end:   pop     af
         and     a
         ret
+
+; CH_TAB -- PRINT's TAB item (and INPUT's, in its prompt), from HOME $21B8 in
+; place of its CALL FIND-INT2 / LD A,17h, on the run-time pass only (HOME
+; $214F returns from the item on the syntax pass). TAB n reached a channel as
+; the bytes 23, n low, n high -- the same bytes as PRINT #4;CHR$ 23;... -- so a
+; file channel took every 23 for a TAB, and binary data with a 23 in it could
+; not be written (#347). Now, on an 'F' channel, the seek goes to the Pico as
+; its own command, tpi:chseek with n's two bytes, after what was printed
+; before it and with the read-ahead emptied; then the count in R_FLAGS bits
+; 2-1 makes CH_OUT swallow the three bytes HOME still prints. Any other
+; channel (the screen, the printer) gets them as before. Returns A = 23, BC =
+; n: what the stock code at $21BD prints.
+CH_TAB:
+        call    HC_FIND_INT2       ; BC = n; Report B past 65535
+        push    ix
+        ld      ix,(CURCHL)
+        ld      a,(ix+R_LETTER)
+        cp      'F'
+        jr      nz,.done           ; not a file: HOME prints the three bytes
+        ld      (ix+R_INN),0       ; a seek: what was read ahead is not next
+        ld      (ix+R_INP),0
+        push    bc
+        call    CH_FLUSH           ; what was printed before the TAB goes first
+        pop     bc
+        push    bc
+        ld      (ix+R_OUTBUF),c    ; the payload: n low, n high
+        ld      (ix+R_OUTBUF+1),b
+        ld      b,2
+        ld      c,0                ; PMR2
+        ld      a,(ix+R_STRM)
+        ld      hl,CMD_CHSEEK
+        call    CH_SEND
+        call    CH_STATUS          ; Q, O and the rest as their reports
+        pop     bc
+        ld      a,(ix+R_FLAGS)
+        or      6                  ; swallow 23, low, high
+        ld      (ix+R_FLAGS),a
+.done:  pop     ix
+        ld      a,23
+        ret
+
+; FDD_TAB_MAIN -- G_MAIN's routine since #347: B = the TAB token is HOME
+; $21B8's TAB item, anything else a disk keyword for FDD_MAIN as before.
+FDD_TAB_MAIN:
+        ld      a,b
+        cp      TOK_TAB
+        jp      nz,FDD_MAIN
+        ld      iy,IY_SYSVARS      ; the bank call clobbers IY; FIND-INT2 needs it
+        jp      CH_TAB
+
+; CH_SKIP -- CH_OUT with a TAB's bytes still due (R_FLAGS bits 2-1 = how
+; many): swallow this one and count it. IX was pushed by CH_OUT.
+CH_SKIP:
+        ld      a,(ix+R_FLAGS)
+        sub     2
+        ld      (ix+R_FLAGS),a
+        pop     ix
+        ret
+
+CMD_CHSEEK:  db "tpi:chseek ",0
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE

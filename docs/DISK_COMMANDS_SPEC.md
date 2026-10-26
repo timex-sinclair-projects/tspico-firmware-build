@@ -351,11 +351,16 @@ The design choices:
 - **Order on the wire.**
   - The ROM sends any printed bytes before it asks for more input, so the `TAB` in
     `INPUT #4;TAB 7;a$` reaches the Pico first.
-  - A `TAB` discards whatever was read ahead.
+  - A `TAB` sends what was printed before it, then the seek (`tpi:chseek`), and
+    discards whatever was read ahead.
   - On a record file each CR is sent at once, so Report Q comes from the `PRINT` that
     made the record too long.
-- **Byte 23 is always `TAB`**, in binary files too, as it is on the screen. A binary
-  file can't hold a raw 23 written with `PRINT #`.
+- **Byte 23 is data** (#347). Until then it was always `TAB`, in binary files too,
+  as it is on the screen, so a binary file couldn't hold a 23 written with `PRINT #`:
+  `TAB n` reached the channel as the same bytes as `CHR$ 23;CHR$ lo;CHR$ hi`. ROM 2.3
+  patches HOME's `TAB` item (`$21B8`): on an `F` channel the seek goes to the Pico as
+  `tpi:chseek` and the driver swallows the three bytes the stock code still prints.
+  In text mode a 23 in the data is dropped with its two bytes, like `AT`.
 - **The prompt on a `u` channel.** Text in `INPUT #`'s prompt is written to the file on
   a `u` channel; only `TAB` belongs there. On an `r` channel it is dropped.
 
@@ -370,7 +375,8 @@ print item that sends a 16-bit number to the channel**:
 - It then does `RST 10` three times: `CHR$ 23`, the low byte, the high byte.
 - Those go to the *current channel's* output routine. On the screen channel they
   mean "move to column n". On a disk channel the driver owns them, so they mean
-  "move to record n".
+  "move to record n". (Since #347 the driver is told by the ROM, not by the bytes:
+  see "Byte 23 is data" above.)
 
 So random access needs **no new statements and no parser changes**:
 

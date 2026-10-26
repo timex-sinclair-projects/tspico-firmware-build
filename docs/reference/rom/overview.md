@@ -47,7 +47,7 @@ All checksums below were computed from the files in the repository.
 | 1.1 | `ROMs/TSPICO-11-home`, `-exrom` | 16K + 16K | `E8714BED`, `268649F6` | 15h | Gustavo Pane's ROM as the boards shipped; the only public release before ROM 2.2 | what users still have (the upgrade UF2 replaces it; [../firmware/upgrade.md](../firmware/upgrade.md)) |
 | the base image | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | 1.1 plus 104 EXROM bytes (a ready-wait and guard in the Y/N loop, and BREAK at the SAVE prompt) and the version byte | build input: the base `tspico-sync.asm` patches; never released |
 | the SYNC layer | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | the base image plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | build input: the base `build-rom.py` patches; never released |
-| **ROM 2.3** (#227, #228) | `src/rom/TSPICO-23.ROM` | 32K | `1338F0D5` | 23h | the SYNC layer plus the disk-command layer: 20 patches and the module at EXROM 3000h–37B4h; 2099 bytes in 19 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less four patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **ROM 2.3** (#227, #228, #347) | `src/rom/TSPICO-23.ROM` | 32K | `AD1DF59E` | 23h | the SYNC layer plus the disk-command layer: 21 patches and the module at EXROM 3000h–381Ah; 2206 bytes in 20 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less four patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX build input | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base `tspico-zx48-v3.asm` patches |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | the ZX build input plus a WAIT_RDY fix, `LOAD "tpi:…"` and `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
 
@@ -119,7 +119,7 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | the base image | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | the SYNC layer | [exrom-sync.md](exrom-sync.md) |
 | 23D4h–2FFFh | 3116 | `FFh`, free | | |
-| 3000h–37B4h | 1973 | the disk-command module (377Fh–37B4h `PS_READ`, from ROM 2.3) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
+| 3000h–381Ah | 2075 | the disk-command module (377Fh–37B4h `PS_READ`, from ROM 2.3; 37B5h–381Ah the TAB item, #347) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
 | 37B5h–3FFFh | 2123 | `FFh`, free | | |
 
 Chunk 0 is effectively full: the 1K hole at 1800h was used for the driver,
@@ -332,7 +332,7 @@ puts it anywhere else.
 
 #### The patches
 
-Twenty, applied in this order (the last four are ROM 2.3's). The reason for each is in the source's
+Twenty-one, applied in this order (the last four are ROM 2.3's, and so is the TAB item's at 21B8h, #347). The reason for each is in the source's
 `note`, and in full, with what it calls, in the chapter named.
 
 | Site | Before → after | What it does | Chapter |
@@ -342,6 +342,7 @@ Twenty, applied in this order (the last four are ROM 2.3's). The reason for each
 | EXROM 2213h | `CP 86h / RET NZ / CALL 02B9h` → `CP 87h / JP Z,3006h / RET` | the unreachable second `CP 86h` becomes response function 88h, the lower-screen Y/N loop | [exrom-chunk1.md](exrom-chunk1.md) |
 | HOME 25D6h | the 14-byte disk-keyword stub → `DI / LD HL,3000h / CALL 03FCh / EI / RET` + 5 × `00` | CAT, FORMAT, MOVE, ERASE enter the module with B = the token, on both passes | [home.md](home.md) |
 | HOME 1488h | 55 bytes of dead SYSCON code → four trampolines and H_TRAP | OPEN # (1488h), CLOSE # (1494h), an `F` record's output (14A0h) and input (14A9h), the error trap (14B2h) | [home.md](home.md) |
+| HOME 21B8h | `CALL 1F23h / LD A,17h` → `LD B,ADh / CALL 25D6h` | the TAB item enters the module (`CH_TAB`): on a file channel the seek goes to the Pico as `tpi:chseek`, and a 23 in the data is data (#347) | [home.md](home.md#21b8h-the-tab-item) |
 | HOME 03F3h | the BEEPER thunk → `DI / LD (5DCDh),HL / LD HL,3015h / JR 041Ch` | BEEPER's round trip under `DI` | [home.md](home.md) |
 | HOME 041Ch | 5 dead bytes → `CALL 03FCh / EI / RET` | the BEEPER thunk's tail | [home.md](home.md) |
 | HOME 145Eh | `CALL 1465h` → `CALL 1488h` | OPEN # through its trampoline | [home.md](home.md) |
@@ -359,9 +360,9 @@ Twenty, applied in this order (the last four are ROM 2.3's). The reason for each
 | EXROM 045Fh | `PUSH AF / JR 0465h` → `JP 377Fh` | `PRINT_STRING_FROM_PICO` becomes the module's `PS_READ`: control-code values and bytes ≥ 80h are text (#228) | [exrom-fdd.md](exrom-fdd.md#ps_read) |
 
 The difference the disk-command layer makes, measured on the committed
-images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2099 bytes in 19 hunks: 99
-in HOME, 31 in the EXROM outside the module, and 1969 in the module's
-region — 4 of the module's 1973 bytes are `FFh`, the same as the free space
+images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2206 bytes in 20 hunks: 104
+in HOME, 31 in the EXROM outside the module, and 2071 in the module's
+region — 4 of the module's 2075 bytes are `FFh`, the same as the free space
 they replaced. The three version patches replace the SYNC layer's own version marks
 (its banner characters, `20h` and `0020h`). The byte-by-byte account is in the build
 history ([ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-home-and-exrom-patches)).
@@ -401,6 +402,8 @@ must be kept in step.
 | HOME 1461h | OPEN # storing DE in the STRMS entry after the 145Eh call |
 | HOME 13A8h | CLOSE # resetting the STRMS entry after the 13A5h call |
 | HOME 11EDh | `RST 10` output through CURCHL's record, HL restored after |
+| HOME 21B5h | the TAB item's `CALL 214Fh`, which returns from it on the syntax pass, so `CH_TAB` runs at run time only |
+| HOME 21BDh | the TAB item's `RST 10h` with A, C, B, then `RET`: what `CH_TAB` returns into |
 
 ### `tools/romdiff.py`
 

@@ -314,6 +314,19 @@ def h_chwr(p, pre, cmd):
     ch_reply(p, st)
 
 
+def h_chseek(p, pre, cmd):
+    hx = args(cmd).strip()
+    try:
+        data = bytes(int(hx[i:i + 2], 16) for i in range(0, len(hx), 2))
+    except ValueError:
+        data = b""
+    if len(data) != 2:
+        ch_reply(p, 5)
+        return
+    _, st = ch_call(p.ch.seek, params(pre)[0] & 0xFF, data[0] | data[1] << 8)
+    ch_reply(p, st)
+
+
 def h_chrd(p, pre, cmd):
     par1, par2 = params(pre)
     data, st = ch_call(p.ch.read, par1 & 0xFF, max(1, min(255, par2 or 255)))
@@ -351,7 +364,7 @@ def h_colour(p, pre, cmd):
 
 
 HANDLERS = {"TPI:PATH": h_path, "TPI:DIR": h_dir, "TPI:COLOUR": h_colour, "TPI:CHOPEN": h_chopen,
-            "TPI:CHWR": h_chwr, "TPI:CHRD": h_chrd, "TPI:CHCLOSE": h_chclose}
+            "TPI:CHWR": h_chwr, "TPI:CHSEEK": h_chseek, "TPI:CHRD": h_chrd, "TPI:CHCLOSE": h_chclose}
 
 # dev_extcmd.py, run unchanged: its `tp` module is this simulation
 _P = {}

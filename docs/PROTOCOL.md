@@ -381,14 +381,17 @@ send them.
 | `tpi:chopen <mode> <path>` | stream (0–255, just a key) | record length (0 = a stream, 1–254) | bare status (`CH_REPLY`) |
 | `tpi:chopen r d:<pattern>` | stream | 0 | bare status; the channel reads a listing |
 | `tpi:chwr <hex>` | stream | 0 | bare status |
+| `tpi:chseek <hex>` | stream | 0 | bare status; the body is *n* low, *n* high (4 hex digits) |
 | `tpi:chrd` | stream | bytes wanted (1–255; 0 = 255) | **data phase**, below |
 | `tpi:chclose` | stream | 0 | bare status (closing an unopened stream is fine) |
 
 Modes: `r`, `w`, `a`, `u`, each with an optional `b` (binary). Text mode turns
 2068 CR and keyword tokens into newlines and words on the card, and back.
-Binary passes bytes through — **except byte 23 (`$17`) in a write, which is
-always the TAB escape** `23, n lo, n hi` (seek to byte or record *n*, 1-based).
-TAB 0 is a query: the next read returns a count as text + CR (names in a
+Binary passes every byte through, 23 included. `TAB n` (seek to byte or
+record *n*, 1-based) is its own command, `tpi:chseek`: ROM 2.3's TAB item
+sends it instead of printing `23, n lo, n hi` into the data (#347). In text
+mode a 23 in the data is a control code and is dropped with its two bytes,
+like AT. TAB 0 is a query: the next read returns a count as text + CR (names in a
 listing, records in a record file, bytes otherwise). `tpi:chwr` sends its
 payload as hex because the command text must be text.
 
@@ -775,8 +778,14 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   machine-code client that stops reading at its own `N`, as ROM 2.2 did,
   leaves the Pico's echo and `$03` in TX, to be read as the next command's
   status.
-- **Byte 23 in a channel write is always a TAB**, in binary mode too (§7).
-  Binary data containing `$17` can't go through `tpi:chwr`.
+- **A seek in the data stream can't be told from data.** `PRINT #4;TAB n`
+  and `PRINT #4;CHR$ 23;CHR$ lo;CHR$ hi` reach a channel's output routine as
+  the same three bytes, so until #347 every 23 in a binary file was taken for
+  a TAB, and the file was silently corrupted from there on. ROM 2.3's TAB item
+  now sends the seek out of band as `tpi:chseek` (§7) and makes the channel
+  swallow the three bytes the stock code still prints; `tpi:chwr` is all
+  data. Anything else that shares a byte stream with control codes has the
+  same problem.
 - **Underscore constants don't cross modules on the Pico.** `_1_OK`,
   `_6_6_Num2Big` and friends are `const()`s with a leading underscore, which
   MicroPython substitutes at compile time and never stores on the module.

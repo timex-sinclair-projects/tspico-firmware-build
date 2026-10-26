@@ -7,7 +7,7 @@ channel driver ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) sends what BASIC
 prints to a stream as raw 2068 bytes — tokens, control codes, CR — and asks
 for bytes when BASIC reads. This module keeps one `Channel` per stream
 number in a `Channels` table and does everything that is not I/O: the mode
-rules, the position, TAB as a seek, fixed-length records, directory
+rules, the position, TAB as a seek (`Channels.seek`), fixed-length records, directory
 listings held in memory, and the translation between 2068 text and the
 UTF-8, LF-ended text a Mac or a PC writes. File access comes in from
 outside as an object with four methods (`SD_FS` in
@@ -20,8 +20,8 @@ There is no block cache on the Pico: the spec's "Buffering" paragraph
 (§4b, one 256-byte block per channel, written back when evicted) describes
 an earlier design; the only buffers are the ROM's 64-byte output and
 255-byte input buffers, and every `tpi:chwr` reaches the card at once.
-The handlers that call it are `CH_OPEN`, `CH_WRITE`, `CH_READ` and
-`CH_CLOSE` ([tspico-disk.md](tspico-disk.md)); the contract is
+The handlers that call it are `CH_OPEN`, `CH_WRITE`, `CH_SEEK`, `CH_READ`
+and `CH_CLOSE` ([tspico-disk.md](tspico-disk.md)); the contract is
 [DISK_COMMANDS_SPEC.md §4 and §4b](../../DISK_COMMANDS_SPEC.md), the
 user's view [user-manual.md chapter 6](../../manual/user-manual.md), the
 wire view [PROTOCOL.md §7](../../PROTOCOL.md) and
@@ -30,19 +30,22 @@ wire view [PROTOCOL.md §7](../../PROTOCOL.md) and
 The header comment names the three stages: stage 1 (#83) sequential text
 and binary files in modes `r`, `w`, `a`; stage 2 (#84, spec §4b) `TAB` as
 the position, mode `u`, record files; stage 3 (spec §4) `d:` listings.
+The TAB paragraph says how a TAB arrives now: as `tpi:chseek` (`seek`), so
+every byte of a write is data (#347). Until then it arrived as 23, low, high
+in the data and `write` took every 23 for a TAB.
 
 ## Map of the file
 
 | Lines | What |
 |---|---|
-| 24–45 | `TOKENS`, `EXTRA`, `POUND`, `keyword` — the 2068's keywords by code |
-| 48–95 | `TextOut` — 2068 output bytes to text-file bytes |
-| 98–155 | `LATIN1`, `UTF8`, `TextIn` — text-file bytes to 2068 input bytes |
-| 158–177 | `utf8_len` |
-| 180–198 | `Channel` — one stream's state |
+| 25–46 | `TOKENS`, `EXTRA`, `POUND`, `keyword` — the 2068's keywords by code |
+| 49–96 | `TextOut` — 2068 output bytes to text-file bytes |
+| 99–156 | `LATIN1`, `UTF8`, `TextIn` — text-file bytes to 2068 input bytes |
+| 159–178 | `utf8_len` |
+| 181–198 | `Channel` — one stream's state |
 | 201–216 | `ChannelError`, `MAX_RECLEN`, `parse_mode` |
-| 219–420 | `Channels` — the table and every operation on it |
-| 423–449 | `_split_cr`, `_one_line` |
+| 219–412 | `Channels` — the table and every operation on it |
+| 415–441 | `_split_cr`, `_one_line` |
 
 ## The keywords
 
@@ -71,9 +74,10 @@ parameters; other control codes are dropped; block graphics and UDGs
 become `?`.
 
 `PARAMS = {16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 2, 23: 2}` — the
-number of parameter bytes after each control code. 23 (TAB) never reaches
-`TextOut` from `Channels.write`, which takes it as the seek escape first
-(`PROTOCOL.md` §13, "Byte 23 in a channel write is always a TAB").
+number of parameter bytes after each control code. A TAB item no longer
+reaches the channel as data (it is `tpi:chseek`, #347), so a 23 here is a
+`CHR$ 23` the program printed; text mode drops it with its two bytes, as
+it drops AT. Binary mode never comes here and stores it.
 
 ### `TextOut.__init__(self)`
 
@@ -173,7 +177,6 @@ The state of one open stream; a plain record of attributes, created by
 | text_in | `TextIn` | the input translator, replaced on a seek |
 | eof_cr | bool, False | a last line with no newline has had its CR supplied |
 | last_raw | int, 10 | the last raw byte read, to know whether the file ended in a line end |
-| tab | list or None, None | the TAB bytes still to come after a 23: a list collecting them across calls |
 | fill | int or None, None | bytes written into the open record; None when no record is open |
 | query | bool, False | `TAB 0` seen: the next read returns a count |
 | mem | bytes or None, None | a `d:` listing: the names, not a file |
@@ -277,12 +280,12 @@ from `pos + fill` to the record's end; moves `pos` on by `reclen`; clears
 `query` is cleared and `pos = (n - 1) * (reclen or 1)`: record `n` of a
 record file, byte `n` of a stream, both 1-based (spec §4b). A fresh
 `TextIn`, `eof_cr` false and `last_raw` 10, so what was read ahead is
-forgotten; the ROM does the same on its side (`CH_OUT` clears its input
-buffer on a 23).
+forgotten; the ROM does the same on its side (`CH_TAB` empties its input
+buffer before it sends the seek).
 
 ### `Channels._data(self, ch, data)`
 
-Bytes to store (no TAB among them) at the channel's position. Mode `r`:
+Bytes to store at the channel's position. Mode `r`:
 dropped — INPUT #'s prompt items go to the stream too (spec §4b). After
 `TAB 0`: `("TAB 0 is only for reading", "Q")`. A stream: the bytes
 (binary) or `text_out.feed(data)` (text) are written at `pos`, which
@@ -296,17 +299,25 @@ stored in a record.
 
 ### `Channels.write(self, stream, data)`
 
-What BASIC printed to the stream, with TAB as 23, low, high. Scans the
-bytes: while `ch.tab` is collecting, the byte joins it and the second one
-completes `n = lo | hi << 8` for `_seek`; a 23 sends the run so far to
-`_data` and starts collecting; any other byte joins the run; the final run
-goes to `_data`. The TAB's bytes may arrive in later calls (pinned: `TAB
-15` sent one byte per chunk). Called by `CH_WRITE`. Pinned by `stage2`:
+What BASIC printed to the stream, all of it data: non-empty `data` goes
+to `_data`. A 23 is a 23 (#347): the ROM sends a TAB as `tpi:chseek`, so
+nothing in the bytes is a seek (pinned: a binary `u` stream stores `1, 23,
+2, 3` and reads it back from `TAB 2`; text drops a 23 and its two bytes).
+Until #347 it scanned for 23 and took it and the next two bytes, across
+calls, as `TAB n`, so binary data could not hold a 23. Called by
+`CH_WRITE`. Pinned by `stage2` (each TAB through `seek`):
 `TAB 3;"carol"` pads records 1–2 and fills 3; a record written in two
 chunks; after writing record 2 the next read is record 3; `TAB 0` then
 data Q; longer than the record Q with the record untouched; a record left
 open by `;` is padded at close; binary records pad with 0; on a `u` stream
 a write after a read lands right after that line.
+
+### `Channels.seek(self, stream, n)`
+
+`TAB n` on the stream, from `CH_SEEK` (`tpi:chseek`): `_seek` on the
+stream's `Channel`; a stream that is not open is `("Stream not open",
+"O")`. `n` is 0–65535 (two bytes from the ROM). Pinned: a seek on a closed
+stream O; every `TAB` in `stage2` and `stage3`.
 
 ### `Channels.read(self, stream, n)`
 
@@ -325,7 +336,7 @@ advances `pos` by the raw length, remembers the last raw byte, and returns
 last line that had no newline gets one CR (`eof_cr`), then `b""`. The
 output is never longer than `raw`, so never longer than `n`. Called by
 `CH_READ`. Pinned: reading back in 4-byte chunks; a last line without a
-newline ends in CR once; binary round-trips every byte but 23; a write
+newline ends in CR once; binary round-trips every byte, 23 included; a write
 channel Q; a closed stream O; `u` reads one line at a time; `TAB 6` from
 byte 6; `TAB 0` on a stream is the size; `r` with a record length reads
 the padded gap record.

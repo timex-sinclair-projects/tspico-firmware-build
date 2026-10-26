@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, MOVE, ERASE, FORMAT, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2628–3466.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2628–3489.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -28,9 +28,9 @@ module's patches.
 | 2818–3112 | `DISK_COPY` … `DISK_REN_WORK` — MOVE, ERASE, FORMAT and `tpi:ren` | here |
 | 3122–3125 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
 | 3128–3237 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3251–3278 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3281–3313 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3316–3466 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 3252–3279 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3282–3314 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3317–3489 | `DIR_NAMES`, `CH_OPEN`, `CH_HEX`, `CH_WRITE`, `CH_SEEK`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -56,6 +56,7 @@ bytes 3–4 and 5–6, read with `PARAMS(pre)` ([tspico-files.md](tspico-files.m
 | **OPEN #n,"f:path"[,mode[,len]]** | `tpi:chopen mode path` | stream n | record length (0 = stream) | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
 | **OPEN #n,"d:spec"** | `tpi:chopen r d:spec` | stream n | 0 | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
 | **PRINT #n;…** (the driver's flush) | `tpi:chwr <hex>` | stream n | 0 | [`CH_WRITE`](#ch_writepre-cmd) | a bare status |
+| **PRINT #n;TAB t**, **INPUT #n;TAB t;** | `tpi:chseek <hex>`: t low, t high | stream n | 0 | [`CH_SEEK`](#ch_seekpre-cmd) | a bare status |
 | **INPUT #n / INKEY$ #n** (the driver's fetch) | `tpi:chrd` | stream n | bytes wanted (255) | [`CH_READ`](#ch_readpre-cmd) | status 1, count, bytes, XOR; or status 7 |
 | **CLOSE #n** | `tpi:chclose` | stream n | 0 | [`CH_CLOSE`](#ch_closepre-cmd) | a bare status |
 
@@ -528,14 +529,14 @@ tape. Returns `(length of the tape, 1)` or `(message, status)`.
 Beware: a +3DOS file whose header length exceeds the file describes as
 `None`; loaded as CODE it is taken whole, header included.
 
-## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
+## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chseek, tpi:chrd, tpi:chclose
 
-The comment at line 3240 lists the four commands. The ROM's channel driver
+The comment at line 3240 lists the five commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
-<hex>` when 64 bytes are up, at every CR on a record file, before a fetch
-and at CLOSE #; `CH_IN` hands out buffered bytes and `CH_FETCH` refills
+<hex>` when 64 bytes are up, at every CR on a record file, before a TAB,
+before a fetch and at CLOSE #; `CH_TAB` sends a TAB as `tpi:chseek`; `CH_IN` hands out buffered bytes and `CH_FETCH` refills
 with `tpi:chrd` (PMR2 = 255). The Pico keeps each stream's path, mode and
 position in `CHANNELS` ([tspico-state.md](tspico-state.md)), an instance
 of `channels.Channels` over `SD_FS`, and does the text translation there
@@ -625,21 +626,45 @@ directories first with `/`, then files, then end of file; `d:*.bak` and
 directory F; mode `w` or a record length with `d:` Q. The audit test pins
 `chopen u` with a record length.
 
+### `CH_HEX(cmd)`
+
+The body of `tpi:chwr` and `tpi:chseek` as bytes: the text after the
+command word, stripped, decoded two hex digits at a time with `int(..,
+16)`; `None` if a pair is not hex. Split out of `CH_WRITE` when `CH_SEEK`
+needed the same decoding (#347).
+
 ### `CH_WRITE(pre, cmd)`
 
 `tpi:chwr <hex>`: what BASIC printed to stream PMR1, as hexadecimal pairs
 in the command text (the body must be text, and 9 + 128 characters stay
-under the 256-byte command). The pairs are decoded with `int(.., 16)`; a
-bad digit is `CH_REPLY(5)` (C) and nothing is written.
+under the 256-byte command). `CH_HEX` decodes them; a bad digit is
+`CH_REPLY(5)` (C) and nothing is written.
 `CH_CALL(CHANNELS.write, stream, data)` mounts the card, stores the bytes
-at the stream's position with the TAB escape (23, lo, hi) honored and
-text translated, and gives the card back; a stream that is not open is
+at the stream's position — every byte data, 23 included, text translated
+— and gives the card back; a stream that is not open is
 `O` → J, `TAB 0` followed by data or a record overrun `Q`.
 `CH_REPLY(st)`. Output to a read stream is accepted and dropped — INPUT #'s
 prompt items. The ROM's `CH_FLUSH` zeroes its count before sending, so
 bytes the Pico refuses are dropped with the report and CLOSE # can still
 close the stream. Pinned by `test_channels`: two writes translated and
-appended; bad hex C; binary bytes as sent; `TAB 2` into record 2, padded.
+appended; bad hex C; binary bytes as sent, 23 included; `TAB 2` into
+record 2, padded.
+
+### `CH_SEEK(pre, cmd)`
+
+`tpi:chseek <hex>`: `TAB n` on stream PMR1, n's low and high bytes as
+four hex digits. ROM 2.3's TAB item sends it ([rom/exrom-fdd.md](../rom/exrom-fdd.md),
+`CH_TAB`) for `PRINT #n;TAB t` and for the TAB in `INPUT #n;TAB t;a$`,
+after flushing what was printed before it. It used to send the TAB as 23,
+low, high inside `tpi:chwr`'s data, the same bytes as `CHR$ 23`, so a
+binary file could not hold a 23 (#347; the comment in the function).
+A body that is not exactly two bytes is `CH_REPLY(5)` (C).
+`CH_CALL(CHANNELS.seek, stream, lo | hi << 8)` mounts the card (closing an
+open record writes its padding), moves the position and gives the card
+back; a stream that is not open is `O` → J. `CH_REPLY(st)`. It is in
+`SD_QUIET`: with no card the answer is a bare J. Pinned by `test_channels`:
+`chseek 0200` OK; one byte C; a stream that isn't open J; and the audit
+test's open-record cases seek with it.
 
 ### `CH_READ(pre, cmd)`
 
@@ -689,7 +714,7 @@ so: `CH_CALL(CHANNELS.close, stream)`, which mounts the card; an error
 (no card: J; an SD error: F) is logged and sent, and the stream stays in
 `CHANNELS`.
 
-The long comment at line 3428 is the history. When channels arrived (#83)
+The long comment at line 3451 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

@@ -124,6 +124,21 @@ PATCHES = [
              "(fddcmd.asm GUARDED). Spec §4.",
     ),
     dict(
+        name="TAB item: $21B8 CALL FIND-INT2 / LD A,17h -> LD B,TAB / CALL $25D6 (CH_TAB)",
+        bank="home", addr=0x21B8,
+        before="cd 23 1f 3e 17", after="06 ad cd d6 25",
+        note="PRINT's (and INPUT's) TAB item printed 23, n low, n high through "
+             "the channel, the same bytes as CHR$ 23 in the data, so a file "
+             "channel couldn't hold a 23 (#347). B = the TAB token through the "
+             "disk-keyword thunk at $25D6 reaches the module's CH_TAB (FDD_MAIN "
+             "tells it from the disk keywords by the token), which takes n off "
+             "the calculator stack itself, sends an 'F' channel's seek as "
+             "tpi:chseek and sets CH_OUT to swallow the three bytes, and returns "
+             "A = 17h, BC = n for the stock RST 10h trio at $21BD. Only the run-"
+             "time pass gets here: $21B5's CALL $214F returns from the item on "
+             "the syntax pass. No new HOME bytes.",
+    ),
+    dict(
         name="BEEPER thunk under DI: $03F3 -> $041C tail -> EXROM BEEP_VEC ($3015)",
         bank="home", addr=0x03F3,
         before="22 cd 5d 21 00 20 c3 fc 03",
@@ -327,6 +342,10 @@ ANCHORS = [
          bank="home", addr=0x1461, bytes="73 23 72 c9"),
     dict(name="CLOSE #: $13A8 resets the STRMS entry after the $13A5 call",
          bank="home", addr=0x13A8, bytes="01 00 00 11 e2 a3 eb 19"),
+    dict(name="TAB item after the $21B8 patch: RST 10h with A, C, B, then RET",
+         bank="home", addr=0x21BD, bytes="d7 79 d7 78 d7 c9"),
+    dict(name="TAB item before the $21B8 patch: CALL $214F (returns on the syntax pass)",
+         bank="home", addr=0x21B5, bytes="cd 4f 21"),
     dict(name="RST 10 output: CURCHL's record, HL restored after (the stubs rely on it)",
          bank="home", addr=0x11ED, bytes="d9 e5 2a 51 5c"),
 ]

@@ -2,7 +2,7 @@
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
 1488 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
-at EXROM 3000h–37B4h and spliced into the SYNC layer's image
+at EXROM 3000h–381Ah and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
 `src/rom/TSPICO-23.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
@@ -15,14 +15,16 @@ on the SD card; adds
 channels: `OPEN #n,"f:path","mode"[,reclen]`, `PRINT #`, `INPUT #`,
 `CLOSE #`, and `"d:"` directory listings; adds response function 88h (a
 Y/N prompt on the lower screen); makes the BIOS C_END report a timeout
-as J, never F; and, from ROM 2.3, replaces the string reader every response
+as J, never F; sends a TAB on a file channel to the Pico as its own
+command (`CH_TAB`, #347); and, from ROM 2.3, replaces the string reader every response
 function prints with (`PS_READ`). Everything is turned into `tpi:` commands the firmware already
 answers ([../firmware/tspico-disk.md](../firmware/tspico-disk.md)). The
 design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
 byte-level change list is in [the build history](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
-The module is 1973 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end). It enters the 2068's code only through a vector
+The module is 2075 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end,
+then `CH_TAB` and its helpers 102 more, #347). It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
@@ -35,22 +37,23 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 34–136 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 143–164 | 3000h–3020h | the vector table |
-| 166–177 | 3021h | `TAPE_MODE` |
-| 192–215 | 3029h | `G_BEEP` |
-| 217–275 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 277–297 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 299–391 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `NONSENSE`, `TOO_LONG` |
-| 393–467 | | the parsing helpers |
-| 469–568 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 570–806 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 808–828 | | `LOWER_LOOP` (function 88h) |
-| 830–1385 | | the channel driver |
-| 1387–1405 | | `HEXDIG`, `STRLEN` |
-| 1407–1419 | to 3777h | the command strings, `MODE_R` |
-| 1421–1435 | 3778h–377Eh | `PRELOAD` |
-| 1437–1488 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader), `FDD_END` |
+| 34–137 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 145–166 | 3000h–3020h | the vector table |
+| 168–179 | 3021h | `TAPE_MODE` |
+| 194–217 | 3029h | `G_BEEP` |
+| 219–277 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 279–299 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 301–393 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `NONSENSE`, `TOO_LONG` |
+| 395–469 | | the parsing helpers |
+| 471–570 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 572–808 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 810–830 | | `LOWER_LOOP` (function 88h) |
+| 832–1390 | | the channel driver |
+| 1392–1410 | | `HEXDIG`, `STRLEN` |
+| 1412–1424 | to 3777h | the command strings, `MODE_R` |
+| 1426–1440 | 3778h–377Eh | `PRELOAD` |
+| 1442–1490 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1491–1553 | 37B5h–381Ah | `CH_TAB`, `FDD_TAB_MAIN`, `CH_SKIP`, `CMD_CHSEEK` (the TAB item, #347), `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -146,7 +149,7 @@ bytes into the allocation. Offsets from the record's start:
 | `R_OUTN` | 7 | bytes waiting in the output buffer |
 | `R_INN` | 8 | bytes in the input buffer |
 | `R_INP` | 9 | the next input byte to hand out |
-| `R_FLAGS` | 10 | bit 0: a record file (OPEN # gave a length) |
+| `R_FLAGS` | 10 | bit 0: a record file (OPEN # gave a length); bits 2–1: how many of a TAB's three bytes `CH_OUT` still has to swallow (`CH_TAB` sets 3, `CH_SKIP` counts down) |
 | `R_OUTBUF` | 11 | the output buffer |
 | `OUTMAX` | 64 | its size: `tpi:chwr` sends the bytes as hex, 9 + 128 < 256 |
 | `R_INBUF` | 75 | the input buffer |
@@ -182,6 +185,7 @@ treats an offset whose high bit is set as a SYSCON channel (its `D OR E ≥
 | `TOK_FORMAT` | D0h | FORMAT |
 | `TOK_MOVE` | D1h | MOVE |
 | `TOK_ERASE` | D2h | ERASE |
+| `TOK_TAB` | ADh | TAB: not a statement; HOME 21B8h's TAB item puts it in B so `FDD_TAB_MAIN` can tell it from a disk keyword |
 
 ## The vector table
 
@@ -192,7 +196,7 @@ not at 3000h. The patches point at these vectors, never at routines:
 
 | Name | EXROM | Jumps to | Reached from |
 |---|---|---|---|
-| `FDD_DISPATCH` | 3000h | `G_MAIN` | HOME 25D6h, the disk keywords |
+| `FDD_DISPATCH` | 3000h | `G_MAIN` | HOME 25D6h, the disk keywords; HOME 21B8h, the TAB item, through 25D6h |
 | `F_HOOK_VEC` | 3003h | `F_HOOK` | EXROM 01D2h, SAVE-ETC's jump to SESSION_SETUP |
 | `LOWER_VEC` | 3006h | `LOWER_LOOP` | EXROM 2213h, function 88h |
 | `CH_OUT_VEC` | 3009h | `G_OUT` | HOME 14A0h, an `F` record's output |
@@ -247,7 +251,7 @@ Each is `LD HL,routine / JR GUARDED` (the last falls in):
 
 | Entry | Routine |
 |---|---|
-| `G_MAIN` | `FDD_MAIN` |
+| `G_MAIN` | `FDD_TAB_MAIN` (`FDD_MAIN` until #347) |
 | `G_OUT` | `CH_OUT` |
 | `G_IN` | `CH_IN` |
 | `G_OPEN` | `CH_OPEN_HOOK` |
@@ -302,14 +306,17 @@ switch back.
 ### `FDD_MAIN`
 
 The disk keywords' routine, entered on **both** passes (HOME 25D6h has no
-other way to hand over the syntax check), with B = the token.
+other way to hand over the syntax check), with B = the token. Since #347
+`FDD_TAB_MAIN` comes first and sends the TAB item (B = ADh) to `CH_TAB`;
+every other token arrives here as before.
 
 1. `LD IY,IY_SYSVARS`: the bank call clobbers IY, and HOME routines need it.
 2. `EI`: HOME's hook entered under `DI`, and CAT's "Scroll?" and the Y/N
    prompts wait with `HALT`.
 3. CAT → `FDD_CAT`; MOVE → `FDD_MOVE`; ERASE → `FDD_ONE_ARG` with HL =
    `CMD_ERASE`; FORMAT → `FDD_ONE_ARG` with `CMD_FORMAT`; any other token →
-   `RET` (no-op; nothing else reaches 25D6h).
+   `RET` (no-op: the only other caller of 25D6h, the TAB item, has gone
+   to `CH_TAB`).
 
 After it, at 30A8h, `"FDDCMD",0` — a signature nothing checks;
 `build-rom.py` checks `FDD_DISPATCH`'s address instead, as the comment says
@@ -772,16 +779,20 @@ An `F` record's output routine: `RST 10h` with CURCHL on the record
 reaches HOME 14A0h, which comes here through `G_OUT` with A = the
 character.
 
-1. `LD IY,IY_SYSVARS`; IX = CURCHL.
-2. A TAB control (23) is a seek on a record file, so whatever was read
-   ahead is no longer next: `R_INN` and `R_INP` = 0.
-3. The byte goes into `R_OUTBUF` at `R_OUTN`, which goes up.
+1. `LD IY,IY_SYSVARS`; IX = CURCHL; C = the byte.
+2. `R_FLAGS` bits 2–1 not zero: this is one of the three bytes (23, n low,
+   n high) HOME's TAB item prints after `CH_TAB` has already sent the
+   seek; `JP CH_SKIP` swallows it. Four `NOP`s follow, so that the change
+   moved no address in the module.
+3. The byte goes into `R_OUTBUF` at `R_OUTN`, which goes up. Every byte is
+   data, 23 included.
 4. `CH_FLUSH` when the buffer is full (64), or — on a record file — at
    every CR, so a record that is too long is Report Q on the PRINT that
    made it.
 
-TAB's two parameter bytes come through here as ordinary characters, and the
-Pico interprets the sequence (23, lo, hi) ([../firmware/channels.md](../firmware/channels.md)).
+Until #347 step 2 was `CP 23`: a 23 emptied the read-ahead, and the byte
+and its two parameters went into the buffer for the Pico to read as a TAB.
+A `CHR$ 23` in the data did the same, so a binary file couldn't hold one.
 
 ### `CH_IN`
 
@@ -792,9 +803,10 @@ end is "8 End of file".
 
 1. `LD IY,IY_SYSVARS`; IX = CURCHL.
 2. A byte left in `R_INBUF` (`R_INP` < `R_INN`): hand it out, `R_INP` + 1.
-3. Otherwise `CH_FLUSH` (what was printed first goes out first — `INPUT
-   #4;TAB n;` is a seek followed by a read), then `CH_FETCH`; Z: try again;
-   NZ: the end of the file.
+3. Otherwise `CH_FLUSH` (what was printed first goes out first), then
+   `CH_FETCH`; Z: try again; NZ: the end of the file. (The TAB in `INPUT
+   #4;TAB n;a$` has already gone, as `tpi:chseek` from `CH_TAB`, before
+   the first read.)
 
 ### `CH_FLUSH`
 
@@ -879,6 +891,7 @@ NUL-ended prefixes, sent as the start of each command:
 | `CMD_CHCLOSE` | `tpi:chclose` | `CH_CLOSE_HOOK` |
 | `CMD_CHOPEN` | `tpi:chopen ` | `CH_OPEN_HOOK` |
 | `MODE_R` | `r` (not NUL-ended: copied with a length of 1) | OPEN # with no mode |
+| `CMD_CHSEEK` | `tpi:chseek ` | `CH_TAB`; at the end of the module with it (#347), not here |
 
 ### `PRELOAD` (3778h)
 
@@ -955,9 +968,70 @@ interpreter against the committed image, with v1.1's reader (from
 `TSPICO-SYNC.ROM`) for contrast:
 [`rom_fn86_hosttest.py`](../../../src/test/rom_fn86_hosttest.py).
 
+## The TAB item (#347)
+
+`PRINT #n;TAB t` printed the TAB as three bytes through the channel, 23,
+t low, t high (HOME 21B8h–21C2h): the same bytes as `PRINT #n;CHR$
+23;CHR$ lo;CHR$ hi`. The driver could not tell them apart, so every 23 a
+program wrote to a file was taken for a TAB, the two bytes after it for
+the position, and the rest of the data landed in the wrong place with no
+error. LarKen's random-access utility had the same flaw. TOS and JLO SAFE
+did not: TOS parsed `;AT p` in its own statement and JLO had no channels.
+ROM 2.3 sends the seek out of band instead: a HOME patch at 21B8h
+([home.md](home.md#21b8h-the-tab-item)) brings the TAB item here, and the
+Pico gets `tpi:chseek`. BASIC is unchanged. Everything is added after
+`PS_READ`, and `CH_OUT` keeps its size, so no existing address moved.
+
+### `CH_TAB`
+
+Entered from HOME 21B8h through 25D6h, `FDD_DISPATCH`, `G_MAIN`,
+`GUARDED` and `FDD_TAB_MAIN`, on the run-time pass only (HOME's CALL
+214Fh, just before, returns from the TAB item on the syntax pass). It
+replaces HOME's `CALL FIND-INT2 / LD A,17h`, so it must leave what those
+did: A = 17h, BC = t (GUARDED returns AF, BC, DE and HL).
+
+1. `HC_FIND_INT2`: BC = t off the calculator stack; past 65535, Report B,
+   as before.
+2. IX = CURCHL. Not an `F` record (the screen, the printer, the lower
+   screen): skip to 4, and HOME prints the three bytes as it always has.
+3. An `F` record: `R_INN` and `R_INP` = 0 (what was read ahead is no
+   longer next); `CH_FLUSH`, so what was printed before the TAB reaches the
+   file first; t into `R_OUTBUF` (low, high) and `CH_SEND` **`tpi:chseek`**
+   with those two bytes as the payload (four hex digits), PMR1 = the
+   stream, PMR2 = 0; `CH_STATUS` (an error raises its report, and nothing
+   below happens). Then `R_FLAGS` bits 2–1 = 3.
+4. A = 17h. Back in HOME at 21BDh: `RST 10h` with 17h, C, B. On an `F`
+   record `CH_OUT` swallows all three through `CH_SKIP`.
+
+The Pico's side is `CH_SEEK` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#ch_seekpre-cmd)).
+Tested in ZEsarUX with the firmware behind it (the emulator, not
+hardware): a 23 written to a binary file stays a 23; `TAB` writes and
+reads records, `TAB 0` reads the count, `TAB` on a binary `u` stream
+overwrites in place, and the screen's `TAB` is unchanged.
+
+### `FDD_TAB_MAIN`
+
+`G_MAIN`'s routine: `LD A,B / CP TOK_TAB`; not the TAB token → `JP
+FDD_MAIN`, the disk keywords as before; the TAB token → `LD IY,IY_SYSVARS`
+(the bank call clobbers IY, and FIND-INT2 needs it) and `JP CH_TAB`. It
+exists so that `FDD_MAIN` didn't have to grow: `G_MAIN`'s `LD HL` operand
+changed and nothing moved.
+
+### `CH_SKIP`
+
+`CH_OUT`'s exit for a swallowed TAB byte: `R_FLAGS` − 2 (bits 2–1 count
+3, 2, 1, 0; bit 0, the record-file flag, is never touched, because the
+count is not zero when this runs), then `POP IX` (pushed by `CH_OUT`) and
+`RET`.
+
+### `CMD_CHSEEK`
+
+`tpi:chseek `, NUL-ended: `CH_TAB`'s prefix. Here rather than with the
+other command strings, which sit before `PRELOAD`.
+
 ### `FDD_END`
 
-The end of the module, 37B5h (377Fh in ROM 2.2, before `PS_READ`); `SAVEBIN` writes `FDD_BASE` to here as
+The end of the module, 381Bh (37B5h before #347; 377Fh in ROM 2.2, before `PS_READ`); `SAVEBIN` writes `FDD_BASE` to here as
 `fddcmd.bin`, which `build-rom.py` splices in after checking that the
 region is all `FFh`.
 

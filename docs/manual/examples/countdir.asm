@@ -1,7 +1,7 @@
 ; countdir.asm -- how many files match a pattern, without listing them.
 ; Opens a directory listing as a channel (the d: device), then asks for the
-; number of names the way TAB 0 does in BASIC: a seek to byte 0 (the bytes
-; 23, 0, 0 sent with tpi:chwr) makes the next read return the count as text.
+; number of names the way TAB 0 does in BASIC: a seek to byte 0 (tpi:chseek
+; with n low, n high = 0, 0) makes the next read return the count as text.
 ;
 ;   LET n=USR 60000       n = the number of names
 ;
@@ -22,7 +22,7 @@ REPLY:  ds 8                    ; the count comes back as digits and a CR
 
 OPEN_T: db "tpi:chopen r d:"
 OPEN_L  equ $-OPEN_T
-TAB0_T: db "tpi:chwr 170000"    ; 23, 0, 0: TAB 0
+TAB0_T: db "tpi:chseek 0000"    ; TAB 0
 TAB0_L  equ $-TAB0_T
 RD_T:   db "tpi:chrd"
 RD_L    equ $-RD_T

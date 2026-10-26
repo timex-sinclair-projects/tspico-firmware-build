@@ -103,12 +103,12 @@ def main():
             break
         got += d
     check(got == b"a\rno newline\r", "a last line without a newline still ends in CR, once (%r)" % got)
-    every = bytes(b for b in range(256) if b != 23)   # 23 is TAB, as on the screen
+    every = bytes(range(256))                         # 23 too: a TAB comes as seek() (#347)
     ch.open(7, "/sd/TAP/bin.dat", "wb")
     ch.write(7, every)
     ch.open(7, "/sd/TAP/bin.dat", "rb")
     check(ch.read(7, 255) + ch.read(7, 255) == every and ch.read(7, 255) == b"",
-          "binary: every byte but 23 (TAB) both ways, then end of file")
+          "binary: every byte, 23 included, both ways, then end of file")
     ch.open(8, "/sd/TAP/notes.txt", "w")
     check(bytes(fs.files["/sd/TAP/notes.txt"]) == b"", "w truncates an existing file")
 
@@ -144,8 +144,11 @@ def main():
     return 0 if ok else 1
 
 
-def tab(n):
-    return bytes([23, n & 0xFF, n >> 8])
+def seek_write(ch, stream, n, data):
+    """PRINT #stream;TAB n;data as ROM 2.3 sends it: tpi:chseek n, then
+    tpi:chwr data (#347)."""
+    ch.seek(stream, n)
+    ch.write(stream, data)
 
 
 def stage2(err):
@@ -155,38 +158,38 @@ def stage2(err):
     p = "/sd/TAP/people.dat"
     ch.open(4, p, "u", 10)
     check(fs.files[p] == b"", "u creates a missing file")
-    ch.write(4, tab(3) + b"carol\r")
+    seek_write(ch, 4, 3, b"carol\r")
     check(bytes(fs.files[p]) == b" " * 20 + b"carol     ",
           "PRINT #4;TAB 3;\"carol\": records 1-2 padded, 3 = carol + spaces (%r)" % bytes(fs.files[p]))
-    ch.write(4, tab(1) + b"al")
+    seek_write(ch, 4, 1, b"al")
     ch.write(4, b"ice\r")
     check(bytes(fs.files[p])[:10] == b"alice     ", "a record written in two chunks (PRINT ...;)")
-    ch.write(4, tab(2))
+    ch.seek(4, 2)
     ch.write(4, b"bob\r")
     check(ch.read(4, 255) == b"carol     \r", "the next read after writing record 2 is record 3, then CR")
-    ch.write(4, tab(1))
+    ch.seek(4, 1)
     check(ch.read(4, 255) == b"alice     \r", "INPUT #4;TAB 1;a$: exactly record 1 and CR")
     check(ch.read(4, 255) == b"bob       \r", "then sequentially record 2")
     ch.read(4, 255)
     check(ch.read(4, 255) == b"", "past the last record: end of file")
-    ch.write(4, tab(0))
+    ch.seek(4, 0)
     check(ch.read(4, 255) == b"3\r", "INPUT #4;TAB 0;n: the record count")
-    ch.write(4, tab(0))
+    ch.seek(4, 0)
     check(err(lambda: ch.write(4, b"x")) == "Q", "PRINT #4;TAB 0;...: Q")
-    ch.write(4, tab(2))
+    ch.seek(4, 2)
     check(err(lambda: ch.write(4, b"12345678901")) == "Q", "longer than the record: Q, nothing cut off")
     check(bytes(fs.files[p])[10:20] == b"bob       ", "  and record 2 is untouched")
-    ch.write(4, tab(5) + b"eve;")
+    seek_write(ch, 4, 5, b"eve;")
     ch.close(4)
     check(len(fs.files[p]) == 50 and bytes(fs.files[p])[40:] == b"eve;      ",
           "a record left open by ';' is padded at CLOSE; the gap is padding (%d)" % len(fs.files[p]))
     ch.open(5, p, "r", 10)
-    ch.write(5, tab(4))
+    ch.seek(5, 4)
     check(ch.read(5, 255) == b"          \r", "r with a record length: TAB 4 reads the padded gap record")
     ch.write(5, b"P?")
     check(bytes(fs.files[p])[:5] == b"alice", "r: prompt text is still dropped")
     ch.open(6, "/sd/TAP/rec.bin", "ub", 4)
-    ch.write(6, tab(2) + bytes([1, 2]) + b"\r")
+    seek_write(ch, 6, 2, bytes([1, 2]) + b"\r")
     check(bytes(fs.files["/sd/TAP/rec.bin"]) == bytes(4) + bytes([1, 2, 0, 0]), "binary records pad with 0")
     check(err(lambda: ch.open(7, p, "u", 255)) == "Q", "record length 255: Q (254 is the most)")
 
@@ -198,21 +201,27 @@ def stage2(err):
     ch.write(4, b"LINE TWO\r")
     check(bytes(fs.files[q]) == b"line one\nLINE TWO\nline three\n",
           "a write after INPUT # lands right after that line (%r)" % bytes(fs.files[q]))
-    ch.write(4, tab(6))
+    ch.seek(4, 6)
     check(ch.read(4, 255) == b"one\r", "TAB 6: from byte 6 of the file")
-    ch.write(4, tab(0))
+    ch.seek(4, 0)
     check(ch.read(4, 255) == b"%d\r" % len(fs.files[q]), "TAB 0 on a stream: the size in bytes")
     ch.open(5, q, "r")
-    ch.write(5, tab(10))
+    ch.seek(5, 10)
     check(ch.read(5, 255) == b"LINE TWO\rline three\r", "r: TAB 10 seeks, then reads ahead as before")
-    ch.write(5, tab(1) + b"P?")
+    seek_write(ch, 5, 1, b"P?")
     check(ch.read(5, 4) == b"line", "TAB 1 then prompt text on r: back to the start, prompt dropped")
     t = C.Channels(fs)
-    t.open(3, q, "u")
-    t.write(3, bytes([23]))
-    t.write(3, bytes([15]))
-    t.write(3, bytes([0]))
-    check(t.read(3, 255) == b"TWO\r", "TAB 15 sent one byte per chunk")
+    t.open(3, "/sd/TAP/x.bin", "ub")
+    t.write(3, bytes([1, 23, 2, 3]))
+    check(bytes(fs.files["/sd/TAP/x.bin"]) == bytes([1, 23, 2, 3]),
+          "a 23 in the data is a 23, not a seek (#347)")
+    t.seek(3, 2)
+    check(t.read(3, 255) == bytes([23, 2, 3]), "  and TAB 2 reads it back")
+    t.open(2, "/sd/TAP/x.txt", "w")
+    t.write(2, b"a" + bytes([23, 5, 0]) + b"b\r")
+    check(bytes(fs.files["/sd/TAP/x.txt"]) == b"ab\n",
+          "text: a 23 is a control code, dropped with its two bytes like AT")
+    check(err(lambda: t.seek(9, 1)) == "O", "seek on a closed stream: O")
 
 
 def stage3(err):
@@ -227,13 +236,13 @@ def stage3(err):
         got += d
     check(got == b"GAMES/\radv.tap\rch?.bas\r", "one name a line, a dir's with '/', non-ASCII as '?' (%r)" % got)
     check(ch.read(4, 255) == b"", "then end of file (Report 8)")
-    ch.write(4, tab(0))
+    ch.seek(4, 0)
     check(ch.read(4, 255) == b"3\r", "TAB 0: the number of names")
-    ch.write(4, tab(8) + b"P?")
+    seek_write(ch, 4, 8, b"P?")
     check(ch.read(4, 255) == b"adv.tap\rch?.bas\r", "TAB 8: from the second name; prompt text dropped")
     ch.open_list(5, [])
     check(ch.read(5, 255) == b"", "no names: the first read is end of file")
-    ch.write(5, tab(0))
+    ch.seek(5, 0)
     check(ch.read(5, 255) == b"0\r", "  and TAB 0 says 0")
 
 

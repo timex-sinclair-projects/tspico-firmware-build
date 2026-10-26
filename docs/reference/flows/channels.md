@@ -59,22 +59,48 @@ writes, and closes.
 `CH_OUT` ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#ch_out)), under `DI`
 through the returning thunk.
 
-1. `CH_OUT` puts the byte in the record's 64-byte buffer. A TAB code (23)
-   also empties the read-ahead (a seek).
+1. `CH_OUT` puts the byte in the record's 64-byte buffer, whatever it is:
+   23 is data like any other (a TAB is the next section). While R_FLAGS
+   bits 2–1 count down after a TAB, it swallows the byte instead.
 2. When the buffer is full — or at a CR on a record file — `CH_FLUSH`:
    the count cleared first, then **`tpi:chwr 68656c6c6f0d`** (the bytes as
    lower-case hex: the body must be text) with PMR1 = 4.
 3. Pico: `CH_WRITE` decodes the hex (a bad digit: C, nothing written) and
    `CH_CALL(CHANNELS.write, 4, data)`: the card mounted, the bytes appended
    at the stream's position with the text translated (the 2068's CR to the
-   file's line ending; the TAB escape `17h lo hi` honored), the card given
+   file's line ending; every byte data in binary mode), the card given
    back. `CH_REPLY(st)` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#ch_writepre-cmd),
    [../firmware/channels.md](../firmware/channels.md)).
 4. 2068: `CH_STATUS`.
 
 A short PRINT stays in the 2068's buffer until the buffer fills, a CR on a
-record file, an INPUT on the same stream, or CLOSE: PRINT is cheap, the
-command is per 64 bytes.
+record file, a TAB, an INPUT on the same stream, or CLOSE: PRINT is cheap,
+the command is per 64 bytes.
+
+## TAB
+
+`PRINT #4;TAB 7;"x"` (and `INPUT #4;TAB 7;a$`, whose prompt items are
+printed to the stream). The stock TAB item printed `23, 07, 00` through the
+channel: the same bytes as `CHR$ 23;CHR$ 7;CHR$ 0`, so a 23 in binary data
+was taken for a TAB too (#347). ROM 2.3 sends the seek on its own:
+
+1. HOME 21B8h (run time only; the syntax pass returns at 21B5h): `LD B,ADh
+   / CALL 25D6h`, the disk-keyword thunk, in place of `CALL FIND-INT2 / LD
+   A,17h` ([../rom/home.md](../rom/home.md#21b8h-the-tab-item)).
+2. `FDD_TAB_MAIN` (where `G_MAIN` now enters) sees the TAB token in B → `CH_TAB`
+   ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#ch_tab)): n off the
+   calculator stack (`HC_FIND_INT2`; past 65535, Report B). Not an `F`
+   channel: return.
+3. An `F` channel: the read-ahead emptied, `CH_FLUSH` (what was printed
+   before the TAB goes first), then **`tpi:chseek 0700`** (n low, n high as
+   hex), PMR1 = 4, and `CH_STATUS`; R_FLAGS bits 2–1 set to 3.
+4. Pico: `CH_SEEK` → `CH_CALL(CHANNELS.seek, 4, 7)`: a record left open is
+   padded and closed, then the position is record 7 (byte 7 on a stream);
+   n = 0 makes the next read the count
+   ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#ch_seekpre-cmd)).
+5. Back in HOME at 21BDh with A = 17h, BC = n: the stock `RST 10h` three
+   times. `CH_OUT` swallows them, counting R_FLAGS down. On the screen or
+   the printer the three bytes do what they always did.
 
 ## INPUT
 
@@ -83,8 +109,7 @@ characters through the record's input routine, HOME 14A9h → `CH_IN`.
 
 1. A byte left in the record's 255-byte input buffer: hand it out (carry
    set).
-2. Otherwise `CH_FLUSH` (what was printed goes first — `INPUT #4;TAB n;` is
-   a seek, then a read), then `CH_FETCH`: **`tpi:chrd`**, PMR1 = 4, PMR2 =
+2. Otherwise `CH_FLUSH` (what was printed goes first), then `CH_FETCH`: **`tpi:chrd`**, PMR1 = 4, PMR2 =
    255.
 3. Pico: `CH_READ` — `CH_CALL(CHANNELS.read, 4, 255)`; then **a data phase,
    not a status**: `01`, the count, the bytes, their XOR — built in RAM and
@@ -122,8 +147,7 @@ silently ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_beep-3029h)).
 (PMR2 = 30; 1–254; 255 or more is sent as 255 and refused with Q). A record
 file sends at every CR, so a record longer than 30 is Report Q on the
 PRINT that made it; `PRINT #4;TAB n;…` and `INPUT #4;TAB n;…` seek to
-record n, the TAB arriving at the Pico as the escape `17h lo hi` in the
-`tpi:chwr` data. CLOSE pads a record left open by a trailing `;` to its
+record n, the TAB arriving at the Pico as `tpi:chseek` (above). CLOSE pads a record left open by a trailing `;` to its
 full length ([../firmware/channels.md](../firmware/channels.md), [user
 manual §6.7](../../manual/user-manual.md#67-records-jumping-straight-to-what-you-want)).
 
@@ -151,6 +175,7 @@ for every character.
 | no card | the card gate | J (bare); the stream stays as it was |
 | a missing file for `r`, a missing folder | `CH_OPEN` | F, no channel |
 | a bad mode, a record too long, `TAB 0` with data | `CH_OPEN`, `CH_WRITE` | Q |
+| `TAB` past 65535 | HOME's FIND-INT2, from `CH_TAB` | B |
 | the end of the file | `CH_READ` → 7 | 8 End of file |
 | a starved FIFO in the data phase | `CH_FETCH`'s XOR | R |
 | the Pico's tail not finished before the next SYNC | `CH_SEND`'s IDLE wait (~1 s) | — (prevented); without it, T |
@@ -159,6 +184,6 @@ for every character.
 ## Where to read more
 
 - The ROM side: [../rom/exrom-fdd.md](../rom/exrom-fdd.md#the-channel-driver).
-- The Pico side: [../firmware/tspico-disk.md](../firmware/tspico-disk.md#open--channels-tpichopen-tpichwr-tpichrd-tpichclose),
+- The Pico side: [../firmware/tspico-disk.md](../firmware/tspico-disk.md#open--channels-tpichopen-tpichwr-tpichseek-tpichrd-tpichclose),
   [../firmware/channels.md](../firmware/channels.md).
 - Byte by byte: [PROTOCOL.md §7](../../PROTOCOL.md#7-the-channel-commands).

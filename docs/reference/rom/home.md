@@ -68,6 +68,7 @@ the fixed one ([sysvars.md](sysvars.md#5d37h-the-nmi-vector)).
 | 145Fh | disk-command layer | `CALL 1465h` | `CALL 1488h` | OPEN # through the module | OPEN # |
 | 1488h–14C5h | disk-command layer | dead SYSCON code | five trampolines and the error trap | the module's HOME entries | OPEN #, CLOSE #, PRINT #, INPUT # |
 | 1946h–1949h | disk-command layer | syntax offsets `d0 c0 c4 c8` | `d2 c2 c6 ca` | a bare CAT/FORMAT/MOVE/ERASE is accepted | the disk keywords |
+| 21B8h–21BCh | disk-command layer (#347) | `CALL 1F23h / LD A,17h` | `LD B,ADh / CALL 25D6h` | a TAB on a file channel goes to the Pico as its own command | PRINT #, INPUT # with TAB |
 | 24C5h–24CEh | 1.1 | part of the AROS stream dispatch | helpers the EXROM's SAVE path calls | | SAVE etc. |
 | 2548h–2560h | 1.1 | DOSAVE, the class-0Bh dispatcher | jumps to EXROM 01ABh, 01CCh, 1855h | SAVE, LOAD, VERIFY, MERGE go to the EXROM | SAVE, LOAD, VERIFY, MERGE |
 | 25C0h | 1.1 | `CALL 0F09h` | `CALL 0F43h` | | *(uncertain)* |
@@ -368,6 +369,38 @@ and the routine's address, so a bare `CAT` is accepted and the module
 parses whatever follows on both passes. The routines at 25C8h–25D4h are
 `LD B,token / JR 25D6h`, unchanged.
 
+### 21B8h: the TAB item
+
+PRINT's print-item routine (and INPUT's, for its prompt items) handles
+`TAB n` at 21ADh–21C2h:
+
+```text
+21ADh   CP ADh / JR NZ,21C3h  ; not TAB: the colour items
+21B1h   RST 20h               ; past the token
+        CALL 1BE5h            ; the number (class 06h)
+21B5h   CALL 214Fh            ; syntax pass: return from the item here
+21B8h   CALL 1F23h            ; genuine: FIND-INT2, n -> BC (Report B)
+21BBh   LD A,17h              ; genuine: the TAB control
+21BDh   RST 10h / LD A,C / RST 10h / LD A,B / RST 10h / RET   (shared with AT)
+```
+
+So `TAB n` reached the current channel as 17h, n low, n high: on the
+screen "go to column n", but on a file channel the same three bytes as
+`CHR$ 23;CHR$ lo;CHR$ hi`. The module's channel driver took every 23 it
+was given for a TAB, so a binary file could not hold one (#347).
+
+The disk-command layer replaces the five bytes at 21B8h with `LD B,ADh /
+CALL 25D6h`: B = the TAB token, into the disk-keyword thunk (below), whose
+module routine (`FDD_TAB_MAIN`) tells the TAB token from a disk keyword
+and goes to `CH_TAB` ([exrom-fdd.md](exrom-fdd.md#ch_tab)). `CH_TAB` does
+the FIND-INT2 itself (through `CALL_HOME`), sends the seek as
+`tpi:chseek` when the current channel is an `F` record and tells the
+driver to swallow the three bytes, and returns A = 17h, BC = n, so 21BDh
+prints them as it always has. On any other channel nothing else changes.
+214Fh (`CALL 2889h / POP HL / RET Z / JP (HL)`) returns from the item on
+the syntax pass, so the module is called at run time only. No new HOME
+bytes: the patch reuses 25D6h. `build-rom.py` anchors 21B5h and 21BDh.
+
 ### 24C5h–24CEh: helpers for the SAVE path (v1.1)
 
 The genuine bytes were part of the AROS cartridge's stream dispatch
@@ -425,7 +458,7 @@ established *(unverified)*.
 ### 25D6h–25E3h: the disk keywords
 
 All four keyword routines (25C8h–25D4h) load B with their token and jump
-here. The genuine 14 bytes were `CALL 2889h / JR NZ / CALL 2569h / CALL 1B44h /
+here; so does the TAB item at 21B8h (B = ADh, by `CALL`, since #347). The genuine 14 bytes were `CALL 2889h / JR NZ / CALL 2569h / CALL 1B44h /
 JP 2567h`, the stock handling of keywords the 2068 had no disk to drive;
 what each call did is not decoded here. ROM 2.2:
 
@@ -454,6 +487,7 @@ where the genuine stub jumped, is untouched.
 | CAT, FORMAT, MOVE, ERASE | syntax offsets 1946h → 25C8h–25D4h → 25D6h | the module, 3000h |
 | OPEN # | 1438h → 14BDh (syntax); 145Eh → 1488h (run time) | G_OSYN, G_OPEN |
 | PRINT #, INPUT #, LIST #, INKEY$ # on an `F` stream | the record's 14A0h / 14A9h | G_OUT, G_IN |
+| TAB in PRINT or INPUT (any channel) | 21B8h → 25D6h | G_MAIN → `FDD_TAB_MAIN` → `CH_TAB` |
 | CLOSE # | 13A5h → 1494h | G_CLOSE |
 | LPRINT, LLIST | 0500h → 0A09h → 04F2h / 0A26h / 04E8h; 0A23h at the end of a line (the stock ZX Printer flush) | 1639h, 163Ch; 1636h |
 | COPY | 0A02h → 3CE3h | 1630h |

@@ -218,11 +218,12 @@ ROM: [exrom-driver.md](../rom/exrom-driver.md) (1879h, 196Dh).
 | `tpi:chopen <mode> <path>` | stream | record length (0 = a stream, 1–254) | a bare status, `CH_REPLY` |
 | `tpi:chopen r d:<pattern>` | stream | 0 | a bare status; the channel reads a listing |
 | `tpi:chwr <hex>` | stream | 0 | a bare status |
+| `tpi:chseek <hex>` | stream | 0 | a bare status; the body is n low, n high |
 | `tpi:chrd` | stream | bytes wanted (1–255; 0 = 255) | the data phase: status (1 data, 7 end of file), n, n bytes, XOR |
 | `tpi:chclose` | stream | 0 | a bare status |
 
-Modes `r`, `w`, `a`, `u`, each with an optional `b`. Byte 17h in a write is
-always the TAB escape `17h, n lo, n hi`. Firmware:
+Modes `r`, `w`, `a`, `u`, each with an optional `b`. Every byte of a write
+is data, 17h included; `TAB n` is `tpi:chseek` (#347). Firmware:
 [tspico-disk.md](../firmware/tspico-disk.md), [channels.md](../firmware/channels.md);
 ROM: [exrom-fdd.md](../rom/exrom-fdd.md).
 

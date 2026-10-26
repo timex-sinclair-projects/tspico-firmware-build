@@ -6,9 +6,10 @@
 # translation both ways.
 #
 # Stage 1: sequential text and binary files (modes r, w, a).
-# Stage 2 (spec §4b): TAB is the position. PRINT #4;TAB n reaches the channel as
-# 23, n low, n high, and so does INPUT #4;TAB n;a$ (INPUT prints its prompt items
-# to the stream) just before it reads. Mode u reads and writes. A channel opened
+# Stage 2 (spec §4b): TAB is the position. PRINT #4;TAB n reaches the Pico as
+# tpi:chseek n, and so does INPUT #4;TAB n;a$ (INPUT prints its prompt items to
+# the stream) just before it reads: the ROM sends the seek as its own command,
+# so the bytes written are all data, 23 included (#347). Mode u reads and writes. A channel opened
 # with a record length is a record file: TAB n is record n (1-based), a PRINT
 # fills one record (a CR closes it and pads the rest), a read returns exactly one
 # record and a CR, and TAB 0 asks for the record count. Without one it is a
@@ -188,7 +189,6 @@ class Channel:
         self.text_in = TextIn()
         self.eof_cr = False                          # a last line without a newline got its CR
         self.last_raw = 10
-        self.tab = None                              # TAB bytes still to come: a list
         self.fill = None                             # bytes in the open record, None: none open
         self.query = False                           # TAB 0: the next read is the count
         self.mem = None                              # a listing (d:): the bytes, not a file
@@ -296,7 +296,7 @@ class Channels:
         ch.last_raw = 10
 
     def _data(self, ch, data):
-        """Bytes to store (no TAB in them) at the channel's position."""
+        """Bytes to store at the channel's position."""
 
         if ch.mode == "r":
             return                                   # INPUT #'s prompt items: dropped
@@ -324,26 +324,18 @@ class Channels:
             ch.fill = fill + len(out)
 
     def write(self, stream, data):
-        """What BASIC printed to the stream: data, and TAB as 23, low, high."""
+        """What BASIC printed to the stream. Every byte is data: a TAB comes
+        as seek(), so a 23 here is a 23 (#347; in text mode a control code)."""
 
         ch = self._get(stream)
-        run = bytearray()
-        for b in data:
-            if ch.tab is not None:
-                ch.tab.append(b)
-                if len(ch.tab) == 2:
-                    n = ch.tab[0] | ch.tab[1] << 8
-                    ch.tab = None
-                    self._seek(ch, n)
-            elif b == 23:
-                if run:
-                    self._data(ch, run)
-                    run = bytearray()
-                ch.tab = []
-            else:
-                run.append(b)
-        if run:
-            self._data(ch, run)
+        if data:
+            self._data(ch, data)
+
+    def seek(self, stream, n):
+        """TAB n on the stream: record n of a record file, byte n of a stream
+        (1-based); 0 makes the next read the count."""
+
+        self._seek(self._get(stream), n)
 
     def read(self, stream, n):
         """Up to n bytes for the 2068, or b"" at the end of the file."""

@@ -881,21 +881,21 @@ The main routine sends the line 64 bytes at a time, then a single 0Dh. A driver:
 Put the file on a PC and you'll find one line per score. You can read it back with
 `OPEN #4,"f:scores.txt"` and `INPUT #4`.
 
-> **Note:** in a channel, the byte 23 (17h) is always the start of a TAB (a seek), even in
-> binary mode. Text doesn't contain it, but a block of machine code or a screen might. **To
-> write binary data, use an ordinary `SAVE ... CODE`**, or `SAVE "f:..." CODE`, not
-> `tpi:chwr`.
+> **Note:** a text-mode channel drops the byte 23 (17h) and the two bytes after it, as the
+> 2068's own output does with a TAB. Text doesn't contain it, but a block of machine code or a
+> screen might: **open a binary channel** (`wb`, section 6.2) to write those, and every byte
+> goes into the file as it is.
 
 ## 5.4 Counting files: `countdir`
 
 The channel commands can open a folder listing as if it were a file (the `d:` device, as in
-`OPEN #4,"d:*.tap"`). A TAB 0 on that channel asks for the number of names, and the next read
-returns it as digits and a carriage return. `countdir` uses that trick to count the files that
+`OPEN #4,"d:*.tap"`). A TAB 0 on that channel (`tpi:chseek 0000`) asks for the number of
+names, and the next read returns it as digits and a carriage return. `countdir` uses that trick to count the files that
 match a pattern, without reading the whole listing:
 
 ```asm
 OPEN_T: db "tpi:chopen r d:"
-TAB0_T: db "tpi:chwr 170000"    ; 23, 0, 0: TAB 0
+TAB0_T: db "tpi:chseek 0000"    ; TAB 0
 ```
 
 After the TAB, one `tpi:chrd` returns something like `12` and a CR, which the program turns
@@ -1017,17 +1017,18 @@ Add `b` for **binary** (`rb`, `wb`, `ab`, `ub`). Without it, a channel is in **t
   tokens are spelled out as text;
 - **reading**, newlines become carriage returns, so `INPUT #` sees lines.
 
-Binary mode passes the bytes through unchanged, with one exception: in a write, **byte 23 is
-always the start of a TAB**, in either mode (next section). Paths work as they do everywhere
+Binary mode passes every byte through unchanged, 23 included. (Text mode drops a 23 and the
+two bytes after it; a seek is its own command, next section.) Paths work as they do everywhere
 else: relative to the current folder, or from the card's `/TAP` folder if they start with `/`.
 
 ## 6.3 TAB: seeking
 
-A write of the three bytes `23, n low, n high` moves the channel to byte *n* of the file (1 is
-the first byte). This is how `PRINT #s;TAB n;` works, and it's how your machine code
-seeks: `tpi:chwr 17` followed by the two bytes in hex.
+`tpi:chseek` followed by *n* low and *n* high in hex moves the channel to byte *n* of the file
+(1 is the first byte): `tpi:chseek 0A00` is TAB 10. This is what `PRINT #s;TAB n;` sends, and
+it's how your machine code seeks. The answer is a bare status, as for `tpi:chwr`; a body that
+isn't two bytes is **C**.
 
-**TAB 0** (`tpi:chwr 170000`) is a question. The next `tpi:chrd` answers it with a count, as
+**TAB 0** (`tpi:chseek 0000`) is a question. The next `tpi:chrd` answers it with a count, as
 text ending in a carriage return:
 
 - for a folder listing, the number of names (as `countdir` uses);
@@ -1053,7 +1054,7 @@ length (**Q** otherwise). A folder that isn't there gives **F**.
 
 1. `chopen`, `chwr` (hex), `chrd` (data answer), `chclose`: the stream number is just a label.
 2. Modes `r w a u`, plus `b` for binary. Text mode translates line ends and keywords.
-3. Byte 23 in a write is always a TAB: don't write raw binary containing it.
+3. `tpi:chseek` seeks; in binary mode every byte `tpi:chwr` sends is data.
 4. TAB 0 then a read gives you a count; `d:` lists a folder.
 
 ---
@@ -1294,7 +1295,8 @@ in RAM, with no bank switching at all.
    ends a listing with 03h, even after `N`.
 7. **Handle BREAK with a SYNC** so the Pico stops too.
 8. **Close your channels**, even when something fails.
-9. **Don't write byte 23 through a channel** unless you mean a TAB.
+9. **Write binary data through a binary channel** (`b`): text mode drops a 23 and the two
+   bytes after it.
 10. **`DI` around every bank switch**, and don't let a report escape from the EXROM without a
     trap.
 11. **Stay out of ZX48 mode** with this protocol; `OUT 14,14` leaves it.
@@ -3206,10 +3208,13 @@ until something sends it.
 - **The key click.** `INPUT #` reads through the line editor, and the editor clicks once for
   every character it takes, as if you'd typed it. Reading a file sounded like a typewriter
   until the module learned to skip the click when the current channel is an `f:` record.
-- **`TAB` for free.** `PRINT #4;TAB 30;` sends the control code 23 and two bytes of position
-  through the output routine like any other characters. The `f:` channel takes that sequence
-  as a seek, so on a file of fixed-length records, `PRINT #4;TAB n;` and `INPUT #4;TAB n;`
-  go straight to record *n*. BASIC needed no new keyword.
+- **`TAB` without a new keyword.** On a stock 2068, `PRINT #4;TAB 30;` sends the control code
+  23 and two bytes of position through the output routine like any other characters. At first
+  the `f:` channel took that sequence as a seek, which meant a binary file could never hold a
+  23. ROM 2.3 patches the TAB item instead: on an `f:` channel it sends the seek to the Pico as
+  its own command, `tpi:chseek`, and the channel swallows the three bytes that follow. So
+  `PRINT #4;TAB n;` and `INPUT #4;TAB n;` still go straight to record *n*, and every byte of
+  data is data.
 - **`NEW` forgets one end.** `NEW` and a reset clear the 2068's records, but the TS-Pico still
   remembers the streams. The next `OPEN #` of the same stream number replaces the stale entry,
   so nothing needs cleaning up.

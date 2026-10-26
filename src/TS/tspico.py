@@ -2746,7 +2746,7 @@ SD_FREE = frozenset((
 # Commands the fdd ROM sends in the middle of a BASIC statement (OPEN #,
 # PRINT #, INPUT #, SAVE/LOAD "f:"): a printed message would move the ROM's
 # current channel, so these get the bare status (CH_REPLY does the same).
-SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:FOPEN"))
+SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHSEEK", "TPI:CHRD", "TPI:FOPEN"))
 
 
 def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct):                        # does this command need the card?
@@ -3242,6 +3242,7 @@ def NATIVE_LOAD_PREP(path, op, mod):                                           #
 # with the stream number in PMR1:
 #   tpi:chopen <mode> <path>   open ("r" / "w" / "a", + "b" for binary)
 #   tpi:chwr <hex>             write bytes (hex in the body: no data phase)
+#   tpi:chseek <hex>           TAB n: n low, n high, as hex (#347)
 #   tpi:chrd                   read up to PMR2 bytes -- a raw data phase:
 #                              status, count, the bytes, their XOR (see CH_READ)
 #   tpi:chclose                close (not an error if it isn't open)
@@ -3368,16 +3369,38 @@ def CH_OPEN(pre, cmd):                                                        # 
     CH_REPLY(st)
 
 
+def CH_HEX(cmd):                                                              # tpi:chwr / chseek body -> bytes, None if bad
+
+    hx = getArgs(cmd).strip()
+    try:
+        return bytes(int(hx[i:i + 2], 16) for i in range(0, len(hx), 2))
+    except ValueError:
+        return None
+
+
 def CH_WRITE(pre, cmd):                                                       # tpi:chwr <hex>
 
     stream = PARAMS(pre)[0] & 0xFF
-    hx = getArgs(cmd).strip()
-    try:
-        data = bytes(int(hx[i:i + 2], 16) for i in range(0, len(hx), 2))
-    except ValueError:
+    data = CH_HEX(cmd)
+    if data is None:
         CH_REPLY(_5_C_Nonsense)
         return
     msg, st = CH_CALL(CHANNELS.write, stream, data)
+    CH_REPLY(st)
+
+
+def CH_SEEK(pre, cmd):                                                        # tpi:chseek <hex>
+
+    # ROM 2.3's TAB item sends PRINT #n;TAB n (and INPUT #n;TAB n;) here as its
+    # own command, n low and n high in the body, instead of 23, low, high in
+    # the data: a file channel took every 23 for a TAB, so binary data could
+    # not hold one (#347). tpi:chwr's bytes are now all data.
+    stream = PARAMS(pre)[0] & 0xFF
+    data = CH_HEX(cmd)
+    if data is None or len(data) != 2:
+        CH_REPLY(_5_C_Nonsense)
+        return
+    msg, st = CH_CALL(CHANNELS.seek, stream, data[0] | data[1] << 8)
     CH_REPLY(st)
 
 
@@ -6601,6 +6624,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:FOPEN": NATIVE_OPEN,
         "TPI:CHOPEN": CH_OPEN,
         "TPI:CHWR": CH_WRITE,
+        "TPI:CHSEEK": CH_SEEK,
         "TPI:CHRD": CH_READ,
         "TPI:CHCLOSE": CH_CLOSE,
         "TPI:FFW" : FWD,

@@ -225,7 +225,8 @@ def test_ch_close(t, root):
         return tx[0] if tx else None
 
     check(cmd(t.CH_OPEN, "tpi:chopen u recs.dat", 4, 6) == t._1_OK, "chopen u, record length 6")
-    cmd(t.CH_WRITE, "tpi:chwr " + (bytes([23, 2, 0]) + b"ab").hex(), 4)   # TAB 2;"ab"; (no CR)
+    cmd(t.CH_SEEK, "tpi:chseek 0200", 4)                                  # TAB 2;"ab"; (no CR)
+    cmd(t.CH_WRITE, "tpi:chwr " + b"ab".hex(), 4)
     del state["inactive_io"][:]
     st = cmd(t.CH_CLOSE, "tpi:chclose", 4)
     check(st == t._1_OK, "chclose: OK (%r)" % (st,))
@@ -251,7 +252,8 @@ def test_ch_close(t, root):
     state["card"] = True
     t.TSP.sd_present = True
     cmd(t.CH_OPEN, "tpi:chopen u recs2.dat", 6, 6)
-    cmd(t.CH_WRITE, "tpi:chwr " + (bytes([23, 1, 0]) + b"z").hex(), 6)
+    cmd(t.CH_SEEK, "tpi:chseek 0100", 6)
+    cmd(t.CH_WRITE, "tpi:chwr " + b"z".hex(), 6)
     state["card"] = False
     st = cmd(t.CH_CLOSE, "tpi:chclose", 6)
     check(st == t._10_J_Invalid_IO and 6 in t.CHANNELS.table,

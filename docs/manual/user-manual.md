@@ -1199,8 +1199,8 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
   **O Invalid stream**.
 - A file can be read and written by different streams, but they don't know about each other.
   CLOSE one before relying on what the other sees.
-- One character can't be written into a file with `PRINT #`: `CHR$ 23`, because the 2068 uses
-  it for `TAB`.
+- In a text file, `PRINT #` drops `CHR$ 23` and the two characters after it, as it drops an
+  `AT`'s. A binary file (`"wb"`, `"ab"`, `"ub"`) takes every character, `CHR$ 23` included.
 
 **If something goes wrong:**
 
