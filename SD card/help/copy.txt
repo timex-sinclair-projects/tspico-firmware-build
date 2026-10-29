@@ -3,13 +3,14 @@ BASIC Command               COPY
 COPY
 
 Prints the top 22 lines of the
-diplay on the printer. You can't
-COPY a screen of an automatic
-listing. Since it is monochrome,
-pixels that are INK color
-(binary 1 in memory) appear
-black with PAPER pixels (binary
-0 in memory) as the white paper.
+display on the printer. You
+can't COPY a screen of an
+automatic listing. Since it is
+monochrome, pixels that are INK
+color (binary 1 in memory)
+appear black with PAPER pixels
+(binary 0 in memory) as the
+white paper.
 Things printed with INVERSE will
 appear so, even if the colors
 make it look normal as INVERSE
@@ -23,8 +24,25 @@ With a TS-Pico in "ts2040"
 output goes to the printer. In
 "picopt" (software print) mode,
 the output goes to the TS-Pico,
-but this currently is not
-implemented.
+which saves it as a picture in
+/VSCREEN/SCRnnnn.BMP.
+
+COPY "a.tap" TO "b.tap"
+Copies a file. The source is not
+changed. If the destination is a
+directory, the copy keeps its
+name. An existing file is never
+overwritten (Report F). A
+directory can't be copied
+(Report Q).
+
+COPY "*.tap" TO "backup"
+Copies every match into the
+directory, listing each one as
+copied or exists.
+
+Names can be string expressions.
+Same as SAVE "tpi:copy a b".
 
 See also: LPRINT, ts2040, picopt
-To copy a file, see MOVE.
+          move, erase, cat

@@ -134,7 +134,7 @@ consequences before their causes.
 | Firmware | 2.3.1 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
 | TS-2068 ROM | 2.3 | HOME 0065h (`PEEK 101` = 35), BIOS G_VERS = 0023h, the boot banner, and byte 2 of every command pre-header | `PEEK 101`; `SAVE "tpi:info"` (from the pre-header) |
 | ZX Spectrum ROM | v4 | the banner byte at 38B7h | the boot screen in ZX48 mode |
-| The ROM's disk module | FDD_VERSION 8 (unchanged by 2.3, which added `PS_READ` at its end) | EXROM 30AFh | — |
+| The ROM's disk module | FDD_VERSION 9 (2.3 added `PS_READ` and the COPY entry at its end) | EXROM 30AFh | — |
 
 The firmware and the ROM share a major.minor number; the third part is a
 firmware-only release on the same ROM. Firmware 2.3 needs ROM 2.3: after

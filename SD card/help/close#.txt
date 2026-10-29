@@ -8,4 +8,5 @@ finishes the file on the SD
 card, so close files before the
 program ends.
 
-See also: OPEN#, streams
+See also: OPEN#, RESTORE,
+streams

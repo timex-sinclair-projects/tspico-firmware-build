@@ -1,6 +1,6 @@
 # catalog.py — names, wildcards, paths, listings
 
-Source: [`src/TS/catalog.py`](../../../src/TS/catalog.py) (313 lines).
+Source: [`src/TS/catalog.py`](../../../src/TS/catalog.py) (531 lines).
 
 The pure half of `CAT` / `SAVE "tpi:dir <arg>"`, and of every other
 command that takes a path: pattern matching, path resolution inside the
@@ -20,7 +20,14 @@ Callers outside [tspico-disk.md](tspico-disk.md): `LIST_DIR_FILES`
 `GETINFO` (`space_pair`), `ChangeDir` (`resolve`), `LOAD_TPI` (`has_wild`,
 `match_shown`), `RM_CHECK` (`resolve`, `ROOT`, `within`) — all in
 [tspico-files.md](tspico-files.md) and
-[tspico-commands.md](tspico-commands.md).
+[tspico-commands.md](tspico-commands.md); `LIST_DIR_FILES` also takes
+`card_line`, and `CARD_LABEL` ([tspico-bus.md](tspico-bus.md)) takes
+`read_label`.
+
+The file's end is not pure: `read_label` and `write_label` read and write
+the card's raw sectors, through a block device the caller hands in (the SD
+driver, `SD_DEV` in `tspico.py`), because MicroPython gives Python no way
+to the FAT volume label.
 
 ## Map of the file
 
@@ -32,6 +39,10 @@ Callers outside [tspico-disk.md](tspico-disk.md): `LIST_DIR_FILES`
 | 136–174 | `select`, `basename`, `parent`, `within` |
 | 177–246 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
 | 249–313 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
+| 316–354 | `LIST_TEXT_MAX`, `LIST_HEX_MAX`, `is_text`, `list_text` — LIST "name" |
+| 357–385 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
+| 388–515 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
+| 518–531 | `card_line` — CAT's card line |
 
 ## Constants
 
@@ -108,7 +119,7 @@ pattern, dir + pattern, root + pattern, a plain name, spaces stripped.
 
 ### `split_pair(arg)`
 
-`"a.tap|b.tap"` → `("a.tap", "b.tap")`. The ROM joins MOVE's two names
+`"a.tap|b.tap"` → `("a.tap", "b.tap")`. The ROM joins COPY's and MOVE's two names
 with `|`, which FAT names cannot contain; typed by hand, `SAVE "tpi:copy a
 b"` with a single space works too (exactly two words). Either half is `''`
 when missing: with no `|` and not two words, the whole stripped text is
@@ -238,3 +249,168 @@ two more than its payload. Used by `TAPDIR` and `CATALOG_TEXT`
 (`orphans=True`). Pinned: headers only by default; `orphans=True` shows
 the headerless block, named so; the position is marked, even on a data
 block; every row is 32 characters.
+
+## LIST "name": a file as the 2068 shows it
+
+| Name | Value | Meaning |
+|---|---|---|
+| `LIST_TEXT_MAX` | 8192 | the most of a text file `LIST "x"` shows |
+| `LIST_HEX_MAX` | 2048 | the most of any other file: 256 rows of the hex dump. Also how much `DISK_LIST_WORK` reads first, to decide which the file is |
+
+### `is_text(data)`
+
+True if every byte of `data` is TAB, LF, CR, or 32 and up but not 127 (DEL).
+Bytes from 80h up pass (UTF-8 or Latin-1 text), and `list_text` shows them
+as `?`. Pinned: CR, LF and TAB are text; a 0 byte and 127 are not; é in
+UTF-8 is.
+
+### `list_text(data, size, text=None)`
+
+`LIST "name"`'s text, from the first bytes of the file (`data`) and the
+file's `size`. `text` says which form (default `is_text(data)`; the caller
+passes what it decided on the first `LIST_HEX_MAX` bytes, so text that
+turns binary further on still lists as text).
+
+- **Text:** TAB becomes two spaces, CR and LF stay (`SEND_MSG2` breaks
+  lines at them), every other character goes through `screen_name`, so
+  what the 2068 can't show is `?`.
+- **Anything else:** a hex dump, 8 bytes a row in 30 columns, CR-ended:
+  the offset in four hex digits, the 16 hex digits, the bytes as
+  characters (`.` for anything outside 32–126 or in `UNSHOWABLE`), as in
+  `0000 4142434445464748 ABCDEFGH`; a short last row is padded so its
+  characters line up.
+
+When `data` is shorter than `size`, a last line `(the first N of M
+bytes)`, after a blank one. Pinned: line ends kept, TAB as two spaces, `|`
+as `?`; a binary row's layout and a short last row's padding; `|` and `~`
+as `.` in a row; the "first N of M" line; with `text=True` a control code
+is `?`.
+
+## The card's label
+
+MicroPython's `VfsFat` doesn't give Python the volume label: FatFs's
+`f_getlabel` and `f_setlabel` are compiled in (the rp2 port sets
+`MICROPY_FATFS_USE_LABEL`), but `VfsFat` calls only `f_setlabel`, from
+mkfs (the comment at 357–368). So these work in the card's raw 512-byte
+sectors through `readblocks` and `writeblocks`, and `write_label` needs
+the card unmounted, because FatFs keeps a sector of the root folder
+cached.
+
+The label is a root-folder entry with attribute 08h, which Windows and
+macOS show. The boot sector has a copy, `BS_VolLab`, which DOS showed.
+`read_label` reads the entry, and `write_label` writes only the entry, as
+FatFs's `f_setlabel` does (MicroPython 1.29's `lib/oofatfs/ff.c`): the
+boot sector is the one sector whose loss makes a card unmountable, and
+the name shows without it. One effect: once the label is taken off, macOS
+shows the boot sector's copy, the name the card was formatted with
+(checked on `hdiutil` images, 2026-10-29). The TS-Pico shows `SD`.
+Pinned against FAT16 and FAT32 images built by
+[`src/test/fat_image.py`](../../../src/test/fat_image.py), laid out like
+images `newfs_msdos` made and `fsck_msdos` passed (*the real images were
+checked by hand, 2026-10-29; the test uses the fakes*).
+
+| Name | Value | Meaning |
+|---|---|---|
+| `LABEL_MAX` | 11 | a FAT label's length |
+| `LABEL_BAD` | `"*+,./:;<=>?[\]\|` | characters FatFs's `f_setlabel` refuses |
+
+### `label_clean(name)`
+
+The label FAT would store for `name`: trailing spaces off, upper case. None
+if it is longer than `LABEL_MAX`, starts with a space, or holds a
+character below a space, above `~`, in `LABEL_BAD` or in `UNSHOWABLE` (the
+2068 couldn't show it in CAT's card line). `""` is no label. Used by
+`LABEL_SET`. Pinned: `games` → `GAMES`; `Games 2  ` → `GAMES 2`; `""`
+and 11 characters pass; 12 characters, a leading space, `.`, `:`, `*`,
+`|`, `é` and TAB are None.
+
+### `_u32(b, i)`
+
+The little-endian 32-bit number at `b[i]`. `_u16` (two bytes) is the same,
+at line 388 (`native.py` has its own, [native.md](native.md)).
+
+### `_is_vbr(b)`
+
+True if sector `b` is a FAT boot sector with 512-byte sectors: the 55h AAh
+signature, a jump (EBh, E9h or E8h) first, 512 bytes per sector, a power
+of two sectors per cluster, one or two FATs and some reserved sectors.
+FatFs's `check_fs`, simplified (inferred from the FatFs source; the
+checks were chosen to take the cards `newfs_msdos` and SD Card Formatter
+make).
+
+### `_Fat`
+
+The FAT volume on `dev`, found as FatFs finds it: sector 0 if it is a boot
+sector, else the first of the MBR's four partitions whose first sector is
+one. `OSError(19, "No FAT volume")` if neither.
+
+### `_Fat.__init__(self, dev)`
+
+Reads sector 0 and, through the MBR if need be, the boot sector. Keeps
+`dev`, `start` (the volume's first sector), `spc` (sectors per cluster),
+`fat` (the first FAT's sector) and `fat32` (the 16-bit FAT size is 0).
+FAT32: `data` (cluster 2's sector) and `root_clus`. FAT12/16: `root` (the
+fixed root folder's first sector) and `root_secs`.
+
+### `_Fat.read(self, n)`
+
+Sector `n` as a new 512-byte `bytearray`.
+
+### `_Fat.root_sectors(self)`
+
+Every root-folder sector, in order: the fixed area on FAT12/16; on FAT32
+each cluster of the root's chain, read from the FAT, until an end mark
+(0FFFFFF7h and up) or a cluster below 2. At most 65 536 clusters, so a
+loop in a damaged chain ends.
+
+### `_Fat.find(self)`
+
+`(lab, free)`, each `(sector, offset, buf)` or `(None, None, None)`: the
+label entry and the first free one. An entry is the label if its
+attribute has 08h and is not a long-name piece (0Fh in the low six bits),
+and its first byte is neither 0 nor E5h. A free entry is a deleted one
+(E5h) or the first 0, where the search stops. `buf` is the sector as read,
+for the caller to change and write back. Pinned (through `read_label`): a
+long-name entry and a deleted label are not the label.
+
+### `read_label(dev)`
+
+The card's label, `""` for none; `OSError` if there is no FAT volume. A
+first byte of 05h is E5h (FAT's escape for a name that starts with E5h);
+anything outside 32–126 is `?`; trailing spaces go. Used by `CARD_LABEL`.
+
+### `write_label(dev, name)`
+
+Gives the card the label `name`, already in `label_clean`'s form; `""`
+takes it off. `OSError` if there is no FAT volume.
+
+- **A name:** a new entry, the name padded to 11 and attribute 08h, with
+  no date, goes over the old label entry or else into the first free one;
+  none free is `ValueError("Root folder full")` (FAT12/16's fixed root
+  folder can fill; on FAT32 a full root folder's chain is not extended).
+- **`""`:** the label entry, if there is one, is marked deleted (E5h).
+
+Either way one sector is written, the root-folder sector holding the
+entry, read just before; the boot sector, its FAT32 backup and the FATs
+are never touched. Used by `DISK_LABEL_WORK`, with the card unmounted.
+Pinned: FAT16 (no MBR) — the label goes in a deleted slot with the other
+entries untouched, and only that sector is written; a second label
+replaces the first, leaving one entry; `""` deletes it, writing nothing
+else; a full root folder is ValueError with nothing written, but one
+holding a label takes the new one in its place. FAT32 behind an MBR — the
+label goes in the root's second cluster when the first is full, and only
+that sector is written; the boot sector, its backup and the MBR are
+untouched. No FAT volume: OSError (from
+`read_label`).
+
+## CAT's card line
+
+### `card_line(label, total, free)`
+
+The line CAT and `tpi:dir` show over the listing, at most 32 characters:
+`SD: 240 MB; free: 236 MB`, with the label in place of `SD` when the card
+has one. A long label tries `L: 240 MB, 236 MB free`, then `L 240 MB, 236
+MB free`, then `L: 236 MB free`, and the last cut to 32. The sizes come
+from `space_pair`. Used by `LIST_DIR_FILES`. Pinned: no label; a label in
+place of `SD`; two 11-character labels with large sizes still fit 32
+columns.

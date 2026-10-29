@@ -2,11 +2,25 @@ BASIC Command            RESTORE
 --------------------------------
 RESTORE [n]
 
-Sets the the DATA pointer (sys
+Sets the DATA pointer (sys
 var DATADD) for the next READ
 by specifying the program line
 number. The default line number
-is 0. CLEAR also resets the 
+is 0. CLEAR also resets the
 pointer to line 0.
 
-See also: READ, DATA, CLEAR,    sysvars
+RESTORE #n
+Goes back to the start of the
+file open on stream n with
+OPEN #n,"f:...". The next
+INPUT #n reads from the first
+byte, and the next PRINT #n
+writes over the start. What was
+printed before is sent first.
+On a record file, the open
+record is finished first.
+A stream that isn't an OPEN #
+file is Report O.
+
+See also: READ, DATA, CLEAR,
+sysvars, open#
