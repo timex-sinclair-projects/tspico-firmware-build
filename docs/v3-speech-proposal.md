@@ -184,9 +184,8 @@ On branch `v3-speech` (2026-10-12):
 | 2. The chip in `tsbus` | **Done.** `sp0256.c` (MAME's core via `tools/sp0256-port.py`), checked bit for bit against MAME's C++ (`sp0256_hosttest.py`). Core 1 runs it into a ring that two DMA channels play to GP46/GP30. Core 1 never reads flash: the tables had to be placed in RAM by name, because GCC put them in `.rodata` even without `const`. On board 2: 80,157 samples for two sentences, exactly MAME's count, never late |
 | 3. Text and `tpi:say` | **Done.** `speech.py`, the rules generated from Wasser's `english.c`, `/speech.txt`, `tpi:say`, and speech started at boot with `SPEECH_VOLUME`/`SPEECH_RATE`/`SPEECH_PORTS` |
 | 4. The `s:` channel | **Dropped**: needs a ROM change |
-| 5. Ports 17 and 37 | **Done** in the firmware; untested from a 2068 |
+| 5. Ports 17 and 37 | **Done**, tested from a 2068 with a program written for the speech board (OUT 17 / IN 37). The boot greeting also speaks at power-on |
 | 6. Docs | **Done**: the reference (`firmware/speech.md`, `tsbus.md`, `board.md` and others), the v3 manual's Appendix G, `NOTICE` |
 
-Still to do, with the card in a 2068: `tpi:say` from BASIC, a program
-written for the speech board (OUT 17 / IN 37), and the IN timing while speech
-plays (`respond_ns`, no late INs).
+Still to do, with the card in a 2068: `tpi:say` from BASIC, and the IN timing
+while speech plays (`respond_ns`, no late INs).
