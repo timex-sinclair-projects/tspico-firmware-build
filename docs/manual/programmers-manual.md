@@ -1074,7 +1074,7 @@ Every `SAVE "tpi:..."` command in the User Manual can be sent with `SEND_CMD` an
 | `tpi:cd <folder>`, `tpi:cd -` | moving around (see the User Manual) |
 | `tpi:path` | prints the current folder |
 | `tpi:dir [pattern]` | prints a listing (86h, with "Scroll?") |
-| `tpi:copy a b`, `tpi:ren a b`, `tpi:erase x` | file handling, as MOVE, ERASE and FORMAT use |
+| `tpi:copy a b`, `tpi:ren a b`, `tpi:erase x`, `tpi:format x` | file handling, as COPY, MOVE, ERASE and FORMAT use |
 | `tpi:verbose` | turns the Pico's messages on or off |
 
 Remember that most commands only print a message when VERBOSE is on. With it off, you get a

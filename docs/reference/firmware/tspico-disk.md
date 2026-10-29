@@ -1,11 +1,11 @@
-# tspico.py part 7 — the ROM's disk commands on the Pico: CAT, MOVE, ERASE, FORMAT, `f:` files, the channels
+# tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2628–3466.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2628–3469.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
 The ROM gives the four stock disk keywords (CAT, MOVE, ERASE, FORMAT) a
-meaning, adds `f:` names to SAVE, LOAD, VERIFY and MERGE, and adds `f:` and
+meaning, gives COPY a file form beside its printer one, adds `f:` names to SAVE, LOAD, VERIFY and MERGE, and adds `f:` and
 `d:` channels to OPEN # and CLOSE #. None of that is new wire protocol: the
 ROM's module at EXROM 3000h turns each statement into an ordinary `'B'`
 command whose text starts `tpi:`, and the handlers in this part of
@@ -25,12 +25,12 @@ module's patches.
 |---|---|---|
 | 2628–2707 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
 | 2716–2815 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 2818–3112 | `DISK_COPY` … `DISK_REN_WORK` — MOVE, ERASE, FORMAT and `tpi:ren` | here |
-| 3122–3125 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3128–3237 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3251–3278 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3281–3313 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3316–3466 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2818–3115 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT and MOVE | here |
+| 3125–3128 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 3131–3240 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 3254–3281 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3284–3316 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3319–3469 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -47,11 +47,11 @@ bytes 3–4 and 5–6, read with `PARAMS(pre)` ([tspico-files.md](tspico-files.m
 | **CAT** | `tpi:dir` | 0 | 0 | `DIR` ([tspico-commands.md](tspico-commands.md)) | the cached listing, function 86h |
 | **CAT ""** | `tpi:tapdir` | 0 | 0 | `TAPDIR` ([tspico-commands.md](tspico-commands.md)) | the mounted TAP's blocks, 86h |
 | **CAT x$** | `tpi:dir x` | 0 | 0 | `DIR` → [`CATALOG`](#catalogarg) | a listing (86h) or a status |
-| **MOVE TO x$** | `tpi:cd x`; `""` sends `tpi:cd -` | 0 | 0 | `CDIR` ([tspico-commands.md](tspico-commands.md)) | a status |
-| **MOVE a$ TO b$** | `tpi:copy a\|b` | 0 | 0 | [`DISK_COPY`](#disk_copypre-cmd) | a status, or one row per file (86h) |
+| **MOVE TO x$** | `tpi:cd x` (`"-"`: `tpi:cd -`, the previous folder); `""` sends `tpi:cd` | 0 | 0 | `CDIR` ([tspico-commands.md](tspico-commands.md)) | a status; for `""`, the folder menu |
+| **MOVE a$ TO b$** | `tpi:ren a\|b` | 0 | 0 | [`DISK_REN`](#disk_renpre-cmd) | a status |
+| **COPY a$ TO b$** | `tpi:copy a\|b` | 0 | 0 | [`DISK_COPY`](#disk_copypre-cmd) | a status, or one row per file (86h) |
 | **ERASE x$** | `tpi:erase x` | 0 | 0 | [`DISK_ERASE`](#disk_erasepre-cmd) | a status, or a Y/N prompt per match (86h) |
 | **FORMAT x$** | `tpi:format x` | 0 | 0 | [`DISK_FORMAT`](#disk_formatpre-cmd) | a status |
-| — (no keyword) | `tpi:ren a\|b` | 0 | 0 | [`DISK_REN`](#disk_renpre-cmd) | a status |
 | **SAVE/LOAD/VERIFY/MERGE "f:path"** | `tpi:fopen path` | op + 256 × token | the session id | [`NATIVE_OPEN`](#native_openpre-cmd) | a status; for a SAVE over a file, a Y/N prompt on the lower screen (88h) |
 | **OPEN #n,"f:path"[,mode[,len]]** | `tpi:chopen mode path` | stream n | record length (0 = stream) | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
 | **OPEN #n,"d:spec"** | `tpi:chopen r d:spec` | stream n | 0 | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
@@ -59,8 +59,8 @@ bytes 3–4 and 5–6, read with `PARAMS(pre)` ([tspico-files.md](tspico-files.m
 | **INPUT #n / INKEY$ #n** (the driver's fetch) | `tpi:chrd` | stream n | bytes wanted (255) | [`CH_READ`](#ch_readpre-cmd) | status 1, count, bytes, XOR; or status 7 |
 | **CLOSE #n** | `tpi:chclose` | stream n | 0 | [`CH_CLOSE`](#ch_closepre-cmd) | a bare status |
 
-**How the ROM sends them.** The four keywords and `tpi:cd` go through the
-stock `SAVE "tpi:…"` machinery: `FDD_MAIN` builds the text in the
+**How the ROM sends them.** The four keywords, COPY's file form and `tpi:cd` go through the
+stock `SAVE "tpi:…"` machinery: `FDD_MAIN` (`FDD_COPY` for COPY) builds the text in the
 calculator-stack workspace and `TPI_SEND` enters `SESSION_SETUP` past its
 5–31 character name gate (`SESSION_NAMED`, 1AACh), so an argument may be 64
 characters (`MAX_ARG`; longer, or empty, is Report F in the ROM and nothing
@@ -206,9 +206,9 @@ mounted TAP from its live table with `>` on the position; a file typed in
 lower case listed by its stored name; from a subdirectory, `../*.tzx` lists
 the parent unindexed.
 
-## MOVE, ERASE, FORMAT and tpi:ren
+## COPY, ERASE, FORMAT and MOVE
 
-The comment at line 2833 states the rules all four share: paths resolve
+The comment at lines 2710–2714 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -218,7 +218,7 @@ directory with FAT's case-insensitive names.
 
 ### `DISK_COPY(pre, cmd)`
 
-MOVE a$ TO b$ — `tpi:copy a|b`. Copies a file to a new name or into a
+COPY a$ TO b$ — `tpi:copy a|b`. Copies a file to a new name or into a
 directory, or every file matching a pattern into a directory. The source
 is never touched.
 
@@ -230,8 +230,9 @@ is never touched.
    pattern case, one 32-character row per file, keywords not expanded.
    Otherwise `SEND_MSG(msg, "", st)`, logged at level 1 when it is an error.
 
-`pre` is not used. On the ROM side `FDD_MOVE` pops both strings, builds
-`CMD_COPY` + source + `'|'` + destination and sends it through `TPI_SEND`;
+`pre` is not used. On the ROM side `TWO_NAMES` (COPY's way into
+`FDD_MOVE`) pops both strings, builds `CMD_COPY` + source + `'|'` +
+destination and sends it through `TPI_SEND`;
 `|` cannot occur in a FAT name, so it is a safe separator.
 
 Pinned by `disk_cmds_hosttest.py` (`test_copy`): file to new name, whole
@@ -345,13 +346,16 @@ to the 2068.
 ### `DISK_FORMAT(pre, cmd)`
 
 FORMAT x$ — `tpi:format x`. Makes an empty `.tap` and mounts it with
-append on, as `tpi:newtap` does, or makes a directory when the name ends
-in `/`. It never formats the card and never overwrites.
+append on, the start of a new tape to SAVE into, or makes a directory when
+the name ends in `/`. It never formats the card and never overwrites.
+(`tpi:newtap`, which made the `.tap` alone, is gone: this does its job.)
 
 1. `arg` empty: `"Name required"`, Q.
 2. Ends in `/`: `SD_CALL(DISK_MAKE_DIR, arg.rstrip('/'))` and `SEND_MSG`.
-3. Otherwise the base name gets `.tap` when it has no dot; an extension that
-   is not `.TAP` is `'FORMAT makes "x.tap" or "dir/"'`, Q.
+3. Otherwise the base name gets `.tap` when it has no dot; a base name that
+   is `.tap` alone (any case) is no name: `"Name required"`, F; an extension
+   that is not `.TAP` is `'FORMAT makes "x.tap" or "dir/"'`, Q. So
+   `a.b.tap` makes `a.b.tap`, and `v1.2` (a dot, no `.tap`) is Q.
 4. `SD_CALL(DISK_NEW_TAP, arg)` returns the real path or an error
    (logged, sent).
 5. `MOUNT_FILE(real)` ([tspico-files.md](tspico-files.md)), which does its
@@ -365,7 +369,10 @@ never touched. Pinned by `disk_cmds_hosttest.py` (`test_format`): a name
 without `.tap` makes an empty `new.tap`, mounted with append on; a
 subdirectory path; an existing file F, not truncated, not mounted; not a
 `.tap` Q; a missing directory F; `dir/` made and added to `alldirs`, and F
-the second time; `/` F.
+the second time; `/` F. `commands_hosttest.py` (`test_format_tap`) pins
+what `tpi:newtap` was tested for: mounted with append on; an existing name
+in another case F, the file untouched, nothing mounted; `a.b.tap` not
+`a.b.tap.tap` (#169); `.tap` alone F with nothing made.
 
 ### `DISK_NEW_TAP(name)`
 
@@ -386,8 +393,8 @@ ignored), `REFRESH_IF(parent)`, `"Made <public>/"`, 1.
 
 ### `DISK_REN(pre, cmd)`
 
-`SAVE "tpi:ren old|new"` — rename, or move into a directory. No keyword
-sends it: MOVE copies (spec §3, "Decided"). `split_pair` as `DISK_COPY`
+MOVE a$ TO b$ — `tpi:ren a|b`: rename, or move into a directory (spec
+§3). The ROM builds it as `DISK_COPY`'s, with `CMD_REN`. `split_pair` as `DISK_COPY`
 (`"Rename needs two names"`, Q); `SD_CALL(DISK_REN_WORK, a, b)`;
 `SEND_MSG(msg, "", st)`. Nothing is logged here.
 
@@ -407,7 +414,7 @@ itself Q, the mounted file Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3115 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 3118 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -530,7 +537,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
 
-The comment at line 3240 lists the four commands. The ROM's channel driver
+The comment at line 3243 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -689,7 +696,7 @@ so: `CH_CALL(CHANNELS.close, stream)`, which mounts the card; an error
 (no card: J; an SD error: F) is logged and sent, and the stream stays in
 `CHANNELS`.
 
-The long comment at line 3428 is the history. When channels arrived (#83)
+The long comment at line 3431 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

@@ -406,7 +406,7 @@ LOG_LABELS = ("INFO", "WARNING", "ERROR", "CRITICAL","SPECIAL")
 # parked state machine for the rest of the session.
 sd_active = False
 
-# The directory before the last successful change: MOVE TO "" (tpi:cd -) goes
+# The directory before the last successful change: MOVE TO "-" (tpi:cd -) goes
 # back to it. One level, like cd -.
 prev_path = None
 
@@ -1150,7 +1150,7 @@ def SD_MOUNT_FAILED(attempt, err):                                             #
     OSError(19). attempt 0: the detect switch said no card."""
 
     # Raise rather than loop in BLINK_ERROR. This runs inside commands
-    # (CD, MD, RM, NEWTAP, HELP, every MOUNT_FILE), and a card that wedges
+    # (CD, MD, RM, FORMAT, HELP, every MOUNT_FILE), and a card that wedges
     # mid-session -- often right after a failed write -- used to brick the
     # TS-Pico until power-cycle. Raised, it becomes that one command
     # failing: PROCESS_CMD's handler catches it and FAIL_CMD re-arms the
@@ -2707,9 +2707,9 @@ def CATALOG_TEXT(arg):                                                          
     return header + "".join(catalog.dir_rows(entries, index_of, shorten_filename)), _1_OK
 
 
-# ─── MOVE / ERASE / FORMAT (docs/DISK_COMMANDS_SPEC.md §3) ─────────────────
-# The ROM turns MOVE "a" TO "b", ERASE "x" and FORMAT "x" into tpi:copy a|b,
-# tpi:erase x and tpi:format x; tpi:ren a|b has no keyword. Paths resolve like
+# ─── COPY / MOVE / ERASE / FORMAT (docs/DISK_COMMANDS_SPEC.md §3) ──────────
+# The ROM turns COPY "a" TO "b", MOVE "a" TO "b", ERASE "x" and FORMAT "x" into
+# tpi:copy a|b, tpi:ren a|b, tpi:erase x and tpi:format x. Paths resolve like
 # CAT's (catalog.resolve: '/' is the SD root, '..' never climbs above it).
 # Nothing here overwrites: an existing target is Report F.
 
@@ -2815,7 +2815,7 @@ def PROMPT_EACH(prompts):                                                     # 
     return yes
 
 
-def DISK_COPY(pre, cmd):                                                      # MOVE "a" TO "b" / SAVE "tpi:copy a|b"
+def DISK_COPY(pre, cmd):                                                      # COPY "a" TO "b" / SAVE "tpi:copy a|b"
 
     # SAVE "tpi:copy a|b"      - copy file a to b (b may be a directory)
     # SAVE "tpi:copy *.tap|d"  - copy the matching files into directory d
@@ -3015,6 +3015,9 @@ def DISK_FORMAT(pre, cmd):                                                    # 
     base = catalog.basename(arg)
     if '.' not in base:
         arg += '.tap'
+    elif base.upper() == '.TAP':                                             # ".tap" alone is no name
+        SEND_MSG("Name required", "", _3_F_Invalid_file)
+        return
     elif base[base.rfind('.'):].upper() != '.TAP':
         SEND_MSG('FORMAT makes "x.tap" or "dir/"', "", _4_Q_Parameter)
         return
@@ -3026,7 +3029,7 @@ def DISK_FORMAT(pre, cmd):                                                    # 
     if not MOUNT_FILE(real):
         SEND_MSG("Made it, but can't mount it", "", _4_Q_Parameter)
         return
-    TSP.append = True                                                         # SAVE adds to it, as tpi:newtap does
+    TSP.append = True                                                         # SAVE adds to it
     SEND_MSG("New .tap mounted: ", public_fname(), _1_OK)
 
 
@@ -3067,7 +3070,7 @@ def DISK_MAKE_DIR(name):                                                      # 
     return "Made %s/" % catalog.public(real), _1_OK
 
 
-def DISK_REN(pre, cmd):                                                       # SAVE "tpi:ren a|b" (no keyword)
+def DISK_REN(pre, cmd):                                                       # MOVE "a" TO "b" / SAVE "tpi:ren a|b"
 
     # SAVE "tpi:ren old|new"   - rename (or move, if new is a directory)
     # SAVE "tpi:ren old new"   - the same, typed with a space
@@ -3807,69 +3810,6 @@ def TAPDIR(pre, cmd):                                                        # D
     return
 
 
-def NEW_TAP(pre, cmd):
-
-    # Create a new empty tap file of the given name and mount it.
-    # SAVE "tpi:newtap name"       # 
-    # SAVE "tpi:newtap name.tap"   # 
-
-    global TSP
-    
-    TLM("NEW_TAP enter")
-    arg = getArgs(cmd).strip()
-    # Remove a .tap extension: only at the end (#169: the text from the
-    # first dot was compared, so "a.b.tap" became a.b.tap.tap)
-    filename = (arg[:-4] if arg.lower().endswith('.tap') else arg).strip()
-    if filename == "":                          # nothing, or ".tap" alone
-        msg = "Name required for new .tap file"
-        LOG(msg, 1)
-        SEND_MSG(msg, "", _3_F_Invalid_file, True)
-        return
-    # Check for invalid chars
-    clean_fname = ''.join(l for l in filename if (l >= ' ' and l < chr(127) and (l not in r':*\/|"<>')))
-    if clean_fname != filename:
-        msg = 'Filename "%s" not allowed' % filename
-        LOG(msg, 2)
-        SEND_MSG(msg, "", _3_F_Invalid_file)
-        return
-    filename = "%s/%s.tap" % (TSP.cur_path, clean_fname)
-
-    # Make new empty .tap file -- never over an existing one (FORMAT refuses too)
-    def make():
-        if file_exists(filename) or dir_exists(filename):
-            return "File exists: ", _3_F_Invalid_file
-        with open(filename, "w") as newfile:
-            pass
-        os.chdir(TSP.cur_path)
-        DIR_FILES()
-        return "", _1_OK
-
-    msg, st = SD_CALL(make)
-    if st != _1_OK:
-        if msg == "SD card error":
-            msg = "Can't create new file: "
-        LOG(msg + filename, 1)
-        SEND_MSG(msg, "%s.tap" % clean_fname, st)
-        return
-    LOG("New empty file:%s" % filename, 0)
-
-    if not MOUNT_FILE(filename):
-        msg = "Failed to mount new .tap file: "
-        LOG(msg + filename, 2)
-        st = _4_Q_Parameter
-    else:
-        # Set append on
-        TSP.append = True
-        msg = "New .tap file mounted: "
-        LOG(msg + filename, 0)
-        filename = public_fname()
-        st = _1_OK
-
-    # ACTIVATE_MQ()
-    SEND_MSG(msg, filename, st)
-    return
-
-
 def SA_NOT_IMP(pre, cmd):                                                      # Output for not implemented SAVE Command 
     
     SEND_MSG("CMD OK, but not yet implemented", "", _5_C_Nonsense)
@@ -4193,7 +4133,7 @@ def ChangeDir(potential_new_path, SDactive = False):
     global prev_path
     old_path = TSP.cur_path
 
-    if potential_new_path == "-":                                                 # MOVE TO "": back where we were
+    if potential_new_path == "-":                                                 # MOVE TO "-": back where we were
         if prev_path and dir_exists(prev_path):
             new_path = prev_path
         else:
@@ -4537,7 +4477,6 @@ def GETHELP(pre, cmd):                                                 # Shows T
         M.append('"tpi:boot"[CODE loc,slot]')
         M.append('"tpi:dock"[CODE loc,slot]')
         M.append('"tpi:dock"[CODE 0,1/2]')
-        M.append('"tpi:newtap <name>[.tap]"')
         M.append('"tpi:nop"')
         M.append('"tpi:path"[CODE 1,0]')
         M.append('"tpi:rew"[CODE 0/1/2/3,n]')
@@ -6622,7 +6561,6 @@ def TS2068_IO():                                                         # Main 
         "TPI:PATH" : PATH,
         "TPI:REW" : REW,
         "TPI:RM" : RM, # dir or file
-        "TPI:NEWTAP" : NEW_TAP,
         "TPI:TAPDIR" : TAPDIR,
         "TPI:VERBOSE" : VERB_TOGGLE, 
         "TPI:ZX48" : ZX48,

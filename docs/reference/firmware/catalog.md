@@ -108,7 +108,7 @@ pattern, dir + pattern, root + pattern, a plain name, spaces stripped.
 
 ### `split_pair(arg)`
 
-`"a.tap|b.tap"` → `("a.tap", "b.tap")`. The ROM joins MOVE's two names
+`"a.tap|b.tap"` → `("a.tap", "b.tap")`. The ROM joins COPY's and MOVE's two names
 with `|`, which FAT names cannot contain; typed by hand, `SAVE "tpi:copy a
 b"` with a single space works too (exactly two words). Either half is `''`
 when missing: with no `|` and not two words, the whole stripped text is

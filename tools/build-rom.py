@@ -87,16 +87,30 @@ PATCHES = [
         name="disk-token hook: $25D6 stub -> EXROM FDD_DISPATCH",
         bank="home", addr=0x25D6,
         before="cd 89 28 20 06 cd 69 25 cd 44 1b c3 67 25",
-        after="f3 21 00 30 cd fc 03 fb c9 00 00 00 00 00",
+        after="f3 21 00 30 cd fc 03 fb d0 e9 06 ff 18 f2",
         note="Repurpose the 14-byte disk-command stub ($25D6-$25E3, which all of "
              "CAT/FORMAT/MOVE/ERASE fall into) as DI / LD HL,$3000 / CALL $03FC / "
-             "EI / RET -- the returning HOME->EXROM thunk, under DI for the reason "
-             "given on the $1488 patch -- entering FDD_DISPATCH with the EXROM "
-             "paged and B = the token, on BOTH the syntax and runtime pass. The "
-             "module tests BIT 7,(IY+1): syntax pass consumes the argument and "
-             "returns to accept the statement; runtime pass builds and sends the "
-             "TPI command. Nothing external jumps into this region except the "
-             "command fall-throughs; $2567 is untouched.",
+             "EI / RET NC / JP (HL) -- the returning HOME->EXROM thunk, under DI "
+             "for the reason given on the $1488 patch -- entering FDD_DISPATCH "
+             "with the EXROM paged and B = the token, on BOTH the syntax and "
+             "runtime pass. The module tests BIT 7,(IY+1): syntax pass consumes "
+             "the argument and returns to accept the statement; runtime pass "
+             "builds and sends the TPI command. It returns NC, except a bare COPY "
+             "at run time: C with HL = $0A02, HOME's COPY (the printer). $25E0 is "
+             "COPY's routine (the $19D7 patch): LD B,FFh / JR $25D6. Nothing "
+             "external jumps into this region except the command fall-throughs; "
+             "$2567 is untouched.",
+    ),
+    dict(
+        name="COPY's parameter list: $19D7 class 00 / $0A02 -> class 05 / $25E0",
+        bank="home", addr=0x19D7,
+        before="00 02 0a", after="05 e0 25",
+        note="Class 00 accepted only a bare COPY (CHECK-END on the syntax pass). "
+             "Class 05 hands the rest of the statement to the routine on both "
+             "passes, so COPY \"a\" TO \"b\" reaches the module (FDD_COPY), as "
+             "the $1946 patch did for CAT/FORMAT/MOVE/ERASE. Both classes leave "
+             "T-ADDR at $19D8, so the bare COPY the module hands back to $0A02 "
+             "still reads as COPY (D8h) in the printer path at EXROM $1781.",
     ),
     dict(
         name="channel trampolines, stubs and the error trap in the dead $1488-$14BC",
@@ -311,6 +325,8 @@ ANCHORS = [
          bank="exrom", addr=0x21E3, bytes="cd c3 01 f5 cd 5f 04"),
     dict(name="HOME->EXROM returning thunk the $25D6 hook jumps to",
          bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
+    dict(name="H_COPY: HOME's COPY, where the $25D6 hook sends a bare COPY",
+         bank="home", addr=0x0A02, bytes="d9 21 30 16 c3 e3 3c"),
     dict(name="EXROM $2000: JP to the relocated BEEPER (G_BEEP calls it)",
          bank="exrom", addr=0x2000, bytes="c3 3f 20"),
     dict(name="MODE_SET_OK: CALL S_MODE / CALL $042F / JP $1B72 (\"0 OK\"), TAPE_MODE ends here",

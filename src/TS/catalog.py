@@ -119,7 +119,7 @@ def split_arg(arg):
 
 
 def split_pair(arg):
-    """ "a.tap|b.tap" -> ("a.tap", "b.tap"). The ROM joins MOVE's two names with
+    """ "a.tap|b.tap" -> ("a.tap", "b.tap"). The ROM joins COPY's and MOVE's names with
     '|', which FAT names can't contain; typed by hand (SAVE "tpi:copy a b") a
     single space works too. Either half is '' when missing."""
 

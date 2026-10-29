@@ -1,11 +1,11 @@
-"""Host-side test for tpi:newtap, tpi:rm and tpi:boot -- CPython, no Pico.
+"""Host-side test for tpi:format (.tap), tpi:rm and tpi:boot -- CPython, no Pico.
 
 Runs the REAL TS.tspico handlers against a temporary directory standing in for
 the SD card (the CardOS of disk_cmds_hosttest.py, case-insensitive like FAT),
 and a temporary config.ini:
 
-  * NEWTAP makes and mounts a new .tap, and refuses a name that exists (any
-    case) instead of emptying it;
+  * FORMAT makes and mounts a new .tap, and refuses a name that exists (any
+    case) instead of emptying it (what tpi:newtap did before FORMAT took over);
   * RM removes any file (not only the indexed types), by name, path or listing
     number, and empty folders; it refuses the mounted file, a missing name, a
     non-empty folder and the current folder -- before its Y/N prompt;
@@ -56,10 +56,10 @@ def run(t, handler, text, a=0, b=0):
     handler(pre(a, b), "D.." + text)
 
 
-def test_newtap(t, root, sent):
-    print("tpi:newtap")
+def test_format_tap(t, root, sent):
+    print("tpi:format (a .tap)")
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap fresh")
+    run(t, t.DISK_FORMAT, "tpi:format fresh")
     check(D.on_card(root, "fresh.tap"), "makes fresh.tap")
     check(t.mounted[-1].lower().endswith("/fresh.tap") and t.TSP.append,
           "mounts it with append on")
@@ -67,27 +67,25 @@ def test_newtap(t, root, sent):
 
     del sent[:]
     n = len(t.mounted)
-    run(t, t.NEW_TAP, "tpi:newtap chess")
+    run(t, t.DISK_FORMAT, "tpi:format chess")
     check(sent[-1][3] == t._3_F_Invalid_file, "an existing name (other case) is F (%r)" % (sent[-1],))
     check(os.path.getsize(os.path.join(root, "CHESS.TAP")) == 1500, "and the file is untouched")
     check(len(t.mounted) == n, "and nothing is mounted")
 
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap chess.tap")
+    run(t, t.DISK_FORMAT, "tpi:format chess.tap")
     check(sent[-1][3] == t._3_F_Invalid_file, "the same with .tap given")
 
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap a.b.tap")
+    run(t, t.DISK_FORMAT, "tpi:format a.b.tap")
     check(D.on_card(root, "a.b.tap") and not D.on_card(root, "a.b.tap.tap") and sent[-1][3] == t._1_OK,
           "a.b.tap makes a.b.tap, not a.b.tap.tap (#169) (%r)" % (sent[-1],))
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap v1.2")
-    check(D.on_card(root, "v1.2.tap"), "v1.2 (a dot, no .tap) makes v1.2.tap")
-    del sent[:]
     n = len(t.mounted)
-    run(t, t.NEW_TAP, "tpi:newtap .tap")
+    run(t, t.DISK_FORMAT, "tpi:format .tap")
     check(sent[-1][3] == t._3_F_Invalid_file and not D.on_card(root, ".tap") and len(t.mounted) == n,
           ".tap alone is no name: F, nothing made (%r)" % (sent[-1],))
+    check(not hasattr(t, "NEW_TAP"), "tpi:newtap is gone (FORMAT does its job)")
 
 
 def test_rm(t, root, sent):
@@ -314,7 +312,7 @@ def main():
         t.utime = types.SimpleNamespace(sleep=lambda s: None)
         _hw()._rom = types.SimpleNamespace(put=lambda v: None)
         _hw()._bank = types.SimpleNamespace(put=lambda v: None)
-        test_newtap(t, root, sent)
+        test_format_tap(t, root, sent)
         test_rm(t, root, sent)
         test_dir_range(t, sent)
         test_ffw_by_file(t, sent)

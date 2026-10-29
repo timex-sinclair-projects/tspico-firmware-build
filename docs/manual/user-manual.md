@@ -523,11 +523,11 @@ A few special names help you get around:
 | `games/arcade` | A folder inside a folder |
 | `/games` | A path from the root |
 
-`MOVE TO ""` is the same as `SAVE "tpi:cd -"`: back to where you were.
+`MOVE TO "-"` is the same as `SAVE "tpi:cd -"`: back to where you were.
 
-**Picking a folder from a list.** Type `SAVE "tpi:cd"` on its own and the TS-Pico shows the
-folders here as a numbered menu. Press a digit **0**-**9**, or **Q W E R T Y** for items
-10 to 15, to go into one; **B** goes back a page, any other key goes forward, and **N**
+**Picking a folder from a list.** Type `SAVE "tpi:cd"` (or `MOVE TO ""`) on its own and the
+TS-Pico shows the folders here as a numbered menu. Press a digit **0**-**9**, or
+**Q W E R T Y** for items 10 to 15, to go into one; **B** goes back a page, any other key goes forward, and **N**
 quits. `SAVE "tpi:cd" CODE 0,1` lists every folder on the card instead.
 
 ![The tpi:cd menu: each folder with a digit to press, and the prompt at the bottom](images/cd-menu.png)
@@ -748,7 +748,7 @@ repeats**.
 > writing (for example because it was pulled out), you get **J Invalid I/O device** instead of
 > **0 OK**, and nothing is saved.
 
-## 4.3 Adding to a TAP: APPEND and NEWTAP
+## 4.3 Adding to a TAP: APPEND and FORMAT
 
 Sometimes you want several programs in one TAP, like a real cassette. That's what **append**
 mode is for:
@@ -768,12 +768,12 @@ it's on. Mounting any file turns it off.
 To start a fresh, empty TAP and switch append on in one go:
 
 ```basic
-FORMAT "collection.tap"        : REM refuses if the file exists
-SAVE "tpi:newtap collection"   : REM the same
+FORMAT "collection.tap"           : REM refuses if the file exists
+SAVE "tpi:format collection"      : REM the same (.tap is added)
 ```
 
-> **Note:** neither command touches a file that's already there. Both answer **F**, and
-> `tpi:newtap` shows `File exists:` when VERBOSE is on.
+> **Note:** FORMAT never touches a file that's already there. It answers **F**, and shows
+> `Already exists:` when VERBOSE is on.
 
 ## 4.4 Using a real cassette recorder
 
@@ -1777,7 +1777,7 @@ message (`CODE 1,0`).
 
 # Chapter 10: Command Reference
 
-<!-- keywords: CAT · ERASE · FORMAT · MOVE · tpi: -->
+<!-- keywords: CAT · COPY · ERASE · FORMAT · MOVE · tpi: -->
 
 **How to read an entry.** Messages appear only after `SAVE "tpi:verbose" CODE 1,1`, unless
 they're marked *(shown)*: with verbose off you see only the report. Listings and the forms
@@ -1788,9 +1788,10 @@ doesn't answer, **D** if you press **BREAK**, and **T** if the TS-Pico resets a 
 ## 10.1 BASIC keywords
 
 These are the 2068's own keywords, which Timex's ROM never implemented. The TS-Pico ROM
-makes them work on the SD card. Every argument is a string expression, so `CAT a$` and
-`ERASE "old"+n$` are fine, up to 64 characters. A name over 64 characters, or an empty name
-where one is required, gives **F**.
+makes them work on the SD card. COPY is the one Timex did implement: on its own it still
+prints the screen (Chapter 7), and with two names it copies a file. Every argument is a
+string expression, so `CAT a$` and `ERASE "old"+n$` are fine, up to 64 characters. A name
+over 64 characters, or an empty name where one is required, gives **F**.
 
 ### CAT: list files
 
@@ -1812,6 +1813,26 @@ CAT "frogger.tap"    : REM the blocks in a TAP file
   another folder that's empty *(verbose)*.
 
 As a command: `SAVE "tpi:dir <arg>"`, or `SAVE "tpi:tapdir"` for `CAT ""`.
+
+### COPY: copy files
+
+```basic
+COPY "a.tap" TO "b.tap"       : REM copy a.tap to b.tap
+COPY "a.tap" TO "backup"      : REM copy into a folder, keeping the name
+COPY "*.tap" TO "backup"      : REM copy all matching files into a folder
+COPY                          : REM the screen to the printer (Chapter 7)
+```
+
+- The original stays where it is. To rename or move a file, use MOVE.
+- It never overwrites. **F**: `/b.tap: exists`. With a pattern, each file gets its own line:
+  `copied`, `exists`, `same file`, `no such dir` or `copy failed`.
+- **F**: `Not found:`, `No match for`. **Q**: `Can't copy a directory`,
+  `Copy them to a directory` (a pattern needs a folder to copy into).
+- *(verbose)* `Copied a.tap` (the source's name).
+- `COPY "a"` with no `TO`, or `TO` with a name missing, is refused as you enter the line, like
+  any other mistyped statement.
+
+As a command: `SAVE "tpi:copy a.tap b.tap"`.
 
 ### ERASE: delete files
 
@@ -1842,7 +1863,9 @@ FORMAT "tools/"      : REM a new folder
 ```
 
 - **F**: `Already exists:` (FORMAT never overwrites), `Name not allowed:`, `Not found:` for the
-  parent folder. **Q**: `FORMAT makes "x.tap" or "dir/"` for any other extension.
+  parent folder, `Name required` for `".tap"` on its own. **Q**: `FORMAT makes "x.tap" or
+  "dir/"` for any other extension. A name with a dot in it needs `.tap` at the end:
+  `FORMAT "v1.2.tap"`, not `FORMAT "v1.2"`.
 - *(verbose)* `New .tap mounted: /songs.tap` or `Made /tools/`.
 
 As a command: `SAVE "tpi:format songs.tap"`.
@@ -1851,24 +1874,24 @@ As a command: `SAVE "tpi:format songs.tap"`.
 
 See Chapter 5.
 
-### MOVE: copy files and change folder
+### MOVE: rename files and change folder
 
 ```basic
-MOVE "a.tap" TO "b.tap"       : REM copy a.tap to b.tap
-MOVE "a.tap" TO "backup"      : REM copy into a folder, keeping the name
-MOVE "*.tap" TO "backup"      : REM copy all matching files into a folder
-MOVE TO "games"               : REM change folder
-MOVE TO ""                    : REM back to the previous folder
+MOVE "old.tap" TO "new.tap"   : REM rename a file
+MOVE "game.tap" TO "archive"  : REM move into a folder, keeping the name
+MOVE "tools" TO "utils"       : REM rename a folder
+MOVE TO "games"               : REM change folder (also .., /, a/b, /a/b)
+MOVE TO "-"                   : REM back to the previous folder
+MOVE TO ""                    : REM pick a folder from a menu (3.2)
 ```
 
-- MOVE **copies**; the original stays where it is. To rename or move, use `tpi:ren`.
-- It never overwrites. **F**: `/b.tap: exists`. With a pattern, each file gets its own line:
-  `copied`, `exists`, `same file`, `no such dir` or `copy failed`.
-- **F**: `Not found:`, `No match for`. **Q**: `Can't copy a directory`,
-  `Copy them to a directory` (a pattern needs a folder to copy into).
-- *(verbose)* `Copied B.TAP`.
+- MOVE renames; it doesn't copy. To copy a file, use COPY.
+- It never overwrites. **F**: `Not found:`, `Already exists:`.
+- **Q**: `File is mounted`, `Can't rename the current directory` (also a folder above it),
+  `Can't move a directory into itself`.
+- *(verbose)* `Renamed to /new.tap`.
 
-As commands: `SAVE "tpi:copy a.tap b.tap"` and `SAVE "tpi:cd games"`.
+As commands: `SAVE "tpi:ren old.tap new.tap"` and `SAVE "tpi:cd games"`.
 
 ### OPEN # and CLOSE #
 
@@ -1971,7 +1994,7 @@ whose folder isn't there, such as `/tap/x`.
 
 ### copy, erase, format
 
-The command forms of MOVE, ERASE and FORMAT: `SAVE "tpi:copy a.tap b.tap"` (the two names
+The command forms of COPY, ERASE and FORMAT: `SAVE "tpi:copy a.tap b.tap"` (the two names
 separated by a space), `SAVE "tpi:erase x"` and `SAVE "tpi:format x.tap"`. They behave like the
 keywords, with two differences: the whole name, `tpi:` included, must fit in 31 characters, and a
 missing name gives **Q** (`Name required`, or for `tpi:copy`
@@ -2119,13 +2142,6 @@ instead. A mode is saved for the next start (`MODEM_MODE` in `config.ini`); flow
 mode change turns it off (F.6). **A**: any other word.
 <!-- /v3 -->
 
-### newtap: make a new TAP
-
-`SAVE "tpi:newtap name"` makes `name.tap`, mounts it and switches append on. A name that
-already ends in `.tap` is used as it is: `tpi:newtap a.b.tap` makes `a.b.tap`. **F**: no name
-(`Name required for new .tap file` *(shown)*, also for `.tap` on its own), a name with `:*\/|"<>` in it,
-or a file of that name already there (`File exists:`; the file is left alone).
-
 ### nop
 
 `SAVE "tpi:nop"` does nothing and answers **0 OK**. It's a handy "are you there?" test.
@@ -2150,7 +2166,7 @@ SAVE "tpi:ren old.tap new.tap"    : REM rename
 SAVE "tpi:ren game.tap archive"   : REM move into a folder, keeping the name
 ```
 
-This works for folders too.
+The command form of MOVE "a" TO "b". This works for folders too.
 
 - **F**: `Not found:`, `Already exists:`. 
 - **Q**: `File is mounted`,
@@ -2605,7 +2621,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **A Invalid argument** | A `CODE a,b` or argument the command doesn't accept; an empty program SAVE |
 | **C Nonsense in BASIC** | An unknown `tpi:` word; a command not yet implemented; extra words after an argument; a `tpi:` name longer than 31 characters (1.2) |
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or declined "Replace?" |
-| **F Invalid file name** | Not found; not allowed; already exists (FORMAT, MOVE, ren) |
+| **F Invalid file name** | Not found; not allowed; already exists (FORMAT, COPY, MOVE, ren) |
 | **J Invalid I/O device** | The TS-Pico didn't answer, or an SD card that won't mount |
 | **O Invalid stream** | OPEN # of a stream that's already open to a file |
 | **Q Parameter error** | Can't be done right now: mounted, not empty, wrong mode, wrong type, too long, booted slot |
@@ -2624,11 +2640,12 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | List matching files | `CAT "*.tap"` | `SAVE "tpi:dir *.tap"` |
 | Look inside the mounted TAP | `CAT ""` | `SAVE "tpi:tapdir"` |
 | Change folder | `MOVE TO "games"` | `SAVE "tpi:cd games"` |
-| Back to the previous folder | `MOVE TO ""` | `SAVE "tpi:cd -"` |
+| Back to the previous folder | `MOVE TO "-"` | `SAVE "tpi:cd -"` |
+| Pick a folder from a menu | `MOVE TO ""` | `SAVE "tpi:cd"` |
 | Where am I? |  | `SAVE "tpi:path"` |
 | Make a folder | `FORMAT "dir/"` | `SAVE "tpi:md dir"` |
-| Copy a file | `MOVE "a" TO "b"` | `SAVE "tpi:copy a b"` |
-| Rename or move a file |  | `SAVE "tpi:ren a b"` |
+| Copy a file | `COPY "a" TO "b"` | `SAVE "tpi:copy a b"` |
+| Rename or move a file | `MOVE "a" TO "b"` | `SAVE "tpi:ren a b"` |
 | Delete a file | `ERASE "a"` | `SAVE "tpi:erase a"` |
 | Delete matching files | `ERASE "*.bak"` | `SAVE "tpi:erase *.bak"` |
 | New empty TAP | `FORMAT "x.tap"` | `SAVE "tpi:format x.tap"` |
