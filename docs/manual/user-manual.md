@@ -2184,6 +2184,9 @@ on the card's line. `SAVE "tpi:label"` on its own always shows the label *(shown
   `. " * + , / : ; < = > ? [ \ ] |`. **Q**: `Root folder full` on a card whose top folder has
   no room for it.
 - *(verbose)* `Label: GAMES` or `Label taken off`.
+- Once the label is taken off, a PC or Mac may show the name the card had when it was
+  formatted: the card keeps a copy of that name, which the TS-Pico leaves alone. To change it,
+  set a new label instead.
 - The TS-Pico reads the label when the card goes in or at switch-on, so a label you change on a
   computer shows once the card is back.
 - `FORMAT ":GAMES"` and `FORMAT ":"` do the same from BASIC.

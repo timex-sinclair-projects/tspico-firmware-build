@@ -1,6 +1,6 @@
 # catalog.py — names, wildcards, paths, listings
 
-Source: [`src/TS/catalog.py`](../../../src/TS/catalog.py) (544 lines).
+Source: [`src/TS/catalog.py`](../../../src/TS/catalog.py) (531 lines).
 
 The pure half of `CAT` / `SAVE "tpi:dir <arg>"`, and of every other
 command that takes a path: pattern matching, path resolution inside the
@@ -40,9 +40,9 @@ to the FAT volume label.
 | 177–246 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
 | 249–313 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
 | 316–354 | `LIST_TEXT_MAX`, `LIST_HEX_MAX`, `is_text`, `list_text` — LIST "name" |
-| 357–383 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
-| 386–528 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
-| 531–544 | `card_line` — CAT's card line |
+| 357–385 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
+| 388–515 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
+| 518–531 | `card_line` — CAT's card line |
 
 ## Constants
 
@@ -288,15 +288,23 @@ is `?`.
 
 ## The card's label
 
-MicroPython's `VfsFat` doesn't give Python the volume label: FatFs has
-`f_getlabel` and `f_setlabel`, but the port compiles them only for mkfs
-(the comment at 357–366). So these work in the card's raw 512-byte sectors
-through `readblocks` and `writeblocks`, and `write_label` needs the card
-unmounted, because FatFs keeps a sector of the root folder cached. The
-label is in two places: a root-folder entry with attribute 08h, which
-Windows and macOS show, and the boot sector's `BS_VolLab`, which DOS
-showed. `read_label` reads the entry; `write_label` writes both, as FatFs
-does. Pinned against FAT16 and FAT32 images built by
+MicroPython's `VfsFat` doesn't give Python the volume label: FatFs's
+`f_getlabel` and `f_setlabel` are compiled in (the rp2 port sets
+`MICROPY_FATFS_USE_LABEL`), but `VfsFat` calls only `f_setlabel`, from
+mkfs (the comment at 357–368). So these work in the card's raw 512-byte
+sectors through `readblocks` and `writeblocks`, and `write_label` needs
+the card unmounted, because FatFs keeps a sector of the root folder
+cached.
+
+The label is a root-folder entry with attribute 08h, which Windows and
+macOS show. The boot sector has a copy, `BS_VolLab`, which DOS showed.
+`read_label` reads the entry, and `write_label` writes only the entry, as
+FatFs's `f_setlabel` does (MicroPython 1.29's `lib/oofatfs/ff.c`): the
+boot sector is the one sector whose loss makes a card unmountable, and
+the name shows without it. One effect: once the label is taken off, macOS
+shows the boot sector's copy, the name the card was formatted with
+(checked on `hdiutil` images, 2026-10-29). The TS-Pico shows `SD`.
+Pinned against FAT16 and FAT32 images built by
 [`src/test/fat_image.py`](../../../src/test/fat_image.py), laid out like
 images `newfs_msdos` made and `fsck_msdos` passed (*the real images were
 checked by hand, 2026-10-29; the test uses the fakes*).
@@ -319,7 +327,7 @@ and 11 characters pass; 12 characters, a leading space, `.`, `:`, `*`,
 ### `_u32(b, i)`
 
 The little-endian 32-bit number at `b[i]`. `_u16` (two bytes) is the same,
-at line 386 (`native.py` has its own, [native.md](native.md)).
+at line 388 (`native.py` has its own, [native.md](native.md)).
 
 ### `_is_vbr(b)`
 
@@ -339,13 +347,10 @@ one. `OSError(19, "No FAT volume")` if neither.
 ### `_Fat.__init__(self, dev)`
 
 Reads sector 0 and, through the MBR if need be, the boot sector. Keeps
-`dev`, `start` (the volume's first sector), `boot` (its boot sector),
-`spc` (sectors per cluster), `fat` (the first FAT's sector) and `fat32`
-(the 16-bit FAT size is 0). FAT32: `data` (cluster 2's sector),
-`root_clus`, the label at 71 and the extended signature at 66 in the boot
-sector, `backup` (the backup boot sector, from offset 50). FAT12/16:
-`root` (the fixed root folder's first sector) and `root_secs`, the label
-at 43 and the signature at 38, `backup` 0.
+`dev`, `start` (the volume's first sector), `spc` (sectors per cluster),
+`fat` (the first FAT's sector) and `fat32` (the 16-bit FAT size is 0).
+FAT32: `data` (cluster 2's sector) and `root_clus`. FAT12/16: `root` (the
+fixed root folder's first sector) and `root_secs`.
 
 ### `_Fat.read(self, n)`
 
@@ -385,17 +390,17 @@ takes it off. `OSError` if there is no FAT volume.
   folder can fill; on FAT32 a full root folder's chain is not extended).
 - **`""`:** the label entry, if there is one, is marked deleted (E5h).
 
-Then, if the boot sector has the extended signature 29h, `BS_VolLab` is
-the name padded to 11, or `NO NAME    `, and on FAT32 the backup boot
-sector the same, if it is one. Used by `DISK_LABEL_WORK`, with the card
-unmounted. Pinned: FAT16 (no MBR) — the label goes in a deleted slot with
-the other entries untouched, and into the boot sector; a second label
-replaces the first, leaving one entry; `""` deletes it and the boot
-sector says `NO NAME`; a full root folder is ValueError with nothing
-written, but one holding a label takes the new one in its place. FAT32
-behind an MBR — the label goes in the root's second cluster when the first
-is full; the boot sector and its backup follow, the MBR is untouched, and
-only those three sectors are written. No FAT volume: OSError (from
+Either way one sector is written, the root-folder sector holding the
+entry, read just before; the boot sector, its FAT32 backup and the FATs
+are never touched. Used by `DISK_LABEL_WORK`, with the card unmounted.
+Pinned: FAT16 (no MBR) — the label goes in a deleted slot with the other
+entries untouched, and only that sector is written; a second label
+replaces the first, leaving one entry; `""` deletes it, writing nothing
+else; a full root folder is ValueError with nothing written, but one
+holding a label takes the new one in its place. FAT32 behind an MBR — the
+label goes in the root's second cluster when the first is full, and only
+that sector is written; the boot sector, its backup and the MBR are
+untouched. No FAT volume: OSError (from
 `read_label`).
 
 ## CAT's card line

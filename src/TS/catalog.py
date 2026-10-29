@@ -356,14 +356,16 @@ def list_text(data, size, text=None):
 
 # --- The card's label ----------------------------------------------------------
 # MicroPython's VfsFat doesn't give Python the FAT volume label (FatFs has
-# f_getlabel/f_setlabel, but only mkfs uses them), so these read and write it
-# in the raw sectors, through a block device handed in (readblocks/
+# f_getlabel/f_setlabel, but only mkfs calls f_setlabel), so these read and
+# write it in the raw sectors, through a block device handed in (readblocks/
 # writeblocks of 512-byte blocks: the SD driver, or a test image). Writing
 # needs the card unmounted: FatFs keeps a sector of the root folder cached.
 #
-# The label lives in two places: a root-folder entry with attribute 08h (what
-# Windows and macOS show) and the boot sector's BS_VolLab (what DOS showed).
-# read_label reads the entry; write_label writes both, like FatFs.
+# The label is a root-folder entry with attribute 08h, what Windows and macOS
+# show. The boot sector has a copy (BS_VolLab) that DOS showed; FatFs's
+# f_setlabel leaves it alone, and so does write_label: the boot sector is the
+# one sector whose loss makes the card unmountable, and nothing reads it for
+# the name. So a label change writes one sector, the one FatFs would.
 
 LABEL_MAX = 11
 LABEL_BAD = '"*+,./:;<=>?[\\]|'                     # FatFs's f_setlabel refuses these
@@ -420,7 +422,6 @@ class _Fat:
                 raise OSError(19, "No FAT volume")
             b = self.read(start)
         self.start = start
-        self.boot = b
         spc, rsvd, nfat = b[13], _u16(b, 14), b[16]
         fatsz = _u16(b, 22) or _u32(b, 36)
         self.spc = spc
@@ -429,13 +430,9 @@ class _Fat:
         if self.fat32:
             self.data = self.fat + nfat * fatsz
             self.root_clus = _u32(b, 44)
-            self.lab_at, self.sig_at = 71, 66
-            self.backup = _u16(b, 50)
         else:
             self.root = self.fat + nfat * fatsz
             self.root_secs = (_u16(b, 17) * 32 + 511) // 512
-            self.lab_at, self.sig_at = 43, 38
-            self.backup = 0
 
     def read(self, n):
         buf = bytearray(512)
@@ -496,8 +493,8 @@ def read_label(dev):
 def write_label(dev, name):
     """Give the card the label `name` (label_clean's form; "" takes it
     away). OSError if there's no FAT volume, ValueError if the root folder
-    has no free entry for it. Writes the root-folder entry and the boot
-    sector's copy (and FAT32's backup boot sector)."""
+    has no free entry for it. Writes the one root-folder sector that holds
+    the entry, and nothing else."""
 
     fat = _Fat(dev)
     lab, free = fat.find()
@@ -512,20 +509,10 @@ def write_label(dev, name):
         buf[off:off + 32] = entry
         fat.dev.writeblocks(n, buf)
     else:
-        raw = b"NO NAME    "
         n, off, buf = lab
         if n is not None:
             buf[off] = 0xE5
             fat.dev.writeblocks(n, buf)
-    boot = fat.boot
-    if boot[fat.sig_at] == 0x29:
-        boot[fat.lab_at:fat.lab_at + 11] = raw
-        fat.dev.writeblocks(fat.start, boot)
-        if fat.backup:
-            bk = fat.read(fat.start + fat.backup)
-            if _is_vbr(bk):
-                bk[fat.lab_at:fat.lab_at + 11] = raw
-                fat.dev.writeblocks(fat.start + fat.backup, bk)
 
 
 def card_line(label, total, free):

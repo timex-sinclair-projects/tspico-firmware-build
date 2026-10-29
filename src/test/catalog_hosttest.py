@@ -239,14 +239,15 @@ def test_label(c):
     check(c.read_label(dev) == "GAMES 2", "FAT16: write, then read back")
     check(e[2][:12] == b"GAMES 2    \x08" and e[1][:11] == b"README  TXT" and e[0][11] == 0x0F,
           "FAT16: in the deleted slot, the other entries untouched")
-    check(dev.get(0)[43:54] == b"GAMES 2    ", "FAT16: the boot sector's BS_VolLab too")
+    check(dev.get(0)[43:54] == b"NO NAME    " and dev.writes == [root],
+          "FAT16: only the root-folder sector written; the boot sector left alone %r" % dev.writes)
     c.write_label(dev, "TS-PICO")
     e = F.entries(dev, root)
     check(c.read_label(dev) == "TS-PICO" and sum(1 for x in e if x[0] not in (0, 0xE5) and x[11] == 0x08) == 1,
           "FAT16: a second label replaces the first, one entry")
     c.write_label(dev, "")
-    check(c.read_label(dev) == "" and F.entries(dev, root)[2][0] == 0xE5 and dev.get(0)[43:54] == b"NO NAME    ",
-          "FAT16: \"\" takes it off (entry deleted, boot sector NO NAME)")
+    check(c.read_label(dev) == "" and F.entries(dev, root)[2][0] == 0xE5 and set(dev.writes) == {root},
+          "FAT16: \"\" takes it off (the entry deleted, nothing else written)")
 
     dev, root = F.fat16(root_ents=16)
     F.fill(dev, root, [F.entry("FILE%04dTAP" % i) for i in range(16)])
@@ -261,7 +262,7 @@ def test_label(c):
     check(c.read_label(dev) == "NEW", "FAT16: a full root folder with a label: it is replaced")
 
     # FAT32 behind an MBR: the root folder's first cluster is full, so the
-    # label goes in the second; the backup boot sector follows
+    # label goes in the second, and only that sector is written
     dev, (r0, r1), start = F.fat32()
     F.fill(dev, r0, [F.entry("FILE%04dTAP" % i) for i in range(16)])
     mbr = dev.get(0)
@@ -269,9 +270,9 @@ def test_label(c):
     c.write_label(dev, "CARD32")
     check(c.read_label(dev) == "CARD32" and F.entries(dev, r1)[0][:12] == b"CARD32     \x08",
           "FAT32: the label in the root folder's second cluster")
-    check(dev.get(start)[71:82] == b"CARD32     " and dev.get(start + 6)[71:82] == b"CARD32     "
-          and dev.get(0) == mbr, "FAT32: boot sector and its backup, the MBR untouched")
-    check(set(dev.writes) == {r1, start, start + 6}, "FAT32: only those three sectors written %r" % dev.writes)
+    check(dev.get(start)[71:82] == b"NO NAME    " and dev.get(start + 6)[71:82] == b"NO NAME    "
+          and dev.get(0) == mbr, "FAT32: the boot sector, its backup and the MBR untouched")
+    check(dev.writes == [r1], "FAT32: only that sector written %r" % dev.writes)
 
     try:
         c.read_label(F.Dev())

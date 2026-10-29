@@ -453,20 +453,20 @@ regenerate it when a line number moves (the test checks that it is current).
 | `LIST_HEX_MAX` | variable | [319](../../../src/TS/catalog.py#L319) | [firmware/catalog.md](../firmware/catalog.md) |
 | `is_text` | function | [322](../../../src/TS/catalog.py#L322) | [firmware/catalog.md](../firmware/catalog.md) |
 | `list_text` | function | [332](../../../src/TS/catalog.py#L332) | [firmware/catalog.md](../firmware/catalog.md) |
-| `LABEL_MAX` | variable | [368](../../../src/TS/catalog.py#L368) | [firmware/catalog.md](../firmware/catalog.md) |
-| `LABEL_BAD` | variable | [369](../../../src/TS/catalog.py#L369) | [firmware/catalog.md](../firmware/catalog.md) |
-| `label_clean` | function | [372](../../../src/TS/catalog.py#L372) | [firmware/catalog.md](../firmware/catalog.md) |
-| `_u16` | function | [386](../../../src/TS/catalog.py#L386) | [firmware/native.md](../firmware/native.md) |
-| `_u32` | function | [390](../../../src/TS/catalog.py#L390) | [firmware/catalog.md](../firmware/catalog.md) |
-| `_is_vbr` | function | [394](../../../src/TS/catalog.py#L394) | [firmware/catalog.md](../firmware/catalog.md) |
-| `_Fat` | class | [402](../../../src/TS/catalog.py#L402) | [firmware/catalog.md](../firmware/catalog.md) |
-| `_Fat.__init__` | method | [407](../../../src/TS/catalog.py#L407) | [firmware/catalog.md](../firmware/catalog.md) |
-| `_Fat.read` | method | [440](../../../src/TS/catalog.py#L440) | [firmware/catalog.md](../firmware/catalog.md) |
-| `_Fat.root_sectors` | method | [445](../../../src/TS/catalog.py#L445) | [firmware/catalog.md](../firmware/catalog.md) |
-| `_Fat.find` | method | [461](../../../src/TS/catalog.py#L461) | [firmware/catalog.md](../firmware/catalog.md) |
-| `read_label` | function | [483](../../../src/TS/catalog.py#L483) | [firmware/catalog.md](../firmware/catalog.md) |
-| `write_label` | function | [496](../../../src/TS/catalog.py#L496) | [firmware/catalog.md](../firmware/catalog.md) |
-| `card_line` | function | [531](../../../src/TS/catalog.py#L531) | [firmware/catalog.md](../firmware/catalog.md) |
+| `LABEL_MAX` | variable | [370](../../../src/TS/catalog.py#L370) | [firmware/catalog.md](../firmware/catalog.md) |
+| `LABEL_BAD` | variable | [371](../../../src/TS/catalog.py#L371) | [firmware/catalog.md](../firmware/catalog.md) |
+| `label_clean` | function | [374](../../../src/TS/catalog.py#L374) | [firmware/catalog.md](../firmware/catalog.md) |
+| `_u16` | function | [388](../../../src/TS/catalog.py#L388) | [firmware/native.md](../firmware/native.md) |
+| `_u32` | function | [392](../../../src/TS/catalog.py#L392) | [firmware/catalog.md](../firmware/catalog.md) |
+| `_is_vbr` | function | [396](../../../src/TS/catalog.py#L396) | [firmware/catalog.md](../firmware/catalog.md) |
+| `_Fat` | class | [404](../../../src/TS/catalog.py#L404) | [firmware/catalog.md](../firmware/catalog.md) |
+| `_Fat.__init__` | method | [409](../../../src/TS/catalog.py#L409) | [firmware/catalog.md](../firmware/catalog.md) |
+| `_Fat.read` | method | [437](../../../src/TS/catalog.py#L437) | [firmware/catalog.md](../firmware/catalog.md) |
+| `_Fat.root_sectors` | method | [442](../../../src/TS/catalog.py#L442) | [firmware/catalog.md](../firmware/catalog.md) |
+| `_Fat.find` | method | [458](../../../src/TS/catalog.py#L458) | [firmware/catalog.md](../firmware/catalog.md) |
+| `read_label` | function | [480](../../../src/TS/catalog.py#L480) | [firmware/catalog.md](../firmware/catalog.md) |
+| `write_label` | function | [493](../../../src/TS/catalog.py#L493) | [firmware/catalog.md](../firmware/catalog.md) |
+| `card_line` | function | [518](../../../src/TS/catalog.py#L518) | [firmware/catalog.md](../firmware/catalog.md) |
 
 ## `src/TS/extcmd.py`
 

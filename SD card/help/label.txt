@@ -12,7 +12,9 @@ characters the 2068 can't show,
 or . " * + , / : ; < = > ? [ \ ]
 
 SAVE "tpi:label -"
-Takes the label off.
+Takes the label off. A PC or
+Mac may then show the name the
+card was formatted with.
 
 FORMAT ":GAMES" and FORMAT ":"
 do the same from BASIC.
