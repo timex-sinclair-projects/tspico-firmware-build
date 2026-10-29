@@ -21,7 +21,7 @@ sources are listed [at the end](#sources).
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
 | **2.1** | `src/rom/TSPICO-21.ROM` until 2.2, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. It shipped with firmware 2.1.0–2.1.2. |
 | **2.2** | `src/rom/TSPICO-22.ROM`, crc 8363E100 | 2.1 plus a 16th patch (EXROM 20BEh) and two module fixes: `tpi:tape` keeps the printer switch ([TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), #176) and a pre-load of 0 is Report J ([PRELOAD](#preload-a-pre-load-of-0-is-report-j), #179). The module is 1919 bytes, 3000h–377Eh. It shipped with firmware 2.2 and 2.2.1. |
-| **2.3** | `src/rom/TSPICO-23.ROM`, crc 45C0E05D | 2.2 plus five patches, `PS_READ` and COPY: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228); COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-23-copy-and-move)). The module is 2030 bytes, 3000h–37EDh, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
+| **2.3** | `src/rom/TSPICO-23.ROM`, crc 614CE7E4 | 2.2 plus seven patches, `PS_READ`, COPY, LIST and RESTORE: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228); COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-23-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-23-list-and-restore)). The module is 2284 bytes, 3000h–38EBh, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -383,6 +383,30 @@ The stock COPY ends with a jump back into HOME and never returns, so the
 module can't call it: for a bare COPY at run time the module returns carry
 set with HL = 0A02h and the hook ends `RET NC / JP (HL)`. The new code
 (FDD_ENTRY, FDD_COPY, CMD_CD_MENU) is at 37B5h–37EDh, after `PS_READ`.
+
+#### ROM 2.3: LIST and RESTORE
+
+| BASIC | Sent as | Token |
+|---|---|---|
+| `LIST x$` | `tpi:list x` (text as itself, anything else as a hex dump) | F0h |
+| `LIST`, `LIST n`, `LIST #n` | the stock LIST | F0h |
+| `RESTORE #n` | `tpi:chwr 170100` on stream n: TAB 1, the start of the file | E5h |
+| `RESTORE`, `RESTORE n` | the stock RESTORE | E5h |
+
+LIST's parameter list at HOME 19AFh (class 05h, 1545h) and RESTORE's at
+19D0h (class 03h, 1E9Dh) both become class 05h with routine 25D6h itself,
+so B holds no token: FDD_ENTRY tells them apart by T-ADDR, which class 05h
+leaves at 19B0h or 19D1h. A string after LIST (told by its first
+characters, STR_NEXT; the module can't scan the expression without
+evaluating it twice or doubling its hidden numbers) is `tpi:list`; anything
+else goes back to 1545h with carry set, on both passes. RESTORE does
+class 03h's part itself (the number, or USE-ZERO at 1C51h) and goes back to
+1E9Dh at run time; `RESTORE #n` flushes the stream, drops what it had read
+ahead and sends TAB 1, which the firmware's channel code already took as a
+seek, so the firmware needs nothing new for it. Report O when stream n
+isn't an OPEN # file. The new code (FDD_LIST, FDD_RESTORE, STR_NEXT,
+HC_USE_ZERO, CMD_LIST) takes the module to 38EBh. `tpi:label` (the card's
+name, also `FORMAT ":name"`) is firmware only.
 
 ### SAVE / LOAD "f:path"
 

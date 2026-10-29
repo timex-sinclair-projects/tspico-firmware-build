@@ -97,9 +97,12 @@ PATCHES = [
              "the argument and returns to accept the statement; runtime pass "
              "builds and sends the TPI command. It returns NC, except a bare COPY "
              "at run time: C with HL = $0A02, HOME's COPY (the printer). $25E0 is "
-             "COPY's routine (the $19D7 patch): LD B,FFh / JR $25D6. Nothing "
-             "external jumps into this region except the command fall-throughs; "
-             "$2567 is untouched.",
+             "COPY's routine (the $19D7 patch): LD B,FFh / JR $25D6. LIST and "
+             "RESTORE come straight here (the $19AF and $19D0 patches) with no "
+             "token in B; the module tells them by T-ADDR, and hands their other "
+             "forms back the same way: C with HL = $1545 (LIST) or $1E9D "
+             "(RESTORE). Nothing external jumps into this region except the "
+             "command fall-throughs; $2567 is untouched.",
     ),
     dict(
         name="COPY's parameter list: $19D7 class 00 / $0A02 -> class 05 / $25E0",
@@ -111,6 +114,26 @@ PATCHES = [
              "the $1946 patch did for CAT/FORMAT/MOVE/ERASE. Both classes leave "
              "T-ADDR at $19D8, so the bare COPY the module hands back to $0A02 "
              "still reads as COPY (D8h) in the printer path at EXROM $1781.",
+    ),
+    dict(
+        name="LIST's parameter list: $19AF class 05 / $1545 -> class 05 / $25D6",
+        bank="home", addr=0x19AF,
+        before="05 45 15", after="05 d6 25",
+        note="LIST \"name\" shows a file (FDD_LIST, tpi:list). LIST was class "
+             "05 already, so only the routine changes: the hook, which the "
+             "module answers for a string and hands back to $1545 for LIST, "
+             "LIST n and LIST #n on both passes. T-ADDR stays $19B0, which is "
+             "how the module knows the statement.",
+    ),
+    dict(
+        name="RESTORE's parameter list: $19D0 class 03 / $1E9D -> class 05 / $25D6",
+        bank="home", addr=0x19D0,
+        before="03 9d 1e", after="05 d6 25",
+        note="RESTORE #n rewinds an OPEN # file (FDD_RESTORE). Class 03 (an "
+             "optional number) refused the #. Class 05 hands the statement to "
+             "the module, which does class 03's part itself for RESTORE and "
+             "RESTORE n (the number through $1BE5, or 0 through $1C51) and "
+             "hands over to $1E9D at run time. T-ADDR is $19D1.",
     ),
     dict(
         name="channel trampolines, stubs and the error trap in the dead $1488-$14BC",
@@ -327,6 +350,12 @@ ANCHORS = [
          bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
     dict(name="H_COPY: HOME's COPY, where the $25D6 hook sends a bare COPY",
          bank="home", addr=0x0A02, bytes="d9 21 30 16 c3 e3 3c"),
+    dict(name="H_LIST: HOME's LIST, where FDD_LIST sends LIST, LIST n, LIST #n",
+         bank="home", addr=0x1545, bytes="3e 02 fd 36 02 00"),
+    dict(name="H_RESTORE: HOME's RESTORE after class 03 (FIND-INT2 first)",
+         bank="home", addr=0x1E9D, bytes="cd 23 1f 2a bc 5c"),
+    dict(name="H_USE_ZERO: USE-ZERO, a 0 on the calculator stack at run time",
+         bank="home", addr=0x1C51, bytes="cd 89 28 c8 ef a0 38 c9"),
     dict(name="EXROM $2000: JP to the relocated BEEPER (G_BEEP calls it)",
          bank="exrom", addr=0x2000, bytes="c3 3f 20"),
     dict(name="MODE_SET_OK: CALL S_MODE / CALL $042F / JP $1B72 (\"0 OK\"), TAPE_MODE ends here",

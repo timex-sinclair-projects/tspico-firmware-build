@@ -9,7 +9,9 @@
 ;  entry ($3000), so control lands in FDD_DISPATCH with the EXROM paged and
 ;  returns to the BASIC interpreter when we RET. B carries the BASIC token.
 ;  COPY reaches the same hook ($25E0); a bare COPY comes back with carry set
-;  and the hook goes on to HOME's own COPY, the printer (FDD_ENTRY).
+;  and the hook goes on to HOME's own COPY, the printer (FDD_ENTRY). LIST and
+;  RESTORE come straight to $25D6, and T-ADDR says which; their other forms go
+;  back to HOME the same way.
 ;
 ;  BASIC calls a command's routine TWICE — once to syntax-check the statement
 ;  (FLAGS bit 7 clear) and once to execute it (bit 7 set). Both reach here.
@@ -27,6 +29,8 @@
 ;    COPY               -> HOME's COPY: the screen to the printer
 ;    ERASE x            -> tpi:erase x
 ;    FORMAT x           -> tpi:format x
+;    LIST x             -> tpi:list x            (a string; LIST, LIST n, LIST #n: HOME's)
+;    RESTORE #n         -> back to the start of the file on #n (RESTORE [n]: HOME's)
 ;
 ;  The command is built in the calculator-stack workspace with a string
 ;  descriptor above it, and sent through the shipping SAVE "tpi:..." machinery
@@ -85,6 +89,12 @@ CURCHL          EQU $5C51          ; the current channel's record
 THUNK_HX        EQU $03FC          ; HOME: LD (5DCD),HL / LD HL,t / JP here = call EXROM t
 H_COPY          EQU $0A02          ; HOME: COPY (EXX / LD HL,1630h / JP 3CE3h), the
                                    ;   printer; the $25D6 hook jumps there on carry
+H_LIST          EQU $1545          ; HOME: LIST, class 05h: it parses its own #n and n
+H_RESTORE       EQU $1E9D          ; HOME: RESTORE, with the line number class 03h stacked
+H_USE_ZERO      EQU $1C51          ; HOME: USE-ZERO, 0 on the calculator stack at run time
+T_LIST          EQU $19B0          ; T-ADDR in a LIST statement: its parameter list
+                                   ;   (19AFh) + 1, where class 05h leaves it
+T_RESTORE       EQU $19D1          ; T-ADDR in a RESTORE statement (list 19D0h + 1)
 
 ; --- a channel record in CHANS (spec §4; FDD_COMMANDS_DESIGN §6.1, §10.8) --------
 ; Each OPEN # takes CH_ALLOC bytes just before CHANS' closing $80, with the
@@ -124,7 +134,12 @@ BANK_SP         EQU $65CE          ; the RAM bank-call stack pointer
 H_TRAP          EQU $14B2          ; HOME: GUARDED's error trap
 BEEPER          EQU $2000          ; EXROM: JP to the relocated HOME BEEPER
 READ_DELAY      EQU 16             ; x 16 T-states between data-phase reads (~75 us)
+TOK_INKEY       EQU $A6
+TOK_FN          EQU $A8
 TOK_SCREEN      EQU $AA
+TOK_VALS        EQU $AE
+TOK_STRS        EQU $C1
+TOK_CHRS        EQU $C2
 TOK_CODE        EQU $AF
 TOK_LINE        EQU $CA
 TOK_DATA        EQU $E4
@@ -1513,7 +1528,16 @@ FDD_ENTRY:
         call    .run
         pop     ix                 ; the flags pass through
         ret
-.run:   ld      ix,CMD_REN         ; MOVE a TO b: rename
+.run:   ld      hl,(TADDR)         ; LIST and RESTORE come straight to $25D6
+        ld      a,h                ;   (B is not a token then): their
+        cp      high T_LIST        ;   parameter lists say which
+        jr      nz,.tok
+        ld      a,l
+        cp      low T_LIST
+        jr      z,FDD_LIST
+        cp      low T_RESTORE
+        jp      z,FDD_RESTORE
+.tok:   ld      ix,CMD_REN         ; MOVE a TO b: rename
         ld      a,b
         cp      TOK_COPY
         jr      z,FDD_COPY
@@ -1540,6 +1564,155 @@ FDD_COPY:
         scf
         ret
 
+;------------------------------------------------------------------------------
+; FDD_LIST -- LIST string            show a file (tpi:list)
+;             LIST, LIST n, LIST #n  HOME's LIST (C, HL = H_LIST, on both passes:
+;                                    it does its own syntax check)
+; LIST's parameter list (HOME 19AFh) is class 05h with routine 25D6h. Which
+; form it is goes by how the expression starts (STR_NEXT): the module can't
+; scan it to find out, because a syntax-pass scan at run time inserts a
+; second hidden number after each number in the line, and a run-time scan
+; evaluates it twice.
+;------------------------------------------------------------------------------
+FDD_LIST:
+        ld      iy,IY_SYSVARS
+        ei                         ; as FDD_MAIN
+        call    AT_END
+        jr      z,.home            ; LIST
+        cp      '#'
+        jr      z,.home            ; LIST #n
+        call    STR_NEXT
+        jr      nz,.home           ; LIST n
+        ld      hl,CMD_LIST
+        call    FDD_ONE_ARG
+        and     a                  ; NC: the hook returns
+        ret
+.home:  ld      hl,H_LIST
+        scf
+        ret
+
+;------------------------------------------------------------------------------
+; FDD_RESTORE -- RESTORE [n]   HOME's RESTORE: the module does class 03h's
+;                              part (the number, or 0) and hands over at run
+;                              time (C, HL = H_RESTORE)
+;                RESTORE #n    the file open on stream n goes back to its
+;                              start: what was printed to it is sent, what
+;                              was read ahead is dropped, and TAB 1 goes to
+;                              the Pico (Channels._seek: byte 0, a record
+;                              file's open record closed). Report O if #n is
+;                              not an OPEN # file.
+; RESTORE's parameter list (HOME 19D0h) was class 03h, routine 1E9Dh; it is
+; class 05h with routine 25D6h.
+;------------------------------------------------------------------------------
+FDD_RESTORE:
+        ld      iy,IY_SYSVARS
+        ei
+        call    AT_END
+        jr      z,.zero
+        cp      '#'
+        jr      z,.strm
+        call    HC_EXPT_1NUM       ; RESTORE n
+        call    AT_END
+        jp      nz,NONSENSE
+        call    RUNTIME
+        ret     z                  ; syntax pass: accepted (NC)
+        jr      .home
+.zero:  call    RUNTIME
+        ret     z
+        call    HC_USE_ZERO        ; RESTORE: line 0
+.home:  ld      hl,H_RESTORE
+        scf
+        ret
+.strm:  call    NEXT_CHAR
+        call    HC_EXPT_1NUM       ; the stream
+        call    AT_END
+        jp      nz,NONSENSE
+        call    RUNTIME
+        ret     z
+        call    HC_FIND_INT2       ; BC
+        ld      a,b
+        and     a
+        jr      nz,.bad
+        ld      a,c
+        cp      16
+        jr      nc,.bad
+        add     a,a
+        add     a,low (STRMS+6)    ; stream n's STRMS entry
+        ld      l,a
+        ld      h,high STRMS
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        ld      a,d
+        or      e
+        jr      z,.bad             ; not open
+        bit     7,d
+        jr      nz,.bad            ; SYSCON
+        ld      hl,(CHANS)
+        add     hl,de
+        dec     hl
+        push    hl
+        pop     ix                 ; the record
+        ld      a,(ix+R_LETTER)
+        cp      'F'
+        jr      nz,.bad
+        call    CH_FLUSH           ; what was printed first
+        xor     a
+        ld      (ix+R_INN),a       ; what was read ahead goes
+        ld      (ix+R_INP),a
+        ld      (ix+R_OUTBUF),23   ; TAB 1: the file's first byte
+        ld      (ix+R_OUTBUF+1),1
+        ld      (ix+R_OUTBUF+2),a
+        ld      (ix+R_OUTN),3
+        call    CH_FLUSH
+        and     a
+        ret
+.bad:   rst     8
+        db      $17                ; O Invalid stream
+
+; STR_NEXT -- Z if the expression at CH_ADD starts as a string does: a quote,
+; a string variable (a letter, then '$'), FN a$, STR$, CHR$, INKEY$, SCREEN$
+; or VAL$. It only looks; CH_ADD stays on the expression. Anything else
+; (a parenthesis among them) counts as a number.
+STR_NEXT:
+        call    SKIP_SPACES        ; A = the character, HL = CH_ADD
+        cp      '"'
+        ret     z
+        cp      TOK_INKEY
+        ret     z
+        cp      TOK_SCREEN
+        ret     z
+        cp      TOK_VALS
+        ret     z
+        cp      TOK_STRS
+        ret     z
+        cp      TOK_CHRS
+        ret     z
+        cp      TOK_FN
+        call    z,.next            ; FN a$(...): the letter
+        or      $20
+        cp      'a'
+        jr      c,.no
+        cp      'z'+1
+        jr      nc,.no
+        call    .next              ; then '$', perhaps after spaces
+        cp      '$'
+        ret
+.no:    or      1                  ; NZ
+        ret
+.next:  inc     hl
+        ld      a,(hl)
+        cp      ' '
+        jr      z,.next
+        ret
+
+HC_USE_ZERO:
+        push    ix
+        exx
+        ld      hl,H_USE_ZERO
+        jp      CALL_HOME
+
+CMD_LIST:    db "tpi:list ",0
 CMD_CD_MENU: db "tpi:cd",0
 
 FDD_END:

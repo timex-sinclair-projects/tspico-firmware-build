@@ -82,7 +82,7 @@ lets you look after files and folders.
 **What you can do with it:**
 
 - Load and save programs, screens, code and data to TAP files on the SD card
-- Browse, create, copy, rename and delete files and folders
+- Browse, create, copy, rename and delete files and folders, and show a file on the screen
 - Save a program as a plain file (`foo.bas`, `foo.scr`), not only inside a TAP
 - Read and write text and data files from BASIC with `OPEN #`, `PRINT #` and `INPUT #`
 - Capture `LPRINT`, `LLIST` and `COPY` to text and picture files
@@ -454,7 +454,9 @@ SAVE "tpi:dir"
 ```
 
 Or you can use the **CAT** command. The listing shows the folder you're in (the
-*current folder*), how big the card is and how much space is free, then folders, then files.
+*current folder*), the card's name, how big the card is and how much space is free, then
+folders, then files. The card's name is its label, the name a PC or Mac shows for it, or `SD`
+if it has none (`SAVE "tpi:label"`, 10.3).
 If it's longer than the screen, you'll see `Scroll? (Y/n)` with a percentage showing how far
 through you are. Press **Y** or **ENTER** for more, a number **1** to **9** to scroll that many
 lines, or **N** to stop.
@@ -472,6 +474,9 @@ CAT ""               : REM the blocks inside the mounted TAP
 `*` matches any run of characters and `?` matches exactly one. They work in the last part of a
 path. `SAVE "tpi:dir games"`, `SAVE "tpi:dir *.tap"` and so on give the same listings, as long
 as the whole name fits in 31 characters.
+
+To see what's inside a file, **LIST** it: `LIST "notes.txt"` shows a text file on the screen,
+and any other file as a hex dump (10.1).
 
 ![CAT: the path and card on a blue bar, folders in blue, each file's number on a cyan chip](images/cat.png)
 
@@ -916,7 +921,7 @@ line 30 asks `Replace scores.dat? (Y/N)`: press **Y**.
 
 # Chapter 6: Streams and Channels: `OPEN #`
 
-<!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · CLOSE # -->
+<!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · RESTORE # · CLOSE # -->
 
 > **Chapter Preview.** Write and read text files with the 2068's own `PRINT #` and `INPUT #`,
 > keep records you can jump to by number, and read a folder listing into a program.
@@ -1032,6 +1037,23 @@ stopping, the program goes to line 100:
   letter.
 
 Numbers work too: `INPUT #4;n` reads a line and turns it into a number, as if you'd typed it.
+
+**Reading it again.** `RESTORE #4` goes back to the start of the file, so the next `INPUT #4`
+reads the first line again. There's no need to CLOSE and OPEN it:
+
+```basic
+10 OPEN #4,"f:shopping.txt"
+20 INPUT #4;a$
+30 RESTORE #4
+40 INPUT #4;b$
+50 CLOSE #4
+60 PRINT a$;"/";b$
+```
+
+This prints `Eggs/Eggs`. On a file you're writing, the next `PRINT #4` after `RESTORE #4` writes
+from the start, over what's there. Anything you printed before it is sent first. `RESTORE #`
+works on a stream opened with `"f:"`; any other stream gives **O Invalid stream**. `RESTORE` and
+`RESTORE 100` still set the DATA pointer, as always.
 
 ## 6.4 One character at a time: INKEY$ #
 
@@ -1197,6 +1219,7 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
   `"u"` file the prompt text is written into the file, so leave prompts out when reading files.
 - You can't OPEN a stream that's already open to a file. CLOSE it first, or you'll get
   **O Invalid stream**.
+- `RESTORE #4` on a record file finishes the open record first, then goes back to the start.
 - A file can be read and written by different streams, but they don't know about each other.
   CLOSE one before relying on what the other sees.
 - One character can't be written into a file with `PRINT #`: `CHR$ 23`, because the 2068 uses
@@ -1209,7 +1232,7 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 | **F Invalid file name** | Reading a file that isn't there, or a folder that isn't there |
 | **Q Parameter error** | A bad mode; a record too long; reading a file opened for writing; `PRINT #4;TAB 0` |
 | **8 End of file** | You read past the end |
-| **O Invalid stream** | The stream is already open to a file |
+| **O Invalid stream** | The stream is already open to a file; `RESTORE #` of a stream that isn't open to a file |
 | **4 Out of memory** | No room for another open file (each takes 512 bytes) |
 
 ## 6.10 More ways to use files
@@ -1291,7 +1314,8 @@ the file as spaces.
 3. Always CLOSE a file you've written to.
 4. A record length (`OPEN #4,"f:x","u",20`) makes TAB jump to a record; `TAB 0` counts them.
 5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT.
-6. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
+6. `RESTORE #n` goes back to the start of the file, to read it again or write over it.
+7. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
    `PEEK 23739` says which report it caught.
 
 ---
@@ -1777,7 +1801,7 @@ message (`CODE 1,0`).
 
 # Chapter 10: Command Reference
 
-<!-- keywords: CAT · COPY · ERASE · FORMAT · MOVE · tpi: -->
+<!-- keywords: CAT · COPY · ERASE · FORMAT · LIST · MOVE · RESTORE # · tpi: -->
 
 **How to read an entry.** Messages appear only after `SAVE "tpi:verbose" CODE 1,1`, unless
 they're marked *(shown)*: with verbose off you see only the report. Listings and the forms
@@ -1788,10 +1812,12 @@ doesn't answer, **D** if you press **BREAK**, and **T** if the TS-Pico resets a 
 ## 10.1 BASIC keywords
 
 These are the 2068's own keywords, which Timex's ROM never implemented. The TS-Pico ROM
-makes them work on the SD card. COPY is the one Timex did implement: on its own it still
-prints the screen (Chapter 7), and with two names it copies a file. Every argument is a
-string expression, so `CAT a$` and `ERASE "old"+n$` are fine, up to 64 characters. A name
-over 64 characters, or an empty name where one is required, gives **F**.
+makes them work on the SD card. COPY, LIST and RESTORE are ones Timex did implement, and
+their usual forms work as they always have: COPY on its own prints the screen (Chapter 7),
+LIST and `LIST 100` list the program, and RESTORE sets the DATA pointer. With a file name,
+COPY copies a file and LIST shows one; `RESTORE #n` goes back to the start of a file. Every
+argument is a string expression, so `CAT a$` and `ERASE "old"+n$` are fine, up to 64
+characters. A name over 64 characters, or an empty name where one is required, gives **F**.
 
 ### CAT: list files
 
@@ -1809,6 +1835,8 @@ CAT "frogger.tap"    : REM the blocks in a TAP file
 - With a pattern, the second line of the header shows the pattern and the counts, for example
   `*.tap: 12 files, 0 dirs`.
 - Files whose names start with a dot are hidden, unless the pattern starts with a dot.
+- The header's second line is the card: its label, or `SD` if it has none, then its size and
+  the space free, for example `GAMES: 240 MB; free: 236 MB`. A long label gets a shorter line.
 - **F**: `Not found:`, `Not a directory:`, `No match for` a pattern, or `Directory is empty` for
   another folder that's empty *(verbose)*.
 
@@ -1852,14 +1880,16 @@ ERASE "empty/"       : REM remove an empty folder (note the slash)
 
 As a command: `SAVE "tpi:erase old.tap"`.
 
-### FORMAT: make a new TAP or folder
+### FORMAT: make a new TAP or folder, or name the card
 
-FORMAT **never formats your SD card.** It makes something new and empty:
+FORMAT **never formats your SD card.** It makes something new and empty, or names the card:
 
 ```basic
 FORMAT "songs.tap"   : REM a new, empty TAP, mounted with append on
 FORMAT "songs"       : REM the same (.tap is added)
 FORMAT "tools/"      : REM a new folder
+FORMAT ":GAMES"      : REM label the card GAMES
+FORMAT ":"           : REM take the label off
 ```
 
 - **F**: `Already exists:` (FORMAT never overwrites), `Name not allowed:`, `Not found:` for the
@@ -1867,8 +1897,39 @@ FORMAT "tools/"      : REM a new folder
   "dir/"` for any other extension. A name with a dot in it needs `.tap` at the end:
   `FORMAT "v1.2.tap"`, not `FORMAT "v1.2"`.
 - *(verbose)* `New .tap mounted: /songs.tap` or `Made /tools/`.
+- A name starting with `:` is the card's label, as `SAVE "tpi:label"` sets it (10.3). A file
+  name can't contain `:`, so this never clashes with making a file.
 
 As a command: `SAVE "tpi:format songs.tap"`.
+
+### LIST: show a file
+
+```basic
+LIST "notes.txt"     : REM show a file on the screen
+LIST "games/read.me" : REM a path works too
+LIST z$              : REM any string expression
+LIST                 : REM the program, as always (also LIST 100, LIST #3)
+```
+
+- A text file shows as text, up to its first 8192 bytes. Line ends are kept, a TAB shows as two
+  spaces, and characters the 2068 can't show (`|`, `~`, `{`, `}`, accented letters) show as `?`.
+- Any other file shows as a hex dump of its first 2048 bytes, 8 bytes to a row: the address,
+  the bytes in hex, then the characters, with `.` for any that can't show.
+
+  ```
+  0000 4142434445464748 ABCDEFGH
+  ```
+
+- If that isn't the whole file, a last line says how much it was: `(the first 2048 of 6912
+  bytes)`. A long listing stops at each screen with `Scroll? (Y/n)`.
+- A file counts as text if its first 2048 bytes have no control codes except TAB, line feed and
+  carriage return, and no DEL (127).
+- LIST decides by how the expression starts. A quote, a string variable, `FN a$`, `STR$`,
+  `CHR$`, `INKEY$`, `SCREEN$` or `VAL$` means a file name; anything else is a line number, so
+  `LIST ("notes.txt")` is **C Nonsense in BASIC**: leave the brackets off.
+- **F**: `Not found:`. **Q**: `A directory:`, `LIST takes one file` (a pattern).
+
+As a command: `SAVE "tpi:list notes.txt"`.
 
 ### LOAD, SAVE, VERIFY, MERGE with `f:`
 
@@ -1896,6 +1957,22 @@ As commands: `SAVE "tpi:ren old.tap new.tap"` and `SAVE "tpi:cd games"`.
 ### OPEN # and CLOSE #
 
 See Chapter 6.
+
+### RESTORE #: back to the start of a file
+
+```basic
+RESTORE #4           : REM the file on stream 4, from the start
+RESTORE              : REM the DATA pointer, as always (also RESTORE 100)
+```
+
+- The next `INPUT #4` reads from the first byte; the next `PRINT #4` writes from the start, over
+  what's there.
+- What was printed to the stream before is sent first, and anything read ahead is dropped. On a
+  record file, the open record is finished first.
+- **O**: stream 4 isn't open to an `"f:"` file (not open, a screen or printer stream, or a
+  number over 15).
+
+See 6.3.
 
 ## 10.2 Mounting: LOAD "tpi:..."
 
@@ -1992,13 +2069,13 @@ whose folder isn't there, such as `/tap/x`.
 
 `SAVE "tpi:close"`. Always **0 OK**. *(verbose)* `Unmounting file.`
 
-### copy, erase, format
+### copy, erase, format, list
 
-The command forms of COPY, ERASE and FORMAT: `SAVE "tpi:copy a.tap b.tap"` (the two names
-separated by a space), `SAVE "tpi:erase x"` and `SAVE "tpi:format x.tap"`. They behave like the
-keywords, with two differences: the whole name, `tpi:` included, must fit in 31 characters, and a
-missing name gives **Q** (`Name required`, or for `tpi:copy`
-`Copy needs a source and a destination`) where the keyword gives **F**.
+The command forms of COPY, ERASE, FORMAT and LIST: `SAVE "tpi:copy a.tap b.tap"` (the two names
+separated by a space), `SAVE "tpi:erase x"`, `SAVE "tpi:format x.tap"` and
+`SAVE "tpi:list x"`. They behave like the keywords, with two differences: the whole name,
+`tpi:` included, must fit in 31 characters, and a missing name gives **Q** (`Name required`,
+or for `tpi:copy` `Copy needs a source and a destination`) where the keyword gives **F**.
 
 ### dir: list the current folder
 
@@ -2090,6 +2167,26 @@ the current folder and how many files are in it.
 <!-- /v3 -->
 
 With no SD card, the strip and the card's `none` turn red.
+
+### label: the card's name
+
+```basic
+SAVE "tpi:label"             : REM show it: Label: GAMES, or No label
+SAVE "tpi:label GAMES"       : REM set it
+SAVE "tpi:label -"           : REM take it off
+```
+
+The label is the card's name, the one a PC or Mac shows for it. CAT shows it in place of `SD`
+on the card's line. `SAVE "tpi:label"` on its own always shows the label *(shown)*.
+
+- Up to 11 characters, kept in upper case. **Q**: `Not a label:` for a name that is too long,
+  starts with a space, or has a character the 2068 can't show or one of
+  `. " * + , / : ; < = > ? [ \ ] |`. **Q**: `Root folder full` on a card whose top folder has
+  no room for it.
+- *(verbose)* `Label: GAMES` or `Label taken off`.
+- The TS-Pico reads the label when the card goes in or at switch-on, so a label you change on a
+  computer shows once the card is back.
+- `FORMAT ":GAMES"` and `FORMAT ":"` do the same from BASIC.
 
 ### log
 
@@ -2236,7 +2333,7 @@ with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
   the ROM loaders and the disk keywords. You won't need to type them.
 - **upgrade**, **rompatch** and **sys** belonged to the old 1.1 update process and have been
   removed. Use the web updater (Appendix A).
-- **config**, **delete**, **freset**, **getconfig**, **list**, **meminfo** and **stop** are
+- **config**, **delete**, **freset**, **getconfig**, **meminfo** and **stop** are
   reserved for the future. They give **C** with `CMD OK, but not yet implemented`.
 - **.fact** and **.rndw** are examples for programmers (see the Programmer's Manual).
 
@@ -2623,7 +2720,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or declined "Replace?" |
 | **F Invalid file name** | Not found; not allowed; already exists (FORMAT, COPY, MOVE, ren) |
 | **J Invalid I/O device** | The TS-Pico didn't answer, or an SD card that won't mount |
-| **O Invalid stream** | OPEN # of a stream that's already open to a file |
+| **O Invalid stream** | OPEN # of a stream that's already open to a file; RESTORE # of a stream that isn't |
 | **Q Parameter error** | Can't be done right now: mounted, not empty, wrong mode, wrong type, too long, booted slot |
 | **R Tape loading error** | Data damaged in transit; a damaged TAP or file; nothing on the tape matched a LOAD |
 | **T TS-Pico reset, try again** | The TS-Pico reset a transfer that went wrong. Try again. |
@@ -2639,6 +2736,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | List the current folder | `CAT` | `SAVE "tpi:dir"` |
 | List matching files | `CAT "*.tap"` | `SAVE "tpi:dir *.tap"` |
 | Look inside the mounted TAP | `CAT ""` | `SAVE "tpi:tapdir"` |
+| Show a file | `LIST "notes.txt"` | `SAVE "tpi:list notes.txt"` |
 | Change folder | `MOVE TO "games"` | `SAVE "tpi:cd games"` |
 | Back to the previous folder | `MOVE TO "-"` | `SAVE "tpi:cd -"` |
 | Pick a folder from a menu | `MOVE TO ""` | `SAVE "tpi:cd"` |
@@ -2649,6 +2747,8 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Delete a file | `ERASE "a"` | `SAVE "tpi:erase a"` |
 | Delete matching files | `ERASE "*.bak"` | `SAVE "tpi:erase *.bak"` |
 | New empty TAP | `FORMAT "x.tap"` | `SAVE "tpi:format x.tap"` |
+| Name the card | `FORMAT ":GAMES"` | `SAVE "tpi:label GAMES"` |
+| Take the card's name off | `FORMAT ":"` | `SAVE "tpi:label -"` |
 | Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:03"` |
 | Pick a file to mount |  | `SAVE "tpi:idir"` |
 | Unmount |  | `SAVE "tpi:close"` |
@@ -2657,6 +2757,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Add SAVEs to the mounted TAP |  | `SAVE "tpi:append on"` |
 | Save a single file | `SAVE "f:x.bas"` |  |
 | Open a file stream | `OPEN #4,"f:x.txt","w"` |  |
+| Go back to the start of a file | `RESTORE #4` |  |
 | Read a folder listing | `OPEN #4,"d:*.tap"` |  |
 | Messages on/off |  | `SAVE "tpi:verbose" CODE 1,1` / `CODE 1,0` |
 | Status |  | `SAVE "tpi:info"` |

@@ -406,6 +406,10 @@ LOG_LABELS = ("INFO", "WARNING", "ERROR", "CRITICAL","SPECIAL")
 # parked state machine for the rest of the session.
 sd_active = False
 
+# The SD driver the last mount used: tpi:label reads and writes the card's
+# raw sectors through it (catalog.read_label / write_label).
+SD_DEV = None
+
 # The directory before the last successful change: MOVE TO "-" (tpi:cd -) goes
 # back to it. One level, like cd -.
 prev_path = None
@@ -664,6 +668,7 @@ class PICO_STATUS():                                                            
         # a different value on a later mount means a different card.
         self.sd_present = False
         self.sd_cid = None
+        self.sd_label = ""                                                      # the card's FAT label, "" for none (SD_REVALIDATE)
         self.save_no_card = False                                               # the dispatcher's card check for this SAVE failed
         self.sd_listing_ok = False                                              # DIR_FILES read the current folder without errors
         self.listing_stale = False                                              # a ZX48 SAVE wrote into the folder: REFRESH_LISTING
@@ -1086,6 +1091,7 @@ def ACTIVATE_SD(tries=None):                                                    
 
     global MQ
     global sd_active
+    global SD_DEV
 
     TLM("ACTIVATE_SD enter")
     if not board.sd_card_ready():
@@ -1126,6 +1132,7 @@ def ACTIVATE_SD(tries=None):                                                    
                 print("[ACTIVATE_SD] %s -- recovered" % recovered)
                 LOG("SD card %s; recovered without a power cycle" % recovered, 1)
             os.mount(sd, "/sd")
+            SD_DEV = sd
             TLM("ACTIVATE_SD exit", "SD mounted at /sd (attempt %d)" % attempt)
             if attempt > 1:
                 LOG("SD card mounted on attempt %d (before that: %s)" % (attempt, err), 1)
@@ -1231,6 +1238,7 @@ def SD_REVALIDATE(changed):                                                    #
       * a DIFFERENT card: append goes off (a save must never land in the
         other card's file), and open channels and the printer capture are
         dropped -- their files were on the other card;
+      * the card's label is read (CAT shows it);
       * the directory caches are rebuilt.
 
     If there is no TAP folder and one can't be made (a write-protected card),
@@ -1259,9 +1267,22 @@ def SD_REVALIDATE(changed):                                                    #
         TSP.append = False
         CHANNELS.close_all()
         prn_path = None
+    TSP.sd_label = CARD_LABEL()
     os.chdir(TSP.cur_path)
     TSP.sd_listing_ok = DIR_FILES()
     alldirs = GET_DIRS()
+
+
+def CARD_LABEL():                                                             # the mounted card's label, "" if it can't be read
+
+    """Read once per card (SD_REVALIDATE), for CAT's card line. Reading the
+    raw sectors under the mount is safe: nothing has written since it."""
+
+    try:
+        return catalog.read_label(SD_DEV) if SD_DEV is not None else ""
+    except Exception as e:                                                    # the label never stops a mount
+        LOG("SD card label: %s" % e, 0)
+        return ""
 
 
 def LISTING_SIG(entries):                                                     # the folder's names, types and sizes, as one number
@@ -1734,7 +1755,7 @@ def LIST_DIR_FILES():                                                           
     sd_tot   = os.statvfs("")[2]
     sd_free  = os.statvfs("")[3]
     sd_space = (sd_tot * sd_block, sd_free * sd_block)
-    sd_stat  = "SD: %s; free: %s" % catalog.space_pair(*sd_space)
+    sd_stat  = catalog.card_line(TSP.sd_label, *sd_space)
 
     header = DIR_HEADER(sd_stat)
     
@@ -2739,7 +2760,7 @@ SD_FREE = frozenset((
     "TPI:DOCK", "TPI:MEMDOCK", "TPI:ZX48", "TPI:NOP", "TPI:PATH", "TPI:CLOSE",
     "TPI:TAPDIR", "TPI:FFW", "TPI:REW", "TPI:APPEND", "TPI:BLKRCV", "TPI:CHCLOSE",
     "TPI:AUTOLF", "TPI:NOAUTOLF", "TPI:AUTOPG", "TPI:NOAUTOPG", "TPI:BMP", "TPI:PRNSZ",
-    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:LIST", "TPI:MODEM", "TPI:SAY",
+    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:MODEM", "TPI:SAY",
     "TPI:GREET", "TPI:AUTOMOUNT",
     "TPI:MEMINFO", "TPI:STOP"))
 
@@ -2999,6 +3020,7 @@ def DISK_FORMAT(pre, cmd):                                                    # 
 
     # SAVE "tpi:format name.tap" - create an empty .tap and mount it (".tap" may be left off)
     # SAVE "tpi:format dir/"     - make a directory
+    # SAVE "tpi:format :name"    - label the card (as tpi:label; ":" alone takes it off)
     # Never formats the card, and never overwrites.
 
     global TSP
@@ -3007,6 +3029,9 @@ def DISK_FORMAT(pre, cmd):                                                    # 
     arg = getArgs(cmd).strip()
     if not arg:
         SEND_MSG("Name required", "", _4_Q_Parameter)
+        return
+    if arg.startswith(':'):                                                   # FORMAT ":name": the card's label
+        LABEL_SET(arg[1:].strip() or "-")
         return
     if arg.endswith('/'):
         msg, st = SD_CALL(DISK_MAKE_DIR, arg.rstrip('/'))
@@ -3068,6 +3093,86 @@ def DISK_MAKE_DIR(name):                                                      # 
         pass
     REFRESH_IF(catalog.parent(real))
     return "Made %s/" % catalog.public(real), _1_OK
+
+
+def DISK_LIST(pre, cmd):                                                      # LIST "x" / SAVE "tpi:list x"
+
+    # SAVE "tpi:list name" - show a file: text as itself, anything else as a
+    # hex dump (the first catalog.LIST_TEXT_MAX or LIST_HEX_MAX bytes)
+
+    TLM("DISK_LIST enter")
+    arg = getArgs(cmd).strip()
+    if not arg:
+        SEND_MSG("Name required", "", _4_Q_Parameter)
+        return
+    msg, st = SD_CALL(DISK_LIST_WORK, arg)
+    if st != _1_OK:
+        SEND_MSG(msg, "", st)
+        return
+    SEND_MSG2(msg, st, False)
+
+
+def DISK_LIST_WORK(name):                                                     # LIST's text for one file; SD active
+
+    if catalog.has_wild(name):
+        return "LIST takes one file", _4_Q_Parameter
+    real = catalog.resolve(TSP.cur_path, name)
+    if real is not None and dir_exists(real):
+        return "A directory: %s" % catalog.public(real), _4_Q_Parameter
+    if real is None or not file_exists(real):
+        return "Not found: %s" % name, _3_F_Invalid_file
+    size = os.stat(real)[6]
+    with open(real, "rb") as f:
+        data = f.read(catalog.LIST_HEX_MAX)
+        text = catalog.is_text(data)                                          # the start decides
+        if text and size > len(data):
+            data += f.read(catalog.LIST_TEXT_MAX - len(data))
+    gc.collect()
+    return catalog.list_text(data, size, text), _1_OK
+
+
+def DISK_LABEL(pre, cmd):                                                     # SAVE "tpi:label [name]"
+
+    # SAVE "tpi:label"       - show the card's label
+    # SAVE "tpi:label name"  - set it: up to 11 characters, kept in upper case
+    # SAVE "tpi:label -"     - take it off (FORMAT ":name" and ":" do the same)
+
+    TLM("DISK_LABEL enter")
+    arg = getArgs(cmd).strip()
+    if not arg:
+        if TSP.sd_label:
+            SEND_MSG("Label: ", TSP.sd_label, _1_OK, True)
+        else:
+            SEND_MSG("No label", "", _1_OK, True)
+        return
+    LABEL_SET(arg)
+
+
+def LABEL_SET(arg):                                                           # tpi:label name / FORMAT ":name"
+
+    name = "" if arg == "-" else catalog.label_clean(arg)
+    if name is None:
+        SEND_MSG("Not a label: %s" % arg, "", _4_Q_Parameter)
+        return
+    msg, st = SD_CALL(DISK_LABEL_WORK, name)
+    SEND_MSG(msg, "", st)
+
+
+def DISK_LABEL_WORK(name):                                                    # write the label; SD active
+
+    if not hasattr(SD_DEV, "writeblocks"):
+        return "Can't label this card", _4_Q_Parameter
+    os.umount("/sd")                                                          # FatFs keeps a root sector cached
+    try:
+        catalog.write_label(SD_DEV, name)
+    except ValueError as e:                                                   # no free entry in the root folder
+        return str(e), _4_Q_Parameter
+    finally:
+        os.mount(SD_DEV, "/sd")                                               # (umount left the cwd at /)
+        os.chdir(TSP.cur_path)
+    TSP.sd_label = name
+    TSP.sd_listing_ok = DIR_FILES()                                           # CAT's card line
+    return ("Label: %s" % name if name else "Label taken off"), _1_OK
 
 
 def DISK_REN(pre, cmd):                                                       # MOVE "a" TO "b" / SAVE "tpi:ren a|b"
@@ -4492,6 +4597,8 @@ def GETHELP(pre, cmd):                                                 # Shows T
         M.append('"tpi:copy <from> <to>"')
         M.append('"tpi:erase <name or pattern>"')
         M.append('"tpi:format <name.tap or dir/>"')
+        M.append('"tpi:label [name or -]"')
+        M.append('"tpi:list <name>"')
         M.append('"tpi:ren <old> <new>"')
         M.append('"tpi:automount [name.tap/off]"')
         M.append('"tpi:opprint"  "tpi:clprint"')
@@ -6537,6 +6644,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:ERASE": DISK_ERASE,
         "TPI:FORMAT": DISK_FORMAT,
         "TPI:REN": DISK_REN,
+        "TPI:LABEL": DISK_LABEL,
         "TPI:FOPEN": NATIVE_OPEN,
         "TPI:CHOPEN": CH_OPEN,
         "TPI:CHWR": CH_WRITE,
@@ -6572,7 +6680,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:DELETE" : SA_NOT_IMP,
         "TPI:FRESET" : SA_NOT_IMP,
         "TPI:GETCONFIG" : SA_NOT_IMP, 
-        "TPI:LIST" : SA_NOT_IMP,
+        "TPI:LIST" : DISK_LIST,
         "TPI:MEMINFO" : SA_NOT_IMP,
         "TPI:NOAUTOLF" : PRN_FLAG,
         "TPI:NOAUTOPG" : PRN_FLAG,

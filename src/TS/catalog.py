@@ -311,3 +311,234 @@ def tap_header_rows(tbl, cur_idx=None, idx1=0, idx2=None, orphans=False):
                 N.append("Data block  %5s " % el[1])
             N.append("%-10s" % ("headerless" if orphans and orphan else el[3]))
     return N
+
+
+# --- LIST "name": a file as the 2068 shows it --------------------------------
+
+LIST_TEXT_MAX = 8192                                # bytes of a text file LIST shows
+LIST_HEX_MAX = 2048                                 # bytes of anything else (256 rows)
+
+
+def is_text(data):
+    """True if data reads as text: no control codes but TAB, LF and CR, and
+    no DEL. Bytes from 80h up (UTF-8, Latin-1) pass; LIST shows them as '?'."""
+
+    for b in data:
+        if (b < 32 and b not in (9, 10, 13)) or b == 127:
+            return False
+    return True
+
+
+def list_text(data, size, text=None):
+    """LIST "name"'s text for the first bytes of a file (`data`) of `size`
+    bytes. Text as itself, line ends kept and a TAB as two spaces, through
+    screen_name; anything else as a hex dump, 8 bytes a row in 30 columns:
+    "0000 0011223344556677 ..h.i..."  If `data` is not the whole file, a
+    last line says how much of it this is. `text` says which (default:
+    is_text(data)); a control code in text shows as '?'."""
+
+    if text is None:
+        text = is_text(data)
+    if text:
+        out = [c if c in "\r\n" else screen_name(c)
+               for c in "".join(chr(b) for b in data).replace("\t", "  ")]
+    else:
+        out = []
+        for i in range(0, len(data), 8):
+            row = data[i:i + 8]
+            out.append("%04X %-16s %s\r" % (
+                i, "".join("%02X" % b for b in row),
+                "".join(chr(b) if 32 <= b < 127 and chr(b) not in UNSHOWABLE else "." for b in row)))
+    if len(data) < size:
+        out.append("\r(the first %d of %d bytes)" % (len(data), size))
+    return "".join(out)
+
+
+# --- The card's label ----------------------------------------------------------
+# MicroPython's VfsFat doesn't give Python the FAT volume label (FatFs has
+# f_getlabel/f_setlabel, but only mkfs uses them), so these read and write it
+# in the raw sectors, through a block device handed in (readblocks/
+# writeblocks of 512-byte blocks: the SD driver, or a test image). Writing
+# needs the card unmounted: FatFs keeps a sector of the root folder cached.
+#
+# The label lives in two places: a root-folder entry with attribute 08h (what
+# Windows and macOS show) and the boot sector's BS_VolLab (what DOS showed).
+# read_label reads the entry; write_label writes both, like FatFs.
+
+LABEL_MAX = 11
+LABEL_BAD = '"*+,./:;<=>?[\\]|'                     # FatFs's f_setlabel refuses these
+
+
+def label_clean(name):
+    """The label FAT would store for `name` (upper case, at most 11
+    characters, no trailing spaces), or None if it can't be one. "" is no
+    label."""
+
+    name = name.rstrip(" ").upper()
+    if len(name) > LABEL_MAX or name[:1] == " ":
+        return None
+    for c in name:
+        if c < " " or c > "~" or c in LABEL_BAD or c in UNSHOWABLE:
+            return None
+    return name
+
+
+def _u16(b, i):
+    return b[i] | b[i + 1] << 8
+
+
+def _u32(b, i):
+    return b[i] | b[i + 1] << 8 | b[i + 2] << 16 | b[i + 3] << 24
+
+
+def _is_vbr(b):
+    """A FAT boot sector with 512-byte sectors (FatFs's check_fs, simplified)."""
+
+    return (b[510] == 0x55 and b[511] == 0xAA and b[0] in (0xEB, 0xE9, 0xE8)
+            and _u16(b, 11) == 512 and b[13] and not b[13] & (b[13] - 1)
+            and b[16] in (1, 2) and _u16(b, 14))
+
+
+class _Fat:
+    """The geometry of the FAT volume on dev, found as FatFs finds it: the
+    first sector, else the first of the MBR's four partitions that holds
+    one. OSError if there is none."""
+
+    def __init__(self, dev):
+        self.dev = dev
+        b = self.read(0)
+        start = 0
+        if not _is_vbr(b):
+            if b[510] != 0x55 or b[511] != 0xAA:
+                raise OSError(19, "No FAT volume")
+            for k in range(4):
+                lba = _u32(b, 446 + 16 * k + 8)
+                if lba and _is_vbr(self.read(lba)):
+                    start = lba
+                    break
+            else:
+                raise OSError(19, "No FAT volume")
+            b = self.read(start)
+        self.start = start
+        self.boot = b
+        spc, rsvd, nfat = b[13], _u16(b, 14), b[16]
+        fatsz = _u16(b, 22) or _u32(b, 36)
+        self.spc = spc
+        self.fat = start + rsvd
+        self.fat32 = _u16(b, 22) == 0
+        if self.fat32:
+            self.data = self.fat + nfat * fatsz
+            self.root_clus = _u32(b, 44)
+            self.lab_at, self.sig_at = 71, 66
+            self.backup = _u16(b, 50)
+        else:
+            self.root = self.fat + nfat * fatsz
+            self.root_secs = (_u16(b, 17) * 32 + 511) // 512
+            self.lab_at, self.sig_at = 43, 38
+            self.backup = 0
+
+    def read(self, n):
+        buf = bytearray(512)
+        self.dev.readblocks(n, buf)
+        return buf
+
+    def root_sectors(self):
+        """Every sector of the root folder, in order."""
+
+        if not self.fat32:
+            for i in range(self.root_secs):
+                yield self.root + i
+            return
+        c = self.root_clus
+        for _ in range(65536):                       # a loop in the chain ends it
+            if c < 2 or c >= 0x0FFFFFF7:
+                return
+            for i in range(self.spc):
+                yield self.data + (c - 2) * self.spc + i
+            sec = self.read(self.fat + c * 4 // 512)
+            c = _u32(sec, c * 4 % 512) & 0x0FFFFFFF
+
+    def find(self):
+        """(sector, offset, buf) of the label entry, then of the first free
+        entry: (None, None, None) for one that isn't there."""
+
+        lab = free = (None, None, None)
+        for n in self.root_sectors():
+            buf = self.read(n)
+            for off in range(0, 512, 32):
+                b0, attr = buf[off], buf[off + 11]
+                if b0 == 0:
+                    if free[0] is None:
+                        free = (n, off, buf)
+                    return lab, free
+                if b0 == 0xE5:
+                    if free[0] is None:
+                        free = (n, off, buf)
+                    continue
+                if attr & 0x3F != 0x0F and attr & 0x08 and lab[0] is None:
+                    lab = (n, off, buf)
+        return lab, free
+
+
+def read_label(dev):
+    """The card's label ("" for none). OSError if there's no FAT volume."""
+
+    fat = _Fat(dev)
+    (n, off, buf), _ = fat.find()
+    if n is None:
+        return ""
+    raw = bytearray(buf[off:off + 11])
+    if raw[0] == 0x05:
+        raw[0] = 0xE5
+    return "".join(chr(b) if 32 <= b < 127 else "?" for b in raw).rstrip(" ")
+
+
+def write_label(dev, name):
+    """Give the card the label `name` (label_clean's form; "" takes it
+    away). OSError if there's no FAT volume, ValueError if the root folder
+    has no free entry for it. Writes the root-folder entry and the boot
+    sector's copy (and FAT32's backup boot sector)."""
+
+    fat = _Fat(dev)
+    lab, free = fat.find()
+    if name:
+        raw = (name + " " * LABEL_MAX)[:LABEL_MAX].encode()
+        n, off, buf = lab if lab[0] is not None else free
+        if n is None:
+            raise ValueError("Root folder full")
+        entry = bytearray(32)
+        entry[0:11] = raw
+        entry[11] = 0x08
+        buf[off:off + 32] = entry
+        fat.dev.writeblocks(n, buf)
+    else:
+        raw = b"NO NAME    "
+        n, off, buf = lab
+        if n is not None:
+            buf[off] = 0xE5
+            fat.dev.writeblocks(n, buf)
+    boot = fat.boot
+    if boot[fat.sig_at] == 0x29:
+        boot[fat.lab_at:fat.lab_at + 11] = raw
+        fat.dev.writeblocks(fat.start, boot)
+        if fat.backup:
+            bk = fat.read(fat.start + fat.backup)
+            if _is_vbr(bk):
+                bk[fat.lab_at:fat.lab_at + 11] = raw
+                fat.dev.writeblocks(fat.start + fat.backup, bk)
+
+
+def card_line(label, total, free):
+    """CAT's card line, at most 32 characters: "SD: 240 MB; free: 236 MB",
+    the label in place of "SD" when the card has one, shorter forms when a
+    long label doesn't fit."""
+
+    tot, fr = space_pair(total, free)
+    who = label or "SD"
+    for line in ("%s: %s; free: %s" % (who, tot, fr),
+                 "%s: %s, %s free" % (who, tot, fr),
+                 "%s %s, %s free" % (who, tot, fr),
+                 "%s: %s free" % (who, fr)):
+        if len(line) <= 32:
+            return line
+    return line[:32]

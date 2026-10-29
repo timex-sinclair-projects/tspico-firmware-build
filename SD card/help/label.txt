@@ -1,0 +1,25 @@
+TS-Pico Command            LABEL
+--------------------------------
+SAVE "tpi:label"
+Shows the SD card's label, the
+name a PC or Mac shows for it.
+
+SAVE "tpi:label GAMES"
+Sets it: up to 11 characters,
+kept in upper case. Not allowed
+(Report Q): a space first, the
+characters the 2068 can't show,
+or . " * + , / : ; < = > ? [ \ ]
+
+SAVE "tpi:label -"
+Takes the label off.
+
+FORMAT ":GAMES" and FORMAT ":"
+do the same from BASIC.
+
+CAT shows the label in place of
+"SD" on the card's line. A label
+changed on a computer shows when
+the card is back in the TS-Pico.
+
+See also: format, cat

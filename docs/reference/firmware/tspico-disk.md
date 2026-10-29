@@ -1,11 +1,13 @@
-# tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, `f:` files, the channels
+# tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2628–3469.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2649–3574.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
 The ROM gives the four stock disk keywords (CAT, MOVE, ERASE, FORMAT) a
-meaning, gives COPY a file form beside its printer one, adds `f:` names to SAVE, LOAD, VERIFY and MERGE, and adds `f:` and
+meaning, gives COPY a file form beside its printer one and LIST one beside
+its program one, adds `RESTORE #n` (which reaches the Pico as an ordinary
+TAB, [channels.md](channels.md#channels_seekself-ch-n)), adds `f:` names to SAVE, LOAD, VERIFY and MERGE, and adds `f:` and
 `d:` channels to OPEN # and CLOSE #. None of that is new wire protocol: the
 ROM's module at EXROM 3000h turns each statement into an ordinary `'B'`
 command whose text starts `tpi:`, and the handlers in this part of
@@ -23,14 +25,14 @@ module's patches.
 
 | Lines | What | Chapter |
 |---|---|---|
-| 2628–2707 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
-| 2716–2815 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 2818–3115 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT and MOVE | here |
-| 3125–3128 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3131–3240 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3254–3281 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3284–3316 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3319–3469 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2649–2728 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
+| 2737–2836 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
+| 2839–3220 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
+| 3230–3233 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 3236–3345 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 3359–3386 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3389–3421 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3424–3574 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -206,9 +208,9 @@ mounted TAP from its live table with `>` on the position; a file typed in
 lower case listed by its stored name; from a subdirectory, `../*.tzx` lists
 the parent unindexed.
 
-## COPY, ERASE, FORMAT and MOVE
+## COPY, ERASE, FORMAT, LIST, the label and MOVE
 
-The comment at lines 2710–2714 states the rules all four share: paths resolve
+The comment at lines 2731–2735 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -349,18 +351,24 @@ FORMAT x$ — `tpi:format x`. Makes an empty `.tap` and mounts it with
 append on, the start of a new tape to SAVE into, or makes a directory when
 the name ends in `/`. It never formats the card and never overwrites.
 (`tpi:newtap`, which made the `.tap` alone, is gone: this does its job.)
+`FORMAT ":name"` labels the card instead.
 
 1. `arg` empty: `"Name required"`, Q.
-2. Ends in `/`: `SD_CALL(DISK_MAKE_DIR, arg.rstrip('/'))` and `SEND_MSG`.
-3. Otherwise the base name gets `.tap` when it has no dot; a base name that
+2. Starts with `:`: `LABEL_SET` with the rest, stripped, or `"-"` (take the
+   label off) when nothing is left; it answers, and that is all. So
+   `FORMAT ":GAMES"` is `tpi:label GAMES` and `FORMAT ":"` is `tpi:label
+   -`. Why FORMAT: a disk system's FORMAT is where a disk got its name, and
+   it keeps a word out of the keyword list *(the user's choice, #349)*.
+3. Ends in `/`: `SD_CALL(DISK_MAKE_DIR, arg.rstrip('/'))` and `SEND_MSG`.
+4. Otherwise the base name gets `.tap` when it has no dot; a base name that
    is `.tap` alone (any case) is no name: `"Name required"`, F; an extension
    that is not `.TAP` is `'FORMAT makes "x.tap" or "dir/"'`, Q. So
    `a.b.tap` makes `a.b.tap`, and `v1.2` (a dot, no `.tap`) is Q.
-4. `SD_CALL(DISK_NEW_TAP, arg)` returns the real path or an error
+5. `SD_CALL(DISK_NEW_TAP, arg)` returns the real path or an error
    (logged, sent).
-5. `MOUNT_FILE(real)` ([tspico-files.md](tspico-files.md)), which does its
+6. `MOUNT_FILE(real)` ([tspico-files.md](tspico-files.md)), which does its
    own SD session; a false return is `"Made it, but can't mount it"`, Q.
-6. `TSP.append = True`; `SEND_MSG("New .tap mounted: ", public_fname(), 1)`.
+7. `TSP.append = True`; `SEND_MSG("New .tap mounted: ", public_fname(), 1)`.
 
 `FORMAT "/"` ends in `/`, so it reaches `DISK_MAKE_DIR` with an empty name,
 which resolves to the current directory: `"Not allowed"` at the root,
@@ -391,6 +399,78 @@ parent `"Not found"`, F. `os.mkdir`, then `real[3:]` is appended to
 `alldirs` and the list sorted (inside a bare `try`, so a failure there is
 ignored), `REFRESH_IF(parent)`, `"Made <public>/"`, 1.
 
+### `DISK_LIST(pre, cmd)`
+
+`LIST x$` — `tpi:list x`: show a file. Text as itself, anything else as a
+hex dump (`catalog.list_text`, [catalog.md](catalog.md#list_textdata-size-textnone)).
+No name: `"Name required"`, Q (from the ROM, `LIST ""` never gets here:
+the module's `FDD_ONE_ARG` refuses an empty name with F).
+`SD_CALL(DISK_LIST_WORK, arg)`; an error status goes out with `SEND_MSG`,
+the text with `SEND_MSG2(msg, st, False)`: paged, with "Scroll? (Y/n)"
+between screens, and no keyword expansion (a byte that is a 2068 token
+would otherwise print as the keyword). `TPI:LIST` was a reserved word
+answered by `SA_NOT_IMP` before; it is not in `SD_FREE`, so the dispatcher
+looks for a card first. Pinned by `commands_hosttest.py` (`test_list`): a
+CR LF text file as itself; an 8-byte binary pattern as two hex rows; a
+5000-byte binary shows its first 2048; a 12 001-byte file whose start is
+text shows its first 8192, a later NUL as `?`; a folder Q, a missing file
+F, a wildcard Q, no name Q; not in `SD_FREE`.
+
+### `DISK_LIST_WORK(name)`
+
+SD active. A name with a wildcard: `"LIST takes one file"`, Q. A
+directory: `"A directory: <public>"`, Q. Missing, or above the root:
+`"Not found: <name>"`, F. Otherwise reads the first `LIST_HEX_MAX` (2048)
+bytes and decides with `is_text`; for text, reads on to `LIST_TEXT_MAX`
+(8192). `gc.collect()`, then `(list_text(data, size, text), 1)`. Why the
+start decides: reading 8 KB of a binary file to show 2 KB of it would cost
+RAM for nothing, and a text file with a stray control code further on
+still reads better as text (the code shows as `?`).
+
+### `DISK_LABEL(pre, cmd)`
+
+`tpi:label [name]`: the card's FAT volume label, the name Windows and
+macOS show for it.
+
+- **No name:** `TSP.sd_label` as `"Label: <label>"`, or `"No label"`,
+  both forced (shown whatever `VERBOSE` says). It is the label read when
+  the card was mounted (`SD_REVALIDATE`), so no card access.
+- **A name:** `LABEL_SET`. `-` takes the label off.
+
+Pinned by `commands_hosttest.py` (`test_label`): bare is "No label"; set,
+then bare shows it; `FORMAT ":tspico"` sets `TSPICO`; `-` and `FORMAT ":"`
+take it off; `a.b` and 12 characters are Q with nothing written; a driver
+with no `writeblocks` is Q.
+
+### `LABEL_SET(arg)`
+
+`tpi:label` and `FORMAT ":name"`'s common part. `-` is `""` (off);
+anything else through `catalog.label_clean`; None is `"Not a label: <arg>"`,
+Q. Then `SD_CALL(DISK_LABEL_WORK, name)` and `SEND_MSG` with its answer.
+
+### `DISK_LABEL_WORK(name)`
+
+Writes the label, SD active.
+
+1. `SD_DEV` without `writeblocks`: `"Can't label this card"`, Q. (The
+   emulator's card, a host folder, has no raw blocks.)
+2. `os.umount("/sd")`: FatFs keeps a sector of the root folder cached, and
+   a write under it would be undone or overwritten by the next one it makes.
+3. `catalog.write_label(SD_DEV, name)`; a `ValueError` (the root folder is
+   full) is its message, Q. Whatever happens, `finally` mounts `SD_DEV` on
+   `/sd` again and `os.chdir(TSP.cur_path)`, because `umount` left the
+   current directory at `/`. An `OSError` (no FAT volume found, a write
+   that failed) goes on up to `SD_CALL`.
+4. `TSP.sd_label = name`, `TSP.sd_listing_ok = DIR_FILES()` (CAT's card
+   line is built there), `"Label: <name>"` or `"Label taken off"`, 1; not
+   forced, so verbose only.
+
+Nothing the firmware holds open lives on `/sd` across commands (channels
+reopen by path, the mounted TAP is served from its copy in flash), so the
+remount loses nothing *(checked by reading the code, not on hardware)*.
+Pinned (`test_label`): the label written, `TSP.sd_label` set, `umount`
+then `mount`, the listing rebuilt.
+
 ### `DISK_REN(pre, cmd)`
 
 MOVE a$ TO b$ — `tpi:ren a|b`: rename, or move into a directory (spec
@@ -414,7 +494,7 @@ itself Q, the mounted file Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3118 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 3223 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -537,7 +617,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
 
-The comment at line 3243 lists the four commands. The ROM's channel driver
+The comment at line 3348 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -696,7 +776,7 @@ so: `CH_CALL(CHANNELS.close, stream)`, which mounts the card; an error
 (no card: J; an SD error: F) is logged and sent, and the stream stays in
 `CHANNELS`.
 
-The long comment at line 3431 is the history. When channels arrived (#83)
+The long comment at line 3536 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

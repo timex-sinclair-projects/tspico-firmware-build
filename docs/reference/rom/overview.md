@@ -47,7 +47,7 @@ All checksums below were computed from the files in the repository.
 | 1.1 | `ROMs/TSPICO-11-home`, `-exrom` | 16K + 16K | `E8714BED`, `268649F6` | 15h | Gustavo Pane's ROM as the boards shipped; the only public release before ROM 2.2 | what users still have (the upgrade UF2 replaces it; [../firmware/upgrade.md](../firmware/upgrade.md)) |
 | the base image | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | 1.1 plus 104 EXROM bytes (a ready-wait and guard in the Y/N loop, and BREAK at the SAVE prompt) and the version byte | build input: the base `tspico-sync.asm` patches; never released |
 | the SYNC layer | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | the base image plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | build input: the base `build-rom.py` patches; never released |
-| **ROM 2.3** (#227, #228) | `src/rom/TSPICO-23.ROM` | 32K | `45C0E05D` | 23h | the SYNC layer plus the disk-command layer: 21 patches and the module at EXROM 3000h–37EDh; 2158 bytes in 20 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less four patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **ROM 2.3** (#227, #228) | `src/rom/TSPICO-23.ROM` | 32K | `614CE7E4` | 23h | the SYNC layer plus the disk-command layer: 23 patches and the module at EXROM 3000h–38EBh; 2417 bytes in 21 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less six patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX build input | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base `tspico-zx48-v3.asm` patches |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | the ZX build input plus a WAIT_RDY fix, `LOAD "tpi:…"` and `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
 
@@ -96,7 +96,7 @@ offset 0. Every address in this reference is a Z80 address, and it says
 
 | Z80 | Contents |
 |---|---|
-| 0000h–3CDBh | the genuine HOME ROM, with hooks: 10 hunks (242 bytes) in 1.1, the version byte in the base image, 14 bytes from the SYNC layer, 99 bytes from the disk-command layer |
+| 0000h–3CDBh | the genuine HOME ROM, with hooks: 10 hunks (242 bytes) in 1.1, the version byte in the base image, 14 bytes from the SYNC layer, 107 bytes from the disk-command layer (99 in ROM 2.2) |
 | 3CDCh–3CFDh | new TS-Pico code in the genuine ROM's `FFh` filler, including the HOME→EXROM thunk at 3CE3h |
 | 3D00h–3FFFh | the character set, untouched |
 
@@ -119,8 +119,8 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | the base image | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | the SYNC layer | [exrom-sync.md](exrom-sync.md) |
 | 23D4h–2FFFh | 3116 | `FFh`, free | | |
-| 3000h–37EDh | 2030 | the disk-command module (377Fh–37B4h `PS_READ`, from ROM 2.3; 37B5h–37EDh the COPY entry) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
-| 37EEh–3FFFh | 2066 | `FFh`, free | | |
+| 3000h–38EBh | 2284 | the disk-command module (377Fh–37B4h `PS_READ`, from ROM 2.3; 37B5h–38EBh the COPY, LIST and RESTORE entry) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
+| 38ECh–3FFFh | 1812 | `FFh`, free | | |
 
 Chunk 0 is effectively full: the 1K hole at 1800h was used for the driver,
 and the stock "call into HOME" sequence, repeated through the ROM, was
@@ -332,7 +332,7 @@ puts it anywhere else.
 
 #### The patches
 
-Twenty-one, applied in this order (the last four are ROM 2.3's, and so is 19D7h). The reason for each is in the source's
+Twenty-three, applied in this order (the last four are ROM 2.3's, and so are 19D7h, 19AFh and 19D0h). The reason for each is in the source's
 `note`, and in full, with what it calls, in the chapter named.
 
 | Site | Before → after | What it does | Chapter |
@@ -340,8 +340,10 @@ Twenty-one, applied in this order (the last four are ROM 2.3's, and so is 19D7h)
 | HOME 1946h | `d0 c0 c4 c8` → `d2 c2 c6 ca` | the syntax-table offsets of CAT, FORMAT, MOVE, ERASE skip the string-and-comma prefix: a bare keyword is accepted | [home.md](home.md) |
 | EXROM 01D2h | `JP 1A73h` → `JP 3003h` | SAVE-ETC's only jump to SESSION_SETUP now goes through F_HOOK, which takes `f:` names | [exrom-fdd.md](exrom-fdd.md) |
 | EXROM 2213h | `CP 86h / RET NZ / CALL 02B9h` → `CP 87h / JP Z,3006h / RET` | the unreachable second `CP 86h` becomes response function 88h, the lower-screen Y/N loop | [exrom-chunk1.md](exrom-chunk1.md) |
-| HOME 25D6h | the 14-byte disk-keyword stub → `DI / LD HL,3000h / CALL 03FCh / EI / RET NC / JP (HL)`, then `LD B,FFh / JR 25D6h` at 25E0h | CAT, FORMAT, MOVE, ERASE and COPY enter the module with B = the token, on both passes; a bare COPY comes back with carry and jumps to HOME's COPY | [home.md](home.md#25d6h25e3h-the-disk-keywords) |
+| HOME 25D6h | the 14-byte disk-keyword stub → `DI / LD HL,3000h / CALL 03FCh / EI / RET NC / JP (HL)`, then `LD B,FFh / JR 25D6h` at 25E0h | CAT, FORMAT, MOVE, ERASE and COPY enter the module with B = the token, LIST and RESTORE with T-ADDR saying which, on both passes; a bare COPY, LIST that isn't `LIST "x"`, and RESTORE that isn't `RESTORE #n` come back with carry and jump to HOME's own routine | [home.md](home.md#25d6h25e3h-the-disk-keywords) |
 | HOME 19D7h | `00 02 0A` → `05 E0 25` | COPY's parameter list: class 05h and routine 25E0h, so COPY reaches the hook on both passes | [home.md](home.md#19d7h19d9h-copys-parameter-list) |
+| HOME 19AFh | `05 45 15` → `05 D6 25` | LIST's parameter list: routine 25D6h, so `LIST "x"` can show a file; the module hands the other forms to 1545h | [home.md](home.md#19b0h19b1h-lists-parameter-list) |
+| HOME 19D0h | `03 9D 1E` → `05 D6 25` | RESTORE's parameter list: class 05h and routine 25D6h, so `RESTORE #n` reaches the module; the module does class 03h's part for the other forms | [home.md](home.md#19d0h19d2h-restores-parameter-list) |
 | HOME 1488h | 55 bytes of dead SYSCON code → four trampolines and H_TRAP | OPEN # (1488h), CLOSE # (1494h), an `F` record's output (14A0h) and input (14A9h), the error trap (14B2h) | [home.md](home.md) |
 | HOME 03F3h | the BEEPER thunk → `DI / LD (5DCDh),HL / LD HL,3015h / JR 041Ch` | BEEPER's round trip under `DI` | [home.md](home.md) |
 | HOME 041Ch | 5 dead bytes → `CALL 03FCh / EI / RET` | the BEEPER thunk's tail | [home.md](home.md) |
@@ -360,9 +362,9 @@ Twenty-one, applied in this order (the last four are ROM 2.3's, and so is 19D7h)
 | EXROM 045Fh | `PUSH AF / JR 0465h` → `JP 377Fh` | `PRINT_STRING_FROM_PICO` becomes the module's `PS_READ`: control-code values and bytes ≥ 80h are text (#228) | [exrom-fdd.md](exrom-fdd.md#ps_read) |
 
 The difference the disk-command layer makes, measured on the committed
-images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2158 bytes in 20 hunks: 102
-in HOME, 31 in the EXROM outside the module, and 2025 in the module's
-region — 5 of the module's 2030 bytes are `FFh`, the same as the free space
+images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2417 bytes in 21 hunks: 107
+in HOME, 31 in the EXROM outside the module, and 2279 in the module's
+region — 5 of the module's 2284 bytes are `FFh`, the same as the free space
 they replaced. The three version patches replace the SYNC layer's own version marks
 (its banner characters, `20h` and `0020h`). The byte-by-byte account is in the build
 history ([ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-home-and-exrom-patches)).
@@ -394,6 +396,9 @@ must be kept in step.
 | EXROM 21E3h | the 86h handler and its loop at 21E6h |
 | HOME 03FCh | the returning HOME→EXROM thunk |
 | HOME 0A02h | the stock COPY's start, which a bare COPY resumes (H_COPY) |
+| HOME 1545h | LIST's routine, which LIST, `LIST n` and `LIST #n` resume (H_LIST) |
+| HOME 1E9Dh | RESTORE's routine after class 03h: FIND-INT2 first (H_RESTORE) |
+| HOME 1C51h | USE-ZERO: 0 on the calculator stack at run time, nothing at the syntax pass (H_USE_ZERO) |
 | EXROM 2000h | `JP` to the relocated BEEPER (G_BEEP calls it) |
 | EXROM 2105h | `CALL S_MODE / CALL 042Fh / JP 1B72h`: where `tpi:sdcard` and `tpi:picopt` store TPMODE and say "0 OK"; TAPE_MODE ends here (MODE_SET_OK) |
 | HOME 12BBh | MAKE-ROOM (OPEN # appends a record) |

@@ -12,7 +12,7 @@ the firmware and the ROM as they change.
 ## For TS-Pico owners
 
 **[User Manual]({{ '/manual/user-manual.html' | relative_url }})** — setting up the TS-Pico,
-loading and saving from the SD card, the disk commands (CAT, COPY, MOVE, ERASE, FORMAT), `f:` files
+loading and saving from the SD card, the disk commands (CAT, COPY, MOVE, ERASE, FORMAT, LIST), `f:` files
 and `OPEN #` channels, every `tpi:` command, the printer, Spectrum mode, and updating with the
 [web updater]({{ site.updater_url | relative_url }}).
 

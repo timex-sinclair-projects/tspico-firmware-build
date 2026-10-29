@@ -66,6 +66,14 @@ routine `$0A02`, the printer COPY), so `COPY "a"` was a syntax error. The ROM ma
 module parses `COPY "a" TO "b"` itself. A bare `COPY` is handed back to HOME's COPY at
 `$0A02` and prints the screen as before.
 
+**`LIST` and `RESTORE` join them too** (#341), for `LIST "name"` and `RESTORE #n`.
+LIST's parameter list (HOME `$19AF`) stays class `$05`, with its routine moved from `$1545`
+to the `$25D6` hook. RESTORE's (`$19D0`) goes from class `$03` (a number, or 0) to class
+`$05`, routine `$25D6`. Neither carries a token into the hook, so the module tells them apart
+by T-ADDR (`$19B0` for LIST, `$19D1` for RESTORE) and hands every stock form back: `LIST`,
+`LIST n` and `LIST #n` to HOME's `$1545`, `RESTORE` and `RESTORE n` to `$1E9D` (the module
+does class `$03`'s part first, the number or 0).
+
 ### Why the other TOS verbs can't come along
 
 TOS overloads `GO TO *`, `GO SUB *`, `DIM *`, `LET *`, `LIST *`, `DRAW *` and
@@ -174,7 +182,7 @@ block table and marks the tape position with `>`.
 
 The last waits for native files (§4a), because `DIR`'s filter also decides what `LOAD "tpi:n"` can index.
 
-## 3. `COPY`, `MOVE`, `ERASE`, `FORMAT`
+## 3. `COPY`, `MOVE`, `ERASE`, `FORMAT`, `LIST`, `RESTORE #`
 
 **Implemented** (ROM `fddcmd.asm` v5, firmware `DISK_COPY` / `DISK_ERASE` /
 `DISK_FORMAT` / `DISK_REN` + `ChangeDir`). Every argument is a string
@@ -194,6 +202,11 @@ expression, up to 64 characters.
 | `ERASE "olddir/"` | `tpi:erase olddir/` | Remove an empty directory (`dirinfo.tap` doesn't count). Not empty is Report Q |
 | `FORMAT "new.tap"` / `FORMAT "new"` | `tpi:format new.tap` | Create an empty TAP and mount it with append on, so `SAVE` adds to it |
 | `FORMAT "tools/"` | `tpi:format tools/` | Make a directory |
+| `FORMAT ":GAMES"` / `FORMAT ":"` | `tpi:format :GAMES` / `tpi:format :` | Set the card's label (as `tpi:label GAMES`) / take it off (as `tpi:label -`) |
+| `LIST "notes.txt"` | `tpi:list notes.txt` | Show a file: text as itself (up to 8192 bytes), anything else as a hex dump (up to 2048). A folder or a pattern is Report Q |
+| `LIST`, `LIST n`, `LIST #n` | nothing | HOME's own LIST of the program |
+| `RESTORE #4` | `TAB 1` on the channel (`tpi:chwr 170100`) | Back to the start of the file open on stream 4: what was printed is sent first, what was read ahead is dropped, a record file's open record is finished. Not an `f:` stream: Report O |
+| `RESTORE`, `RESTORE n` | nothing | HOME's own RESTORE of the DATA pointer |
 
 - **The separator.** `COPY` and `MOVE` join their two names with `|`, which a FAT name
   can't contain. Typed by hand, `SAVE "tpi:copy a b"` and `SAVE "tpi:ren a b"` with a
@@ -255,6 +268,28 @@ the list of directories to pick from, as `SAVE "tpi:cd"` does.
 
 **FORMAT never touches the SD card's file system.** A BASIC statement that can wipe
 the card is one mistyped line away from disaster. Formatting stays in the web updater.
+`FORMAT ":name"` writes only the card's label (the root-folder volume entry and the boot
+sector's copy); a FAT name can't contain `:`, so it can't clash with making a file.
+
+**Decided: `LIST "name"`, `RESTORE #n` and the card label** (#341). The same comparison
+of the 1980s 2068 disk systems turned up three things worth having:
+
+- **Showing a file.** Larken's `PRINT "file"` and Zebra's `DUMP` showed a file on the screen.
+  `LIST` is the natural keyword: `LIST "name"` shows the file, and `LIST`, `LIST n` and
+  `LIST #n` keep their meaning. The ROM tells the forms apart by how the expression starts
+  (a quote, a string variable, `FN a$`, `STR$`, `CHR$`, `INKEY$`, `SCREEN$` or `VAL$`), not by
+  scanning it: a syntax-pass scan at run time inserts a second hidden number after each number
+  in the line, and a run-time scan evaluates the expression twice. So `LIST ("x")` goes to
+  the stock LIST, which wants a number: Report C.
+- **Rewinding a channel.** Zebra's `RESTORE *#n` sent a channel back to its start. `RESTORE #n`
+  does it here without a CLOSE and OPEN; plain `RESTORE` stays the DATA pointer.
+- **Disk labels.** All four named a disk when it was formatted, and Oliger's and Zebra's
+  could rename one (`RESTORE /"name"`, `LET *":a" TO ":b"`). The FAT volume label is
+  the SD card's equivalent: CAT shows it on the card line, and `FORMAT ":name"` (or
+  `SAVE "tpi:label name"`) sets it.
+
+Whole-machine snapshots (Oliger's SAFE, Larken's LKDOS) are parked in
+[`FUTURE_FEATURES.md`](FUTURE_FEATURES.md): they are a hardware question first.
 
 ---
 
@@ -628,7 +663,7 @@ container is the same. The header's issue/version bytes can mark a file as
 | `DIM *` (create file or directory) | `FORMAT "dir/"` makes directories. `OPEN #` with `w` creates files |
 | `LET *` (rename) | `MOVE "a" TO "b"` (`tpi:ren`) |
 | `ATTR *` (protect or hide) | MicroPython's FAT VFS has no call to set attributes. The use that matters, keeping `ERASE` off a file, could later be a firmware-side protect list |
-| `LIST *`, `LIST *#` (status) | `CAT` shows the current path. Add a `SAVE "tpi:chans"` verb only if channels need debugging |
+| `LIST *`, `LIST *#` (status) | `CAT` shows the current path. Add a `SAVE "tpi:chans"` verb only if channels need debugging. (`LIST "name"` shows a file, §3) |
 | SCPs, drive letters, `FORMAT *` of a disk | There's one storage device. The serial ports aren't on this hardware |
 | `SAVE *`, `LOAD *`, `MERGE *`, `VERIFY *` | Kept, as native files with the `f:` prefix (§4a) |
 

@@ -1027,6 +1027,11 @@ A write of the three bytes `23, n low, n high` moves the channel to byte *n* of 
 the first byte). This is how `PRINT #s;TAB n;` works, and it's how your machine code
 seeks: `tpi:chwr 17` followed by the two bytes in hex.
 
+BASIC's `RESTORE #s` is the same seek to the start. The ROM sends what was printed to the
+stream first, drops what it had read ahead, then writes `23, 1, 0` (`tpi:chwr 170100`). On a
+record file the Pico finishes the open record before it moves. From machine code, send the same
+`tpi:chwr 170100`, and throw away anything you've buffered from earlier `tpi:chrd`s.
+
 **TAB 0** (`tpi:chwr 170000`) is a question. The next `tpi:chrd` answers it with a count, as
 text ending in a carriage return:
 
@@ -1055,6 +1060,7 @@ length (**Q** otherwise). A folder that isn't there gives **F**.
 2. Modes `r w a u`, plus `b` for binary. Text mode translates line ends and keywords.
 3. Byte 23 in a write is always a TAB: don't write raw binary containing it.
 4. TAB 0 then a read gives you a count; `d:` lists a folder.
+5. `tpi:chwr 170100` (TAB 1) goes back to the start of the file, as `RESTORE #s` does.
 
 ---
 
@@ -1075,6 +1081,8 @@ Every `SAVE "tpi:..."` command in the User Manual can be sent with `SEND_CMD` an
 | `tpi:path` | prints the current folder |
 | `tpi:dir [pattern]` | prints a listing (86h, with "Scroll?") |
 | `tpi:copy a b`, `tpi:ren a b`, `tpi:erase x`, `tpi:format x` | file handling, as COPY, MOVE, ERASE and FORMAT use |
+| `tpi:list x` | shows a file, as `LIST "x"` does (86h, with "Scroll?") |
+| `tpi:label`, `tpi:label name`, `tpi:label -` | shows, sets or takes off the SD card's label, as `FORMAT ":name"` does |
 | `tpi:verbose` | turns the Pico's messages on or off |
 
 Remember that most commands only print a message when VERBOSE is on. With it off, you get a

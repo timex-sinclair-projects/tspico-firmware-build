@@ -243,9 +243,11 @@ display of the response):
 |---|---|---|
 | `CAT` / `CAT "x"` / `CAT ""` | `tpi:dir` / `tpi:dir x` / `tpi:tapdir` | `DIR` (with `CATALOG` for an argument) / `TAPDIR` |
 | `ERASE "x"` | `tpi:erase x` | `DISK_ERASE` (file, pattern with Y/N each, or `dir/`) |
-| `FORMAT "x"` | `tpi:format x` | `DISK_FORMAT` (`x.tap` new + mounted, or `dir/`) |
+| `FORMAT "x"` | `tpi:format x` | `DISK_FORMAT` (`x.tap` new + mounted, `dir/`, or `:label`, which goes to `LABEL_SET`) |
 | `MOVE TO "x"` / `MOVE "a" TO "b"` | `tpi:cd x` (`"-"` → `tpi:cd -`, `""` → `tpi:cd`, the menu) / `tpi:ren a\|b` | `CDIR` / `DISK_REN` |
 | `COPY "a" TO "b"` / `COPY` | `tpi:copy a\|b` / nothing: HOME's printer COPY | `DISK_COPY` / — |
+| `LIST "x"` / `LIST`, `LIST n`, `LIST #n` | `tpi:list x` / nothing: HOME's LIST at `$1545` | `DISK_LIST` / — |
+| `RESTORE #n` / `RESTORE`, `RESTORE n` | `TAB 1` written to the channel (`tpi:chwr 170100`) / nothing: HOME's RESTORE at `$1E9D` | `CH_WRITE` (the seek) / — |
 
 **COPY** comes in a different way (#341). Its parameter list at HOME `$19D7` was class
 `$00` with routine `$0A02` (no operands, so `COPY "a"` was a syntax error); the ROM makes it
@@ -253,6 +255,16 @@ class `$05` with routine `$25E0`, `LD B,$FF` / `JR $25D6`, so COPY enters the mo
 the same stub with its own token. The stub ends `RET NC` / `JP (HL)`: the module returns NC
 for everything except a bare `COPY` at run time, which returns C with `HL = $0A02`, and the
 stub jumps on to HOME's own COPY, the printer.
+
+**LIST and RESTORE** come in through their parameter lists (#341). LIST's at HOME `$19AF`
+stays class `$05`, its routine moved from `$1545` to `$25D6`; RESTORE's at `$19D0` goes from
+class `$03`, routine `$1E9D`, to class `$05`, routine `$25D6`. B holds no token on that path,
+so the module reads T-ADDR (`$19B0` for LIST, `$19D1` for RESTORE). `LIST "x"` (an expression
+that starts as a string) sends `tpi:list x`; `RESTORE #n` flushes the stream's channel, drops
+what it read ahead and writes `TAB 1` to it. Every other form returns C with `HL` = HOME's
+routine, and the stub jumps there: `$1545` for LIST on both passes (it checks its own syntax),
+`$1E9D` for RESTORE at run time, after the module has stacked the line number or 0 (on the
+syntax pass the module checks RESTORE's number itself and returns NC).
 
 The verbs map to Pico commands that exist today. The argument is read from the
 BASIC line and appended after the verb. Both the syntax-check and runtime pass
