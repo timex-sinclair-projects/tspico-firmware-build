@@ -21,9 +21,10 @@ on:
 
 jobs:
   # The user manual as PDFs (tools/manual-pdf/make.sh): a half-letter one-up
-  # for reading and a saddle-stitch booklet imposed on letter. Built on every
+  # for reading and a saddle-stitch booklet imposed on letter, the same two of
+  # the Quick Start Guide, and the Quick Reference Guide's card. Built on every
   # push that touches the manual so a change that breaks the PDFs shows here, not at release
-  # time; release.yml attaches the same two files to each release. Also the
+  # time; release.yml attaches the same files to each release. Also the
   # v3 card's manual (BOARD=v3, tools/manual-variants.py), PDFs and Markdown,
   # as its own artifact: not published while the card is unreleased; and the
   # print-on-demand files (PRINT=1) for KDP and Lulu.
@@ -42,7 +43,7 @@ jobs:
         timeout-minutes: 10
         run: tools/manual-pdf/ci-setup.sh
 
-      - name: Build the user manual PDFs
+      - name: Build the user manual and quick guide PDFs
         run: tools/manual-pdf/make.sh "${{ runner.temp }}/manual-pdf"
 
       # Artifacts here are kept 7 days: they preview a change. Releases
