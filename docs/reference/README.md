@@ -213,5 +213,5 @@ behavior, and the caveat and the issue link go.
 | `tools/sp0256-port.py` | `c6ee937adb2b` | [firmware/speech.md](firmware/speech.md) | — |
 | `tools/speech-rules.py` | `b58417ce8921` | [firmware/speech.md](firmware/speech.md) | — |
 | `.github/workflows/build.yml` | `50d4be3e0b2e` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/manual.yml` | `fbc8048014b5` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/release.yml` | `31083ed0bdf7` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/manual.yml` | `892625b44d24` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/release.yml` | `80e5550bae98` | [firmware/boot.md](firmware/boot.md) | — |

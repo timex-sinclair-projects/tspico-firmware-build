@@ -1,0 +1,14 @@
+/* The Quick Start Guide's pages (quick.py), over print.css: the manual's
+   pages without the running head, each a section that opens with the
+   chapter opener's slash and title, a size smaller. quick.py gives
+   each page its named page (@page p1, p2, ...) with the page number at the
+   outer foot and the margins mirrored for the booklet. */
+@page { margin: .5in .5in .62in .62in; }
+section.page + section.page { break-before: page; }
+/* Chrome paints a little of the opener's skewed slash at the foot of the page
+   before; a hairline of padding above it keeps it on its own page. */
+section.page { padding-top: 1pt; }
+.opener { margin: 0 0 .18in; }
+.opener h1 { font-size: 21pt; }
+section.page p:last-child { margin-bottom: 0; }
+img { max-width: min(100%, 3in); max-height: 2.1in; }

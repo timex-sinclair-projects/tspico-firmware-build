@@ -8,8 +8,9 @@ this script copies
     docs/manual/*.md          -> site/manual/
     docs/manual/images/       -> site/manual/images/
 
-so the website always shows the docs as they are on main. The user manual
-is published as the TS-Pico 2.x's (tools/manual-variants.py, board v2): the
+so the website always shows the docs as they are on main. The user manual,
+the Quick Start Guide and the Quick Reference Guide are published as the
+TS-Pico 2.x's (tools/manual-variants.py, board v2): the
 v3 card's passages are left out until the card is released. The copies are
 generated, never committed (.gitignore), and the docs stay where they are:
 GitHub renders them as before.
@@ -45,17 +46,27 @@ COPY_DIRS = [("docs/manual/images", "manual/images")]
 # The v3 manual's pictures stay off the site with the rest of the v3 card.
 COPY_IGNORE = ["*-v3.*"]
 
-# Lines added under a page's "From ... on GitHub" note. The user manual's
-# PDFs are built into the same folder by tools/manual-pdf/make.sh in pages.yml.
+# Lines added under a page's "From ... on GitHub" note. The user manual's,
+# the Quick Start Guide's and the Quick Reference Guide's PDFs are built into
+# the same folder by tools/manual-pdf/make.sh in pages.yml.
 EXTRA = {
     "docs/manual/user-manual.md":
         "<p class=\"doc-pdf\">As a PDF: <a href=\"user-manual-half-letter.pdf\">for reading</a> "
         "(5.5 &times; 8.5 in), or <a href=\"user-manual-saddle-stitch-letter.pdf\">as a booklet to "
         "print</a> (letter, double-sided, flip on the short edge; fold and staple).</p>",
+    "docs/manual/quick-start.md":
+        "<p class=\"doc-pdf\">As a PDF: <a href=\"quick-start-half-letter.pdf\">for reading</a> "
+        "(5.5 &times; 8.5 in), or <a href=\"quick-start-saddle-stitch-letter.pdf\">as a booklet to "
+        "print</a> (two letter sheets, double-sided, flip on the short edge; fold and staple).</p>",
+    "docs/manual/quick-reference.md":
+        "<p class=\"doc-pdf\">As a PDF: <a href=\"quick-reference-card-letter.pdf\">the card to "
+        "print</a> (one letter sheet, double-sided, flip on the short edge; fold in three, the "
+        "cover on the outside).</p>",
 }
 
 # Docs published as one board's variant (tools/manual-variants.py).
-VARIANTS = {"docs/manual/user-manual.md": "v2"}
+VARIANTS = {"docs/manual/user-manual.md": "v2", "docs/manual/quick-start.md": "v2",
+            "docs/manual/quick-reference.md": "v2"}
 
 
 def manual_variant(text, board):
@@ -79,7 +90,7 @@ def published():
                     continue
                 rel = os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/")
                 if src == "docs/manual" and "/" in rel:
-                    continue                    # only the two manuals, not examples/
+                    continue                    # only the manuals, not examples/
                 site = posixpath.join(dst, "index.md" if f == "README.md" else rel)
                 out[posixpath.join(src, rel)] = site
     return out
