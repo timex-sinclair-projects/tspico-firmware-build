@@ -124,8 +124,8 @@ switch the 2068 off, unplug the card's USB cable if it's connected, and switch o
 ## Giving commands
 
 **Use the 2068's own keywords** where there is one: LOAD and SAVE, and `CAT`, `MOVE TO`,
-COPY, MOVE, ERASE and FORMAT for files and folders. Everything else is a name that starts
-with `tpi:`:
+COPY, MOVE, ERASE and FORMAT for files and folders. Everything else is a `tpi:`
+name:
 
 - **Commands use SAVE.** `SAVE "tpi:info"` shows the TS-Pico's status; nothing is saved.
 - **LOAD "tpi:..." mounts a file**: `LOAD "tpi:frogger.tap"` makes it the "tape" that
