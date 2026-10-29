@@ -124,7 +124,7 @@ switch the 2068 off, unplug the card's USB cable if it's connected, and switch o
 
 ## Giving commands
 
-Almost everything the TS-Pico does is reached through a name that starts with `tpi:`:
+Almost everything the TS-Pico does is reached through a `tpi:` name. The rules are simple.
 
 - **Commands use SAVE.** `SAVE "tpi:dir"` lists the folder; nothing is saved.
 - **LOAD "tpi:..." mounts a file**: `LOAD "tpi:frogger.tap"` makes it the "tape" that
