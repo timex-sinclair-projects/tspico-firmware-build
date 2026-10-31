@@ -69,7 +69,13 @@ Ryan discovered the Timex group, recovered his old programs from tape and began 
 
 ## Joe Vandezande
 
-Joe designed the 3D-printed enclosures for the TS-Pico, the PicoVideo and the expansion bus board, and helps with testing and troubleshooting.
+<img class="portrait" src="{{ '/assets/img/joe.jpg' | relative_url }}" alt="Joe Vandezande">
+
+Joe spent much of the late ’70s and early ’80s poring over computer magazines, and there he stumbled across an ad for the ZX80. By the time he had saved enough money to buy one, the ZX81 was out. Armed with a shiny new ZX81, a 12” black-and-white TV and a second-hand tape recorder, he started a lifelong hobby of electronics and small computers. That interest led him to a computer career in both the Air National Guard and civilian jobs.
+
+Often described as a born tinkerer, he built and repaired many add-ons for his ZX81 and later his TS1000. Over the years he has collected a wide variety of computers from the ’70s to the early 2000s, mostly from people giving him their old “junk” in trade for upgrading or fixing their current computer. Fixing up and expanding these old systems has given him a lot of insight into the design choices the engineers made “back in the day.”
+
+Today Joe supports the team by designing 3D-printable cases for the TS-Pico boards and the expansion board they plug into. He has also archived many disks and tapes from the TS Online User Group library.
 
 ## David Anderson
 
