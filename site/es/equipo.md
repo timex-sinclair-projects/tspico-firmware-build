@@ -70,7 +70,13 @@ Ryan descubrió el grupo de Timex, recuperó sus viejos programas de cinta y de 
 
 ## Joe Vandezande
 
-Joe diseñó los gabinetes impresos en 3D del TS-Pico, del PicoVideo y de la placa de expansión del bus. También ayuda con las pruebas y la resolución de problemas.
+<img class="portrait" src="{{ '/assets/img/joe.jpg' | relative_url }}" alt="Joe Vandezande">
+
+A fines de los años 70 y comienzos de los 80, Joe pasaba mucho tiempo leyendo revistas de computación, y en una de ellas encontró un aviso de la ZX80. Para cuando juntó el dinero para comprarla, ya había salido la ZX81. Con una ZX81 flamante, un televisor en blanco y negro de 12 pulgadas y un grabador de casetes de segunda mano, empezó una afición de toda la vida por la electrónica y las computadoras pequeñas. Ese interés lo llevó a una carrera en computación, tanto en la Guardia Nacional Aérea como en empleos civiles.
+
+Descrito a menudo como un experimentador nato, construyó y reparó muchos accesorios para su ZX81 y, más tarde, para su TS1000. Con los años reunió una gran variedad de computadoras, desde los años 70 hasta comienzos de los 2000, casi todas de gente que le dejaba su vieja “chatarra” a cambio de que le actualizara o arreglara la computadora que usaba. Reparar y ampliar esos sistemas antiguos le dio una gran comprensión de las decisiones de diseño que tomaron los ingenieros “en aquella época”.
+
+Hoy Joe colabora con el equipo diseñando gabinetes imprimibles en 3D para las placas del TS-Pico y para la placa de expansión en la que se conectan. Además, archivó muchos discos y cintas de la biblioteca del TS Online User Group.
 
 ## David Anderson
 
