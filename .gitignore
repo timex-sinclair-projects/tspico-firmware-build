@@ -64,6 +64,9 @@ tools/zmakebas/*.o
 /SD card/TAP/test/savetest.tap
 /SD card/TAP/test/hwtest.tap
 /SD card/TAP/test/modemtst.tap
+/SD card/TAP/test/disktest.tap
+/SD card/TAP/test/listtest.tap
+/SD card/TAP/test/labeltst.tap
 
 # Staging dir the CI 'Stage generated .tap files' step builds before
 # uploading them as the basic-taps artifact. Only appears if that step is
