@@ -26,7 +26,7 @@ cartridges, ZX Spectrum mode and every command.
 <!-- v3 -->
 - the TS-Pico v3 card;
 <!-- /v3 -->
-- an expansion bus board, if you use one (the TS-Pico can also plug straight into the 2068);
+- an expansion bus board;
 - a micro SD card. Your TS-Pico came with one, already set up.
 
 ![The Timex Sinclair 2068, seen from the front left](images/ts2068.svg)
@@ -36,18 +36,12 @@ cartridges, ZX Spectrum mode and every command.
 
 ## Fitting the TS-Pico
 
-**Direct connection.** The TS-Pico plugs straight into the expansion connector at the back
-right of the 2068 and sticks out behind it.
-<!-- v2 -->
+The TS-Pico goes into an expansion bus board: the bus board plugs into the expansion
+connector at the back right of the 2068, and the TS-Pico into any of its slots.
 
-![A TS-Pico plugged straight into the 2068, standing up behind it](images/ts2068-tspico.svg)
-<!-- /v2 -->
+![An expansion bus board: the long connector at the front goes into the 2068, and cards go into its four slots](images/bus-expansion.svg)
 
-**On an expansion bus.** The bus board plugs into the 2068, and the TS-Pico plugs into one of
-its slots. Any slot works.
-
-> **Warning.** On an expansion bus, set the TS-Pico's slot's BUSISO bypass, or the TS-Pico
-> won't work. With jumpers, remove the jumper for the TS-Pico's slot; with switches, slide its
+> **Warning.** Set the BUSISO bypass for the TS-Pico's slot, or the TS-Pico won't work. With jumpers, remove the jumper for the TS-Pico's slot; with switches, slide its
 > BUSISO switch towards the 2068.
 
 Both connectors are keyed, so they only go in one way. Expect a fair amount of resistance when
