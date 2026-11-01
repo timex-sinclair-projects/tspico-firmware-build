@@ -4,9 +4,8 @@ Switch TS-Pico to Spectrum mode.
 Shows more help when invoked.
 Mount a tap file first if you
 want LOAD "" in Spectrum mode.
-With the ZX v3 ROM, LOAD "tpi:
-name" mounts a .tap there too.
-With v4, SAVE "tpi:dir" lists
+There, LOAD "tpi:name" mounts a
+.tap and SAVE "tpi:dir" lists
 the folder. Other tpi: commands
 wait until you're back on the
 2068.
