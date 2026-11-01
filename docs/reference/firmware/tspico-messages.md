@@ -200,7 +200,7 @@ which would hide the line's end from `SEND_MSG2`'s column count. Color 8
 only values used beyond 1, 5 and 7, so none is `00h` or `03h` (see the
 text rules). Send the result with `SEND_MSG2(…, colour=True)`; without
 `colour` the codes are stripped. Callers: `DIR` (2581), `CATALOG` (2647),
-`CDIR` (4319), `ZX_TPI`'s listing (7454).
+`CDIR` (4319), `ZX_TPI`'s listing (7458).
 
 `lista` and `dirinfo.tap` keep the plain text; the color is added only on
 the way out.

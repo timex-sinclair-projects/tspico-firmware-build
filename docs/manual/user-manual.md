@@ -744,6 +744,8 @@ repeats**.
   **F Invalid file name**. The F comes after the `Start tape` key, but nothing is written.
 - Saving over an existing name **replaces that file without asking**.
 - If nothing was mounted, the new file becomes the mounted file.
+- If you save over the mounted file (with append off), the new file is mounted in its place, so
+  `CAT ""` shows what is on the card now.
 - An empty program gives **A Invalid argument**.
 
 > **Note:** the TS-Pico answers once your data is on the card. If the card fails while it's

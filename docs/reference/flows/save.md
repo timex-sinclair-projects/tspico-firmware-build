@@ -65,8 +65,11 @@ on the card with its bus interface down — its pre-header was lost
 (hardware, 2026-10-04). Now a failed write is reported, and the next
 command finds the Pico listening.
 
-After the SAVE the new file is mounted, with append off: a second `SAVE`
-makes another new file. An existing file of the same name is replaced.
+After the SAVE, if nothing was mounted, the new file is mounted, with append
+off: a second `SAVE` makes another new file. An existing file of the same
+name is replaced. If that file was the mounted TAP (the name compared
+ignoring case), it is re-mounted, so the mount shows the new content (#362);
+a SAVE to any other name leaves the current mount as it was.
 
 ## Variants
 
