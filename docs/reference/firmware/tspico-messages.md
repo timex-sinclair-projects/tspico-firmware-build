@@ -4,7 +4,7 @@ Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1540–1629
 (`shorten_filename`, `DIR_HEADER`, the color helpers), 2190–2533
 (`MSG_BYTE`, `SEND_MSG`, `SEND_STATUS`, `SEND_MSG2`), 2798–2836 (`PROMPT_EACH`),
 3607–3799 (`ListMenu`), 3939–3951 (`xchr`, `xstr`), 4628–4640
-(`BUILD_FIT`) and 5677–5744 (`SEND_MSG_PROMPT_YN`).
+(`BUILD_FIT`) and 5681–5748 (`SEND_MSG_PROMPT_YN`).
 
 A `tpi:` command answers the 2068 with one byte — a status — or with a
 **response function**: a byte of `80h` or more that makes the ROM print
@@ -40,7 +40,7 @@ FIFO through the never-blocking command I/O of
 | `xchr(m)` | 3939 | a character of a card name as the 2068 lists it |
 | `xstr(s)` | 3947 | a name as the 2068 lists it |
 | `BUILD_FIT(s, n)` | 4628 | the build stamp in `n` characters |
-| `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | 5677 | `86h` or `88h`: one question, one key |
+| `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | 5681 | `86h` or `88h`: one question, one key |
 
 ## The answer on the wire
 
@@ -120,7 +120,7 @@ A BREAK at any key wait (the ROM's `KEYWAIT`) is a port-0Fh write;
 command ([tspico-bus.md](tspico-bus.md#command-io-that-never-blocks)).
 After a builder that waits for keys has returned, nothing more may be sent
 for that command: the ROM has finished its function and will read the next
-byte as a status (the comments at 3612 and 5680).
+byte as a status (the comments at 3612 and 5684).
 
 ## Names and listings on a 32-column screen
 
@@ -200,7 +200,7 @@ which would hide the line's end from `SEND_MSG2`'s column count. Color 8
 only values used beyond 1, 5 and 7, so none is `00h` or `03h` (see the
 text rules). Send the result with `SEND_MSG2(…, colour=True)`; without
 `colour` the codes are stripped. Callers: `DIR` (2602), `CATALOG` (2668),
-`CDIR` (4364), `ZX_TPI`'s listing (7496).
+`CDIR` (4364), `ZX_TPI`'s listing (7504).
 
 `lista` and `dirinfo.tap` keep the plain text; the color is added only on
 the way out.
@@ -285,7 +285,7 @@ that it was once described as redundant and the audit tried removing it.
 
 Callers: 72 sites in `tspico.py` — most handlers end with it — and
 external commands through `extcmd.py`. The forced ones: `NO_CARD_REPLY`
-(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (6433:
+(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (6437:
 that message says what to do), and `extcmd`'s `RND_WORD` (89). The
 `romupdate` refusal and the other mount errors go through `LOAD_TPI`'s
 message ([tspico-files.md](tspico-files.md)).
@@ -560,7 +560,7 @@ SCREEN$` overwrites a file (3109), kept to one line.
    test for 89 (`Y`) holds whatever case was typed.
 
 The status is always 1. The callers act on the key: `GETLOG`'s "Clear the
-log file (y/N)?" (4751) and `RM`'s "Remove NAME (y/N)?" (5789) go on only
+log file (y/N)?" (4751) and `RM`'s "Remove NAME (y/N)?" (5793) go on only
 for 89 (`Y`), and the question is the whole answer — a refusal reaches only
 the log. `tpi:fopen` records anything but `Y` as a refusal that `SAVE_TS`
 turns into Report D at the header. All callers use `echo=True`.
@@ -568,7 +568,7 @@ turns into Report D at the header. All callers use `echo=True`.
 Beware: like the other builders it ends the exchange; the comment at the
 top says "this cannot be followed by another SEND_MSG* call". The RX
 drain runs before anything is sent (`CMD_RX_FLUSH`), as the comments here
-(5698–5700) and in `ListMenu` (3627–3630) say.
+(5702–5704) and in `ListMenu` (3627–3630) say.
 
 ## Card names as the 2068 shows them
 

@@ -797,6 +797,14 @@ def main():
     check(t.TSP.sd_present is False and logs and "detect switch" in logs[-1],
           "sd_present False; logged as a card that went (%r)" % logs[-1:])
 
+    # The joystick: port 1's bits 0-5 (up, down, left, right, fire 1, fire 2),
+    # low while pressed, as the Kempston byte 000FUDLR. Bits 6-7 (nBUSAK_L,
+    # SD_CD) never reach it; fire 2 is fire.
+    k = b3.kempston_byte
+    check([k(0xFF & ~(1 << b)) for b in range(6)] == [8, 4, 2, 1, 16, 16],
+          "kempston_byte: up 8, down 4, left 2, right 1, fire 16, fire 2 16")
+    check(k(0xFF) == 0 and k(0x3F) == 0 and k(0xC0) == 0x1F,
+          "kempston_byte: nothing pressed 0 whatever bits 6-7 say; all pressed 1Fh")
     # Speech: speech_start turns the chip on at a rate and volume and reads
     # /speech.txt; say converts text and queues it, or stops.
     print("speech")

@@ -17,6 +17,7 @@ PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
 SD_SLOTS = True     # tpi:boot and tpi:dock take MEM 3: a slot file on the SD card
 HAS_MODEM = True    # the TS2050's 8251 at 73h/77h, bridged to the ESP32-C3 (modem_start)
+HAS_JOYSTICK = True # the DE-9 socket, answered as a Kempston interface at 1Fh (joystick)
 HAS_SPEECH = True   # the SP0256-AL2 on core 1, out of the audio jack (speech_start)
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
@@ -50,6 +51,7 @@ _X_WIFI_EN = 0x08       # bit 3: the ESP32-C3's EN, high = powered and running
 _X_WIFI_DL = 0x10       # bit 4: high pulls the ESP32's IO9 low, so it boots into download mode
 _X_NLED = 0x20          # bit 5, active low
 _X_SD_CD = 0x80         # port 1 bit 7: low = a card in (the TF-01A's switch closes to GND; R38 pulls it up)
+_IOX_INT = 35           # nIOX_INT: the expander pulls it low when an input changes (R8 pulls it up)
 
 # A card the switch has only just seen is left alone this long before the
 # first SPI clock, so it is seated and powered before its lines are driven.
@@ -221,6 +223,59 @@ def modem_download(on):
     the firmware. Takes effect at the next modem_power(True)."""
     return _port0(_X_WIFI_DL, _X_WIFI_DL if on else 0)
 
+# The joystick (phase 6): the DE-9's six switches are port 1's bits 0-5 (up,
+# down, left, right, fire 1, fire 2), pulled up, low while pressed. The
+# expander pulls nIOX_INT low when any input changes, so the port is read
+# only then, in a soft IRQ handler: a scheduled callback, which runs between
+# bytecodes, so never inside another I2C transfer (see _port0). tsbus answers
+# 1Fh from the byte it is given; the 2068 never waits for I2C. Reading port
+# 1 releases nIOX_INT; a read that failed leaves it low, which
+# joystick_service sees from the idle loop.
+_joy_pin = None          # Pin(_IOX_INT) while the joystick is answered
+_joy_buf = bytearray(1)
+
+
+def kempston_byte(p1):
+    """Port 1 as the Kempston interface's byte, 000FUDLR, 1 = pressed: up
+    bit 3, down 2, left 1, right 0, fire bit 4. Fire 2 is a second fire
+    button: bit 5 is left 0, since games that look at the whole byte take
+    bits 5-7 set for no interface at all."""
+    j = ~p1 & 0x3F
+    return (((j >> 3) & 1) | ((j >> 1) & 2) | ((j << 1) & 4) | ((j << 3) & 8)
+            | (0x10 if j & 0x30 else 0))
+
+
+def _joy_read(_pin=None):
+    try:
+        _iox().readfrom_mem_into(_IOX_ADDR, _IOX_IN1, _joy_buf)
+    except OSError:
+        return                  # nIOX_INT stays low; joystick_service tries again
+    tsbus.kempston(kempston_byte(_joy_buf[0]))
+
+
+def joystick(on):
+    """Answer 1Fh as a Kempston joystick from the DE-9 (on), or leave 1Fh
+    unanswered (off). On reads the switches straight away: a change before
+    now left nIOX_INT low, with no edge to come."""
+    global _joy_pin
+    if on:
+        _joy_pin = Pin(_IOX_INT, Pin.IN)
+        _joy_pin.irq(_joy_read, Pin.IRQ_FALLING)
+        _joy_read()
+    else:
+        if _joy_pin:
+            _joy_pin.irq(None)
+            _joy_pin = None
+        tsbus.kempston(None)
+
+
+def joystick_service():
+    """From the idle loop: a read the IRQ handler couldn't finish (the
+    expander didn't answer) leaves nIOX_INT low, with no edge to come; read
+    again. So does a change of the SD card switch or nBUSAK_L, also port 1,
+    when nothing else has read it: harmless, the same byte is set again."""
+    if _joy_pin is not None and not _joy_pin.value():
+        _joy_read()
 # Speech (docs/v3-speech-proposal.md): the SP0256-AL2 emulated on core 1
 # (tsbus, sp0256.c), out of the audio jack. Text becomes allophone numbers
 # on core 0 (TS/speech.py); tsbus queues them, and the chip speaks them while

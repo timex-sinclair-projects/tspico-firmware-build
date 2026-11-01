@@ -160,8 +160,10 @@ file. That is a hardware question before it is a firmware one.
   [v3-speech-proposal.md](v3-speech-proposal.md) (the SP0256-AL2 emulated from
   its ROM, `tpi:say`, an `s:` channel, and David's speech board's ports).
 
-- **The OLED status display** and **the Kempston joystick** wait on hardware:
-  [v3-oled-proposal.md](v3-oled-proposal.md), and the `v3-kempston` branch.
+- **The Kempston joystick** has left this list too: the v3 card answers
+  port 1Fh from its DE-9 socket (`KEMPSTON` in `config.ini`).
+- **The OLED status display** waits on hardware:
+  [v3-oled-proposal.md](v3-oled-proposal.md).
 - **The ESP32 as a WiFi file server:** a different role for the modem module,
   noted in [v3-modem-proposal.md](v3-modem-proposal.md) ("Not in this
   proposal").

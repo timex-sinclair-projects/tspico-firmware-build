@@ -22,29 +22,32 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6528), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5154, `reboot=True`), `MEMDOCK` (5288), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7513) |
-| `restart_mq()` | `ZX48_IO` (7514, 7619, 7661) |
-| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
-| `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
-| `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6496) |
-| `led_brightness()` | `TS2068_IO` (6500), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6651, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7316) |
+| `start_memory()` | `TS2068_IO` (6602), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5219, `reboot=True`), `MEMDOCK` (5353), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (759), `ZX48_IO` (7595) |
+| `restart_mq()` | `ZX48_IO` (7596, 7701, 7743) |
+| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1104, 1107, 1125) |
+| `sd_card_ready()` | `ACTIVATE_SD` (1097), before anything else |
+| `sd_release_bus()` | `DEACTIVATE_SD` (712) |
+| `make_led()` | `TS2068_IO` (6570) |
+| `led_brightness()` | `TS2068_IO` (6574), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6727, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7398) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5065, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5122, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5130, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5187, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `HAS_MODEM` | `TS2068_IO` (6531, at boot; 7245, the idle loop), `MODEM` (5309, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
-| `modem_start()` | `TS2068_IO` (6389), at boot with `config.ini`'s modem keys; `MODEM` (5296), a new mode |
-| `modem_service()` | `TS2068_IO`'s idle loop (7093), every pass with nothing arrived |
-| `HAS_SPEECH` | `TS2068_IO` (6391, at boot), `SAY` (5315, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
-| `speech_start()` | `TS2068_IO` (6393), at boot with `config.ini`'s speech keys |
-| `say()` | `SAY` (5320, `tpi:say`) |
-| `modem_status()`, `MODEM_MODES` | `MODEM` (5287, 5290) |
-| `LABEL` | `GETINFO` (4619, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
+| `HAS_MODEM` | `TS2068_IO` (6605, at boot; 7325, the idle loop), `MODEM` (5377, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `modem_start()` | `TS2068_IO` (6606), at boot with `config.ini`'s modem keys; `MODEM` (5392), a new mode |
+| `modem_service()` | `TS2068_IO`'s idle loop (7326), every pass with nothing arrived |
+| `HAS_SPEECH` | `TS2068_IO` (6610, at boot), `SAY` (5416, `GREET` 5447, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
+| `speech_start()` | `TS2068_IO` (6612), at boot with `config.ini`'s speech keys |
+| `say()` | `SAY` (5421, `tpi:say`), `GREET` (5460, `tpi:greet`), `TS2068_IO` (6621, the greeting) |
+| `modem_status()`, `MODEM_MODES` | `MODEM` (5382, 5386) |
+| `LABEL` | `GETINFO` (4680, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
+| `HAS_JOYSTICK` | `TS2068_IO` (6608, at boot; 7327, the idle loop) |
+| `joystick()` | `TS2068_IO` (6609), at boot with `config.ini`'s `KEMPSTON` |
+| `joystick_service()` | `TS2068_IO`'s idle loop (7328), every pass with nothing arrived |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
 PIO programs. So it detects the v3 card itself (step 4.2;
@@ -103,6 +106,10 @@ core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 `False`: no TS2050 modem. 73h/77h are not answered, `tpi:modem` says "No
 modem on this board", and nothing calls the modem functions.
 
+### `HAS_JOYSTICK`
+
+`False`: no joystick socket. 1Fh is not answered, and `config.ini`'s
+`KEMPSTON` is ignored.
 ### `HAS_SPEECH`
 
 `False`: no audio output. `tpi:say` says "No speech on this board", and
@@ -279,6 +286,10 @@ literal `V2.2` on both boards, so the v3 card said it was a v2.2 board.
 
 `True`: the TS2050 modem (`modem_start` below; [docs/v3-modem-proposal.md](../../v3-modem-proposal.md)).
 
+### `HAS_JOYSTICK`
+
+`True`: the DE-9 socket, answered at 1Fh as a Kempston interface
+(`joystick` below).
 ### `HAS_SPEECH`
 
 `True`: speech, the SP0256-AL2 on core 1 out of the audio jack (`speech_start`
@@ -333,6 +344,12 @@ EN, high to run it; bit 4 (10h), high, pulls its IO9 low through the
 LED, active low: lit, port 0 is C0h. Bit 7 of port 1 (80h) is the detect
 switch: the TF-01A's switch closes to GND with a card in, and R38 pulls it
 up, so low means a card. Read on the card with the socket empty: port 1 FFh.
+
+### `_IOX_INT`
+
+35, nIOX_INT: the XL9555 pulls it low when any input of either port
+changes, and lets go when the port that changed is read; R8 (10 k) pulls it
+up. Only `joystick` uses it.
 
 ### `SD_SETTLE_MS`
 
@@ -476,6 +493,54 @@ IO9 held low (`True`) or released. The ESP32 reads IO9 as it leaves reset,
 so this takes effect at the next `modem_power(True)`: low boots its ROM's
 serial downloader, for installing Zimodem, instead of the firmware.
 
+### `_joy_pin`, `_joy_buf`
+
+`_joy_pin`: `Pin(_IOX_INT)` with its IRQ set while the joystick is
+answered, `None` otherwise. `_joy_buf`: the one-byte buffer every port 1
+read goes into, so the handler allocates nothing.
+
+### `kempston_byte(p1)`
+
+Port 1 as the Kempston interface's byte. The DE-9's six switches are port
+1's bits 0–5 (up, down, left, right, fire 1, fire 2; tspico-hardware
+`gen_memory.py`), pulled up to 3.3 V and low while pressed. The Kempston
+byte is 000FUDLR with 1 = pressed: right bit 0, left 1, down 2, up 3, fire
+4. Fire 2 is a second fire button, also bit 4: bit 5 is left 0, because
+games that look at the whole byte take bits 5–7 set for no interface.
+Nothing pressed: 0.
+
+### `_joy_read(_pin=None)`
+
+`_joy_pin`'s IRQ handler (and the read `joystick` and `joystick_service`
+make): port 1 into `_joy_buf` over I2C0, then
+`tsbus.kempston(kempston_byte(...))`. The IRQ is MicroPython's soft kind,
+so the handler is a scheduled callback that runs between bytecodes on core
+0, never inside another I2C transfer (the reasoning at `_port0`). If the
+expander doesn't answer, nothing changes and nIOX_INT stays low, which
+`joystick_service` sees. The 2068 never waits for this: core 1 answers 1Fh
+from the byte it was last given.
+
+### `joystick(on)`
+
+`True`: `_joy_pin` made, its IRQ on the falling edge, and the switches read
+at once, since a change before now left nIOX_INT low with no edge to come.
+`False`: the IRQ off and `tsbus.kempston(None)`, so 1Fh goes unanswered.
+`TS2068_IO` calls it at boot with `config.ini`'s `KEMPSTON`.
+
+Tested on the second v3 board (2026-10-12; the 2068 not connected): each
+direction held alone gave its bit (up 8, down 4, left 2, right 1, fire 16),
+and in a 30 s watch every movement reached `tsbus` through the IRQ within
+one 10 ms sample. The first proto1's socket never changed port 1: its DE-9
+footprint was found to need a redesign (the second board has the socket
+mounted on the back). `IN 31` from the 2068 is not yet tested.
+
+### `joystick_service()`
+
+From `TS2068_IO`'s idle loop: if nIOX_INT is still low, `_joy_read`
+again. That catches a read the IRQ handler couldn't finish. A change of
+the SD card switch or nBUSAK_L (also port 1) that nothing else has read
+does the same: harmless, the same byte is set again. One GPIO read per
+pass otherwise.
 ### `speech_start(volume, rate, ports=True)`
 
 Speech on, from `TS2068_IO` at boot with `config.ini`'s `SPEECH_VOLUME`,

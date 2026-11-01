@@ -14,7 +14,8 @@ moved under MicroPython. Phase 3 of the v3 port plan
 ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1 and reset control;
 the `MQ` object over core 1's queues; and switching images. Phase 6 adds
 the TS2050 modem's 8251 at 73h/77h, bridged to the card's ESP32-C3
-([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)), and speech: the
+([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)); the Kempston
+joystick at 1Fh from a byte core 0 keeps current; and speech: the
 SP0256-AL2 emulated on core 1 and played by DMA through two PIO2 state
 machines to the audio pins ([speech.md](speech.md)). The v2 firmware
 does not use any of it.
@@ -39,6 +40,7 @@ than repeating it.
 | `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`, `tsbus.modem_flow`; `tsbus.esp_relay`, to install Zimodem |
 | `tsbus.c`, flash writes | `apb_dma_pause`, `apb_dma_resume`, `__wrap_flash_range_erase`, `__wrap_flash_range_program` |
 | `tsbus.c`, speech | the ring, its DMA and timer, `speech_pass` on core 1, ports 17 and 37 in `handle_in` and `core1_main`; `tsbus.speech`, `tsbus.say`, `tsbus.speech_volume`, `tsbus.speaking`, `tsbus.speech_ports`. The chip itself is `sp0256.c` ([speech.md](speech.md)) |
+| `tsbus.c`, the joystick | 1Fh in `handle_in`; `tsbus.kempston` |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
 | `micropython.cmake` | the user-module build, and the `TSBUS_DIAG` switch |
@@ -210,6 +212,8 @@ in the file.
 | `mtx_inflight` | uint32 | `core1_main`; `tsbus_modem` (0) | how many bytes the run `ch_mtx` is sending holds |
 | `modem_ins` | volatile uint32 | `handle_in` | INs from 73h/77h answered |
 | `modem_wake`, `modem_touched` | volatile bool | set by `core1_main` (an OUT to 73h/77h: both) and `handle_in` (an IN: `modem_touched`); cleared by `tsbus_modem_poll` and `tsbus_modem` | what core 1 saw since core 0 last asked: a program writing to the 8251, and any use of it |
+| `kempston` | volatile int16, -1 | `tsbus_kempston`; `handle_in` | the byte IN 1Fh reads (the Kempston joystick), or -1: 1Fh unanswered. Core 0 sets it from the expander (`board_v3.joystick`); core 1 only reads it. A halfword store, so core 1 never sees half a change |
+| `kemp_ins` | volatile uint32 | `handle_in` | INs from 1Fh answered |
 | `modem_line_up` | volatile bool, false | `tsbus_modem_line`; `core1_main` (sets it on Zimodem's `READY.`) | Zimodem is running. Until then core 1 starts no `ch_mtx` run (what is queued waits in `line_tx`) and drops what `ch_mrx` brings (the boot banner, or noise from an ESP32 that is off), looking in it for `READY.` (`m2050_wait_ready`, #300). Kept across `tsbus.modem(True)` |
 | `modem_readies` | volatile uint32, 0 | `core1_main` | times the line came up on `READY.` (`m_readies`) |
 | `PIN_AUDIO_L`, `PIN_AUDIO_R` | 46, 30 | `spk_sm` | the audio outputs, driven by `spk_pwm` on PIO2, to the filter, the MCP6002 mixer and the jack; both play the same |
@@ -318,6 +322,11 @@ While `modem_on`, 73h and 77h are answered the same way, the reply from
 `u8251_data_in` or `u8251_status` (decoded from A0-A7 with `port & FBh ==
 73h`, A2 choosing). With the modem on, the slowest reply from entry to U3 on
 was 412 ns (`respond_ns`, proto1 2026-10-12).
+
+1Fh, while `kempston` is 0 or more, is answered with that byte: a compare
+of the low address byte (the high byte is ignored, as a Kempston interface
+ignores it) and a load, no I2C and nothing behind APB. The expander is read
+on core 0 (`board_v3.joystick`).
 
 While `spk_ports_on` and `speech_on`, 25h (37) is answered: FFh while
 speech is busy (allophones in either queue, or the chip's LRQ not ready),
@@ -635,6 +644,13 @@ time at `baud` after the last (33.3 ms at 300); 0: as soon as the last is
 read. `usart.pace` in core cycles; kept across `tsbus.modem(True)`
 (`pace_set`). A negative baud is `ValueError`.
 
+### `tsbus.kempston(byte)`
+
+From now on an IN from 1Fh reads `byte` (0–255; anything else is
+`ValueError`). `None`: 1Fh is left unanswered, as on a 2068 without the
+interface. One store to `kempston`. `board_v3._joy_read` calls it whenever
+the joystick changes, and `board_v3.joystick(False)` with `None`.
+
 ### `tsbus.modem_flow(on)`
 
 Hayes mode's flow control (#301): sets `modem.flow_want`, which
@@ -793,9 +809,11 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `m_mode_sel` (`modem_mode`), `m_state` (the 2050 state, `M2050_ONHOOK`
 0 … `M2050_HANGUP` 5), `m_dials`, `m_connects`, `m_carrier_lost`,
 `m_line_up` and `m_readies` (times the line came up on Zimodem's `READY.`).
-`m_rx_lost` is the line's ring overflowing (`modem.rx_lost`). Speech: `s_on`,
-`s_allophones`, `s_samples`, `s_late` (passes that found the DMA caught up),
-`s_queued` (`tsbus.say`'s queue), `s_ports`, `s_port_outs`, `s_port_ins`.
+`m_rx_lost` is the line's ring overflowing (`modem.rx_lost`). The joystick:
+`k_on` (1Fh answered), `k_byte` (what it reads, 0 while off) and `k_ins`.
+Speech: `s_on`, `s_allophones`, `s_samples`, `s_late` (passes that found the
+DMA caught up), `s_queued` (`tsbus.say`'s queue), `s_ports`, `s_port_outs`,
+`s_port_ins`.
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
 
@@ -868,8 +886,8 @@ at the REPL: F7h, FBh, FFh and 00h, as on v2.
 
 The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type,
 with the functions above, `modem`, `modem_mode`, `modem_line`,
-`modem_poll`, `modem_pace`, `esp_relay`, `speech`, `say`, `speech_volume`,
-`speaking` and `speech_ports` among them.
+`modem_poll`, `modem_pace`, `esp_relay`, `kempston`, `speech`, `say`,
+`speech_volume`, `speaking` and `speech_ports` among them.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 

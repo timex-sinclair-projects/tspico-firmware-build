@@ -4887,6 +4887,7 @@ def LOAD_CONFIG():
     default_values["MODEM_MODE"] = "2050"                      # the v3 card's TS2050 modem: "2050", "hayes" or "off" (tpi:modem); v2 ignores it
     default_values["MODEM_BAUD"] = 300                         # ... received characters paced to this (0: none)
     default_values["MODEM_IDLE_MIN"] = 10                      # ... the ESP32 off after this many minutes unused
+    default_values["KEMPSTON"] = True                          # the v3 card's DE-9 joystick answered at 1Fh; v2 ignores it
     default_values["SPEECH_VOLUME"] = 35                       # the v3 card's speech (tpi:say): volume, % (v2 ignores both)
     default_values["SPEECH_RATE"] = 100                        # ... the chip's speed, %: 50-150; its pitch moves with it
     default_values["SPEECH_PORTS"] = True                      # ... OUT 17 / IN 37 answered, as David's speech board
@@ -4927,10 +4928,13 @@ def LOAD_CONFIG():
 
     # The modem's keys (the v3 card, docs/v3-modem-proposal.md): a mode it
     # knows, a pace from 0 (none) to the line's 115200, an idle time from a
-    # minute to a day. Anything else is logged and replaced, as above.
+    # minute to a day; the joystick's on/off; speech's volume, rate and ports,
+    # the greeting and the auto-mount. Anything else is logged and replaced, as
+    # above.
     for key, ok in (("MODEM_MODE", lambda v: v in ("2050", "hayes", "off")),
                     ("MODEM_BAUD", lambda v: type(v) is int and 0 <= v <= 115200),
                     ("MODEM_IDLE_MIN", lambda v: type(v) is int and 1 <= v <= 1440),
+                    ("KEMPSTON", lambda v: type(v) is bool),
                     ("SPEECH_VOLUME", lambda v: type(v) is int and 0 <= v <= 100),
                     ("SPEECH_RATE", lambda v: type(v) is int and 50 <= v <= 150),
                     ("SPEECH_PORTS", lambda v: type(v) is bool),
@@ -6601,6 +6605,8 @@ def TS2068_IO():                                                         # Main 
     if board.HAS_MODEM:                                                # v3: the 8251 answered from now; the ESP32 stays off
         board.modem_start(init_values["MODEM_MODE"], init_values["MODEM_BAUD"],
                           init_values["MODEM_IDLE_MIN"])
+    if board.HAS_JOYSTICK:                                             # v3: the DE-9 answered at 1Fh (Kempston)
+        board.joystick(init_values["KEMPSTON"])
     if board.HAS_SPEECH:                                               # v3: the speech chip on core 1, silent until tpi:say
         try:
             n = board.speech_start(init_values["SPEECH_VOLUME"], init_values["SPEECH_RATE"],
@@ -7318,6 +7324,8 @@ def TS2068_IO():                                                         # Main 
                 else:
                     if board.HAS_MODEM:                                 # v3: power the ESP32 when a program wants the modem
                         board.modem_service()
+                    if board.HAS_JOYSTICK:                              # v3: a joystick read the IRQ couldn't finish
+                        board.joystick_service()
                     # Nothing to do, so check if time to save the log
                     # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap ──
                     # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min).

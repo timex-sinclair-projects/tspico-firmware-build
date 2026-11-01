@@ -309,8 +309,9 @@ doing:
 | Two short flashes every couple of seconds | Running without an SD card (see 2.6) |
 
 **The audio jack** gives the card's speech (Appendix G), mixed with the 2068's own sound.
-**The other connectors**, a joystick socket and a display header, are for features coming in
-later firmware.
+**The joystick socket** takes an Atari-style joystick, which programs read as a Kempston
+joystick (9.4). **The other connector**, a display header, is for features coming in later
+firmware.
 <!-- /v3 -->
 
 ## 2.4 The micro SD card
@@ -1792,12 +1793,40 @@ message (`CODE 1,0`).
 
 > **Note:** older instructions say `OUT 10,100`. That no longer works: use `OUT 14,14`.
 
+<!-- v2 -->
 ## 9.4 Summary
+<!-- /v2 -->
+<!-- v3 -->
+## 9.4 A joystick
+
+The card's joystick socket takes an Atari-style joystick, the 9-pin kind made for the Atari 2600,
+the Commodore 64 and the Spectrum's Kempston interfaces. Programs read it as a **Kempston
+joystick**, on port 31, so a Spectrum game that offers "Kempston" in its controls menu works with
+it: choose Kempston when it asks.
+
+To check the joystick, run this in either mode and move the stick:
+
+```basic
+10 PRINT AT 0,0; IN 31;"   ": GO TO 10
+```
+
+Nothing pressed reads 0. Right is 1, left 2, down 4, up 8 and fire 16, and they add up: up with
+fire reads 24. A second fire button, if the stick has one, works as fire.
+
+The 2068's own joystick ports, read by `STICK`, are a different thing: programs written for them
+don't see this socket. If another device on the 2068 also answers port 31, switch the card's off
+with `KEMPSTON` in `config.ini` (Appendix D).
+
+## 9.5 Summary
+<!-- /v3 -->
 
 1. Mount a TAP, `SAVE "tpi:zx48"`, then `OUT 244,3`.
 2. LOAD, SAVE, `LOAD "tpi:..."` and `SAVE "tpi:dir"` work in Spectrum mode.
 3. `SAVE "tpi:zx48" CODE 0,2` picks the compatible loader for stubborn games.
 4. `OUT 244,0` then `OUT 14,14` brings you home.
+<!-- v3 -->
+5. Spectrum games read the card's joystick as a Kempston joystick, on port 31.
+<!-- /v3 -->
 
 ---
 
@@ -2810,7 +2839,7 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 <!-- /v2 -->
 <!-- v3 -->
 ```text
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": ""}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true}
 ```
 <!-- /v3 -->
 
@@ -2842,6 +2871,7 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `SPEECH_RATE` | The speech's speed, 50-150 (%); its pitch moves with it | `100` |
 | `SPEECH_PORTS` | Programs can speak through ports 17 and 37 (Appendix G) | `true` |
 | `SPEECH_GREETING` | What the card says at switch-on (G.8); `""` is nothing | `""` |
+| `KEMPSTON` | The joystick socket answers port 31 as a Kempston joystick (9.4) | `true` |
 <!-- /v3 -->
 
 <!-- v2 -->
