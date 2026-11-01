@@ -86,8 +86,12 @@ been measured here)*.
 
 ## COPY
 
-`COPY` → HOME 0A02h → EXROM 1630h → 1781h: TPMODE bit 0 set → 16F3h, one
+`COPY` → the disk-keyword hook (COPY's parameter list is class 05h, routine
+25E0h): the disk module sees a bare COPY and hands it back, and the hook
+jumps to HOME 0A02h ([../rom/home.md](../rom/home.md#25d6h25e3h-the-disk-keywords))
+→ EXROM 1630h → 1781h: TPMODE bit 0 set → 16F3h, one
 transaction ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#the-printer-path-1630h183bh)).
+`COPY "a" TO "b"` is a file copy, not this flow ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#disk_copypre-cmd)).
 
 | # | Side | What happens |
 |---|---|---|

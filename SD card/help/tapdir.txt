@@ -12,4 +12,4 @@ CODE 1,n: Show n hdrs of context
 For n=255, show a screenful 
 around the current point.
 
-See also: ffw, rew, load, newtap
+See also: ffw, rew, load, format

@@ -38,7 +38,8 @@ Format: <code>LOAD "tpi:{<i>name</i> | <i>nn</i>}"</code>
 
 **CODE *a*,*b*** passes the command two numbers. Leaving it off is the same as `CODE 0,0`.
 
-**Keywords** `CAT`, `MOVE`, `ERASE` and `FORMAT` work on the SD card too, with no `tpi:`.
+**Keywords** `CAT`, `COPY`, `MOVE`, `ERASE`, `FORMAT` and `LIST` work on the SD card too, with
+no `tpi:`.
 
 ## Generic terms and definitions
 
@@ -141,9 +142,8 @@ Format: <code>CAT ["{<i>folder</i> | <i>pattern</i> | <i>name</i>.tap}"]</code>
 | `CAT "games"` | Another folder, without going there |
 | `CAT "*.tap"` | Files matching a pattern |
 | `CAT "frogger.tap"` | The blocks inside a TAP |
-| `CAT ""` | The blocks inside the mounted TAP |
 
-**MOVE TO** Changes the current folder. `MOVE TO ""` goes back to the previous one.<br>
+**MOVE TO** Changes the current folder. `MOVE TO ""` picks one from a menu.<br>
 Format: <code>MOVE TO "<i>folder</i>"</code>
 
 | Folder | Is |
@@ -153,16 +153,20 @@ Format: <code>MOVE TO "<i>folder</i>"</code>
 | `-` | The folder you were in before |
 | `/games` | A path from the root |
 
-**MOVE** Copies a file, or every match of a pattern into a folder. Never overwrites.<br>
-Format: <code>MOVE "{<i>name</i> | <i>pattern</i>}" TO "{<i>name</i> | <i>folder</i>}"</code>
+**COPY** Copies a file, or every match of a pattern into a folder. Never overwrites.<br>
+Format: <code>COPY "{<i>name</i> | <i>pattern</i>}" TO "{<i>name</i> | <i>folder</i>}"</code>
+
+**MOVE** The same shape, but renames a file or folder, or moves it into a folder.
+
+**LIST** <code>"<i>name</i>"</code> shows a file: text as it is, anything else in hex.
 
 **ERASE** Deletes a file without asking; with a pattern, asks about each one. A slash
 erases an empty folder.<br>
 Format: <code>ERASE "{<i>name</i> | <i>pattern</i> | <i>folder</i>/}"</code>
 
-**FORMAT** Makes a new, empty TAP (mounted, with append on) or folder. Never touches the SD
-card, and never replaces a file.<br>
-Format: <code>FORMAT "{<i>name</i>.tap | <i>folder</i>/}"</code>
+**FORMAT** Makes a new, empty TAP (mounted, with append on) or folder, or names the card.
+Never formats the card or replaces a file.<br>
+Format: <code>FORMAT "{<i>name</i>.tap | <i>folder</i>/ | :<i>label</i>}"</code>
 
 | Command | Does |
 |---|---|
@@ -172,11 +176,8 @@ Format: <code>FORMAT "{<i>name</i>.tap | <i>folder</i>/}"</code>
 | `SAVE "tpi:cd"` | Pick a folder from a menu |
 | `SAVE "tpi:path"` | Show the current folder |
 | `SAVE "tpi:md `*`folder`*`"` | Make a folder |
-| `SAVE "tpi:copy `*`a b`*`"` | Copy *a* to *b* |
-| `SAVE "tpi:ren `*`a b`*`"` | Rename *a*, or move it into folder *b* |
-| `SAVE "tpi:erase `*`name`*`"` | The same as `ERASE` |
 | `SAVE "tpi:rm `*`name`*`"` | Remove a file or an empty folder, asking first |
-| `SAVE "tpi:format `*`name`*`.tap"` | The same as `FORMAT` |
+| `SAVE "tpi:label [`*`name`*`]"` | Show or set the card's label |
 
 ## Native files: f:
 
@@ -228,7 +229,7 @@ Format: <code>SAVE "tpi:append [{on | off}]"</code>
 
 | Command | Does |
 |---|---|
-| `SAVE "tpi:newtap `*`name`*`"` | A new TAP, mounted, with append on |
+| `FORMAT "`*`name`*`.tap"` | A new TAP, mounted, with append on |
 | `SAVE "tpi:tape"` | LOAD and SAVE use the cassette recorder |
 | `SAVE "tpi:sdcard"` | Back to the TS-Pico (as at switch-on) |
 

@@ -30,6 +30,11 @@ differ, with runs closer than five bytes merged into one hunk):
 | the base image → the SYNC layer (`TSPICO-SYNC.ROM`) | 14 | 2 (0065h, 0F13h–0F1Fh) |
 | the SYNC layer → ROM 2.2 (the disk-command layer) | 99 | 9 |
 | genuine → ROM 2.2 | 342 | 17 |
+| the SYNC layer → ROM 2.3 | 107 | 12 |
+| genuine → ROM 2.3 | 350 | 20 |
+
+ROM 2.3 adds the version byte and three parameter lists (COPY's, LIST's,
+RESTORE's) to ROM 2.2's.
 
 The layers are described in
 [overview.md](overview.md#the-images). The older account of the genuine →
@@ -68,10 +73,13 @@ the fixed one ([sysvars.md](sysvars.md#5d37h-the-nmi-vector)).
 | 145Fh | disk-command layer | `CALL 1465h` | `CALL 1488h` | OPEN # through the module | OPEN # |
 | 1488h–14C5h | disk-command layer | dead SYSCON code | five trampolines and the error trap | the module's HOME entries | OPEN #, CLOSE #, PRINT #, INPUT # |
 | 1946h–1949h | disk-command layer | syntax offsets `d0 c0 c4 c8` | `d2 c2 c6 ca` | a bare CAT/FORMAT/MOVE/ERASE is accepted | the disk keywords |
+| 19B0h–19B1h | disk-command layer (2.3) | LIST's parameter list `05 45 15` (class 05h, 1545h) | `05 D6 25` (class 05h, 25D6h) | `LIST "x"` shows a file | LIST |
+| 19D0h–19D2h | disk-command layer (2.3) | RESTORE's parameter list `03 9D 1E` (class 03h, 1E9Dh) | `05 D6 25` (class 05h, 25D6h) | `RESTORE #n` rewinds a file | RESTORE |
+| 19D7h–19D9h | disk-command layer | COPY's parameter list `00 02 0A` (class 00h, 0A02h) | `05 E0 25` (class 05h, 25E0h) | COPY takes arguments | COPY |
 | 24C5h–24CEh | 1.1 | part of the AROS stream dispatch | helpers the EXROM's SAVE path calls | | SAVE etc. |
 | 2548h–2560h | 1.1 | DOSAVE, the class-0Bh dispatcher | jumps to EXROM 01ABh, 01CCh, 1855h | SAVE, LOAD, VERIFY, MERGE go to the EXROM | SAVE, LOAD, VERIFY, MERGE |
 | 25C0h | 1.1 | `CALL 0F09h` | `CALL 0F43h` | | *(uncertain)* |
-| 25D6h–25E3h | disk-command layer | the disk-keyword stub | `DI / LD HL,3000h / CALL 03FCh / EI / RET` | the disk keywords enter the module | CAT, FORMAT, MOVE, ERASE |
+| 25D6h–25E3h | disk-command layer | the disk-keyword stub | `DI / LD HL,3000h / CALL 03FCh / EI / RET NC / JP (HL)`; COPY's `LD B,FFh / JR 25D6h` at 25E0h | the disk keywords, COPY, LIST and RESTORE enter the module | CAT, FORMAT, MOVE, ERASE, COPY, LIST, RESTORE |
 | 3CDCh–3CFFh | 1.1 | `FFh` filler | the HOME→EXROM thunk 3CE3h and two helpers | | everything |
 
 ## The thunks
@@ -238,7 +246,7 @@ gone; their callers are kept.
 
 | HOME | Now | What |
 |---|---|---|
-| 0A02h | `EXX / LD HL,1630h / JP 3CE3h` | COPY. The syntax table's COPY entry (19D7h: class 00h, routine 0A02h) still points here. EXROM 1630h → 1781h: with TPMODE bit 0 set, the COPY goes to the Pico as a printer transaction; clear, the stock dump, now at EXROM 1794h, runs ([exrom-chunk1.md](exrom-chunk1.md)) |
+| 0A02h | `EXX / LD HL,1630h / JP 3CE3h` | COPY. The syntax table's COPY entry (19D7h) pointed here with class 00h; since COPY took arguments it is class 05h with routine 25E0h, and the hook at 25D6h jumps here for a bare COPY ([below](#25d6h25e3h-the-disk-keywords)). EXROM 1630h → 1781h: with TPMODE bit 0 set, the COPY goes to the Pico as a printer transaction; clear, the stock dump, now at EXROM 1794h, runs ([exrom-chunk1.md](exrom-chunk1.md)) |
 | 0A09h | `LD C,A / LD A,(5DDBh) / RRCA / LD A,C / JP NC,061Ah` | the character router, from 0500h. TPMODE bit 0 clear (printer to the 2068): the stock 061Ah, exactly as before |
 | 0A12h | `BIT 1,(IY+1) / JP Z,061Eh` | printer to the Pico, but this character is not for the printer (FLAGS bit 1 clear): into 061Ah after its own test, which therefore takes the screen path |
 | 0A19h | `CP 80h / JR NC,0A68h` | a printer character: 80h and above to 0A68h |
@@ -368,6 +376,44 @@ and the routine's address, so a bare `CAT` is accepted and the module
 parses whatever follows on both passes. The routines at 25C8h–25D4h are
 `LD B,token / JR 25D6h`, unchanged.
 
+### 19B0h–19B1h: LIST's parameter list
+
+LIST (token F0h) had `05 45 15` at 19AFh: class 05h, routine 1545h, HOME's
+LIST, which parses `LIST`, `LIST n` and `LIST #n` itself on both passes.
+Now `05 D6 25`: the same class, routine 25D6h, the hook, with no `LD B`
+in front, so B is not a token. The module tells LIST by T-ADDR, which class
+05h leaves at 19B0h, and hands everything but `LIST "x"` back to 1545h with
+carry set: HOME's LIST runs on the statement's own stack, as before
+([exrom-fdd.md](exrom-fdd.md#fdd_list-37f9h)). Only the address bytes
+changed.
+
+### 19D0h–19D2h: RESTORE's parameter list
+
+RESTORE (token E5h) had `03 9D 1E`: class 03h (a number, or 0 when there
+is none), routine 1E9Dh. Now `05 D6 25`: class 05h, routine 25D6h, T-ADDR
+19D1h. The module does class 03h's work itself (`HC_EXPT_1NUM`, or
+USE-ZERO at 1C51h) and, for `RESTORE` and `RESTORE n`, returns carry set
+with HL = 1E9Dh at run time, so HOME's RESTORE takes the number off the
+calculator stack as before. `RESTORE #n` it does itself
+([exrom-fdd.md](exrom-fdd.md#fdd_restore-3819h)).
+
+### 19D7h–19D9h: COPY's parameter list
+
+COPY (token FFh) had `00 02 0A`: class 00h ("no operands": the syntax pass
+checks the statement ends there, and the run-time pass calls the routine),
+routine 0A02h. Now `05 E0 25`: class 05h, routine 25E0h, the same class
+the disk keywords use, so `COPY "a" TO "b"` reaches the module on both
+passes. 25E0h is `LD B,FFh / JR 25D6h`, in the stub's spare bytes. Both
+classes read the routine's address from 19D8h–19D9h and leave T-ADDR at
+19D8h, and class 05h calls the routine with the same stack, so a bare COPY
+the module sends back to 0A02h (below) runs exactly as it did; the printer
+path reads T-ADDR's low byte, D8h, as COPY
+([exrom-chunk1.md](exrom-chunk1.md#the-printer-path-1630h183bh)).
+*(The class 00h/05h code is the Spectrum's CLASS-00/CLASS-05, which share
+everything but the end-of-statement check; inferred from the Spectrum ROM
+and confirmed in tools/emu, where a bare COPY with `tpi:picopt` still makes
+its BMP.)*
+
 ### 24C5h–24CEh: helpers for the SAVE path (v1.1)
 
 The genuine bytes were part of the AROS cartridge's stream dispatch
@@ -425,7 +471,8 @@ established *(unverified)*.
 ### 25D6h–25E3h: the disk keywords
 
 All four keyword routines (25C8h–25D4h) load B with their token and jump
-here. The genuine 14 bytes were `CALL 2889h / JR NZ / CALL 2569h / CALL 1B44h /
+here, and so does COPY's (25E0h, B = FFh). LIST's and RESTORE's parameter
+lists (19AFh, 19D0h) name 25D6h itself; the module tells them by T-ADDR. The genuine 14 bytes were `CALL 2889h / JR NZ / CALL 2569h / CALL 1B44h /
 JP 2567h`, the stock handling of keywords the 2068 had no disk to drive;
 what each call did is not decoded here. ROM 2.2:
 
@@ -434,14 +481,21 @@ what each call did is not decoded here. ROM 2.2:
         LD HL,3000h        ; the module's G_MAIN vector
         CALL 03FCh         ; into the module and back
         EI
-        RET
-25DFh   5 × NOP
+        RET NC
+        JP (HL)            ; HOME finishes it: 0A02h COPY, 1545h LIST, 1E9Dh RESTORE
+25E0h   LD B,FFh           ; COPY's routine (19D7h)
+        JR 25D6h
 ```
 
 The module's FDD_MAIN runs on **both** passes — the syntax check, where it
 consumes the argument and returns so the statement is accepted, and run
-time, where it builds and sends `tpi:dir`, `tpi:copy`, `tpi:erase` or
-`tpi:format` (it tests FLAGS bit 7; [exrom-fdd.md](exrom-fdd.md)). 2567h,
+time, where it builds and sends `tpi:dir`, `tpi:cd`, `tpi:ren`, `tpi:copy`,
+`tpi:erase` or `tpi:format` (it tests FLAGS bit 7; [exrom-fdd.md](exrom-fdd.md)).
+It returns carry clear, except where HOME finishes the statement: a bare
+COPY at run time (HL = 0A02h), LIST other than `LIST "x"` (HL = 1545h, both
+passes) and `RESTORE` or `RESTORE n` at run time (HL = 1E9Dh). The stock COPY ends with a no-return jump to
+HOME, so it has to start from here, on the statement's own stack, not from
+inside the module ([exrom-fdd.md](exrom-fdd.md#fdd_entry-37b5h)). 2567h,
 where the genuine stub jumped, is untouched.
 
 ## The HOME side of the protocol, by statement
@@ -452,11 +506,16 @@ where the genuine stub jumped, is untouched.
 | SAVE, LOAD, VERIFY, MERGE | class 0Bh → 2548h → 3CE3h; helpers 254Fh, 2558h, 24C7h | 01ABh … 01D2h ([exrom-driver.md](exrom-driver.md)) |
 | `SAVE "tpi:…"` | the same | SESSION_SETUP → BUILD_PREHEADER_B |
 | CAT, FORMAT, MOVE, ERASE | syntax offsets 1946h → 25C8h–25D4h → 25D6h | the module, 3000h |
+| `COPY "a" TO "b"` | 19D7h (class 05h) → 25E0h → 25D6h | the module, 3000h (`FDD_COPY`) |
+| `LIST "x"` | 19AFh (class 05h) → 25D6h | the module, 3000h (`FDD_LIST`) |
+| LIST, `LIST n`, `LIST #n` | 19AFh → 25D6h, the module, back to 25DFh → 1545h | |
+| `RESTORE #n` | 19D0h (class 05h) → 25D6h | the module, 3000h (`FDD_RESTORE`), `CH_FLUSH` |
+| RESTORE, `RESTORE n` | 19D0h → 25D6h, the module (the number), back to 25DFh → 1E9Dh | |
 | OPEN # | 1438h → 14BDh (syntax); 145Eh → 1488h (run time) | G_OSYN, G_OPEN |
 | PRINT #, INPUT #, LIST #, INKEY$ # on an `F` stream | the record's 14A0h / 14A9h | G_OUT, G_IN |
 | CLOSE # | 13A5h → 1494h | G_CLOSE |
 | LPRINT, LLIST | 0500h → 0A09h → 04F2h / 0A26h / 04E8h; 0A23h at the end of a line (the stock ZX Printer flush) | 1639h, 163Ch; 1636h |
-| COPY | 0A02h → 3CE3h | 1630h |
+| COPY | 19D7h → 25E0h → 25D6h, the module, back to 25DFh → 0A02h → 3CE3h | 1630h |
 | BEEP, the key click | 03F3h → 041Ch → 03FCh | G_BEEP → BEEPER |
 | any report | 0F12h → 03FCh | EX_REPORT_MSG |
 | a report inside the module | `RST 8` → ERR_SP → 14B2h | |

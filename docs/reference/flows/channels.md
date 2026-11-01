@@ -100,6 +100,33 @@ The editor clicks once per character taken; the ROM's G_BEEP skips the
 click when the current channel is an `F` record, so a file is read
 silently ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_beep-3029h)).
 
+## RESTORE
+
+`RESTORE #4`: back to the start of the file. HOME's syntax table sends
+RESTORE to the hook at 25D6h (class 05h), and the module's `FDD_RESTORE`
+takes the `#` form itself; plain `RESTORE` and `RESTORE n` go back to
+HOME's RESTORE ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#fdd_restore-3819h)).
+
+1. Stream 4's STRMS entry must lead to an `F` record (not open, a SYSCON
+   channel, another channel letter or a stream above 15: **Report O**).
+2. `CH_FLUSH`: anything printed and still buffered goes out as
+   `tpi:chwr`.
+3. The record's input buffer is emptied (`R_INN` = `R_INP` = 0): what was
+   read ahead is no longer next.
+4. `CH_FLUSH` again with the three bytes 23, 1, 0 in the output buffer:
+   **`tpi:chwr 170100`**, TAB 1. Nothing new on the wire.
+5. Pico: `CH_WRITE` → `Channels.write`, which takes the TAB in any mode
+   (the same escape as in Records, below) → `Channels._seek(ch, 1)`: an
+   open record is closed (padded), the position is 0, the text-in state is
+   reset ([../firmware/channels.md](../firmware/channels.md#channels_seekself-ch-n)).
+   Bare status, as for any `tpi:chwr`.
+
+So the next `INPUT #4` reads the first line again, and on a `w`, `a` or `u`
+stream the next `PRINT #4` writes over the start of the file. That holds
+for an `a` stream too: `_seek` sets the position whatever the mode, and
+`_data` writes at the position. A `d:` listing goes back to its first
+name.
+
 ## CLOSE
 
 `CLOSE #4`: HOME 13A5h → 1494h → `CH_CLOSE_HOOK`.

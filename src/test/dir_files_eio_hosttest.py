@@ -121,7 +121,7 @@ def setup(t, fail_on):
     fos = FakeOS(fail_on)
     t.os = fos
     t.open = fos.open
-    t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", LOG_LEVEL=0)
+    t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", LOG_LEVEL=0, sd_label="")
     return fos
 
 

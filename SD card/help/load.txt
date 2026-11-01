@@ -12,7 +12,8 @@ in a tpi:dir listing. Only the
 listed types (.tap, .dck, .rom,
 .bin) can be mounted this way.
 
-See also: close, dir, tapdir,   newtap
+See also: close, dir, tapdir,
+          format
 
 BASIC Command               LOAD
 --------------------------------

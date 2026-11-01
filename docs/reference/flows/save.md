@@ -6,7 +6,7 @@ tape code sends a header block and a data block as it would to a cassette;
 each is a transaction with the Pico, which captures the blocks, checks
 them, can refuse the SAVE before the data is sent, and writes the file
 before it gives the final status. This flow follows one `SAVE "name"` of a
-BASIC program, then APPEND and NEWTAP, `SAVE "f:path"`, and the failures.
+BASIC program, then APPEND and FORMAT, `SAVE "f:path"`, and the failures.
 
 Notation as in [command.md](command.md): **TX**/**RX** the bus FIFOs, **Y**
 the status (`FF` READY + IDLE, `F7` READY mid-transaction, `FB` RECOVERED,
@@ -73,16 +73,16 @@ a SAVE to any other name leaves the current mount as it was.
 
 ## Variants
 
-### Append (`tpi:append on`, or `tpi:newtap name`)
+### Append (`tpi:append on`, or `FORMAT "name"`)
 
 With a TAP mounted and `TSP.append` on, step 9 skips the name check and
 step 16 opens the mounted TAP (`TSP.f_name`) in `"ab"`: the blocks go on
 its end, and the mount is refreshed so they can be loaded. If the card was
 swapped since (the mount found a different card and turned append off),
 the write refuses rather than append to a same-named file on the other
-card. `tpi:newtap name` (or `FORMAT "name.tap"`) makes an empty TAP,
+card. `FORMAT "name"` (`tpi:format name`) makes an empty `name.tap`,
 mounts it and turns append on: the usual way to collect several programs
-in one tape ([../firmware/tspico-commands.md](../firmware/tspico-commands.md#new_tappre-cmd)).
+in one tape ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#disk_formatpre-cmd)).
 
 ### `SAVE "f:path"`
 

@@ -105,7 +105,7 @@
 # Setup
 DATA 2,"tpi:verbose on",0,0,"Turn on verbose mode","Verbose is now enabled","0"
 DATA 2,"tpi:loglevel 0",0,0,"Set loglevel to 0 for testing","LOG level set to 0 INFO","0"
-DATA 2,"tpi:newtap foo",0,0,"Make a new tap file with append on","File created","0"
+DATA 2,"tpi:format foo",0,0,"Make a new tap file with append on","File created","0"
 DATA 2,"tpi:append",0,0,"Show append state","Append is ON","0"
 DATA 2,"tpi:path",1,0,"Show mounted file","/TAP/picotest/foo.tap","0"
 DATA 2,"tpi:tapdir",0,0,"Show empty tapdir","Indicates empty","0"

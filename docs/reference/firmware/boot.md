@@ -591,7 +591,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `1338F0D5` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `614CE7E4` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |

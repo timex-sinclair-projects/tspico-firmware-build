@@ -1,8 +1,8 @@
 # EXROM 3000h: the disk module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
-1488 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
-at EXROM 3000h–37B4h and spliced into the SYNC layer's image
+1719 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
+at EXROM 3000h–38EBh and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
 `src/rom/TSPICO-23.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
@@ -10,7 +10,9 @@ at EXROM 3000h–37B4h and spliced into the SYNC layer's image
 The module and its patches are ROM 2.3's last layer (2.2's, plus #227 and
 #228: see `PS_READ` and [overview.md](overview.md)). The module gives the
 2068's dormant disk keywords — CAT, MOVE, ERASE, FORMAT — real meanings
-on the SD card; adds
+on the SD card; gives COPY a file form (`COPY "a" TO "b"`) beside the
+printer one, LIST a file form (`LIST "name"`) beside the program listing,
+and RESTORE a stream form (`RESTORE #n`, back to the start of a file); adds
 `SAVE`/`LOAD`/`VERIFY`/`MERGE "f:path"` for plain files; adds file
 channels: `OPEN #n,"f:path","mode"[,reclen]`, `PRINT #`, `INPUT #`,
 `CLOSE #`, and `"d:"` directory listings; adds response function 88h (a
@@ -22,7 +24,9 @@ design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
 byte-level change list is in [the build history](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
-The module is 1973 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end). It enters the 2068's code only through a vector
+The module is 2284 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end, then
+COPY's file form, MOVE as rename, `LIST "name"` and `RESTORE #n` 311 more, also
+at the end). It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
@@ -35,22 +39,24 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 34–136 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 143–164 | 3000h–3020h | the vector table |
-| 166–177 | 3021h | `TAPE_MODE` |
-| 192–215 | 3029h | `G_BEEP` |
-| 217–275 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 277–297 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 299–391 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `NONSENSE`, `TOO_LONG` |
-| 393–467 | | the parsing helpers |
-| 469–568 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 570–806 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 808–828 | | `LOWER_LOOP` (function 88h) |
-| 830–1385 | | the channel driver |
-| 1387–1405 | | `HEXDIG`, `STRLEN` |
-| 1407–1419 | to 3777h | the command strings, `MODE_R` |
-| 1421–1435 | 3778h–377Eh | `PRELOAD` |
-| 1437–1488 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader), `FDD_END` |
+| 43–159 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 166–187 | 3000h–3020h | the vector table |
+| 189–200 | 3021h | `TAPE_MODE` |
+| 215–238 | 3029h | `G_BEEP` |
+| 240–298 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 300–320 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 322–419 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
+| 421–495 | | the parsing helpers |
+| 497–596 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 598–834 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 836–856 | | `LOWER_LOOP` (function 88h) |
+| 858–1413 | | the channel driver |
+| 1415–1433 | | `HEXDIG`, `STRLEN` |
+| 1435–1447 | to 3777h | the command strings, `MODE_R` |
+| 1449–1463 | 3778h–377Eh | `PRELOAD` |
+| 1465–1513 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1515–1716 | 37B5h–38EBh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1718–1719 | 38ECh | `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -96,6 +102,12 @@ ROM that moves one fails instead of jumping into the wrong code
 | `TSPICO_READ_DATA` | EXROM 2298h | `IN A,(0Eh) / AND A / RET`: one byte from the Pico, no ready-wait, Z for 00h. `PS_READ`'s read |
 | `PRINT_A` | EXROM 05FAh | `LD (IY+52h),FFh` (SCR_CT, so the 2068 never stops with its own "scroll?") then RST 10h through CALL_HOME: what the v1.1 reader printed with. `PS_READ`'s print |
 | `THUNK_HX` | HOME 03FCh | the returning HOME→EXROM thunk (named; the module never calls it — HOME's stubs do) |
+| `H_COPY` | HOME 0A02h | HOME's COPY (`EXX / LD HL,1630h / JP 3CE3h`), the screen to the printer: `FDD_COPY` hands it back to the 25D6h hook for a bare COPY (`build-rom.py` checks its bytes) |
+| `H_LIST` | HOME 1545h | HOME's LIST (`LD A,2 / LD (IY+2),0 …`), class 05h: it parses its own `#n` and line number. `FDD_LIST` hands it back to the hook for `LIST`, `LIST n` and `LIST #n`, on both passes |
+| `H_RESTORE` | HOME 1E9Dh | HOME's RESTORE (`CALL 1F23h` first: the line number class 03h stacked). `FDD_RESTORE` stacks the number itself and hands it back at run time |
+| `H_USE_ZERO` | HOME 1C51h | USE-ZERO: a 0 on the calculator stack at run time, nothing on the syntax pass (what class 03h does for a missing number). `HC_USE_ZERO` calls it |
+| `T_LIST` | 19B0h | not a routine: T-ADDR during a LIST statement, its parameter list (19AFh) + 1, where class 05h leaves it. `FDD_ENTRY` tells LIST by it (LIST and RESTORE reach the hook with no token in B) |
+| `T_RESTORE` | 19D1h | the same for RESTORE (list 19D0h) |
 | `H_OUT_STUB` | HOME 14A0h | `DI / LD HL,CH_OUT_VEC / CALL 03FCh / EI / RET` |
 | `H_IN_STUB` | HOME 14A9h | the same for `CH_IN_VEC` |
 | `H_MAKE_ROOM` | HOME 12BBh | MAKE-ROOM: BC bytes after (HL); Report 4 |
@@ -169,19 +181,25 @@ treats an offset whose high bit is set as a SYSCON channel (its `D OR E ≥
 |---|---|---|
 | `STREAM_LOWER` | FDh | stream −3, K, the lower screen |
 | `READ_DELAY` | 16 | × 16 T-states between data-phase reads, ~75 µs: the Pico feeds a 4-deep FIFO |
-| `TOK_SCREEN` | AAh | SCREEN$ |
+| `TOK_INKEY` | A6h | INKEY$: `STR_NEXT` takes it for the start of a string |
+| `TOK_FN` | A8h | FN: `STR_NEXT` looks past it for `a$` |
+| `TOK_SCREEN` | AAh | SCREEN$ (`SAVE … SCREEN$`; and a string start for `STR_NEXT`) |
+| `TOK_VALS` | AEh | VAL$, a string start for `STR_NEXT` |
+| `TOK_STRS` | C1h | STR$, the same |
+| `TOK_CHRS` | C2h | CHR$, the same |
 | `TOK_CODE` | AFh | CODE |
 | `TOK_LINE` | CAh | LINE |
 | `TOK_DATA` | E4h | DATA |
 | `MAX_ARG` | 64 | the longest argument; longer is Report F |
 | `ROOM` | 160 | workspace a command may need: 2 × MAX_ARG + 32 |
 | `CR` | 0Dh | BASIC's end of line |
-| `SEP` | `'\|'` | MOVE's source/destination separator: cannot occur in a FAT name |
+| `SEP` | `'\|'` | COPY's and MOVE's source/destination separator: cannot occur in a FAT name |
 | `TOK_TO` | CCh | TO |
 | `TOK_CAT` | CFh | CAT |
 | `TOK_FORMAT` | D0h | FORMAT |
 | `TOK_MOVE` | D1h | MOVE |
 | `TOK_ERASE` | D2h | ERASE |
+| `TOK_COPY` | FFh | COPY (`LD B,FFh` at HOME 25E0h) |
 
 ## The vector table
 
@@ -192,7 +210,7 @@ not at 3000h. The patches point at these vectors, never at routines:
 
 | Name | EXROM | Jumps to | Reached from |
 |---|---|---|---|
-| `FDD_DISPATCH` | 3000h | `G_MAIN` | HOME 25D6h, the disk keywords |
+| `FDD_DISPATCH` | 3000h | `G_MAIN` | HOME 25D6h, the disk keywords and COPY |
 | `F_HOOK_VEC` | 3003h | `F_HOOK` | EXROM 01D2h, SAVE-ETC's jump to SESSION_SETUP |
 | `LOWER_VEC` | 3006h | `LOWER_LOOP` | EXROM 2213h, function 88h |
 | `CH_OUT_VEC` | 3009h | `G_OUT` | HOME 14A0h, an `F` record's output |
@@ -247,7 +265,7 @@ Each is `LD HL,routine / JR GUARDED` (the last falls in):
 
 | Entry | Routine |
 |---|---|
-| `G_MAIN` | `FDD_MAIN` |
+| `G_MAIN` | `FDD_ENTRY` (which calls `FDD_MAIN`) |
 | `G_OUT` | `CH_OUT` |
 | `G_IN` | `CH_IN` |
 | `G_OPEN` | `CH_OPEN_HOOK` |
@@ -302,14 +320,16 @@ switch back.
 ### `FDD_MAIN`
 
 The disk keywords' routine, entered on **both** passes (HOME 25D6h has no
-other way to hand over the syntax check), with B = the token.
+other way to hand over the syntax check), with B = the token, from
+`FDD_ENTRY`, which has set IX for `FDD_MOVE`.
 
 1. `LD IY,IY_SYSVARS`: the bank call clobbers IY, and HOME routines need it.
 2. `EI`: HOME's hook entered under `DI`, and CAT's "Scroll?" and the Y/N
    prompts wait with `HALT`.
 3. CAT → `FDD_CAT`; MOVE → `FDD_MOVE`; ERASE → `FDD_ONE_ARG` with HL =
    `CMD_ERASE`; FORMAT → `FDD_ONE_ARG` with `CMD_FORMAT`; any other token →
-   `RET` (no-op; nothing else reaches 25D6h).
+   `RET` (no-op; nothing else reaches it: COPY, the one other token at 25D6h,
+   goes to `FDD_COPY` first).
 
 After it, at 30A8h, `"FDDCMD",0` — a signature nothing checks;
 `build-rom.py` checks `FDD_DISPATCH`'s address instead, as the comment says
@@ -317,7 +337,8 @@ After it, at 30A8h, `"FDDCMD",0` — a signature nothing checks;
 
 ### `FDD_VERSION` (30AFh)
 
-One byte, 8: the module's revision number. Nothing reads it; the
+One byte, 9: the module's revision number (8 until COPY joined and MOVE
+became rename). Nothing reads it; the
 ROM's version for programs is `PEEK 101` and G_VERS
 ([overview.md](overview.md#which-rom-is-this)).
 
@@ -334,13 +355,21 @@ firmware does with each command is [../firmware/tspico-disk.md](../firmware/tspi
 | `CAT` | `tpi:dir` | [`DIR`](../firmware/tspico-commands.md#dirpre-cmd) |
 | `CAT ""` | `tpi:tapdir` | [`TAPDIR`](../firmware/tspico-commands.md#tapdirpre-cmd) |
 | `CAT x` | `tpi:dir x` | [`CATALOG`](../firmware/tspico-disk.md#catalogarg) |
-| `MOVE TO x` | `tpi:cd x` | [`CDIR`](../firmware/tspico-commands.md#cdirpre-cmd) |
-| `MOVE TO ""` | `tpi:cd -` (back to the previous folder) | the same |
-| `MOVE a TO b` | `tpi:copy a\|b` | [`DISK_COPY`](../firmware/tspico-disk.md#disk_copypre-cmd) |
+| `MOVE TO x` | `tpi:cd x` (`"-"`: `tpi:cd -`, back to the previous folder) | [`CDIR`](../firmware/tspico-commands.md#cdirpre-cmd) |
+| `MOVE TO ""` | `tpi:cd` (the menu of folders) | the same |
+| `MOVE a TO b` | `tpi:ren a\|b` | [`DISK_REN`](../firmware/tspico-disk.md#disk_renpre-cmd) |
+| `COPY a TO b` | `tpi:copy a\|b` | [`DISK_COPY`](../firmware/tspico-disk.md#disk_copypre-cmd) |
+| `COPY` | nothing: HOME's COPY, the printer ([home.md](home.md#25d6h25e3h-the-disk-keywords)) | [`PRINT_IO`](../firmware/printer.md) with `tpi:picopt` |
 | `ERASE x` | `tpi:erase x` | [`DISK_ERASE`](../firmware/tspico-disk.md#disk_erasepre-cmd) |
 | `FORMAT x` | `tpi:format x` | [`DISK_FORMAT`](../firmware/tspico-disk.md#disk_formatpre-cmd) |
+| `LIST x`, x a string | `tpi:list x` | [`DISK_LIST`](../firmware/tspico-disk.md#disk_listpre-cmd) |
+| `LIST`, `LIST n`, `LIST #n` | nothing: HOME's LIST (`FDD_LIST`) | |
+| `RESTORE #n` | `tpi:chwr` with TAB 1 (23, 1, 0) on stream n | [`Channels._seek`](../firmware/channels.md#channels_seekself-ch-n) |
+| `RESTORE`, `RESTORE n` | nothing: HOME's RESTORE (`FDD_RESTORE`) | |
 
-MOVE copies; there is no keyword for rename (`SAVE "tpi:ren a|b"`).
+MOVE renames (or moves into a folder) and COPY copies, the way DOS and Unix
+use the words; no 1980s 2068 disk system agreed on either
+([DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md), #341).
 
 ### `FDD_CAT`
 
@@ -359,15 +388,34 @@ ERASE and FORMAT; HL = the prefix. The argument is required: `AT_END` →
 
 ### `FDD_MOVE`
 
-`SKIP_SPACES`; `TO` straight away → `.cd`. Otherwise a source is required
-(`AT_END` → `NONSENSE`): `HC_EXPT_STR` (the source), `TO` required (else
-`NONSENSE`), `NEXT_CHAR` past it, `EXPT_STR_END` (the destination); return
-on the syntax pass. At run time pop the destination (on top) then the
-source, both `NOT_EMPTY`; `BUILD_START` with `CMD_COPY`, then the source,
+`SKIP_SPACES`; `TO` straight away → `MOVE_TO`. Otherwise it falls into
+`TWO_NAMES` with IX = `CMD_REN`, set by `FDD_ENTRY`.
+
+### `TWO_NAMES`
+
+`string TO string` with IX = the prefix: `CMD_REN` from MOVE, `CMD_COPY`
+from `FDD_COPY`. A source is required (`AT_END` → `NONSENSE`):
+`HC_EXPT_STR` (the source), `TO` required (else `NONSENSE`), `NEXT_CHAR`
+past it, `EXPT_STR_END` (the destination); return on the syntax pass. At
+run time pop the destination (on top) then the source, both `NOT_EMPTY`;
+`PUSH IX / POP HL` and `BUILD_START` with that prefix, then the source,
 `SEP` (`|`), the destination; `SEND_TAIL`.
 
-`.cd`: `NEXT_CHAR` past `TO`, `EXPT_STR_END`, `POP_STR`; an empty string →
-`CMD_CD_BACK` (`tpi:cd -`); else `SEND_ONE` with `CMD_CD`.
+Why IX: COPY's code is at the end of the module, and the prefix had to
+reach this body without moving anything below it (`PS_READ` is pinned at
+377Fh, and the chapters cite these addresses). `PUSH IX / POP HL` is three
+bytes, as the `LD HL,CMD_COPY` it replaced. IX survives the calls into
+HOME: `CALL_HOME` pushes the caller's IX and pops it on the way back
+([exrom-driver.md](exrom-driver.md#call_home-03ddh)); nothing else here
+touches it.
+
+### `MOVE_TO`
+
+`NEXT_CHAR` past `TO`, `EXPT_STR_END`, return on the syntax pass, `POP_STR`;
+an empty string → `SEND_PREFIX` with `CMD_CD_MENU` (`tpi:cd`, the
+firmware's menu of folders); else `SEND_ONE` with `CMD_CD`, so `MOVE TO
+"-"` sends `tpi:cd -` (the previous folder). The empty case can't go
+through `SEND_ONE`: its `LDIR` with BC = 0 would copy 64K.
 
 `|` is the separator because it cannot occur in a FAT name; a command typed
 by hand may use a space instead, which the firmware also accepts
@@ -444,7 +492,7 @@ STKEND.
 ### `SEND_PREFIX`
 
 `BUILD_START`, push the start, `SEND_TAIL`: a command that is only its
-prefix (`tpi:dir`, `tpi:tapdir`, `tpi:cd -`).
+prefix (`tpi:dir`, `tpi:tapdir`, `tpi:cd`).
 
 ### `SEND_ONE`
 
@@ -473,7 +521,7 @@ report. Why skip the gate: SESSION_SETUP only takes names of 5–31
 characters, which is BASIC's limit for `SAVE "tpi:…"` text, but everything
 past it keeps the name as a pointer and a 16-bit length, and the Pico sizes
 its buffer from the pre-header; so a `MOVE` of two 64-character paths
-(137 characters with the prefix) goes through. The anchors at 1A73h and
+(137 characters with the prefix; a `COPY`, 138) goes through. The anchors at 1A73h and
 1AACh guard both halves of this.
 
 ### `COPY_CSTR`
@@ -870,10 +918,11 @@ NUL-ended prefixes, sent as the start of each command:
 | `CMD_DIR_ARG` | `tpi:dir ` | `CAT x` |
 | `CMD_TAPDIR` | `tpi:tapdir` | `CAT ""` |
 | `CMD_CD` | `tpi:cd ` | `MOVE TO x` |
-| `CMD_CD_BACK` | `tpi:cd -` | `MOVE TO ""` |
-| `CMD_COPY` | `tpi:copy ` | `MOVE a TO b` |
+| `CMD_REN` | `tpi:ren ` | `MOVE a TO b` (through IX) |
+| `CMD_COPY` | `tpi:copy ` | `COPY a TO b` (through IX) |
 | `CMD_ERASE` | `tpi:erase ` | `ERASE` |
 | `CMD_FORMAT` | `tpi:format ` | `FORMAT` |
+| `CMD_LIST` | `tpi:list ` | `LIST x` (at the end of the module, `CMD_LIST`) |
 | `CMD_CHWR` | `tpi:chwr ` | `CH_FLUSH` |
 | `CMD_CHRD` | `tpi:chrd` | `CH_FETCH` |
 | `CMD_CHCLOSE` | `tpi:chclose` | `CH_CLOSE_HOOK` |
@@ -955,9 +1004,138 @@ interpreter against the committed image, with v1.1's reader (from
 `TSPICO-SYNC.ROM`) for contrast:
 [`rom_fn86_hosttest.py`](../../../src/test/rom_fn86_hosttest.py).
 
+### `FDD_ENTRY` (37B5h)
+
+`G_MAIN`'s routine since COPY joined the disk keywords: every disk keyword,
+COPY, LIST and RESTORE, on both passes. `PUSH IX`, then `CALL .run`, `POP
+IX`, `RET`: the caller's IX back, the flags as `.run` left them.
+
+`.run` first looks at T_ADDR. LIST's and RESTORE's parameter lists point
+straight at 25D6h, not at 25E0h's `LD B,FFh` as COPY's does, so B holds
+whatever the statement loop left in it and can't say which keyword this is.
+Class 05h leaves T_ADDR one past the class byte, so it can: `T_LIST`
+(19B0h) → `FDD_LIST`, `T_RESTORE` (19D1h) → `FDD_RESTORE`. The two share a
+high byte, which is compared first (19h; COPY's 19D8h has it too, and falls
+through on the low byte). Anything else (`.tok`): IX = `CMD_REN` (MOVE's
+two-name form renames); COPY (B = `TOK_COPY`) → `FDD_COPY`; any other token
+→ `CALL FDD_MAIN`, then `AND A` and `RET`.
+
+It returns carry clear, except where HOME has to finish the statement: a
+bare COPY at run time, LIST that isn't `LIST x` (both passes), and
+`RESTORE` or `RESTORE n` at run time. HOME's hook is
+`CALL 03FCh / EI / RET NC / JP (HL)` ([home.md](home.md#25d6h25e3h-the-disk-keywords)),
+so carry set with HL = `H_COPY` sends the statement on to HOME's own COPY,
+and the `AND A` keeps whatever flags a `tpi:` command left from reaching
+that test. Why HOME has to do it: the stock COPY (EXROM 1781h) ends with a
+no-return jump to HOME (17B3h → 0A30h), whose `RET` must find the
+statement loop's return address, not the module's. Jumping to 0A02h from
+the hook is what class 00h did, on the same stack and with T-ADDR still
+19D8h, which is how the printer path at 1781h tells COPY from LPRINT
+(D8h → TADDR 4, [exrom-chunk1.md](exrom-chunk1.md#the-printer-path-1630h183bh)).
+
+### `FDD_COPY` (37DDh)
+
+COPY, with B = FFh. `LD IY,IY_SYSVARS` and `EI`, as `FDD_MAIN`. `AT_END`:
+
+- **bare** (`.bare`): `RUNTIME`; the syntax pass returns, carry clear from
+  its `AND 80h`, and the statement is accepted; at run time HL =
+  `H_COPY`, `SCF`, `RET`: the hook goes on to HOME's COPY, the screen to
+  the printer (or to the Pico with `tpi:picopt`, [../flows/printer.md](../flows/printer.md)).
+- **otherwise**: IX = `CMD_COPY`, `CALL TWO_NAMES`, `AND A`, `RET`. So
+  `COPY "a" TO "b"` sends `tpi:copy a|b`. `COPY "a"`, `COPY TO "b"` and
+  `COPY "a" TO` are Report C on the syntax pass: the line is refused at
+  entry with the `?` marker.
+
+### `FDD_LIST` (37F9h)
+
+LIST, with T_ADDR = 19B0h. `LD IY,IY_SYSVARS` and `EI`, as `FDD_MAIN`.
+Bare `LIST`, `LIST #n`, and anything `STR_NEXT` says is not a string, go to
+`.home`: HL = `H_LIST` (1545h), `SCF`, `RET`, on **both** passes. HOME's
+LIST routine does its own syntax check (it runs under `SYNTAX-Z` like any
+class 05h routine), so handing it the statement at the syntax pass is what
+class 05h with 1545h did, and the `?` marker lands where HOME puts it.
+
+A string (`LIST "x"`, `LIST a$`, `LIST STR$ n` …): `FDD_ONE_ARG` with HL =
+`CMD_LIST`, so the syntax pass checks the string and the end of the
+statement and returns, and at run time **`tpi:list x`** goes to the Pico
+([../firmware/tspico-disk.md](../firmware/tspico-disk.md#disk_listpre-cmd));
+`AND A`, `RET`.
+
+Why not scan the expression and look at its type: a scan in syntax mode
+done at run time inserts a second hidden number after each number in the
+line (the line has them already), and a scan in run mode evaluates the
+expression a second time (the comment at 1571–1575). So the test is lexical, and `LIST (a$)` counts as a number:
+HOME's LIST then says Report C at the syntax pass.
+
+### `FDD_RESTORE` (3819h)
+
+RESTORE, with T_ADDR = 19D1h. The list was class 03h with 1E9Dh; it is
+class 05h with 25D6h, so the module does class 03h's part.
+
+- **`RESTORE`**: the syntax pass returns (`RUNTIME`); at run time
+  `HC_USE_ZERO` stacks 0, then `.home`: HL = `H_RESTORE` (1E9Dh), `SCF`,
+  `RET`, and the hook jumps to HOME's RESTORE, which takes the number off
+  the stack as class 03h left it.
+- **`RESTORE n`**: `HC_EXPT_1NUM`, then the end of the statement
+  (`NONSENSE` if not), then the syntax pass returns; at run time `.home`.
+- **`RESTORE #n`** (`.strm`): `NEXT_CHAR` past the `#`, `HC_EXPT_1NUM`,
+  the end of the statement; the syntax pass returns. At run time
+  `HC_FIND_INT2` gives BC = n, and n above 15 is `.bad`. Stream n's STRMS
+  entry is `STRMS + 6 + 2n` (streams −3 to −1 come first); 0 (not open)
+  or bit 7 of the high byte set (a SYSCON channel) is `.bad`. IX = CHANS +
+  the offset − 1 is the record; anything but `'F'` in `R_LETTER` is
+  `.bad`. Then:
+  1. `CH_FLUSH`: what was printed to the stream goes out first.
+  2. `R_INN` = `R_INP` = 0: what was read ahead is dropped, as `CH_OUT`
+     does for a TAB.
+  3. `R_OUTBUF` = 23, 1, 0, `R_OUTN` = 3, `CH_FLUSH`: **`tpi:chwr 170100`**,
+     TAB 1. The firmware's `Channels.write` takes a TAB in every mode and
+     `Channels._seek` puts the channel at byte 0, closing an open record
+     first and resetting what it had read ahead
+     ([../firmware/channels.md](../firmware/channels.md#channels_seekself-ch-n)).
+  4. `AND A`, `RET`.
+
+  `.bad` is `RST 8` with 17h: **Report O Invalid stream**. A Report from
+  the Pico comes through `CH_STATUS` as for any `tpi:chwr`.
+
+Before this, `RESTORE #4` was Report C at the syntax pass (class 03h wants a
+number or the end of the statement).
+
+### `STR_NEXT` (389Eh)
+
+Z if the expression at CH_ADD starts the way a string does; CH_ADD is not
+moved. `SKIP_SPACES`, then Z for a quote, `INKEY$` (A6h), `SCREEN$` (AAh),
+`VAL$` (AEh), `STR$` (C1h) or `CHR$` (C2h). `FN` (A8h) moves to the next
+non-space character, the function's letter. A letter (either case: `OR
+20h`) followed, after any spaces, by `$` is Z (a string variable, or `FN
+a$`); anything else is NZ (`.no`: `OR 1`). `.next` steps HL past spaces
+and returns the character.
+
+A number that starts with a letter (`LIST a`, `LIST a(2)`) is NZ: the
+letter isn't followed by `$`. A string in parentheses (`LIST (a$)`) is NZ
+too, and goes to HOME's LIST, which says Report C.
+
+### `HC_USE_ZERO` (38D2h)
+
+`PUSH IX / EXX / LD HL,H_USE_ZERO / JP CALL_HOME`: HOME's USE-ZERO (1C51h),
+which stacks 0 at run time (its `CALL SYNTAX-Z / RET Z` makes it nothing at
+the syntax pass). Bare `RESTORE` at run time, as class 03h did.
+
+### `CMD_LIST` (38DBh)
+
+`tpi:list `, NUL-ended: `LIST x`'s prefix. Here with the code that came with
+it, as `CMD_CD_MENU`.
+
+### `CMD_CD_MENU` (38E5h)
+
+`tpi:cd`, NUL-ended: what `MOVE TO ""` sends, the text of `SAVE "tpi:cd"`.
+At the end of the module with the code that came with it, so the string
+table above kept its length (`CMD_REN` took `CMD_CD_BACK`'s nine bytes).
+
 ### `FDD_END`
 
-The end of the module, 37B5h (377Fh in ROM 2.2, before `PS_READ`); `SAVEBIN` writes `FDD_BASE` to here as
+The end of the module, 38ECh (377Fh in ROM 2.2, before `PS_READ`; 37EEh
+before LIST and RESTORE joined); `SAVEBIN` writes `FDD_BASE` to here as
 `fddcmd.bin`, which `build-rom.py` splices in after checking that the
 region is all `FFh`.
 
