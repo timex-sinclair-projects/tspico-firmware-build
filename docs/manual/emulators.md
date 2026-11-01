@@ -154,7 +154,7 @@ mounted tape on the real TS-Pico. `SAVE "test"` saves into a TAP on the card, an
 it on your computer straight away.
 
 Everything else in the [User Manual](user-manual.md) works the same way: folders
-(`SAVE "tpi:cd"`), the disk commands, `f:` files, channels, the printer (its output lands
+(`MOVE TO "games"`), the disk commands, `f:` files, channels, the printer (its output lands
 in the card's `VLPRINT` and `VSCREEN` folders).
 
 ---

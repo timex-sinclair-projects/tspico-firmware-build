@@ -25,7 +25,10 @@ commands, upper or lower case doesn't matter.
 
 ## How TS-Pico commands work
 
-**Commands** are a SAVE of a name that starts with `tpi:`. Nothing is saved: the TS-Pico
+**Keywords** `CAT`, `MOVE TO`, `COPY`, `MOVE`, `ERASE`, `FORMAT` and `LIST` work on the SD
+card. Where there's a keyword, use it.
+
+**Commands** do the rest: a SAVE of a name that starts with `tpi:`. Nothing is saved: the TS-Pico
 carries out the command.<br>
 Format: <code>SAVE "tpi:<i>command</i> [<i>argument</i>]" [CODE <i>a</i>,<i>b</i>]</code>
 
@@ -38,14 +41,11 @@ Format: <code>LOAD "tpi:{<i>name</i> | <i>nn</i>}"</code>
 
 **CODE *a*,*b*** passes the command two numbers. Leaving it off is the same as `CODE 0,0`.
 
-**Keywords** `CAT`, `COPY`, `MOVE`, `ERASE`, `FORMAT` and `LIST` work on the SD card too, with
-no `tpi:`.
-
 ## Generic terms and definitions
 
 ***a*, *b*** The two numbers after `CODE`.
 
-**current folder** The folder `CAT` lists and new files go into. `SAVE "tpi:path"` shows it.
+**current folder** The folder `CAT` lists and new files go into. `CAT`'s first line shows it.
 
 ***folder*** A folder name or path: `games`, `games/arcade`, `/games`, `..`, `/`, `-`.
 
@@ -121,7 +121,7 @@ switch-on: `SAVE "tpi:verbose" CODE 1,1` turns them on, `CODE 1,0` off.
 
 **Scroll? (Y/n)** Y or ENTER for the next page, **1**-**9** for that many lines, N to stop.
 
-**Pick-from-a-list menus** (`tpi:cd`, `tpi:idir`) **0**-**9**, then **Q W E R T Y** for 10
+**Pick-from-a-list menus** (`MOVE TO ""`, `tpi:idir`) **0**-**9**, then **Q W E R T Y** for 10
 to 15, to choose; B goes back a page, N quits, any other key goes on.
 
 **Replace *name*? (Y/N)** Y replaces the file; any other key cancels with **D**.
@@ -168,16 +168,14 @@ Format: <code>ERASE "{<i>name</i> | <i>pattern</i> | <i>folder</i>/}"</code>
 Never formats the card or replaces a file.<br>
 Format: <code>FORMAT "{<i>name</i>.tap | <i>folder</i>/ | :<i>label</i>}"</code>
 
-| Command | Does |
+| Only as a command | Does |
 |---|---|
-| `SAVE "tpi:dir [`*`pattern`*`]"` | The same as `CAT` |
 | `SAVE "tpi:dir" CODE 2,0` | Every file's full name and number |
-| `SAVE "tpi:cd `*`folder`*`"` | The same as `MOVE TO` |
-| `SAVE "tpi:cd"` | Pick a folder from a menu |
-| `SAVE "tpi:path"` | Show the current folder |
-| `SAVE "tpi:md `*`folder`*`"` | Make a folder |
+| `SAVE "tpi:cd" CODE 0,1` | Pick from every folder on the card |
+| `SAVE "tpi:md `*`folder`*`" CODE 1,0` | Make a folder and go into it |
+| `SAVE "tpi:path"` | Show the current folder on its own |
 | `SAVE "tpi:rm `*`name`*`"` | Remove a file or an empty folder, asking first |
-| `SAVE "tpi:label [`*`name`*`]"` | Show or set the card's label |
+| `SAVE "tpi:label"` | Show the card's label |
 
 ## Native files: f:
 

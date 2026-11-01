@@ -95,42 +95,60 @@ lets you look after files and folders.
 
 ## 1.2 How TS-Pico commands work
 
-Almost everything the TS-Pico does is reached through a filename that starts with `tpi:`. When
-the 2068 sees `SAVE "tpi:..."`, it doesn't save anything; it sends the rest of the name to
-the TS-Pico as a command.
+Most of the time you use the 2068's own BASIC. LOAD, SAVE, VERIFY and MERGE work as they
+always have, with the SD card in place of the tape. The disk keywords that Timex printed on
+the keyboard but never made work, such as CAT, ERASE, FORMAT and MOVE, now work on the card,
+and COPY and LIST also take a file name:
 
 ```basic
-SAVE "tpi:dir"
+CAT                          : REM list the files
+MOVE TO "games"              : REM go into a folder
+COPY "frogger.tap" TO "old"  : REM copy a file into the folder old
+LIST "notes.txt"             : REM show a file
 ```
 
-That's the directory command. The rules are simple:
+**Where there's a keyword, use it.** This manual does. A keyword takes any string expression,
+such as `CAT a$` or `ERASE "old"+n$`, and a name of up to 64 characters.
 
-- **Commands use SAVE.** `SAVE "tpi:dir"`, `SAVE "tpi:cd games"`, `SAVE "tpi:info"`.
+For everything else there's a special file name: one that starts with `tpi:`. When the 2068
+sees `SAVE "tpi:..."`, it doesn't save anything; it sends the rest of the name to the TS-Pico
+as a command.
+
+```basic
+SAVE "tpi:info"
+```
+
+That shows the TS-Pico's status. The rules are simple:
+
+- **Commands use SAVE.** `SAVE "tpi:info"`, `SAVE "tpi:verbose"`, `SAVE "tpi:close"`.
 - **LOAD "tpi:..." mounts a file.** `LOAD "tpi:frogger.tap"` makes `frogger.tap` the "tape" that
-  `LOAD ""` reads from. There are no other LOAD commands.
+  `LOAD ""` reads from. There's no keyword for this one, and it's the `tpi:` name you'll use most.
+  There are no other LOAD commands.
 
   > **Coming from version 1.1?** Version 1.1 used `LOAD "tpi:dir"`, `LOAD "tpi:path"` and so on.
-  > In this version they are all `SAVE` commands. `LOAD "tpi:dir"` now tries to mount a file
-  > called `dir`, and gives Report F.
+  > In this version they are all `SAVE` commands, and most have a keyword: `CAT` for `tpi:dir`.
+  > `LOAD "tpi:dir"` now tries to mount a file called `dir`, and gives Report F.
 
-- **Upper or lower case doesn't matter** in the command word: `tpi:DIR`, `tpi:dir` and `TPI:Dir`
-  all work.
-- **Anything after a space is the argument:** `SAVE "tpi:cd games"`.
+- **Upper or lower case doesn't matter** in the command word: `tpi:INFO`, `tpi:info` and
+  `TPI:Info` all work.
+- **Anything after a space is the argument:** `SAVE "tpi:automount menu.tap"`.
 - **The whole name, `tpi:` included, must fit in 31 characters.** The 2068 accepts a longer one
   when you type the line, but stops with **C Nonsense in BASIC** when it runs. Watch for this
-  when a program builds the name from a string: `SAVE "tpi:cd "+d$` works only while `d$` is
-  at most 24 characters.
+  when a program builds the name from a string: `SAVE "tpi:automount "+m$` works only while
+  `m$` is at most 17 characters. A keyword's name can be up to 64.
 - **Some commands take numbers** after the name, written the way you'd save a block of code:
 
   ```basic
-  SAVE "tpi:dir" CODE 1,5
+  SAVE "tpi:verbose" CODE 1,1
   ```
 
   Nothing is saved. The two numbers (we'll call them *a* and *b*) are passed to the command,
   and each command says what they mean. Leaving `CODE` off is the same as `CODE 0,0`.
 
-The disk commands also have their own keywords, so you can type `CAT` instead of
-`SAVE "tpi:dir"`. We'll use both as we go.
+Every keyword has a `tpi:` command behind it: CAT is `tpi:dir`, MOVE TO is `tpi:cd`. You'll
+meet those in older programs and listings, and Chapter 10 gives both. A few of them can do
+something the keyword can't, such as showing a long file name in full; where that's so, the
+chapters say what and how, in a box headed **What only the command does**.
 
 ## 1.3 Quiet or chatty: VERBOSE
 
@@ -142,8 +160,8 @@ SAVE "tpi:verbose" CODE 1,1
 ```
 
 Now commands tell you what they did ("Changed dir to: games") and why they failed ("File does
-not exist: frogr.tap"). Turn it off again with `CODE 1,0`. Some commands, such as **DIR**, **PATH**,
-**INFO** and the listings, always show their output whatever the setting, and so do a few
+not exist: frogr.tap"). Turn it off again with `CODE 1,0`. Some commands, such as **CAT**,
+**INFO** and the other listings, always show their output whatever the setting, and so do a few
 messages, such as `No SD card`. Every other message in this manual appears only in verbose
 mode: with it off, you see only the report.
 
@@ -171,8 +189,9 @@ Appendix B has the full list.
 ## 1.5 Summary
 
 1. The TS-Pico keeps your programs on a micro SD card and makes LOAD and SAVE fast.
-2. `SAVE "tpi:command"` sends a command; `LOAD "tpi:file"` mounts a file.
-3. `CODE a,b` after a command passes it two numbers.
+2. BASIC keywords such as CAT, MOVE TO, COPY and ERASE work on the card. Use them where they exist.
+3. `SAVE "tpi:command"` sends any other command, and `CODE a,b` after it passes two numbers.
+   `LOAD "tpi:file"` mounts a file.
 4. Turn on `SAVE "tpi:verbose" CODE 1,1` to see messages while you learn.
 5. Errors come back as ordinary 2068 reports.
 
@@ -180,7 +199,7 @@ Appendix B has the full list.
 
 # Chapter 2: Installing Your TS-Pico
 
-<!-- keywords: SD card · jumpers · tpi:dir -->
+<!-- keywords: SD card · jumpers · CAT -->
 
 > **Chapter Preview.** Fit the TS-Pico, read its light and buttons, prepare an SD card, and run
 > your first command.
@@ -331,7 +350,7 @@ back between commands.
 <!-- /v3 -->
 
 **Swapping cards.** You can change cards while the 2068 is on. The next command that reads the
-card (a `CAT` or `SAVE "tpi:dir"` will do) notices it's a different card and reads it
+card (a `CAT` will do) notices it's a different card and reads it
 afresh. You stay in the same folder if the new card has it, and the mounted TAP stays mounted
 if the new card has that file too; otherwise you're back at the top, with nothing mounted.
 Append is switched off, so a SAVE can't land in a file on the other card, and any files open
@@ -360,7 +379,7 @@ You'll need the TS-Pico fitted (2.2) and an SD card in its socket (2.4).
 2. Press **ENTER**.
 
    You should see the flashing **K** cursor.
-3. Type `SAVE "tpi:dir"` and press **ENTER**.
+3. Type `CAT` and press **ENTER**.
 
    You should see a listing of your `TAP` folder, even if it's empty:
 
@@ -440,26 +459,23 @@ recovers once it loses power, which taking the card out, or switching everything
 
 # Chapter 3: Getting Around: Files, Folders and Tapes
 
-<!-- keywords: CAT · CD · MOVE TO · PATH · FFW · REW -->
+<!-- keywords: CAT · MOVE TO · COPY · MOVE · ERASE · LIST · FFW · REW -->
 
-> **Chapter Preview.** List what's on the card, move between folders, and mount a TAP file so
-> that `LOAD ""` reads from it.
+> **Chapter Preview.** List what's on the card, move between folders, copy, rename and delete
+> files, and mount a TAP file so that `LOAD ""` reads from it.
 
-## 3.1 What's on the card? DIR and CAT
-
-You've already met the directory listing:
+## 3.1 What's on the card? CAT
 
 ```basic
-SAVE "tpi:dir"
+CAT
 ```
 
-Or you can use the **CAT** command. The listing shows the folder you're in (the
-*current folder*), the card's name, how big the card is and how much space is free, then
-folders, then files. The card's name is its label, the name a PC or Mac shows for it, or `SD`
-if it has none (`SAVE "tpi:label"`, 10.3).
-If it's longer than the screen, you'll see `Scroll? (Y/n)` with a percentage showing how far
-through you are. Press **Y** or **ENTER** for more, a number **1** to **9** to scroll that many
-lines, or **N** to stop.
+The listing shows the folder you're in (the *current folder*), the card's name, how big the
+card is and how much space is free, then folders, then files. The card's name is its label,
+the name a PC or Mac shows for it, or `SD` if it has none (`FORMAT ":GAMES"` names it; see
+10.1). If the listing is longer than the screen, you'll see `Scroll? (Y/n)` with a percentage
+showing how far through you are. Press **Y** or **ENTER** for more, a number **1** to **9** to
+scroll that many lines, or **N** to stop.
 
 `CAT` can do more than list the current folder:
 
@@ -472,8 +488,7 @@ CAT ""               : REM the blocks inside the mounted TAP
 ```
 
 `*` matches any run of characters and `?` matches exactly one. They work in the last part of a
-path. `SAVE "tpi:dir games"`, `SAVE "tpi:dir *.tap"` and so on give the same listings, as long
-as the whole name fits in 31 characters.
+path.
 
 To see what's inside a file, **LIST** it: `LIST "notes.txt"` shows a text file on the screen,
 and any other file as a hex dump (10.1).
@@ -483,42 +498,29 @@ and any other file as a hex dump (10.1).
 *`CAT` on a card with four folders and eight files. `{game}.tap` and `jet~1.tap` appear as
 `?game?.tap` and `jet?1.tap`; see below.*
 
-> **By the way:** `SAVE "tpi:dir"` checks the card before it lists the folder. After you swap
-> cards you see the new card, and if you take the card out, add files from a computer and put
-> it back, the new files are there too. No restart needed.
+> **By the way:** `CAT` checks the card before it lists the folder. After you swap cards you
+> see the new card, and if you take the card out, add files from a computer and put it back,
+> the new files are there too. No restart needed.
+
+**Long names.** A name too long for the line is shortened in the middle with `>`. CAT can't
+show it in full, but the command behind it can: `SAVE "tpi:dir" CODE 2,0` lists every file's
+full name with its number, and `SAVE "tpi:dir" CODE 1,5` shows file 5's.
 
 **Names with characters the 2068 can't show.** A file named on a computer can contain characters
 the 2068 doesn't have on its keyboard or prints as something else: `|` and `~` come out as the
 keywords STICK and FREE, `{` and `}` can come out as ON ERR and SOUND, and accented letters
 don't exist at all. The listing shows each of them as `?`, for example `?game?.tap` for
-`{game}.tap`. You can type the name just as it's shown; see the next section.
+`{game}.tap`. You can type the name just as it's shown; see 3.4.
 
-## 3.2 Folders: CD, MOVE TO and PATH
+## 3.2 Folders: MOVE TO
 
 To go into a folder:
-
-```basic
-SAVE "tpi:cd games"
-```
-
-or:
 
 ```basic
 MOVE TO "games"
 ```
 
-To see where you are:
-
-```basic
-SAVE "tpi:path"
-```
-
-```
-Current working dir is:
-/TAP/GAMES
-```
-
-A few special names help you get around:
+The first line of `CAT` shows where you are now. A few special names help you get around:
 
 | Name | Takes you to |
 |---|---|
@@ -528,27 +530,58 @@ A few special names help you get around:
 | `games/arcade` | A folder inside a folder |
 | `/games` | A path from the root |
 
-`MOVE TO "-"` is the same as `SAVE "tpi:cd -"`: back to where you were.
+So `MOVE TO ".."` goes up a level and `MOVE TO "-"` takes you back to where you were.
 
-**Picking a folder from a list.** Type `SAVE "tpi:cd"` (or `MOVE TO ""`) on its own and the
-TS-Pico shows the folders here as a numbered menu. Press a digit **0**-**9**, or
-**Q W E R T Y** for items 10 to 15, to go into one; **B** goes back a page, any other key goes forward, and **N**
-quits. `SAVE "tpi:cd" CODE 0,1` lists every folder on the card instead.
+**Picking a folder from a list.** `MOVE TO ""` shows the folders here as a numbered menu. Press
+a digit **0**-**9**, or **Q W E R T Y** for items 10 to 15, to go into one; **B** goes back a
+page, any other key goes forward, and **N** quits.
 
-![The tpi:cd menu: each folder with a digit to press, and the prompt at the bottom](images/cd-menu.png)
+![The folder menu: each folder with a digit to press, and the prompt at the bottom](images/cd-menu.png)
 
-*The `SAVE "tpi:cd"` menu, waiting for a key.*
+*The `MOVE TO ""` menu, waiting for a key.*
 
 **Making a folder:**
 
 ```basic
-SAVE "tpi:md tools"
-FORMAT "tools/"      : REM the same (note the slash)
+FORMAT "tools/"      : REM note the slash
 ```
 
-`SAVE "tpi:md tools" CODE 1,0` makes the folder and goes into it.
+> **What only the commands do.** `MOVE TO` and FORMAT cover everyday use. Their `tpi:`
+> commands (10.3) go a step further:
+>
+> - `SAVE "tpi:cd" CODE 0,1` picks from **every** folder on the card, not just the ones here;
+> - `SAVE "tpi:cd games" CODE 1,0` goes into `games` and lists it, and `CODE 1,1` goes in and
+>   lets you pick a file to mount;
+> - `SAVE "tpi:md tools" CODE 1,0` makes the folder and goes into it;
+> - `SAVE "tpi:path"` shows the current folder on its own, without a listing.
 
-## 3.3 Mounting a TAP file
+## 3.3 Copying, renaming and deleting: COPY, MOVE and ERASE
+
+```basic
+COPY "frogger.tap" TO "backup.tap"   : REM a second copy
+COPY "frogger.tap" TO "games"        : REM a copy in the games folder
+COPY "*.tap" TO "games"              : REM every TAP file here, into games
+MOVE "old.tap" TO "new.tap"          : REM rename a file
+MOVE "frogger.tap" TO "games"        : REM move it into games
+ERASE "old.tap"                      : REM delete it
+ERASE "*.bak"                        : REM delete matching files, asking about each
+```
+
+- **COPY** leaves the original where it is; **MOVE** doesn't. MOVE renames folders too.
+- Neither ever overwrites: if the new name is taken, you get **F Invalid file name**.
+- **ERASE** deletes a single file **without asking**. With a pattern it asks `Erase NAME (Y/N)?`
+  for each file.
+- ERASE removes a folder only if it's empty, and only with a slash: `ERASE "tools/"`.
+- The mounted file can't be renamed, moved or erased: you'll get **Q Parameter error**. Eject
+  it first (3.7).
+
+Section 10.1 has every message these give.
+
+> **What only the command does.** To delete a file but be asked first, or to pick it by its
+> number in the listing, use `SAVE "tpi:rm old.tap"` or `SAVE "tpi:rm 3"`: it asks
+> `Remove "old.tap" (y/N)?` before it does anything.
+
+## 3.4 Mounting a TAP file
 
 A TAP file is a recording of a cassette: a series of blocks, as they'd appear on tape.
 To use one, you **mount** it. Think of it as putting the cassette in the player:
@@ -557,9 +590,10 @@ To use one, you **mount** it. Think of it as putting the cassette in the player:
 LOAD "tpi:frogger.tap"
 ```
 
-Now `LOAD ""` loads from that file, one program after another, as a tape would. The
-TS-Pico copies the TAP into its own memory while it mounts it. The LED flickers for a moment,
-and big files take a second or two.
+This is the one `tpi:` name everyone needs: there's no keyword for mounting. Now `LOAD ""`
+loads from that file, one program after another, as a tape would. The TS-Pico copies the TAP
+into its own memory while it mounts it. The LED flickers for a moment, and big files take a
+second or two.
 
 You can also mount a file by the **index number** shown in the listing:
 
@@ -573,7 +607,7 @@ command: it's an ordinary LOAD of a program called `tpi:3`. Type `LOAD "tpi:03"`
 
 **Remember:**
 
-- Mounting only looks in the **current folder**. Use `MOVE TO` or `tpi:cd` first.
+- Mounting only looks in the **current folder**. Use `MOVE TO` first.
 - Only TAP, DCK, ROM and BIN files can be mounted. DCK, ROM and BIN files are cartridges and
   ROM images; they're covered in Chapter 8. TZX files are listed with an index number, but the
   TS-Pico can't mount them: you'll get **Q Parameter error**.
@@ -588,15 +622,14 @@ command: it's an ordinary LOAD of a program called `tpi:3`. Type `LOAD "tpi:03"`
   ![LOAD "tpi:*.tap" with several matches: the count, and Report F](images/load-several-match.png)
 
 **Picking a file from a list.** `SAVE "tpi:idir"` shows the indexed files as a menu, using the
-same keys as `tpi:cd`, and mounts the one you pick.
+same keys as the folder menu, and mounts the one you pick.
 
-## 3.4 Looking inside a TAP
+## 3.5 Looking inside a TAP
 
 To see what's in the mounted TAP:
 
 ```basic
-SAVE "tpi:tapdir"
-CAT ""               : REM the same
+CAT ""
 ```
 
 ![CAT "": the file and tape pointer on a blue bar; headers in blue; the next block on a yellow row](images/tapdir.png)
@@ -605,13 +638,16 @@ CAT ""               : REM the same
 
 Each program on a tape is two blocks: a short **header** (`Y` in the Hdr? column) carrying its
 name, and the data itself, described by its type. The `>` marks the **tape pointer**, the block
-the next `LOAD` will start from.
-`SAVE "tpi:tapdir" CODE 1,0` shows one line per program or file instead of one per block.
-`CAT "other.tap"` shows the contents of any TAP, mounted or not.
+the next `LOAD` will start from. `CAT "other.tap"` shows the contents of any TAP, mounted or not.
 
-## 3.5 Winding the tape: FFW and REW
+> **What only the command does.** `CAT ""` shows every block. For a long tape,
+> `SAVE "tpi:tapdir" CODE 1,0` shows one line per program or file instead, and
+> `SAVE "tpi:tapdir" CODE 0,3` just the three blocks either side of the pointer.
 
-Like a cassette, the tape winds forward and back:
+## 3.6 Winding the tape: FFW and REW
+
+Like a cassette, the tape winds forward and back. There are no keywords for this; the
+commands are:
 
 ```basic
 SAVE "tpi:ffw"             : REM forward one block
@@ -620,20 +656,22 @@ SAVE "tpi:ffw" CODE 2,1    : REM forward to the next program or file
 SAVE "tpi:rew" CODE 3,2    : REM back two files, then show the tape
 ```
 
-The tape stops at either end rather than wrapping round. With verbose on you'll see
+You often don't need them: `LOAD "name"` finds a program by its name wherever it is on the
+tape (4.1). The tape stops at either end rather than wrapping round. With verbose on you'll see
 `Moved ahead to block # 4`, `Can't FWD. Already at end.`, `Can't REW. Already at start.`, or
 `Can't FWD. No later file.` when you skip by files from the last program. With verbose off
 each of these is **0 OK**.
 
-## 3.6 Ejecting the tape: CLOSE
+## 3.7 Ejecting the tape
 
 ```basic
 SAVE "tpi:close"
 ```
 
-This unmounts the file. It's always safe, even with nothing mounted.
+This unmounts the file. It's always safe, even with nothing mounted. There's no keyword for
+it: `CLOSE #` closes streams (Chapter 6), not the tape.
 
-## 3.7 LOAD "" with nothing mounted
+## 3.8 LOAD "" with nothing mounted
 
 If nothing is mounted and you type `LOAD ""`, the TS-Pico loads a little menu program instead:
 
@@ -666,7 +704,7 @@ is, so it doesn't matter which folder you're in later. At switch-on you're still
 folder. If the file has gone from the card, you get the built-in menu. `SAVE "tpi:automount"`
 shows the file, and `SAVE "tpi:automount off"` goes back to the built-in menu.
 
-## 3.8 Try it: from the listing to a running program
+## 3.9 Try it: from the listing to a running program
 
 You'll need a TAP file on the card. These steps use `frogger.tap`; use the name of one of yours.
 
@@ -685,16 +723,17 @@ You'll need a TAP file on the card. These steps use `frogger.tap`; use the name 
    itself.
 5. Type `SAVE "tpi:close"` and press **ENTER**.
 
-   You should see **0 OK**. With nothing mounted, the next `LOAD ""` loads the menu (3.7).
+   You should see **0 OK**. With nothing mounted, the next `LOAD ""` loads the menu (3.8).
 
-## 3.9 Summary
+## 3.10 Summary
 
-1. `CAT` (or `SAVE "tpi:dir"`) lists files; patterns such as `"*.tap"` narrow it down.
-2. `MOVE TO "folder"` (or `SAVE "tpi:cd folder"`) changes folder; `..`, `/` and `-` help you move.
-3. `LOAD "tpi:name.tap"` mounts a file, by name or by index number.
-4. `CAT ""` (or `SAVE "tpi:tapdir"`) shows what's inside the mounted TAP.
-5. `SAVE "tpi:ffw"` and `SAVE "tpi:rew"` move the tape pointer; `SAVE "tpi:close"` ejects.
-6. `SAVE "tpi:automount name.tap"` makes `LOAD ""` load your own program at switch-on.
+1. `CAT` lists files; patterns such as `"*.tap"` narrow it down. `LIST "name"` shows a file.
+2. `MOVE TO "folder"` changes folder; `..`, `/` and `-` help you move; `MOVE TO ""` is a menu.
+3. `COPY`, `MOVE` and `ERASE` copy, rename and delete files; `FORMAT "dir/"` makes a folder.
+4. `LOAD "tpi:name.tap"` mounts a file, by name or by index number. There's no keyword for it.
+5. `CAT ""` shows what's inside the mounted TAP.
+6. `SAVE "tpi:ffw"` and `SAVE "tpi:rew"` move the tape pointer; `SAVE "tpi:close"` ejects.
+7. `SAVE "tpi:automount name.tap"` makes `LOAD ""` load your own program at switch-on.
 
 ---
 
@@ -759,29 +798,30 @@ repeats**.
 ## 4.3 Adding to a TAP: APPEND and FORMAT
 
 Sometimes you want several programs in one TAP, like a real cassette. That's what **append**
-mode is for:
+mode is for. The quickest way in is to start a fresh, empty TAP:
 
 ```basic
-LOAD "tpi:collection.tap"
-SAVE "tpi:append" CODE 1,1     : REM or SAVE "tpi:append on"
+FORMAT "collection.tap"        : REM a new TAP, mounted, with append on
 SAVE "one"
 SAVE "two"
 SAVE "tpi:append off"
 ```
 
 With append on, every SAVE is added to the end of the mounted TAP; the name you give is kept
-in the tape header but doesn't name a file. `SAVE "tpi:append"` on its own tells you whether
-it's on. Mounting any file turns it off.
+in the tape header but doesn't name a file. FORMAT never touches a file that's already there:
+it answers **F**, and shows `Already exists:` when VERBOSE is on.
 
-To start a fresh, empty TAP and switch append on in one go:
+To add to a TAP you already have, mount it and turn append on yourself. There's no keyword
+for append:
 
 ```basic
-FORMAT "collection.tap"           : REM refuses if the file exists
-SAVE "tpi:format collection"      : REM the same (.tap is added)
+LOAD "tpi:collection.tap"
+SAVE "tpi:append on"           : REM or CODE 1,1
+SAVE "three"
+SAVE "tpi:append off"
 ```
 
-> **Note:** FORMAT never touches a file that's already there. It answers **F**, and shows
-> `Already exists:` when VERBOSE is on.
+`SAVE "tpi:append"` on its own tells you whether it's on. Mounting any file turns it off.
 
 ## 4.4 Using a real cassette recorder
 
@@ -792,8 +832,8 @@ SAVE "tpi:tape"      : REM LOAD and SAVE use the cassette recorder
 SAVE "tpi:sdcard"    : REM back to the TS-Pico (the setting at switch-on)
 ```
 
-`tpi:` commands keep working in tape mode; only plain LOAD, SAVE, VERIFY and MERGE go to
-tape. Printing stays where it was (Chapter 7). You can check the setting with `PRINT PEEK 24027`; see Appendix D.
+There are no keywords for these. `tpi:` commands keep working in tape mode; only plain LOAD,
+SAVE, VERIFY and MERGE go to tape. Printing stays where it was (Chapter 7). You can check the setting with `PRINT PEEK 24027`; see Appendix D.
 
 ## 4.5 A program that keeps its pictures on a tape
 
@@ -1332,7 +1372,7 @@ the file as spaces.
 ## 7.1 Switching the printer
 
 When you switch on, printing goes to a real TS 2040 printer, if you have one. To send it to
-the TS-Pico instead:
+the TS-Pico instead (there's no keyword for this switch):
 
 ```basic
 SAVE "tpi:picopt"
@@ -2000,6 +2040,9 @@ LOAD "tpi:dirinfo.tap"    : REM mount the folder listing as a tape (see below)
 
 ## 10.3 The `tpi:` commands
 
+Where a command has a keyword in 10.1, the entry says so: use the keyword, and the command
+only for what the keyword can't do. The rest have no keyword.
+
 ### append
 
 ```basic
@@ -2021,7 +2064,7 @@ SAVE "tpi:automount off"          : REM back to the built-in menu
 
 The file is found from the current folder (`.tap` is added if you leave it out) and kept with
 its whole path; the current folder at switch-on is still the top one. Nothing is mounted now.
-See 3.7. **F**: `Not found:`. **J**: no SD card. The name can be up to 17 characters (1.2).
+See 3.8. **F**: `Not found:`. **J**: no SD card. The name can be up to 17 characters (1.2).
 
 ### autolf, noautolf, autopg, noautopg, bmp, clprint, opprint, prnsz
 
@@ -2053,6 +2096,9 @@ boot a RAM slot you've loaded since switching on.
 
 ### cd: change folder
 
+**Keyword:** `MOVE TO "games"`, `MOVE TO "-"`, and `MOVE TO ""` for the menu. Only the command
+picks from every folder on the card (`CODE 0,1`) or does more once it gets there (`CODE 1,n`, `CODE 2,0`).
+
 ```basic
 SAVE "tpi:cd games"          : REM also .., /, -, a/b, /a/b
 SAVE "tpi:cd"                : REM pick from a menu of folders
@@ -2080,6 +2126,9 @@ separated by a space), `SAVE "tpi:erase x"`, `SAVE "tpi:format x.tap"` and
 or for `tpi:copy` `Copy needs a source and a destination`) where the keyword gives **F**.
 
 ### dir: list the current folder
+
+**Keyword:** `CAT`, `CAT "games"`, `CAT "*.tap"`. Only the command shows long names in full
+(`CODE 1,n`, `CODE 2,n`).
 
 ```basic
 SAVE "tpi:dir"               : REM the listing
@@ -2172,6 +2221,9 @@ With no SD card, the strip and the card's `none` turn red.
 
 ### label: the card's name
 
+**Keyword:** `FORMAT ":GAMES"` and `FORMAT ":"`. Only the command shows the label on its own:
+CAT shows it too, on the card's line.
+
 ```basic
 SAVE "tpi:label"             : REM show it: Label: GAMES, or No label
 SAVE "tpi:label GAMES"       : REM set it
@@ -2218,6 +2270,8 @@ numbers log more. The setting lasts until the TS-Pico is switched off.
 
 ### md: make a folder
 
+**Keyword:** `FORMAT "name/"`. Only the command goes into the new folder too (`CODE 1,0`).
+
 `SAVE "tpi:md name"`, or `CODE 1,0` to go into it too. *(verbose)* `Created dir: name`.
 
 - **8**: `MD: directory "x" exists`. 
@@ -2250,6 +2304,9 @@ mode change turns it off (F.6). **A**: any other word.
 
 ### path
 
+**Keyword:** none, but `CAT` shows the current folder in its first line. Only the command
+shows the mounted file's path (`CODE 1,0`).
+
 ```basic
 SAVE "tpi:path"              : REM the current folder
 SAVE "tpi:path" CODE 1,0     : REM the mounted file
@@ -2263,6 +2320,8 @@ Chapter 7.
 
 ### ren: rename or move a file
 
+**Keyword:** `MOVE "old.tap" TO "new.tap"`, which does the same.
+
 ```basic
 SAVE "tpi:ren old.tap new.tap"    : REM rename
 SAVE "tpi:ren game.tap archive"   : REM move into a folder, keeping the name
@@ -2275,6 +2334,9 @@ The command form of MOVE "a" TO "b". This works for folders too.
   `Can't rename the current directory`, `Can't move a directory into itself`.
 
 ### rm: remove a file or empty folder
+
+**Keyword:** `ERASE "old.tap"`, which doesn't ask for one file and takes `"name/"` for a
+folder. Only the command asks first, and takes an index number.
 
 ```basic
 SAVE "tpi:rm old.tap"        : REM asks: Remove "old.tap" (y/N)?
@@ -2307,6 +2369,9 @@ turn. At most 23 characters of text (the whole name fits in 31): say longer text
 <!-- /v3 -->
 
 ### tapdir: look inside the mounted TAP
+
+**Keyword:** `CAT ""`, and `CAT "other.tap"` for a TAP that isn't mounted. Only the command
+shows part of the tape (`CODE 0,n`) or one line per file (`CODE 1,0`).
 
 ```basic
 SAVE "tpi:tapdir"            : REM every block
@@ -2424,7 +2489,7 @@ with **L BREAK into program**, or the next TS-Pico command gives **D** again.
 
 ### LOAD "tpi:dir" gives F
 
-**Fix.** Use `SAVE "tpi:dir"`, or `CAT`.
+**Fix.** Use `CAT`, or `SAVE "tpi:dir"`.
 **Likely cause.** `LOAD "tpi:dir"` is version 1.1's command; it now tries to mount a file
 called `dir`.
 
@@ -2745,7 +2810,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Change folder | `MOVE TO "games"` | `SAVE "tpi:cd games"` |
 | Back to the previous folder | `MOVE TO "-"` | `SAVE "tpi:cd -"` |
 | Pick a folder from a menu | `MOVE TO ""` | `SAVE "tpi:cd"` |
-| Where am I? |  | `SAVE "tpi:path"` |
+| Where am I? | `CAT` (its first line) | `SAVE "tpi:path"` |
 | Make a folder | `FORMAT "dir/"` | `SAVE "tpi:md dir"` |
 | Copy a file | `COPY "a" TO "b"` | `SAVE "tpi:copy a b"` |
 | Rename or move a file | `MOVE "a" TO "b"` | `SAVE "tpi:ren a b"` |
@@ -2829,7 +2894,7 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
 | `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3.1"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
-| `AUTOMOUNT` | The TAP mounted at switch-on, so `LOAD ""` loads it (3.7); `""` is none | `""` |
+| `AUTOMOUNT` | The TAP mounted at switch-on, so `LOAD ""` loads it (3.8); `""` is none | `""` |
 <!-- v2 -->
 | `LED_BRIGHTNESS` | Not used on the TS-Pico 2.x | `5` |
 <!-- /v2 -->
@@ -2922,7 +2987,7 @@ for this, MODEMTST:
 
 ```basic
 SAVE "tpi:modem hayes"       : REM talk to the modem directly
-SAVE "tpi:cd test"
+MOVE TO "test"
 LOAD "tpi:modemtst.tap"
 LOAD ""
 RUN
