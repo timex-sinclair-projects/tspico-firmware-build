@@ -101,11 +101,14 @@ the keyboard but never made work, such as CAT, ERASE, FORMAT and MOVE, now work 
 and COPY and LIST also take a file name:
 
 ```basic
-CAT                          : REM list the files
-MOVE TO "games"              : REM go into a folder
-COPY "frogger.tap" TO "old"  : REM copy a file into the folder old
-LIST "notes.txt"             : REM show a file
+CAT
+MOVE TO "games"
+COPY "frogger.tap" TO "old"
+LIST "notes.txt"
 ```
+
+Those list the files, go into the folder `games`, copy `frogger.tap` into the folder `old`, and
+show a text file.
 
 **Where there's a keyword, use it.** This manual does. A keyword takes any string expression,
 such as `CAT a$` or `ERASE "old"+n$`, and a name of up to 64 characters.
@@ -540,8 +543,10 @@ page, any other key goes forward, and **N** quits.
 **Making a folder:**
 
 ```basic
-FORMAT "tools/"      : REM note the slash
+FORMAT "tools/"
 ```
+
+The slash at the end is what makes it a folder.
 
 > **What only the commands do.** `MOVE TO` and FORMAT cover everyday use. Their `tpi:`
 > commands (10.3) go a step further:
@@ -552,17 +557,26 @@ FORMAT "tools/"      : REM note the slash
 > - `SAVE "tpi:md tools" CODE 1,0` makes the folder and goes into it;
 > - `SAVE "tpi:path"` shows the current folder on its own, without a listing.
 
-## 3.3 Copying, renaming and deleting: COPY, MOVE and ERASE
+## 3.3 Copying, renaming and deleting
 
 ```basic
-COPY "frogger.tap" TO "backup.tap"   : REM a second copy
-COPY "frogger.tap" TO "games"        : REM a copy in the games folder
-COPY "*.tap" TO "games"              : REM every TAP file here, into games
-MOVE "old.tap" TO "new.tap"          : REM rename a file
-MOVE "frogger.tap" TO "games"        : REM move it into games
-ERASE "old.tap"                      : REM delete it
-ERASE "*.bak"                        : REM delete matching files, asking about each
+COPY "game.tap" TO "copy.tap"
+COPY "game.tap" TO "games"
+COPY "*.tap" TO "games"
 ```
+
+The first makes a second copy, `copy.tap`. The second puts a copy in the folder `games`, and
+the third copies every TAP file here into `games`.
+
+```basic
+MOVE "old.tap" TO "new.tap"
+MOVE "game.tap" TO "games"
+ERASE "old.tap"
+ERASE "*.bak"
+```
+
+MOVE renames a file, or moves it into a folder. ERASE deletes a file, or every file that
+matches a pattern.
 
 - **COPY** leaves the original where it is; **MOVE** doesn't. MOVE renames folders too.
 - Neither ever overwrites: if the new name is taken, you get **F Invalid file name**.
@@ -798,11 +812,13 @@ Sometimes you want several programs in one TAP, like a real cassette. That's wha
 mode is for. The quickest way in is to start a fresh, empty TAP:
 
 ```basic
-FORMAT "collection.tap"        : REM a new TAP, mounted, with append on
+FORMAT "collection.tap"
 SAVE "one"
 SAVE "two"
 SAVE "tpi:append off"
 ```
+
+FORMAT makes a new, empty TAP, mounts it and turns append on.
 
 With append on, every SAVE is added to the end of the mounted TAP; the name you give is kept
 in the tape header but doesn't name a file. FORMAT never touches a file that's already there:
@@ -813,12 +829,13 @@ for append:
 
 ```basic
 LOAD "tpi:collection.tap"
-SAVE "tpi:append on"           : REM or CODE 1,1
+SAVE "tpi:append on"
 SAVE "three"
 SAVE "tpi:append off"
 ```
 
-`SAVE "tpi:append"` on its own tells you whether it's on. Mounting any file turns it off.
+`SAVE "tpi:append" CODE 1,1` turns it on too, and `SAVE "tpi:append"` on its own tells you
+whether it's on. Mounting any file turns it off.
 
 ## 4.4 Using a real cassette recorder
 
