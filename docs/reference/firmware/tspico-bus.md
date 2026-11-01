@@ -601,7 +601,7 @@ Callers: `TS2068_IO` at boot (6688), `SD_CALL`, `SD_PROBE`,
 manage the card themselves: `MOUNT_FILE` (1840), `CATALOG` (2637),
 `ChangeDir` (4192), `GETHELP` (4450), `MDIR` (5014), `PRINT_FLUSH` (5974),
 `COPY_BMP` (6006), `PRN_OPEN` (6080), `TS2068_IO`'s SAVE and LOAD branches
-(7048–7145) and `ZX_TPI` (7436).
+(7048–7149) and `ZX_TPI` (7440).
 
 Beware:
 
@@ -786,7 +786,7 @@ Clears the flag first, then `ACTIVATE_SD()`, `os.chdir(TSP.cur_path)`,
 `TSP.sd_listing_ok = DIR_FILES()`; an `OSError` (no card) is ignored —
 the command's own card check answers. The `finally` gives the bus back,
 Y BUSY. Callers, both where the Z80 is waiting for READY: the start of
-`PROCESS_CMD` (6345) and `ZX_TPI` before it matches a name (7434, 7453).
+`PROCESS_CMD` (6345) and `ZX_TPI` before it matches a name (7438, 7457).
 
 ### `SD_PROBE(tries=None)`
 
@@ -817,7 +817,7 @@ that second. Callers: `MOUNT_FILE` when a mount fails at level 2 or above
 (1954), `BLKRCV` when the block asked for runs past the file (4161). The
 single-port firmware also called it in a loop when the boot mount failed
 and after a failed transaction; both are gone (`ACTIVATE_SD` raises
-instead, and the comment at 7240–7247 explains why the dispatcher's
+instead, and the comment at 7244–7251 explains why the dispatcher's
 recovery no longer blinks: the second it blocked was time the Z80 could
 already be sending its next pre-header).
 

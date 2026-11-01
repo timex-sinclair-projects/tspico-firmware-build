@@ -7109,12 +7109,16 @@ def TS2068_IO():                                                         # Main 
                                             LOG("Re-mount failed for: %s" % TSP.f_name, 2)
                                         # ACTIVATE_MQ()
                         
-                                elif TSP.f_name == pf_name:
-                                    # This overwrote tap file that was mounted. The original
-                                    # copy is still mounted, and the new tap on SD will only 
-                                    # contain the one new saved file. You could turn on append,
-                                    # and this will get re-mounted with the original content lost.
-                                    LOG("Append is off. Overwrote mounted tap on SD but no re-mount.", 0)
+                                elif TSP.f_name.lower() == pf_name.lower():
+                                    # This replaced the mounted TAP on the card (FAT names
+                                    # ignore case, so "mixed" replaces Mixed.tap). The mount
+                                    # is a copy in /TMP: mount the new file, or tapdir, LOAD ""
+                                    # and ffw/rew go on serving the old content (#362). As a
+                                    # "remount", a failure unmounts rather than leave it stale.
+                                    if MOUNT_FILE(pf_name, True):
+                                        LOG("Append is off. Re-mounted the replaced file: %s" % pf_name, 0)
+                                    else:
+                                        LOG("Re-mount of replaced file failed: %s" % pf_name, 2)
 
                                 else:
                                     # Saved to a new file while one is mounted with append off.
