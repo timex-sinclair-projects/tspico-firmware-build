@@ -22,32 +22,32 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6556), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5173, `reboot=True`), `MEMDOCK` (5307), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7549) |
-| `restart_mq()` | `ZX48_IO` (7550, 7655, 7697) |
-| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
-| `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
-| `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6524) |
-| `led_brightness()` | `TS2068_IO` (6528), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6681, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7352) |
+| `start_memory()` | `TS2068_IO` (6602), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5219, `reboot=True`), `MEMDOCK` (5353), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (759), `ZX48_IO` (7595) |
+| `restart_mq()` | `ZX48_IO` (7596, 7701, 7743) |
+| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1104, 1107, 1125) |
+| `sd_card_ready()` | `ACTIVATE_SD` (1097), before anything else |
+| `sd_release_bus()` | `DEACTIVATE_SD` (712) |
+| `make_led()` | `TS2068_IO` (6570) |
+| `led_brightness()` | `TS2068_IO` (6574), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6727, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7398) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5084, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5141, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5130, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5187, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `HAS_MODEM` | `TS2068_IO` (6559, at boot; 7279, the idle loop), `MODEM` (5331, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
-| `modem_start()` | `TS2068_IO` (6560), at boot with `config.ini`'s modem keys; `MODEM` (5346), a new mode |
-| `modem_service()` | `TS2068_IO`'s idle loop (7280), every pass with nothing arrived |
-| `HAS_SPEECH` | `TS2068_IO` (6564, at boot), `SAY` (5370, `GREET` 5401, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
-| `speech_start()` | `TS2068_IO` (6566), at boot with `config.ini`'s speech keys |
-| `say()` | `SAY` (5375, `tpi:say`), `GREET` (5414, `tpi:greet`), `TS2068_IO` (6575, the greeting) |
-| `modem_status()`, `MODEM_MODES` | `MODEM` (5336, 5340) |
-| `LABEL` | `GETINFO` (4634, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
-| `HAS_JOYSTICK` | `TS2068_IO` (6562, at boot; 7281, the idle loop) |
-| `joystick()` | `TS2068_IO` (6563), at boot with `config.ini`'s `KEMPSTON` |
-| `joystick_service()` | `TS2068_IO`'s idle loop (7282), every pass with nothing arrived |
+| `HAS_MODEM` | `TS2068_IO` (6605, at boot; 7325, the idle loop), `MODEM` (5377, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `modem_start()` | `TS2068_IO` (6606), at boot with `config.ini`'s modem keys; `MODEM` (5392), a new mode |
+| `modem_service()` | `TS2068_IO`'s idle loop (7326), every pass with nothing arrived |
+| `HAS_SPEECH` | `TS2068_IO` (6610, at boot), `SAY` (5416, `GREET` 5447, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
+| `speech_start()` | `TS2068_IO` (6612), at boot with `config.ini`'s speech keys |
+| `say()` | `SAY` (5421, `tpi:say`), `GREET` (5460, `tpi:greet`), `TS2068_IO` (6621, the greeting) |
+| `modem_status()`, `MODEM_MODES` | `MODEM` (5382, 5386) |
+| `LABEL` | `GETINFO` (4680, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
+| `HAS_JOYSTICK` | `TS2068_IO` (6608, at boot; 7327, the idle loop) |
+| `joystick()` | `TS2068_IO` (6609), at boot with `config.ini`'s `KEMPSTON` |
+| `joystick_service()` | `TS2068_IO`'s idle loop (7328), every pass with nothing arrived |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
 PIO programs. So it detects the v3 card itself (step 4.2;

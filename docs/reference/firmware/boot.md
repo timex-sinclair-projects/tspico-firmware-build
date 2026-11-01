@@ -237,7 +237,7 @@ a UF2 ([DEVELOPER_GUIDE.md §5–6](../../DEVELOPER_GUIDE.md#6-the-dev-override-
   Inside it, `from TS.tspico_io import …` and the other `TS` imports still
   resolve to the frozen modules.
 - **`/dev_extcmd.py`** replaces the frozen `TS.extcmd`: `TS2068_IO` tries
-  `from dev_extcmd import EXT_SA_FUNCT` first (6665;
+  `from dev_extcmd import EXT_SA_FUNCT` first (6711;
   [extcmd.md](extcmd.md)).
 - To go back: delete the file and restart.
 
@@ -592,7 +592,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `1338F0D5` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `614CE7E4` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |
@@ -698,7 +698,7 @@ power cycle before the driver learned to recover it
 | `/assets/romupdate.tap`, `/assets/dckupdate.tap` | the slot updaters | `build-basic.sh` → the same |
 | `/assets/romupd3.tap`, `/assets/dckupd3.tap` | the v3 card's slot updaters (`basic/assets/romupd3.bas`, `dckupd3.bas`) | `build-basic.sh` → the same | `MOUNT_FILE` for a `.ROM`/`.BIN`/`.DCK` |
 | `/activity.log` | the log | `SAVE_LOG`; `main.py` on a fatal error | `tpi:log`; trimmed to 64 KB at boot |
-| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6585–6586) | `TS2068_IO` | below |
+| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6631–6632) | `TS2068_IO` | below |
 | `/TMP/temp.tap` | the mounted TAP, copied from the card (or the updater tape) | `MOUNT_FILE` | `LOAD_TS`, `FWD`/`REW` via the table; removed by `FORGET_MOUNT` |
 | `/TMP/temp.bin` | the mounted ROM or DCK image (a DCK rebuilt to a full 64K by `DCK_IMAGE`) | `MOUNT_FILE`, `DCK_IMAGE` | `BLKRCV`; removed by `FORGET_MOUNT` |
 | `/TMP/native.tap` | the one-shot tape for `LOAD "f:…"` | `NATIVE_LOAD_PREP` | `LOAD_TS` |

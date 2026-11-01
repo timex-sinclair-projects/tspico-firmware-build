@@ -239,7 +239,7 @@ dirtied by an earlier `os.remove` when the next call, even
 its SD work.
 
 The same can happen mid-session. Once the card stops answering, every
-command that needs it (CD, MD, RM, NEWTAP, HELP, LOAD "tpi:file", the
+command that needs it (CD, MD, RM, FORMAT, HELP, LOAD "tpi:file", the
 re-mount after a SAVE) spends its five `ACTIVATE_SD` attempts and then
 fails with Report J; `activity.log` shows `Mounting SD Card failed in
 ACTIVATE_SD after 5 attempts!` and the handler exception. Everything else

@@ -135,7 +135,7 @@ root:
 | Seek | `tpi:ffw`, `tpi:rew` | unchanged |
 | SAVE | `SAVE "name"` | Pico buffers, then pushes to host |
 | Append | `tpi:append` | needs a host-side append opcode |
-| New TAP | `tpi:newtap` | host creates the file |
+| New TAP | `tpi:format` | host creates the file |
 | Make dir | `tpi:md` | host creates the folder |
 | Delete | `tpi:rm` | host deletes — **confirm-in-host by default** |
 | Help text | `tpi:help <topic>` | served from the host, no SD needed |
@@ -482,7 +482,7 @@ version bump and the estimates below roughly double.
 4. Liveness probe + `tpi:reconnect` (§4.4).
 5. Migrate commands one at a time, hardware-testing each:
    `dir` → `cd` → `path` → mount-by-name → mount-by-index → `LOAD` →
-   `SAVE` → `append` → `md`/`rm`/`newtap` → `help` → `.dck`/`.rom`.
+   `SAVE` → `append` → `md`/`rm`/`format` → `help` → `.dck`/`.rom`.
 6. `tpi:copy` — single file, host → SD (§4.5).
 7. Host app v0: Python daemon, framed serial client, folder picker,
    headless + minimal UI.

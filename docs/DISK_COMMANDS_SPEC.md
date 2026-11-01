@@ -60,6 +60,20 @@ rule is that each form is parsed by our own routine in both passes:
 - **Syntax pass:** consume the arguments and accept the line.
 - **Run pass:** evaluate the arguments and send the command.
 
+**`COPY` joins them** (#341). Its stock entry at `$19D7` is class `$00` (no operands,
+routine `$0A02`, the printer COPY), so `COPY "a"` was a syntax error. The ROM makes it class
+`$05` with routine `$25E0`, which enters the same `$25D6` hook with COPY's token, so the
+module parses `COPY "a" TO "b"` itself. A bare `COPY` is handed back to HOME's COPY at
+`$0A02` and prints the screen as before.
+
+**`LIST` and `RESTORE` join them too** (#341), for `LIST "name"` and `RESTORE #n`.
+LIST's parameter list (HOME `$19AF`) stays class `$05`, with its routine moved from `$1545`
+to the `$25D6` hook. RESTORE's (`$19D0`) goes from class `$03` (a number, or 0) to class
+`$05`, routine `$25D6`. Neither carries a token into the hook, so the module tells them apart
+by T-ADDR (`$19B0` for LIST, `$19D1` for RESTORE) and hands every stock form back: `LIST`,
+`LIST n` and `LIST #n` to HOME's `$1545`, `RESTORE` and `RESTORE n` to `$1E9D` (the module
+does class `$03`'s part first, the number or 0).
+
 ### Why the other TOS verbs can't come along
 
 TOS overloads `GO TO *`, `GO SUB *`, `DIM *`, `LET *`, `LIST *`, `DRAW *` and
@@ -68,7 +82,7 @@ syntax class. For example, `GO TO` wants a number, so `GO TO "games"` is Nonsens
 BASIC at line entry. Taking them over would mean patching the core statements'
 syntax paths, and every `GO TO` in every program would pay for it. Don't.
 Change-directory, make-directory and rename go onto the four free keywords
-through keyword-inside-argument forms (§3), or stay on `SAVE "tpi:..."`.
+through keyword-inside-argument forms (§3), and copy onto `COPY`.
 
 ### Argument rules common to all four
 
@@ -168,7 +182,7 @@ block table and marks the tape position with `>`.
 
 The last waits for native files (§4a), because `DIR`'s filter also decides what `LOAD "tpi:n"` can index.
 
-## 3. `MOVE`, `ERASE`, `FORMAT`
+## 3. `COPY`, `MOVE`, `ERASE`, `FORMAT`, `LIST`, `RESTORE #`
 
 **Implemented** (ROM `fddcmd.asm` v5, firmware `DISK_COPY` / `DISK_ERASE` /
 `DISK_FORMAT` / `DISK_REN` + `ChangeDir`). Every argument is a string
@@ -177,27 +191,40 @@ expression, up to 64 characters.
 | Form | Sends | Meaning |
 |---|---|---|
 | `MOVE TO "games"` | `tpi:cd games` | **Change directory.** `".."` goes up, `"/"` is the root, and paths such as `"a/b"`, `"../x"` and `"/games"` work |
-| `MOVE TO ""` | `tpi:cd -` | Back to the directory before the last change (one level, like `cd -`) |
-| `MOVE "a.tap" TO "b.tap"` | `tpi:copy a.tap\|b.tap` | **Copy** a file. The source is untouched. If the destination is a directory, the copy keeps its name |
-| `MOVE "*.tap" TO "backup"` | `tpi:copy *.tap\|backup` | Copy every match into a directory, listing each file as `copied` or `exists` |
+| `MOVE TO "-"` | `tpi:cd -` | Back to the directory before the last change (one level, like `cd -`) |
+| `MOVE TO ""` | `tpi:cd` | The interactive list of directories to pick from |
+| `MOVE "old.tap" TO "new.tap"` | `tpi:ren old.tap\|new.tap` | **Rename** a file or directory. If the destination is a directory, the source moves into it and keeps its name |
+| `COPY "a.tap" TO "b.tap"` | `tpi:copy a.tap\|b.tap` | **Copy** a file. The source is untouched. If the destination is a directory, the copy keeps its name |
+| `COPY "*.tap" TO "backup"` | `tpi:copy *.tap\|backup` | Copy every match into a directory, listing each file as `copied` or `exists` |
+| `COPY` | nothing | The screen to the printer, HOME's own COPY (in `tpi:picopt` mode, a BMP in `/VSCREEN`) |
 | `ERASE "old.tap"` | `tpi:erase old.tap` | Delete a file. No prompt, and silent unless `VERBOSE` |
 | `ERASE "*.bak"` | `tpi:erase *.bak` | `Erase <name> (Y/N)?` for each match. **Y** erases it, **N** stops, any other key skips it |
 | `ERASE "olddir/"` | `tpi:erase olddir/` | Remove an empty directory (`dirinfo.tap` doesn't count). Not empty is Report Q |
-| `FORMAT "new.tap"` / `FORMAT "new"` | `tpi:format new.tap` | Create an empty TAP and mount it with append on, as `tpi:newtap` does |
+| `FORMAT "new.tap"` / `FORMAT "new"` | `tpi:format new.tap` | Create an empty TAP and mount it with append on, so `SAVE` adds to it |
 | `FORMAT "tools/"` | `tpi:format tools/` | Make a directory |
-| — | `tpi:ren old\|new` | Rename (or move into a directory). It has no keyword |
+| `FORMAT ":GAMES"` / `FORMAT ":"` | `tpi:format :GAMES` / `tpi:format :` | Set the card's label (as `tpi:label GAMES`) / take it off (as `tpi:label -`) |
+| `LIST "notes.txt"` | `tpi:list notes.txt` | Show a file: text as itself (up to 8192 bytes), anything else as a hex dump (up to 2048). A folder or a pattern is Report Q |
+| `LIST`, `LIST n`, `LIST #n` | nothing | HOME's own LIST of the program |
+| `RESTORE #4` | `TAB 1` on the channel (`tpi:chwr 170100`) | Back to the start of the file open on stream 4: what was printed is sent first, what was read ahead is dropped, a record file's open record is finished. Not an `f:` stream: Report O |
+| `RESTORE`, `RESTORE n` | nothing | HOME's own RESTORE of the DATA pointer |
 
-- **The separator.** `MOVE` joins its two names with `|`, which a FAT name can't contain.
-  Typed by hand, `SAVE "tpi:copy a b"` with a space also works.
-- **Nothing is ever overwritten.** An existing destination is Report F: `MOVE`
-  onto a file, `FORMAT` of an existing name, `tpi:ren` onto a name.
+- **The separator.** `COPY` and `MOVE` join their two names with `|`, which a FAT name
+  can't contain. Typed by hand, `SAVE "tpi:copy a b"` and `SAVE "tpi:ren a b"` with a
+  space also work.
+- **Malformed forms are syntax errors.** `COPY "a"` with no `TO`, `COPY TO "b"` and
+  `COPY "a" TO` are refused at entry (the `?` marker), like any other bad line. Bare `COPY`
+  is the only one-word form.
+- **Nothing is ever overwritten.** An existing destination is Report F: `COPY`
+  onto a file, `MOVE` onto a name, `FORMAT` of an existing name.
 - **Report Q is for requests that can't be carried out:**
-  - the mounted file or the current directory (or one of its parents) for `ERASE`/`tpi:ren`;
-  - a directory as `MOVE`'s source;
+  - the mounted file or the current directory (or one of its parents) for `ERASE`/`MOVE`;
+  - a directory as `COPY`'s source, or a directory moved into itself;
   - a pattern copied to something that isn't a directory;
-  - `FORMAT` of a name that isn't `.tap`.
-- **Report F is for names:** a missing file, a path above the root, an empty name, or a name
-  longer than 64 characters (checked in the ROM, and nothing is sent).
+  - `FORMAT` of a name with another extension (`"notes.txt"`). A name with a dot in it
+    needs `.tap` at the end: `"v1.2"` is Q, `"v1.2.tap"` makes `v1.2.tap`.
+- **Report F is for names:** a missing file, a path above the root, an empty name (and a
+  `FORMAT` name that is only `".tap"`), or a name longer than 64 characters (checked in the
+  ROM, and nothing is sent).
 - **N skips, like any key but Y.** Since ROM 2.3 (#227) the function-`$86` prompt loop sends
   every key, N included, to the TS-Pico, so N means "not this one" and the questions go on.
   (ROM 2.2 ended the whole exchange on N, so there N stopped asking.) The erasing happens
@@ -209,17 +236,60 @@ expression, up to 64 characters.
   This also lifts `CAT`'s old 23-character limit. `build-rom.py` checks the bytes at
   every base-ROM address the module relies on (`ANCHORS`).
 
-**Decided: `MOVE "a" TO "b"` copies.** This is what TOS and the Interface 1
-mean, and a mistyped name can't lose data. Rename becomes a new firmware verb,
-`SAVE "tpi:ren a b"`, and doesn't get a keyword.
+**Decided: `COPY "a" TO "b"` copies and `MOVE "a" TO "b"` renames**
+([#334](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/334),
+[#341](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/341)).
+An earlier version of this spec had `MOVE` copy, as TOS and the Interface 1 do, with
+rename left to `SAVE "tpi:ren a b"`. Ryan pointed out (#334) that users read `MOVE` the
+way Unix's `mv` works, so a `MOVE` that leaves the original behind is a surprise. The survey of the four 1980s 2068 disk
+systems in #341 (Oliger SAFE, Larken, AERCO, Zebra TOS) settled it:
 
-`MOVE TO ""` goes back to the previous directory, like `cd -`. There is one
+- **None of them had a real move.** No system had a keyword that copies and removes the
+  original; TOS's own tutorial copies with `MOVE *` and then `ERASE`s.
+- **Every system spelled rename differently:** `RESTORE /`, `MOVE`, `LET *`, or nothing at
+  all. There is no habit to keep. `MOVE "a" TO "b"` as rename (and move into a folder)
+  matches Larken, DOS and Unix.
+- **`COPY` was never a disk verb.** On all four it stayed the screen dump, so
+  `COPY "a" TO "b"` collides with no 1980s convention, and bare `COPY` keeps its meaning.
+- **Source `TO` destination**, the order every system but AERCO used, stays.
+
+`MOVE` still never overwrites an existing name, so a mistyped destination can't lose data.
+The cost is a tension with the planned Interface 1 forms (#330): on the IF1, `MOVE` copies,
+so a future `MOVE "m";1;"x" TO …` would copy while `MOVE "a" TO "b"` renames. That is
+accepted.
+
+ROM 2.3 had no released users when this changed, so no installed programs break.
+
+`MOVE TO "-"` goes back to the previous directory, like `cd -`. There is one
 level of memory. It stands in for TOS's `GO SUB *` / `DRAW *` directory
 stack in the case that matters: a menu or loader program changes directory to
-find its files, then puts the user back where they started.
+find its files, then puts the user back where they started. `MOVE TO ""` shows
+the list of directories to pick from, as `SAVE "tpi:cd"` does.
 
 **FORMAT never touches the SD card's file system.** A BASIC statement that can wipe
 the card is one mistyped line away from disaster. Formatting stays in the web updater.
+`FORMAT ":name"` writes only the card's label (the root-folder volume entry and the boot
+sector's copy); a FAT name can't contain `:`, so it can't clash with making a file.
+
+**Decided: `LIST "name"`, `RESTORE #n` and the card label** (#341). The same comparison
+of the 1980s 2068 disk systems turned up three things worth having:
+
+- **Showing a file.** Larken's `PRINT "file"` and Zebra's `DUMP` showed a file on the screen.
+  `LIST` is the natural keyword: `LIST "name"` shows the file, and `LIST`, `LIST n` and
+  `LIST #n` keep their meaning. The ROM tells the forms apart by how the expression starts
+  (a quote, a string variable, `FN a$`, `STR$`, `CHR$`, `INKEY$`, `SCREEN$` or `VAL$`), not by
+  scanning it: a syntax-pass scan at run time inserts a second hidden number after each number
+  in the line, and a run-time scan evaluates the expression twice. So `LIST ("x")` goes to
+  the stock LIST, which wants a number: Report C.
+- **Rewinding a channel.** Zebra's `RESTORE *#n` sent a channel back to its start. `RESTORE #n`
+  does it here without a CLOSE and OPEN; plain `RESTORE` stays the DATA pointer.
+- **Disk labels.** All four named a disk when it was formatted, and Oliger's and Zebra's
+  could rename one (`RESTORE /"name"`, `LET *":a" TO ":b"`). The FAT volume label is
+  the SD card's equivalent: CAT shows it on the card line, and `FORMAT ":name"` (or
+  `SAVE "tpi:label name"`) sets it.
+
+Whole-machine snapshots (Oliger's SAFE, Larken's LKDOS) are parked in
+[`FUTURE_FEATURES.md`](FUTURE_FEATURES.md): they are a hardware question first.
 
 ---
 
@@ -572,8 +642,8 @@ container is the same. The header's issue/version bytes can mark a file as
   - The default filter adds `BAS`, `SCR`, `DAT` and `TXT`.
   - For files with a +3DOS header, the row shows the type and autostart line or
     load address, read from the header, like the TAP-block listing in §2.
-- **`MOVE` / `ERASE`:** these work on any file. `MOVE "foo.bas" TO "backup"` copies the
-  file as it is.
+- **`COPY` / `MOVE` / `ERASE`:** these work on any file. `COPY "foo.bas" TO "backup"` copies
+  the file as it is.
 - **Firmware:**
   - One new source/sink for the existing SAVE/LOAD block path: a named file
     instead of the mounted TAP. It covers header ↔ +3DOS conversion, headerless
@@ -589,11 +659,11 @@ container is the same. The header's issue/version bytes can mark a file as
 
 | TOS feature | Why it's left out |
 |---|---|
-| `GO TO *`, `GO SUB *`, `DRAW *` (cd and the directory stack) | The keywords can't be reused without `*` (§1). `MOVE TO` replaces cd, and `MOVE TO ""` covers the stack's real use (§3) |
+| `GO TO *`, `GO SUB *`, `DRAW *` (cd and the directory stack) | The keywords can't be reused without `*` (§1). `MOVE TO` replaces cd, and `MOVE TO "-"` covers the stack's real use (§3) |
 | `DIM *` (create file or directory) | `FORMAT "dir/"` makes directories. `OPEN #` with `w` creates files |
-| `LET *` (rename) | `SAVE "tpi:ren a b"`, or `MOVE` then `ERASE` |
+| `LET *` (rename) | `MOVE "a" TO "b"` (`tpi:ren`) |
 | `ATTR *` (protect or hide) | MicroPython's FAT VFS has no call to set attributes. The use that matters, keeping `ERASE` off a file, could later be a firmware-side protect list |
-| `LIST *`, `LIST *#` (status) | `CAT` shows the current path. Add a `SAVE "tpi:chans"` verb only if channels need debugging |
+| `LIST *`, `LIST *#` (status) | `CAT` shows the current path. Add a `SAVE "tpi:chans"` verb only if channels need debugging. (`LIST "name"` shows a file, §3) |
 | SCPs, drive letters, `FORMAT *` of a disk | There's one storage device. The serial ports aren't on this hardware |
 | `SAVE *`, `LOAD *`, `MERGE *`, `VERIFY *` | Kept, as native files with the `f:` prefix (§4a) |
 
@@ -606,8 +676,10 @@ container is the same. The header's issue/version bytes can mark a file as
    Firmware: a pattern and path argument for `DIR`, a TAP-block listing for any
    file, and the header and footer.
 2. **`MOVE TO`**, then `ERASE`, then `FORMAT`. These are thin wrappers over `CD`,
-   `RM`, `MD` and `NEWTAP`, plus one new single-round-trip `ERASE` verb.
-3. **`MOVE a TO b`** (copy), plus the `tpi:ren` verb.
+   `RM` and `MD`, plus new single-round-trip `ERASE` and `FORMAT` verbs (`tpi:format`
+   took over the old `tpi:newtap`).
+3. **`MOVE a TO b`** (copy at first), plus the `tpi:ren` verb. Now `COPY a TO b` copies and
+   `MOVE a TO b` renames (§3).
 4. **Native files: `SAVE`/`LOAD "f:name"`** (§4a), with +3DOS headers and
    headerless `.scr`/CODE. It's the biggest improvement to everyday use after `CAT`, and it
    needs no new wire protocol. Text files come with channels (step 5).

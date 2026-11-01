@@ -146,7 +146,7 @@ def call(t, sent, handler, cmd):
 
 
 def test_copy(t, root):
-    print("MOVE a TO b  (tpi:copy)")
+    print("COPY a TO b  (tpi:copy)")
     build_card(root)
     sent = setup(t, root)
     C = t.DISK_COPY

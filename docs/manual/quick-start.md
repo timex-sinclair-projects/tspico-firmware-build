@@ -182,10 +182,10 @@ CAT "games/b*" : REM games, b...
 | `-` | The folder you were in before |
 | `games/arcade` | A folder inside a folder |
 
-`MOVE TO ""` takes you back to where you were.
+`MOVE TO "-"` takes you back to where you were.
 
-**Picking from a list.** `SAVE "tpi:cd"` on its own shows the folders here as a numbered
-menu. Press a digit **0**-**9**, or **Q W E R T Y** for items 10 to 15, to go into one;
+**Picking from a list.** `SAVE "tpi:cd"` on its own, or `MOVE TO ""`, shows the folders here
+as a numbered menu. Press a digit **0**-**9**, or **Q W E R T Y** for items 10 to 15, to go into one;
 **N** quits.
 
 **Making a folder.** `SAVE "tpi:md tools"`. Name things with letters, digits, `-` and `_`.

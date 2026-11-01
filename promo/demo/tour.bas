@@ -76,9 +76,9 @@
  2070 MOVE TO "tour"
  2080 LET c$="SAVE ""tpi:path""": GO SUB 8200
  2090 SAVE "tpi:path"
- 2100 PRINT 'INK 1;"MOVE TO """" goes back:"
- 2110 LET c$="MOVE TO """"": GO SUB 8200
- 2120 MOVE TO ""
+ 2100 PRINT 'INK 1;"MOVE TO ""-"" goes back:"
+ 2110 LET c$="MOVE TO ""-""": GO SUB 8200
+ 2120 MOVE TO "-"
  2130 LET c$="SAVE ""tpi:path""": GO SUB 8200
  2140 SAVE "tpi:path"
  2150 GO SUB 8900
@@ -90,16 +90,16 @@
 
 # ---- 4 Copying and new tapes -------------------------------------------------
  2500 LET n=4: LET t$="Copies and new tapes"
- 2510 LET d$="MOVE copies files. FORMAT": LET e$="starts a new, empty TAP. CAT": LET f$="looks inside a TAP.": GO SUB 8000
+ 2510 LET d$="COPY copies files. FORMAT": LET e$="starts a new, empty TAP. CAT": LET f$="looks inside a TAP.": GO SUB 8000
  2520 GO SUB 8100
  2530 PRINT INK 1;"Copy a file into the folder:"
- 2540 LET c$="MOVE ""multi.tap"" TO ""tour""": GO SUB 8200
- 2550 MOVE "multi.tap" TO "tour"
+ 2540 LET c$="COPY ""multi.tap"" TO ""tour""": GO SUB 8200
+ 2550 COPY "multi.tap" TO "tour"
  2560 PRINT 'INK 1;"Go in, and copy with a new name:"
  2570 LET c$="MOVE TO ""tour""": GO SUB 8200
  2580 MOVE TO "tour"
- 2590 LET c$="MOVE ""/art.tap"" TO ""pics.tap""": GO SUB 8200
- 2600 MOVE "/art.tap" TO "pics.tap"
+ 2590 LET c$="COPY ""/art.tap"" TO ""pics.tap""": GO SUB 8200
+ 2600 COPY "/art.tap" TO "pics.tap"
  2610 PRINT 'INK 1;"A new, empty tape:"
  2620 LET c$="FORMAT ""songs.tap""": GO SUB 8200
  2630 FORMAT "songs.tap"

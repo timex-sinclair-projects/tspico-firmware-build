@@ -99,8 +99,8 @@ slower in the emulator than on the board.
 |---|---|---|---|---|---|
 | 1 | Welcome to TS-Pico 2.3 | `PRINT PEEK 101` gives 35 (ROM 2.3); commands are SAVE now, LOAD "tpi:..." only mounts; `SAVE "tpi:info"` | keys only | 1-3 | 13 s |
 | 2 | Listings in color | `CAT`; `CAT "*.tap"`; `CAT "library"`, which stops at `(71%) Scroll? (Y/n)` | **Y** at Scroll? (N stops the list) | 4-7 | 15 s |
-| 3 | Folders | `FORMAT "tour/"`, `MOVE TO "tour"`, `SAVE "tpi:path"`, `MOVE TO ""`, `tpi:path`; `CAT` with `<tour>` in it | keys only | 8-10 | 10 s |
-| 4 | Copies and new tapes | `MOVE "multi.tap" TO "tour"`; `MOVE TO "tour"`; `MOVE "/art.tap" TO "pics.tap"` (a copy with a new name); `FORMAT "songs.tap"`; `CAT`; `CAT "multi.tap"` (the blocks in a TAP, not mounted); `CAT ""` (the new tape: empty, append on); `SAVE "tpi:close"` | keys only | 11-14 | 12 s |
+| 3 | Folders | `FORMAT "tour/"`, `MOVE TO "tour"`, `SAVE "tpi:path"`, `MOVE TO "-"`, `tpi:path`; `CAT` with `<tour>` in it | keys only | 8-10 | 10 s |
+| 4 | Copies and new tapes | `COPY "multi.tap" TO "tour"`; `MOVE TO "tour"`; `COPY "/art.tap" TO "pics.tap"` (a copy with a new name); `FORMAT "songs.tap"`; `CAT`; `CAT "multi.tap"` (the blocks in a TAP, not mounted); `CAT ""` (the new tape: empty, append on); `SAVE "tpi:close"` | keys only | 11-14 | 12 s |
 | 5 | Single files with f: | Draws a picture, `SAVE "f:title.scr" SCREEN$`, wipes the screen, `LOAD "f:title.scr" SCREEN$`. Then two graphics: `SAVE "f:ab.bin" CODE USR "a",16`, wiped, `LOAD "f:ab.bin" CODE` | **ENTER** at each "Start tape" (two) | 15-20 | 32 s |
 | 6 | Files as streams | `OPEN #4,"f:notes.txt","w"`, `PRINT #4`, `CLOSE #4`; `INPUT #4` until **8 End of file**, caught with `ON ERR GO TO`; a record file (`"u",12`, `TAB`) as a high-score table; `OPEN #5,"d:/*.tap"`, the top folder's tapes one name at a time | keys only | 21-24 | 18 s |
 | 7 | The virtual printer | `SAVE "tpi:picopt"`, `PRINT PEEK 24027` (3); `LPRINT`; `LLIST 9900`; `COPY`; `SAVE "tpi:clprint"`; `SAVE "tpi:ts2040"`, `PEEK 24027` (2); where the files are | keys only | 25-27 | 26 s |
@@ -172,6 +172,11 @@ Results on 2026-10-16 (this branch's firmware, `TSPICO-23.ROM`):
 - A take stopped with BREAK at step 30 (chapter 8: `pics.tap` mounted, seven files in
   `tour/`; it stopped with L BREAK into program, 8945:2), then `RUN`: the full tour again,
   ending 0 OK, 9999:1, every step's text and picture the same as the clean run's.
+
+Since those runs, chapter 3 goes back with `MOVE TO "-"` and chapter 4 copies with `COPY "a"
+TO "b"` (#341: `MOVE "a" TO "b"` renames now, and `MOVE TO ""` shows the folder menu). The
+changed tour hasn't been through `emu_tour.py` yet, and the findings below are from the
+earlier runs.
 
 ## Findings
 

@@ -429,7 +429,7 @@
  9053 INPUT "": IF z$=CHR$ 13 THEN GO TO 9000
  9054 IF z$="d" THEN SAVE "tpi:tapdir"
  9055 IF z$="a" THEN GO TO 9006
- 9056 IF z$="n" THEN INPUT "Name of new TAP file:";z$: IF z$<>"" THEN SAVE "tpi:newtap "+z$
+ 9056 IF z$="n" THEN INPUT "Name of new TAP file:";z$: IF z$<>"" THEN SAVE "tpi:format "+z$
  9057 IF z$="f" THEN SAVE "tpi:ffw"CODE 1,1
  9058 IF z$="r" THEN SAVE "tpi:rew"CODE 1,1
  9059 GO TO 9050

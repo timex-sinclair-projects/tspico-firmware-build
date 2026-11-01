@@ -130,6 +130,22 @@ check: a test tone from each channel at the jack, and the 2068's own BEEP
 through the mix. Then measure core 1's headroom with the diag build's
 `max_gap`.
 
+## Snapshots
+
+*Added 2026-10-29, from the comparison of 1980s 2068 disk systems in
+[#341](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/341).
+Parked; no issue yet.*
+
+Save the whole machine to a file and bring it back later: RAM, the Z80's
+registers and the bank and port state, so a game can be stopped and resumed
+anywhere, whether or not it has a save feature of its own. Oliger's SAFE and
+Larken's LKDOS both did this on the 2068: an NMI, then a key to choose save
+or load.
+
+**To settle first:** whether the TS-Pico can freeze the Z80 at all (an NMI,
+or some other way) and then read RAM, the registers and the banks out to a
+file. That is a hardware question before it is a firmware one.
+
 ## Dropped, unless it becomes a reported problem
 
 - **Blocking reads through /WAIT** (port plan, phase 6; dropped 2026-10-12).

@@ -3,7 +3,7 @@
 Field log, 2026-09-26: a card failed a write (EIO), and from then on
 ACTIVATE_SD could not mount it ("[Errno 19] ENODEV" x5) until power-cycle.
 ACTIVATE_SD used to drop into BLINK_ERROR forever at that point -- from
-inside any command that touches the card (CD, MD, RM, NEWTAP, HELP, every
+inside any command that touches the card (CD, MD, RM, FORMAT, HELP, every
 MOUNT_FILE). It now raises OSError instead, and:
 
   * PROCESS_CMD's handler catches it; FAIL_CMD sees sd_active, hands the

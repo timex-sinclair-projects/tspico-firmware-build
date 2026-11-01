@@ -8,4 +8,23 @@ by default. The listing uses
 scroll prompts between multiple
 screens.
 
-See also: LLIST
+LIST "notes.txt"
+Shows a file on the SD card. A
+text file shows as text, up to
+8192 bytes. Anything else shows
+as a hex dump, 8 bytes a row, up
+to 2048 bytes:
+0000 4142434445464748 ABCDEFGH
+If that isn't the whole file, a
+last line says how much it is.
+Characters the 2068 can't show
+appear as ?.
+
+The name can be a string
+expression: LIST z$. A folder or
+a pattern is Report Q, a missing
+file Report F.
+
+Same as SAVE "tpi:list name".
+
+See also: LLIST, cat
