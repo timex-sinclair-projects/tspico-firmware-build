@@ -61,7 +61,7 @@ or, for a card put in BOOTSEL by hand, from the RP2350 drive. On the v3 card:
 
 - **No wipe and no ROM step.** Its ROMs are slot files in `/slots` on the
   same flash as the firmware, so `flash_nuke` (RP2040-only anyway) would
-  erase the user's cartridges. The two options are unticked and greyed out.
+  erase the user's cartridges. The two options are unticked and grayed out.
 - **Firmware** is the manifest's `v3.uf2` (`firmware-v3.uf2`), checked to be
   an RP2350 UF2, and the downgrade warning uses `v3.mp_version`.
 - **Files** first removes a stray `/TS` folder (it would shadow the frozen

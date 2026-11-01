@@ -86,7 +86,7 @@ Ten bytes open every transaction. Byte 0 picks the kind
 | 42h `'B'` | 4, 5, 6 | printer: COPY (4, 6), one LPRINT character (5) | `PRINT_IO` |
 | 42h `'B'` | 0 | `SAVE "tpi:…"`: a command | `PROCESS_CMD` → `SA_funct` / `EXT_SA_FUNCT` |
 | 42h `'B'` | 1–3 | `LOAD "tpi:name"`: mount | `PROCESS_CMD` → `LOAD_TPI` |
-| anything else | — | unrecognised: FIFOs emptied, one 01h staged, status FBh | `MQ_TO_IDLE(recovered=True)` |
+| anything else | — | unrecognized: FIFOs emptied, one 01h staged, status FBh | `MQ_TO_IDLE(recovered=True)` |
 
 | Byte | Command (`'B'`) | Block (00h / FFh) |
 |---|---|---|
@@ -143,6 +143,10 @@ Anything ≥ 80h is a response function (next table). Everything else goes to
 | 10 | 9 | J Invalid I/O device | 12h | `_10_J_Invalid_IO` | 1C21h |
 | 11–127 | ≥ 10 | D BREAK - CONT repeats | 0Ch | `_11_D_Break` | 00F8h |
 | READY with bit 2 low | — | T TS-Pico reset, try again | 1Ch | — | `RD_STATUS` |
+
+A LOAD's refusal doesn't go through this table: the tape path at 196Dh turns any
+refused LOAD into R, so status 7 after a search that found nothing shows as R,
+not 8 ([../flows/load.md](../flows/load.md), #311).
 
 The ROM's BIOS `C_END` returns these on failure with carry set: A = status − 1
 for an error status, 09h for a timeout, 0Ch for

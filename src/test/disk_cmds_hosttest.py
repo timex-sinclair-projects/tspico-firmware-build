@@ -114,6 +114,7 @@ def setup(t, root):
         setattr(t, n, lambda *a, **k: None)
     t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: sent.append(("MSG2", msg, st))
     t.SEND_MSG = lambda msg, msg1, st, force=False: sent.append(("MSG", msg, msg1, st))
+    t.SEND_STATUS = lambda st: sent.append(("STATUS", st))
     t.led = types.SimpleNamespace(value=lambda *a: None, toggle=lambda: None)
     t.LOG = lambda *a: None
     t.busy = False
@@ -395,6 +396,14 @@ def test_native_open(t, root):
     check(r[-1] == t._1_OK and t.TSP.native == dict(op=0, path="/sd/TAP/games/new.bas",
                                                     session=0x4242, refuse=False),
           "SAVE, new file: armed for the session (%r)" % (t.TSP.native,))
+    t.TSP.VERBOSE = True
+    r = fopen("games/pic.scr", 0, t.MOD_SCREEN)
+    check(r == ("STATUS", t._1_OK) and t.TSP.native == dict(op=0, path="/sd/TAP/games/pic.scr",
+                                                           session=0x4242, refuse=False),
+          "SAVE ... SCREEN$, new file: the bare status, no 'Saving to' even with VERBOSE on (#314) (%r)" % (r,))
+    r = fopen("games/new2.bas", 0)
+    check(r[0] == "MSG" and r[1].startswith("Saving to"), "  any other SAVE still says 'Saving to' (%r)" % (r,))
+    t.TSP.VERBOSE = False
     keys[:] = [ord("Y")]
     r = fopen("advent.tap", 0)
     check(prompts[-1] == ("Replace advent.tap? (Y/N)", True) and t.TSP.native["refuse"] is False,

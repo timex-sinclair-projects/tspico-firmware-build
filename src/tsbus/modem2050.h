@@ -75,6 +75,16 @@ typedef struct {
     uint32_t hang_at, last_tx_at;
     uint8_t xoff_sent;
 
+    // Hayes mode's flow control: off unless the program turns it on
+    // (tsbus.modem_flow, after sending Zimodem ATF1). flow_want is core 0's
+    // request; m2050_poll copies it into flow on core 1.
+    volatile uint8_t flow_want;
+    uint8_t flow;
+
+    // Waiting for Zimodem (m2050_wait_ready): characters of READY. matched,
+    // and line-ending bytes after it still to drop.
+    uint8_t ready_match, eol_swallow;
+
     // Counters.
     uint32_t dials, connects, carrier_lost, rx_lost;
 } m2050_t;
@@ -82,5 +92,6 @@ typedef struct {
 void m2050_init(m2050_t *m, uint8_t mode, uint32_t tick_ms,
     uint8_t *lrx, uint32_t lrx_size, uint8_t *ltx, uint32_t ltx_size);
 void m2050_poll(m2050_t *m, u8251_t *u, uint32_t now);
+int m2050_wait_ready(m2050_t *m);
 
 #endif

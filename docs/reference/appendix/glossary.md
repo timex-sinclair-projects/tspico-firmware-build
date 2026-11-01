@@ -97,7 +97,7 @@ the lower screen, and so on. [ports-and-status.md](ports-and-status.md),
 [exrom-chunk1.md](../rom/exrom-chunk1.md).
 
 **Harness.** A standalone script in `src/test/` that drives the real bus
-from the Pico to capture or reproduce one behaviour; the repo's way of
+from the Pico to capture or reproduce one behavior; the repo's way of
 settling protocol questions. `src/CLAUDE.md`.
 
 **HOME.** See Bank. The TS2068's own ROM, patched with hooks that redirect
@@ -239,6 +239,6 @@ a message (81h) instead of answering a bare status. [tspico-messages.md](../firm
 **Y register.** The PIO scratch register whose low byte is the status port.
 [pio.md](../firmware/pio.md).
 
-**ZX48 mode.** The TS-Pico serving the customised Spectrum ROM from flash
+**ZX48 mode.** The TS-Pico serving the customized Spectrum ROM from flash
 slot 0 and speaking the Spectrum ROM's tape protocol, after `tpi:zx48`.
 [zx48.md](../rom/zx48.md), [flows/zx48.md](../flows/zx48.md).

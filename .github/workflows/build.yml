@@ -3,15 +3,47 @@ name: Build TS-Pico Firmware
 on:
   push:
     # Build a UF2 for every pushed branch, not just main. This lets
-  # contributors test changes on real hardware by flashing the UF2
+    # contributors test changes on real hardware by flashing the UF2
     # from their feature branch before opening a PR. See CLAUDE.md
     # "GitHub workflow" for the rules around branch-based testing.
     branches: ['**']
+    # ...but only when the push touches something this build reads.
+    # Everything counts except the paths negated below: the website, the
+    # promo and archive folders, the other workflows' own inputs (esp32/,
+    # windows-updater/), the root and docs/ Markdown, and the user manual,
+    # which manual.yml builds. docs/manual/examples/ comes back in: its
+    # tests run here. docs/reference/ and docs/rom-analysis/ stay in:
+    # reference_hosttest.py and build-rom.py read them. A later pattern
+    # wins, so the order matters.
+    paths: &firmware_paths
+      - '**'
+      - '!*.md'
+      - '!docs/*'
+      - '!docs/manual/**'
+      - 'docs/manual/examples/**'
+      - '!site/**'
+      - '!promo/**'
+      - '!archive/**'
+      - '!esp32/**'
+      - '!windows-updater/**'
+      - '!.claude/**'
+      - '!.github/release-notes/**'
+      - '!.github/workflows/manual.yml'
+      - '!tools/manual-pdf/**'
+      - '!tools/manual-variants.py'
+      - '!tools/build-site-docs.py'
   pull_request:
     # Also build on PR open/update so the UF2 is rebuilt against the
     # merge result — catches conflicts that pass on the branch but
     # break when combined with main.
     branches: [main]
+    paths: *firmware_paths
+  # Weekly, on main: Pages builds the testers' main/ channel from the newest
+  # green main build whose tspico-firmware-uf2 hasn't expired (30 days).
+  # With the paths filter, a quiet month of docs-only commits would leave
+  # none, and the next site deploy would drop the channel.
+  schedule:
+    - cron: '17 6 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -135,7 +167,6 @@ jobs:
           python3 src/test/tsbus_io_hosttest.py
           python3 src/test/usart8251_hosttest.py
           python3 src/test/modem2050_hosttest.py
-          python3 src/test/manual_variants_hosttest.py
           python3 src/test/board_v3_hosttest.py
           python3 src/test/deep_queue_hosttest.py
           python3 src/test/reference_hosttest.py
@@ -428,6 +459,13 @@ jobs:
         working-directory: ${{ github.workspace }}/micropython/ports/rp2
         run: make -j$(nproc) BOARD_DIR=${{ github.workspace }}/src/boards/TSPICO_V3
 
+      # Core 1 must never touch flash, which stalls while core 0 writes it
+      # (#254): every function it reaches in RAM, and none of them holding a
+      # flash address (a call, or .rodata). Read from the linked ELF, since
+      # gcc decides what lands where (#305's s_ready went to .rodata).
+      - name: Check core 1 stays in RAM
+        run: python3 tools/check-core1-ram.py -v micropython/ports/rp2/build-TSPICO_V3/firmware.elf
+
       - name: Upload the v3 firmware.uf2 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -445,39 +483,3 @@ jobs:
             ${{ github.workspace }}/micropython/ports/rp2/build-TSPICO_V3/CMakeFiles/CMakeOutput.log
             ${{ github.workspace }}/micropython/ports/rp2/build-TSPICO_V3/CMakeFiles/CMakeError.log
           retention-days: 7
-
-  # The user manual as PDFs (tools/manual-pdf/make.sh): a half-letter one-up
-  # for reading and a saddle-stitch booklet imposed on letter. Built on every
-  # push so a manual change that breaks the PDFs shows here, not at release
-  # time; release.yml attaches the same two files to each release. Also the
-  # v3 card's manual (BOARD=v3, tools/manual-variants.py), PDFs and Markdown,
-  # as its own artifact: not published while the card is unreleased.
-  manual-pdf:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Install pandoc, the PDF fonts and pypdf
-        timeout-minutes: 10
-        run: tools/manual-pdf/ci-setup.sh
-
-      - name: Build the user manual PDFs
-        run: tools/manual-pdf/make.sh "${{ runner.temp }}/manual-pdf"
-
-      - name: Upload the manual PDFs
-        uses: actions/upload-artifact@v4
-        with:
-          name: tspico-manual-pdf
-          path: ${{ runner.temp }}/manual-pdf/*.pdf
-
-      - name: Build the v3 card's manual
-        run: |
-          BOARD=v3 tools/manual-pdf/make.sh "${{ runner.temp }}/manual-v3"
-          python3 tools/manual-variants.py v3 docs/manual/user-manual.md "${{ runner.temp }}/manual-v3/user-manual-v3.md"
-
-      - name: Upload the v3 card's manual
-        uses: actions/upload-artifact@v4
-        with:
-          name: tspico-manual-v3
-          path: ${{ runner.temp }}/manual-v3/

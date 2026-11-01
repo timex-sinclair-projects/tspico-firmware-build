@@ -56,11 +56,11 @@ transaction after it ends by staging the next.
 | 1 | HOME 0000h | the Z80 resets into HOME — the Pico's flash slot `ROM_SLOT` (normally 1, ROM 2.2), served by the ROM state machine | the Pico not yet at step 8: the Z80 reads whatever the bus floats to *(unverified: in practice the Pico's boot is fast enough, and the 2068's own reset delay covers it)* |
 | 2 | HOME (genuine) | the 2068's RAM test, system variables, channels | |
 | 3 | HOME 0DF1h | the 29-byte boot stub at 0E0Bh is copied to RAM 6000h and run: `OUT (F4h),03h` — chunks 0 and 1 from the cartridge bus (TS-Pico: 03h, genuine 01h), FFh bit 7 set (the EXROM), the 2068's bank-switch code copied from EXROM 1000h–162Fh to RAM 6200h, back to HOME ([../rom/home.md](../rom/home.md#0e0ch-a-16k-exrom)) | an 8K-only EXROM model (an old emulator) fails at the first call into chunk 1 |
-| 4 | HOME 0DFFh | the bank stack pointer (65CEh) initialised | |
+| 4 | HOME 0DFFh | the bank stack pointer (65CEh) initialized | |
 | 5 | HOME 0E05h | EXTINIT, EXROM 08E7h, called through the RAM bank code | |
 | 6 | EXROM 08E7h → 01BCh | the TS-Pico's EXTINIT: `CALL 221Fh` — **TPMODE = 2** (LOAD and SAVE to the Pico, printer to the 2068), 5CBEh and 6315h cleared — then BANK (5DCFh) = FFh ([../rom/sysvars.md](../rom/sysvars.md#5ddbh-tpmode-peek-24027)) | |
 | 7 | EXROM 1C49h | the banner: 41 bytes copied to the printer buffer at 5B00h and printed through HOME's PO-MSG: "© 2026 TS-Pico ROM v2.2" ([../rom/exrom-driver.md](../rom/exrom-driver.md#the-boot-message-1c49h)) | |
-| 8 | EXROM 1C86h | the rest of the genuine EXTINIT; back to HOME | |
+| 8 | EXROM 1C86h | `BOOT_DOCK_CHECK`: with **D** held the DOCK's LROS/AROS headers are not read, so a mounted cartridge is not run; otherwise the genuine EXTINIT (08EAh) reads them and starts an LROS if there is one; then back to HOME ([../rom/exrom-driver.md](../rom/exrom-driver.md#boot_dock_check-1c86h)) | a cartridge image in the dock slots that crashes runs at every boot: hold D |
 | 9 | HOME | the copyright message, the BASIC prompt | |
 
 Nothing in the 2068's boot talks to the Pico through ports 0Eh/0Fh: the

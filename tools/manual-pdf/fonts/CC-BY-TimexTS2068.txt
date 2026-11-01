@@ -1,0 +1,9 @@
+TimexTS2068.otf: "Timex TS2068" by jonnybgood, made with FontStruct.
+https://fontstruct.com/fontstructions/show/2507039/zx-spectrum-zx81-1
+https://fontstruct.com/fontstructors/show/557611/jonnybgood
+
+Licensed under the Creative Commons Attribution 3.0 licence (CC BY 3.0):
+http://creativecommons.org/licenses/by/3.0/
+
+Used unchanged for the code blocks in the PDF user manual; the manual's
+colophon credits it. FontStruct is a trademark of FontStruct.com.

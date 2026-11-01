@@ -9,6 +9,9 @@
   --accent: #d6273e;        /* Sinclair red */
   --accent-ink: #ffffff;
   --link: #1f6fd6;
+  /* The docs' slash, shared with the manual PDF (tools/manual-pdf/print.css):
+     the 2068 manual cover's red, green and blue, with a yellow */
+  --slash-red: #e2322d; --slash-yellow: #f2b51d; --slash-green: #3aa93f; --slash-blue: #2ba6de;
   --max: 980px;
   --text-max: 760px;
 }
@@ -52,14 +55,14 @@ h2 { font-size: 1.5rem; margin-top: 2.2rem; }
   position: sticky; top: 0; z-index: 50;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
-  /* Sinclair rainbow hairline */
+  /* Sinclair rainbow hairline, in the docs' slash colors */
   box-shadow: 0 2px 0 0 transparent;
 }
 .site-header::after {
   content: ""; display: block; height: 3px;
   background: linear-gradient(90deg,
-    #d6273e 0 20%, #f08a24 20% 40%, #f5c518 40% 60%,
-    #2ca24c 60% 80%, #1f6fd6 80% 100%);
+    var(--slash-red) 0 25%, var(--slash-yellow) 25% 50%,
+    var(--slash-green) 50% 75%, var(--slash-blue) 75% 100%);
 }
 .header-inner {
   display: flex; align-items: center; gap: 16px;
@@ -158,6 +161,14 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
 }
 
 /* --- Docs: the manuals and the programmer's reference (tools/build-site-docs.py) --- */
+/* The slash over a doc page's title (front matter doc: true): four bars slanted
+   like the Spectrum's flash, the mark the manual's chapter openers carry too */
+.slash {
+  width: 96px; height: 6px; margin: 0 0 14px 2px; transform: skewX(-30deg);
+  background: linear-gradient(90deg,
+    var(--slash-red) 0 25%, var(--slash-yellow) 25% 50%,
+    var(--slash-green) 50% 75%, var(--slash-blue) 75% 100%);
+}
 .page table { display: block; overflow-x: auto; border-collapse: collapse; font-size: .9rem; margin: 1em 0; }
 .page th, .page td { border: 1px solid var(--border); padding: 4px 8px; vertical-align: top; text-align: left; }
 .page th { background: var(--panel); }

@@ -81,7 +81,7 @@ state machine on GP23, refilled by core 0 from the SD card.
 Play sound files from the SD card through the card's audio jack, started
 from BASIC: `SAVE "tpi:play boom.wav"` for a sound effect, or music that
 plays in the background while a program runs, with a stop command.
-Digitised effects, speech recordings and music are things the 2068 can't
+Digitized effects, speech recordings and music are things the 2068 can't
 make itself, so this is a new tool for 2068 programmers.
 
 **How it might work:** WAV (8- or 16-bit PCM, resampled to the PWM rate) to
@@ -102,7 +102,7 @@ perhaps MP3) are a later question.
 *Added 2026-10-12; was phase 7 of the v3 port plan.*
 
 An AY-3-8910 at $FFFD (register select, and read-back on IN) and $BFFD
-(data), synthesised on core 1 and played through the card's PWM audio
+(data), synthesized on core 1 and played through the card's PWM audio
 (GP30 right, GP46 left) to the 3.5 mm jack.
 
 **Why it's not scheduled.** The 2068 has a real AY at $F5/$F6, so 2068
@@ -144,8 +144,10 @@ through the mix. Then measure core 1's headroom with the diag build's
   [v3-speech-proposal.md](v3-speech-proposal.md) (the SP0256-AL2 emulated from
   its ROM, `tpi:say`, an `s:` channel, and David's speech board's ports).
 
-- **The OLED status display** and **the Kempston joystick** wait on hardware:
-  [v3-oled-proposal.md](v3-oled-proposal.md), and the `v3-kempston` branch.
+- **The Kempston joystick** has left this list too: the v3 card answers
+  port 1Fh from its DE-9 socket (`KEMPSTON` in `config.ini`).
+- **The OLED status display** waits on hardware:
+  [v3-oled-proposal.md](v3-oled-proposal.md).
 - **The ESP32 as a WiFi file server:** a different role for the modem module,
   noted in [v3-modem-proposal.md](v3-modem-proposal.md) ("Not in this
   proposal").

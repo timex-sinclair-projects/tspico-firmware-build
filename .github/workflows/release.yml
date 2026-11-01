@@ -394,8 +394,9 @@ jobs:
           cp esp32/zimodem/out/zimodem-v3.bin "$RUNNER_TEMP/zimodem-v3.bin"
 
       # The user manual as PDFs (tools/manual-pdf/make.sh, also built by
-      # build.yml on every push): the half-letter one-up for reading and the
-      # saddle-stitch booklet imposed on letter, both from the manual at the tag.
+      # manual.yml on pushes that touch the manual): the half-letter one-up for reading and the
+      # saddle-stitch booklet imposed on letter, both from the manual at the tag; and the same
+      # two of the Quick Start Guide, and the Quick Reference Guide's tri-fold card.
       - name: Install pandoc, the PDF fonts and pypdf
         timeout-minutes: 10
         run: tools/manual-pdf/ci-setup.sh
@@ -410,7 +411,7 @@ jobs:
           UF2: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
           FLASH_ROM: ${{ steps.flash.outputs.rom }}
         run: |
-          # Assets: bundle + raw UF2 + the upgrade UF2 + the user manual PDFs,
+          # Assets: bundle + raw UF2 + the upgrade UF2 + the manual and quick guide PDFs,
           # plus the 512K flash image when the build-flash step produced one.
           # pages.yml publishes firmware.uf2 and upgrade.uf2 to the updater.
           ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)"
@@ -418,7 +419,10 @@ jobs:
           ASSETS+=( "${RUNNER_TEMP}/firmware-v3.uf2#firmware-v3.uf2 (the TS-Pico v3 card's firmware, RP2350)"
                     "${RUNNER_TEMP}/v3-slots.zip#v3-slots.zip (the v3 card's ROM and cartridge slot files, for /slots)" )
           ASSETS+=( "${RUNNER_TEMP}/manual-pdf/user-manual-half-letter.pdf#user-manual-half-letter.pdf (the user manual, 5.5 x 8.5 in, for reading)"
-                    "${RUNNER_TEMP}/manual-pdf/user-manual-saddle-stitch-letter.pdf#user-manual-saddle-stitch-letter.pdf (the user manual as a booklet: print on letter, double-sided, flip on the short edge; fold and staple)" )
+                    "${RUNNER_TEMP}/manual-pdf/user-manual-saddle-stitch-letter.pdf#user-manual-saddle-stitch-letter.pdf (the user manual as a booklet: print on letter, double-sided, flip on the short edge; fold and staple)"
+                    "${RUNNER_TEMP}/manual-pdf/quick-start-half-letter.pdf#quick-start-half-letter.pdf (the Quick Start Guide, 5.5 x 8.5 in, for reading)"
+                    "${RUNNER_TEMP}/manual-pdf/quick-start-saddle-stitch-letter.pdf#quick-start-saddle-stitch-letter.pdf (the Quick Start Guide as a booklet: two letter sheets, double-sided, flip on the short edge; fold and staple)"
+                    "${RUNNER_TEMP}/manual-pdf/quick-reference-card-letter.pdf#quick-reference-card-letter.pdf (the Quick Reference Guide: one letter sheet, double-sided, flip on the short edge; fold in three)" )
           if [ -f "${RUNNER_TEMP}/zimodem-v3.bin" ]; then
             ASSETS+=( "${RUNNER_TEMP}/zimodem-v3.bin#zimodem-v3.bin (Zimodem for the v3 card's modem, the ESP32-C3: one image for address 0)" )
           fi

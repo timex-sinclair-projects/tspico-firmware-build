@@ -94,7 +94,7 @@ def fake_tsbus():
     t.load, t.load_at, t.read, t.switch = load, load_at, read, switch
     t.dock_writes = lambda on: CALLS.append(("dock_writes", bool(on)))
     # The modem (step 4): what board_v3's modem_* call, and what core 1 says.
-    for name in ("modem", "modem_mode", "modem_pace", "modem_line"):
+    for name in ("modem", "modem_mode", "modem_pace", "modem_line", "modem_flow"):
         setattr(t, name, (lambda n: lambda *a: CALLS.append((n,) + a))(name))
     t.modem_poll = lambda: POLL[0]
     # Speech: what board_v3's speech_start and say call.
@@ -105,13 +105,14 @@ def fake_tsbus():
         CALLS.append(("say", None if al is None else bytes(al)))
         return 0 if al is None else min(len(al), SAY_ROOM[0])
     t.say = say
-    t.stats = lambda: {"m_state": STATE[0], "m_dials": 3, "m_connects": 2}
+    t.stats = lambda: {"m_state": STATE[0], "m_dials": 3, "m_connects": 2, "m_flow": FLOW[0]}
     return t
 
 
 POLL = [0]       # what tsbus.modem_poll() returns
 SAY_ROOM = [1024]  # how many allophones tsbus.say() takes
 STATE = [0]      # m_state in tsbus.stats()
+FLOW = [0]       # m_flow in tsbus.stats()
 
 
 class FakePin:
@@ -683,13 +684,16 @@ def main():
     POLL[0] = 5                                          # an OUT to the 8251
     board.modem_service()
     check(esp_on(), "an OUT to the 8251: the ESP32 on")
-    clock.ms += 1999
+    clock.ms += 1500
     POLL[0] = 4
     board.modem_service()
-    check(("modem_line", True) not in take(), "  not up for MODEM_BOOT_MS")
-    clock.ms += 1
+    check(("modem_line", True) not in take() and board.modem_status()[1] == "starting",
+          "  Zimodem not heard from yet: not up, ESP32 starting")
+    POLL[0] = 4 | 8                                      # core 1 saw READY.
     board.modem_service()
-    check(take() == [("modem_line", True)], "  then the line is up")
+    check(take() == [] and board.modem_status()[1] == "on",
+          "  core 1 saw READY. (bit 3) and brought the line up: on, nothing to tell tsbus")
+    POLL[0] = 4
     for _ in range(20):                                  # a terminal polling, 20 minutes
         clock.ms += 60_000
         board.modem_service()
@@ -710,6 +714,13 @@ def main():
     board.modem_service()
     check(esp_on(), "used again: on again")
     take()
+    POLL[0] = 4
+    clock.ms += 7999
+    board.modem_service()
+    check(("modem_line", True) not in take(), "  no READY.: not up for MODEM_BOOT_MS (8 s)")
+    clock.ms += 1
+    board.modem_service()
+    check(take() == [("modem_line", True)], "  then up anyway (the fallback)")
     board.modem_start("off")
     check(not esp_on() and take()[:2] == [("modem_pace", 300), ("modem", False)],
           "modem_start off: ports unanswered, ESP32 off")
@@ -732,14 +743,27 @@ def main():
     check(("modem_mode", 0) in take(), "  and the modem set up in Hayes mode")
     STATE[0] = 3
     t.MODEM(bytes(10), "tpi:modem")
-    check(sent_m[-1] == ("Modem: hayes mode, ESP32 off", "Line -; 3 calls, 2 made", t._1_OK),
-          "tpi:modem: the state, shown (%r)" % (sent_m[-1:],))
+    check(sent_m[-1] == ("Modem: hayes mode, ESP32 off", "Flow off; 3 calls, 2 made", t._1_OK),
+          "tpi:modem: the state, shown; Hayes mode says flow (%r)" % (sent_m[-1:],))
+    take()
+    t.MODEM(bytes(10), "tpi:modem flow on")
+    check(sent_m[-1] == ("Modem: flow on", "", t._1_OK) and take() == [("modem_flow", True)],
+          "tpi:modem flow on: 0 OK, tsbus.modem_flow(True) (%r)" % (sent_m[-1:],))
+    with open("config.ini") as f:
+        check("MODEM_FLOW" not in json.load(f), "  and nothing saved in config.ini")
+    FLOW[0] = 1
+    t.MODEM(bytes(10), "tpi:modem")
+    check(sent_m[-1][1] == "Flow on; 3 calls, 2 made", "  shown as on (%r)" % (sent_m[-1:],))
+    FLOW[0] = 0
+    t.MODEM(bytes(10), "tpi:modem FLOW OFF")
+    check(sent_m[-1] == ("Modem: flow off", "", t._1_OK) and take() == [("modem_flow", False)],
+          "tpi:modem flow off (any case): tsbus.modem_flow(False)")
     board.modem_start("2050")
     t.MODEM(bytes(10), "tpi:modem")
     check(sent_m[-1][1] == "Line connected; 3 calls, 2 made", "  2050 mode: the line state (%r)" % (sent_m[-1:],))
     STATE[0] = 0
     t.MODEM(bytes(10), "tpi:modem fast")
-    check(sent_m[-1][2] == t._8_A_Invalid_arg and sent_m[-1][1] == "Use 2050, hayes or off",
+    check(sent_m[-1][2] == t._8_A_Invalid_arg and sent_m[-1][1] == "2050, hayes, off or flow on/off",
           "tpi:modem fast: Report A (%r)" % (sent_m[-1:],))
     t.board.HAS_MODEM = False
     t.MODEM(bytes(10), "tpi:modem")

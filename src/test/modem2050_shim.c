@@ -35,6 +35,12 @@ int shim_get(const char *k) {
     if (!strcmp(k, "carrier_lost")) return (int)m.carrier_lost;
     if (!strcmp(k, "xoff_sent")) return m.xoff_sent;
     if (!strcmp(k, "lrx_level")) return (int)(m.lrx_head - m.lrx_tail);
+    if (!strcmp(k, "flow")) return m.flow;
+    if (!strcmp(k, "eol_swallow")) return m.eol_swallow;
     return -999;
 }
 const char *shim_number(void) { return m.number; }
+/* tsbus.modem_flow: core 0's request, taken on the next pass */
+void shim_flow(int on) { m.flow_want = on ? 1 : 0; }
+/* core 1 while the line is down: Zimodem's READY. yet? */
+int shim_wait_ready(void) { return m2050_wait_ready(&m); }

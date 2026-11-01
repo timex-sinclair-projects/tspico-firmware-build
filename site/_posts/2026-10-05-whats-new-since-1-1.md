@@ -28,8 +28,8 @@ come from that.
   LOAD or SAVE. The two-port link cures it, and LOAD now streams each block straight from
   the Pico's memory.
 - **LOAD gives up when there's nothing to find.** `LOAD "name"` searches the mounted tape
-  from the tape pointer and wraps round once. If nothing matches, you get **8 End of file**
-  instead of an endless wait.
+  from the tape pointer and wraps round once. If nothing matches, you get **R Tape loading
+  error** instead of an endless wait.
 - **A damaged TAP file gives Report R Tape loading error**, the same report a bad cassette
   gives.
 - **SAVE checks the name first.** A plain SAVE name can use letters, digits, `-` and `_`.
@@ -55,7 +55,7 @@ come from that.
 
 **Files and folders**
 
-- **Clearer listings.** `SAVE "tpi:dir"` shows the folder in colour, with the card's size
+- **Clearer listings.** `SAVE "tpi:dir"` shows the folder in color, with the card's size
   and free space. A long listing stops at `Scroll? (Y/n)` and shows how far through you are;
   press **1** to **9** to scroll that many lines.
 
@@ -148,7 +148,7 @@ positioning let a program jump straight to record 57 without reading the 56 befo
   It works out what your board needs and walks you through it.
 - **The virtual printer.** After `SAVE "tpi:picopt"`, `LPRINT` and `LLIST` go to text files
   on the card, and `COPY` saves the screen as a BMP picture you can open on any computer.
-  COPY understands the second screen, hi-colour and the 512-column mode. You choose the page
+  COPY understands the second screen, hi-color and the 512-column mode. You choose the page
   width, the line endings and the picture size.
 - **A menu when nothing is mounted.** `LOAD ""` with no tape mounted loads a small menu, with
   help on every command, a file picker, and the **TS-Pico Commander**, a full-screen file

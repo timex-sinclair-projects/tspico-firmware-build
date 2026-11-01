@@ -153,7 +153,7 @@ while a buffer drives it, and RP2350 erratum E9 can latch a pad with its
 input and pull-down both on at about 2 V. The same state as the bring-up's
 `board_safe_init()` (`firmware/bringup/board.c` in tspico-hardware).
 
-State: GPIO, I2C0 (left initialised; `machine.I2C(0)` sets it up again) and
+State: GPIO, I2C0 (left initialized; `machine.I2C(0)` sets it up again) and
 the expander. The pads keep their reset pull-downs on the outputs, as in
 the bring-up firmware. MicroPython's soft reset (`machine_pin_deinit`) only
 turns off pin interrupts, so the state holds across Ctrl-D. RESET_HOLD is

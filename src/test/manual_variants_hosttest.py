@@ -9,7 +9,9 @@ docs/manual/user-manual.md holds both boards' passages; <!-- v2 --> and
     appendix it should have and no marker left;
   - the v2 manual (the published one: the website and the release PDFs)
     says nothing of the v3 card while the card is unreleased;
-  - build-site-docs.py publishes the v2 variant.
+  - the Quick Start Guide and the Quick Reference Guide pair their markers
+    up, and their v2 variants say nothing of the v3 card either;
+  - build-site-docs.py publishes the v2 variant of all three.
 
 Run:  python3 src/test/manual_variants_hosttest.py
 """
@@ -25,6 +27,8 @@ sys.path.insert(0, os.path.join(REPO, "tools"))
 mv = importlib.import_module("manual-variants")
 
 FAILS = []
+# The quick guides (tools/manual-pdf/quick.py), written for both boards too.
+QUICK = ("quick-start.md", "quick-reference.md")
 
 
 def check(ok, what):
@@ -68,9 +72,24 @@ def main():
     hits = [l for l in v2.split("\n") if re.search(r"\bv3\b|RP2350|Appendix F|ESP32|Zimodem", l, re.I)]
     check(not hits, "v2: nothing about the v3 card (%r)" % hits[:3])
 
+    print("the quick guides")
+    for doc in QUICK:
+        with open(os.path.join(REPO, "docs", "manual", doc), encoding="utf-8") as f:
+            text = f.read()
+        try:
+            q2, q3 = mv.variant(text, "v2"), mv.variant(text, "v3")
+        except mv.MarkerError as e:
+            check(False, "%s: markers pair up (%s)" % (doc, e))
+            continue
+        check(all(not re.search(r"<!-- /?v[23] -->", out) for out in (q2, q3)), "%s: no marker left" % doc)
+        hits = [l for l in q2.split("\n") if re.search(r"\bv3\b|RP2350|ESP32|Zimodem", l, re.I)]
+        check(not hits, "%s, v2: nothing about the v3 card (%r)" % (doc, hits[:3]))
+
     print("the website")
     site = importlib.import_module("build-site-docs")
     check(site.VARIANTS.get("docs/manual/user-manual.md") == "v2", "build-site-docs publishes the v2 manual")
+    for doc in QUICK:
+        check(site.VARIANTS.get("docs/manual/" + doc) == "v2", "build-site-docs publishes the v2 " + doc)
     import fnmatch
     imgs = os.listdir(os.path.join(REPO, "docs", "manual", "images"))
     kept = [f for f in imgs if not any(fnmatch.fnmatch(f, p) for p in site.COPY_IGNORE)]

@@ -144,7 +144,7 @@ starting attempts after `SD_TRY_MS` (6 s): five such attempts ran past the
 
 ## The R1 bits
 
-An R1 is the one-byte answer to every command here; `cmd` recognises it by
+An R1 is the one-byte answer to every command here; `cmd` recognizes it by
 bit 7 being clear. Only three bits are named; the four that are commented
 out (erase reset, erase sequence error, address error, parameter error) are
 never tested.
@@ -207,7 +207,7 @@ Nothing in the repo supplies one.
 
 ## `SDCard.init_spi(self, baudrate)`
 
-Re-initialises the SPI bus at `baudrate`, phase 0, polarity 0. It tries
+Re-initializes the SPI bus at `baudrate`, phase 0, polarity 0. It tries
 `self.spi.MASTER` first (the pyboard form, `spi.init(master, baudrate=…)`)
 and on `AttributeError` uses the keyword-only form (the ESP8266 form, as the
 comments say). The rp2 port's `machine.SPI` has no `MASTER` attribute, so
@@ -303,7 +303,7 @@ raise.
 The start-up sequence, run once per `SDCard`, so once per mount attempt:
 
 1. `cs.init(cs.OUT, value=1)`: CS high.
-2. `init_spi(100000)`: the low rate the spec requires for initialisation.
+2. `init_spi(100000)`: the low rate the spec requires for initialization.
 3. Sixteen `0xFF` bytes with CS high: 128 clocks, more than the 74 the card
    needs to wake. The literal string is spelled out "for small memory
    footprint".

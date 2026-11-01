@@ -92,7 +92,7 @@ waits a bounded time, then gives up and says so:
 | the LOAD stream, the echoes | 3 s without a read; 1 s for each echo | the same |
 | command output nobody reads | `CMD_STALL_MS`, 10 minutes (a listing at "Scroll?" may wait as long as the user likes) | `CmdAbort(3)` → the tail says `FB` |
 | a key wait | `KEY_WAIT_MS`, a day | the same |
-| an unrecognised pre-header | at once | `MQ_TO_IDLE(recovered=True)` |
+| an unrecognized pre-header | at once | `MQ_TO_IDLE(recovered=True)` |
 
 On the 2068, the ROM's `RD_STATUS` (inside every `WAIT_PICO_READY` poll)
 sees READY with bit 2 low and raises **Report T "TS-Pico reset, try

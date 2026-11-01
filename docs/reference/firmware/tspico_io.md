@@ -384,7 +384,7 @@ the `RxDMA`, and only then says idle, because the pre-header follows IDLE at
 once.
 
 Callers: the idle loop (a SYNC; a partial pre-header, with `recovered=True`;
-an unrecognised pre-header; the service-loop restart), `PROCESS_CMD`'s and
+an unrecognized pre-header; the service-loop restart), `PROCESS_CMD`'s and
 `PRINT_IO`'s body aborts, `LOAD_TS`'s abort path, `LOAD_REFUSE` and
 `LOAD_RETRY_DONE`. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
 pins TX = `[01]`, RX empty, the three status choices. Why one byte and not
@@ -426,7 +426,7 @@ hardware probes behind the allocation rule.
 Keeps the low byte of the Z80's word `w` in `echo = [count, block type, CRC]`:
 the first goes to `echo[1]`, the second to `echo[2]`, anything after the
 second is dropped, and `echo[0]` counts. No allocation. `LOAD_TS` reads
-`echo[1]` as the block-type acknowledgement and `echo[2]` as the Z80's
+`echo[1]` as the block-type acknowledgment and `echo[2]` as the Z80's
 computed CRC; it stores both and checks neither.
 
 ### `STREAM_DMA(MQ, buf, echo, stall_ms, ready, first_ms=0)`
@@ -807,8 +807,8 @@ path. `ticks_us()` wraps after ~71 minutes.
 ### `LOAD_REFUSE(pre, MQ, st)`
 
 Ends a LOAD with an error instead of a block: status `st`, 2 for Report R, 7
-for "End of file" (Report 8 where the ROM maps it; ROM 2.2's header search
-shows it as R). Returns 0, or `TX_ROOM`'s 1 or 3 after a BREAK or a stall,
+for "End of file". On a LOAD the ROM shows both as R: EXROM 196Dh turns any
+refused LOAD into R (ROMs 2.1 to 2.3; the user manual said 8 until #311). Returns 0, or `TX_ROOM`'s 1 or 3 after a BREAK or a stall,
 having gone back to idle.
 
 The status cannot simply be written first. The ROM reads a LOAD's first
@@ -922,8 +922,8 @@ request with no search in progress (`ld_start < 0`) starts one at the current
 `offset` and `tap_idx`, with `ld_wrapped = False`. A header request after the
 tape has wrapped (`ld_wrapped`) and come back to or past `ld_start` is a full
 lap with nothing accepted: the search ends, the file is closed if it is not the
-cached handle, and the LOAD is refused with status 7 ("End of file"; ROM 2.2
-shows R). One lap is allowed deliberately, because a program that
+cached handle, and the LOAD is refused with status 7 ("End of file"; ROMs 2.1
+to 2.3 show R). One lap is allowed deliberately, because a program that
 legitimately needs to wrap cannot rewind — it does not speak TPI — and a second
 lap would only repeat the first. Then the end of the tape: `arch_len` is the
 file's size, and an `offset` at or past it is reset to block 0 with
@@ -1189,7 +1189,7 @@ updater is not yet running.
 ### `LOAD_ZX(MQ, TSP)`
 
 Sends one TAP block to the Spectrum ROM: after the `'L'` that `ZX48_IO`
-consumed and the ROM's poll of 0Fh for READY (the customised ZX ROM, not the original in slot 0; up to
+consumed and the ROM's poll of 0Fh for READY (the customized ZX ROM, not the original in slot 0; up to
 ~3.8 s, then Report R), the response is exactly `totbytes` bytes, flag +
 content + CRC, with no status byte and no pre-load. The LED goes on. The source
 is `/assets/nofile.tap` with no mount (`f_name` empty or `totlen` 0; a WARNING

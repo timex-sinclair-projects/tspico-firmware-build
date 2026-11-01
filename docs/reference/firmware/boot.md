@@ -4,8 +4,10 @@ Source: [`src/main.py`](../../../src/main.py) (all of it),
 [`src/config.ini`](../../../src/config.ini),
 [`src/manifest.py`](../../../src/manifest.py),
 [`tools/gen-buildinfo.py`](../../../tools/gen-buildinfo.py),
+[`tools/check-core1-ram.py`](../../../tools/check-core1-ram.py),
 [`src/build-dev-mpy.sh`](../../../src/build-dev-mpy.sh),
 [`.github/workflows/build.yml`](../../../.github/workflows/build.yml),
+[`.github/workflows/manual.yml`](../../../.github/workflows/manual.yml),
 [`.github/workflows/release.yml`](../../../.github/workflows/release.yml),
 [`flash/manifest.json`](../../../flash/manifest.json),
 [`tools/build-flash.py`](../../../tools/build-flash.py).
@@ -30,7 +32,9 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `src/manifest.py` | the freeze manifest: which modules go into the UF2 |
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
-| `.github/workflows/build.yml` | every push: tests, ROM checks, the two v2 UF2s, the v3 UF2, the user manual PDFs (and the v3 card's), artifacts |
+| `tools/check-core1-ram.py` | `build-v3`'s check that the v3 card's core 1 never touches flash, from the linked ELF |
+| `.github/workflows/build.yml` | every push that touches the firmware's inputs, and weekly on `main`: tests, ROM checks, the two v2 UF2s, the v3 UF2, artifacts |
+| `.github/workflows/manual.yml` | every push that touches the user manual: the manual and quick guide PDFs (and the v3 card's) |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
 | `tools/pico-serial.py` | the USB console from a shell |
@@ -274,8 +278,21 @@ boot. That is why the overrides and the assets live at the root and in
 
 ## CI: `build.yml`
 
-Runs on every push to any branch, on pull requests to `main`, and by hand;
-Ubuntu 22.04. The steps, in order:
+Runs on pushes to any branch and pull requests to `main` that touch
+something the build reads, every Monday on `main`, and by hand; Ubuntu
+22.04. "Something the build reads" is every path except the ones the
+`paths` filter negates: `site/`, `promo/`, `archive/`, `esp32/` and
+`windows-updater/` (which have workflows of their own), the root and
+`docs/` Markdown, `.claude/`, the release notes, and the user manual and
+its tools, which `manual.yml` builds. `docs/manual/examples/` (tested in
+step 5), `docs/reference/` (step 3) and `docs/rom-analysis/` (step 6) are
+read by the build and stay in. Until 2026-10 it ran on every push, and the
+Actions storage and runner time that cost are why it doesn't. The weekly run
+exists for Pages: the `main/` channel takes the newest green `main` build
+whose `tspico-firmware-uf2` hasn't expired, and without it a month of
+docs-only commits would leave none. A branch whose head commit was
+docs-only has no run for that commit; `pico-serial.py flash --branch`
+says so (below). The steps, in order:
 
 1. **Build tools**: `git`, `build-essential`, `cmake`,
    `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi`, `python3` from apt.
@@ -291,7 +308,8 @@ Ubuntu 22.04. The steps, in order:
 3. **Host tests**: 43 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
-   ([README](../README.md#keeping-it-current)). They pin invariants that
+   ([README](../README.md#keeping-it-current)); the manual's
+   `manual_variants_hosttest.py` runs in `manual.yml` instead. They pin invariants that
    used to be checked only by flashing a UF2; they do not observe the Z80
    bus.
 4. **The flash manifest**: `tools/build-flash.py check flash/manifest.json`
@@ -348,21 +366,33 @@ the board's manifest freezes `src/TS/` directly, `buildinfo.py` among them),
 and runs `make` with
 `BOARD_DIR=$GITHUB_WORKSPACE/src/boards/TSPICO_V3`, so nothing is copied
 into the MicroPython tree. It needs its own clone because step 9 replaces
-the port's `boards/manifest.py`. The UF2, `build-TSPICO_V3/firmware.uf2`,
+the port's `boards/manifest.py`. Then `tools/check-core1-ram.py -v` reads
+`build-TSPICO_V3/firmware.elf` and fails the job if anything core 1 reaches
+is in flash (below). The UF2, `build-TSPICO_V3/firmware.uf2`,
 is uploaded as `tspico-v3-firmware-uf2`. The board brings in the `tsbus`
 module itself (`USER_C_MODULES`), so the job needs no extra arguments. The
 UF2 is the whole firmware, `TS.tspico` on `board_v3` (step 4.3 of the v3
 port plan); `pico-serial.py flash --v3 --branch B` fetches it.
 
-A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
+The user manual is built by its own workflow, `manual.yml`, on pushes and
+pull requests that touch `docs/manual/`, `tools/manual-pdf/`,
+`tools/manual-variants.py`, `tools/build-site-docs.py`, `src/config.ini`
+(the cover's version) or `site/assets/img/`. Its one job, `manual-pdf`,
+first runs `manual_variants_hosttest.py`, then `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
 the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
 DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
-Poppins) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
+Poppins) and the code-block font (Timex TS2068, CC BY 3.0, credited in the
+colophon) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
 one board's manual from `docs/manual/user-manual.md`
 (`tools/manual-variants.py`: passages for one board sit between
 `<!-- v2 -->` or `<!-- v3 -->` marker lines; `BOARD=v2` is the default and
-the published manual), turns it into HTML with pandoc, and
+the published manual), turns it into HTML with pandoc and
+`tools/manual-pdf/manual.lua` (program listings laid out as the 2068 lists
+them: line numbers in four columns, every line cut at 32; and a lead-in
+paragraph kept on one page with the code, picture or short list after it;
+and the board drawing printed at the full text width, not the usual 3.3 in,
+so its jumper labels can be read), and
 `tools/manual-pdf/book.py` adds the title page, contents and chapter
 openers, prints the manual and the two covers with the runner's Chrome, and
 assembles the half-letter one-up (cover + manual) and the saddle-stitch
@@ -372,14 +402,46 @@ printed twice: the first print says where each chapter starts, and a blank
 page goes in before each one that would open on a left-hand page. The
 cover's version comes from `config.ini` and its date from the last commit.
 The script checks the page size and count and that every chapter opens on
-an odd page; the two PDFs are uploaded as
-`tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
-(`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover), uploaded
+an odd page. Then `tools/manual-pdf/quick.py` makes the two quick guides
+from `docs/manual/quick-start.md` and `quick-reference.md` (the same board
+variants): the Quick Start Guide, the manual's cover with "QUICK START" on
+it, six pages (one per `##` section, styled by `quick.css` over the
+manual's `print.css`) and a back cover (`quick-back.html`), as a half-letter
+one-up and a booklet on two letter sheets; and the Quick Reference Guide, a
+card after the 2068's (`card.css`), one landscape letter sheet printed on
+both sides and folded in three, its panels started by `<!-- panel: NAME -->`
+comments in the Markdown and its cover drawn by the script. The script
+fails if a guide's section or a card panel runs over (for the card, a
+script in the page measures each panel in Chrome's `--dump-dom`). The five
+PDFs are uploaded as `tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
+(`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover, and
+`quick-start-v3-*.pdf` and `quick-reference-card-v3-letter.pdf`), uploaded
 with its Markdown as `tspico-manual-v3`; it isn't published (website,
-releases) while the card is unreleased. Building them on every push means a
-manual change that breaks them fails here, not at release time.
+releases) while the card is unreleased. Then `PRINT=1` makes the files for
+printing on demand, uploaded as `tspico-manual-print` and taken from there
+by hand to Amazon KDP (paperback) and Lulu (coil bound, which lies flat;
+run locally with no output folder, `make.sh` puts them on the Desktop):
+`user-manual-print-interior.pdf`, the one-up without its cover padded to an
+even page count, the interior for both, printed with a wider inside margin
+than the reading PDF (`GUTTER`, 0.8 in by default against 0.62 in, and 0.45
+in outside against 0.5: the KDP proof's perfect binding swallowed too much
+of 0.62 in, which is Lulu's minimum for a 61 to 150 page paperback; KDP's
+is 0.375 in, and coil needs no gutter); `user-manual-kdp-cover.pdf`, back, spine and front
+on one sheet with 0.125 in of bleed all round, the spine the page count
+times KDP's paper thickness (`PAPER=white`, the default, or `cream`), and
+the back cover's links raised out of the corner where KDP prints the
+barcode; and `user-manual-lulu-coil-cover.pdf`, back and front with bleed
+and no spine (11.25 x 8.75 in). The cover art (`cover.css`) runs into the
+bleed. Spine text goes on only where it fits with 0.125 in clear each side
+(Lulu's figure; KDP asks for 1/16 in), about 0.35 in of spine or 155 pages
+on white paper; the manual is far short of that. `book.py` checks each
+cover's size. Building them on every push that touches the manual means a
+change that breaks them fails here, not at release time.
 
-Artifacts are kept 30 days. `tools/pico-serial.py flash --branch B`
+`build.yml`'s artifacts are kept 30 days (its failure logs 7); `manual.yml`'s
+three are kept 7 days, since they preview a change: releases build their
+own PDFs, and the print-on-demand files are taken by hand soon after the
+build. `tools/pico-serial.py flash --branch B`
 downloads the `tspico-firmware-uf2` of B's current head and flashes it
 (below). The list of host tests in step 3 is the authority on what CI
 runs; a new test needs a line there.
@@ -388,6 +450,67 @@ A second workflow, `emu-host.yml`, builds the standalone emulator host
 (`tools/emu`) for each platform on pushes that touch `src/`, `basic/` or
 the emulator, and attaches the binaries to a release
 ([docs/EMULATOR_BRIDGE.md](../../EMULATOR_BRIDGE.md)).
+
+## `tools/check-core1-ram.py`
+
+`python3 tools/check-core1-ram.py [-v] [--tools PREFIX] firmware.elf`, from
+`build-v3` after the build. The v3 card's core 1 serves the 2068's bus, the
+modem and speech, and must never fetch an instruction or read data from
+flash: flash reads stall while core 0 erases or programs it (#254), and an
+IN gives core 1 about 600 ns ([tsbus.md](tsbus.md#how-it-fits-under-micropython)). The source
+marks its code `__not_in_flash_func` and its data non-`const` or
+`SP0256_DATA`, but what lands where is gcc's decision: in #305 a
+`static char s_ready[]` that nothing wrote went to `.rodata` anyway, and
+`core1_main`'s set-up called `irq_set_priority` and `irq_set_enabled`,
+which are in flash, until this check found them. So it reads the linked
+ELF with binutils (`objdump -t` for the symbols, `objdump -d` for the code;
+`.data` is marked as code, so its `.time_critical` functions are
+disassembled with it).
+
+From `ROOTS` it follows every direct branch out of a function into the
+function it lands in, and every literal-pool word or `movw`/`movt` pair that
+is a function's start with the Thumb bit set (a function pointer, or a
+linker veneer's target). Every function reached must be at `RAM_LO` or
+above, and none may use an address from `FLASH_LO` to `FLASH_HI`: a call to
+flash (an SDK helper left out of line, `memcpy`, `__aeabi_*`, through a
+veneer or not) or a read of flash data (`.rodata`, `.flashdata`, a PIO
+program's instructions). Each one is a `FLASH:` line naming the function,
+the address and what is there, and the exit status is 1. `-v` lists the
+functions reached and the RAM data they address, with each object's
+section.
+
+What it can't see: a flash address that only exists at run time (a pointer
+core 0 stores in a struct core 1 reads; today every such pointer, the
+rings and `sp0256_al2`, is to RAM), indirect calls (`blx`/`bx` to a
+register: listed as `note:` and not followed; there are none), and the
+`TSBUS_DIAG` build, which CI doesn't make. Core 1's exception vectors other
+than `PIO2_IRQ_0` are core 0's, in flash; a fault on core 1 is already the
+end. A value that only looks like a flash address (a constant `0x10000000`
+loaded from a pool) would be reported too; there is none, and the answer
+would be to load it differently, not to allow it.
+
+Checked against the v1.29.0 build (gcc 13.3, 2026-10-15): before the
+`core1_main` change it reported the two `irq_set_*` veneers; with
+`s_ready`'s `volatile` taken out it reported `m2050_wait_ready` reading
+`s_ready` in `.rodata`; as committed, 22 functions and no flash address.
+
+| Symbol | What it is |
+|---|---|
+| `ROOTS` | core 1's entry points: `core1_main` (`multicore_launch_core1`) and `iord_isr` (core 1's own vector table) |
+| `FLASH_LO`, `FLASH_HI` | 10000000h–1FFFFFFFh: every XIP alias of the flash (cached, uncached, maintenance, cache-as-SRAM) |
+| `RAM_LO` | 20000000h: SRAM's start; a function below it is in flash |
+| `FUNC_RE`, `INSN_RE` | a function's label line and an instruction line in `objdump -d` |
+| `BRANCH_RE`, `TARGET_RE` | a direct branch's mnemonic (`b`, `bl`, `blx`, `b<cond>`, `cbz`…) and its `<addr> <symbol>` target |
+| `MOVW_RE` | a `movw`/`movt` operand: the register and the 16-bit value |
+| `run(cmd)` | a command's standard output; fails on a non-zero exit |
+| `is_flash(a)` | `a` is in `FLASH_LO`..`FLASH_HI` |
+| `Elf` | the ELF as binutils shows it |
+| `Elf.__init__(path, prefix)` | reads `objdump -t` (every defined symbol's address, size and section; which are functions, `F`) and `objdump -d`, cut into functions at function symbols only, since `.data`'s variables get labels too |
+| `Elf.sym(a)` | the symbol `a` is in, as name+offset and section |
+| `Elf.name(a)` | the same name, or `?` |
+| `Elf.refs(fname)` | every address a function uses: branch targets, pool words, `movw`/`movt` constants, and its indirect branches |
+| `Elf.func_of(a)` | the function `a` is in |
+| `main()` | the walk, the report and the exit status |
 
 ## Releases: `release.yml`
 
@@ -414,17 +537,21 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    alone (`build` exits 2, "INCOMPLETE", after writing them).
 4. **Zimodem for the v3 card's modem**, `zimodem-v3.bin`
    (`esp32/zimodem/build.sh`, PlatformIO 6.1.19: Zimodem 4.0.3 with the
-   card's patches, merged into one image for flash address 0). The step may
+   card's patches, which make it 4.0.3.1 (IO5/IO7 pulled up; a phonebook
+   dial keeps the dial's own modifiers, #302), merged into one image for
+   flash address 0). The step may
    fail without failing the release, which then has no `zimodem-v3.bin`.
    The same build runs in `zimodem.yml` when `esp32/zimodem/` changes, or
    by hand, as the `tspico-zimodem` artifact.
-5. **The user manual PDFs**, as `build.yml`'s `manual-pdf` job makes them,
-   from the manual at the tag.
+5. **The user manual and quick guide PDFs**, as `manual.yml`'s `manual-pdf`
+   job makes them, from the docs at the tag.
 6. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
    reflash), `upgrade.uf2`, `firmware-v3.uf2` and `v3-slots.zip` (the v3
    card's firmware and slots), `zimodem-v3.bin` when it was built,
    `user-manual-half-letter.pdf`,
-   `user-manual-saddle-stitch-letter.pdf`, and the flash image when there
+   `user-manual-saddle-stitch-letter.pdf`, `quick-start-half-letter.pdf`,
+   `quick-start-saddle-stitch-letter.pdf`,
+   `quick-reference-card-letter.pdf`, and the flash image when there
    is one. If the
    release already exists, the assets are uploaded to it (`--clobber`) and
    its notes left alone; otherwise it is created with the notes in
@@ -437,9 +564,9 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
 `workflow_run`: GitHub does not fire `release` events for releases made
 by a workflow's token), on a green build of `main`, and on pushes to
 `main` that touch `site/`, `web-updater/`, `SD card/`, the manuals or the
-reference. It copies the two manuals and this reference into the site
+reference. It copies the manuals, the quick guides and this reference into the site
 (`tools/build-site-docs.py`, links rewritten for the site), builds the user
-manual's two PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
+manual's and the quick guides' PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
 from the Docs page), builds the Jekyll site and mounts the web updater at `/updater/`, with the latest
 release's payload under `/updater/release/` and the latest green `main`
 build under `/updater/main/`. Each channel carries the v3 card's firmware
@@ -545,7 +672,10 @@ via `gh`; it reboots the board into BOOTSEL with `machine.bootloader()`, so
 no buttons, and finds either chip's drive, `RPI-RP2` or `RP2350`). Before
 copying, `flash` compares the UF2's family IDs with the drive's
 `INFO_UF2.TXT` Board-ID and refuses a UF2 built for the other chip, leaving
-the board in BOOTSEL. `--sd` on `put`, `get` and `run` mounts the SD card
+the board in BOOTSEL. `--branch` finds the run by the branch's head
+commit, so when that commit touched nothing `build.yml` reads (a docs-only
+commit) there is no run and `flash` stops, saying so; pass `--run` with the
+branch's last firmware build. `--sd` on `put`, `get` and `run` mounts the SD card
 at `/sd` first, as `ACTIVATE_SD` does (`board.sd_take_bus`, `sd_spi`,
 `sd_cs`, then `TS.sdcard.SDCard`; so on either board), and unmounts it and
 calls `board.sd_release_bus` after; a `put`/`get` path gets `/sd` in front.

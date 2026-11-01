@@ -438,6 +438,8 @@ def main():
     results.append(check("ver_of", core.ver_of("2.2.1") == (2, 2) and core.ver_of("x") is None))
     results.append(check("major_of", core.major_of("1.1 (no version in config.ini)") == 1.1))
     results.append(check("ver_cmp", core.ver_cmp("1.20.0", "1.29.0") < 0 and core.ver_cmp("1.29", "1.29.0") == 0))
+    results.append(check("ver_cmp: our Zimodem 4.0.3.1 is newer than 4.0.3",
+                         core.ver_cmp("4.0.3", "4.0.3.1") < 0 and core.ver_cmp("4.0.3.1", "4.0.3.1") == 0))
     m = {"rom_version": "2.2", "fw_version": "2.2.1"}
     results.append(check("rom_behind: 2.1 board", core.rom_behind({"ver": (2, 1), "from1x": False}, m)))
     results.append(check("rom_behind: 2.2 board", not core.rom_behind({"ver": (2, 2), "from1x": False}, m)))

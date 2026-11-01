@@ -14,6 +14,10 @@ side of the wire.
 > **Scope note.** We are *not* reproducing the FDD 3000's command syntax, which
 > is derived from the ZX Interface 1 and carries a device-type argument
 > (`"m";1;"name"`). The TS-PICO has one storage device. Syntax is ours to choose.
+> *(2026-10-18: the Interface 1 forms are now planned as well, for mounted `.MDR`
+> microdrive images, alongside the SD card's `f:` syntax; see
+> [#330](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/330)
+> and the non-goals in [`DISK_COMMANDS_SPEC.md`](DISK_COMMANDS_SPEC.md).)*
 
 ## Start here
 
@@ -196,7 +200,7 @@ is occupied, so this displaces no existing address.
         │ HOME hook: 3 bytes @ $25D6 + 4 in the syntax offset table
         ▼
    EXROM $22AE+  parse args
-        │  synthesise "TPI:DIR ..." etc.
+        │  synthesize "TPI:DIR ..." etc.
         │  point $5DD3/$5DD5 at it, set T-ADDR
         ▼
    existing $1A73 → $1BA0 'B' block ──────────►  PROCESS_CMD  →  SA_funct{}
@@ -208,7 +212,7 @@ is occupied, so this displaces no existing address.
         (direct port $0E/$0F, own wait loop)
 ```
 
-Phase 1 adds **no new wire protocol at all**: the commands become synthesised
+Phase 1 adds **no new wire protocol at all**: the commands become synthesized
 `TPI:` strings on the existing `'B'` BASIC-command path, which the Pico already
 parses in `PROCESS_CMD` and dispatches through the `SA_funct` table. Only
 Phase 3's bulk transfers need anything new.
@@ -317,7 +321,7 @@ almost free: the `'B'`-block path already surfaces the Pico's status byte as a
 report, so it is a matter of the handlers returning the right status.
 
 Pico-side work in this phase is small: a few handlers in `SA_funct`, most of them
-thin wrappers over `DIR`, `RM`, `CD`, `TAPDIR`, `NEW_TAP`. Each must honour the
+thin wrappers over `DIR`, `RM`, `CD`, `TAPDIR`, `NEW_TAP`. Each must honor the
 V6 tail pre-load contract in `PROCESS_CMD` — handlers write their response and
 return; they do **not** write their own `0x01`. See
 [`EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md) §3.
@@ -479,10 +483,10 @@ That is perfectly fine for "one command, one message." It is fatal for
    sane interval rather than on every poll.
 2. **Every channel is buffered.** `PRINT #` fills a RAM record buffer and flushes
    only when full or on `CLOSE #`; `INPUT #` pulls a block and serves bytes from
-   RAM. This amortises one handshake over a whole block instead of over one byte,
+   RAM. This amortizes one handshake over a whole block instead of over one byte,
    and it makes random access fall out for free — a seek is "give me block N."
 
-MicroPython on the Pico side needs the same amortisation for the same reason: a
+MicroPython on the Pico side needs the same amortization for the same reason: a
 per-byte round trip through the FIFO and the interpreter will not keep up.
 
 The Interface 1 precedent is the sanity check here — its microdrive channel is
@@ -550,7 +554,7 @@ the declarative `PATCHES` manifest (each patch asserts the bytes it overwrites, 
 a moved ROM fails loudly); and, with `--verify`, assert that **only** the module
 region and enabled patches changed. Because file offset == Z80 address in both
 banks, the report reads in Z80 addresses. This is the reproducible, diffable
-append-and-patch pattern the v1.5w fix used, mechanised.
+append-and-patch pattern the v1.5w fix used, mechanized.
 
 First build is proven end to end: it assembles the `$3000` skeleton, applies the
 verified 4-byte syntax-offset patch, produces `build/TSPICO-fdd.ROM` changing
@@ -851,7 +855,7 @@ ROM experiment.**
 
    then read it back with ZRCP `evaluate var0` before and after the event. Always
    run a positive control (a breakpoint on `$1A71`, the statement dispatcher,
-   which any line must reach) — that is what caught the non-halting behaviour.
+   which any line must reach) — that is what caught the non-halting behavior.
 
 2. **Typing a keyword token is unnecessary.** Disk keywords are buried in extended
    mode, but the edit line can be built directly: press one key that yields a

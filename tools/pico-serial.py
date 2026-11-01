@@ -416,8 +416,10 @@ def ci_run_for_branch(branch):
     runs = gh_json("run", "list", "--commit", sha, "--workflow", BUILD_WORKFLOW,
                    "--json", "databaseId,status,conclusion,headSha,createdAt")
     if not runs:
-        sys.exit("no %s run for %s (%s) yet -- has CI started? Or pass --run"
-                 % (BUILD_WORKFLOW, branch, sha[:7]))
+        sys.exit("no %s run for %s (%s) -- has CI started? %s skips commits "
+                 "that touch only docs, the site or the manual; if this one did, "
+                 "pass --run with the branch's last firmware build"
+                 % (BUILD_WORKFLOW, branch, sha[:7], BUILD_WORKFLOW))
     runs.sort(key=lambda r: r["createdAt"], reverse=True)
     ok = [r for r in runs if r["status"] == "completed" and r["conclusion"] == "success"]
     if not ok:

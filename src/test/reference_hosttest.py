@@ -113,9 +113,11 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "tools/build-flash.py",
     "tools/build-upgrade.py",
     "tools/gen-buildinfo.py",
+    "tools/check-core1-ram.py",
     "tools/sp0256-port.py",
     "tools/speech-rules.py",
     ".github/workflows/build.yml",
+    ".github/workflows/manual.yml",
     ".github/workflows/release.yml",
 )
 

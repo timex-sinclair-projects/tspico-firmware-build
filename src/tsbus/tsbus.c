@@ -40,9 +40,11 @@
  *                                  the ESP32-C3 on UART0 (usart8251.c, modem2050.c);
  *                                  sets up the UART and two DMA channels
  *   tsbus.modem_mode(m)            0 Hayes (pass-through, DSR 1), 1 2050 (the default)
- *   tsbus.modem_line(on)           Zimodem is up (core 0 powered it and waited) or not
+ *   tsbus.modem_line(on)           Zimodem is up or not (core 1 also sets it on READY.)
  *   tsbus.modem_poll()             what core 0's idle loop needs, as bits (no allocation)
  *   tsbus.modem_pace(baud)         received characters no faster than baud (0: none)
+ *   tsbus.modem_flow(on)           Hayes mode: XON/XOFF toward Zimodem (the program sent
+ *                                  ATF1 and dials with X); off at every tsbus.modem(True)
  *   tsbus.esp_relay(first, idle)   USB <-> the ESP32-C3's UART, byte for byte, to flash
  *                                  Zimodem with the ESP32 ROM's loader (the modem off)
  *   tsbus.kempston(byte)           answer 1Fh, the Kempston joystick, with byte; None:
@@ -183,8 +185,11 @@ static volatile uint32_t io_ins, io_in_ours, io_outs_ours, io_in_late, respond_m
 #define PIN_MODEM_TX 44
 #define PIN_MODEM_RX 45
 #define MODEM_BAUD 115200
-#define LINE_RX_N 4096
-#define LINE_RX_BITS 12
+// 16 KB, not 4: after XOFF Zimodem can still send up to its whole 4 KB
+// serial buffer (it copies from the socket without looking for XOFF), so
+// the card sends XOFF at half full and keeps 8 KB free (#301).
+#define LINE_RX_N 16384
+#define LINE_RX_BITS 14
 #define LINE_TX_N 1024
 #define U_RX_N 1024
 #define U_TX_N 1024
@@ -210,8 +215,11 @@ static volatile uint32_t kemp_ins;  // INs from 1Fh answered
 // using it); modem_touched: any IN or OUT (it still is). Both are cleared by
 // tsbus.modem_poll(). modem_line_up: Zimodem is running; until then nothing
 // goes to the UART (it waits in line_tx) and what comes in is dropped (the
-// boot banner, or noise from an ESP that is off).
+// boot banner, or noise from an ESP that is off), except that core 1 looks
+// in it for Zimodem's READY. and brings the line up itself then
+// (m2050_wait_ready, #300). Core 0 brings it up after MODEM_BOOT_MS if not.
 static volatile bool modem_wake, modem_touched, modem_line_up;
+static volatile uint32_t modem_readies;   // times the line came up on READY.
 
 // Speech (docs/v3-speech-proposal.md): the SP0256-AL2 emulated on core 1
 // (sp0256.c), a few samples per pass of its loop, into a ring of PWM levels
@@ -245,8 +253,8 @@ static volatile uint32_t spk_allophones, spk_samples, spk_late;
 // 37 reads the chip's LRQ on bit 7 (1: busy). Its 74HC138 decodes A4, A5 and
 // /RD with A7 low, so it answers more of the port range; programs use 17 and
 // 37, and the card decodes exactly those, leaving the rest of that range
-// free (1Fh, the Kempston port, is in it). Answered only while speech is
-// on. Allophones from OUT 17 go in their own queue, which core 1
+// free (1Fh, in it, is the card's own Kempston port). Answered only while
+// speech is on. Allophones from OUT 17 go in their own queue, which core 1
 // both fills (io_snoop) and empties (speech_pass), so it needs no lock.
 #define SPK_PORT_OUT 0x11
 #define SPK_PORT_IN  0x25
@@ -701,7 +709,6 @@ static void __not_in_flash_func(speech_pass)(void) {
 }
 
 static void __not_in_flash_func(core1_main)(void) {
-    // Setup may call flash code: core 0 waits in tsbus.start() until it is done.
     const uint32_t *v = (const uint32_t *)scb_hw->vtor;
     for (uint i = 0; i < CORE1_NVEC; i++) {
         core1_vectors[i] = v[i];
@@ -714,8 +721,13 @@ static void __not_in_flash_func(core1_main)(void) {
     m33_hw->demcr |= M33_DEMCR_TRCENA_BITS;
     m33_hw->dwt_ctrl |= M33_DWT_CTRL_CYCCNTENA_BITS;
     pio_iord->irq = 1u;
-    irq_set_priority(PIO2_IRQ_0, 0);
-    irq_set_enabled(PIO2_IRQ_0, true);                            // for this core
+    // PIO2_IRQ_0 at priority 0 and enabled, for this core: the NVIC directly,
+    // as irq_set_priority and irq_set_enabled do, since those are in flash
+    // (tools/check-core1-ram.py fails the build on any flash call).
+    const uint32_t iord_bit = 1u << (PIO2_IRQ_0 % 32);
+    nvic_hw->ipr[PIO2_IRQ_0 / 4] &= ~(0xffu << (8 * (PIO2_IRQ_0 % 4)));
+    nvic_hw->icpr[PIO2_IRQ_0 / 32] = iord_bit;
+    nvic_hw->iser[PIO2_IRQ_0 / 32] = iord_bit;
     core1_ready = true;
 
     const uint32_t snoop_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + sm_snoop);
@@ -826,8 +838,11 @@ static void __not_in_flash_func(core1_main)(void) {
             mrx_off = off;
             bool idle = !(dma_hw->ch[ch_mtx].ctrl_trig & DMA_CH0_CTRL_TRIG_BUSY_BITS);
             modem.lrx_head += got;
-            if (!modem_line_up) {
-                modem.lrx_tail = modem.lrx_head;      // nobody there yet: drop it
+            // Nobody there yet: dropped, but looked through for Zimodem's
+            // READY., which brings the line up (what follows it is kept).
+            if (!modem_line_up && m2050_wait_ready(&modem)) {
+                modem_line_up = true;
+                modem_readies++;
             }
             if (idle) {
                 modem.ltx_tail += mtx_inflight;
@@ -1284,9 +1299,11 @@ static mp_obj_t tsbus_modem_mode(mp_obj_t mode_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_mode_obj, tsbus_modem_mode);
 
-// tsbus.modem_line(on): Zimodem is up (core 0 powered the ESP32 and gave it
-// time to boot), or not. Kept across tsbus.modem(True). While it isn't,
-// core 1 sends nothing to the UART and drops what arrives.
+// tsbus.modem_line(on): Zimodem is up, or not: core 0 says so when it powers
+// the ESP32 off or restarts it (False), or when Zimodem hasn't said READY.
+// within MODEM_BOOT_MS (True); core 1 sets it itself on READY. Kept across
+// tsbus.modem(True). While it isn't, core 1 sends nothing to the UART and
+// drops what arrives, looking only for READY.
 static mp_obj_t tsbus_modem_line(mp_obj_t on_in) {
     modem_line_up = mp_obj_is_true(on_in);
     return mp_const_none;
@@ -1296,7 +1313,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_line_obj, tsbus_modem_line);
 // tsbus.modem_poll(): for core 0's idle loop, as a small int (no
 // allocation, it runs every idle pass): bit 0 an OUT to the 8251 since the
 // last poll, bit 1 off-hook (2050 mode, not on-hook), bit 2 any IN or OUT
-// since the last poll. Bits 0 and 2 are cleared by the read.
+// since the last poll, bit 3 the line up (core 1 sets it on Zimodem's
+// READY.). Bits 0 and 2 are cleared by the read.
 static mp_obj_t tsbus_modem_poll(void) {
     mp_int_t r = 0;
     if (modem_on) {
@@ -1308,6 +1326,9 @@ static mp_obj_t tsbus_modem_poll(void) {
         }
         if (modem_touched) {
             r |= 4;
+        }
+        if (modem_line_up) {
+            r |= 8;                     // set by core 1 on Zimodem's READY. too
         }
         modem_wake = modem_touched = false;
     }
@@ -1346,6 +1367,18 @@ static mp_obj_t tsbus_kempston(mp_obj_t byte_in) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_kempston_obj, tsbus_kempston);
+// tsbus.modem_flow(on): in Hayes mode, pause Zimodem with XOFF when the
+// receive ring is half full and resume it with XON below 1/4, as 2050 mode
+// does while connected. Only for a program that has set Zimodem up for it
+// (ATF1, and X in the dial: ATDTX): otherwise XOFF and XON reach the host
+// as data. Core 1 takes the request on its next pass (modem.flow_want); every
+// tsbus.modem(True) (a mode change, the boot) turns it off again.
+static mp_obj_t tsbus_modem_flow(mp_obj_t on_in) {
+    modem.flow_want = mp_obj_is_true(on_in) ? 1 : 0;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_flow_obj, tsbus_modem_flow);
+
 // tsbus.speech(on[, rate]): speech on: the chip reset, the PWM audio pins set
 // up (12-bit levels, a 61 kHz carrier), and two DMA channels playing the
 // ring to them, paced by a DMA timer at the chip's 10 kHz times rate / 100
@@ -1631,6 +1664,8 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_m_tx, usart.tx_chars);
     store(d, MP_QSTR_m_tx_dropped, usart.tx_dropped);
     store(d, MP_QSTR_m_rx_lost, modem.rx_lost);
+    store(d, MP_QSTR_m_flow, modem.flow);
+    store(d, MP_QSTR_m_xoff, modem.xoff_sent);
     store(d, MP_QSTR_m_rxq, (modem.lrx_head - modem.lrx_tail) + (usart.rx_head - usart.rx_tail));
     store(d, MP_QSTR_m_mode_sel, modem_mode);
     store(d, MP_QSTR_m_state, modem.state);
@@ -1638,6 +1673,7 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_m_connects, modem.connects);
     store(d, MP_QSTR_m_carrier_lost, modem.carrier_lost);
     store(d, MP_QSTR_m_line_up, modem_line_up);
+    store(d, MP_QSTR_m_readies, modem_readies);
     store(d, MP_QSTR_m_pace_us, usart.pace / (BUS_CLOCK_HZ / 1000000));
     // The joystick (1Fh).
     store(d, MP_QSTR_k_byte, kempston < 0 ? 0 : kempston);
@@ -1906,6 +1942,7 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_modem_line), MP_ROM_PTR(&tsbus_modem_line_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_poll), MP_ROM_PTR(&tsbus_modem_poll_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_pace), MP_ROM_PTR(&tsbus_modem_pace_obj) },
+    { MP_ROM_QSTR(MP_QSTR_modem_flow), MP_ROM_PTR(&tsbus_modem_flow_obj) },
     { MP_ROM_QSTR(MP_QSTR_esp_relay), MP_ROM_PTR(&tsbus_esp_relay_obj) },
     { MP_ROM_QSTR(MP_QSTR_kempston), MP_ROM_PTR(&tsbus_kempston_obj) },
     { MP_ROM_QSTR(MP_QSTR_speech), MP_ROM_PTR(&tsbus_speech_obj) },

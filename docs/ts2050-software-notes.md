@@ -75,7 +75,7 @@ Every control write after the mode byte is a command.
 | 6 | SYNDET/BRKDET | Async mode: RxD low for two whole frames | RxD returns high, or a reset |
 | 7 | DSR | The /DSR pin is low | The pin goes high |
 
-**Datasheet behaviour a driver relies on:**
+**Datasheet behavior a driver relies on:**
 
 - **The TxRDY status bit is not masked by CTS or TxEN.** It only means "buffer empty". The TxRDY *pin* is masked by both. Every program here polls the status bit.
 - **Short characters read back with zeros.** With 5, 6 or 7 data bits, the unused high bits of a received byte are 0, and on transmit they are "don't care". So in 7E1 a received byte always has bit 7 = 0.
@@ -94,7 +94,7 @@ Every control write after the mode byte is a command.
 - The `.tap` holds a BASIC loader `aai` (493 bytes, autostarts at line 10) and a CODE block `aterm`: 8000 bytes at **54016 (D300h)**, running from D300h to F23Fh.
 - Entry point is D300h. The BASIC calls `PRINT USR 54016`.
 - Menus:
-  - Main menu: A auto-dial, B/I/P colours, S setup.
+  - Main menu: A auto-dial, B/I/P colors, S setup.
   - Setup menu: D duplex, P parity, S stop bits, W word length.
   - A "Modem CMD" prompt: H hang up, M answer, D dial, P off-hook with no carrier monitoring.
 - Messages: "Ring-In", "Connect", "Connection lost", "No answer or busy", "Manual disconnect".
@@ -105,7 +105,7 @@ Every control write after the mode byte is a command.
 - Download (`mterm-II.dck`, 8201 bytes): https://archive.org/download/timex-sinclair-software-archive/MTERM%20II%20%281986%29%28Zebra%20Systems%29%28US%29%28TS2068%29%28Cartridge%29.zip
 - Archive page: https://timexsinclair.com/computer_media/mterm-ii.md
 - **Layout:** a DCK with bank 00 (DOCK) and a single ROM chunk, chunk 4 (8000h–9FFFh).
-  - The cartridge header at 8000h is `01 02 08 80 …` and contains a tokenised BASIC line, `PRINT USR 32816`.
+  - The cartridge header at 8000h is `01 02 08 80 …` and contains a tokenized BASIC line, `PRINT USR 32816`.
   - At 8030h the code runs `LD HL,80FCh / LD DE,D2FCh / LD BC,1E30h / LDIR / JP D2FDh`. So the program runs from RAM at **D2FCh–F12Bh**.
 - Features beyond MTERM/T:
   - A phonebook in which each entry has its own serial parameters (its own mode byte).
@@ -125,7 +125,7 @@ Every control write after the mode byte is a command.
 - **ER (bit 4) is always set in the stored value**, so rewriting the command also clears errors.
 - `LD BC,(store)` loads C = stored command and B = mode, which is what the init routine takes.
 
-### 2.3 Initialise / write command (MTERM/T DD32h; MTERM II E737h)
+### 2.3 Initialize / write command (MTERM/T DD32h; MTERM II E737h)
 
 Inputs: B = mode byte, or 0 for "command only". C = stored command.
 
@@ -231,7 +231,7 @@ One iteration takes **106 T-states while on-hook** (DD17 returns early) and **13
 1. Go off-hook.
 2. Wait FC04h × 130 T ≈ **2.38 s** for dial tone.
 3. Walk up to 30 characters of the number string:
-   - Digits are dialled.
+   - Digits are dialed.
    - `P` pauses 65536 × 130 T ≈ **2.42 s**.
    - Anything else is skipped.
 4. After the last digit, wait another 2.38 s.
@@ -430,7 +430,7 @@ FFF3  IN A,(77h) / AND 80h / RET Z                         ; "o" = 65523: wait-f
   - 116 should probably be 115;
   - the jump byte 240 should probably be 245, looping back to FFF3h.
   
-  Treat this program as a behavioural reference, not as working code.
+  Treat this program as a behavioral reference, not as working code.
 - The `XOR A` before each `IN A,(n)` puts 00h on A8–A15. MTERM does not do this, so the high byte doesn't matter.
 
 ### 3.4 Other programs (not disassembled)
@@ -493,7 +493,7 @@ Each code is preceded by and followed by the end-of-line string. **With ATX1, `C
 | `ATDT"host:port"` | Connect with telnet negotiation for this session (or set `S62=1`) |
 | `ATDX"host:port"` | Enable XON/XOFF for this session |
 | `ATP"5551212=host:port,notes"` | Add a phonebook entry |
-| `ATD5551212` | Dial a phonebook entry by number |
+| `ATD5551212` | Dial a phonebook entry by number (with the entry's saved modifiers only; the card's 4.0.3.1 build adds the dial's own, so 2050 mode's `ATDX5551212` obeys XON/XOFF) |
 | `ATH` | Hang up all connections |
 | `ATO` | Resume the stream |
 
@@ -509,7 +509,7 @@ Each code is preceded by and followed by the end-of-line string. **With ATX1, `C
 
 Everything in this section is a recommendation. It is written to work against a real 8251 as well as against the emulation.
 
-**Initialise**
+**Initialize**
 
 ```
 OUT (77h),00h ; OUT (77h),00h ; OUT (77h),00h   ; worst-case reset (datasheet)

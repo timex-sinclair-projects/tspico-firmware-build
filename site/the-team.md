@@ -2,7 +2,7 @@
 layout: page
 title: The Team
 lang: en
-description: The people behind the TS Pico — Ricardo, Gustavo, Jeff, Tim and David.
+description: The people behind the TS Pico — Ricardo, Gustavo, Jeff, Tim, Ryan, Joe and David.
 ---
 
 ## Ricardo Calcagno
@@ -61,7 +61,21 @@ Tim joined the team early, offering his software and hardware design support to 
 
 ## Ryan Gray
 
-[Ryan](https://graytrek.com/) joined the team to develop tools like the Commander and help with firmware on the Pico.
+[Ryan](https://graytrek.com/) started out on the TRS-80 Model I that the Junior High had a few of, then was soon staying after school and going to Radio Shack on the weekends. He saved up for a US version ZX81 with a whole 16K. He then got a Timex Sinclair 2068 just in time before Timex called it quits. He spent a few years showing his friends how it was superior to their computers. He was also a member of the Timex/Sinclair User Group of Fort Worth.
+
+For college, he moved on to another doomed system, the IBM PCjr. After studying engineering and computer science, he eventually got a professional job writing and using engineering simulation software to calculate important things.
+
+Ryan discovered the Timex group, recovered his old programs from tape and began immediately continuing to work on them. He joined the team to develop tools like the Commander and help with firmware on the Pico.
+
+## Joe Vandezande
+
+<img class="portrait" src="{{ '/assets/img/joe.jpg' | relative_url }}" alt="Joe Vandezande">
+
+Joe spent much of the late ’70s and early ’80s poring over computer magazines, and there he stumbled across an ad for the ZX80. By the time he had saved enough money to buy one, the ZX81 was out. Armed with a shiny new ZX81, a 12” black-and-white TV and a second-hand tape recorder, he started a lifelong hobby of electronics and small computers. That interest led him to a computer career in both the Air National Guard and civilian jobs.
+
+Often described as a born tinkerer, he built and repaired many add-ons for his ZX81 and later his TS1000. Over the years he has collected a wide variety of computers from the ’70s to the early 2000s, mostly from people giving him their old “junk” in trade for upgrading or fixing their current computer. Fixing up and expanding these old systems has given him a lot of insight into the design choices the engineers made “back in the day.”
+
+Today Joe supports the team by designing 3D-printable cases for the TS-Pico boards and the expansion board they plug into. He has also archived many disks and tapes from the TS Online User Group library.
 
 ## David Anderson
 
