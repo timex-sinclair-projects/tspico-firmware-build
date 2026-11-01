@@ -15,7 +15,9 @@ MOUNT_FILE). It now raises OSError instead, and:
     too;
   * the dispatcher's post-SAVE remount (not under PROCESS_CMD) logs and
     re-arms instead of ending TS2068_IO, and doesn't spend another five
-    attempts on the directory refresh;
+    attempts on the directory refresh; and while that branch is under test,
+    a SAVE with append off that replaces the mounted TAP (same name, in any
+    case) re-mounts it, where it used to leave the old copy mounted (#362);
   * boot, with no card at all, carries on into the dispatcher without one
     (it used to end in the blink loop): TSP.sd_present stays False and the
     commands that need a card are refused (sd_state_hosttest.py).
@@ -308,6 +310,49 @@ def test_save_remount(t):
     check(t.sd_active is False, "sd_active cleared")
 
 
+def test_save_replaces_mount(t):
+    print("Dispatcher: SAVE with append off over the mounted TAP re-mounts it (#362)")
+    cases = [("the same name", "/sd/TAP/many.tap", "/sd/TAP/many.tap", True),
+             ("the name in another case", "/sd/TAP/Mixed.tap", "/sd/TAP/mixed.tap", True),
+             ("another file", "/sd/TAP/many.tap", "/sd/TAP/other.tap", False)]
+    for what, mounted, saved_as, remount in cases:
+        env = install(t)
+        mounts = []
+
+        def inject_pre():
+            t.TSP.f_name = mounted              # mounted, append off
+            t.MQ.rx = [0] * 10                  # pre[0]=0, pre[1]=0: SAVE
+            env.stop_new_bus = True
+
+        def save_ts(mq, tsp, pre=None):
+            tsp.f_name = saved_as               # SAVE_TS's "wb" target
+            return mq, tsp, "", True
+
+        def mount_file(name, remounting=False):
+            mounts.append((name, remounting))
+            t.TSP.f_name = name
+            return True
+
+        boot_fakes(t, env, inject_pre)
+        t.SAVE_TS = save_ts
+        real_mount = t.MOUNT_FILE
+        t.MOUNT_FILE = mount_file
+        try:
+            t.TS2068_IO()
+            outcome = "returned"
+        except LoopDone:
+            outcome = "back at the top of the loop"
+        except BaseException as e:             # noqa: BLE001
+            outcome = "raised %r" % e
+        finally:
+            t.MOUNT_FILE = real_mount
+        want = [(mounted, True)] if remount else []
+        check(outcome == "back at the top of the loop" and mounts == want
+              and t.TSP.f_name == mounted,
+              "%s: %s, still %s mounted (%s)"
+              % (what, "re-mounted" if remount else "no mount", mounted, mounts))
+
+
 def test_service_restart(t):
     print("An unexpected error restarts the service loop, not the ROM lines (audit §4)")
     env = install(t)
@@ -400,6 +445,7 @@ def main():
     test_process_cmd(t)
     test_boot_no_card(t)
     test_save_remount(t)
+    test_save_replaces_mount(t)
     test_service_restart(t)
 
     ok = all(results)

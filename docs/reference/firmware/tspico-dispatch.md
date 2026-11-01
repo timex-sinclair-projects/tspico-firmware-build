@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4859–4971
 (`LOAD_CONFIG`), 6016–6118 (the printer path), 6198–6534 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6542–7738 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+`PROCESS_CMD`) and 6542–7742 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -43,10 +43,10 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 | `FAIL_CMD(status)` | 6198 | a command that failed: one status byte, on a bus in a known state |
 | `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6250 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
 | `TS2068_IO()` | 6542 | the board setup and the service loop |
-| `ZX_TPI()` | 7427 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7565 | the Spectrum-mode loop |
+| `ZX_TPI()` | 7431 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 7569 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 7423), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 7427), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -843,8 +843,13 @@ A SAVE's header pre-header ([PROTOCOL.md §6.2](../../PROTOCOL.md#62-save),
    - no file was mounted and `SAVE_TS` made one: `MOUNT_FILE(TSP.f_name,
      True)` it (append stays off; as a "remount", a failure goes straight
      to `UNMOUNT`, which calls `SEND_MSG` before the arm point);
-   - the SAVE overwrote the mounted TAP (`TSP.f_name == pf_name`): logged;
-     the old content stays mounted, no re-mount;
+   - the SAVE replaced the mounted TAP (`TSP.f_name` equals `pf_name`
+     ignoring case, since FAT does: `SAVE "mixed"` replaces `Mixed.tap`):
+     `MOUNT_FILE(pf_name, True)` mounts the new file, pointer at block 0,
+     append off. The mount is a copy in `/TMP/temp.tap`, so without this
+     `CAT ""`, `LOAD ""` and ffw/rew served the old content (#362, until
+     2026-11-01). As a "remount" a failure goes to `UNMOUNT` rather than
+     leave the old copy mounted;
    - a new file while another is mounted: `TSP.f_name = pf_name`.
    A failure sets `sd_gone`. If not `sd_gone`: `ACTIVATE_SD()`,
    `os.chdir(TSP.cur_path)` (`MOUNT_FILE` does not set it), `DIR_FILES()`
@@ -977,7 +982,7 @@ too if `log_to_serial` is set from the REPL.
 
 Tests that run this function: [sd_wedged_hosttest.py](../../../src/test/sd_wedged_hosttest.py)
 (boot with no card continues into the loop; the post-SAVE re-mount logs and
-re-arms), [dir_files_eio_hosttest.py](../../../src/test/dir_files_eio_hosttest.py)
+re-arms; a SAVE that replaces the mounted TAP re-mounts it), [dir_files_eio_hosttest.py](../../../src/test/dir_files_eio_hosttest.py)
 (a card that fails its first write), [sync_io_hosttest.py](../../../src/test/sync_io_hosttest.py)
 (the pre-header goes through `RX_CAPTURE` in both copies of the module),
 [stdin_drain_hosttest.py](../../../src/test/stdin_drain_hosttest.py) (both

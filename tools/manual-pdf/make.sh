@@ -10,13 +10,24 @@
 #                                         double-sided (flip on the short edge)
 #                                         and stapling on the fold
 #
+# and, from docs/manual/quick-start.md and quick-reference.md (quick.py):
+#
+#   quick-start-half-letter.pdf           the Quick Start Guide: the cover,
+#                                         six pages, the back cover
+#   quick-start-saddle-stitch-letter.pdf  the same as a booklet on two letter
+#                                         sheets, printed and folded as above
+#   quick-reference-card-letter.pdf       the Quick Reference Guide, after the
+#                                         2068's: one letter sheet, landscape,
+#                                         printed double-sided (flip on the
+#                                         short edge) and folded in three
+#
 # Usage: [BOARD=v2|v3] [PRINT=1 [PAPER=white|cream]] tools/manual-pdf/make.sh [OUTDIR]
-#        (default build/manual-pdf). Only the two PDFs go into OUTDIR.
+#        (default build/manual-pdf). Only the five PDFs go into OUTDIR.
 #        pages.yml builds them into site/manual for the website;
 #        release.yml attaches them.
 #
 # PRINT=1 makes the files for printing on demand instead, the paperback
-# on Amazon KDP and the coil-bound book on Lulu (build.yml's artifact). With
+# on Amazon KDP and the coil-bound book on Lulu (manual.yml's artifact). With
 # no OUTDIR they go on the Desktop, ready to upload (build/manual-print if
 # there is no ~/Desktop):
 #
@@ -33,10 +44,12 @@
 #                                    11.25 x 8.75 in
 #
 # BOARD picks the manual (tools/manual-variants.py: user-manual.md holds
-# both boards' passages between <!-- v2 --> / <!-- v3 --> markers): v2, the
-# TS-Pico 2.x, is the default and the published one; v3, the v3 card, makes
-# user-manual-v3-half-letter.pdf and user-manual-v3-saddle-stitch-letter.pdf
-# (build.yml's artifact while the card is unreleased).
+# both boards' passages between <!-- v2 --> / <!-- v3 --> markers, and so do
+# the quick guides): v2, the TS-Pico 2.x, is the default and the published
+# one; v3, the v3 card, makes user-manual-v3-half-letter.pdf and
+# user-manual-v3-saddle-stitch-letter.pdf, and quick-start-v3-* and
+# quick-reference-card-v3-letter.pdf (manual.yml's artifact while the card
+# is unreleased). PRINT=1 makes only the manual's print files.
 #
 # The pages are styled after the 1983 Timex Sinclair 2068 User Manual
 # (print.css, cover.css); every chapter opens on a right-hand page (book.py).
@@ -64,7 +77,7 @@ case "$BOARD" in
 esac
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
-# Everything but the two PDFs is made in a scratch folder, so OUTDIR can be
+# Everything but the PDFs is made in a scratch folder, so OUTDIR can be
 # a folder of the website (pages.yml uses site/manual) without stray files.
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -86,7 +99,7 @@ fill() {
   sed -e "s|{{FW}}|$FW|g" -e "s|{{ROM}}|$ROM|g" -e "s|{{DATE}}|$DATE|g" \
       -e "s|{{TITLE}}|$TITLE|g" -e "s|{{T3}}|$T3|g" \
       -e "s|{{IMG}}|file://$REPO/site/assets/img|g" -e "s|{{FONTS}}|file://$HERE/fonts|g" \
-      "$HERE/$1" > "$WORK/$1"
+      "$HERE/$1" > "${DEST:-$WORK}/$1"
 }
 for f in print.css cover.css front.html back.html mask.html; do fill $f; done
 # A perfect-bound paperback loses some of the inside margin into the spine,
@@ -121,3 +134,27 @@ cp "$WORK/user-manual-half-letter.pdf" "$OUT/$NAME-half-letter.pdf"
 cp "$WORK/user-manual-saddle-stitch-letter.pdf" "$OUT/$NAME-saddle-stitch-letter.pdf"
 echo "$OUT/$NAME-half-letter.pdf"
 echo "$OUT/$NAME-saddle-stitch-letter.pdf"
+
+# The Quick Start Guide and the Quick Reference Guide (quick.py), in a
+# folder of their own: the guide's front cover is the manual's with its own
+# title.
+QW="$WORK/quick"
+mkdir -p "$QW"
+TITLE="TS-Pico Quick Start Guide"; T3="QUICK START"
+for f in print.css quick.css card.css cover.css front.html quick-back.html; do DEST="$QW" fill $f; done
+cp -R "$HERE/img" "$QW/img"
+case "$BOARD" in v3) SUFFIX=-v3 ;; *) SUFFIX= ;; esac
+for doc in quick-start quick-reference; do
+  python3 "$REPO/tools/manual-variants.py" "$BOARD" "$REPO/docs/manual/$doc.md" "$QW/$doc.md"
+done
+pandoc "$QW/quick-start.md" -f gfm -t html5 --standalone --section-divs $EMBED \
+       --resource-path="$REPO/docs/manual" --metadata pagetitle="$TITLE" \
+       --css "$QW/print.css" --css "$QW/quick.css" -o "$QW/quick-start.html"
+pandoc "$QW/quick-reference.md" -f gfm -t html5 --standalone $EMBED \
+       --metadata pagetitle="TS-Pico Quick Reference Guide" --css "$QW/card.css" -o "$QW/quick-reference.html"
+for what in start card; do
+  SUFFIX="$SUFFIX" CHROME="$CHROME" FW="$FW" ROM="$ROM" DATE="$DATE" python3 "$HERE/quick.py" $what "$QW"
+done
+for f in quick-start$SUFFIX-half-letter quick-start$SUFFIX-saddle-stitch-letter quick-reference-card$SUFFIX-letter; do
+  cp "$QW/$f.pdf" "$OUT/$f.pdf"; echo "$OUT/$f.pdf"
+done

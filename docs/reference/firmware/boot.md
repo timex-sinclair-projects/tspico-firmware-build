@@ -34,7 +34,7 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
 | `tools/check-core1-ram.py` | `build-v3`'s check that the v3 card's core 1 never touches flash, from the linked ELF |
 | `.github/workflows/build.yml` | every push that touches the firmware's inputs, and weekly on `main`: tests, ROM checks, the two v2 UF2s, the v3 UF2, artifacts |
-| `.github/workflows/manual.yml` | every push that touches the user manual: the manual PDFs (and the v3 card's) |
+| `.github/workflows/manual.yml` | every push that touches the user manual: the manual and quick guide PDFs (and the v3 card's) |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
 | `tools/pico-serial.py` | the USB console from a shell |
@@ -401,9 +401,20 @@ printed twice: the first print says where each chapter starts, and a blank
 page goes in before each one that would open on a left-hand page. The
 cover's version comes from `config.ini` and its date from the last commit.
 The script checks the page size and count and that every chapter opens on
-an odd page; the two PDFs are uploaded as
-`tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
-(`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover), uploaded
+an odd page. Then `tools/manual-pdf/quick.py` makes the two quick guides
+from `docs/manual/quick-start.md` and `quick-reference.md` (the same board
+variants): the Quick Start Guide, the manual's cover with "QUICK START" on
+it, six pages (one per `##` section, styled by `quick.css` over the
+manual's `print.css`) and a back cover (`quick-back.html`), as a half-letter
+one-up and a booklet on two letter sheets; and the Quick Reference Guide, a
+card after the 2068's (`card.css`), one landscape letter sheet printed on
+both sides and folded in three, its panels started by `<!-- panel: NAME -->`
+comments in the Markdown and its cover drawn by the script. The script
+fails if a guide's section or a card panel runs over (for the card, a
+script in the page measures each panel in Chrome's `--dump-dom`). The five
+PDFs are uploaded as `tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
+(`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover, and
+`quick-start-v3-*.pdf` and `quick-reference-card-v3-letter.pdf`), uploaded
 with its Markdown as `tspico-manual-v3`; it isn't published (website,
 releases) while the card is unreleased. Then `PRINT=1` makes the files for
 printing on demand, uploaded as `tspico-manual-print` and taken from there
@@ -531,13 +542,15 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    fail without failing the release, which then has no `zimodem-v3.bin`.
    The same build runs in `zimodem.yml` when `esp32/zimodem/` changes, or
    by hand, as the `tspico-zimodem` artifact.
-5. **The user manual PDFs**, as `manual.yml`'s `manual-pdf` job makes them,
-   from the manual at the tag.
+5. **The user manual and quick guide PDFs**, as `manual.yml`'s `manual-pdf`
+   job makes them, from the docs at the tag.
 6. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
    reflash), `upgrade.uf2`, `firmware-v3.uf2` and `v3-slots.zip` (the v3
    card's firmware and slots), `zimodem-v3.bin` when it was built,
    `user-manual-half-letter.pdf`,
-   `user-manual-saddle-stitch-letter.pdf`, and the flash image when there
+   `user-manual-saddle-stitch-letter.pdf`, `quick-start-half-letter.pdf`,
+   `quick-start-saddle-stitch-letter.pdf`,
+   `quick-reference-card-letter.pdf`, and the flash image when there
    is one. If the
    release already exists, the assets are uploaded to it (`--clobber`) and
    its notes left alone; otherwise it is created with the notes in
@@ -550,9 +563,9 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
 `workflow_run`: GitHub does not fire `release` events for releases made
 by a workflow's token), on a green build of `main`, and on pushes to
 `main` that touch `site/`, `web-updater/`, `SD card/`, the manuals or the
-reference. It copies the two manuals and this reference into the site
+reference. It copies the manuals, the quick guides and this reference into the site
 (`tools/build-site-docs.py`, links rewritten for the site), builds the user
-manual's two PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
+manual's and the quick guides' PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
 from the Docs page), builds the Jekyll site and mounts the web updater at `/updater/`, with the latest
 release's payload under `/updater/release/` and the latest green `main`
 build under `/updater/main/`. Each channel carries the v3 card's firmware

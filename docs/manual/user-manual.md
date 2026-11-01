@@ -641,9 +641,10 @@ If nothing is mounted and you type `LOAD ""`, the TS-Pico loads a little menu pr
 - **C** gives help on a single command;
 - **P** lets you pick a file from any folder and load it;
 - **F** starts the **TS-Pico Commander**, a full-screen file manager;
-- **R** shows your ROM version;
-- **I** shows TS-Pico information;
-- **V** has settings for the Pico Video board;
+- **I** shows TS-Pico information, including your ROM version;
+- **T** opens a one-line menu at the bottom of the screen for everyday `tpi:` commands such as
+  `cd`, `dir`, `help` and `info`;
+- **V** has settings for the Pico Video board, including ULA Plus;
 - **Q** quits.
 
 To get the menu back at any time: `SAVE "tpi:close"` then `LOAD ""`.
@@ -747,6 +748,8 @@ repeats**.
   **F Invalid file name**. The F comes after the `Start tape` key, but nothing is written.
 - Saving over an existing name **replaces that file without asking**.
 - If nothing was mounted, the new file becomes the mounted file.
+- If you save over the mounted file (with append off), the new file is mounted in its place, so
+  `CAT ""` shows what is on the card now.
 - An empty program gives **A Invalid argument**.
 
 > **Note:** the TS-Pico answers once your data is on the card. If the card fails while it's

@@ -244,9 +244,9 @@ regenerate it when a line number moves (the test checks that it is current).
 | `FAIL_CMD` | function | [6198](../../../src/TS/tspico.py#L6198) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `PROCESS_CMD` | function | [6250](../../../src/TS/tspico.py#L6250) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `TS2068_IO` | function | [6542](../../../src/TS/tspico.py#L6542) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
-| `ZX_REPORT` | variable | [7423](../../../src/TS/tspico.py#L7423) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
-| `ZX_TPI` | function | [7427](../../../src/TS/tspico.py#L7427) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
-| `ZX48_IO` | function | [7565](../../../src/TS/tspico.py#L7565) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `ZX_REPORT` | variable | [7427](../../../src/TS/tspico.py#L7427) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
+| `ZX_TPI` | function | [7431](../../../src/TS/tspico.py#L7431) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
+| `ZX48_IO` | function | [7569](../../../src/TS/tspico.py#L7569) | [firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md) |
 | `MQ` | variable | [754](../../../src/TS/tspico.py#L754) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `led` | variable | [1372](../../../src/TS/tspico.py#L1372) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
 | `dead` | variable | [1388](../../../src/TS/tspico.py#L1388) | [firmware/tspico-state.md](../firmware/tspico-state.md) |
