@@ -234,6 +234,12 @@ nearest the 2068.
 
 *An expansion bus board. The connector at the front goes into the 2068; the TS-Pico goes into
 one of the four slots.*
+<!-- v2 -->
+
+![The 2068 with an expansion bus board behind it and the TS-Pico standing in the slot nearest the 2068](images/ts2068-bus-tspico.svg)
+
+*The TS-Pico on a 3-slot expansion bus, in the slot nearest the 2068.*
+<!-- /v2 -->
 
 > **Warning.** Set the BUSISO bypass for the TS-Pico's slot, or the TS-Pico won't work. The bus has "BUSISO bypass" jumpers or switches on its right-hand side, between
 > the card-edge connectors.

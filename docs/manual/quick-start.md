@@ -39,7 +39,12 @@ cartridges, ZX Spectrum mode and every command.
 The TS-Pico goes into an expansion bus board: the bus board plugs into the expansion
 connector at the back right of the 2068, and the TS-Pico into any of its slots.
 
+<!-- v2 -->
+![The 2068 with an expansion bus board behind it and the TS-Pico standing in the slot nearest the 2068](images/ts2068-bus-tspico.svg)
+<!-- /v2 -->
+<!-- v3 -->
 ![An expansion bus board: the long connector at the front goes into the 2068, and cards go into its four slots](images/bus-expansion.svg)
+<!-- /v3 -->
 
 > **Warning.** Set the BUSISO bypass for the TS-Pico's slot, or the TS-Pico won't work. With jumpers, remove the jumper for the TS-Pico's slot; with switches, slide its
 > BUSISO switch towards the 2068.
