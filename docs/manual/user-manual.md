@@ -1738,8 +1738,8 @@ You'll need a TAP of Spectrum programs on the card. These steps use `spectrum.ta
 - `SAVE "name"` saves a new `name.tap` in the current folder, replacing any file of that name.
 - `LOAD "tpi:name.tap"` and `LOAD "tpi:nnn"` mount another TAP from the current folder, by name or
   index number.
-- With the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068,
-  with `scroll?` for a long one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too.
+- `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068, with `scroll?` for a
+  long one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too.
 
   ![SAVE "tpi:dir" on the Spectrum: the same listing as CAT on the 2068](images/zx48-dir.png)
 - Other `tpi:` commands aren't available: `SAVE "tpi:..."` gives **Q Parameter error**.
@@ -1771,8 +1771,7 @@ message (`CODE 1,0`).
 ## 9.4 Summary
 
 1. Mount a TAP, `SAVE "tpi:zx48"`, then `OUT 244,3`.
-2. LOAD, SAVE and `LOAD "tpi:..."` work in Spectrum mode, and with the v4 Spectrum ROM so does
-   `SAVE "tpi:dir"`.
+2. LOAD, SAVE, `LOAD "tpi:..."` and `SAVE "tpi:dir"` work in Spectrum mode.
 3. `SAVE "tpi:zx48" CODE 0,2` picks the compatible loader for stubborn games.
 4. `OUT 244,0` then `OUT 14,14` brings you home.
 
@@ -2214,8 +2213,8 @@ At switch-on, the setting comes from `config.ini` (off unless you change it; see
 
 ### zx48
 
-Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` mounts a TAP and,
-with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
+Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` mounts a TAP and
+`SAVE "tpi:dir"` lists the folder.
 
 ## 10.4 Commands you may see mentioned elsewhere
 
