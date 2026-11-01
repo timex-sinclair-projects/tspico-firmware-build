@@ -210,8 +210,8 @@ Format: <code>LOAD "tpi:{<i>name</i> | <i>nn</i>}"</code>
 | `SAVE "tpi:automount `*`name`*`"` | Mount this TAP at switch-on; `off` to stop |
 
 **Nothing mounted?** `LOAD ""` loads the TS-Pico's menu: **H** help, **C** help on a command,
-**P** pick a file and load it, **F** the TS-Pico Commander, **R** the ROM version, **I** TS-Pico
-information, **V** Pico Video settings, **Q** quit.
+**P** pick a file and load it, **F** the TS-Pico Commander, **I** TS-Pico information and ROM
+version, **T** a one-line `tpi:` menu, **V** Pico Video settings, **Q** quit.
 
 ## Loading and saving
 
