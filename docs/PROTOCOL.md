@@ -698,6 +698,15 @@ Each of these was a real bug. Most show up one command *after* the mistake.
   length-low byte, and the "TX FIFO not empty after ZX mode" cleanup in
   `ZX48_IO` was mopping it up rather than fixing it. Covered now by
   `src/test/zx48_hosttest.py`.
+- **ZX48 mode: each reply piece starts in the user's colors.** The ZX v4
+  ROM prints a `tpi:` reply in pieces of up to 255 bytes and calls
+  `CHAN_OPEN` before each one. On the Spectrum, opening the screen
+  channel ends in `TEMPS`, which puts the permanent colors back over any
+  `PAPER`/`INK` codes sent so far. `ZX_TPI` cut the colored `tpi:dir`
+  listing at exactly 255 bytes, so one index number a listing (wherever
+  the cut fell) lost its cyan for one, two or three digits (#373). A piece
+  must start with every color code its text needs, so `ZX_TPI` now cuts
+  just before a `PAPER` code. Covered by `src/test/zx48_tpi_hosttest.py`.
 - **Never call `ENA_MQ()` — it rebuilds the single-port SM.** It
   creates `TS_IO` at 15 MHz, which does not decode `$0E` from `$0F`.
   `SAVE_ZX` called it after its SD write and handed the result back to
