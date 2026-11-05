@@ -212,6 +212,6 @@ behavior, and the caveat and the issue link go.
 | `tools/check-core1-ram.py` | `c512cd36652b` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/sp0256-port.py` | `c6ee937adb2b` | [firmware/speech.md](firmware/speech.md) | — |
 | `tools/speech-rules.py` | `b58417ce8921` | [firmware/speech.md](firmware/speech.md) | — |
-| `.github/workflows/build.yml` | `50d4be3e0b2e` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/manual.yml` | `892625b44d24` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/release.yml` | `80e5550bae98` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `e297fda05022` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/manual.yml` | `01bec89b50d1` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/release.yml` | `46ce83b07790` | [firmware/boot.md](firmware/boot.md) | — |

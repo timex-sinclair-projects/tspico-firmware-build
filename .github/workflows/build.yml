@@ -48,34 +48,24 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      # apt on the hosted runners sometimes hangs mid-download (four times
-      # on 2026-09-30); a normal install takes about a minute. Each attempt
-      # gets 4 minutes and a stuck one is retried, so a bad mirror costs
-      # minutes instead of blocking the job until GitHub's own limit.
-      - name: Install build tools
-        timeout-minutes: 15
+      # The ARM compiler from Arm's tarball, kept in the Actions cache
+      # (.github/actions/arm-toolchain says why: apt's mirror stalled and
+      # failed the job). gcc, make, cmake, git, python3 and zip come with the
+      # ubuntu-24.04 runner image, so there is no apt step at all.
+      - name: ARM toolchain (GCC 10.3, cached)
+        uses: ./.github/actions/arm-toolchain
+
+      - name: Tool versions
         run: |
-          for attempt in 1 2 3; do
-            if sudo timeout 240 apt-get update \
-               && sudo timeout 240 apt-get install -y \
-                    -o Acquire::Retries=3 -o Acquire::http::Timeout=30 \
-                    git build-essential cmake \
-                    gcc-arm-none-eabi libnewlib-arm-none-eabi \
-                    python3; then
-              exit 0
-            fi
-            echo "::warning::apt attempt $attempt failed or timed out; retrying"
-            sudo dpkg --configure -a || true   # finish anything a killed install left half-done
-            sleep 10
-          done
-          echo "::error::apt failed three times"
-          exit 1
+          cmake --version | head -1
+          gcc --version | head -1
+          python3 --version
 
       # Smoke-test the BASIC -> TAP toolchain on every push/PR. The .tap
       # outputs aren't committed (they're gitignored; see basic/README.md),
@@ -113,7 +103,7 @@ jobs:
           find basic-taps -type f -print0 | xargs -0 ls -l
 
       - name: Upload generated .tap artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: basic-taps
           path: basic-taps/
@@ -225,7 +215,7 @@ jobs:
         run: python3 src/test/rom_fn86_hosttest.py
 
       - name: Upload the fdd ROM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-fdd-rom
           path: |
@@ -315,7 +305,7 @@ jobs:
           find . -name "*.uf2" -ls 2>/dev/null
 
       - name: Upload firmware.uf2 artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-firmware-uf2
           path: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
@@ -342,7 +332,7 @@ jobs:
         run: make -j$(nproc) BUILD=build-UPGRADE FROZEN_MANIFEST=$PWD/boards/manifest_upgrade.py
 
       - name: Upload the upgrade UF2 artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-upgrade-uf2
           path: |
@@ -389,7 +379,7 @@ jobs:
 
       - name: Upload dev_tspico.mpy artifact
         if: hashFiles('src/dev_tspico.py') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dev_tspico-mpy
           path: src/dev_tspico.mpy
@@ -397,7 +387,7 @@ jobs:
 
       - name: Upload build logs (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-logs
           path: |
@@ -412,30 +402,14 @@ jobs:
   # REPL with the bus pins in their safe state. Its own job and its own clone,
   # because the v2 job replaces the port's boards/manifest.py.
   build-v3:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      # The same retried apt install as the build job.
-      - name: Install build tools
-        timeout-minutes: 15
-        run: |
-          for attempt in 1 2 3; do
-            if sudo timeout 240 apt-get update \
-               && sudo timeout 240 apt-get install -y \
-                    -o Acquire::Retries=3 -o Acquire::http::Timeout=30 \
-                    git build-essential cmake \
-                    gcc-arm-none-eabi libnewlib-arm-none-eabi \
-                    python3; then
-              exit 0
-            fi
-            echo "::warning::apt attempt $attempt failed or timed out; retrying"
-            sudo dpkg --configure -a || true
-            sleep 10
-          done
-          echo "::error::apt failed three times"
-          exit 1
+      # The same cached toolchain as the build job.
+      - name: ARM toolchain (GCC 10.3, cached)
+        uses: ./.github/actions/arm-toolchain
 
       - name: Clone MicroPython v1.29.0
         run: |
@@ -467,7 +441,7 @@ jobs:
         run: python3 tools/check-core1-ram.py -v micropython/ports/rp2/build-TSPICO_V3/firmware.elf
 
       - name: Upload the v3 firmware.uf2 artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-v3-firmware-uf2
           path: ${{ github.workspace }}/micropython/ports/rp2/build-TSPICO_V3/firmware.uf2
@@ -476,7 +450,7 @@ jobs:
 
       - name: Upload build logs (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-v3-logs
           path: |

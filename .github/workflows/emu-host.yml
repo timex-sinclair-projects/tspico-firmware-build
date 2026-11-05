@@ -37,16 +37,16 @@ jobs:
   inputs:
     # The generated files the bundle carries, made once: the assets TAPs
     # (zmakebas) and the build stamp.
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Build BASIC programs (the assets TAPs)
         run: ./tools/build-basic.sh
       - name: Build stamp
         run: python3 tools/gen-buildinfo.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: emu-host-inputs
           path: |
@@ -61,23 +61,32 @@ jobs:
         include:
           - os: macos-14
             name: pico_host-macos-arm64
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             name: pico_host-linux-x86_64
+            # Built in Debian 11, not on the runner: PyInstaller packs the
+            # Python it runs on, and its glibc is the oldest the binary
+            # starts on. The runner's Python (24.04) would need glibc 2.39
+            # and leave out Debian 12, Ubuntu 22.04 and Raspberry Pi OS
+            # bookworm; bullseye's 2.31 covers more than 22.04's 2.35 did.
+            # Not -slim: PyInstaller needs binutils (objdump).
+            container: python:3.12-bullseye
           - os: windows-2022
             name: pico_host-windows-x86_64
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     defaults:
       run:
         shell: bash
     env:
       PYTHON: python
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           name: emu-host-inputs
           path: src
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
+        if: matrix.container == ''
         with:
           python-version: '3.12'
       - name: PyInstaller
@@ -145,7 +154,7 @@ jobs:
       - name: Remove the signing keychain
         if: always() && steps.signing.outputs.identity != ''
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.name }}
           path: dist/pico_host*
@@ -154,11 +163,11 @@ jobs:
     # On a v* tag: attach the three binaries to the release release.yml makes.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: bins
       - name: Attach to the release

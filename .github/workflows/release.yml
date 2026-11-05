@@ -32,7 +32,7 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     permissions:
       # Required so `gh release create` can publish the release and
@@ -52,33 +52,40 @@ jobs:
           echo "Releasing tag: ${TAG}"
 
       - name: Checkout repo at tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ steps.tag.outputs.tag }}
           fetch-depth: 0  # full history for release-notes generation
 
-      # apt on the hosted runners sometimes hangs mid-download (four times
-      # on 2026-09-30); a normal install takes about a minute. Each attempt
-      # gets 4 minutes and a stuck one is retried, so a bad mirror costs
-      # minutes instead of blocking the job until GitHub's own limit.
-      - name: Install build tools
-        timeout-minutes: 15
+      # The ARM compiler from Arm's tarball, kept in the Actions cache: the
+      # same steps as .github/actions/arm-toolchain (which says why), inline
+      # because a manual release checks out an older tag, which may not have
+      # that file. gcc, make, cmake, git, python3 and zip come with the
+      # ubuntu-24.04 runner image. Keep the two copies in step.
+      - name: Restore the ARM toolchain
+        id: armgcc
+        uses: actions/cache@v5
+        with:
+          path: ~/arm-gnu-toolchain
+          key: arm-gnu-toolchain-10.3-2021.10-x86_64-linux
+
+      - name: Download the ARM toolchain (cache miss)
+        if: steps.armgcc.outputs.cache-hit != 'true'
+        env:
+          URL: https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2
+          SHA256: 97dbb4f019ad1650b732faffcc881689cedc14e2b7ee863d390e0a41ef16c9a3
         run: |
-          for attempt in 1 2 3; do
-            if sudo timeout 240 apt-get update \
-               && sudo timeout 240 apt-get install -y \
-                    -o Acquire::Retries=3 -o Acquire::http::Timeout=30 \
-                    git build-essential cmake \
-                    gcc-arm-none-eabi libnewlib-arm-none-eabi \
-                    python3 zip; then
-              exit 0
-            fi
-            echo "::warning::apt attempt $attempt failed or timed out; retrying"
-            sudo dpkg --configure -a || true   # finish anything a killed install left half-done
-            sleep 10
-          done
-          echo "::error::apt failed three times"
-          exit 1
+          tgz="$RUNNER_TEMP/arm-gnu-toolchain.tar.bz2"
+          curl -fsSL --retry 5 --retry-all-errors --connect-timeout 30 --max-time 900 -o "$tgz" "$URL"
+          echo "$SHA256  $tgz" | sha256sum -c -
+          mkdir -p ~/arm-gnu-toolchain
+          tar xjf "$tgz" -C ~/arm-gnu-toolchain --strip-components=1
+          rm -rf ~/arm-gnu-toolchain/share/doc "$tgz"
+
+      - name: Put the ARM toolchain on PATH
+        run: |
+          echo "$HOME/arm-gnu-toolchain/bin" >> "$GITHUB_PATH"
+          "$HOME/arm-gnu-toolchain/bin/arm-none-eabi-gcc" --version | head -1
 
       - name: Clone MicroPython v1.29.0
         run: |
@@ -389,6 +396,11 @@ jobs:
         id: zimodem
         continue-on-error: true
         run: |
+          # In a venv: ubuntu-24.04's Python refuses system-wide pip
+          # installs (PEP 668). Activated, so build.sh's python3 has
+          # PlatformIO's pyserial for esptool too.
+          python3 -m venv "$RUNNER_TEMP/pio-venv"
+          . "$RUNNER_TEMP/pio-venv/bin/activate"
           pip install platformio==6.1.19
           esp32/zimodem/build.sh
           cp esp32/zimodem/out/zimodem-v3.bin "$RUNNER_TEMP/zimodem-v3.bin"
