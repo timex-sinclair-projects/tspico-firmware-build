@@ -388,6 +388,13 @@ surface this spec recommends is:
 
 Test program: `basic/SD/TAP/test/chtest4.bas`.
 
+**`v:` (the v3 card's speech, #375).** `OPEN #n,"v:"[,mode]` opens a
+write-only stream with no file: each line printed to it is spoken when its
+CR arrives (the ROM sends a `v:` stream's buffer at every CR), and an
+unfinished line at `CLOSE #`. It needs no card. Reading is Report Q, and so
+are a record length and anything after the colon; on a board without
+speech (v2) it is Report F. The ROM sends the spec whole, as for `d:`.
+
 The design choices:
 
 - **The `f:` prefix.** Stock `OPEN #` accepts only one-letter channel names (K/S/P). A

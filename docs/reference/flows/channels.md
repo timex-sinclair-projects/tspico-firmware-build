@@ -8,7 +8,8 @@ position. Every exchange is a `tpi:` command sent in the middle of a BASIC
 statement, so every answer is a bare status — a printed message would move
 the current channel to the screen — and the ROM must wait for the Pico's
 tail before each new command. This flow follows one file from OPEN to
-CLOSE, then records, `d:` listings and the failures. User's view: [user
+CLOSE, then records, `d:` listings, the speech channel (`v:`) and the
+failures. User's view: [user
 manual chapter 6](../../manual/user-manual.md#chapter-6-streams-and-channels-open-).
 
 Notation as in [command.md](command.md): **TX**/**RX** the bus FIFOs, **Y**
@@ -40,7 +41,7 @@ and armed the capture, and `CH_SEND` waits for that `FF` before its SYNC.
 | # | Side | Routine | What happens | What can go wrong |
 |---|---|---|---|---|
 | 1 | 2068, syntax | HOME 1438h → 14BDh → `OPEN_SYNTAX` | the spec, then `,"mode"` and an optional `,reclen` are evaluated, so the number's hidden form is stored ([../rom/home.md](../rom/home.md#13a5h-1438h-145eh-open--and-close-)) | extra arguments to a K/S/P OPEN: Report C, now at syntax time |
-| 2 | 2068, run time | HOME 140Fh (the stream into 5CCBh) → 145Eh → 1488h → `CH_OPEN_HOOK` | `f:` or `d:`: ours; K/S/P go to the stock 1465h | |
+| 2 | 2068, run time | HOME 140Fh (the stream into 5CCBh) → 145Eh → 1488h → `CH_OPEN_HOOK` | `f:`, `d:` or `v:`: ours (`SPEC_KIND`); K/S/P go to the stock 1465h | |
 | 3 | 2068 | `CH_OPEN_HOOK` | room for the record and the command (Report 4); the mode popped (1–3 characters; none = `r`); `tpi:chopen a log.txt` built at STKEND | a mode of 4+ characters: Q |
 | 4 | 2068 | `CH_SEND` | waits for IDLE; SYNC; the pre-header — TADDR 0, PMR1 = 4 (the stream), PMR2 = the record length (0) — the pre-load (`PRELOAD`: 0 is J), WF_NPH, the body | |
 | 5 | Pico | `PROCESS_CMD` → card gate → `CH_OPEN` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#ch_openpre-cmd)) | the path resolved (`/` is the card's TAP folder); inside `CH_CALL`: a directory Q, a missing parent F, `CHANNELS.open(4, real, "a", 0)` — creates the file for `a`/`u`, truncates for `w`, requires it for `r` | TX [st], Y `F7`; then the tail: TX [01], Y `FF` |
@@ -161,6 +162,26 @@ spec whole (`tpi:chopen r d:games/*.tap`); the Pico lists the names
 (`DIR_NAMES`: folders first with a `/`, then files) into an in-memory
 stream, and `INPUT #5;n$` reads one name per line until Report 8. A mode
 other than `r` or a record length is Q.
+
+## The speech channel (`v:`)
+
+`OPEN #4,"v:"` on the v3 card (#375): `CH_OPEN_HOOK` sends the spec whole
+(`tpi:chopen r v:`, any mode). `SD_NEEDED` lets it through with no card
+(`CH_SPEECH_PATH`); `CH_OPEN` answers F on a board without speech, Q for a
+record length or anything after `v:`, else opens a speech stream
+(`CHANNELS.open_speech(4, board.say)`). The record is an ordinary `'F'`
+record with `R_FLAGS` bit 1 (`REC_FLAGS`).
+
+`PRINT #4;"HELLO THERE"`: `CH_OUT` buffers the bytes and, because of bit 1,
+flushes at the CR: one `tpi:chwr` with the line. `SD_NEEDED` passes it with
+no card (`CHANNELS.speaking(4)`), and `CH_WRITE` runs `CHANNELS.write`
+without `SD_CALL`: `TextOut` spells out keywords and drops control codes,
+and each complete line goes to `board.say`, which queues its allophones for
+core 1 and returns at once — the 2068 carries on while the card speaks. A
+line over 64 bytes arrives in pieces and is said whole at its CR; `PRINT
+#4;"BYE";` (no CR) is said at `CLOSE #4`. Speech off (it never started at
+boot) is J on the `PRINT`; an unknown `[NAME]` Q. `INPUT #4` is Q: the
+stream is only written.
 
 ## Errors inside the module
 

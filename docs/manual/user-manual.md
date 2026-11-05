@@ -970,10 +970,13 @@ line 30 asks `Replace scores.dat? (Y/N)`: press **Y**.
 
 You already use streams without knowing it. `PRINT` goes to stream 2, the screen, and `INPUT`
 comes from the keyboard. The 2068 has sixteen streams, numbered 0 to 15, and **OPEN #** connects
-one to a device. The TS-Pico adds two new kinds of device:
+one to a device. The TS-Pico adds new kinds of device:
 
 - `"f:name"`, a file on the SD card;
 - `"d:pattern"`, a list of file names.
+<!-- v3 -->
+- `"v:"`, the card's voice: what you `PRINT` to it is spoken (Appendix G).
+<!-- /v3 -->
 
 ```basic
 OPEN #4,"f:notes.txt","w"
@@ -1354,6 +1357,9 @@ the file as spaces.
 3. Always CLOSE a file you've written to.
 4. A record length (`OPEN #4,"f:x","u",20`) makes TAB jump to a record; `TAB 0` counts them.
 5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT.
+<!-- v3 -->
+   `OPEN #n,"v:"` speaks what you print to it (Appendix G).
+<!-- /v3 -->
 6. `RESTORE #n` goes back to the start of the file, to read it again or write over it.
 7. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
    `PEEK 23739` says which report it caught.
@@ -2181,7 +2187,7 @@ SAVE "tpi:greet"               : REM show it
 SAVE "tpi:greet off"           : REM no greeting
 ```
 
-Speech, G.8. **A**: a name in `[...]` that isn't an allophone.
+Speech, G.9. **A**: a name in `[...]` that isn't an allophone.
 <!-- /v3 -->
 
 ### help
@@ -2903,7 +2909,7 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `SPEECH_VOLUME` | How loud the speech is, 0-100 (%) | `35` |
 | `SPEECH_RATE` | The speech's speed, 50-150 (%); its pitch moves with it | `100` |
 | `SPEECH_PORTS` | Programs can speak through ports 17 and 37 (Appendix G) | `true` |
-| `SPEECH_GREETING` | What the card says at switch-on (G.8); `""` is nothing | `""` |
+| `SPEECH_GREETING` | What the card says at switch-on (G.9); `""` is nothing | `""` |
 <!-- /v3 -->
 
 <!-- v2 -->
@@ -3150,17 +3156,38 @@ or `;` makes a long pause, a comma a shorter one. Text that ends in a word, with
 runs straight on into the next `tpi:say`, so a sentence said in pieces sounds as it would in
 one.
 
-## G.2 When a word comes out wrong
+## G.2 Longer text: a stream, `v:`
+
+A stream has no 23-character limit. Open one to the card's voice, and everything you `PRINT`
+to it is spoken (Chapter 6):
+
+```basic
+10 OPEN #4,"v:"
+20 PRINT #4;"HELLO, I AM YOUR TIMEX SINCLAIR 2068."
+30 PRINT #4;"WHAT SHALL WE DO TODAY?"
+40 CLOSE #4
+```
+
+Each line is said as soon as it's printed, and the 2068 carries on as it does after
+`tpi:say`; a line waits its turn behind the one before. Anything `PRINT` can print goes:
+`PRINT #4;"SCORE ";s` says the number, keywords are said by name, and allophones in square
+brackets work as in `tpi:say`. A line that ends in `;` waits for the rest of it, or for
+`CLOSE #4`. `TAB` and `AT` are left out.
+
+The stream needs no SD card. Like any open stream it borrows 512 bytes until you close it, and
+it can't be read: `INPUT #4` is **Q Parameter error**. `"v:"` takes nothing after the colon.
+
+## G.3 When a word comes out wrong
 
 The card turns spelling into sounds with a set of rules, which get about one word in ten
 wrong. Two ways round it:
 
 - **Spell it as it sounds**: `SAVE "tpi:say ZEEBRA"`.
-- **Give the sounds themselves**, the chip's *allophones*, in square brackets (G.4):
+- **Give the sounds themselves**, the chip's *allophones*, in square brackets (G.5):
   `SAVE "tpi:say [ZZ IY BB1 RR2 AX]"`. Brackets and words mix: `SAVE "tpi:say HELLO [PA4] THERE"`.
 
 To fix a word for good, put it in a file called `speech.txt` in the card's own memory (with
-Thonny), one word a line, with its sounds in the rules' codes (G.5):
+Thonny), one word a line, with its sounds in the rules' codes (G.6):
 
 ```text
 # my words
@@ -3170,13 +3197,13 @@ ZEBRA = zIYbrAX
 
 The card reads it when it starts.
 
-## G.3 Speed, pitch and volume
+## G.4 Speed, pitch and volume
 
 `SPEECH_VOLUME` (0-100, normally 35) and `SPEECH_RATE` (50-150, normally 100) in `config.ini`
 (Appendix D). The chip's speed and pitch go together, as they did when its clock was changed:
 80 gives a slower, deeper voice.
 
-## G.4 The allophones
+## G.5 The allophones
 
 | | | | | | |
 |---|---|---|---|---|---|
@@ -3197,7 +3224,7 @@ of a word, `TT1` at the end or after S; `KK1` before E, I and A as in "cat", `KK
 U, `KK2` at the end; `DD2` at the start, `DD1` at the end. End a phrase with a pause (`PA4` or
 `PA5`).
 
-## G.5 The rules' sound codes, for `speech.txt`
+## G.6 The rules' sound codes, for `speech.txt`
 
 Two letters in capitals: `IY` b**ee**t, `IH` b**i**t, `EY` g**a**te, `EH` g**e**t, `AE` f**a**t,
 `AA` f**a**ther, `AO` l**aw**n, `OW` l**o**ne, `UH` f**u**ll, `UW` f**oo**l, `ER` m**ur**d**er**,
@@ -3206,10 +3233,10 @@ ei**th**er, `SH` lea**sh**, `ZH` lei**s**ure, `HH` **h**ow, `NG` su**ng**, `CH` 
 **wh**ere. One letter in small letters: `p` `t` `k` `b` `d` `g` `f` `v` `s` `z` `m` `n` `l` `w`
 `y` `r` and `j` (**j**ar).
 
-## G.6 Programs written for a speech board
+## G.7 Programs written for a speech board
 
 The card answers the ports the Pico Speech Synth 2068 board uses (a Pico version of Wilf
-Rigter's ZX Voice), so programs written for it speak through the card: `OUT 17,n` speaks allophone `n` (the numbers in G.4's
+Rigter's ZX Voice), so programs written for it speak through the card: `OUT 17,n` speaks allophone `n` (the numbers in G.5's
 order, `PA1` = 0 to `BB2` = 63), and `IN 37` is 128 or more while the card is still busy. They
 work in Spectrum mode too. Set `SPEECH_PORTS` to `false` if something else on your 2068 uses
 those ports.
@@ -3221,7 +3248,7 @@ those ports.
 40 DATA 27,7,45,53,4: REM HH1 EH LL OW PA5
 ```
 
-## G.7 Where the voice comes from
+## G.8 Where the voice comes from
 
 The SP0256-AL2's ROM is copyright Microchip Technology Inc., which retains the rights to the
 algorithms and data it contains, and allows its distribution with this acknowledgment. The
@@ -3230,7 +3257,7 @@ license). The spelling-to-sound rules are the US Naval Research Laboratory's (NR
 7948, 1976), as John A. Wasser coded them in 1985; both are public domain. The details are in
 the `NOTICE` file on the project's GitHub.
 
-## G.8 A greeting at switch-on
+## G.9 A greeting at switch-on
 
 The card can say something each time the 2068 starts:
 
@@ -3245,11 +3272,12 @@ cartridge in the DOCK slot (Chapter 8). `SAVE "tpi:greet"` shows it, and
 21 characters (1.2); for a longer one, set `SPEECH_GREETING` in `config.ini`
 (Appendix D).
 
-## G.9 Summary
+## G.10 Summary
 
 1. `SAVE "tpi:say TEXT"` speaks, while the 2068 carries on; `SAVE "tpi:say"` stops.
-2. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
-3. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
-4. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
-5. `SAVE "tpi:greet TEXT"` makes the card say hello at switch-on.
+2. `OPEN #4,"v:"` then `PRINT #4` speaks text of any length, a line at a time.
+3. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
+4. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
+5. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
+6. `SAVE "tpi:greet TEXT"` makes the card say hello at switch-on.
 <!-- /v3 -->
