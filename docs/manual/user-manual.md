@@ -490,7 +490,7 @@ path.
 To see what's inside a file, **LIST** it: `LIST "notes.txt"` shows a text file on the screen,
 and any other file as a hex dump (10.1).
 
-![CAT: the path and card on a blue bar, folders in blue, each file's number on a cyan chip](images/cat.png)
+![CAT: the path and card on a blue bar, then the folders, and each file's number on a cyan chip](images/cat.png)
 
 *`CAT` on a card with four folders and eight files. `{game}.tap` and `jet~1.tap` appear as
 `?game?.tap` and `jet?1.tap`; see below.*
