@@ -4121,46 +4121,63 @@ def BLKRCV(pre, cmd):                                                           
     # which needs the user's attention and a power cycle anyway.)
     # ──────────────────────────────────────────────────────────────────────
     GATE = 8                                # > the 4-deep FIFO + the status byte
+    _PIECE = 32768                          # the most one Z80 write loop reads (#372)
 
     def stream(f, total):
         """Send `total` bytes of file f (from its current position)."""
-        # By DMA where there is one: the whole image into RAM (a .DCK is 64K;
-        # v1.29 has ~180K free), the gate as below, then the rest from RAM by
-        # a DMA channel -- no file reads, GCs or USB interrupts can leave the
+        # By DMA where there is one: the image into RAM, then from RAM by a
+        # DMA channel -- no file reads, GCs or USB interrupts can leave the
         # FIFO dry under the Z80's 33 us write loop, which would put 00s in
         # the flash. A Z80 that stops (reset mid-write) or a BREAK / SYNC now
         # ends it too: the loop never pauses once it has started, so 3 s of
         # no reads means it has gone.
+        #
+        # One 32K piece at a time, not the whole image (#372): the Z80 never
+        # reads more than 32768 bytes in one write loop -- romupdate writes
+        # one 32K slot, dckupdate two, with BASIC PRINTs in between -- so a
+        # piece's DMA ends as its loop does, and the next piece is read from
+        # the file while BASIC runs. A 64K bytearray can't be counted on: the
+        # v2 heap's largest block was ~113K after boot, ~52K some commands
+        # later (hardware 2026-11-05). Then a .DCK fell to the hand loop, too
+        # slow for the write loop: 00s in the flash, and the Pico blocked in
+        # put() on bytes the Z80 never read, deaf to the tpi:close after it.
         data = None
         if tspico_io.CAN_STREAM():
             try:
                 gc.collect()
-                data = bytearray(total)
+                data = bytearray(min(total, _PIECE))
             except MemoryError:
                 data = None
         if data is not None:
-            got = f.readinto(data)
-            mvd = memoryview(data)[:got]
-            # No gate: the channel starts now, seconds before the write loop
-            # reads (BASIC prints and erases first), and BREAK / a stall end
-            # it. The gate's late start cost ten empty reads -- 00s in the
-            # flash (hardware, 2026-10-03). Up to CMD_STALL_MS for the first
-            # read (the erase), then 3 s: the write loop never pauses.
-            _CMD_ECHO[0] = 0
-            r = STREAM_DMA(MQ, mvd, _CMD_ECHO, 3000, False, CMD_STALL_MS)
-            if r is not None:
-                TLM("BLKRCV streamed by DMA", "why=%d sent=%d of %d echo=%s rx=%d" % (
-                    r[0], r[1], got, bytes(_CMD_ECHO).hex(), MQ.rx_fifo()))
-                if r[0]:
-                    raise CmdAbort(r[0])
-                return
-            gate = GATE                     # no channel free: the stream below, from RAM
-            for i in range(got):
-                if gate:
-                    CMD_PUT(mvd[i])
-                    gate -= 1
+            mvb = memoryview(data)
+            left = total
+            while left > 0:
+                got = f.readinto(mvb[:min(left, _PIECE)])
+                if not got:
+                    break
+                mvd = mvb[:got]
+                # No gate: the channel starts now, before the write loop
+                # reads (BASIC prints and erases first, or prints between the
+                # pieces), and BREAK / a stall end it. The gate's late start
+                # cost ten empty reads -- 00s in the flash (hardware,
+                # 2026-10-03). Up to CMD_STALL_MS for the piece's first read,
+                # then 3 s: the write loop never pauses.
+                _CMD_ECHO[0] = 0
+                r = STREAM_DMA(MQ, mvd, _CMD_ECHO, 3000, False, CMD_STALL_MS)
+                if r is not None:
+                    TLM("BLKRCV streamed by DMA", "why=%d sent=%d of %d echo=%s rx=%d" % (
+                        r[0], r[1], got, bytes(_CMD_ECHO).hex(), MQ.rx_fifo()))
+                    if r[0]:
+                        raise CmdAbort(r[0])
                 else:
-                    wrt(mvd[i])
+                    gate = GATE             # no channel free: this piece by hand, from RAM
+                    for i in range(got):
+                        if gate:
+                            CMD_PUT(mvd[i])
+                            gate -= 1
+                        else:
+                            wrt(mvd[i])
+                left -= got
             return
         gate = GATE
         left = total
@@ -5342,7 +5359,11 @@ def MEMDOCK(pre, cmd):                                                  # Change
         # With a .ROM/.DCK mounted this is romupdate/dckupdate picking the
         # slot it is about to erase: refuse the booted one here, before the
         # DOCK moves. (BLKRCV checks again; plain DOCK use is unaffected.)
-        clash = BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
+        # Not for flash 0: BLKRCV never writes it (SYSTEM_SLOT_LOCK), so a
+        # .DCK there can't reach the boot slot 1 -- and 2,0 is the default
+        # dckupdate puts back, with the .DCK still mounted if its tpi:close
+        # failed (#372). Refusing that left the DOCK on the new cartridge.
+        clash = None if SYSTEM_SLOT_LOCK(par1, par2) else BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
         if clash:
             LOG("DOCK: %s Command refused" % clash[0], 1)
             SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
