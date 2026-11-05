@@ -279,7 +279,8 @@ boot. That is why the overrides and the assets live at the root and in
 
 Runs on pushes to any branch and pull requests to `main` that touch
 something the build reads, every Monday on `main`, and by hand; Ubuntu
-22.04. "Something the build reads" is every path except the ones the
+24.04 (22.04 until 2026-11: GitHub began retiring that image on
+2026-09-17). "Something the build reads" is every path except the ones the
 `paths` filter negates: `site/`, `promo/`, `archive/`, `esp32/` and
 `windows-updater/` (which have workflows of their own), the root and
 `docs/` Markdown, `.claude/`, the release notes, and the user manual and
@@ -293,10 +294,28 @@ docs-only commits would leave none. A branch whose head commit was
 docs-only has no run for that commit; `pico-serial.py flash --branch`
 says so (below). The steps, in order:
 
-1. **Build tools**: `git`, `build-essential`, `cmake`,
-   `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi`, `python3` from apt.
-   Each attempt has 4 minutes and is retried up to three times: apt on the
-   hosted runners hung mid-download four times on 2026-09-30.
+1. **The ARM toolchain**: `.github/actions/arm-toolchain`, a composite
+   action. Arm's GNU toolchain 10.3-2021.10 (`arm-none-eabi` GCC 10.3,
+   newlib included), unpacked in `~/arm-gnu-toolchain` and kept in the
+   Actions cache under a key naming that version; on a miss it is
+   downloaded from Arm, checked against a pinned SHA-256 (Arm publishes the
+   MD5) and saved, its 61 MB of manuals left out. Then its `bin/` goes on
+   `PATH`. It replaced apt's `gcc-arm-none-eabi` (10.3-2021.07 on 22.04),
+   because the ~440 MB download from the runner's Ubuntu mirror stalled and
+   failed the job (four times on 2026-09-30, three on 2026-11-05, with
+   apt's retries and three 4-minute attempts each), and because 24.04's
+   package is GCC 13: the version is pinned so the firmware's code doesn't
+   change with the runner image. Everything else the build uses (`gcc`,
+   `make`, `cmake`, `git`, `python3`, `zip`) comes with the runner image, so
+   there is no apt step; **Tool versions** prints `cmake`'s, `gcc`'s and
+   Python's. One catch: the toolchain's binutils is 2.37 (Ubuntu's apt
+   package was 2.38), whose `ld --defsym` takes only numbers, `+` and `-`,
+   and MicroPython passes the board's `PICO_FLASH_SIZE_BYTES` that way, which
+   the Pico SDK gives RPI_PICO as `(2 * 1024 * 1024)`. So the v2 builds (the
+   firmware in step 10 and the upgrade UF2 in step 11, here and in
+   `release.yml`) run `make` with `CMAKE_ARGS=-DPICO_FLASH_SIZE_BYTES=2097152`
+   in the environment, which the port's Makefile appends its own arguments
+   to. The v3 board sets its 16 MB as a number in `mpconfigboard.cmake`.
 2. **BASIC → TAP**: `tools/build-basic.sh` tokenizes every `basic/**/*.bas`
    with the vendored `zmakebas` (catches a `.bas` that will not tokenize).
    The outputs — `src/assets/*.tap` for the Pico's flash, `SD card/…` for
@@ -358,8 +377,7 @@ says so (below). The steps, in order:
 15. On failure, the CMake logs.
 
 A second job, `build-v3`, runs alongside: the v3 board's UF2
-([board-v3.md](board-v3.md)). It installs the same tools with the same
-retries, clones MicroPython v1.29.0 itself, builds `mpy-cross`, and runs
+([board-v3.md](board-v3.md)). It takes the same cached toolchain (step 1), clones MicroPython v1.29.0 itself, builds `mpy-cross`, and runs
 `make submodules`, generates the build stamp (`tools/gen-buildinfo.py`:
 the board's manifest freezes `src/TS/` directly, `buildinfo.py` among them),
 and runs `make` with
@@ -378,9 +396,11 @@ pull requests that touch `docs/manual/`, `tools/manual-pdf/`,
 `tools/manual-variants.py`, `tools/build-site-docs.py`, `src/config.ini`
 (the cover's version) or `site/assets/img/`. Its one job, `manual-pdf`,
 first runs `manual_variants_hosttest.py`, then `tools/manual-pdf/ci-setup.sh`
-installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
-the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
-DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
+installs a pinned pandoc (3.5: 22.04's 2.9 had no `--embed-resources`, and
+pinned, the PDFs don't change with the runner image), the Linux fonts the
+stylesheets fall back to (Charis SIL, Nimbus Sans, DejaVu Sans Mono) from
+apt, and `pypdf` with `pip --user --break-system-packages` (24.04's Python
+refuses a system-wide install, PEP 668); the heading and cover fonts (Arvo, Inter,
 Poppins) and the code-block font (Timex TS2068, CC BY 3.0, credited in the
 colophon) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
 one board's manual from `docs/manual/user-manual.md`
@@ -448,7 +468,21 @@ runs; a new test needs a line there.
 A second workflow, `emu-host.yml`, builds the standalone emulator host
 (`tools/emu`) for each platform on pushes that touch `src/`, `basic/` or
 the emulator, and attaches the binaries to a release
-([docs/EMULATOR_BRIDGE.md](../../EMULATOR_BRIDGE.md)).
+([docs/EMULATOR_BRIDGE.md](../../EMULATOR_BRIDGE.md)). The Linux one is
+built in a `python:3.12-bullseye` container rather than on the 24.04
+runner: PyInstaller packs the Python it runs on, and that Python's glibc is
+the oldest the binary starts on. Built on 24.04 it would need glibc 2.39
+and leave out Debian 12, Ubuntu 22.04 and Raspberry Pi OS bookworm;
+bullseye's 2.31 covers more than the 2.35 it needed when it was built on
+22.04. (The full image, not `-slim`: PyInstaller needs binutils.) The
+macOS one is built on `macos-15`: GitHub retired the `macos-14` runners,
+and a job asking for them is cancelled before it starts.
+
+Every workflow uses the first major of each GitHub action that runs on
+Node 24 (`checkout@v5`, `upload-artifact@v6`, `download-artifact@v7`,
+`setup-python@v6`, `cache@v5`, `deploy-pages@v5`,
+`upload-pages-artifact@v5`): GitHub has deprecated Node 20, and the v4s
+were being forced onto Node 24 with a warning on every run.
 
 ## `tools/check-core1-ram.py`
 
@@ -517,7 +551,9 @@ Fires on a pushed tag `v*` (or by hand with a tag). Version numbers: the
 major.minor are the ROM's, the patch digit is firmware-only (2.2.1 is
 firmware 2.2.1 on ROM 2.2). The job, at the tag:
 
-1. Builds as `build.yml` does — the stamp check, staging, the firmware
+1. Builds as `build.yml` does, with the same cached ARM toolchain (its
+   steps inline rather than the composite action: a manual release checks
+   out an older tag, which may not have `.github/actions/`) — the stamp check, staging, the firmware
    UF2, `dev_tspico.mpy`, the upgrade UF2, the v3 card's firmware, the
    BASIC TAPs. **It runs no tests**: the commit is expected to have passed
    `build.yml` already. The v3 card's firmware is built in its own
@@ -538,7 +574,8 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    (`esp32/zimodem/build.sh`, PlatformIO 6.1.19: Zimodem 4.0.3 with the
    card's patches, which make it 4.0.3.1 (IO5/IO7 pulled up; a phonebook
    dial keeps the dial's own modifiers, #302), merged into one image for
-   flash address 0). The step may
+   flash address 0), PlatformIO installed in a venv (24.04's Python
+   refuses a system-wide pip install). The step may
    fail without failing the release, which then has no `zimodem-v3.bin`.
    The same build runs in `zimodem.yml` when `esp32/zimodem/` changes, or
    by hand, as the `tspico-zimodem` artifact.

@@ -74,7 +74,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # When chained off a workflow, only publish if it passed -- and for the
     # firmware build, only for pushes to main (not branches or PRs).
     if: >-
@@ -85,7 +85,7 @@ jobs:
              github.event.workflow_run.event == 'push'))) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0    # the main/ channel archives src/ at its build's commit
 
@@ -306,17 +306,17 @@ jobs:
           find "$DEST" -maxdepth 2 | sort
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site/_site
 
   deploy:
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,52 @@
+name: ARM toolchain
+description: >-
+  Arm's GNU toolchain for the RP2040/RP2350 builds (arm-none-eabi GCC 10.3,
+  newlib included) on PATH, from the Actions cache when it has it.
+
+# Why not apt: gcc-arm-none-eabi and its newlib were ~440 MB from the
+# runner's Ubuntu mirror on every run, and the mirror stalls often enough to
+# fail the job (four times on 2026-09-30, three on 2026-11-05, with apt's
+# own retries and three whole attempts). The cache holds the unpacked
+# toolchain, so a hit needs no download at all; a miss fetches Arm's
+# tarball once, checks it against the SHA-256 below and saves it.
+#
+# Why 10.3-2021.10: the builds used Ubuntu 22.04's gcc-arm-none-eabi,
+# 10.3-2021.07. Arm's 10.3-2021.10 is the same compiler with bug fixes, so
+# moving off apt (and onto ubuntu-24.04, whose package is GCC 13) does not
+# change the code the firmware is built with. A newer GCC is a separate
+# change, to be tested on hardware: bump VERSION, URL and SHA256 together.
+#
+# Used by build.yml's firmware jobs. release.yml has the same steps inline:
+# a manual release checks out an older tag, which has no copy of this file.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore the toolchain
+      id: cache
+      uses: actions/cache@v5
+      with:
+        path: ~/arm-gnu-toolchain
+        key: arm-gnu-toolchain-10.3-2021.10-x86_64-linux
+
+    - name: Download the toolchain (cache miss)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        URL: https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2
+        # Arm publishes the MD5, 2383e4eb4ea23f248d33adc70dc3227e; this is
+        # the SHA-256 of the file with that MD5.
+        SHA256: 97dbb4f019ad1650b732faffcc881689cedc14e2b7ee863d390e0a41ef16c9a3
+      run: |
+        tgz="$RUNNER_TEMP/arm-gnu-toolchain.tar.bz2"
+        curl -fsSL --retry 5 --retry-all-errors --connect-timeout 30 --max-time 900 -o "$tgz" "$URL"
+        echo "$SHA256  $tgz" | sha256sum -c -
+        mkdir -p ~/arm-gnu-toolchain
+        tar xjf "$tgz" -C ~/arm-gnu-toolchain --strip-components=1
+        rm -rf ~/arm-gnu-toolchain/share/doc "$tgz"   # the manuals (61 of 709 MB), never read here
+
+    - name: Put it on PATH
+      shell: bash
+      run: |
+        echo "$HOME/arm-gnu-toolchain/bin" >> "$GITHUB_PATH"
+        "$HOME/arm-gnu-toolchain/bin/arm-none-eabi-gcc" --version | head -1
