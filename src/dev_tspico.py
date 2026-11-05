@@ -4128,11 +4128,11 @@ def BLKRCV(pre, cmd):                                                           
         # reads more than 32768 bytes in one write loop -- romupdate writes
         # one 32K slot, dckupdate two, with BASIC PRINTs in between -- so a
         # piece's DMA ends as its loop does, and the next piece is read from
-        # the file while BASIC runs. A 64K bytearray no longer fits the v2
-        # heap (192K free, largest block ~52K, hardware 2026-11-05): every
-        # .DCK fell to the hand loop below, which can't keep up with the
-        # write loop -- 00s in the flash, and the Pico left blocked in put()
-        # on bytes the Z80 would never read, deaf to the tpi:close after it.
+        # the file while BASIC runs. A 64K bytearray can't be counted on: the
+        # v2 heap's largest block was ~113K after boot, ~52K some commands
+        # later (hardware 2026-11-05). Then a .DCK fell to the hand loop, too
+        # slow for the write loop: 00s in the flash, and the Pico blocked in
+        # put() on bytes the Z80 never read, deaf to the tpi:close after it.
         data = None
         if tspico_io.CAN_STREAM():
             try:

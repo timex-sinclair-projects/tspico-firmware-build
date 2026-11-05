@@ -395,9 +395,10 @@ an empty FIFO reads as `00h`, and that `00h` goes into the flash.
   writes one 32K slot, `dckupdate` two, with BASIC between them), so a
   piece's channel ends as its loop does and the next piece is read while
   BASIC runs. Until #372 the whole image went into one buffer, and a
-  64K `bytearray` no longer fits a v2 Pico's heap: 192K free, but the
-  largest free block about 52K (hardware, 2026-11-05). Every `.DCK` fell
-  to the hand loop below, which can't keep up with the write loop: `00h`s
+  64K `bytearray` can't be counted on in a v2 Pico's heap: its largest
+  free block was about 113K after boot and about 52K some commands later
+  (hardware, 2026-11-05). When it failed, a `.DCK` fell to the hand loop
+  below, which can't keep up with the write loop: `00h`s
   in the flash, and the Pico blocked in `put()` on bytes the Z80 would
   never read, deaf to the loader's `tpi:close` (its Report J).
 - **No channel free**: that piece from the buffer, the first `GATE` = 8
