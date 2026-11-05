@@ -26,7 +26,7 @@ cartridges, ZX Spectrum mode and every command.
 <!-- v3 -->
 - the TS-Pico v3 card;
 <!-- /v3 -->
-- an expansion bus board, if you use one (the TS-Pico can also plug straight into the 2068);
+- an expansion bus board;
 - a micro SD card. Your TS-Pico came with one, already set up.
 
 ![The Timex Sinclair 2068, seen from the front left](images/ts2068.svg)
@@ -36,18 +36,17 @@ cartridges, ZX Spectrum mode and every command.
 
 ## Fitting the TS-Pico
 
-**Direct connection.** The TS-Pico plugs straight into the expansion connector at the back
-right of the 2068 and sticks out behind it.
+The TS-Pico goes into an expansion bus board: the bus board plugs into the expansion
+connector at the back right of the 2068, and the TS-Pico into any of its slots.
+
 <!-- v2 -->
-
-![A TS-Pico plugged straight into the 2068, standing up behind it](images/ts2068-tspico.svg)
+![The 2068 with an expansion bus board behind it and the TS-Pico standing in the slot nearest the 2068](images/ts2068-bus-tspico.svg)
 <!-- /v2 -->
+<!-- v3 -->
+![An expansion bus board: the long connector at the front goes into the 2068, and cards go into its four slots](images/bus-expansion.svg)
+<!-- /v3 -->
 
-**On an expansion bus.** The bus board plugs into the 2068, and the TS-Pico plugs into one of
-its slots. Any slot works.
-
-> **Warning.** On an expansion bus, set the TS-Pico's slot's BUSISO bypass, or the TS-Pico
-> won't work. With jumpers, remove the jumper for the TS-Pico's slot; with switches, slide its
+> **Warning.** Set the BUSISO bypass for the TS-Pico's slot, or the TS-Pico won't work. With jumpers, remove the jumper for the TS-Pico's slot; with switches, slide its
 > BUSISO switch towards the 2068.
 
 Both connectors are keyed, so they only go in one way. Expect a fair amount of resistance when
@@ -124,15 +123,16 @@ switch the 2068 off, unplug the card's USB cable if it's connected, and switch o
 
 ## Giving commands
 
-Almost everything the TS-Pico does is reached through a name that starts with `tpi:`:
+**Use the 2068's own keywords** where there is one: LOAD and SAVE, and `CAT`, `MOVE TO`,
+COPY, MOVE, ERASE and FORMAT for files and folders. Everything else is a name that starts
+with `tpi:`:
 
-- **Commands use SAVE.** `SAVE "tpi:dir"` lists the folder; nothing is saved.
+- **Commands use SAVE.** `SAVE "tpi:info"` shows the TS-Pico's status; nothing is saved.
 - **LOAD "tpi:..." mounts a file**: `LOAD "tpi:frogger.tap"` makes it the "tape" that
-  `LOAD ""` reads from.
-- **Anything after a space is the argument:** `SAVE "tpi:cd games"`. Upper or lower case
-  doesn't matter.
+  `LOAD ""` reads from. There's no keyword for this one.
+- **Anything after a space is the argument.** Upper or lower case doesn't matter.
 - **The whole name, `tpi:` included, must fit in 31 characters.**
-- **Some commands take two numbers**, written like a block of code: `SAVE "tpi:dir" CODE 1,5`.
+- **Some commands take two numbers**, written like a block of code: `SAVE "tpi:log" CODE 0,500`.
 
 **Quiet or chatty.** Out of the box, commands work quietly: you see only the report. While
 you're learning, turn on the messages, which tell you what a command did and why one failed:
@@ -172,8 +172,8 @@ CAT "games/b*" : REM games, b...
 
 `*` matches any run of characters and `?` exactly one.
 
-**Moving between folders.** `MOVE TO "games"` (or `SAVE "tpi:cd games"`) goes into a folder.
-`SAVE "tpi:path"` tells you where you are. A few special names help:
+**Moving between folders.** `MOVE TO "games"` goes into a folder, and the first line of `CAT`
+tells you where you are. A few special names help:
 
 | Name | Takes you to |
 |---|---|
@@ -184,11 +184,11 @@ CAT "games/b*" : REM games, b...
 
 `MOVE TO "-"` takes you back to where you were.
 
-**Picking from a list.** `SAVE "tpi:cd"` on its own, or `MOVE TO ""`, shows the folders here
-as a numbered menu. Press a digit **0**-**9**, or **Q W E R T Y** for items 10 to 15, to go into one;
+**Picking from a list.** `MOVE TO ""` shows the folders here as a numbered menu. Press a digit **0**-**9**, or **Q W E R T Y** for items 10 to 15, to go into one;
 **N** quits.
 
-**Making a folder.** `SAVE "tpi:md tools"`. Name things with letters, digits, `-` and `_`.
+**Files and folders.** `FORMAT "tools/"` makes a folder. `COPY "a" TO "b"` copies a file,
+`MOVE "a" TO "b"` renames it, and `ERASE "a"` deletes it, without asking.
 
 ## Loading programs
 
