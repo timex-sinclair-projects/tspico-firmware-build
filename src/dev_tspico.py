@@ -440,12 +440,16 @@ PAPER_ = "\x11"
 # (10h-15h); anything else is Report K (see SEND_MSG2).
 ATTR_VALUES = (tuple(range(10)), tuple(range(10)), (0, 1, 8), (0, 1, 8), (0, 1), (0, 1))
 NORMAL_ = PAPER_ + "\x08" + INK_ + "\x08"
-# Blue and red text bring their own white paper (#370): on PAPER 8 the ink
-# lands on the user's paper, and blue on a blue screen (or red on red) can't
-# be read. INK 9 would always show but only as black or white. On the 2068's
-# own white paper these look the same as before. Go back with NORMAL_.
+# Text that keeps a colour brings its own white paper (#370): on PAPER 8 the
+# ink lands on the user's paper, and blue on a blue screen (or red on red)
+# can't be read. On the 2068's own white paper these look as they always did.
+# PLAIN_ follows them.
 BLUE_ = PAPER_ + "\x07" + INK_ + "\x01"
 RED_ = PAPER_ + "\x07" + INK_ + "\x02"
+# The rest of a listing: the screen's paper with INK 9, black or white to
+# suit it, so the user's own ink (black on a blue screen, say) can't make it
+# hard to read (#370). Every listing ends with NORMAL_.
+PLAIN_ = PAPER_ + "\x08" + INK_ + "\x09"
 
 RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD's tail
 
@@ -1574,8 +1578,8 @@ def CAT_COLOUR(text):                                                         # 
 
     """The listing as CAT shows it (chosen 2026-10-02): the path and the
     card line on a blue bar, the column titles on cyan, the dashed line
-    gone, folders in blue with "folder" for their size, and each index
-    number on a cyan chip. `text` is DIR_HEADER's four 32-character rows
+    gone, folders with "folder" for their size, and each index number on a
+    cyan chip. The rows are PLAIN_ (contrast ink on the screen's paper, #370). `text` is DIR_HEADER's four 32-character rows
     and then 32-character entry rows, as DIR_FILES and CATALOG_TEXT build
     them (and as dirinfo and tpi:info's tests read them: those keep the
     plain text). Anything else -- a TAP's block list, "Directory is empty"
@@ -1594,15 +1598,15 @@ def CAT_COLOUR(text):                                                         # 
     while len(rest) >= 32:
         row = rest[:32]
         if row[0] == "<":
-            out.append(BLUE_ + row[:22] + "%10s" % "folder")
+            out.append(PLAIN_ + row[:22] + "%10s" % "folder")
         elif row[:3].isdigit() and row[3] == " ":
-            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + NORMAL_ + row[3:])
+            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
         elif row[:4] == "    ":
-            out.append(NORMAL_ + row)
+            out.append(PLAIN_ + row)
         else:
             break
         rest = rest[32:]
-    out.append(NORMAL_ + rest)
+    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
     return "".join(out)
 
 
@@ -1628,10 +1632,10 @@ def TAPDIR_COLOUR(text, headers):                                             # 
             out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
         else:
             hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
-            out.append(NORMAL_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
-                       + (BLUE_ if hdr else NORMAL_) + row[3:])
+            out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
+                       + (BLUE_ if hdr else PLAIN_) + row[3:])
         rest = rest[32:]
-    out.append(NORMAL_ + rest)
+    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
     return "".join(out)
 
 
@@ -2636,7 +2640,7 @@ def DIR(pre, cmd):                                                              
         M = [PAPER_ + "\x01" + INK_ + "\x07" + "%-32s" % ("Path:%s" % public_path(27))]
         M.append(PAPER_ + "\x05" + INK_ + "\x09" + "  #  File Name         %3d files" % n)
         for f in range(par2, n):
-            M.append(PAPER_ + "\x05" + INK_ + "\x09" + "%03d" % idx + NORMAL_ + " %s\r" % files[f])
+            M.append(PAPER_ + "\x05" + INK_ + "\x09" + "%03d" % idx + PLAIN_ + " %s\r" % files[f])
             idx += 1
         M.append(NORMAL_)
         msg = "".join(M)
@@ -3610,7 +3614,7 @@ def IDIR(pre, cmd):
     return
 
 
-def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
+def ListMenu(List, hdr1, hdr2, action, chosen):
 
     # Given a list of strings, present them 16 at a time to pick from by
     # pressing keys 0-9,Q-Y or N to stop, B to go back a page or other key to go
@@ -3643,7 +3647,8 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
 
     # CAT's colours (2026-10-02): the path on the blue bar, the titles and
     # page on cyan, the old dashed hdr3 line gone, each choice letter on a cyan
-    # chip, folders in blue, the page's place in the list on cyan.
+    # chip, the page's place in the list on cyan. The entries (folders too,
+    # #370) are PLAIN_: contrast ink on the screen's paper.
     BAR = PAPER_ + "\x01" + INK_ + "\x07"
     CYAN = PAPER_ + "\x05" + INK_ + "\x09"
     Init = True
@@ -3680,10 +3685,11 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
         codes(BAR)
         for m in ("%-32s" % hdr1)[:32]:
             wrt(m)
-        codes(NORMAL_)
+        codes(PLAIN_)
         wrt(0x0D)
         for m in "(no items available)":
             wrt(m)
+        codes(NORMAL_)
         wrt(LOOP_END)                   # 0x03: end of loop (no scroll, no keypress)
         wrt.send()                      # data in TX first, then READY
         CMD_DRAIN()
@@ -3710,19 +3716,15 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
         codes(CYAN)
         for m in ("%-24s%8s" % (hdr2, pg))[:32]:
             wrt(m)
-        codes(NORMAL_)
+        codes(PLAIN_)
         while i < nmax and idx + i < n:
             x = letters[i]
             codes(CYAN)
             wrt(x)
-            codes(NORMAL_)
+            codes(PLAIN_)
             wrt(0x20)
-            if folders:
-                codes(BLUE_)
             for m in List[idx+i]:
                 wrt(m)
-            if folders:
-                codes(NORMAL_)
             wrt(0x0D)
             i += 1
         j = i
@@ -3736,7 +3738,7 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
         codes(CYAN)
         for k in range(w):
             wrt('=')
-        codes(NORMAL_)
+        codes(PLAIN_)
         for k in range(32 - a - w):
             wrt('-')
         wrt(0x0D)
@@ -4357,7 +4359,7 @@ def CDIR(pre, cmd):                                                             
                 List = dirs
         else:
             List = alldirs
-        isel = ListMenu(List, hdr1, hdr2, "Change to dir", "Changing dir to: ", True)
+        isel = ListMenu(List, hdr1, hdr2, "Change to dir", "Changing dir to: ")
         if isel >= 0:
             status, message = ChangeDir(List[isel])
         led.value(0)
@@ -4674,16 +4676,16 @@ def GETINFO(pre, cmd):                                                 # Shows T
     # SEND_MSG2's `colour`.
     missing = not TSP.sd_present                                       # a TAP not mounted isn't an error
     bar = PAPER_ + "\x05" + INK_ + "\x09" + " TS-Pico " + PAPER_ + ("\x02" if missing else "\x01") + INK_ + "\x07"
-    lab = lambda t: BLUE_ + "%-10s" % t + NORMAL_
-    warn = RED_ + "none" + NORMAL_
+    lab = lambda t: BLUE_ + "%-10s" % t + PLAIN_
+    warn = RED_ + "none" + PLAIN_
     M     = [bar + "%-23s" % " interface status"]                  # 9 + 23: SEND_MSG2 ends the line
-    M.append(BLUE_ + " %s 2023-2026 TS Pico Dev Team" % cop + NORMAL_ + nl + nl)
-    M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + BLUE_ + "uPython " + NORMAL_
+    M.append(BLUE_ + " %s 2023-2026 TS Pico Dev Team" % cop + PLAIN_ + nl + nl)
+    M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + BLUE_ + "uPython " + PLAIN_
              + ".".join(str(v) for v in sys.implementation.version[:3]) + nl)
     M.append(lab("ROM") + ("%d.%d" % (rom_id >> 4, rom_id & 0x0F) if rom_id != 0xFF   # what the ROM said (#227)
                            else TSP.ROM_VERSION) + nl)
     M.append(lab("Build") + BUILD_FIT(BUILD_VERSION, 22) + nl)        # 10 + 22: the 32-col line
-    M.append(lab("Board") + "%-6s" % board.LABEL[:6] + BLUE_ + "Log level " + NORMAL_ + "%d" % TSP.LOG_LEVEL + nl)
+    M.append(lab("Board") + "%-6s" % board.LABEL[:6] + BLUE_ + "Log level " + PLAIN_ + "%d" % TSP.LOG_LEVEL + nl)
     M.append(lab("Free RAM") + "%d kB" % (gc.mem_free() >> 10) + nl)
     M.append(lab("Flash") + "%s, %s free" % catalog.space_pair(fl_tot, fl_free) + nl)
     if TSP.sd_present and sd_space:
@@ -4693,9 +4695,9 @@ def GETINFO(pre, cmd):                                                 # Shows T
     mem, page = getBoot()
     M.append(lab("Boot") + "%-6s" % ("%d,%d" % (mem, page)))
     mem, page = getDock()
-    M.append(BLUE_ + "Dock " + NORMAL_ + "%d,%d" % (mem, page) + nl)
+    M.append(BLUE_ + "Dock " + PLAIN_ + "%d,%d" % (mem, page) + nl)
     M.append(lab("Append") + "%-6s" % ("on" if TSP.append else "off")
-             + BLUE_ + "Verbose " + NORMAL_ + ("on" if TSP.VERBOSE else "off") + nl)
+             + BLUE_ + "Verbose " + PLAIN_ + ("on" if TSP.VERBOSE else "off") + nl)
 
     if not TSP.f_name:
         M.append(lab("Mounted") + "none" + nl)
@@ -4728,6 +4730,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
 
     M.append(lab("Path") + "%s" % public_path() + nl)
     M.append(lab("Files") + "%d" % len(files) + nl)
+    M.append(NORMAL_)                                                  # back to the screen's own colours
     msg = "".join(M)
     SEND_MSG2(msg, _1_OK, True, True)
 

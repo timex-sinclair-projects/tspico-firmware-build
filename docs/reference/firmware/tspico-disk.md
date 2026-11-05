@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2655–3580.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2659–3584.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -25,14 +25,14 @@ module's patches.
 
 | Lines | What | Chapter |
 |---|---|---|
-| 2655–2734 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
-| 2743–2842 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 2845–3226 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
-| 3236–3239 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3242–3351 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3365–3392 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3395–3427 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3430–3580 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2659–2738 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
+| 2747–2846 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
+| 2849–3230 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
+| 3240–3243 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 3246–3355 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 3369–3396 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3399–3431 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3434–3584 | `DIR_NAMES`, `CH_OPEN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -210,7 +210,7 @@ the parent unindexed.
 
 ## COPY, ERASE, FORMAT, LIST, the label and MOVE
 
-The comment at lines 2737–2741 states the rules all four share: paths resolve
+The comment at lines 2741–2745 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -494,7 +494,7 @@ itself Q, the mounted file Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3229 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 3233 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -617,7 +617,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
 
-The comment at line 3354 lists the four commands. The ROM's channel driver
+The comment at line 3358 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -776,7 +776,7 @@ so: `CH_CALL(CHANNELS.close, stream)`, which mounts the card; an error
 (no card: J; an SD error: F) is logged and sent, and the stream stays in
 `CHANNELS`.
 
-The long comment at line 3542 is the history. When channels arrived (#83)
+The long comment at line 3546 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a
