@@ -24,9 +24,10 @@ design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
 byte-level change list is in [the build history](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
-The module is 2284 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end, then
+The module is 2331 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end, then
 COPY's file form, MOVE as rename, `LIST "name"` and `RESTORE #n` 311 more, also
-at the end). It enters the 2068's code only through a vector
+at the end, then the speech channel, `v:`, 47 more: 14 of them free bytes
+before `PS_READ`, #375). It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
@@ -50,13 +51,15 @@ the Pico Interface BIOS.
 | 497–596 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
 | 598–834 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
 | 836–856 | | `LOWER_LOOP` (function 88h) |
-| 858–1413 | | the channel driver |
-| 1415–1433 | | `HEXDIG`, `STRLEN` |
-| 1435–1447 | to 3777h | the command strings, `MODE_R` |
-| 1449–1463 | 3778h–377Eh | `PRELOAD` |
-| 1465–1513 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1515–1716 | 37B5h–38EBh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1718–1719 | 38ECh | `FDD_END` |
+| 858–1404 | | the channel driver |
+| 1406–1424 | | `HEXDIG`, `STRLEN` |
+| 1426–1438 | to 3769h | the command strings, `MODE_R` |
+| 1440–1453 | 376Ah–3770h | `PRELOAD` |
+| 1455–1457 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
+| 1459–1508 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1510–1711 | 37B5h–38EBh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1713–1767 | 38ECh–391Ah | the speech channel's helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375) |
+| 1769–1770 | 391Bh | `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -158,7 +161,7 @@ bytes into the allocation. Offsets from the record's start:
 | `R_OUTN` | 7 | bytes waiting in the output buffer |
 | `R_INN` | 8 | bytes in the input buffer |
 | `R_INP` | 9 | the next input byte to hand out |
-| `R_FLAGS` | 10 | bit 0: a record file (OPEN # gave a length) |
+| `R_FLAGS` | 10 | bit 0: a record file (OPEN # gave a length); bit 1: speech (`v:`, #375). Either one makes `CH_OUT` send at each CR |
 | `R_OUTBUF` | 11 | the output buffer |
 | `OUTMAX` | 64 | its size: `tpi:chwr` sends the bytes as hex, 9 + 128 < 256 |
 | `R_INBUF` | 75 | the input buffer |
@@ -699,7 +702,8 @@ clear, so the firmware's 88h text has no leading CR; keep it to one line
 points stream n at it; `PRINT #n`, `INPUT #n`, `LIST #n`, `INKEY$ #n` go
 through the record's routines; `CLOSE #n` flushes it, tells the Pico and
 takes the record out again. `OPEN #n,"d:[pattern]"` does the same with a
-read-only listing of names. Modes: `r` read, `w` write (truncate), `a`
+read-only listing of names, and `OPEN #n,"v:"` (#375) the v3 card's
+speech: the Pico says each line printed to it. Modes: `r` read, `w` write (truncate), `a`
 append, `u` update, each with an optional `b` (binary: no text
 conversion); the Pico interprets them ([../firmware/channels.md](../firmware/channels.md)).
 With a record length the file is a record file, and `PRINT #n;TAB r;…`
@@ -722,8 +726,10 @@ top of the calculator stack, and CH_ADD is on the `,` of a mode, if any
 
 1. `LD IY,IY_SYSVARS`; `PEEK_NAME`. Not ours → `STRMS_NC` (carry clear,
    HL = the STRMS entry, the stack untouched) and HOME's stock 1465h opens
-   K, S or P as before. Ours: `d:` (any case, any length ≥ 2, the rest a
-   pattern) or `f:` with at least one more character.
+   K, S or P as before. Ours (`SPEC_KIND`, past the `:` test): `d:` (any
+   case, any length ≥ 2, the rest a pattern), `v:` (any case and length; the
+   Pico refuses anything after the colon) or `f:` with at least one more
+   character.
 2. A spec over 64 characters after the prefix → `TOO_LONG` (F).
    `HC_TEST_ROOM` with `CH_ALLOC + ROOM`: Report 4 now, before the Pico
    hears of it, if the record and the command will not fit.
@@ -733,13 +739,15 @@ top of the calculator stack, and CH_ADD is on the `,` of a mode, if any
    statement must end (else `NONSENSE`). The mode is popped: `""` is `r`;
    1–3 characters are passed on; 4 or more is Report Q.
 4. **`tpi:chopen <mode> <path>`**, built at STKEND: `CMD_CHOPEN`, the mode,
-   a space, then the spec — without its `f:`, or whole for `d:` (the Pico
-   lists it). A zero-length path is skipped (an `LDIR` with BC = 0 would
+   a space, then the spec — without its `f:`, or whole for `d:` and `v:`
+   (`DV_TEST`: the Pico lists the one and speaks for the other). A zero-length path is skipped (an `LDIR` with BC = 0 would
    copy 64K). PMR2 = the record length, or FFh if it is over 255 (the Pico
    answers Q). `CH_SEND` with A = the stream, no payload; `CH_STATUS` (F,
    Q … raise their reports; nothing has been allocated yet).
-5. The spec is dropped from the calculator stack (STKEND − 5), as 1465h's
-   STK-FETCH would have.
+5. `PUSH_LETTER` keeps the spec's first letter on the stack, then the spec
+   is dropped from the calculator stack (STKEND − 5), as 1465h's
+   STK-FETCH would have. (Step 6 moves memory, so the spec can't be looked
+   at again later.)
 6. **The allocation**: it goes where CHANS' closing 80h is (PROG − 1, or
    PROG − 2 when one spare byte sits between that 80h and PROG, as on the
    2068). The pad: if the offset the record would have (record − CHANS + 1)
@@ -748,8 +756,10 @@ top of the calculator stack, and CH_ADD is on the `,` of a mode, if any
    take it for a SYSCON channel. `HC_MAKE_ROOM` opens `CH_ALLOC` bytes after
    (start − 1) so the 80h moves up past them; the allocation is zeroed.
 7. **The record**, IX = start + pad: `R_OUT` = 14A0h, `R_IN` = 14A9h,
-   `R_LETTER` = `'F'`, `R_PAD`, `R_STRM` = the stream, `R_FLAGS` bit 0 if a
-   record length was given.
+   `R_LETTER` = `'F'`, `R_PAD`, `R_STRM` = the stream; then `REC_FLAGS` with
+   the letter and the record length: `R_FLAGS` bit 1 for `v:`, bit 0 if a
+   record length was given. A speech record is an `'F'` record in every
+   other way, so `CH_CLOSE_HOOK`, `G_BEEP` and the rest need nothing new.
 8. DE = the offset (record − CHANS + 1), HL = the STRMS entry (`STRMS_HL`),
    carry set: HOME's 1461h stores DE there.
 
@@ -824,9 +834,10 @@ character.
 2. A TAB control (23) is a seek on a record file, so whatever was read
    ahead is no longer next: `R_INN` and `R_INP` = 0.
 3. The byte goes into `R_OUTBUF` at `R_OUTN`, which goes up.
-4. `CH_FLUSH` when the buffer is full (64), or — on a record file — at
-   every CR, so a record that is too long is Report Q on the PRINT that
-   made it.
+4. `CH_FLUSH` when the buffer is full (64), or — on a record file or a
+   speech stream (`R_FLAGS` bits 0–1) — at every CR, so a record that is
+   too long is Report Q on the PRINT that made it, and a line printed to
+   `v:` is said as soon as it is printed.
 
 TAB's two parameter bytes come through here as ordinary characters, and the
 Pico interprets the sequence (23, lo, hi) ([../firmware/channels.md](../firmware/channels.md)).
@@ -929,7 +940,7 @@ NUL-ended prefixes, sent as the start of each command:
 | `CMD_CHOPEN` | `tpi:chopen ` | `CH_OPEN_HOOK` |
 | `MODE_R` | `r` (not NUL-ended: copied with a length of 1) | OPEN # with no mode |
 
-### `PRELOAD` (3778h)
+### `PRELOAD` (376Ah)
 
 `SEND_FOPEN`'s and `CH_SEND`'s read of the pre-load status: `CALL
 BIOS_RX_A` (`IN A,(0Eh) / AND A`), `RET NZ`, `JP WF_FAIL`. A 0 means no
@@ -946,7 +957,13 @@ channel command in that time -- an `ON ERR` handler doing `PRINT #` -- would
 read it and report it as its own. Added at the end of the module, so that
 adding it moved no other address: the two `CALL BIOS_RX_A`s became `CALL PRELOAD`
 in place. [`rom_preload_hosttest.py`](../../../src/test/rom_preload_hosttest.py)
-runs it from the committed image.
+runs it from the committed image. It was at 3778h until #375 made the
+channel driver 14 bytes shorter; the free bytes after it keep `PS_READ` put.
+
+The `BLOCK $377F-$,$FF` after it fills the gap up to `PS_READ`, whose
+address HOME's 045Fh patch jumps to (`build-rom.py`'s `FIXED_SYMS` checks
+it). Code before it that gets shorter leaves room here; code that grows
+must be balanced, or `PS_READ` and the patch move together.
 
 ### `PS_READ`
 
@@ -1064,7 +1081,7 @@ statement and returns, and at run time **`tpi:list x`** goes to the Pico
 Why not scan the expression and look at its type: a scan in syntax mode
 done at run time inserts a second hidden number after each number in the
 line (the line has them already), and a scan in run mode evaluates the
-expression a second time (the comment at 1571–1575). So the test is lexical, and `LIST (a$)` counts as a number:
+expression a second time (the comment at 1566–1570). So the test is lexical, and `LIST (a$)` counts as a number:
 HOME's LIST then says Report C at the syntax pass.
 
 ### `FDD_RESTORE` (3819h)
@@ -1132,10 +1149,42 @@ it, as `CMD_CD_MENU`.
 At the end of the module with the code that came with it, so the string
 table above kept its length (`CMD_REN` took `CMD_CD_BACK`'s nine bytes).
 
+### The speech channel's helpers (#375)
+
+`OPEN #n,"v:"` needed four small routines; they are here, past `PS_READ`, so
+the hook's call sites could shrink instead of grow.
+
+#### `SPEC_KIND` (38ECh)
+
+DE = the spec (already known to have `:` second), C = its length: Z if it is
+ours — `d:` or `v:` (`DV_TEST`), or `f:` with at least one character more
+(`CP 3 / SBC A,A / AND A`: FFh, NZ, for a bare `f:`) — else NZ. A is lost.
+Called once, by `CH_OPEN_HOOK` (`JP NZ,STRMS_NC` after it).
+
+#### `DV_TEST` (38F9h)
+
+Z if the spec at DE starts with `d` or `v` in either case; A = the letter in
+upper case. Called by `SPEC_KIND` and by `CH_OPEN_HOOK` when it builds the
+command (`d:` and `v:` go whole).
+
+#### `PUSH_LETTER` (3902h)
+
+Pushes the spec's first letter, upper case, in AF under its own return
+address (`POP HL / PUSH AF / JP (HL)`); HL is lost. `CH_OPEN_HOOK` calls it
+just before it drops the spec, because the allocation that follows moves
+memory, and pops it again for `REC_FLAGS`.
+
+#### `REC_FLAGS` (390Bh)
+
+IX = the new record, A = the letter, BC = the record length: `SET 1` of
+`R_FLAGS` for `'V'`, `SET 0` for a length that is not 0. HL (the record) is
+kept, for the offset `CH_OPEN_HOOK` works out next. A `v:` with a length
+never gets this far: the Pico answers Q first.
+
 ### `FDD_END`
 
-The end of the module, 38ECh (377Fh in ROM 2.2, before `PS_READ`; 37EEh
-before LIST and RESTORE joined); `SAVEBIN` writes `FDD_BASE` to here as
+The end of the module, 391Bh (377Fh in ROM 2.2, before `PS_READ`; 37EEh
+before LIST and RESTORE joined; 38ECh before the speech channel); `SAVEBIN` writes `FDD_BASE` to here as
 `fddcmd.bin`, which `build-rom.py` splices in after checking that the
 region is all `FFh`.
 
