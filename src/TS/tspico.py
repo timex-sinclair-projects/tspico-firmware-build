@@ -5329,7 +5329,11 @@ def MEMDOCK(pre, cmd):                                                  # Change
         # With a .ROM/.DCK mounted this is romupdate/dckupdate picking the
         # slot it is about to erase: refuse the booted one here, before the
         # DOCK moves. (BLKRCV checks again; plain DOCK use is unaffected.)
-        clash = BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
+        # Not for flash 0: BLKRCV never writes it (SYSTEM_SLOT_LOCK), so a
+        # .DCK there can't reach the boot slot 1 -- and 2,0 is the default
+        # dckupdate puts back, with the .DCK still mounted if its tpi:close
+        # failed (#372). Refusing that left the DOCK on the new cartridge.
+        clash = None if SYSTEM_SLOT_LOCK(par1, par2) else BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
         if clash:
             LOG("DOCK: %s Command refused" % clash[0], 1)
             SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
