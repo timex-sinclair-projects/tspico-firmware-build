@@ -532,10 +532,10 @@ not exist until `TS2068_IO` first calls `ACTIVATE_SD` (6804): before that
 build it, each a new object on the same hardware state machine:
 `ACTIVATE_MQ` (`TS_IO_DUAL` at 30 MHz, running, Y BUSY), `ACTIVATE_SD`
 (`NULL_SM` at 15 MHz, started and stopped at once: parked) and `ZX48_IO`
-(7659, `TS_IO_DUAL`, started a moment later), each through the board layer
+(7676, `TS_IO_DUAL`, started a moment later), each through the board layer
 (`board.make_mq`, `board.sd_take_bus`; [board.md](board.md)). The dispatcher and `ZX48_IO`
 also take it back from the tuples `SAVE_TS`, `LOAD_SERVE`, `LOAD_ZX`,
-`LOAD_ZX_C` and `SAVE_ZX` return (7138, 7301, 7313, 7702, 7706, 7716), which
+`LOAD_ZX_C` and `SAVE_ZX` return (7138, 7301, 7313, 7719, 7723, 7733), which
 hand back the object they were given. Lifetime: the session. The invariant
 is `sd_active`: when it is `True`, `MQ` is the parked `NULL_SM`, its FIFOs
 reach no Z80, and the real program's FIFOs and Y are gone; every SD access
@@ -625,7 +625,7 @@ use" (6912), because then nobody else will clear it. Readers: `WAIT_CORE1`
 800 ms wait before IDLE (7013), the idle loop's `if not busy` before
 spawning (7415), `TS2068_IO`'s wait for `BLINK_LED` to stop (6815,
 unbounded, and the comment says why that one is safe), and `ZX48_IO`'s
-bounded 3 s wait before a transfer (7686). The invariant it carries is
+bounded 3 s wait before a transfer (7703). The invariant it carries is
 "a flash write stops both cores, so no transfer may start while one is in
 progress" ([PROTOCOL.md §13](../../PROTOCOL.md), "Wait for core1" and
 "`busy` is set by another core"). Before the 2026-09-30 audit `SAVE_LOG`
@@ -640,12 +640,12 @@ reads.
 `list` of `str`, `[]` from `TS2068_IO` (6631). `LOG` appends
 `"[<ticks_us>]<LABEL>:<msg>\n"` (1834); the dispatcher and `ZX48_IO` append
 the one string `SAVE_TS`, `LOAD_SERVE` and the ZX transfers return as
-their log (7142, 7303, 7315, 7708, 7718; the comments say an array was
+their log (7142, 7303, 7315, 7725, 7735; the comments say an array was
 planned). `SAVE_LOG` writes every entry to `/activity.log` and replaces the
 list with an empty one in its `finally`, write or no write, so a full flash
 cannot make it grow without bound (2136–2145); `CLEAR_LOG` empties it with
 the file (2189). The idle heartbeats test it (`if log_entries`) to decide
-whether to save (7414, 7784). `SAVE_LOG` runs on core1 in `TS2068_IO`'s
+whether to save (7414, 7801). `SAVE_LOG` runs on core1 in `TS2068_IO`'s
 idle loop and synchronously everywhere else; an entry `LOG` appends on
 core0 between core1's write loop and its `log_entries = []` is lost with
 the replaced list *(inferred: nothing in the code guards that window)*.
@@ -749,6 +749,6 @@ commands (4671–4675). Lifetime: the session; nothing rewrites it.
 _4_Q_Parameter: 0x19}`: the status codes above translated into the byte
 the ZX ROM puts in `ERR_NR` for `LOAD "tpi:…"` in ZX48 mode, where
 `0xFF` is `0 OK`. `ZX_TPI` sends `ZX_REPORT.get(st, 0x19)` as the first
-byte of its reply (7601), so any other status is Report Q. See
+byte of its reply (7618), so any other status is Report Q. See
 [tspico-dispatch.md](tspico-dispatch.md), `ZX_TPI`, and
 [zx48.md](../rom/zx48.md).

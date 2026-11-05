@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4919–5035
 (`LOAD_CONFIG`), 6084–6186 (the printer path), 6266–6602 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6610–7814 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+`PROCESS_CMD`) and 6610–7831 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -44,7 +44,7 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 | `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6318 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
 | `TS2068_IO()` | 6610 | the board setup and the service loop |
 | `ZX_TPI()` | 7503 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7641 | the Spectrum-mode loop |
+| `ZX48_IO(pre)` | 7658 | the Spectrum-mode loop |
 
 `ZX_REPORT` (line 7499), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
@@ -1062,8 +1062,19 @@ What it does:
 6. The text: a listing becomes bytes with anything ≥ 80h replaced by `?`;
    otherwise `(msg.strip() + " " + rest).strip()`, cut to 200 bytes. A
    `LOG` at level 0 (2 for an error).
-7. The reply buffer `out`: v4 — `status`, then for each 255-byte slice its
-   length and bytes, then `0`; without `pieces` — `status`, `len(text)`, the text.
+7. The reply buffer `out`: v4 — `status`, then each piece's length and
+   bytes, then `0`; without `pieces` — `status`, `len(text)`, the text.
+   A v4 piece is at most 255 bytes and, when the text goes on past that,
+   ends just before the last PAPER code (11h) in reach (`text.rfind(b"\x11",
+   i + 1, j + 1)`); with none, at 255. Why (#373): the ROM calls
+   `CHAN_OPEN` before each piece's `PR_STRING`, and on the Spectrum opening
+   the screen channel ends in `TEMPS`, which puts the user's permanent
+   colors back. A cut at byte 255 inside a row's `PAPER 5, INK 9, "005"`
+   printed the digits after the cut on the user's paper, one entry a
+   listing, at places that depended only on the byte count. Every 11h in
+   `CAT_COLOUR`'s output starts a whole setting (paper, then ink; the values
+   are 0–9, so a value byte is never 11h), so a piece cut there carries its
+   own colors.
    `out[0] = ZX_REPORT.get(st, 0x19)`: FFh for `_1_OK`, 1Ah (R), 0Eh (F),
    19h (Q), and Q for any other status.
 8. `ZX_FLUSH_TX(MQ)`; `gc.collect()`; `r = STREAM_DMA(MQ, out, None, stall,
@@ -1095,7 +1106,10 @@ first bytes are in TX before READY and the rest follows without an empty
 read; a missing file is F (0Eh), a `.ROM` Q (19h), `SAVE "tpi:x"` Q, a
 failed mount Q, an op without 80h asking for `dir` gets the "needs ZX ROM v4" Q, v4's
 `dir` goes through `ACTIVATE_SD`/`CATALOG`/`DEACTIVATE_SD`/`ACTIVATE_MQ`
-and comes back in pieces with `nxt == -1`; a name that stops half-way gives
+and comes back in pieces with `nxt == -1`, each piece after the first
+starting with PAPER, and with each piece starting from the user's colors
+(as `TEMPS` leaves them) every index number and the titles still come out
+on cyan, for listings of 30 to 45 rows; a name that stops half-way gives
 no reply, no mount, no hang; a stale listing is re-read first. The user's
 view: [user-manual.md 9.2](../../manual/user-manual.md#92-what-works-in-spectrum-mode).
 

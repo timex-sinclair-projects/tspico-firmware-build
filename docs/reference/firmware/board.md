@@ -24,8 +24,8 @@ Who calls what:
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
 | `start_memory()` | `TS2068_IO` (6666), once; with a MEM 3 slot, the SD card mounted around it |
 | `map_slots()` | `MEMBOOT` (5279, `reboot=True`), `MEMDOCK` (5417), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (769), `ZX48_IO` (7659) |
-| `restart_mq()` | `ZX48_IO` (7660, 7765, 7807) |
+| `make_mq()` | `ACTIVATE_MQ` (769), `ZX48_IO` (7676) |
+| `restart_mq()` | `ZX48_IO` (7677, 7782, 7824) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1114, 1117, 1135) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1107), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (722) |
