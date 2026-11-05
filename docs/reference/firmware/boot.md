@@ -308,7 +308,14 @@ says so (below). The steps, in order:
    change with the runner image. Everything else the build uses (`gcc`,
    `make`, `cmake`, `git`, `python3`, `zip`) comes with the runner image, so
    there is no apt step; **Tool versions** prints `cmake`'s, `gcc`'s and
-   Python's.
+   Python's. One catch: the toolchain's binutils is 2.37 (Ubuntu's apt
+   package was 2.38), whose `ld --defsym` takes only numbers, `+` and `-`,
+   and MicroPython passes the board's `PICO_FLASH_SIZE_BYTES` that way, which
+   the Pico SDK gives RPI_PICO as `(2 * 1024 * 1024)`. So the v2 builds (the
+   firmware in step 10 and the upgrade UF2 in step 11, here and in
+   `release.yml`) run `make` with `CMAKE_ARGS=-DPICO_FLASH_SIZE_BYTES=2097152`
+   in the environment, which the port's Makefile appends its own arguments
+   to. The v3 board sets its 16 MB as a number in `mpconfigboard.cmake`.
 2. **BASIC → TAP**: `tools/build-basic.sh` tokenizes every `basic/**/*.bas`
    with the vendored `zmakebas` (catches a `.bas` that will not tokenize).
    The outputs — `src/assets/*.tap` for the Pico's flash, `SD card/…` for
@@ -467,7 +474,9 @@ runner: PyInstaller packs the Python it runs on, and that Python's glibc is
 the oldest the binary starts on. Built on 24.04 it would need glibc 2.39
 and leave out Debian 12, Ubuntu 22.04 and Raspberry Pi OS bookworm;
 bullseye's 2.31 covers more than the 2.35 it needed when it was built on
-22.04. (The full image, not `-slim`: PyInstaller needs binutils.)
+22.04. (The full image, not `-slim`: PyInstaller needs binutils.) The
+macOS one is built on `macos-15`: GitHub retired the `macos-14` runners,
+and a job asking for them is cancelled before it starts.
 
 Every workflow uses the first major of each GitHub action that runs on
 Node 24 (`checkout@v5`, `upload-artifact@v6`, `download-artifact@v7`,
