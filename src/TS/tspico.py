@@ -7513,11 +7513,28 @@ def ZX_TPI():
     # message in pieces of up to 255 and a 0. The first bytes go in before
     # READY -- the ROM reads the instant it sees it -- the rest as it reads.
     if pieces:
-        k = (len(text) + 254) // 255
-        out = bytearray(1 + len(text) + k + 1)
+        # ─── A piece ends just before a PAPER code (#373) ─────────────────
+        # The ROM opens the screen channel before each piece, and on the
+        # Spectrum CHAN_OPEN ends in TEMPS: the colours go back to the
+        # user's own. A cut at byte 255 inside a row's "PAPER 5, INK 9,
+        # 005" printed the digits after it in the user's paper colour. In
+        # CAT_COLOUR's listing every 11h starts a whole colour setting
+        # (paper, then ink; the values are 0-9, never 11h), so a piece
+        # cut there begins with its own colours. Text without one is cut
+        # at 255, as before.
+        parts = []
+        i = 0
+        while i < len(text):
+            j = i + 255
+            if j < len(text):
+                k = text.rfind(b"\x11", i + 1, j + 1)
+                if k >= 0:
+                    j = k
+            parts.append(text[i:j])
+            i = j
+        out = bytearray(1 + len(text) + len(parts) + 1)
         j = 1
-        for i in range(0, len(text), 255):
-            part = text[i:i + 255]
+        for part in parts:
             out[j] = len(part)
             out[j + 1:j + 1 + len(part)] = part
             j += 1 + len(part)
