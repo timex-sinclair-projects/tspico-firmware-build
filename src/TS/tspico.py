@@ -440,6 +440,16 @@ PAPER_ = "\x11"
 # (10h-15h); anything else is Report K (see SEND_MSG2).
 ATTR_VALUES = (tuple(range(10)), tuple(range(10)), (0, 1, 8), (0, 1, 8), (0, 1), (0, 1))
 NORMAL_ = PAPER_ + "\x08" + INK_ + "\x08"
+# Text that keeps a colour brings its own white paper (#370): on PAPER 8 the
+# ink lands on the user's paper, and blue on a blue screen (or red on red)
+# can't be read. On the 2068's own white paper these look as they always did.
+# PLAIN_ follows them.
+BLUE_ = PAPER_ + "\x07" + INK_ + "\x01"
+RED_ = PAPER_ + "\x07" + INK_ + "\x02"
+# The rest of a listing: the screen's paper with INK 9, black or white to
+# suit it, so the user's own ink (black on a blue screen, say) can't make it
+# hard to read (#370). Every listing ends with NORMAL_.
+PLAIN_ = PAPER_ + "\x08" + INK_ + "\x09"
 
 RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD's tail
 
@@ -1568,8 +1578,8 @@ def CAT_COLOUR(text):                                                         # 
 
     """The listing as CAT shows it (chosen 2026-10-02): the path and the
     card line on a blue bar, the column titles on cyan, the dashed line
-    gone, folders in blue with "folder" for their size, and each index
-    number on a cyan chip. `text` is DIR_HEADER's four 32-character rows
+    gone, folders with "folder" for their size, and each index number on a
+    cyan chip. The rows are PLAIN_ (contrast ink on the screen's paper, #370). `text` is DIR_HEADER's four 32-character rows
     and then 32-character entry rows, as DIR_FILES and CATALOG_TEXT build
     them (and as dirinfo and tpi:info's tests read them: those keep the
     plain text). Anything else -- a TAP's block list, "Directory is empty"
@@ -1588,15 +1598,15 @@ def CAT_COLOUR(text):                                                         # 
     while len(rest) >= 32:
         row = rest[:32]
         if row[0] == "<":
-            out.append(NORMAL_ + INK_ + "\x01" + row[:22] + "%10s" % "folder")
+            out.append(PLAIN_ + row[:22] + "%10s" % "folder")
         elif row[:3].isdigit() and row[3] == " ":
-            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + NORMAL_ + row[3:])
+            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
         elif row[:4] == "    ":
-            out.append(NORMAL_ + row)
+            out.append(PLAIN_ + row)
         else:
             break
         rest = rest[32:]
-    out.append(NORMAL_ + rest)
+    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
     return "".join(out)
 
 
@@ -1622,10 +1632,10 @@ def TAPDIR_COLOUR(text, headers):                                             # 
             out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
         else:
             hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
-            out.append(NORMAL_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
-                       + PAPER_ + "\x08" + INK_ + ("\x01" if hdr else "\x08") + row[3:])
+            out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
+                       + (BLUE_ if hdr else PLAIN_) + row[3:])
         rest = rest[32:]
-    out.append(NORMAL_ + rest)
+    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
     return "".join(out)
 
 
@@ -2630,7 +2640,7 @@ def DIR(pre, cmd):                                                              
         M = [PAPER_ + "\x01" + INK_ + "\x07" + "%-32s" % ("Path:%s" % public_path(27))]
         M.append(PAPER_ + "\x05" + INK_ + "\x09" + "  #  File Name         %3d files" % n)
         for f in range(par2, n):
-            M.append(PAPER_ + "\x05" + INK_ + "\x09" + "%03d" % idx + NORMAL_ + " %s\r" % files[f])
+            M.append(PAPER_ + "\x05" + INK_ + "\x09" + "%03d" % idx + PLAIN_ + " %s\r" % files[f])
             idx += 1
         M.append(NORMAL_)
         msg = "".join(M)
@@ -2770,12 +2780,16 @@ SD_FREE = frozenset((
 SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:FOPEN"))
 
 
-def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct):                        # does this command need the card?
+def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # does this command need the card?
 
     if load_cmd:
         return True                                                           # LOAD "tpi:name": mount a file
     if cmd_word == "TPI:HELP":
         return cmd_exec.strip() != cmd_word                                   # a topic is a file on the card
+    if cmd_word == "TPI:CHOPEN" and CH_SPEECH_PATH(cmd_exec):
+        return False                                                          # OPEN #n,"v:": speech, no file
+    if cmd_word == "TPI:CHWR" and stream is not None and CHANNELS.speaking(stream):
+        return False                                                          # PRINT # to a speech channel
     return cmd_word in SA_funct and cmd_word not in SD_FREE
 
 
@@ -3449,6 +3463,15 @@ def CH_OPEN(pre, cmd):                                                        # 
     k = arg.find(' ')
     mode, path = (arg[:k], arg[k + 1:].strip()) if k > 0 else ("r", arg)
     TLM("CH_OPEN", "stream=%d mode=%r path=%r reclen=%d" % (stream, mode, path, reclen))
+    if path[:2].lower() == "v:":                                              # the v3 card's speech: no file (#375)
+        if not board.HAS_SPEECH:
+            CH_REPLY(_3_F_Invalid_file)
+        elif reclen or path[2:].strip():
+            CH_REPLY(_4_Q_Parameter)                                          # "v:" alone, a stream (any mode: it is only written)
+        else:
+            CHANNELS.open_speech(stream, board.say)
+            CH_REPLY(_1_OK)
+        return
     if path[:2].lower() == "d:":                                              # stage 3: a directory listing
         def op():
             if mode.lower() != "r" or reclen:
@@ -3476,6 +3499,16 @@ def CH_OPEN(pre, cmd):                                                        # 
     CH_REPLY(st)
 
 
+def CH_SPEECH_PATH(cmd):                                                      # tpi:chopen <mode> v:
+
+    """Is this tpi:chopen for OPEN #n,"v:" (the v3 card's speech)?"""
+
+    arg = getArgs(cmd).strip()
+    k = arg.find(' ')
+    path = arg[k + 1:].strip() if k > 0 else arg
+    return path[:2].lower() == "v:"
+
+
 def CH_WRITE(pre, cmd):                                                       # tpi:chwr <hex>
 
     stream = PARAMS(pre)[0] & 0xFF
@@ -3484,6 +3517,17 @@ def CH_WRITE(pre, cmd):                                                       # 
         data = bytes(int(hx[i:i + 2], 16) for i in range(0, len(hx), 2))
     except ValueError:
         CH_REPLY(_5_C_Nonsense)
+        return
+    if CHANNELS.speaking(stream):                                             # v:: no card, so no SD_CALL
+        try:
+            CHANNELS.write(stream, data)
+            st = _1_OK
+        except channels.ChannelError as e:
+            st = CH_STATUS.get(e.args[1], _4_Q_Parameter)
+        except OSError as e:                                                  # speech off
+            LOG("PRINT # to speech: %r" % e, 1)
+            st = _10_J_Invalid_IO
+        CH_REPLY(st)
         return
     msg, st = CH_CALL(CHANNELS.write, stream, data)
     CH_REPLY(st)
@@ -3604,7 +3648,7 @@ def IDIR(pre, cmd):
     return
 
 
-def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
+def ListMenu(List, hdr1, hdr2, action, chosen):
 
     # Given a list of strings, present them 16 at a time to pick from by
     # pressing keys 0-9,Q-Y or N to stop, B to go back a page or other key to go
@@ -3637,7 +3681,8 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
 
     # CAT's colours (2026-10-02): the path on the blue bar, the titles and
     # page on cyan, the old dashed hdr3 line gone, each choice letter on a cyan
-    # chip, folders in blue, the page's place in the list on cyan.
+    # chip, the page's place in the list on cyan. The entries (folders too,
+    # #370) are PLAIN_: contrast ink on the screen's paper.
     BAR = PAPER_ + "\x01" + INK_ + "\x07"
     CYAN = PAPER_ + "\x05" + INK_ + "\x09"
     Init = True
@@ -3674,10 +3719,11 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
         codes(BAR)
         for m in ("%-32s" % hdr1)[:32]:
             wrt(m)
-        codes(NORMAL_)
+        codes(PLAIN_)
         wrt(0x0D)
         for m in "(no items available)":
             wrt(m)
+        codes(NORMAL_)
         wrt(LOOP_END)                   # 0x03: end of loop (no scroll, no keypress)
         wrt.send()                      # data in TX first, then READY
         CMD_DRAIN()
@@ -3704,19 +3750,15 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
         codes(CYAN)
         for m in ("%-24s%8s" % (hdr2, pg))[:32]:
             wrt(m)
-        codes(NORMAL_)
+        codes(PLAIN_)
         while i < nmax and idx + i < n:
             x = letters[i]
             codes(CYAN)
             wrt(x)
-            codes(NORMAL_)
+            codes(PLAIN_)
             wrt(0x20)
-            if folders:
-                codes(INK_ + "\x01")
             for m in List[idx+i]:
                 wrt(m)
-            if folders:
-                codes(INK_ + "\x08")
             wrt(0x0D)
             i += 1
         j = i
@@ -3730,7 +3772,7 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
         codes(CYAN)
         for k in range(w):
             wrt('=')
-        codes(NORMAL_)
+        codes(PLAIN_)
         for k in range(32 - a - w):
             wrt('-')
         wrt(0x0D)
@@ -4113,46 +4155,63 @@ def BLKRCV(pre, cmd):                                                           
     # which needs the user's attention and a power cycle anyway.)
     # ──────────────────────────────────────────────────────────────────────
     GATE = 8                                # > the 4-deep FIFO + the status byte
+    _PIECE = 32768                          # the most one Z80 write loop reads (#372)
 
     def stream(f, total):
         """Send `total` bytes of file f (from its current position)."""
-        # By DMA where there is one: the whole image into RAM (a .DCK is 64K;
-        # v1.29 has ~180K free), the gate as below, then the rest from RAM by
-        # a DMA channel -- no file reads, GCs or USB interrupts can leave the
+        # By DMA where there is one: the image into RAM, then from RAM by a
+        # DMA channel -- no file reads, GCs or USB interrupts can leave the
         # FIFO dry under the Z80's 33 us write loop, which would put 00s in
         # the flash. A Z80 that stops (reset mid-write) or a BREAK / SYNC now
         # ends it too: the loop never pauses once it has started, so 3 s of
         # no reads means it has gone.
+        #
+        # One 32K piece at a time, not the whole image (#372): the Z80 never
+        # reads more than 32768 bytes in one write loop -- romupdate writes
+        # one 32K slot, dckupdate two, with BASIC PRINTs in between -- so a
+        # piece's DMA ends as its loop does, and the next piece is read from
+        # the file while BASIC runs. A 64K bytearray can't be counted on: the
+        # v2 heap's largest block was ~113K after boot, ~52K some commands
+        # later (hardware 2026-11-05). Then a .DCK fell to the hand loop, too
+        # slow for the write loop: 00s in the flash, and the Pico blocked in
+        # put() on bytes the Z80 never read, deaf to the tpi:close after it.
         data = None
         if tspico_io.CAN_STREAM():
             try:
                 gc.collect()
-                data = bytearray(total)
+                data = bytearray(min(total, _PIECE))
             except MemoryError:
                 data = None
         if data is not None:
-            got = f.readinto(data)
-            mvd = memoryview(data)[:got]
-            # No gate: the channel starts now, seconds before the write loop
-            # reads (BASIC prints and erases first), and BREAK / a stall end
-            # it. The gate's late start cost ten empty reads -- 00s in the
-            # flash (hardware, 2026-10-03). Up to CMD_STALL_MS for the first
-            # read (the erase), then 3 s: the write loop never pauses.
-            _CMD_ECHO[0] = 0
-            r = STREAM_DMA(MQ, mvd, _CMD_ECHO, 3000, False, CMD_STALL_MS)
-            if r is not None:
-                TLM("BLKRCV streamed by DMA", "why=%d sent=%d of %d echo=%s rx=%d" % (
-                    r[0], r[1], got, bytes(_CMD_ECHO).hex(), MQ.rx_fifo()))
-                if r[0]:
-                    raise CmdAbort(r[0])
-                return
-            gate = GATE                     # no channel free: the stream below, from RAM
-            for i in range(got):
-                if gate:
-                    CMD_PUT(mvd[i])
-                    gate -= 1
+            mvb = memoryview(data)
+            left = total
+            while left > 0:
+                got = f.readinto(mvb[:min(left, _PIECE)])
+                if not got:
+                    break
+                mvd = mvb[:got]
+                # No gate: the channel starts now, before the write loop
+                # reads (BASIC prints and erases first, or prints between the
+                # pieces), and BREAK / a stall end it. The gate's late start
+                # cost ten empty reads -- 00s in the flash (hardware,
+                # 2026-10-03). Up to CMD_STALL_MS for the piece's first read,
+                # then 3 s: the write loop never pauses.
+                _CMD_ECHO[0] = 0
+                r = STREAM_DMA(MQ, mvd, _CMD_ECHO, 3000, False, CMD_STALL_MS)
+                if r is not None:
+                    TLM("BLKRCV streamed by DMA", "why=%d sent=%d of %d echo=%s rx=%d" % (
+                        r[0], r[1], got, bytes(_CMD_ECHO).hex(), MQ.rx_fifo()))
+                    if r[0]:
+                        raise CmdAbort(r[0])
                 else:
-                    wrt(mvd[i])
+                    gate = GATE             # no channel free: this piece by hand, from RAM
+                    for i in range(got):
+                        if gate:
+                            CMD_PUT(mvd[i])
+                            gate -= 1
+                        else:
+                            wrt(mvd[i])
+                left -= got
             return
         gate = GATE
         left = total
@@ -4351,7 +4410,7 @@ def CDIR(pre, cmd):                                                             
                 List = dirs
         else:
             List = alldirs
-        isel = ListMenu(List, hdr1, hdr2, "Change to dir", "Changing dir to: ", True)
+        isel = ListMenu(List, hdr1, hdr2, "Change to dir", "Changing dir to: ")
         if isel >= 0:
             status, message = ChangeDir(List[isel])
         led.value(0)
@@ -4668,16 +4727,16 @@ def GETINFO(pre, cmd):                                                 # Shows T
     # SEND_MSG2's `colour`.
     missing = not TSP.sd_present                                       # a TAP not mounted isn't an error
     bar = PAPER_ + "\x05" + INK_ + "\x09" + " TS-Pico " + PAPER_ + ("\x02" if missing else "\x01") + INK_ + "\x07"
-    lab = lambda t: INK_ + "\x01" + "%-10s" % t + INK_ + "\x08"
-    warn = INK_ + "\x02" + "none" + INK_ + "\x08"
+    lab = lambda t: BLUE_ + "%-10s" % t + PLAIN_
+    warn = RED_ + "none" + PLAIN_
     M     = [bar + "%-23s" % " interface status"]                  # 9 + 23: SEND_MSG2 ends the line
-    M.append(NORMAL_ + INK_ + "\x01" + " %s 2023-2026 TS Pico Dev Team" % cop + INK_ + "\x08" + nl + nl)
-    M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + INK_ + "\x01" + "uPython " + INK_ + "\x08"
+    M.append(BLUE_ + " %s 2023-2026 TS Pico Dev Team" % cop + PLAIN_ + nl + nl)
+    M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + BLUE_ + "uPython " + PLAIN_
              + ".".join(str(v) for v in sys.implementation.version[:3]) + nl)
     M.append(lab("ROM") + ("%d.%d" % (rom_id >> 4, rom_id & 0x0F) if rom_id != 0xFF   # what the ROM said (#227)
                            else TSP.ROM_VERSION) + nl)
     M.append(lab("Build") + BUILD_FIT(BUILD_VERSION, 22) + nl)        # 10 + 22: the 32-col line
-    M.append(lab("Board") + "%-6s" % board.LABEL[:6] + INK_ + "\x01" + "Log level " + INK_ + "\x08" + "%d" % TSP.LOG_LEVEL + nl)
+    M.append(lab("Board") + "%-6s" % board.LABEL[:6] + BLUE_ + "Log level " + PLAIN_ + "%d" % TSP.LOG_LEVEL + nl)
     M.append(lab("Free RAM") + "%d kB" % (gc.mem_free() >> 10) + nl)
     M.append(lab("Flash") + "%s, %s free" % catalog.space_pair(fl_tot, fl_free) + nl)
     if TSP.sd_present and sd_space:
@@ -4687,9 +4746,9 @@ def GETINFO(pre, cmd):                                                 # Shows T
     mem, page = getBoot()
     M.append(lab("Boot") + "%-6s" % ("%d,%d" % (mem, page)))
     mem, page = getDock()
-    M.append(INK_ + "\x01" + "Dock " + INK_ + "\x08" + "%d,%d" % (mem, page) + nl)
+    M.append(BLUE_ + "Dock " + PLAIN_ + "%d,%d" % (mem, page) + nl)
     M.append(lab("Append") + "%-6s" % ("on" if TSP.append else "off")
-             + INK_ + "\x01" + "Verbose " + INK_ + "\x08" + ("on" if TSP.VERBOSE else "off") + nl)
+             + BLUE_ + "Verbose " + PLAIN_ + ("on" if TSP.VERBOSE else "off") + nl)
 
     if not TSP.f_name:
         M.append(lab("Mounted") + "none" + nl)
@@ -4722,6 +4781,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
 
     M.append(lab("Path") + "%s" % public_path() + nl)
     M.append(lab("Files") + "%d" % len(files) + nl)
+    M.append(NORMAL_)                                                  # back to the screen's own colours
     msg = "".join(M)
     SEND_MSG2(msg, _1_OK, True, True)
 
@@ -5329,7 +5389,11 @@ def MEMDOCK(pre, cmd):                                                  # Change
         # With a .ROM/.DCK mounted this is romupdate/dckupdate picking the
         # slot it is about to erase: refuse the booted one here, before the
         # DOCK moves. (BLKRCV checks again; plain DOCK use is unaffected.)
-        clash = BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
+        # Not for flash 0: BLKRCV never writes it (SYSTEM_SLOT_LOCK), so a
+        # .DCK there can't reach the boot slot 1 -- and 2,0 is the default
+        # dckupdate puts back, with the .DCK still mounted if its tpi:close
+        # failed (#372). Refusing that left the DOCK on the new cartridge.
+        clash = None if SYSTEM_SLOT_LOCK(par1, par2) else BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
         if clash:
             LOG("DOCK: %s Command refused" % clash[0], 1)
             SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
@@ -6423,7 +6487,7 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
         # No card: a command that needs one gets told so, once, clearly. The
         # card is looked for again first (one quick try), so putting one in
         # is all it takes; one that has come back is set up on the way.
-        if SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct) and not TSP.sd_present \
+        if SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, PARAMS(pre)[0] & 0xFF) and not TSP.sd_present \
                 and not SD_PROBE():
             NO_CARD_REPLY(cmd_word)
 

@@ -10,8 +10,13 @@ SD sizes in units that fit the card (2026-10-02).
     RST 10h would refuse is dropped with its code. Without colour=True every
     attribute code is dropped, as before.
   * CAT_COLOUR: blue bar over the path and card line, cyan column titles,
-    the dashed line gone, folders in blue as "folder", index numbers on
+    the dashed line gone, folders as "folder", index numbers on
     cyan chips; any other text goes through unchanged.
+  * #370: coloured ink always comes with its own paper (blue and red text
+    on white), so a blue or red screen doesn't hide it. The rest of the
+    text, folders included, is INK 9 (black or white to suit the screen's
+    paper), never the user's own ink, and each listing ends back in the
+    screen's own colours.
   * GETINFO: the cyan badge on a blue strip; with no SD card the strip
     and the card's "none" turn red. Nothing mounted is not a warning.
     The Board line comes from the board module (board.LABEL): the v2
@@ -45,6 +50,34 @@ def plain(m):
 def codes(m):
     """[(code, value), ...] in order."""
     return [(ord(a), ord(b)) for a, b in re.findall("([\x10\x11])(.)", m)]
+
+
+def readable(m):
+    """#370: no coloured ink on the user's own paper. A code sequence that
+    sets INK 0-7 while PAPER is 8 (the screen's paper, which may be the same
+    colour) fails, as does ink the same as its paper. INK 8 and 9 are fine:
+    the user's ink, or the contrast one."""
+    paper = 8
+    for code, v in codes(m):
+        if code == 0x11:
+            paper = v
+        elif v < 8 and (paper == 8 or paper == v):
+            return False
+    return True
+
+
+def own_ink(m):
+    """#370: the characters a listing prints in the user's own ink (INK 8),
+    stripped of spaces. Black on a blue screen is hard to read, so the
+    listings print their plain text with INK 9 and leave INK 8 for after."""
+    ink, out = 8, []
+    for part in re.split("([\x10\x11].)", m):
+        if len(part) == 2 and part[0] in "\x10\x11":
+            if part[0] == "\x10":
+                ink = ord(part[1])
+        elif ink == 8:
+            out.append(part)
+    return "".join(out).replace(" ", "").replace("\r", "")
 
 
 def screen(m):
@@ -123,10 +156,13 @@ def test_cat_colour(t):
     cs = codes(out)
     check(cs[:4] == [(0x11, 1), (0x10, 7), (0x11, 5), (0x10, 9)],
           "blue bar with white text, then cyan titles with contrast ink (%r)" % cs[:4])
-    check(out.index("<GAMES>") > out.index("\x10\x01", 10), "the folder in blue ink")
+    check(t.PLAIN_ + "<GAMES>" in out and t.BLUE_ not in out, "the folder in contrast ink, like the files (#370)")
+    check(readable(out), "no coloured ink on the screen's paper (#370)")
     i = out.index("000")
-    check(out[i - 4:i] == "\x11\x05\x10\x09" and out[i + 3:i + 7] == "\x11\x08\x10\x08",
-          "the index on a cyan chip, then back to the screen's colours")
+    check(out[i - 4:i] == "\x11\x05\x10\x09" and out[i + 3:i + 7] == t.PLAIN_,
+          "the index on a cyan chip, then the screen's paper with contrast ink")
+    check(own_ink(out) == "" and out.endswith(t.NORMAL_),
+          "no text in the user's own ink; back to it at the end (#370, %r)" % own_ink(out))
     check(all(v not in (0, 3) for _, v in cs), "no value the ROM can't take (%r)" % cs)
     for text in ("CACHED", "File:/advent.tap" + " " * 16 + "x"):
         check(t.CAT_COLOUR(text) == text, "not a folder listing (%r...): unchanged" % text[:12])
@@ -175,6 +211,7 @@ def test_info(t):
           "every line fits, %d lines (the 22-line page)" % len(lines))
     check(all(v not in (0, 3) for _, v in codes(msg)), "no value the ROM can't take")
     check(not re.search("\x10\x02", msg), "nothing missing: no red")
+    check(readable(msg), "labels in blue on white paper, never on the screen's (#370)")
 
     t.isTapMounted = lambda: True
     t.TSP = types.SimpleNamespace(FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2, sd_present=True,
@@ -192,7 +229,10 @@ def test_info(t):
     lines = screen(msg)
     check(codes(msg)[2] == (0x11, 2), "no SD card: the strip is red (%r)" % (codes(msg)[2],))
     check("SD card   none" in lines and "Mounted   none" in lines, "both say none")
-    check(msg.count("\x10\x02none") == 1 and "\x10\x02none" + "\x10\x08" + "\r" in msg.split("SD card")[1][:40],
+    check(readable(msg), "the red none on white paper (#370)")
+    check(own_ink(msg) == "" and msg.endswith(t.NORMAL_),
+          "values in contrast ink, never the user's own; back to it at the end (#370, %r)" % own_ink(msg))
+    check(msg.count(t.RED_ + "none") == 1 and t.RED_ + "none" + t.PLAIN_ + "\r" in msg.split("SD card")[1][:40],
           "only the card's none is red: nothing mounted is not a warning")
     msg, _ = run(True, False)
     check(codes(msg)[2] == (0x11, 1) and "\x10\x02" not in msg,
@@ -251,8 +291,10 @@ def test_tapdir(t):
     i = out.index(rows[2])
     check(out[i - 4:i] == "\x11\x06\x10\x09", "the block LOAD reads next is on a yellow row")
     i0 = out.index(rows[0][3:])
-    check(out[i0 - 2:i0] == "\x10\x01" and out[out.index(rows[1][3:]) - 2:out.index(rows[1][3:])] == "\x10\x08",
-          "headers in blue, data in the screen's ink")
+    check(out[i0 - 2:i0] == "\x10\x01" and out[out.index(rows[1][3:]) - 2:out.index(rows[1][3:])] == "\x10\x09",
+          "headers in blue, data in contrast ink")
+    check(own_ink(out) == "" and out.endswith(t.NORMAL_), "no text in the user's own ink (#370, %r)" % own_ink(out))
+    check(t.BLUE_ + rows[0][3:] in out and readable(out), "headers on white paper (#370)")
     check(all(v not in (0, 3) for _, v in cs), "no value the ROM can't take")
     hrows = [" 00 Program       1236 manic     ", ">02 Code block    6914 manicscr  "]
     hrows = [r[:32] for r in hrows]
@@ -273,14 +315,15 @@ def test_listmenu(t):
     t.CMD_KEY = lambda: 78                                       # N: quit at the first prompt
     t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
     t.ListMenu(["GAMES", "UTILS"], "Path:/", "  Directory Name",
-               "Change to dir", "Changing dir to: ", True)
+               "Change to dir", "Changing dir to: ")
     text = "".join(chr(b) for b in out[2:])                      # past 86h and the status
     lines = screen(text.split("\x00")[0])
     check(lines[2] == "Path:/".ljust(32) and lines[3].startswith("  Directory Name") and lines[3].endswith("1 of 1"),
           "the path on the bar line, the titles with the page (%r)" % lines[2:4])
     check(lines[4] == "0 GAMES" and "-" * 30 not in text, "rows follow the titles; no dashed line (%r)" % lines[4:6])
-    check("\x11\x05\x10\x090" + t.NORMAL_ in text, "the choice letter on a cyan chip")
-    check("\x10\x01GAMES\x10\x08" in text, "a folder in blue")
+    check("\x11\x05\x10\x090" + t.PLAIN_ in text, "the choice letter on a cyan chip")
+    check(own_ink(text) == "", "no text in the user's own ink (#370, %r)" % own_ink(text))
+    check(t.PLAIN_ + " GAMES\r" in text and readable(text), "a folder in contrast ink, like any entry (#370)")
     check(all(v not in (0, 3) for _, v in codes(text)), "no value the ROM can't take")
 
 

@@ -9,7 +9,8 @@ Decisions taken with David on 2026-10-12 are marked **(decided)**.
 
 **Status (2026-10-12):** built on branch `v3-speech`, everything but the
 tests that need the card in a 2068; see [Progress](#progress). The speech
-channel (`s:`) was dropped: the ROM can't reach it.
+channel was dropped here as `s:` (the ROM couldn't reach it) and came back
+as `v:` with a ROM 2.3 change (#375, 2026-11-05).
 
 ## What the prototypes settled
 
@@ -147,7 +148,7 @@ something else on the 2068 uses them. They work in ZX48 mode too, where
 3. **Text:** the rules table and its build tool, the matcher, numbers, the
    exception dictionary and `/speech.txt`, and `tpi:say` (text and
    `[allophones]`). Host test: known words to known allophones.
-4. ~~**The `s:` channel.**~~ Dropped (above).
+4. ~~**The `s:` channel.**~~ Dropped (above); done later as `v:` (#375).
 5. **Ports 17 and 37,** tested with a program written for David's board.
 6. **Docs:** the reference, the v3 manual (an appendix, "Speech": `tpi:say`,
    the channel, the ports, the allophone table, adding words), and `NOTICE`
@@ -183,7 +184,7 @@ On branch `v3-speech` (2026-10-12):
 | 1. The audio path | **Done** on board 2, on USB power with no 2068: tones on each channel at the jack, and the ROM speech played by DMA at 10 kHz |
 | 2. The chip in `tsbus` | **Done.** `sp0256.c` (MAME's core via `tools/sp0256-port.py`), checked bit for bit against MAME's C++ (`sp0256_hosttest.py`). Core 1 runs it into a ring that two DMA channels play to GP46/GP30. Core 1 never reads flash: the tables had to be placed in RAM by name, because GCC put them in `.rodata` even without `const`. On board 2: 80,157 samples for two sentences, exactly MAME's count, never late |
 | 3. Text and `tpi:say` | **Done.** `speech.py`, the rules generated from Wasser's `english.c`, `/speech.txt`, `tpi:say`, and speech started at boot with `SPEECH_VOLUME`/`SPEECH_RATE`/`SPEECH_PORTS` |
-| 4. The `s:` channel | **Dropped**: needs a ROM change |
+| 4. The speech channel | **Done** as `OPEN #n,"v:"` (#375): the ROM's OPEN hook takes `v:` and flushes at each CR; the firmware says each line. `s:` was dropped because the stock ROM takes `s` as the screen |
 | 5. Ports 17 and 37 | **Done** in the firmware; untested from a 2068 |
 | 6. Docs | **Done**: the reference (`firmware/speech.md`, `tsbus.md`, `board.md` and others), the v3 manual's Appendix G, `NOTICE` |
 

@@ -1,8 +1,9 @@
 # channels.py — `OPEN #` channels: streams, records, text conversion
 
-Source: [`src/TS/channels.py`](../../../src/TS/channels.py) (449 lines).
+Source: [`src/TS/channels.py`](../../../src/TS/channels.py) (499 lines).
 
-The Pico half of `OPEN #n,"f:name"` and `OPEN #n,"d:spec"`. The ROM's
+The Pico half of `OPEN #n,"f:name"`, `OPEN #n,"d:spec"` and, on the v3
+card, `OPEN #n,"v:"` (speech). The ROM's
 channel driver ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) sends what BASIC
 prints to a stream as raw 2068 bytes — tokens, control codes, CR — and asks
 for bytes when BASIC reads. This module keeps one `Channel` per stream
@@ -29,20 +30,22 @@ wire view [PROTOCOL.md §7](../../PROTOCOL.md) and
 
 The header comment names the three stages: stage 1 (#83) sequential text
 and binary files in modes `r`, `w`, `a`; stage 2 (#84, spec §4b) `TAB` as
-the position, mode `u`, record files; stage 3 (spec §4) `d:` listings.
+the position, mode `u`, record files; stage 3 (spec §4) `d:` listings. A
+fourth paragraph adds the speech channel (#375): write-only, no file, each
+line spoken when its CR arrives, and never in need of the card.
 
 ## Map of the file
 
 | Lines | What |
 |---|---|
-| 24–45 | `TOKENS`, `EXTRA`, `POUND`, `keyword` — the 2068's keywords by code |
-| 48–95 | `TextOut` — 2068 output bytes to text-file bytes |
-| 98–155 | `LATIN1`, `UTF8`, `TextIn` — text-file bytes to 2068 input bytes |
-| 158–177 | `utf8_len` |
-| 180–198 | `Channel` — one stream's state |
-| 201–216 | `ChannelError`, `MAX_RECLEN`, `parse_mode` |
-| 219–420 | `Channels` — the table and every operation on it |
-| 423–449 | `_split_cr`, `_one_line` |
+| 26–47 | `TOKENS`, `EXTRA`, `POUND`, `keyword` — the 2068's keywords by code |
+| 50–97 | `TextOut` — 2068 output bytes to text-file bytes |
+| 100–157 | `LATIN1`, `UTF8`, `TextIn` — text-file bytes to 2068 input bytes |
+| 160–179 | `utf8_len` |
+| 182–202 | `Channel` — one stream's state |
+| 205–220 | `ChannelError`, `MAX_RECLEN`, `parse_mode` |
+| 223–470 | `Channels` — the table and every operation on it |
+| 473–499 | `_split_cr`, `_one_line` |
 
 ## The keywords
 
@@ -178,6 +181,8 @@ The state of one open stream; a plain record of attributes, created by
 | query | bool, False | `TAB 0` seen: the next read returns a count |
 | mem | bytes or None, None | a `d:` listing: the names, not a file |
 | count | int or None, None | … and how many names |
+| say | function or None, None | a speech channel (`v:`): called with each line printed to it |
+| line | bytearray, empty | … and the translated text so far, up to the next newline |
 
 ### `Channel.pad(self)`
 
@@ -244,6 +249,43 @@ name a line, a directory's with `/`; then end of file; `TAB 0` the count;
 `TAB 8` from the second name; an empty listing reads end of file at once
 and `TAB 0` says 0.
 
+### `Channels.open_speech(self, stream, say)`
+
+`OPEN #n,"v:"` on the v3 card (#375): a write-only channel with no file
+(path `None`, mode `w`, so `read` says Q), and `say` (the firmware passes
+`board.say`) kept in `ch.say`. Drops any stale entry for the stream first,
+as `open` does. Called by `CH_OPEN` only after it checked that the board
+has speech and the spec is `v:` alone.
+Pinned by `channels_hosttest.py`'s `speech`: nothing said before a CR; a
+line said at its CR; keywords spelled out; an empty line silent; two lines
+in one write said apart; TAB ignored; `CLOSE` says the unfinished line,
+and still closes with speech off; reading Q; an unknown allophone Q; a
+stale file entry replaced.
+
+### `Channels.speaking(self, stream)`
+
+Is the stream open on speech? True when its entry has `say`. `SD_NEEDED`
+and `CH_WRITE` ask it so a `PRINT #` to speech never waits for, or needs,
+the card.
+
+### `Channels._speak(self, ch, final=False)`
+
+Says every complete line in `ch.line`: cuts at each `\n` (a CR, after
+`TextOut`) and hands the text before it to `_say`, keeping the rest. With
+`final` (at `close`), says what is left too if it is not blank. Why lines:
+the rules turn text into sounds a phrase at a time, and the ROM's driver
+sends a speech stream's bytes at each CR (`CH_OUT`, R_FLAGS bit 1), so a
+line is normally one `tpi:chwr`; a line longer than the ROM's 64-byte
+buffer arrives in pieces and is still said whole.
+
+### `Channels._say(self, ch, text)`
+
+One line to `ch.say`, decoded from UTF-8; a blank line says nothing (an
+empty `board.say` would stop speech). A `ValueError` from the speech rules
+(a `[NAME]` that is not an SP0256 allophone) becomes `("Not an allophone",
+"Q")`. An `OSError` (speech never started) passes up for `CH_WRITE` to
+answer J.
+
 ### `Channels._size(self, ch)`
 
 The size: `len(ch.mem)` for a listing, else `fs.size(ch.path)`.
@@ -283,7 +325,10 @@ buffer on a 23).
 ### `Channels._data(self, ch, data)`
 
 Bytes to store (no TAB among them) at the channel's position. Mode `r`:
-dropped — INPUT #'s prompt items go to the stream too (spec §4b). After
+dropped — INPUT #'s prompt items go to the stream too (spec §4b). A speech
+channel: the bytes go through `text_out` (keywords spelled out, control
+codes dropped, CR → `\n`) onto `ch.line`, and `_speak` says each line now
+complete; nothing else applies. After
 `TAB 0`: `("TAB 0 is only for reading", "Q")`. A stream: the bytes
 (binary) or `text_out.feed(data)` (text) are written at `pos`, which
 advances. A record file: `_split_cr` cuts the data at each CR; a CR opens
@@ -298,7 +343,8 @@ stored in a record.
 
 What BASIC printed to the stream, with TAB as 23, low, high. Scans the
 bytes: while `ch.tab` is collecting, the byte joins it and the second one
-completes `n = lo | hi << 8` for `_seek`; a 23 sends the run so far to
+completes `n = lo | hi << 8` for `_seek` (on a speech channel the TAB is
+dropped: there is no position); a 23 sends the run so far to
 `_data` and starts collecting; any other byte joins the run; the final run
 goes to `_data`. The TAB's bytes may arrive in later calls (pinned: `TAB
 15` sent one byte per chunk). Called by `CH_WRITE`. Pinned by `stage2`:
@@ -338,7 +384,10 @@ the table only after that write succeeded: if `fs.write` raises (no card,
 an SD error), the stream stays open, which matches the ROM's `CLOSE #`,
 which reports the error before freeing its side of the channel, so the
 statement can simply be repeated once the card is back (the docstring;
-`CH_CLOSE` in [tspico-disk.md](tspico-disk.md)).
+`CH_CLOSE` in [tspico-disk.md](tspico-disk.md)). A speech channel says
+what is left of an unfinished line (`PRINT #4;"bye";` then `CLOSE #4`)
+with `_speak(final=True)`; a `ChannelError` or `OSError` from that is
+swallowed, because closing must still close.
 
 ### `Channels.close_writes(self, stream)`
 
