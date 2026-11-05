@@ -264,7 +264,7 @@ def info(t):
 def cd_menu(t):
     w = Wire(t, keys=[78])
     t.ListMenu(["DEMO", "GAMES", "TEST", "UTILS"], "Path:/", "  Directory Name",
-               "  " + "-" * 30, "Change to dir", "Changing dir to: ", True)
+               "Change to dir", "Changing dir to: ")
     s = Screen()
     s.print_bytes(w.first_page(), expand=False)
     save(s, "cd-menu")
