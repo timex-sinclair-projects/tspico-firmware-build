@@ -608,7 +608,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3076); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3076 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7678), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7695), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
