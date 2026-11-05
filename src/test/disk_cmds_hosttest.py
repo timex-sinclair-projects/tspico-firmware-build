@@ -558,6 +558,63 @@ def test_channels(t, root):
     t.CH_READY = real_ch_ready
 
 
+def test_speech_channel(t):
+    print("OPEN #n,\"v:\": the v3 card's speech (#375)")
+    tx = []
+    said = []
+    t.CMD_PUT = lambda b: tx.append(b)
+    real_ch_ready, real_board, real_sd_call = t.CH_READY, t.board, t.SD_CALL
+    t.CH_READY = lambda: tx.append("READY")
+
+    def say(text):
+        said.append(text)
+        return 1, 1
+    t.board = types.SimpleNamespace(HAS_SPEECH=True, say=say)
+
+    def no_card(fn):
+        raise AssertionError("the card was used")
+    t.SD_CALL = no_card
+    t.CHANNELS.close_all()
+
+    def cmd(handler, text, stream, par2=0):
+        pre = bytearray(10)
+        pre[3], pre[5], pre[6] = stream, par2 & 0xFF, par2 >> 8
+        del tx[:]
+        handler(pre, "xxx" + text)
+        return tx[0] if len(tx) == 2 and tx[1] == "READY" else tx
+
+    check(not t.SD_NEEDED(False, "TPI:CHOPEN", "tpi:chopen r v:", {"TPI:CHOPEN": None, "TPI:CHWR": None}, 4),
+          "SD_NEEDED: chopen v: needs no card")
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:x", 4) == t._4_Q_Parameter and not t.CHANNELS.speaking(4),
+          "chopen r v:x: Q, no card asked for (only \"v:\" is speech)")
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:", 4) == t._1_OK and t.CHANNELS.speaking(4),
+          "chopen r v: opens a speech stream, no card")
+    check(cmd(t.CH_OPEN, "tpi:chopen w V:", 6) == t._1_OK and t.CHANNELS.speaking(6),
+          "  any mode, either case")
+    check(not t.SD_NEEDED(False, "TPI:CHWR", "tpi:chwr 4849", {"TPI:CHOPEN": None, "TPI:CHWR": None}, 4),
+          "SD_NEEDED: chwr to the speech stream needs no card")
+    check(t.SD_NEEDED(False, "TPI:CHWR", "tpi:chwr 4849", {"TPI:CHOPEN": None, "TPI:CHWR": None}, 5),
+          "  chwr to another stream still does")
+    check(cmd(t.CH_WRITE, "tpi:chwr " + b"HI THERE\r".hex(), 4) == t._1_OK and said == ["HI THERE"],
+          "chwr: the line is said at its CR (%r)" % said)
+    check(cmd(t.CH_WRITE, "tpi:chwr " + b"BYE".hex(), 4) == t._1_OK and said == ["HI THERE"],
+          "  no CR: not yet")
+    check(cmd(t.CH_CLOSE, "tpi:chclose", 4) == t._1_OK and said[-1] == "BYE" and not t.CHANNELS.speaking(4),
+          "chclose says the rest and closes, no card")
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:", 4, 10) == t._4_Q_Parameter, "v: with a record length: Q")
+
+    def off(text):
+        raise OSError("speech is off")
+    t.board.say = off
+    cmd(t.CH_OPEN, "tpi:chopen r v:", 4)
+    check(cmd(t.CH_WRITE, "tpi:chwr " + b"X\r".hex(), 4) == t._10_J_Invalid_IO, "speech off: chwr is J")
+    t.board = types.SimpleNamespace(HAS_SPEECH=False)
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:", 7) == t._3_F_Invalid_file and not t.CHANNELS.speaking(7),
+          "a board with no speech: F")
+    t.CHANNELS.close_all()
+    t.CH_READY, t.board, t.SD_CALL = real_ch_ready, real_board, real_sd_call
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -575,6 +632,7 @@ def main():
         test_cd_and_ren(t, root)
         test_native_open(t, root)
         test_channels(t, root)
+        test_speech_channel(t)
         t.PROMPT_EACH = real_prompt_each                          # test_erase stubs it
         t.SEND_MSG_PROMPT_YN = real_prompt_yn                     # test_native_open stubs it
         test_prompt_each(t)

@@ -33,7 +33,7 @@ the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
 Data goes through two accessors, 2298h (`IN A,(0Eh)`) and 229Dh
 (`OUT (0Eh),A`), and status through READ_STATUS (0655h, the `IN A,(0Fh)` at
 065Bh); the SYNC/BREAK layer adds the SYNC and BREAK writes and its own status reads at
-2304h–23C0h, and the disk module one IDLE poll at 3662h. Every site is listed in
+2304h–23C0h, and the disk module one IDLE poll at 3654h. Every site is listed in
 [rom/overview.md](../rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 ## The status byte

@@ -200,7 +200,7 @@ the names are the TS2068's (ZX Spectrum names where they are the same).
 
 | Address | Name | Used for | Sites |
 |---|---|---|---|
-| 5C3Ah | ERR_NR | the report code; IY points here, and `IY+0` is ERR_NR | the module's reports (3087h, 335Ch, 348Eh, 34B3h, 3562h, 35A1h) |
+| 5C3Ah | ERR_NR | the report code; IY points here, and `IY+0` is ERR_NR | the module's reports (3087h, 335Ch, 347Fh, 34A4h, 3553h, 3593h) |
 | 5C3Bh | FLAGS | bit 7: 1 = run time, 0 = syntax check. The disk keywords run on both passes and test it ([exrom-fdd.md](exrom-fdd.md)); SESSION_NAMED tests it as `IY+1` | 3171h, 1B48h |
 | 5C3Dh | ERR_SP | the error handler's stack frame: GUARDED installs H_TRAP and puts the old value back | 3062h, 3074h, 3081h; HOME H_TRAP (14B2h) |
 | 5C5Dh | CH_ADD | the next character of the BASIC line: the module's argument parser | 3154h, 3158h, 315Ch, 3280h |
@@ -222,7 +222,7 @@ routine at 22AEh (clear the lower screen).
 |---|---|---|---|
 | 5C10h | STRMS | the stream table (−3…15, two bytes each): OPEN # and CLOSE # | 34F0h |
 | 5C4Fh | CHANS | the channel area, where OPEN # adds an `F` record | 342Dh, 3480h, 34BBh |
-| 5C51h | CURCHL | the current channel's record: the `F` record's routines find their record through it | 3033h, 350Dh, 3568h, 35A7h, 3641h, 3649h |
+| 5C51h | CURCHL | the current channel's record: the `F` record's routines find their record through it | 3033h, 34FEh, 3559h, 3599h, 3633h, 363Bh |
 | 5C53h | PROG | the end of the channel area | 3422h |
 | 5C48h | BORDCR | the border color, which BEEPER keeps | 2051h, 22DAh |
 | 5CCBh | (OPEN/CLOSE # stream) | the stream number the stock OPEN/CLOSE # code stores at 140Fh, which the module reads | 340Fh, 3471h, 34A9h |

@@ -158,7 +158,7 @@ file. That is a hardware question before it is a firmware one.
 
 - **Speech** has left this list: it has a proposal,
   [v3-speech-proposal.md](v3-speech-proposal.md) (the SP0256-AL2 emulated from
-  its ROM, `tpi:say`, an `s:` channel, and David's speech board's ports).
+  its ROM, `tpi:say`, a `v:` channel, and David's speech board's ports).
 
 - **The Kempston joystick** has left this list too: the v3 card answers
   port 1Fh from its DE-9 socket (`KEMPSTON` in `config.ini`).
