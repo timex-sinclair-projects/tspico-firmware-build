@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1418–2199,
-2544–2576, 3835–3840, 3933–3992, 4237–4324, 4471–4478, 5233–5290,
-5522–5536, 5618–5683 and 5841–5857 (firmware 2.3).
+2544–2576, 3835–3840, 3933–3992, 4254–4341, 4488–4495, 5250–5307,
+5543–5557, 5639–5704 and 5862–5878 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -52,17 +52,17 @@ document it is linked, not restated: the pitfalls are in
 | `file_exists(filename)` | 3940–3944 | `os.stat` says not a directory |
 | `public_path(n=0)` | 3961–3973 | `TSP.cur_path` without `/sd`, optionally shortened |
 | `public_fname(n=0)` | 3976–3991 | `TSP.f_name` without `/sd`, optionally shortened |
-| `ChangeDir(potential_new_path, SDactive=False)` | 4237–4324 | the rules of `tpi:cd` / `MOVE TO` |
-| `getArgs(cmd)` | 4471–4478 | the text after the command word |
-| `getBoot()` | 5233–5241 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5244–5252 | (memory, slot) in the DOCK |
-| `SYSTEM_SLOT_LOCK(mem, page)` | 5255–5266 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5269–5289 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5522–5536 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5618–5638 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5641–5683 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 5841–5857 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 5860–5889 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `ChangeDir(potential_new_path, SDactive=False)` | 4254–4341 | the rules of `tpi:cd` / `MOVE TO` |
+| `getArgs(cmd)` | 4488–4495 | the text after the command word |
+| `getBoot()` | 5250–5258 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5261–5269 | (memory, slot) in the DOCK |
+| `SYSTEM_SLOT_LOCK(mem, page)` | 5272–5283 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5286–5306 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 5543–5557 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5639–5659 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5662–5704 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 5862–5878 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 5881–5910 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -429,8 +429,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7144, 7161 and
-7173, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7165, 7182 and
+7194, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -608,7 +608,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3072); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3072 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7623), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7644), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
@@ -823,8 +823,10 @@ for another slot, so this refusal is the second line of defense.
 slot 0 refused, slot 1 and SRAM 0 written.
 
 Callers: `BLKRCV` on v2, before `BOOT_SLOT_CLASH`, and `SLOT_WRITE` on
-the v3 card, after its range check. `MEMDOCK` doesn't call it: docking
-flash slot 0 is ZX Spectrum mode's ordinary state, image mounted or not.
+the v3 card, after its range check, and `MEMDOCK`, but not to refuse:
+docking flash slot 0 is ZX Spectrum mode's ordinary state, image mounted
+or not. `MEMDOCK` uses it to skip `BOOT_SLOT_CLASH` for a slot `BLKRCV`
+will never write (#372).
 
 ### `BOOT_SLOT_CLASH(mem, page, f_name)`
 
@@ -859,7 +861,18 @@ with a `.TAP` mounted is untouched. The `isinstance` test is the fix for
 `tpi:dock` with no file mounted raising (Report J), noted in the audit's
 status for #128.
 
-Callers: `MEMDOCK` (before it changes anything), `BLKRCV` (first thing).
+Callers: `MEMDOCK` (before it changes anything, unless `SYSTEM_SLOT_LOCK`
+locks the slot), `BLKRCV` (after `SYSTEM_SLOT_LOCK`).
+
+`MEMDOCK` skips it for flash slot 0 (since #372). A `.DCK` docked at 2,0
+spans slots 0 and 1, so with the usual boot from flash 1 the rule above
+refuses it, yet `BLKRCV` never writes there (`SYSTEM_SLOT_LOCK`), so
+nothing is protected. And 2,0 is the default `dckupdate.bas` puts the DOCK
+back to (lines 650 and 680): when its `tpi:close` at line 600 had failed
+(on v2, because `BLKRCV` was still blocked behind the write loop; see
+[`BLKRCV`](tspico-commands.md#blkrcvpre-cmd), "Why pieces"), the `.DCK` was
+still mounted, both restores came back Report Q, and the
+loader stopped with the DOCK still on the cartridge it had just written.
 
 Beware: it compares against the *current* boot setting, which `tpi:boot`
 changes at once while the 2068 keeps running the old ROM until `NEW` or a

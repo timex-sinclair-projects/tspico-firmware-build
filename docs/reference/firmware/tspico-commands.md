@@ -1,11 +1,11 @@
 # TS/tspico.py (part 6) — the `tpi:` commands
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
-2578–2655 (`DIR`), 3585–3929 (`IDIR` … `SA_NOT_IMP`), 3994–4235
-(`APPEND`, `BLKRCV`), 4327–4867 (`CDIR` … `GETLOG`), 4982–5366
-(`LOGLEVEL` … `MEMDOCK`), 5369–5438 (`MODEM`), 5539–5615 (`REW`), 5755–6017 (`BAD_CODE` …
-`NOP`) and 6129–6205 (the printer settings); the dispatch table
-`SA_funct` at 6646–6699, inside `TS2068_IO`.
+2578–2655 (`DIR`), 3585–3929 (`IDIR` … `SA_NOT_IMP`), 3994–4252
+(`APPEND`, `BLKRCV`), 4344–4884 (`CDIR` … `GETLOG`), 4999–5387
+(`LOGLEVEL` … `MEMDOCK`), 5390–5459 (`MODEM`), 5560–5636 (`REW`), 5776–6038 (`BAD_CODE` …
+`NOP`) and 6150–6226 (the printer settings); the dispatch table
+`SA_funct` at 6667–6720, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -34,33 +34,33 @@ where the manual and the code differ, the entries below say so.
 | `SA_NOT_IMP(pre, cmd)` | 3926 | the six reserved words |
 | `APPEND(pre, cmd)` | 3994 | `tpi:append` |
 | `BLKRCV(pre, cmd)` | 4059 | `tpi:blkrcv` |
-| `CDIR(pre, cmd)` | 4327 | `tpi:cd` |
-| `FWD(pre, cmd)` | 4386 | `tpi:ffw` |
-| `GETHELP(pre, cmd)` | 4481 | `tpi:help` |
-| `GETINFO(pre, cmd)` | 4650 | `tpi:info` |
-| `GETLOG(pre, cmd)` | 4740 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 4982 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 5041 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5171 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5292 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 5369 | `tpi:modem` |
-| `SAY(pre, cmd)` | 5411 | `tpi:say` |
-| `GREET(pre, cmd)` | 5441 | `tpi:greet` |
-| `AUTOMOUNT(pre, cmd)` | 5480 | `tpi:automount` |
-| `REW(pre, cmd)` | 5539 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 5755 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 5760 | the "Bad argument" message |
-| `RM(pre, cmd)` | 5765 | `tpi:rm` |
-| `RM_CHECK(name)` | 5811 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 5832 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 5892 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 5946 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 6000 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6129 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6150 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6161 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6174 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6192 | `tpi:bmp` |
+| `CDIR(pre, cmd)` | 4344 | `tpi:cd` |
+| `FWD(pre, cmd)` | 4403 | `tpi:ffw` |
+| `GETHELP(pre, cmd)` | 4498 | `tpi:help` |
+| `GETINFO(pre, cmd)` | 4667 | `tpi:info` |
+| `GETLOG(pre, cmd)` | 4757 | `tpi:log` |
+| `LOGLEVEL(pre, cmd)` | 4999 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 5058 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 5188 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5309 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 5390 | `tpi:modem` |
+| `SAY(pre, cmd)` | 5432 | `tpi:say` |
+| `GREET(pre, cmd)` | 5462 | `tpi:greet` |
+| `AUTOMOUNT(pre, cmd)` | 5501 | `tpi:automount` |
+| `REW(pre, cmd)` | 5560 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 5776 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 5781 | the "Bad argument" message |
+| `RM(pre, cmd)` | 5786 | `tpi:rm` |
+| `RM_CHECK(name)` | 5832 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 5853 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 5913 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 5967 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 6021 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6150 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6171 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6182 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6195 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 6213 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -83,7 +83,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (6643–6644) says (until #181 it
+   trailing space, as the comment above it (6664–6665) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE`, and `tpi:help` with a topic) and
@@ -136,7 +136,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (6646) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (6667) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -380,20 +380,33 @@ every ~33 µs (117 T-states), until it has the whole image. So the bytes
 are queued long before anything reads them, and must then never run dry:
 an empty FIFO reads as `00h`, and that `00h` goes into the flash.
 
-- **By DMA**, or the v3 card's queue (`tspico_io.CAN_STREAM()`), when the whole image fits in
-  RAM after a `gc.collect()` — a `.DCK` is 64K, v1.29 has about 180K
-  free): the file is read into one buffer and sent with
-  `STREAM_DMA(MQ, data, _CMD_ECHO, 3000, False, CMD_STALL_MS)` — up to
-  `CMD_STALL_MS` for the first read (the erase takes seconds), then 3 s,
-  since the write loop never pauses. A BREAK or SYNC (code 1) or a stall
-  (code 3) raises `CmdAbort`. The channel starts at once, seconds before
-  the loop reads; there is no gate (below), because starting the stream
-  late cost ten empty reads — ten `00h`s in the flash (hardware,
-  2026-10-03).
-- **No channel free, image in RAM**: the first `GATE` = 8 bytes through
-  `CMD_PUT`, the rest with `MQ.put`.
-- **No DMA**: the file is read 256 bytes at a time into one buffer; the
-  first 8 bytes through `CMD_PUT`, then `MQ.put` byte by byte.
+- **By DMA**, or the v3 card's queue (`tspico_io.CAN_STREAM()`), in
+  `_PIECE` = 32 768-byte pieces through one buffer of that size (or the
+  image's size, if smaller), allocated after a `gc.collect()`. Each piece
+  is read from the file into the buffer and sent with
+  `STREAM_DMA(MQ, piece, _CMD_ECHO, 3000, False, CMD_STALL_MS)` — up to
+  `CMD_STALL_MS` for its first read (the erase takes seconds; before a
+  `.DCK`'s second piece, BASIC prints between the two write loops), then
+  3 s, since the write loop never pauses. A BREAK or SYNC (code 1) or a
+  stall (code 3) raises `CmdAbort`. The channel starts at once, before the
+  loop reads; there is no gate (below), because starting the stream late
+  cost ten empty reads — ten `00h`s in the flash (hardware, 2026-10-03).
+  Why pieces: no write loop reads more than 32 768 bytes (`romupdate`
+  writes one 32K slot, `dckupdate` two, with BASIC between them), so a
+  piece's channel ends as its loop does and the next piece is read while
+  BASIC runs. Until #372 the whole image went into one buffer, and a
+  64K `bytearray` can't be counted on in a v2 Pico's heap: its largest
+  free block was about 113K after boot and about 52K some commands later
+  (hardware, 2026-11-05). When it failed, a `.DCK` fell to the hand loop
+  below, which can't keep up with the write loop: `00h`s
+  in the flash, and the Pico blocked in `put()` on bytes the Z80 would
+  never read, deaf to the loader's `tpi:close` (its Report J).
+- **No channel free**: that piece from the buffer, the first `GATE` = 8
+  bytes through `CMD_PUT`, the rest with `MQ.put`.
+- **No DMA, or no room for the buffer**: the file is read 256 bytes at a
+  time into one buffer; the first 8 bytes through `CMD_PUT`, then
+  `MQ.put` byte by byte. Too slow for the write loop on v1.29
+  *(observed with a `.DCK`, 2026-11-05)*.
 
 Why the gate: if BASIC never reaches the write loop — BREAK during the
 PRINTs or the erase, or an error — nothing ever reads, and a plain
@@ -509,7 +522,7 @@ says), `expandKeywords` off.
   then every `SAVE` command with its `CODE` options, 32-column lines,
   three pages with their own headings — and, if external commands are
   loaded, a list of their words. Status 1. The summary is a literal in
-  the code (4564–4619); it must be kept in step with this table by hand.
+  the code (4581–4636); it must be kept in step with this table by hand.
 - **`?`**: the topics: every `*.txt` in `/sd/help` (sorted, without the
   extension, names starting with `.` skipped), packed into 32-column
   lines.
@@ -527,7 +540,7 @@ in a `try`) and gives it back before answering; the card gate has already
 probed for a card, since a topic needs one (`SD_NEEDED`'s special case).
 An error in `os.ilistdir` or `ACTIVATE_SD` reaches `FAIL_CMD`, Report J.
 The help files are written for the 2068's screen: short lines, CR, LF or
-CR LF line ends (the comment at 4486–4488). Error statuses are logged.
+CR LF line ends (the comment at 4503–4505). Error statuses are logged.
 
 ### `GETINFO(pre, cmd)`
 
@@ -613,7 +626,7 @@ middle of a UTF-8 sequence) "Couldn't read the log file", Report Q,
 logged. The buffer is dropped before `SEND_MSG2` builds its pages. LED on,
 off in a `finally`.
 
-Why the `try` covers only the read (the comment at 4821–4839; 2026-09-30
+Why the `try` covers only the read (the comment at 4838–4856; 2026-09-30
 audit): it was a bare `except:` around the read **and** `SEND_MSG2`. A
 BREAK at the "Scroll?" prompt raises `CmdAbort`, a `BaseException`, which
 a bare `except:` catches: `GETLOG` ate the BREAK and then sent "Log file
@@ -818,6 +831,9 @@ mounted, this is the updater choosing the slot it is about to erase, and
 the booted slot is refused: "Can't write Flash slot N:" / "the 2068 is
 running from it. Boot another slot first.", shown, Report Q, nothing
 changed ([tspico-files.md](tspico-files.md#boot_slot_clashmem-page-f_name)).
+Flash slot 0 skips that check (`SYSTEM_SLOT_LOCK`): `tpi:blkrcv` refuses
+it anyway, and refusing 2,0 with a `.DCK` mounted stopped `dckupdate.bas`
+putting the DOCK back to its default after a failed `tpi:close` (#372).
 Otherwise the old setting becomes the previous one, the new is written
 into `ROM_SM`/`bank_sm`, `board.map_slots` (on v2 `ROM.put`, `BANK.put`)
 switches the bank, and only then is "Change DOCK to MEM=…, PAGE=…" sent
