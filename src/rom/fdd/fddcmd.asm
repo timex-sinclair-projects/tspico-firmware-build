@@ -111,7 +111,8 @@ R_PAD           EQU 6              ; bytes before the record in its allocation
 R_OUTN          EQU 7              ; bytes waiting in R_OUTBUF
 R_INN           EQU 8              ; bytes in R_INBUF
 R_INP           EQU 9              ; the next one to hand out
-R_FLAGS         EQU 10             ; bit 0: a record file (OPEN # gave a length)
+R_FLAGS         EQU 10             ; bit 0: a record file (OPEN # gave a length);
+                                   ;   bit 1: speech ("v:"), sent at each CR too
 R_OUTBUF        EQU 11
 OUTMAX          EQU 64             ; tpi:chwr sends them as hex: 9 + 128 < 256
 R_INBUF         EQU R_OUTBUF+OUTMAX
@@ -892,15 +893,8 @@ CH_OPEN_HOOK:
         dec     de
         cp      ':'
         jp      nz,STRMS_NC
-        ld      a,(de)
-        and     $DF
-        cp      'D'                ; "d:[pattern]" (stage 3): a directory listing
-        jr      z,.ours
-        cp      'F'
+        call    SPEC_KIND          ; "d:", "v:", or "f:" and a character more
         jp      nz,STRMS_NC
-        ld      a,c
-        cp      3
-        jp      c,STRMS_NC         ; "f:" and at least one character
 .ours:  ld      a,c
         cp      MAX_ARG+3
         jp      nc,TOO_LONG
@@ -947,10 +941,8 @@ CH_OPEN_HOOK:
         inc     de
         push    de
         call    PEEK_NAME
-        ld      a,(de)
-        and     $DF
-        cp      'D'
-        jr      z,.keep            ; "d:..." goes as it is: the Pico lists it
+        call    DV_TEST
+        jr      z,.keep            ; "d:..." and "v:" go as they are
         inc     de
         inc     de                 ; past "f:"
         dec     bc
@@ -975,6 +967,7 @@ CH_OPEN_HOOK:
         ld      a,(STREAM_N)
         call    CH_SEND
         call    CH_STATUS          ; F, Q ... raise their reports
+        call    PUSH_LETTER        ; [letter]: the spec is about to go
         ld      hl,(STKEND)        ; drop the spec, as $1465's STK_FETCH would
         ld      de,-5
         add     hl,de
@@ -1026,12 +1019,9 @@ CH_OPEN_HOOK:
         ld      (ix+R_PAD),a
         ld      a,(STREAM_N)
         ld      (ix+R_STRM),a
+        pop     af                 ; the spec's letter
         pop     bc                 ; the record length
-        ld      a,b
-        or      c
-        jr      z,.strm
-        ld      (ix+R_FLAGS),1
-.strm:
+        call    REC_FLAGS
         ld      de,(CHANS)
         and     a
         sbc     hl,de
@@ -1209,8 +1199,9 @@ CH_OUT:
         jr      nc,.send
         ld      a,c                ; a record file sends at each CR, so a
         cp      13                 ;   record that is too long is Report Q
-        jr      nz,.done           ;   on the PRINT that made it
-        bit     0,(ix+R_FLAGS)
+        jr      nz,.done           ;   on the PRINT that made it; speech
+        ld      a,(ix+R_FLAGS)     ;   too, so a line is said when it is
+        and     3                  ;   printed
         jr      z,.done
 .send:  call    CH_FLUSH
 .done:  pop     ix
@@ -1460,6 +1451,10 @@ PRELOAD:
         call    BIOS_RX_A          ; IN A,(0Eh) / AND A: Z if 0
         ret     nz
         jp      WF_FAIL            ; A = 0: J (Invalid I/O device)
+
+; Free bytes: PS_READ stays at 377Fh, where HOME's patch jumps (build-rom.py's
+; FIXED_SYMS). Code before it that shrinks leaves room here (#375: 14 bytes).
+        BLOCK   $377F-$,$FF
 
 ;------------------------------------------------------------------------------
 ; PS_READ -- PRINT_STRING_FROM_PICO for ROM 2.3 (#228). EXROM $045F (functions
@@ -1714,6 +1709,62 @@ HC_USE_ZERO:
 
 CMD_LIST:    db "tpi:list ",0
 CMD_CD_MENU: db "tpi:cd",0
+
+;------------------------------------------------------------------------------
+; OPEN #n,"v:" -- the v3 card's speech (#375). CH_OPEN_HOOK takes it as it takes
+; "d:": the spec goes to the Pico whole (tpi:chopen r v:), which speaks what is
+; printed to the stream. The record is an 'F' record like any other (CLOSE #,
+; the quiet key click and the rest need no change); R_FLAGS bit 1 makes CH_OUT
+; send at each CR, so PRINT #4;"HELLO" is said at once, not when 64 bytes have
+; gathered or at CLOSE #. Here, past PS_READ, so nothing before it moves.
+;------------------------------------------------------------------------------
+
+; SPEC_KIND -- DE = the spec ("x:..."), C = its length: Z if it is ours ("d:",
+; "v:", or "f:" with at least one character more), else NZ. A is lost.
+SPEC_KIND:
+        call    DV_TEST
+        ret     z
+        cp      'F'
+        ret     nz
+        ld      a,c
+        cp      3                  ; C: "f:" alone
+        sbc     a,a                ; FFh if so, else 0
+        and     a                  ; Z: ours
+        ret
+
+; DV_TEST -- Z if the spec at DE starts with d or v (any case); A = the letter
+; in upper case.
+DV_TEST:
+        ld      a,(de)
+        and     $DF
+        cp      'D'
+        ret     z
+        cp      'V'
+        ret
+
+; PUSH_LETTER -- push the spec's first letter (upper case) in AF under the
+; return address: CH_OPEN_HOOK drops the spec before it builds the record.
+; HL is lost.
+PUSH_LETTER:
+        call    PEEK_NAME
+        ld      a,(de)
+        and     $DF
+        pop     hl                 ; the return address
+        push    af
+        jp      (hl)
+
+; REC_FLAGS -- the new record's R_FLAGS (IX = the record, A = the spec's
+; letter, BC = the record length): bit 0 for a record file, bit 1 for speech.
+; HL is kept.
+REC_FLAGS:
+        cp      'V'
+        jr      nz,.file
+        set     1,(ix+R_FLAGS)
+.file:  ld      a,b
+        or      c
+        ret     z
+        set     0,(ix+R_FLAGS)
+        ret
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE
