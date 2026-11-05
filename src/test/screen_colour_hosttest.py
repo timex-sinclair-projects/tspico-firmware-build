@@ -12,6 +12,8 @@ SD sizes in units that fit the card (2026-10-02).
   * CAT_COLOUR: blue bar over the path and card line, cyan column titles,
     the dashed line gone, folders in blue as "folder", index numbers on
     cyan chips; any other text goes through unchanged.
+  * #370: coloured ink always comes with its own paper (blue and red text
+    on white), so a blue or red screen doesn't hide it.
   * GETINFO: the cyan badge on a blue strip; with no SD card the strip
     and the card's "none" turn red. Nothing mounted is not a warning.
     The Board line comes from the board module (board.LABEL): the v2
@@ -45,6 +47,20 @@ def plain(m):
 def codes(m):
     """[(code, value), ...] in order."""
     return [(ord(a), ord(b)) for a, b in re.findall("([\x10\x11])(.)", m)]
+
+
+def readable(m):
+    """#370: no coloured ink on the user's own paper. A code sequence that
+    sets INK 0-7 while PAPER is 8 (the screen's paper, which may be the same
+    colour) fails, as does ink the same as its paper. INK 8 and 9 are fine:
+    the user's ink, or the contrast one."""
+    paper = 8
+    for code, v in codes(m):
+        if code == 0x11:
+            paper = v
+        elif v < 8 and (paper == 8 or paper == v):
+            return False
+    return True
 
 
 def screen(m):
@@ -123,7 +139,8 @@ def test_cat_colour(t):
     cs = codes(out)
     check(cs[:4] == [(0x11, 1), (0x10, 7), (0x11, 5), (0x10, 9)],
           "blue bar with white text, then cyan titles with contrast ink (%r)" % cs[:4])
-    check(out.index("<GAMES>") > out.index("\x10\x01", 10), "the folder in blue ink")
+    check(out.index("<GAMES>") == out.index(t.BLUE_) + 4, "the folder in blue ink on white paper (#370)")
+    check(readable(out), "no coloured ink on the screen's paper (#370)")
     i = out.index("000")
     check(out[i - 4:i] == "\x11\x05\x10\x09" and out[i + 3:i + 7] == "\x11\x08\x10\x08",
           "the index on a cyan chip, then back to the screen's colours")
@@ -175,6 +192,7 @@ def test_info(t):
           "every line fits, %d lines (the 22-line page)" % len(lines))
     check(all(v not in (0, 3) for _, v in codes(msg)), "no value the ROM can't take")
     check(not re.search("\x10\x02", msg), "nothing missing: no red")
+    check(readable(msg), "labels in blue on white paper, never on the screen's (#370)")
 
     t.isTapMounted = lambda: True
     t.TSP = types.SimpleNamespace(FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2, sd_present=True,
@@ -192,7 +210,8 @@ def test_info(t):
     lines = screen(msg)
     check(codes(msg)[2] == (0x11, 2), "no SD card: the strip is red (%r)" % (codes(msg)[2],))
     check("SD card   none" in lines and "Mounted   none" in lines, "both say none")
-    check(msg.count("\x10\x02none") == 1 and "\x10\x02none" + "\x10\x08" + "\r" in msg.split("SD card")[1][:40],
+    check(readable(msg), "the red none on white paper (#370)")
+    check(msg.count(t.RED_ + "none") == 1 and t.RED_ + "none" + t.NORMAL_ + "\r" in msg.split("SD card")[1][:40],
           "only the card's none is red: nothing mounted is not a warning")
     msg, _ = run(True, False)
     check(codes(msg)[2] == (0x11, 1) and "\x10\x02" not in msg,
@@ -253,6 +272,7 @@ def test_tapdir(t):
     i0 = out.index(rows[0][3:])
     check(out[i0 - 2:i0] == "\x10\x01" and out[out.index(rows[1][3:]) - 2:out.index(rows[1][3:])] == "\x10\x08",
           "headers in blue, data in the screen's ink")
+    check(t.BLUE_ + rows[0][3:] in out and readable(out), "headers on white paper (#370)")
     check(all(v not in (0, 3) for _, v in cs), "no value the ROM can't take")
     hrows = [" 00 Program       1236 manic     ", ">02 Code block    6914 manicscr  "]
     hrows = [r[:32] for r in hrows]
@@ -280,7 +300,7 @@ def test_listmenu(t):
           "the path on the bar line, the titles with the page (%r)" % lines[2:4])
     check(lines[4] == "0 GAMES" and "-" * 30 not in text, "rows follow the titles; no dashed line (%r)" % lines[4:6])
     check("\x11\x05\x10\x090" + t.NORMAL_ in text, "the choice letter on a cyan chip")
-    check("\x10\x01GAMES\x10\x08" in text, "a folder in blue")
+    check(t.BLUE_ + "GAMES" + t.NORMAL_ in text and readable(text), "a folder in blue on white paper (#370)")
     check(all(v not in (0, 3) for _, v in codes(text)), "no value the ROM can't take")
 
 

@@ -440,6 +440,12 @@ PAPER_ = "\x11"
 # (10h-15h); anything else is Report K (see SEND_MSG2).
 ATTR_VALUES = (tuple(range(10)), tuple(range(10)), (0, 1, 8), (0, 1, 8), (0, 1), (0, 1))
 NORMAL_ = PAPER_ + "\x08" + INK_ + "\x08"
+# Blue and red text bring their own white paper (#370): on PAPER 8 the ink
+# lands on the user's paper, and blue on a blue screen (or red on red) can't
+# be read. INK 9 would always show but only as black or white. On the 2068's
+# own white paper these look the same as before. Go back with NORMAL_.
+BLUE_ = PAPER_ + "\x07" + INK_ + "\x01"
+RED_ = PAPER_ + "\x07" + INK_ + "\x02"
 
 RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD's tail
 
@@ -1588,7 +1594,7 @@ def CAT_COLOUR(text):                                                         # 
     while len(rest) >= 32:
         row = rest[:32]
         if row[0] == "<":
-            out.append(NORMAL_ + INK_ + "\x01" + row[:22] + "%10s" % "folder")
+            out.append(BLUE_ + row[:22] + "%10s" % "folder")
         elif row[:3].isdigit() and row[3] == " ":
             out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + NORMAL_ + row[3:])
         elif row[:4] == "    ":
@@ -1623,7 +1629,7 @@ def TAPDIR_COLOUR(text, headers):                                             # 
         else:
             hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
             out.append(NORMAL_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
-                       + PAPER_ + "\x08" + INK_ + ("\x01" if hdr else "\x08") + row[3:])
+                       + (BLUE_ if hdr else NORMAL_) + row[3:])
         rest = rest[32:]
     out.append(NORMAL_ + rest)
     return "".join(out)
@@ -3712,11 +3718,11 @@ def ListMenu(List, hdr1, hdr2, action, chosen, folders=False):
             codes(NORMAL_)
             wrt(0x20)
             if folders:
-                codes(INK_ + "\x01")
+                codes(BLUE_)
             for m in List[idx+i]:
                 wrt(m)
             if folders:
-                codes(INK_ + "\x08")
+                codes(NORMAL_)
             wrt(0x0D)
             i += 1
         j = i
@@ -4668,16 +4674,16 @@ def GETINFO(pre, cmd):                                                 # Shows T
     # SEND_MSG2's `colour`.
     missing = not TSP.sd_present                                       # a TAP not mounted isn't an error
     bar = PAPER_ + "\x05" + INK_ + "\x09" + " TS-Pico " + PAPER_ + ("\x02" if missing else "\x01") + INK_ + "\x07"
-    lab = lambda t: INK_ + "\x01" + "%-10s" % t + INK_ + "\x08"
-    warn = INK_ + "\x02" + "none" + INK_ + "\x08"
+    lab = lambda t: BLUE_ + "%-10s" % t + NORMAL_
+    warn = RED_ + "none" + NORMAL_
     M     = [bar + "%-23s" % " interface status"]                  # 9 + 23: SEND_MSG2 ends the line
-    M.append(NORMAL_ + INK_ + "\x01" + " %s 2023-2026 TS Pico Dev Team" % cop + INK_ + "\x08" + nl + nl)
-    M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + INK_ + "\x01" + "uPython " + INK_ + "\x08"
+    M.append(BLUE_ + " %s 2023-2026 TS Pico Dev Team" % cop + NORMAL_ + nl + nl)
+    M.append(lab("Firmware") + "%-6s" % TSP.FW_VERSION + BLUE_ + "uPython " + NORMAL_
              + ".".join(str(v) for v in sys.implementation.version[:3]) + nl)
     M.append(lab("ROM") + ("%d.%d" % (rom_id >> 4, rom_id & 0x0F) if rom_id != 0xFF   # what the ROM said (#227)
                            else TSP.ROM_VERSION) + nl)
     M.append(lab("Build") + BUILD_FIT(BUILD_VERSION, 22) + nl)        # 10 + 22: the 32-col line
-    M.append(lab("Board") + "%-6s" % board.LABEL[:6] + INK_ + "\x01" + "Log level " + INK_ + "\x08" + "%d" % TSP.LOG_LEVEL + nl)
+    M.append(lab("Board") + "%-6s" % board.LABEL[:6] + BLUE_ + "Log level " + NORMAL_ + "%d" % TSP.LOG_LEVEL + nl)
     M.append(lab("Free RAM") + "%d kB" % (gc.mem_free() >> 10) + nl)
     M.append(lab("Flash") + "%s, %s free" % catalog.space_pair(fl_tot, fl_free) + nl)
     if TSP.sd_present and sd_space:
@@ -4687,9 +4693,9 @@ def GETINFO(pre, cmd):                                                 # Shows T
     mem, page = getBoot()
     M.append(lab("Boot") + "%-6s" % ("%d,%d" % (mem, page)))
     mem, page = getDock()
-    M.append(INK_ + "\x01" + "Dock " + INK_ + "\x08" + "%d,%d" % (mem, page) + nl)
+    M.append(BLUE_ + "Dock " + NORMAL_ + "%d,%d" % (mem, page) + nl)
     M.append(lab("Append") + "%-6s" % ("on" if TSP.append else "off")
-             + INK_ + "\x01" + "Verbose " + INK_ + "\x08" + ("on" if TSP.VERBOSE else "off") + nl)
+             + BLUE_ + "Verbose " + NORMAL_ + ("on" if TSP.VERBOSE else "off") + nl)
 
     if not TSP.f_name:
         M.append(lab("Mounted") + "none" + nl)
