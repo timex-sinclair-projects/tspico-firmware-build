@@ -484,6 +484,22 @@ Node 24 (`checkout@v5`, `upload-artifact@v6`, `download-artifact@v7`,
 `upload-pages-artifact@v5`): GitHub has deprecated Node 20, and the v4s
 were being forced onto Node 24 with a warning on every run.
 
+`prune-artifacts.yml` keeps the artifacts down to the newest two of each
+name. It runs `tools/prune-artifacts.py --delete` after every run of the
+workflows that upload artifacts (`build.yml`, `manual.yml`, `emu-host.yml`,
+`zimodem.yml`, `windows-updater.yml`, `pages.yml`), on any branch. For each
+artifact name it keeps the two newest and the newest from a green push run on
+`main`. That second rule is for `pages.yml`: the `main/` channel downloads the
+newest green `main` build's UF2s, and the Zimodem fallback downloads the newest
+green `main` `zimodem.yml` run's `tspico-zimodem`, which can be months old
+because Zimodem builds only when its inputs change. The reason is storage:
+artifacts in this private repo count against the organization's Actions
+storage, and by 2026-11-05 the 30- to 90-day retentions had piled up 4,400
+artifacts and 16 GB, 13.9 GB of it emulator builds. The catch:
+`pico-serial.py flash --branch` takes the branch head's own build, so a
+branch whose last build has had two newer ones since, on any branch, has no
+`tspico-firmware-uf2` left to flash. Re-run its build first.
+
 ## `tools/check-core1-ram.py`
 
 `python3 tools/check-core1-ram.py [-v] [--tools PREFIX] firmware.elf`, from
