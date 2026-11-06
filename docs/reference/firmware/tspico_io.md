@@ -218,8 +218,8 @@ The bits are [PROTOCOL.md §3.1](../../PROTOCOL.md); the ROM side is
 [../rom/exrom-sync.md](../rom/exrom-sync.md).
 
 Callers: `SAY_READY` (for `"mid"`), `MQ_TO_IDLE`, `SAVE_TS`, and in `tspico.py`
-the SYNC branch of the idle loop, `PROCESS_CMD`'s body abort (6513) and
-tail, `PRINT_IO`, `CH_READY` (3431, `"mid"`) and the post-SAVE arm point. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
+the SYNC branch of the idle loop, `PROCESS_CMD`'s body abort (6502) and
+tail, `PRINT_IO`, `CH_READY` (3421, `"mid"`) and the post-SAVE arm point. [`sync_io_hosttest.py`](../../../src/test/sync_io_hosttest.py)
 pins the three values.
 
 ## The pre-header capture

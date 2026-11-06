@@ -83,7 +83,7 @@ def test_meminfo(t, sent):
     t.LOG = lambda m, lvl: logged.append((m, lvl))
     h = FakeHeap(150_000, 52_000)
     t.gc, t.bytearray = h, h.bytearray
-    t.files, t.dirs, t.alldirs, t.lista = ["a"] * 7, ["d"] * 2, ["/TAP"] * 3, "x" * 99
+    t.files, t.dirs, t.lista = ["a"] * 7, ["d"] * 2, "x" * 99
     t.TSP.offset_tbl = [[0, 1, " Y", "n"]] * 5
     maps = []
     mp = types.ModuleType("micropython")
@@ -97,7 +97,7 @@ def test_meminfo(t, sent):
         line = out.getvalue().strip()
         check(line.startswith("MEM tag=r1_mount free=150000 alloc=50000 largest=5"),
               "one MEM line: tag, free, alloc, largest (%r)" % line[:70])
-        check(" files=7 dirs=2 alldirs=3 lista=99 blocks=5 " in line, "the listing sizes and the block table")
+        check(" files=7 dirs=2 lista=99 blocks=5 " in line, "the listing sizes and the block table")
         check(h.collects >= 1, "collects before it measures")
         check(logged and logged[0][0] == line and logged[0][1] == 4, "the same line in the log, at level 4")
         check(not maps, "no heap map unless asked")
