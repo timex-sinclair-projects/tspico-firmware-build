@@ -1643,9 +1643,10 @@ def DIR_FILES():                                                                
     """
     Rebuild files[], lista and dirinfo.tap for the current directory.
 
-    Returns True on success. On an SD card error (OSError) it logs an ERROR
-    with the reason, leaves an empty listing that says so, and returns False
-    instead of raising.
+    Returns True on success. On an SD card error (OSError) or when the heap
+    can't hold the listing (MemoryError) it logs an ERROR with the reason,
+    leaves an empty listing that says so, and returns False instead of
+    raising.
 
     Any FatFs call can reach the card here, not just the dirinfo.tap write.
     The field failure (activity.log, 2026-09-26) was EIO from
@@ -1653,6 +1654,14 @@ def DIR_FILES():                                                                
     sector that os.remove("dirinfo.tap") had dirtied. Uncaught, that took
     TS2068_IO down at boot with a FATAL and the 2068 got no TS-Pico at all,
     not even LOAD from the flash assets.
+
+    MemoryError (#384): a 300-file folder on the v2 board ran out of heap in
+    NEW_TAPBLK, which builds dirinfo.tap's block as one bytes object (~9.7K
+    in one piece; the largest free block was 13.6K and falling, REPL test
+    2026-11-06). Uncaught, it went to the service loop's handler as an
+    "unexpected error" -- the 2068 got a recovered status, the listing was
+    left half-built, and three in a minute stop the firmware (FATAL). Now
+    MOVE TO still lands in the folder and the listing says why it is empty.
     """
 
     global files
@@ -1666,17 +1675,26 @@ def DIR_FILES():                                                                
         LIST_DIR_FILES()
         return True
     except OSError as e:
+        why = None
         LOG("DIR_FILES: SD card error, directory listing skipped: %s" % e, 2)
+    except MemoryError:
+        why = "out of memory"
 
-    files = []
-    dirs = []
-    files_upper = []
+    files = []                                                                               # the half-built lists go first: the
+    dirs = []                                                                                # memory they hold is what the log
+    files_upper = []                                                                         # line and the message need
     dirs_upper = []
+    lista = ""
     sd_space = None
-    lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
+    if why:
+        gc.collect()
+        LOG("DIR_FILES: out of memory, directory listing skipped (%d bytes free)" % gc.mem_free(), 2)
+        lista = DIR_HEADER("SD: " + why) + "Too many files to list here\r"
+    else:
+        lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
 
     try:
-        os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage
+        os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage; an old one lists the last folder
     except:
         pass
 
