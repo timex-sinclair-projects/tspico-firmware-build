@@ -22,32 +22,33 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6760), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5358, `reboot=True`), `MEMDOCK` (5496), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (766), `ZX48_IO` (7770) |
-| `restart_mq()` | `ZX48_IO` (7771, 7876, 7918) |
+| `start_memory()` | `TS2068_IO` (6785), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5383, `reboot=True`), `MEMDOCK` (5521), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (766), `ZX48_IO` (7795) |
+| `restart_mq()` | `ZX48_IO` (7796, 7901, 7943) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1111, 1114, 1132) |
 | `sd_card_ready()` | `ACTIVATE_SD` (1104), before anything else |
 | `sd_release_bus()` | `DEACTIVATE_SD` (719) |
-| `make_led()` | `TS2068_IO` (6728) |
-| `led_brightness()` | `TS2068_IO` (6732), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6885, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7556) |
+| `make_led()` | `TS2068_IO` (6753) |
+| `led_brightness()` | `TS2068_IO` (6757), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6910, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7581) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5269, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5326, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5294, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5351, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `HAS_MODEM` | `TS2068_IO` (6763, at boot; 7483, the idle loop), `MODEM` (5520, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
-| `modem_start()` | `TS2068_IO` (6764), at boot with `config.ini`'s modem keys; `MODEM` (5535), a new mode |
-| `modem_service()` | `TS2068_IO`'s idle loop (7484), every pass with nothing arrived |
-| `HAS_SPEECH` | `TS2068_IO` (6768, at boot), `SAY` (5559, `GREET` 5590, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
-| `speech_start()` | `TS2068_IO` (6770), at boot with `config.ini`'s speech keys |
-| `say()` | `SAY` (5564, `tpi:say`), `GREET` (5603, `tpi:greet`), `TS2068_IO` (6779, the greeting) |
-| `modem_status()`, `MODEM_MODES` | `MODEM` (5525, 5529) |
-| `LABEL` | `GETINFO` (4754, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
-| `HAS_JOYSTICK` | `TS2068_IO` (6766, at boot; 7485, the idle loop) |
-| `joystick()` | `TS2068_IO` (6767), at boot with `config.ini`'s `KEMPSTON` |
-| `joystick_service()` | `TS2068_IO`'s idle loop (7486), every pass with nothing arrived |
+| `BLOCK_BUF` | `tspico.py` at import (1203), as `tspico_io.BLOCK_BUF`: the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)) |
+| `HAS_MODEM` | `TS2068_IO` (6788, at boot; 7508, the idle loop), `MODEM` (5545, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `modem_start()` | `TS2068_IO` (6789), at boot with `config.ini`'s modem keys; `MODEM` (5560), a new mode |
+| `modem_service()` | `TS2068_IO`'s idle loop (7509), every pass with nothing arrived |
+| `HAS_SPEECH` | `TS2068_IO` (6793, at boot), `SAY` (5584, `GREET` 5615, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
+| `speech_start()` | `TS2068_IO` (6795), at boot with `config.ini`'s speech keys |
+| `say()` | `SAY` (5589, `tpi:say`), `GREET` (5628, `tpi:greet`), `TS2068_IO` (6804, the greeting) |
+| `modem_status()`, `MODEM_MODES` | `MODEM` (5550, 5554) |
+| `LABEL` | `GETINFO` (4779, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
+| `HAS_JOYSTICK` | `TS2068_IO` (6791, at boot; 7510, the idle loop) |
+| `joystick()` | `TS2068_IO` (6792), at boot with `config.ini`'s `KEMPSTON` |
+| `joystick_service()` | `TS2068_IO`'s idle loop (7511), every pass with nothing arrived |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
 PIO programs. So it detects the v3 card itself (step 4.2;
@@ -95,6 +96,14 @@ it stays as they show it.
 Both `True`. `SLOTS`: the Z80 writes the slots, so `tpi:blkrcv` streams the
 image and `MOUNT_FILE` serves `romupdate.tap`/`dckupdate.tap`. `HAS_CORE1`:
 core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
+
+### `BLOCK_BUF`
+
+`None`: v2 has no shared block buffer, so `tspico_io.BLOCK` makes a new
+`bytearray` for every LOAD and SAVE data block, as it always did. The v2 heap
+(about 190K free) still had a 66K block after round after round of big
+listings and 64K DOCK mounts (#384, `memcheck --dck`, 2026-11-06), so 48K
+held for good would cost it more than it saves. See board_v3's `BLOCK_BUF`.
 
 ### `SD_SLOTS`
 
@@ -591,15 +600,29 @@ apart from `_served`, not a `None` boot pair there, so that a `tpi:dock`
 `_keys` cuts v2's two words into those pairs: boot from `rom_sm` bits 0–1
 and `bank_sm` bits 0–3, dock from bits 2–3 and 4–7.
 
-### `_buf`, `_zeros`
+### `BLOCK_SIZE`, `BLOCK_BUF`, `_buf`, `_zeros`
 
-`_buf` is the one 32K `bytearray` every slot passes through: a ROM, each
-half of the dock, a RAM dock being saved. It is allocated at import, while
-the heap is clean. Once the firmware runs, the heap (about 190K) has no 64K
-block free, and on the card `tpi:dock` failed with `MemoryError` building a
-64K dock image (2026-10-10). Step 1's first version had already failed the
-same way at boot. Nothing in the slot code allocates a big buffer after
-import. `_zeros` is 1K of zeros, loaded 32 times to clear an empty half.
+`BLOCK_BUF` is the card's one block buffer, a `bytearray(BLOCK_SIZE)` made
+at import, while the heap is clean; `BLOCK_SIZE` is 49152 + 8. `_buf` is
+`memoryview(BLOCK_BUF)[:SLOT_SIZE]`, its first 32K: every slot passes
+through it (a ROM, each half of the dock, a RAM dock being saved).
+`tspico.py` hands `BLOCK_BUF` to `tspico_io` (1203), where `BLOCK` lends its
+front to the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)).
+
+Why at import: once the firmware runs, the heap (172K, about 100K free) has
+no 64K block, and a 32K one isn't certain either. On the card `tpi:dock`
+failed with `MemoryError` building a 64K dock image (2026-10-10), and step
+1's first version had already failed the same way at boot. After a
+300-file folder had been listed, a 35000-byte LOAD found no block of its
+size and streamed from the file instead, running dry 94 times (Report R),
+and the SAVE of the same block gave Report 6 (2026-11-06, #384). Why 48K +
+8: any block of the 2068's 48K of RAM fits, SAVE's (content + flag, two
+session bytes and parity, `blen + 4`) and LOAD's (content + parity). Why one
+buffer: its users never overlap. Each takes it and is done with it inside
+one command, and the slot code and the transfers are never in the same one.
+It costs 16K more than the 32K `_buf` it replaced. A bigger block still
+allocates its own, as before. `_zeros` is 1K of zeros, loaded 32 times to
+clear an empty half.
 
 ### `slot_path(mem, slot)`
 

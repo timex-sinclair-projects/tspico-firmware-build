@@ -321,12 +321,21 @@ def early_init():
 _served = None      # ((boot mem, slot), (dock mem, slot)) the 2068 is served now
 _boot_stale = False  # write_slot rewrote the boot slot: tpi:boot loads it again
 
-# The one buffer every slot passes through: a ROM, each half of the dock, a
-# RAM dock being saved. Allocated here, at import, while the heap is clean:
-# once the firmware runs, the v3 heap (about 190K) has no 64K block, and a
-# 32K one isn't certain either (hardware, 2026-10-10: tpi:dock failed with
-# MemoryError building a 64K dock image).
-_buf = bytearray(SLOT_SIZE)
+# The one block buffer: every slot passes through its first 32K (a ROM, each
+# half of the dock, a RAM dock being saved), and LOAD and SAVE hold a data
+# block in it (tspico_io.BLOCK, set from BLOCK_BUF by tspico.py). Allocated
+# here, at import, while the heap is clean: once the firmware runs, the v3
+# heap has no 64K block, a 32K one isn't certain either (hardware,
+# 2026-10-10: tpi:dock failed with MemoryError building a 64K dock image),
+# and a 35000-byte LOAD or SAVE failed for want of one after a 300-file
+# folder had been listed (2026-11-06, #384: LOAD streamed from the file
+# instead and ran dry, Report R; SAVE gave Report 6). 48K plus a little holds
+# any block of the 2068's RAM: SAVE's flag, session bytes and parity (4)
+# and LOAD's flag-less block (content + parity). The users never overlap:
+# each takes it and is done with it inside one command.
+BLOCK_SIZE = 49152 + 8
+BLOCK_BUF = bytearray(BLOCK_SIZE)
+_buf = memoryview(BLOCK_BUF)[:SLOT_SIZE]
 _zeros = bytes(1024)                # for an empty half, without another 32K
 
 

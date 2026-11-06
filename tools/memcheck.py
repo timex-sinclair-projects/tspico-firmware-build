@@ -6,6 +6,7 @@ free block change as the TS-Pico is used.
     python3 tools/memcheck.py --rounds 5      # more rounds (default 3)
     python3 tools/memcheck.py --emu           # a dry run in ZEsarUX (tools/emu)
     python3 tools/memcheck.py --parse LOG     # just the report, from a saved console log
+    python3 tools/memcheck.py --dck           # the #372 check: a 64K .DCK streamed, round after round
 
 The 2068 runs basic/SD/TAP/test/memtest.bas (built by tools/build-basic.sh).
 After each step it sends SAVE "tpi:meminfo <tag>". The firmware's MEMINFO
@@ -39,6 +40,14 @@ This script:
 The numbers are the hardware's. In the emulator (--emu) the firmware runs on
 CPython: the program's flow and the MEM lines are real, the numbers are not.
 
+With --dck the 2068 runs dcktest.bas instead: each round lists MEMDIR and
+the biggest folder, mounts memdck64.dck (64K), measures, and streams it into
+SRAM slot 8 the way dckupdate.bas does (SAVE "tpi:blkrcv", the two 32K write
+loops), then sends tpi:close at once -- the command that came back J in #372.
+No keys to press and no flash written. The firmware's telemetry must be on
+("TELEMETRY": true in config.ini): its "BLKRCV streamed by DMA" lines say
+whether each 32K piece went by DMA, every byte read. The report counts them.
+
 The 2068 should be on and at the BASIC prompt with the SD card in, and
 nothing else using the Pico's port (Thonny, a watch).
 """
@@ -61,6 +70,9 @@ import sd_roundtrip as RT                                       # noqa: E402
 PS = [sys.executable, os.path.join(HERE, "pico-serial.py")]
 MEMTEST_SRC = os.path.join(ROOT, "basic", "SD", "TAP", "test", "memtest.bas")
 MEMTEST = os.path.join(ROOT, "SD card", "TAP", "test", "memtest.tap")
+DCKTEST_SRC = os.path.join(ROOT, "basic", "SD", "TAP", "test", "dcktest.bas")
+DCKTEST = os.path.join(ROOT, "SD card", "TAP", "test", "dcktest.tap")
+DCK_PIECE = 32768                       # BLKRCV's _PIECE: one Z80 write loop
 
 MEMDIR_FILES = 300                      # tapes in the test folder
 BIG_LEN = 35000                         # memtest.bas: LOAD ""CODE 30000, SAVE …CODE 30000,35000
@@ -95,26 +107,37 @@ def dock():
     return bytes([0, 2, 0, 0, 0, 0, 0, 0, 0]) + bytes((i * 3) & 0xFF for i in range(8192))
 
 
+def dock64():
+    """memdck64.dck: a DOCK image (bank 0) with all eight 8K chunks, 64K of a
+    pattern that is never 00 (an empty FIFO reads as 00s)."""
+    return bytes([0] + [2] * 8) + bytes(1 + (i * 13 + (i >> 8)) % 255 for i in range(65536))
+
+
 def little_tap(i):
     """One of MEMDIR's tapes: a small CODE block."""
     return RT.hdr(3, "m%03d" % i, 16, 40000, 32768) + RT.blk(0xFF, bytes([i & 0xFF]) * 16)
 
 
 def build_memtest():
-    if not os.path.exists(MEMTEST) or os.path.getmtime(MEMTEST) < os.path.getmtime(MEMTEST_SRC):
+    stale = [t for t, s in ((MEMTEST, MEMTEST_SRC), (DCKTEST, DCKTEST_SRC))
+             if not os.path.exists(t) or os.path.getmtime(t) < os.path.getmtime(s)]
+    if stale:
         print("  Building the BASIC programs (tools/build-basic.sh)...")
         subprocess.run([os.path.join(HERE, "build-basic.sh")], capture_output=True, check=True)
 
 
-def write_files(folder, board_v3, rounds, bigdir):
-    """The four files in `folder` (a local folder): what goes in the card's /TAP."""
+def write_files(folder, board_v3, rounds, bigdir, dck=False):
+    """The files in `folder` (a local folder): what goes in the card's /TAP.
+    memtest.bas's four, or with dck dcktest.bas's three."""
     build_memtest()
-    shutil.copy(MEMTEST, os.path.join(folder, "memtest.tap"))
-    for name, data in (("memcfg.tap", cfg_tap(board_v3, rounds, bigdir)),
-                       ("memtape.tap", tape()), ("memdock.dck", dock())):
+    prog = "dcktest.tap" if dck else "memtest.tap"
+    shutil.copy(DCKTEST if dck else MEMTEST, os.path.join(folder, prog))
+    files = [("memcfg.tap", cfg_tap(board_v3, rounds, bigdir))]
+    files += [("memdck64.dck", dock64())] if dck else [("memtape.tap", tape()), ("memdock.dck", dock())]
+    for name, data in files:
         with open(os.path.join(folder, name), "wb") as f:
             f.write(data)
-    return ("memtest.tap", "memcfg.tap", "memtape.tap", "memdock.dck")
+    return (prog,) + tuple(n for n, _ in files)
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +211,58 @@ def parse_map(lines):
 
 
 WATCH_TIME = re.compile(r"^\d\d:\d\d:\d\d ")
+DMA_RX = re.compile(r"BLKRCV streamed by DMA.*?why=(\d+) sent=(\d+) of (\d+)")
+
+
+def parse_dma(line):
+    """A "BLKRCV streamed by DMA" telemetry line as (why, sent, of), or None."""
+    m = DMA_RX.search(line)
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def dck_rounds(lines):
+    """For --dck: each round's 32K pieces as the telemetry tells them, and
+    the tpi:close tries. {round: {"pieces": [(why, sent, of)], "tries": n}}.
+    A piece belongs to the round whose "rN_mounted" measurement came before it."""
+    out, cur = {}, None
+    for line in lines:
+        line = WATCH_TIME.sub("", line)
+        row = parse_mem(line)
+        if row:
+            m = re.match(r"r(\d+)_(mounted|closed_t(\d+))", row["tag"])
+            if m:
+                cur = int(m.group(1))
+                d = out.setdefault(cur, {"pieces": [], "tries": None})
+                if m.group(3) is not None:
+                    d["tries"] = int(m.group(3))
+            continue
+        p = parse_dma(line)
+        if p and cur is not None:
+            out[cur]["pieces"].append(p)
+    return out
+
+
+def dck_report(rounds):
+    """The --dck verdict, as markdown lines."""
+    md = ["", "## The .DCK stream (#372)", "",
+          "| round | pieces by DMA | complete | tpi:close tries |", "|---|---|---|---|"]
+    good = True
+    for n, d in sorted(rounds.items()):
+        ok = [p for p in d["pieces"] if p[0] == 0 and p[1] == p[2] == DCK_PIECE]
+        fine = len(d["pieces"]) == 2 and len(ok) == 2 and d["tries"] == 0
+        good = good and fine
+        md.append("| %d | %d | %s | %s |" % (n, len(d["pieces"]), "yes" if len(ok) == 2 else
+                  "NO " + ", ".join("why=%d %d of %d" % p for p in d["pieces"]),
+                  "-" if d["tries"] is None else d["tries"]))
+    if not rounds:
+        md.append("| - | no rounds measured | | |")
+        good = False
+    if rounds and not any(d["pieces"] for d in rounds.values()):
+        md += ["", "No \"BLKRCV streamed by DMA\" lines: is TELEMETRY on in config.ini? "
+               "A piece without one went by the hand loop."]
+    md += ["", "Every round both 32K pieces by DMA and tpi:close answered first time: %s."
+           % ("yes" if good else "NO")]
+    return md
 
 
 def collect(lines):
@@ -217,7 +292,7 @@ def k(n):
     return "%.1f" % (n / 1024)
 
 
-def report(rows, maps, out):
+def report(rows, maps, out, dck=None):
     """The table and the map summaries: printed, and in out/report.md and out/mem.csv."""
     md = ["# Heap measurement (#384)", "",
           "| step | free K | largest K | alloc K | files | dirs | lista | blocks | ms |",
@@ -239,6 +314,8 @@ def report(rows, maps, out):
         if per_round:
             md.append("Lowest largest block in each round: " + ", ".join(
                 "%d: %s K" % (n, k(min(v))) for n, v in sorted(per_round.items())) + ".")
+    if dck is not None:
+        md += dck_report(dck)
     for tag, s in maps.items():
         h = s["header"]
         md += ["", "## Heap map: %s" % tag, ""]
@@ -330,9 +407,10 @@ def hardware(args, out):
     work = tempfile.mkdtemp(prefix="memcheck.")
     print("Setting up. The firmware stops for a minute; leave the 2068 at the prompt.")
     ps("break", "--timeout", "5")
-    o = repl("from TS import board\nimport TS.tspico as T\n"
-             "print('HW', board.NAME, T.FW_VERSION, hasattr(T, 'MEMINFO'))\n", work)
-    m = re.search(r"HW (\w+) (\S+) (\w+)", o)
+    o = repl("from TS import board\nimport TS.tspico as T\nimport json\n"
+             "print('HW', board.NAME, T.FW_VERSION, hasattr(T, 'MEMINFO'),"
+             " json.load(open('/config.ini')).get('TELEMETRY', False))\n", work)
+    m = re.search(r"HW (\w+) (\S+) (\w+) (\w+)", o)
     if not m:
         sys.exit("Couldn't read the board from the REPL:\n" + o)
     board_v3 = m.group(1) == "v3"
@@ -342,6 +420,14 @@ def hardware(args, out):
         sys.exit("  This firmware has no tpi:meminfo. Flash this branch first:\n"
                  "    python3 tools/pico-serial.py flash %s--branch <this branch>"
                  % ("--v3 " if board_v3 else ""))
+    if args.dck and board_v3:
+        ps("softreset")
+        sys.exit("  --dck is for the v2 board: the v3 card writes the slot itself (SLOT_WRITE,\n"
+                 "  dckupd3.bas), so there is no stream to check.")
+    if args.dck and m.group(4) != "True":
+        ps("softreset")
+        sys.exit('  --dck needs the firmware\'s telemetry: set "TELEMETRY": true in the Pico\'s\n'
+                 "  /config.ini (and back to false after), then run this again.")
 
     o = repl(BIGGEST, work, sd=True)
     m = re.search(r"BIG (\S+) (-?\d+)", o)
@@ -353,7 +439,7 @@ def hardware(args, out):
 
     with open(os.path.join(work, "m000.tap"), "wb") as f:
         f.write(little_tap(0))
-    for name in write_files(work, board_v3, args.rounds, bigdir) + ("m000.tap",):
+    for name in write_files(work, board_v3, args.rounds, bigdir, args.dck) + ("m000.tap",):
         o = ps("put", "--sd", os.path.join(work, name), "/TAP/" + name)
         if "bytes" not in o or "MISMATCH" in o:
             sys.exit("Couldn't copy %s to the card:\n%s" % (name, o))
@@ -365,9 +451,13 @@ def hardware(args, out):
     log = os.path.join(out, "console.log")
     watch = subprocess.Popen(PS + ["watch", "--seconds", str(args.timeout)], stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True, bufsize=1)
-    print('\nOn the 2068 type:   MOVE TO "/"   then   LOAD "tpi:memtest.tap"   then   LOAD ""')
-    print("Press ENTER at each \"Start tape\" (%d of them). Waiting for the last measurement..."
-          % args.rounds)
+    print('\nOn the 2068 type:   MOVE TO "/"   then   LOAD "tpi:%s.tap"   then   LOAD ""'
+          % ("dcktest" if args.dck else "memtest"))
+    if args.dck:
+        print("No keys to press. Waiting for the last measurement...")
+    else:
+        print("Press ENTER at each \"Start tape\" (%d of them). Waiting for the last measurement..."
+              % args.rounds)
     lines = []
     t0 = time.time()
     try:
@@ -381,6 +471,9 @@ def hardware(args, out):
                 if r:
                     print("  %-16s free %6s K  largest %6s K" % (r["tag"], k(r.get("free", 0)),
                                                                    k(r.get("largest", 0))))
+                p = parse_dma(WATCH_TIME.sub("", line))
+                if p:
+                    print("    32K piece by DMA: why=%d, %d of %d bytes read" % p)
                 if "MEM map end tag=end" in line or time.time() - t0 > args.timeout:
                     break
     finally:
@@ -405,21 +498,21 @@ def emulator(args, out):
     for i in range(120):
         with open(os.path.join(tapdir, "GAMES", "g%03d.tap" % i), "wb") as f:
             f.write(little_tap(i))
-    write_files(tapdir, False, args.rounds, "/GAMES")
+    write_files(tapdir, False, args.rounds, "/GAMES", args.dck)
     log = "/tmp/pico_host.out"
     with S.Session(sd=card, log=log) as s:
         s.run(S.MOVE, " ", S.TO, '"/"')
-        s.run(S.LOAD, '"tpi:memtest.tap"')
-        s.run(S.LOAD, '""', until="memory test", timeout=60)
+        s.run(S.LOAD, '"tpi:%s.tap"' % ("dcktest" if args.dck else "memtest"))
+        s.run(S.LOAD, '""', until="DCK stream test" if args.dck else "memory test", timeout=60)
         t0 = time.time()
         while time.time() - t0 < args.timeout:
             time.sleep(1)
             t = s.text()
             if "press any key" in t.lower():
                 s.key(129)
-            if "MEMTEST DONE" in t:
+            if "MEMTEST DONE" in t or "DCK TEST DONE" in t:
                 break
-            if re.search(r"\n\S.*, \d+:\d+\s*$", t) and "MEMTEST" not in t:
+            if re.search(r"\n\S.*, \d+:\d+\s*$", t) and "TEST DONE" not in t:
                 print("  The program stopped:\n" + t)
                 break
         s.screenshot(os.path.join(out, "end.bmp"))
@@ -434,6 +527,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--emu", action="store_true", help="a dry run in ZEsarUX (tools/emu)")
+    ap.add_argument("--dck", action="store_true",
+                    help="the #372 check: dcktest.bas streams a 64K .DCK into SRAM each round")
     ap.add_argument("--parse", metavar="LOG", help="report on a saved console log, no board")
     ap.add_argument("--out", help="the output folder (default: a new temporary one)")
     ap.add_argument("--timeout", type=int, default=2400, help="seconds to wait for the program")
@@ -452,7 +547,7 @@ def main():
     rows, maps = collect(lines)
     if not rows:
         sys.exit("No MEM lines. The console log is in " + out)
-    report(rows, maps, out)
+    report(rows, maps, out, dck_rounds(lines) if args.dck else None)
     print("Saved in " + out)
 
 
