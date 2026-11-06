@@ -1314,7 +1314,7 @@ def LISTING_FRESHEN():                                                        # 
     listing (lista, free space) happens only when it changed."""
     try:
         os.chdir(TSP.cur_path)
-        sig = LISTING_SIG(sorted(os.ilistdir(), key=lambda fname: fname[0].lower()))
+        sig = LISTING_SIG(catalog.sort_items(os.ilistdir()))
     except OSError:
         return
     if sig != getattr(TSP, "listing_sig", None):
@@ -1591,22 +1591,31 @@ def CAT_COLOUR(text):                                                         # 
 
     if not text.startswith("Path:") or len(text) < 128:
         return text
-    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
-           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
-    rest = text[128:]                                                      # [96:128] is the dashes
-    while len(rest) >= 32:
-        row = rest[:32]
-        if row[0] == "<":
-            out.append(PLAIN_ + row[:22] + "%10s" % "folder")
-        elif row[:3].isdigit() and row[3] == " ":
-            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
-        elif row[:4] == "    ":
-            out.append(PLAIN_ + row)
-        else:
-            break
-        rest = rest[32:]
-    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
-    return "".join(out)
+    # No room for the colored copy (it needs a block as big as the listing,
+    # 12K for 300 files, while the listing itself is still held): the plain
+    # listing goes out instead. Unguarded, the MemoryError reached the
+    # dispatcher and the 2068 got Report J (v3, a 300-file CAT, #384).
+    try:
+        out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
+               PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
+        rest = text[128:]                                                      # [96:128] is the dashes
+        while len(rest) >= 32:
+            row = rest[:32]
+            if row[0] == "<":
+                out.append(PLAIN_ + row[:22] + "%10s" % "folder")
+            elif row[:3].isdigit() and row[3] == " ":
+                out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
+            elif row[:4] == "    ":
+                out.append(PLAIN_ + row)
+            else:
+                break
+            rest = rest[32:]
+        out.append((PLAIN_ + rest if rest else "") + NORMAL_)
+        return "".join(out)
+    except MemoryError:
+        out = None
+        gc.collect()
+        return text
 
 
 def TAPDIR_COLOUR(text, headers):                                             # CAT "" as CAT shows a folder
@@ -1622,20 +1631,26 @@ def TAPDIR_COLOUR(text, headers):                                             # 
 
     if not text.startswith("File:") or len(text) < 128:
         return text
-    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],
-           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]
-    rest = text[128:]
-    while len(rest) >= 32 and rest[0] in " >" and rest[1:3].isdigit():
-        row = rest[:32]
-        if row[0] == ">":
-            out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
-        else:
-            hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
-            out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
-                       + (BLUE_ if hdr else PLAIN_) + row[3:])
-        rest = rest[32:]
-    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
-    return "".join(out)
+    # No room for the colored copy: the plain listing, as CAT_COLOUR (#384).
+    try:
+        out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],
+               PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]
+        rest = text[128:]
+        while len(rest) >= 32 and rest[0] in " >" and rest[1:3].isdigit():
+            row = rest[:32]
+            if row[0] == ">":
+                out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
+            else:
+                hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
+                out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
+                           + (BLUE_ if hdr else PLAIN_) + row[3:])
+            rest = rest[32:]
+        out.append((PLAIN_ + rest if rest else "") + NORMAL_)
+        return "".join(out)
+    except MemoryError:
+        out = None
+        gc.collect()
+        return text
 
 
 def DIR_FILES():                                                                             # Get all files and directories from current path
@@ -1670,6 +1685,12 @@ def DIR_FILES():                                                                
     global lista
     global sd_space
 
+    # Collect first: the command so far left garbage all through the heap,
+    # and the listing's rows, kept, would go between it. Without this a
+    # 300-file folder failed from MOVE TO on the v3 card every time ("out of
+    # memory" with 89K free) but listed from the REPL and in memtest; with
+    # it, it listed (2026-11-06, #384). A collection takes 4.3 ms on v3.
+    gc.collect()
     try:
         LIST_DIR_FILES()
         return True
@@ -1738,7 +1759,7 @@ def LIST_DIR_FILES():                                                           
     n = 0
 
     if ordered:
-        listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
+        listing = catalog.sort_items(os.ilistdir())
     else:
         listing = [item for item in os.ilistdir()]
     TSP.listing_sig = LISTING_SIG(listing)                                    # what LISTING_FRESHEN compares
@@ -1840,7 +1861,7 @@ def DIRINFO_WRITE():                                                            
     (LISTING_SIG), the listing is rebuilt first, so the numbers in it are
     the ones LOAD "tpi:n" uses. Raises OSError on a card error."""
     os.chdir(TSP.cur_path)
-    listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
+    listing = catalog.sort_items(os.ilistdir())
     if LISTING_SIG(listing) != TSP.listing_sig:
         DIR_FILES()                                                                          # files[] and lista to match
     n_dirs = sum(1 for it in listing if it[1] == 16384)
@@ -2773,8 +2794,25 @@ def CATALOG_TEXT(arg):                                                          
 
     listed = real if is_dir else real[:real.rfind('/')]
     here = listed.upper() == TSP.cur_path.upper()
-    upper = [f.upper() for f in files] if here else []
-    index_of = lambda n: upper.index(n.upper()) if n.upper() in upper else None
+    # A file's index is its place in files[]. Both lists come from
+    # os.ilistdir() of this folder, so a name matches exactly, and in the
+    # same order: the search goes on from the last match, once round, so a
+    # whole folder is one pass. (It made an upper-case copy of files[] and
+    # searched it twice per row, #384.)
+    at = [0]
+
+    def index_of(name):
+        k = len(files) if here else 0
+        j = at[0]
+        for _ in range(k):
+            if j >= k:
+                j = 0
+            if files[j] == name:
+                at[0] = j + 1
+                return j
+            j += 1
+        return None
+
     nf = sum(1 for e in entries if not e[1])
     line2 = (("%s: " % pat) if pat else "") + catalog.counts(nf, len(entries) - nf)
     header = DIR_HEADER(line2, shorten_filename(xstr(path), 27))
@@ -2929,7 +2967,7 @@ def DISK_COPY_WORK(a, b):                                                     # 
             return "Not found: %s" % a, _3_F_Invalid_file
         if not dst_is_dir:
             return "Copy them to a directory", _4_Q_Parameter
-        for item in sorted(os.ilistdir(src_dir), key=lambda it: it[0].lower()):
+        for item in catalog.sort_items(os.ilistdir(src_dir)):
             n = item[0]
             if item[1] == 16384 or n == "dirinfo.tap" or not catalog.match(n, pat) \
                     or (n[0] == '.' and pat[0] != '.'):
@@ -3049,7 +3087,7 @@ def DISK_ERASE_MATCHES(where, pat):                                           # 
     d = catalog.resolve(TSP.cur_path, where)
     if d is None or not dir_exists(d):
         return "Not found: %s" % where, _3_F_Invalid_file
-    found = [d + '/' + it[0] for it in sorted(os.ilistdir(d), key=lambda it: it[0].lower())
+    found = [d + '/' + it[0] for it in catalog.sort_items(os.ilistdir(d))
              if it[1] != 16384 and it[0] != "dirinfo.tap" and catalog.match(it[0], pat)
              and (it[0][0] != '.' or pat[0] == '.')]
     if not found:
@@ -4603,7 +4641,7 @@ def GETHELP(pre, cmd):                                                 # Shows T
             if arg == "?":
 
                 # List specific help file names
-                listing = sorted(os.ilistdir(HELP_DIR), key=lambda fname: fname[0].lower())
+                listing = catalog.sort_items(os.ilistdir(HELP_DIR))
                 M = ['Commands for "tpi:help cmd":', nl, nl]
                 l = 0
                 for name in listing:
@@ -7611,6 +7649,48 @@ ZX_REPORT = {_1_OK: 0xFF, _2_R_Tape_load: 0x1A, _3_F_Invalid_file: 0x0E,
              _4_Q_Parameter: 0x19}
 
 
+def ZX_PIECES(text):                                                         # the v4 reply's pieces
+    """The ZX v4 ROM's reply after its status byte: `text` (bytes) in pieces
+    of up to 255, each with its length first, then a 0, as one bytearray
+    with a spare byte in front for the status (ZX_TPI writes it)."""
+
+    # ─── A piece ends just before a PAPER code (#373) ─────────────────
+    # The ROM opens the screen channel before each piece, and on the
+    # Spectrum CHAN_OPEN ends in TEMPS: the colours go back to the
+    # user's own. A cut at byte 255 inside a row's "PAPER 5, INK 9,
+    # 005" printed the digits after it in the user's paper colour. In
+    # CAT_COLOUR's listing every 11h starts a whole colour setting
+    # (paper, then ink; the values are 0-9, never 11h), so a piece
+    # cut there begins with its own colours. Text without one is cut
+    # at 255, as before.
+    # The cuts first (ints), then each piece copied straight from the
+    # text into the reply: no copy of each piece on the way (#384).
+    cuts = []
+    i = 0
+    n = len(text)
+    while i < n:
+        j = i + 255
+        if j < n:
+            k = text.rfind(b"\x11", i + 1, j + 1)
+            if k >= 0:
+                j = k
+        else:
+            j = n
+        cuts.append(j)
+        i = j
+    out = bytearray(1 + len(text) + len(cuts) + 1)
+    mv = memoryview(text)
+    i = 0
+    j = 1
+    for k in cuts:
+        out[j] = k - i
+        out[j + 1:j + 1 + k - i] = mv[i:k]
+        j += 1 + k - i
+        i = k
+    out[j] = 0
+    return out
+
+
 def ZX_TPI():
     """LOAD "tpi:<name>" in ZX48 mode -- the ZX v3 ROM's 'T' command, which
     ZX48_IO has taken. Returns nxt, as LOAD_ZX.
@@ -7686,7 +7766,14 @@ def ZX_TPI():
             REFRESH_LISTING()
         msg, rest, st = LOAD_TPI(rest, only_tap=True)   # may use the SD card: MQ is rebuilt
     if listing is not None:
-        text = bytes(b if b < 0x80 else 0x3F for b in listing.encode())
+        # One copy, as bytes; a byte above 7Fh (screen_name leaves none) is
+        # '?'. bytes(generator) grew the reply a byte at a time (#384).
+        text = listing.encode()
+        listing = None
+        for b in text:
+            if b >= 0x80:
+                text = bytes(b if b < 0x80 else 0x3F for b in text)
+                break
         LOG("ZX48 tpi:dir: %d bytes" % len(text), 0)
     else:
         text = (msg.strip() + " " + rest).strip().encode()[:200]
@@ -7696,32 +7783,7 @@ def ZX_TPI():
     # message in pieces of up to 255 and a 0. The first bytes go in before
     # READY -- the ROM reads the instant it sees it -- the rest as it reads.
     if pieces:
-        # ─── A piece ends just before a PAPER code (#373) ─────────────────
-        # The ROM opens the screen channel before each piece, and on the
-        # Spectrum CHAN_OPEN ends in TEMPS: the colours go back to the
-        # user's own. A cut at byte 255 inside a row's "PAPER 5, INK 9,
-        # 005" printed the digits after it in the user's paper colour. In
-        # CAT_COLOUR's listing every 11h starts a whole colour setting
-        # (paper, then ink; the values are 0-9, never 11h), so a piece
-        # cut there begins with its own colours. Text without one is cut
-        # at 255, as before.
-        parts = []
-        i = 0
-        while i < len(text):
-            j = i + 255
-            if j < len(text):
-                k = text.rfind(b"\x11", i + 1, j + 1)
-                if k >= 0:
-                    j = k
-            parts.append(text[i:j])
-            i = j
-        out = bytearray(1 + len(text) + len(parts) + 1)
-        j = 1
-        for part in parts:
-            out[j] = len(part)
-            out[j + 1:j + 1 + len(part)] = part
-            j += 1 + len(part)
-        out[j] = 0
+        out = ZX_PIECES(text)
     else:
         out = bytearray(2 + len(text))
         out[1] = len(text)
