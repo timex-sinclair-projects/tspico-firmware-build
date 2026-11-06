@@ -1643,9 +1643,10 @@ def DIR_FILES():                                                                
     """
     Rebuild files[], lista and dirinfo.tap for the current directory.
 
-    Returns True on success. On an SD card error (OSError) it logs an ERROR
-    with the reason, leaves an empty listing that says so, and returns False
-    instead of raising.
+    Returns True on success. On an SD card error (OSError) or when the heap
+    can't hold the listing (MemoryError) it logs an ERROR with the reason,
+    leaves an empty listing that says so, and returns False instead of
+    raising.
 
     Any FatFs call can reach the card here, not just the dirinfo.tap write.
     The field failure (activity.log, 2026-09-26) was EIO from
@@ -1653,6 +1654,14 @@ def DIR_FILES():                                                                
     sector that os.remove("dirinfo.tap") had dirtied. Uncaught, that took
     TS2068_IO down at boot with a FATAL and the 2068 got no TS-Pico at all,
     not even LOAD from the flash assets.
+
+    MemoryError (#384): a 300-file folder on the v2 board ran out of heap in
+    NEW_TAPBLK, which builds dirinfo.tap's block as one bytes object (~9.7K
+    in one piece; the largest free block was 13.6K and falling, REPL test
+    2026-11-06). Uncaught, it went to the service loop's handler as an
+    "unexpected error" -- the 2068 got a recovered status, the listing was
+    left half-built, and three in a minute stop the firmware (FATAL). Now
+    MOVE TO still lands in the folder and the listing says why it is empty.
     """
 
     global files
@@ -1666,17 +1675,26 @@ def DIR_FILES():                                                                
         LIST_DIR_FILES()
         return True
     except OSError as e:
+        why = None
         LOG("DIR_FILES: SD card error, directory listing skipped: %s" % e, 2)
+    except MemoryError:
+        why = "out of memory"
 
-    files = []
-    dirs = []
-    files_upper = []
+    files = []                                                                               # the half-built lists go first: the
+    dirs = []                                                                                # memory they hold is what the log
+    files_upper = []                                                                         # line and the message need
     dirs_upper = []
+    lista = ""
     sd_space = None
-    lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
+    if why:
+        gc.collect()
+        LOG("DIR_FILES: out of memory, directory listing skipped (%d bytes free)" % gc.mem_free(), 2)
+        lista = DIR_HEADER("SD: " + why) + "Too many files to list here\r"
+    else:
+        lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
 
     try:
-        os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage
+        os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage; an old one lists the last folder
     except:
         pass
 
@@ -4788,7 +4806,79 @@ def GETINFO(pre, cmd):                                                 # Shows T
     return
 
 
-def GETLOG(pre, cmd):                                                 # Shows the last nn bytes of the events log file 
+MEM_STEP = const(256)                                                  # LARGEST_BLOCK's precision, bytes
+
+
+def LARGEST_BLOCK():                                                   # the biggest bytearray the heap can give now
+
+    """The size of the largest bytearray that can be allocated now, to
+    MEM_STEP bytes, found by trying sizes (a binary search). A heap whose
+    free memory is in pieces can't give one buffer as big as its total:
+    this is the number that says whether a 32K or 64K buffer would fit.
+    MicroPython has no call that returns it (micropython.mem_info prints
+    "max free sz" but returns nothing). A size that doesn't fit makes the
+    allocator collect garbage and try again before it raises MemoryError,
+    so this takes a few tens of milliseconds. Diagnostic only (MEMINFO)."""
+
+    lo, hi = 0, gc.mem_free() + MEM_STEP
+    while hi - lo > MEM_STEP:
+        mid = ((lo + hi) >> 1) & ~15
+        try:
+            b = bytearray(mid)
+            b = None
+            lo = mid
+        except MemoryError:
+            hi = mid
+    return lo
+
+
+
+def MEMINFO(pre, cmd):                                                 # The heap now: free, largest block, listing sizes
+
+    """SAVE "tpi:meminfo [tag] [map]": collect garbage, then measure the heap
+    and say so, for the heap fragmentation work (#384). One line goes to
+    the USB console and /activity.log, for tools/memcheck.py to collect:
+
+        MEM tag=<tag> free=<bytes> alloc=<bytes> largest=<bytes>
+            files=<n> dirs=<n> alldirs=<n> lista=<chars> blocks=<n> ms=<ms>
+
+    largest is LARGEST_BLOCK: the biggest buffer that can be had now. The
+    counts are what the firmware keeps between commands that grows with the
+    card: the current folder's files and folders, every folder on the card
+    (alldirs), the listing text (lista) and the mounted tape's block table.
+    With the word "map", micropython.mem_info(1)'s heap map follows on the
+    console only (one letter per 16-byte block; it is long), between
+    "MEM map begin" and "MEM map end" lines. The 2068 gets one message
+    line: free and largest, in K. Measured before anything else here
+    allocates, so the command's own strings aren't counted."""
+
+    t0 = time.ticks_ms()
+    gc.collect()
+    free = gc.mem_free()
+    alloc = gc.mem_alloc()
+    largest = LARGEST_BLOCK()
+    gc.collect()
+    ms = time.ticks_diff(time.ticks_ms(), t0)
+
+    words = getArgs(cmd).split()
+    want_map = any(w.lower() == "map" for w in words)
+    tag = "_".join(w for w in words if w.lower() != "map") or "-"
+    line = "MEM tag=%s free=%d alloc=%d largest=%d files=%d dirs=%d alldirs=%d lista=%d blocks=%d ms=%d" % (
+        tag, free, alloc, largest, len(files), len(dirs), len(alldirs), len(lista),
+        len(getattr(TSP, "offset_tbl", None) or ()), ms)
+    print(line)
+    LOG(line, 4)
+    if want_map:
+        import micropython
+        print("MEM map begin tag=%s" % tag)
+        micropython.mem_info(1)
+        print("MEM map end tag=%s" % tag)
+    SEND_MSG("Free %dK, largest %dK" % (free >> 10, largest >> 10), tag[:32], _1_OK, True)
+
+    return
+
+
+def GETLOG(pre, cmd):                                                 # Shows the last nn bytes of the events log file
 
     # SAVE "tpi:log"
     # SAVE "tpi:log"CODE 0,n     - Show n bytes of the end of the file
@@ -6745,7 +6835,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:FRESET" : SA_NOT_IMP,
         "TPI:GETCONFIG" : SA_NOT_IMP, 
         "TPI:LIST" : DISK_LIST,
-        "TPI:MEMINFO" : SA_NOT_IMP,
+        "TPI:MEMINFO" : MEMINFO,
         "TPI:NOAUTOLF" : PRN_FLAG,
         "TPI:NOAUTOPG" : PRN_FLAG,
         "TPI:OPPRINT" : PRN_OPEN,
