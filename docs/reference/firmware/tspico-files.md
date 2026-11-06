@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1418–2199,
-2544–2576, 3869–3874, 3967–4026, 4288–4375, 4522–4529, 5284–5341,
-5577–5591, 5673–5738 and 5896–5912 (firmware 2.3).
+2544–2576, 3869–3874, 3967–4026, 4288–4375, 4522–4529, 5356–5413,
+5649–5663, 5745–5810 and 5968–5984 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -54,15 +54,15 @@ document it is linked, not restated: the pitfalls are in
 | `public_fname(n=0)` | 4010–4025 | `TSP.f_name` without `/sd`, optionally shortened |
 | `ChangeDir(potential_new_path, SDactive=False)` | 4288–4375 | the rules of `tpi:cd` / `MOVE TO` |
 | `getArgs(cmd)` | 4522–4529 | the text after the command word |
-| `getBoot()` | 5284–5292 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5295–5303 | (memory, slot) in the DOCK |
-| `SYSTEM_SLOT_LOCK(mem, page)` | 5306–5317 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5320–5340 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5577–5591 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5673–5693 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5696–5738 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 5896–5912 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 5915–5944 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `getBoot()` | 5356–5364 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5367–5375 | (memory, slot) in the DOCK |
+| `SYSTEM_SLOT_LOCK(mem, page)` | 5378–5389 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5392–5412 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 5649–5663 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5745–5765 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5768–5810 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 5968–5984 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 5987–6016 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -429,8 +429,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7199, 7216 and
-7228, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7271, 7288 and
+7300, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -608,7 +608,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3076); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3076 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7695), because the ZX ROM waits
+inline 3 s wait of the same shape (line 7767), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 

@@ -2406,8 +2406,10 @@ Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` 
   the ROM loaders and the disk keywords. You won't need to type them.
 - **upgrade**, **rompatch** and **sys** belonged to the old 1.1 update process and have been
   removed. Use the web updater (Appendix A).
-- **config**, **delete**, **freset**, **getconfig**, **meminfo** and **stop** are
-  reserved for the future. They give **C** with `CMD OK, but not yet implemented`.
+- **config**, **delete**, **freset**, **getconfig** and **stop** are reserved for the future.
+  They give **C** with `CMD OK, but not yet implemented`.
+- **meminfo** is for developers: `SAVE "tpi:meminfo"` shows the Pico's free memory and the
+  largest single piece of it, and writes the numbers to its USB console and log.
 - **.fact** and **.rndw** are examples for programmers (see the Programmer's Manual).
 
 - Version 1.1 names such as `LOAD "tpi:dir"`, `getinfo`, `gethelp` and `getlog` have been replaced
