@@ -159,7 +159,7 @@ def test_dir_files(t, logs):
             ok, raised = None, e
         check(raised is None and ok is False,
               "EIO from %s: returns False, does not raise (%r)" % (what, raised))
-        check(t.files == [] and t.files_upper == [],
+        check(t.files == [] and t.dirs == [],
               "EIO from %s: files[] emptied, no stale entries" % what)
         check(t.lista[32:64].startswith("SD: card error") and "reseat the card" in t.lista,
               "EIO from %s: lista keeps its layout and says the card failed" % what)
@@ -189,7 +189,7 @@ def test_dir_files(t, logs):
     finally:
         t.catalog.size_text, t.gc = real_size, real_gc
     check(raised is None and ok is False, "MemoryError: returns False, does not raise (%r)" % (raised,))
-    check(t.files == [] and t.files_upper == [] and t.dirs == [] and t.dirs_upper == [],
+    check(t.files == [] and t.dirs == [],
           "MemoryError: the half-built lists are emptied")
     check(t.lista[32:64].startswith("SD: out of memory") and "Too many files" in t.lista
           and len(t.lista) < 200, "MemoryError: lista keeps its layout and says why (%r)" % t.lista[32:])

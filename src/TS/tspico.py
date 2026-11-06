@@ -418,9 +418,7 @@ prev_path = None
 # has been read: with no card at boot they stay so, and the commands that list
 # or index them are refused until a card is in (SD_NEEDED).
 files = []
-files_upper = []
 dirs = []
-dirs_upper = []
 lista = ""
 alldirs = []
 sd_space = None                                                                # (total, free) bytes, as the last listing read them
@@ -1670,8 +1668,6 @@ def DIR_FILES():                                                                
     global dirs
     global lista
     global sd_space
-    global files_upper
-    global dirs_upper
 
     try:
         LIST_DIR_FILES()
@@ -1684,9 +1680,7 @@ def DIR_FILES():                                                                
 
     files = []                                                                               # the half-built lists go first: the
     dirs = []                                                                                # memory they hold is what the log
-    files_upper = []                                                                         # line and the message need
-    dirs_upper = []
-    lista = ""
+    lista = ""                                                                               # line and the message need
     sd_space = None
     if why:
         gc.collect()
@@ -1704,13 +1698,13 @@ def LIST_DIR_FILES():                                                           
     global dirs
     global lista
     global sd_space
-    global files_upper
-    global dirs_upper
     
+    # files_upper and dirs_upper, upper-cased copies of every name, were
+    # dropped (#384): one string per name, kept until the next listing and
+    # scattered through the heap (the REPL heap maps, 2026-11-06), for one
+    # case-insensitive lookup in LOAD_TPI, which now compares as it goes.
     files = []
     dirs = []
-    files_upper = []
-    dirs_upper = []
     lista = ""
     L = []
     header = ""
@@ -1738,7 +1732,6 @@ def LIST_DIR_FILES():                                                           
     for archs in listing:
         if archs[1] == 16384:
             dirs.append(archs[0])
-            dirs_upper.append(archs[0].upper())
             nom = shorten_filename(catalog.screen_name(archs[0]), 20)
             L.append("<%-21s       0 B" % (nom + ">"))
 
@@ -1749,7 +1742,6 @@ def LIST_DIR_FILES():                                                           
             if (archs[0][-3:].upper() not in ext) or (archs[0][0] in starts) or archs[0] == "dirinfo.tap":
                 continue
             files.append(archs[0])
-            files_upper.append(archs[0].upper())
             
             size_txt = catalog.size_text(int(archs[3]))
 
@@ -5824,8 +5816,12 @@ def LOAD_TPI(name, only_tap=False, fresh=False):
         return msg, name, _2_R_Tape_load
 
     name, idx = ResolveIndexName(name)
-    if idx < 0 and name.upper() in files_upper:                                 # Is name a valid file?
-        idx = files_upper.index(name.upper())
+    if idx < 0:                                                                 # the name, in any case: the first file
+        up = name.upper()                                                       # whose upper-cased name is it (files_upper
+        for i, f in enumerate(files):                                           # held these copies until #384)
+            if f.upper() == up:
+                idx = i
+                break
     if idx < 0 and catalog.has_wild(name):
         # The name as CAT showed it: '?' for a character the 2068 can't type
         # (catalog.screen_name), '*' for any run. Exactly one match mounts
@@ -6433,7 +6429,6 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     global rom_id
     
     global files
-    global files_upper
     
     TSP.zx48 = False
     rom_id = pre[2]                 # FFh up to ROM 2.2, the version (23h) from 2.3 (#227)

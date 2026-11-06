@@ -95,7 +95,6 @@ def main():
     def run(name, stale=False, **kw):
         P.fresh(t, pio)
         t.files = ["Manic.tap", "Jetpac.TAP", "zx.rom"]
-        t.files_upper = [f.upper() for f in t.files]
         t.TSP.listing_stale = stale
         pio.tx, pio.rx, pio.y = [], [], 0            # the 'T' dropped READY
         pio.tx_at_ready = []
@@ -147,7 +146,6 @@ def main():
         def run_files(files, name):
             P.fresh(t, pio)
             t.files = files
-            t.files_upper = [f.upper() for f in files]
             t.TSP.listing_stale = False
             pio.tx, pio.rx, pio.y = [], [], 0
             pio.tx_at_ready = []
@@ -178,7 +176,6 @@ def main():
 
         def added_on_a_mac():
             t.files.append("new.tap")
-            t.files_upper.append("NEW.TAP")
         t.LISTING_CHECK = added_on_a_mac
         r, _ = run("new.tap")
         t.LISTING_CHECK = real_check
@@ -267,7 +264,6 @@ def main():
         def dir_files():
             steps.append("DIR_FILES")
             t.files = ["Manic.tap", "Jetpac.TAP", "zx.rom", "q.tap"]
-            t.files_upper = [f.upper() for f in t.files]
             return True
         t.ACTIVATE_SD = lambda *a: steps.append("ACTIVATE_SD")
         t.DEACTIVATE_SD = lambda: steps.append("DEACTIVATE_SD")
