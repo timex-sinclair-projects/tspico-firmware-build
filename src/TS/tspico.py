@@ -1591,22 +1591,31 @@ def CAT_COLOUR(text):                                                         # 
 
     if not text.startswith("Path:") or len(text) < 128:
         return text
-    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
-           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
-    rest = text[128:]                                                      # [96:128] is the dashes
-    while len(rest) >= 32:
-        row = rest[:32]
-        if row[0] == "<":
-            out.append(PLAIN_ + row[:22] + "%10s" % "folder")
-        elif row[:3].isdigit() and row[3] == " ":
-            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
-        elif row[:4] == "    ":
-            out.append(PLAIN_ + row)
-        else:
-            break
-        rest = rest[32:]
-    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
-    return "".join(out)
+    # No room for the colored copy (it needs a block as big as the listing,
+    # 12K for 300 files, while the listing itself is still held): the plain
+    # listing goes out instead. Unguarded, the MemoryError reached the
+    # dispatcher and the 2068 got Report J (v3, a 300-file CAT, #384).
+    try:
+        out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
+               PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
+        rest = text[128:]                                                      # [96:128] is the dashes
+        while len(rest) >= 32:
+            row = rest[:32]
+            if row[0] == "<":
+                out.append(PLAIN_ + row[:22] + "%10s" % "folder")
+            elif row[:3].isdigit() and row[3] == " ":
+                out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
+            elif row[:4] == "    ":
+                out.append(PLAIN_ + row)
+            else:
+                break
+            rest = rest[32:]
+        out.append((PLAIN_ + rest if rest else "") + NORMAL_)
+        return "".join(out)
+    except MemoryError:
+        out = None
+        gc.collect()
+        return text
 
 
 def TAPDIR_COLOUR(text, headers):                                             # CAT "" as CAT shows a folder
@@ -1622,20 +1631,26 @@ def TAPDIR_COLOUR(text, headers):                                             # 
 
     if not text.startswith("File:") or len(text) < 128:
         return text
-    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],
-           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]
-    rest = text[128:]
-    while len(rest) >= 32 and rest[0] in " >" and rest[1:3].isdigit():
-        row = rest[:32]
-        if row[0] == ">":
-            out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
-        else:
-            hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
-            out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
-                       + (BLUE_ if hdr else PLAIN_) + row[3:])
-        rest = rest[32:]
-    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
-    return "".join(out)
+    # No room for the colored copy: the plain listing, as CAT_COLOUR (#384).
+    try:
+        out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],
+               PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]
+        rest = text[128:]
+        while len(rest) >= 32 and rest[0] in " >" and rest[1:3].isdigit():
+            row = rest[:32]
+            if row[0] == ">":
+                out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
+            else:
+                hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
+                out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
+                           + (BLUE_ if hdr else PLAIN_) + row[3:])
+            rest = rest[32:]
+        out.append((PLAIN_ + rest if rest else "") + NORMAL_)
+        return "".join(out)
+    except MemoryError:
+        out = None
+        gc.collect()
+        return text
 
 
 def DIR_FILES():                                                                             # Get all files and directories from current path
@@ -1670,6 +1685,12 @@ def DIR_FILES():                                                                
     global lista
     global sd_space
 
+    # Collect first: the command so far left garbage all through the heap,
+    # and the listing's rows, kept, would go between it. Without this a
+    # 300-file folder failed from MOVE TO on the v3 card every time ("out of
+    # memory" with 89K free) but listed from the REPL and in memtest; with
+    # it, it listed (2026-11-06, #384). A collection takes 4.3 ms on v3.
+    gc.collect()
     try:
         LIST_DIR_FILES()
         return True

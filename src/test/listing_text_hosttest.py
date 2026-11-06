@@ -192,6 +192,19 @@ def main():
     check(all(t.TAPDIR_COLOUR(x, h) == old_tapdir_colour(x, h) for x in taps for h in (False, True)),
           "TAPDIR_COLOUR: the same as before on %d listings, both views" % len(taps))
 
+    # No room for the colored copy: the plain listing, not a MemoryError (Report J)
+    class Tight(str):
+        def __getitem__(self, k):
+            raise MemoryError("memory allocation failed, allocating 12109 bytes")
+    big = Tight(dir_listing(rng, 14, 300, 5))
+    check(t.CAT_COLOUR(big) is big, "CAT_COLOUR: no room for the colored copy -> the plain listing")
+    tap = Tight(tap_listing(rng, 40, 0))
+    check(t.TAPDIR_COLOUR(tap, False) is tap, "TAPDIR_COLOUR: the same")
+    seg = ts.replace("\r\n", "\n")
+    seg = seg[seg.index("def DIR_FILES():"):seg.index("        LIST_DIR_FILES()\n", seg.index("def DIR_FILES():"))]
+    check(seg.rstrip().endswith("gc.collect()\n    try:") or seg.rstrip().endswith("try:") and "    gc.collect()\n    try:" in seg,
+          "DIR_FILES collects before the listing")
+
     # ZX_PIECES
     blobs = [b"", b"x", b"a" * 254, b"a" * 255, b"a" * 256, b"b" * 1000]
     for _ in range(40):
