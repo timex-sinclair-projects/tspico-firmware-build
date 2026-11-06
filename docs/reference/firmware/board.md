@@ -37,6 +37,7 @@ Who calls what:
 | `rom_slot_empty()` | `MEMBOOT` (5122, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
+| `BLOCK_BUF` | `tspico.py` at import (1203), as `tspico_io.BLOCK_BUF`: the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)) |
 | `HAS_MODEM` | `TS2068_IO` (6531, at boot; 7245, the idle loop), `MODEM` (5309, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
 | `modem_start()` | `TS2068_IO` (6389), at boot with `config.ini`'s modem keys; `MODEM` (5296), a new mode |
 | `modem_service()` | `TS2068_IO`'s idle loop (7093), every pass with nothing arrived |
@@ -92,6 +93,14 @@ it stays as they show it.
 Both `True`. `SLOTS`: the Z80 writes the slots, so `tpi:blkrcv` streams the
 image and `MOUNT_FILE` serves `romupdate.tap`/`dckupdate.tap`. `HAS_CORE1`:
 core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
+
+### `BLOCK_BUF`
+
+`None`: v2 has no shared block buffer, so `tspico_io.BLOCK` makes a new
+`bytearray` for every LOAD and SAVE data block, as it always did. The v2 heap
+(about 190K free) still had a 66K block after round after round of big
+listings and 64K DOCK mounts (#384, `memcheck --dck`, 2026-11-06), so 48K
+held for good would cost it more than it saves. See board_v3's `BLOCK_BUF`.
 
 ### `SD_SLOTS`
 
@@ -526,15 +535,29 @@ apart from `_served`, not a `None` boot pair there, so that a `tpi:dock`
 `_keys` cuts v2's two words into those pairs: boot from `rom_sm` bits 0–1
 and `bank_sm` bits 0–3, dock from bits 2–3 and 4–7.
 
-### `_buf`, `_zeros`
+### `BLOCK_SIZE`, `BLOCK_BUF`, `_buf`, `_zeros`
 
-`_buf` is the one 32K `bytearray` every slot passes through: a ROM, each
-half of the dock, a RAM dock being saved. It is allocated at import, while
-the heap is clean. Once the firmware runs, the heap (about 190K) has no 64K
-block free, and on the card `tpi:dock` failed with `MemoryError` building a
-64K dock image (2026-10-10). Step 1's first version had already failed the
-same way at boot. Nothing in the slot code allocates a big buffer after
-import. `_zeros` is 1K of zeros, loaded 32 times to clear an empty half.
+`BLOCK_BUF` is the card's one block buffer, a `bytearray(BLOCK_SIZE)` made
+at import, while the heap is clean; `BLOCK_SIZE` is 49152 + 8. `_buf` is
+`memoryview(BLOCK_BUF)[:SLOT_SIZE]`, its first 32K: every slot passes
+through it (a ROM, each half of the dock, a RAM dock being saved).
+`tspico.py` hands `BLOCK_BUF` to `tspico_io` (1203), where `BLOCK` lends its
+front to the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)).
+
+Why at import: once the firmware runs, the heap (172K, about 100K free) has
+no 64K block, and a 32K one isn't certain either. On the card `tpi:dock`
+failed with `MemoryError` building a 64K dock image (2026-10-10), and step
+1's first version had already failed the same way at boot. After a
+300-file folder had been listed, a 35000-byte LOAD found no block of its
+size and streamed from the file instead, running dry 94 times (Report R),
+and the SAVE of the same block gave Report 6 (2026-11-06, #384). Why 48K +
+8: any block of the 2068's 48K of RAM fits, SAVE's (content + flag, two
+session bytes and parity, `blen + 4`) and LOAD's (content + parity). Why one
+buffer: its users never overlap. Each takes it and is done with it inside
+one command, and the slot code and the transfers are never in the same one.
+It costs 16K more than the 32K `_buf` it replaced. A bigger block still
+allocates its own, as before. `_zeros` is 1K of zeros, loaded 32 times to
+clear an empty half.
 
 ### `slot_path(mem, slot)`
 

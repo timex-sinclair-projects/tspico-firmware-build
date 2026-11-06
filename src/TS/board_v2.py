@@ -23,6 +23,7 @@ SD_SLOTS = False    # no MEM 3: slots come from the flash and SRAM chips only
 HAS_MODEM = False   # no TS2050 modem: 73h/77h are not answered
 HAS_SPEECH = False  # no audio output: tpi:say answers "No speech on this board"
 HAS_CORE1 = True    # core 1 is free for background(): BLINK_LED, SAVE_LOG
+BLOCK_BUF = None    # no shared block buffer: LOAD and SAVE allocate (v2 has the heap)
 
 # Holds SM0 while the SD card has GPIO 2-4 (sd_take_bus).
 @asm_pio(

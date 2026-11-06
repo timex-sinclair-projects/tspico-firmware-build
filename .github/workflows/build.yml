@@ -127,6 +127,7 @@ jobs:
           python3 src/test/sdcard_init_hosttest.py
           python3 src/test/load_ts_hosttest.py
           python3 src/test/save_ts_hosttest.py
+          python3 src/test/block_buf_hosttest.py
           python3 src/test/cmd_io_hosttest.py
           python3 src/test/printer_hosttest.py
           python3 src/test/printer_io_hosttest.py

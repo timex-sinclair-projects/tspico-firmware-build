@@ -93,6 +93,24 @@ LOAD_CHUNK = const(256)
 _LOAD_BUF = bytearray(LOAD_CHUNK)
 _LOAD_MV = memoryview(_LOAD_BUF)
 
+# The board's shared block buffer, or None (v2). tspico.py sets it from
+# board.BLOCK_BUF: this module can't import TS.board (the upgrade UF2 freezes
+# only the modules above). On v3 a 35000-byte block found no free block of
+# its size after a big folder listing (#384), so LOAD and SAVE borrow this
+# one, made at boot.
+BLOCK_BUF = None
+
+
+def BLOCK(n):
+    """n bytes for a LOAD or SAVE data block: the front of BLOCK_BUF (a
+    memoryview) if it is set and holds n, else a new bytearray(n), which may
+    raise MemoryError as before. The caller is done with it before the
+    command returns; nothing else holds it meanwhile."""
+    b = BLOCK_BUF
+    if b is not None and n <= len(b):
+        return memoryview(b)[:n]
+    return bytearray(n)
+
 
 # ─── Fast exec: MQX(MQ, ) without the per-call assembler ───────────────
 # StateMachine.exec("text") runs the Python-level PIO assembler
@@ -1597,7 +1615,7 @@ def LOAD_TS(pre, MQ, TSP):
     else:
         try:
             gc.collect()
-            hdr = bytearray(totbytes - 1)
+            hdr = BLOCK(totbytes - 1)
             arch.readinto(hdr)
         except MemoryError:
             hdr = None
@@ -2111,7 +2129,7 @@ def LOAD_ZX(MQ, TSP):
     # hardware 2026-10-02/03). A block the heap can't hold uses the file.
     whole = None
     try:
-        whole = bytearray(totbytes - 1)
+        whole = BLOCK(totbytes - 1)
         rd(whole)
     except MemoryError:
         whole = None
@@ -2688,11 +2706,11 @@ def SAVE_TS(MQ, TSP, pre=None):
     # timeout. Collect and retry once, then refuse properly.
     # ------------------------------------------------------------------
     try:
-        blk = bytearray(long)
+        blk = BLOCK(long)
     except MemoryError:
         gc.collect()
         try:
-            blk = bytearray(long)
+            blk = BLOCK(long)
         except MemoryError:
             TLM("SAVE_TS EXIT no memory", "need %d bytes" % long)
             _fl = REFUSE_SAVE(MQ, 0x06)  # -> Report 6 "Number too big"
@@ -2989,7 +3007,7 @@ def SAVE_ZX(MQ, TSP):
     n = hdr[14] + 256 * hdr[15]
     try:
         gc.collect()
-        blk = bytearray(n + 4)
+        blk = BLOCK(n + 4)
     except MemoryError:
         return fail("no room for a %d-byte block" % n, True)
 
