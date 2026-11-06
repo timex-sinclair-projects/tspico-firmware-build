@@ -447,13 +447,6 @@ RED_ = PAPER_ + "\x07" + INK_ + "\x02"
 # suit it, so the user's own ink (black on a blue screen, say) can't make it
 # hard to read (#370). Every listing ends with NORMAL_.
 PLAIN_ = PAPER_ + "\x08" + INK_ + "\x09"
-# The listings' other colour settings (CAT_COLOUR, TAPDIR_COLOUR), made once
-# here, not again for every row: the blue bar (path, card line), cyan (the
-# column titles, the index and block-number chips) and the yellow row (the
-# block LOAD "" reads next).
-BAR_ = PAPER_ + "\x01" + INK_ + "\x07"
-CHIP_ = PAPER_ + "\x05" + INK_ + "\x09"
-NEXT_ = PAPER_ + "\x06" + INK_ + "\x09"
 
 RXD = None          # TS2068_IO's RxDMA (the pre-header by DMA), for PROCESS_CMD's tail
 
@@ -1596,26 +1589,23 @@ def CAT_COLOUR(text):                                                         # 
     character and the next row (SEND_MSG2 would then not see the line's
     end)."""
 
-    # The rows are taken by index: `rest = rest[32:]` a row at a time copied
-    # the whole rest of the listing for every row, about 640K of strings of
-    # every size for a 200-row folder, on every CAT and MOVE TO (#384).
     if not text.startswith("Path:") or len(text) < 128:
         return text
-    out = [BAR_ + text[0:64],                                              # path + card line
-           CHIP_ + text[64:96]]                                            # column titles
-    i, n = 128, len(text)                                                  # [96:128] is the dashes
-    while n - i >= 32:
-        row = text[i:i + 32]
+    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
+           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
+    rest = text[128:]                                                      # [96:128] is the dashes
+    while len(rest) >= 32:
+        row = rest[:32]
         if row[0] == "<":
-            out.append(PLAIN_ + row[:22] + "    folder")
+            out.append(PLAIN_ + row[:22] + "%10s" % "folder")
         elif row[:3].isdigit() and row[3] == " ":
-            out.append(CHIP_ + row[:3] + PLAIN_ + row[3:])
+            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
         elif row[:4] == "    ":
             out.append(PLAIN_ + row)
         else:
             break
-        i += 32
-    out.append((PLAIN_ + text[i:] if i < n else "") + NORMAL_)
+        rest = rest[32:]
+    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
     return "".join(out)
 
 
@@ -1632,18 +1622,19 @@ def TAPDIR_COLOUR(text, headers):                                             # 
 
     if not text.startswith("File:") or len(text) < 128:
         return text
-    out = [BAR_ + text[0:64], CHIP_ + text[64:96]]
-    i, n = 128, len(text)                                                  # by index, as CAT_COLOUR
-    while n - i >= 32 and text[i] in " >" and text[i + 1:i + 3].isdigit():
-        row = text[i:i + 32]
+    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],
+           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]
+    rest = text[128:]
+    while len(rest) >= 32 and rest[0] in " >" and rest[1:3].isdigit():
+        row = rest[:32]
         if row[0] == ">":
-            out.append(NEXT_ + row)
+            out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
         else:
             hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
-            out.append(PLAIN_ + row[0] + CHIP_ + row[1:3]
+            out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
                        + (BLUE_ if hdr else PLAIN_) + row[3:])
-        i += 32
-    out.append((PLAIN_ + text[i:] if i < n else "") + NORMAL_)
+        rest = rest[32:]
+    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
     return "".join(out)
 
 

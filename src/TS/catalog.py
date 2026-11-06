@@ -47,8 +47,16 @@ def sort_items(items):
     2026-11-06), in the middle of building the listing. Here each name is
     lowered once, an ordered folder is not sorted at all, and the list is
     turned back into the items in place. FAT names differ in more than case,
-    so the lowered names are unique and the order is the same."""
-    d = [(it[0].lower(), it) for it in items]
+    so the lowered names are unique and the order is the same.
+
+    The items are all read first, and only then paired with their lowered
+    names, in the same list: pairs made while os.ilistdir() still yielded
+    put a short-lived pair and string between every kept item, and the
+    300-file listing then found no 2K block for CAT_COLOUR (v3, 2026-11-06)."""
+    d = list(items)
+    for i in range(len(d)):
+        it = d[i]
+        d[i] = (it[0].lower(), it)
     for i in range(1, len(d)):
         if d[i][0] < d[i - 1][0]:
             d.sort()

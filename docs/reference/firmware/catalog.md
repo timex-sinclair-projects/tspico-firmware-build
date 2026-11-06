@@ -34,15 +34,15 @@ to the FAT volume label.
 | Lines | What |
 |---|---|
 | 10–22 | `ROOT`, `DIR_EXT`, `BLK_TYPES`, `UNSHOWABLE` |
-| 25–99 | `screen_name`, `sort_items`, `match_shown`, `has_wild`, `match` — names and wildcards, the listing order |
-| 102–162 | `resolve`, `public`, `split_arg`, `split_pair` — paths and arguments |
-| 165–203 | `select`, `basename`, `parent`, `within` |
-| 206–275 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
-| 278–342 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
-| 345–383 | `LIST_TEXT_MAX`, `LIST_HEX_MAX`, `is_text`, `list_text` — LIST "name" |
-| 386–414 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
-| 417–544 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
-| 547–560 | `card_line` — CAT's card line |
+| 25–107 | `screen_name`, `sort_items`, `match_shown`, `has_wild`, `match` — names and wildcards, the listing order |
+| 110–170 | `resolve`, `public`, `split_arg`, `split_pair` — paths and arguments |
+| 173–211 | `select`, `basename`, `parent`, `within` |
+| 214–283 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
+| 286–350 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
+| 353–391 | `LIST_TEXT_MAX`, `LIST_HEX_MAX`, `is_text`, `list_text` — LIST "name" |
+| 394–422 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
+| 425–552 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
+| 555–568 | `card_line` — CAT's card line |
 
 ## Constants
 
@@ -84,7 +84,11 @@ not once per item, and its quicksort takes the last item as the pivot, so
 a folder already in name order (files copied in alphabetically) is near
 its worst case. 300 files made 45,149 lowered strings and took 1.58 s on
 the v3 card, shuffled 2,959 in 138 ms; pairs took 118 ms and 16 ms, and
-the order check makes the ordered case one pass (REPL, 2026-11-06). Used by
+the order check makes the ordered case one pass (REPL, 2026-11-06).
+The items are all read into the list first and only then paired with their
+lowered names, in place: pairs made while `os.ilistdir()` still yielded put
+a short-lived pair and string between every kept item, and on the v3 card
+the 300-file listing then found no 2K block for `CAT_COLOUR`. Used by
 `select` and, in `tspico.py`, by `LISTING_FRESHEN`, `LIST_DIR_FILES`,
 `DIRINFO_WRITE`, `DISK_COPY_WORK` (a folder's entries), `DISK_ERASE_MATCHES`
 and `GETHELP` (the topics).
@@ -317,7 +321,7 @@ is `?`.
 MicroPython's `VfsFat` doesn't give Python the volume label: FatFs's
 `f_getlabel` and `f_setlabel` are compiled in (the rp2 port sets
 `MICROPY_FATFS_USE_LABEL`), but `VfsFat` calls only `f_setlabel`, from
-mkfs (the comment at 386–397). So these work in the card's raw 512-byte
+mkfs (the comment at 394–405). So these work in the card's raw 512-byte
 sectors through `readblocks` and `writeblocks`, and `write_label` needs
 the card unmounted, because FatFs keeps a sector of the root folder
 cached.
@@ -353,7 +357,7 @@ and 11 characters pass; 12 characters, a leading space, `.`, `:`, `*`,
 ### `_u32(b, i)`
 
 The little-endian 32-bit number at `b[i]`. `_u16` (two bytes) is the same,
-at line 417 (`native.py` has its own, [native.md](native.md)).
+at line 425 (`native.py` has its own, [native.md](native.md)).
 
 ### `_is_vbr(b)`
 

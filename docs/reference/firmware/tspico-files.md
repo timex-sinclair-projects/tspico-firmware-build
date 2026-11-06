@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1424–2251,
-2596–2628, 3928–3933, 4026–4085, 4347–4434, 4588–4595, 5414–5471,
-5707–5721, 5803–5885 and 6043–6059 (firmware 2.3).
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1417–2242,
+2587–2619, 3919–3924, 4017–4076, 4338–4425, 4579–4586, 5405–5462,
+5698–5712, 5794–5876 and 6034–6050 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -32,39 +32,39 @@ document it is linked, not restated: the pitfalls are in
 
 | Symbol | Lines | Role |
 |---|---|---|
-| `COPY_FILE(src_file, dst_file)` | 1424–1481 | copy a file 512 bytes at a time, after a bounded wait for core1 |
-| `DCK_IMAGE()` | 1484–1553 | expand `/TMP/temp.bin` from a `.DCK` into a full 64 KB cartridge image |
-| `DIRINFO_ROWS(listing)` | 1816–1832 | `dirinfo.tap`'s rows, one at a time (a generator) |
-| `DIRINFO_WRITE()` | 1835–1881 | write `dirinfo.tap` for the current folder, row by row |
-| `DIR_FILES()` | 1650–1702 | `LIST_DIR_FILES` with the card-error and out-of-memory handling; returns True/False |
-| `LIST_GC_EVERY` | 1705 | `LIST_DIR_FILES` collects garbage after this many rows (32) |
-| `LIST_DIR_FILES()` | 1708–1813 | read the current folder: `files`, `dirs`, `lista`, `sd_space` |
-| `LOG(msg, level)` | 1884–1924 | queue a log line, filtered by `TSP.LOG_LEVEL` |
-| `MOUNT_FILE(f_name, remounting=False)` | 1927–2099 | make a `.tap`, `.rom`, `.bin` or `.dck` the mounted file |
-| `NEW_HDR(type_hdr, fname, long)` | 2068–2130 | a TAP header block |
-| `OFF_TABLE()` | 2133–2145 | the mounted file's block table, rewound |
-| `PARAMS(pre)` | 2148–2154 | the two `CODE` parameters from the pre-header |
-| `SAVE_LOG()` | 2157–2200 | write `log_entries` to `/activity.log`; clears `busy` on every path |
-| `WAIT_CORE1(limit_ms, who)` | 2203–2228 | bounded wait for a `SAVE_LOG` on core1 |
-| `CLEAR_LOG()` | 2231–2249 | truncate `/activity.log` |
-| `WALK(top)` | 2596–2609 | recursive folder walk (generator) |
-| `GET_DIRS(path='/sd/TAP')` | 2612–2627 | every folder on the card, sorted, as public paths |
-| `isTapMounted()` | 3928–3932 | is the mounted file a `.tap`? |
-| `dir_exists(filename)` | 4026–4030 | `os.stat` says directory |
-| `file_exists(filename)` | 4033–4037 | `os.stat` says not a directory |
-| `public_path(n=0)` | 4054–4066 | `TSP.cur_path` without `/sd`, optionally shortened |
-| `public_fname(n=0)` | 4069–4084 | `TSP.f_name` without `/sd`, optionally shortened |
-| `ChangeDir(potential_new_path, SDactive=False)` | 4347–4434 | the rules of `tpi:cd` / `MOVE TO` |
-| `getArgs(cmd)` | 4588–4595 | the text after the command word |
-| `getBoot()` | 5414–5422 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5425–5433 | (memory, slot) in the DOCK |
-| `SYSTEM_SLOT_LOCK(mem, page)` | 5436–5447 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5450–5470 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5707–5721 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5803–5823 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5826–5885 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 6043–6059 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 6062–6091 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `COPY_FILE(src_file, dst_file)` | 1417–1474 | copy a file 512 bytes at a time, after a bounded wait for core1 |
+| `DCK_IMAGE()` | 1477–1546 | expand `/TMP/temp.bin` from a `.DCK` into a full 64 KB cartridge image |
+| `DIRINFO_ROWS(listing)` | 1807–1823 | `dirinfo.tap`'s rows, one at a time (a generator) |
+| `DIRINFO_WRITE()` | 1826–1872 | write `dirinfo.tap` for the current folder, row by row |
+| `DIR_FILES()` | 1641–1693 | `LIST_DIR_FILES` with the card-error and out-of-memory handling; returns True/False |
+| `LIST_GC_EVERY` | 1696 | `LIST_DIR_FILES` collects garbage after this many rows (32) |
+| `LIST_DIR_FILES()` | 1699–1804 | read the current folder: `files`, `dirs`, `lista`, `sd_space` |
+| `LOG(msg, level)` | 1875–1915 | queue a log line, filtered by `TSP.LOG_LEVEL` |
+| `MOUNT_FILE(f_name, remounting=False)` | 1918–2090 | make a `.tap`, `.rom`, `.bin` or `.dck` the mounted file |
+| `NEW_HDR(type_hdr, fname, long)` | 2068–2121 | a TAP header block |
+| `OFF_TABLE()` | 2124–2136 | the mounted file's block table, rewound |
+| `PARAMS(pre)` | 2139–2145 | the two `CODE` parameters from the pre-header |
+| `SAVE_LOG()` | 2148–2191 | write `log_entries` to `/activity.log`; clears `busy` on every path |
+| `WAIT_CORE1(limit_ms, who)` | 2194–2219 | bounded wait for a `SAVE_LOG` on core1 |
+| `CLEAR_LOG()` | 2222–2240 | truncate `/activity.log` |
+| `WALK(top)` | 2587–2600 | recursive folder walk (generator) |
+| `GET_DIRS(path='/sd/TAP')` | 2603–2618 | every folder on the card, sorted, as public paths |
+| `isTapMounted()` | 3919–3923 | is the mounted file a `.tap`? |
+| `dir_exists(filename)` | 4017–4021 | `os.stat` says directory |
+| `file_exists(filename)` | 4024–4028 | `os.stat` says not a directory |
+| `public_path(n=0)` | 4045–4057 | `TSP.cur_path` without `/sd`, optionally shortened |
+| `public_fname(n=0)` | 4060–4075 | `TSP.f_name` without `/sd`, optionally shortened |
+| `ChangeDir(potential_new_path, SDactive=False)` | 4338–4425 | the rules of `tpi:cd` / `MOVE TO` |
+| `getArgs(cmd)` | 4579–4586 | the text after the command word |
+| `getBoot()` | 5405–5413 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5416–5424 | (memory, slot) in the DOCK |
+| `SYSTEM_SLOT_LOCK(mem, page)` | 5427–5438 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5441–5461 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 5698–5712 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5794–5814 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5817–5876 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 6034–6050 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 6053–6082 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -510,7 +510,7 @@ Names and listing numbers are resolved before the call (`LOAD_TPI`,
 
 **Why it is written this way.** The copy to flash is the bus-sharing
 constraint under `COPY_FILE`. For a ROM or cartridge the trick is in the
-comment at line 1978: the updater tape goes to `temp.tap` but `TSP.f_name`
+comment at line 1969: the updater tape goes to `temp.tap` but `TSP.f_name`
 keeps the image's name, so the next plain `LOAD ""` runs the updater's BASIC
 program from `temp.tap`
 ([`LOAD_TS`](tspico_io.md)), and that program's `SAVE "tpi:blkrcv"` streams
@@ -548,8 +548,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7344, 7361 and
-7373, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7335, 7352 and
+7364, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -707,9 +707,9 @@ and the user retries; waiting for ever costs the session. The caller picks
 the limit from what the Z80 tolerates at that point; a normal log write takes
 a few tens of milliseconds.
 
-Callers: `COPY_FILE` (3144); the main loop before a SAVE, a LOAD and a
-headerless LOAD (3144 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7864), because the ZX ROM waits
+Callers: `COPY_FILE` (3135); the main loop before a SAVE, a LOAD and a
+headerless LOAD (3135 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
+inline 3 s wait of the same shape (line 7855), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 

@@ -2,8 +2,6 @@
 
 The listing path made far more short-lived strings than it needed, which
 spreads the kept objects across the Pico's non-moving heap:
-  * CAT_COLOUR and TAPDIR_COLOUR took a row with `rest = rest[32:]`,
-    copying the rest of the listing for every row;
   * every listing sorted with sorted(key=...), and MicroPython calls the
     key on every comparison (45,149 lowered strings for a 300-file folder
     in name order, 1.58 s on the v3 card);
@@ -11,6 +9,11 @@ spreads the kept objects across the Pico's non-moving heap:
   * CATALOG_TEXT made an upper-case copy of files[] and searched it twice
     per row;
   * the ZX48 tpi:dir reply grew a byte at a time and copied every piece.
+
+CAT_COLOUR and TAPDIR_COLOUR are checked against the old code too. Their
+`rest = rest[32:]` stays: taking rows by index fragmented the v3 heap
+more, because the slices were small garbage between the kept rows, where
+the big copies of the rest never fit (REPL, 2026-11-06).
 
 The rewrites must give exactly what the old code gave. The old code is
 kept here, as it was on main 1d08839, and compared on generated listings.
@@ -188,7 +191,6 @@ def main():
     taps += ["File:short", header("File:")]
     check(all(t.TAPDIR_COLOUR(x, h) == old_tapdir_colour(x, h) for x in taps for h in (False, True)),
           "TAPDIR_COLOUR: the same as before on %d listings, both views" % len(taps))
-    check("\n        rest = rest[32:]" not in ts.replace("\r\n", "\n"), "no listing copies its rest a row at a time")
 
     # ZX_PIECES
     blobs = [b"", b"x", b"a" * 254, b"a" * 255, b"a" * 256, b"b" * 1000]
