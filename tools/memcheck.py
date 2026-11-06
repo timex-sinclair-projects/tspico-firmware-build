@@ -11,7 +11,7 @@ The 2068 runs basic/SD/TAP/test/memtest.bas (built by tools/build-basic.sh).
 After each step it sends SAVE "tpi:meminfo <tag>". The firmware's MEMINFO
 collects garbage, measures, and prints one line on the USB console:
 
-    MEM tag=r1_mount free=… alloc=… largest=… files=… dirs=… alldirs=… lista=… blocks=… ms=…
+    MEM tag=r1_mount free=… alloc=… largest=… files=… dirs=… lista=… blocks=… ms=…
 
 "largest" is the biggest buffer the heap can give at that moment
 (LARGEST_BLOCK). It is the number that decides whether a 32K or 64K buffer
@@ -65,7 +65,7 @@ MEMTEST = os.path.join(ROOT, "SD card", "TAP", "test", "memtest.tap")
 MEMDIR_FILES = 300                      # tapes in the test folder
 BIG_LEN = 35000                         # memtest.bas: LOAD ""CODE 30000, SAVE …CODE 30000,35000
 SMALL_BLOCKS = 30                       # header + data pairs after the big block
-MEM_FIELDS = ("free", "alloc", "largest", "files", "dirs", "alldirs", "lista", "blocks", "ms")
+MEM_FIELDS = ("free", "alloc", "largest", "files", "dirs", "lista", "blocks", "ms")
 
 
 # ---------------------------------------------------------------------------
@@ -220,12 +220,12 @@ def k(n):
 def report(rows, maps, out):
     """The table and the map summaries: printed, and in out/report.md and out/mem.csv."""
     md = ["# Heap measurement (#384)", "",
-          "| step | free K | largest K | alloc K | files | dirs | alldirs | lista | blocks | ms |",
-          "|---|---|---|---|---|---|---|---|---|---|"]
+          "| step | free K | largest K | alloc K | files | dirs | lista | blocks | ms |",
+          "|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
-        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d |" % (
+        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d |" % (
             r["tag"], k(r.get("free", 0)), k(r.get("largest", 0)), k(r.get("alloc", 0)),
-            r.get("files", 0), r.get("dirs", 0), r.get("alldirs", 0), r.get("lista", 0),
+            r.get("files", 0), r.get("dirs", 0), r.get("lista", 0),
             r.get("blocks", 0), r.get("ms", 0)))
     if rows:
         lg = [r.get("largest", 0) for r in rows]

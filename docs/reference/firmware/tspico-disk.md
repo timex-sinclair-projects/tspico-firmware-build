@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2677–3636.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2677–3626.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -27,12 +27,12 @@ module's patches.
 |---|---|---|
 | 2677–2756 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
 | 2765–2868 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 2871–3252 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
-| 3262–3265 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3268–3377 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3391–3418 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3421–3453 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3456–3636 | `DIR_NAMES`, `CH_OPEN`, `CH_SPEECH_PATH`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2871–3242 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
+| 3252–3255 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 3258–3367 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 3381–3408 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3411–3443 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3446–3626 | `DIR_NAMES`, `CH_OPEN`, `CH_SPEECH_PATH`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -109,9 +109,8 @@ the tail was still running and the pre-header behind it was lost (Report T;
 
 **State between calls.** `TSP.cur_path` is the directory every path resolves
 from; `TSP.f_name`, `TSP.offset_tbl` and `TSP.tap_idx` are the mounted TAP,
-which ERASE, `tpi:ren` and an `f:` SAVE refuse to touch; `files` and
-`alldirs` are the current folder's index and the directory list that
-`REFRESH_IF`, `DISK_MAKE_DIR` and `DISK_ERASE_ONE` keep current;
+which ERASE, `tpi:ren` and an `f:` SAVE refuse to touch; `files` is the
+current folder's index that `REFRESH_IF` keeps current;
 `TSP.native` is the arm `tpi:fopen` leaves for the SAVE or LOAD transaction
 of the same session, and `NATIVE_TAP` the one-shot tape in flash it points
 at; `CHANNELS` holds each open stream's path and position
@@ -305,7 +304,7 @@ happens between two SD sessions (spec §3, "N skips, like any key but
 Y"). Pinned by `disk_cmds_hosttest.py` (`test_erase`): a file goes
 with no prompt and a `SEND_MSG` answer; missing F; a directory without `/`
 Q and kept; a non-empty directory Q; an empty directory (bar `dirinfo.tap`)
-removed and dropped from `alldirs`; the current directory's parent Q; the
+removed; the current directory's parent Q; the
 mounted file Q; a pattern asks one prompt per match, sorted, erases only
 those answered Y, and sends nothing after the exchange; no match F with no
 prompt. `test_prompt_each` pins `PROMPT_EACH`'s byte sequence.
@@ -321,14 +320,13 @@ Returns `(message, status)`.
   directory"`, Q. `real/dirinfo.tap` is removed first (the folder's listing
   tape, made by `LOAD "tpi:dirinfo.tap"` since #384 and by older firmware on
   every listing, does not make a directory non-empty), then `os.rmdir`; an `OSError`
-  is `"Directory not empty"`, Q. `alldirs` loses every entry at or below
-  `real[3:]` (the list holds paths without `/sd`), `REFRESH_IF(parent)`,
+  is `"Directory not empty"`, Q. `REFRESH_IF(parent)`,
   `"Erased <public>"`, 1.
 - **File.** A directory named without `/`: `'A directory: ERASE "x/"'`, Q.
   Missing: F. The mounted file (`TSP.f_name`, case-insensitive): `"File is
   mounted"`, Q. `os.remove`, `REFRESH_IF(parent)`, `"Erased <public>"`, 1.
 
-Writes the card, `alldirs` and the folder caches. Reads `TSP.cur_path`,
+Writes the card and the folder caches. Reads `TSP.cur_path`,
 `TSP.f_name`.
 
 ### `DISK_ERASE_MATCHES(where, pat)`
@@ -378,7 +376,7 @@ which resolves to the current directory: `"Not allowed"` at the root,
 never touched. Pinned by `disk_cmds_hosttest.py` (`test_format`): a name
 without `.tap` makes an empty `new.tap`, mounted with append on; a
 subdirectory path; an existing file F, not truncated, not mounted; not a
-`.tap` Q; a missing directory F; `dir/` made and added to `alldirs`, and F
+`.tap` Q; a missing directory F; `dir/` made, and F
 the second time; `/` F. `commands_hosttest.py` (`test_format_tap`) pins
 what `tpi:newtap` was tested for: mounted with append on; an existing name
 in another case F, the file untouched, nothing mounted; `a.b.tap` not
@@ -397,9 +395,7 @@ file with `open(real, "wb")` and runs `REFRESH_IF(parent)`.
 
 `FORMAT "dir/"`, SD active. The root itself or a path above it is `"Not
 allowed: <name>/"`, F; an existing name `"Already exists"`, F; a missing
-parent `"Not found"`, F. `os.mkdir`, then `real[3:]` is appended to
-`alldirs` and the list sorted (inside a bare `try`, so a failure there is
-ignored), `REFRESH_IF(parent)`, `"Made <public>/"`, 1.
+parent `"Not found"`, F. `os.mkdir`, `REFRESH_IF(parent)`, `"Made <public>/"`, 1.
 
 ### `DISK_LIST(pre, cmd)`
 
@@ -488,15 +484,14 @@ file, or a directory holding it (`catalog.within(TSP.f_name, src)`):
 `"File is mounted"`, Q. The destination must resolve (F); an existing
 directory means "into it", `dst/<basename of src>`. An existing target
 `"Already exists"`, F; a missing parent `"Not found: b"`, F; a directory
-into itself `"Can't move a directory into itself"`, Q. `os.rename`; for a
-directory `alldirs = GET_DIRS()` re-walks the card; `REFRESH_IF` with both
+into itself `"Can't move a directory into itself"`, Q. `os.rename`; `REFRESH_IF` with both
 parents; `"Renamed to <public dst>"`, 1. Pinned by `test_cd_and_ren`:
 rename, move into a directory, onto an existing name F, a directory into
 itself Q, the mounted file Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3255 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 3245 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -619,7 +614,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
 
-The comment at line 3380 lists the four commands. The ROM's channel driver
+The comment at line 3370 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -809,7 +804,7 @@ A speech stream (`v:`) never writes to the card, so it takes the first
 path: `Channels.close` says what is left of an unfinished line and drops
 the entry, even when speech is off.
 
-The long comment at line 3598 is the history. When channels arrived (#83)
+The long comment at line 3588 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

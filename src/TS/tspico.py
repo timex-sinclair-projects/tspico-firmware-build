@@ -420,7 +420,6 @@ prev_path = None
 files = []
 dirs = []
 lista = ""
-alldirs = []
 sd_space = None                                                                # (total, free) bytes, as the last listing read them
 
 # ─── Colour in SEND_MSG2 (the CAT listing and tpi:info, 2026-10-02) ─────
@@ -1247,13 +1246,15 @@ def SD_REVALIDATE(changed):                                                    #
         other card's file), and open channels and the printer capture are
         dropped -- their files were on the other card;
       * the card's label is read (CAT shows it);
-      * the directory caches are rebuilt.
+      * the current folder's listing is re-read. (The list of every
+        folder on the card is not kept: tpi:cd CODE 0,1 walks the card
+        when it is asked for, #384.)
 
     If there is no TAP folder and one can't be made (a write-protected card),
     the card counts as missing: TSP.sd_present goes False and OSError(19) is
     raised."""
 
-    global alldirs, prev_path, prn_path
+    global prev_path, prn_path
 
     root = catalog.ROOT
     if not dir_exists(root):
@@ -1278,7 +1279,6 @@ def SD_REVALIDATE(changed):                                                    #
     TSP.sd_label = CARD_LABEL()
     os.chdir(TSP.cur_path)
     TSP.sd_listing_ok = DIR_FILES()
-    alldirs = GET_DIRS()
 
 
 def CARD_LABEL():                                                             # the mounted card's label, "" if it can't be read
@@ -3006,7 +3006,6 @@ def DISK_ERASE_ONE(arg):                                                      # 
             os.rmdir(real)
         except OSError:
             return "Directory not empty", _4_Q_Parameter
-        alldirs[:] = [d for d in alldirs if not catalog.within(d, real[3:])]
         REFRESH_IF(catalog.parent(real))
         return "Erased %s" % catalog.public(real), _1_OK
     if dir_exists(real):
@@ -3118,11 +3117,6 @@ def DISK_MAKE_DIR(name):                                                      # 
     if not dir_exists(catalog.parent(real)):
         return "Not found: %s" % catalog.public(catalog.parent(real)), _3_F_Invalid_file
     os.mkdir(real)
-    try:
-        alldirs.append(real[3:])
-        alldirs.sort()
-    except Exception:
-        pass
     REFRESH_IF(catalog.parent(real))
     return "Made %s/" % catalog.public(real), _1_OK
 
@@ -3223,8 +3217,6 @@ def DISK_REN(pre, cmd):                                                       # 
 
 def DISK_REN_WORK(a, b):
 
-    global alldirs
-
     cur = TSP.cur_path
     src = catalog.resolve(cur, a)
     if src is None or not (file_exists(src) or dir_exists(src)):
@@ -3246,8 +3238,6 @@ def DISK_REN_WORK(a, b):
     if is_dir and catalog.within(dst, src):
         return "Can't move a directory into itself", _4_Q_Parameter
     os.rename(src, dst)
-    if is_dir:
-        alldirs = GET_DIRS()
     REFRESH_IF(catalog.parent(src), catalog.parent(dst))
     return "Renamed to %s" % catalog.public(dst), _1_OK
 
@@ -4406,7 +4396,6 @@ def CDIR(pre, cmd):                                                             
 
     global lista
     global dirs
-    global alldirs
     global led
     
     TLM("CDIR enter")
@@ -4427,7 +4416,15 @@ def CDIR(pre, cmd):                                                             
             else:
                 List = dirs
         else:
-            List = alldirs
+            # Every folder on the card, walked now: kept between commands it
+            # was one more long-lived string per folder, rebuilt at every
+            # card change, rename and ERASE for this one menu (#384).
+            ACTIVATE_SD()
+            try:
+                List = GET_DIRS()
+            finally:
+                DEACTIVATE_SD()
+                ACTIVATE_MQ()
         isel = ListMenu(List, hdr1, hdr2, "Change to dir", "Changing dir to: ")
         if isel >= 0:
             status, message = ChangeDir(List[isel])
@@ -4840,12 +4837,12 @@ def MEMINFO(pre, cmd):                                                 # The hea
     the USB console and /activity.log, for tools/memcheck.py to collect:
 
         MEM tag=<tag> free=<bytes> alloc=<bytes> largest=<bytes>
-            files=<n> dirs=<n> alldirs=<n> lista=<chars> blocks=<n> ms=<ms>
+            files=<n> dirs=<n> lista=<chars> blocks=<n> ms=<ms>
 
     largest is LARGEST_BLOCK: the biggest buffer that can be had now. The
     counts are what the firmware keeps between commands that grows with the
-    card: the current folder's files and folders, every folder on the card
-    (alldirs), the listing text (lista) and the mounted tape's block table.
+    card: the current folder's files and folders, the listing text (lista)
+    and the mounted tape's block table.
     With the word "map", micropython.mem_info(1)'s heap map follows on the
     console only (one letter per 16-byte block; it is long), between
     "MEM map begin" and "MEM map end" lines. The 2068 gets one message
@@ -4863,8 +4860,8 @@ def MEMINFO(pre, cmd):                                                 # The hea
     words = getArgs(cmd).split()
     want_map = any(w.lower() == "map" for w in words)
     tag = "_".join(w for w in words if w.lower() != "map") or "-"
-    line = "MEM tag=%s free=%d alloc=%d largest=%d files=%d dirs=%d alldirs=%d lista=%d blocks=%d ms=%d" % (
-        tag, free, alloc, largest, len(files), len(dirs), len(alldirs), len(lista),
+    line = "MEM tag=%s free=%d alloc=%d largest=%d files=%d dirs=%d lista=%d blocks=%d ms=%d" % (
+        tag, free, alloc, largest, len(files), len(dirs), len(lista),
         len(getattr(TSP, "offset_tbl", None) or ()), ms)
     print(line)
     LOG(line, 4)
@@ -5186,7 +5183,6 @@ def MDIR(pre, cmd):                                                             
     # SAVE "tpi:md <name>" CODE 1,0     - Also change to the new directory
 
     global TSP
-    global alldirs
     
     TLM("MDIR enter")
     # The name as every handler takes it (#174: this was cmd[10:], so a
@@ -5224,13 +5220,6 @@ def MDIR(pre, cmd):                                                             
                 os.mkdir(full)
                 if par1 != 1 or par2 != 0:
                     DIR_FILES() # Update local dir list
-                # Update alldirs w/o calling GET_DIRS()
-                try:
-                    alldirs.append("%s/%s" % (TSP.cur_path[3:], name))
-                    alldirs.sort()
-                    gc.collect()
-                except:
-                    pass
 
             except OSError:
 
@@ -6722,7 +6711,6 @@ def TS2068_IO():                                                         # Main 
     global led
     global TSP
     
-    global alldirs
     global EXT_SA_FUNCT
     
     busy = False

@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1416–2217,
-2562–2594, 3887–3892, 3985–4044, 4306–4393, 4540–4547, 5374–5431,
-5667–5681, 5763–5845 and 6003–6019 (firmware 2.3).
+2562–2594, 3877–3882, 3975–4034, 4296–4383, 4537–4544, 5363–5420,
+5656–5670, 5752–5834 and 5992–6008 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -16,7 +16,7 @@ none of them sends anything to the 2068. They sit between the bus helpers of
 [part 2](tspico-bus.md) — `ACTIVATE_SD`, `DEACTIVATE_SD`, `ACTIVATE_MQ`,
 `SD_CALL`, `LISTING_CHECK` — which they call to reach the card, and the
 handlers, which call them. The module variables they fill (`files`, `dirs`,
-`lista`, `alldirs`, `sd_space`, `prev_path`,
+`lista`, `sd_space`, `prev_path`,
 `log_entries`, `busy`, `led`) and the `TSP` fields they set are described in
 [part 1](tspico-state.md); the TAP block table they build is
 [`catalog.tap_table`](catalog.md).
@@ -48,22 +48,22 @@ document it is linked, not restated: the pitfalls are in
 | `CLEAR_LOG()` | 2197–2215 | truncate `/activity.log` |
 | `WALK(top)` | 2562–2575 | recursive folder walk (generator) |
 | `GET_DIRS(path='/sd/TAP')` | 2578–2593 | every folder on the card, sorted, as public paths |
-| `isTapMounted()` | 3887–3891 | is the mounted file a `.tap`? |
-| `dir_exists(filename)` | 3985–3989 | `os.stat` says directory |
-| `file_exists(filename)` | 3992–3996 | `os.stat` says not a directory |
-| `public_path(n=0)` | 4013–4025 | `TSP.cur_path` without `/sd`, optionally shortened |
-| `public_fname(n=0)` | 4028–4043 | `TSP.f_name` without `/sd`, optionally shortened |
-| `ChangeDir(potential_new_path, SDactive=False)` | 4306–4393 | the rules of `tpi:cd` / `MOVE TO` |
-| `getArgs(cmd)` | 4540–4547 | the text after the command word |
-| `getBoot()` | 5374–5382 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5385–5393 | (memory, slot) in the DOCK |
-| `SYSTEM_SLOT_LOCK(mem, page)` | 5396–5407 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5410–5430 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5667–5681 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 5763–5783 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5786–5845 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 6003–6019 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 6022–6051 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `isTapMounted()` | 3877–3881 | is the mounted file a `.tap`? |
+| `dir_exists(filename)` | 3975–3979 | `os.stat` says directory |
+| `file_exists(filename)` | 3982–3986 | `os.stat` says not a directory |
+| `public_path(n=0)` | 4003–4015 | `TSP.cur_path` without `/sd`, optionally shortened |
+| `public_fname(n=0)` | 4018–4033 | `TSP.f_name` without `/sd`, optionally shortened |
+| `ChangeDir(potential_new_path, SDactive=False)` | 4296–4383 | the rules of `tpi:cd` / `MOVE TO` |
+| `getArgs(cmd)` | 4537–4544 | the text after the command word |
+| `getBoot()` | 5363–5371 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5374–5382 | (memory, slot) in the DOCK |
+| `SYSTEM_SLOT_LOCK(mem, page)` | 5385–5396 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5399–5419 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 5656–5670 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 5752–5772 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 5775–5834 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 5992–6008 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 6011–6040 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -523,8 +523,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7305, 7322 and
-7334, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7293, 7310 and
+7322, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -682,9 +682,9 @@ and the user retries; waiting for ever costs the session. The caller picks
 the limit from what the Z80 tolerates at that point; a normal log write takes
 a few tens of milliseconds.
 
-Callers: `COPY_FILE` (3094); the main loop before a SAVE, a LOAD and a
-headerless LOAD (3094 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 7801), because the ZX ROM waits
+Callers: `COPY_FILE` (3093); the main loop before a SAVE, a LOAD and a
+headerless LOAD (3093 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
+inline 3 s wait of the same shape (line 7789), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
@@ -721,13 +721,14 @@ level 2 and returns what had been gathered so far (at least the root).
 Success logs at level 0.
 
 Why: `tpi:cd` with `CODE 0,1` offers every folder on the card as a menu
-([`CDIR`](tspico-commands.md#cdirpre-cmd)); the card is walked once, not on
-every menu.
+([`CDIR`](tspico-commands.md#cdirpre-cmd)).
 
-Callers: [`SD_REVALIDATE`](tspico-bus.md) (the first time a card is seen,
-and whenever one comes back or is swapped) stores the result in `alldirs`;
-[`DISK_REN`](tspico-disk.md) rebuilds it after renaming a folder. `MDIR`
-appends to `alldirs` instead of calling this.
+Callers: `CDIR` only, each time that menu is asked for; the list is the
+menu's and goes when it ends. Until #384 `SD_REVALIDATE` stored the result
+in a module list, `alldirs`, at every card mount, and `DISK_REN`, `MDIR`,
+`DISK_MAKE_DIR` and `DISK_ERASE_ONE` kept it current: one long-lived string
+per folder, for a menu few users open. Walking the card per menu costs one
+`ilistdir` per folder (61 on the test card) instead.
 
 Beware: one `ilistdir` per folder, with the card active; the default
 argument is the root's real path, the same string as `catalog.ROOT`.
