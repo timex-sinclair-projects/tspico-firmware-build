@@ -34,15 +34,15 @@ to the FAT volume label.
 | Lines | What |
 |---|---|
 | 10–22 | `ROOT`, `DIR_EXT`, `BLK_TYPES`, `UNSHOWABLE` |
-| 25–70 | `screen_name`, `match_shown`, `has_wild`, `match` — names and wildcards |
-| 73–133 | `resolve`, `public`, `split_arg`, `split_pair` — paths and arguments |
-| 136–174 | `select`, `basename`, `parent`, `within` |
-| 177–246 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
-| 249–313 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
-| 316–354 | `LIST_TEXT_MAX`, `LIST_HEX_MAX`, `is_text`, `list_text` — LIST "name" |
-| 357–385 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
-| 388–515 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
-| 518–531 | `card_line` — CAT's card line |
+| 25–99 | `screen_name`, `sort_items`, `match_shown`, `has_wild`, `match` — names and wildcards, the listing order |
+| 102–162 | `resolve`, `public`, `split_arg`, `split_pair` — paths and arguments |
+| 165–203 | `select`, `basename`, `parent`, `within` |
+| 206–275 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
+| 278–342 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
+| 345–383 | `LIST_TEXT_MAX`, `LIST_HEX_MAX`, `is_text`, `list_text` — LIST "name" |
+| 386–414 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
+| 417–544 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
+| 547–560 | `card_line` — CAT's card line |
 
 ## Constants
 
@@ -63,6 +63,31 @@ wildcard (`LOAD_TPI`), and `?` cannot be part of a FAT name, so it never
 collides with a real one. Used by `dir_rows`, `xstr`/`xchr` in `tspico.py`,
 and `match_shown`. Pinned: `{a}|b~c\x7fé.tap` → `?a??b?c??.tap`; `GAME
 (1).TAP` unchanged.
+
+A name with nothing to replace is returned as it is, the same object: one
+pass over its characters finds that. It runs for every row of every
+listing, and rebuilding each name a character at a time made a string
+per name for nothing (#384).
+
+### `sort_items(items)`
+
+`os.ilistdir()` items (tuples whose `[0]` is the name), or any iterable of
+them, as a new list in name order, case folded: the order sorting with a
+key of the lowered name gives. Each name is lowered once into a
+`(lowered, item)` pair; if no pair is out of order the list is not sorted;
+then each pair is replaced by its item, in the same list. FAT names
+differ in more than case, so the lowered names are unique and the order
+is the same as the key sort's.
+
+Why (#384): MicroPython's sort calls the key function on every comparison,
+not once per item, and its quicksort takes the last item as the pivot, so
+a folder already in name order (files copied in alphabetically) is near
+its worst case. 300 files made 45,149 lowered strings and took 1.58 s on
+the v3 card, shuffled 2,959 in 138 ms; pairs took 118 ms and 16 ms, and
+the order check makes the ordered case one pass (REPL, 2026-11-06). Used by
+`select` and, in `tspico.py`, by `LISTING_FRESHEN`, `LIST_DIR_FILES`,
+`DIRINFO_WRITE`, `DISK_COPY_WORK` (a folder's entries), `DISK_ERASE_MATCHES`
+and `GETHELP` (the topics).
 
 ### `match_shown(name, pat)`
 
@@ -131,7 +156,8 @@ the first half. Used by `DISK_COPY` and `DISK_REN`.
 
 What CAT lists from a directory's `os.ilistdir()` items, in its order:
 `[(name, is_dir, size)]` — directories, then files, then (bare listing
-only) the files `DIR` cannot index. Items are sorted case-insensitively.
+only) the files `DIR` cannot index. Items are sorted case-insensitively
+(`sort_items`).
 `dirinfo.tap` is never listed; dot names only when the pattern starts with
 a dot; with a pattern, a non-match is dropped. A directory (type 16384)
 goes to the first group with size 0; with no pattern a file whose last
@@ -291,7 +317,7 @@ is `?`.
 MicroPython's `VfsFat` doesn't give Python the volume label: FatFs's
 `f_getlabel` and `f_setlabel` are compiled in (the rp2 port sets
 `MICROPY_FATFS_USE_LABEL`), but `VfsFat` calls only `f_setlabel`, from
-mkfs (the comment at 357–368). So these work in the card's raw 512-byte
+mkfs (the comment at 386–397). So these work in the card's raw 512-byte
 sectors through `readblocks` and `writeblocks`, and `write_label` needs
 the card unmounted, because FatFs keeps a sector of the root folder
 cached.
@@ -327,7 +353,7 @@ and 11 characters pass; 12 characters, a leading space, `.`, `:`, `*`,
 ### `_u32(b, i)`
 
 The little-endian 32-bit number at `b[i]`. `_u16` (two bytes) is the same,
-at line 388 (`native.py` has its own, [native.md](native.md)).
+at line 417 (`native.py` has its own, [native.md](native.md)).
 
 ### `_is_vbr(b)`
 
