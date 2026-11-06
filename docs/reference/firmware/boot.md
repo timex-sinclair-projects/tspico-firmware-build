@@ -237,7 +237,7 @@ a UF2 ([DEVELOPER_GUIDE.md §5–6](../../DEVELOPER_GUIDE.md#6-the-dev-override-
   Inside it, `from TS.tspico_io import …` and the other `TS` imports still
   resolve to the frozen modules.
 - **`/dev_extcmd.py`** replaces the frozen `TS.extcmd`: `TS2068_IO` tries
-  `from dev_extcmd import EXT_SA_FUNCT` first (6894;
+  `from dev_extcmd import EXT_SA_FUNCT` first (6932;
   [extcmd.md](extcmd.md)).
 - To go back: delete the file and restart.
 
@@ -324,7 +324,7 @@ says so (below). The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 49 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 50 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)); the manual's
@@ -752,7 +752,7 @@ power cycle before the driver learned to recover it
 | `/assets/romupdate.tap`, `/assets/dckupdate.tap` | the slot updaters | `build-basic.sh` → the same |
 | `/assets/romupd3.tap`, `/assets/dckupd3.tap` | the v3 card's slot updaters (`basic/assets/romupd3.bas`, `dckupd3.bas`) | `build-basic.sh` → the same | `MOUNT_FILE` for a `.ROM`/`.BIN`/`.DCK` |
 | `/activity.log` | the log | `SAVE_LOG`; `main.py` on a fatal error | `tpi:log`; trimmed to 64 KB at boot |
-| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6814–6815) | `TS2068_IO` | below |
+| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6852–6853) | `TS2068_IO` | below |
 | `/TMP/temp.tap` | the mounted TAP, copied from the card (or the updater tape) | `MOUNT_FILE` | `LOAD_TS`, `FWD`/`REW` via the table; removed by `FORGET_MOUNT` |
 | `/TMP/temp.bin` | the mounted ROM or DCK image (a DCK rebuilt to a full 64K by `DCK_IMAGE`) | `MOUNT_FILE`, `DCK_IMAGE` | `BLKRCV`; removed by `FORGET_MOUNT` |
 | `/TMP/native.tap` | the one-shot tape for `LOAD "f:…"` | `NATIVE_LOAD_PREP` | `LOAD_TS` |

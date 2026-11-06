@@ -25,8 +25,45 @@ UNSHOWABLE = "{|}~\x7f"
 def screen_name(s):
     """s as the 2068 lists it: every character it can't print or type
     becomes '?', which LOAD "tpi:..." then takes as a wildcard (LOAD_TPI).
-    '?' can't be part of a FAT name, so it never collides with a real one."""
+    '?' can't be part of a FAT name, so it never collides with a real one.
+    A name with nothing to replace comes back as it is: this runs for every
+    row of every listing, and rebuilding each name a character at a time
+    made a string per name for nothing (#384)."""
+    for c in s:
+        if c < " " or c > "~" or c in UNSHOWABLE:
+            break
+    else:
+        return s
     return "".join("?" if (c < " " or c > "~" or c in UNSHOWABLE) else c for c in s)
+
+
+def sort_items(items):
+    """os.ilistdir() items (tuples whose [0] is the name) as a new list in
+    name order, case folded: what sorting with a key of the lowered name
+    gives, without its cost on the Pico. MicroPython's sort calls the key on
+    every comparison, not once per item, and its quicksort takes the last
+    item as the pivot, so a folder already in name order is near its worst
+    case: 300 files made 45,149 lowered strings and took 1.58 s (v3 card,
+    2026-11-06), in the middle of building the listing. Here each name is
+    lowered once, an ordered folder is not sorted at all, and the list is
+    turned back into the items in place. FAT names differ in more than case,
+    so the lowered names are unique and the order is the same.
+
+    The items are all read first, and only then paired with their lowered
+    names, in the same list: pairs made while os.ilistdir() still yielded
+    put a short-lived pair and string between every kept item, and the
+    300-file listing then found no 2K block for CAT_COLOUR (v3, 2026-11-06)."""
+    d = list(items)
+    for i in range(len(d)):
+        it = d[i]
+        d[i] = (it[0].lower(), it)
+    for i in range(1, len(d)):
+        if d[i][0] < d[i - 1][0]:
+            d.sort()
+            break
+    for i in range(len(d)):
+        d[i] = d[i][1]
+    return d
 
 
 def match_shown(name, pat):
@@ -141,7 +178,7 @@ def select(items, pat):
     """
 
     dirs_l, files_l, other_l = [], [], []
-    for item in sorted(items, key=lambda it: it[0].lower()):
+    for item in sort_items(items):
         name = item[0]
         if name == "dirinfo.tap":
             continue
