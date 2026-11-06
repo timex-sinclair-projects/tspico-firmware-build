@@ -132,7 +132,6 @@ def setup(t, root):
         return True
     t.MOUNT_FILE = mount
     t.GET_DIRS = lambda path="/sd/TAP": ["/TAP"]
-    t.alldirs = ["/TAP", "/TAP/EMPTY", "/TAP/FULL", "/TAP/GAMES", "/TAP/GAMES/ARCADE"]
     t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", f_name="", offset_tbl=[], tap_idx=0,
                                   append=False, VERBOSE=False, LOG_LEVEL=2)
     t.prev_path = None
@@ -203,7 +202,6 @@ def test_erase(t, root):
         f.write(b"d")
     r = call(t, sent, E, "tpi:erase empty/")
     check(r[-1] == t._1_OK and not on_card(root, "EMPTY"), "empty directory (bar dirinfo.tap): removed")
-    check("/TAP/EMPTY" not in t.alldirs, "  and dropped from alldirs")
     t.TSP.cur_path = "/sd/TAP/GAMES/ARCADE"
     r = call(t, sent, E, "tpi:erase /games/")
     check(r[-1] == t._4_Q_Parameter, "the current directory's parent: Report Q")
@@ -327,8 +325,8 @@ def test_format(t, root):
     r = call(t, sent, F, "tpi:format nodir/x.tap")
     check(r[-1] == t._3_F_Invalid_file, "missing directory: Report F")
     r = call(t, sent, F, "tpi:format tools/")
-    check(r[-1] == t._1_OK and os.path.isdir(os.path.join(root, "tools")) and "/TAP/tools" in t.alldirs,
-          "dir/: made, and added to alldirs")
+    check(r[-1] == t._1_OK and os.path.isdir(os.path.join(root, "tools")),
+          "dir/: made")
     r = call(t, sent, F, "tpi:format tools/")
     check(r[-1] == t._3_F_Invalid_file, "dir/ again: Report F")
     r = call(t, sent, F, "tpi:format /")
@@ -369,6 +367,30 @@ def test_cd_and_ren(t, root):
     t.TSP.f_name = "/sd/TAP/CHESS.TAP"
     r = call(t, sent, R, "tpi:ren chess.tap|c.tap")
     check(r[-1] == t._4_Q_Parameter, "the mounted file: Q")
+    t.TSP.f_name = ""
+
+    print("tpi:cd CODE 0,1: every folder, walked when asked for (#384)")
+    check(not hasattr(t, "alldirs"), "no list of every folder kept between commands")
+    t.GET_DIRS = REAL_GET_DIRS
+    shown, sd = [], []
+    t.ListMenu = lambda lst, *a: shown.append(list(lst)) or -1
+    t.ACTIVATE_SD = lambda *a, **k: sd.append("on")
+    t.DEACTIVATE_SD = lambda *a, **k: sd.append("off")
+    t.ACTIVATE_MQ = lambda *a, **k: sd.append("mq")
+    t.TSP.cur_path = "/sd/TAP"
+    pre = bytearray(10)
+    pre[5] = 1                                                    # CODE 0,1
+    t.CDIR(pre, "xxxtpi:cd")
+    got = shown[0] if shown else None
+    check(got is not None and "/TAP" in got and "/TAP/GAMES/ARCADE" in got and got == sorted(got)
+          and all(os.path.isdir(t.os.real("/sd" + d)) for d in got),
+          "the menu lists the card's folders, sorted (%r)" % (got,))
+    check(sd[:3] == ["on", "off", "mq"], "the card is mounted for the walk and handed back (%r)" % (sd,))
+    os.mkdir(os.path.join(root, "NEWONE"))
+    t.CDIR(pre, "xxxtpi:cd")
+    check("/TAP/NEWONE" in shown[-1], "a folder made since shows the next time, no cache to update")
+    for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ"):
+        setattr(t, n, lambda *a, **k: None)
 
 
 def test_native_open(t, root):
@@ -622,6 +644,8 @@ def main():
     sys.modules["dev_extcmd"] = ext
     import TS.tspico as t
     t.TLM_ENABLED = False
+    global REAL_GET_DIRS
+    REAL_GET_DIRS = t.GET_DIRS
     real_prompt_each = t.PROMPT_EACH
     real_prompt_yn = t.SEND_MSG_PROMPT_YN
     root = tempfile.mkdtemp(prefix="disk_hosttest.")
