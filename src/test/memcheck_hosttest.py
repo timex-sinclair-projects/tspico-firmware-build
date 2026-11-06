@@ -187,6 +187,43 @@ def test_files():
     check(ok, "every block's checksum is right")
     d = M.dock()
     check(d[0] == 0 and d[1] == 2 and set(d[2:9]) == {0} and len(d) == 9 + 8192, "memdock: bank 0, one 8K chunk")
+    d = M.dock64()
+    check(list(d[:9]) == [0] + [2] * 8 and len(d) == 9 + 65536, "memdck64: bank 0, all eight 8K chunks")
+    check(0 not in d[9:], "  no 00 in the image: an empty FIFO's 00s can't pass for it")
+    work = tempfile.mkdtemp(prefix="memcheck_hosttest.")
+    built = os.path.exists(M.DCKTEST)
+    if built:
+        M.build_memtest = lambda: None
+        names = M.write_files(work, False, 2, "/GAMES", dck=True)
+        check(names == ("dcktest.tap", "memcfg.tap", "memdck64.dck")
+              and all(os.path.exists(os.path.join(work, n)) for n in names), "--dck: dcktest's three files (%r)" % (names,))
+    else:
+        print("  (dcktest.tap not built: tools/build-basic.sh; the --dck file check skipped)")
+
+
+def test_dck():
+    import memcheck as M
+    print("memcheck.py --dck: the stream's telemetry")
+    line = ("12:00:01 [TLM 1 dt=2 tx=0 rx=0] BLKRCV streamed by DMA: "
+            "why=0 sent=32768 of 32768 echo=00000000 rx=0")
+    check(M.parse_dma(M.WATCH_TIME.sub("", line)) == (0, 32768, 32768), "a DMA line: why, sent, of")
+    check(M.parse_dma("BLKRCV enter") is None, "not another BLKRCV line")
+    mem = "MEM tag=%s free=1 alloc=1 largest=1 files=0 dirs=0 lista=0 blocks=0 ms=1"
+    lines = [mem % "start", mem % "r1_mounted", line, line, mem % "r1_closed_t0",
+             mem % "r2_mounted", line, line.replace("why=0 sent=32768", "why=2 sent=100"),
+             mem % "r2_closed_t3", mem % "r3_mounted", mem % "r3_closed_t0", mem % "end"]
+    r = M.dck_rounds(lines)
+    check(sorted(r) == [1, 2, 3] and len(r[1]["pieces"]) == 2 and r[1]["tries"] == 0,
+          "pieces go to the round they follow; the tries from the tag (%r)" % (r.get(1),))
+    check(r[2]["tries"] == 3 and r[2]["pieces"][1] == (2, 100, 32768) and r[3]["pieces"] == [],
+          "a short piece, a retried close, a round with no telemetry")
+    text = "\n".join(M.dck_report(r))
+    check("| 1 | 2 | yes | 0 |" in text and "| 2 | 2 | NO why=0 32768 of 32768, why=2 100 of 32768 | 3 |" in text
+          and "| 3 | 0 | NO  | 0 |" in text and text.rstrip().endswith("NO."), "the table and the verdict")
+    good = M.dck_rounds(lines[:5])
+    check("first time: yes." in "\n".join(M.dck_report(good)), "one good round: yes")
+    check("TELEMETRY" in "\n".join(M.dck_report({1: {"pieces": [], "tries": 0}})),
+          "no DMA lines at all: says to turn TELEMETRY on")
 
 
 def main():
@@ -203,6 +240,7 @@ def main():
     test_meminfo(t, sent)
     test_parse()
     test_files()
+    test_dck()
     print("\n%d/%d passed" % (sum(results), len(results)))
     return 0 if all(results) else 1
 
