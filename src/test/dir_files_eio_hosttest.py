@@ -1,5 +1,8 @@
 """Host-side test for DIR_FILES on a failing SD card -- CPython, no Pico.
 
+(Also: a MemoryError, #384 -- a folder too big for the heap -- is handled
+the same way.)
+
 A TS-Pico's card mounted at boot and then failed its first write:
 
     File "TS/tspico.py", line 4437, in TS2068_IO
@@ -165,6 +168,33 @@ def test_dir_files(t, logs):
               "EIO from %s: ERROR logged with the reason" % what)
         check("dirinfo.tap" not in fos.files,
               "EIO from %s: no (half-written) dirinfo.tap left behind" % what)
+
+    # #384: a big folder on the v2 board ran out of heap in NEW_TAPBLK.
+    # Uncaught, a MemoryError reached the service loop's handler (three in a
+    # minute stop the firmware) and left the listing half-built.
+    fos = setup(t, None)
+    t.files = ["STALE.TAP"]
+    real_blk = t.NEW_TAPBLK
+
+    def no_heap(items, size):
+        raise MemoryError("memory allocation failed, allocating 9673 bytes")
+    t.NEW_TAPBLK = no_heap
+    real_gc, t.gc = t.gc, types.SimpleNamespace(collect=lambda: None, mem_free=lambda: 157000)
+    del logs[:]
+    try:
+        ok = t.DIR_FILES()
+        raised = None
+    except BaseException as e:                                  # noqa: BLE001
+        ok, raised = None, e
+    finally:
+        t.NEW_TAPBLK, t.gc = real_blk, real_gc
+    check(raised is None and ok is False, "MemoryError: returns False, does not raise (%r)" % (raised,))
+    check(t.files == [] and t.files_upper == [] and t.dirs == [] and t.dirs_upper == [],
+          "MemoryError: the half-built lists are emptied")
+    check(t.lista[32:64].startswith("SD: out of memory") and "Too many files" in t.lista
+          and len(t.lista) < 200, "MemoryError: lista keeps its layout and says why (%r)" % t.lista[32:])
+    check(any(lvl == 2 and "out of memory" in m for lvl, m in logs), "MemoryError: ERROR logged")
+    check("dirinfo.tap" not in fos.files, "MemoryError: the old folder's dirinfo.tap is gone")
 
 
 def test_boot(t, logs):

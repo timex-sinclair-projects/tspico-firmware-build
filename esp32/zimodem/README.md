@@ -12,8 +12,12 @@ come blank; the web updater installs this build through the card's own USB.
   - a phonebook dial (`ATD1234`) keeps the dial's own modifiers as well as
     the entry's. The card's 2050 mode dials `ATDX1234`, so the call obeys
     XON/XOFF and the card can pause Zimodem when its ring fills (#302);
-  - the version becomes **4.0.3.1**, which `ATI` reports, so the updaters
-    (which compare four parts) install it over a stock 4.0.3.
+  - the serial rate starts at 115200, the card's, instead of Zimodem's
+    1200. A blank module has no saved configuration, so a stock build
+    answered the card at a rate it doesn't listen at (4.0.3.2);
+  - the version becomes **4.0.3.2**, which `ATI` reports, so the updaters
+    (which compare four parts) install it over a stock 4.0.3 and over our
+    4.0.3.1.
 
   Then it builds it with PlatformIO, and merges the bootloader, partition table,
   `boot_app0` and the app into `out/zimodem-v3.bin`, one image for flash
