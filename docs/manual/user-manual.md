@@ -336,7 +336,8 @@ Your card came ready to use. If you set up a new one:
 1. Format it **FAT32** on your computer. Cards up to 16GB work.
 2. Create a folder called **`TAP`** at the top level of the card. The TS-Pico treats `TAP` as
    its root folder. (It makes the folder on a card that doesn't have one.)
-3. Copy your `.tap` files into `TAP`, or into folders inside it.
+3. Copy your `.tap` files into `TAP`, or into folders inside it. Keep each folder to about
+   100 files (see 3.1).
 4. If you like, copy the `help` folder from the TS-Pico release to the top level of the card,
    next to `TAP`. That's where `SAVE "tpi:help word"` finds its help pages.
 
@@ -489,6 +490,10 @@ path.
 
 To see what's inside a file, **LIST** it: `LIST "notes.txt"` shows a text file on the screen,
 and any other file as a hex dump (10.1).
+
+> **Note:** keep each folder to about 100 files. `CAT` shows about 20 at a time, so a folder of
+> 100 is five screens to page through; a few folders, say by type or by letter, are easier to
+> find your way around. Folders of up to 300 files have been tested and work.
 
 ![CAT: the path and card on a blue bar, then the folders, and each file's number on a cyan chip](images/cat.png)
 
