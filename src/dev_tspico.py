@@ -1306,13 +1306,13 @@ def LISTING_SIG(entries):                                                     # 
 def LISTING_FRESHEN():                                                        # re-read the folder if the card's copy changed
 
     """The card is mounted. Re-read the current folder (DIR_FILES: files,
-    lista, dirinfo.tap) if what is on the card no longer matches the last
+    lista) if what is on the card no longer matches the last
     listing. The Pico only noticed a card being swapped when a command found
     it missing or a different card; the SAME card, taken out, given a file
     on a Mac and put back between two commands, kept the old listing -- CAT
     didn't show the file and LOAD "tpi:" couldn't find it until a reboot
     (hardware, 2026-10-03). Reading the folder is cheap; rebuilding the
-    listing (dirinfo.tap, free space) happens only when it changed."""
+    listing (lista, free space) happens only when it changed."""
     try:
         os.chdir(TSP.cur_path)
         sig = LISTING_SIG(sorted(os.ilistdir(), key=lambda fname: fname[0].lower()))
@@ -1641,14 +1641,14 @@ def TAPDIR_COLOUR(text, headers):                                             # 
 
 def DIR_FILES():                                                                             # Get all files and directories from current path
     """
-    Rebuild files[], lista and dirinfo.tap for the current directory.
+    Rebuild files[] and lista for the current directory.
 
     Returns True on success. On an SD card error (OSError) or when the heap
     can't hold the listing (MemoryError) it logs an ERROR with the reason,
     leaves an empty listing that says so, and returns False instead of
     raising.
 
-    Any FatFs call can reach the card here, not just the dirinfo.tap write.
+    Any FatFs call can reach the card here, not just a write.
     The field failure (activity.log, 2026-09-26) was EIO from
     sdcard.writeblocks raised inside os.ilistdir(): FatFs flushing the
     sector that os.remove("dirinfo.tap") had dirtied. Uncaught, that took
@@ -1656,9 +1656,11 @@ def DIR_FILES():                                                                
     not even LOAD from the flash assets.
 
     MemoryError (#384): a 300-file folder on the v2 board ran out of heap in
-    NEW_TAPBLK, which builds dirinfo.tap's block as one bytes object (~9.7K
+    NEW_TAPBLK, which built dirinfo.tap's block as one bytes object (~9.7K
     in one piece; the largest free block was 13.6K and falling, REPL test
-    2026-11-06). Uncaught, it went to the service loop's handler as an
+    2026-11-06). That block is gone from the listing (DIRINFO_WRITE makes
+    dirinfo.tap when it is LOADed), but a big enough folder can still run
+    out. Uncaught, it went to the service loop's handler as an
     "unexpected error" -- the 2068 got a recovered status, the listing was
     left half-built, and three in a minute stop the firmware (FATAL). Now
     MOVE TO still lands in the folder and the listing says why it is empty.
@@ -1693,11 +1695,6 @@ def DIR_FILES():                                                                
     else:
         lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
 
-    try:
-        os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage; an old one lists the last folder
-    except:
-        pass
-
     return False
 
 
@@ -1718,22 +1715,17 @@ def LIST_DIR_FILES():                                                           
     L = []
     header = ""
     
-    dirinfo = []
-    tap_blk = []
-    tap_hdr = []
-    num_dirs = 0
-    num_files = 0
-    
     ext = catalog.DIR_EXT                                                                     # extensions to be included
     starts = ['.']                                                                            # first characters of files to be excluded
     
     ordered = True                                                                            # In the future, this could be controlled by an option
 
-    # dirinfo.tap is the synthetic TAP this function writes at the end (the
-    # listing in a form the Commander LOADs). It is left out of the listing
-    # by name below. It used to be deleted here first, a FAT write on every
-    # listing -- the write #62 traced field EIO errors to. (2026-09-30
-    # audit, §3.)
+    # dirinfo.tap (the listing as a TAP the menu program LOADs) is not
+    # written here any more: DIRINFO_WRITE makes it when it is LOADed (#384).
+    # Building it here cost the biggest allocation of every MOVE TO (one
+    # bytes object, ~9.7K for 300 files: where a big folder ran out of heap)
+    # and a card write per listing, the write #62 traced field EIO errors to.
+    # An old one on the card is still left out of the listing by name below.
 
     if ordered:
         listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
@@ -1748,10 +1740,8 @@ def LIST_DIR_FILES():                                                           
             dirs.append(archs[0])
             dirs_upper.append(archs[0].upper())
             nom = shorten_filename(catalog.screen_name(archs[0]), 20)
-            dirinfo.append("%-32s" %  nom)
             L.append("<%-21s       0 B" % (nom + ">"))
 
-    num_dirs = len(dirinfo)
     i = 0
     
     for archs in listing:
@@ -1765,12 +1755,12 @@ def LIST_DIR_FILES():                                                           
 
             nom = "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(archs[0]), 18), size_txt)
             L.append(nom)
-            dirinfo.append(nom)
 
             i += 1
 
     # Then every other file, without an index: LOAD "tpi:n" only counts the
-    # types above, and files[] / dirinfo.tap keep exactly those (spec §2).
+    # types above, and files[] / dirinfo.tap (DIRINFO_ROWS) keep exactly
+    # those (spec §2).
     for archs in listing:
         if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
                 and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
@@ -1793,22 +1783,76 @@ def LIST_DIR_FILES():                                                           
         lista = header + "".join(L)
     del L
 
-    num_files = len(files)
-    
-    dirinfo.insert(0, "%-32s" % num_dirs)
-    dirinfo.insert(1, "%-32s" % num_files)
-    
-    tap_blk = (NEW_TAPBLK(dirinfo, 32))
-    del dirinfo
-    long = len(tap_blk) - 4                                        # this is the pure data blk size stored in header; it's the block minus the first 4 bytes
-    tap_hdr = NEW_HDR(2, "dirinfo", long)                             # generate header for each block, with parameters
-    
-    with open("dirinfo.tap", "wb") as f_out:
-        f_out.write(tap_hdr)                                          # now write the header
-        f_out.write(tap_blk)                                           # and then the block
-
     # gc.collect()
     return
+
+
+def DIRINFO_ROWS(listing):                                                                   # dirinfo.tap's rows, from LIST_DIR_FILES' listing
+    """The rows of dirinfo.tap's a$, each exactly 32 characters, for a
+    folder listing in LIST_DIR_FILES' order (os.ilistdir's entries sorted by
+    lower-case name): the folders, then the files LOAD "tpi:n" numbers, with
+    the same numbers and the same filter as files[]. A generator, so nothing
+    but one row is held at a time."""
+    ext = catalog.DIR_EXT
+    for it in listing:
+        if it[1] == 16384:
+            yield "%-32s" % shorten_filename(catalog.screen_name(it[0]), 20)
+    i = 0
+    for it in listing:
+        if it[1] == 32768 and it[0][-3:].upper() in ext and it[0][0] != "." \
+                and it[0] != "dirinfo.tap":
+            yield "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(it[0]), 18),
+                                      catalog.size_text(int(it[3])))
+            i += 1
+
+
+def DIRINFO_WRITE():                                                                         # write dirinfo.tap for the current folder, row by row
+    """Write <cur_path>/dirinfo.tap: a TAP with one character array, a$ --
+    row 1 the number of folders, row 2 the number of files, then
+    DIRINFO_ROWS. The card is active. Called by LOAD_TPI when the name is
+    dirinfo.tap; that LOAD is the only reader (the flash menu program,
+    nofile.bas, and the manual's "for programmers" note).
+
+    It used to be built by LIST_DIR_FILES on every listing, as one bytes
+    object (NEW_TAPBLK) -- ~9.7K in one piece for 300 files, the allocation
+    a big folder ran out of heap in (#384) -- and written to the card on
+    every MOVE TO. Now it is made only when asked for, from a fresh read of
+    the folder, and written as it is made: the header first (the length is
+    known from the counts), then one 32-byte row at a time with the XOR
+    checksum kept as it goes. If the folder changed since files[] was built
+    (LISTING_SIG), the listing is rebuilt first, so the numbers in it are
+    the ones LOAD "tpi:n" uses. Raises OSError on a card error."""
+    os.chdir(TSP.cur_path)
+    listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
+    if LISTING_SIG(listing) != TSP.listing_sig:
+        DIR_FILES()                                                                          # files[] and lista to match
+    n_dirs = sum(1 for it in listing if it[1] == 16384)
+    n_files = sum(1 for _ in DIRINFO_ROWS(listing)) - n_dirs
+    rows = 2 + n_dirs + n_files
+    data = 1 + 4 + 32 * rows                                                                 # dims count, the two dims, the rows
+    head = bytes(((data + 2) & 0xFF, (data + 2) >> 8,                                        # block length: flag + data + checksum
+                  0xFF, 2, rows & 0xFF, rows >> 8, 32, 0))                                   # flag, 2 dims: rows x 32
+    crc = 0
+    for c in head[2:]:
+        crc ^= c
+    row = bytearray(32)
+    with open(TSP.cur_path + "/dirinfo.tap", "wb") as f:
+        f.write(NEW_HDR(2, "dirinfo", data))
+        f.write(head)
+
+        def put(text):
+            nonlocal crc
+            b = text.encode()
+            row[:] = (b + b" " * 32)[:32]
+            for c in row:
+                crc ^= c
+            f.write(row)
+
+        put("%-32s" % n_dirs)
+        put("%-32s" % n_files)
+        for text in DIRINFO_ROWS(listing):
+            put(text)
+        f.write(bytes((crc,)))
 
 
 def LOG(msg, level):                                                                    # Adds a timestamped new entry to log_entries
@@ -2041,7 +2085,7 @@ def NEW_HDR(type_hdr: int, fname, long: int):                      # This routin
     
     hdr = bytearray.fromhex('00')                                  # We start building the bytearray that will form the header: start with 0x00, a type header (FF=data)
     hdr += type_hdr.to_bytes(1, 'little')                          # Next, the filename passed as parameter
-    hdr += f"{fname:<10}"[:10]                                     # ...trimmed to 10 bytes and left-justified with blanks
+    hdr += f"{fname:<10}"[:10].encode()                            # ...trimmed to 10 bytes and left-justified with blanks
     
     long_b = int(long/256)                                         # Now we calculate LSB and MSB of block length
     long_a = int(((long/256) - long_b) * 256)
@@ -2059,42 +2103,6 @@ def NEW_HDR(type_hdr: int, fname, long: int):                      # This routin
     
     return(hdr)                                                    # and return the header
     
-
-def NEW_TAPBLK(items, maxsize: int):                               # This routine generates a data block for storing an array, with the parameters: array items, and max size of single item
-    
-    num_items = len(items)
-
-    dims = [0] * 4                                                 # This will hold LSB and MSB for both dimension of the array
-
-    dims[1] = int((num_items)/256)  
-    dims[0] = int(((num_items/256) - dims[1]) * 256)
-
-    dims[3] = int((maxsize)/256)
-    dims[2] = int(((maxsize/256) - dims[3]) * 256)
-
-    blk = bytearray.fromhex("FF02")                                # We start a new data block: FF for data, 02 for String array type
-
-    for el in dims:
-        blk += el.to_bytes(1, 'little')                            # Now, store each LSB/MSB in blk
-        
-    for el in items:                                               # Now onto the items themselves 
-        blk += el
-    
-    crc = 0
-    for el in blk:
-        crc = crc ^ el                                             # calculate CRC
-    
-    blk += crc.to_bytes(1, 'little')                               # and store it at the end of the blk
-    
-    len_blk = len(blk)
-    len2 = int((len_blk)/256)                                      # Now calculate blk length's LSB/MSB 
-    len1 = int(((len_blk/256) - len2) * 256)
-    
-    blk = len2.to_bytes(1, 'little') + blk                         #...and store it on the blk's first two positions
-    blk = len1.to_bytes(1, 'little') + blk
-
-    return(blk)                                                    # and return the blk
-
 
 def OFF_TABLE():                                                             # Builds an offset table of segments, from the current .TAP file
     
@@ -2999,7 +3007,7 @@ def DISK_ERASE_ONE(arg):                                                      # 
         if catalog.within(cur, real):
             return "Can't erase the current directory", _4_Q_Parameter
         try:
-            os.remove(real + "/dirinfo.tap")                                  # DIR_FILES' own file doesn't count
+            os.remove(real + "/dirinfo.tap")                                  # the listing tape doesn't count
         except OSError:
             pass
         try:
@@ -5796,6 +5804,19 @@ def LOAD_TPI(name, only_tap=False, fresh=False):
     .DCK and .BIN mount a TS-2068 updater program instead.
     """
     if name == "dirinfo.tap":
+        # Made now, from the folder as it is (DIRINFO_WRITE, #384): no longer
+        # kept up to date by every listing. MOUNT_FILE mounts the card
+        # itself, so the card is given back first.
+        try:
+            ACTIVATE_SD()
+            try:
+                DIRINFO_WRITE()
+            finally:
+                DEACTIVATE_SD()
+                ACTIVATE_MQ()
+        except (OSError, MemoryError) as e:
+            LOG("dirinfo.tap not written: %r" % e, 2)
+            return "Error mounting file: ", name, _4_Q_Parameter
         if MOUNT_FILE("%s/dirinfo.tap" % TSP.cur_path):
             return "Mounting dir info: ", name, _1_OK
         msg = "Error mounting file: "
