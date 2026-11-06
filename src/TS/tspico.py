@@ -1200,6 +1200,7 @@ def SAVE_MOUNT():                                                               
 
 
 tspico_io.SD_MOUNT = SAVE_MOUNT                                                 # 2026-09-30 audit, §2 #21
+tspico_io.BLOCK_BUF = board.BLOCK_BUF                                           # LOAD/SAVE blocks (v3; #384)
 
 
 def SD_NOTE_CARD(cid):                                                         # ACTIVATE_SD: a card mounted

@@ -60,41 +60,42 @@ In source order, with line numbers of the file as it is today:
 
 - 1–16: imports. `rp2.DMA` is imported as `_DMA`, `None` on MicroPython v1.20
   and under the host tests' fake `rp2`; `machine.mem32` as `_mem32` (line
-  109), `None` on a PC. `from TS.sdcard import *` and `from TS import native`.
+  127), `None` on a PC. `from TS.sdcard import *` and `from TS import native`.
 - 18–43: the two-firmware import rule, as a comment.
-- 45–95: module state and bus constants: `log_entries`, `_nofile_arch`,
-  `PORT_0F`, `TX_DEPTH`, `LOAD_CHUNK`, `_LOAD_BUF`, `_LOAD_MV`.
-- 97–150: the v3 card: `_tsbus_mq` (and `_DMA`, `_mem32` switched off),
+- 45–113: module state and bus constants: `log_entries`, `_nofile_arch`,
+  `PORT_0F`, `TX_DEPTH`, `LOAD_CHUNK`, `_LOAD_BUF`, `_LOAD_MV`, `BLOCK_BUF`,
+  `BLOCK`.
+- 115–168: the v3 card: `_tsbus_mq` (and `_DMA`, `_mem32` switched off),
   `DRAIN_MAX`, `LED`, `_LED`, `CAN_STREAM`.
-- 153–198: the fast PIO exec and the status register: `_SM0_EXECCTRL`,
+- 171–216: the fast PIO exec and the status register: `_SM0_EXECCTRL`,
   `_SM0_INSTR`, `_SM0_PINCTRL`, `_ENCODED`, `MQX`, `MQ_STATUS`.
-- 200–322: the pre-header capture: `RX_CAPTURE`, class `RxDMA` (`__init__`,
+- 218–340: the pre-header capture: `RX_CAPTURE`, class `RxDMA` (`__init__`,
   `arm`, `waiting`, `stop`, `take`), `RX_DMA`.
-- 325–364: USB stdin: `_stdin_ipoll`, `_stdin_readinto`, `_stdin_byte`,
+- 343–382: USB stdin: `_stdin_ipoll`, `_stdin_readinto`, `_stdin_byte`,
   `DRAIN_STDIN`.
-- 367–393: `MQ_TO_IDLE`.
-- 396–610: sending: `TX_ROOM`, `ECHO_KEEP`, `STREAM_DMA`, `QUEUE_WAIT_MS`,
+- 385–411: `MQ_TO_IDLE`.
+- 414–628: sending: `TX_ROOM`, `ECHO_KEEP`, `STREAM_DMA`, `QUEUE_WAIT_MS`,
   `STREAM_QUEUE`, `RX_WORD`.
-- 613–769: receiving blocks: `RXB_OK`, `RXB_ABORT`, `RXB_STALL`, `_RING_BITS`,
+- 631–787: receiving blocks: `RXB_OK`, `RXB_ABORT`, `RXB_STALL`, `_RING_BITS`,
   `_RING_WORDS`, `_RING_SETUP`, `_ring`, `SAY_READY`, `RX_RING`, `RX_BLOCK`,
   `_SAVE_HDR_RAW`.
-- 772–795: `OPEN_NOFILE_TAP`.
-- 798–1063: the four PIO programs `sel_bank`, `set_ctrl`, `set_dck` and
+- 790–813: `OPEN_NOFILE_TAP`.
+- 816–1081: the four PIO programs `sel_bank`, `set_ctrl`, `set_dck` and
   `TS_IO_DUAL`. They are explained instruction by instruction in
   [pio.md](pio.md); this chapter has no entries for them.
-- 1066–1123: `REWIND_ABORTED_SEARCH`, `ENA_MQ_DUAL`.
-- 1126–1227: the SD card and the log: `SD_MOUNT`, `ENA_SD`, `LOG_ADD`.
-- 1230–1307: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
+- 1084–1141: `REWIND_ABORTED_SEARCH`, `ENA_MQ_DUAL`.
+- 1144–1245: the SD card and the log: `SD_MOUNT`, `ENA_SD`, `LOG_ADD`.
+- 1248–1325: refusing a LOAD: `_ld_err`, `_ld_err_t`, `_ld_err_staged`,
   `LOAD_REFUSE`, `FIRST_STATUS`, `LOAD_RETRY_DONE`.
-- 1310–1919: `LOAD_TS`, `LOAD_SERVE`.
-- 1921–1961: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
+- 1328–1937: `LOAD_TS`, `LOAD_SERVE`.
+- 1939–1979: ZX48 mode's limits and slow paths: `ZX_STALL_MS`,
   `ZX_BLOCK_GAP_MS`, `ZX_FLUSH_TX`, `ZX_ROOM`.
-- 1964–2044: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
+- 1982–2062: UPDATE mode: `TAPE_STREAM`, `TAPE_STREAM_OF`, `ZX_ARM`,
   `ZX_STREAM`.
-- 2047–2330: `LOAD_ZX`, `ZX_C_BLOCKS`, `LOAD_ZX_C`.
-- 2333–2439: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
-- 2442–2915: `SAVE_TS`.
-- 2918–3052: `_xor`, `SAVE_ZX`.
+- 2065–2348: `LOAD_ZX`, `ZX_C_BLOCKS`, `LOAD_ZX_C`.
+- 2351–2457: SAVE helpers: `SAVE_NAME`, `REFUSE_SAVE`, `DRAIN_REFUSED_SAVE`.
+- 2460–2933: `SAVE_TS`.
+- 2936–3070: `_xor`, `SAVE_ZX`.
 
 The last section of this chapter lists the places where a comment, a design
 document and the code disagree.
@@ -135,6 +136,21 @@ data loop reading 00h from an empty TX and give Report J
 | `LOAD_CHUNK` | `const(256)` | How many bytes a file-streamed LOAD block reads at a time. One `readinto` per byte cost too much on v1.29: the ROMs read blind every ~43–47 µs and the log showed "TX ran dry" in 6914-byte blocks on both the 2068 and ZX48 paths (hardware, 2026-10-02). |
 | `_LOAD_BUF` | `bytearray(LOAD_CHUNK)` | The chunk buffer, made once at import so the stream loops allocate nothing. Used by `LOAD_TS` (the checksum pass and the data stream when the block does not fit in RAM) and `LOAD_ZX`. |
 | `_LOAD_MV` | `memoryview(_LOAD_BUF)` | Sliced (`_LOAD_MV[:left]`) for the tail of a block: one small allocation per block, not per byte. |
+| `BLOCK_BUF` | `None` | The board's shared block buffer: `None` at import; `tspico.py` sets it to `board.BLOCK_BUF` at its own import (1203), the v3 card's 48K buffer or `None` on v2 ([board.md](board.md#block_size-block_buf-_buf-_zeros)). A hook, not an import: the upgrade UF2 freezes this module without `TS.board`. |
+
+### `BLOCK(n)`
+
+`n` bytes for a LOAD or SAVE data block. With `BLOCK_BUF` set and at least
+`n` long, `memoryview(BLOCK_BUF)[:n]`: its front, no copy; else a new
+`bytearray(n)`, which may raise `MemoryError` as before. Callers:
+`LOAD_TS` (a data block), `LOAD_ZX`, `SAVE_TS`, `SAVE_ZX`. Each is done with
+it before it returns, and nothing else holds the buffer meanwhile. Why: on
+the v3 card a 35000-byte block found no free block of its size once a
+300-file folder had been listed (#384); the buffer made at boot always has
+one. The callers treat what comes back as a `bytearray`: `readinto`,
+indexing, assignment, `len`, slices, `write` and the DMA all take a
+`memoryview` the same way (`block_buf_hosttest.py` reruns the LOAD, SAVE
+and ZX48 host tests with the buffer set).
 
 ## The v3 card
 
@@ -676,7 +692,7 @@ on `False`, and lazily by `LOAD_TS`.
 
 ## The PIO programs
 
-Lines 798–1063 define `sel_bank` (bank selection on A15–A18), `set_ctrl` (the
+Lines 816–1081 define `sel_bank` (bank selection on A15–A18), `set_ctrl` (the
 control lines /BE, A14_L, `U10_ENA`, `U13_ENA`), `set_dck` (`U10_ENA` and
 `U13_ENA` only, for DOCK access without ROM mapping) and `TS_IO_DUAL` (the two ports; 20
 instructions, with the auto-busy `mov(y, null)` of issue #14). They are
@@ -955,9 +971,10 @@ bad XOR checksum. Before this, each of them reached the Z80, which for a
 header just asked again (archive tapes under ZEsarUX ended in Report T,
 2026-10-04). A lap with no block of the requested type at all ends the search
 with status 7 for a header and 2 for a data block. The block is read into RAM
-first — `hdr = bytearray(totbytes - 1)`, the content and the CRC, the flag
-being `blk_info[2]` — always for a header, and for a data block after a
-`gc.collect()` with `MemoryError` falling back to the file (`seek` back to
+first — the content and the CRC, the flag being `blk_info[2]` — always for a
+header (`hdr = bytearray(totbytes - 1)`), and for a data block after a
+`gc.collect()` into `hdr = BLOCK(totbytes - 1)` (the v3 card's shared buffer,
+else a new `bytearray`) with `MemoryError` falling back to the file (`seek` back to
 `offset + 3`, the first content byte). Why RAM: a LittleFS read can stall for a
 few hundred µs on a cache refill or a block boundary, longer than the 4-deep TX
 FIFO covers at ~47 µs a byte: "TX ran dry" 17 times in a 35795-byte block
@@ -1198,7 +1215,7 @@ consulted. The three-byte prefix is read at `TSP.offset`. `ZX_FLUSH_TX` clears
 the tail of a block the ROM did not read to the end, so the flag goes in
 clean; `gc.collect()` runs while the ROM waits for READY (a GC mid-block stops
 core0 for 5–25 ms and the Z80 reads 00h from an empty TX every 43 µs). The
-whole block (content + CRC) is read into `whole = bytearray(totbytes - 1)`,
+whole block (content + CRC) is read into `whole = BLOCK(totbytes - 1)`,
 `MemoryError` falling back to the file a chunk at a time — no file access once
 the ROM reads blind ("TX ran dry" 9–10 times a block, hardware 2026-10-02/03).
 
@@ -1386,7 +1403,8 @@ after the final status had told the 2068 "0 OK", and its `END_MSG` then
 blocked in `MQ.put` on a Z80 that had stopped reading: `SAVE "bad file"`
 wedged the Pico until reset); BLEN (`hdr[14:16]`) of 0 — A, because the ROM's
 SA-BYTES loop decrements DE then tests it, so a zero length floods 65536 bytes
-onto the bus; and the block buffer `bytearray(blen + 4)`, retried once after
+onto the bus; and the block buffer `BLOCK(blen + 4)` (the v3 card's shared
+buffer when it fits, else a new `bytearray`), retried once after
 `gc.collect()` — Report 6, because BLEN is 16 bits, `SAVE "x" CODE 0,65535` is
 legal, and an unguarded `MemoryError` dropped the Pico to a REPL while the
 2068 waited out its ~19.9 s ([PROTOCOL.md §13](../../PROTOCOL.md), "Guard every
@@ -1504,7 +1522,7 @@ it is dispatched as a command — and returns with `nxt` -1. Steps:
 `RX_BLOCK(MQ, hdr, 21, ZX_STALL_MS, ZX_STALL_MS, "ready")` (READY once
 listening: the `'S'` dropped Y and the ZX ROM polls 0Fh before sending);
 not `RXB_OK` fails without a drain. The block must be a tape header: length
-17, flag 0, parity 0, else `fail` with a drain. `blk = bytearray(n + 4)` after
+17, flag 0, parity 0, else `fail` with a drain. `blk = BLOCK(n + 4)` after
 a `gc.collect()`, `MemoryError` failing with a drain. `RX_WORD(MQ,
 ZX_BLOCK_GAP_MS)` must be `'S'` (83): anything else is logged and returned as
 `nxt`, so `ZX48_IO` dispatches a command byte, or -1 for silence. Then
