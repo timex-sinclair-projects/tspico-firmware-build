@@ -13,7 +13,10 @@ a time. This checks, with the real TS.tspico functions on a fake card:
     LIST_DIR_FILES' dirinfo rows + NEW_TAPBLK, as they were), checksums and
     lengths included;
   * a folder changed since the last listing is listed again first, so the
-    numbers in a$ are the ones LOAD "tpi:n" uses.
+    numbers in a$ are the ones LOAD "tpi:n" uses;
+  * LIST_DIR_FILES collects every LIST_GC_EVERY rows (the v3 heap ran out
+    of contiguous room in a 300-file folder without it), and the listing is
+    the same with or without those collections.
 
 Run:  python3 src/test/dirinfo_hosttest.py
 """
@@ -152,6 +155,37 @@ def main():
     t.open = real_open
     check(st == t._4_Q_Parameter and len(t.mounted) == n, "Report Q, nothing mounted (%r)" % (msg,))
     check(any(lvl == 2 and "dirinfo.tap" in m for lvl, m in logs), "ERROR logged")
+
+    print("a big folder: a collection every LIST_GC_EVERY rows")
+    big = os.path.join(root, "BIG")
+    os.makedirs(big)
+    for k in range(95):
+        with open(os.path.join(big, "f%03d.tap" % k), "wb") as f:
+            f.write(b"b")
+    for k in range(3):
+        os.makedirs(os.path.join(big, "dir%d" % k))
+    with open(os.path.join(big, "notes.txt"), "wb") as f:
+        f.write(b"n")                                           # a row without a number
+    t.os.chdir("/sd/TAP/BIG")
+    real_gc = t.gc
+    counted = []
+    t.gc = types.SimpleNamespace(collect=lambda: counted.append(1))
+    try:
+        t.LIST_DIR_FILES()
+        packed = (t.lista, list(t.files), list(t.dirs))
+        rows = 3 + 95 + 1
+        check(len(counted) == rows // t.LIST_GC_EVERY,
+              "%d rows: %d collections, one per %d rows" % (rows, len(counted), t.LIST_GC_EVERY))
+        every = t.LIST_GC_EVERY
+        t.LIST_GC_EVERY = 10 ** 9
+        del counted[:]
+        t.LIST_DIR_FILES()
+        t.LIST_GC_EVERY = every
+        check(not counted and (t.lista, t.files, t.dirs) == packed,
+              "the same listing with no collections: folders, numbered files, the other file")
+    finally:
+        t.gc = real_gc
+    check(len(t.files) == 95 and len(t.dirs) == 3 and "notes.txt" in t.lista, "  all 99 rows there")
 
     shutil.rmtree(root, ignore_errors=True)
     ok = all(results)

@@ -1692,6 +1692,9 @@ def DIR_FILES():                                                                
     return False
 
 
+LIST_GC_EVERY = 32                                                            # LIST_DIR_FILES collects after this many rows (#384)
+
+
 def LIST_DIR_FILES():                                                                        # DIR_FILES without the error handling; raises OSError on SD errors
     
     global files
@@ -1720,6 +1723,18 @@ def LIST_DIR_FILES():                                                           
     # bytes object, ~9.7K for 300 files: where a big folder ran out of heap)
     # and a card write per listing, the write #62 traced field EIO errors to.
     # An old one on the card is still left out of the listing by name below.
+    #
+    # A collection every LIST_GC_EVERY rows (#384): the firmware leaves
+    # gc.threshold() off, so MicroPython collects only when the heap is
+    # full. Each row's short-lived strings (screen_name, the upper-cased
+    # extension, the formatting) push allocations up through the heap, and
+    # the rows that are kept end up spread over all of it: on the v3 card
+    # (about 100K free) a 300-file folder failed at file 256, growing files[]
+    # by 2K, with 62K free in pieces of at most 480 bytes. Collecting as it
+    # goes keeps the kept rows packed: the same folder then lists with 46K
+    # in one piece (REPL, 2026-11-06). A collection takes 4.3 ms on v3; no
+    # bus traffic runs during a listing.
+    n = 0
 
     if ordered:
         listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
@@ -1734,6 +1749,9 @@ def LIST_DIR_FILES():                                                           
             dirs.append(archs[0])
             nom = shorten_filename(catalog.screen_name(archs[0]), 20)
             L.append("<%-21s       0 B" % (nom + ">"))
+            n += 1
+            if not n % LIST_GC_EVERY:
+                gc.collect()
 
     i = 0
     
@@ -1749,6 +1767,9 @@ def LIST_DIR_FILES():                                                           
             L.append(nom)
 
             i += 1
+            n += 1
+            if not n % LIST_GC_EVERY:
+                gc.collect()
 
     # Then every other file, without an index: LOAD "tpi:n" only counts the
     # types above, and files[] / dirinfo.tap (DIRINFO_ROWS) keep exactly
@@ -1758,6 +1779,9 @@ def LIST_DIR_FILES():                                                           
                 and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
             L.append("    %-18s%10s" % (shorten_filename(catalog.screen_name(archs[0]), 18),
                                         catalog.size_text(int(archs[3]))))
+            n += 1
+            if not n % LIST_GC_EVERY:
+                gc.collect()
     
     del listing
 
