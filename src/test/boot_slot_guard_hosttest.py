@@ -232,6 +232,18 @@ def test_dck(t, image):
     check(r is not None and r[2] == t._4_Q_Parameter and t.MQ.puts == [],
           "tpi:blkrcv with DOCK 2,4 while booted from 5: Report Q, nothing streamed")
 
+    print("  dckupdate's restore to 2,0 with the .DCK still mounted (#372)")
+    sent = setup(t, (2, 1), (1, 0), "/sd/TAP/GAME.DCK", image)
+    r = memdock(t, sent, 0, 2)
+    check(r[2] == t._1_OK and t.getDock() == (2, 0),
+          "booted from 1, CODE 0,2 back to flash 0 (0+1): allowed (%r)" % (r,))
+    sent = setup(t, (2, 1), (1, 0), "/sd/TAP/GAME.DCK", image)
+    r = memdock(t, sent, 2, 0)
+    check(r[2] == t._1_OK and t.getDock() == (2, 0), "  and CODE 2,0: allowed (%r)" % (r,))
+    r = blkrcv(t, sent)
+    check(r is not None and r[2] == t._4_Q_Parameter and r[0] == "Can't write Flash slot 0:"
+          and t.MQ.puts == [], "  tpi:blkrcv there still refuses: Report Q, nothing streamed")
+
 
 def test_plain_dock(t, image):
     print("Nothing mounted (plain DOCK use, and romupdate's restore after tpi:close)")
@@ -269,6 +281,46 @@ def test_system_slots(t, image):
           and t.SYSTEM_SLOT_LOCK(2, 0) is not None, "SYSTEM_SLOT_LOCK: flash 0 only")
 
 
+def test_dma_pieces(t):
+    print("BLKRCV streams by DMA in 32K pieces, one per Z80 write loop (#372)")
+    # A 64K bytearray doesn't fit the v2 heap (largest block ~52K): BLKRCV
+    # fell to the hand loop, put 00s in the flash and blocked in put().
+    calls = []
+
+    def fake_dma(MQ, buf, echo, stall, ready, first_ms=0):
+        calls.append((bytes(buf), stall, ready, first_ms))
+        return 0, len(buf), -1
+
+    saved = t.STREAM_DMA, t.tspico_io.CAN_STREAM
+    t.STREAM_DMA, t.tspico_io.CAN_STREAM = fake_dma, lambda: True
+    big = bytes((i * 7 + (i >> 8)) & 0xFF for i in range(65536 + 5000))
+    fd, path = tempfile.mkstemp(prefix="dma_pieces.", suffix=".bin")
+    with os.fdopen(fd, "wb") as f:
+        f.write(big)
+    try:
+        sent = setup(t, (2, 1), (2, 4), "/sd/TAP/GAME.DCK", path)
+        r = blkrcv(t, sent)
+        check(r is None and t.MQ.puts == [t._1_OK], "a .DCK: OK status, the image by DMA")
+        check([len(c[0]) for c in calls] == [32768, 32768],
+              "  two 32768-byte pieces, not one 64K buffer (%r)" % ([len(c[0]) for c in calls],))
+        check(b"".join(c[0] for c in calls) == big[:65536], "  the pieces are the image, in order")
+        check(all(c[1] == 3000 and c[2] is False and c[3] == t.CMD_STALL_MS for c in calls),
+              "  each piece waits CMD_STALL_MS for its first read (the erase, or BASIC's PRINTs), "
+              "then 3 s, with no READY of its own")
+        for size, want in ((16384, [16384]), (32768, [32768])):
+            del calls[:]
+            with open(path, "wb") as f:
+                f.write(big[:size])
+            sent = setup(t, (2, 1), (2, 4), "/sd/TAP/TEST.ROM", path)
+            r = blkrcv(t, sent)
+            check(r is None and [len(c[0]) for c in calls] == want
+                  and b"".join(c[0] for c in calls) == big[:size],
+                  "a %dK .ROM: one piece (%r)" % (size // 1024, [len(c[0]) for c in calls]))
+    finally:
+        t.STREAM_DMA, t.tspico_io.CAN_STREAM = saved
+        os.remove(path)
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -289,6 +341,7 @@ def main():
         test_dck(t, image)
         test_plain_dock(t, image)
         test_system_slots(t, image)
+        test_dma_pieces(t)
     finally:
         os.remove(image)
     ok = all(results)

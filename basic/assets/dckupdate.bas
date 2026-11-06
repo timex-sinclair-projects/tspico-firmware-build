@@ -59,7 +59,15 @@
   570 PRINT " press ""D"" during boot."
   580 INPUT "Set DOCK to ";(loc);",";(sl);" and"'"RESTART NOW (y/N)?";c$
   590 PRINT '">Unmounting .dck file    ...";
-  600 IF NOT demo THEN SAVE "tpi:close"
+# Right after the write loop tpi:close can come back J (#372): try it again,
+# up to five times a second apart, rather than stop the loader on line 600.
+# If it never answers, carry on: the DOCK restore below works either way.
+  592 LET tr=0: IF demo THEN GO TO 610
+  594 ON ERR GO TO 602
+  600 SAVE "tpi:close": ON ERR RESET : GO TO 610
+  602 ON ERR RESET : IF PEEK 23739<>19 THEN PRINT "STOPPED": STOP : REM BREAK, not J
+  603 LET tr=tr+1: IF tr<5 THEN PAUSE 50: GO TO 594
+  604 PRINT "FAILED": GO TO 620
   610 PRINT "OK"
   620 IF c$="y" OR c$="Y" THEN LET n=1: GO TO 3000
   630 PRINT ">Restoring DOCK slot...";

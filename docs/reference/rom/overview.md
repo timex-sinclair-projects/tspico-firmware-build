@@ -47,7 +47,7 @@ All checksums below were computed from the files in the repository.
 | 1.1 | `ROMs/TSPICO-11-home`, `-exrom` | 16K + 16K | `E8714BED`, `268649F6` | 15h | Gustavo Pane's ROM as the boards shipped; the only public release before ROM 2.2 | what users still have (the upgrade UF2 replaces it; [../firmware/upgrade.md](../firmware/upgrade.md)) |
 | the base image | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | 1.1 plus 104 EXROM bytes (a ready-wait and guard in the Y/N loop, and BREAK at the SAVE prompt) and the version byte | build input: the base `tspico-sync.asm` patches; never released |
 | the SYNC layer | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | the base image plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | build input: the base `build-rom.py` patches; never released |
-| **ROM 2.3** (#227, #228) | `src/rom/TSPICO-23.ROM` | 32K | `614CE7E4` | 23h | the SYNC layer plus the disk-command layer: 23 patches and the module at EXROM 3000h–38EBh; 2417 bytes in 21 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less six patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **ROM 2.3** (#227, #228) | `src/rom/TSPICO-23.ROM` | 32K | `22891815` | 23h | the SYNC layer plus the disk-command layer: 23 patches and the module at EXROM 3000h–391Ah; 2450 bytes in 22 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less six patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX build input | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base `tspico-zx48-v3.asm` patches |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | the ZX build input plus a WAIT_RDY fix, `LOAD "tpi:…"` and `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
 
@@ -119,8 +119,8 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | the base image | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | the SYNC layer | [exrom-sync.md](exrom-sync.md) |
 | 23D4h–2FFFh | 3116 | `FFh`, free | | |
-| 3000h–38EBh | 2284 | the disk-command module (377Fh–37B4h `PS_READ`, from ROM 2.3; 37B5h–38EBh the COPY, LIST and RESTORE entry) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
-| 38ECh–3FFFh | 1812 | `FFh`, free | | |
+| 3000h–391Ah | 2331 | the disk-command module (3771h–377Eh 14 free `FFh`; 377Fh–37B4h `PS_READ`, from ROM 2.3; 37B5h–38EBh the COPY, LIST and RESTORE entry; 38ECh–391Ah the speech channel's helpers, #375) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
+| 391Bh–3FFFh | 1765 | `FFh`, free | | |
 
 Chunk 0 is effectively full: the 1K hole at 1800h was used for the driver,
 and the stock "call into HOME" sequence, repeated through the ROM, was
@@ -245,7 +245,7 @@ Every `IN`/`OUT` on the TS-Pico's two ports in ROM 2.2 (HOME has none):
 | 2320h | `OUT (0Fh),A` (03h) | BRK_ABORT | the abort on BREAK |
 | 23A7h | `IN A,(0Fh)` | BIOS WF_NPH | the BIOS ready-wait |
 | 23C0h | `OUT (0Fh),A` (03h) | BIOS WF_NPH | its BREAK abort |
-| 3662h | `IN A,(0Fh)` | CH_SEND | a channel command waits for IDLE before its SYNC |
+| 3654h | `IN A,(0Fh)` | CH_SEND | a channel command waits for IDLE before its SYNC |
 | 2020h, 2023h | `OUT (0Fh),A` (20h, then 00h) | — | dead: after a `RET`, never called ([PROTOCOL_FROM_ROM.md](../../rom-analysis/PROTOCOL_FROM_ROM.md#0x2000-0x203e-is-a-relocation-landing-pad-not-an-api-table)) |
 | 2236h | `OUT (0Fh),A` (00h) | — | after a `RET`; nothing jumps or calls here *(inferred unreachable)* |
 
@@ -362,10 +362,11 @@ Twenty-three, applied in this order (the last four are ROM 2.3's, and so are 19D
 | EXROM 045Fh | `PUSH AF / JR 0465h` → `JP 377Fh` | `PRINT_STRING_FROM_PICO` becomes the module's `PS_READ`: control-code values and bytes ≥ 80h are text (#228) | [exrom-fdd.md](exrom-fdd.md#ps_read) |
 
 The difference the disk-command layer makes, measured on the committed
-images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2417 bytes in 21 hunks: 107
-in HOME, 31 in the EXROM outside the module, and 2279 in the module's
-region — 5 of the module's 2284 bytes are `FFh`, the same as the free space
-they replaced. The three version patches replace the SYNC layer's own version marks
+images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2450 bytes in 22 hunks: 107
+in HOME, 31 in the EXROM outside the module, and 2312 in the module's
+region — 19 of the module's 2331 bytes are `FFh`, the same as the free space
+they replaced (14 of them the free run before `PS_READ`, which splits the
+module into two hunks). The three version patches replace the SYNC layer's own version marks
 (its banner characters, `20h` and `0020h`). The byte-by-byte account is in the build
 history ([ROM_CHANGES.md](../../ROM_CHANGES.md#rom-21-home-and-exrom-patches)).
 

@@ -21,12 +21,18 @@ chapter covers the parts that are speech's alone:
 How they're joined up is elsewhere:
 - the ring, the DMA and the ports: [tsbus.md](tsbus.md#speech), in `tsbus.c`;
 - the board's calls: [board.md](board.md#speech_startvolume-rate-portstrue);
-- `tpi:say`: [tspico-commands.md](tspico-commands.md#saypre-cmd).
+- `tpi:say`: [tspico-commands.md](tspico-commands.md#saypre-cmd);
 
-There is no speech channel (`OPEN #n,"s:"`): the ROM's `CH_OPEN_HOOK` claims
-only `d:` and `f:` specs and gives the rest to the stock 2068 code, whose `s`
-is the screen. Adding it would need a ROM change, so it was dropped
-(2026-10-12).
+- the speech channel, `OPEN #n,"v:"` then `PRINT #n`: each line printed is
+  said, through `board.say` like `tpi:say` but with no 23-character limit
+  ([channels.md](channels.md#channelsopen_speechself-stream-say),
+  [tspico-disk.md](tspico-disk.md#ch_openpre-cmd)).
+
+The channel's letter is `v` (voice), not `s`. A first try in October 2026
+used `s:` and was dropped because the ROM's `CH_OPEN_HOOK` claimed only `d:`
+and `f:` then, and the stock 2068 code takes `s` as the screen; #375 changed
+the hook to claim `v:` too, which also keeps `"s"` and `"s:"` from meaning
+different things.
 
 Where each piece comes from, and on what terms, is in
 [`NOTICE`](../../../NOTICE): Microchip's ROM (acknowledged, as its 2007

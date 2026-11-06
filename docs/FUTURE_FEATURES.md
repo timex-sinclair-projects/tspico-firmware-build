@@ -158,7 +158,7 @@ file. That is a hardware question before it is a firmware one.
 
 - **Speech** has left this list: it has a proposal,
   [v3-speech-proposal.md](v3-speech-proposal.md) (the SP0256-AL2 emulated from
-  its ROM, `tpi:say`, an `s:` channel, and David's speech board's ports).
+  its ROM, `tpi:say`, a `v:` channel, and David's speech board's ports).
 
 - **The OLED status display** and **the Kempston joystick** wait on hardware:
   [v3-oled-proposal.md](v3-oled-proposal.md), and the `v3-kempston` branch.
