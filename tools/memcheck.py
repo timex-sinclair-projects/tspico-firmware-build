@@ -187,11 +187,15 @@ def parse_map(lines):
             "cells": len(cells)}
 
 
+WATCH_TIME = re.compile(r"^\d\d:\d\d:\d\d ")
+
+
 def collect(lines):
     """The MEM rows and the heap maps ({tag: summary}) in console lines."""
     rows, maps = [], {}
     cur, tag = None, None
     for line in lines:
+        line = WATCH_TIME.sub("", line)     # pico-serial.py watch puts the time first
         m = re.search(r"MEM map begin tag=(\S+)", line)
         if m:
             cur, tag = [], m.group(1)

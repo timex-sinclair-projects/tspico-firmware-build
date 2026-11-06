@@ -157,6 +157,9 @@ def test_parse():
     with redirect_stdout(io.StringIO()):
         text = M.report(rows, maps, out)
     check("| r1_memdir |" in text and os.path.exists(os.path.join(out, "mem.csv")), "a report and a CSV")
+    rows, maps = M.collect(["08:36:22 " + l for l in lines])
+    check(len(rows) == 2 and maps.get("start", {}).get("cells") == 4 * 64,
+          "the same lines as watch saves them, a time first: the map is still read")
 
 
 def test_files():
