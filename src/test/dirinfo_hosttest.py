@@ -14,9 +14,12 @@ a time. This checks, with the real TS.tspico functions on a fake card:
     lengths included;
   * a folder changed since the last listing is listed again first, so the
     numbers in a$ are the ones LOAD "tpi:n" uses;
-  * LIST_DIR_FILES makes no rows and collects nothing: lista is a DirText,
-    its rows made from INDEX when read (#384), and it reads as the whole
-    listing.
+  * LIST_DIR_FILES makes no rows: lista is a DirText, its rows made from
+    INDEX when read (#384), and it reads as the whole listing. It collects
+    once, after reading the folder and before it makes anything it keeps
+    (the signature, the DirText), so those don't land past the garbage;
+  * DEACTIVATE_SD drops the SD card driver (SD_DEV), made new by every
+    mount, so it isn't kept between commands either.
 
 Run:  python3 src/test/dirinfo_hosttest.py
 """
@@ -93,6 +96,7 @@ def main():
     with open(os.path.join(root, "dirinfo.tap"), "wb") as f:
         f.write(b"OLD")                                         # an old firmware's, stale
     dir_files = t.DIR_FILES                                     # D.setup stubs it; the real one is under test
+    deactivate_sd = t.DEACTIVATE_SD                             # and this one, for the SD_DEV check
     D.setup(t, root)
     t.DIR_FILES = dir_files
     t.os.statvfs = lambda p: (512, 512, 1000, 500, 500, 0, 0, 0, 0, 255)
@@ -156,7 +160,7 @@ def main():
     check(st == t._4_Q_Parameter and len(t.mounted) == n, "Report Q, nothing mounted (%r)" % (msg,))
     check(any(lvl == 2 and "dirinfo.tap" in m for lvl, m in logs), "ERROR logged")
 
-    print("a big folder: no rows made, no collections, while it lists")
+    print("a big folder: no rows made, one collection before what it keeps")
     big = os.path.join(root, "BIG")
     os.makedirs(big)
     for k in range(95):
@@ -169,20 +173,29 @@ def main():
     t.os.chdir("/sd/TAP/BIG")
     real_gc = t.gc
     counted = []
-    t.gc = types.SimpleNamespace(collect=lambda: counted.append(1))
+    t.gc = types.SimpleNamespace(collect=lambda: counted.append((t.TSP.listing_sig, t.lista)))
     made = []
     real_row = t.DirText.row
     t.DirText.row = lambda self, r: made.append(r) or real_row(self, r)
     try:
         t.LIST_DIR_FILES()
-        check(not counted and not made and isinstance(t.lista, t.DirText),
-              "99 entries: lista is a DirText, no row made and no collection while listing")
+        check(not made and isinstance(t.lista, t.DirText),
+              "99 entries: lista is a DirText, and no row was made")
+        check(counted == [(None, "")] and t.TSP.listing_sig is not None,
+              "  one collection, before the signature and the DirText were made")
         check(len(t.lista) == 128 + 32 * 99 and t.lista[128 + 32 * 3:128 + 32 * 3 + 4] == "000 ",
               "  it reads as the listing: 99 rows of 32, the first numbered row after the 3 folders")
     finally:
         t.gc = real_gc
         t.DirText.row = real_row
     check(len(t.files) == 95 and len(t.dirs) == 3 and "notes.txt" in t.lista, "  all 99 rows there")
+
+    print("the SD card driver goes with the mount")
+    t.SD_DEV = object()
+    t.os.umount = lambda p: None
+    t.board = types.SimpleNamespace(sd_release_bus=lambda: None)
+    deactivate_sd()
+    check(t.SD_DEV is None, "DEACTIVATE_SD drops SD_DEV: nothing of the mount is kept between commands")
 
     shutil.rmtree(root, ignore_errors=True)
     ok = all(results)

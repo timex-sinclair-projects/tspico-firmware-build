@@ -707,11 +707,19 @@ class PICO_STATUS():                                                            
 def DEACTIVATE_SD():
     """Tear down SD card access and safe the shared bus lines."""
     TLM("DEACTIVATE_SD enter")
+    global SD_DEV
+
     try:
         os.umount("/sd")
         TLM("  /sd unmounted")
     except:
         TLM("  /sd already unmounted")
+    # The driver goes with the mount: ACTIVATE_SD makes a new one for every
+    # mount, and the old one, kept here between commands with its buffers,
+    # sat wherever that mount had put it -- in the middle of the free
+    # memory after a big listing (#384). Only a mounted card's work reads
+    # it (CARD_LABEL, DISK_LABEL_WORK).
+    SD_DEV = None
 
     # v2: CS high, and GPIO 2-4 (the SD card's SPI lines and also D0-D2 of
     # the 2068 bus) driven LOW until the bus state machine takes them back
@@ -1887,22 +1895,31 @@ def LIST_DIR_FILES():                                                           
     # joined from all the rows (9.7K for 300 files), and the rows, kept
     # until the join, needed a collection every 32 of them (LIST_GC_EVERY)
     # not to spread over the heap with the formatting's garbage.
+    #
+    # What it does keep -- the signature, the free space, the header and the
+    # DirText, a few hundred bytes -- is made after a collection, once the
+    # reading is done. Made as they came, each went just past the garbage
+    # before it, and stayed there when that was collected: in the middle
+    # of the free memory, splitting it (heap map after a 300-file MOVE TO
+    # on the v3 card, 2026-11-07, #384).
     files = []
     dirs = []
     lista = ""
+    TSP.listing_sig = None
 
-    sig = LISTING_SIG(os.ilistdir())                                          # the first read: the count, and what LISTING_FRESHEN compares
-    TSP.listing_sig = sig
+    n, s = LISTING_SIG(os.ilistdir())                                         # the first read: the count, and what LISTING_FRESHEN compares
     ix = INDEX
-    ix.fill(os.ilistdir(), sig[0])                                            # the second: the index
+    ix.fill(os.ilistdir(), n)                                                 # the second: the index
+    vfs = os.statvfs("")
+    total, free = vfs[2] * vfs[0], vfs[3] * vfs[0]
+    vfs = None
+    gc.collect()                                                              # the reading's garbage goes before anything kept is made
+
+    TSP.listing_sig = (n, s)
     files = ix.files
     dirs = ix.dirs
-
-    vfs = os.statvfs("")
-    sd_space = (vfs[2] * vfs[0], vfs[3] * vfs[0])
-    sd_stat = catalog.card_line(TSP.sd_label, *sd_space)
-
-    header = DIR_HEADER(sd_stat)
+    sd_space = (total, free)
+    header = DIR_HEADER(catalog.card_line(TSP.sd_label, total, free))
 
     if len(ix) or ix.more:
         lista = DirText(ix, header)                                           # its rows are made as they are read
