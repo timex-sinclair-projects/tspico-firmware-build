@@ -83,6 +83,18 @@ Run from the REPL with the firmware stopped, the Pico on UART0 directly.
 | The same, `ATS45=3` (stream, no checksum) | OK, byte-exact, about 5 s to the first byte and 2.4 s of data. No size limit. |
 | Unzip on the Pico (`deflate.DeflateIO`, raw, 15-bit window) | 78,936-byte TAP in 975 ms. ZIP CRC and MD5 match archive.org's copy. |
 
+**End to end, 2026-11-07 (same board):** a REPL prototype of `tpi:net get`
+did the whole path. Zimodem fetched *Quetzalcoatl* (Virgin Games, 1984), a
+14,719-byte ZIP, in stream mode into RAM in 6.7 s. The Pico inflated the TAP
+inside it (38,198 bytes, CRC ok), and the TAP was copied to the SD card.
+David ran `LOAD "tpi:quetzal.tap"` and `LOAD ""` on the 2068, and the game
+runs.
+
+The prototype wrote to the Pico's flash first because the SD card wouldn't
+initialize (`card type v2`). It was stuck from before the test, the known
+state after a replug or a hard reset, and reseating it fixed that. The
+firmware will write straight to SD.
+
 What we learned:
 
 - **Stream mode (`ATS45=3`) is the one to use.** The ZIP's own CRC32 does
