@@ -174,11 +174,11 @@ def test_dir_files(t, logs):
     # minute stop the firmware) and left the listing half-built.
     fos = setup(t, None)
     t.files = ["STALE.TAP"]
-    real_size = t.catalog.size_text
+    real_fill = t.INDEX.fill
 
     def no_heap(*a):
         raise MemoryError("memory allocation failed, allocating 9673 bytes")
-    t.catalog.size_text = no_heap
+    t.INDEX.fill = no_heap                                      # the sort keys: the listing's one big allocation
     real_gc, t.gc = t.gc, types.SimpleNamespace(collect=lambda: None, mem_free=lambda: 157000)
     del logs[:]
     try:
@@ -187,7 +187,7 @@ def test_dir_files(t, logs):
     except BaseException as e:                                  # noqa: BLE001
         ok, raised = None, e
     finally:
-        t.catalog.size_text, t.gc = real_size, real_gc
+        t.INDEX.fill, t.gc = real_fill, real_gc
     check(raised is None and ok is False, "MemoryError: returns False, does not raise (%r)" % (raised,))
     check(t.files == [] and t.dirs == [],
           "MemoryError: the half-built lists are emptied")

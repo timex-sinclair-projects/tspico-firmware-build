@@ -1586,6 +1586,138 @@ def DIR_HEADER(sd_stat, path=None):                                             
     return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (path, sd_stat[:32])
 
 
+class DirText:                                                                 # lista for a listed folder: rows made when read (#384)
+
+    """lista for a folder that has entries: DIR_HEADER's 128 characters and
+    then one 32-character row per entry of INDEX, exactly the text
+    LIST_DIR_FILES used to join -- but no row exists until it is read.
+    Reads are what SEND_MSG2 does (len, [i]) and what the host tests do
+    (slices, `in`, ==); a slice, `in` or == builds the whole text, so the
+    firmware uses only len and [i]. CAT_COLOUR gives a DirColour of it.
+
+    Why (#384): the listing was a str of 32 characters a row (9.7K in one
+    block for 300 files), kept until the next listing, and CAT's colored
+    copy of it took a second block the size of it (12.1K), which a 300-file
+    folder on the v3 card could not find. Now the listing costs one row at
+    a time."""
+
+    def __init__(self, ix, header):
+        self.ix = ix
+        self.header = header
+        self.n = ix.start[3] + (1 if ix.more else 0)                          # rows: the entries, and "and n more"
+        self._at = -1
+        self._row = ""
+
+    def __len__(self):
+        return 128 + 32 * self.n
+
+    def row(self, r):                                                          # plain row r, 32 characters
+        ix = self.ix
+        s = ix.start
+        if r >= s[3]:
+            return "%-32s" % ("    and %d more not listed" % ix.more)
+        nm = catalog.screen_name(ix.name(r))
+        if r < s[1]:
+            return "<%-21s       0 B" % (shorten_filename(nm, 20) + ">")
+        if r < s[2]:
+            return "%03d %-18s%10s" % (r - s[1], shorten_filename(nm, 18), catalog.size_text(ix.size[r]))
+        return "    %-18s%10s" % (shorten_filename(nm, 18), catalog.size_text(ix.size[r]))
+
+    def text(self):                                                            # the whole listing, as one str
+        return self.header + "".join(self.row(r) for r in range(self.n))
+
+    def __getitem__(self, i):
+        if type(i) is not int:                                                 # a slice
+            return self.text()[i]
+        if i < 0:
+            i += len(self)
+        if i < 128:
+            return self.header[i]
+        r = (i - 128) >> 5
+        if r != self._at:
+            if r >= self.n:
+                raise IndexError("index out of range")
+            self._row = self.row(r)
+            self._at = r
+        return self._row[(i - 128) & 31]
+
+    def __contains__(self, s):
+        return s in self.text()
+
+    def __eq__(self, other):
+        return self.text() == (other.text() if isinstance(other, DirText) else other)
+
+    def startswith(self, s):
+        return self.header.startswith(s)
+
+
+class DirColour:                                                               # CAT_COLOUR of a DirText, made when read
+
+    """CAT_COLOUR(DirText): the same characters CAT_COLOUR makes from the
+    plain text -- the colored header (104 characters), a folder row of 36,
+    a numbered row of 40, any other row of 36, then NORMAL_ -- one row at a
+    time, as SEND_MSG2 reads it (len, [i], count). Every row has a fixed
+    length by its kind, and INDEX keeps each kind together, so where a
+    character is is arithmetic."""
+
+    def __init__(self, dt):
+        self.dt = dt
+        s = dt.ix.start
+        self.head = (PAPER_ + "\x01" + INK_ + "\x07" + dt.header[0:64]
+                     + PAPER_ + "\x05" + INK_ + "\x09" + dt.header[64:96])
+        h = len(self.head)
+        self.b1 = h + 36 * s[1]                                               # after the folders
+        self.b2 = self.b1 + 40 * (s[2] - s[1])                                # after the numbered files
+        self.b3 = self.b2 + 36 * (dt.n - s[2])                                # after the others (and "and n more")
+        self._at = -1
+        self._row = ""
+
+    def __len__(self):
+        return self.b3 + len(NORMAL_)
+
+    def crow(self, r):                                                         # colored row r, as CAT_COLOUR colors it
+        p = self.dt.row(r)
+        s = self.dt.ix.start
+        if r < s[1]:
+            return PLAIN_ + p[:22] + "%10s" % "folder"
+        if r < s[2]:
+            return PAPER_ + "\x05" + INK_ + "\x09" + p[:3] + PLAIN_ + p[3:]
+        return PLAIN_ + p
+
+    def text(self):
+        return self.head + "".join(self.crow(r) for r in range(self.dt.n)) + NORMAL_
+
+    def __getitem__(self, i):
+        if type(i) is not int:
+            return self.text()[i]
+        if i < 0:
+            i += len(self)
+        if i < len(self.head):
+            return self.head[i]
+        if i >= self.b3:
+            return NORMAL_[i - self.b3]
+        s = self.dt.ix.start
+        if i < self.b1:
+            r, o = divmod(i - len(self.head), 36)
+        elif i < self.b2:
+            r, o = divmod(i - self.b1, 40)
+            r += s[1]
+        else:
+            r, o = divmod(i - self.b2, 36)
+            r += s[2]
+        if r != self._at:
+            self._row = self.crow(r)
+            self._at = r
+        return self._row[o]
+
+    def count(self, sub, start=0):
+        # No row holds a CR or LF (screen_name makes every code below 32 a
+        # "?"), so SEND_MSG2's count of the line ends still to come is 0.
+        if sub in ("\r", "\n", "\r\n"):
+            return 0
+        return self.text().count(sub, start)
+
+
 def CAT_COLOUR(text):                                                         # a plain listing -> the coloured one
 
     """The listing as CAT shows it (chosen 2026-10-02): the path and the
@@ -1602,6 +1734,8 @@ def CAT_COLOUR(text):                                                         # 
     character and the next row (SEND_MSG2 would then not see the line's
     end)."""
 
+    if isinstance(text, DirText):                                             # the folder's listing: colored as it is read
+        return DirColour(text)
     if not text.startswith("Path:") or len(text) < 128:
         return text
     # No room for the colored copy (it needs a block as big as the listing,
@@ -1727,9 +1861,6 @@ def DIR_FILES():                                                                
     return False
 
 
-LIST_GC_EVERY = 32                                                            # LIST_DIR_FILES collects after this many rows (#384)
-
-
 def LIST_DIR_FILES():                                                                        # DIR_FILES without the error handling; raises OSError on SD errors
 
     global files
@@ -1751,14 +1882,11 @@ def LIST_DIR_FILES():                                                           
     # and a card write per listing, the write #62 traced field EIO errors to.
     # An old one on the card is still left out of the listing (kind_of).
     #
-    # A collection every LIST_GC_EVERY rows (#384): the firmware leaves
-    # gc.threshold() off, so MicroPython collects only when the heap is
-    # full. The rows are kept until lista is joined from them, and each
-    # row's short-lived strings (screen_name, the formatting) would spread
-    # them over all of the heap: on the v3 card (about 100K free) a 300-file
-    # folder failed at file 256 with 62K free in pieces of at most 480
-    # bytes. Collecting as it goes keeps the rows packed (REPL, 2026-11-06).
-    # A collection takes 4.3 ms on v3; no bus traffic runs during a listing.
+    # lista is a DirText (#384): the rows are made from INDEX when they are
+    # read, by SEND_MSG2 as it sends them, so no row is kept. It was a str
+    # joined from all the rows (9.7K for 300 files), and the rows, kept
+    # until the join, needed a collection every 32 of them (LIST_GC_EVERY)
+    # not to spread over the heap with the formatting's garbage.
     files = []
     dirs = []
     lista = ""
@@ -1769,32 +1897,6 @@ def LIST_DIR_FILES():                                                           
     ix.fill(os.ilistdir(), sig[0])                                            # the second: the index
     files = ix.files
     dirs = ix.dirs
-    st = ix.start
-
-    L = [None] * (len(ix) + (1 if ix.more else 0))
-    r = 0
-    for i in range(st[0], st[1]):
-        L[r] = "<%-21s       0 B" % (shorten_filename(catalog.screen_name(ix.name(i)), 20) + ">")
-        r += 1
-        if not r % LIST_GC_EVERY:
-            gc.collect()
-    for i in range(st[1], st[2]):
-        L[r] = "%03d %-18s%10s" % (i - st[1], shorten_filename(catalog.screen_name(ix.name(i)), 18),
-                                   catalog.size_text(ix.size[i]))
-        r += 1
-        if not r % LIST_GC_EVERY:
-            gc.collect()
-    # Then every other file, without an index: LOAD "tpi:n" only counts the
-    # types above, and files / dirinfo.tap (DIRINFO_ROWS) keep exactly those
-    # (spec §2).
-    for i in range(st[2], st[3]):
-        L[r] = "    %-18s%10s" % (shorten_filename(catalog.screen_name(ix.name(i)), 18),
-                                  catalog.size_text(ix.size[i]))
-        r += 1
-        if not r % LIST_GC_EVERY:
-            gc.collect()
-    if ix.more:                                                               # past INDEX_ENTRIES or INDEX_NAME_BYTES
-        L[r] = "%-32s" % ("    and %d more not listed" % ix.more)
 
     vfs = os.statvfs("")
     sd_space = (vfs[2] * vfs[0], vfs[3] * vfs[0])
@@ -1802,11 +1904,10 @@ def LIST_DIR_FILES():                                                           
 
     header = DIR_HEADER(sd_stat)
 
-    if not L:
-        lista = header + "%s\r" % "Directory is empty"
+    if len(ix) or ix.more:
+        lista = DirText(ix, header)                                           # its rows are made as they are read
     else:
-        lista = header + "".join(L)
-    del L
+        lista = header + "%s\r" % "Directory is empty"
     return
 
 
