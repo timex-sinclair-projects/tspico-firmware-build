@@ -70,6 +70,7 @@ from the BASIC keyword to the SD card and back.
 | Flows | [flows/break-and-recovery.md](flows/break-and-recovery.md) | SYNC, BREAK, a dropped transaction |
 | Flows | [flows/zx48.md](flows/zx48.md) | `tpi:zx48` and life in Spectrum mode |
 | Appendix | [appendix/ports-and-status.md](appendix/ports-and-status.md) | Ports, status bits, status codes to reports, function codes, pre-headers |
+| Appendix | [appendix/memory.md](appendix/memory.md) | Memory: how the heap breaks into pieces, the rules for code that allocates or keeps anything, and how to measure a change |
 | Appendix | [appendix/glossary.md](appendix/glossary.md) | The words |
 | Appendix | [appendix/index.md](appendix/index.md) | Every symbol, where it is in the source and where it is explained (generated) |
 
@@ -102,6 +103,13 @@ what it takes and returns, with units and sentinels; what state it reads
 and writes (globals, `TSP` fields, files); and what to beware of. A
 variable's entry says its type, its initial value, who sets it, who reads it,
 and the invariant it carries.
+
+**A variable's entry also says what it costs in memory**: how big it gets
+(fixed, or with the folder, the tape, the card), when it is made (at
+import, per command) and when it is dropped. Anything a module variable
+points at stays on the heap, where it was made, until the variable lets go,
+and that is what breaks the heap into pieces. The rules are in
+[appendix/memory.md](appendix/memory.md).
 
 **Source order.** Entries appear in the order the symbols appear in the
 file. A chapter opens with a map of the file.
@@ -157,17 +165,17 @@ behavior, and the caveat and the issue link go.
 | Source | Checked at | Chapter | Flows and appendices |
 |---|---|---|---|
 | `src/main.py` | `162b8f97be26` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
-| `src/TS/tspico.py` | `73c1e116ffdc` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
-| `src/TS/tspico_io.py` | `f56de52e4a74` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) | [flows/boot.md](flows/boot.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/TS/tspico.py` | `73c1e116ffdc` | [firmware/tspico-state.md](firmware/tspico-state.md), [tspico-bus.md](firmware/tspico-bus.md), [tspico-dispatch.md](firmware/tspico-dispatch.md), [tspico-messages.md](firmware/tspico-messages.md), [tspico-files.md](firmware/tspico-files.md), [tspico-commands.md](firmware/tspico-commands.md), [tspico-disk.md](firmware/tspico-disk.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [flows/printer.md](flows/printer.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md), [appendix/memory.md](appendix/memory.md) |
+| `src/TS/tspico_io.py` | `f56de52e4a74` | [firmware/pio.md](firmware/pio.md), [firmware/tspico_io.md](firmware/tspico_io.md) | [flows/boot.md](flows/boot.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/sd-handover.md](flows/sd-handover.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md), [appendix/memory.md](appendix/memory.md) |
 | `src/TS/sdcard.py` | `e1c614de390c` | [firmware/sdcard.md](firmware/sdcard.md) | [flows/sd-handover.md](flows/sd-handover.md) |
 | `src/TS/channels.py` | `9a863730fbf6` | [firmware/channels.md](firmware/channels.md) | [flows/channels.md](flows/channels.md) |
-| `src/TS/catalog.py` | `218906f31898` | [firmware/catalog.md](firmware/catalog.md) | — |
+| `src/TS/catalog.py` | `218906f31898` | [firmware/catalog.md](firmware/catalog.md) | [appendix/memory.md](appendix/memory.md) |
 | `src/TS/extcmd.py` | `b8ad10ebadd7` | [firmware/extcmd.md](firmware/extcmd.md) | — |
 | `src/TS/native.py` | `3f4bb90a622f` | [firmware/native.md](firmware/native.md) | [flows/save.md](flows/save.md) |
 | `src/TS/printer.py` | `d8bb84d1d654` | [firmware/printer.md](firmware/printer.md) | [flows/printer.md](flows/printer.md) |
 | `src/TS/board.py` | `76b05c62a1d9` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/board_v2.py` | `63b5811b2f33` | [firmware/board.md](firmware/board.md), [firmware/pio.md](firmware/pio.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
-| `src/TS/board_v3.py` | `72ed4b1d3a81` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md) |
+| `src/TS/board_v3.py` | `72ed4b1d3a81` | [firmware/board.md](firmware/board.md) | [flows/boot.md](flows/boot.md), [flows/sd-handover.md](flows/sd-handover.md), [appendix/memory.md](appendix/memory.md) |
 | `src/TS/speech.py` | `4271ff5c0029` | [firmware/speech.md](firmware/speech.md) | [flows/boot.md](flows/boot.md) |
 | `src/TS/speech_rules.py` | `3e16e980652d` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/upgrade/main.py` | `6ab664e9c744` | [firmware/upgrade.md](firmware/upgrade.md) | — |
