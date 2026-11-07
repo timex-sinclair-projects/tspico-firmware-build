@@ -14,9 +14,9 @@ a time. This checks, with the real TS.tspico functions on a fake card:
     lengths included;
   * a folder changed since the last listing is listed again first, so the
     numbers in a$ are the ones LOAD "tpi:n" uses;
-  * LIST_DIR_FILES collects every LIST_GC_EVERY rows (the v3 heap ran out
-    of contiguous room in a 300-file folder without it), and the listing is
-    the same with or without those collections.
+  * LIST_DIR_FILES makes no rows and collects nothing: lista is a DirText,
+    its rows made from INDEX when read (#384), and it reads as the whole
+    listing.
 
 Run:  python3 src/test/dirinfo_hosttest.py
 """
@@ -156,7 +156,7 @@ def main():
     check(st == t._4_Q_Parameter and len(t.mounted) == n, "Report Q, nothing mounted (%r)" % (msg,))
     check(any(lvl == 2 and "dirinfo.tap" in m for lvl, m in logs), "ERROR logged")
 
-    print("a big folder: a collection every LIST_GC_EVERY rows")
+    print("a big folder: no rows made, no collections, while it lists")
     big = os.path.join(root, "BIG")
     os.makedirs(big)
     for k in range(95):
@@ -170,21 +170,18 @@ def main():
     real_gc = t.gc
     counted = []
     t.gc = types.SimpleNamespace(collect=lambda: counted.append(1))
+    made = []
+    real_row = t.DirText.row
+    t.DirText.row = lambda self, r: made.append(r) or real_row(self, r)
     try:
         t.LIST_DIR_FILES()
-        packed = (t.lista, list(t.files), list(t.dirs))
-        rows = 3 + 95 + 1
-        check(len(counted) == rows // t.LIST_GC_EVERY,
-              "%d rows: %d collections, one per %d rows" % (rows, len(counted), t.LIST_GC_EVERY))
-        every = t.LIST_GC_EVERY
-        t.LIST_GC_EVERY = 10 ** 9
-        del counted[:]
-        t.LIST_DIR_FILES()
-        t.LIST_GC_EVERY = every
-        check(not counted and (t.lista, t.files, t.dirs) == packed,
-              "the same listing with no collections: folders, numbered files, the other file")
+        check(not counted and not made and isinstance(t.lista, t.DirText),
+              "99 entries: lista is a DirText, no row made and no collection while listing")
+        check(len(t.lista) == 128 + 32 * 99 and t.lista[128 + 32 * 3:128 + 32 * 3 + 4] == "000 ",
+              "  it reads as the listing: 99 rows of 32, the first numbered row after the 3 folders")
     finally:
         t.gc = real_gc
+        t.DirText.row = real_row
     check(len(t.files) == 95 and len(t.dirs) == 3 and "notes.txt" in t.lista, "  all 99 rows there")
 
     shutil.rmtree(root, ignore_errors=True)
