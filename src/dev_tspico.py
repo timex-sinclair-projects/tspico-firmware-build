@@ -419,6 +419,7 @@ prev_path = None
 # or index them are refused until a card is in (SD_NEEDED).
 files = []
 dirs = []
+INDEX = catalog.Index()                                                        # the folder, packed: files and dirs are its Views once listed (#384)
 lista = ""
 sd_space = None                                                                # (total, free) bytes, as the last listing read them
 
@@ -1730,110 +1731,82 @@ LIST_GC_EVERY = 32                                                            # 
 
 
 def LIST_DIR_FILES():                                                                        # DIR_FILES without the error handling; raises OSError on SD errors
-    
+
     global files
     global dirs
     global lista
     global sd_space
-    
-    # files_upper and dirs_upper, upper-cased copies of every name, were
-    # dropped (#384): one string per name, kept until the next listing and
-    # scattered through the heap (the REPL heap maps, 2026-11-06), for one
-    # case-insensitive lookup in LOAD_TPI, which now compares as it goes.
-    files = []
-    dirs = []
-    lista = ""
-    L = []
-    header = ""
-    
-    ext = catalog.DIR_EXT                                                                     # extensions to be included
-    starts = ['.']                                                                            # first characters of files to be excluded
-    
-    ordered = True                                                                            # In the future, this could be controlled by an option
 
+    # The folder goes into INDEX (catalog.Index, #384): buffers made once, at
+    # import, so the listing keeps nothing new on the heap. files and dirs
+    # are its Views: sequences of names, each decoded when asked for. They
+    # were one str per name (files_upper and dirs_upper, upper-cased copies,
+    # went first, #389), made in the same pass as the listing's garbage and
+    # spread over the whole heap with it.
+    #
     # dirinfo.tap (the listing as a TAP the menu program LOADs) is not
     # written here any more: DIRINFO_WRITE makes it when it is LOADed (#384).
     # Building it here cost the biggest allocation of every MOVE TO (one
     # bytes object, ~9.7K for 300 files: where a big folder ran out of heap)
     # and a card write per listing, the write #62 traced field EIO errors to.
-    # An old one on the card is still left out of the listing by name below.
+    # An old one on the card is still left out of the listing (kind_of).
     #
     # A collection every LIST_GC_EVERY rows (#384): the firmware leaves
     # gc.threshold() off, so MicroPython collects only when the heap is
-    # full. Each row's short-lived strings (screen_name, the upper-cased
-    # extension, the formatting) push allocations up through the heap, and
-    # the rows that are kept end up spread over all of it: on the v3 card
-    # (about 100K free) a 300-file folder failed at file 256, growing files[]
-    # by 2K, with 62K free in pieces of at most 480 bytes. Collecting as it
-    # goes keeps the kept rows packed: the same folder then lists with 46K
-    # in one piece (REPL, 2026-11-06). A collection takes 4.3 ms on v3; no
-    # bus traffic runs during a listing.
-    n = 0
+    # full. The rows are kept until lista is joined from them, and each
+    # row's short-lived strings (screen_name, the formatting) would spread
+    # them over all of the heap: on the v3 card (about 100K free) a 300-file
+    # folder failed at file 256 with 62K free in pieces of at most 480
+    # bytes. Collecting as it goes keeps the rows packed (REPL, 2026-11-06).
+    # A collection takes 4.3 ms on v3; no bus traffic runs during a listing.
+    files = []
+    dirs = []
+    lista = ""
 
-    if ordered:
-        listing = catalog.sort_items(os.ilistdir())
-    else:
-        listing = [item for item in os.ilistdir()]
-    TSP.listing_sig = LISTING_SIG(listing)                                    # what LISTING_FRESHEN compares
-    
-    nom = bytearray(32)
-    
-    for archs in listing:
-        if archs[1] == 16384:
-            dirs.append(archs[0])
-            nom = shorten_filename(catalog.screen_name(archs[0]), 20)
-            L.append("<%-21s       0 B" % (nom + ">"))
-            n += 1
-            if not n % LIST_GC_EVERY:
-                gc.collect()
+    sig = LISTING_SIG(os.ilistdir())                                          # the first read: the count, and what LISTING_FRESHEN compares
+    TSP.listing_sig = sig
+    ix = INDEX
+    ix.fill(os.ilistdir(), sig[0])                                            # the second: the index
+    files = ix.files
+    dirs = ix.dirs
+    st = ix.start
 
-    i = 0
-    
-    for archs in listing:
-        if archs[1] == 32768:
-            if (archs[0][-3:].upper() not in ext) or (archs[0][0] in starts) or archs[0] == "dirinfo.tap":
-                continue
-            files.append(archs[0])
-            
-            size_txt = catalog.size_text(int(archs[3]))
-
-            nom = "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(archs[0]), 18), size_txt)
-            L.append(nom)
-
-            i += 1
-            n += 1
-            if not n % LIST_GC_EVERY:
-                gc.collect()
-
+    L = [None] * (len(ix) + (1 if ix.more else 0))
+    r = 0
+    for i in range(st[0], st[1]):
+        L[r] = "<%-21s       0 B" % (shorten_filename(catalog.screen_name(ix.name(i)), 20) + ">")
+        r += 1
+        if not r % LIST_GC_EVERY:
+            gc.collect()
+    for i in range(st[1], st[2]):
+        L[r] = "%03d %-18s%10s" % (i - st[1], shorten_filename(catalog.screen_name(ix.name(i)), 18),
+                                   catalog.size_text(ix.size[i]))
+        r += 1
+        if not r % LIST_GC_EVERY:
+            gc.collect()
     # Then every other file, without an index: LOAD "tpi:n" only counts the
-    # types above, and files[] / dirinfo.tap (DIRINFO_ROWS) keep exactly
-    # those (spec §2).
-    for archs in listing:
-        if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
-                and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
-            L.append("    %-18s%10s" % (shorten_filename(catalog.screen_name(archs[0]), 18),
-                                        catalog.size_text(int(archs[3]))))
-            n += 1
-            if not n % LIST_GC_EVERY:
-                gc.collect()
-    
-    del listing
+    # types above, and files / dirinfo.tap (DIRINFO_ROWS) keep exactly those
+    # (spec §2).
+    for i in range(st[2], st[3]):
+        L[r] = "    %-18s%10s" % (shorten_filename(catalog.screen_name(ix.name(i)), 18),
+                                  catalog.size_text(ix.size[i]))
+        r += 1
+        if not r % LIST_GC_EVERY:
+            gc.collect()
+    if ix.more:                                                               # past INDEX_ENTRIES or INDEX_NAME_BYTES
+        L[r] = "%-32s" % ("    and %d more not listed" % ix.more)
 
-    sd_block = os.statvfs("")[0]
-    sd_tot   = os.statvfs("")[2]
-    sd_free  = os.statvfs("")[3]
-    sd_space = (sd_tot * sd_block, sd_free * sd_block)
-    sd_stat  = catalog.card_line(TSP.sd_label, *sd_space)
+    vfs = os.statvfs("")
+    sd_space = (vfs[2] * vfs[0], vfs[3] * vfs[0])
+    sd_stat = catalog.card_line(TSP.sd_label, *sd_space)
 
     header = DIR_HEADER(sd_stat)
-    
+
     if not L:
         lista = header + "%s\r" % "Directory is empty"
     else:
         lista = header + "".join(L)
     del L
-
-    # gc.collect()
     return
 
 
@@ -4487,9 +4460,9 @@ def CDIR(pre, cmd):                                                             
         hdr2 = "  Directory Name"
         if par2 == 0:
             if cwd != '/TAP':
-                List = ['..'] + dirs
+                List = ['..'] + list(dirs)
             else:
-                List = dirs
+                List = list(dirs)
         else:
             # Every folder on the card, walked now: kept between commands it
             # was one more long-lived string per folder, rebuilt at every
