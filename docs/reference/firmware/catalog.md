@@ -89,7 +89,7 @@ The items are all read into the list first and only then paired with their
 lowered names, in place: pairs made while `os.ilistdir()` still yielded put
 a short-lived pair and string between every kept item, and on the v3 card
 the 300-file listing then found no 2K block for `CAT_COLOUR`. Used by
-`select` and, in `tspico.py`, by `LISTING_FRESHEN`, `LIST_DIR_FILES`,
+`select` and, in `tspico.py`, by `LIST_DIR_FILES`,
 `DIRINFO_WRITE`, `DISK_COPY_WORK` (a folder's entries), `DISK_ERASE_MATCHES`
 and `GETHELP` (the topics).
 
