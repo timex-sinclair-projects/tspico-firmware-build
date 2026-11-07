@@ -36,6 +36,7 @@ python3 loadtest.py           # ~45 min for ~1400 tapes, 12 workers
 python3 followup.py           # ~15 min
 python3 build_card.py ~/Desktop/sd-2068
 python3 publish.py ~/Desktop/sd-2068    # to archive.org (--dry-run to check first)
+python3 tap_folder.py ~/Desktop/sd-2068 ~/Desktop/taps-2068 --publish   # the WiFi folder (#401)
 ```
 
 Every step reuses what's already done. The fetch keeps a zip it has already
@@ -116,6 +117,25 @@ holds the tapes that were left out, with the same catalog.
     `ia delete timex-sinclair-software-archive --no-backup 'history/files/…'`.
   - **`--dry-run`** makes the zip, uploads nothing, and reports the old copies
     the item has now.
+- **`tap_folder.py`** lays the card's archive tapes out as plain files for the
+  v3 card's WiFi download (#401), at their card paths (`TAP/GAMES/name.tap`),
+  with an index, `tspico-taps.txt.gz`. With `--publish` it uploads them to their
+  own archive.org item, `tspico-2068-tapes`.
+  - **Why plain files:** Zimodem's `AT&G` needs a reply with a Content-Length.
+    A file in an item has one, and a tape inside a zip can't be fetched on its
+    own (see `docs/v3-wifi-archive-proposal.md`).
+  - **What goes in:** only the tapes on the card, so only those that load and
+    start, with the pipeline's repairs. The tour and its demo tapes stay on the
+    card. A tape over `--max-tap` (default 65536 bytes) is left out and listed.
+  - **The index:** one line per tape, tab-separated: path, status (`L` `LOAD ""`,
+    `R` then `RUN`, `C` `LOAD "" CODE`, `S` another way), title, year,
+    publisher, size, and the `computer_media` post ID (from `describe.py`).
+    A tape from a collection is titled `Collection: tape`.
+  - **Rebuilds:** `--publish` compares each tape with the MD5 in the item's
+    file list and uploads only what changed, then the index, all with
+    `x-archive-keep-old-version: 0`, so nothing replaced is kept under
+    `history/`. A tape that has left the card is listed, not deleted.
+    `--dry-run` reports and uploads nothing.
 
 ## Verdicts
 
