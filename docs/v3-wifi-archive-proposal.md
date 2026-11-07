@@ -223,6 +223,9 @@ is to put the tapes themselves in the item, as plain `.tap` files (they'd
 get a Content-Length), and point the index at those. That would publish
 more copies of tapes already in the item and in the SD card ZIP, so it's
 David's call.
+David's direction (2026-11-07): a clean folder of plain TAP files plus an
+index, as a project of its own,
+[#401](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/401).
 
 ## Steps
 
