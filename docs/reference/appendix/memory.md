@@ -15,7 +15,7 @@ that keeps something between two commands.
 
 | | v2 (RP2040) | v3 card (RP2350B) |
 |---|---|---|
-| GC heap | about 190K free with the firmware running ([board.md](../firmware/board.md#block_buf)) | 172K in all, about 76K free with the firmware running; the top 256K of SRAM is `tsbus`'s images ([board-v3.md](../firmware/board-v3.md#memmapsection_extra_post_platform_endincl)) |
+| GC heap | 234K in all, about 182K free with the firmware running, and a 168K largest block after three rounds of the 300-file folder and a 64K DOCK (`memcheck --dck`, 2026-11-07) | 172K in all, about 76K free with the firmware running; the top 256K of SRAM is `tsbus`'s images ([board-v3.md](../firmware/board-v3.md#memmapsection_extra_post_platform_endincl)) |
 | LOAD/SAVE block | a new `bytearray` per block | `BLOCK_BUF`, 48K, made at import ([board.md](../firmware/board.md)) |
 | a 64K DOCK stream | `BLKRCV` in 32K pieces (#376) | `BLOCK_BUF` |
 
