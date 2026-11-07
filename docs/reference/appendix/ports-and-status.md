@@ -22,6 +22,9 @@ are not the TS-Pico's protocol, and the ROM never touches them. So are 11h
 true: an allophone for the speech chip, and its busy bit (bit 7: FFh busy,
 7Fh ready), as David's Pico Speech Synth 2068 board
 ([../firmware/tsbus.md](../firmware/tsbus.md#speech)).
+1Fh (31) on IN is the Kempston joystick from the card's DE-9 socket (unless
+`config.ini`'s `KEMPSTON` is false): 000FUDLR, 1 = pressed, the high
+address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep1)).
 
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which

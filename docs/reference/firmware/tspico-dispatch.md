@@ -1,8 +1,8 @@
 # TS/tspico.py (part 3) — the dispatcher
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 5172–5284
-(`LOAD_CONFIG`), 6342–6444 (the printer path), 6524–6859 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6867–8107 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 5172–5288
+(`LOAD_CONFIG`), 6346–6448 (the printer path), 6528–6863 (`FAIL_CMD`,
+`PROCESS_CMD`) and 6871–8115 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -37,17 +37,17 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 | Symbol | Line | Role |
 |---|---|---|
 | `LOAD_CONFIG()` | 5172 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
-| `PRINT_FLUSH()` | 6342 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
-| `COPY_BMP(scr, mode, colour)` | 6374 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
-| `PRINT_IO(pre)` | 6395 | one printer transaction: an LPRINT character, or COPY |
-| `FAIL_CMD(status)` | 6524 | a command that failed: one status byte, on a bus in a known state |
-| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6576 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
-| `TS2068_IO()` | 6867 | the board setup and the service loop |
-| `ZX_PIECES(text)` | 7755 | the v4 reply: the text in pieces of up to 255, each after its length, then 0 |
-| `ZX_TPI()` | 7797 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7934 | the Spectrum-mode loop |
+| `PRINT_FLUSH()` | 6346 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
+| `COPY_BMP(scr, mode, colour)` | 6378 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
+| `PRINT_IO(pre)` | 6399 | one printer transaction: an LPRINT character, or COPY |
+| `FAIL_CMD(status)` | 6528 | a command that failed: one status byte, on a bus in a known state |
+| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6580 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
+| `TS2068_IO()` | 6871 | the board setup and the service loop |
+| `ZX_PIECES(text)` | 7763 | the v4 reply: the text in pieces of up to 255, each after its length, then 0 |
+| `ZX_TPI()` | 7805 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 7942 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 7751), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 7759), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -81,6 +81,7 @@ What it does:
    | MODEM_MODE | `"2050"` | the v3 card's TS2050 modem: `"2050"`, `"hayes"` or `"off"` (`board.modem_start`, `tpi:modem`); v2 ignores it |
    | MODEM_BAUD | `300` | the modem's received characters paced to this; 0, none |
    | MODEM_IDLE_MIN | `10` | the ESP32 off after this many minutes unused and on-hook |
+   | KEMPSTON | `True` | the v3 card's DE-9 joystick answered at 1Fh as a Kempston interface (`board.joystick`); v2 ignores it |
    | SPEECH_VOLUME | `35` | the v3 card's speech: volume, % (`board.speech_start`); v2 ignores the speech keys |
    | SPEECH_RATE | `100` | ... the chip's speed, % (50-150): its pitch moves with it |
    | SPEECH_PORTS | `True` | ... OUT 17 / IN 37 answered, as David's Pico Speech Synth 2068 board |
@@ -90,7 +91,7 @@ What it does:
    | ROM_VERSION | the module's `ROM_VERSION` | the ROM this firmware ships with; shown by `tpi:info`, nothing else reads it |
 
    The shipped [`src/config.ini`](../../../src/config.ini) holds exactly
-   these eighteen keys. The comment at line 5185 notes that `PICO_STATUS`
+   these nineteen keys. The comment at line 5185 notes that `PICO_STATUS`
    carries a second copy of the defaults (it does, as `try/except` fallbacks)
    and that there should be one; there are still two.
 3. `ROM_SM` must be one of 5, 6, 9, 10 — the four combinations `tpi:boot`
@@ -103,9 +104,10 @@ What it does:
    `LED_BRIGHTNESS` must be an `int` from 1 to 100; anything else (0, 5.5,
    `"5"`) is logged at level 2 and replaced by 5, and written back. So must
    the modem's: `MODEM_MODE` one of the three, `MODEM_BAUD` an `int` from 0
-   to 115200, `MODEM_IDLE_MIN` an `int` from 1 to 1450; and speech's:
-   `SPEECH_VOLUME` an `int` from 0 to 100, `SPEECH_RATE` from 50 to 150,
-   `SPEECH_PORTS` a `bool`, `SPEECH_GREETING` and `AUTOMOUNT` strings
+   to 115200, `MODEM_IDLE_MIN` an `int` from 1 to 1440; `KEMPSTON` a `bool`
+   (anything else, 0, 1 or `"true"`, is logged and replaced by `True`); and
+   speech's: `SPEECH_VOLUME` an `int` from 0 to 100, `SPEECH_RATE` from 50 to
+   150, `SPEECH_PORTS` a `bool`, `SPEECH_GREETING` and `AUTOMOUNT` strings
    (any string: what they name is checked where they are used).
 4. The one-shot. `boot_mem = ROM_SM & 3`. If `ROM_SLOT` is not 1 or
    `boot_mem` is not 2 (flash; so an SD boot too), the configured pair is remembered, the
@@ -313,7 +315,7 @@ The pre-header fields as the ROM builds them
 |---|---|---|
 | 0 | `'B'` (42h) | — (the dispatcher chose this handler on it) |
 | 1 | TADDR | `load_cmd`: 0 = `SAVE "tpi:…"` command, 1–3 = `LOAD "tpi:name"`, a mount |
-| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6585), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
+| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6589), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
 | 3–4 | PMR1, the first `CODE` number, little-endian | the handlers' `par1` (`PARAMS(pre)`) |
 | 5–6 | PMR2, the second `CODE` number | `par2` |
 | 7–8 | length of the command text | the body size |
@@ -504,7 +506,7 @@ It owns `busy` (core1 is writing the log), `dead` (tells `BLINK_LED` to
 stop), `files`, `lista`, `log_entries`,
 `log_to_serial` (initialized `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file),
-`MQ`, `led`, `TSP`, `EXT_SA_FUNCT` and, from line 7176, `RXD`.
+`MQ`, `led`, `TSP`, `EXT_SA_FUNCT` and, from line 7182, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
 
 ### Configuration and the log file
@@ -538,6 +540,8 @@ card check below. Then, where `board.HAS_MODEM` (the v3 card),
 `board.modem_start` with `config.ini`'s `MODEM_MODE`, `MODEM_BAUD` and
 `MODEM_IDLE_MIN`: from here the 8251 at 73h/77h is answered (unless the
 mode is "off"); the ESP32 stays off until a program uses it. Then, where
+`board.HAS_JOYSTICK`, `board.joystick` with `KEMPSTON`: from here IN 1Fh
+reads the joystick ([board.md](board.md#joystickon)). Then, where
 `board.HAS_SPEECH`, `board.speech_start` with `SPEECH_VOLUME`, `SPEECH_RATE`
 and `SPEECH_PORTS`: the chip on core 1, silent until `tpi:say`, ports 17/37
 answered, `/speech.txt` read ([board.md](board.md#speech_startvolume-rate-portstrue)).
@@ -681,7 +685,7 @@ seeds the chain for the life of the session. It must be here and not inside
 that `LOAD ""` will give Report R until the assets are copied. The SD outcome
 is logged (OK / mounted but failing / no card), `SAVE_LOG()`, a `gc.collect()`,
 "TS Pico initialized OK. Waiting for commands...", `SAVE_LOG()` again, LED
-off. `wrt = MQ.put` at line 7161 is assigned and never used.
+off. `wrt = MQ.put` at line 7167 is assigned and never used.
 
 ### The capture buffers and the DMA channel
 
@@ -757,7 +761,7 @@ status read (`RD_STATUS`), not in `SYNC_WAIT`, so a transaction the Pico
 dropped reports T only if its ROM is still waiting for READY when the
 `0xFB` goes up; a later command finds `0xFF` *(inferred from
 [tspico-sync.asm](../../../src/rom/patches/tspico-sync.asm): `SYNC_WAIT`
-masks READY and IDLE only)*. The comments at lines 7189 and 7281 that say
+masks READY and IDLE only)*. The comments at lines 7195 and 7287 that say
 "the next command gets Report T" describe the ROM's own ready-wait of the
 transaction in hand, not a later one.
 
@@ -934,7 +938,9 @@ did not.
 
 When nothing has arrived, first, where `board.HAS_MODEM`,
 `board.modem_service()`: the modem's power on demand, a C call and a
-`ticks_ms` on most passes ([board.md](board.md#modem_service)). Then the heartbeat, with `time.ticks_diff` (the raw
+`ticks_ms` on most passes ([board.md](board.md#modem_service)); and where
+`board.HAS_JOYSTICK`, `board.joystick_service()`, one GPIO read unless a
+joystick read is pending ([board.md](board.md#joystick_service)). Then the heartbeat, with `time.ticks_diff` (the raw
 subtraction went negative after `ticks_us` wrapped at 2³⁰ µs, ~17.9 min,
 and the loop spun in `continue` for ever: the "LED stopped blinking" halt):
 
