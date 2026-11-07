@@ -127,11 +127,14 @@ listing page is an undocumented HTML scrape. But we own the
 `timex-sinclair-software-archive` item (`tools/sd-archive/publish.py`
 uploads to it). So we publish a small index next to the ZIPs.
 
-Suggested format: a text file with one line per loadable tape, holding the
-title, year, publisher, category, the ZIP's name, the member path and the
-size. Its source would be the catalog `build_card.py` already writes for the
-SD card. The 2068-only list, with names only, would be about 70 KB, which
-fits on the SD card and takes about 7 s to download. The device downloads
+Suggested format: a text file with one line per tape, holding the title,
+year, publisher, the ZIP's name and size, the member path and its size, and
+a "tested" mark. It covers every ZIP tagged `(TS2068)` (David's choice,
+2026-11-07), not just the load-tested ones. The host tool that builds it
+reads the member lists from the ZIPs in `~/tspico-archive-work`, or
+downloads them, and takes the titles and categories from the SD card
+catalog where a tape is on it. With names only, the list would be about
+70 KB, which fits on the SD card and takes about 7 s to download. The device downloads
 it once (and again on a refresh command) and searches it locally. That also
 means:
 
@@ -144,8 +147,14 @@ means:
   goes through archive.org's `ia6xxxxx` redirect. An index line could also
   carry the direct `ia` path, but those hosts move, so the redirect is
   safer.
-- **Only tapes we know load.** The SD-card pipeline has already load-tested
-  1,327 of them.
+- **What the device can't fetch is left out.** The index leaves out ZIPs
+  with no `.tap`, `.tzx` or `.dck` inside (the WAV-only and image ZIPs),
+  and ZIPs too big for the RAM buffer. The sizes are in the metadata, and
+  the largest 2068 ZIPs are 260 MB WAV collections. A ZIP with several
+  tapes gets one line per tape.
+- **Untested is marked, not hidden.** The 1,328 tapes the SD-card pipeline
+  load-tested carry the mark. The rest are listed too, so `tpi:net` can
+  show which is which.
 - **Categories and real titles** instead of TOSEC filenames.
 
 TSRun's way of getting one TAP (archive.org's unzip service) is out for
@@ -164,23 +173,22 @@ can't (the manual's rule). A first cut:
 - `SAVE "tpi:net word"`: searches the index and prints numbered matches,
   like `tpi:dir` does.
 - `SAVE "tpi:net get 12"`: downloads match 12 into `/TAP/NET/` under an 8.3
-  name, then mounts it, so `LOAD ""` runs it. That's the same two-step load
+  name. If that name exists, the Y/N prompt asks before overwriting; the
+  refusal comes first, as with `tpi:rm`. Then it mounts the tape, so `LOAD ""` runs it. That's the same two-step load
   as SD files.
 - `SAVE "tpi:net update"`: downloads the index again.
 
 A menu program, a BASIC TAP in `/assets`, could come later on top of the
 same commands.
 
-## Open questions for David
+## Decisions (David, 2026-11-07)
 
-1. Is B acceptable in place of the two-image design, given that Zimodem
-   already does HTTPS?
-2. Should it offer only the load-tested tapes from our index, or every ZIP
-   in the item (TS1000, Spectrum and untested ones too)?
-3. Where should downloads go (`/TAP/NET/`?), and what if the name already
-   exists?
-4. Should it be v3 only? A v2 card has no ESP32, so yes, unless someone adds
-   an external one.
+1. **Zimodem fetches (option B).** No second ESP32 image.
+2. **Every 2068 ZIP** in the item, tested or not, minus what the device
+   can't fetch (see the index).
+3. **Downloads go to `/TAP/NET/`.** An existing name is asked about first
+   (Y/N), not overwritten silently.
+4. **v3 only.** The v2 manual doesn't mention it.
 
 ## Steps
 
