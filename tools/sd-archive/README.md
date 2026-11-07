@@ -24,6 +24,11 @@ fetch.py PAGE ─▶ plan.py ─▶ loadtest.py ─▶ followup.py ─▶ build_
 - About 5 GB in the work folder, `$TSPICO_ARCHIVE_WORK` (default
   `~/tspico-archive-work`). The zips go there, plus everything the scripts
   make. None of it goes in the repo.
+- For `publish.py` and `tap_folder.py --publish`: the `internetarchive` library
+  and an account that can write the items (`ia configure`). If it came with
+  `pipx install internetarchive`, the library is only in pipx's venv: run those
+  two with that venv's Python, for example
+  `"$(pipx environment --value PIPX_LOCAL_VENVS)/internetarchive/bin/python" publish.py …`.
 
 ## Run
 
