@@ -66,6 +66,165 @@ def sort_items(items):
     return d
 
 
+# ─── The folder index (#384) ───────────────────────────────────────────────
+# The current folder as LIST_DIR_FILES lists it, in buffers made once, at
+# import, and never made again: the names packed as UTF-8 in one bytearray,
+# with arrays of where each starts and of the sizes. files[] and dirs[] were
+# one str per name, made in the same pass as the listing's garbage, so they
+# ended up spread over the whole heap (a 300-file folder: ~12K in ~300
+# pieces). Here a listing keeps nothing new; what it makes on the way is
+# garbage, and one collection gives the heap back in one piece.
+
+INDEX_ENTRIES = 512                                 # entries the index holds
+INDEX_NAME_BYTES = 8192                             # bytes of names it holds
+
+DIR = 0                                             # kind_of(): a folder
+FILE = 1                                            # a file LOAD "tpi:n" numbers
+OTHER = 2                                           # any other file, shown unnumbered
+
+
+def kind_of(item):
+    """An os.ilistdir() item's place in a listing: DIR, FILE (one of
+    DIR_EXT, numbered), OTHER (shown, not numbered), or None: left out (a
+    name starting with '.', dirinfo.tap, anything not a file or folder).
+    LIST_DIR_FILES' rule; folders are all shown, dot folders too."""
+    if item[1] == 16384:
+        return DIR
+    name = item[0]
+    if item[1] != 32768 or name[0] == "." or name == "dirinfo.tap":
+        return None
+    return FILE if name[-3:].upper() in DIR_EXT else OTHER
+
+
+class View:
+    """One kind of an Index's entries as a read-only sequence of names:
+    len(), [i] (negative too), iteration, `in` and == against a list. A
+    name is decoded from the index each time, so it is a new short-lived
+    str; nothing is kept."""
+
+    def __init__(self, ix, kind):
+        self.ix = ix
+        self.kind = kind
+
+    def __len__(self):
+        s = self.ix.start
+        return s[self.kind + 1] - s[self.kind]
+
+    def at(self, i):                                # i -> the entry's place in the index
+        n = len(self)
+        if i < 0:
+            i += n
+        if not 0 <= i < n:
+            raise IndexError("index out of range")
+        return self.ix.start[self.kind] + i
+
+    def __getitem__(self, i):
+        return self.ix.name(self.at(i))
+
+    def size(self, i):
+        return self.ix.size[self.at(i)]
+
+    def __iter__(self):
+        s = self.ix.start
+        for i in range(s[self.kind], s[self.kind + 1]):
+            yield self.ix.name(i)
+
+    def __contains__(self, name):
+        for n in self:
+            if n == name:
+                return True
+        return False
+
+    def __eq__(self, other):
+        return list(self) == list(other)
+
+
+class Index:
+    """The current folder, sorted as LIST_DIR_FILES lists it: the folders,
+    then the numbered files, then the others, each by lower-cased name.
+    Holds up to `entries` entries and `name_bytes` bytes of names; what
+    doesn't fit is counted in `more` and left out (the last in that order
+    go first). `dirs`, `files` and `others` are Views of it."""
+
+    def __init__(self, entries=INDEX_ENTRIES, name_bytes=INDEX_NAME_BYTES):
+        import array
+        self.cap = entries
+        self.names = bytearray(name_bytes)
+        self._mv = memoryview(self.names)
+        self.off = array.array("H", [0] * (entries + 1))   # (a list: "L" is 8 bytes on a 64-bit host)
+        self.size = array.array("L", [0] * entries)
+        self.start = [0, 0, 0, 0]                   # where DIR, FILE, OTHER begin; [3] is the count
+        self.more = 0
+        self.dirs = View(self, DIR)
+        self.files = View(self, FILE)
+        self.others = View(self, OTHER)
+
+    def __len__(self):
+        return self.start[3]
+
+    def name(self, i):
+        return str(self._mv[self.off[i]:self.off[i + 1]], "utf-8")
+
+    def clear(self):
+        self.start[0] = self.start[1] = self.start[2] = self.start[3] = 0
+        self.more = 0
+
+    def fill(self, items, count):
+        """Rebuild from os.ilistdir() items; `count` is how many there are
+        (LISTING_SIG's count, from a first read), so the one list of sort
+        keys is made at its full length at once, not grown.
+
+        Each kept item becomes one str, "<kind><lower-case name>\\0<name>
+        \\0<size>", and the list is sorted with no key: comparisons in C.
+        MicroPython calls a key= on every comparison (45,149 calls for 300
+        names, 1.58 s, #394), and its quicksort is near its worst on a list
+        already in order, so an ordered list is not sorted at all. FAT
+        names differ in more than case, so the lower-case names decide
+        every comparison. Then each key is copied into the buffers and
+        dropped."""
+        self.clear()
+        keys = [None] * count
+        j = 0
+        for it in items:
+            if j == count:                          # the folder grew between the two reads
+                break
+            k = kind_of(it)
+            if k is None:
+                continue
+            nm = it[0]
+            keys[j] = "%d%s\x00%s\x00%d" % (k, nm.lower(), nm, it[3] if len(it) > 3 else 0)
+            j += 1
+        del keys[j:]
+        for i in range(1, j):
+            if keys[i] < keys[i - 1]:
+                keys.sort()
+                break
+        mv = self._mv
+        room = len(self.names)
+        cnt = [0, 0, 0]
+        n = 0
+        p = 0
+        self.off[0] = 0
+        for i in range(j):
+            k = keys[i]
+            keys[i] = None
+            a = k.index("\x00")
+            b = k.index("\x00", a + 1)
+            nm = k[a + 1:b].encode()
+            if self.more or n == self.cap or p + len(nm) > room:
+                self.more += 1                      # and every one after: no gaps in the numbers
+                continue
+            mv[p:p + len(nm)] = nm
+            p += len(nm)
+            self.size[n] = int(k[b + 1:])
+            n += 1
+            self.off[n] = p
+            cnt[ord(k[0]) - 48] += 1
+        self.start[1] = cnt[0]
+        self.start[2] = cnt[0] + cnt[1]
+        self.start[3] = n
+
+
 def match_shown(name, pat):
     """Does pat match name as the 2068 lists it (screen_name)? Case-
     insensitive; '*' matches any run, but '?' only a character the 2068
