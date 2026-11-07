@@ -8,7 +8,9 @@ spreads the kept objects across the Pico's non-moving heap:
   * screen_name rebuilt every name a character at a time;
   * CATALOG_TEXT made an upper-case copy of files[] and searched it twice
     per row;
-  * the ZX48 tpi:dir reply grew a byte at a time and copied every piece.
+  * the ZX48 tpi:dir reply grew a byte at a time and copied every piece;
+  * LISTING_FRESHEN sorted the whole folder on every CAT to hash it in
+    name order; LISTING_SIG now sums the entries' hashes, in any order.
 
 CAT_COLOUR and TAPDIR_COLOUR are checked against the old code too. Their
 `rest = rest[32:]` stays: taking rows by index fragmented the v3 heap
@@ -204,6 +206,24 @@ def main():
     seg = seg[seg.index("def DIR_FILES():"):seg.index("        LIST_DIR_FILES()\n", seg.index("def DIR_FILES():"))]
     check(seg.rstrip().endswith("gc.collect()\n    try:") or seg.rstrip().endswith("try:") and "    gc.collect()\n    try:" in seg,
           "DIR_FILES collects before the listing")
+
+    # LISTING_SIG: in any order, from the iterator itself
+    ents = [("g%03d.tap" % i, 32768, 0, 1000 + i) for i in range(300)] + [("sub%d" % i, 16384, 0, 0) for i in range(5)]
+    sig = t.LISTING_SIG(iter(ents))
+    check(all(t.LISTING_SIG(iter(rng.sample(ents, len(ents)))) == sig for _ in range(5)),
+          "LISTING_SIG: the same for the folder in any order")
+    check(t.LISTING_SIG(iter(sorted(ents, key=lambda e: e[0].lower()))) == sig, "... and in name order")
+    changed = [ents[:-1], ents + [("new.tap", 32768, 0, 5)],
+               [("g000.TAP",) + ents[0][1:]] + ents[1:], [ents[0][:3] + (1001,)] + ents[1:],
+               [(ents[0][0], 16384, 0, 0)] + ents[1:]]
+    check(all(t.LISTING_SIG(iter(c)) != sig for c in changed),
+          "... and different for a file removed, added, renamed, resized or turned into a folder")
+    check(t.LISTING_SIG(iter([("a", 32768, 0)])) == t.LISTING_SIG(iter([("a", 32768, 0, 0)])),
+          "... an entry without a size counts as size 0")
+    fr = ts.replace("\r\n", "\n")
+    fr = fr[fr.index("def LISTING_FRESHEN"):fr.index("def LISTING_CHECK")]
+    check("LISTING_SIG(os.ilistdir())" in fr and "sort_items" not in fr,
+          "LISTING_FRESHEN hands os.ilistdir() over unsorted")
 
     # ZX_PIECES
     blobs = [b"", b"x", b"a" * 254, b"a" * 255, b"a" * 256, b"b" * 1000]

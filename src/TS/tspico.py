@@ -1294,12 +1294,24 @@ def CARD_LABEL():                                                             # 
         return ""
 
 
-def LISTING_SIG(entries):                                                     # the folder's names, types and sizes, as one number
+def LISTING_SIG(entries):                                                     # the folder's names, types and sizes, as two numbers
 
-    """A fingerprint of a folder listing (os.ilistdir's entries, in
-    LIST_DIR_FILES' order): name, type and size of each. Two listings with
-    the same fingerprint list the same files."""
-    return hash(tuple((e[0], e[1], e[3] if len(e) > 3 else 0) for e in entries))
+    """A fingerprint of a folder listing: name, type and size of each entry
+    (os.ilistdir's), in any order. Two listings with the same fingerprint
+    list the same files.
+
+    The sum of each entry's hash, taken as the entries come, with their
+    count (#384). It used to hash a tuple of every entry in name order, so
+    LISTING_FRESHEN sorted the whole folder and built a tuple per entry on
+    every CAT, only to compare one number. A sum doesn't care about order,
+    so it takes os.ilistdir() as it is and keeps nothing: one entry at a
+    time is all the memory it holds."""
+    s = 0
+    n = 0
+    for e in entries:
+        s = (s + hash((e[0], e[1], e[3] if len(e) > 3 else 0))) & 0x3FFFFFFF
+        n += 1
+    return (n, s)
 
 
 def LISTING_FRESHEN():                                                        # re-read the folder if the card's copy changed
@@ -1314,7 +1326,7 @@ def LISTING_FRESHEN():                                                        # 
     listing (lista, free space) happens only when it changed."""
     try:
         os.chdir(TSP.cur_path)
-        sig = LISTING_SIG(catalog.sort_items(os.ilistdir()))
+        sig = LISTING_SIG(os.ilistdir())                                     # in the card's order: no sort
     except OSError:
         return
     if sig != getattr(TSP, "listing_sig", None):
