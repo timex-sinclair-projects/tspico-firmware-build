@@ -101,14 +101,14 @@ def main():
                          tags=e["tags"], blocks_loaded="%s of %s" % (r.get("served"), r.get("blocks")),
                          converted_from=e["src"] if e["src"] != "tap" else "",
                          also_listed_as="; ".join(e["also"]), page=C.public(e["page"]), download=e["url"]))
-    shutil.copytree(os.path.join(C.REPO, "SD card", "help"), os.path.join(out, "help"))
+    shutil.copytree(os.path.join(C.REPO, "SD card", "help"), os.path.join(out, "help"), ignore=C.skip_junk)
     # The guided tour (promo/demo) at the top of TAP, where CAT starts, as on
     # the repo's own card. It needs its companion tapes beside it.
     sd_tap = os.path.join(C.REPO, "SD card", "TAP")
     for n in TOUR:
         shutil.copyfile(os.path.join(sd_tap, n), os.path.join(out, "TAP", n))
     for n in TOUR_DIRS:
-        shutil.copytree(os.path.join(sd_tap, n), os.path.join(out, "TAP", n))
+        shutil.copytree(os.path.join(sd_tap, n), os.path.join(out, "TAP", n), ignore=C.skip_junk)
     tour = dict.fromkeys(rows[0], "")
     tour.update(on_card="yes", folder="TAP", file="tour.tap", title="TS-Pico 2.3 guided tour",
                 summary="A tour of what's new in the TS-Pico since version 1.1, one feature per chapter.",
