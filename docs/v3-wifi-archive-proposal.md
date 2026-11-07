@@ -190,10 +190,47 @@ same commands.
    (Y/N), not overwritten silently.
 4. **v3 only.** The v2 manual doesn't mention it.
 
+## The index, built (2026-11-07)
+
+`tools/sd-archive/net_index.py` builds it from the item's file list and the
+ZIPs themselves. It downloaded the small ones the SD-card pipeline didn't
+already have.
+
+- **Coverage:** 1,217 ZIPs looked at (the 1,189 tagged `(TS2068)`, plus 28
+  from the site's 2068 list without the tag). They yield **967 tapes from
+  902 ZIPs.** By status: 337 L, 163 R, 32 X, 435 untested.
+- **Left out:** 265 ZIPs over 32 KB, 37 ZIPs with no `.tap`, and 16 TZXs
+  named `.tap`.
+- **Size and URLs:** the index is 105 KB, and 27.9 KB gzipped. The longest
+  `AT&G` line is 178 bytes, because only what HTTP needs is percent-encoded
+  (archive.org accepts unencoded parentheses and commas).
+- **Entries:** each line names the tape by its entry in the ZIP's central
+  directory, not by its local header. Some ZIPs store sizes after the data
+  (flag bit 3), so their local headers give no length.
+
+On the card (board 1, bare REPL), the 27.9 KB `.gz` gunzipped to flash in
+1.3 s. A search for "scramble" read all 967 lines in 0.26 s. Fetching
+*Circuit Board Scramble* by its index line took 9.7 s, and its TAP came out
+through the central directory with a good CRC (a flag-bit-3 ZIP). The tape
+is now in `/TAP/NET/` on the card.
+
+**The gap is the collections.** About 560 of the 1,328 load-tested tapes
+are inside ZIPs over 32 KB: user-group library tapes (CATUG, ISTUG,
+SINCUS…), most of them big because they also hold WAV recordings. Neither a
+bigger RAM buffer nor Zimodem reaches them. Zimodem sends no `Range`
+header, and archive.org's unzip service is chunked. The way to reach them
+is to put the tapes themselves in the item, as plain `.tap` files (they'd
+get a Content-Length), and point the index at those. That would publish
+more copies of tapes already in the item and in the SD card ZIP, so it's
+David's call.
+
 ## Steps
 
 1. **Hardware spike:** done, 2026-11-06 (above). B works with whole ZIPs.
-2. **Index:** generate it in `tools/sd-archive/` and publish it to the item.
+2. **Index:** `tools/sd-archive/net_index.py` (built and tested on the card,
+   2026-11-07). It goes into the item once David agrees; then fetch the
+   published `.gz` with `AT&G` once, to check archive.org serves it with a
+   length.
 3. **Firmware:** the core-0 ESP transfer in `tsbus` (into RAM, `ATS45=3`),
    ZIP inflate to SD, and `tpi:wifi` and `tpi:net`. The same PR updates the
    reference chapters (`docs/reference/`).
