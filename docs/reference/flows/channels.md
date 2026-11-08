@@ -8,8 +8,8 @@ position. Every exchange is a `tpi:` command sent in the middle of a BASIC
 statement, so every answer is a bare status — a printed message would move
 the current channel to the screen — and the ROM must wait for the Pico's
 tail before each new command. This flow follows one file from OPEN to
-CLOSE, then records, `d:` listings, the speech channel (`v:`) and the
-failures. User's view: [user
+CLOSE, then records, `d:` listings, the speech channel (`v:`), the command
+channel (`x:`) and the failures. User's view: [user
 manual chapter 6](../../manual/user-manual.md#chapter-6-streams-and-channels-open-).
 
 Notation as in [command.md](command.md): **TX**/**RX** the bus FIFOs, **Y**
@@ -161,20 +161,22 @@ manual §6.7](../../manual/user-manual.md#67-records-jumping-straight-to-what-yo
 spec whole (`tpi:chopen r d:games/*.tap`); the Pico lists the names
 (`DIR_NAMES`: folders first with a `/`, then files) into an in-memory
 stream, and `INPUT #5;n$` reads one name per line until Report 8. A mode
-other than `r` or a record length is Q.
+other than `r` or a record length is Q. The names are read from the card
+once, at OPEN: each `tpi:chrd` after that is answered from RAM with no
+mount (`CHANNELS.in_memory`, since #404).
 
 ## The speech channel (`v:`)
 
 `OPEN #4,"v:"` on the v3 card (#375): `CH_OPEN_HOOK` sends the spec whole
 (`tpi:chopen r v:`, any mode). `SD_NEEDED` lets it through with no card
-(`CH_SPEECH_PATH`); `CH_OPEN` answers F on a board without speech, Q for a
+(`CH_NOCARD_PATH`); `CH_OPEN` answers F on a board without speech, Q for a
 record length or anything after `v:`, else opens a speech stream
 (`CHANNELS.open_speech(4, board.say)`). The record is an ordinary `'F'`
 record with `R_FLAGS` bit 1 (`REC_FLAGS`).
 
 `PRINT #4;"HELLO THERE"`: `CH_OUT` buffers the bytes and, because of bit 1,
 flushes at the CR: one `tpi:chwr` with the line. `SD_NEEDED` passes it with
-no card (`CHANNELS.speaking(4)`), and `CH_WRITE` runs `CHANNELS.write`
+no card (`CHANNELS.in_memory(4)`), and `CH_WRITE` runs `CHANNELS.write`
 without `SD_CALL`: `TextOut` spells out keywords and drops control codes,
 and each complete line goes to `board.say`, which queues its allophones for
 core 1 and returns at once — the 2068 carries on while the card speaks. A
@@ -182,6 +184,41 @@ line over 64 bytes arrives in pieces and is said whole at its CR; `PRINT
 #4;"BYE";` (no CR) is said at `CLOSE #4`. Speech off (it never started at
 boot) is J on the `PRINT`; an unknown `[NAME]` Q. `INPUT #4` is Q: the
 stream is only written.
+
+## The command channel (`x:`)
+
+`OPEN #4,"x:"` (#404): `CH_OPEN_HOOK` sends the spec whole (`tpi:chopen
+r x:`, any mode). `SD_NEEDED` lets it through with no card
+(`CH_NOCARD_PATH`); `CH_OPEN` answers Q for a record length or anything
+after `x:`, else opens a command stream (`CHANNELS.open_command(4,
+X_RUN)`). The record is an ordinary `'F'` record with `R_FLAGS` bits 1 and
+2 (`REC_FLAGS`).
+
+`PRINT #4;"dir"`: `CH_OUT` buffers the bytes, and because of bit 1 flushes
+at the CR: one `tpi:chwr` with the line. `SD_NEEDED` passes it with no card
+(`CHANNELS.in_memory(4)`); `CH_WRITE` runs `CHANNELS.write` without
+`SD_CALL`, and `Channels._command` runs the line through `X_RUN` and keeps
+the answer in the channel. `path` and `mount` need nothing but RAM; `dir`
+and `info` mount the card for themselves (`dir` brings the folder index up
+to date with `LISTING_FRESHEN`, then answers with an `XDirText` over it).
+The `tpi:chwr` answers its status: an unknown command is Q on the `PRINT`,
+`dir` with no card J.
+
+`INPUT #4;d`: `CH_IN` finds its buffer empty, flushes (nothing), and
+`CH_FETCH` sends `tpi:chrd`; `CH_READ` reads the answer from RAM with no
+mount, up to 255 bytes (`XDirText.chunk` builds just those rows), and
+`CH_IN` hands them out a byte at a time until the CR, which `INPUT` takes
+as the end of the line. Further `INPUT #4` read on from the same 255 bytes,
+then fetch again. Past the end of the answer the Pico sends status 7 and
+`INPUT` stops with Report 8, so `dir` gives its counts first: two lines,
+the folders and the files, then one 32-character row each.
+
+`PRINT #4;"path"` after a `dir` read only in part: every byte `CH_OUT`
+takes on an `x:` record clears `R_INN` and `R_INP` (`IN_DROP`, because of
+bit 2), so the rows `CH_IN` had read ahead are gone; on the Pico,
+`_command` starts the new answer from its beginning. The next `INPUT #4`
+fetches the path, not the rest of the listing. The answer lives in the
+channel until the next command, `CLOSE #4`, or the stream's next OPEN.
 
 ## Errors inside the module
 
@@ -196,7 +233,7 @@ for every character.
 
 | Failure | Where | BASIC sees |
 |---|---|---|
-| no card | the card gate | J (bare); the stream stays as it was |
+| no card | the card gate (`x:` `dir`: `X_RUN`) | J (bare); the stream stays as it was |
 | a missing file for `r`, a missing folder | `CH_OPEN` | F, no channel |
 | a bad mode, a record too long, `TAB 0` with data | `CH_OPEN`, `CH_WRITE` | Q |
 | the end of the file | `CH_READ` → 7 | 8 End of file |

@@ -74,7 +74,7 @@ blocks for good ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md
 | a SAVE | the dispatcher's `SD_PROBE` at the header (with `PRELOAD_READ` around it); `SAVE_TS`'s write through `SAVE_MOUNT` before the final status; the re-mount after it ([save.md](save.md)) | the header's ready-wait; the final status's ready-wait |
 | LOAD | **never**: `LOAD_TS` streams from the copy on the Pico's flash, because the Z80 reads the block blind and the card cannot be touched then ([load.md](load.md)) | — |
 | printing | `PRINT_FLUSH` when the text buffer is full or another transaction arrives; `COPY_BMP` | a printer transaction's ready-wait |
-| a channel command | `CH_CALL` → `SD_CALL` for each `tpi:chwr`, `tpi:chrd` … (open, seek, write or read, close) | `CH_SEND`'s WF_NPH ([channels.md](channels.md)) |
+| a channel command | `CH_CALL` → `SD_CALL` for each `tpi:chwr`, `tpi:chrd` … (open, seek, write or read, close) on an `f:` stream; a stream with no file (`d:`, `v:`, `x:`) is written and read in RAM with no `SD_CALL` and no mount (#404) | `CH_SEND`'s WF_NPH ([channels.md](channels.md)) |
 | ZX48 mode | `SAVE_ZX` mounts with `ENA_SD` → `SAVE_MOUNT` and gives the bus back with `ENA_MQ_DUAL`, which rebuilds `TS_IO_DUAL` and **says READY** itself because `ZX48_IO` never returns to the dispatcher between transfers; `ZX_TPI` uses the usual `ACTIVATE_SD` … `ACTIVATE_MQ` and says READY with its reply ([../firmware/tspico_io.md](../firmware/tspico_io.md#ena_mq_dualmq)) | the Spectrum ROM's ready-wait after `'S'` or `'T'` |
 
 ## No card, and a stuck card
