@@ -94,6 +94,7 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/boards/TSPICO_V3/pins.csv",
     "src/boards/TSPICO_V3/tspico_v3_pins.h",
     "src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl",
+    "src/boards/TSPICO_V3/memmap/pico_psram_region.ld",
     "src/tsbus/tsbus.c",
     "src/tsbus/tsbus.pio",
     "src/tsbus/usart8251.h",

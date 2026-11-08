@@ -2,7 +2,8 @@
 
 Source: [`src/boards/TSPICO_V3/`](../../../src/boards/TSPICO_V3/):
 `mpconfigboard.cmake`, `mpconfigboard.h`, `board_init.c`, `tspico_v3_pins.h`,
-`tspico_v3.h`, `memmap/section_extra_post_platform_end.incl`, `manifest.py`,
+`tspico_v3.h`, `memmap/section_extra_post_platform_end.incl`,
+`memmap/pico_psram_region.ld`, `manifest.py`,
 `pins.csv`.
 
 The MicroPython board for the TS-Pico v3 card (RP2350B), phase 3 of the v3
@@ -31,6 +32,7 @@ tspico-hardware, from the schematic netlist), not the v2 map in
 | `tspico_v3_pins.h` | the pin map and the expander's registers, shared with `tsbus` |
 | `tspico_v3.h` | the pico-sdk board header |
 | `memmap/section_extra_post_platform_end.incl` | ends the GC heap at `0x20040000` |
+| `memmap/pico_psram_region.ld` | the linker's PSRAM region, 8 MB |
 | `manifest.py` | the freeze manifest |
 | `pins.csv` | names for `machine.Pin` |
 
@@ -265,6 +267,19 @@ linker search path (`tspico_v3_linker_override()`, above):
 
 It asserts that `.bss` ends below the image region and that the heap is over
 64 KB. `tsbus.start()` checks `__GcHeapEnd` again at run time.
+
+## `memmap/pico_psram_region.ld`
+
+The linker's `PSRAM` memory region: `ORIGIN = 0x11000000, LENGTH = 8M`. The
+SDK generates a file of this name with `LENGTH = PICO_PSRAM_SIZE_BYTES`,
+which this build leaves unset (the size is auto-detected at boot), so its
+region is 0 bytes and the link fails once anything is placed in it: "PSRAM:
+7 MB of 0 GB", `ld returned 1` in CI on 2026-11-08, with
+`tspico_v3_psram_reserve` in it. This board's `memmap/` is ahead of the
+SDK's directory in the linker search path (`tspico_v3_linker_override()`),
+so this copy is the one used. It only sizes the region for the linker: the C
+code still sees no `PICO_PSRAM_SIZE_BYTES`, and the chip's size comes from
+its ID at boot.
 
 ## `manifest.py`
 
