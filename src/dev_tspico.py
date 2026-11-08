@@ -6002,7 +6002,8 @@ def WIFI(pre, cmd):                                                   # The v3 c
     # SAVE "tpi:wifi name,password" - Join that network and save it as Zimodem's default
     #
     # A tpi: name is 31 characters at most, so name,password has 22. A longer
-    # one is joined with PicoTerm's WiFi menu, which saves it the same way.
+    # one is joined with ATW in Hayes mode (the manual's F.2) or PicoTerm's
+    # WiFi menu, which save it the same way.
     # The password is never logged or shown. docs/v3-wifi-archive-proposal.md.
 
     TLM("WIFI enter")
@@ -6048,7 +6049,7 @@ def NET(pre, cmd):                                                    # Tapes fr
     # (#401), fetched by Zimodem (board.wifi_get) into BLOCK_BUF, so a tape
     # over 48K is refused before it is fetched. One fetch per command keeps
     # it inside the 2068's ~19.9 s wait. A download isn't mounted (David,
-    # 2026-11-08): tpi:cd /net, then LOAD "tpi:name.tap". The list is kept
+    # 2026-11-08): MOVE TO "/net", then LOAD "tpi:name.tap". The list is kept
     # on flash (net.LIST_PATH); the full index on the card (net.FULL_PATH).
 
     TLM("NET enter")
@@ -6157,7 +6158,7 @@ def NET_GET(net, e, par1):                                            # download
         return
     msg, st = SD_CALL(NET_WRITE, dest, n)
     LOG(msg, 0 if st == _1_OK else 2)
-    SEND_MSG(msg, ('tpi:cd /net, LOAD "tpi:%s", then %s' % (name, net.how(e[2])))
+    SEND_MSG(msg, ('MOVE TO "/net", LOAD "tpi:%s", then %s' % (name, net.how(e[2])))
              if st == _1_OK else "", st)
 
 

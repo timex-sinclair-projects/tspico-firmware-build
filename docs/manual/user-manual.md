@@ -72,7 +72,8 @@ the 2068 through two I/O ports, looks after the SD card, and has no memory chips
 - sixteen **RAM slots**, lost when the power goes off.
 
 It also has a **WiFi modem**, which programs written for the Timex TS2050 modem use to reach
-hosts on the internet (Appendix F).
+hosts on the internet, and which downloads programs from the Timex/Sinclair archive straight
+onto the SD card (Appendix F).
 <!-- /v3 -->
 
 The TS-Pico replaces part of the 2068's own ROM with its own version, so the ordinary
@@ -2416,6 +2417,23 @@ The modem, Appendix F. The show form gives the mode, whether the WiFi part is on
 `Line on-hook; 3 calls, 2 made`; in Hayes mode the second line starts `Flow on` or `Flow off`
 instead. A mode is saved for the next start (`MODEM_MODE` in `config.ini`); flow isn't, and a
 mode change turns it off (F.6). **A**: any other word.
+
+### net: programs from the archive
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:net"` | List the archive's categories, numbered |
+| `SAVE "tpi:net 5"` | Open number 5: a folder is listed, a program is downloaded to `/TAP/NET` |
+| `SAVE "tpi:net 5" CODE 255,0` | The same, replacing a file of that name without asking |
+| `SAVE "tpi:net more"` | The rest of a big folder's list |
+| `SAVE "tpi:net .."` | The folder above |
+| `SAVE "tpi:net find word"` | Programs whose name or title has the word (or every word) |
+| `SAVE "tpi:net update"` | Download the archive's index again |
+
+Appendix F.7. *(verbose)* `Saved /TAP/NET/name.tap` and how to load it. **J**: `Not on WiFi`
+(see `wifi`), `Download failed`, or another WiFi problem. **6**: a number not in the list, or
+`Too big for the card:` a program over 48K. **Q**: `No list yet` or `No more in this folder`.
+**A**: any other word.
 <!-- /v3 -->
 
 ### nop
@@ -2511,6 +2529,19 @@ shows part of the tape (`CODE 0,n`) or one line per file (`CODE 1,0`).
 | `SAVE "tpi:verbose" CODE 1,0` | Turn it off (or `SAVE "tpi:verbose off"`) |
 
 At switch-on, the setting comes from `config.ini` (off unless you change it; see Appendix D).
+
+<!-- v3 -->
+### wifi
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:wifi"` | Show whether the modem is on WiFi, and its address |
+| `SAVE "tpi:wifi name,password"` | Join that network and keep it for next time |
+
+`WiFi: on, address 192.168.1.20`, or `WiFi: not on a network`. A name and password together
+can be 22 characters at most; for a longer one, use `ATW` in Hayes mode (F.2). **J**:
+`Can't join` the network. **A**: no comma.
+<!-- /v3 -->
 
 ### zx48
 
@@ -3080,7 +3111,7 @@ Zoom meetings; and to our families.
 <!-- v3 -->
 ---
 
-<!-- keywords: modem · WiFi · MTERM · tpi:modem -->
+<!-- keywords: modem · WiFi · MTERM · tpi:modem · tpi:net · tpi:wifi · archive -->
 
 # Appendix F: The Modem
 
@@ -3218,12 +3249,79 @@ to the host as data. On an X call the modem also takes any 19 or 17 the program 
 XOFF or XON, so don't send binary data that contains them. `SAVE "tpi:modem flow off"` turns
 it off again.
 
-## F.7 Summary
+## F.7 Programs from the archive
+
+The modem can also fetch programs. The Timex/Sinclair software archive keeps over two thousand
+2068 programs on archive.org, every one tested to load, and `tpi:net` downloads them onto the
+SD card. The modem has to be on your WiFi first (F.2, or `SAVE "tpi:wifi name,password"` if
+the two fit in 22 characters).
+
+Start with the list of categories:
+
+```basic
+SAVE "tpi:net"
+```
+
+```
+Net: /TAP
+001 ARCADE/ Arcade games (53)
+002 COLLECT/ Collections and mag
+003 DEMOS/ Demos (93)
+...
+```
+
+Each line has a number. Open one with its number: a folder shows its own list, with the
+programs in it.
+
+```basic
+SAVE "tpi:net 1"
+```
+
+```
+Net: /TAP/ARCADE
+001 alienbla L Alien Blaster
+002 ambush   L Ambush
+003 androids L Androids
+...
+```
+
+A program's line shows its file name, a letter, and its title. Its number downloads it:
+
+```basic
+SAVE "tpi:net 2"
+```
+
+The letter says how it loads: **L** with `LOAD ""`, **R** with `LOAD ""` then `RUN`, **C** with
+`LOAD "" CODE`. A big folder's list comes in two parts; the first ends with `tpi:net more`,
+which shows the rest. `SAVE "tpi:net .."` goes back up.
+
+Or search the whole archive by name or title:
+
+```basic
+SAVE "tpi:net find chess"
+```
+
+The first search downloads the archive's index to the card, which takes a few seconds more.
+
+A downloaded program goes into the `NET` folder. Load it the usual way:
+
+```basic
+MOVE TO "/net"
+LOAD "tpi:ambush.tap"
+LOAD ""
+```
+
+If a file of that name is already there, the card asks before replacing it. Each download takes
+5 to 15 seconds. A few programs, those over 48K, are too big to download this way: the card
+says so before it starts.
+
+## F.8 Summary
 
 1. The modem looks like a TS2050 to the 2068: MTERM and other 2050 programs work as they are.
 2. Set up WiFi and the phonebook once, in Hayes mode, with `ATW`, `AT&W` and `ATP`.
 3. Dial a phonebook number from the program; press **ENTER** if the host is quiet.
 4. `SAVE "tpi:modem"` shows the state and sets the mode.
+5. `SAVE "tpi:net"` lists the archive's programs; a number downloads one to `/TAP/NET`.
 
 ---
 

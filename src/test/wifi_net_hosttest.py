@@ -376,7 +376,7 @@ def main():
     check("1 of 2" in got[0][1], "tpi:net ..: back up, then GAMES again")
     got = run("tpi:net 2")
     saved = os.path.join(d, "TAP", "NET", "21.tap")
-    check(got == [("MSG", "Saved /TAP/NET/21.tap", 'tpi:cd /net, LOAD "tpi:21.tap", then LOAD ""', t._1_OK)],
+    check(got == [("MSG", "Saved /TAP/NET/21.tap", 'MOVE TO "/net", LOAD "tpi:21.tap", then LOAD ""', t._1_OK)],
           "tpi:net 2: a tape saved, how to load it (%r)" % (got,))
     with open(saved, "rb") as f:
         check(f.read() == T21, "  /TAP/NET/21.tap byte-exact, the folder made")

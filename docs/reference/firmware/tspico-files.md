@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1438–2424,
 2769–2801, 4243–4248, 4353–4412, 4674–4761, 4915–4922, 5745–5802,
-6304–6318, 6400–6482 and 6640–6656 (firmware 2.3).
+6305–6319, 6401–6483 and 6641–6657 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -62,11 +62,11 @@ document it is linked, not restated: the pitfalls are in
 | `getDock()` | 5756–5764 | (memory, slot) in the DOCK |
 | `SYSTEM_SLOT_LOCK(mem, page)` | 5767–5778 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
 | `BOOT_SLOT_CLASH(mem, page, f_name)` | 5781–5801 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 6304–6318 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 6400–6420 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 6423–6482 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 6640–6656 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 6659–6688 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `REMOVE_DIR(d)` | 6305–6319 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 6401–6421 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 6424–6483 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 6641–6657 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 6660–6689 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -636,8 +636,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7946, 7963 and
-7975, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7947, 7964 and
+7976, inside a `try` because the card may have gone).
 
 Beware:
 
