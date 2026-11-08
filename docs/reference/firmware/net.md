@@ -69,14 +69,15 @@ whose path and title hold every word, in any case: `(entries, matched)`.
 Entries stop at `limit`, the count doesn't. The header and short lines are
 skipped.
 
-### `save_listing(where, part, parts, rows, path=LIST_PATH)`
+### `save_listing(where, part, parts, rows, path=None)`
 
 Keeps a list for `tpi:net <number>`, `more` and `..`: a `#` line with
 `where` (a folder, or "find *words*"), `part` and `parts`, then one
 tab-joined line per entry. On flash, not in RAM: rule 3, nothing kept
-between commands. It is written after the fetch, never during it.
+between commands. It is written after the fetch, never during it. `path`
+None means `LIST_PATH`, read at the call, so a test can move it.
 
-### `load_listing(path=LIST_PATH)`
+### `load_listing(path=None)`
 
 `(where, part, parts, rows)` of the kept list, or `None` if there is none
 or its header is short.

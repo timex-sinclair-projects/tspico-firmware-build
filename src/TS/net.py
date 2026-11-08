@@ -76,18 +76,18 @@ def find(f, words, limit=MAX_FIND):
     return rows, n
 
 
-def save_listing(where, part, parts, rows, path=LIST_PATH):
+def save_listing(where, part, parts, rows, path=None):
     """Keep the listing on flash, for tpi:net <number>, more and .."""
-    with open(path, "w") as f:
+    with open(path or LIST_PATH, "w") as f:
         f.write("#\t%s\t%d\t%d\n" % (where, part, parts))
         for r in rows:
             f.write("\t".join(r) + "\n")
 
 
-def load_listing(path=LIST_PATH):
+def load_listing(path=None):
     """(where, part, parts, rows) of the last listing, or None."""
     try:
-        f = open(path)
+        f = open(path or LIST_PATH)
     except OSError:
         return None
     with f:
