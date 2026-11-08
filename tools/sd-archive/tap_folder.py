@@ -9,7 +9,10 @@ CARD is the folder build_card.py made. OUTDIR gets:
 
   OUTDIR/TAP/<CATEGORY>[/<COLLECTION>]/<name>.tap   every archive tape on the
                                                      card, at its card path
-  OUTDIR/tspico-taps.txt, tspico-taps.txt.gz         the index the card loads
+  OUTDIR/TAP/.../index.txt, index2.txt...            each folder's index, for
+                                                     browsing (8 KB parts)
+  OUTDIR/tspico-taps.txt, tspico-taps.txt.gz         every tape in one index,
+                                                     for search
 
 Only the card's tapes go in: the ones that load and start (load-tested), with
 the pipeline's repairs and conversions, from zips checked against archive.org
@@ -23,7 +26,23 @@ docs/v3-wifi-archive-proposal.md). The URL is the item, then the path:
 
   AT&G"https://archive.org/download/ITEM/TAP/GAMES/name.tap"
 
-The index is one line per tape, tab-separated, UTF-8, after a '#' header:
+Browsing starts at TAP/index.txt. Every folder has an index.txt: its
+subfolders, then its tapes, tab-separated UTF-8 after a '#' header. A folder's
+index is split into parts of at most 8192 bytes (MAX_PART), so each part fits
+the card's 32 KB download buffer with room to spare: index.txt, index2.txt...
+The header says which part it is and how many there are:
+
+  #tspico-dir  1  DATE  TAP/HOME  Home and business  part 1 of 2  tapes 428
+
+  name/  D  title  tapes                  a subfolder: its title (the program's
+                                          title on the site, for a collection)
+                                          and how many tapes are under it
+  name.tap  status  title  year  publisher  size  post
+                                          a tape, with the fields below; in a
+                                          collection, the title drops the
+                                          collection's name
+
+The full index, tspico-taps.txt.gz, is one line per tape, after a '#' header:
 
   path  status  title  year  publisher  size  post
 
@@ -39,7 +58,9 @@ The index is one line per tape, tab-separated, UTF-8, after a '#' header:
              (needs describe.py's descriptions.json; empty without it)
 
 --publish uploads to the ITEM below: only the tapes whose MD5 differs from
-the item's copy, then the index. Every upload sends
+the item's copy, then the indexes that changed. Uploads go CHUNK files at a
+time, and wait while the item has more than QUEUE archive.org tasks queued,
+since archive.org refuses uploads past a few hundred. Every upload sends
 x-archive-keep-old-version: 0 (ia upload --no-backup), so a replaced tape
 leaves no copy under history/files/; a tape changed to take personal data
 out must not stay public there. A tape in the item that is no longer on the
@@ -65,6 +86,14 @@ INDEX = "tspico-taps.txt"           # the card fetches INDEX + ".gz"
 FORMAT = 1
 MAX_COMMAND = 255                   # Zimodem's MAX_COMMAND_SIZE is 256, with the 0
 NO_BACKUP = {"x-archive-keep-old-version": "0"}
+CHUNK = 50                          # files per upload call
+QUEUE = 100                         # archive.org refuses uploads ("bucket_tasks_queued exceeds rationed
+                                    # amount") once an item has a few hundred tasks queued; each file is one task
+DIR_INDEX = "index"                 # index.txt, then index2.txt, index3.txt... in every folder
+MAX_PART = 8192                     # bytes per index part, header included
+GROUPS = {"ARCADE": "Arcade games", "GAMES": "Games", "EDUCATE": "Education", "MUSIC": "Music, sound and speech",
+          "HOME": "Home and business", "GRAPHICS": "Graphics", "UTILITY": "Utilities", "DEMOS": "Demos",
+          "COLLECT": "Collections and magazines", "MISC": "Other programs"}
 STATUS = {'LOAD ""': "L", 'LOAD "", then RUN': "R", 'LOAD "" CODE': "C"}
 METADATA = dict(
     mediatype="software", collection="open_source_software",
@@ -101,12 +130,73 @@ def clean(s):
     return re.sub(r"\s+", " ", s or "").strip()
 
 
+def part_name(k):
+    return "%s%s.txt" % (DIR_INDEX, "" if k == 1 else k)
+
+
+def write_dirs(out, lines, posts):
+    """An index in every folder: its subfolders, then its tapes, in parts of at most MAX_PART bytes.
+    posts: {tape path: its program's title on the site}, which names a collection's folder.
+    Returns the index paths, relative to out."""
+    tapes = collections.defaultdict(list)                   # folder -> tape lines
+    subs = collections.defaultdict(set)                     # folder -> subfolders
+    for f in lines:
+        d = os.path.dirname(f[0])
+        tapes[d].append(f)
+        while "/" in d:
+            subs[os.path.dirname(d)].add(d)
+            d = os.path.dirname(d)
+    count = collections.Counter()
+    for d, ts in tapes.items():
+        x = d
+        while True:
+            count[x] += len(ts)
+            if "/" not in x:
+                break
+            x = os.path.dirname(x)
+
+    def title(d):
+        name = os.path.basename(d)
+        if d.count("/") == 1:
+            return GROUPS.get(name, name.title())
+        ts = [posts[t[0]] for t in tapes[d]] or [title(x) for x in subs[d]]
+        return collections.Counter(ts).most_common(1)[0][0]
+
+    written, today = [], time.strftime("%Y-%m-%d")
+    for d in sorted(set(tapes) | set(subs)):
+        t = title(d) if "/" in d else "TS-2068 programs"
+        rows = [[os.path.basename(x) + "/", "D", title(x), str(count[x])]
+                for x in sorted(subs[d], key=lambda x: title(x).lower())]
+        for f in tapes[d]:
+            tt = f[2][len(t) + 2:] if f[2].startswith(t + ": ") else f[2]
+            rows.append([os.path.basename(f[0]), f[1], tt] + f[3:])
+        parts, cur, size = [], [], 0
+        for r in rows:
+            b = len(("\t".join(r) + "\n").encode("utf-8"))
+            if cur and size + b > MAX_PART - 120:           # room for the header
+                parts.append(cur)
+                cur, size = [], 0
+            cur.append(r)
+            size += b
+        parts.append(cur)
+        for k, rs in enumerate(parts, 1):
+            head = "#tspico-dir\t%d\t%s\t%s\t%s\tpart %d of %d\ttapes %d\n" % (
+                FORMAT, today, d, t, k, len(parts), count[d])
+            text = (head + "".join("\t".join(r) + "\n" for r in rs)).encode("utf-8")
+            assert len(text) <= MAX_PART, (d, k, len(text))
+            rel = os.path.join(d, part_name(k))
+            with open(os.path.join(out, rel), "wb") as fh:
+                fh.write(text)
+            written.append(rel)
+    return written
+
+
 def build(card, out, max_tap):
     rows = [r for r in csv.DictReader(open(os.path.join(card, "catalog.csv")))
             if r["on_card"] == "yes" and r["page"]]          # archive tapes; not the tour
     desc = {C.public(k): v for k, v in C.load("descriptions.json", {}).items()}
     per_page = collections.Counter(r["page"] for r in rows)
-    lines, big, nopost = [], [], 0
+    lines, big, nopost, posts = [], [], 0, {}
     for r in sorted(rows, key=lambda r: (r["folder"], r["file"])):
         path = "%s/%s" % (r["folder"], r["file"])
         src = os.path.join(card, path)
@@ -128,6 +218,7 @@ def build(card, out, max_tap):
                   year, clean(pub), str(size), post]
         assert all("\t" not in x for x in fields), fields
         lines.append(fields)
+        posts[path] = clean(r["title"])
     head = "#tspico-taps\t%d\t%s\ttapes %d\tmax-tap %d\n" % (FORMAT, time.strftime("%Y-%m-%d"), len(lines), max_tap)
     text = (head + "".join("\t".join(f) + "\n" for f in lines)).encode("utf-8")
     with open(os.path.join(out, INDEX), "wb") as f:
@@ -138,14 +229,18 @@ def build(card, out, max_tap):
     print("index %d bytes, .gz %d bytes; %d tapes without a post ID%s" % (
         len(text), os.path.getsize(os.path.join(out, INDEX + ".gz")), nopost,
         " (run describe.py)" if nopost else ""))
+    dirs = write_dirs(out, lines, posts)
+    sizes = [os.path.getsize(os.path.join(out, p)) for p in dirs]
+    print("%d folder indexes in %d folders; largest part %d bytes" % (
+        len(dirs), len({os.path.dirname(p) for p in dirs}), max(sizes)))
     if big:
         print("left out, over --max-tap %d: %d tapes" % (max_tap, len(big)))
         for s, p in sorted(big, reverse=True):
             print("  %7d  %s" % (s, p))
-    return [l[0] for l in lines]
+    return [l[0] for l in lines], dirs
 
 
-def publish(out, paths, dry):
+def publish(out, paths, dirs, dry):
     have = C.archive_files(ITEM)            # {} while the item doesn't exist
     new = not have
     todo = {p: os.path.join(out, p) for p in paths
@@ -156,22 +251,56 @@ def publish(out, paths, dry):
     for n in gone:
         print("  no longer on the card (not deleted): %s" % n)
     files = dict(todo)
-    files.update({n: os.path.join(out, n) for n in (INDEX, INDEX + ".gz")})
+    idx = [n for n in dirs + [INDEX, INDEX + ".gz"]
+           if n not in have or have[n].get("md5") != C.md5_file(os.path.join(out, n))]
+    files.update({n: os.path.join(out, n) for n in idx})
+    stale = sorted(n for n in have if re.fullmatch(r"TAP/.*%s\d*\.txt" % DIR_INDEX, n) and n not in set(dirs))
+    for n in stale:
+        print("  index part no longer made (not deleted): %s" % n)
+    print("%d of %d indexes to upload" % (len(idx), len(dirs) + 2))
     if dry:
         print("would upload %d files with %s%s" % (len(files), NO_BACKUP, ", creating the item" if new else ""))
         return
     import internetarchive as ia
-    names = sorted(files, key=lambda n: (n.startswith(INDEX), n))     # the index last
-    for i in range(0, len(names), 100):
-        chunk = {n: files[n] for n in names[i:i + 100]}
+    def order(n):                       # tapes, then the folder indexes, then the full index
+        return (n.startswith(INDEX), os.path.basename(n).startswith(DIR_INDEX), n)
+    names = sorted(files, key=order)
+    for i in range(0, len(names), CHUNK):
+        if not wait_for_queue(ia):
+            raise SystemExit("archive.org still has over %d tasks queued for %s after 6 hours" % (QUEUE, ITEM))
+        chunk = {n: files[n] for n in names[i:i + CHUNK]}
         kw = dict(metadata=METADATA) if new and i == 0 else {}
-        for r in ia.upload(ITEM, files=chunk, headers=NO_BACKUP, retries=5, retries_sleep=30, **kw):
-            r.raise_for_status()
-        print("  uploaded %d of %d" % (min(i + 100, len(names)), len(names)))
+        for attempt in range(10):
+            try:
+                for r in ia.upload(ITEM, files=chunk, headers=NO_BACKUP, checksum=True,
+                                   retries=5, retries_sleep=30, **kw):
+                    r.raise_for_status()
+                break
+            except Exception as e:              # noqa: BLE001 -- archive.org's rate limit comes back as an HTTP error
+                if "reduce your request rate" not in str(e) or attempt == 9:
+                    raise
+                print("  archive.org asks to slow down; waiting for its queue")
+                wait_for_queue(ia, 0, 60)
+        print("  uploaded %d of %d" % (min(i + CHUNK, len(names)), len(names)))
+    if not wait_for_queue(ia, 0, 30):        # one task can sit queued for hours; check what's there now
+        print("archive.org still has tasks queued for the item after 30 minutes; check later with:")
+        print("  ia list %s | grep history/" % ITEM)
     print("https://archive.org/download/%s/%s.gz" % (ITEM, INDEX))
     left = [n for n in C.archive_files(ITEM) if n.startswith("history/")]
     if left:
         raise SystemExit("archive.org kept %d old copies under history/: %s" % (len(left), left[:5]))
+
+
+def wait_for_queue(ia, most=QUEUE, minutes=360):
+    """Wait until the item has at most `most` archive.org tasks queued or running.
+    Returns False if it still has more after `minutes`."""
+    s = ia.get_session()
+    for _ in range(minutes * 2):
+        t = s.get_tasks_summary(ITEM)
+        if t.get("queued", 0) + t.get("running", 0) <= most:
+            return True
+        time.sleep(30)
+    return False
 
 
 def main():
@@ -187,9 +316,9 @@ def main():
         raise SystemExit("%s has no catalog.csv: run build_card.py first" % card)
     if os.path.exists(out):
         raise SystemExit("%s exists: move it away first" % out)
-    paths = build(card, out, a.max_tap)
+    paths, dirs = build(card, out, a.max_tap)
     if a.publish:
-        publish(out, paths, a.dry_run)
+        publish(out, paths, dirs, a.dry_run)
 
 
 if __name__ == "__main__":
