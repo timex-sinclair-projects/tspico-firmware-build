@@ -157,6 +157,23 @@ docstring is the format's definition; in short:
   tape and the `.gz` each come back 302 to `ia600909.us.archive.org`, then
   200 with a `content-length`.
 
+**On the card, 2026-11-08** (board 1, Zimodem 4.0.3.2, after rejoining the
+WiFi with PicoTerm): six files fetched with `AT&G` in stream mode
+(`ATS45=3`) into a 64 KB RAM buffer, each checked against the item's MD5.
+All six were byte-exact:
+
+| File | Bytes | Time |
+|------|------:|-----:|
+| `TAP/index.txt` | 339 | 3.2 s |
+| `TAP/GAMES/index.txt` | 8,117 | 4.0 s |
+| `TAP/GAMES/index2.txt` | 1,374 | 3.8 s |
+| `tspico-taps.txt.gz` | 45,999 | 8.8 s |
+| `TAP/ARCADE/ambush.tap` | 7,994 | 4.9 s |
+| `TAP/UTILITY/pcdrawv3.tap`, the largest | 63,635 | 10.8 s |
+
+About 3 s of each is the request and archive.org's redirect. A 64 KB
+buffer, taken in a bare REPL (164 KB free), was enough for all of them.
+
 What this means for the card:
 
 - **No unzip and no central-directory walk.** A download is one `AT&G`
@@ -241,8 +258,8 @@ collection ZIPs over 32 KB.
 ## Steps
 
 1. **Hardware spike:** done, 2026-11-06 (above).
-2. **The folder:** published 2026-11-07 (#402, #403). Left: a v3 card
-   downloads from it byte-exact (#401's last box).
+2. **The folder:** published 2026-11-07 (#402, #403); a v3 card downloaded
+   from it byte-exact, 2026-11-08 (above).
 3. **Firmware:** the core-0 ESP transfer in `tsbus` (into a RAM buffer,
    `ATS45=3`, 64 KB or a stated limit), the write to SD, and `tpi:wifi`
    and `tpi:net`. The same PR updates the reference chapters
