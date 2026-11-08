@@ -45,7 +45,7 @@ def fill(a: uint, n: uint, seed: uint, inv: uint):
     while i < int(n):
         v = (a + uint(i) * 4) ^ seed
         if inv:
-            v = v ^ 0xFFFFFFFF
+            v = ~v
         p[i] = v
         i += 1
 
@@ -60,7 +60,7 @@ def check(a: uint, n: uint, seed: uint, inv: uint, base: uint) -> int:
     while i < int(n):
         v = (base + uint(i) * 4) ^ seed
         if inv:
-            v = v ^ 0xFFFFFFFF
+            v = ~v
         if uint(p[i]) != v:
             bad += 1
         i += 1
@@ -74,7 +74,7 @@ def first_bad(a: uint, n: uint, seed: uint, inv: uint, base: uint) -> int:
     while i < int(n):
         v = (base + uint(i) * 4) ^ seed
         if inv:
-            v = v ^ 0xFFFFFFFF
+            v = ~v
         if uint(p[i]) != v:
             return i
         i += 1
