@@ -44,9 +44,13 @@ void tspico_v3_safe_init(void) {
     in_nopull(PIN_RESET_HOLD);
     // The expander's /INT has its own 10k pull-up.
     in_nopull(PIN_NIOX_INT);
-    // PSRAM is not fitted; keep its CS high anyway.
+    // PSRAM CS: the SDK's runtime_init has already given GP47 to the QMI
+    // (XIP_CS1) and the PSRAM is in use; gpio_init would take it back. On a
+    // build without PSRAM, keep it high.
+    #if !MICROPY_HW_ENABLE_PSRAM
     gpio_init(PIN_PSRAM_CS);
     gpio_pull_up(PIN_PSRAM_CS);
+    #endif
     // The SD socket: nothing drives it until the firmware has seen a card
     // on the detect switch (board_v3.sd_card_ready). A driven line can power
     // a card through its I/O pins before its VDD contact makes. Plain
