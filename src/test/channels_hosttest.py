@@ -140,6 +140,7 @@ def main():
     stage3(err)
     speech(err)
     commands(err)
+    cat_text(err)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
@@ -351,6 +352,40 @@ def commands(err):
     check(ch.in_memory(5) and ch.table[5].path is None, "x: replaces a stale file entry on the stream")
     ch.open_list(6, ["a/", "b"])
     check(ch.in_memory(6), "a d: listing is in memory too")
+    ch.close_all()
+
+
+
+def cat_text(err):
+    print("write_text: CAT #s into a file (#404)")
+    fs = MemFS()
+    writes = []
+    real = fs.write
+    fs.write = lambda p, pos, data, t: writes.append(len(data)) or real(p, pos, data, t)
+    ch = C.Channels(fs)
+    ch.open(4, "/sd/TAP/cat.txt", "w")
+    ch.write(4, b"Before\r")
+    ch.write_text(4, ["Path:/TAP", "", "000 a.tap   1 kB"])
+    ch.write(4, b"After\r")
+    check(bytes(fs.files["/sd/TAP/cat.txt"]) == b"Before\nPath:/TAP\n\n000 a.tap   1 kB\nAfter\n",
+          "text file: each line with LF, at the file's position (%r)" % bytes(fs.files["/sd/TAP/cat.txt"]))
+    del writes[:]
+    ch.write_text(4, ["%031d" % i for i in range(100)])
+    check(len(writes) == 7 and max(writes) <= 512 + 32, "100 lines: 7 writes of about 512 bytes (%r)" % writes)
+    ch.open(5, "/sd/TAP/cat.bin", "wb")
+    ch.write_text(5, ["ab", "c"])
+    check(bytes(fs.files["/sd/TAP/cat.bin"]) == b"ab\rc\r", "binary file: the CRs as they are")
+    ch.open(6, "/sd/TAP/cat.rec", "w", 8)
+    ch.write_text(6, ["one", "two"])
+    check(bytes(fs.files["/sd/TAP/cat.rec"]) == b"one     two     ", "record file: a record a line")
+    check(err(lambda: ch.write_text(6, ["longer than 8"])) == "Q", "  a line too long: Q")
+    ch.open(7, "/sd/TAP/cat.txt", "r")
+    check(err(lambda: ch.write_text(7, ["x"])) == "Q", "a file opened to be read: Q")
+    ch.open_list(8, ["a"])
+    check(err(lambda: ch.write_text(8, ["x"])) == "Q", "a d: listing: Q")
+    ch.open_command(9, lambda line: b"")
+    check(err(lambda: ch.write_text(9, ["x"])) == "Q", "an x: stream: Q")
+    check(err(lambda: ch.write_text(10, ["x"])) == "O", "a stream that isn't open: O")
     ch.close_all()
 
 

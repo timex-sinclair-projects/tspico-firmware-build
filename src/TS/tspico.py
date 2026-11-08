@@ -3019,7 +3019,7 @@ SD_FREE = frozenset((
 # Commands the fdd ROM sends in the middle of a BASIC statement (OPEN #,
 # PRINT #, INPUT #, SAVE/LOAD "f:"): a printed message would move the ROM's
 # current channel, so these get the bare status (CH_REPLY does the same).
-SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:FOPEN"))
+SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:CHCAT", "TPI:FOPEN"))
 
 
 def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # does this command need the card?
@@ -3739,6 +3739,84 @@ def CH_OPEN(pre, cmd):                                                        # 
     CH_REPLY(st)
 
 
+def SCREEN_LINES(text):                                                      # a listing as the 2068 shows it, a line at a time
+
+    """The lines a listing's text makes on the 2068's 32-column screen,
+    with no colors: the text as SEND_MSG2 gets it (rows of 32 characters
+    that wrap, CRs, and INK, PAPER, AT and TAB codes with their parameters,
+    which are dropped). A CR straight after a full row ends nothing, as on
+    the screen. Each line comes with its trailing spaces cut. Reads the
+    text with len() and [i] only, so a DirText makes one row at a time."""
+
+    line = []
+    skip = 0
+    full = False
+    for i in range(len(text)):
+        c = text[i]
+        o = ord(c)
+        if skip:
+            skip -= 1
+            continue
+        if c == "\r":
+            if not full:
+                yield "".join(line).rstrip()
+                line = []
+            full = False
+            continue
+        if 16 <= o <= 21:
+            skip = 1
+            continue
+        if o == 22 or o == 23:
+            skip = 2
+            continue
+        if o < 32:
+            continue
+        full = False
+        line.append(c)
+        if len(line) == 32:
+            yield "".join(line).rstrip()
+            line = []
+            full = True
+    if line:
+        yield "".join(line).rstrip()
+
+
+def CH_CAT(pre, cmd):                                                         # tpi:chcat [x]: CAT #s[;x]
+
+    """CAT #s, CAT #s;"x" (#404): the listing CAT or CAT "x" would show,
+    written as plain lines into the file open on stream s (PMR1) instead.
+    PMR2 is 1 when a string came with it: "" is the mounted TAP, as CAT ""
+    is. The answer is a bare status: the stream isn't a file open to be
+    written (x:, d:, v:, mode r), Q; what CAT "x" would refuse, F; no card,
+    J (the card gate)."""
+
+    stream, has = PARAMS(pre)
+    stream &= 0xFF
+    arg = getArgs(cmd).strip() if has else None
+    TLM("CH_CAT", "stream=%d arg=%r" % (stream, arg))
+
+    def op():
+        ch = CHANNELS.table.get(stream)
+        if ch is None:
+            raise channels.ChannelError("Stream not open", "O")
+        if ch.in_memory() or ch.mode == "r":
+            raise channels.ChannelError("Not a file open for writing", "Q")
+        if arg is None:
+            LISTING_FRESHEN()
+            text = lista
+        elif arg == "":
+            text = TAPDIR_TEXT(0, 0)
+        else:
+            text, st = CATALOG_TEXT(arg)
+            if st != _1_OK:
+                raise channels.ChannelError(text, "F")
+        CHANNELS.write_text(stream, SCREEN_LINES(text))
+    msg, st = CH_CALL(op)
+    if st != _1_OK:
+        LOG("CAT #%d: %s" % (stream, msg), 1)
+    CH_REPLY(st)
+
+
 def CH_NOCARD_PATH(cmd):                                                      # tpi:chopen <mode> v: or x:
 
     """Is this tpi:chopen for OPEN #n,"v:" (the v3 card's speech) or
@@ -4181,10 +4259,27 @@ def TAPDIR(pre, cmd):                                                        # D
     #                                 block at the current position is shown too.
     # SAVE "tpi:tapdir"CODE x,255   - Show a screenfull around the current pos
 
-    global TSP
-    
     TLM("TAPDIR enter")
     par1, par2 = PARAMS(pre)
+    nom = TAPDIR_TEXT(par1, par2)
+    if nom is None:
+        msg = BAD_CODE("TAPDIR", par1, par2)
+        LOG(msg, 2)
+        SEND_MSG(msg, "", _8_A_Invalid_arg)
+        return
+    if isTapMounted():
+        nom = TAPDIR_COLOUR(nom, par1 == 1)
+    SEND_MSG2(nom, _1_OK, True, True)
+
+
+def TAPDIR_TEXT(par1, par2):                                                  # TAPDIR's listing, plain; None: a bad CODE
+
+    """The text TAPDIR shows, before TAPDIR_COLOUR: 32-character rows, the
+    mounted TAP's blocks (par1 0) or headers (par1 1), par2 as TAPDIR
+    takes it. With nothing mounted, the one-row notice. CAT #s;"" writes
+    it into a file (CH_CAT)."""
+
+    global TSP
 
     if not isTapMounted():
 
@@ -4206,10 +4301,7 @@ def TAPDIR(pre, cmd):                                                        # D
             # N.appd(" #  File         Len  Desc.     ")
             N.append("Blk Type         Len  Name      ")
         else:
-            msg = BAD_CODE("TAPDIR", par1, par2)
-            LOG(msg, 2)
-            SEND_MSG(msg, "", _8_A_Invalid_arg)
-            return
+            return None
         N.append("--------------------------------")
 
         if not TSP.offset_tbl:
@@ -4245,12 +4337,10 @@ def TAPDIR(pre, cmd):                                                        # D
             else: # Header listing
 
                 N.extend(catalog.tap_header_rows(TSP.offset_tbl, TSP.tap_idx, idx1, idx2))
-                    
-        nom = TAPDIR_COLOUR("".join(N), par1 == 1)
 
-    SEND_MSG2(nom, _1_OK, True, True)
+        nom = "".join(N)
 
-    return
+    return nom
 
 
 def SA_NOT_IMP(pre, cmd):                                                      # Output for not implemented SAVE Command 
@@ -7102,6 +7192,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:CHWR": CH_WRITE,
         "TPI:CHRD": CH_READ,
         "TPI:CHCLOSE": CH_CLOSE,
+        "TPI:CHCAT": CH_CAT,
         "TPI:FFW" : FWD,
         "TPI:HELP" : GETHELP,
         "TPI:IDIR" : IDIR,

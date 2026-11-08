@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2884–3914.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2884–3992.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -32,7 +32,7 @@ module's patches.
 | 3483–3592 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
 | 3606–3633 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
 | 3636–3668 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3671–3914 | `DIR_NAMES`, `CH_OPEN`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 3671–3992 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -62,6 +62,7 @@ bytes 3–4 and 5–6, read with `PARAMS(pre)` ([tspico-files.md](tspico-files.m
 | **PRINT #n;…** (the driver's flush) | `tpi:chwr <hex>` | stream n | 0 | [`CH_WRITE`](#ch_writepre-cmd) | a bare status |
 | **INPUT #n / INKEY$ #n** (the driver's fetch) | `tpi:chrd` | stream n | bytes wanted (255) | [`CH_READ`](#ch_readpre-cmd) | status 1, count, bytes, XOR; or status 7 |
 | **CLOSE #n** | `tpi:chclose` | stream n | 0 | [`CH_CLOSE`](#ch_closepre-cmd) | a bare status |
+| **CAT #n**, **CAT #n;x$** (#404) | `tpi:chcat` or `tpi:chcat x` | stream n | 1 when a string came, else 0 | [`CH_CAT`](#ch_catpre-cmd) | a bare status; the listing is written into the file |
 
 **How the ROM sends them.** The four keywords, COPY's file form and `tpi:cd` go through the
 stock `SAVE "tpi:…"` machinery: `FDD_MAIN` (`FDD_COPY` for COPY) builds the text in the
@@ -617,7 +618,7 @@ tape. Returns `(length of the tape, 1)` or `(message, status)`.
 Beware: a +3DOS file whose header length exceeds the file describes as
 `None`; loaded as CODE it is taken whole, header included.
 
-## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
+## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose, tpi:chcat
 
 The comment at line 3595 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
@@ -735,6 +736,62 @@ either case, no card used; `v:x` and a record length Q; no speech on the
 board F. `dirinfo_hosttest.py` pins `x:`: `x:y` and a record length Q;
 `X:` opens with no card; `SD_NEEDED` lets `chwr` and `chrd` on it through
 with no card.
+
+### `SCREEN_LINES(text)`
+
+A generator: the lines a listing's text makes on the 2068's 32-column
+screen, with no colors, for `CH_CAT`. The text is what `SEND_MSG2` would
+get before any coloring: 32-character rows that wrap, CRs, and control
+codes. INK to OVER (16–21) are dropped with their one parameter, AT and TAB
+(22, 23) with their two, any other code below 32 alone. A row that reaches
+32 characters ends a line; a CR straight after it ends nothing (`full`), as
+on the screen, so a listing of full rows each with a CR doesn't get a blank
+line between rows. Each line comes with its trailing spaces cut; what is
+left at the end is the last line. It reads the text with `len()` and `[i]`
+only, so a `DirText` (`lista`) makes one row at a time and the listing is
+never joined (rule 6 in [the memory appendix](../appendix/memory.md)).
+Pinned by `dirinfo_hosttest.py`: wrapping, the CR after a full row, the
+codes and their parameters dropped.
+
+### `CH_CAT(pre, cmd)`
+
+`tpi:chcat [x]`: `CAT #n` and `CAT #n;"x"` (#404). The listing `CAT` or
+`CAT "x"` would show is written as plain lines into the file open on
+stream PMR1, at its position, instead of to the screen. The ROM can't do it
+itself: printing a reply into an `f:` stream mid-transaction would need the
+stream's flush, whose SYNC ends the reply ([rom/exrom-fdd.md](../rom/exrom-fdd.md#cat_hash-3932h)).
+It has already checked the stream (Report O) and sent what was printed to
+it first.
+
+`stream = PMR1 & 0xFF`; PMR2 nonzero means a string came, the argument
+being the text after the word (`getArgs`, stripped). Inside `CH_CALL`:
+
+1. The stream must be open (`ChannelError` `O`, which `CH_STATUS` makes
+   J: the ROM checked it already, so only a Pico out of step with the ROM
+   gets here) and a file opened to be written: `d:`, `v:`, `x:`
+   (`in_memory`) or mode `r` is Q.
+2. The text: no string, `LISTING_FRESHEN()` then `lista`, the folder
+   listing `CAT` shows; `""`, `TAPDIR_TEXT(0, 0)`, every block of the
+   mounted TAP or the nothing-mounted notice ([tspico-commands.md](tspico-commands.md#tapdir_textpar1-par2));
+   anything else, `CATALOG_TEXT(x)`, whose refusal (not found, a bad
+   pattern) is its message with `F`.
+3. `CHANNELS.write_text(stream, SCREEN_LINES(text))`
+   ([channels.md](channels.md#channelswrite_textself-stream-lines)): a
+   text file gets LF line ends, a binary one CRs, a record file a record a
+   line (Q for one too long).
+
+A failure is logged at 1 (`CAT #n: message`), and the answer is
+`CH_REPLY(st)`, a bare status: `TPI:CHCAT` is in `SD_QUIET`, so no card is
+J without a message. The card is needed for every form (`CH_CALL`), even
+`CAT #n;""`, because the file is on it. Nothing in the listing is
+colored or keyword-expanded, and there is no `Scroll?` pager.
+
+Pinned by `dirinfo_hosttest.py` (the bare form is `lista`'s lines after
+what was printed, `"*.tap"` appends `CATALOG_TEXT`'s rows, `"nothere"` is F
+and writes nothing, `""` the notice; a closed stream J; mode `r`, `x:` and
+`d:` Q) and `channels_hosttest.py` (`write_text`). The emulator (the real
+ROM and firmware) ran every form and read the file back with `INPUT #`.
+Not yet on hardware.
 
 ### `CH_NOCARD_PATH(cmd)`
 
@@ -863,7 +920,7 @@ card, so they take the first path: `Channels.close` drops the entry (on
 speech, after saying what is left of an unfinished line, even when speech
 is off).
 
-The long comment at line 3876 is the history. When channels arrived (#83)
+The long comment at line 3954 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

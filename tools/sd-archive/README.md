@@ -124,7 +124,8 @@ holds the tapes that were left out, with the same catalog.
     the item has now.
 - **`tap_folder.py`** lays the card's archive tapes out as plain files for the
   v3 card's WiFi download (#401), at their card paths (`TAP/GAMES/name.tap`),
-  with an index, `tspico-taps.txt.gz`. With `--publish` it uploads them to their
+  with an `index.txt` in every folder for browsing, and one index of every tape,
+  `tspico-taps.txt.gz`, for search. With `--publish` it uploads them to their
   own archive.org item, `tspico-2068-tapes`.
   - **Why plain files:** Zimodem's `AT&G` needs a reply with a Content-Length.
     A file in an item has one, and a tape inside a zip can't be fetched on its
@@ -132,13 +133,19 @@ holds the tapes that were left out, with the same catalog.
   - **What goes in:** only the tapes on the card, so only those that load and
     start, with the pipeline's repairs. The tour and its demo tapes stay on the
     card. A tape over `--max-tap` (default 65536 bytes) is left out and listed.
-  - **The index:** one line per tape, tab-separated: path, status (`L` `LOAD ""`,
+  - **Folder indexes:** `TAP/index.txt` lists the groups. Each folder's index lists
+    its subfolders (`name/ D title tapes`), then its tapes. It is split into
+    8 KB parts (`index.txt`, `index2.txt`…) so a part always fits the card's
+    32 KB download buffer; the header says `part 1 of 2`.
+  - **The full index:** one line per tape, tab-separated: path, status (`L` `LOAD ""`,
     `R` then `RUN`, `C` `LOAD "" CODE`, `S` another way), title, year,
     publisher, size, and the `computer_media` post ID (from `describe.py`).
     A tape from a collection is titled `Collection: tape`.
   - **Rebuilds:** `--publish` compares each tape with the MD5 in the item's
     file list and uploads only what changed, then the index, all with
-    `x-archive-keep-old-version: 0`, so nothing replaced is kept under
+    `x-archive-keep-old-version: 0`, 50 at a time, waiting while the item has
+    over 100 archive.org tasks queued (archive.org refuses uploads past a few
+    hundred: "bucket_tasks_queued exceeds rationed amount"). Nothing replaced is kept under
     `history/`. A tape that has left the card is listed, not deleted.
     `--dry-run` reports and uploads nothing.
 
@@ -167,3 +174,29 @@ card, even when the first part loads.
   good tapes failed with Report R.
 - **Reset:** between tapes the 2068 is reset with ZRCP `reset-cpu`.
   `hard-reset-cpu` doesn't reliably restart a program that's running.
+
+## The index for downloads over WiFi
+
+`net_index.py` writes the list a v3 card downloads to find tapes in the item
+(see `docs/v3-wifi-archive-proposal.md`). It doesn't need the emulator, but it
+does use `plan.json` and the `results*.json` files, if they're there, to mark
+the tapes that were load-tested.
+
+```bash
+python3 net_index.py              # the item's file list, plus ZIPs not yet downloaded
+python3 net_index.py --offline    # cached list and ZIPs only
+python3 net_index.py --publish    # then upload tspico-net.txt(.gz) to the item
+```
+
+- **Which ZIPs:** every ZIP tagged `(TS2068)`, plus the ones the site's 2068
+  list links (`plan.json`).
+- **What's left out, and why:** the card can't download a ZIP bigger than
+  `--max-zip` (32 KB, its RAM buffer). It can't use a ZIP with no `.tap`
+  inside, a `.tap` that is really a TZX, or a URL too long for Zimodem's
+  256-byte `AT` line. The script prints how many of each it left out.
+- **Format:** one tab-separated line per tape, described at the top of the
+  script. It gives the 8.3 name, the status (`L`, `R` or `C` tested and
+  working, `X` tested and failing or damaged, `?` untested), the title, year
+  and publisher, and the ZIP and the tape's entry in it.
+- **The `.gz`:** the card downloads this copy, about 28 KB, and unzips it
+  with MicroPython's `deflate`.

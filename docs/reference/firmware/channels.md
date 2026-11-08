@@ -48,8 +48,8 @@ memory like a `d:` listing.
 | 163–182 | `utf8_len` |
 | 185–210 | `Channel` — one stream's state |
 | 213–228 | `ChannelError`, `MAX_RECLEN`, `parse_mode` |
-| 231–528 | `Channels` — the table and every operation on it |
-| 531–557 | `_split_cr`, `_one_line` |
+| 231–550 | `Channels` — the table and every operation on it |
+| 553–579 | `_split_cr`, `_one_line` |
 
 ## The keywords
 
@@ -313,6 +313,26 @@ Otherwise the last answer goes first (`mem` empty, `pos` 0, a fresh
 answer. The ROM drops what it read ahead from the last answer on any
 write to the stream (`CH_OUT`, R_FLAGS bit 2), so the two sides agree on
 where the new answer starts.
+
+### `Channels.write_text(self, stream, lines)`
+
+`CAT #n` (#404): `lines` (strings of printable ASCII, from `SCREEN_LINES` in
+`CH_CAT`) written into the file open on `stream` as if each had been
+printed to it with a CR. Only a file opened to be written takes them: a
+stream with no file (`d:`, `v:`, `x:`) or mode `r` is `("Not a file open
+for writing", "Q")`; a stream that is not open is `_get`'s `O`. Each line
+is encoded, a CR (13) appended, and the bytes go to `_data` in pieces of
+512 or a little over, the last piece whatever is left, so a long listing
+is neither one block in memory nor one card write a line. Going through
+`_data` gives the same result as `PRINT #`: a text file gets LF line ends
+(`TextOut`), a binary file the CRs, a record file one record a line, with
+Q for a line longer than the record (*inferred:* the lines before it stay
+written).
+The lines hold no 23, so nothing is taken as a TAB. Pinned by
+`channels_hosttest.py` (`cat_text`): LF lines at the file's position after
+what was there; 100 lines in 7 writes of about 512 bytes; CRs kept in
+binary; a record a line and Q for one too long; mode `r`, `d:` and `x:` Q;
+a closed stream O.
 
 ### `Channels.speaking(self, stream)`
 

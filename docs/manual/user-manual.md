@@ -484,6 +484,7 @@ CAT "*.tap"          : REM only the TAP files
 CAT "games/b*"       : REM files in games starting with b
 CAT "frogger.tap"    : REM the blocks inside a TAP file
 CAT ""               : REM the blocks inside the mounted TAP
+CAT #4               : REM the listing into the file open on stream 4 (6.5)
 ```
 
 `*` matches any run of characters and `?` matches exactly one. They work in the last part of a
@@ -1130,6 +1131,16 @@ OPEN #4,"f:listing.txt","w": LIST #4: CLOSE #4
 Now `listing.txt` holds your program as readable text, handy for sharing it or printing it on
 a modern printer.
 
+`CAT #` does the same for a folder listing. It takes anything `CAT` takes:
+
+```basic
+OPEN #4,"f:files.txt","w": CAT #4: CAT #4;"test/*.tap": CLOSE #4
+```
+
+The file gets the listing as plain text, one line a row, with no colors and no `Scroll?`.
+`CAT #4;""` lists the mounted TAP. The stream must be a file open for writing: one open with
+`"r"`, or a `d:` or `x:` stream, gives **Q Parameter error**.
+
 ## 6.6 Capturing the screen: OPEN #2
 
 Stream 2 is the screen. Point it at a file, and everything your program PRINTs goes to the file
@@ -1420,8 +1431,9 @@ the file as spaces.
 <!-- v3 -->
    `OPEN #n,"v:"` speaks what you print to it (Appendix G).
 <!-- /v3 -->
-6. `RESTORE #n` goes back to the start of the file, to read it again or write over it.
-7. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
+6. `LIST #n` and `CAT #n` write a program listing or a folder listing into a file.
+7. `RESTORE #n` goes back to the start of the file, to read it again or write over it.
+8. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
    `PEEK 23739` says which report it caught.
 
 ---

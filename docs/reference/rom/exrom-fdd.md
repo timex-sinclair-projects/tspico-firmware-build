@@ -1,8 +1,8 @@
 # EXROM 3000h: the disk module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
-1719 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
-at EXROM 3000h–38EBh and spliced into the SYNC layer's image
+1858 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
+at EXROM 3000h–3997h and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
 `src/rom/TSPICO-23.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
@@ -24,11 +24,11 @@ design is [FDD_COMMANDS_DESIGN.md](../../FDD_COMMANDS_DESIGN.md) and the
 specification [DISK_COMMANDS_SPEC.md](../../DISK_COMMANDS_SPEC.md); the
 byte-level change list is in [the build history](../../ROM_CHANGES.md#rom-21-the-module-at-exrom-3000h).
 
-The module is 2353 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end, then
+The module is 2456 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end, then
 COPY's file form, MOVE as rename, `LIST "name"` and `RESTORE #n` 311 more, also
 at the end, then the speech channel, `v:`, 47 more: 14 of them free bytes
 before `PS_READ`, #375; then the command channel, `x:`, 22 more at the end,
-#404). It enters the 2068's code only through a vector
+#404; then `CAT #n`, 103 more at the end, #404). It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
 GUARDED, an error frame that keeps the RAM bank stack straight when a
@@ -58,10 +58,11 @@ the Pico Interface BIOS.
 | 1442–1455 | 376Ah–3770h | `PRELOAD` |
 | 1457–1459 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
 | 1461–1510 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1512–1713 | 37B5h–38EBh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1715–1780 | 38ECh–3927h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
-| 1782–1787 | 3928h–3930h | `IN_DROP` (#404) |
-| 1789–1790 | 3931h | `FDD_END` |
+| 1512–1719 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1721–1786 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
+| 1788–1793 | 3929h–3931h | `IN_DROP` (#404) |
+| 1795–1855 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
+| 1857–1858 | 3998h | `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -378,7 +379,9 @@ use the words; no 1980s 2068 disk system agreed on either
 
 ### `FDD_CAT`
 
-`AT_END`: a bare `CAT` → `.bare`: `RUNTIME`, return on the syntax pass, else
+`CAT_HASH` first, in `AT_END`'s place: for `CAT #n` and `CAT #n;"x"` it does
+the whole statement and returns from `FDD_CAT` itself (#404); for anything
+else it is `AT_END`. Then: a bare `CAT` → `.bare`: `RUNTIME`, return on the syntax pass, else
 `SEND_PREFIX` with `CMD_DIR`. Otherwise `EXPT_STR_END` (one string
 expression that ends the statement; return on the syntax pass), `POP_STR`;
 an empty string → `SEND_PREFIX` with `CMD_TAPDIR` (the mounted tape's
@@ -948,6 +951,7 @@ NUL-ended prefixes, sent as the start of each command:
 | `CMD_CHRD` | `tpi:chrd` | `CH_FETCH` |
 | `CMD_CHCLOSE` | `tpi:chclose` | `CH_CLOSE_HOOK` |
 | `CMD_CHOPEN` | `tpi:chopen ` | `CH_OPEN_HOOK` |
+| `CMD_CHCAT` | `tpi:chcat ` | `CAT_HASH` (`CAT #n`; at the end of the module, `CMD_CHCAT`) |
 | `MODE_R` | `r` (not NUL-ended: copied with a length of 1) | OPEN # with no mode |
 
 ### `PRELOAD` (376Ah)
@@ -1107,28 +1111,37 @@ class 05h with 25D6h, so the module does class 03h's part.
   (`NONSENSE` if not), then the syntax pass returns; at run time `.home`.
 - **`RESTORE #n`** (`.strm`): `NEXT_CHAR` past the `#`, `HC_EXPT_1NUM`,
   the end of the statement; the syntax pass returns. At run time
-  `HC_FIND_INT2` gives BC = n, and n above 15 is `.bad`. Stream n's STRMS
-  entry is `STRMS + 6 + 2n` (streams −3 to −1 come first); 0 (not open)
-  or bit 7 of the high byte set (a SYSCON channel) is `.bad`. IX = CHANS +
-  the offset − 1 is the record; anything but `'F'` in `R_LETTER` is
-  `.bad`. Then:
-  1. `CH_FLUSH`: what was printed to the stream goes out first.
-  2. `R_INN` = `R_INP` = 0: what was read ahead is dropped, as `CH_OUT`
+  `STRM_REC` (Report O unless n is a stream open to an `f:` file; what was
+  printed to it goes out first), then:
+  1. `R_INN` = `R_INP` = 0: what was read ahead is dropped, as `CH_OUT`
      does for a TAB.
-  3. `R_OUTBUF` = 23, 1, 0, `R_OUTN` = 3, `CH_FLUSH`: **`tpi:chwr 170100`**,
+  2. `R_OUTBUF` = 23, 1, 0, `R_OUTN` = 3, `CH_FLUSH`: **`tpi:chwr 170100`**,
      TAB 1. The firmware's `Channels.write` takes a TAB in every mode and
      `Channels._seek` puts the channel at byte 0, closing an open record
      first and resetting what it had read ahead
      ([../firmware/channels.md](../firmware/channels.md#channels_seekself-ch-n)).
-  4. `AND A`, `RET`.
+  3. `AND A`, `RET`.
 
-  `.bad` is `RST 8` with 17h: **Report O Invalid stream**. A Report from
-  the Pico comes through `CH_STATUS` as for any `tpi:chwr`.
+  A Report from the Pico comes through `CH_STATUS` as for any `tpi:chwr`.
+  Until #404 the stream checks were inline here; they moved to `STRM_REC`
+  when `CAT #n` came to need them too.
 
 Before this, `RESTORE #4` was Report C at the syntax pass (class 03h wants a
 number or the end of the statement).
 
-### `STR_NEXT` (389Eh)
+### `STRM_REC` (3870h)
+
+The number on the calculator stack is a stream open to an `OPEN #`
+channel; IX = its record, and what was printed to it has been sent. Used by
+`RESTORE #n` and `CAT #n`. `HC_FIND_INT2` gives BC = n, and n above 15 is
+`.bad`. Stream n's STRMS entry is `STRMS + 6 + 2n` (streams −3 to −1 come
+first); 0 (not open) or bit 7 of the high byte set (a SYSCON channel) is
+`.bad`. IX = CHANS + the offset − 1 is the record; `'F'` in `R_LETTER` ends
+with `JP Z,CH_FLUSH`, anything else falls into `.bad`: `RST 8` with 17h,
+**Report O Invalid stream**. A Report from the Pico on the flush comes
+through `CH_STATUS`.
+
+### `STR_NEXT` (389Fh)
 
 Z if the expression at CH_ADD starts the way a string does; CH_ADD is not
 moved. `SKIP_SPACES`, then Z for a quote, `INKEY$` (A6h), `SCREEN$` (AAh),
@@ -1142,18 +1155,18 @@ A number that starts with a letter (`LIST a`, `LIST a(2)`) is NZ: the
 letter isn't followed by `$`. A string in parentheses (`LIST (a$)`) is NZ
 too, and goes to HOME's LIST, which says Report C.
 
-### `HC_USE_ZERO` (38D2h)
+### `HC_USE_ZERO` (38D3h)
 
 `PUSH IX / EXX / LD HL,H_USE_ZERO / JP CALL_HOME`: HOME's USE-ZERO (1C51h),
 which stacks 0 at run time (its `CALL SYNTAX-Z / RET Z` makes it nothing at
 the syntax pass). Bare `RESTORE` at run time, as class 03h did.
 
-### `CMD_LIST` (38DBh)
+### `CMD_LIST` (38DCh)
 
 `tpi:list `, NUL-ended: `LIST x`'s prefix. Here with the code that came with
 it, as `CMD_CD_MENU`.
 
-### `CMD_CD_MENU` (38E5h)
+### `CMD_CD_MENU` (38E6h)
 
 `tpi:cd`, NUL-ended: what `MOVE TO ""` sends, the text of `SAVE "tpi:cd"`.
 At the end of the module with the code that came with it, so the string
@@ -1165,27 +1178,27 @@ table above kept its length (`CMD_REN` took `CMD_CD_BACK`'s nine bytes).
 the hook's call sites could shrink instead of grow. `OPEN #n,"x:"` added a
 letter to `DV_TEST` and to `REC_FLAGS`, and `IN_DROP`.
 
-#### `SPEC_KIND` (38ECh)
+#### `SPEC_KIND` (38EDh)
 
 DE = the spec (already known to have `:` second), C = its length: Z if it is
 ours — `d:`, `v:` or `x:` (`DV_TEST`), or `f:` with at least one character more
 (`CP 3 / SBC A,A / AND A`: FFh, NZ, for a bare `f:`) — else NZ. A is lost.
 Called once, by `CH_OPEN_HOOK` (`JP NZ,STRMS_NC` after it).
 
-#### `DV_TEST` (38F9h)
+#### `DV_TEST` (38FAh)
 
 Z if the spec at DE starts with `d`, `v` or `x` in either case; A = the
 letter in upper case. Called by `SPEC_KIND` and by `CH_OPEN_HOOK` when it
 builds the command (`d:`, `v:` and `x:` go whole).
 
-#### `PUSH_LETTER` (3905h)
+#### `PUSH_LETTER` (3906h)
 
 Pushes the spec's first letter, upper case, in AF under its own return
 address (`POP HL / PUSH AF / JP (HL)`); HL is lost. `CH_OPEN_HOOK` calls it
 just before it drops the spec, because the allocation that follows moves
 memory, and pops it again for `REC_FLAGS`.
 
-#### `REC_FLAGS` (390Eh)
+#### `REC_FLAGS` (390Fh)
 
 IX = the new record, A = the letter, BC = the record length: `SET 2` and
 `SET 1` of `R_FLAGS` for `'X'`, `SET 1` for `'V'`, `SET 0` for a length
@@ -1193,7 +1206,7 @@ that is not 0. HL (the record) is kept, for the offset `CH_OPEN_HOOK`
 works out next. A `v:` or `x:` with a length never gets this far: the
 Pico answers Q first.
 
-#### `IN_DROP` (3928h)
+#### `IN_DROP` (3929h)
 
 IX = the record: `R_INN` and `R_INP` = 0, so `CH_IN` forgets what it read
 ahead and its next read fetches. Called by `CH_OUT` for a TAB (a seek) and
@@ -1202,12 +1215,52 @@ part of an answer (the first screen of a `dir`) and prints the next
 command reads that command's answer, not what was left of the last one in
 `R_INBUF`. The Pico starts the new answer from its start at the same time
 (`Channels._command`, [../firmware/channels.md](../firmware/channels.md)).
+`CAT_HASH` calls it too, so a `CAT #n` into a file that was being read
+leaves nothing stale.
+
+### `CAT_HASH` (3932h)
+
+`CAT #n`, `CAT #n;"x"` (or `,"x"`): the listing `CAT` or `CAT "x"` would
+show, written into the `f:` file open on stream n instead of the screen
+(#404). `FDD_CAT`'s first call, in `AT_END`'s place: `AT_END`, and Z (the
+end of the statement) or anything but `#` returns as `AT_END` would, so
+`CAT` and `CAT "x"` go on in `FDD_CAT` as before.
+
+For `#` it does the whole statement. `POP HL` drops the return into
+`FDD_CAT`, so its own `RET`s return from `FDD_CAT` (NC, as `FDD_CAT` does).
+`NEXT_CHAR` past the `#`, `HC_EXPT_1NUM` (the stream), then the end of the
+statement (`.bare`), or `;` or `,` and `EXPT_STR_END` (`.str`); anything
+else is `NONSENSE`. The syntax pass returns. At run time `.str` pops the
+string (`POP_STR`: DE, BC; over 64 characters is Report F) with A = 1; `.bare` has BC = 0, A = 0. `.run`:
+`STRM_REC` (IX = the record, Report O, and what was printed sent first),
+`IN_DROP`, then `BUILD_START` with `CMD_CHCAT` and the string copied after
+it (`.none` skips the `LDIR` for an empty one: BC = 0 would copy 64K), a
+NUL, and `CH_SEND` with A = `R_STRM` (PMR1), C = A from before (PMR2: 1 when
+a string came, so `CAT #n;""` is the mounted tape, as `CAT ""` is), B = 0
+(no payload). `CH_STATUS` raises the Pico's report: Q (not a file open to
+be written), F (what `CAT "x"` would refuse), J (no card). `AND A`, `RET`.
+
+Why the Pico writes the file: printing a reply into an `f:` stream
+mid-transaction can't work, because the stream's flush (`CH_SEND`) waits
+for IDLE and sends the SYNC that ends the reply being printed. The firmware
+side is `CH_CAT` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md)).
+
+Tested in the emulator, not yet on hardware. *(Seen there:)* the first
+line typed or run after boot that has an `OPEN #` and a flush in it (a
+`RESTORE #n` or a `CAT #n` after a `PRINT #n`) can give Report C on one
+run and not the next; ROM 2.3 before this change does the same with
+`RESTORE #n`, so it is not `CAT_HASH`'s. It looks like the emulator's
+timing (inferred).
+
+### `CMD_CHCAT` (398Dh)
+
+`tpi:chcat `, NUL-ended: `CAT #n`'s prefix, the argument after it.
 
 ### `FDD_END`
 
-The end of the module, 3931h (377Fh in ROM 2.2, before `PS_READ`; 37EEh
+The end of the module, 3998h (377Fh in ROM 2.2, before `PS_READ`; 37EEh
 before LIST and RESTORE joined; 38ECh before the speech channel; 391Bh
-before the command channel); `SAVEBIN` writes `FDD_BASE` to here as
+before the command channel; 3931h before `CAT #n`); `SAVEBIN` writes `FDD_BASE` to here as
 `fddcmd.bin`, which `build-rom.py` splices in after checking that the
 region is all `FFh`.
 
