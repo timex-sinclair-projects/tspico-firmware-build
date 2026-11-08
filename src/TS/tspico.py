@@ -3012,7 +3012,7 @@ SD_FREE = frozenset((
     "TPI:DOCK", "TPI:MEMDOCK", "TPI:ZX48", "TPI:NOP", "TPI:PATH", "TPI:CLOSE",
     "TPI:TAPDIR", "TPI:FFW", "TPI:REW", "TPI:APPEND", "TPI:BLKRCV", "TPI:CHCLOSE",
     "TPI:AUTOLF", "TPI:NOAUTOLF", "TPI:AUTOPG", "TPI:NOAUTOPG", "TPI:BMP", "TPI:PRNSZ",
-    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:MODEM", "TPI:SAY",
+    "TPI:CONFIG", "TPI:DELETE", "TPI:FRESET", "TPI:GETCONFIG", "TPI:MODEM", "TPI:SAY", "TPI:WIFI",
     "TPI:GREET", "TPI:AUTOMOUNT",
     "TPI:MEMINFO", "TPI:STOP"))
 
@@ -5993,6 +5993,272 @@ def GREET(pre, cmd):                                                  # The v3 c
     return
 
 
+WIFI_HINT = 'SAVE "tpi:wifi name,password"'
+
+
+def WIFI(pre, cmd):                                                   # The v3 card's WiFi (Zimodem's)
+
+    # SAVE "tpi:wifi"               - Show whether the ESP32 is on WiFi, and its address
+    # SAVE "tpi:wifi name,password" - Join that network and save it as Zimodem's default
+    #
+    # A tpi: name is 31 characters at most, so name,password has 22. A longer
+    # one is joined with PicoTerm's WiFi menu, which saves it the same way.
+    # The password is never logged or shown. docs/v3-wifi-archive-proposal.md.
+
+    TLM("WIFI enter")
+    if not board.HAS_MODEM:
+        SEND_MSG("No WiFi on this board", "", _3_F_Invalid_file, True)
+        return
+    arg = getArgs(cmd).strip()
+    try:
+        if arg == "":
+            ip = board.wifi_status()
+            if ip:
+                SEND_MSG("WiFi: on, address %s" % ip, "", _1_OK, True)
+            else:
+                SEND_MSG("WiFi: not on a network", WIFI_HINT, _1_OK, True)
+            return
+        ssid, comma, password = arg.partition(",")
+        ssid = ssid.strip()
+        if not comma or not ssid:
+            SEND_MSG("WIFI: Name and password needed", WIFI_HINT, _8_A_Invalid_arg)
+            return
+        ip = board.wifi_join(ssid, password)
+    except board.WifiError as e:
+        LOG("WIFI: %s" % e, 2)
+        SEND_MSG(str(e), "", _10_J_Invalid_IO, True)
+        return
+    msg = "WiFi: joined %s" % ssid
+    LOG(msg, 0)
+    SEND_MSG(msg, "Address %s" % ip, _1_OK, True)
+
+
+def NET(pre, cmd):                                                    # Tapes from the archive over WiFi
+
+    # SAVE "tpi:net"              - List the archive's categories, numbered
+    # SAVE "tpi:net 5"            - Open entry 5 of the last list: a folder
+    #                               is listed, a tape is downloaded to /TAP/NET
+    # SAVE "tpi:net 5" CODE 255,0 - The same, replacing a file of that name without asking
+    # SAVE "tpi:net more"         - The next part of a folder's list (a big folder has two)
+    # SAVE "tpi:net .."           - The folder above
+    # SAVE "tpi:net find word"    - Tapes whose name or title has every word
+    # SAVE "tpi:net update"       - Download the full index again (find downloads it once)
+    #
+    # The tapes are plain files in the tspico-2068-tapes item on archive.org
+    # (#401), fetched by Zimodem (board.wifi_get) into BLOCK_BUF, so a tape
+    # over 48K is refused before it is fetched. One fetch per command keeps
+    # it inside the 2068's ~19.9 s wait. A download isn't mounted (David,
+    # 2026-11-08): tpi:cd /net, then LOAD "tpi:name.tap". The list is kept
+    # on flash (net.LIST_PATH); the full index on the card (net.FULL_PATH).
+
+    TLM("NET enter")
+    if not board.HAS_MODEM:
+        SEND_MSG("No WiFi on this board", "", _3_F_Invalid_file, True)
+        return
+    par1, par2 = PARAMS(pre)
+    if (par1, par2) not in ((0, 0), (255, 0)):
+        msg = BAD_CODE("NET", par1, par2)
+        LOG(msg, 2)
+        SEND_MSG(msg, "", _8_A_Invalid_arg)
+        return
+    arg = getArgs(cmd).strip()
+    low = arg.lower()
+    gc.collect()                                                      # the module is kept: made on a clean heap
+    from TS import net
+    try:
+        if low == "":
+            NET_LIST(net, net.ROOT, 1)
+        elif low in ("..", "more"):
+            last = net.load_listing()
+            if last is None or last[0].startswith("find "):
+                NET_LIST(net, net.ROOT, 1)
+            elif low == "..":
+                NET_LIST(net, net.parent(last[0]), 1)
+            elif last[1] >= last[2]:
+                SEND_MSG("NET: No more in this folder", "", _4_Q_Parameter)
+            else:
+                NET_LIST(net, last[0], last[1] + 1)
+        elif low.startswith("find "):
+            NET_FIND(net, arg[5:].split())
+        elif low == "update":
+            NET_UPDATE(net)
+        elif arg.isdigit():
+            NET_OPEN(net, int(arg), par1)
+        else:
+            SEND_MSG(BAD_ARG("NET", arg), "a number, more, .., find word or update", _8_A_Invalid_arg)
+    except board.WifiError as e:
+        msg = str(e)
+        LOG("NET: %s" % msg, 2)
+        SEND_MSG(msg, WIFI_HINT if msg == "Not on WiFi" else "", _10_J_Invalid_IO, True)
+
+
+def NET_SHOW(net, title, rows, foot):                                 # tpi:net's list, numbered from 1
+
+    M = [PAPER_ + "\x01" + INK_ + "\x07" + "%-32s" % title[:32]]
+    for i, e in enumerate(rows):
+        M.append(PAPER_ + "\x05" + INK_ + "\x09" + "%03d" % (i + 1) + PLAIN_ + " %s\r" % net.row(i + 1, e))
+    if foot:
+        M.append(PLAIN_ + foot + "\r")
+    M.append(NORMAL_)
+    SEND_MSG2("".join(M), 1, False, True)
+
+
+def NET_LIST(net, folder, part):                                      # fetch a folder's index part and list it
+
+    n = board.wifi_get(net.part_url(folder, part), board.BLOCK_BUF)
+    text = bytes(memoryview(board.BLOCK_BUF)[:n]).decode()
+    parts, rows = net.parse_part(text, folder)
+    del text
+    net.save_listing(folder, part, parts, rows)
+    title = "Net: /" + folder + ("  %d of %d" % (part, parts) if parts > 1 else "")
+    foot = 'Part %d of %d: tpi:net more' % (part, parts) if part < parts else ""
+    LOG("NET: %s part %d, %d entries" % (folder, part, len(rows)), 0)
+    NET_SHOW(net, title, rows, foot)
+
+
+def NET_OPEN(net, k, par1):                                           # tpi:net <number>
+
+    last = net.load_listing()
+    if last is None:
+        SEND_MSG("NET: No list yet", 'SAVE "tpi:net" first', _4_Q_Parameter)
+        return
+    rows = last[3]
+    if not 1 <= k <= len(rows):
+        SEND_MSG("NET: Number out of range 1-%d" % len(rows), "", _6_6_Num2Big)
+        return
+    e = rows[k - 1]
+    if e[0] == "D":
+        NET_LIST(net, e[1], 1)
+    else:
+        NET_GET(net, e, par1)
+
+
+def NET_GET(net, e, par1):                                            # download a tape to /TAP/NET
+
+    name = net.name_of(e)
+    size = int(e[4])
+    room = len(board.BLOCK_BUF)
+    if size > room:                                                   # refused before any fetch
+        SEND_MSG("NET: Too big for the card: %s" % name, "%d bytes, %d at most" % (size, room), _6_6_Num2Big)
+        return
+    dest = net.SAVE_DIR + "/" + name
+    there, st = SD_CALL(NET_EXISTS, dest)
+    if st != _1_OK:
+        SEND_MSG(there, "", st)
+        return
+    n = board.wifi_get(net.tape_url(e[1]), board.BLOCK_BUF)
+    if there and par1 == 0:
+        ch = SEND_MSG_PROMPT_YN('Replace "%s" (y/N)?' % name)         # the prompt is the answer:
+        if ch != 89: # 89='Y'                                         # the rest only reaches the log
+            LOG("NET: %s not replaced" % name, 0)
+            return
+        msg, st = SD_CALL(NET_WRITE, dest, n)
+        LOG(msg, 0 if st == _1_OK else 2)
+        return
+    msg, st = SD_CALL(NET_WRITE, dest, n)
+    LOG(msg, 0 if st == _1_OK else 2)
+    SEND_MSG(msg, ('tpi:cd /net, LOAD "tpi:%s", then %s' % (name, net.how(e[2])))
+             if st == _1_OK else "", st)
+
+
+def NET_EXISTS(dest):                                                 # NET_GET, before it fetches: SD active
+
+    return file_exists(dest), _1_OK
+
+
+def NET_WRITE(dest, n):                                               # BLOCK_BUF's n bytes to dest: SD active
+
+    from TS import net
+    if not dir_exists(net.SAVE_DIR):
+        os.mkdir(net.SAVE_DIR)
+    try:
+        with open(dest, "wb") as f:
+            f.write(memoryview(board.BLOCK_BUF)[:n])
+    except OSError:
+        try:
+            os.remove(dest)                                           # no half a tape left behind
+        except OSError:
+            pass
+        raise
+    REFRESH_IF(net.SAVE_DIR)
+    return "Saved /TAP/NET/%s" % dest.rsplit("/", 1)[-1], _1_OK
+
+
+def NET_FETCH_FULL(net):                                              # the full index onto the card
+
+    n = board.wifi_get(net.ITEM + net.FULL + ".gz", board.BLOCK_BUF)
+    return SD_CALL(NET_INFLATE, net, n)
+
+
+def NET_INFLATE(net, n):                                              # BLOCK_BUF's .gz to net.FULL_PATH: SD active
+
+    import deflate
+    gz = net.FULL_PATH + ".gz"
+    with open(gz, "wb") as f:                                         # a file, not BytesIO: that would copy 46K
+        f.write(memoryview(board.BLOCK_BUF)[:n])
+    b = memoryview(board.BLOCK_BUF)[:512]
+    total = 0
+    try:
+        with open(gz, "rb") as src, open(net.FULL_PATH, "wb") as out:
+            d = deflate.DeflateIO(src, deflate.GZIP, 15)
+            while True:
+                k = d.readinto(b)
+                if not k:
+                    break
+                out.write(b[:k])
+                total += k
+    except Exception:
+        try:
+            os.remove(net.FULL_PATH)
+        except OSError:
+            pass
+        raise
+    finally:
+        os.remove(gz)
+    return "Index: %d bytes" % total, _1_OK
+
+
+def NET_FIND(net, words):                                             # tpi:net find
+
+    if not words:
+        SEND_MSG("NET: find what?", 'SAVE "tpi:net find word"', _8_A_Invalid_arg)
+        return
+    there, st = SD_CALL(NET_EXISTS, net.FULL_PATH)
+    if st != _1_OK:
+        SEND_MSG(there, "", st)
+        return
+    if not there:
+        msg, st = NET_FETCH_FULL(net)
+        if st != _1_OK:
+            SEND_MSG(msg, "", st)
+            return
+    found, st = SD_CALL(NET_SEARCH, net, words)
+    if st != _1_OK:
+        SEND_MSG(found, "", st)
+        return
+    rows, n = found
+    where = "find " + " ".join(words)
+    net.save_listing(where, 1, 1, rows)
+    LOG("NET: %s, %d found" % (where, n), 0)
+    if not rows:
+        SEND_MSG("NET: Nothing found", "", _1_OK, True)
+        return
+    foot = "%d found, first %d shown" % (n, len(rows)) if n > len(rows) else ""
+    NET_SHOW(net, "Net: %s (%d)" % (where, n), rows, foot)
+
+
+def NET_SEARCH(net, words):                                           # NET_FIND's search: SD active
+
+    with open(net.FULL_PATH) as f:
+        return net.find(f, words), _1_OK
+
+
+def NET_UPDATE(net):                                                  # tpi:net update
+
+    msg, st = NET_FETCH_FULL(net)
+    SEND_MSG("NET: " + msg if st == _1_OK else msg, "", st)
+
+
 def AUTOMOUNT(pre, cmd):                                              # the .tap mounted at power-on
 
     # SAVE "tpi:automount menu.tap"  - Mount this file (in the current folder) at power-on
@@ -7206,6 +7472,8 @@ def TS2068_IO():                                                         # Main 
         "TPI:MEMDOCK" : MEMDOCK,
         "TPI:MODEM" : MODEM,
         "TPI:SAY" : SAY,
+        "TPI:WIFI" : WIFI,
+        "TPI:NET" : NET,
         "TPI:GREET" : GREET,
         "TPI:AUTOMOUNT" : AUTOMOUNT,
         "TPI:NOP" : NOP,                                                                      # This is to test Ryan's new Commander

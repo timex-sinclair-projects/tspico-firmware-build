@@ -231,6 +231,167 @@ def modem_download(on):
     the firmware. Takes effect at the next modem_power(True)."""
     return _port0(_X_WIFI_DL, _X_WIFI_DL if on else 0)
 
+# WiFi downloads (tpi:wifi, tpi:net; docs/v3-wifi-archive-proposal.md):
+# core 0 borrows UART0 from tsbus for one command and talks to Zimodem itself.
+# AT&G"url" fetches a file; stream mode (ATS45=3) sends "[ 0 size ]" and the
+# bytes, with no checksum and no flow control, so they are collected into
+# RAM and written to the SD card after (writing while receiving lost bytes).
+# Proved by src/test/wifi_get_harness.py on board 1 (2026-11-08): under the
+# firmware's own heap, cold and warm, byte-exact.
+ESP_BOOT_MS = 8000       # EN high to Zimodem's READY. (2.8-3 s with a WiFi join)
+ESP_JOIN_MS = 10000      # READY. to an address (ATI2 not 0.0.0.0)
+ESP_FIRST_MS = 15000     # AT&G to the "[ 0 size ]" header (3-5 s seen)
+ESP_IDLE_MS = 4000       # a stall in the data that ends a fetch
+
+
+class WifiError(Exception):
+    """A fetch or join that failed; str() is the message for the 2068."""
+
+
+def _esp_wait(u, want, ms, buf):
+    """Read UART0 into buf until `want` or ERROR is in it, or ms pass; the
+    bytes read. Only the last len(buf) are kept: the ESP32's ROM prints
+    ~280 bytes before Zimodem's READY."""
+    n, t0 = 0, time.ticks_ms()
+    mv = memoryview(buf)
+    half = len(buf) // 2
+    while time.ticks_diff(time.ticks_ms(), t0) < ms:
+        if n == len(buf):
+            mv[:half] = mv[half:]
+            n = half
+        k = u.readinto(mv[n:])
+        if k:
+            n += k
+            got = bytes(mv[:n])
+            if want in got or b"ERROR" in got:
+                return got
+        else:
+            time.sleep_ms(5)
+    return bytes(mv[:n])
+
+
+def _esp_cmd(u, line, ms=1500):
+    """Send one AT line; the reply, through OK or ERROR."""
+    u.read()
+    u.write(line + b"\r")
+    return _esp_wait(u, b"OK\r\n", ms, bytearray(128))
+
+
+def _esp_address(u, join_ms):
+    """Zimodem's address (ATI2) once it is on WiFi, or None after join_ms."""
+    t0 = time.ticks_ms()
+    while True:
+        r = _esp_cmd(u, b"ATI2")
+        for ln in r.split(b"\r\n"):
+            if ln.count(b".") == 3 and ln != b"0.0.0.0":
+                return ln.decode()
+        if time.ticks_diff(time.ticks_ms(), t0) >= join_ms:
+            return None
+        time.sleep_ms(500)
+
+
+def _esp_open():
+    """UART0 from tsbus, the ESP32 on and answering; the UART. A modem call
+    in progress (2050 mode off-hook) is refused, since UART0 carries it."""
+    global _m_up
+    if _m_mode == "2050" and tsbus.stats()["m_state"]:
+        raise WifiError("Modem in use")
+    from machine import UART
+    tsbus.modem(False)                    # core 1 leaves UART0 and its DMA alone
+    u = UART(0, 115200, tx=Pin(44), rx=Pin(45), timeout=0, rxbuf=4096)
+    try:
+        if not _m_powered:
+            esp_boot(False)
+            if b"READY." not in _esp_wait(u, b"READY.", ESP_BOOT_MS, bytearray(256)):
+                raise WifiError("No answer from the ESP32")
+            tsbus.modem_line(True)        # up: the modem needn't wait MODEM_BOOT_MS
+            _m_up = True
+        _esp_cmd(u, b"ATE0")
+    except BaseException:
+        _esp_close(u)
+        raise
+    return u
+
+
+def _esp_close(u):
+    """Zimodem back as a program expects it (echo on, no stream mode), UART0
+    back to tsbus, and the modem's idle clock restarted."""
+    global _m_last
+    time.sleep_ms(200)                    # the end of a cut-short stream
+    _esp_cmd(u, b"ATS45=0")
+    _esp_cmd(u, b"ATE1")
+    u.deinit()
+    _m_last = time.ticks_ms()
+    modem_start(_m_mode)                  # "off": the ESP32 off again
+
+
+def wifi_get(url, buf):
+    """Fetch url (https://...) into buf with Zimodem's AT&G; its length.
+    WifiError if the ESP32 isn't on WiFi, the fetch fails, or the file is
+    bigger than buf (nothing is fetched past it)."""
+    u = _esp_open()
+    try:
+        if _esp_address(u, ESP_JOIN_MS) is None:
+            raise WifiError("Not on WiFi")
+        if b"OK" not in _esp_cmd(u, b"ATS45=3"):
+            raise WifiError("No answer from the ESP32")
+        small = bytearray(256)
+        for tries in range(3):            # just after a cold boot the first
+            u.read()                      # AT&G once answered ERROR (2026-11-08)
+            u.write(b'AT&G"' + url.encode() + b'"\r')
+            h = _esp_wait(u, b"]\r\n", ESP_FIRST_MS, small)
+            i = h.find(b"]\r\n")
+            if i >= 0 or b"ERROR" not in h:
+                break
+            time.sleep_ms(1000)
+        if i < 0:
+            raise WifiError("Download failed" if b"ERROR" in h else "No reply from the ESP32")
+        size = int(h[h.index(b"[") + 1:i].split()[1])
+        if size > len(buf):
+            raise WifiError("Too big: %d bytes" % size)
+        mv = memoryview(buf)
+        n = len(h) - i - 3
+        mv[:n] = h[i + 3:]
+        last = time.ticks_ms()
+        while n < size and time.ticks_diff(time.ticks_ms(), last) < ESP_IDLE_MS:
+            k = u.readinto(mv[n:size])
+            if k:
+                n += k
+                last = time.ticks_ms()
+        if n < size:
+            raise WifiError("Download cut short")
+        return size
+    finally:
+        _esp_close(u)
+
+
+def wifi_status():
+    """Zimodem's address, or None if it isn't on WiFi (a short wait)."""
+    u = _esp_open()
+    try:
+        return _esp_address(u, 2000)
+    finally:
+        _esp_close(u)
+
+
+def wifi_join(ssid, password):
+    """Join ssid and save it as Zimodem's default (ATW, AT&W); the address.
+    WifiError if it doesn't join."""
+    if '"' in ssid or '"' in password:
+        raise WifiError('No " in a name or password')
+    u = _esp_open()
+    try:
+        r = _esp_cmd(u, b'ATW"' + ("%s,%s" % (ssid, password)).encode() + b'"', 20000)
+        if b"OK" not in r:
+            raise WifiError("Can't join " + ssid)
+        ip = _esp_address(u, ESP_JOIN_MS)
+        if ip is None:
+            raise WifiError("Can't join " + ssid)
+        _esp_cmd(u, b"AT&W")
+        return ip
+    finally:
+        _esp_close(u)
+
 # The joystick (phase 6): the DE-9's six switches are port 1's bits 0-5 (up,
 # down, left, right, fire 1, fire 2), pulled up, low while pressed. The
 # expander pulls nIOX_INT low when any input changes, so the port is read
