@@ -46,16 +46,24 @@ _SD_SCK, _SD_MOSI, _SD_MISO = 38, 39, 32
 _IOX_ADDR = 0x20
 _IOX_IN1 = 1            # input port 1: the joystick, nBUSAK_L, SD_CD
 _IOX_OUT0 = 2
-_IOX_OUT0_SAFE = 0xE0   # no bus request, no NMI, OLED in reset, ESP32 off, LED off
+_IOX_OUT0_SAFE = 0xA0   # no bus request, no NMI, OLED in reset, ESP32 off, LED off, SD socket off
 _X_WIFI_EN = 0x08       # bit 3: the ESP32-C3's EN, high = powered and running
 _X_WIFI_DL = 0x10       # bit 4: high pulls the ESP32's IO9 low, so it boots into download mode
 _X_NLED = 0x20          # bit 5, active low
+_X_SD_PWR = 0x40        # bit 6: SD_PWR_EN, high = the socket powered (proto2's U32; unconnected on proto1)
 _X_SD_CD = 0x80         # port 1 bit 7: low = a card in (the TF-01A's switch closes to GND; R38 pulls it up)
 _IOX_INT = 35           # nIOX_INT: the expander pulls it low when an input changes (R8 pulls it up)
 
 # A card the switch has only just seen is left alone this long before the
 # first SPI clock, so it is seated and powered before its lines are driven.
 SD_SETTLE_MS = 250
+# The socket's power switch (#262): after it turns on, this long before the
+# first clock (VDD is up in about 120 us; the SD spec asks for 1 ms). After
+# it turns off, this long before it turns on again: U32 discharges VDD through
+# about 150 ohm into 10 uF, a time constant of 1.5 ms.
+SD_ON_MS = 2
+SD_OFF_MS = 10
+_sd_off_at = None       # ticks_ms when the socket was last switched off; None: not since boot
 
 _i2c = None             # I2C(0), shared by the LED and the card-detect read
 _cd_since = None        # ticks_ms when the switch was first seen closed; None: no card
@@ -610,15 +618,20 @@ def card_present():
 
 def sd_card_ready():
     """ACTIVATE_SD asks this before it touches an SD line. False: the switch
-    says the socket is empty, so no SPI at all. True: a card is in, and has
-    been for SD_SETTLE_MS (it waits out the rest when the card is new), or
-    the switch can't be read and the mount will find out."""
+    says the socket is empty, so no SPI at all, and a socket left powered
+    (the card pulled while it was mounted) is released and switched off.
+    True: a card is in, and has been for SD_SETTLE_MS (it waits out the rest
+    when the card is new), or the switch can't be read and the mount will
+    find out; either way the socket is then powered (sd_power)."""
     global _cd_since
     p = card_present()
     if p is None:
+        sd_power(True)
         return True
     if not p:
         _cd_since = None
+        if _out0 & _X_SD_PWR:               # lines are driven only while it's on
+            sd_power(False)
         return False
     now = time.ticks_ms()
     if _cd_since is None:
@@ -626,7 +639,51 @@ def sd_card_ready():
     wait = SD_SETTLE_MS - time.ticks_diff(now, _cd_since)
     if wait > 0:
         time.sleep_ms(wait)
+    sd_power(True)
     return True
+
+
+def sd_power(on):
+    """The SD socket's power switch, SD_PWR_EN (port 0 bit 6, #262). On: if
+    it was off, it waits out the rest of SD_OFF_MS since it went off, turns
+    on, and waits SD_ON_MS for VDD before returning. Off: the four SD lines
+    are released first (_sd_lines_free), then the power goes, so no driven
+    line ever meets an unpowered card (what killed the two cards of
+    tspico-hardware #21). Nothing happens on proto1 (bit 6 isn't connected;
+    its socket is always powered)."""
+    global _sd_off_at
+    if on:
+        if _out0 & _X_SD_PWR:
+            return
+        if _sd_off_at is not None:
+            wait = SD_OFF_MS - time.ticks_diff(time.ticks_ms(), _sd_off_at)
+            if wait > 0:
+                time.sleep_ms(wait)
+        _port0(_X_SD_PWR, _X_SD_PWR)
+        time.sleep_ms(SD_ON_MS)
+    else:
+        _sd_lines_free()
+        if _out0 & _X_SD_PWR:
+            _port0(_X_SD_PWR, 0)
+            _sd_off_at = time.ticks_ms()
+
+
+def _sd_power_off_at_import():
+    """A soft reset starts _out0 again at _IOX_OUT0_SAFE (socket off) but
+    leaves the expander as it was: with the socket powered if a card was
+    mounted. The LED's next write would switch it off under whatever the
+    SPI pins were left driving. So, once at import: if the expander says the
+    socket is on, release the lines, then switch it off."""
+    global _sd_off_at
+    try:
+        out = _iox().readfrom_mem(_IOX_ADDR, _IOX_OUT0, 1)[0]
+        if out & _X_SD_PWR:
+            _sd_lines_free()
+            _out0_buf[0] = out & ~_X_SD_PWR
+            _iox().writeto_mem(_IOX_ADDR, _IOX_OUT0, _out0_buf)
+            _sd_off_at = time.ticks_ms()
+    except OSError:
+        pass                    # no expander answering: nothing to switch
 
 
 def sd_take_bus():
@@ -645,15 +702,26 @@ def sd_spi():
 
 
 def sd_release_bus():
-    """After the card is unmounted: nothing drives the socket. CS, SCK,
-    MOSI and MISO go back to plain inputs, no pulls (RP2350 erratum E9: a
-    pull-down can latch the pad), as board_init.c leaves them at power-on.
-    R34 holds CS high, so a card that is in stays deselected, and R35 holds
-    MISO; SCK and MOSI float behind their 33R. A card going in then
-    meets no driven line, which could power it through its I/O pins before
-    its VDD contact makes."""
+    """After the card is unmounted: the lines released, then the socket
+    switched off (sd_power(False)), so every command powers the card for its
+    own mount. ACTIVATE_SD powers it again (sd_card_ready)."""
+    sd_power(False)
+
+
+def _sd_lines_free():
+    """Nothing drives the socket. CS, SCK, MOSI and MISO go back to plain
+    inputs, no pulls (RP2350 erratum E9: a pull-down can latch the pad), as
+    board_init.c leaves them at power-on. R34 holds CS high, so a card that
+    is in stays deselected, and R35 holds MISO; SCK and MOSI float behind
+    their 33R. On proto2 R34 and R35 are on the switched rail, so with the
+    socket off they hold nothing up either. A card going in then meets no
+    driven line, which could power it through its I/O pins before its VDD
+    contact makes."""
     for p in (_SD_CS, _SD_SCK, _SD_MOSI, _SD_MISO):
         Pin(p, Pin.IN, pull=None)
+
+
+_sd_power_off_at_import()
 
 
 class ExpanderLED:
