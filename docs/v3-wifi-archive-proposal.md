@@ -1,6 +1,7 @@
 # v3: download 2068 programs from the archive over WiFi (proposal)
 
-Status: proposal, 2026-11-06. Nothing built yet.
+Status: proposal, 2026-11-06; revised 2026-11-08 for the plain-TAP folder
+(#401). No firmware yet.
 
 The idea: the v3 card's ESP32-C3 joins the home WiFi, reaches the
 Timex/Sinclair software archive on archive.org, and the user picks a program
@@ -59,11 +60,13 @@ owns the SD card, the `tpi:` commands and the 2068's messages:
 
 1. **One ESP32 image, no switching.** The modem keeps working, and the
    updaters don't change.
-2. **Fetch whole ZIPs and unzip on the Pico.** `AT&G` refuses any reply
-   without a Content-Length (`proto_http.ino:470`), and archive.org's unzip
-   service and metadata API always answer chunked. Plain files in the item,
-   whole ZIPs included, come with a length. MicroPython's built-in `deflate`
-   unzips them.
+2. **Fetch plain files.** `AT&G` refuses any reply without a
+   Content-Length (`proto_http.ino:470`), and archive.org's unzip service
+   and metadata API always answer chunked. Plain files in an item come with
+   a length. The tapes are now plain `.tap` files in their own item (see
+   "The folder" below), so the Pico saves what it receives and unzips
+   nothing. Whole ZIPs work too (the spike unzipped them with MicroPython's
+   built-in `deflate`), but the folder made that unnecessary.
 3. **New firmware:** a core-0 path to the ESP UART that sends an `AT` line
    and collects the response, with core 1's modem logic held off. That's the
    pattern `tsbus.esp_relay` already follows. Ours carries bytes to a buffer
@@ -108,8 +111,8 @@ What we learned:
   allocated early or in pieces (see #384).
 - **The `AT` command line is at most 256 bytes** (`MAX_COMMAND_SIZE`), and
   TOSEC names are long. One QWIK 1040 member URL was 314 bytes. Whole-ZIP
-  URLs are shorter (about 165), but the index should give each file a short
-  URL anyway (see below).
+  URLs are shorter (about 165). The folder's tape paths are 34 characters
+  at most (see "The folder").
 - `example.com` gave `ERROR` over both http and https. We didn't look into
   why, and archive.org was unaffected.
 
@@ -120,48 +123,60 @@ fetch and the parsing and hands the Pico finished files. It needs more C++
 on the ESP32 and gains nothing over B: the Pico has more RAM free than the C3
 does once TLS is running, and it already writes the SD card.
 
-## The index: publish our own
+## The folder: `tspico-2068-tapes` (#401)
 
 The metadata JSON (552 KB) is too big for either chip to hold, and the
-listing page is an undocumented HTML scrape. But we own the
-`timex-sinclair-software-archive` item (`tools/sd-archive/publish.py`
-uploads to it). So we publish a small index next to the ZIPs.
+ZIPs hide most of the tested tapes: about 560 of them sit in collection ZIPs
+over 32 KB, many of them big only because they also hold WAV recordings.
+Zimodem sends no `Range` header and archive.org's unzip service is chunked,
+so nothing on the card reaches a tape inside a big ZIP.
 
-Suggested format: a text file with one line per tape, holding the title,
-year, publisher, the ZIP's name and size, the member path and its size, and
-a "tested" mark. It covers every ZIP tagged `(TS2068)` (David's choice,
-2026-11-07), not just the load-tested ones. The host tool that builds it
-reads the member lists from the ZIPs in `~/tspico-archive-work`, or
-downloads them, and takes the titles and categories from the SD card
-catalog where a tape is on it. With names only, the list would be about
-70 KB, which fits on the SD card and takes about 7 s to download. The device downloads
-it once (and again on a refresh command) and searches it locally. That also
-means:
+So the tapes themselves went up as plain files, in an item of their own:
+[`tspico-2068-tapes`](https://archive.org/details/tspico-2068-tapes)
+("TS-Pico WiFi tapes: TS-2068 programs as plain TAP files"), published
+2026-11-07 by `tools/sd-archive/tap_folder.py` (#402, #403). The script's
+docstring is the format's definition; in short:
 
-- **No HTML parsing on the device.** The index names the ZIP and the member
-  inside it.
-- **It downloads through Zimodem.** A plain file in the item comes with a
-  Content-Length, unlike the metadata API. The index should be one file of
-  known size, small enough for RAM, or split by first letter.
-- **Short URLs.** Under the 256-byte `AT` limit, `/download/<item>/<zip>`
-  goes through archive.org's `ia6xxxxx` redirect. An index line could also
-  carry the direct `ia` path, but those hosts move, so the redirect is
-  safer.
-- **What the device can't fetch is left out.** The index leaves out ZIPs
-  with no `.tap`, `.tzx` or `.dck` inside (the WAV-only and image ZIPs),
-  and ZIPs too big for the RAM buffer. The sizes are in the metadata, and
-  the largest 2068 ZIPs are 260 MB WAV collections. A ZIP with several
-  tapes gets one line per tape.
-- **Untested is marked, not hidden.** The 1,328 tapes the SD-card pipeline
-  load-tested carry the mark. The rest are listed too, so `tpi:net` can
-  show which is which.
-- **Categories and real titles** instead of TOSEC filenames.
+- **The tapes:** 2,300, the SD card's archive tapes, at their card paths
+  (`TAP/GAMES/name.tap`, `TAP/COLLECT/<collection>/name.tap`), with the
+  pipeline's repairs and conversions. Every one loads and starts:
+  1,353 `LOAD ""`, 484 `LOAD ""` then `RUN`, 444 `LOAD "" CODE`, 19 another
+  way. 34 tapes over 64 KB (`--max-tap 65536`) were left out.
+- **Browsing:** every folder has an `index.txt`: a `#tspico-dir` header,
+  then its subfolders (`name/ D title tapes`) and its tapes
+  (`name.tap status title year publisher size post`), tab-separated.
+  A folder's index is split into parts of at most 8 KB (`index2.txt`...),
+  97 parts in 94 folders. Browsing starts at `TAP/index.txt` (339 bytes,
+  ten categories).
+- **Search:** `tspico-taps.txt.gz`, one line per tape with its full path,
+  221 KB, 46 KB gzipped.
+- **URLs:** `https://archive.org/download/tspico-2068-tapes/TAP/...`. The
+  longest tape path is 34 characters, so every `AT&G` line is far under
+  Zimodem's 256-byte limit, and nothing needs percent-encoding.
+- **Content-Length:** checked from the host 2026-11-08. The top index, a
+  tape and the `.gz` each come back 302 to `ia600909.us.archive.org`, then
+  200 with a `content-length`.
 
-TSRun's way of getting one TAP (archive.org's unzip service) is out for
-Zimodem, because its replies are chunked. Fetching the whole ZIP and
-inflating it on the Pico works (see the spike). Most 2068 ZIPs are a few
-KB. The index should leave out the huge ones, such as the 260 MB WAV
-collections.
+What this means for the card:
+
+- **No unzip and no central-directory walk.** A download is one `AT&G`
+  and a file write.
+- **The buffer has to be 64 KB, or the card skips the big tapes.** 127
+  tapes are over 32 KB (the largest is 63,635 bytes), and the bytes still
+  arrive with no flow control, so a tape has to fit in RAM before it's
+  written. board_v3's 32 KB slot buffer isn't enough; the 48 KB boot
+  `BLOCK_BUF` (#392) isn't either. Either the firmware takes a 64 KB
+  buffer while the heap is clean, or `tpi:net` refuses tapes over what it
+  has and says so (the size is in the index line, so it can refuse before
+  asking for it).
+- **The full index needs the same buffer.** At 46 KB gzipped it doesn't
+  fit in 32 KB. Browsing doesn't need it: every folder index part fits
+  in 8 KB.
+
+The ZIP index this proposal first built (`net_index.py`, 2026-11-07) is
+retired: it reached 967 tapes, a third of them untested, against the
+folder's 2,300 tested ones. Its findings are kept under "The ZIP index"
+below.
 
 ## On the 2068
 
@@ -170,13 +185,17 @@ can't (the manual's rule). A first cut:
 
 - `SAVE "tpi:wifi ssid,password"`: passes the credentials to Zimodem
   (`ATW`, `AT&W`). It only needs running once.
-- `SAVE "tpi:net word"`: searches the index and prints numbered matches,
-  like `tpi:dir` does.
-- `SAVE "tpi:net get 12"`: downloads match 12 into `/TAP/NET/` under an 8.3
-  name. If that name exists, the Y/N prompt asks before overwriting; the
-  refusal comes first, as with `tpi:rm`. Then it mounts the tape, so `LOAD ""` runs it. That's the same two-step load
-  as SD files.
-- `SAVE "tpi:net update"`: downloads the index again.
+- `SAVE "tpi:net"`: lists `TAP/index.txt`, the categories, numbered, like
+  `tpi:dir` does. `SAVE "tpi:net 5"` opens entry 5: a folder lists its own
+  index (each 8 KB part in turn), a tape downloads.
+- `SAVE "tpi:net find word"`: searches the full index (downloaded once to
+  the SD card) and prints numbered matches.
+- A tape downloads into `/TAP/NET/` under its 8.3 name. If that name
+  exists, the Y/N prompt asks before overwriting; the refusal comes first,
+  as with `tpi:rm`. Then it mounts the tape, so `LOAD ""` runs it, the same
+  two-step load as SD files. The index line's status says which `LOAD` to
+  use.
+- `SAVE "tpi:net update"`: downloads the full index again.
 
 A menu program, a BASIC TAP in `/assets`, could come later on top of the
 same commands.
@@ -185,15 +204,17 @@ same commands.
 
 1. **Zimodem fetches (option B).** No second ESP32 image.
 2. **Every 2068 ZIP** in the item, tested or not, minus what the device
-   can't fetch (see the index).
+   can't fetch. *Superseded* by David's direction for #401: the card fetches
+   from the plain-TAP folder, which holds the load-tested tapes only.
 3. **Downloads go to `/TAP/NET/`.** An existing name is asked about first
    (Y/N), not overwritten silently.
 4. **v3 only.** The v2 manual doesn't mention it.
 
-## The index, built (2026-11-07)
+## The ZIP index (2026-11-07, retired)
 
-`tools/sd-archive/net_index.py` builds it from the item's file list and the
-ZIPs themselves. It downloaded the small ones the SD-card pipeline didn't
+`tools/sd-archive/net_index.py` built it from the item's file list and the
+ZIPs themselves. It was never published, and it was removed when the folder
+replaced it; it's in this PR's history (commit 89ded57). It downloaded the small ones the SD-card pipeline didn't
 already have.
 
 - **Coverage:** 1,217 ZIPs looked at (the 1,189 tagged `(TS2068)`, plus 28
@@ -214,27 +235,16 @@ On the card (board 1, bare REPL), the 27.9 KB `.gz` gunzipped to flash in
 through the central directory with a good CRC (a flag-bit-3 ZIP). The tape
 is now in `/TAP/NET/` on the card.
 
-**The gap is the collections.** About 560 of the 1,328 load-tested tapes
-are inside ZIPs over 32 KB: user-group library tapes (CATUG, ISTUG,
-SINCUS…), most of them big because they also hold WAV recordings. Neither a
-bigger RAM buffer nor Zimodem reaches them. Zimodem sends no `Range`
-header, and archive.org's unzip service is chunked. The way to reach them
-is to put the tapes themselves in the item, as plain `.tap` files (they'd
-get a Content-Length), and point the index at those. That would publish
-more copies of tapes already in the item and in the SD card ZIP, so it's
-David's call.
-David's direction (2026-11-07): a clean folder of plain TAP files plus an
-index, as a project of its own,
-[#401](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/401).
+That's what showed the gap the folder closes: about 560 tested tapes in
+collection ZIPs over 32 KB.
 
 ## Steps
 
-1. **Hardware spike:** done, 2026-11-06 (above). B works with whole ZIPs.
-2. **Index:** `tools/sd-archive/net_index.py` (built and tested on the card,
-   2026-11-07). It goes into the item once David agrees; then fetch the
-   published `.gz` with `AT&G` once, to check archive.org serves it with a
-   length.
-3. **Firmware:** the core-0 ESP transfer in `tsbus` (into RAM, `ATS45=3`),
-   ZIP inflate to SD, and `tpi:wifi` and `tpi:net`. The same PR updates the
-   reference chapters (`docs/reference/`).
+1. **Hardware spike:** done, 2026-11-06 (above).
+2. **The folder:** published 2026-11-07 (#402, #403). Left: a v3 card
+   downloads from it byte-exact (#401's last box).
+3. **Firmware:** the core-0 ESP transfer in `tsbus` (into a RAM buffer,
+   `ATS45=3`, 64 KB or a stated limit), the write to SD, and `tpi:wifi`
+   and `tpi:net`. The same PR updates the reference chapters
+   (`docs/reference/`).
 4. **Manual:** a WiFi section in the v3 manual's modem chapter.
