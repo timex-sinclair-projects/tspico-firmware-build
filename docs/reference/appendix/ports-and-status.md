@@ -30,7 +30,7 @@ the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
 Data goes through two accessors, 2298h (`IN A,(0Eh)`) and 229Dh
 (`OUT (0Eh),A`), and status through READ_STATUS (0655h, the `IN A,(0Fh)` at
 065Bh); the SYNC/BREAK layer adds the SYNC and BREAK writes and its own status reads at
-2304h–23C0h, and the disk module one IDLE poll at 3662h. Every site is listed in
+2304h–23C0h, and the disk module one IDLE poll at 3654h. Every site is listed in
 [rom/overview.md](../rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 ## The status byte
@@ -220,6 +220,7 @@ ROM: [exrom-driver.md](../rom/exrom-driver.md) (1879h, 196Dh).
 | `tpi:chwr <hex>` | stream | 0 | a bare status |
 | `tpi:chrd` | stream | bytes wanted (1–255; 0 = 255) | the data phase: status (1 data, 7 end of file), n, n bytes, XOR |
 | `tpi:chclose` | stream | 0 | a bare status |
+| `tpi:chcat [x]` | stream | 1 when a string came (`""` is the mounted TAP), else 0 | a bare status: `CAT #n` wrote the listing into the file (#404) |
 
 Modes `r`, `w`, `a`, `u`, each with an optional `b`. Byte 17h in a write is
 always the TAB escape `17h, n lo, n hi`. Firmware:

@@ -132,7 +132,6 @@ def setup(t, root):
         return True
     t.MOUNT_FILE = mount
     t.GET_DIRS = lambda path="/sd/TAP": ["/TAP"]
-    t.alldirs = ["/TAP", "/TAP/EMPTY", "/TAP/FULL", "/TAP/GAMES", "/TAP/GAMES/ARCADE"]
     t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", f_name="", offset_tbl=[], tap_idx=0,
                                   append=False, VERBOSE=False, LOG_LEVEL=2)
     t.prev_path = None
@@ -203,7 +202,6 @@ def test_erase(t, root):
         f.write(b"d")
     r = call(t, sent, E, "tpi:erase empty/")
     check(r[-1] == t._1_OK and not on_card(root, "EMPTY"), "empty directory (bar dirinfo.tap): removed")
-    check("/TAP/EMPTY" not in t.alldirs, "  and dropped from alldirs")
     t.TSP.cur_path = "/sd/TAP/GAMES/ARCADE"
     r = call(t, sent, E, "tpi:erase /games/")
     check(r[-1] == t._4_Q_Parameter, "the current directory's parent: Report Q")
@@ -327,8 +325,8 @@ def test_format(t, root):
     r = call(t, sent, F, "tpi:format nodir/x.tap")
     check(r[-1] == t._3_F_Invalid_file, "missing directory: Report F")
     r = call(t, sent, F, "tpi:format tools/")
-    check(r[-1] == t._1_OK and os.path.isdir(os.path.join(root, "tools")) and "/TAP/tools" in t.alldirs,
-          "dir/: made, and added to alldirs")
+    check(r[-1] == t._1_OK and os.path.isdir(os.path.join(root, "tools")),
+          "dir/: made")
     r = call(t, sent, F, "tpi:format tools/")
     check(r[-1] == t._3_F_Invalid_file, "dir/ again: Report F")
     r = call(t, sent, F, "tpi:format /")
@@ -369,6 +367,30 @@ def test_cd_and_ren(t, root):
     t.TSP.f_name = "/sd/TAP/CHESS.TAP"
     r = call(t, sent, R, "tpi:ren chess.tap|c.tap")
     check(r[-1] == t._4_Q_Parameter, "the mounted file: Q")
+    t.TSP.f_name = ""
+
+    print("tpi:cd CODE 0,1: every folder, walked when asked for (#384)")
+    check(not hasattr(t, "alldirs"), "no list of every folder kept between commands")
+    t.GET_DIRS = REAL_GET_DIRS
+    shown, sd = [], []
+    t.ListMenu = lambda lst, *a: shown.append(list(lst)) or -1
+    t.ACTIVATE_SD = lambda *a, **k: sd.append("on")
+    t.DEACTIVATE_SD = lambda *a, **k: sd.append("off")
+    t.ACTIVATE_MQ = lambda *a, **k: sd.append("mq")
+    t.TSP.cur_path = "/sd/TAP"
+    pre = bytearray(10)
+    pre[5] = 1                                                    # CODE 0,1
+    t.CDIR(pre, "xxxtpi:cd")
+    got = shown[0] if shown else None
+    check(got is not None and "/TAP" in got and "/TAP/GAMES/ARCADE" in got and got == sorted(got)
+          and all(os.path.isdir(t.os.real("/sd" + d)) for d in got),
+          "the menu lists the card's folders, sorted (%r)" % (got,))
+    check(sd[:3] == ["on", "off", "mq"], "the card is mounted for the walk and handed back (%r)" % (sd,))
+    os.mkdir(os.path.join(root, "NEWONE"))
+    t.CDIR(pre, "xxxtpi:cd")
+    check("/TAP/NEWONE" in shown[-1], "a folder made since shows the next time, no cache to update")
+    for n in ("ACTIVATE_SD", "DEACTIVATE_SD", "ACTIVATE_MQ"):
+        setattr(t, n, lambda *a, **k: None)
 
 
 def test_native_open(t, root):
@@ -558,6 +580,63 @@ def test_channels(t, root):
     t.CH_READY = real_ch_ready
 
 
+def test_speech_channel(t):
+    print("OPEN #n,\"v:\": the v3 card's speech (#375)")
+    tx = []
+    said = []
+    t.CMD_PUT = lambda b: tx.append(b)
+    real_ch_ready, real_board, real_sd_call = t.CH_READY, t.board, t.SD_CALL
+    t.CH_READY = lambda: tx.append("READY")
+
+    def say(text):
+        said.append(text)
+        return 1, 1
+    t.board = types.SimpleNamespace(HAS_SPEECH=True, say=say)
+
+    def no_card(fn):
+        raise AssertionError("the card was used")
+    t.SD_CALL = no_card
+    t.CHANNELS.close_all()
+
+    def cmd(handler, text, stream, par2=0):
+        pre = bytearray(10)
+        pre[3], pre[5], pre[6] = stream, par2 & 0xFF, par2 >> 8
+        del tx[:]
+        handler(pre, "xxx" + text)
+        return tx[0] if len(tx) == 2 and tx[1] == "READY" else tx
+
+    check(not t.SD_NEEDED(False, "TPI:CHOPEN", "tpi:chopen r v:", {"TPI:CHOPEN": None, "TPI:CHWR": None}, 4),
+          "SD_NEEDED: chopen v: needs no card")
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:x", 4) == t._4_Q_Parameter and not t.CHANNELS.speaking(4),
+          "chopen r v:x: Q, no card asked for (only \"v:\" is speech)")
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:", 4) == t._1_OK and t.CHANNELS.speaking(4),
+          "chopen r v: opens a speech stream, no card")
+    check(cmd(t.CH_OPEN, "tpi:chopen w V:", 6) == t._1_OK and t.CHANNELS.speaking(6),
+          "  any mode, either case")
+    check(not t.SD_NEEDED(False, "TPI:CHWR", "tpi:chwr 4849", {"TPI:CHOPEN": None, "TPI:CHWR": None}, 4),
+          "SD_NEEDED: chwr to the speech stream needs no card")
+    check(t.SD_NEEDED(False, "TPI:CHWR", "tpi:chwr 4849", {"TPI:CHOPEN": None, "TPI:CHWR": None}, 5),
+          "  chwr to another stream still does")
+    check(cmd(t.CH_WRITE, "tpi:chwr " + b"HI THERE\r".hex(), 4) == t._1_OK and said == ["HI THERE"],
+          "chwr: the line is said at its CR (%r)" % said)
+    check(cmd(t.CH_WRITE, "tpi:chwr " + b"BYE".hex(), 4) == t._1_OK and said == ["HI THERE"],
+          "  no CR: not yet")
+    check(cmd(t.CH_CLOSE, "tpi:chclose", 4) == t._1_OK and said[-1] == "BYE" and not t.CHANNELS.speaking(4),
+          "chclose says the rest and closes, no card")
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:", 4, 10) == t._4_Q_Parameter, "v: with a record length: Q")
+
+    def off(text):
+        raise OSError("speech is off")
+    t.board.say = off
+    cmd(t.CH_OPEN, "tpi:chopen r v:", 4)
+    check(cmd(t.CH_WRITE, "tpi:chwr " + b"X\r".hex(), 4) == t._10_J_Invalid_IO, "speech off: chwr is J")
+    t.board = types.SimpleNamespace(HAS_SPEECH=False)
+    check(cmd(t.CH_OPEN, "tpi:chopen r v:", 7) == t._3_F_Invalid_file and not t.CHANNELS.speaking(7),
+          "a board with no speech: F")
+    t.CHANNELS.close_all()
+    t.CH_READY, t.board, t.SD_CALL = real_ch_ready, real_board, real_sd_call
+
+
 def main():
     P.install_fakes()
     ext = types.ModuleType("dev_extcmd")
@@ -565,6 +644,8 @@ def main():
     sys.modules["dev_extcmd"] = ext
     import TS.tspico as t
     t.TLM_ENABLED = False
+    global REAL_GET_DIRS
+    REAL_GET_DIRS = t.GET_DIRS
     real_prompt_each = t.PROMPT_EACH
     real_prompt_yn = t.SEND_MSG_PROMPT_YN
     root = tempfile.mkdtemp(prefix="disk_hosttest.")
@@ -575,6 +656,7 @@ def main():
         test_cd_and_ren(t, root)
         test_native_open(t, root)
         test_channels(t, root)
+        test_speech_channel(t)
         t.PROMPT_EACH = real_prompt_each                          # test_erase stubs it
         t.SEND_MSG_PROMPT_YN = real_prompt_yn                     # test_native_open stubs it
         test_prompt_each(t)

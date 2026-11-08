@@ -21,7 +21,7 @@ sources are listed [at the end](#sources).
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
 | **2.1** | `src/rom/TSPICO-21.ROM` until 2.2, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. It shipped with firmware 2.1.0–2.1.2. |
 | **2.2** | `src/rom/TSPICO-22.ROM`, crc 8363E100 | 2.1 plus a 16th patch (EXROM 20BEh) and two module fixes: `tpi:tape` keeps the printer switch ([TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), #176) and a pre-load of 0 is Report J ([PRELOAD](#preload-a-pre-load-of-0-is-report-j), #179). The module is 1919 bytes, 3000h–377Eh. It shipped with firmware 2.2 and 2.2.1. |
-| **2.3** | `src/rom/TSPICO-23.ROM`, crc 614CE7E4 | 2.2 plus seven patches, `PS_READ`, COPY, LIST and RESTORE: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228); COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-23-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-23-list-and-restore)). The module is 2284 bytes, 3000h–38EBh, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
+| **2.3** | `src/rom/TSPICO-23.ROM`, crc 69660CDB | 2.2 plus seven patches, `PS_READ`, COPY, LIST and RESTORE: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228); COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-23-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-23-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-23-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-23-the-command-channel), #404); `CAT #n` writes a listing into a file ([below](#rom-23-cat-n), #404). The module is 2456 bytes, 3000h–3997h, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -407,6 +407,59 @@ seek, so the firmware needs nothing new for it. Report O when stream n
 isn't an OPEN # file. The new code (FDD_LIST, FDD_RESTORE, STR_NEXT,
 HC_USE_ZERO, CMD_LIST) takes the module to 38EBh. `tpi:label` (the card's
 name, also `FORMAT ":name"`) is firmware only.
+
+#### ROM 2.3: the speech channel
+
+`OPEN #n,"v:"` (#375) opens the v3 card's speech: every line `PRINT #n`
+prints is said. CH_OPEN_HOOK (335Ch) takes a `v:` spec as it takes `d:`:
+the whole spec goes to the Pico (`tpi:chopen r v:`), which answers F on a
+board with no speech and Q for anything after the `v:` or a record length.
+The record is an ordinary 'F' record, so CLOSE #, the quiet key click and
+the rest are unchanged; R_FLAGS bit 1 marks it, and CH_OUT then sends the
+buffer at each CR as it does for a record file, so a line is said when it
+is printed rather than when 64 bytes have gathered or at CLOSE #. The new
+code (SPEC_KIND, DV_TEST, PUSH_LETTER, REC_FLAGS) is at the end of the
+module, 38ECh–391Ah. The hook's call sites got shorter, so PS_READ keeps
+its address behind 14 free bytes (3771h–377Eh) and the channel routines
+from OPEN_SYNTAX to CH_SEND sit 14–15 bytes lower than before. The letter
+is `v` (voice) because the stock code takes `s` as the screen, reading only
+a spec's first character.
+
+#### ROM 2.3: the command channel
+
+`OPEN #n,"x:"` (#404) opens a stream a program talks to the Pico through:
+each line printed to it is a command (`path`, `dir`, `mount`, `info`), and
+`INPUT #n` reads the answer, one value a line. DV_TEST takes `x` as it
+takes `d` and `v`, so the whole spec goes to the Pico (`tpi:chopen r x:`),
+which answers Q for anything after the `x:` or a record length. REC_FLAGS
+sets R_FLAGS bit 1 for it, as for speech, so CH_OUT sends each line at its
+CR, and bit 2, which makes CH_OUT forget what CH_IN read ahead whenever the
+stream is written: a new command's answer replaces the last, and a program
+that read only part of a `dir` must not get the rest of it after its next
+command. CH_OUT's TAB test and the new bit-2 test both call IN_DROP, in the
+same 12 bytes as before, so nothing up to PS_READ moves. DV_TEST, REC_FLAGS
+and IN_DROP grew the end of the module to 3930h; PUSH_LETTER and REC_FLAGS
+are 3 bytes higher.
+
+#### ROM 2.3: CAT #n
+
+`CAT #n`, `CAT #n;"x"` and `CAT #n,"x"` (#404) write what `CAT` and
+`CAT "x"` would show into the file open on stream n, as plain text: one
+line a row, no colors and no `Scroll?`. `CAT #n;""` is the mounted TAP.
+FDD_CAT's first call is now CAT_HASH in AT_END's place, the same 3 bytes,
+so nothing up to PS_READ moves. For anything but `#` it is AT_END. For `#`
+it does the whole statement on both passes: the stream, then the end of
+the statement or `;`/`,` and a string. At run time STRM_REC checks the
+stream (Report O unless it's an OPEN # file, as for RESTORE #n, which now
+shares it) and flushes it, IN_DROP drops what was read ahead, and the
+channel command `tpi:chcat [x]` goes out with PMR1 = the stream and PMR2 =
+1 when a string came. The Pico writes the listing into the file itself and
+answers with a bare status: Q for a stream open to read, `d:`, `v:` or
+`x:`, F for a name that isn't there. The ROM can't print the listing into
+the stream: printing into a Pico-backed stream in the middle of the reply
+would send a channel command, whose SYNC ends the reply. STRM_REC and
+CAT_HASH take the module to 3997h; the code after FDD_RESTORE is 1 byte
+higher.
 
 ### SAVE / LOAD "f:path"
 

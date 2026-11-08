@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 
 ZIMODEM_REPO=https://github.com/bozimmerman/Zimodem.git
 ZIMODEM_REV=a24225cc1b6c219e6c0764a4e6b1a388356a1dd5   # 4.0.3, 2026-08-30
-ZIMODEM_VERSION=4.0.3.1   # ours: 4.0.3 with the patches below (ATI says it)
+ZIMODEM_VERSION=4.0.3.2   # ours: 4.0.3 with the patches below (ATI says it)
 
 [ -d Zimodem/.git ] || git clone -q "$ZIMODEM_REPO" Zimodem
 git -C Zimodem cat-file -e "$ZIMODEM_REV^{commit}" 2>/dev/null || git -C Zimodem fetch -q origin
@@ -38,6 +38,15 @@ perl -pi -e 's/ZResult res = doDialStreamCommand\(0,vbuf,addrLen,false,phb->modi
     Zimodem/zimodem/zcommand.ino
 grep -q 'String mods = String(phb->modifiers) + dmodifiers;' Zimodem/zimodem/zcommand.ino \
     || { echo "build.sh: the phonebook-modifiers patch didn't apply" >&2; exit 1; }
+
+# The card talks to Zimodem at 115200 (board_v3.py, usart8251.c), but Zimodem
+# starts at 1200 until a saved configuration says otherwise. A blank module
+# has none, so a fresh install answered nothing and the modem was dead
+# (2026-11-02, the first new v3 board). Make 115200 the default; it is also
+# what AT&F goes back to. A configuration saved with another rate still wins.
+perl -pi -e 's/^#define DEFAULT_BAUD_RATE 1200\b/#define DEFAULT_BAUD_RATE 115200/' Zimodem/zimodem/zimodem.ino
+grep -q '^#define DEFAULT_BAUD_RATE 115200\b' Zimodem/zimodem/zimodem.ino \
+    || { echo "build.sh: the 115200 default patch didn't apply" >&2; exit 1; }
 
 # The version ATI reports, so the updaters can tell this build from 4.0.3.
 perl -pi -e "s/#define ZIMODEM_VERSION \"4\.0\.3\"/#define ZIMODEM_VERSION \"$ZIMODEM_VERSION\"/" Zimodem/zimodem/zimodem.ino

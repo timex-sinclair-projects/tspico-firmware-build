@@ -184,8 +184,6 @@ def run_cmd(t, env, text, load_cmd=0):
         VERBOSE=False, LOG_LEVEL=0, offset=0, offset_tbl=[], tap_idx=0,
         sd_present=True, sd_cid=0, sd_listing_ok=True, save_no_card=False)
     t.files = ["GAME.TAP"]
-    t.files_upper = ["GAME.TAP"]
-    t.alldirs = []
     try:
         t.PROCESS_CMD(P.make_pre(text, load_cmd), {"TPI:MD": t.MDIR}, {})
         return bus, None

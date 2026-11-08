@@ -77,7 +77,7 @@ There are no jumpers to set on the card.
 Your card came ready to use. To set up a new one, format it **FAT32** on your computer (cards
 up to 16GB work), and copy your `.tap` files into a folder called **`TAP`** at the top of the
 card, or into folders inside it. `TAP` is the TS-Pico's top folder; it makes one on a card that
-doesn't have it.
+doesn't have it. Keep each folder to about 100 files: `CAT` shows them about 20 at a time.
 
 <!-- v2 -->
 The card goes into the slot at the upper right corner of the board, contacts first, and

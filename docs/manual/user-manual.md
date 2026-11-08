@@ -339,7 +339,8 @@ Your card came ready to use. If you set up a new one:
 1. Format it **FAT32** on your computer. Cards up to 16GB work.
 2. Create a folder called **`TAP`** at the top level of the card. The TS-Pico treats `TAP` as
    its root folder. (It makes the folder on a card that doesn't have one.)
-3. Copy your `.tap` files into `TAP`, or into folders inside it.
+3. Copy your `.tap` files into `TAP`, or into folders inside it. Keep each folder to about
+   100 files (see 3.1).
 4. If you like, copy the `help` folder from the TS-Pico release to the top level of the card,
    next to `TAP`. That's where `SAVE "tpi:help word"` finds its help pages.
 
@@ -486,6 +487,7 @@ scroll that many lines, or **N** to stop.
 | `CAT "games/b*"` | Files in games starting with b |
 | `CAT "frogger.tap"` | The blocks inside a TAP file |
 | `CAT ""` | The blocks inside the mounted TAP |
+| `CAT #4` | The listing into the file open on stream 4 (6.5) |
 
 `*` matches any run of characters and `?` matches exactly one. They work in the last part of a
 path.
@@ -493,7 +495,11 @@ path.
 To see what's inside a file, **LIST** it: `LIST "notes.txt"` shows a text file on the screen,
 and any other file as a hex dump (10.1).
 
-![CAT: the path and card on a blue bar, folders in blue, each file's number on a cyan chip](images/cat.png)
+> **Note:** keep each folder to about 100 files. `CAT` shows about 20 at a time, so a folder of
+> 100 is five screens to page through; a few folders, say by type or by letter, are easier to
+> find your way around. Folders of up to 300 files have been tested and work.
+
+![CAT: the path and card on a blue bar, then the folders, and each file's number on a cyan chip](images/cat.png)
 
 *`CAT` on a card with four folders and eight files. `{game}.tap` and `jet~1.tap` appear as
 `?game?.tap` and `jet?1.tap`; see below.*
@@ -981,16 +987,21 @@ line 30 asks `Replace scores.dat? (Y/N)`: press **Y**.
 <!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · RESTORE # · CLOSE # -->
 
 > **Chapter Preview.** Write and read text files with the 2068's own `PRINT #` and `INPUT #`,
-> keep records you can jump to by number, and read a folder listing into a program.
+> keep records you can jump to by number, read a folder listing into a program, and ask the
+> TS-Pico where you are.
 
 ## 6.1 Streams in a nutshell
 
 You already use streams without knowing it. `PRINT` goes to stream 2, the screen, and `INPUT`
 comes from the keyboard. The 2068 has sixteen streams, numbered 0 to 15, and **OPEN #** connects
-one to a device. The TS-Pico adds two new kinds of device:
+one to a device. The TS-Pico adds new kinds of device:
 
 - `"f:name"`, a file on the SD card;
-- `"d:pattern"`, a list of file names.
+- `"d:pattern"`, a list of file names;
+- `"x:"`, questions for the TS-Pico: the folder you're in, what's mounted, and more.
+<!-- v3 -->
+- `"v:"`, the card's voice: what you `PRINT` to it is spoken (Appendix G).
+<!-- /v3 -->
 
 ```basic
 OPEN #4,"f:notes.txt","w"
@@ -1136,6 +1147,16 @@ OPEN #4,"f:listing.txt","w": LIST #4: CLOSE #4
 Now `listing.txt` holds your program as readable text, handy for sharing it or printing it on
 a modern printer.
 
+`CAT #` does the same for a folder listing. It takes anything `CAT` takes:
+
+```basic
+OPEN #4,"f:files.txt","w": CAT #4: CAT #4;"test/*.tap": CLOSE #4
+```
+
+The file gets the listing as plain text, one line a row, with no colors and no `Scroll?`.
+`CAT #4;""` lists the mounted TAP. The stream must be a file open for writing: one open with
+`"r"`, or a `d:` or `x:` stream, gives **Q Parameter error**.
+
 ## 6.6 Capturing the screen: OPEN #2
 
 Stream 2 is the screen. Point it at a file, and everything your program PRINTs goes to the file
@@ -1267,7 +1288,58 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
   `TAB 0` gives 0.
 - A `d:` stream is read-only.
 
-## 6.9 Good to know
+## 6.9 Asking the TS-Pico: `x:`
+
+A program sometimes needs to know what the TS-Pico knows: which folder it's in, what's
+mounted, what's in the folder. `OPEN #` with `"x:"` gives you a stream you can ask. `PRINT #` a
+question to it, and `INPUT #` reads the answer:
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"path"
+30 INPUT #4;p$
+40 PRINT "You are in ";p$
+50 CLOSE #4
+```
+
+```
+You are in /TAP/games
+```
+
+There are four questions:
+
+| Question | The answer, one line each |
+|---|---|
+| `"path"` | The folder you're in |
+| `"mount"` | The file that's mounted, or an empty line if none is |
+| `"dir"` | The number of folders, the number of files, then a line for each folder and each file |
+| `"info"` | The card's name, its free space and its total size in bytes, the firmware's version, the ROM's |
+
+`"dir"` gives the same rows as `dirinfo.tap` (see 10.2), each one 32 characters. A folder's row is its name. A file's row has its number in columns 1 to 3, its name
+in 5 to 22 and its size in 23 to 32, so `TO` picks out each part:
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"dir"
+30 INPUT #4;d: INPUT #4;f
+40 FOR i=1 TO d: INPUT #4;a$: PRINT "Folder ";a$( TO 20): NEXT i
+50 FOR i=1 TO f: INPUT #4;a$: PRINT a$( TO 3);" ";a$(5 TO 22): NEXT i
+60 CLOSE #4
+```
+
+The number in a file's row is the one `LOAD "tpi:nnn"` mounts it by.
+
+- Each question replaces the last answer, whether you read all of it or not.
+- Reading past the end of an answer gives **8 End of file**. That's why `"dir"` starts with its
+  counts.
+- Questions can be in capitals or lowercase. A question the TS-Pico doesn't know gives
+  **Q Parameter error**.
+- `"dir"` needs the SD card: without it you'll get **J Invalid I/O device**. The others work
+  without one. `"info"` then gives no name and no space.
+- Don't put a prompt in an `INPUT #` from an `x:` stream: the prompt goes to the stream, and
+  the TS-Pico would take it for the start of a question.
+
+## 6.10 Good to know
 
 - `CLOSE #` on a stream that isn't open does nothing, as on a standard 2068.
 - After `NEW` or a reset, open streams are forgotten; OPEN them again. `CLEAR` and `RUN`
@@ -1292,7 +1364,7 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 | **O Invalid stream** | The stream is already open to a file; `RESTORE #` of a stream that isn't open to a file |
 | **4 Out of memory** | No room for another open file (each takes 512 bytes) |
 
-## 6.10 More ways to use files
+## 6.11 More ways to use files
 
 These patterns come up in most programs that keep data. Each one was run on a 2068 with the
 TS-Pico firmware.
@@ -1364,15 +1436,20 @@ any spreadsheet on your computer:
 as in line 40: a comma on its own between PRINT items moves to the next column, and goes into
 the file as spaces.
 
-## 6.11 Summary
+## 6.12 Summary
 
 1. `OPEN #n,"f:name","mode"` connects a stream to a file: r, w, a or u, plus b for binary.
 2. `PRINT #`, `INPUT #`, `INKEY$ #` and `LIST #` work as they do with any stream.
 3. Always CLOSE a file you've written to.
 4. A record length (`OPEN #4,"f:x","u",20`) makes TAB jump to a record; `TAB 0` counts them.
-5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT.
-6. `RESTORE #n` goes back to the start of the file, to read it again or write over it.
-7. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
+5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT. `OPEN #n,"x:"` answers
+   questions: `PRINT #n;"path"`, then `INPUT #n;p$`.
+<!-- v3 -->
+   `OPEN #n,"v:"` speaks what you print to it (Appendix G).
+<!-- /v3 -->
+6. `LIST #n` and `CAT #n` write a program listing or a folder listing into a file.
+7. `RESTORE #n` goes back to the start of the file, to read it again or write over it.
+8. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
    `PEEK 23739` says which report it caught.
 
 ---
@@ -2049,8 +2126,8 @@ See 6.3.
   for example a TZX file, a damaged cartridge, or a failed copy.
 - **For programmers:** `dirinfo.tap` holds one character array, `a$`. Row 1 is the number of
   folders, row 2 the number of files, then the folder names, then rows of
-  `nnn name        size`. `LOAD "" DATA a$()` reads it into your program. `OPEN #n,"d:"` is
-  easier.
+  `nnn name        size`. `LOAD "" DATA a$()` reads it into your program. `OPEN #n,"x:"`
+  gives the same rows without mounting anything (see 6.9).
 
 ## 10.3 The `tpi:` commands
 
@@ -2198,7 +2275,7 @@ are **0 OK**, even with nothing mounted: with verbose off, nothing tells you the
 | `SAVE "tpi:greet"` | Show it |
 | `SAVE "tpi:greet off"` | No greeting |
 
-Speech, G.8. **A**: a name in `[...]` that isn't an allophone.
+Speech, G.9. **A**: a name in `[...]` that isn't an allophone.
 <!-- /v3 -->
 
 ### help
@@ -2417,8 +2494,10 @@ Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` 
   the ROM loaders and the disk keywords. You won't need to type them.
 - **upgrade**, **rompatch** and **sys** belonged to the old 1.1 update process and have been
   removed. Use the web updater (Appendix A).
-- **config**, **delete**, **freset**, **getconfig**, **meminfo** and **stop** are
-  reserved for the future. They give **C** with `CMD OK, but not yet implemented`.
+- **config**, **delete**, **freset**, **getconfig** and **stop** are reserved for the future.
+  They give **C** with `CMD OK, but not yet implemented`.
+- **meminfo** is for developers: `SAVE "tpi:meminfo"` shows the Pico's free memory and the
+  largest single piece of it, and writes the numbers to its USB console and log.
 - **.fact** and **.rndw** are examples for programmers (see the Programmer's Manual).
 
 - Version 1.1 names such as `LOAD "tpi:dir"`, `getinfo`, `gethelp` and `getlog` have been replaced
@@ -2920,7 +2999,7 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `SPEECH_VOLUME` | How loud the speech is, 0-100 (%) | `35` |
 | `SPEECH_RATE` | The speech's speed, 50-150 (%); its pitch moves with it | `100` |
 | `SPEECH_PORTS` | Programs can speak through ports 17 and 37 (Appendix G) | `true` |
-| `SPEECH_GREETING` | What the card says at switch-on (G.8); `""` is nothing | `""` |
+| `SPEECH_GREETING` | What the card says at switch-on (G.9); `""` is nothing | `""` |
 <!-- /v3 -->
 
 <!-- v2 -->
@@ -3167,17 +3246,38 @@ or `;` makes a long pause, a comma a shorter one. Text that ends in a word, with
 runs straight on into the next `tpi:say`, so a sentence said in pieces sounds as it would in
 one.
 
-## G.2 When a word comes out wrong
+## G.2 Longer text: a stream, `v:`
+
+A stream has no 23-character limit. Open one to the card's voice, and everything you `PRINT`
+to it is spoken (Chapter 6):
+
+```basic
+10 OPEN #4,"v:"
+20 PRINT #4;"HELLO, I AM YOUR TIMEX SINCLAIR 2068."
+30 PRINT #4;"WHAT SHALL WE DO TODAY?"
+40 CLOSE #4
+```
+
+Each line is said as soon as it's printed, and the 2068 carries on as it does after
+`tpi:say`; a line waits its turn behind the one before. Anything `PRINT` can print goes:
+`PRINT #4;"SCORE ";s` says the number, keywords are said by name, and allophones in square
+brackets work as in `tpi:say`. A line that ends in `;` waits for the rest of it, or for
+`CLOSE #4`. `TAB` and `AT` are left out.
+
+The stream needs no SD card. Like any open stream it borrows 512 bytes until you close it, and
+it can't be read: `INPUT #4` is **Q Parameter error**. `"v:"` takes nothing after the colon.
+
+## G.3 When a word comes out wrong
 
 The card turns spelling into sounds with a set of rules, which get about one word in ten
 wrong. Two ways round it:
 
 - **Spell it as it sounds**: `SAVE "tpi:say ZEEBRA"`.
-- **Give the sounds themselves**, the chip's *allophones*, in square brackets (G.4):
+- **Give the sounds themselves**, the chip's *allophones*, in square brackets (G.5):
   `SAVE "tpi:say [ZZ IY BB1 RR2 AX]"`. Brackets and words mix: `SAVE "tpi:say HELLO [PA4] THERE"`.
 
 To fix a word for good, put it in a file called `speech.txt` in the card's own memory (with
-Thonny), one word a line, with its sounds in the rules' codes (G.5):
+Thonny), one word a line, with its sounds in the rules' codes (G.6):
 
 ```text
 # my words
@@ -3187,13 +3287,13 @@ ZEBRA = zIYbrAX
 
 The card reads it when it starts.
 
-## G.3 Speed, pitch and volume
+## G.4 Speed, pitch and volume
 
 `SPEECH_VOLUME` (0-100, normally 35) and `SPEECH_RATE` (50-150, normally 100) in `config.ini`
 (Appendix D). The chip's speed and pitch go together, as they did when its clock was changed:
 80 gives a slower, deeper voice.
 
-## G.4 The allophones
+## G.5 The allophones
 
 | | | | | | |
 |---|---|---|---|---|---|
@@ -3214,7 +3314,7 @@ of a word, `TT1` at the end or after S; `KK1` before E, I and A as in "cat", `KK
 U, `KK2` at the end; `DD2` at the start, `DD1` at the end. End a phrase with a pause (`PA4` or
 `PA5`).
 
-## G.5 The rules' sound codes, for `speech.txt`
+## G.6 The rules' sound codes, for `speech.txt`
 
 Two letters in capitals: `IY` b**ee**t, `IH` b**i**t, `EY` g**a**te, `EH` g**e**t, `AE` f**a**t,
 `AA` f**a**ther, `AO` l**aw**n, `OW` l**o**ne, `UH` f**u**ll, `UW` f**oo**l, `ER` m**ur**d**er**,
@@ -3223,10 +3323,10 @@ ei**th**er, `SH` lea**sh**, `ZH` lei**s**ure, `HH` **h**ow, `NG` su**ng**, `CH` 
 **wh**ere. One letter in small letters: `p` `t` `k` `b` `d` `g` `f` `v` `s` `z` `m` `n` `l` `w`
 `y` `r` and `j` (**j**ar).
 
-## G.6 Programs written for a speech board
+## G.7 Programs written for a speech board
 
 The card answers the ports the Pico Speech Synth 2068 board uses (a Pico version of Wilf
-Rigter's ZX Voice), so programs written for it speak through the card: `OUT 17,n` speaks allophone `n` (the numbers in G.4's
+Rigter's ZX Voice), so programs written for it speak through the card: `OUT 17,n` speaks allophone `n` (the numbers in G.5's
 order, `PA1` = 0 to `BB2` = 63), and `IN 37` is 128 or more while the card is still busy. They
 work in Spectrum mode too. Set `SPEECH_PORTS` to `false` if something else on your 2068 uses
 those ports.
@@ -3238,7 +3338,7 @@ those ports.
 40 DATA 27,7,45,53,4: REM HH1 EH LL OW PA5
 ```
 
-## G.7 Where the voice comes from
+## G.8 Where the voice comes from
 
 The SP0256-AL2's ROM is copyright Microchip Technology Inc., which retains the rights to the
 algorithms and data it contains, and allows its distribution with this acknowledgment. The
@@ -3247,7 +3347,7 @@ license). The spelling-to-sound rules are the US Naval Research Laboratory's (NR
 7948, 1976), as John A. Wasser coded them in 1985; both are public domain. The details are in
 the `NOTICE` file on the project's GitHub.
 
-## G.8 A greeting at switch-on
+## G.9 A greeting at switch-on
 
 The card can say something each time the 2068 starts:
 
@@ -3262,11 +3362,12 @@ cartridge in the DOCK slot (Chapter 8). `SAVE "tpi:greet"` shows it, and
 21 characters (1.2); for a longer one, set `SPEECH_GREETING` in `config.ini`
 (Appendix D).
 
-## G.9 Summary
+## G.10 Summary
 
 1. `SAVE "tpi:say TEXT"` speaks, while the 2068 carries on; `SAVE "tpi:say"` stops.
-2. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
-3. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
-4. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
-5. `SAVE "tpi:greet TEXT"` makes the card say hello at switch-on.
+2. `OPEN #4,"v:"` then `PRINT #4` speaks text of any length, a line at a time.
+3. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
+4. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
+5. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
+6. `SAVE "tpi:greet TEXT"` makes the card say hello at switch-on.
 <!-- /v3 -->

@@ -1,7 +1,7 @@
 """ROM 2.1's PRELOAD (#179) in the Z80 interpreter.
 
 SEND_FOPEN and CH_SEND, the fdd module's hand-built exchanges, read the
-pre-load status through PRELOAD (EXROM 3778h): a 0 -- no Pico, or a link
+pre-load status through PRELOAD (EXROM 376Ah; 3778h until #375): a 0 -- no Pico, or a link
 out of step -- is Report J at once, as the ROM's own exchanges give it
 (1A35h); anything else goes on, as it always did. (Not the ROM's whole
 rule: the only other value the firmware stages is a refused header LOAD's
@@ -24,8 +24,8 @@ sys.path.insert(0, HERE)
 from z80core import Z80                                          # noqa: E402
 
 ROM21 = os.path.join(REPO, "src", "rom", "TSPICO-23.ROM")
-PRELOAD = 0x3778
-CALLS = {"SEND_FOPEN": 0x32DE, "CH_SEND": 0x369F}
+PRELOAD = 0x376A
+CALLS = {"SEND_FOPEN": 0x32DE, "CH_SEND": 0x3691}
 DONE = 0xFF00
 RST8 = 0x0008
 
@@ -60,7 +60,7 @@ def run(exrom, answer):
 def main():
     exrom = open(ROM21, "rb").read()[0x4000:]
     check(exrom[PRELOAD:PRELOAD + 5] == bytes([0xCD, 0x48, 0x18, 0xC0, 0xC3]),
-          "PRELOAD at 3778h: CALL BIOS_RX_A / RET NZ / JP WF_FAIL")
+          "PRELOAD at 376Ah: CALL BIOS_RX_A / RET NZ / JP WF_FAIL")
     for name, at in CALLS.items():
         check(exrom[at:at + 3] == bytes([0xCD, PRELOAD & 0xFF, PRELOAD >> 8]),
               "%s calls it (%04Xh)" % (name, at))

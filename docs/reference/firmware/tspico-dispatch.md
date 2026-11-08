@@ -1,8 +1,8 @@
 # TS/tspico.py (part 3) — the dispatcher
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 4859–4971
-(`LOAD_CONFIG`), 6016–6118 (the printer path), 6198–6534 (`FAIL_CMD`,
-`PROCESS_CMD`) and 6542–7742 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 5384–5496
+(`LOAD_CONFIG`), 6554–6656 (the printer path), 6736–7071 (`FAIL_CMD`,
+`PROCESS_CMD`) and 7079–8320 (`TS2068_IO`, `ZX_TPI`, `ZX48_IO`).
 
 This part is the firmware's main program. `TS2068_IO` is what `main.py`
 calls and never returns from: it sets the board up, then loops, taking one
@@ -36,17 +36,18 @@ pre-header ([PROTOCOL.md §4.2](../../PROTOCOL.md#42-the-pre-load-byte)).
 
 | Symbol | Line | Role |
 |---|---|---|
-| `LOAD_CONFIG()` | 4859 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
-| `PRINT_FLUSH()` | 6016 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
-| `COPY_BMP(scr, mode, colour)` | 6048 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
-| `PRINT_IO(pre)` | 6069 | one printer transaction: an LPRINT character, or COPY |
-| `FAIL_CMD(status)` | 6198 | a command that failed: one status byte, on a bus in a known state |
-| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6250 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
-| `TS2068_IO()` | 6542 | the board setup and the service loop |
-| `ZX_TPI()` | 7431 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
-| `ZX48_IO(pre)` | 7569 | the Spectrum-mode loop |
+| `LOAD_CONFIG()` | 5384 | `config.ini` → the dictionary `PICO_STATUS` is built from; the one-shot boot slot |
+| `PRINT_FLUSH()` | 6554 | the buffered printer text → `/VLPRINT/PRNnnnn.TXT` |
+| `COPY_BMP(scr, mode, colour)` | 6586 | a COPY body → `/VSCREEN/SCRnnnn.BMP` |
+| `PRINT_IO(pre)` | 6607 | one printer transaction: an LPRINT character, or COPY |
+| `FAIL_CMD(status)` | 6736 | a command that failed: one status byte, on a bus in a known state |
+| `PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT)` | 6788 | a `'B'` pre-header: the body, the lookup, the handler, the tail |
+| `TS2068_IO()` | 7079 | the board setup and the service loop |
+| `ZX_PIECES(text)` | 7968 | the v4 reply: the text in pieces of up to 255, each after its length, then 0 |
+| `ZX_TPI()` | 8010 | the ZX ROM's `'T'` command: `LOAD "tpi:name"`, `SAVE "tpi:dir"` |
+| `ZX48_IO(pre)` | 8147 | the Spectrum-mode loop |
 
-`ZX_REPORT` (line 7427), the status-to-ERR_NR table `ZX_TPI` uses, is a
+`ZX_REPORT` (line 7964), the status-to-ERR_NR table `ZX_TPI` uses, is a
 module variable: [tspico-state.md](tspico-state.md).
 
 ## `LOAD_CONFIG()`
@@ -89,7 +90,7 @@ What it does:
    | ROM_VERSION | the module's `ROM_VERSION` | the ROM this firmware ships with; shown by `tpi:info`, nothing else reads it |
 
    The shipped [`src/config.ini`](../../../src/config.ini) holds exactly
-   these eighteen keys. The comment at line 4872 notes that `PICO_STATUS`
+   these eighteen keys. The comment at line 5397 notes that `PICO_STATUS`
    carries a second copy of the defaults (it does, as `try/except` fallbacks)
    and that there should be one; there are still two.
 3. `ROM_SM` must be one of 5, 6, 9, 10 — the four combinations `tpi:boot`
@@ -102,7 +103,7 @@ What it does:
    `LED_BRIGHTNESS` must be an `int` from 1 to 100; anything else (0, 5.5,
    `"5"`) is logged at level 2 and replaced by 5, and written back. So must
    the modem's: `MODEM_MODE` one of the three, `MODEM_BAUD` an `int` from 0
-   to 115200, `MODEM_IDLE_MIN` an `int` from 1 to 1440; and speech's:
+   to 115200, `MODEM_IDLE_MIN` an `int` from 1 to 1450; and speech's:
    `SPEECH_VOLUME` an `int` from 0 to 100, `SPEECH_RATE` from 50 to 150,
    `SPEECH_PORTS` a `bool`, `SPEECH_GREETING` and `AUTOMOUNT` strings
    (any string: what they name is checked where they are used).
@@ -264,7 +265,7 @@ What it does:
    into the parked state machine and the TS-Pico would be deaf for the rest
    of the session ([sd_wedged_hosttest.py](../../../src/test/sd_wedged_hosttest.py)).
 2. Empties TX (`pull (noblock)` / `mov (osr, null)` through `MQX`) and RX
-   (`MQ.get()`), each at most `tspico_io.DRAIN_MAX` times (64; 1100 for the
+   (`MQ.get()`), each at most `tspico_io.DRAIN_MAX` times (64; 1110 for the
    v3 card's 1024-entry queues). Bounded on purpose: this is the recovery
    path, and an unbounded drain here would be the hang it exists to prevent.
    The v2 FIFOs are four deep.
@@ -312,7 +313,7 @@ The pre-header fields as the ROM builds them
 |---|---|---|
 | 0 | `'B'` (42h) | — (the dispatcher chose this handler on it) |
 | 1 | TADDR | `load_cmd`: 0 = `SAVE "tpi:…"` command, 1–3 = `LOAD "tpi:name"`, a mount |
-| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6260), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
+| 2 | the ROM's version, 23h (ROM 2.3, #227; `BANK_SV`, always FFh, before) | `rom_id` (6797), shown by `tpi:info` ([tspico-state.md](tspico-state.md#rom_id)) |
 | 3–4 | PMR1, the first `CODE` number, little-endian | the handlers' `par1` (`PARAMS(pre)`) |
 | 5–6 | PMR2, the second `CODE` number | `par2` |
 | 7–8 | length of the command text | the body size |
@@ -382,9 +383,12 @@ are set before the `try` so the tail can log them.
 
 ### The card gate
 
-`SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct)` says whether this
-command needs the card: every mount does; `TPI:HELP` only with a topic (a
-file on the card); otherwise a built-in command that is not in `SD_FREE`.
+`SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream)` (the stream is
+PMR1's low byte) says whether this command needs the card: every mount
+does; `TPI:HELP` only with a topic (a file on the card); `tpi:chopen` of
+`v:` or `x:`, and `tpi:chwr` and `tpi:chrd` on a stream with no file
+(`d:`, `v:`, `x:`), never do; otherwise a built-in
+command that is not in `SD_FREE`.
 An external command never counts as needing it. If it does and
 `TSP.sd_present` is false, `SD_PROBE()` looks once more (one mount attempt,
 ~0.5 s; it leaves the bus with the MQ and Y BUSY, and a card that has come
@@ -467,7 +471,7 @@ not `MQ_READY`, so the ROM waits for *this* IDLE before its SYNC
 
 Takes: `pre` (the 10-byte `bytearray`), the two tables. Returns nothing.
 State: `TSP.zx48`, `TSP.listing_stale` (via `REFRESH_LISTING`); `RXD`; the
-globals `files`/`files_upper` are declared but only the callees change them.
+global `files` is declared but only the callees change it.
 Caller: `TS2068_IO`. Callees: `RX_CAPTURE`, `MQ_TO_IDLE`, `MQ_STATUS`,
 `FAIL_CMD`, `REFRESH_LISTING`, `SD_NEEDED`, `SD_PROBE`, `NO_CARD_REPLY`,
 `LOAD_TPI`, `SEND_MSG`, `CMD_FLUSH`, the handlers.
@@ -501,7 +505,7 @@ It owns `busy` (core1 is writing the log), `dead` (tells `BLINK_LED` to
 stop), `files`, `lista`, `log_entries`,
 `log_to_serial` (initialized `False`; nothing in the module sets it `True` —
 a REPL knob that sends `LOG` to USB instead of the file),
-`MQ`, `led`, `TSP`, `alldirs`, `EXT_SA_FUNCT` and, from line 6852, `RXD`.
+`MQ`, `led`, `TSP`, `EXT_SA_FUNCT` and, from line 7389, `RXD`.
 All are in [tspico-state.md](tspico-state.md).
 
 ### Configuration and the log file
@@ -588,7 +592,8 @@ in table order:
 | TPI:IDIR | `IDIR` | | TPI:CLPRINT | `PRN_CLOSE` |
 | TPI:INFO | `GETINFO` | | TPI:OPPRINT | `PRN_OPEN` |
 | TPI:LOG | `GETLOG` | | TPI:PRNSZ | `PRN_SIZE` |
-| TPI:LOGLEVEL | `LOGLEVEL` | | TPI:CONFIG, TPI:DELETE, TPI:FRESET, TPI:GETCONFIG, TPI:MEMINFO, TPI:STOP | `SA_NOT_IMP` |
+| TPI:LOGLEVEL | `LOGLEVEL` | | TPI:CONFIG, TPI:DELETE, TPI:FRESET, TPI:GETCONFIG, TPI:STOP | `SA_NOT_IMP` |
+| TPI:MEMINFO | `MEMINFO` | | TPI:CHCAT | `CH_CAT` (#404) |
 
 Each handler has its entry in [tspico-commands.md](tspico-commands.md) or
 [tspico-disk.md](tspico-disk.md). The comment above the table ("Commands
@@ -616,11 +621,11 @@ false and the wait after the card check falls through. Then `ACTIVATE_SD(tries=5
 card can refuse and be fine seconds later). The first successful mount runs
 `SD_NOTE_CARD` → `SD_REVALIDATE` ([tspico-bus.md](tspico-bus.md)): a missing
 `/TAP` folder is made, the current folder and mounted file checked,
-`DIR_FILES` and `GET_DIRS` fill the caches. An `OSError` is caught here:
+`DIR_FILES` fills the listing caches. An `OSError` is caught here:
 `TSP.sd_present = False`, a level-1 `LOG` "Starting without an SD card".
 
 What "no card" means from here on: `TSP.sd_present` is `False`; `files`,
-`dirs`, `lista`, `alldirs` stay empty; `sd_ok` below is false; the idle
+`dirs`, `lista` stay empty; `sd_ok` below is false; the idle
 heartbeat double-blinks; every command that needs the card is refused by
 `PROCESS_CMD`'s gate with "No SD card…" and Report J after one fresh probe,
 so inserting a card is all it takes; `LOAD ""` with nothing mounted still
@@ -677,7 +682,7 @@ seeds the chain for the life of the session. It must be here and not inside
 that `LOAD ""` will give Report R until the assets are copied. The SD outcome
 is logged (OK / mounted but failing / no card), `SAVE_LOG()`, a `gc.collect()`,
 "TS Pico initialized OK. Waiting for commands...", `SAVE_LOG()` again, LED
-off. `wrt = MQ.put` at line 6837 is assigned and never used.
+off. `wrt = MQ.put` at line 7374 is assigned and never used.
 
 ### The capture buffers and the DMA channel
 
@@ -753,7 +758,7 @@ status read (`RD_STATUS`), not in `SYNC_WAIT`, so a transaction the Pico
 dropped reports T only if its ROM is still waiting for READY when the
 `0xFB` goes up; a later command finds `0xFF` *(inferred from
 [tspico-sync.asm](../../../src/rom/patches/tspico-sync.asm): `SYNC_WAIT`
-masks READY and IDLE only)*. The comments at lines 6865 and 6957 that say
+masks READY and IDLE only)*. The comments at lines 7402 and 7494 that say
 "the next command gets Report T" describe the ROM's own ready-wait of the
 transaction in hand, not a later one.
 
@@ -999,6 +1004,17 @@ several have been overtaken (the audit's §3 list of stale comments). The
 10-word pre-header capture and the SYNC path must stay allocation-free and
 must not log before IDLE.
 
+## `ZX_PIECES(text)`
+
+`ZX_TPI`'s v4 reply after its status byte, as one `bytearray` with a spare
+byte in front for the status: `text` (bytes) in pieces, each a length 1–255
+and that many bytes, then `0`. Where the pieces are cut, and why, is
+`ZX_TPI`'s step 7. The cuts are found first, as a list of ints, and
+each piece is copied straight from a `memoryview` of the text into the
+reply. Why (#384): each piece was sliced into a copy of its own first,
+so a listing went through the heap twice more. `listing_text_hosttest.py`
+checks the reply is the old code's, byte for byte.
+
 ## `ZX_TPI()`
 
 The ZX ROM's `'T'` command: `LOAD "tpi:name"` and
@@ -1051,11 +1067,25 @@ What it does:
    wildcard; anything but a `.tap` is refused with Q, since `.ROM`/`.DCK`/
    `.BIN` would mount the 2068 updater; a mount may use the card (the state
    machine is rebuilt).
-6. The text: a listing becomes bytes with anything ≥ 80h replaced by `?`;
+6. The text: a listing becomes bytes with anything ≥ 80h replaced by `?`
+   (one `encode()`; only a text with such a byte is copied again, and
+   `screen_name` leaves none. `bytes(generator)` grew it a byte at a time,
+   #384);
    otherwise `(msg.strip() + " " + rest).strip()`, cut to 200 bytes. A
    `LOG` at level 0 (2 for an error).
-7. The reply buffer `out`: v4 — `status`, then for each 255-byte slice its
-   length and bytes, then `0`; without `pieces` — `status`, `len(text)`, the text.
+7. The reply buffer `out`: v4 — `status`, then `ZX_PIECES(text)`: each piece's length and
+   bytes, then `0`; without `pieces` — `status`, `len(text)`, the text.
+   A v4 piece is at most 255 bytes and, when the text goes on past that,
+   ends just before the last PAPER code (11h) in reach (`text.rfind(b"\x11",
+   i + 1, j + 1)`); with none, at 255. Why (#373): the ROM calls
+   `CHAN_OPEN` before each piece's `PR_STRING`, and on the Spectrum opening
+   the screen channel ends in `TEMPS`, which puts the user's permanent
+   colors back. A cut at byte 255 inside a row's `PAPER 5, INK 9, "005"`
+   printed the digits after the cut on the user's paper, one entry a
+   listing, at places that depended only on the byte count. Every 11h in
+   `CAT_COLOUR`'s output starts a whole setting (paper, then ink; the values
+   are 0–9, so a value byte is never 11h), so a piece cut there carries its
+   own colors.
    `out[0] = ZX_REPORT.get(st, 0x19)`: FFh for `_1_OK`, 1Ah (R), 0Eh (F),
    19h (Q), and Q for any other status.
 8. `ZX_FLUSH_TX(MQ)`; `gc.collect()`; `r = STREAM_DMA(MQ, out, None, stall,
@@ -1087,7 +1117,10 @@ first bytes are in TX before READY and the rest follows without an empty
 read; a missing file is F (0Eh), a `.ROM` Q (19h), `SAVE "tpi:x"` Q, a
 failed mount Q, an op without 80h asking for `dir` gets the "needs ZX ROM v4" Q, v4's
 `dir` goes through `ACTIVATE_SD`/`CATALOG`/`DEACTIVATE_SD`/`ACTIVATE_MQ`
-and comes back in pieces with `nxt == -1`; a name that stops half-way gives
+and comes back in pieces with `nxt == -1`, each piece after the first
+starting with PAPER, and with each piece starting from the user's colors
+(as `TEMPS` leaves them) every index number and the titles still come out
+on cyan, for listings of 30 to 45 rows; a name that stops half-way gives
 no reply, no mount, no hang; a stale listing is re-read first. The user's
 view: [user-manual.md 9.2](../../manual/user-manual.md#92-what-works-in-spectrum-mode).
 

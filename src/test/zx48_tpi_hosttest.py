@@ -33,6 +33,7 @@ import load_ts_hosttest as L                                    # noqa: E402
 
 READY = L.READY
 results = []
+pieces_seen = []                     # v4: each piece as the ROM read it
 
 
 def check(cond, msg):
@@ -57,9 +58,14 @@ def z80_tpi(name, op=1, stop_at=None):
     status = yield ("in",)
     n = yield ("in",)
     msg = bytearray()
+    del pieces_seen[:]
     while True:
+        piece = bytearray()
         for _ in range(n):
-            msg.append((yield ("in",)))
+            piece.append((yield ("in",)))
+        msg += piece
+        if piece:
+            pieces_seen.append(bytes(piece))
         if not op & 0x80 or not n:
             break
         n = yield ("in",)                   # v4: the next piece's length, 0 = the end
@@ -89,7 +95,6 @@ def main():
     def run(name, stale=False, **kw):
         P.fresh(t, pio)
         t.files = ["Manic.tap", "Jetpac.TAP", "zx.rom"]
-        t.files_upper = [f.upper() for f in t.files]
         t.TSP.listing_stale = stale
         pio.tx, pio.rx, pio.y = [], [], 0            # the 'T' dropped READY
         pio.tx_at_ready = []
@@ -141,7 +146,6 @@ def main():
         def run_files(files, name):
             P.fresh(t, pio)
             t.files = files
-            t.files_upper = [f.upper() for f in files]
             t.TSP.listing_stale = False
             pio.tx, pio.rx, pio.y = [], [], 0
             pio.tx_at_ready = []
@@ -172,7 +176,6 @@ def main():
 
         def added_on_a_mac():
             t.files.append("new.tap")
-            t.files_upper.append("NEW.TAP")
         t.LISTING_CHECK = added_on_a_mac
         r, _ = run("new.tap")
         t.LISTING_CHECK = real_check
@@ -207,6 +210,36 @@ def main():
             check(steps == ["ACTIVATE_SD", "CATALOG ''", "DEACTIVATE_SD", "ACTIVATE_MQ"],
                   "the card is read and the bus handed back (%s)" % steps)
             check(not pio.tx and pio.dropped == 0, "TX empty afterwards, nothing dropped")
+            check(all(0 < len(p) <= 255 for p in pieces_seen)
+                  and all(p[0] == 0x11 for p in pieces_seen[1:]),
+                  "%d pieces of at most 255, each after the first starting with PAPER (%s)"
+                  % (len(pieces_seen), [len(p) for p in pieces_seen]))
+
+            def on_cyan(pieces):
+                # The Spectrum's view (#373): the ROM's CHAN_OPEN before each
+                # piece runs TEMPS, so every piece starts in the user's colours.
+                shown, paper, code = [], None, None
+                for p in pieces:
+                    paper, code = None, None
+                    for b in p:
+                        if code is not None:
+                            paper = b if code == 0x11 else paper
+                            code = None
+                        elif 0x10 <= b <= 0x15:
+                            code = b
+                        elif paper == 5:
+                            shown.append(chr(b))
+                return "".join(shown)
+            bad = []
+            for rows in range(30, 46):           # the cuts land on every column of a row somewhere
+                lst = t.DIR_HEADER("%d files, 0 dirs" % rows, "/TAP") + "".join(
+                    "%03d %-18s%10s" % (i, "G%02d.TAP" % i, "1 kB") for i in range(rows))
+                t.CATALOG_TEXT = lambda arg, lst=lst: (lst, t._1_OK)
+                run("dir", op=0x80)
+                if on_cyan(pieces_seen) != lst[64:96] + "".join("%03d" % i for i in range(rows)):
+                    bad.append(rows)
+            check(not bad, "every index number and the titles on cyan, wherever 255 falls (bad: %s)" % bad)
+            t.CATALOG_TEXT = lambda arg: (steps.append("CATALOG %r" % arg), (big, t._1_OK))[1]
             del steps[:]
             run("DIR games", op=0x80)
             check(steps[1] == "CATALOG 'games'", "SAVE \"tpi:dir games\": the argument goes to CATALOG (%s)" % steps)
@@ -231,7 +264,6 @@ def main():
         def dir_files():
             steps.append("DIR_FILES")
             t.files = ["Manic.tap", "Jetpac.TAP", "zx.rom", "q.tap"]
-            t.files_upper = [f.upper() for f in t.files]
             return True
         t.ACTIVATE_SD = lambda *a: steps.append("ACTIVATE_SD")
         t.DEACTIVATE_SD = lambda: steps.append("DEACTIVATE_SD")
