@@ -479,6 +479,14 @@ SDK sets the boot clock before MicroPython sets the flash divider
 ([board-v3.md](board-v3.md)). If Python later calls `machine.freq()`, the
 bus timing is gone; nothing guards against it yet.
 
+With PSRAM (`MICROPY_HW_ENABLE_PSRAM`, [board-v3.md](board-v3.md#mpconfigboardcmake))
+and the chip found, it then sets the PSRAM's QMI timing again for 250 MHz,
+as `machine.freq()` does: `psram_configure_params` with the SDK's defaults
+(at most 133 MHz) and `psram_reinitialize`. Why: `main()` set the divider
+and read delay for 150 MHz, and the GC heap is partly in the PSRAM. Read
+back on the card at 250 MHz (2026-11-08): divider 2 (125 MHz), read delay
+3, and `src/test/psram_test.py` passes all 8 MB.
+
 ### `tsbus.start()`
 
 Once (a no-op afterwards, including after a soft reset): checks the GC heap

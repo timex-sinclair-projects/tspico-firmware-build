@@ -11,6 +11,8 @@ builds MicroPython v1.29.0 for the card with the bus pins held safe and the
 `tsbus` C module, the card's bus ([tsbus.md](tsbus.md)), built in. The board
 sets up what `tsbus` needs from MicroPython: SRAM above the GC heap for the
 images, core 1 free of `_thread`, and a flash divider that survives 250 MHz.
+It also brings up the 8 MB PSRAM (U22): 1 MB of it goes to the GC heap and 7
+MB is kept for the board.
 No TS modules yet; the board layer under the firmware is phase 4. The v2
 firmware does not use any of it. CI builds it in the `build-v3` job
 ([boot.md](boot.md#ci-buildyml)).
@@ -23,9 +25,9 @@ tspico-hardware, from the schematic netlist), not the v2 map in
 
 | File | What it is |
 |---|---|
-| `mpconfigboard.cmake` | the build settings: platform, SDK board header, GPIO count, flash size and boot2 divider, manifest, board C source, `tsbus`, the linker override, filesystem size |
-| `mpconfigboard.h` | the compile-time settings: name, no PSRAM, no `_thread`, the flash clock limit, the default peripheral pins, the start-up hook |
-| `board_init.c` | `tspico_v3_safe_init()`, the safe pin and expander state |
+| `mpconfigboard.cmake` | the build settings: platform, SDK board header, GPIO count, flash size and boot2 divider, PSRAM, manifest, board C source, `tsbus`, the linker override, filesystem size |
+| `mpconfigboard.h` | the compile-time settings: name, no `_thread`, the flash clock limit, the default peripheral pins, the start-up hook |
+| `board_init.c` | `tspico_v3_safe_init()`, the safe pin and expander state; the PSRAM reserve |
 | `tspico_v3_pins.h` | the pin map and the expander's registers, shared with `tsbus` |
 | `tspico_v3.h` | the pico-sdk board header |
 | `memmap/section_extra_post_platform_end.incl` | ends the GC heap at `0x20040000` |
@@ -44,6 +46,7 @@ directory's name; the build goes to `build-TSPICO_V3/`).
 | `PICO_BOARD_HEADER_DIRS`, `PICO_BOARD` | this directory, `tspico_v3` | the SDK takes `tspico_v3.h` from here |
 | `PICO_NUM_GPIOS` | 48 | the QFN-80 package: without it `machine.Pin` stops at GP29, and SD, the OLED, the ESP32 and audio are on GP30-GP47 |
 | `PICO_FLASH_SIZE_BYTES` | 16777216 | the port's CMake fails without it as a variable ("PICO_FLASH_SIZE_BYTES must be defined"). `tspico_v3.h` defines it for the compiler only, having no `pico_cmake_set` lines |
+| `MICROPY_HW_ENABLE_PSRAM`, `MICROPY_HW_PSRAM_CS_PIN` | 1, 47 | U22, the APS6404L (8 MB QSPI PSRAM), on QMI chip select 1 at GP47. The port's `CMakeLists.txt` turns them into compile definitions, links `hardware_psram` and, as no board header sets `PICO_PSRAM_SIZE_BYTES`, adds `PICO_PSRAM_CS_PIN=47` and `PICO_AUTO_DETECT_PSRAM_SIZE=1`. The SDK's `runtime_init_setup_psram` then gives GP47 to `XIP_CS1`, reads the chip's ID for its size and sets QMI window 1 up for quad reads (EBh) and writes (38h) with writes enabled. `main()` sets the QMI timing again for the 150 MHz boot clock and adds the PSRAM above `__psram_end__` to the GC heap as a second area (`MICROPY_GC_SPLIT_HEAP`, on with PSRAM); see `tspico_v3_psram_reserve` for why that is 1 MB. On a card without the chip nothing is found and the heap is SRAM only. Fitted 2026-11-08; `src/test/psram_test.py` checks it |
 | `MICROPY_FROZEN_MANIFEST` | `manifest.py` here | see below |
 | `MICROPY_SOURCE_BOARD` | `board_init.c` | adds the safe-init function to the build |
 | `PICO_FLASH_SPI_CLKDIV` (compile definition) | 3 | the flash divider boot2 sets. After every flash erase or program the SDK re-enables XIP through boot2, and MicroPython only restores its own divider afterwards, in code that runs from flash. At `tsbus`'s 250 MHz, `tspico_v3.h`'s 2 ran the flash at 125 MHz there, and core 0 hung on the first LittleFS write (found 2026-10-09). 3 gives 50 MHz at boot and 83 MHz at 250 MHz. A compile definition so `tspico_v3.h` stays the bring-up's |
@@ -60,8 +63,11 @@ directory's name; the build goes to `build-TSPICO_V3/`).
 
 ### `MICROPY_HW_ENABLE_PSRAM`
 
-0. The APS6404L footprint (U22) is not fitted on proto1; images live in
-SRAM.
+Not set here: `mpconfigboard.cmake` sets it (1) and the port passes it as a
+`-D` flag, which a definition here would clash with. The comment says so. The
+2068's images stay in SRAM: the PSRAM shares the QSPI bus with the flash and
+sits behind the XIP cache, so its delay is not steady enough for a Z80 memory
+cycle (`docs/v3-slots-proposal.md`).
 
 ### `MICROPY_PY_THREAD`
 
@@ -109,6 +115,28 @@ point where the bring-up firmware calls `board_safe_init()`.
 
 ## `board_init.c`
 
+### `tspico_v3_psram_reserve`, `TSPICO_V3_PSRAM_RESERVE`
+
+What: a 7 MB array (`TSPICO_V3_PSRAM_RESERVE`), 4 KB aligned, in the linker
+section `.psram_uninitialised.tspico_v3_reserve`. It is the only thing in the
+PSRAM's sections, so it sits at the bottom of the chip, `0x11000000` to
+`0x11700000`, and `__psram_end__` is its end. Only with
+`MICROPY_HW_ENABLE_PSRAM`.
+
+Why: MicroPython's `main()` gives the GC heap the PSRAM from `__psram_end__`
+to the top of the chip, so this block decides the heap's share: the top 1 MB
+(`gc.mem_free()` about 1.2 MB with SRAM's part). 1 MB is room for the 64 KB slot
+buffers and the 2068's big operations; all 8 MB would make every
+`gc.collect()` mark and sweep 8 MB at PSRAM speed. The 7 MB is kept for the
+board's own use, the RAM slots or a slot-image cache of
+`docs/v3-slots-proposal.md`. Nothing uses it yet.
+
+State: none at boot. The section is NOLOAD, so the startup code neither
+copies nor clears it, and it holds whatever the chip powered up with.
+`tspico_v3_safe_init()` names it in an empty `asm` so the linker's
+`--gc-sections` keeps it (the linker script lists the section without
+`KEEP`); without that the heap would get all 8 MB.
+
 ### `out(pin, v)`, `in_nopull(pin)`
 
 `gpio_init`, then drive `v` as an output; or `gpio_init` and no pulls.
@@ -128,7 +156,11 @@ Steps, in order:
    on GP22): inputs, no pulls.
 5. RESET_HOLD (GP29): input, no pulls, so R1 holds the 2068 in reset.
 6. The expander's /INT (GP35): input, no pulls (it has a 10k pull-up).
-7. PSRAM CS (GP47): input with the pull-up.
+7. PSRAM CS (GP47): left alone with PSRAM on. The SDK's `runtime_init`
+   has already given it to the QMI (`XIP_CS1`) and the heap may be in the
+   PSRAM, so `gpio_init` would cut the chip off. Instead the empty `asm`
+   that keeps `tspico_v3_psram_reserve`. On a build without PSRAM: input
+   with the pull-up.
 8. The SD socket's four lines (CS 37, SCK 38, MOSI 39, MISO 32): inputs, no
    pulls. Nothing drives the socket until the firmware has seen a card on
    the detect switch and powered the socket (`board_v3.sd_card_ready`); on
@@ -167,7 +199,7 @@ never driven here: releasing the 2068 is `tsbus`'s job.
 
 Checked on proto1 board 1 (2026-10-09, REPL): GP8-GP10 out and high, /BE and
 /WAIT requests out and low, RESET_HOLD an input reading 1, SD CS high, PSRAM
-CS pulled up; expander output register E0h, port 0 direction C0h. Until
+CS pulled up (before PSRAM was on); expander output register E0h, port 0 direction C0h. Until
 2026-10-10 SD CS was driven high here. Now all four SD lines are inputs: read
 back on the card with the socket empty, GP32, 37, 38 and 39 `mode=IN`.
 
@@ -225,7 +257,8 @@ linker search path (`tspico_v3_linker_override()`, above):
 - `__GcHeapEnd` is `0x20040000`, `TSBUS_IMAGE_REGION`, instead of the top
   of RAM less 4 KB. The top 256 KB of SRAM is `tsbus`'s images. That leaves
   the GC heap about 196 KB (`gc.mem_free()` 191 KB at the REPL; 470 KB
-  before `tsbus`).
+  before `tsbus`). That is the heap's SRAM area; with the PSRAM the heap
+  has a second, 1 MB area there (`tspico_v3_psram_reserve`, above).
 - `__StackBottom` is the start of scratch Y, so the C stack is scratch Y's
   8 KB. MicroPython's RP2350 layout adds 4 KB at the top of main RAM below
   scratch Y, which would fall inside the image region.
