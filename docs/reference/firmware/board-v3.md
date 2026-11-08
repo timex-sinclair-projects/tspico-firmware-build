@@ -131,16 +131,22 @@ Steps, in order:
 7. PSRAM CS (GP47): input with the pull-up.
 8. The SD socket's four lines (CS 37, SCK 38, MOSI 39, MISO 32): inputs, no
    pulls. Nothing drives the socket until the firmware has seen a card on
-   the detect switch (`board_v3.sd_card_ready`); R34 holds CS high and R35
-   holds MISO. Then OLED CS: output, high; OLED DC: output, low.
+   the detect switch and powered the socket (`board_v3.sd_card_ready`); on
+   proto1 R34 holds CS high and R35 holds MISO (on proto2 they are on the
+   socket's switched rail, off until then). Then OLED CS: output, high; OLED DC: output, low.
 9. The XL9555 expander, over I2C0 at 400 kHz (GP24/25, internal pulls off;
    R6/R7 pull up): output register `IOX_OUT0_SAFE` first, then port 1's
-   polarity 0 and direction all inputs, then port 0's direction (bits 0-5
-   outputs). If a write is not acknowledged it stops there.
+   polarity 0 and direction all inputs, then port 0's direction
+   (`IOX_CFG0_SAFE`: bits 0-6 outputs, bit 7 an input). If a write is not
+   acknowledged it stops there.
 
 Why the expander: its port 0 drives the /BUSRQ and /NMI requests (through
-the 74LVC06), the OLED reset, the ESP32's EN and IO9, and the LED, and it
-powers up as inputs with the output register at FFh. Writing the outputs
+the 74LVC06), the OLED reset, the ESP32's EN and IO9, the LED and, on
+proto2, the SD socket's power switch (bit 6, `SD_PWR_EN`; R43 holds it off
+while the bit is an input), and it powers up as inputs with the output
+register at FFh. The socket is left off here: `board_v3.sd_power` turns it
+on for a mount, after the SD lines above are inputs (#262). Until 2026-11-08
+bit 6 stayed an input (direction C0h), so a proto2 socket never had power. Writing the outputs
 before the direction brings them up safe, as `iox_init()` does in the
 bring-up. On proto1 the request lines are also pulled low on the board: with
 the expander unconfigured they read low (port 0 read E0h). The LED stays off
@@ -193,9 +199,11 @@ and `tsbus`:
 
 And the XL9555's registers and port 0 bits: `IOX_ADDR` (20h), `IOX_OUT0`,
 `IOX_POL1`, `IOX_CFG0`, `IOX_CFG1`; `X_BUSRQ`, `X_NMI_REQ`, `X_NOLED_RST`,
-`X_WIFI_EN`, `X_WIFI_DL`, `X_NLED` (bits 0-5); `IOX_OUT0_SAFE` (`X_NLED` and
-the spare bits 6-7 high, the rest low: no bus request, no NMI, the OLED in
-reset, the ESP32 off and booting normally, the LED off).
+`X_WIFI_EN`, `X_WIFI_DL`, `X_NLED` (bits 0-5), `X_SD_PWR_EN` (bit 6: proto2's
+SD socket power, high = on; unconnected on proto1); `IOX_OUT0_SAFE` (`X_NLED`
+and the spare bit 7 high, the rest low: no bus request, no NMI, the OLED in
+reset, the ESP32 off and booting normally, the LED off, the SD socket off);
+`IOX_CFG0_SAFE` (80h: bits 0-6 outputs, bit 7 an input).
 
 ## `tspico_v3.h`
 

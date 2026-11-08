@@ -31,7 +31,10 @@ The v3 card has no handover: its SD card is on its own pins (SPI0 on GPIO
 ([../firmware/board.md](../firmware/board.md#board_v3py)). The calls in this
 flow still run; on v3 they leave the bus alone. Before any of them,
 `ACTIVATE_SD` reads the socket's detect switch. With no card in, no SD line
-is touched and it fails in about 2 ms. The v2 socket has no switch.
+is touched and it fails in about 2 ms. With one, `sd_card_ready` switches
+the socket's power on (proto2, `sd_power`) and waits `SD_ON_MS` for VDD
+before the first clock; at step 7 `sd_release_bus` releases the lines, then
+switches it off. The v2 socket has no switch and no power control.
 
 ## One handover
 

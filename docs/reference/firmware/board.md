@@ -331,15 +331,18 @@ The SD card's own pins: CS 37, SCK 38, MOSI 39, MISO 32, SPI0
 ([board-v3.md](board-v3.md#pinscsv)). GPIO 2–4 are MD2–MD4 on this card,
 the Z80 data bus, and are never touched by SD.
 
-### `_IOX_ADDR`, `_IOX_IN1`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_WIFI_EN`, `_X_WIFI_DL`, `_X_NLED`, `_X_SD_CD`
+### `_IOX_ADDR`, `_IOX_IN1`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_WIFI_EN`, `_X_WIFI_DL`, `_X_NLED`, `_X_SD_PWR`, `_X_SD_CD`
 
 The XL9555 at I2C address 20h. Register 1 is input port 1 (the joystick,
 nBUSAK_L and the SD card-detect switch); register 2 is output port 0. Its
-safe value is E0h (no bus request, no NMI, OLED in reset, ESP32 off, LED
-off), as `board_init.c` sets it at start-up. Bit 3 (08h) is the ESP32-C3's
+safe value is A0h (no bus request, no NMI, OLED in reset, ESP32 off, LED
+off, SD socket off), as `board_init.c` sets it at start-up. Bit 3 (08h) is the ESP32-C3's
 EN, high to run it; bit 4 (10h), high, pulls its IO9 low through the
 74LVC06, so it boots into its ROM's serial downloader. Bit 5 of port 0 (20h) is the
-LED, active low: lit, port 0 is C0h. Bit 7 of port 1 (80h) is the detect
+LED, active low: lit, port 0 is 80h. Bit 6 (40h) is `SD_PWR_EN`: on proto2,
+high turns on U32, the load switch (SY6280, 0.45 A limit) that feeds the
+socket's VDD; on proto1 it is not connected and the socket is always
+powered (#262, `sd_power`). Bit 7 of port 1 (80h) is the detect
 switch: the TF-01A's switch closes to GND with a card in, and R38 pulls it
 up, so low means a card. Read on the card with the socket empty: port 1 FFh.
 
@@ -348,6 +351,21 @@ up, so low means a card. Read on the card with the socket empty: port 1 FFh.
 250. How long a card the switch has only just seen is left before its first
 SPI clock (`sd_card_ready`), so that it is fully seated and powered before
 its lines are driven. A judgment, not a measured figure.
+
+### `SD_ON_MS`, `SD_OFF_MS`
+
+The socket's power switch (`sd_power`, #262). `SD_ON_MS`, 2: after it turns
+on, before `sd_power` returns and the first clock can come. U32's turn-on is
+about 120 µs; the SD spec asks for 1 ms after VDD is up. `SD_OFF_MS`, 10:
+after it turns off, before it may turn on again. U32 discharges VDD through
+about 150 Ω into C50/C51 (10.1 µF), a time constant of about 1.5 ms, so
+10 ms takes it to nothing and the card powers up from cold. Both from the
+datasheet and the schematic (#262), not measured.
+
+### `_sd_off_at`
+
+`ticks_ms` when the socket was last switched off, so `sd_power(True)` waits
+out what is left of `SD_OFF_MS`. `None` until the first switch-off.
 
 ### `_i2c`, `_cd_since`
 
@@ -363,9 +381,10 @@ SDA 24.
 ### `_out0`, `_out0_buf`
 
 Port 0 is shared: the LED (bit 5), the ESP32's EN and IO9 (bits 3 and 4),
-and on proto2 the SD socket's power (bit 6, #262, not yet used). `_out0` is
-the value last written, starting at E0h, what `board_init.c` writes at
-power-up. `_out0_buf` is the one-byte buffer every write sends, so the byte
+and on proto2 the SD socket's power (bit 6, `sd_power`). `_out0` is
+the value last written, starting at A0h, what `board_init.c` writes at
+power-up. A soft reset starts it there again while the expander keeps what
+it had; `_sd_power_off_at_import` brings the socket's bit into line. `_out0_buf` is the one-byte buffer every write sends, so the byte
 on the wire is always a whole value of `_out0`. Before this (until the
 modem's step 1), the LED wrote C0h or E0h on every edge, which would have
 switched the ESP32 off 100 times a second.
@@ -758,13 +777,19 @@ I2C read of input port 1, about 100 µs.
 
 `ACTIVATE_SD` asks this before it touches an SD line.
 
-- `card_present()` is `None`: `True`, and the mount finds out.
+- `card_present()` is `None`: the socket is powered (`sd_power(True)`) and
+  `True`, and the mount finds out.
 - `False`: `_cd_since` cleared and `False`, so `ACTIVATE_SD` fails at once
-  and the socket is never clocked.
+  and the socket is never clocked. If the socket was still powered (the
+  card was pulled while mounted, or the last mount never got to
+  `sd_release_bus`), `sd_power(False)` releases its lines and switches it
+  off first. Otherwise nothing but the switch read: lines are only driven
+  while the socket is on.
 - `True`: `_cd_since` set if this is the first time the card is seen, then
-  `sleep_ms` for whatever is left of `SD_SETTLE_MS`, then `True`. A card in
-  for longer goes straight through. One taken out and put back settles
-  again.
+  `sleep_ms` for whatever is left of `SD_SETTLE_MS`, then `sd_power(True)`
+  (which waits `SD_ON_MS` if it had to switch the socket on), then `True`.
+  A card in for longer goes straight through. One taken out and put back
+  settles again.
 
 Why (2026-10-10): two cards died on the card the moment they went into its
 socket, each resetting the RP2350B (and so the 2068). The firmware used to
@@ -776,9 +801,49 @@ afterwards, and the dead cards read 190 Ω across their supply (a good one
 about 6 kΩ). With this function and `sd_release_bus` in place, three hot
 inserts were clean: USB only with the firmware stopped and with it running,
 and in the 2068. No reset, and the cards stayed cool
-(tspico-hardware [#21](https://github.com/factus10/tspico-hardware/issues/21),
-which keeps the design question open: switched power for the socket). The
-switch is also a faster and surer "no card" than a mount's timeout.
+(tspico-hardware [#21](https://github.com/factus10/tspico-hardware/issues/21)).
+proto2 adds what #21 asked for, switched power for the socket (`sd_power`).
+The switch is also a faster and surer "no card" than a mount's timeout.
+
+### `sd_power(on)`
+
+The socket's power switch, bit 6 of port 0 (`_X_SD_PWR`) through `_port0`.
+
+- On: nothing if it is already on (bit 6 set in `_out0`). Otherwise it
+  sleeps for whatever is left of `SD_OFF_MS` since `_sd_off_at`, sets the
+  bit, and sleeps `SD_ON_MS` so VDD is up before the caller's first clock.
+- Off: `_sd_lines_free()` first, always; then, if it was on, the bit
+  cleared and `_sd_off_at` set.
+
+The order is the point: a line driven into an unpowered card can power it
+through its I/O pins, which is what killed the two cards of #21. Releasing
+the lines before the power goes, and switching it on only after the lines
+have been inputs since the last release, means no driven line ever meets a
+card without VDD. On proto2 the card's pull-ups R34-R37 are on the switched
+rail too, so with the socket off nothing at all holds the card's pins up.
+
+Why (#262, 2026-11-08): proto2 added U32, enabled by `SD_PWR_EN` with R43
+pulling it off. Until this, the firmware left bit 6 an input (`board_init.c`
+set the direction to C0h), so on a proto2 board the socket never had power
+and every mount failed with `OSError(19, 'no SD card')` while the switch saw
+the card. Checked on a proto2 board at the REPL: with bit 6 an input, no
+mount; with it an output and high, the card mounted and listed. A current
+limit at 0.45 A also means a card that latches up no longer pulls +3V3 down
+and resets the RP2350B. Not done: power-cycling a card that won't mount
+(off, `SD_OFF_MS`, on, retry once), which the issue suggests; `ACTIVATE_SD`
+retries without it.
+
+### `_sd_power_off_at_import()`
+
+Runs once, when the module is imported. A soft reset (Ctrl-D, or `main.py`
+starting again) restarts `_out0` at A0h, but the expander keeps its output
+register: if a card was mounted, the socket is still on, and the LED's next
+write would switch it off from the shadow without releasing the SPI pins.
+So it reads output port 0, and if bit 6 is set, frees the four lines, then
+writes back the same byte with only bit 6 cleared, and sets `_sd_off_at`.
+After a power-on or a UF2 flash `board_init.c` has already left it off, and
+the read is all it does. No expander answering: nothing. This makes `_i2c`
+at import rather than on first use.
 
 ### `sd_take_bus()`
 
@@ -793,14 +858,23 @@ first instant; `SDCard` drives it from there. And
 
 ### `sd_release_bus()`
 
-After every unmount: CS, SCK, MOSI and MISO become plain inputs with no
+After every unmount: `sd_power(False)`, so the lines are released, then the
+socket is switched off. Every command powers the card for its own mount
+(`sd_card_ready`) and leaves it off. `tools/pico-serial.py --sd` mounts the
+same way, `sd_card_ready()` first.
+
+### `_sd_lines_free()`
+
+CS, SCK, MOSI and MISO become plain inputs with no
 pulls (`Pin(p, IN, pull=None)`), the state `board_init.c` leaves them in at
 power-on. Nothing drives the socket between commands. R34 holds CS high, so
 a card that is in stays deselected, and R35 holds MISO; SCK and MOSI float
-behind their 33 Ω resistors. No pull-downs: RP2350 erratum E9 can latch a
+behind their 33 Ω resistors. On proto2 R34 and R35 are on the switched rail,
+so with the socket off they hold nothing up either. No pull-downs: RP2350 erratum E9 can latch a
 pad with input and pull-down both on. Making the pins inputs takes them
 from SPI0, which until 2026-10-10 went on driving SCK and MOSI after every
-unmount, while CS was driven high.
+unmount, while CS was driven high. Called by `sd_power(False)` and
+`_sd_power_off_at_import`.
 
 ### `ExpanderLED`
 

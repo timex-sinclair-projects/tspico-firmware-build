@@ -144,6 +144,7 @@ class FakeTimer:
 
 
 IN1 = [0xFF]            # the expander's input port 1: bit 7 high = no card
+OUT0 = [0xA0]           # its output register 0 as read back: board_init.c's IOX_OUT0_SAFE
 
 
 class FakeI2C:
@@ -152,12 +153,14 @@ class FakeI2C:
 
     def writeto_mem(self, addr, reg, data):
         CALLS.append(("i2c", addr, reg, bytes(data)))
+        if reg == 2:
+            OUT0[0] = data[0]
 
     def readfrom_mem(self, addr, reg, n):
         CALLS.append(("i2c-read", addr, reg))
         if IN1[0] is None:
             raise OSError(5, "EIO")
-        return bytes((IN1[0],))
+        return bytes((OUT0[0] if reg == 2 else IN1[0],))
 
 
 class Clock:
@@ -312,8 +315,9 @@ def main():
     check(board.card_present() is True, "bit 7 low: a card")
     IN1[0] = 0x7F
     ok = board.sd_card_ready()
-    check(ok is True and clock.slept == [b3.SD_SETTLE_MS], "a card just seen: it settles %d ms first (%r)"
-          % (b3.SD_SETTLE_MS, clock.slept))
+    check(ok is True and clock.slept == [b3.SD_SETTLE_MS, b3.SD_ON_MS],
+          "a card just seen: it settles %d ms, then the socket is powered and VDD gets %d ms (%r)"
+          % (b3.SD_SETTLE_MS, b3.SD_ON_MS, clock.slept))
     clock.slept = []
     check(board.sd_card_ready() is True and not clock.slept, "and not again while it stays in")
     IN1[0] = 0xFF
@@ -321,12 +325,62 @@ def main():
     IN1[0] = 0x7F
     clock.ms += 100
     board.sd_card_ready()
-    check(clock.slept == [b3.SD_SETTLE_MS], "out and in again: it settles again (%r)" % clock.slept)
+    check(clock.slept == [b3.SD_SETTLE_MS, b3.SD_ON_MS], "out and in again: it settles again (%r)" % clock.slept)
     IN1[0] = None
     check(board.card_present() is None and board.sd_card_ready() is True,
           "expander not answering: unknown, and the mount decides")
     IN1[0] = 0xFF
+    board.sd_release_bus()
     take()
+
+    print("the socket's power switch (#262)")
+    check(b3._out0 & 0x40 == 0 and OUT0[0] & 0x40 == 0, "off at rest: bit 6 low in the shadow and the expander")
+    board.sd_card_ready()                                # the socket seen empty: the next card is new
+    take()
+    IN1[0] = 0x7F
+    clock.ms += 1000
+    clock.slept = []
+    board.sd_card_ready()
+    got = take()
+    writes = [c for c in got if c[0] == "i2c"]
+    check(writes == [("i2c", 0x20, 2, b"\xe0")], "a card: bit 6 set, nothing else changed (%r)" % writes)
+    check(not [c for c in got if c[0] == "Pin"], "  no SD line touched before the power")
+    check(clock.slept == [b3.SD_SETTLE_MS, b3.SD_ON_MS], "  settled, then VDD's %d ms (%r)" % (b3.SD_ON_MS, clock.slept))
+    clock.slept = []
+    board.sd_card_ready()
+    check(take() == [("i2c-read", 0x20, 1)] and not clock.slept, "  asked again: already on, no write, no wait")
+    board.sd_release_bus()
+    got = take()
+    check(got == [("Pin", p, "IN", "pull=None") for p in (37, 38, 39, 32)] + [("i2c", 0x20, 2, b"\xa0")],
+          "sd_release_bus: the four lines released FIRST, then the socket off (%r)" % got)
+    board.sd_release_bus()
+    check(take() == [("Pin", p, "IN", "pull=None") for p in (37, 38, 39, 32)], "  again: lines only, no write")
+    clock.ms += 3
+    clock.slept = []
+    board.sd_card_ready()
+    check(clock.slept == [b3.SD_OFF_MS - 3, b3.SD_ON_MS],
+          "on again 3 ms after off: waits out SD_OFF_MS (%r)" % clock.slept)
+    IN1[0] = 0xFF
+    take()
+    check(board.sd_card_ready() is False, "card pulled while powered: not ready")
+    got = take()
+    check(got[1:] == [("Pin", p, "IN", "pull=None") for p in (37, 38, 39, 32)] + [("i2c", 0x20, 2, b"\xa0")],
+          "  lines released, then the socket off (%r)" % got)
+    check(board.sd_card_ready() is False and take() == [("i2c-read", 0x20, 1)],
+          "  and while it stays out: only the switch read")
+    led0 = b3._out0
+    b3._out0 = 0xA0
+    OUT0[0] = 0xE8
+    clock.ms += 50
+    b3._sd_power_off_at_import()
+    got = take()
+    check(got == [("i2c-read", 0x20, 2)] + [("Pin", p, "IN", "pull=None") for p in (37, 38, 39, 32)]
+          + [("i2c", 0x20, 2, b"\xa8")] and b3._sd_off_at == clock.ms,
+          "soft reset with the socket on: lines released, then only bit 6 cleared (%r)" % got)
+    b3._sd_power_off_at_import()
+    check(take() == [("i2c-read", 0x20, 2)], "  socket already off: read, nothing written")
+    b3._out0 = led0
+    OUT0[0] = led0
 
     print("the LED on the expander, dimmed")
     led = board.make_led()
@@ -334,7 +388,7 @@ def main():
     del FakeTimer.made[:]
     led.value(1)
     led.value(1)
-    check(take() == [("i2c", 0x20, 2, b"\xc0")], "on: lit at once (bit 5 low), once")
+    check(take() == [("i2c", 0x20, 2, b"\x80")], "on: lit at once (bit 5 low), once")
     live = [t for t in FakeTimer.made if t.live]
     per = [t for t in live if t.mode == FakeTimer.PERIODIC]
     off = [t for t in live if t.mode == FakeTimer.ONE_SHOT]
@@ -345,18 +399,18 @@ def main():
         off.callback(off)
         per.callback(per)
     writes = [c[3] for c in take() if c[0] == "i2c"]
-    check(writes == [b"\xe0", b"\xc0"] * 3, "two writes a period (%r)" % writes)
+    check(writes == [b"\xa0", b"\x80"] * 3, "two writes a period (%r)" % writes)
     check(off.live and off.us == 500, "the one-shot re-armed each period")
     led.brightness(30)
     check([t.us for t in FakeTimer.made if t.live and t.mode == FakeTimer.ONE_SHOT] == [3000],
           "brightness(30) while on: 3 ms of 10")
     led.off()
     check(not [t for t in FakeTimer.made if t.live] and led.value() == 0, "off: both timers stop")
-    check(take()[-1:] == [("i2c", 0x20, 2, b"\xe0")], "and the LED is left dark")
+    check(take()[-1:] == [("i2c", 0x20, 2, b"\xa0")], "and the LED is left dark")
     board.led_brightness(led, 100)
     del FakeTimer.made[:]
     led.toggle()
-    check(led.value() == 1 and not FakeTimer.made and take() == [("i2c", 0x20, 2, b"\xc0")],
+    check(led.value() == 1 and not FakeTimer.made and take() == [("i2c", 0x20, 2, b"\x80")],
           "100 %: simply lit, no timers")
     led.off()
     take()
@@ -364,8 +418,8 @@ def main():
     print("port 0 shared: the ESP32's EN and IO9 next to the LED")
     board.led_brightness(led, 5)
     take()
-    check(board.modem_power(True) is True and take() == [("i2c", 0x20, 2, b"\xe8")],
-          "modem_power(True): EN (bit 3) set, the rest safe (E8h)")
+    check(board.modem_power(True) is True and take() == [("i2c", 0x20, 2, b"\xa8")],
+          "modem_power(True): EN (bit 3) set, the rest safe (A8h)")
     check(board.modem_power(True) and take() == [], "  again: no write")
     led.on()
     per = [t for t in FakeTimer.made if t.live and t.mode == FakeTimer.PERIODIC][-1]
@@ -373,17 +427,17 @@ def main():
     off.callback(off)
     per.callback(per)
     writes = [c[3] for c in take() if c[0] == "i2c"]
-    check(writes == [b"\xc8", b"\xe8", b"\xc8"], "the LED's edges keep EN set (%r)" % writes)
+    check(writes == [b"\x88", b"\xa8", b"\x88"], "the LED's edges keep EN set (%r)" % writes)
     board.modem_download(True)
-    check(take() == [("i2c", 0x20, 2, b"\xd8")], "modem_download(True): bit 4 too, the LED lit kept (D8h)")
+    check(take() == [("i2c", 0x20, 2, b"\x98")], "modem_download(True): bit 4 too, the LED lit kept (98h)")
     off.callback(off)                                    # the LED goes dark between
     board.modem_power(False)                             # a main-thread change
     writes = [c[3] for c in take() if c[0] == "i2c"]
-    check(writes == [b"\xf8", b"\xf0"], "  a change after an LED edge starts from it (%r)" % writes)
+    check(writes == [b"\xb8", b"\xb0"], "  a change after an LED edge starts from it (%r)" % writes)
     board.modem_download(False)
     led.off()
     take()
-    check(b3._out0 == 0xE0, "everything off: back to E0h, the power-up value")
+    check(b3._out0 == 0xA0, "everything off: back to A0h, the power-up value")
 
     print("background and the slot commands")
     ran = []
