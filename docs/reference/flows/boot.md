@@ -43,7 +43,10 @@ default; slot 1, then `/rom/TSPICO-23.ROM`, if it's missing) into HOME and
 EXROM and the dock slots into DOCK, and releases the 2068 (only now does it
 start), step 10 is skipped, and step 11 mounts the card on its
 own pins without taking the bus. It reads the socket's detect switch first:
-with no card it fails at once, the socket never clocked.
+with no card it fails at once, the socket never clocked; with one it powers
+the socket first (proto2's switch, `board_v3.sd_power`), and the unmount
+after switches it off again. Importing `board_v3` has already switched off
+a socket a soft reset left on.
 
 From step 15 on the Pico is ready for any transaction. The pre-load at
 step 15 is the only one staged outside a transaction's tail; every
