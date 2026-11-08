@@ -418,11 +418,9 @@ prev_path = None
 # has been read: with no card at boot they stay so, and the commands that list
 # or index them are refused until a card is in (SD_NEEDED).
 files = []
-files_upper = []
 dirs = []
-dirs_upper = []
+INDEX = catalog.Index()                                                        # the folder, packed: files and dirs are its Views once listed (#384)
 lista = ""
-alldirs = []
 sd_space = None                                                                # (total, free) bytes, as the last listing read them
 
 # ─── Colour in SEND_MSG2 (the CAT listing and tpi:info, 2026-10-02) ─────
@@ -709,11 +707,19 @@ class PICO_STATUS():                                                            
 def DEACTIVATE_SD():
     """Tear down SD card access and safe the shared bus lines."""
     TLM("DEACTIVATE_SD enter")
+    global SD_DEV
+
     try:
         os.umount("/sd")
         TLM("  /sd unmounted")
     except:
         TLM("  /sd already unmounted")
+    # The driver goes with the mount: ACTIVATE_SD makes a new one for every
+    # mount, and the old one, kept here between commands with its buffers,
+    # sat wherever that mount had put it -- in the middle of the free
+    # memory after a big listing (#384). Only a mounted card's work reads
+    # it (CARD_LABEL, DISK_LABEL_WORK).
+    SD_DEV = None
 
     # v2: CS high, and GPIO 2-4 (the SD card's SPI lines and also D0-D2 of
     # the 2068 bus) driven LOW until the bus state machine takes them back
@@ -1203,6 +1209,7 @@ def SAVE_MOUNT():                                                               
 
 
 tspico_io.SD_MOUNT = SAVE_MOUNT                                                 # 2026-09-30 audit, §2 #21
+tspico_io.BLOCK_BUF = board.BLOCK_BUF                                           # LOAD/SAVE blocks (v3; #384)
 
 
 def SD_NOTE_CARD(cid):                                                         # ACTIVATE_SD: a card mounted
@@ -1249,13 +1256,15 @@ def SD_REVALIDATE(changed):                                                    #
         other card's file), and open channels and the printer capture are
         dropped -- their files were on the other card;
       * the card's label is read (CAT shows it);
-      * the directory caches are rebuilt.
+      * the current folder's listing is re-read. (The list of every
+        folder on the card is not kept: tpi:cd CODE 0,1 walks the card
+        when it is asked for, #384.)
 
     If there is no TAP folder and one can't be made (a write-protected card),
     the card counts as missing: TSP.sd_present goes False and OSError(19) is
     raised."""
 
-    global alldirs, prev_path, prn_path
+    global prev_path, prn_path
 
     root = catalog.ROOT
     if not dir_exists(root):
@@ -1280,7 +1289,6 @@ def SD_REVALIDATE(changed):                                                    #
     TSP.sd_label = CARD_LABEL()
     os.chdir(TSP.cur_path)
     TSP.sd_listing_ok = DIR_FILES()
-    alldirs = GET_DIRS()
 
 
 def CARD_LABEL():                                                             # the mounted card's label, "" if it can't be read
@@ -1295,27 +1303,39 @@ def CARD_LABEL():                                                             # 
         return ""
 
 
-def LISTING_SIG(entries):                                                     # the folder's names, types and sizes, as one number
+def LISTING_SIG(entries):                                                     # the folder's names, types and sizes, as two numbers
 
-    """A fingerprint of a folder listing (os.ilistdir's entries, in
-    LIST_DIR_FILES' order): name, type and size of each. Two listings with
-    the same fingerprint list the same files."""
-    return hash(tuple((e[0], e[1], e[3] if len(e) > 3 else 0) for e in entries))
+    """A fingerprint of a folder listing: name, type and size of each entry
+    (os.ilistdir's), in any order. Two listings with the same fingerprint
+    list the same files.
+
+    The sum of each entry's hash, taken as the entries come, with their
+    count (#384). It used to hash a tuple of every entry in name order, so
+    LISTING_FRESHEN sorted the whole folder and built a tuple per entry on
+    every CAT, only to compare one number. A sum doesn't care about order,
+    so it takes os.ilistdir() as it is and keeps nothing: one entry at a
+    time is all the memory it holds."""
+    s = 0
+    n = 0
+    for e in entries:
+        s = (s + hash((e[0], e[1], e[3] if len(e) > 3 else 0))) & 0x3FFFFFFF
+        n += 1
+    return (n, s)
 
 
 def LISTING_FRESHEN():                                                        # re-read the folder if the card's copy changed
 
     """The card is mounted. Re-read the current folder (DIR_FILES: files,
-    lista, dirinfo.tap) if what is on the card no longer matches the last
+    lista) if what is on the card no longer matches the last
     listing. The Pico only noticed a card being swapped when a command found
     it missing or a different card; the SAME card, taken out, given a file
     on a Mac and put back between two commands, kept the old listing -- CAT
     didn't show the file and LOAD "tpi:" couldn't find it until a reboot
     (hardware, 2026-10-03). Reading the folder is cheap; rebuilding the
-    listing (dirinfo.tap, free space) happens only when it changed."""
+    listing (lista, free space) happens only when it changed."""
     try:
         os.chdir(TSP.cur_path)
-        sig = LISTING_SIG(sorted(os.ilistdir(), key=lambda fname: fname[0].lower()))
+        sig = LISTING_SIG(os.ilistdir())                                     # in the card's order: no sort
     except OSError:
         return
     if sig != getattr(TSP, "listing_sig", None):
@@ -1574,6 +1594,138 @@ def DIR_HEADER(sd_stat, path=None):                                             
     return "Path:%-27s%-32sFile Name                   Size--------------------------------" % (path, sd_stat[:32])
 
 
+class DirText:                                                                 # lista for a listed folder: rows made when read (#384)
+
+    """lista for a folder that has entries: DIR_HEADER's 128 characters and
+    then one 32-character row per entry of INDEX, exactly the text
+    LIST_DIR_FILES used to join -- but no row exists until it is read.
+    Reads are what SEND_MSG2 does (len, [i]) and what the host tests do
+    (slices, `in`, ==); a slice, `in` or == builds the whole text, so the
+    firmware uses only len and [i]. CAT_COLOUR gives a DirColour of it.
+
+    Why (#384): the listing was a str of 32 characters a row (9.7K in one
+    block for 300 files), kept until the next listing, and CAT's colored
+    copy of it took a second block the size of it (12.1K), which a 300-file
+    folder on the v3 card could not find. Now the listing costs one row at
+    a time."""
+
+    def __init__(self, ix, header):
+        self.ix = ix
+        self.header = header
+        self.n = ix.start[3] + (1 if ix.more else 0)                          # rows: the entries, and "and n more"
+        self._at = -1
+        self._row = ""
+
+    def __len__(self):
+        return 128 + 32 * self.n
+
+    def row(self, r):                                                          # plain row r, 32 characters
+        ix = self.ix
+        s = ix.start
+        if r >= s[3]:
+            return "%-32s" % ("    and %d more not listed" % ix.more)
+        nm = catalog.screen_name(ix.name(r))
+        if r < s[1]:
+            return "<%-21s       0 B" % (shorten_filename(nm, 20) + ">")
+        if r < s[2]:
+            return "%03d %-18s%10s" % (r - s[1], shorten_filename(nm, 18), catalog.size_text(ix.size[r]))
+        return "    %-18s%10s" % (shorten_filename(nm, 18), catalog.size_text(ix.size[r]))
+
+    def text(self):                                                            # the whole listing, as one str
+        return self.header + "".join(self.row(r) for r in range(self.n))
+
+    def __getitem__(self, i):
+        if type(i) is not int:                                                 # a slice
+            return self.text()[i]
+        if i < 0:
+            i += len(self)
+        if i < 128:
+            return self.header[i]
+        r = (i - 128) >> 5
+        if r != self._at:
+            if r >= self.n:
+                raise IndexError("index out of range")
+            self._row = self.row(r)
+            self._at = r
+        return self._row[(i - 128) & 31]
+
+    def __contains__(self, s):
+        return s in self.text()
+
+    def __eq__(self, other):
+        return self.text() == (other.text() if isinstance(other, DirText) else other)
+
+    def startswith(self, s):
+        return self.header.startswith(s)
+
+
+class DirColour:                                                               # CAT_COLOUR of a DirText, made when read
+
+    """CAT_COLOUR(DirText): the same characters CAT_COLOUR makes from the
+    plain text -- the colored header (104 characters), a folder row of 36,
+    a numbered row of 40, any other row of 36, then NORMAL_ -- one row at a
+    time, as SEND_MSG2 reads it (len, [i], count). Every row has a fixed
+    length by its kind, and INDEX keeps each kind together, so where a
+    character is is arithmetic."""
+
+    def __init__(self, dt):
+        self.dt = dt
+        s = dt.ix.start
+        self.head = (PAPER_ + "\x01" + INK_ + "\x07" + dt.header[0:64]
+                     + PAPER_ + "\x05" + INK_ + "\x09" + dt.header[64:96])
+        h = len(self.head)
+        self.b1 = h + 36 * s[1]                                               # after the folders
+        self.b2 = self.b1 + 40 * (s[2] - s[1])                                # after the numbered files
+        self.b3 = self.b2 + 36 * (dt.n - s[2])                                # after the others (and "and n more")
+        self._at = -1
+        self._row = ""
+
+    def __len__(self):
+        return self.b3 + len(NORMAL_)
+
+    def crow(self, r):                                                         # colored row r, as CAT_COLOUR colors it
+        p = self.dt.row(r)
+        s = self.dt.ix.start
+        if r < s[1]:
+            return PLAIN_ + p[:22] + "%10s" % "folder"
+        if r < s[2]:
+            return PAPER_ + "\x05" + INK_ + "\x09" + p[:3] + PLAIN_ + p[3:]
+        return PLAIN_ + p
+
+    def text(self):
+        return self.head + "".join(self.crow(r) for r in range(self.dt.n)) + NORMAL_
+
+    def __getitem__(self, i):
+        if type(i) is not int:
+            return self.text()[i]
+        if i < 0:
+            i += len(self)
+        if i < len(self.head):
+            return self.head[i]
+        if i >= self.b3:
+            return NORMAL_[i - self.b3]
+        s = self.dt.ix.start
+        if i < self.b1:
+            r, o = divmod(i - len(self.head), 36)
+        elif i < self.b2:
+            r, o = divmod(i - self.b1, 40)
+            r += s[1]
+        else:
+            r, o = divmod(i - self.b2, 36)
+            r += s[2]
+        if r != self._at:
+            self._row = self.crow(r)
+            self._at = r
+        return self._row[o]
+
+    def count(self, sub, start=0):
+        # No row holds a CR or LF (screen_name makes every code below 32 a
+        # "?"), so SEND_MSG2's count of the line ends still to come is 0.
+        if sub in ("\r", "\n", "\r\n"):
+            return 0
+        return self.text().count(sub, start)
+
+
 def CAT_COLOUR(text):                                                         # a plain listing -> the coloured one
 
     """The listing as CAT shows it (chosen 2026-10-02): the path and the
@@ -1590,24 +1742,35 @@ def CAT_COLOUR(text):                                                         # 
     character and the next row (SEND_MSG2 would then not see the line's
     end)."""
 
+    if isinstance(text, DirText):                                             # the folder's listing: colored as it is read
+        return DirColour(text)
     if not text.startswith("Path:") or len(text) < 128:
         return text
-    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
-           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
-    rest = text[128:]                                                      # [96:128] is the dashes
-    while len(rest) >= 32:
-        row = rest[:32]
-        if row[0] == "<":
-            out.append(PLAIN_ + row[:22] + "%10s" % "folder")
-        elif row[:3].isdigit() and row[3] == " ":
-            out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
-        elif row[:4] == "    ":
-            out.append(PLAIN_ + row)
-        else:
-            break
-        rest = rest[32:]
-    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
-    return "".join(out)
+    # No room for the colored copy (it needs a block as big as the listing,
+    # 12K for 300 files, while the listing itself is still held): the plain
+    # listing goes out instead. Unguarded, the MemoryError reached the
+    # dispatcher and the 2068 got Report J (v3, a 300-file CAT, #384).
+    try:
+        out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],                 # path + card line
+               PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]                # column titles
+        rest = text[128:]                                                      # [96:128] is the dashes
+        while len(rest) >= 32:
+            row = rest[:32]
+            if row[0] == "<":
+                out.append(PLAIN_ + row[:22] + "%10s" % "folder")
+            elif row[:3].isdigit() and row[3] == " ":
+                out.append(PAPER_ + "\x05" + INK_ + "\x09" + row[:3] + PLAIN_ + row[3:])
+            elif row[:4] == "    ":
+                out.append(PLAIN_ + row)
+            else:
+                break
+            rest = rest[32:]
+        out.append((PLAIN_ + rest if rest else "") + NORMAL_)
+        return "".join(out)
+    except MemoryError:
+        out = None
+        gc.collect()
+        return text
 
 
 def TAPDIR_COLOUR(text, headers):                                             # CAT "" as CAT shows a folder
@@ -1623,174 +1786,272 @@ def TAPDIR_COLOUR(text, headers):                                             # 
 
     if not text.startswith("File:") or len(text) < 128:
         return text
-    out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],
-           PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]
-    rest = text[128:]
-    while len(rest) >= 32 and rest[0] in " >" and rest[1:3].isdigit():
-        row = rest[:32]
-        if row[0] == ">":
-            out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
-        else:
-            hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
-            out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
-                       + (BLUE_ if hdr else PLAIN_) + row[3:])
-        rest = rest[32:]
-    out.append((PLAIN_ + rest if rest else "") + NORMAL_)
-    return "".join(out)
+    # No room for the colored copy: the plain listing, as CAT_COLOUR (#384).
+    try:
+        out = [PAPER_ + "\x01" + INK_ + "\x07" + text[0:64],
+               PAPER_ + "\x05" + INK_ + "\x09" + text[64:96]]
+        rest = text[128:]
+        while len(rest) >= 32 and rest[0] in " >" and rest[1:3].isdigit():
+            row = rest[:32]
+            if row[0] == ">":
+                out.append(PAPER_ + "\x06" + INK_ + "\x09" + row)
+            else:
+                hdr = ("Data block" not in row[4:15]) if headers else row[18:20] == " Y"
+                out.append(PLAIN_ + row[0] + PAPER_ + "\x05" + INK_ + "\x09" + row[1:3]
+                           + (BLUE_ if hdr else PLAIN_) + row[3:])
+            rest = rest[32:]
+        out.append((PLAIN_ + rest if rest else "") + NORMAL_)
+        return "".join(out)
+    except MemoryError:
+        out = None
+        gc.collect()
+        return text
 
 
 def DIR_FILES():                                                                             # Get all files and directories from current path
     """
-    Rebuild files[], lista and dirinfo.tap for the current directory.
+    Rebuild files[] and lista for the current directory.
 
-    Returns True on success. On an SD card error (OSError) it logs an ERROR
-    with the reason, leaves an empty listing that says so, and returns False
-    instead of raising.
+    Returns True on success. On an SD card error (OSError) or when the heap
+    can't hold the listing (MemoryError) it logs an ERROR with the reason,
+    leaves an empty listing that says so, and returns False instead of
+    raising.
 
-    Any FatFs call can reach the card here, not just the dirinfo.tap write.
+    Any FatFs call can reach the card here, not just a write.
     The field failure (activity.log, 2026-09-26) was EIO from
     sdcard.writeblocks raised inside os.ilistdir(): FatFs flushing the
     sector that os.remove("dirinfo.tap") had dirtied. Uncaught, that took
     TS2068_IO down at boot with a FATAL and the 2068 got no TS-Pico at all,
     not even LOAD from the flash assets.
+
+    MemoryError (#384): a 300-file folder on the v2 board ran out of heap in
+    NEW_TAPBLK, which built dirinfo.tap's block as one bytes object (~9.7K
+    in one piece; the largest free block was 13.6K and falling, REPL test
+    2026-11-06). That block is gone from the listing (DIRINFO_WRITE makes
+    dirinfo.tap when it is LOADed), but a big enough folder can still run
+    out. Uncaught, it went to the service loop's handler as an
+    "unexpected error" -- the 2068 got a recovered status, the listing was
+    left half-built, and three in a minute stop the firmware (FATAL). Now
+    MOVE TO still lands in the folder and the listing says why it is empty.
     """
 
     global files
     global dirs
     global lista
     global sd_space
-    global files_upper
-    global dirs_upper
 
+    # Collect first: the command so far left garbage all through the heap,
+    # and the listing's rows, kept, would go between it. Without this a
+    # 300-file folder failed from MOVE TO on the v3 card every time ("out of
+    # memory" with 89K free) but listed from the REPL and in memtest; with
+    # it, it listed (2026-11-06, #384). A collection takes 4.3 ms on v3.
+    gc.collect()
     try:
         LIST_DIR_FILES()
         return True
     except OSError as e:
+        why = None
         LOG("DIR_FILES: SD card error, directory listing skipped: %s" % e, 2)
+    except MemoryError:
+        why = "out of memory"
 
-    files = []
-    dirs = []
-    files_upper = []
-    dirs_upper = []
+    files = []                                                                               # the half-built lists go first: the
+    dirs = []                                                                                # memory they hold is what the log
+    lista = ""                                                                               # line and the message need
     sd_space = None
-    lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
-
-    try:
-        os.remove("dirinfo.tap")                                                             # a half-written one would LOAD as garbage
-    except:
-        pass
+    if why:
+        gc.collect()
+        LOG("DIR_FILES: out of memory, directory listing skipped (%d bytes free)" % gc.mem_free(), 2)
+        lista = DIR_HEADER("SD: " + why) + "Too many files to list here\r"
+    else:
+        lista = DIR_HEADER("SD: card error") + "SD card error: reseat the card\r"   # it recovers without a power cycle since #66/#101
 
     return False
 
 
 def LIST_DIR_FILES():                                                                        # DIR_FILES without the error handling; raises OSError on SD errors
-    
+
     global files
     global dirs
     global lista
     global sd_space
-    global files_upper
-    global dirs_upper
-    
+
+    # The folder goes into INDEX (catalog.Index, #384): buffers made once, at
+    # import, so the listing keeps nothing new on the heap. files and dirs
+    # are its Views: sequences of names, each decoded when asked for. They
+    # were one str per name (files_upper and dirs_upper, upper-cased copies,
+    # went first, #389), made in the same pass as the listing's garbage and
+    # spread over the whole heap with it.
+    #
+    # dirinfo.tap (the listing as a TAP the menu program LOADs) is not
+    # written here any more: DIRINFO_WRITE makes it when it is LOADed (#384).
+    # Building it here cost the biggest allocation of every MOVE TO (one
+    # bytes object, ~9.7K for 300 files: where a big folder ran out of heap)
+    # and a card write per listing, the write #62 traced field EIO errors to.
+    # An old one on the card is still left out of the listing (kind_of).
+    #
+    # lista is a DirText (#384): the rows are made from INDEX when they are
+    # read, by SEND_MSG2 as it sends them, so no row is kept. It was a str
+    # joined from all the rows (9.7K for 300 files), and the rows, kept
+    # until the join, needed a collection every 32 of them (LIST_GC_EVERY)
+    # not to spread over the heap with the formatting's garbage.
+    #
+    # What it does keep -- the signature, the free space, the header and the
+    # DirText, a few hundred bytes -- is made after a collection, once the
+    # reading is done. Made as they came, each went just past the garbage
+    # before it, and stayed there when that was collected: in the middle
+    # of the free memory, splitting it (heap map after a 300-file MOVE TO
+    # on the v3 card, 2026-11-07, #384).
     files = []
     dirs = []
-    files_upper = []
-    dirs_upper = []
     lista = ""
-    L = []
-    header = ""
-    
-    dirinfo = []
-    tap_blk = []
-    tap_hdr = []
-    num_dirs = 0
-    num_files = 0
-    
-    ext = catalog.DIR_EXT                                                                     # extensions to be included
-    starts = ['.']                                                                            # first characters of files to be excluded
-    
-    ordered = True                                                                            # In the future, this could be controlled by an option
+    TSP.listing_sig = None
 
-    # dirinfo.tap is the synthetic TAP this function writes at the end (the
-    # listing in a form the Commander LOADs). It is left out of the listing
-    # by name below. It used to be deleted here first, a FAT write on every
-    # listing -- the write #62 traced field EIO errors to. (2026-09-30
-    # audit, §3.)
+    n, s = LISTING_SIG(os.ilistdir())                                         # the first read: the count, and what LISTING_FRESHEN compares
+    ix = INDEX
+    ix.fill(os.ilistdir(), n)                                                 # the second: the index
+    vfs = os.statvfs("")
+    total, free = vfs[2] * vfs[0], vfs[3] * vfs[0]
+    vfs = None
+    gc.collect()                                                              # the reading's garbage goes before anything kept is made
 
-    if ordered:
-        listing = sorted(os.ilistdir(), key=lambda fname: fname[0].lower())
+    TSP.listing_sig = (n, s)
+    files = ix.files
+    dirs = ix.dirs
+    sd_space = (total, free)
+    header = DIR_HEADER(catalog.card_line(TSP.sd_label, total, free))
+
+    if len(ix) or ix.more:
+        lista = DirText(ix, header)                                           # its rows are made as they are read
     else:
-        listing = [item for item in os.ilistdir()]
-    TSP.listing_sig = LISTING_SIG(listing)                                    # what LISTING_FRESHEN compares
-    
-    nom = bytearray(32)
-    
-    for archs in listing:
-        if archs[1] == 16384:
-            dirs.append(archs[0])
-            dirs_upper.append(archs[0].upper())
-            nom = shorten_filename(catalog.screen_name(archs[0]), 20)
-            dirinfo.append("%-32s" %  nom)
-            L.append("<%-21s       0 B" % (nom + ">"))
+        lista = header + "%s\r" % "Directory is empty"
+    return
 
-    num_dirs = len(dirinfo)
+
+def DIRINFO_ROWS(listing):                                                                   # dirinfo.tap's rows, from LIST_DIR_FILES' listing
+    """The rows of dirinfo.tap's a$, each exactly 32 characters, for a
+    folder listing in LIST_DIR_FILES' order (os.ilistdir's entries sorted by
+    lower-case name): the folders, then the files LOAD "tpi:n" numbers, with
+    the same numbers and the same filter as files[]. A generator, so nothing
+    but one row is held at a time."""
+    ext = catalog.DIR_EXT
+    for it in listing:
+        if it[1] == 16384:
+            yield DIR_ROW(it[0])
     i = 0
-    
-    for archs in listing:
-        if archs[1] == 32768:
-            if (archs[0][-3:].upper() not in ext) or (archs[0][0] in starts) or archs[0] == "dirinfo.tap":
-                continue
-            files.append(archs[0])
-            files_upper.append(archs[0].upper())
-            
-            size_txt = catalog.size_text(int(archs[3]))
-
-            nom = "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(archs[0]), 18), size_txt)
-            L.append(nom)
-            dirinfo.append(nom)
-
+    for it in listing:
+        if it[1] == 32768 and it[0][-3:].upper() in ext and it[0][0] != "." \
+                and it[0] != "dirinfo.tap":
+            yield FILE_ROW(i, it[0], int(it[3]))
             i += 1
 
-    # Then every other file, without an index: LOAD "tpi:n" only counts the
-    # types above, and files[] / dirinfo.tap keep exactly those (spec §2).
-    for archs in listing:
-        if archs[1] == 32768 and archs[0][-3:].upper() not in ext \
-                and archs[0][0] not in starts and archs[0] != "dirinfo.tap":
-            L.append("    %-18s%10s" % (shorten_filename(catalog.screen_name(archs[0]), 18),
-                                        catalog.size_text(int(archs[3]))))
-    
-    del listing
 
-    sd_block = os.statvfs("")[0]
-    sd_tot   = os.statvfs("")[2]
-    sd_free  = os.statvfs("")[3]
-    sd_space = (sd_tot * sd_block, sd_free * sd_block)
-    sd_stat  = catalog.card_line(TSP.sd_label, *sd_space)
+def DIR_ROW(name):                                                                           # a folder's 32-character row (dirinfo.tap, x: dir)
+    return "%-32s" % shorten_filename(catalog.screen_name(name), 20)
 
-    header = DIR_HEADER(sd_stat)
-    
-    if not L:
-        lista = header + "%s\r" % "Directory is empty"
-    else:
-        lista = header + "".join(L)
-    del L
 
-    num_files = len(files)
-    
-    dirinfo.insert(0, "%-32s" % num_dirs)
-    dirinfo.insert(1, "%-32s" % num_files)
-    
-    tap_blk = (NEW_TAPBLK(dirinfo, 32))
-    del dirinfo
-    long = len(tap_blk) - 4                                        # this is the pure data blk size stored in header; it's the block minus the first 4 bytes
-    tap_hdr = NEW_HDR(2, "dirinfo", long)                             # generate header for each block, with parameters
-    
-    with open("dirinfo.tap", "wb") as f_out:
-        f_out.write(tap_hdr)                                          # now write the header
-        f_out.write(tap_blk)                                           # and then the block
+def FILE_ROW(i, name, size):                                                                 # a file's: index 1-3, name 5-22, size 23-32
+    return "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(name), 18),
+                               catalog.size_text(size))
 
-    # gc.collect()
-    return
+
+class XDirText:                                                                              # x: dir's answer, made as it is read
+    """The answer to dir on an x: channel (#404): two count lines (folders,
+    then files), then one 32-character row per folder and per numbered file,
+    as dirinfo.tap's a$ has them, each ending in a newline. Made from the
+    folder index as the 2068 reads it: len() and chunk(), as
+    channels.Channels reads an answer, so nothing but the piece asked for is
+    ever built (300 files would be ~10K in one piece). Not slicing: a slice
+    object's start and stop are a MicroPython build option. The counts are taken
+    when dir runs; a row the index no longer has (the folder changed before
+    the program read it) comes back blank."""
+
+    ROW = 33
+
+    def __init__(self, ix):
+        self.ix = ix
+        self.nd = len(ix.dirs)
+        self.nf = len(ix.files)
+        self.head = b"%d\n%d\n" % (self.nd, self.nf)
+        self.n = len(self.head) + self.ROW * (self.nd + self.nf)
+
+    def __len__(self):
+        return self.n
+
+    def row(self, r):
+        try:
+            if r < self.nd:
+                t = DIR_ROW(self.ix.dirs[r])
+            else:
+                f = self.ix.files
+                t = FILE_ROW(r - self.nd, f[r - self.nd], f.size(r - self.nd))
+        except IndexError:
+            t = ""
+        return ("%-32s\n" % t).encode()
+
+    def chunk(self, a, n):                                                                   # the bytes from a, up to n of them
+        a = max(0, a)
+        b = min(self.n, a + n)
+        out = bytearray()
+        h = len(self.head)
+        if a < h:
+            out.extend(self.head[a:min(b, h)])
+            a = h
+        while a < b:
+            r, k = divmod(a - h, self.ROW)
+            take = min(b - a, self.ROW - k)
+            out.extend(self.row(r)[k:k + take])
+            a += take
+        return bytes(out)
+
+
+def DIRINFO_WRITE():                                                                         # write dirinfo.tap for the current folder, row by row
+    """Write <cur_path>/dirinfo.tap: a TAP with one character array, a$ --
+    row 1 the number of folders, row 2 the number of files, then
+    DIRINFO_ROWS. The card is active. Called by LOAD_TPI when the name is
+    dirinfo.tap; that LOAD is the only reader (the flash menu program,
+    nofile.bas, and the manual's "for programmers" note).
+
+    It used to be built by LIST_DIR_FILES on every listing, as one bytes
+    object (NEW_TAPBLK) -- ~9.7K in one piece for 300 files, the allocation
+    a big folder ran out of heap in (#384) -- and written to the card on
+    every MOVE TO. Now it is made only when asked for, from a fresh read of
+    the folder, and written as it is made: the header first (the length is
+    known from the counts), then one 32-byte row at a time with the XOR
+    checksum kept as it goes. If the folder changed since files[] was built
+    (LISTING_SIG), the listing is rebuilt first, so the numbers in it are
+    the ones LOAD "tpi:n" uses. Raises OSError on a card error."""
+    os.chdir(TSP.cur_path)
+    listing = catalog.sort_items(os.ilistdir())
+    if LISTING_SIG(listing) != TSP.listing_sig:
+        DIR_FILES()                                                                          # files[] and lista to match
+    n_dirs = sum(1 for it in listing if it[1] == 16384)
+    n_files = sum(1 for _ in DIRINFO_ROWS(listing)) - n_dirs
+    rows = 2 + n_dirs + n_files
+    data = 1 + 4 + 32 * rows                                                                 # dims count, the two dims, the rows
+    head = bytes(((data + 2) & 0xFF, (data + 2) >> 8,                                        # block length: flag + data + checksum
+                  0xFF, 2, rows & 0xFF, rows >> 8, 32, 0))                                   # flag, 2 dims: rows x 32
+    crc = 0
+    for c in head[2:]:
+        crc ^= c
+    row = bytearray(32)
+    with open(TSP.cur_path + "/dirinfo.tap", "wb") as f:
+        f.write(NEW_HDR(2, "dirinfo", data))
+        f.write(head)
+
+        def put(text):
+            nonlocal crc
+            b = text.encode()
+            row[:] = (b + b" " * 32)[:32]
+            for c in row:
+                crc ^= c
+            f.write(row)
+
+        put("%-32s" % n_dirs)
+        put("%-32s" % n_files)
+        for text in DIRINFO_ROWS(listing):
+            put(text)
+        f.write(bytes((crc,)))
 
 
 def LOG(msg, level):                                                                    # Adds a timestamped new entry to log_entries
@@ -2023,7 +2284,7 @@ def NEW_HDR(type_hdr: int, fname, long: int):                      # This routin
     
     hdr = bytearray.fromhex('00')                                  # We start building the bytearray that will form the header: start with 0x00, a type header (FF=data)
     hdr += type_hdr.to_bytes(1, 'little')                          # Next, the filename passed as parameter
-    hdr += f"{fname:<10}"[:10]                                     # ...trimmed to 10 bytes and left-justified with blanks
+    hdr += f"{fname:<10}"[:10].encode()                            # ...trimmed to 10 bytes and left-justified with blanks
     
     long_b = int(long/256)                                         # Now we calculate LSB and MSB of block length
     long_a = int(((long/256) - long_b) * 256)
@@ -2041,42 +2302,6 @@ def NEW_HDR(type_hdr: int, fname, long: int):                      # This routin
     
     return(hdr)                                                    # and return the header
     
-
-def NEW_TAPBLK(items, maxsize: int):                               # This routine generates a data block for storing an array, with the parameters: array items, and max size of single item
-    
-    num_items = len(items)
-
-    dims = [0] * 4                                                 # This will hold LSB and MSB for both dimension of the array
-
-    dims[1] = int((num_items)/256)  
-    dims[0] = int(((num_items/256) - dims[1]) * 256)
-
-    dims[3] = int((maxsize)/256)
-    dims[2] = int(((maxsize/256) - dims[3]) * 256)
-
-    blk = bytearray.fromhex("FF02")                                # We start a new data block: FF for data, 02 for String array type
-
-    for el in dims:
-        blk += el.to_bytes(1, 'little')                            # Now, store each LSB/MSB in blk
-        
-    for el in items:                                               # Now onto the items themselves 
-        blk += el
-    
-    crc = 0
-    for el in blk:
-        crc = crc ^ el                                             # calculate CRC
-    
-    blk += crc.to_bytes(1, 'little')                               # and store it at the end of the blk
-    
-    len_blk = len(blk)
-    len2 = int((len_blk)/256)                                      # Now calculate blk length's LSB/MSB 
-    len1 = int(((len_blk/256) - len2) * 256)
-    
-    blk = len2.to_bytes(1, 'little') + blk                         #...and store it on the blk's first two positions
-    blk = len1.to_bytes(1, 'little') + blk
-
-    return(blk)                                                    # and return the blk
-
 
 def OFF_TABLE():                                                             # Builds an offset table of segments, from the current .TAP file
     
@@ -2730,8 +2955,25 @@ def CATALOG_TEXT(arg):                                                          
 
     listed = real if is_dir else real[:real.rfind('/')]
     here = listed.upper() == TSP.cur_path.upper()
-    upper = [f.upper() for f in files] if here else []
-    index_of = lambda n: upper.index(n.upper()) if n.upper() in upper else None
+    # A file's index is its place in files[]. Both lists come from
+    # os.ilistdir() of this folder, so a name matches exactly, and in the
+    # same order: the search goes on from the last match, once round, so a
+    # whole folder is one pass. (It made an upper-case copy of files[] and
+    # searched it twice per row, #384.)
+    at = [0]
+
+    def index_of(name):
+        k = len(files) if here else 0
+        j = at[0]
+        for _ in range(k):
+            if j >= k:
+                j = 0
+            if files[j] == name:
+                at[0] = j + 1
+                return j
+            j += 1
+        return None
+
     nf = sum(1 for e in entries if not e[1])
     line2 = (("%s: " % pat) if pat else "") + catalog.counts(nf, len(entries) - nf)
     header = DIR_HEADER(line2, shorten_filename(xstr(path), 27))
@@ -2777,7 +3019,7 @@ SD_FREE = frozenset((
 # Commands the fdd ROM sends in the middle of a BASIC statement (OPEN #,
 # PRINT #, INPUT #, SAVE/LOAD "f:"): a printed message would move the ROM's
 # current channel, so these get the bare status (CH_REPLY does the same).
-SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:FOPEN"))
+SD_QUIET = frozenset(("TPI:CHOPEN", "TPI:CHWR", "TPI:CHRD", "TPI:CHCAT", "TPI:FOPEN"))
 
 
 def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # does this command need the card?
@@ -2786,10 +3028,11 @@ def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # do
         return True                                                           # LOAD "tpi:name": mount a file
     if cmd_word == "TPI:HELP":
         return cmd_exec.strip() != cmd_word                                   # a topic is a file on the card
-    if cmd_word == "TPI:CHOPEN" and CH_SPEECH_PATH(cmd_exec):
-        return False                                                          # OPEN #n,"v:": speech, no file
-    if cmd_word == "TPI:CHWR" and stream is not None and CHANNELS.speaking(stream):
-        return False                                                          # PRINT # to a speech channel
+    if cmd_word == "TPI:CHOPEN" and CH_NOCARD_PATH(cmd_exec):
+        return False                                                          # OPEN #n,"v:" or "x:": no file
+    if cmd_word in ("TPI:CHWR", "TPI:CHRD") and stream is not None \
+            and CHANNELS.in_memory(stream):
+        return False                                                          # a stream with no file (d:, v:, x:)
     return cmd_word in SA_funct and cmd_word not in SD_FREE
 
 
@@ -2886,7 +3129,7 @@ def DISK_COPY_WORK(a, b):                                                     # 
             return "Not found: %s" % a, _3_F_Invalid_file
         if not dst_is_dir:
             return "Copy them to a directory", _4_Q_Parameter
-        for item in sorted(os.ilistdir(src_dir), key=lambda it: it[0].lower()):
+        for item in catalog.sort_items(os.ilistdir(src_dir)):
             n = item[0]
             if item[1] == 16384 or n == "dirinfo.tap" or not catalog.match(n, pat) \
                     or (n[0] == '.' and pat[0] != '.'):
@@ -2981,14 +3224,13 @@ def DISK_ERASE_ONE(arg):                                                      # 
         if catalog.within(cur, real):
             return "Can't erase the current directory", _4_Q_Parameter
         try:
-            os.remove(real + "/dirinfo.tap")                                  # DIR_FILES' own file doesn't count
+            os.remove(real + "/dirinfo.tap")                                  # the listing tape doesn't count
         except OSError:
             pass
         try:
             os.rmdir(real)
         except OSError:
             return "Directory not empty", _4_Q_Parameter
-        alldirs[:] = [d for d in alldirs if not catalog.within(d, real[3:])]
         REFRESH_IF(catalog.parent(real))
         return "Erased %s" % catalog.public(real), _1_OK
     if dir_exists(real):
@@ -3007,7 +3249,7 @@ def DISK_ERASE_MATCHES(where, pat):                                           # 
     d = catalog.resolve(TSP.cur_path, where)
     if d is None or not dir_exists(d):
         return "Not found: %s" % where, _3_F_Invalid_file
-    found = [d + '/' + it[0] for it in sorted(os.ilistdir(d), key=lambda it: it[0].lower())
+    found = [d + '/' + it[0] for it in catalog.sort_items(os.ilistdir(d))
              if it[1] != 16384 and it[0] != "dirinfo.tap" and catalog.match(it[0], pat)
              and (it[0][0] != '.' or pat[0] == '.')]
     if not found:
@@ -3100,11 +3342,6 @@ def DISK_MAKE_DIR(name):                                                      # 
     if not dir_exists(catalog.parent(real)):
         return "Not found: %s" % catalog.public(catalog.parent(real)), _3_F_Invalid_file
     os.mkdir(real)
-    try:
-        alldirs.append(real[3:])
-        alldirs.sort()
-    except Exception:
-        pass
     REFRESH_IF(catalog.parent(real))
     return "Made %s/" % catalog.public(real), _1_OK
 
@@ -3205,8 +3442,6 @@ def DISK_REN(pre, cmd):                                                       # 
 
 def DISK_REN_WORK(a, b):
 
-    global alldirs
-
     cur = TSP.cur_path
     src = catalog.resolve(cur, a)
     if src is None or not (file_exists(src) or dir_exists(src)):
@@ -3228,8 +3463,6 @@ def DISK_REN_WORK(a, b):
     if is_dir and catalog.within(dst, src):
         return "Can't move a directory into itself", _4_Q_Parameter
     os.rename(src, dst)
-    if is_dir:
-        alldirs = GET_DIRS()
     REFRESH_IF(catalog.parent(src), catalog.parent(dst))
     return "Renamed to %s" % catalog.public(dst), _1_OK
 
@@ -3472,6 +3705,13 @@ def CH_OPEN(pre, cmd):                                                        # 
             CHANNELS.open_speech(stream, board.say)
             CH_REPLY(_1_OK)
         return
+    if path[:2].lower() == "x:":                                              # commands, answers read back (#404)
+        if reclen or path[2:].strip():
+            CH_REPLY(_4_Q_Parameter)                                          # "x:" alone, a stream
+        else:
+            CHANNELS.open_command(stream, X_RUN)
+            CH_REPLY(_1_OK)
+        return
     if path[:2].lower() == "d:":                                              # stage 3: a directory listing
         def op():
             if mode.lower() != "r" or reclen:
@@ -3499,14 +3739,142 @@ def CH_OPEN(pre, cmd):                                                        # 
     CH_REPLY(st)
 
 
-def CH_SPEECH_PATH(cmd):                                                      # tpi:chopen <mode> v:
+def SCREEN_LINES(text):                                                      # a listing as the 2068 shows it, a line at a time
 
-    """Is this tpi:chopen for OPEN #n,"v:" (the v3 card's speech)?"""
+    """The lines a listing's text makes on the 2068's 32-column screen,
+    with no colors: the text as SEND_MSG2 gets it (rows of 32 characters
+    that wrap, CRs, and INK, PAPER, AT and TAB codes with their parameters,
+    which are dropped). A CR straight after a full row ends nothing, as on
+    the screen. Each line comes with its trailing spaces cut. Reads the
+    text with len() and [i] only, so a DirText makes one row at a time."""
+
+    line = []
+    skip = 0
+    full = False
+    for i in range(len(text)):
+        c = text[i]
+        o = ord(c)
+        if skip:
+            skip -= 1
+            continue
+        if c == "\r":
+            if not full:
+                yield "".join(line).rstrip()
+                line = []
+            full = False
+            continue
+        if 16 <= o <= 21:
+            skip = 1
+            continue
+        if o == 22 or o == 23:
+            skip = 2
+            continue
+        if o < 32:
+            continue
+        full = False
+        line.append(c)
+        if len(line) == 32:
+            yield "".join(line).rstrip()
+            line = []
+            full = True
+    if line:
+        yield "".join(line).rstrip()
+
+
+def CH_CAT(pre, cmd):                                                         # tpi:chcat [x]: CAT #s[;x]
+
+    """CAT #s, CAT #s;"x" (#404): the listing CAT or CAT "x" would show,
+    written as plain lines into the file open on stream s (PMR1) instead.
+    PMR2 is 1 when a string came with it: "" is the mounted TAP, as CAT ""
+    is. The answer is a bare status: the stream isn't a file open to be
+    written (x:, d:, v:, mode r), Q; what CAT "x" would refuse, F; no card,
+    J (the card gate)."""
+
+    stream, has = PARAMS(pre)
+    stream &= 0xFF
+    arg = getArgs(cmd).strip() if has else None
+    TLM("CH_CAT", "stream=%d arg=%r" % (stream, arg))
+
+    def op():
+        ch = CHANNELS.table.get(stream)
+        if ch is None:
+            raise channels.ChannelError("Stream not open", "O")
+        if ch.in_memory() or ch.mode == "r":
+            raise channels.ChannelError("Not a file open for writing", "Q")
+        if arg is None:
+            LISTING_FRESHEN()
+            text = lista
+        elif arg == "":
+            text = TAPDIR_TEXT(0, 0)
+        else:
+            text, st = CATALOG_TEXT(arg)
+            if st != _1_OK:
+                raise channels.ChannelError(text, "F")
+        CHANNELS.write_text(stream, SCREEN_LINES(text))
+    msg, st = CH_CALL(op)
+    if st != _1_OK:
+        LOG("CAT #%d: %s" % (stream, msg), 1)
+    CH_REPLY(st)
+
+
+def CH_NOCARD_PATH(cmd):                                                      # tpi:chopen <mode> v: or x:
+
+    """Is this tpi:chopen for OPEN #n,"v:" (the v3 card's speech) or
+    OPEN #n,"x:" (commands, #404)? Neither opens a file."""
 
     arg = getArgs(cmd).strip()
     k = arg.find(' ')
     path = arg[k + 1:].strip() if k > 0 else arg
-    return path[:2].lower() == "v:"
+    return path[:2].lower() in ("v:", "x:")
+
+
+def X_RUN(line):                                                              # a command printed to an x: channel
+
+    """The answer to one line printed to OPEN #n,"x:" (#404), as bytes (or
+    XDirText) for INPUT # to read, one value a line. Plain text for a
+    program, not laid out for the screen:
+
+      path   the current folder, as tpi:path shows it
+      dir    the folder count, the file count, then dirinfo.tap's rows
+      mount  the mounted file, or an empty line when none is
+      info   the card's label, free and total bytes, the firmware's version
+             and the ROM's ("" when the ROM doesn't say)
+
+    Runs inside tpi:chwr, so it never prints. Anything else is Q; dir with
+    no card J, with an SD error F."""
+
+    w = line.lower()
+    if w == "path":
+        return ("%s\n" % public_path()).encode()
+    if w == "mount":
+        return ("%s\n" % public_fname()).encode()
+    if w == "info":
+        label, free, total = "", 0, 0
+        try:
+            ACTIVATE_SD()
+            vfs = os.statvfs("")
+            total, free = vfs[2] * vfs[0], vfs[3] * vfs[0]
+            label = TSP.sd_label
+        except OSError:
+            pass                                                              # no card: no label, no space
+        finally:
+            DEACTIVATE_SD()
+            ACTIVATE_MQ()
+        rom = "%d.%d" % (rom_id >> 4, rom_id & 0x0F) if rom_id != 0xFF else ""
+        return ("%s\n%d\n%d\n%s\n%s\n" % (label, free, total, TSP.FW_VERSION, rom)).encode()
+    if w == "dir":
+        try:
+            ACTIVATE_SD()
+            LISTING_FRESHEN()                                                 # the index matches the card
+        except OSError:
+            raise channels.ChannelError("No card" if not TSP.sd_present else "SD card error",
+                                        "O" if not TSP.sd_present else "F")
+        finally:
+            DEACTIVATE_SD()
+            ACTIVATE_MQ()
+        gc.collect()
+        return XDirText(INDEX)
+    raise channels.ChannelError("Not an x: command", "Q")
 
 
 def CH_WRITE(pre, cmd):                                                       # tpi:chwr <hex>
@@ -3518,14 +3886,14 @@ def CH_WRITE(pre, cmd):                                                       # 
     except ValueError:
         CH_REPLY(_5_C_Nonsense)
         return
-    if CHANNELS.speaking(stream):                                             # v:: no card, so no SD_CALL
+    if CHANNELS.in_memory(stream):                                            # v:, x:, d:: no file, so no SD_CALL
         try:
             CHANNELS.write(stream, data)
             st = _1_OK
         except channels.ChannelError as e:
             st = CH_STATUS.get(e.args[1], _4_Q_Parameter)
         except OSError as e:                                                  # speech off
-            LOG("PRINT # to speech: %r" % e, 1)
+            LOG("PRINT # to stream %d: %r" % (stream, e), 1)
             st = _10_J_Invalid_IO
         CH_REPLY(st)
         return
@@ -3542,7 +3910,13 @@ def CH_READ(pre, cmd):                                                        # 
     #   bytes are ready before READY and garbage is collected first.
     par1, par2 = PARAMS(pre)
     stream, n = par1 & 0xFF, max(1, min(255, par2 or 255))
-    data, st = CH_CALL(CHANNELS.read, stream, n)
+    if CHANNELS.in_memory(stream):                                            # d:, x:: in RAM, so no mount
+        try:
+            data, st = CHANNELS.read(stream, n), _1_OK
+        except channels.ChannelError as e:
+            data, st = e.args[0], CH_STATUS.get(e.args[1], _4_Q_Parameter)
+    else:
+        data, st = CH_CALL(CHANNELS.read, stream, n)
     wrt = CMD_PUT
     if st != _1_OK or not data:
         wrt(st if st != _1_OK else _7_8_EOF)
@@ -3885,10 +4259,27 @@ def TAPDIR(pre, cmd):                                                        # D
     #                                 block at the current position is shown too.
     # SAVE "tpi:tapdir"CODE x,255   - Show a screenfull around the current pos
 
-    global TSP
-    
     TLM("TAPDIR enter")
     par1, par2 = PARAMS(pre)
+    nom = TAPDIR_TEXT(par1, par2)
+    if nom is None:
+        msg = BAD_CODE("TAPDIR", par1, par2)
+        LOG(msg, 2)
+        SEND_MSG(msg, "", _8_A_Invalid_arg)
+        return
+    if isTapMounted():
+        nom = TAPDIR_COLOUR(nom, par1 == 1)
+    SEND_MSG2(nom, _1_OK, True, True)
+
+
+def TAPDIR_TEXT(par1, par2):                                                  # TAPDIR's listing, plain; None: a bad CODE
+
+    """The text TAPDIR shows, before TAPDIR_COLOUR: 32-character rows, the
+    mounted TAP's blocks (par1 0) or headers (par1 1), par2 as TAPDIR
+    takes it. With nothing mounted, the one-row notice. CAT #s;"" writes
+    it into a file (CH_CAT)."""
+
+    global TSP
 
     if not isTapMounted():
 
@@ -3910,10 +4301,7 @@ def TAPDIR(pre, cmd):                                                        # D
             # N.appd(" #  File         Len  Desc.     ")
             N.append("Blk Type         Len  Name      ")
         else:
-            msg = BAD_CODE("TAPDIR", par1, par2)
-            LOG(msg, 2)
-            SEND_MSG(msg, "", _8_A_Invalid_arg)
-            return
+            return None
         N.append("--------------------------------")
 
         if not TSP.offset_tbl:
@@ -3949,12 +4337,10 @@ def TAPDIR(pre, cmd):                                                        # D
             else: # Header listing
 
                 N.extend(catalog.tap_header_rows(TSP.offset_tbl, TSP.tap_idx, idx1, idx2))
-                    
-        nom = TAPDIR_COLOUR("".join(N), par1 == 1)
 
-    SEND_MSG2(nom, _1_OK, True, True)
+        nom = "".join(N)
 
-    return
+    return nom
 
 
 def SA_NOT_IMP(pre, cmd):                                                      # Output for not implemented SAVE Command 
@@ -4388,7 +4774,6 @@ def CDIR(pre, cmd):                                                             
 
     global lista
     global dirs
-    global alldirs
     global led
     
     TLM("CDIR enter")
@@ -4405,11 +4790,19 @@ def CDIR(pre, cmd):                                                             
         hdr2 = "  Directory Name"
         if par2 == 0:
             if cwd != '/TAP':
-                List = ['..'] + dirs
+                List = ['..'] + list(dirs)
             else:
-                List = dirs
+                List = list(dirs)
         else:
-            List = alldirs
+            # Every folder on the card, walked now: kept between commands it
+            # was one more long-lived string per folder, rebuilt at every
+            # card change, rename and ERASE for this one menu (#384).
+            ACTIVATE_SD()
+            try:
+                List = GET_DIRS()
+            finally:
+                DEACTIVATE_SD()
+                ACTIVATE_MQ()
         isel = ListMenu(List, hdr1, hdr2, "Change to dir", "Changing dir to: ")
         if isel >= 0:
             status, message = ChangeDir(List[isel])
@@ -4563,7 +4956,7 @@ def GETHELP(pre, cmd):                                                 # Shows T
             if arg == "?":
 
                 # List specific help file names
-                listing = sorted(os.ilistdir(HELP_DIR), key=lambda fname: fname[0].lower())
+                listing = catalog.sort_items(os.ilistdir(HELP_DIR))
                 M = ['Commands for "tpi:help cmd":', nl, nl]
                 l = 0
                 for name in listing:
@@ -4788,7 +5181,79 @@ def GETINFO(pre, cmd):                                                 # Shows T
     return
 
 
-def GETLOG(pre, cmd):                                                 # Shows the last nn bytes of the events log file 
+MEM_STEP = const(256)                                                  # LARGEST_BLOCK's precision, bytes
+
+
+def LARGEST_BLOCK():                                                   # the biggest bytearray the heap can give now
+
+    """The size of the largest bytearray that can be allocated now, to
+    MEM_STEP bytes, found by trying sizes (a binary search). A heap whose
+    free memory is in pieces can't give one buffer as big as its total:
+    this is the number that says whether a 32K or 64K buffer would fit.
+    MicroPython has no call that returns it (micropython.mem_info prints
+    "max free sz" but returns nothing). A size that doesn't fit makes the
+    allocator collect garbage and try again before it raises MemoryError,
+    so this takes a few tens of milliseconds. Diagnostic only (MEMINFO)."""
+
+    lo, hi = 0, gc.mem_free() + MEM_STEP
+    while hi - lo > MEM_STEP:
+        mid = ((lo + hi) >> 1) & ~15
+        try:
+            b = bytearray(mid)
+            b = None
+            lo = mid
+        except MemoryError:
+            hi = mid
+    return lo
+
+
+
+def MEMINFO(pre, cmd):                                                 # The heap now: free, largest block, listing sizes
+
+    """SAVE "tpi:meminfo [tag] [map]": collect garbage, then measure the heap
+    and say so, for the heap fragmentation work (#384). One line goes to
+    the USB console and /activity.log, for tools/memcheck.py to collect:
+
+        MEM tag=<tag> free=<bytes> alloc=<bytes> largest=<bytes>
+            files=<n> dirs=<n> lista=<chars> blocks=<n> ms=<ms>
+
+    largest is LARGEST_BLOCK: the biggest buffer that can be had now. The
+    counts are what the firmware keeps between commands that grows with the
+    card: the current folder's files and folders, the listing text (lista)
+    and the mounted tape's block table.
+    With the word "map", micropython.mem_info(1)'s heap map follows on the
+    console only (one letter per 16-byte block; it is long), between
+    "MEM map begin" and "MEM map end" lines. The 2068 gets one message
+    line: free and largest, in K. Measured before anything else here
+    allocates, so the command's own strings aren't counted."""
+
+    t0 = time.ticks_ms()
+    gc.collect()
+    free = gc.mem_free()
+    alloc = gc.mem_alloc()
+    largest = LARGEST_BLOCK()
+    gc.collect()
+    ms = time.ticks_diff(time.ticks_ms(), t0)
+
+    words = getArgs(cmd).split()
+    want_map = any(w.lower() == "map" for w in words)
+    tag = "_".join(w for w in words if w.lower() != "map") or "-"
+    line = "MEM tag=%s free=%d alloc=%d largest=%d files=%d dirs=%d lista=%d blocks=%d ms=%d" % (
+        tag, free, alloc, largest, len(files), len(dirs), len(lista),
+        len(getattr(TSP, "offset_tbl", None) or ()), ms)
+    print(line)
+    LOG(line, 4)
+    if want_map:
+        import micropython
+        print("MEM map begin tag=%s" % tag)
+        micropython.mem_info(1)
+        print("MEM map end tag=%s" % tag)
+    SEND_MSG("Free %dK, largest %dK" % (free >> 10, largest >> 10), tag[:32], _1_OK, True)
+
+    return
+
+
+def GETLOG(pre, cmd):                                                 # Shows the last nn bytes of the events log file
 
     # SAVE "tpi:log"
     # SAVE "tpi:log"CODE 0,n     - Show n bytes of the end of the file
@@ -4947,6 +5412,7 @@ def LOAD_CONFIG():
     default_values["MODEM_MODE"] = "2050"                      # the v3 card's TS2050 modem: "2050", "hayes" or "off" (tpi:modem); v2 ignores it
     default_values["MODEM_BAUD"] = 300                         # ... received characters paced to this (0: none)
     default_values["MODEM_IDLE_MIN"] = 10                      # ... the ESP32 off after this many minutes unused
+    default_values["KEMPSTON"] = True                          # the v3 card's DE-9 joystick answered at 1Fh; v2 ignores it
     default_values["SPEECH_VOLUME"] = 35                       # the v3 card's speech (tpi:say): volume, % (v2 ignores both)
     default_values["SPEECH_RATE"] = 100                        # ... the chip's speed, %: 50-150; its pitch moves with it
     default_values["SPEECH_PORTS"] = True                      # ... OUT 17 / IN 37 answered, as David's speech board
@@ -4987,10 +5453,13 @@ def LOAD_CONFIG():
 
     # The modem's keys (the v3 card, docs/v3-modem-proposal.md): a mode it
     # knows, a pace from 0 (none) to the line's 115200, an idle time from a
-    # minute to a day. Anything else is logged and replaced, as above.
+    # minute to a day; the joystick's on/off; speech's volume, rate and ports,
+    # the greeting and the auto-mount. Anything else is logged and replaced, as
+    # above.
     for key, ok in (("MODEM_MODE", lambda v: v in ("2050", "hayes", "off")),
                     ("MODEM_BAUD", lambda v: type(v) is int and 0 <= v <= 115200),
                     ("MODEM_IDLE_MIN", lambda v: type(v) is int and 1 <= v <= 1440),
+                    ("KEMPSTON", lambda v: type(v) is bool),
                     ("SPEECH_VOLUME", lambda v: type(v) is int and 0 <= v <= 100),
                     ("SPEECH_RATE", lambda v: type(v) is int and 50 <= v <= 150),
                     ("SPEECH_PORTS", lambda v: type(v) is bool),
@@ -5096,7 +5565,6 @@ def MDIR(pre, cmd):                                                             
     # SAVE "tpi:md <name>" CODE 1,0     - Also change to the new directory
 
     global TSP
-    global alldirs
     
     TLM("MDIR enter")
     # The name as every handler takes it (#174: this was cmd[10:], so a
@@ -5134,13 +5602,6 @@ def MDIR(pre, cmd):                                                             
                 os.mkdir(full)
                 if par1 != 1 or par2 != 0:
                     DIR_FILES() # Update local dir list
-                # Update alldirs w/o calling GET_DIRS()
-                try:
-                    alldirs.append("%s/%s" % (TSP.cur_path[3:], name))
-                    alldirs.sort()
-                    gc.collect()
-                except:
-                    pass
 
             except OSError:
 
@@ -5702,6 +6163,19 @@ def LOAD_TPI(name, only_tap=False, fresh=False):
     .DCK and .BIN mount a TS-2068 updater program instead.
     """
     if name == "dirinfo.tap":
+        # Made now, from the folder as it is (DIRINFO_WRITE, #384): no longer
+        # kept up to date by every listing. MOUNT_FILE mounts the card
+        # itself, so the card is given back first.
+        try:
+            ACTIVATE_SD()
+            try:
+                DIRINFO_WRITE()
+            finally:
+                DEACTIVATE_SD()
+                ACTIVATE_MQ()
+        except (OSError, MemoryError) as e:
+            LOG("dirinfo.tap not written: %r" % e, 2)
+            return "Error mounting file: ", name, _4_Q_Parameter
         if MOUNT_FILE("%s/dirinfo.tap" % TSP.cur_path):
             return "Mounting dir info: ", name, _1_OK
         msg = "Error mounting file: "
@@ -5709,8 +6183,12 @@ def LOAD_TPI(name, only_tap=False, fresh=False):
         return msg, name, _2_R_Tape_load
 
     name, idx = ResolveIndexName(name)
-    if idx < 0 and name.upper() in files_upper:                                 # Is name a valid file?
-        idx = files_upper.index(name.upper())
+    if idx < 0:                                                                 # the name, in any case: the first file
+        up = name.upper()                                                       # whose upper-cased name is it (files_upper
+        for i, f in enumerate(files):                                           # held these copies until #384)
+            if f.upper() == up:
+                idx = i
+                break
     if idx < 0 and catalog.has_wild(name):
         # The name as CAT showed it: '?' for a character the 2068 can't type
         # (catalog.screen_name), '*' for any run. Exactly one match mounts
@@ -6318,7 +6796,6 @@ def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):                                   
     global rom_id
     
     global files
-    global files_upper
     
     TSP.zx48 = False
     rom_id = pre[2]                 # FFh up to ROM 2.2, the version (23h) from 2.3 (#227)
@@ -6616,7 +7093,6 @@ def TS2068_IO():                                                         # Main 
     global led
     global TSP
     
-    global alldirs
     global EXT_SA_FUNCT
     
     busy = False
@@ -6665,6 +7141,8 @@ def TS2068_IO():                                                         # Main 
     if board.HAS_MODEM:                                                # v3: the 8251 answered from now; the ESP32 stays off
         board.modem_start(init_values["MODEM_MODE"], init_values["MODEM_BAUD"],
                           init_values["MODEM_IDLE_MIN"])
+    if board.HAS_JOYSTICK:                                             # v3: the DE-9 answered at 1Fh (Kempston)
+        board.joystick(init_values["KEMPSTON"])
     if board.HAS_SPEECH:                                               # v3: the speech chip on core 1, silent until tpi:say
         try:
             n = board.speech_start(init_values["SPEECH_VOLUME"], init_values["SPEECH_RATE"],
@@ -6714,6 +7192,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:CHWR": CH_WRITE,
         "TPI:CHRD": CH_READ,
         "TPI:CHCLOSE": CH_CLOSE,
+        "TPI:CHCAT": CH_CAT,
         "TPI:FFW" : FWD,
         "TPI:HELP" : GETHELP,
         "TPI:IDIR" : IDIR,
@@ -6745,7 +7224,7 @@ def TS2068_IO():                                                         # Main 
         "TPI:FRESET" : SA_NOT_IMP,
         "TPI:GETCONFIG" : SA_NOT_IMP, 
         "TPI:LIST" : DISK_LIST,
-        "TPI:MEMINFO" : SA_NOT_IMP,
+        "TPI:MEMINFO" : MEMINFO,
         "TPI:NOAUTOLF" : PRN_FLAG,
         "TPI:NOAUTOPG" : PRN_FLAG,
         "TPI:OPPRINT" : PRN_OPEN,
@@ -7382,6 +7861,8 @@ def TS2068_IO():                                                         # Main 
                 else:
                     if board.HAS_MODEM:                                 # v3: power the ESP32 when a program wants the modem
                         board.modem_service()
+                    if board.HAS_JOYSTICK:                              # v3: a joystick read the IRQ couldn't finish
+                        board.joystick_service()
                     # Nothing to do, so check if time to save the log
                     # ─── DUAL-PORT MIGRATION: use ticks_diff to handle wrap ──
                     # `time.ticks_us()` on rp2 wraps at 2**30 us (~17.9 min).
@@ -7492,6 +7973,48 @@ ZX_REPORT = {_1_OK: 0xFF, _2_R_Tape_load: 0x1A, _3_F_Invalid_file: 0x0E,
              _4_Q_Parameter: 0x19}
 
 
+def ZX_PIECES(text):                                                         # the v4 reply's pieces
+    """The ZX v4 ROM's reply after its status byte: `text` (bytes) in pieces
+    of up to 255, each with its length first, then a 0, as one bytearray
+    with a spare byte in front for the status (ZX_TPI writes it)."""
+
+    # ─── A piece ends just before a PAPER code (#373) ─────────────────
+    # The ROM opens the screen channel before each piece, and on the
+    # Spectrum CHAN_OPEN ends in TEMPS: the colours go back to the
+    # user's own. A cut at byte 255 inside a row's "PAPER 5, INK 9,
+    # 005" printed the digits after it in the user's paper colour. In
+    # CAT_COLOUR's listing every 11h starts a whole colour setting
+    # (paper, then ink; the values are 0-9, never 11h), so a piece
+    # cut there begins with its own colours. Text without one is cut
+    # at 255, as before.
+    # The cuts first (ints), then each piece copied straight from the
+    # text into the reply: no copy of each piece on the way (#384).
+    cuts = []
+    i = 0
+    n = len(text)
+    while i < n:
+        j = i + 255
+        if j < n:
+            k = text.rfind(b"\x11", i + 1, j + 1)
+            if k >= 0:
+                j = k
+        else:
+            j = n
+        cuts.append(j)
+        i = j
+    out = bytearray(1 + len(text) + len(cuts) + 1)
+    mv = memoryview(text)
+    i = 0
+    j = 1
+    for k in cuts:
+        out[j] = k - i
+        out[j + 1:j + 1 + k - i] = mv[i:k]
+        j += 1 + k - i
+        i = k
+    out[j] = 0
+    return out
+
+
 def ZX_TPI():
     """LOAD "tpi:<name>" in ZX48 mode -- the ZX v3 ROM's 'T' command, which
     ZX48_IO has taken. Returns nxt, as LOAD_ZX.
@@ -7567,7 +8090,14 @@ def ZX_TPI():
             REFRESH_LISTING()
         msg, rest, st = LOAD_TPI(rest, only_tap=True)   # may use the SD card: MQ is rebuilt
     if listing is not None:
-        text = bytes(b if b < 0x80 else 0x3F for b in listing.encode())
+        # One copy, as bytes; a byte above 7Fh (screen_name leaves none) is
+        # '?'. bytes(generator) grew the reply a byte at a time (#384).
+        text = listing.encode()
+        listing = None
+        for b in text:
+            if b >= 0x80:
+                text = bytes(b if b < 0x80 else 0x3F for b in text)
+                break
         LOG("ZX48 tpi:dir: %d bytes" % len(text), 0)
     else:
         text = (msg.strip() + " " + rest).strip().encode()[:200]
@@ -7577,32 +8107,7 @@ def ZX_TPI():
     # message in pieces of up to 255 and a 0. The first bytes go in before
     # READY -- the ROM reads the instant it sees it -- the rest as it reads.
     if pieces:
-        # ─── A piece ends just before a PAPER code (#373) ─────────────────
-        # The ROM opens the screen channel before each piece, and on the
-        # Spectrum CHAN_OPEN ends in TEMPS: the colours go back to the
-        # user's own. A cut at byte 255 inside a row's "PAPER 5, INK 9,
-        # 005" printed the digits after it in the user's paper colour. In
-        # CAT_COLOUR's listing every 11h starts a whole colour setting
-        # (paper, then ink; the values are 0-9, never 11h), so a piece
-        # cut there begins with its own colours. Text without one is cut
-        # at 255, as before.
-        parts = []
-        i = 0
-        while i < len(text):
-            j = i + 255
-            if j < len(text):
-                k = text.rfind(b"\x11", i + 1, j + 1)
-                if k >= 0:
-                    j = k
-            parts.append(text[i:j])
-            i = j
-        out = bytearray(1 + len(text) + len(parts) + 1)
-        j = 1
-        for part in parts:
-            out[j] = len(part)
-            out[j + 1:j + 1 + len(part)] = part
-            j += 1 + len(part)
-        out[j] = 0
+        out = ZX_PIECES(text)
     else:
         out = bytearray(2 + len(text))
         out[1] = len(text)

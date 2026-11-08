@@ -1,15 +1,15 @@
 # channels.py — `OPEN #` channels: streams, records, text conversion
 
-Source: [`src/TS/channels.py`](../../../src/TS/channels.py) (499 lines).
+Source: [`src/TS/channels.py`](../../../src/TS/channels.py) (557 lines).
 
-The Pico half of `OPEN #n,"f:name"`, `OPEN #n,"d:spec"` and, on the v3
-card, `OPEN #n,"v:"` (speech). The ROM's
+The Pico half of `OPEN #n,"f:name"`, `OPEN #n,"d:spec"`, `OPEN #n,"x:"`
+(commands, #404) and, on the v3 card, `OPEN #n,"v:"` (speech). The ROM's
 channel driver ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) sends what BASIC
 prints to a stream as raw 2068 bytes — tokens, control codes, CR — and asks
 for bytes when BASIC reads. This module keeps one `Channel` per stream
 number in a `Channels` table and does everything that is not I/O: the mode
 rules, the position, TAB as a seek, fixed-length records, directory
-listings held in memory, and the translation between 2068 text and the
+listings and command answers held in memory, and the translation between 2068 text and the
 UTF-8, LF-ended text a Mac or a PC writes. File access comes in from
 outside as an object with four methods (`SD_FS` in
 [tspico-disk.md](tspico-disk.md); a dictionary in the host test), so the
@@ -32,20 +32,24 @@ The header comment names the three stages: stage 1 (#83) sequential text
 and binary files in modes `r`, `w`, `a`; stage 2 (#84, spec §4b) `TAB` as
 the position, mode `u`, record files; stage 3 (spec §4) `d:` listings. A
 fourth paragraph adds the speech channel (#375): write-only, no file, each
-line spoken when its CR arrives, and never in need of the card.
+line spoken when its CR arrives, and never in need of the card. A fifth
+adds the command channel (#404): each line printed to `x:` is a command
+(`path`, `dir`, `mount`, `info`), and `INPUT #` reads its answer, plain
+lines for a program rather than text laid out for the screen, held in
+memory like a `d:` listing.
 
 ## Map of the file
 
 | Lines | What |
 |---|---|
-| 26–47 | `TOKENS`, `EXTRA`, `POUND`, `keyword` — the 2068's keywords by code |
-| 50–97 | `TextOut` — 2068 output bytes to text-file bytes |
-| 100–157 | `LATIN1`, `UTF8`, `TextIn` — text-file bytes to 2068 input bytes |
-| 160–179 | `utf8_len` |
-| 182–202 | `Channel` — one stream's state |
-| 205–220 | `ChannelError`, `MAX_RECLEN`, `parse_mode` |
-| 223–470 | `Channels` — the table and every operation on it |
-| 473–499 | `_split_cr`, `_one_line` |
+| 29–50 | `TOKENS`, `EXTRA`, `POUND`, `keyword` — the 2068's keywords by code |
+| 53–100 | `TextOut` — 2068 output bytes to text-file bytes |
+| 103–160 | `LATIN1`, `UTF8`, `TextIn` — text-file bytes to 2068 input bytes |
+| 163–182 | `utf8_len` |
+| 185–210 | `Channel` — one stream's state |
+| 213–228 | `ChannelError`, `MAX_RECLEN`, `parse_mode` |
+| 231–550 | `Channels` — the table and every operation on it |
+| 553–579 | `_split_cr`, `_one_line` |
 
 ## The keywords
 
@@ -160,14 +164,14 @@ is valid so far but the chunk ends first.
 ### `Channel`
 
 The state of one open stream; a plain record of attributes, created by
-`Channels.open` and `Channels.open_list`, read and written by the
-`Channels` methods.
+`Channels.open`, `open_list`, `open_speech` and `open_command`, read and
+written by the `Channels` methods.
 
 ### `Channel.__init__(self, path, mode, binary, pos, reclen)`
 
 | Attribute | Type, initial | Meaning |
 |---|---|---|
-| path | str (None for a listing) | the real file path |
+| path | str (None for `d:`, `v:` and `x:`) | the real file path |
 | mode | `'r'`, `'w'`, `'a'` or `'u'` | after `parse_mode` |
 | binary | bool | `b` in the mode: bytes pass through, padding is 0 |
 | pos | int | the next byte of the file; a record file's current record starts here |
@@ -179,10 +183,17 @@ The state of one open stream; a plain record of attributes, created by
 | tab | list or None, None | the TAB bytes still to come after a 23: a list collecting them across calls |
 | fill | int or None, None | bytes written into the open record; None when no record is open |
 | query | bool, False | `TAB 0` seen: the next read returns a count |
-| mem | bytes or None, None | a `d:` listing: the names, not a file |
+| mem | bytes, an answer, or None, None | a `d:` listing (the names) or an `x:` command's answer, not a file; an answer is bytes or anything with `len()` and `chunk(pos, n)` (`XDirText`) |
 | count | int or None, None | … and how many names |
 | say | function or None, None | a speech channel (`v:`): called with each line printed to it |
-| line | bytearray, empty | … and the translated text so far, up to the next newline |
+| line | bytearray, empty | … and the translated text so far, up to the next newline (speech and `x:`) |
+| run | function or None, None | a command channel (`x:`): called with each line printed to it, returns the answer |
+
+### `Channel.in_memory(self)`
+
+True when the channel has no file behind it (`path` is None): a `d:`
+listing, a `v:` speech channel or an `x:` command channel. Such a channel
+is read and written with no card mounted (`Channels.in_memory`).
 
 ### `Channel.pad(self)`
 
@@ -262,11 +273,72 @@ in one write said apart; TAB ignored; `CLOSE` says the unfinished line,
 and still closes with speech off; reading Q; an unknown allophone Q; a
 stale file entry replaced.
 
+### `Channels.open_command(self, stream, run)`
+
+`OPEN #n,"x:"` (#404): a channel with no file (path `None`, mode `r`,
+`mem` empty) and `run` kept in `ch.run` (the firmware passes `X_RUN`,
+[tspico-disk.md](tspico-disk.md)). Each line printed to it is a command,
+run at its CR by `_command`; `run(line)` gives the answer, which the next
+`INPUT #` reads from its start through the ordinary text path (`read`:
+each `\n` arrives as a CR). A new command replaces the answer; `run`
+raises `ChannelError` for a command it does not know. The answer is
+bytes, or anything with `len()` and `chunk(pos, n)`, so the dir listing is
+made as it is read and never held in one piece. Drops any stale entry for
+the stream first. Called by `CH_OPEN` once it checked the spec is `x:`
+alone, with no record length.
+Pinned by `channels_hosttest.py`'s `commands`: nothing to read before a
+command (end of file); nothing run before a CR; the answer with LF → CR,
+then end of file; spaces around a command dropped; a long answer read in
+pieces through `chunk()`, never copied whole; a new command replaces an
+answer read only in part; `PRINT #4` alone runs nothing; an unknown
+command Q with the last answer gone; a keyword token spelled out (so not a
+command, Q); TAB ignored; `CLOSE` closes it; a stale file entry replaced.
+
+### `Channels.in_memory(self, stream)`
+
+Is the stream open with no file behind it (`d:`, `v:`, `x:`)? True when it
+has an entry and `Channel.in_memory` says so. `SD_NEEDED`, `CH_WRITE` and
+`CH_READ` ask it, so writing to or reading from such a stream never mounts,
+waits for, or needs the card.
+
+### `Channels._command(self, ch, data)`
+
+The bytes printed to an `x:` stream: through `text_out` (keywords spelled
+out, control codes dropped, CR → `\n`) onto `ch.line`. For each complete
+line: decoded and stripped; a blank one (`PRINT #4` alone) runs nothing.
+Otherwise the last answer goes first (`mem` empty, `pos` 0, a fresh
+`TextIn`, `eof_cr` false, `last_raw` 10), then `mem = ch.run(text)`. So if
+`run` raises, nothing is left to read: an unknown command is Q on the
+`PRINT`, and a following `INPUT #` is end of file, not the previous
+answer. The ROM drops what it read ahead from the last answer on any
+write to the stream (`CH_OUT`, R_FLAGS bit 2), so the two sides agree on
+where the new answer starts.
+
+### `Channels.write_text(self, stream, lines)`
+
+`CAT #n` (#404): `lines` (strings of printable ASCII, from `SCREEN_LINES` in
+`CH_CAT`) written into the file open on `stream` as if each had been
+printed to it with a CR. Only a file opened to be written takes them: a
+stream with no file (`d:`, `v:`, `x:`) or mode `r` is `("Not a file open
+for writing", "Q")`; a stream that is not open is `_get`'s `O`. Each line
+is encoded, a CR (13) appended, and the bytes go to `_data` in pieces of
+512 or a little over, the last piece whatever is left, so a long listing
+is neither one block in memory nor one card write a line. Going through
+`_data` gives the same result as `PRINT #`: a text file gets LF line ends
+(`TextOut`), a binary file the CRs, a record file one record a line, with
+Q for a line longer than the record (*inferred:* the lines before it stay
+written).
+The lines hold no 23, so nothing is taken as a TAB. Pinned by
+`channels_hosttest.py` (`cat_text`): LF lines at the file's position after
+what was there; 100 lines in 7 writes of about 512 bytes; CRs kept in
+binary; a record a line and Q for one too long; mode `r`, `d:` and `x:` Q;
+a closed stream O.
+
 ### `Channels.speaking(self, stream)`
 
-Is the stream open on speech? True when its entry has `say`. `SD_NEEDED`
-and `CH_WRITE` ask it so a `PRINT #` to speech never waits for, or needs,
-the card.
+Is the stream open on speech? True when its entry has `say`. Not used by
+the firmware since #404 (`SD_NEEDED` and `CH_WRITE` ask `in_memory`,
+which covers speech); the host tests use it.
 
 ### `Channels._speak(self, ch, final=False)`
 
@@ -288,11 +360,14 @@ answer J.
 
 ### `Channels._size(self, ch)`
 
-The size: `len(ch.mem)` for a listing, else `fs.size(ch.path)`.
+The size: `len(ch.mem)` for a listing or an answer, else `fs.size(ch.path)`.
 
 ### `Channels._raw(self, ch, pos, n)`
 
-`n` raw bytes at `pos`: from `mem` for a listing, else `fs.read`.
+`n` raw bytes at `pos`: `fs.read` for a file; a slice of `mem` when it is
+`bytes` (a `d:` listing, a short `x:` answer); else `mem.chunk(pos, n)`,
+an answer made as it is read (`XDirText`). Not slicing for those: a
+slice object's `start` and `stop` are a MicroPython build option.
 
 ### `Channels._get(self, stream)`
 
@@ -324,7 +399,8 @@ buffer on a 23).
 
 ### `Channels._data(self, ch, data)`
 
-Bytes to store (no TAB among them) at the channel's position. Mode `r`:
+Bytes to store (no TAB among them) at the channel's position. A command
+channel (`x:`): to `_command`, before the mode test. Mode `r`:
 dropped — INPUT #'s prompt items go to the stream too (spec §4b). A speech
 channel: the bytes go through `text_out` (keywords spelled out, control
 codes dropped, CR → `\n`) onto `ch.line`, and `_speak` says each line now
@@ -343,8 +419,8 @@ stored in a record.
 
 What BASIC printed to the stream, with TAB as 23, low, high. Scans the
 bytes: while `ch.tab` is collecting, the byte joins it and the second one
-completes `n = lo | hi << 8` for `_seek` (on a speech channel the TAB is
-dropped: there is no position); a 23 sends the run so far to
+completes `n = lo | hi << 8` for `_seek` (on a speech or command channel
+the TAB is dropped: there is no position); a 23 sends the run so far to
 `_data` and starts collecting; any other byte joins the run; the final run
 goes to `_data`. The TAB's bytes may arrive in later calls (pinned: `TAB
 15` sent one byte per chunk). Called by `CH_WRITE`. Pinned by `stage2`:

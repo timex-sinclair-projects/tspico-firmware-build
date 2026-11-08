@@ -17,6 +17,9 @@
 # one name per line (a directory's ends in '/'), TAB 0 the number of names.
 # The v3 card's speech (#375): OPEN #n,"v:" is write-only, with no file: each
 # line printed to it (up to a CR) is spoken. It never needs the card.
+# The command channel (#404): OPEN #n,"x:" runs each line printed to it as a
+# command (path, dir, mount, info) and INPUT # reads the answer: plain lines a
+# program can use, not text laid out for the screen. Held in memory, like d:.
 #
 # The card is unmounted between commands (its pins are shared with the 2068
 # link), so no file stays open: every operation opens the file, seeks to the
@@ -197,6 +200,11 @@ class Channel:
         self.count = None                            # ... and how many names
         self.say = None                              # speech (v:): a function given each line
         self.line = bytearray()                      # ... and the line so far
+        self.run = None                              # commands (x:): line -> the answer
+
+    def in_memory(self):
+        """No file behind it (d:, v:, x:): it never needs the card."""
+        return self.path is None
 
     def pad(self):
         return b"\0" if self.binary else b" "
@@ -266,6 +274,70 @@ class Channels:
         ch.say = say
         self.table[stream] = ch
 
+    def open_command(self, stream, run):
+        """OPEN #n,"x:": a channel with no file. Each line printed to it is
+        a command: run(line) gives the answer, which INPUT # then reads from
+        the start, one line at a time. A new command replaces the answer;
+        run raises ChannelError for one it doesn't know.
+
+        The answer is bytes, or anything with len() and chunk(pos, n) (the
+        bytes from pos, up to n of them), so it can be made as it is read
+        (the dir listing is), not held in one piece."""
+
+        self.table.pop(stream, None)
+        ch = Channel(None, "r", False, 0, 0)
+        ch.mem = b""
+        ch.run = run
+        self.table[stream] = ch
+
+    def in_memory(self, stream):
+        """Is stream open with no file behind it (d:, v:, x:)? Then reading
+        and writing it never needs the card."""
+
+        ch = self.table.get(stream)
+        return ch is not None and ch.in_memory()
+
+    def _command(self, ch, data):
+        """x:: gather the line; at its CR, run it and put its answer up."""
+
+        ch.line.extend(ch.text_out.feed(data))       # words, CR -> newline
+        while True:
+            k = ch.line.find(b"\n")
+            if k < 0:
+                return
+            text, ch.line = bytes(ch.line[:k]), ch.line[k + 1:]
+            text = text.decode().strip()
+            if not text:
+                continue                             # PRINT #4 alone: nothing to run
+            ch.mem = b""                             # the last answer goes, whatever happens
+            ch.pos = 0
+            ch.text_in = TextIn()
+            ch.eof_cr = False
+            ch.last_raw = 10
+            ch.mem = ch.run(text)
+
+    def write_text(self, stream, lines):
+        """CAT #s (#404): write text lines (str, printable ASCII) into the
+        file open on stream, at its position, as if each had been printed to
+        it with a CR: a text file gets LF line ends, a binary one the CRs, a
+        record file one record a line (Report Q if a line is too long). Only
+        a file opened to be written takes it; anything else is Q. Written in
+        pieces of about 512 bytes, so a long listing is never one block and
+        the file isn't opened once a line."""
+
+        ch = self._get(stream)
+        if ch.path is None or ch.mode == "r":
+            raise ChannelError("Not a file open for writing", "Q")
+        buf = bytearray()
+        for ln in lines:
+            buf.extend(ln.encode())
+            buf.append(13)
+            if len(buf) >= 512:
+                self._data(ch, buf)
+                buf = bytearray()
+        if buf:
+            self._data(ch, buf)
+
     def speaking(self, stream):
         """Is stream a speech channel? (It needs no card.)"""
 
@@ -297,7 +369,12 @@ class Channels:
         return len(ch.mem) if ch.mem is not None else self.fs.size(ch.path)
 
     def _raw(self, ch, pos, n):
-        return ch.mem[pos:pos + n] if ch.mem is not None else self.fs.read(ch.path, pos, n)
+        m = ch.mem
+        if m is None:
+            return self.fs.read(ch.path, pos, n)
+        if isinstance(m, bytes):
+            return m[pos:pos + n]
+        return m.chunk(pos, n)                       # an answer made as it is read (x: dir)
 
     def _get(self, stream):
         ch = self.table.get(stream)
@@ -338,6 +415,9 @@ class Channels:
     def _data(self, ch, data):
         """Bytes to store (no TAB in them) at the channel's position."""
 
+        if ch.run is not None:
+            self._command(ch, data)
+            return
         if ch.mode == "r":
             return                                   # INPUT #'s prompt items: dropped
         if ch.say is not None:
@@ -378,8 +458,8 @@ class Channels:
                 if len(ch.tab) == 2:
                     n = ch.tab[0] | ch.tab[1] << 8
                     ch.tab = None
-                    if ch.say is None:               # TAB means nothing to speech
-                        self._seek(ch, n)
+                    if ch.say is None and ch.run is None:
+                        self._seek(ch, n)            # TAB means nothing to speech or x:
             elif b == 23:
                 if run:
                     self._data(ch, run)

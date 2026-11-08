@@ -330,6 +330,19 @@ shape are documented in `docs/DUAL_PORT_DEVELOPMENT.md` §8.
   metadata makes the open take 1-5ms, during which the Z80 reads stale
   bytes. Pre-open at boot or at mount time, cache the handle.
 
+## Memory: keep the heap whole
+
+The 2068's big operations need one big free block (a 64K DOCK, a 35K LOAD
+block, a large folder's listing), and MicroPython's GC never moves anything.
+A small object kept between commands, made just after a command's garbage,
+ends up in the middle of the free memory and cuts it in two. That, not big
+objects, was issue #384. Before adding a module variable, a cache, a buffer
+or anything kept between commands, read
+[`docs/reference/appendix/memory.md`](../docs/reference/appendix/memory.md):
+make big buffers once at import, make kept objects after a `gc.collect()`,
+drop what the next command doesn't need, and measure with
+`tools/memcheck.py` on the v3 card before and after.
+
 ## Structural conventions
 
 All firmware sources live under the repo's `src/` folder; paths below

@@ -121,7 +121,7 @@ because the `with` block assigns it; nothing reads it. Harmless.
 ## `config.ini`
 
 `/config.ini` on the Pico's flash, JSON despite the extension — one
-object, eighteen keys. The shipped file is
+object, nineteen keys. The shipped file is
 [`src/config.ini`](../../../src/config.ini); the web updater writes it to
 the flash with the other Pico files (`web-updater/build-payload.sh`), as
 the release bundle's instructions do — replacing whatever settings the
@@ -151,6 +151,7 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | SPEECH_PORTS | bool | `true` | OUT 17 / IN 37 answered, as David's speech board | as `SPEECH_VOLUME` | as `SPEECH_VOLUME` |
 | SPEECH_GREETING | str | `""` | said at power-on when the 2068 starts its own ROM (flash slot 1, default DOCK, no one-shot); `""`, none | `TS2068_IO`, after `board.speech_start` | `LOAD_CONFIG` (default, or a non-string replaced), `GREET` (`tpi:greet`) |
 | AUTOMOUNT | str | `""` | a `.tap` mounted at power-on, its path from the card's top folder (`/GAMES/menu.tap`), so `LOAD ""` loads it instead of the menu; `""`, none. Both boards | `TS2068_IO` → `AUTO_MOUNT` | `LOAD_CONFIG` (default, or a non-string replaced), `AUTOMOUNT` (`tpi:automount`) |
+| KEMPSTON | bool | `true` | the v3 card's DE-9 joystick answered at 1Fh (v2 ignores it) | `LOAD_CONFIG` → `board.joystick` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced) |
 
 **The one-shot boot.** `tpi:boot CODE m,s` writes `ROM_SLOT = s` and
 `ROM_SM`'s low bits `= m` ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).
@@ -236,7 +237,7 @@ a UF2 ([DEVELOPER_GUIDE.md §5–6](../../DEVELOPER_GUIDE.md#6-the-dev-override-
   Inside it, `from TS.tspico_io import …` and the other `TS` imports still
   resolve to the frozen modules.
 - **`/dev_extcmd.py`** replaces the frozen `TS.extcmd`: `TS2068_IO` tries
-  `from dev_extcmd import EXT_SA_FUNCT` first (6484;
+  `from dev_extcmd import EXT_SA_FUNCT` first (7248;
   [extcmd.md](extcmd.md)).
 - To go back: delete the file and restart.
 
@@ -323,7 +324,7 @@ says so (below). The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 43 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 52 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)); the manual's
@@ -645,7 +646,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `22891815` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `69660CDB` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |
@@ -751,7 +752,7 @@ power cycle before the driver learned to recover it
 | `/assets/romupdate.tap`, `/assets/dckupdate.tap` | the slot updaters | `build-basic.sh` → the same |
 | `/assets/romupd3.tap`, `/assets/dckupd3.tap` | the v3 card's slot updaters (`basic/assets/romupd3.bas`, `dckupd3.bas`) | `build-basic.sh` → the same | `MOUNT_FILE` for a `.ROM`/`.BIN`/`.DCK` |
 | `/activity.log` | the log | `SAVE_LOG`; `main.py` on a fatal error | `tpi:log`; trimmed to 64 KB at boot |
-| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6406–6407) | `TS2068_IO` | below |
+| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 7167–7168) | `TS2068_IO` | below |
 | `/TMP/temp.tap` | the mounted TAP, copied from the card (or the updater tape) | `MOUNT_FILE` | `LOAD_TS`, `FWD`/`REW` via the table; removed by `FORGET_MOUNT` |
 | `/TMP/temp.bin` | the mounted ROM or DCK image (a DCK rebuilt to a full 64K by `DCK_IMAGE`) | `MOUNT_FILE`, `DCK_IMAGE` | `BLKRCV`; removed by `FORGET_MOUNT` |
 | `/TMP/native.tap` | the one-shot tape for `LOAD "f:…"` | `NATIVE_LOAD_PREP` | `LOAD_TS` |

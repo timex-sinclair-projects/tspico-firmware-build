@@ -189,7 +189,6 @@ def fresh(mod, mq):
     mod.log_entries = []
     mod.log_to_serial = False
     mod.files = []
-    mod.files_upper = []
 
 
 # ---------------------------------------------------------------------------

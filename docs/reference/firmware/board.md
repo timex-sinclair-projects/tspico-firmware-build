@@ -22,29 +22,33 @@ Who calls what:
 | Call | From |
 |---|---|
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
-| `start_memory()` | `TS2068_IO` (6528), once; with a MEM 3 slot, the SD card mounted around it |
-| `map_slots()` | `MEMBOOT` (5154, `reboot=True`), `MEMDOCK` (5288), each through `SD_SLOTS_CALL` for MEM 3 |
-| `make_mq()` | `ACTIVATE_MQ` (754), `ZX48_IO` (7513) |
-| `restart_mq()` | `ZX48_IO` (7514, 7619, 7661) |
-| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1098, 1101, 1119) |
-| `sd_card_ready()` | `ACTIVATE_SD` (1091), before anything else |
-| `sd_release_bus()` | `DEACTIVATE_SD` (707) |
-| `make_led()` | `TS2068_IO` (6496) |
-| `led_brightness()` | `TS2068_IO` (6500), after `LOAD_CONFIG` |
-| `background()` | `TS2068_IO`: `BLINK_LED` at boot (6651, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7316) |
+| `start_memory()` | `TS2068_IO` (7138), once; with a MEM 3 slot, the SD card mounted around it |
+| `map_slots()` | `MEMBOOT` (5736, `reboot=True`), `MEMDOCK` (5874), each through `SD_SLOTS_CALL` for MEM 3 |
+| `make_mq()` | `ACTIVATE_MQ` (775), `ZX48_IO` (8173) |
+| `restart_mq()` | `ZX48_IO` (8174, 8279, 8321) |
+| `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1120, 1123, 1141) |
+| `sd_card_ready()` | `ACTIVATE_SD` (1113), before anything else |
+| `sd_release_bus()` | `DEACTIVATE_SD` (728) |
+| `make_led()` | `TS2068_IO` (7106) |
+| `led_brightness()` | `TS2068_IO` (7110), after `LOAD_CONFIG` |
+| `background()` | `TS2068_IO`: `BLINK_LED` at boot (7264, only if `HAS_CORE1`), `SAVE_LOG` from the idle loop (7935) |
 | `SLOTS` | `BLKRCV` (v3: `SLOT_WRITE`), `MOUNT_FILE` (which updater tape) |
-| `write_slot()` | `SLOT_WRITE` (5065, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
-| `rom_slot_empty()` | `MEMBOOT` (5122, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
+| `write_slot()` | `SLOT_WRITE` (5647, [tspico-commands.md](tspico-commands.md#slot_writepre)) |
+| `rom_slot_empty()` | `MEMBOOT` (5704, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `HAS_MODEM` | `TS2068_IO` (6531, at boot; 7245, the idle loop), `MODEM` (5309, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
-| `modem_start()` | `TS2068_IO` (6389), at boot with `config.ini`'s modem keys; `MODEM` (5296), a new mode |
-| `modem_service()` | `TS2068_IO`'s idle loop (7093), every pass with nothing arrived |
-| `HAS_SPEECH` | `TS2068_IO` (6391, at boot), `SAY` (5315, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
-| `speech_start()` | `TS2068_IO` (6393), at boot with `config.ini`'s speech keys |
-| `say()` | `SAY` (5320, `tpi:say`) |
-| `modem_status()`, `MODEM_MODES` | `MODEM` (5287, 5290) |
-| `LABEL` | `GETINFO` (4619, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
+| `BLOCK_BUF` | `tspico.py` at import (1212), as `tspico_io.BLOCK_BUF`: the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)) |
+| `HAS_MODEM` | `TS2068_IO` (7141, at boot; 7862, the idle loop), `MODEM` (5898, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
+| `modem_start()` | `TS2068_IO` (7142), at boot with `config.ini`'s modem keys; `MODEM` (5913), a new mode |
+| `modem_service()` | `TS2068_IO`'s idle loop (7863), every pass with nothing arrived |
+| `HAS_SPEECH` | `TS2068_IO` (7146, at boot), `SAY` (5937, `GREET` 5968, [tspico-commands.md](tspico-commands.md#saypre-cmd)) |
+| `speech_start()` | `TS2068_IO` (7148), at boot with `config.ini`'s speech keys |
+| `say()` | `SAY` (5942, `tpi:say`), `GREET` (5981, `tpi:greet`), `TS2068_IO` (7157, the greeting) |
+| `modem_status()`, `MODEM_MODES` | `MODEM` (5903, 5907) |
+| `LABEL` | `GETINFO` (5132, [tspico-commands.md](tspico-commands.md#getinfopre-cmd)), the Board line |
+| `HAS_JOYSTICK` | `TS2068_IO` (7144, at boot; 7864, the idle loop) |
+| `joystick()` | `TS2068_IO` (7145), at boot with `config.ini`'s `KEMPSTON` |
+| `joystick_service()` | `TS2068_IO`'s idle loop (7865), every pass with nothing arrived |
 
 `tspico_io.py` can't import the board layer: `board_v2` imports it for the
 PIO programs. So it detects the v3 card itself (step 4.2;
@@ -93,6 +97,14 @@ Both `True`. `SLOTS`: the Z80 writes the slots, so `tpi:blkrcv` streams the
 image and `MOUNT_FILE` serves `romupdate.tap`/`dckupdate.tap`. `HAS_CORE1`:
 core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 
+### `BLOCK_BUF`
+
+`None`: v2 has no shared block buffer, so `tspico_io.BLOCK` makes a new
+`bytearray` for every LOAD and SAVE data block, as it always did. The v2 heap
+(about 190K free) still had a 66K block after round after round of big
+listings and 64K DOCK mounts (#384, `memcheck --dck`, 2026-11-06), so 48K
+held for good would cost it more than it saves. See board_v3's `BLOCK_BUF`.
+
 ### `SD_SLOTS`
 
 `False`: the slots are the flash and SRAM chips, and `tpi:boot` and
@@ -103,6 +115,10 @@ core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 `False`: no TS2050 modem. 73h/77h are not answered, `tpi:modem` says "No
 modem on this board", and nothing calls the modem functions.
 
+### `HAS_JOYSTICK`
+
+`False`: no joystick socket. 1Fh is not answered, and `config.ini`'s
+`KEMPSTON` is ignored.
 ### `HAS_SPEECH`
 
 `False`: no audio output. `tpi:say` says "No speech on this board", and
@@ -279,6 +295,10 @@ literal `V2.2` on both boards, so the v3 card said it was a v2.2 board.
 
 `True`: the TS2050 modem (`modem_start` below; [docs/v3-modem-proposal.md](../../v3-modem-proposal.md)).
 
+### `HAS_JOYSTICK`
+
+`True`: the DE-9 socket, answered at 1Fh as a Kempston interface
+(`joystick` below).
 ### `HAS_SPEECH`
 
 `True`: speech, the SP0256-AL2 on core 1 out of the audio jack (`speech_start`
@@ -322,23 +342,47 @@ The SD card's own pins: CS 37, SCK 38, MOSI 39, MISO 32, SPI0
 ([board-v3.md](board-v3.md#pinscsv)). GPIO 2–4 are MD2–MD4 on this card,
 the Z80 data bus, and are never touched by SD.
 
-### `_IOX_ADDR`, `_IOX_IN1`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_WIFI_EN`, `_X_WIFI_DL`, `_X_NLED`, `_X_SD_CD`
+### `_IOX_ADDR`, `_IOX_IN1`, `_IOX_OUT0`, `_IOX_OUT0_SAFE`, `_X_WIFI_EN`, `_X_WIFI_DL`, `_X_NLED`, `_X_SD_PWR`, `_X_SD_CD`
 
 The XL9555 at I2C address 20h. Register 1 is input port 1 (the joystick,
 nBUSAK_L and the SD card-detect switch); register 2 is output port 0. Its
-safe value is E0h (no bus request, no NMI, OLED in reset, ESP32 off, LED
-off), as `board_init.c` sets it at start-up. Bit 3 (08h) is the ESP32-C3's
+safe value is A0h (no bus request, no NMI, OLED in reset, ESP32 off, LED
+off, SD socket off), as `board_init.c` sets it at start-up. Bit 3 (08h) is the ESP32-C3's
 EN, high to run it; bit 4 (10h), high, pulls its IO9 low through the
 74LVC06, so it boots into its ROM's serial downloader. Bit 5 of port 0 (20h) is the
-LED, active low: lit, port 0 is C0h. Bit 7 of port 1 (80h) is the detect
+LED, active low: lit, port 0 is 80h. Bit 6 (40h) is `SD_PWR_EN`: on proto2,
+high turns on U32, the load switch (SY6280, 0.45 A limit) that feeds the
+socket's VDD; on proto1 it is not connected and the socket is always
+powered (#262, `sd_power`). Bit 7 of port 1 (80h) is the detect
 switch: the TF-01A's switch closes to GND with a card in, and R38 pulls it
 up, so low means a card. Read on the card with the socket empty: port 1 FFh.
+
+### `_IOX_INT`
+
+35, nIOX_INT: the XL9555 pulls it low when any input of either port
+changes, and lets go when the port that changed is read; R8 (10 k) pulls it
+up. Only `joystick` uses it.
 
 ### `SD_SETTLE_MS`
 
 250. How long a card the switch has only just seen is left before its first
 SPI clock (`sd_card_ready`), so that it is fully seated and powered before
 its lines are driven. A judgment, not a measured figure.
+
+### `SD_ON_MS`, `SD_OFF_MS`
+
+The socket's power switch (`sd_power`, #262). `SD_ON_MS`, 2: after it turns
+on, before `sd_power` returns and the first clock can come. U32's turn-on is
+about 120 µs; the SD spec asks for 1 ms after VDD is up. `SD_OFF_MS`, 10:
+after it turns off, before it may turn on again. U32 discharges VDD through
+about 150 Ω into C50/C51 (10.1 µF), a time constant of about 1.5 ms, so
+10 ms takes it to nothing and the card powers up from cold. Both from the
+datasheet and the schematic (#262), not measured.
+
+### `_sd_off_at`
+
+`ticks_ms` when the socket was last switched off, so `sd_power(True)` waits
+out what is left of `SD_OFF_MS`. `None` until the first switch-off.
 
 ### `_i2c`, `_cd_since`
 
@@ -354,9 +398,10 @@ SDA 24.
 ### `_out0`, `_out0_buf`
 
 Port 0 is shared: the LED (bit 5), the ESP32's EN and IO9 (bits 3 and 4),
-and on proto2 the SD socket's power (bit 6, #262, not yet used). `_out0` is
-the value last written, starting at E0h, what `board_init.c` writes at
-power-up. `_out0_buf` is the one-byte buffer every write sends, so the byte
+and on proto2 the SD socket's power (bit 6, `sd_power`). `_out0` is
+the value last written, starting at A0h, what `board_init.c` writes at
+power-up. A soft reset starts it there again while the expander keeps what
+it had; `_sd_power_off_at_import` brings the socket's bit into line. `_out0_buf` is the one-byte buffer every write sends, so the byte
 on the wire is always a whole value of `_out0`. Before this (until the
 modem's step 1), the LED wrote C0h or E0h on every edge, which would have
 switched the ESP32 off 100 times a second.
@@ -476,6 +521,54 @@ IO9 held low (`True`) or released. The ESP32 reads IO9 as it leaves reset,
 so this takes effect at the next `modem_power(True)`: low boots its ROM's
 serial downloader, for installing Zimodem, instead of the firmware.
 
+### `_joy_pin`, `_joy_buf`
+
+`_joy_pin`: `Pin(_IOX_INT)` with its IRQ set while the joystick is
+answered, `None` otherwise. `_joy_buf`: the one-byte buffer every port 1
+read goes into, so the handler allocates nothing.
+
+### `kempston_byte(p1)`
+
+Port 1 as the Kempston interface's byte. The DE-9's six switches are port
+1's bits 0–5 (up, down, left, right, fire 1, fire 2; tspico-hardware
+`gen_memory.py`), pulled up to 3.3 V and low while pressed. The Kempston
+byte is 000FUDLR with 1 = pressed: right bit 0, left 1, down 2, up 3, fire
+4. Fire 2 is a second fire button, also bit 4: bit 5 is left 0, because
+games that look at the whole byte take bits 5–7 set for no interface.
+Nothing pressed: 0.
+
+### `_joy_read(_pin=None)`
+
+`_joy_pin`'s IRQ handler (and the read `joystick` and `joystick_service`
+make): port 1 into `_joy_buf` over I2C0, then
+`tsbus.kempston(kempston_byte(...))`. The IRQ is MicroPython's soft kind,
+so the handler is a scheduled callback that runs between bytecodes on core
+0, never inside another I2C transfer (the reasoning at `_port0`). If the
+expander doesn't answer, nothing changes and nIOX_INT stays low, which
+`joystick_service` sees. The 2068 never waits for this: core 1 answers 1Fh
+from the byte it was last given.
+
+### `joystick(on)`
+
+`True`: `_joy_pin` made, its IRQ on the falling edge, and the switches read
+at once, since a change before now left nIOX_INT low with no edge to come.
+`False`: the IRQ off and `tsbus.kempston(None)`, so 1Fh goes unanswered.
+`TS2068_IO` calls it at boot with `config.ini`'s `KEMPSTON`.
+
+Tested on the second v3 board (2026-10-12; the 2068 not connected): each
+direction held alone gave its bit (up 8, down 4, left 2, right 1, fire 16),
+and in a 30 s watch every movement reached `tsbus` through the IRQ within
+one 10 ms sample. The first proto1's socket never changed port 1: its DE-9
+footprint was found to need a redesign (the second board has the socket
+mounted on the back). `IN 31` from the 2068 is not yet tested.
+
+### `joystick_service()`
+
+From `TS2068_IO`'s idle loop: if nIOX_INT is still low, `_joy_read`
+again. That catches a read the IRQ handler couldn't finish. A change of
+the SD card switch or nBUSAK_L (also port 1) that nothing else has read
+does the same: harmless, the same byte is set again. One GPIO read per
+pass otherwise.
 ### `speech_start(volume, rate, ports=True)`
 
 Speech on, from `TS2068_IO` at boot with `config.ini`'s `SPEECH_VOLUME`,
@@ -526,15 +619,29 @@ apart from `_served`, not a `None` boot pair there, so that a `tpi:dock`
 `_keys` cuts v2's two words into those pairs: boot from `rom_sm` bits 0–1
 and `bank_sm` bits 0–3, dock from bits 2–3 and 4–7.
 
-### `_buf`, `_zeros`
+### `BLOCK_SIZE`, `BLOCK_BUF`, `_buf`, `_zeros`
 
-`_buf` is the one 32K `bytearray` every slot passes through: a ROM, each
-half of the dock, a RAM dock being saved. It is allocated at import, while
-the heap is clean. Once the firmware runs, the heap (about 190K) has no 64K
-block free, and on the card `tpi:dock` failed with `MemoryError` building a
-64K dock image (2026-10-10). Step 1's first version had already failed the
-same way at boot. Nothing in the slot code allocates a big buffer after
-import. `_zeros` is 1K of zeros, loaded 32 times to clear an empty half.
+`BLOCK_BUF` is the card's one block buffer, a `bytearray(BLOCK_SIZE)` made
+at import, while the heap is clean; `BLOCK_SIZE` is 49152 + 8. `_buf` is
+`memoryview(BLOCK_BUF)[:SLOT_SIZE]`, its first 32K: every slot passes
+through it (a ROM, each half of the dock, a RAM dock being saved).
+`tspico.py` hands `BLOCK_BUF` to `tspico_io` (1203), where `BLOCK` lends its
+front to the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)).
+
+Why at import: once the firmware runs, the heap (172K, about 100K free) has
+no 64K block, and a 32K one isn't certain either. On the card `tpi:dock`
+failed with `MemoryError` building a 64K dock image (2026-10-10), and step
+1's first version had already failed the same way at boot. After a
+300-file folder had been listed, a 35000-byte LOAD found no block of its
+size and streamed from the file instead, running dry 94 times (Report R),
+and the SAVE of the same block gave Report 6 (2026-11-06, #384). Why 48K +
+8: any block of the 2068's 48K of RAM fits, SAVE's (content + flag, two
+session bytes and parity, `blen + 4`) and LOAD's (content + parity). Why one
+buffer: its users never overlap. Each takes it and is done with it inside
+one command, and the slot code and the transfers are never in the same one.
+It costs 16K more than the 32K `_buf` it replaced. A bigger block still
+allocates its own, as before. `_zeros` is 1K of zeros, loaded 32 times to
+clear an empty half.
 
 ### `slot_path(mem, slot)`
 
@@ -735,13 +842,19 @@ I2C read of input port 1, about 100 µs.
 
 `ACTIVATE_SD` asks this before it touches an SD line.
 
-- `card_present()` is `None`: `True`, and the mount finds out.
+- `card_present()` is `None`: the socket is powered (`sd_power(True)`) and
+  `True`, and the mount finds out.
 - `False`: `_cd_since` cleared and `False`, so `ACTIVATE_SD` fails at once
-  and the socket is never clocked.
+  and the socket is never clocked. If the socket was still powered (the
+  card was pulled while mounted, or the last mount never got to
+  `sd_release_bus`), `sd_power(False)` releases its lines and switches it
+  off first. Otherwise nothing but the switch read: lines are only driven
+  while the socket is on.
 - `True`: `_cd_since` set if this is the first time the card is seen, then
-  `sleep_ms` for whatever is left of `SD_SETTLE_MS`, then `True`. A card in
-  for longer goes straight through. One taken out and put back settles
-  again.
+  `sleep_ms` for whatever is left of `SD_SETTLE_MS`, then `sd_power(True)`
+  (which waits `SD_ON_MS` if it had to switch the socket on), then `True`.
+  A card in for longer goes straight through. One taken out and put back
+  settles again.
 
 Why (2026-10-10): two cards died on the card the moment they went into its
 socket, each resetting the RP2350B (and so the 2068). The firmware used to
@@ -753,9 +866,49 @@ afterwards, and the dead cards read 190 Ω across their supply (a good one
 about 6 kΩ). With this function and `sd_release_bus` in place, three hot
 inserts were clean: USB only with the firmware stopped and with it running,
 and in the 2068. No reset, and the cards stayed cool
-(tspico-hardware [#21](https://github.com/factus10/tspico-hardware/issues/21),
-which keeps the design question open: switched power for the socket). The
-switch is also a faster and surer "no card" than a mount's timeout.
+(tspico-hardware [#21](https://github.com/factus10/tspico-hardware/issues/21)).
+proto2 adds what #21 asked for, switched power for the socket (`sd_power`).
+The switch is also a faster and surer "no card" than a mount's timeout.
+
+### `sd_power(on)`
+
+The socket's power switch, bit 6 of port 0 (`_X_SD_PWR`) through `_port0`.
+
+- On: nothing if it is already on (bit 6 set in `_out0`). Otherwise it
+  sleeps for whatever is left of `SD_OFF_MS` since `_sd_off_at`, sets the
+  bit, and sleeps `SD_ON_MS` so VDD is up before the caller's first clock.
+- Off: `_sd_lines_free()` first, always; then, if it was on, the bit
+  cleared and `_sd_off_at` set.
+
+The order is the point: a line driven into an unpowered card can power it
+through its I/O pins, which is what killed the two cards of #21. Releasing
+the lines before the power goes, and switching it on only after the lines
+have been inputs since the last release, means no driven line ever meets a
+card without VDD. On proto2 the card's pull-ups R34-R37 are on the switched
+rail too, so with the socket off nothing at all holds the card's pins up.
+
+Why (#262, 2026-11-08): proto2 added U32, enabled by `SD_PWR_EN` with R43
+pulling it off. Until this, the firmware left bit 6 an input (`board_init.c`
+set the direction to C0h), so on a proto2 board the socket never had power
+and every mount failed with `OSError(19, 'no SD card')` while the switch saw
+the card. Checked on a proto2 board at the REPL: with bit 6 an input, no
+mount; with it an output and high, the card mounted and listed. A current
+limit at 0.45 A also means a card that latches up no longer pulls +3V3 down
+and resets the RP2350B. Not done: power-cycling a card that won't mount
+(off, `SD_OFF_MS`, on, retry once), which the issue suggests; `ACTIVATE_SD`
+retries without it.
+
+### `_sd_power_off_at_import()`
+
+Runs once, when the module is imported. A soft reset (Ctrl-D, or `main.py`
+starting again) restarts `_out0` at A0h, but the expander keeps its output
+register: if a card was mounted, the socket is still on, and the LED's next
+write would switch it off from the shadow without releasing the SPI pins.
+So it reads output port 0, and if bit 6 is set, frees the four lines, then
+writes back the same byte with only bit 6 cleared, and sets `_sd_off_at`.
+After a power-on or a UF2 flash `board_init.c` has already left it off, and
+the read is all it does. No expander answering: nothing. This makes `_i2c`
+at import rather than on first use.
 
 ### `sd_take_bus()`
 
@@ -770,14 +923,23 @@ first instant; `SDCard` drives it from there. And
 
 ### `sd_release_bus()`
 
-After every unmount: CS, SCK, MOSI and MISO become plain inputs with no
+After every unmount: `sd_power(False)`, so the lines are released, then the
+socket is switched off. Every command powers the card for its own mount
+(`sd_card_ready`) and leaves it off. `tools/pico-serial.py --sd` mounts the
+same way, `sd_card_ready()` first.
+
+### `_sd_lines_free()`
+
+CS, SCK, MOSI and MISO become plain inputs with no
 pulls (`Pin(p, IN, pull=None)`), the state `board_init.c` leaves them in at
 power-on. Nothing drives the socket between commands. R34 holds CS high, so
 a card that is in stays deselected, and R35 holds MISO; SCK and MOSI float
-behind their 33 Ω resistors. No pull-downs: RP2350 erratum E9 can latch a
+behind their 33 Ω resistors. On proto2 R34 and R35 are on the switched rail,
+so with the socket off they hold nothing up either. No pull-downs: RP2350 erratum E9 can latch a
 pad with input and pull-down both on. Making the pins inputs takes them
 from SPI0, which until 2026-10-10 went on driving SCK and MOSI after every
-unmount, while CS was driven high.
+unmount, while CS was driven high. Called by `sd_power(False)` and
+`_sd_power_off_at_import`.
 
 ### `ExpanderLED`
 

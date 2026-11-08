@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2659–3618.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2884–3992.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -8,7 +8,7 @@ The ROM gives the four stock disk keywords (CAT, MOVE, ERASE, FORMAT) a
 meaning, gives COPY a file form beside its printer one and LIST one beside
 its program one, adds `RESTORE #n` (which reaches the Pico as an ordinary
 TAB, [channels.md](channels.md#channels_seekself-ch-n)), adds `f:` names to SAVE, LOAD, VERIFY and MERGE, and adds `f:` and
-`d:` channels to OPEN # and CLOSE #. None of that is new wire protocol: the
+`d:` and `x:` channels (and the v3 card's `v:`) to OPEN # and CLOSE #. None of that is new wire protocol: the
 ROM's module at EXROM 3000h turns each statement into an ordinary `'B'`
 command whose text starts `tpi:`, and the handlers in this part of
 `tspico.py` answer it. The handlers are thin: the rules live in three pure
@@ -25,14 +25,14 @@ module's patches.
 
 | Lines | What | Chapter |
 |---|---|---|
-| 2659–2738 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
-| 2747–2850 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 2853–3234 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
-| 3244–3247 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3250–3359 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3373–3400 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3403–3435 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3438–3618 | `DIR_NAMES`, `CH_OPEN`, `CH_SPEECH_PATH`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2884–2980 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
+| 2989–3093 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
+| 3096–3467 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
+| 3477–3480 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 3483–3592 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 3606–3633 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 3636–3668 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 3671–3992 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -58,9 +58,11 @@ bytes 3–4 and 5–6, read with `PARAMS(pre)` ([tspico-files.md](tspico-files.m
 | **OPEN #n,"f:path"[,mode[,len]]** | `tpi:chopen mode path` | stream n | record length (0 = stream) | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
 | **OPEN #n,"d:spec"** | `tpi:chopen r d:spec` | stream n | 0 | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
 | **OPEN #n,"v:"[,mode]** (the v3 card's speech) | `tpi:chopen mode v:` | stream n | 0 | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
+| **OPEN #n,"x:"[,mode]** (commands, #404) | `tpi:chopen mode x:` | stream n | 0 | [`CH_OPEN`](#ch_openpre-cmd) | a bare status |
 | **PRINT #n;…** (the driver's flush) | `tpi:chwr <hex>` | stream n | 0 | [`CH_WRITE`](#ch_writepre-cmd) | a bare status |
 | **INPUT #n / INKEY$ #n** (the driver's fetch) | `tpi:chrd` | stream n | bytes wanted (255) | [`CH_READ`](#ch_readpre-cmd) | status 1, count, bytes, XOR; or status 7 |
 | **CLOSE #n** | `tpi:chclose` | stream n | 0 | [`CH_CLOSE`](#ch_closepre-cmd) | a bare status |
+| **CAT #n**, **CAT #n;x$** (#404) | `tpi:chcat` or `tpi:chcat x` | stream n | 1 when a string came, else 0 | [`CH_CAT`](#ch_catpre-cmd) | a bare status; the listing is written into the file |
 
 **How the ROM sends them.** The four keywords, COPY's file form and `tpi:cd` go through the
 stock `SAVE "tpi:…"` machinery: `FDD_MAIN` (`FDD_COPY` for COPY) builds the text in the
@@ -109,9 +111,8 @@ the tail was still running and the pre-header behind it was lost (Report T;
 
 **State between calls.** `TSP.cur_path` is the directory every path resolves
 from; `TSP.f_name`, `TSP.offset_tbl` and `TSP.tap_idx` are the mounted TAP,
-which ERASE, `tpi:ren` and an `f:` SAVE refuse to touch; `files` and
-`alldirs` are the current folder's index and the directory list that
-`REFRESH_IF`, `DISK_MAKE_DIR` and `DISK_ERASE_ONE` keep current;
+which ERASE, `tpi:ren` and an `f:` SAVE refuse to touch; `files` is the
+current folder's index that `REFRESH_IF` keeps current;
 `TSP.native` is the arm `tpi:fopen` leaves for the SAVE or LOAD transaction
 of the same session, and `NATIVE_TAP` the one-shot tape in flash it points
 at; `CHANNELS` holds each open stream's path and position
@@ -188,6 +189,10 @@ Builds the listing text for `CATALOG`. The SD card must be active. Returns
 5. The index column: only when the listed directory is `TSP.cur_path`
    (case-insensitive) is `index_of(name)` the position of the name in
    `files`, the list `DIR_FILES` built; elsewhere every index is blank.
+   Both lists come from `os.ilistdir()` of the same folder, so a name
+   matches exactly and in the same order: `index_of` searches on from its
+   last match, once round, so a whole folder is one pass. (It made an
+   upper-case copy of `files` and searched it twice per row, #384.)
    Line 2 is `"<pat>: "` (if any) + `catalog.counts(nf, nd)`, the numbers of files and folders in `entries`. The text
    is `DIR_HEADER(line2, path)` ([tspico-files.md](tspico-files.md): four
    32-character rows, `Path:` first) followed by
@@ -211,7 +216,7 @@ the parent unindexed.
 
 ## COPY, ERASE, FORMAT, LIST, the label and MOVE
 
-The comment at lines 2741–2745 states the rules all four share: paths resolve
+The comment at lines 2983–2987 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -272,8 +277,8 @@ The copy, with the SD card active. Returns `(message, status)` or
 5. One name: `REFRESH_IF` runs and the answer is `"Copied <name>"` (1),
    `"Copy failed: <name>"` (Q) or `"<public target>: <why>"` (F). Pattern:
    each row is `"%-32s"` of the name shortened to 18, a space and the word,
-   cut to 32; after the loop `REFRESH_IF(*touched)` rebuilds `files`, `lista`
-   and `dirinfo.tap` if the current folder received a copy.
+   cut to 32; after the loop `REFRESH_IF(*touched)` rebuilds `files` and
+   `lista` if the current folder received a copy.
 
 Reads `TSP.cur_path`; writes files on the card and, through `REFRESH_IF`,
 the folder caches. Beware: `COPY_FILE` returns `False` on any exception,
@@ -305,7 +310,7 @@ happens between two SD sessions (spec §3, "N skips, like any key but
 Y"). Pinned by `disk_cmds_hosttest.py` (`test_erase`): a file goes
 with no prompt and a `SEND_MSG` answer; missing F; a directory without `/`
 Q and kept; a non-empty directory Q; an empty directory (bar `dirinfo.tap`)
-removed and dropped from `alldirs`; the current directory's parent Q; the
+removed; the current directory's parent Q; the
 mounted file Q; a pattern asks one prompt per match, sorted, erases only
 those answered Y, and sends nothing after the exchange; no match F with no
 prompt. `test_prompt_each` pins `PROMPT_EACH`'s byte sequence.
@@ -318,16 +323,16 @@ Returns `(message, status)`.
 - Resolves `arg` (without its trailing `/`); `None`: `"Not found"`, F.
 - **Directory.** Not a directory: F. `catalog.within(cur, real)` — the
   current directory or one of its parents: `"Can't erase the current
-  directory"`, Q. `real/dirinfo.tap` is removed first (`DIR_FILES`' own
-  file does not make a directory non-empty), then `os.rmdir`; an `OSError`
-  is `"Directory not empty"`, Q. `alldirs` loses every entry at or below
-  `real[3:]` (the list holds paths without `/sd`), `REFRESH_IF(parent)`,
+  directory"`, Q. `real/dirinfo.tap` is removed first (the folder's listing
+  tape, made by `LOAD "tpi:dirinfo.tap"` since #384 and by older firmware on
+  every listing, does not make a directory non-empty), then `os.rmdir`; an `OSError`
+  is `"Directory not empty"`, Q. `REFRESH_IF(parent)`,
   `"Erased <public>"`, 1.
 - **File.** A directory named without `/`: `'A directory: ERASE "x/"'`, Q.
   Missing: F. The mounted file (`TSP.f_name`, case-insensitive): `"File is
   mounted"`, Q. `os.remove`, `REFRESH_IF(parent)`, `"Erased <public>"`, 1.
 
-Writes the card, `alldirs` and the folder caches. Reads `TSP.cur_path`,
+Writes the card and the folder caches. Reads `TSP.cur_path`,
 `TSP.f_name`.
 
 ### `DISK_ERASE_MATCHES(where, pat)`
@@ -377,7 +382,7 @@ which resolves to the current directory: `"Not allowed"` at the root,
 never touched. Pinned by `disk_cmds_hosttest.py` (`test_format`): a name
 without `.tap` makes an empty `new.tap`, mounted with append on; a
 subdirectory path; an existing file F, not truncated, not mounted; not a
-`.tap` Q; a missing directory F; `dir/` made and added to `alldirs`, and F
+`.tap` Q; a missing directory F; `dir/` made, and F
 the second time; `/` F. `commands_hosttest.py` (`test_format_tap`) pins
 what `tpi:newtap` was tested for: mounted with append on; an existing name
 in another case F, the file untouched, nothing mounted; `a.b.tap` not
@@ -396,9 +401,7 @@ file with `open(real, "wb")` and runs `REFRESH_IF(parent)`.
 
 `FORMAT "dir/"`, SD active. The root itself or a path above it is `"Not
 allowed: <name>/"`, F; an existing name `"Already exists"`, F; a missing
-parent `"Not found"`, F. `os.mkdir`, then `real[3:]` is appended to
-`alldirs` and the list sorted (inside a bare `try`, so a failure there is
-ignored), `REFRESH_IF(parent)`, `"Made <public>/"`, 1.
+parent `"Not found"`, F. `os.mkdir`, `REFRESH_IF(parent)`, `"Made <public>/"`, 1.
 
 ### `DISK_LIST(pre, cmd)`
 
@@ -487,15 +490,14 @@ file, or a directory holding it (`catalog.within(TSP.f_name, src)`):
 `"File is mounted"`, Q. The destination must resolve (F); an existing
 directory means "into it", `dst/<basename of src>`. An existing target
 `"Already exists"`, F; a missing parent `"Not found: b"`, F; a directory
-into itself `"Can't move a directory into itself"`, Q. `os.rename`; for a
-directory `alldirs = GET_DIRS()` re-walks the card; `REFRESH_IF` with both
+into itself `"Can't move a directory into itself"`, Q. `os.rename`; `REFRESH_IF` with both
 parents; `"Renamed to <public dst>"`, 1. Pinned by `test_cd_and_ren`:
 rename, move into a directory, onto an existing name F, a directory into
 itself Q, the mounted file Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3237 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 3470 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -616,21 +618,23 @@ tape. Returns `(length of the tape, 1)` or `(message, status)`.
 Beware: a +3DOS file whose header length exceeds the file describes as
 `None`; loaded as CODE it is taken whole, header included.
 
-## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose
+## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose, tpi:chcat
 
-The comment at line 3362 lists the four commands. The ROM's channel driver
+The comment at line 3595 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
-<hex>` when 64 bytes are up, at every CR on a record file, before a fetch
-and at CLOSE #; `CH_IN` hands out buffered bytes and `CH_FETCH` refills
+<hex>` when 64 bytes are up, at every CR on a record file and on `v:` and
+`x:`, before a fetch and at CLOSE #; `CH_IN` hands out buffered bytes and `CH_FETCH` refills
 with `tpi:chrd` (PMR2 = 255). The Pico keeps each stream's path, mode and
 position in `CHANNELS` ([tspico-state.md](tspico-state.md)), an instance
 of `channels.Channels` over `SD_FS`, and does the text translation there
 ([channels.md](channels.md)). `CH_STATUS` maps a `ChannelError`'s letter
 to a status: `F` 3, `Q` 4, `O` 10 (J); `CH_CALL` applies it and makes any
 other letter Q. The card is unmounted between commands, so every operation
-opens the file, seeks, reads or writes, and closes it.
+on a file opens it, seeks, reads or writes, and closes it. A stream with no
+file (`d:`, `v:`, `x:`; `CHANNELS.in_memory`) is written and read with no
+card at all.
 
 ### `SD_FS`
 
@@ -677,8 +681,8 @@ the stream never touches the card again.
 ### `CH_OPEN(pre, cmd)`
 
 `tpi:chopen <mode> <path>`: opens stream PMR1 on an `f:` file, a `d:`
-listing or the v3 card's speech (`v:`). PMR2 is the record length, 0 for a
-stream.
+listing, the command channel (`x:`) or the v3 card's speech (`v:`). PMR2 is
+the record length, 0 for a stream.
 
 1. `stream = PMR1 & 0xFF`; the text splits at its first space into the mode
    and the path (no space: mode `r`, the whole text as the path).
@@ -690,12 +694,17 @@ stream.
    board.say)` and `CH_REPLY(1)`. The mode is not checked: OPEN # sends
    `r` when none is given, and the channel is only ever written. No card is
    needed: `SD_NEEDED` lets this command through without one
-   (`CH_SPEECH_PATH`).
-3. **`d:`** (the first two characters, any case): the mode must be `r` and
+   (`CH_NOCARD_PATH`).
+3. **`x:`** (any case; #404), also before the card: a record length, or
+   anything after the `x:`, is `CH_REPLY(4)` (Q). Otherwise
+   `CHANNELS.open_command(stream, X_RUN)` and `CH_REPLY(1)`. The mode is not
+   checked. No card is needed (`CH_NOCARD_PATH`); `dir` and `info` mount it
+   themselves when they run.
+4. **`d:`** (the first two characters, any case): the mode must be `r` and
    the record length 0, else `ChannelError("d: is read-only, no record
    length", "Q")`; `CHANNELS.open_list(stream, DIR_NAMES(spec))` inside
    `CH_CALL`. An error is logged at level 1. `CH_REPLY(st)`.
-4. **`f:`** (the ROM strips the prefix; the Pico sees the bare path).
+5. **`f:`** (the ROM strips the prefix; the Pico sees the bare path).
    `catalog.resolve(TSP.cur_path, path)`; an empty path, a path above the
    root or the root itself is `CH_REPLY(3)` (F) with no SD access. Then,
    inside `CH_CALL`: a directory is `("A directory", "Q")`; a missing
@@ -704,8 +713,9 @@ stream.
    length (Q), requires the file for `r` (F), truncates for `w`, creates
    for `a` and `u`. Errors are logged. `CH_REPLY(st)`.
 
-On the ROM, `CH_OPEN_HOOK` takes `f:`, `d:` and `v:` specs (a `k`/`s`/`p`
-spec goes to the stock code untouched; `d:` and `v:` reach the Pico whole), reads the optional `,"mode"[,len]`
+On the ROM, `CH_OPEN_HOOK` takes `f:`, `d:`, `v:` and `x:` specs (a
+`k`/`s`/`p` spec goes to the stock code untouched; `d:`, `v:` and `x:` reach
+the Pico whole), reads the optional `,"mode"[,len]`
 (`OPEN_SYNTAX` makes the syntax pass store the number's hidden form, which
 stock skipped), checks that the record and the command fit (Report 4),
 sends the command with the stream in PMR1 and the length in PMR2 (a length
@@ -723,15 +733,108 @@ directories first with `/`, then files, then end of file; `d:*.bak` and
 directory F; mode `w` or a record length with `d:` Q. The audit test pins
 `chopen u` with a record length. `test_speech_channel` pins `v:`: any mode,
 either case, no card used; `v:x` and a record length Q; no speech on the
-board F.
+board F. `dirinfo_hosttest.py` pins `x:`: `x:y` and a record length Q;
+`X:` opens with no card; `SD_NEEDED` lets `chwr` and `chrd` on it through
+with no card.
 
-### `CH_SPEECH_PATH(cmd)`
+### `SCREEN_LINES(text)`
 
-Is this `tpi:chopen` text for the speech channel? The path (the text after
-the mode, or all of it) starts with `v:` in either case. `SD_NEEDED` asks it
-so `OPEN #n,"v:"` works with no card in; `CH_OPEN` then answers `v:` and
-`v:anything` without the card too (the second with Q). Pure: it reads only
-`cmd`. Since #375.
+A generator: the lines a listing's text makes on the 2068's 32-column
+screen, with no colors, for `CH_CAT`. The text is what `SEND_MSG2` would
+get before any coloring: 32-character rows that wrap, CRs, and control
+codes. INK to OVER (16–21) are dropped with their one parameter, AT and TAB
+(22, 23) with their two, any other code below 32 alone. A row that reaches
+32 characters ends a line; a CR straight after it ends nothing (`full`), as
+on the screen, so a listing of full rows each with a CR doesn't get a blank
+line between rows. Each line comes with its trailing spaces cut; what is
+left at the end is the last line. It reads the text with `len()` and `[i]`
+only, so a `DirText` (`lista`) makes one row at a time and the listing is
+never joined (rule 6 in [the memory appendix](../appendix/memory.md)).
+Pinned by `dirinfo_hosttest.py`: wrapping, the CR after a full row, the
+codes and their parameters dropped.
+
+### `CH_CAT(pre, cmd)`
+
+`tpi:chcat [x]`: `CAT #n` and `CAT #n;"x"` (#404). The listing `CAT` or
+`CAT "x"` would show is written as plain lines into the file open on
+stream PMR1, at its position, instead of to the screen. The ROM can't do it
+itself: printing a reply into an `f:` stream mid-transaction would need the
+stream's flush, whose SYNC ends the reply ([rom/exrom-fdd.md](../rom/exrom-fdd.md#cat_hash-3932h)).
+It has already checked the stream (Report O) and sent what was printed to
+it first.
+
+`stream = PMR1 & 0xFF`; PMR2 nonzero means a string came, the argument
+being the text after the word (`getArgs`, stripped). Inside `CH_CALL`:
+
+1. The stream must be open (`ChannelError` `O`, which `CH_STATUS` makes
+   J: the ROM checked it already, so only a Pico out of step with the ROM
+   gets here) and a file opened to be written: `d:`, `v:`, `x:`
+   (`in_memory`) or mode `r` is Q.
+2. The text: no string, `LISTING_FRESHEN()` then `lista`, the folder
+   listing `CAT` shows; `""`, `TAPDIR_TEXT(0, 0)`, every block of the
+   mounted TAP or the nothing-mounted notice ([tspico-commands.md](tspico-commands.md#tapdir_textpar1-par2));
+   anything else, `CATALOG_TEXT(x)`, whose refusal (not found, a bad
+   pattern) is its message with `F`.
+3. `CHANNELS.write_text(stream, SCREEN_LINES(text))`
+   ([channels.md](channels.md#channelswrite_textself-stream-lines)): a
+   text file gets LF line ends, a binary one CRs, a record file a record a
+   line (Q for one too long).
+
+A failure is logged at 1 (`CAT #n: message`), and the answer is
+`CH_REPLY(st)`, a bare status: `TPI:CHCAT` is in `SD_QUIET`, so no card is
+J without a message. The card is needed for every form (`CH_CALL`), even
+`CAT #n;""`, because the file is on it. Nothing in the listing is
+colored or keyword-expanded, and there is no `Scroll?` pager.
+
+Pinned by `dirinfo_hosttest.py` (the bare form is `lista`'s lines after
+what was printed, `"*.tap"` appends `CATALOG_TEXT`'s rows, `"nothere"` is F
+and writes nothing, `""` the notice; a closed stream J; mode `r`, `x:` and
+`d:` Q) and `channels_hosttest.py` (`write_text`). The emulator (the real
+ROM and firmware) ran every form and read the file back with `INPUT #`.
+Not yet on hardware.
+
+### `CH_NOCARD_PATH(cmd)`
+
+Is this `tpi:chopen` text for a channel with no file: the speech channel or
+the command channel? The path (the text after the mode, or all of it)
+starts with `v:` or `x:` in either case. `SD_NEEDED` asks it so `OPEN
+#n,"v:"` and `OPEN #n,"x:"` work with no card in; `CH_OPEN` then answers
+them, and `v:anything` or `x:anything` (Q), without the card too. Pure: it
+reads only `cmd`. `CH_SPEECH_PATH` (#375) until #404 added `x:`.
+
+### `X_RUN(line)`
+
+The answer to one line printed to `OPEN #n,"x:"` (#404), for `INPUT #` to
+read one value a line: plain text for a program, not laid out for the
+screen. `Channels._command` calls it with the line stripped; the word is
+matched in either case:
+
+| Command | Answer |
+|---|---|
+| `path` | the current folder, `public_path()`, as `tpi:path` shows it |
+| `dir` | `XDirText(INDEX)` ([tspico-files.md](tspico-files.md)): the folder count, the file count, then `dirinfo.tap`'s rows, made as they are read |
+| `mount` | the mounted file, `public_fname()`, or an empty line when none is |
+| `info` | five lines: the card's label, its free bytes and its total bytes (`os.statvfs`), `TSP.FW_VERSION`, and the ROM's version from `rom_id` (`"2.3"`; empty when the ROM sent FFh) |
+
+`path` and `mount` read only RAM. `info` mounts the card for `statvfs`
+(`ACTIVATE_SD` … `DEACTIVATE_SD`, `ACTIVATE_MQ` in a `finally`); with no
+card, or an SD error, the label is empty and both sizes 0, and the versions
+are still there. `dir` mounts the card for `LISTING_FRESHEN`, so the index
+matches the card before its rows are read, then collects garbage before it
+makes the `XDirText`; an `OSError` is `ChannelError("No card", "O")` (J)
+when the card is missing, `("SD card error", "F")` otherwise. Anything else
+is `("Not an x: command", "Q")`.
+
+It runs inside `tpi:chwr`, one of `SD_QUIET`'s commands, so it never
+prints: the answer waits in the channel for the next `INPUT #`. Pinned by
+`dirinfo_hosttest.py`: `dir`'s counts and rows are those of a fresh
+`dirinfo.tap` for the folder as it is now, read to the end in 255-byte
+reads, then end of file; `path` after a `dir` read only in part is just
+the path; `mount` with a file and with none; `info` with a card and
+without; `dir` with no card J; an unknown command Q and nothing to read.
+The emulator (`tools/emu`, the real ROM and firmware) ran the same: the
+four commands, `TO` slices of the rows, end of file as Report 8, `path`
+and `dir` after a `MOVE TO`.
 
 ### `CH_WRITE(pre, cmd)`
 
@@ -739,11 +842,14 @@ so `OPEN #n,"v:"` works with no card in; `CH_OPEN` then answers `v:` and
 in the command text (the body must be text, and 9 + 128 characters stay
 under the 256-byte command). The pairs are decoded with `int(.., 16)`; a
 bad digit is `CH_REPLY(5)` (C) and nothing is written.
-A speech stream (`CHANNELS.speaking(stream)`, `OPEN #n,"v:"`) skips the
-card: `CHANNELS.write` runs directly, so each whole line is handed to
-`board.say` as it arrives; a `ChannelError` (an unknown `[NAME]`) becomes its
-report (Q), an `OSError` (speech never started at boot) is logged at level 1
-and answered J. `SD_NEEDED` let the command through without a card for the
+A stream with no file (`CHANNELS.in_memory(stream)`: `v:`, `x:`, `d:`)
+skips the card: `CHANNELS.write` runs directly. On speech each whole line
+is handed to `board.say` as it arrives; on `x:` each whole line runs as a
+command (`X_RUN`, which mounts the card itself for `dir` and `info`); on
+`d:` the bytes are dropped. A `ChannelError` (an unknown `[NAME]`, an
+unknown command) becomes its report (Q; `dir` with no card J), an
+`OSError` (speech never started at boot) is logged at level 1 and
+answered J. `SD_NEEDED` let the command through without a card for the
 same reason. Otherwise:
 `CH_CALL(CHANNELS.write, stream, data)` mounts the card, stores the bytes
 at the stream's position with the TAB escape (23, lo, hi) honored and
@@ -762,8 +868,13 @@ speech off, no card used.
 `tpi:chrd`: up to PMR2 bytes from stream PMR1, as a data phase read blind
 by the ROM. `n = max(1, min(255, PMR2 or 255))`.
 
-1. `CH_CALL(CHANNELS.read, stream, n)` gives the bytes (`b""` at the end of
-   the file) or an error status.
+1. A stream with no file (`CHANNELS.in_memory(stream)`: a `d:` listing or
+   an `x:` answer, both in RAM) is read by `CHANNELS.read` directly, with
+   no mount; a `ChannelError` becomes its status through `CH_STATUS`.
+   Since #404; before it, a `d:` read went through `CH_CALL` and mounted
+   the card for every 255 bytes. Otherwise `CH_CALL(CHANNELS.read, stream,
+   n)`. Either gives the bytes (`b""` at the end of the file) or an error
+   status.
 2. An error, or no bytes: one byte — the status, or 7 (`_7_8_EOF`) for the
    end of the file — then `CH_READY()`. Return.
 3. `gc.collect()` first, so no collection pauses the stream. `x` is the XOR
@@ -804,11 +915,12 @@ card. If not: `CHANNELS.close(stream)` without the card, `CH_REPLY(1)`. If
 so: `CH_CALL(CHANNELS.close, stream)`, which mounts the card; an error
 (no card: J; an SD error: F) is logged and sent, and the stream stays in
 `CHANNELS`.
-A speech stream (`v:`) never writes to the card, so it takes the first
-path: `Channels.close` says what is left of an unfinished line and drops
-the entry, even when speech is off.
+A speech stream (`v:`) and a command stream (`x:`) never write to the
+card, so they take the first path: `Channels.close` drops the entry (on
+speech, after saying what is left of an unfinished line, even when speech
+is off).
 
-The long comment at line 3580 is the history. When channels arrived (#83)
+The long comment at line 3954 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

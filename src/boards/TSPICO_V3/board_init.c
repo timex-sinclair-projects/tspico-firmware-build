@@ -61,7 +61,9 @@ void tspico_v3_safe_init(void) {
     out(PIN_OLED_DC, 0);
 
     // The XL9555's port 0 drives /BUSRQ and /NMI (through the 74LVC06), the
-    // OLED reset, the ESP32's EN and IO9, and the LED. It powers up as inputs
+    // OLED reset, the ESP32's EN and IO9, the LED and, on proto2, the SD
+    // socket's power switch, left off: board_v3.py turns it on for a mount,
+    // after the SD lines above are inputs (#262). It powers up as inputs
     // with output register FFh. Output register first, then direction, so the
     // outputs come up safe (as iox_init() in the bring-up). If the expander
     // does not answer, carry on: the request lines are pulled low on the board.
@@ -71,7 +73,7 @@ void tspico_v3_safe_init(void) {
     gpio_disable_pulls(PIN_I2C_SDA);    // R6/R7 are the pull-ups
     gpio_disable_pulls(PIN_I2C_SCL);
     const uint8_t regs[][2] = {
-        {IOX_OUT0, IOX_OUT0_SAFE}, {IOX_POL1, 0x00}, {IOX_CFG1, 0xff}, {IOX_CFG0, 0xc0},
+        {IOX_OUT0, IOX_OUT0_SAFE}, {IOX_POL1, 0x00}, {IOX_CFG1, 0xff}, {IOX_CFG0, IOX_CFG0_SAFE},
     };
     for (unsigned i = 0; i < sizeof regs / sizeof regs[0]; i++) {
         if (i2c_write_timeout_us(i2c0, IOX_ADDR, regs[i], 2, false, 10000) != 2) {

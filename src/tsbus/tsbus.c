@@ -47,6 +47,8 @@
  *                                  ATF1 and dials with X); off at every tsbus.modem(True)
  *   tsbus.esp_relay(first, idle)   USB <-> the ESP32-C3's UART, byte for byte, to flash
  *                                  Zimodem with the ESP32 ROM's loader (the modem off)
+ *   tsbus.kempston(byte)           answer 1Fh, the Kempston joystick, with byte; None:
+ *                                  leave 1Fh unanswered (core 0 keeps it current)
  *   tsbus.speech(on[, rate])       the SP0256-AL2 (sp0256.c) on core 1, played by DMA
  *                                  to the PWM audio pins; rate: the chip's speed, %
  *   tsbus.say(allophones)          queue AL2 allophone numbers (bytes); None: stop now
@@ -203,6 +205,11 @@ static int ch_mrx = -1, ch_mtx = -1;
 static uint32_t mrx_off;            // where ch_mrx had got to in line_rx, last pass
 static uint32_t mtx_inflight;       // bytes ch_mtx is sending
 static volatile uint32_t modem_ins; // INs from 73h/77h answered
+// The Kempston joystick at 1Fh (phase 6): core 0 reads the joystick from the
+// expander (I2C, behind APB) when its /INT says something changed, and sets
+// the byte here (tsbus.kempston); core 1 only reads it. -1: 1Fh unanswered.
+static volatile int16_t kempston = -1;
+static volatile uint32_t kemp_ins;  // INs from 1Fh answered
 // Powering the ESP32 is core 0's (the expander is I2C, behind APB): core 1
 // only says what it saw. modem_wake: an OUT to the 8251 (a program started
 // using it); modem_touched: any IN or OUT (it still is). Both are cleared by
@@ -246,8 +253,8 @@ static volatile uint32_t spk_allophones, spk_samples, spk_late;
 // 37 reads the chip's LRQ on bit 7 (1: busy). Its 74HC138 decodes A4, A5 and
 // /RD with A7 low, so it answers more of the port range; programs use 17 and
 // 37, and the card decodes exactly those, leaving the rest of that range
-// free (1Fh, the Kempston port, is in it). Answered only while speech is
-// on. Allophones from OUT 17 go in their own queue, which core 1
+// free (1Fh, in it, is the card's own Kempston port). Answered only while
+// speech is on. Allophones from OUT 17 go in their own queue, which core 1
 // both fills (io_snoop) and empties (speech_pass), so it needs no lock.
 #define SPK_PORT_OUT 0x11
 #define SPK_PORT_IN  0x25
@@ -568,6 +575,9 @@ static void __not_in_flash_func(handle_in)(void) {
         reply = (port & 4) ? u8251_status(&usart) : u8251_data_in(&usart);
         modem_ins++;
         modem_touched = true;
+    } else if (port == 0x1f && kempston >= 0) {       // the Kempston joystick: 000FUDLR
+        reply = (uint8_t)kempston;
+        kemp_ins++;
     } else if (spk_ports_on && speech_on && port == SPK_PORT_IN) {   // speech: bit 7 busy, the rest as the floating bus (7Fh)
         bool busy = spk_pq_head != spk_pq_tail || spk_q_head != spk_q_tail || !spk_chip.lrq;
         reply = busy ? 0xff : 0x7f;
@@ -1340,6 +1350,23 @@ static mp_obj_t tsbus_modem_pace(mp_obj_t baud_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_modem_pace_obj, tsbus_modem_pace);
 
+// tsbus.kempston(byte): from now on an IN from 1Fh (the low address byte;
+// the high byte is ignored, as a Kempston interface ignores it) reads byte.
+// None: 1Fh is left unanswered, as on a 2068 without the interface. One
+// halfword store, so core 1 never sees half a change.
+static mp_obj_t tsbus_kempston(mp_obj_t byte_in) {
+    if (byte_in == mp_const_none) {
+        kempston = -1;
+    } else {
+        mp_int_t b = mp_obj_get_int(byte_in);
+        if (b < 0 || b > 255) {
+            mp_raise_ValueError(MP_ERROR_TEXT("byte"));
+        }
+        kempston = (int16_t)b;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(tsbus_kempston_obj, tsbus_kempston);
 // tsbus.modem_flow(on): in Hayes mode, pause Zimodem with XOFF when the
 // receive ring is half full and resume it with XON below 1/4, as 2050 mode
 // does while connected. Only for a program that has set Zimodem up for it
@@ -1648,6 +1675,10 @@ static mp_obj_t tsbus_stats(void) {
     store(d, MP_QSTR_m_line_up, modem_line_up);
     store(d, MP_QSTR_m_readies, modem_readies);
     store(d, MP_QSTR_m_pace_us, usart.pace / (BUS_CLOCK_HZ / 1000000));
+    // The joystick (1Fh).
+    store(d, MP_QSTR_k_byte, kempston < 0 ? 0 : kempston);
+    store(d, MP_QSTR_k_on, kempston >= 0);
+    store(d, MP_QSTR_k_ins, kemp_ins);
     // Speech.
     store(d, MP_QSTR_s_on, speech_on);
     store(d, MP_QSTR_s_allophones, spk_allophones);
@@ -1913,6 +1944,7 @@ static const mp_rom_map_elem_t tsbus_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_modem_pace), MP_ROM_PTR(&tsbus_modem_pace_obj) },
     { MP_ROM_QSTR(MP_QSTR_modem_flow), MP_ROM_PTR(&tsbus_modem_flow_obj) },
     { MP_ROM_QSTR(MP_QSTR_esp_relay), MP_ROM_PTR(&tsbus_esp_relay_obj) },
+    { MP_ROM_QSTR(MP_QSTR_kempston), MP_ROM_PTR(&tsbus_kempston_obj) },
     { MP_ROM_QSTR(MP_QSTR_speech), MP_ROM_PTR(&tsbus_speech_obj) },
     { MP_ROM_QSTR(MP_QSTR_say), MP_ROM_PTR(&tsbus_say_obj) },
     { MP_ROM_QSTR(MP_QSTR_speech_volume), MP_ROM_PTR(&tsbus_speech_volume_obj) },

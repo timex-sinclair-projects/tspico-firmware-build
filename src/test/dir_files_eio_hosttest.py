@@ -1,5 +1,8 @@
 """Host-side test for DIR_FILES on a failing SD card -- CPython, no Pico.
 
+(Also: a MemoryError, #384 -- a folder too big for the heap -- is handled
+the same way.)
+
 A TS-Pico's card mounted at boot and then failed its first write:
 
     File "TS/tspico.py", line 4437, in TS2068_IO
@@ -48,7 +51,7 @@ class Bricked(BaseException):
 class FakeOS:
     """Just enough of MicroPython's os for DIR_FILES and TS2068_IO's boot.
 
-    fail_on names the call that raises EIO ("ilistdir", "write", ...).
+    fail_on names the call that raises EIO ("ilistdir", "statvfs", ...).
     """
 
     def __init__(self, fail_on=None):
@@ -140,13 +143,12 @@ def test_dir_files(t, logs):
     check("dirinfo.tap" not in fos.removed,
           "healthy card: the old dirinfo.tap is left out by name, not deleted first (%r)" % fos.removed)
     check(len(t.lista) % 32 == 0, "healthy card: whole 32-column rows")
-    check("dirinfo.tap" in fos.files and fos.files["dirinfo.tap"] > 0,
-          "healthy card: dirinfo.tap written")
+    check(fos.files.get("dirinfo.tap") == 64,
+          "healthy card: dirinfo.tap not written (LOAD makes it since #384)")
     check(not any(lvl >= 2 for lvl, _ in logs), "healthy card: no ERROR logged")
 
     for fail_on, what in (("ilistdir", "os.ilistdir (the field failure)"),
-                          ("statvfs", "os.statvfs"),
-                          ("write", "the dirinfo.tap write")):
+                          ("statvfs", "os.statvfs")):
         fos = setup(t, fail_on)
         t.files = ["STALE.TAP"]
         del logs[:]
@@ -157,14 +159,42 @@ def test_dir_files(t, logs):
             ok, raised = None, e
         check(raised is None and ok is False,
               "EIO from %s: returns False, does not raise (%r)" % (what, raised))
-        check(t.files == [] and t.files_upper == [],
+        check(t.files == [] and t.dirs == [],
               "EIO from %s: files[] emptied, no stale entries" % what)
         check(t.lista[32:64].startswith("SD: card error") and "reseat the card" in t.lista,
               "EIO from %s: lista keeps its layout and says the card failed" % what)
         check(any(lvl == 2 and "EIO" in m for lvl, m in logs),
               "EIO from %s: ERROR logged with the reason" % what)
-        check("dirinfo.tap" not in fos.files,
-              "EIO from %s: no (half-written) dirinfo.tap left behind" % what)
+        check(fos.files.get("dirinfo.tap") == 64 and not fos.removed,
+              "EIO from %s: nothing written or removed on the failing card" % what)
+
+    # #384: a big folder on the v2 board ran out of heap (in NEW_TAPBLK, gone
+    # since; any allocation of the listing can fail the same way).
+    # Uncaught, a MemoryError reached the service loop's handler (three in a
+    # minute stop the firmware) and left the listing half-built.
+    fos = setup(t, None)
+    t.files = ["STALE.TAP"]
+    real_fill = t.INDEX.fill
+
+    def no_heap(*a):
+        raise MemoryError("memory allocation failed, allocating 9673 bytes")
+    t.INDEX.fill = no_heap                                      # the sort keys: the listing's one big allocation
+    real_gc, t.gc = t.gc, types.SimpleNamespace(collect=lambda: None, mem_free=lambda: 157000)
+    del logs[:]
+    try:
+        ok = t.DIR_FILES()
+        raised = None
+    except BaseException as e:                                  # noqa: BLE001
+        ok, raised = None, e
+    finally:
+        t.INDEX.fill, t.gc = real_fill, real_gc
+    check(raised is None and ok is False, "MemoryError: returns False, does not raise (%r)" % (raised,))
+    check(t.files == [] and t.dirs == [],
+          "MemoryError: the half-built lists are emptied")
+    check(t.lista[32:64].startswith("SD: out of memory") and "Too many files" in t.lista
+          and len(t.lista) < 200, "MemoryError: lista keeps its layout and says why (%r)" % t.lista[32:])
+    check(any(lvl == 2 and "out of memory" in m for lvl, m in logs), "MemoryError: ERROR logged")
+    check(fos.files.get("dirinfo.tap") == 64 and not fos.removed, "MemoryError: nothing written or removed")
 
 
 def test_boot(t, logs):
@@ -204,7 +234,7 @@ def test_boot(t, logs):
 
     for fail_on, label in ((None, "healthy card"),
                            ("ilistdir", "EIO from os.ilistdir"),
-                           ("write", "EIO from the dirinfo.tap write")):
+                           ("statvfs", "EIO from os.statvfs")):
         setup(t, fail_on)
         del logs[:]
         del mq.tx_log[:]
@@ -245,10 +275,6 @@ def main():
     t.TLM_ENABLED = False
     t.time = P.FakeTime()
     t.SAVE_LOG = lambda: None
-    # NEW_TAPBLK does bytearray += str, which only MicroPython allows; the
-    # TAP encoding isn't under test, only that bytes reach the file.
-    t.NEW_TAPBLK = lambda items, size: bytearray(4 + size * len(items))
-    t.NEW_HDR = lambda typ, name, n: bytearray(21)
     logs = []
     t.LOG = lambda msg, level: logs.append((level, msg))
 
