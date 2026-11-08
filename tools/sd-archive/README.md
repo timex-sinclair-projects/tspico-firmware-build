@@ -124,7 +124,8 @@ holds the tapes that were left out, with the same catalog.
     the item has now.
 - **`tap_folder.py`** lays the card's archive tapes out as plain files for the
   v3 card's WiFi download (#401), at their card paths (`TAP/GAMES/name.tap`),
-  with an index, `tspico-taps.txt.gz`. With `--publish` it uploads them to their
+  with an `index.txt` in every folder for browsing, and one index of every tape,
+  `tspico-taps.txt.gz`, for search. With `--publish` it uploads them to their
   own archive.org item, `tspico-2068-tapes`.
   - **Why plain files:** Zimodem's `AT&G` needs a reply with a Content-Length.
     A file in an item has one, and a tape inside a zip can't be fetched on its
@@ -132,13 +133,19 @@ holds the tapes that were left out, with the same catalog.
   - **What goes in:** only the tapes on the card, so only those that load and
     start, with the pipeline's repairs. The tour and its demo tapes stay on the
     card. A tape over `--max-tap` (default 65536 bytes) is left out and listed.
-  - **The index:** one line per tape, tab-separated: path, status (`L` `LOAD ""`,
+  - **Folder indexes:** `TAP/index.txt` lists the groups. Each folder's index lists
+    its subfolders (`name/ D title tapes`), then its tapes. It is split into
+    8 KB parts (`index.txt`, `index2.txt`…) so a part always fits the card's
+    32 KB download buffer; the header says `part 1 of 2`.
+  - **The full index:** one line per tape, tab-separated: path, status (`L` `LOAD ""`,
     `R` then `RUN`, `C` `LOAD "" CODE`, `S` another way), title, year,
     publisher, size, and the `computer_media` post ID (from `describe.py`).
     A tape from a collection is titled `Collection: tape`.
   - **Rebuilds:** `--publish` compares each tape with the MD5 in the item's
     file list and uploads only what changed, then the index, all with
-    `x-archive-keep-old-version: 0`, so nothing replaced is kept under
+    `x-archive-keep-old-version: 0`, 50 at a time, waiting while the item has
+    over 100 archive.org tasks queued (archive.org refuses uploads past a few
+    hundred: "bucket_tasks_queued exceeds rationed amount"). Nothing replaced is kept under
     `history/`. A tape that has left the card is listed, not deleted.
     `--dry-run` reports and uploads nothing.
 
