@@ -18,6 +18,7 @@ that keeps something between two commands.
 | GC heap | 234K in all, about 182K free with the firmware running, and a 168K largest block after three rounds of the 300-file folder and a 64K DOCK (`memcheck --dck`, 2026-11-07) | 172K in all, about 76K free with the firmware running; the top 256K of SRAM is `tsbus`'s images ([board-v3.md](../firmware/board-v3.md#memmapsection_extra_post_platform_endincl)) |
 | LOAD/SAVE block | a new `bytearray` per block | `BLOCK_BUF`, 48K, made at import ([board.md](../firmware/board.md)) |
 | a 64K DOCK stream | `BLKRCV` in 32K pieces (#376) | `BLOCK_BUF` |
+| a WiFi download (`tpi:net`) | — (v3 only) | `BLOCK_BUF`: a tape over 49,160 bytes is refused; `machine.UART`'s 4K ring for the command; `TS.net` imported once, after a `gc.collect()` |
 
 v3 is the tight one. Measure there first, then on v2.
 

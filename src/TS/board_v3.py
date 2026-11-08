@@ -381,10 +381,10 @@ def wifi_join(ssid, password):
         raise WifiError('No " in a name or password')
     u = _esp_open()
     try:
-        r = _esp_cmd(u, b'ATW"' + ("%s,%s" % (ssid, password)).encode() + b'"', 20000)
-        if b"OK" not in r:
-            raise WifiError("Can't join " + ssid)
-        ip = _esp_address(u, ESP_JOIN_MS)
+        r = _esp_cmd(u, b'ATW"' + ("%s,%s" % (ssid, password)).encode() + b'"', 12000)
+        if b"OK" not in r:                # 12 s + 3 s + a cold boot's 3 s: inside
+            raise WifiError("Can't join " + ssid)   # the 2068's ~19.9 s wait
+        ip = _esp_address(u, 3000)
         if ip is None:
             raise WifiError("Can't join " + ssid)
         _esp_cmd(u, b"AT&W")

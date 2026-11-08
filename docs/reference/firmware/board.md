@@ -37,7 +37,7 @@ Who calls what:
 | `rom_slot_empty()` | `MEMBOOT` (5704, through `SD_SLOTS_CALL` for MEM 3), before it changes anything |
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
-| `BLOCK_BUF` | `tspico.py` at import (1212), as `tspico_io.BLOCK_BUF`: the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)) |
+| `BLOCK_BUF` | `tspico.py` at import (1212), as `tspico_io.BLOCK_BUF`: the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)); `tpi:net`'s downloads (`wifi_get`) |
 | `HAS_MODEM` | `TS2068_IO` (7141, at boot; 7862, the idle loop), `MODEM` (5898, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
 | `modem_start()` | `TS2068_IO` (7142), at boot with `config.ini`'s modem keys; `MODEM` (5913), a new mode |
 | `modem_service()` | `TS2068_IO`'s idle loop (7863), every pass with nothing arrived |
@@ -521,6 +521,104 @@ IO9 held low (`True`) or released. The ESP32 reads IO9 as it leaves reset,
 so this takes effect at the next `modem_power(True)`: low boots its ROM's
 serial downloader, for installing Zimodem, instead of the firmware.
 
+### WiFi downloads: `ESP_BOOT_MS`, `ESP_JOIN_MS`, `ESP_FIRST_MS`, `ESP_IDLE_MS`
+
+For `tpi:wifi` and `tpi:net` ([tspico-commands.md](tspico-commands.md#wifipre-cmd),
+[docs/v3-wifi-archive-proposal.md](../../v3-wifi-archive-proposal.md)), core
+0 borrows UART0 from tsbus for one command and talks to Zimodem itself.
+`AT&G"url"` fetches a file. In stream mode (`ATS45=3`) Zimodem sends
+`[ 0 size ]`, CR LF, then the bytes, with no checksum. It refuses a reply
+with no Content-Length, which a plain file on archive.org has. There is no
+flow control, so the bytes are collected into RAM and written to the card
+after: writing flash while receiving lost 2.8 KB in the spike.
+`src/test/wifi_get_harness.py` proved the path on board 1 (2026-11-08),
+under the firmware's own heap, cold and warm, byte-exact.
+
+- `ESP_BOOT_MS` 8000: EN high to Zimodem's `READY.`. On board 1 it came
+  at 2.8–3 s, already joined.
+- `ESP_JOIN_MS` 10000: from there to an address (`ATI2` not `0.0.0.0`).
+- `ESP_FIRST_MS` 15000: `AT&G` to the header. 3–5 s were seen; Zimodem
+  makes the TLS connection and follows archive.org's redirect first.
+- `ESP_IDLE_MS` 4000: a stall in the data that ends a fetch as cut short.
+
+### `WifiError`
+
+The exception every WiFi function raises; `str()` is the message the
+2068 is shown ("Not on WiFi", "Download failed", "Too big: *n* bytes",
+"Modem in use", "No answer from the ESP32", "Can't join *name*"…).
+
+### `_esp_wait(u, want, ms, buf)`
+
+Reads UART0 into `buf` until `want` or `ERROR` is in what came, or `ms`
+pass; returns the bytes. Only the last `len(buf)` bytes are kept (the
+newer half moves down when it fills), because the ESP32's ROM prints
+about 280 bytes at power-up before Zimodem's `READY.`. A 256-byte buffer
+that stopped when full missed it (the harness's first cold run). Sleeps
+5 ms between empty reads.
+
+### `_esp_cmd(u, line, ms=1500)`
+
+Drains UART0, sends one AT line with CR, and returns the reply through
+`OK` or `ERROR`.
+
+### `_esp_address(u, join_ms)`
+
+`ATI2` every 500 ms until a reply line has three dots and isn't
+`0.0.0.0`; that address, or `None` after `join_ms`.
+
+### `_esp_open()`
+
+UART0 for core 0, the ESP32 answering; returns the `machine.UART`.
+
+1. 2068 mode with a call (`tsbus.stats()["m_state"]` not on-hook):
+   `WifiError("Modem in use")`, with nothing touched. UART0 carries the
+   call.
+2. `tsbus.modem(False)`: core 1 leaves UART0 and its DMA alone.
+3. `UART(0, 115200, tx=44, rx=45, timeout=0, rxbuf=4096)`: the 4 KB ring
+   is the only allocation of any size.
+4. ESP32 off (`_m_powered` False): `esp_boot(False)`, then wait for
+   `READY.` (`ESP_BOOT_MS`); none, `WifiError`. Seen, the line is raised
+   at once (`tsbus.modem_line(True)`, `_m_up`), since `modem_service`
+   would otherwise wait `MODEM_BOOT_MS` for a `READY.` that this read
+   took.
+5. `ATE0`.
+
+Any failure closes it again (`_esp_close`) before re-raising.
+
+### `_esp_close(u)`
+
+Zimodem back as a program expects it, `ATS45=0` and `ATE1` (its defaults:
+a Hayes program shouldn't find stream mode on), after 200 ms for the tail
+of a cut-short stream. Then `u.deinit()`, `_m_last` now (the idle
+power-off counts from the fetch), and `modem_start(_m_mode)`: tsbus takes
+UART0 back. In "off" mode that powers the ESP32 off again, so each fetch
+boots it.
+
+### `wifi_get(url, buf)`
+
+Fetches `url` into `buf`; returns its length. `_esp_open`, an address
+(`ESP_JOIN_MS`; none, "Not on WiFi"), `ATS45=3`, then `AT&G"url"` and the
+header within `ESP_FIRST_MS`. An `ERROR` is tried up to 3 times, 1 s apart:
+just after a cold boot the first `AT&G` once answered `ERROR`, and the
+same fetch 3 s later worked (2026-11-08; why wasn't found). Bigger than
+`buf`: "Too big", and nothing more is read. The data goes straight into
+`buf`'s memoryview; a stall of `ESP_IDLE_MS` before `size` bytes is "Download
+cut short". `_esp_close` always runs. On board 1, 339 bytes took 3–9 s
+(cold), 8 KB 5–7 s, 46 KB 10–12 s.
+
+### `wifi_status()`
+
+Zimodem's address, or `None` (a 2 s wait for one).
+
+### `wifi_join(ssid, password)`
+
+`ATW"ssid,password"` (12 s for its `OK`), then an address within 3 s,
+then `AT&W` to save it as Zimodem's default. Returns the
+address. No `OK` or no address: "Can't join *ssid*", and nothing saved. A
+`"` in either is refused before anything is sent, since it would end the
+AT string. The waits are short so that a cold boot (3 s), the join and
+the address fit the 2068's ~19.9 s wait.
+
 ### `_joy_pin`, `_joy_buf`
 
 `_joy_pin`: `Pin(_IOX_INT)` with its IRQ set while the joystick is
@@ -627,6 +725,9 @@ at import, while the heap is clean; `BLOCK_SIZE` is 49152 + 8. `_buf` is
 through it (a ROM, each half of the dock, a RAM dock being saved).
 `tspico.py` hands `BLOCK_BUF` to `tspico_io` (1203), where `BLOCK` lends its
 front to the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)).
+`tpi:net` borrows all of it for a download (`wifi_get`), which is why a tape
+over 49,160 bytes is refused (10 of the 2,300 in the item; David chose that
+over a 64K buffer, 2026-11-08).
 
 Why at import: once the firmware runs, the heap (172K, about 100K free) has
 no 64K block, and a 32K one isn't certain either. On the card `tpi:dock`

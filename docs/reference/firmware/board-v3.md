@@ -241,7 +241,8 @@ package straight from the repo's `src/` (`$(BOARD_DIR)/../..`): the same
 modules as `src/manifest.py`, with `board_v3.py` in place of `board_v2.py`
 (`board.py` picks `board_v3` on this build, [board.md](board.md#board_v3py)),
 plus `speech.py` and `speech_rules.py`, the speech the v2 build has no use
-for ([speech.md](speech.md)).
+for ([speech.md](speech.md)), and `net.py`, `tpi:net`'s indexes for the
+WiFi downloads ([net.md](net.md)).
 Freezing from `src/` needs no staging step; `TS/buildinfo.py` is generated
 there first (`tools/gen-buildinfo.py`, CI's "Generate the build stamp"
 step), as for the v2 build. A new file under `src/TS/` needs a line here

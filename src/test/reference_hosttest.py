@@ -64,6 +64,7 @@ FIRMWARE = (
     "src/TS/board_v3.py",
     "src/TS/speech.py",
     "src/TS/speech_rules.py",
+    "src/TS/net.py",
     "src/upgrade/main.py",
     "src/upgrade/upgrade.py",
 )
