@@ -242,6 +242,65 @@ def main():
     t.CMD_PUT, t.CH_READY, t.SD_CALL = real_put, real_ready, real_sd_call
     os.remove(os.path.join(root, "BBB.TAP"))
 
+    print("CAT #s;[\"x\"]: the listing into a file (#404)")
+    real_put, real_ready = t.CMD_PUT, t.CH_READY
+    t.CMD_PUT = lambda b: tx.append(b)
+    t.CH_READY = lambda: tx.append("READY")
+    t.os.chdir("/sd/TAP")
+    t.DIR_FILES()
+    out = os.path.join(root, "cat.txt")
+
+    def cat(arg=None, stream=4):
+        return cmd(t.CH_CAT, "tpi:chcat " + (arg or ""), stream, 0 if arg is None else 1)
+
+    def screen(text):                                           # how the 2068 would show it
+        rows, i = [], 0
+        while i < len(text):
+            k = text.find("\r", i, i + 32)
+            if k >= 0:
+                rows.append(text[i:k].rstrip())
+                i = k + 1
+            else:
+                rows.append(text[i:i + 32].rstrip())
+                i += 32
+                if text[i:i + 1] == "\r":
+                    i += 1                                      # a CR after a full row ends nothing
+        return rows
+
+    check(t.SD_NEEDED(False, "TPI:CHCAT", "tpi:chcat", {"TPI:CHCAT": None}, 4)
+          and "TPI:CHCAT" in t.SD_QUIET, "tpi:chcat needs the card and answers a bare status")
+    check(cmd(t.CH_OPEN, "tpi:chopen w cat.txt", 4) == [t._1_OK, "READY"], "OPEN #4,\"f:cat.txt\",\"w\"")
+    say4 = lambda b: cmd(t.CH_WRITE, "tpi:chwr " + b.hex(), 4)
+    say4(b"My files\r")
+    check(cat() == [t._1_OK, "READY"], "CAT #4: OK, a bare status")
+    want = ["My files"] + screen(t.lista.text())
+    got = open(out).read().split("\n")
+    check(got[:-1] == want and got[-1] == "", "the file holds CAT's rows as lines, after what was printed (%d lines)" % len(want))
+    check(want[1].startswith("Path:/TAP") and any(l.startswith("000 ") for l in want), "  path, then the numbered rows")
+    check(cat("*.tap") == [t._1_OK, "READY"], "CAT #4;\"*.tap\": OK")
+    text, st = t.CATALOG_TEXT("*.tap")
+    got = open(out).read().split("\n")
+    check(got[len(want):-1] == screen(text) and not any("BAK" in l for l in got[len(want):]),
+          "  appended: CAT \"*.tap\"'s rows")
+    n = len(open(out).read())
+    check(cat("nothere") == [t._3_F_Invalid_file, "READY"] and len(open(out).read()) == n,
+          "CAT #4;\"nothere\": F, nothing written")
+    check(cat("") == [t._1_OK, "READY"] and open(out).read().endswith("No .TAP file mounted!  --\n"),
+          "CAT #4;\"\": the mounted TAP (here none)")
+    check(list(t.SCREEN_LINES("\x10\x02" + "A" * 32 + "\rB\x16\x01\x02C\r\r")) == ["A" * 32, "BC", ""],
+          "SCREEN_LINES: INK and AT dropped with their parameters; a CR after a full row ends nothing")
+    cmd(t.CH_CLOSE, "tpi:chclose", 4)
+    check(cat() == [t._10_J_Invalid_IO, "READY"], "CAT #4 with stream 4 closed: J (the ROM says O first)")
+    cmd(t.CH_OPEN, "tpi:chopen r cat.txt", 4)
+    check(cat() == [t._4_Q_Parameter, "READY"], "a file opened to be read: Q")
+    cmd(t.CH_OPEN, "tpi:chopen r x:", 4)
+    check(cat() == [t._4_Q_Parameter, "READY"], "an x: stream: Q")
+    cmd(t.CH_OPEN, "tpi:chopen r d:", 4)
+    check(cat() == [t._4_Q_Parameter, "READY"], "a d: listing: Q")
+    cmd(t.CH_CLOSE, "tpi:chclose", 4)
+    t.CMD_PUT, t.CH_READY = real_put, real_ready
+    os.remove(out)
+
     print("a card error")
     real_open = t.open
 

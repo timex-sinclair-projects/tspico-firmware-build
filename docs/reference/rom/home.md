@@ -509,7 +509,8 @@ where the genuine stub jumped, is untouched.
 | `COPY "a" TO "b"` | 19D7h (class 05h) → 25E0h → 25D6h | the module, 3000h (`FDD_COPY`) |
 | `LIST "x"` | 19AFh (class 05h) → 25D6h | the module, 3000h (`FDD_LIST`) |
 | LIST, `LIST n`, `LIST #n` | 19AFh → 25D6h, the module, back to 25DFh → 1545h | |
-| `RESTORE #n` | 19D0h (class 05h) → 25D6h | the module, 3000h (`FDD_RESTORE`), `CH_FLUSH` |
+| `RESTORE #n` | 19D0h (class 05h) → 25D6h | the module, 3000h (`FDD_RESTORE`), `STRM_REC`, `CH_FLUSH` |
+| `CAT #n`, `CAT #n;"x"` | as CAT | the module, 3000h (`FDD_CAT` → `CAT_HASH`), `STRM_REC`, `CH_SEND` |
 | RESTORE, `RESTORE n` | 19D0h → 25D6h, the module (the number), back to 25DFh → 1E9Dh | |
 | OPEN # | 1438h → 14BDh (syntax); 145Eh → 1488h (run time) | G_OSYN, G_OPEN |
 | PRINT #, INPUT #, LIST #, INKEY$ # on an `F` stream | the record's 14A0h / 14A9h | G_OUT, G_IN |

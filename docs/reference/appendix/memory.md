@@ -154,6 +154,12 @@ until the next command printed to it, `CLOSE #`, or the stream's next
 answer until then); an `XDirText` holds only the index it reads from,
 which is kept anyway (rule 1).
 
+`CAT #n` (#404) writes the same `lista` into a file: `SCREEN_LINES` reads
+it through `len()` and `[i]` only and gives one line at a time, and
+`Channels.write_text` sends them to the card in pieces of about 512 bytes,
+so the listing is never joined into one string
+([../firmware/tspico-disk.md](../firmware/tspico-disk.md#screen_linestext)).
+
 ### 7. Slice with a `memoryview`, not a copy
 
 `text[i:j]` on `bytes`, `bytearray` or `str` makes a new object.

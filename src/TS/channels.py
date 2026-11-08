@@ -316,6 +316,28 @@ class Channels:
             ch.last_raw = 10
             ch.mem = ch.run(text)
 
+    def write_text(self, stream, lines):
+        """CAT #s (#404): write text lines (str, printable ASCII) into the
+        file open on stream, at its position, as if each had been printed to
+        it with a CR: a text file gets LF line ends, a binary one the CRs, a
+        record file one record a line (Report Q if a line is too long). Only
+        a file opened to be written takes it; anything else is Q. Written in
+        pieces of about 512 bytes, so a long listing is never one block and
+        the file isn't opened once a line."""
+
+        ch = self._get(stream)
+        if ch.path is None or ch.mode == "r":
+            raise ChannelError("Not a file open for writing", "Q")
+        buf = bytearray()
+        for ln in lines:
+            buf.extend(ln.encode())
+            buf.append(13)
+            if len(buf) >= 512:
+                self._data(ch, buf)
+                buf = bytearray()
+        if buf:
+            self._data(ch, buf)
+
     def speaking(self, stream):
         """Is stream a speech channel? (It needs no card.)"""
 

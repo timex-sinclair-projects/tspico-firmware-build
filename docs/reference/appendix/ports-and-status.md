@@ -220,6 +220,7 @@ ROM: [exrom-driver.md](../rom/exrom-driver.md) (1879h, 196Dh).
 | `tpi:chwr <hex>` | stream | 0 | a bare status |
 | `tpi:chrd` | stream | bytes wanted (1–255; 0 = 255) | the data phase: status (1 data, 7 end of file), n, n bytes, XOR |
 | `tpi:chclose` | stream | 0 | a bare status |
+| `tpi:chcat [x]` | stream | 1 when a string came (`""` is the mounted TAP), else 0 | a bare status: `CAT #n` wrote the listing into the file (#404) |
 
 Modes `r`, `w`, `a`, `u`, each with an optional `b`. Byte 17h in a write is
 always the TAB escape `17h, n lo, n hi`. Firmware:

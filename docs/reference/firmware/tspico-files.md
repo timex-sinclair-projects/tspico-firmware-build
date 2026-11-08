@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1438–2424,
-2769–2801, 4165–4170, 4263–4322, 4584–4671, 4825–4832, 5651–5708,
-5944–5958, 6040–6122 and 6280–6296 (firmware 2.3).
+2769–2801, 4243–4248, 4353–4412, 4674–4761, 4915–4922, 5741–5798,
+6034–6048, 6130–6212 and 6370–6386 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -51,22 +51,22 @@ document it is linked, not restated: the pitfalls are in
 | `CLEAR_LOG()` | 2404–2422 | truncate `/activity.log` |
 | `WALK(top)` | 2769–2782 | recursive folder walk (generator) |
 | `GET_DIRS(path='/sd/TAP')` | 2785–2800 | every folder on the card, sorted, as public paths |
-| `isTapMounted()` | 4165–4169 | is the mounted file a `.tap`? |
-| `dir_exists(filename)` | 4263–4267 | `os.stat` says directory |
-| `file_exists(filename)` | 4270–4274 | `os.stat` says not a directory |
-| `public_path(n=0)` | 4291–4303 | `TSP.cur_path` without `/sd`, optionally shortened |
-| `public_fname(n=0)` | 4306–4321 | `TSP.f_name` without `/sd`, optionally shortened |
-| `ChangeDir(potential_new_path, SDactive=False)` | 4584–4671 | the rules of `tpi:cd` / `MOVE TO` |
-| `getArgs(cmd)` | 4825–4832 | the text after the command word |
-| `getBoot()` | 5651–5659 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5662–5670 | (memory, slot) in the DOCK |
-| `SYSTEM_SLOT_LOCK(mem, page)` | 5673–5684 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5687–5707 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 5944–5958 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 6040–6060 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 6063–6122 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 6280–6296 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 6299–6328 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `isTapMounted()` | 4243–4247 | is the mounted file a `.tap`? |
+| `dir_exists(filename)` | 4353–4357 | `os.stat` says directory |
+| `file_exists(filename)` | 4360–4364 | `os.stat` says not a directory |
+| `public_path(n=0)` | 4381–4393 | `TSP.cur_path` without `/sd`, optionally shortened |
+| `public_fname(n=0)` | 4396–4411 | `TSP.f_name` without `/sd`, optionally shortened |
+| `ChangeDir(potential_new_path, SDactive=False)` | 4674–4761 | the rules of `tpi:cd` / `MOVE TO` |
+| `getArgs(cmd)` | 4915–4922 | the text after the command word |
+| `getBoot()` | 5741–5749 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5752–5760 | (memory, slot) in the DOCK |
+| `SYSTEM_SLOT_LOCK(mem, page)` | 5763–5774 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5777–5797 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 6034–6048 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 6130–6150 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 6153–6212 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 6370–6386 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 6389–6418 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -636,8 +636,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7581, 7598 and
-7610, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7672, 7689 and
+7701, inside a `try` because the card may have gone).
 
 Beware:
 
@@ -797,7 +797,7 @@ a few tens of milliseconds.
 
 Callers: `COPY_FILE` (3318); the main loop before a SAVE, a LOAD and a
 headerless LOAD (3318 each, [part 3](tspico-dispatch.md)). `ZX48_IO` has an
-inline 3 s wait of the same shape (line 8101), because the ZX ROM waits
+inline 3 s wait of the same shape (line 8192), because the ZX ROM waits
 ~3.8 s for READY. Pinned by `audit_fixes_hosttest.py` `test_busy` ("gives up
 when busy never clears"; "returns True at once when core1 is idle").
 
@@ -850,7 +850,7 @@ argument is the root's real path, the same string as `catalog.ROOT`.
 
 `TSP.f_name and TSP.f_name[-4:].lower() == '.tap'`. Truthy when a `.tap` is
 mounted; the value is `[]` or `""` when nothing is, a `bool` otherwise.
-Callers: `TAPDIR`, `APPEND` (twice), `FWD`, `REW`, `GETINFO`. `dirinfo.tap`
+Callers: `TAPDIR`, `TAPDIR_TEXT`, `APPEND` (twice), `FWD`, `REW`, `GETINFO`. `dirinfo.tap`
 counts.
 
 ### `dir_exists(filename)`
@@ -885,7 +885,7 @@ current folder says `Path:/TAP/GAMES` and `CAT "games"` says `Path:/games`.
 
 The mounted file as the user sees it: `xstr(TSP.f_name[3:])`
 (`/TAP/GAME.TAP`), shortened with `n`; `""` when nothing is mounted.
-Callers: `PATH`, `TAPDIR` (27), `APPEND`, `GETINFO`,
+Callers: `PATH`, `TAPDIR_TEXT` (27), `APPEND`, `GETINFO`,
 [`DISK_FORMAT`](tspico-disk.md).
 
 ### `ChangeDir(potential_new_path, SDactive=False)`
