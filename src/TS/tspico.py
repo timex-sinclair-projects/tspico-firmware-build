@@ -1937,14 +1937,72 @@ def DIRINFO_ROWS(listing):                                                      
     ext = catalog.DIR_EXT
     for it in listing:
         if it[1] == 16384:
-            yield "%-32s" % shorten_filename(catalog.screen_name(it[0]), 20)
+            yield DIR_ROW(it[0])
     i = 0
     for it in listing:
         if it[1] == 32768 and it[0][-3:].upper() in ext and it[0][0] != "." \
                 and it[0] != "dirinfo.tap":
-            yield "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(it[0]), 18),
-                                      catalog.size_text(int(it[3])))
+            yield FILE_ROW(i, it[0], int(it[3]))
             i += 1
+
+
+def DIR_ROW(name):                                                                           # a folder's 32-character row (dirinfo.tap, x: dir)
+    return "%-32s" % shorten_filename(catalog.screen_name(name), 20)
+
+
+def FILE_ROW(i, name, size):                                                                 # a file's: index 1-3, name 5-22, size 23-32
+    return "%03d %-18s%10s" % (i, shorten_filename(catalog.screen_name(name), 18),
+                               catalog.size_text(size))
+
+
+class XDirText:                                                                              # x: dir's answer, made as it is read
+    """The answer to dir on an x: channel (#404): two count lines (folders,
+    then files), then one 32-character row per folder and per numbered file,
+    as dirinfo.tap's a$ has them, each ending in a newline. Made from the
+    folder index as the 2068 reads it: len() and chunk(), as
+    channels.Channels reads an answer, so nothing but the piece asked for is
+    ever built (300 files would be ~10K in one piece). Not slicing: a slice
+    object's start and stop are a MicroPython build option. The counts are taken
+    when dir runs; a row the index no longer has (the folder changed before
+    the program read it) comes back blank."""
+
+    ROW = 33
+
+    def __init__(self, ix):
+        self.ix = ix
+        self.nd = len(ix.dirs)
+        self.nf = len(ix.files)
+        self.head = b"%d\n%d\n" % (self.nd, self.nf)
+        self.n = len(self.head) + self.ROW * (self.nd + self.nf)
+
+    def __len__(self):
+        return self.n
+
+    def row(self, r):
+        try:
+            if r < self.nd:
+                t = DIR_ROW(self.ix.dirs[r])
+            else:
+                f = self.ix.files
+                t = FILE_ROW(r - self.nd, f[r - self.nd], f.size(r - self.nd))
+        except IndexError:
+            t = ""
+        return ("%-32s\n" % t).encode()
+
+    def chunk(self, a, n):                                                                   # the bytes from a, up to n of them
+        a = max(0, a)
+        b = min(self.n, a + n)
+        out = bytearray()
+        h = len(self.head)
+        if a < h:
+            out.extend(self.head[a:min(b, h)])
+            a = h
+        while a < b:
+            r, k = divmod(a - h, self.ROW)
+            take = min(b - a, self.ROW - k)
+            out.extend(self.row(r)[k:k + take])
+            a += take
+        return bytes(out)
 
 
 def DIRINFO_WRITE():                                                                         # write dirinfo.tap for the current folder, row by row
@@ -2970,10 +3028,11 @@ def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # do
         return True                                                           # LOAD "tpi:name": mount a file
     if cmd_word == "TPI:HELP":
         return cmd_exec.strip() != cmd_word                                   # a topic is a file on the card
-    if cmd_word == "TPI:CHOPEN" and CH_SPEECH_PATH(cmd_exec):
-        return False                                                          # OPEN #n,"v:": speech, no file
-    if cmd_word == "TPI:CHWR" and stream is not None and CHANNELS.speaking(stream):
-        return False                                                          # PRINT # to a speech channel
+    if cmd_word == "TPI:CHOPEN" and CH_NOCARD_PATH(cmd_exec):
+        return False                                                          # OPEN #n,"v:" or "x:": no file
+    if cmd_word in ("TPI:CHWR", "TPI:CHRD") and stream is not None \
+            and CHANNELS.in_memory(stream):
+        return False                                                          # a stream with no file (d:, v:, x:)
     return cmd_word in SA_funct and cmd_word not in SD_FREE
 
 
@@ -3646,6 +3705,13 @@ def CH_OPEN(pre, cmd):                                                        # 
             CHANNELS.open_speech(stream, board.say)
             CH_REPLY(_1_OK)
         return
+    if path[:2].lower() == "x:":                                              # commands, answers read back (#404)
+        if reclen or path[2:].strip():
+            CH_REPLY(_4_Q_Parameter)                                          # "x:" alone, a stream
+        else:
+            CHANNELS.open_command(stream, X_RUN)
+            CH_REPLY(_1_OK)
+        return
     if path[:2].lower() == "d:":                                              # stage 3: a directory listing
         def op():
             if mode.lower() != "r" or reclen:
@@ -3673,14 +3739,64 @@ def CH_OPEN(pre, cmd):                                                        # 
     CH_REPLY(st)
 
 
-def CH_SPEECH_PATH(cmd):                                                      # tpi:chopen <mode> v:
+def CH_NOCARD_PATH(cmd):                                                      # tpi:chopen <mode> v: or x:
 
-    """Is this tpi:chopen for OPEN #n,"v:" (the v3 card's speech)?"""
+    """Is this tpi:chopen for OPEN #n,"v:" (the v3 card's speech) or
+    OPEN #n,"x:" (commands, #404)? Neither opens a file."""
 
     arg = getArgs(cmd).strip()
     k = arg.find(' ')
     path = arg[k + 1:].strip() if k > 0 else arg
-    return path[:2].lower() == "v:"
+    return path[:2].lower() in ("v:", "x:")
+
+
+def X_RUN(line):                                                              # a command printed to an x: channel
+
+    """The answer to one line printed to OPEN #n,"x:" (#404), as bytes (or
+    XDirText) for INPUT # to read, one value a line. Plain text for a
+    program, not laid out for the screen:
+
+      path   the current folder, as tpi:path shows it
+      dir    the folder count, the file count, then dirinfo.tap's rows
+      mount  the mounted file, or an empty line when none is
+      info   the card's label, free and total bytes, the firmware's version
+             and the ROM's ("" when the ROM doesn't say)
+
+    Runs inside tpi:chwr, so it never prints. Anything else is Q; dir with
+    no card J, with an SD error F."""
+
+    w = line.lower()
+    if w == "path":
+        return ("%s\n" % public_path()).encode()
+    if w == "mount":
+        return ("%s\n" % public_fname()).encode()
+    if w == "info":
+        label, free, total = "", 0, 0
+        try:
+            ACTIVATE_SD()
+            vfs = os.statvfs("")
+            total, free = vfs[2] * vfs[0], vfs[3] * vfs[0]
+            label = TSP.sd_label
+        except OSError:
+            pass                                                              # no card: no label, no space
+        finally:
+            DEACTIVATE_SD()
+            ACTIVATE_MQ()
+        rom = "%d.%d" % (rom_id >> 4, rom_id & 0x0F) if rom_id != 0xFF else ""
+        return ("%s\n%d\n%d\n%s\n%s\n" % (label, free, total, TSP.FW_VERSION, rom)).encode()
+    if w == "dir":
+        try:
+            ACTIVATE_SD()
+            LISTING_FRESHEN()                                                 # the index matches the card
+        except OSError:
+            raise channels.ChannelError("No card" if not TSP.sd_present else "SD card error",
+                                        "O" if not TSP.sd_present else "F")
+        finally:
+            DEACTIVATE_SD()
+            ACTIVATE_MQ()
+        gc.collect()
+        return XDirText(INDEX)
+    raise channels.ChannelError("Not an x: command", "Q")
 
 
 def CH_WRITE(pre, cmd):                                                       # tpi:chwr <hex>
@@ -3692,14 +3808,14 @@ def CH_WRITE(pre, cmd):                                                       # 
     except ValueError:
         CH_REPLY(_5_C_Nonsense)
         return
-    if CHANNELS.speaking(stream):                                             # v:: no card, so no SD_CALL
+    if CHANNELS.in_memory(stream):                                            # v:, x:, d:: no file, so no SD_CALL
         try:
             CHANNELS.write(stream, data)
             st = _1_OK
         except channels.ChannelError as e:
             st = CH_STATUS.get(e.args[1], _4_Q_Parameter)
         except OSError as e:                                                  # speech off
-            LOG("PRINT # to speech: %r" % e, 1)
+            LOG("PRINT # to stream %d: %r" % (stream, e), 1)
             st = _10_J_Invalid_IO
         CH_REPLY(st)
         return
@@ -3716,7 +3832,13 @@ def CH_READ(pre, cmd):                                                        # 
     #   bytes are ready before READY and garbage is collected first.
     par1, par2 = PARAMS(pre)
     stream, n = par1 & 0xFF, max(1, min(255, par2 or 255))
-    data, st = CH_CALL(CHANNELS.read, stream, n)
+    if CHANNELS.in_memory(stream):                                            # d:, x:: in RAM, so no mount
+        try:
+            data, st = CHANNELS.read(stream, n), _1_OK
+        except channels.ChannelError as e:
+            data, st = e.args[0], CH_STATUS.get(e.args[1], _4_Q_Parameter)
+    else:
+        data, st = CH_CALL(CHANNELS.read, stream, n)
     wrt = CMD_PUT
     if st != _1_OK or not data:
         wrt(st if st != _1_OK else _7_8_EOF)

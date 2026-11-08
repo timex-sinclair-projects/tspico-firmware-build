@@ -139,6 +139,7 @@ def main():
     stage2(err)
     stage3(err)
     speech(err)
+    commands(err)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
@@ -272,6 +273,84 @@ def speech(err):
     ch.open(5, "/sd/TAP/w.txt", "w")
     ch.open_speech(5, say)
     check(ch.speaking(5) and ch.table[5].path is None, "v: replaces a stale file entry on the stream")
+    ch.close_all()
+
+
+
+class Lazy:
+    """An answer with only len() and chunk(), as XDirText is."""
+
+    def __init__(self, data):
+        self.data = data
+        self.slices = 0
+
+    def __len__(self):
+        return len(self.data)
+
+    def chunk(self, pos, n):
+        self.slices += 1
+        return self.data[pos:pos + n]
+
+
+def commands(err):
+    print("commands: x: channels (#404)")
+    ran = []
+    big = Lazy(b"2\n1\n" + b"".join(b"row %02d\n" % i for i in range(40)))
+
+    def run(line):
+        ran.append(line)
+        if line == "path":
+            return b"/games\n"
+        if line == "dir":
+            return big
+        if line == "none":
+            return b"\n"
+        raise C.ChannelError("Not an x: command", "Q")
+    ch = C.Channels(MemFS())
+    ch.open_command(4, run)
+    check(ch.in_memory(4) and not ch.in_memory(5), "in_memory(): the x: stream, no other")
+    check(ch.read(4, 255) == b"", "nothing asked yet: end of data (Report 8)")
+    ch.write(4, b"pa")
+    check(ran == [], "no CR yet: nothing run")
+    ch.write(4, b"th\r")
+    check(ran == ["path"], "a CR runs the line (%r)" % ran)
+    check(ch.read(4, 255) == b"/games\r", "the answer, LF -> CR")
+    check(ch.read(4, 255) == b"", "then end of data")
+    ch.write(4, b"  path  \r")
+    check(ran[-1] == "path" and ch.read(4, 255) == b"/games\r", "spaces around the command go; asked again, read again")
+    ch.write(4, b"dir\r")
+    first = ch.read(4, 10)
+    check(first == b"2\r1\rrow 00", "a long answer comes in pieces (%r)" % first)
+    rest = b""
+    while True:
+        d = ch.read(4, 255)
+        if not d:
+            break
+        rest += d
+    check(first + rest == big.data.replace(b"\n", b"\r"), "... all of it, read through chunk()")
+    check(big.slices >= 2, "the answer was read in pieces, never copied whole (%d pieces)" % big.slices)
+    ch.write(4, b"dir\r")
+    ch.read(4, 20)
+    ch.write(4, b"path\r")
+    check(ch.read(4, 255) == b"/games\r", "a new command replaces an answer read only in part")
+    ch.write(4, b"none\r")
+    check(ch.read(4, 255) == b"\r" and ch.read(4, 255) == b"", "an empty line is one CR, then the end")
+    ch.write(4, b"\r\r")
+    check(ran[-1] == "none", "PRINT #4 alone runs nothing")
+    check(err(lambda: ch.write(4, b"bogus\r")) == "Q", "an unknown command: Q")
+    check(ch.read(4, 255) == b"", "... and the last answer is gone")
+    check(err(lambda: ch.write(4, b"\xf5\r")) == "Q" and ran[-1] == "PRINT",
+          "a keyword token is spelt out, as on any text channel (%r): not a command, Q" % ran[-1])
+    ch.write(4, tab(3) + b"path\r")
+    check(ran[-1] == "path" and ch.read(4, 255) == b"/games\r", "TAB ignored")
+    ch.close(4)
+    check(not ch.in_memory(4) and 4 not in ch.table, "CLOSE closes it")
+    ch.open(5, "/sd/TAP/w.txt", "w")
+    check(not ch.in_memory(5), "a file stream is not in memory")
+    ch.open_command(5, run)
+    check(ch.in_memory(5) and ch.table[5].path is None, "x: replaces a stale file entry on the stream")
+    ch.open_list(6, ["a/", "b"])
+    check(ch.in_memory(6), "a d: listing is in memory too")
     ch.close_all()
 
 

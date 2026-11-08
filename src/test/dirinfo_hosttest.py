@@ -146,6 +146,102 @@ def main():
     check(calls and t.files[0] == "AAA.TAP", "listed again first: files[] has the new file")
     check(got == OLD_DIRINFO(t, listing) and b"000 AAA.TAP" in got, "and dirinfo.tap numbers it the same way")
 
+    print('OPEN #4,"x:": dir, path, mount, info (#404)')
+    got = open(path, "rb").read()
+    di = blocks(got)[1]
+    di_rows = [di[6 + 32 * k:6 + 32 * (k + 1)].decode() for k in range((len(di) - 7) // 32)]
+    with open(os.path.join(root, "BBB.TAP"), "wb") as f:
+        f.write(b"bb")                                          # changed again since dirinfo.tap
+    tx = []
+    real_put, real_ready, real_sd_call = t.CMD_PUT, t.CH_READY, t.SD_CALL
+    t.CMD_PUT = lambda b: tx.append(b)
+    t.CH_READY = lambda: tx.append("READY")
+    t.tspico_io.CAN_STREAM = lambda: False
+
+    def no_card(fn, *a):
+        raise AssertionError("SD_CALL used for an x: stream")
+    t.SD_CALL = no_card
+
+    def cmd(handler, text, stream, par2=0):
+        pre = bytearray(10)
+        pre[3], pre[5] = stream, par2
+        del tx[:]
+        handler(pre, "xxx" + text)
+        return tx
+
+    def say(line):
+        return cmd(t.CH_WRITE, "tpi:chwr " + (line + "\r").encode().hex(), 4)
+
+    def answer():
+        out = b""
+        while True:
+            r = cmd(t.CH_READ, "tpi:chrd", 4, 255)
+            if r[0] != 1:
+                return out, r[0]
+            out += bytes(r[3:3 + r[1]])
+
+    sa = {"TPI:CHOPEN": None, "TPI:CHWR": None, "TPI:CHRD": None}
+    check(not t.SD_NEEDED(False, "TPI:CHOPEN", "tpi:chopen r x:", sa, 4), "SD_NEEDED: chopen x: needs no card")
+    check(cmd(t.CH_OPEN, "tpi:chopen r x:y", 4) == [t._4_Q_Parameter, "READY"], "x:y: Q (only \"x:\")")
+    check(cmd(t.CH_OPEN, "tpi:chopen r x:", 4, 10) == [t._4_Q_Parameter, "READY"], "x: with a record length: Q")
+    check(cmd(t.CH_OPEN, "tpi:chopen r X:", 4) == [t._1_OK, "READY"] and t.CHANNELS.in_memory(4),
+          "X: opens a command stream, no card")
+    check(not t.SD_NEEDED(False, "TPI:CHWR", "tpi:chwr 00", sa, 4)
+          and not t.SD_NEEDED(False, "TPI:CHRD", "tpi:chrd", sa, 4)
+          and t.SD_NEEDED(False, "TPI:CHRD", "tpi:chrd", sa, 5),
+          "SD_NEEDED: chwr/chrd on it need no card; another stream still does")
+    check(say("dir") == [t._1_OK, "READY"], "PRINT #4;\"dir\": OK")
+    data, end = answer()
+    lines = data.split(b"\r")[:-1]
+    check(end == t._7_8_EOF and data.endswith(b"\r"), "read to the end, then Report 8's status")
+    listing = sorted(t.os.ilistdir(), key=lambda e: e[0].lower())
+    want = OLD_DIRINFO(t, listing)
+    wb = blocks(want)[1]
+    want_rows = [wb[6 + 32 * k:6 + 32 * (k + 1)].decode() for k in range((len(wb) - 7) // 32)]
+    check(want_rows != di_rows, "  (the folder changed since dirinfo.tap was made)")
+    check([l.decode() for l in lines[:2]] == [want_rows[0].strip(), want_rows[1].strip()],
+          "lines 1-2: the folder and file counts, fresh (%r)" % lines[:2])
+    check([l.decode() for l in lines[2:]] == want_rows[2:],
+          "then dirinfo.tap's rows, 32 characters each, for the folder as it is now")
+    k = list(t.files).index("BBB.TAP")
+    check(all(len(l) == 32 for l in lines[2:]) and (b"%03d BBB.TAP" % k) in data,
+          "  BBB.TAP numbered %d, as files[] (LOAD \"tpi:n\") numbers it" % k)
+    say("dir")
+    cmd(t.CH_READ, "tpi:chrd", 4, 40)
+    say("path")
+    data, end = answer()
+    check(data == b"/TAP\r", "path after a dir read only in part: just the path (%r)" % data)
+    t.TSP.f_name = "/sd/TAP/CHESS.TAP"
+    say("MOUNT")
+    check(answer()[0] == b"/TAP/CHESS.TAP\r", "mount: the mounted file (either case)")
+    t.TSP.f_name = ""
+    say("mount")
+    check(answer()[0] == b"\r", "mount with nothing mounted: an empty line")
+    t.TSP.sd_label = "TSPICO"
+    t.TSP.FW_VERSION = "9.9.9"
+    t.rom_id = 0x23
+    say("info")
+    check(answer()[0] == b"TSPICO\r256000\r512000\r9.9.9\r2.3\r",
+          "info: label, free, total, firmware, ROM")
+    t.rom_id = 0xFF
+    real_act = t.ACTIVATE_SD
+
+    def no_sd(*a, **k):
+        t.TSP.sd_present = False
+        raise OSError(19, "no SD card")
+    t.ACTIVATE_SD = no_sd
+    say("info")
+    check(answer()[0] == b"\r0\r0\r9.9.9\r\r", "info with no card: no label or space; no ROM version")
+    check(say("dir") == [t._10_J_Invalid_IO, "READY"], "dir with no card: J")
+    t.ACTIVATE_SD = real_act
+    t.TSP.sd_present = True
+    check(say("format") == [t._4_Q_Parameter, "READY"], "an unknown command: Q")
+    check(answer() == (b"", t._7_8_EOF), "  and nothing to read")
+    check(cmd(t.CH_CLOSE, "tpi:chclose", 4) == [t._1_OK, "READY"] and not t.CHANNELS.in_memory(4),
+          "CLOSE #4, no card")
+    t.CMD_PUT, t.CH_READY, t.SD_CALL = real_put, real_ready, real_sd_call
+    os.remove(os.path.join(root, "BBB.TAP"))
+
     print("a card error")
     real_open = t.open
 
