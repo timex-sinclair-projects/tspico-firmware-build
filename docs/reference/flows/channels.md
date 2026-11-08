@@ -8,7 +8,7 @@ position. Every exchange is a `tpi:` command sent in the middle of a BASIC
 statement, so every answer is a bare status — a printed message would move
 the current channel to the screen — and the ROM must wait for the Pico's
 tail before each new command. This flow follows one file from OPEN to
-CLOSE, then records, `d:` listings, the speech channel (`v:`), the command
+CLOSE, with `RESTORE #` and `CAT #` on the way, then records, `d:` listings, the speech channel (`v:`), the command
 channel (`x:`) and the failures. User's view: [user
 manual chapter 6](../../manual/user-manual.md#chapter-6-streams-and-channels-open-).
 
@@ -108,9 +108,10 @@ RESTORE to the hook at 25D6h (class 05h), and the module's `FDD_RESTORE`
 takes the `#` form itself; plain `RESTORE` and `RESTORE n` go back to
 HOME's RESTORE ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#fdd_restore-3819h)).
 
-1. Stream 4's STRMS entry must lead to an `F` record (not open, a SYSCON
-   channel, another channel letter or a stream above 15: **Report O**).
-2. `CH_FLUSH`: anything printed and still buffered goes out as
+1. `STRM_REC`: stream 4's STRMS entry must lead to an `F` record (not
+   open, a SYSCON channel, another channel letter or a stream above 15:
+   **Report O**).
+2. `STRM_REC`'s `CH_FLUSH`: anything printed and still buffered goes out as
    `tpi:chwr`.
 3. The record's input buffer is emptied (`R_INN` = `R_INP` = 0): what was
    read ahead is no longer next.
@@ -127,6 +128,37 @@ stream the next `PRINT #4` writes over the start of the file. That holds
 for an `a` stream too: `_seek` sets the position whatever the mode, and
 `_data` writes at the position. A `d:` listing goes back to its first
 name.
+
+## CAT #
+
+`CAT #4`, `CAT #4;"*.tap"`, `CAT #4;""` (#404): the listing `CAT` would
+show, written into the file open on stream 4. The Pico writes it, because
+the ROM can't print a reply into a Pico-backed stream mid-transaction: the
+stream's flush would SYNC away the reply being printed.
+
+1. HOME sends CAT to the hook at 25D6h as before. `FDD_CAT`'s first call,
+   `CAT_HASH`, sees the `#`, takes the stream number and an optional `;` or
+   `,` and string, and from then on does the whole statement itself; the
+   syntax pass ends there ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#cat_hash-3932h)).
+2. At run time: `STRM_REC` (Report O, as for `RESTORE #4`) and its
+   `CH_FLUSH`, so what was printed before the CAT comes first in the file;
+   then `IN_DROP`: what was read ahead is forgotten.
+3. **`tpi:chcat`** or **`tpi:chcat *.tap`**, sent by `CH_SEND` with PMR1 =
+   the stream and PMR2 = 1 when a string came (so `""` can be told from
+   no string), no payload.
+4. Pico: `CH_CAT` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#ch_catpre-cmd))
+   inside `CH_CALL` (the card is needed): Q unless the stream is a file
+   open to be written; the text is `lista` after `LISTING_FRESHEN`,
+   `TAPDIR_TEXT(0, 0)` for `""`, or `CATALOG_TEXT` (F when it refuses);
+   `SCREEN_LINES` makes it plain lines as the screen would wrap them, with
+   no color codes; `Channels.write_text` writes them through `_data`, as if
+   printed with a CR each, in pieces of about 512 bytes.
+5. A bare status (`TPI:CHCAT` is in `SD_QUIET`); `CH_STATUS` raises its
+   report: Q, F, or J with no card.
+
+The file's position moves past the listing, so a `PRINT #4` after it
+writes after the listing. `CAT #4` to the screen's streams (0–3) is
+Report O: only `f:` files in this version.
 
 ## CLOSE
 
@@ -237,6 +269,7 @@ for every character.
 | a missing file for `r`, a missing folder | `CH_OPEN` | F, no channel |
 | a bad mode, a record too long, `TAB 0` with data | `CH_OPEN`, `CH_WRITE` | Q |
 | the end of the file | `CH_READ` → 7 | 8 End of file |
+| `CAT #n` into a stream that is not a file open to be written (`x:`, `d:`, `v:`, mode `r`); a name `CAT "x"` would refuse | `CH_CAT` | Q; F, with nothing written |
 | a starved FIFO in the data phase | `CH_FETCH`'s XOR | R |
 | the Pico's tail not finished before the next SYNC | `CH_SEND`'s IDLE wait (~1 s) | — (prevented); without it, T |
 | NEW or a reset with channels open | the 2068's records are gone; the Pico's table keeps the streams | nothing: the next OPEN of the stream number replaces the stale entry |
@@ -244,6 +277,6 @@ for every character.
 ## Where to read more
 
 - The ROM side: [../rom/exrom-fdd.md](../rom/exrom-fdd.md#the-channel-driver).
-- The Pico side: [../firmware/tspico-disk.md](../firmware/tspico-disk.md#open--channels-tpichopen-tpichwr-tpichrd-tpichclose),
+- The Pico side: [../firmware/tspico-disk.md](../firmware/tspico-disk.md#open--channels-tpichopen-tpichwr-tpichrd-tpichclose-tpichcat),
   [../firmware/channels.md](../firmware/channels.md).
 - Byte by byte: [PROTOCOL.md §7](../../PROTOCOL.md#7-the-channel-commands).

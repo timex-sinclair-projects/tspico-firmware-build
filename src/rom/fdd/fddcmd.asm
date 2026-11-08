@@ -323,10 +323,10 @@ FDD_VERSION:
         db      9
 
 ;------------------------------------------------------------------------------
-; FDD_CAT -- CAT [string]
+; FDD_CAT -- CAT [string]; CAT #n[;string] goes to CAT_HASH (#404)
 ;------------------------------------------------------------------------------
 FDD_CAT:
-        call    AT_END
+        call    CAT_HASH           ; AT_END's answer, or the whole of CAT #n
         jr      z,.bare
         call    EXPT_STR_END
         ret     z                  ; syntax pass: accepted
@@ -1626,6 +1626,23 @@ FDD_RESTORE:
         jp      nz,NONSENSE
         call    RUNTIME
         ret     z
+        call    STRM_REC           ; IX = the record, what was printed sent
+        xor     a
+        ld      (ix+R_INN),a       ; what was read ahead goes
+        ld      (ix+R_INP),a
+        ld      (ix+R_OUTBUF),23   ; TAB 1: the file's first byte
+        ld      (ix+R_OUTBUF+1),1
+        ld      (ix+R_OUTBUF+2),a
+        ld      (ix+R_OUTN),3
+        call    CH_FLUSH
+        and     a
+        ret
+
+; STRM_REC -- the number on the calculator stack is a stream open to an OPEN #
+; channel (an 'F' record): IX = its record, and what was printed to it is sent
+; first (CH_FLUSH). Report O if it isn't: over 15, not open, a system stream,
+; or another channel. RESTORE #n and CAT #n.
+STRM_REC:
         call    HC_FIND_INT2       ; BC
         ld      a,b
         and     a
@@ -1652,18 +1669,7 @@ FDD_RESTORE:
         pop     ix                 ; the record
         ld      a,(ix+R_LETTER)
         cp      'F'
-        jr      nz,.bad
-        call    CH_FLUSH           ; what was printed first
-        xor     a
-        ld      (ix+R_INN),a       ; what was read ahead goes
-        ld      (ix+R_INP),a
-        ld      (ix+R_OUTBUF),23   ; TAB 1: the file's first byte
-        ld      (ix+R_OUTBUF+1),1
-        ld      (ix+R_OUTBUF+2),a
-        ld      (ix+R_OUTN),3
-        call    CH_FLUSH
-        and     a
-        ret
+        jp      z,CH_FLUSH         ; what was printed first
 .bad:   rst     8
         db      $17                ; O Invalid stream
 
@@ -1785,6 +1791,68 @@ IN_DROP:
         ld      (ix+R_INN),0
         ld      (ix+R_INP),0
         ret
+
+;------------------------------------------------------------------------------
+; CAT_HASH -- FDD_CAT's first call, in AT_END's place (#404). For CAT and
+; CAT "x" it is AT_END: Z at the end of the statement, NZ and A = the
+; character. For CAT #n and CAT #n;"x" (or ,"x") it does the whole statement
+; and returns from FDD_CAT itself, NC as FDD_CAT does: the listing goes into
+; the file open on stream n. The Pico writes it (tpi:chcat, PMR1 = the
+; stream, PMR2 = 1 when a string came: "" is the mounted TAP); the ROM can't
+; print a reply into a Pico-backed stream mid-transaction. What was printed
+; to the stream is sent first and what was read ahead dropped, so the
+; listing lands where the file's position is.
+;------------------------------------------------------------------------------
+CAT_HASH:
+        call    AT_END
+        ret     z
+        cp      '#'
+        ret     nz                 ; CAT "x"
+        pop     hl                 ; FDD_CAT's: this ends the statement
+        call    NEXT_CHAR
+        call    HC_EXPT_1NUM       ; the stream
+        call    AT_END
+        jr      z,.bare
+        cp      ';'
+        jr      z,.str
+        cp      ','
+        jp      nz,NONSENSE
+.str:   call    NEXT_CHAR
+        call    EXPT_STR_END
+        ret     z                  ; syntax pass: accepted (NC)
+        call    POP_STR            ; DE = text, BC = length
+        ld      a,1                ; PMR2: a string came
+        jr      .run
+.bare:  call    RUNTIME
+        ret     z
+        ld      bc,0
+        xor     a                  ; PMR2: none
+.run:   push    af                 ; [PMR2]
+        push    de                 ; [text]
+        push    bc                 ; [length]
+        call    STRM_REC           ; IX = the record (Report O), flushed
+        call    IN_DROP
+        ld      hl,CMD_CHCAT
+        call    BUILD_START        ; HL = start, DE = next
+        pop     bc
+        ex      (sp),hl            ; HL = text; [start]
+        ld      a,b
+        or      c
+        jr      z,.none
+        ldir
+.none:  xor     a
+        ld      (de),a
+        pop     hl                 ; the command
+        pop     af
+        ld      c,a                ; PMR2
+        ld      b,0                ; no payload
+        ld      a,(ix+R_STRM)
+        call    CH_SEND
+        call    CH_STATUS          ; Q, F, J raise their reports
+        and     a
+        ret
+
+CMD_CHCAT:   db "tpi:chcat ",0
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE

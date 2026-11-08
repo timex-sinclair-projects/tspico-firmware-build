@@ -54,7 +54,7 @@ through. The hook moves each entry two bytes forward, so it starts at class `$05
 It has been verified in ZEsarUX.
 
 **So bare `CAT` works, and so does `CAT "*.tap"`, `CAT a$`, or any other form
-the routine parses (`CAT #s` isn't one yet: [below](#2-cat--catalog), #404).
+the routine parses, `CAT #s` included ([below](#2-cat--catalog), #404).
 None of them needs a trailing comma or an empty string.** The only
 rule is that each form is parsed by our own routine in both passes:
 
@@ -120,7 +120,7 @@ as `CAT "<arg>"`**. There is one implementation, in the firmware.
 | `CAT "*.tap"`, `CAT "games/b*"` | `tpi:dir *.tap` | The matching entries. `*` matches any run, `?` one character, case-insensitive, last path component only |
 | `CAT "name.tap"` | `tpi:dir name.tap` | The blocks inside that TAP. It doesn't have to be mounted |
 | `CAT ""` | `tpi:tapdir` | The mounted TAP. It mirrors `LOAD ""`, which means "the tape" |
-| `CAT #s` … | — | **Not yet.** The ROM's print path always opens the main screen. Redirecting it needs its own ROM change |
+| `CAT #s`, `CAT #s;"x"` | `tpi:chcat [x]`, PMR1 = s | The same listing, as plain text, into the file open on stream s (#404). The Pico writes it: the ROM flushes the stream and sends the command, and gets back a bare status. `CAT #s;""` is the mounted TAP. Report O when s isn't an `OPEN #` stream, Q for one open to read or for `d:`, `v:`, `x:` |
 
 - **The argument is any string expression** (`CAT a$`, `CAT d$+"/*.tap"`), checked
   at line entry by HOME's class-`$0A` routine:

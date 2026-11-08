@@ -1,6 +1,6 @@
 BASIC Command                CAT
 --------------------------------
-CAT [name]
+CAT [#n;][name]
 
 Lists files on the SD card.
 CAT         the current dir
@@ -11,6 +11,9 @@ CAT "*.tap" matching names:
 CAT "g.tap" the blocks in a
             .tap file
 CAT ""      the mounted .tap
+CAT #4      into the file open
+            on stream 4; also
+            CAT #4;"*.tap"
 
 Files LOAD "tpi:nn" can use come
 first, with their number (type
