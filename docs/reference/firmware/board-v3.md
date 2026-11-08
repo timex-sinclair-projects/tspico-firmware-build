@@ -127,7 +127,7 @@ PSRAM's sections, so it sits at the bottom of the chip, `0x11000000` to
 
 Why: MicroPython's `main()` gives the GC heap the PSRAM from `__psram_end__`
 to the top of the chip, so this block decides the heap's share: the top 1 MB
-(`gc.mem_free()` about 1.2 MB with SRAM's part). 1 MB is room for the 64 KB slot
+(`gc.mem_free()` 1,085,680 bytes at the REPL with SRAM's part, 2026-11-08; the PSRAM area starts 24 KB above the reserve, after the GC's own tables). 1 MB is room for the 64 KB slot
 buffers and the 2068's big operations; all 8 MB would make every
 `gc.collect()` mark and sweep 8 MB at PSRAM speed. The 7 MB is kept for the
 board's own use, the RAM slots or a slot-image cache of

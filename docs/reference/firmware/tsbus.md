@@ -485,7 +485,7 @@ as `machine.freq()` does: `psram_configure_params` with the SDK's defaults
 (at most 133 MHz) and `psram_reinitialize`. Why: `main()` set the divider
 and read delay for 150 MHz, and the GC heap is partly in the PSRAM. Read
 back on the card at 250 MHz (2026-11-08): divider 2 (125 MHz), read delay
-3, and `src/test/psram_test.py` passes all 8 MB.
+3, and `src/test/psram_test.py` passes on all 8 MB (the reserve and the heap).
 
 ### `tsbus.start()`
 
