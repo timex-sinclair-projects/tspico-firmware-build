@@ -12,6 +12,20 @@
 #include "mpconfigboard.h"
 #include "tspico_v3_pins.h"
 
+#if MICROPY_HW_ENABLE_PSRAM
+// The PSRAM (U22, 8 MB) is split: the bottom 7 MB is this block, kept for the
+// board's own use (RAM slots, a slot-image cache: docs/v3-slots-proposal.md),
+// and MicroPython's GC heap gets the 1 MB above it. main.c starts the PSRAM
+// heap at __psram_end__, the end of the linker's .psram_uninitialised
+// sections, which this block fills. A 1 MB heap (on top of SRAM's ~190 KB)
+// is room for the 64 KB slot buffers and keeps a collection short; all
+// 8 MB would make every gc.collect() sweep 8 MB at PSRAM speed.
+// NOLOAD: nothing clears it at boot.
+#define TSPICO_V3_PSRAM_RESERVE (7 * 1024 * 1024)
+__attribute__((section(".psram_uninitialised.tspico_v3_reserve"), aligned(4096), used))
+uint8_t tspico_v3_psram_reserve[TSPICO_V3_PSRAM_RESERVE];
+#endif
+
 static void out(uint pin, bool v) {
     gpio_init(pin);
     gpio_put(pin, v);
@@ -47,7 +61,11 @@ void tspico_v3_safe_init(void) {
     // PSRAM CS: the SDK's runtime_init has already given GP47 to the QMI
     // (XIP_CS1) and the PSRAM is in use; gpio_init would take it back. On a
     // build without PSRAM, keep it high.
-    #if !MICROPY_HW_ENABLE_PSRAM
+    #if MICROPY_HW_ENABLE_PSRAM
+    // Nothing reads the reserve yet; this reference keeps the linker's
+    // --gc-sections from dropping it (which would give the heap all 8 MB).
+    __asm__ volatile ("" : : "r" (tspico_v3_psram_reserve));
+    #else
     gpio_init(PIN_PSRAM_CS);
     gpio_pull_up(PIN_PSRAM_CS);
     #endif

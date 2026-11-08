@@ -3,10 +3,11 @@
 # Needs a firmware built with MICROPY_HW_ENABLE_PSRAM (mpconfigboard.cmake).
 # Run at the REPL with the firmware stopped:
 #   python3 tools/pico-serial.py break
-#   python3 tools/pico-serial.py run --file src/test/psram_test.py
+#   python3 tools/pico-serial.py run --timeout 240 --file src/test/psram_test.py
 #
 # 1. Was it found: the QMI's CS1 setup, GP47's function, the heap's size.
-# 2. Fills every PSRAM block the heap will give with patterns tied to the
+# 2. Fills the board's 7 MB reserve and every PSRAM block the heap will
+#    give (the 1 MB above it) with patterns tied to the
 #    address (addr ^ seed, then its inverse, then walking ones), and reads
 #    them back. A stuck or crossed address line shows as a block holding
 #    another block's words; a data line as one bit wrong everywhere.
@@ -102,8 +103,12 @@ def walk(a: uint, n: uint) -> int:
     return bad
 
 
-# Take PSRAM from the heap in 256 KB blocks until it is used up.
-BLOCK = 256 * 1024
+# The board's reserve: the bottom 7 MB (tspico_v3_psram_reserve in
+# board_init.c), unused by the firmware so far, so the test may write it.
+RESERVE = 7 * 1024 * 1024
+
+# Take PSRAM from the heap in 64 KB blocks until it is used up.
+BLOCK = 64 * 1024
 blocks = []
 sram = []
 while True:
@@ -121,9 +126,14 @@ gc.collect()
 if not blocks:
     print("FAIL: no heap block in PSRAM (not detected?)")
     raise SystemExit
-addrs = sorted(uctypes.addressof(b) for b in blocks)
-total = len(blocks) * BLOCK
-print("testing", len(blocks), "blocks,", total // 1024, "KB, %08x..%08x" % (addrs[0], addrs[-1] + BLOCK))
+heap = sorted(uctypes.addressof(b) for b in blocks)
+print("heap in PSRAM: %d KB, %08x..%08x" % (len(heap) * BLOCK // 1024, heap[0], heap[-1] + BLOCK))
+if heap[0] < PSRAM_BASE + RESERVE:
+    print("FAIL: the heap starts inside the 7 MB reserve")
+    raise SystemExit
+addrs = list(range(PSRAM_BASE, PSRAM_BASE + RESERVE, BLOCK)) + heap
+total = len(addrs) * BLOCK
+print("testing %d KB: the reserve %08x..%08x and the heap's blocks" % (total // 1024, PSRAM_BASE, PSRAM_BASE + RESERVE))
 
 words = BLOCK // 4
 fails = 0
