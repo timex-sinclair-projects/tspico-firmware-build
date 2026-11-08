@@ -3,9 +3,9 @@
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2803–2880 (`DIR`), 3993–4349 (`IDIR` … `SA_NOT_IMP`), 4414–4672
 (`APPEND`, `BLKRCV`), 4764–5383 (`CDIR` … `GETLOG`), 5502–5882
-(`LOGLEVEL` … `MEMDOCK`), 5885–5954 (`MODEM`), 6055–6131 (`REW`), 6288–6550 (`BAD_CODE` …
-`NOP`) and 6662–6738 (the printer settings); the dispatch table
-`SA_funct` at 7179–7233, inside `TS2068_IO`.
+(`LOGLEVEL` … `MEMDOCK`), 5885–5993 (`MODEM` … `GREET`), 5996–6270 (`WIFI` … `NET_UPDATE`), 6332–6408 (`REW`), 6565–6827 (`BAD_CODE` …
+`NOP`) and 6939–7015 (the printer settings); the dispatch table
+`SA_funct` at 7456–7512, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -50,21 +50,36 @@ where the manual and the code differ, the entries below say so.
 | `MODEM(pre, cmd)` | 5885 | `tpi:modem` |
 | `SAY(pre, cmd)` | 5927 | `tpi:say` |
 | `GREET(pre, cmd)` | 5957 | `tpi:greet` |
-| `AUTOMOUNT(pre, cmd)` | 5996 | `tpi:automount` |
-| `REW(pre, cmd)` | 6055 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 6288 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 6293 | the "Bad argument" message |
-| `RM(pre, cmd)` | 6298 | `tpi:rm` |
-| `RM_CHECK(name)` | 6344 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 6365 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 6425 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 6479 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 6533 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6662 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6683 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6694 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6707 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6725 | `tpi:bmp` |
+| `WIFI_HINT` | 5996 | how to join, in `WIFI`'s and `NET`'s answers |
+| `WIFI(pre, cmd)` | 5999 | `tpi:wifi` |
+| `NET(pre, cmd)` | 6037 | `tpi:net` |
+| `NET_SHOW(net, title, rows, foot)` | 6096 | `tpi:net`'s numbered list |
+| `NET_LIST(net, folder, part)` | 6107 | a folder's index part, fetched and listed |
+| `NET_OPEN(net, k, par1)` | 6120 | `tpi:net <number>` |
+| `NET_GET(net, e, par1)` | 6137 | a tape downloaded to `/TAP/NET` |
+| `NET_EXISTS(dest)` | 6165 | is it on the card, before the fetch |
+| `NET_WRITE(dest, n)` | 6170 | `BLOCK_BUF` to a file on the card |
+| `NET_FETCH_FULL(net)` | 6188 | the full index, fetched |
+| `NET_INFLATE(net, n)` | 6194 | the full index, gunzipped onto the card |
+| `NET_FIND_MS` | 6224 | how long a first `find` may spend on the index and still search |
+| `NET_FIND(net, words)` | 6227 | `tpi:net find` |
+| `NET_SEARCH(net, words)` | 6261 | `NET_FIND`'s search, with the card |
+| `NET_UPDATE(net)` | 6267 | `tpi:net update` |
+| `AUTOMOUNT(pre, cmd)` | 6273 | `tpi:automount` |
+| `REW(pre, cmd)` | 6332 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 6565 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 6570 | the "Bad argument" message |
+| `RM(pre, cmd)` | 6575 | `tpi:rm` |
+| `RM_CHECK(name)` | 6621 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 6642 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 6702 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 6756 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 6810 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6939 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6960 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6971 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6984 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 7002 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -87,7 +102,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (7176–7177) says (until #181 it
+   trailing space, as the comment above it (7453–7454) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE` but `tpi:chopen` of `v:` or `x:`, `tpi:chwr` and `tpi:chrd` on a stream with no file, and `tpi:help` with a topic) and
@@ -140,7 +155,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (7179) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (7456) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -177,6 +192,8 @@ applies (the word is not in `SD_FREE`).
 | `tpi:modem` | MODEM | no | none: show; `tpi:modem 2050`, `hayes` or `off`; `flow on`, `flow off` | `SEND_MSG`; the show form shown |
 | `tpi:say` | SAY | no | text, `[allophones]`, or nothing (stop) | `SEND_MSG` (not shown, unless an error) |
 | `tpi:greet` | GREET | no | none: show; text, or `off` | `SEND_MSG`; the show form shown |
+| `tpi:wifi` | WIFI | no | none: show; `name,password` | `SEND_MSG`, shown |
+| `tpi:net` | NET | yes | none: the categories; a number; `more`; `..`; `find word…`; `update`; `CODE 255,0`: replace without asking | `SEND_MSG2` (a list), `SEND_MSG`, or the Y/N prompt |
 | `tpi:automount` | AUTOMOUNT | no (looks itself) | none: show; a `.tap` name or path, or `off` | `SEND_MSG`; the show form shown |
 | `tpi:nop` | NOP | no | — | `01h` |
 | `tpi:path` | PATH | no | no `CODE`: the folder; `CODE 1,0`: the mounted file | `SEND_MSG`, shown |
@@ -1020,6 +1037,168 @@ Not in the card gate (`SD_FREE`). Off by default (David, 2026-10-13).
 From BASIC the greeting is limited by the ROM's 31-character `tpi:` name:
 21 characters. `config.ini` takes a longer one. There is no `CODE`
 form. `board_v3_hosttest.py` pins the answers and the saved key.
+
+### `WIFI_HINT`
+
+`'SAVE "tpi:wifi name,password"'`: the second line of `WIFI`'s "not on a
+network" and its usage answer, and of `NET`'s "Not on WiFi".
+
+### `WIFI(pre, cmd)`
+
+`tpi:wifi`: whether the v3 card's ESP32 is on WiFi, and joining a network
+([board.md](board.md#wifi_joinssid-password),
+[docs/v3-wifi-archive-proposal.md](../../v3-wifi-archive-proposal.md)). In
+`SD_FREE`: it needs no card.
+
+- No `board.HAS_MODEM` (v2): "No WiFi on this board", shown, Report F.
+- No argument: `board.wifi_status()`. An address: "WiFi: on, address
+  *a.b.c.d*"; none: "WiFi: not on a network" / `WIFI_HINT`. Both shown,
+  0 OK.
+- `name,password`: split at the first comma, the name stripped (the
+  password isn't: a space can be part of it). No comma or no name: "WIFI:
+  Name and password needed" / `WIFI_HINT`, Report A, without echoing the
+  argument (it holds the password). Otherwise `board.wifi_join`: "WiFi:
+  joined *name*" / "Address *a.b.c.d*", shown, 0 OK, and logged at 0.
+- A `board.WifiError` (no ESP32, can't join, a `"` in the name or
+  password, the modem in a call): its text, shown, Report J, logged at 2.
+
+The password is never logged or shown. The ROM's 31-character `tpi:` name
+leaves `name,password` 22 characters; a longer one is joined with `ATW`
+in Hayes mode (the user manual's F.2) or PicoTerm's WiFi menu, which save
+it as Zimodem's default the same way (David's choice, 2026-11-08). There is no `CODE` form.
+`wifi_net_hosttest.py` pins the answers.
+
+### `NET(pre, cmd)`
+
+`tpi:net`: the archive's tapes over WiFi, from the `tspico-2068-tapes`
+item on archive.org (#401), whose formats `tools/sd-archive/tap_folder.py`
+defines and [net.md](net.md) reads. Needs the card (not in `SD_FREE`).
+
+- No `board.HAS_MODEM` (v2): "No WiFi on this board", shown, Report F.
+- `CODE` other than none or `255,0`: `BAD_CODE`, Report A.
+- Then `gc.collect()` and `from TS import net`: the module stays loaded,
+  so it is made on a clean heap (memory.md rule 2).
+- No argument: `NET_LIST` of `net.ROOT` (`TAP`), part 1: the categories.
+- `..`: the folder above the last list's (`net.parent`); `more`: the last
+  list's next part, or "NET: No more in this folder", Report Q. With no
+  list yet, or after a `find`, both list the categories.
+- `find word…`: `NET_FIND`. `update`: `NET_UPDATE`. A number: `NET_OPEN`.
+- Anything else: `BAD_ARG("NET", arg)` / "a number, more, .., find word or
+  update", Report A.
+- A `board.WifiError` from any fetch: its text, shown, Report J, logged at
+  2; "Not on WiFi" gets `WIFI_HINT` as its second line. It is raised only
+  before an answer is sent.
+
+One fetch per command keeps each inside the 2068's ~19.9 s wait
+([flows/command.md](../flows/command.md)): on board 1 a cold first fetch
+took 8–9 s, a warm one 5–7 s, the 46 KB full index 10–12 s. That is why a
+two-part folder is listed one part per command (`more`). A download isn't
+mounted (David, 2026-11-08): the answer says `MOVE TO "/net"` and the `LOAD`.
+`wifi_net_hosttest.py` runs every form against a fake Zimodem.
+
+### `NET_SHOW(net, title, rows, foot)`
+
+The list `SEND_MSG2` pages, in `DIR CODE 2`'s colors: `title` on the blue
+bar, then each entry numbered from 1 on a cyan chip with `net.row`'s text,
+then `foot` if there is one. Not keyword-expanded: `net.row` has already
+made it ASCII.
+
+### `NET_LIST(net, folder, part)`
+
+`board.wifi_get` of `net.part_url(folder, part)` into `board.BLOCK_BUF`,
+decoded and read by `net.parse_part`, kept by `net.save_listing`, and
+shown: the title "Net: /*folder*", with "  *part* of *parts*" for a folder
+in parts, and the foot "Part *part* of *parts*: tpi:net more" while there
+is a next one. Logged at 0. The index text (8 KB at most) is a copy of
+the buffer, dropped before the list is built.
+
+### `NET_OPEN(net, k, par1)`
+
+Entry `k` (from 1) of the kept list: no list, "NET: No list yet" / `'SAVE
+"tpi:net" first'`, Report Q; out of range, "NET: Number out of range
+1-*n*", Report 6. A folder is listed (`NET_LIST`, part 1); a tape goes to
+`NET_GET`.
+
+### `NET_GET(net, e, par1)`
+
+Downloads a tape to `net.SAVE_DIR` (`/sd/TAP/NET`) under its own name.
+
+1. Over `len(board.BLOCK_BUF)` (49,160): "NET: Too big for the card:
+   *name*" / "*size* bytes, 49160 at most", Report 6, before anything is
+   fetched (the size is in the list). 10 of the item's 2,300 tapes are.
+2. `SD_CALL(NET_EXISTS, dest)`: an SD error is answered as `SD_CALL` gives
+   it.
+3. `board.wifi_get` into `BLOCK_BUF`.
+4. The name there and no `CODE 255,0`: `SEND_MSG_PROMPT_YN('Replace
+   "name" (y/N)?')`. The prompt is the answer (as `RM`): N is logged; Y
+   writes it (`NET_WRITE`) and only the log hears how that went. The tape
+   is already in RAM, so the write after the key is under a second.
+5. Otherwise `NET_WRITE`, then "Saved /TAP/NET/*name*" / `MOVE TO "/net",
+   LOAD "tpi:name", then` *how* (`net.how` of its status letter), not
+   shown unless verbose; an error answered as `SD_CALL` gives it.
+
+### `NET_EXISTS(dest)`
+
+`(file_exists(dest), _1_OK)`, run by `SD_CALL` so an SD error comes back
+as its message and status.
+
+### `NET_WRITE(dest, n)`
+
+With the card active: makes `net.SAVE_DIR` if it isn't there, writes
+`BLOCK_BUF`'s first `n` bytes to `dest` in one write (as SAVE writes a
+block), and on an `OSError` removes the half-written file and re-raises.
+Then `REFRESH_IF(net.SAVE_DIR)`, so a `tpi:dir` of `/TAP/NET` shows it.
+Returns ("Saved /TAP/NET/*name*", OK).
+
+### `NET_FETCH_FULL(net)`
+
+The full index, `net.FULL + ".gz"` (46 KB), fetched into `BLOCK_BUF`,
+then `SD_CALL(NET_INFLATE, net, n)`; its answer pair.
+
+### `NET_INFLATE(net, n)`
+
+With the card active: the `.gz` written to `net.FULL_PATH + ".gz"`,
+then gunzipped (`deflate.DeflateIO`, `GZIP`, `net.FULL_WBITS`: a 4 KB
+window) into `net.FULL_PATH` through a 512-byte view of `BLOCK_BUF`, and
+the `.gz` removed. A file, not `io.BytesIO`: that would copy the 46 KB
+onto the heap. The window is 4 KB because `DeflateIO` allocates it whole:
+the default 32 KB failed with `MemoryError` under the running firmware
+(the J of the 2026-11-08 hardware test), and `tap_folder.py` compresses
+the index with the same window. A failed gunzip (any exception: memory, a
+`.gz` made with a bigger window) is logged and removes the half-written
+index, answering "NET: Can't unpack the index", Report F; the `.gz` goes
+either way. Returns ("Index: *n* bytes", OK). `/sd/tspico-taps.txt` is
+outside `/TAP`, so no listing shows it.
+
+### `NET_FIND_MS`
+
+13000 ms. The 2068 waits about 19.9 s for a `tpi:` answer; on board 1 the
+index's fetch took about 10 s, the unpack 2.9 s and the search 2.9 s. A
+first `find` that has spent longer than this on the index stops before
+searching.
+
+### `NET_FIND(net, words)`
+
+`tpi:net find`. No words: "NET: find what?" / `'SAVE "tpi:net find
+word"'`, Report A. If the card has no full index, `NET_FETCH_FULL` first
+(so the first `find` is the slow one); if that took more than
+`NET_FIND_MS`, the answer is "NET: Archive index downloaded" / `'Now SAVE
+"tpi:net find words" again'`, shown, 0 OK, and the search waits for the
+next `find`. Then `SD_CALL(NET_SEARCH, …)`;
+the matches are kept as the list ("find *words*", one part) and logged.
+None: "NET: Nothing found", shown, 0 OK. Otherwise `NET_SHOW` titled
+"Net: find *words* (*n*)", with "*n* found, first 99 shown" past
+`net.MAX_FIND`. The ROM's 31-character name leaves the words 18.
+
+### `NET_SEARCH(net, words)`
+
+With the card active: `net.find` over the open full index; `((rows, n),
+OK)`.
+
+### `NET_UPDATE(net)`
+
+`tpi:net update`: `NET_FETCH_FULL`, answered "NET: Index: *n* bytes" (not
+shown unless verbose), or its error.
 
 ### `AUTOMOUNT(pre, cmd)`
 

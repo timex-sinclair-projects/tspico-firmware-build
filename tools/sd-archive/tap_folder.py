@@ -42,7 +42,8 @@ The header says which part it is and how many there are:
                                           collection, the title drops the
                                           collection's name
 
-The full index, tspico-taps.txt.gz, is one line per tape, after a '#' header:
+The full index, tspico-taps.txt.gz, is one line per tape, after a '#' header
+(gzipped with a 4 KB window, GZ_WBITS, so the card can unpack it):
 
   path  status  title  year  publisher  size  post
 
@@ -71,7 +72,7 @@ card is listed, not deleted: delete it with `ia delete ITEM --no-backup PATH`.
 import argparse
 import collections
 import csv
-import gzip
+import zlib
 import os
 import re
 import shutil
@@ -91,6 +92,8 @@ QUEUE = 100                         # archive.org refuses uploads ("bucket_tasks
                                     # amount") once an item has a few hundred tasks queued; each file is one task
 DIR_INDEX = "index"                 # index.txt, then index2.txt, index3.txt... in every folder
 MAX_PART = 8192                     # bytes per index part, header included
+GZ_WBITS = 12                       # the .gz's window: 4 KB, what the card's inflate allocates
+MAX_GZ = 49160                      # the .gz must fit the card's download buffer (board_v3 BLOCK_BUF)
 GROUPS = {"ARCADE": "Arcade games", "GAMES": "Games", "EDUCATE": "Education", "MUSIC": "Music, sound and speech",
           "HOME": "Home and business", "GRAPHICS": "Graphics", "UTILITY": "Utilities", "DEMOS": "Demos",
           "COLLECT": "Collections and magazines", "MISC": "Other programs"}
@@ -106,6 +109,17 @@ METADATA = dict(
     subject=["Timex/Sinclair 2068", "TS-Pico", "TAP"], creator="timexsinclair.com",
 )
 
+
+
+def gz_index(text):
+    """The full index gzipped with a GZ_WBITS window, not gzip's 32K: the card
+    unpacks it with deflate.DeflateIO(f, GZIP, GZ_WBITS), which allocates the
+    window, and once its firmware has run the heap has no 32K block (the
+    first tpi:net find gave MemoryError, 2026-11-08). Any gunzip reads it."""
+    c = zlib.compressobj(9, zlib.DEFLATED, 16 + GZ_WBITS)
+    gz = c.compress(text) + c.flush()
+    assert len(gz) <= MAX_GZ, "the .gz is %d bytes, over the card's %d: split the index" % (len(gz), MAX_GZ)
+    return gz
 
 def tosec(zipname):
     """(title, year, publisher) from 'Title (1984)(Publisher)(TS2068)....zip'."""
@@ -224,7 +238,7 @@ def build(card, out, max_tap):
     with open(os.path.join(out, INDEX), "wb") as f:
         f.write(text)
     with open(os.path.join(out, INDEX + ".gz"), "wb") as f:
-        f.write(gzip.compress(text, 9, mtime=0))
+        f.write(gz_index(text))
     print("%d tapes -> %s; status %s" % (len(lines), out, dict(sorted(collections.Counter(l[1] for l in lines).items()))))
     print("index %d bytes, .gz %d bytes; %d tapes without a post ID%s" % (
         len(text), os.path.getsize(os.path.join(out, INDEX + ".gz")), nopost,
