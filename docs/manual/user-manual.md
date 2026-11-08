@@ -3301,7 +3301,7 @@ Or search the whole archive by name or title:
 SAVE "tpi:net find chess"
 ```
 
-The first search downloads the archive's index to the card, which takes a few seconds more.
+The first search downloads the archive's index to the card, which takes a few seconds more. If the download takes too long to search as well, the TS-Pico says `Archive index downloaded`: give the same command again, and it searches the copy on the card.
 
 A downloaded program goes into the `NET` folder. Load it the usual way:
 

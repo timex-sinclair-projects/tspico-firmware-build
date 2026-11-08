@@ -6201,22 +6201,27 @@ def NET_INFLATE(net, n):                                              # BLOCK_BU
     total = 0
     try:
         with open(gz, "rb") as src, open(net.FULL_PATH, "wb") as out:
-            d = deflate.DeflateIO(src, deflate.GZIP, 15)
+            d = deflate.DeflateIO(src, deflate.GZIP, net.FULL_WBITS)  # allocates the window:
+                                                                      # no 32K block once running
             while True:
                 k = d.readinto(b)
                 if not k:
                     break
                 out.write(b[:k])
                 total += k
-    except Exception:
+    except Exception as e:                                            # a bad .gz, or MemoryError for
+        LOG("NET: unpacking the index: %r" % e, 2)                    # the window: no half index left
         try:
             os.remove(net.FULL_PATH)
         except OSError:
             pass
-        raise
+        return "NET: Can't unpack the index", _3_F_Invalid_file
     finally:
         os.remove(gz)
     return "Index: %d bytes" % total, _1_OK
+
+
+NET_FIND_MS = 13000      # a first find that took longer to fetch and unpack the index doesn't search
 
 
 def NET_FIND(net, words):                                             # tpi:net find
@@ -6229,9 +6234,14 @@ def NET_FIND(net, words):                                             # tpi:net 
         SEND_MSG(there, "", st)
         return
     if not there:
+        t0 = time.ticks_ms()
         msg, st = NET_FETCH_FULL(net)
         if st != _1_OK:
             SEND_MSG(msg, "", st)
+            return
+        if time.ticks_diff(time.ticks_ms(), t0) > NET_FIND_MS:        # no time left to search:
+            SEND_MSG("NET: Archive index downloaded",                 # the 2068 waits ~19.9 s
+                     'Now SAVE "tpi:net find %s" again' % " ".join(words)[:14], _1_OK, True)
             return
     found, st = SD_CALL(NET_SEARCH, net, words)
     if st != _1_OK:

@@ -33,10 +33,11 @@ between commands except on flash (`LIST_PATH`).
 | `ITEM` | 19 | `https://archive.org/download/tspico-2068-tapes/`: every URL starts here |
 | `ROOT` | 20 | `"TAP"`: the top folder, the categories' index |
 | `FULL` | 21 | `"tspico-taps.txt"`: the full index's name in the item (fetched as `FULL + ".gz"`) |
-| `FULL_PATH` | 22 | `/sd/tspico-taps.txt`: the gunzipped copy on the card, outside `/TAP`, so no listing shows it |
-| `LIST_PATH` | 23 | `/TMP/net.txt`: the last list, on the Pico's flash |
-| `SAVE_DIR` | 24 | `/sd/TAP/NET`: where downloads go (David, 2026-11-07) |
-| `MAX_FIND` | 25 | 99: the most matches `find` keeps; three digits for the 2068's numbers |
+| `FULL_WBITS` | 22 | 12: the `.gz`'s window, 4 KB, as `tap_folder.py`'s `GZ_WBITS`; `NET_INFLATE` allocates it, and 32 KB didn't fit under the running firmware |
+| `FULL_PATH` | 23 | `/sd/tspico-taps.txt`: the gunzipped copy on the card, outside `/TAP`, so no listing shows it |
+| `LIST_PATH` | 24 | `/TMP/net.txt`: the last list, on the Pico's flash |
+| `SAVE_DIR` | 25 | `/sd/TAP/NET`: where downloads go (David, 2026-11-07) |
+| `MAX_FIND` | 26 | 99: the most matches `find` keeps; three digits for the 2068's numbers |
 
 ## Functions
 
@@ -67,7 +68,8 @@ for a tape is skipped.
 The tapes in the full index (an open text file, read a line at a time)
 whose path and title hold every word, in any case: `(entries, matched)`.
 Entries stop at `limit`, the count doesn't. The header and short lines are
-skipped.
+skipped. A line that doesn't hold every word somewhere is skipped before
+it is split: most lines, and the search of 2,300 takes about 3 s on the card.
 
 ### `save_listing(where, part, parts, rows, path=None)`
 

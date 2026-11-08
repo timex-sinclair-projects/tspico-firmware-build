@@ -3,9 +3,9 @@
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2803–2880 (`DIR`), 3993–4349 (`IDIR` … `SA_NOT_IMP`), 4414–4672
 (`APPEND`, `BLKRCV`), 4764–5383 (`CDIR` … `GETLOG`), 5502–5882
-(`LOGLEVEL` … `MEMDOCK`), 5885–5993 (`MODEM` … `GREET`), 5996–6260 (`WIFI` … `NET_UPDATE`), 6322–6398 (`REW`), 6555–6817 (`BAD_CODE` …
-`NOP`) and 6929–7005 (the printer settings); the dispatch table
-`SA_funct` at 7446–7502, inside `TS2068_IO`.
+(`LOGLEVEL` … `MEMDOCK`), 5885–5993 (`MODEM` … `GREET`), 5996–6270 (`WIFI` … `NET_UPDATE`), 6332–6408 (`REW`), 6565–6827 (`BAD_CODE` …
+`NOP`) and 6939–7015 (the printer settings); the dispatch table
+`SA_funct` at 7456–7512, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -61,24 +61,25 @@ where the manual and the code differ, the entries below say so.
 | `NET_WRITE(dest, n)` | 6170 | `BLOCK_BUF` to a file on the card |
 | `NET_FETCH_FULL(net)` | 6188 | the full index, fetched |
 | `NET_INFLATE(net, n)` | 6194 | the full index, gunzipped onto the card |
-| `NET_FIND(net, words)` | 6222 | `tpi:net find` |
-| `NET_SEARCH(net, words)` | 6251 | `NET_FIND`'s search, with the card |
-| `NET_UPDATE(net)` | 6257 | `tpi:net update` |
-| `AUTOMOUNT(pre, cmd)` | 6263 | `tpi:automount` |
-| `REW(pre, cmd)` | 6322 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 6555 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 6560 | the "Bad argument" message |
-| `RM(pre, cmd)` | 6565 | `tpi:rm` |
-| `RM_CHECK(name)` | 6611 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 6632 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 6692 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 6746 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 6800 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6929 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6950 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6961 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6974 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6992 | `tpi:bmp` |
+| `NET_FIND_MS` | 6224 | how long a first `find` may spend on the index and still search |
+| `NET_FIND(net, words)` | 6227 | `tpi:net find` |
+| `NET_SEARCH(net, words)` | 6261 | `NET_FIND`'s search, with the card |
+| `NET_UPDATE(net)` | 6267 | `tpi:net update` |
+| `AUTOMOUNT(pre, cmd)` | 6273 | `tpi:automount` |
+| `REW(pre, cmd)` | 6332 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 6565 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 6570 | the "Bad argument" message |
+| `RM(pre, cmd)` | 6575 | `tpi:rm` |
+| `RM_CHECK(name)` | 6621 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 6642 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 6702 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 6756 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 6810 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6939 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6960 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6971 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6984 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 7002 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -101,7 +102,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (7443–7444) says (until #181 it
+   trailing space, as the comment above it (7453–7454) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE` but `tpi:chopen` of `v:` or `x:`, `tpi:chwr` and `tpi:chrd` on a stream with no file, and `tpi:help` with a topic) and
@@ -154,7 +155,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (7446) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (7456) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -1157,18 +1158,33 @@ then `SD_CALL(NET_INFLATE, net, n)`; its answer pair.
 ### `NET_INFLATE(net, n)`
 
 With the card active: the `.gz` written to `net.FULL_PATH + ".gz"`,
-then gunzipped (`deflate.DeflateIO`, `GZIP`, 15-bit window) into
-`net.FULL_PATH` through a 512-byte view of `BLOCK_BUF`, and the `.gz`
-removed. A file, not `io.BytesIO`: that would copy the 46 KB onto the
-heap. A failed gunzip removes the half-written index. Returns ("Index:
-*n* bytes", OK). `/sd/tspico-taps.txt` is outside `/TAP`, so no listing
-shows it.
+then gunzipped (`deflate.DeflateIO`, `GZIP`, `net.FULL_WBITS`: a 4 KB
+window) into `net.FULL_PATH` through a 512-byte view of `BLOCK_BUF`, and
+the `.gz` removed. A file, not `io.BytesIO`: that would copy the 46 KB
+onto the heap. The window is 4 KB because `DeflateIO` allocates it whole:
+the default 32 KB failed with `MemoryError` under the running firmware
+(the J of the 2026-11-08 hardware test), and `tap_folder.py` compresses
+the index with the same window. A failed gunzip (any exception: memory, a
+`.gz` made with a bigger window) is logged and removes the half-written
+index, answering "NET: Can't unpack the index", Report F; the `.gz` goes
+either way. Returns ("Index: *n* bytes", OK). `/sd/tspico-taps.txt` is
+outside `/TAP`, so no listing shows it.
+
+### `NET_FIND_MS`
+
+13000 ms. The 2068 waits about 19.9 s for a `tpi:` answer; on board 1 the
+index's fetch took about 10 s, the unpack 2.9 s and the search 2.9 s. A
+first `find` that has spent longer than this on the index stops before
+searching.
 
 ### `NET_FIND(net, words)`
 
 `tpi:net find`. No words: "NET: find what?" / `'SAVE "tpi:net find
 word"'`, Report A. If the card has no full index, `NET_FETCH_FULL` first
-(so the first `find` is the slow one). Then `SD_CALL(NET_SEARCH, …)`;
+(so the first `find` is the slow one); if that took more than
+`NET_FIND_MS`, the answer is "NET: Archive index downloaded" / `'Now SAVE
+"tpi:net find words" again'`, shown, 0 OK, and the search waits for the
+next `find`. Then `SD_CALL(NET_SEARCH, …)`;
 the matches are kept as the list ("find *words*", one part) and logged.
 None: "NET: Nothing found", shown, 0 OK. Otherwise `NET_SHOW` titled
 "Net: find *words* (*n*)", with "*n* found, first 99 shown" past

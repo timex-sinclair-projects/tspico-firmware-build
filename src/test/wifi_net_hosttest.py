@@ -157,14 +157,20 @@ class FakeUART:
             q += err
 
 
+def gz12(data):
+    """gzip with a 4K window, as tap_folder.py's gz_index makes the full index."""
+    c = zlib.compressobj(9, zlib.DEFLATED, 16 + 12)
+    return c.compress(data) + c.flush()
+
+
 def fake_deflate():
     m = types.ModuleType("deflate")
     m.RAW, m.ZLIB, m.GZIP, m.AUTO = 0, 1, 2, 3
 
     class DeflateIO:
         def __init__(self, stream, fmt, wbits):
-            assert fmt == m.GZIP and wbits == 15
-            self.data = io.BytesIO(gzip.decompress(stream.read()))
+            assert fmt == m.GZIP and wbits <= 12, "a 4K window: no 32K block on the card's heap"
+            self.data = io.BytesIO(zlib.decompress(stream.read(), 16 + wbits))  # fails on a bigger window
 
         def readinto(self, b):
             d = self.data.read(len(b))
@@ -236,7 +242,7 @@ def main():
                ITEM + "TAP/GAMES/index2.txt": GAMES2.encode(),
                ITEM + "TAP/GAMES/21.tap": T21,
                ITEM + "TAP/GAMES/xadom.tap": XADOM,
-               ITEM + "tspico-taps.txt.gz": gzip.compress(FULL.encode(), mtime=0)}
+               ITEM + "tspico-taps.txt.gz": gz12(FULL.encode())}
     buf = bytearray(49160)
 
     print("wifi_get, the ESP32 off (cold)")
@@ -343,6 +349,7 @@ def main():
     t.TLM = lambda *a, **k: None
     t.LOG = lambda *a: None
     t.DIR_FILES = lambda: True
+    t.time = clock
     t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", f_name="", sd_present=True, VERBOSE=False)
     net.LIST_PATH = os.path.join(d, "net.txt")
     board.BLOCK_BUF = b3.BLOCK_BUF = bytearray(49160)
@@ -400,6 +407,19 @@ def main():
     check(got == [("MSG", "NET: Number out of range 1-3", "", t._6_6_Num2Big)], "a number past the list: Report 6")
     got = run("tpi:net 2", 1, 0)
     check(got[0][3] == t._8_A_Invalid_arg, "CODE 1,0: Report A")
+    t.NET_FIND_MS, keep = -1, t.NET_FIND_MS              # the fetch took all the time there was
+    got = run("tpi:net find xad")
+    check(got == [("MSG", "NET: Archive index downloaded", 'Now SAVE "tpi:net find xad" again', t._1_OK)],
+          "a first find out of time: the index fetched, find again (%r)" % (got,))
+    t.NET_FIND_MS = keep
+    os.remove(os.path.join(d, "tspico-taps.txt"))
+    Z.files[ITEM + "tspico-taps.txt.gz"] = b"\x1f\x8b not gzip"                    # can't be unpacked
+    got = run("tpi:net find xad")
+    check(got == [("MSG", "NET: Can't unpack the index", "", t._3_F_Invalid_file)]
+          and not os.path.exists(os.path.join(d, "tspico-taps.txt"))
+          and not os.path.exists(os.path.join(d, "tspico-taps.txt.gz")),
+          "an index that won't unpack: Report F, nothing left on the card (%r)" % (got,))
+    Z.files[ITEM + "tspico-taps.txt.gz"] = gz12(FULL.encode())
     got = run("tpi:net find xad")
     check(got[0][0] == "MSG2" and "Net: find xad (1)" in got[0][1] and "xadom    R Xadom" in got[0][1],
           "tpi:net find: the full index fetched, one match (%r)" % text_of(got[0][1]))

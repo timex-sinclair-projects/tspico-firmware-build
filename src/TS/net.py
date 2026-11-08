@@ -19,6 +19,7 @@
 ITEM = "https://archive.org/download/tspico-2068-tapes/"
 ROOT = "TAP"
 FULL = "tspico-taps.txt"          # the full index, gunzipped
+FULL_WBITS = 12                    # its .gz's window (tap_folder.py GZ_WBITS): 4K to allocate
 FULL_PATH = "/sd/" + FULL          # on the card, outside /TAP: no listing shows it
 LIST_PATH = "/TMP/net.txt"         # the last listing, on the Pico's flash
 SAVE_DIR = "/sd/TAP/NET"           # where downloads go
@@ -65,8 +66,11 @@ def find(f, words, limit=MAX_FIND):
     words = [w.lower() for w in words]
     rows, n = [], 0
     for ln in f:
+        low = ln.lower()
+        if not all(w in low for w in words) or ln[0] == "#":
+            continue                    # most lines: no split (2,300 lines, ~3 s on the card)
         t = ln.rstrip("\n").split("\t")
-        if len(t) < 6 or ln[0] == "#":
+        if len(t) < 6:
             continue
         hay = (t[0] + " " + t[2]).lower()
         if all(w in hay for w in words):
