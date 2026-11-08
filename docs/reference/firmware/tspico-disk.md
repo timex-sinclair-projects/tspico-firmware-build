@@ -416,7 +416,7 @@ would otherwise print as the keyword). `TPI:LIST` was a reserved word
 answered by `SA_NOT_IMP` before; it is not in `SD_FREE`, so the dispatcher
 looks for a card first. Pinned by `commands_hosttest.py` (`test_list`): a
 CR LF text file as itself; an 8-byte binary pattern as two hex rows; a
-5122-byte binary shows its first 2048; a 12 001-byte file whose start is
+5000-byte binary shows its first 2048; a 12 001-byte file whose start is
 text shows its first 8192, a later NUL as `?`; a folder Q, a missing file
 F, a wildcard Q, no name Q; not in `SD_FREE`.
 

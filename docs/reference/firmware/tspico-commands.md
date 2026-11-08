@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2803–2880 (`DIR`), 3993–4349 (`IDIR` … `SA_NOT_IMP`), 4414–4672
-(`APPEND`, `BLKRCV`), 4764–5383 (`CDIR` … `GETLOG`), 5498–5878
-(`LOGLEVEL` … `MEMDOCK`), 5881–5950 (`MODEM`), 6051–6127 (`REW`), 6284–6546 (`BAD_CODE` …
-`NOP`) and 6658–6734 (the printer settings); the dispatch table
-`SA_funct` at 7173–7227, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4764–5383 (`CDIR` … `GETLOG`), 5502–5882
+(`LOGLEVEL` … `MEMDOCK`), 5885–5954 (`MODEM`), 6055–6131 (`REW`), 6288–6550 (`BAD_CODE` …
+`NOP`) and 6662–6738 (the printer settings); the dispatch table
+`SA_funct` at 7179–7233, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -43,28 +43,28 @@ where the manual and the code differ, the entries below say so.
 | `LARGEST_BLOCK()` | 5187 | `tpi:meminfo`'s largest block |
 | `MEMINFO(pre, cmd)` | 5211 | `tpi:meminfo` |
 | `GETLOG(pre, cmd)` | 5256 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 5498 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 5557 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5679 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5800 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 5881 | `tpi:modem` |
-| `SAY(pre, cmd)` | 5923 | `tpi:say` |
-| `GREET(pre, cmd)` | 5953 | `tpi:greet` |
-| `AUTOMOUNT(pre, cmd)` | 5992 | `tpi:automount` |
-| `REW(pre, cmd)` | 6051 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 6284 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 6289 | the "Bad argument" message |
-| `RM(pre, cmd)` | 6294 | `tpi:rm` |
-| `RM_CHECK(name)` | 6340 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 6361 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 6421 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 6475 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 6529 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6658 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6679 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6690 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6703 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 6721 | `tpi:bmp` |
+| `LOGLEVEL(pre, cmd)` | 5502 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 5561 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 5683 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5804 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 5885 | `tpi:modem` |
+| `SAY(pre, cmd)` | 5927 | `tpi:say` |
+| `GREET(pre, cmd)` | 5957 | `tpi:greet` |
+| `AUTOMOUNT(pre, cmd)` | 5996 | `tpi:automount` |
+| `REW(pre, cmd)` | 6055 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 6288 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 6293 | the "Bad argument" message |
+| `RM(pre, cmd)` | 6298 | `tpi:rm` |
+| `RM_CHECK(name)` | 6344 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 6365 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 6425 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 6479 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 6533 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6662 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6683 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6694 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6707 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 6725 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -87,7 +87,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (7170–7171) says (until #181 it
+   trailing space, as the comment above it (7176–7177) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE` but `tpi:chopen` of `v:` or `x:`, `tpi:chwr` and `tpi:chrd` on a stream with no file, and `tpi:help` with a topic) and
@@ -140,7 +140,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (7173) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (7179) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).

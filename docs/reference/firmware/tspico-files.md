@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1438–2424,
-2769–2801, 4243–4248, 4353–4412, 4674–4761, 4915–4922, 5741–5798,
-6034–6048, 6130–6212 and 6370–6386 (firmware 2.3).
+2769–2801, 4243–4248, 4353–4412, 4674–4761, 4915–4922, 5745–5802,
+6038–6052, 6134–6216 and 6374–6390 (firmware 2.3).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -58,15 +58,15 @@ document it is linked, not restated: the pitfalls are in
 | `public_fname(n=0)` | 4396–4411 | `TSP.f_name` without `/sd`, optionally shortened |
 | `ChangeDir(potential_new_path, SDactive=False)` | 4674–4761 | the rules of `tpi:cd` / `MOVE TO` |
 | `getArgs(cmd)` | 4915–4922 | the text after the command word |
-| `getBoot()` | 5741–5749 | (memory, slot) the 2068 boots from |
-| `getDock()` | 5752–5760 | (memory, slot) in the DOCK |
-| `SYSTEM_SLOT_LOCK(mem, page)` | 5763–5774 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5777–5797 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 6034–6048 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 6130–6150 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 6153–6212 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 6370–6386 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 6389–6418 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `getBoot()` | 5745–5753 | (memory, slot) the 2068 boots from |
+| `getDock()` | 5756–5764 | (memory, slot) in the DOCK |
+| `SYSTEM_SLOT_LOCK(mem, page)` | 5767–5778 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 5781–5801 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 6038–6052 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 6134–6154 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 6157–6216 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 6374–6390 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 6393–6422 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -636,8 +636,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7672, 7689 and
-7701, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 7678, 7695 and
+7707, inside a `try` because the card may have gone).
 
 Beware:
 
