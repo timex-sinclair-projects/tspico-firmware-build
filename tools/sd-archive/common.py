@@ -5,9 +5,13 @@ Everything downloaded or generated goes in the work folder, $TSPICO_ARCHIVE_WORK
 (default ~/tspico-archive-work), never in the repo: the zips alone are ~4.4 GB.
 """
 
+import hashlib
+import hashlib
 import json
 import os
+import re
 import urllib.parse
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -53,6 +57,48 @@ def zip_url(url):
     if "#:~:text=" in url:
         return ARCHIVE + urllib.parse.quote(urllib.parse.unquote(url.split("text=", 1)[1]))
     return url.split("#")[0]
+
+
+UA = {"User-Agent": "tspico-sd-archive"}
+
+
+def get(url, timeout=120):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout).read()
+
+
+def archive_path(url):
+    """(item, file name) for an archive.org download URL, else None. A file
+    served from inside another zip (item/a.zip/b/c.zip) has no entry of its
+    own in the item's file list, so it won't match one."""
+    u = urllib.parse.urlparse(url)
+    if u.netloc != "archive.org" or not u.path.startswith("/download/"):
+        return None
+    item, _, name = u.path[len("/download/"):].partition("/")
+    return item, urllib.parse.unquote(name)
+
+
+def archive_files(item):
+    """{name: {md5, size, ...}} for every file in an archive.org item, read
+    fresh from the metadata API (the same list `ia list -c name,md5` prints)."""
+    d = json.loads(get("https://archive.org/metadata/%s/files" % urllib.parse.quote(item)))
+    return {f["name"]: f for f in d.get("result", [])}
+
+
+def md5_file(path):
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# What the Finder leaves in a checkout: .DS_Store, and "cat 2.txt"-style copies
+# made when a file is copied over one that's there. Never put on the card.
+JUNK = re.compile(r"^\.|.* \d+(\.[^.]*)?$")
+
+
+def skip_junk(_dir, names):
+    return [n for n in names if JUNK.match(n)]
 
 
 def tap_path(sha):

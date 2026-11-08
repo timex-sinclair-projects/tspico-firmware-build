@@ -144,6 +144,16 @@ sent, with a one-row cache. Before #397, a 300-file CAT kept a 9.7K `str`
 and needed a second, 12.1K block for the color, which the v3 heap often
 couldn't give (CAT fell back to plain text).
 
+The same holds for a channel's answer. `channels.Channels` reads an `x:`
+answer through `len()` and `chunk(pos, n)` only, so `dir` answers with
+[`XDirText`](../firmware/tspico-files.md#xdirtext), which builds just the
+rows a `tpi:chrd` asks for (at most 255 bytes), not the ~10K a 300-file
+listing would be in one piece (#404). The answer is kept in the channel
+until the next command printed to it, `CLOSE #`, or the stream's next
+`OPEN #` (rule 3: a stream BASIC forgot, after NEW or a reset, keeps its
+answer until then); an `XDirText` holds only the index it reads from,
+which is kept anyway (rule 1).
+
 ### 7. Slice with a `memoryview`, not a copy
 
 `text[i:j]` on `bytes`, `bytearray` or `str` makes a new object.

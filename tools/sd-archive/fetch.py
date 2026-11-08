@@ -6,11 +6,16 @@ archive.org zip each one links.
 
 e.g. http://localhost/downloadable-software/downloadable-software-for-the-ts-2068/
 Writes items.json, urlmap.json, detail/ (the program pages) and zips/ in the
-work folder. Already-downloaded zips and fetched pages are reused, so it can
-be run again to pick up new programs.
+work folder. Fetched pages are reused, so it can be run again to pick up new
+programs. A zip already in zips/ is reused only while its MD5 matches the
+archive.org item's file list: when archive.org replaces a zip (a privacy fix,
+a better dump), the next run downloads it again. A zip that can't be checked
+(a file served from inside another zip has no MD5 of its own) is reused as
+it is, and the run says how many there were.
 """
 
 import argparse
+import collections
 import concurrent.futures as cf
 import hashlib
 import html
@@ -18,15 +23,10 @@ import os
 import re
 import time
 import urllib.parse
-import urllib.request
 
 import common as C
 
-UA = {"User-Agent": "tspico-sd-archive"}
-
-
-def get(url, timeout=120):
-    return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout).read()
+get = C.get
 
 
 def tag(rest, cls):
@@ -52,22 +52,59 @@ def zip_file(u):
     return C.work("zips", hashlib.md5(u.encode()).hexdigest()[:10] + "_" + name)
 
 
-def download(u):
+def expected(urls):
+    """{url: archive.org's file entry (md5, size)} for every url it lists. One
+    metadata read per item, so a zip replaced on archive.org shows up."""
+    want, items = {}, {}
+    for u in urls:
+        p = C.archive_path(u)
+        if p:
+            items.setdefault(p[0], []).append((u, p[1]))
+    for item, us in sorted(items.items()):
+        try:
+            files = C.archive_files(item)
+        except Exception as e:                  # noqa: BLE001 -- reported; those zips go unchecked
+            print("  can't read the file list of %s (%s): its zips are not checked" % (item, e))
+            continue
+        for u, name in us:
+            if name in files and files[name].get("md5"):
+                want[u] = files[name]
+    return want
+
+
+def matches(f, w):
+    if w.get("size") and os.path.getsize(f) != int(w["size"]):
+        return False                            # no need to read it
+    return C.md5_file(f) == w["md5"]
+
+
+def download(u, w=None):
+    """(url, error, what happened): 'kept', 'unchecked', 'new' or 'replaced'."""
     f = zip_file(u)
-    if os.path.exists(f) and os.path.getsize(f):
-        return u, None
+    had = os.path.exists(f) and os.path.getsize(f) > 0
+    if had and not w:
+        return u, None, "unchecked"
+    if had and matches(f, w):
+        return u, None, "kept"
     err = None
     for _ in range(3):
         try:
             data = get(u)
+            if w and hashlib.md5(data).hexdigest() != w["md5"]:
+                raise ValueError("downloaded copy's MD5 is not archive.org's %s" % w["md5"])
             with open(f + ".part", "wb") as o:
                 o.write(data)
             os.replace(f + ".part", f)
-            return u, None
+            return u, None, "replaced" if had else "new"
         except Exception as e:                  # noqa: BLE001 -- retried, then reported
             err = str(e)
             time.sleep(3)
-    return u, err
+    if had:
+        # The copy here is not archive.org's any more (it may be the one a
+        # privacy fix replaced): never build a card from it.
+        os.remove(f)
+        err += "; the old copy is deleted"
+    return u, err, "failed"
 
 
 def main():
@@ -94,13 +131,21 @@ def main():
     print("%d programs, %d with a download" % (len(items), sum(1 for i in items if i["downloads"])))
 
     urls = sorted({C.zip_url(d) for i in items for d in i["downloads"]} - {C.ARCHIVE.rstrip("/")})
+    want = expected(urls)
     with cf.ThreadPoolExecutor(a.jobs) as ex:
-        res = list(ex.map(download, urls))
+        res = list(ex.map(lambda u: download(u, want.get(u)), urls))
     C.save("urlmap.json", {u: zip_file(u) for u in urls})
-    bad = [r for r in res if r[1]]
-    print("%d zips, %d failed" % (len(res), len(bad)))
-    for u, e in bad:
-        print("  %s: %s" % (u, e))
+    n = collections.Counter(r[2] for r in res)
+    print("%d zips: %d kept, %d new, %d replaced (changed on archive.org), %d not checkable, %d failed"
+          % (len(res), n["kept"], n["new"], n["replaced"], n["unchecked"], n["failed"]))
+    for u, e, k in res:
+        if k == "replaced":
+            print("  replaced: %s" % urllib.parse.unquote(u))
+    for u, e, k in res:
+        if e:
+            print("  failed: %s: %s" % (u, e))
+    if n["replaced"]:
+        print("Run plan.py and the later steps again: the replaced zips' tapes are new to them.")
 
 
 if __name__ == "__main__":

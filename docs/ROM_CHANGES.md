@@ -21,7 +21,7 @@ sources are listed [at the end](#sources).
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
 | **2.1** | `src/rom/TSPICO-21.ROM` until 2.2, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. It shipped with firmware 2.1.0–2.1.2. |
 | **2.2** | `src/rom/TSPICO-22.ROM`, crc 8363E100 | 2.1 plus a 16th patch (EXROM 20BEh) and two module fixes: `tpi:tape` keeps the printer switch ([TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), #176) and a pre-load of 0 is Report J ([PRELOAD](#preload-a-pre-load-of-0-is-report-j), #179). The module is 1919 bytes, 3000h–377Eh. It shipped with firmware 2.2 and 2.2.1. |
-| **2.3** | `src/rom/TSPICO-23.ROM`, crc 22891815 | 2.2 plus seven patches, `PS_READ`, COPY, LIST and RESTORE: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228); COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-23-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-23-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-23-the-speech-channel), #375). The module is 2331 bytes, 3000h–391Ah, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
+| **2.3** | `src/rom/TSPICO-23.ROM`, crc E47BE639 | 2.2 plus seven patches, `PS_READ`, COPY, LIST and RESTORE: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228); COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-23-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-23-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-23-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-23-the-command-channel), #404). The module is 2353 bytes, 3000h–3930h, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -424,6 +424,22 @@ its address behind 14 free bytes (3771h–377Eh) and the channel routines
 from OPEN_SYNTAX to CH_SEND sit 14–15 bytes lower than before. The letter
 is `v` (voice) because the stock code takes `s` as the screen, reading only
 a spec's first character.
+
+#### ROM 2.3: the command channel
+
+`OPEN #n,"x:"` (#404) opens a stream a program talks to the Pico through:
+each line printed to it is a command (`path`, `dir`, `mount`, `info`), and
+`INPUT #n` reads the answer, one value a line. DV_TEST takes `x` as it
+takes `d` and `v`, so the whole spec goes to the Pico (`tpi:chopen r x:`),
+which answers Q for anything after the `x:` or a record length. REC_FLAGS
+sets R_FLAGS bit 1 for it, as for speech, so CH_OUT sends each line at its
+CR, and bit 2, which makes CH_OUT forget what CH_IN read ahead whenever the
+stream is written: a new command's answer replaces the last, and a program
+that read only part of a `dir` must not get the rest of it after its next
+command. CH_OUT's TAB test and the new bit-2 test both call IN_DROP, in the
+same 12 bytes as before, so nothing up to PS_READ moves. DV_TEST, REC_FLAGS
+and IN_DROP grew the end of the module to 3930h; PUSH_LETTER and REC_FLAGS
+are 3 bytes higher.
 
 ### SAVE / LOAD "f:path"
 

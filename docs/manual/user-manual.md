@@ -970,7 +970,8 @@ line 30 asks `Replace scores.dat? (Y/N)`: press **Y**.
 <!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · RESTORE # · CLOSE # -->
 
 > **Chapter Preview.** Write and read text files with the 2068's own `PRINT #` and `INPUT #`,
-> keep records you can jump to by number, and read a folder listing into a program.
+> keep records you can jump to by number, read a folder listing into a program, and ask the
+> TS-Pico where you are.
 
 ## 6.1 Streams in a nutshell
 
@@ -979,7 +980,8 @@ comes from the keyboard. The 2068 has sixteen streams, numbered 0 to 15, and **O
 one to a device. The TS-Pico adds new kinds of device:
 
 - `"f:name"`, a file on the SD card;
-- `"d:pattern"`, a list of file names.
+- `"d:pattern"`, a list of file names;
+- `"x:"`, questions for the TS-Pico: the folder you're in, what's mounted, and more.
 <!-- v3 -->
 - `"v:"`, the card's voice: what you `PRINT` to it is spoken (Appendix G).
 <!-- /v3 -->
@@ -1259,7 +1261,58 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
   `TAB 0` gives 0.
 - A `d:` stream is read-only.
 
-## 6.9 Good to know
+## 6.9 Asking the TS-Pico: `x:`
+
+A program sometimes needs to know what the TS-Pico knows: which folder it's in, what's
+mounted, what's in the folder. `OPEN #` with `"x:"` gives you a stream you can ask. `PRINT #` a
+question to it, and `INPUT #` reads the answer:
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"path"
+30 INPUT #4;p$
+40 PRINT "You are in ";p$
+50 CLOSE #4
+```
+
+```
+You are in /TAP/games
+```
+
+There are four questions:
+
+| Question | The answer, one line each |
+|---|---|
+| `"path"` | The folder you're in |
+| `"mount"` | The file that's mounted, or an empty line if none is |
+| `"dir"` | The number of folders, the number of files, then a line for each folder and each file |
+| `"info"` | The card's name, its free space and its total size in bytes, the firmware's version, the ROM's |
+
+`"dir"` gives the same rows as `dirinfo.tap` (see 10.2), each one 32 characters. A folder's row is its name. A file's row has its number in columns 1 to 3, its name
+in 5 to 22 and its size in 23 to 32, so `TO` picks out each part:
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"dir"
+30 INPUT #4;d: INPUT #4;f
+40 FOR i=1 TO d: INPUT #4;a$: PRINT "Folder ";a$( TO 20): NEXT i
+50 FOR i=1 TO f: INPUT #4;a$: PRINT a$( TO 3);" ";a$(5 TO 22): NEXT i
+60 CLOSE #4
+```
+
+The number in a file's row is the one `LOAD "tpi:nnn"` mounts it by.
+
+- Each question replaces the last answer, whether you read all of it or not.
+- Reading past the end of an answer gives **8 End of file**. That's why `"dir"` starts with its
+  counts.
+- Questions can be in capitals or lowercase. A question the TS-Pico doesn't know gives
+  **Q Parameter error**.
+- `"dir"` needs the SD card: without it you'll get **J Invalid I/O device**. The others work
+  without one. `"info"` then gives no name and no space.
+- Don't put a prompt in an `INPUT #` from an `x:` stream: the prompt goes to the stream, and
+  the TS-Pico would take it for the start of a question.
+
+## 6.10 Good to know
 
 - `CLOSE #` on a stream that isn't open does nothing, as on a standard 2068.
 - After `NEW` or a reset, open streams are forgotten; OPEN them again. `CLEAR` and `RUN`
@@ -1284,7 +1337,7 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 | **O Invalid stream** | The stream is already open to a file; `RESTORE #` of a stream that isn't open to a file |
 | **4 Out of memory** | No room for another open file (each takes 512 bytes) |
 
-## 6.10 More ways to use files
+## 6.11 More ways to use files
 
 These patterns come up in most programs that keep data. Each one was run on a 2068 with the
 TS-Pico firmware.
@@ -1356,13 +1409,14 @@ any spreadsheet on your computer:
 as in line 40: a comma on its own between PRINT items moves to the next column, and goes into
 the file as spaces.
 
-## 6.11 Summary
+## 6.12 Summary
 
 1. `OPEN #n,"f:name","mode"` connects a stream to a file: r, w, a or u, plus b for binary.
 2. `PRINT #`, `INPUT #`, `INKEY$ #` and `LIST #` work as they do with any stream.
 3. Always CLOSE a file you've written to.
 4. A record length (`OPEN #4,"f:x","u",20`) makes TAB jump to a record; `TAB 0` counts them.
-5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT.
+5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT. `OPEN #n,"x:"` answers
+   questions: `PRINT #n;"path"`, then `INPUT #n;p$`.
 <!-- v3 -->
    `OPEN #n,"v:"` speaks what you print to it (Appendix G).
 <!-- /v3 -->
@@ -2072,8 +2126,8 @@ LOAD "tpi:dirinfo.tap"    : REM mount the folder listing as a tape (see below)
   for example a TZX file, a damaged cartridge, or a failed copy.
 - **For programmers:** `dirinfo.tap` holds one character array, `a$`. Row 1 is the number of
   folders, row 2 the number of files, then the folder names, then rows of
-  `nnn name        size`. `LOAD "" DATA a$()` reads it into your program. `OPEN #n,"d:"` is
-  easier.
+  `nnn name        size`. `LOAD "" DATA a$()` reads it into your program. `OPEN #n,"x:"`
+  gives the same rows without mounting anything (see 6.9).
 
 ## 10.3 The `tpi:` commands
 

@@ -65,6 +65,7 @@ tools/zmakebas/*.o
 /SD card/TAP/test/hwtest.tap
 /SD card/TAP/test/modemtst.tap
 /SD card/TAP/test/vtest.tap
+/SD card/TAP/test/xtest.tap
 /SD card/TAP/test/memtest.tap
 /SD card/TAP/test/dcktest.tap
 /SD card/TAP/test/disktest.tap

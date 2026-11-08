@@ -112,7 +112,9 @@ R_OUTN          EQU 7              ; bytes waiting in R_OUTBUF
 R_INN           EQU 8              ; bytes in R_INBUF
 R_INP           EQU 9              ; the next one to hand out
 R_FLAGS         EQU 10             ; bit 0: a record file (OPEN # gave a length);
-                                   ;   bit 1: speech ("v:"), sent at each CR too
+                                   ;   bit 1: sent at each CR too (speech "v:",
+                                   ;   commands "x:"); bit 2: commands ("x:"),
+                                   ;   what was read ahead goes at each write
 R_OUTBUF        EQU 11
 OUTMAX          EQU 64             ; tpi:chwr sends them as hex: 9 + 128 < 256
 R_INBUF         EQU R_OUTBUF+OUTMAX
@@ -893,7 +895,7 @@ CH_OPEN_HOOK:
         dec     de
         cp      ':'
         jp      nz,STRMS_NC
-        call    SPEC_KIND          ; "d:", "v:", or "f:" and a character more
+        call    SPEC_KIND          ; "d:", "v:", "x:", or "f:" and a character more
         jp      nz,STRMS_NC
 .ours:  ld      a,c
         cp      MAX_ARG+3
@@ -942,7 +944,7 @@ CH_OPEN_HOOK:
         push    de
         call    PEEK_NAME
         call    DV_TEST
-        jr      z,.keep            ; "d:..." and "v:" go as they are
+        jr      z,.keep            ; "d:...", "v:" and "x:" go as they are
         inc     de
         inc     de                 ; past "f:"
         dec     bc
@@ -1181,10 +1183,10 @@ CH_OUT:
         ld      ix,(CURCHL)
         ld      c,a
         cp      23                 ; TAB (stage 2): a seek, so what was read
-        jr      nz,.put            ;   ahead is no longer next
-        ld      (ix+R_INN),0
-        ld      (ix+R_INP),0
-.put:   ld      a,(ix+R_OUTN)
+        call    z,IN_DROP          ;   ahead is no longer next; on "x:" any
+        bit     2,(ix+R_FLAGS)     ;   write, a new command, whose answer
+        call    nz,IN_DROP         ;   replaces the last (#404). 12 bytes, as
+.put:   ld      a,(ix+R_OUTN)      ;   before: nothing up to PS_READ moves
         push    ix
         pop     hl
         ld      de,R_OUTBUF
@@ -1717,10 +1719,15 @@ CMD_CD_MENU: db "tpi:cd",0
 ; the quiet key click and the rest need no change); R_FLAGS bit 1 makes CH_OUT
 ; send at each CR, so PRINT #4;"HELLO" is said at once, not when 64 bytes have
 ; gathered or at CLOSE #. Here, past PS_READ, so nothing before it moves.
+;
+; OPEN #n,"x:" -- commands (#404), the same way: the spec goes whole, and
+; R_FLAGS bit 1 sends each line at its CR, so PRINT #4;"dir" reaches the Pico
+; as a command and the next INPUT #4 reads its answer. Bit 2 makes CH_OUT drop
+; what CH_IN read ahead from the last answer whenever the stream is written.
 ;------------------------------------------------------------------------------
 
 ; SPEC_KIND -- DE = the spec ("x:..."), C = its length: Z if it is ours ("d:",
-; "v:", or "f:" with at least one character more), else NZ. A is lost.
+; "v:", "x:", or "f:" with at least one character more), else NZ. A is lost.
 SPEC_KIND:
         call    DV_TEST
         ret     z
@@ -1732,14 +1739,16 @@ SPEC_KIND:
         and     a                  ; Z: ours
         ret
 
-; DV_TEST -- Z if the spec at DE starts with d or v (any case); A = the letter
-; in upper case.
+; DV_TEST -- Z if the spec at DE starts with d, v or x (any case): it goes to
+; the Pico whole. A = the letter in upper case.
 DV_TEST:
         ld      a,(de)
         and     $DF
         cp      'D'
         ret     z
         cp      'V'
+        ret     z
+        cp      'X'
         ret
 
 ; PUSH_LETTER -- push the spec's first letter (upper case) in AF under the
@@ -1754,16 +1763,27 @@ PUSH_LETTER:
         jp      (hl)
 
 ; REC_FLAGS -- the new record's R_FLAGS (IX = the record, A = the spec's
-; letter, BC = the record length): bit 0 for a record file, bit 1 for speech.
-; HL is kept.
+; letter, BC = the record length): bit 0 for a record file, bit 1 (send at
+; each CR) for speech and commands, bit 2 for commands. HL is kept.
 REC_FLAGS:
-        cp      'V'
+        cp      'X'
+        jr      nz,.v
+        set     2,(ix+R_FLAGS)
+        jr      .cr
+.v:     cp      'V'
         jr      nz,.file
-        set     1,(ix+R_FLAGS)
+.cr:    set     1,(ix+R_FLAGS)
 .file:  ld      a,b
         or      c
         ret     z
         set     0,(ix+R_FLAGS)
+        ret
+
+; IN_DROP -- forget what CH_IN read ahead (IX = the record): CH_OUT, for a TAB
+; (a seek) and for any write to an "x:" stream (a new command).
+IN_DROP:
+        ld      (ix+R_INN),0
+        ld      (ix+R_INP),0
         ret
 
 FDD_END:
