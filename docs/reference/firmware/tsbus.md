@@ -496,6 +496,22 @@ and read delay for 150 MHz, and the GC heap is partly in the PSRAM. Read
 back on the card at 250 MHz (2026-11-08): divider 2 (125 MHz), read delay
 3, and `src/test/psram_test.py` passes on all 8 MB (the reserve and the heap).
 
+`psram_reinitialize` runs with interrupts off (`save_and_disable_interrupts`).
+It calls the SDK's `flash_start_xip`, which takes the flash and the PSRAM
+out of XIP for a moment and does not mask interrupts itself, so an
+interrupt there runs its handler from flash (or reaches the GC heap in the
+PSRAM) and core 0 locks up. `tsbus.start()` runs from `main.py` while the
+host is still enumerating USB, and about one reset in twenty
+(2026-11-09) left the card stuck mid-enumeration: the Mac had read its
+descriptors, no serial port came, the 2068 never got its ROM, and only RUN
+brought it back. Proved from the REPL with `main.py` set aside: with a
+10 kHz `machine.Timer` interrupt running, `machine.freq()` at the same
+clock (the same `psram_reinitialize`, interrupts on) locked core 0 within
+500 calls; with `machine.disable_irq()` around each call, 20,000 calls
+and 156,647 timer interrupts passed. Core 1 isn't running yet here.
+MicroPython's own `machine.freq()` has the same window *(upstream; not
+fixed here: the firmware never calls it)*.
+
 ### `tsbus.start()`
 
 Once (a no-op afterwards, including after a soft reset): checks the GC heap
