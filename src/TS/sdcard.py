@@ -92,6 +92,34 @@ _TOKEN_STOP_TRAN = const(0xFD)
 _TOKEN_DATA = const(0xFE)
 _HCS_BIT = const(1 << 30)  # for ACMD41
 
+# The v3 card's PSRAM (#410) is part of the GC heap, so a buffer FatFs hands
+# this driver can be in it (0x11000000 up, behind the QMI). machine.SPI sends
+# 32 bytes or more by DMA, and a DMA that reads or writes the PSRAM waits on
+# the QMI. The DMA's one read port waits with it, and so does tsbus's chain
+# that serves the 2068's memory reads: the 2068 ran wild during SD writes
+# from the PSRAM (2026-11-09: tpi:net, and 3 MB from 0x11000000 crashed it
+# where 3.8 MB from SRAM did not). So such a transfer goes through _BOUNCE,
+# made here: this module is imported at boot (tspico_io), while the heap's
+# SRAM part is the one in use. _recover's 520-byte read uses it too. The v2
+# board and the host tests never see an address in the XIP space.
+try:
+    from uctypes import addressof as _addressof
+except ImportError:
+    _addressof = None
+_BOUNCE = bytearray(520)
+_BOUNCE512 = memoryview(_BOUNCE)[:512]
+
+
+def _in_xip(buf):
+    """True if buf is in the XIP space (flash or PSRAM, 1xxxxxxxh), where
+    SPI's DMA must not go."""
+    return _addressof is not None and _addressof(buf) >> 28 == 1
+
+
+def _bounce(buf):
+    """An SRAM buffer as long as buf (at most 520 bytes)."""
+    return _BOUNCE512 if len(buf) == 512 else memoryview(_BOUNCE)[:len(buf)]
+
 
 class SDCard:
     def __init__(self, spi, cs, baudrate=5_000_000, crc16_function=None):
@@ -173,7 +201,7 @@ class SDCard:
         """
         cs = self.cs
         spi = self.spi
-        buf = bytearray(520)
+        buf = _BOUNCE                     # 520 bytes in SRAM: SPI reads it by DMA
         cs(0)
         spi.readinto(buf, 0xFF)
         seen = 0
@@ -407,7 +435,12 @@ class SDCard:
                     raise OSError(ETIMEDOUT, "read timeout")
                 time.sleep_ms(1)  # if response is slow, wait longer
 
-        self.spi.readinto(buf, 0xFF)
+        if _in_xip(buf):                  # in the PSRAM: by way of SRAM
+            b = _bounce(buf)
+            self.spi.readinto(b, 0xFF)
+            buf[:] = b
+        else:
+            self.spi.readinto(buf, 0xFF)
 
         # read checksum
         ck = self.spi.read(2, 0xFF)
@@ -426,6 +459,11 @@ class SDCard:
         spiff = self._spiff
         r = self.spi.read
         w = self.spi.write
+
+        if _in_xip(buf):                  # in the PSRAM: by way of SRAM
+            b = _bounce(buf)
+            b[:] = buf
+            buf = b
 
         cs(0)
 
