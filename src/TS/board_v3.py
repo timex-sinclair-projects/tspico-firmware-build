@@ -507,6 +507,17 @@ BLOCK_BUF = bytearray(BLOCK_SIZE)
 _buf = memoryview(BLOCK_BUF)[:SLOT_SIZE]
 _zeros = bytes(1024)                # for an empty half, without another 32K
 
+# A card with U22 fitted (the 8 MB PSRAM, #410) has a GC heap of about 1 MB;
+# one without has 172K. On the big heap a buffer over BLOCK_SIZE is
+# made when it is wanted (64K in ~5 ms) instead of being refused: tpi:net's
+# tapes over 48K. Read once here, before the firmware allocates much. CPython
+# (the host tests) has no such heap: False.
+try:
+    import gc as _gc
+    PSRAM_HEAP = _gc.mem_free() + _gc.mem_alloc() > 512 * 1024
+except AttributeError:
+    PSRAM_HEAP = False
+
 
 def _keys(rom_sm, bank_sm):
     """The boot and dock (mem, slot) pairs of v2's two words."""

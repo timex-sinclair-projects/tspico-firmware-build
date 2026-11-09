@@ -6046,8 +6046,9 @@ def NET(pre, cmd):                                                    # Tapes fr
     # SAVE "tpi:net update"       - Download the full index again (find downloads it once)
     #
     # The tapes are plain files in the tspico-2068-tapes item on archive.org
-    # (#401), fetched by Zimodem (board.wifi_get) into BLOCK_BUF, so a tape
-    # over 48K is refused before it is fetched. One fetch per command keeps
+    # (#401), fetched by Zimodem (board.wifi_get) into BLOCK_BUF. A tape over
+    # 48K gets a buffer of its own on a card with the PSRAM (board.PSRAM_HEAP)
+    # and is refused before it is fetched on one without. One fetch per command keeps
     # it inside the 2068's ~19.9 s wait. A download isn't mounted (David,
     # 2026-11-08): MOVE TO "/net", then LOAD "tpi:name.tap". The list is kept
     # on flash (net.LIST_PATH); the full index on the card (net.FULL_PATH).
@@ -6138,25 +6139,31 @@ def NET_GET(net, e, par1):                                            # download
 
     name = net.name_of(e)
     size = int(e[4])
-    room = len(board.BLOCK_BUF)
-    if size > room:                                                   # refused before any fetch
-        SEND_MSG("NET: Too big for the card: %s" % name, "%d bytes, %d at most" % (size, room), _6_6_Num2Big)
-        return
+    buf = board.BLOCK_BUF
+    if size > len(buf):                                               # over 48K: with the PSRAM, a
+        try:                                                          # buffer of its own; without,
+            buf = bytearray(size) if board.PSRAM_HEAP else None       # refused before any fetch
+        except MemoryError:
+            buf = None
+        if buf is None:
+            SEND_MSG("NET: Too big for the card: %s" % name,
+                     "%d bytes, %d at most" % (size, len(board.BLOCK_BUF)), _6_6_Num2Big)
+            return
     dest = net.SAVE_DIR + "/" + name
     there, st = SD_CALL(NET_EXISTS, dest)
     if st != _1_OK:
         SEND_MSG(there, "", st)
         return
-    n = board.wifi_get(net.tape_url(e[1]), board.BLOCK_BUF)
+    n = board.wifi_get(net.tape_url(e[1]), buf)
     if there and par1 == 0:
         ch = SEND_MSG_PROMPT_YN('Replace "%s" (y/N)?' % name)         # the prompt is the answer:
         if ch != 89: # 89='Y'                                         # the rest only reaches the log
             LOG("NET: %s not replaced" % name, 0)
             return
-        msg, st = SD_CALL(NET_WRITE, dest, n)
+        msg, st = SD_CALL(NET_WRITE, dest, buf, n)
         LOG(msg, 0 if st == _1_OK else 2)
         return
-    msg, st = SD_CALL(NET_WRITE, dest, n)
+    msg, st = SD_CALL(NET_WRITE, dest, buf, n)
     LOG(msg, 0 if st == _1_OK else 2)
     SEND_MSG(msg, ('MOVE TO "/net", LOAD "tpi:%s", then %s' % (name, net.how(e[2])))
              if st == _1_OK else "", st)
@@ -6167,14 +6174,14 @@ def NET_EXISTS(dest):                                                 # NET_GET,
     return file_exists(dest), _1_OK
 
 
-def NET_WRITE(dest, n):                                               # BLOCK_BUF's n bytes to dest: SD active
+def NET_WRITE(dest, buf, n):                                          # buf's n bytes to dest: SD active
 
     from TS import net
     if not dir_exists(net.SAVE_DIR):
         os.mkdir(net.SAVE_DIR)
     try:
         with open(dest, "wb") as f:
-            f.write(memoryview(board.BLOCK_BUF)[:n])
+            f.write(memoryview(buf)[:n])
     except OSError:
         try:
             os.remove(dest)                                           # no half a tape left behind

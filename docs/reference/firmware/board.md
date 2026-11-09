@@ -38,6 +38,7 @@ Who calls what:
 | `SD_SLOTS` | `MEM_MAX` ([tspico-commands.md](tspico-commands.md#mem_max)): `MEMBOOT`, `MEMDOCK` and `LOAD_CONFIG` take MEM 3 where it is `True` |
 | `HAS_CORE1` | `TS2068_IO`, the boot blink |
 | `BLOCK_BUF` | `tspico.py` at import (1212), as `tspico_io.BLOCK_BUF`: the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)); `tpi:net`'s downloads (`wifi_get`) |
+| `PSRAM_HEAP` | `NET_GET` (6145, [tspico-commands.md](tspico-commands.md#net_getnet-e-par1)): a tape over `BLOCK_BUF` gets a `bytearray` of its own where it is `True` |
 | `HAS_MODEM` | `TS2068_IO` (7141, at boot; 7862, the idle loop), `MODEM` (5898, [tspico-commands.md](tspico-commands.md#modempre-cmd)) |
 | `modem_start()` | `TS2068_IO` (7142), at boot with `config.ini`'s modem keys; `MODEM` (5913), a new mode |
 | `modem_service()` | `TS2068_IO`'s idle loop (7863), every pass with nothing arrived |
@@ -104,6 +105,11 @@ core 1 is free for `background()`, so `TS2068_IO` starts the boot blink.
 (about 190K free) still had a 66K block after round after round of big
 listings and 64K DOCK mounts (#384, `memcheck --dck`, 2026-11-06), so 48K
 held for good would cost it more than it saves. See board_v3's `BLOCK_BUF`.
+
+### `PSRAM_HEAP`
+
+`False`: v2 has no PSRAM, and no WiFi either, so `NET_GET` is never
+reached on it. The name is here so both boards export the same ones.
 
 ### `SD_SLOTS`
 
@@ -725,9 +731,10 @@ at import, while the heap is clean; `BLOCK_SIZE` is 49152 + 8. `_buf` is
 through it (a ROM, each half of the dock, a RAM dock being saved).
 `tspico.py` hands `BLOCK_BUF` to `tspico_io` (1203), where `BLOCK` lends its
 front to the LOAD and SAVE data blocks ([tspico_io.md](tspico_io.md#blockn)).
-`tpi:net` borrows all of it for a download (`wifi_get`), which is why a tape
-over 49,160 bytes is refused (10 of the 2,300 in the item; David chose that
-over a 64K buffer, 2026-11-08).
+`tpi:net` borrows all of it for a download (`wifi_get`). A tape over 49,160
+bytes (10 of the 2,300 in the item) gets a buffer of its own on a card with
+the PSRAM (`PSRAM_HEAP`) and is refused on one without (David chose that
+over a 64K buffer held for good, 2026-11-08, before the PSRAM).
 
 Why at import: once the firmware runs, the heap (172K, about 100K free) has
 no 64K block, and a 32K one isn't certain either. On the card `tpi:dock`
@@ -743,6 +750,22 @@ one command, and the slot code and the transfers are never in the same one.
 It costs 16K more than the 32K `_buf` it replaced. A bigger block still
 allocates its own, as before. `_zeros` is 1K of zeros, loaded 32 times to
 clear an empty half.
+
+### `PSRAM_HEAP`
+
+`True` when the GC heap is over 512K (`gc.mem_free() + gc.mem_alloc()`,
+read once at import): a card with U22, the 8 MB PSRAM, fitted. Its heap is
+1,188,480 bytes (about 1 MB of it in the PSRAM,
+[board-v3.md](board-v3.md#tspico_v3_psram_reserve-tspico_v3_psram_reserve));
+a card without has 172K. On CPython (the host tests), where `gc` has no
+`mem_free`, it is `False`.
+
+Why: on the big heap a buffer over `BLOCK_SIZE` can be made when it is
+wanted instead of being held for good. A 64K `bytearray` takes 4.6 ms and a
+256K one 18.6 ms (measured 2026-11-09, both placed in the PSRAM); a full
+`gc.collect()` takes 3–20 ms. `NET_GET` uses it for a tape over 48K. A
+`MemoryError` there is still answered as "too big", so a tape that won't
+fit is refused, not half-fetched.
 
 ### `slot_path(mem, slot)`
 
