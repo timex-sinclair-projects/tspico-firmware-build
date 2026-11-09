@@ -413,23 +413,27 @@ regenerate it when a line number moves (the test checks that it is current).
 | `_TOKEN_STOP_TRAN` | variable | [91](../../../src/TS/sdcard.py#L91) | [firmware/sdcard.md](../firmware/sdcard.md) |
 | `_TOKEN_DATA` | variable | [92](../../../src/TS/sdcard.py#L92) | [firmware/sdcard.md](../firmware/sdcard.md) |
 | `_HCS_BIT` | variable | [93](../../../src/TS/sdcard.py#L93) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard` | class | [96](../../../src/TS/sdcard.py#L96) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.__init__` | method | [97](../../../src/TS/sdcard.py#L97) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.check_crcs` | method | [111](../../../src/TS/sdcard.py#L111) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.init_spi` | method | [118](../../../src/TS/sdcard.py#L118) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard._spiff` | method | [128](../../../src/TS/sdcard.py#L128) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard._wait_ready` | method | [131](../../../src/TS/sdcard.py#L131) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard._recover` | method | [146](../../../src/TS/sdcard.py#L146) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.decode_cid` | method | [196](../../../src/TS/sdcard.py#L196) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.init_card` | method | [217](../../../src/TS/sdcard.py#L217) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.cmd` | method | [332](../../../src/TS/sdcard.py#L332) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.readinto` | method | [385](../../../src/TS/sdcard.py#L385) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.write` | method | [424](../../../src/TS/sdcard.py#L424) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.write_token` | method | [457](../../../src/TS/sdcard.py#L457) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.blocks` | method | [473](../../../src/TS/sdcard.py#L473) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.readblocks` | method | [479](../../../src/TS/sdcard.py#L479) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.writeblocks` | method | [507](../../../src/TS/sdcard.py#L507) | [firmware/sdcard.md](../firmware/sdcard.md) |
-| `SDCard.ioctl` | method | [533](../../../src/TS/sdcard.py#L533) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_BOUNCE` | variable | [109](../../../src/TS/sdcard.py#L109) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_BOUNCE512` | variable | [110](../../../src/TS/sdcard.py#L110) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_in_xip` | function | [113](../../../src/TS/sdcard.py#L113) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `_bounce` | function | [119](../../../src/TS/sdcard.py#L119) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard` | class | [124](../../../src/TS/sdcard.py#L124) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.__init__` | method | [125](../../../src/TS/sdcard.py#L125) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.check_crcs` | method | [139](../../../src/TS/sdcard.py#L139) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.init_spi` | method | [146](../../../src/TS/sdcard.py#L146) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard._spiff` | method | [156](../../../src/TS/sdcard.py#L156) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard._wait_ready` | method | [159](../../../src/TS/sdcard.py#L159) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard._recover` | method | [174](../../../src/TS/sdcard.py#L174) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.decode_cid` | method | [224](../../../src/TS/sdcard.py#L224) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.init_card` | method | [245](../../../src/TS/sdcard.py#L245) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.cmd` | method | [360](../../../src/TS/sdcard.py#L360) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.readinto` | method | [413](../../../src/TS/sdcard.py#L413) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.write` | method | [457](../../../src/TS/sdcard.py#L457) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.write_token` | method | [495](../../../src/TS/sdcard.py#L495) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.blocks` | method | [511](../../../src/TS/sdcard.py#L511) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.readblocks` | method | [517](../../../src/TS/sdcard.py#L517) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.writeblocks` | method | [545](../../../src/TS/sdcard.py#L545) | [firmware/sdcard.md](../firmware/sdcard.md) |
+| `SDCard.ioctl` | method | [571](../../../src/TS/sdcard.py#L571) | [firmware/sdcard.md](../firmware/sdcard.md) |
 
 ## `src/TS/channels.py`
 

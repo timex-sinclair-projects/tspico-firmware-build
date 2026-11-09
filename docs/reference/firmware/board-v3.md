@@ -71,6 +71,12 @@ Not set here: `mpconfigboard.cmake` sets it (1) and the port passes it as a
 sits behind the XIP cache, so its delay is not steady enough for a Z80 memory
 cycle (`docs/v3-slots-proposal.md`).
 
+Nor may any DMA read or write the PSRAM while `tsbus` serves the 2068: the
+DMA waits on the QMI, and `tsbus`'s chain waits behind it. The SD driver's
+SPI transfers did that from a heap buffer in the PSRAM and crashed the 2068
+(2026-11-09); they now go through an SRAM buffer ([sdcard.md](sdcard.md),
+"SPI DMA and the PSRAM").
+
 ### `MICROPY_PY_THREAD`
 
 0. `_thread` would run Python on core 1, which belongs to `tsbus`.

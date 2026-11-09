@@ -47,15 +47,16 @@ block; CMD17, CMD24 and CMD58 are never sent.
 | 35–57 | `crc7_be_syndrome_table`, `crc7`, `gb` |
 | 60–81 | the five timeouts |
 | 83–93 | the R1 bits, the three data tokens, `_HCS_BIT` |
-| 96–109 | `SDCard`, `SDCard.__init__` |
-| 111–129 | `check_crcs`, `init_spi`, `_spiff` |
-| 131–194 | `_wait_ready`, `_recover` |
-| 196–215 | `decode_cid` |
-| 217–330 | `init_card`: the start-up sequence |
-| 332–383 | `cmd`: one command frame and its R1 |
-| 385–470 | `readinto`, `write`, `write_token`: one data block each way |
-| 472–531 | `blocks`, `readblocks`, `writeblocks`: the block-device interface |
-| 533–537 | `ioctl` |
+| 95–121 | `_BOUNCE`, `_BOUNCE512`, `_in_xip`, `_bounce`: transfers kept out of the PSRAM |
+| 124–137 | `SDCard`, `SDCard.__init__` |
+| 139–157 | `check_crcs`, `init_spi`, `_spiff` |
+| 159–222 | `_wait_ready`, `_recover` |
+| 224–243 | `decode_cid` |
+| 245–358 | `init_card`: the start-up sequence |
+| 360–411 | `cmd`: one command frame and its R1 |
+| 413–508 | `readinto`, `write`, `write_token`: one data block each way |
+| 510–569 | `blocks`, `readblocks`, `writeblocks`: the block-device interface |
+| 571–575 | `ioctl` |
 
 ## The command set
 
@@ -164,6 +165,43 @@ never tested.
 | `_TOKEN_DATA` | `0xFE` | the start token the card puts before a block it sends; `readinto` waits for it (CSD, CID, every CMD18 block) |
 | `_HCS_BIT` | `1 << 30` | ACMD41's argument on a v2 card: the host supports high capacity (SDHC/SDXC) |
 
+## SPI DMA and the PSRAM
+
+The v3 card with U22 fitted has part of its GC heap in the PSRAM (#410,
+[board-v3.md](board-v3.md)), so a buffer FatFs passes to `readblocks` or
+`writeblocks` can be at 0x11000000 or above, behind the QMI. MicroPython's
+`machine.SPI` sends any transfer of 32 bytes or more by DMA (v1.29,
+`ports/rp2/machine_spi.c`). A DMA read or write of the PSRAM waits on the
+QMI, the DMA's one read port waits with it, and so does tsbus's
+`ch_ptr`/`ch_data` chain, which serves the 2068's memory reads
+([tsbus.md](tsbus.md)): the 2068 gets late or wrong bytes and runs wild. The
+same family as the APB stalls of #254 and #286.
+
+Found on hardware 2026-11-09: `tpi:net` crashed the 2068 about half the time
+on PSRAM firmware, always in the SD write after the download, and never on
+the firmware before #410. A test command writing to the card for 12 s
+crashed it at once with 3 MB sent from 0x11000000; 3.8 MB from a 4K SRAM
+buffer did not. PSRAM traffic from the CPU alone (70 MB in 12 s), the
+ESP32's power, its UART and garbage collections over the PSRAM heap did
+not crash it either.
+
+| Name | Value | What |
+|---|---|---|
+| `_addressof` | `uctypes.addressof`, or `None` | `None` on the host, where `uctypes` doesn't exist: nothing is ever in the XIP space there |
+| `_BOUNCE` | `bytearray(520)` | SRAM for one block, and `_recover`'s 520-byte read. Made at import: `tspico_io` imports this module at boot, while the heap's SRAM part is the one in use *(inferred from the heap's first-fit order; on hardware it was at 0x2xxxxxxx, see below)* |
+| `_BOUNCE512` | `memoryview(_BOUNCE)[:512]` | made once, so a block costs no allocation |
+
+### `_in_xip(buf)`
+
+True when `buf`'s address is in the XIP space, 1xxxxxxxh: the flash and the
+PSRAM, cached and uncached. Always false on the v2 board (no PSRAM, and no
+buffer is in flash) and on the host.
+
+### `_bounce(buf)`
+
+An SRAM buffer of `len(buf)` bytes: `_BOUNCE512` for a block, else a slice
+of `_BOUNCE` (at most 520 bytes). `readinto` and `write` use it.
+
 ## `SDCard`
 
 The block device. Its state, all set in `__init__` and `init_card`:
@@ -242,7 +280,8 @@ Brings back a card that the previous session left inside a transfer,
 before `init_card` sends CMD0. The docstring is the specification; the
 steps as coded:
 
-1. CS low. Read 520 bytes with MOSI high (`spi.readinto(buf, 0xFF)`): a
+1. CS low. Read 520 bytes into `_BOUNCE` with MOSI high
+   (`spi.readinto(buf, 0xFF)`; SRAM, since SPI reads them by DMA): a
    half-sent CMD25 block gets its remaining data, two CRC bytes and the
    response slot filled, and with CRC checks off the card writes that
    sector with the `0xFF` filler. Count the bytes that were not `0xFF` as
@@ -393,7 +432,9 @@ Takes one data block of `len(buf)` bytes from the card, CS low throughout.
    back, then the clock starts and each further poll sleeps 1 ms, up to
    `_READ_TOKEN_MS`; then CS high and `ETIMEDOUT, "read timeout"`. This is
    the one error exit that does not clock a `0xFF` after raising CS.
-2. `spi.readinto(buf, 0xFF)`: the block.
+2. `spi.readinto(buf, 0xFF)`: the block. A `buf` in the PSRAM (`_in_xip`)
+   is read into `_bounce(buf)` and copied over, so SPI's DMA never writes
+   the PSRAM (see "SPI DMA and the PSRAM").
 3. Two CRC bytes, read and, with `crc16` set, checked: `crc16(crc16(0, buf),
    ck)` must be 0, else CS high, `0xFF`, `EIO, "bad data CRC"`. Without
    `crc16` they are dropped.
@@ -407,15 +448,18 @@ to the spec's 100 ms by #131 (audit §4, "data-token wait").
 
 Sends one data block inside a CMD25:
 
-1. CS low. `spi.read(1, token)` sends the token while reading a byte that
+1. A `buf` in the PSRAM (`_in_xip`) is copied to `_bounce(buf)` first, and
+   that is sent: SPI's DMA never reads the PSRAM (see "SPI DMA and the
+   PSRAM"). About 2 µs a block at 250 MHz *(estimated, not measured)*.
+2. CS low. `spi.read(1, token)` sends the token while reading a byte that
    is dropped; `spi.write(buf)` sends the data; then the CRC, computed when
    `crc16` is set, else `FF FF`.
-2. Reads the data response; its low five bits must be `0x05`, "data
+3. Reads the data response; its low five bits must be `0x05`, "data
    accepted". Otherwise CS high, `0xFF`, `EIO, "write fail"`. No STOP_TRAN
    is sent here; `writeblocks`'s `except` does that.
-3. `_wait_ready()` for the card to program the block; -1 gives CS high,
+4. `_wait_ready()` for the card to program the block; -1 gives CS high,
    `0xFF`, `ETIMEDOUT, "write busy"`.
-4. CS high, one `0xFF`.
+5. CS high, one `0xFF`.
 
 Only `writeblocks` calls it, always with `_TOKEN_CMD25`. The "write fail"
 path is the one that used to strand the card (see `writeblocks`), and the
@@ -514,6 +558,8 @@ As the code and its comments say, not from a diff against the origin:
   ~24 ms before and noted that micropython-lib's driver waits ~100 ms.
 - The CID is read and kept (`CIDBYTES`, `CID`, `decode_cid`), with 0 for
   "unknown" (#101, #107).
+- A buffer in the PSRAM goes through `_BOUNCE`, an SRAM buffer, both ways:
+  SPI's DMA must not touch the PSRAM while tsbus serves the 2068.
 - No `crc16` function is wired in; the `crc_function` note in the header
   describes a capability the firmware does not use.
 
