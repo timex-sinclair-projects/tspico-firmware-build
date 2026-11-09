@@ -99,6 +99,15 @@ two apart:
   channels, which have to use the UART, are paused around every flash
   erase and program (`__wrap_flash_range_erase`, below). A `tpi:modem 2050`
   loop then ran 419 commands without a fault (it had failed at once).
+- **Nor may any DMA touch the PSRAM.** It sits behind the QMI, and a DMA
+  read or write there waits on it, holding `ch_ptr` and `ch_data` up the
+  same way. With the PSRAM in the GC heap (#410), the SD driver's SPI DMA
+  sent blocks straight from heap buffers in the PSRAM: `tpi:net` crashed
+  the 2068 about half the time, in the SD write, and 12 s of SD writes
+  from 0x11000000 crashed it at once, where the same writes from SRAM did
+  not (2026-11-09). The CPU's own PSRAM traffic did no harm. The driver
+  now copies such blocks through SRAM ([sdcard.md](sdcard.md), "SPI DMA
+  and the PSRAM").
 - **PIO and DMA** are claimed through the SDK. MicroPython's `rp2` refuses
   claimed state machines and frees only what it claimed itself at soft
   reset, so `tsbus` keeps running through Ctrl-D (checked). PIO0 and PIO1
