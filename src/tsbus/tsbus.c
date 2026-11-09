@@ -93,6 +93,9 @@
 #include "hardware/structs/scb.h"
 #include "hardware/structs/sio.h"
 #include "hardware/vreg.h"
+#if MICROPY_HW_ENABLE_PSRAM
+#include "hardware/psram.h"
+#endif
 
 #include "rp2_flash.h"
 
@@ -968,6 +971,14 @@ static void bus_clock(void) {
     if (!set_sys_clock_khz(BUS_CLOCK_HZ / 1000, false)) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("tsbus: cannot set 250 MHz"));
     }
+    #if MICROPY_HW_ENABLE_PSRAM
+    // The PSRAM's QMI divider and read delay were set for the boot clock: set
+    // them again for 250 MHz, as machine.freq() does.
+    if (psram_is_available()) {
+        psram_configure_params(PICO_DEFAULT_PSRAM_MAX_FREQ, PICO_DEFAULT_PSRAM_MAX_SELECT, PICO_DEFAULT_PSRAM_MIN_DESELECT);
+        psram_reinitialize();
+    }
+    #endif
 }
 
 // ---- Python ------------------------------------------------------------------------------

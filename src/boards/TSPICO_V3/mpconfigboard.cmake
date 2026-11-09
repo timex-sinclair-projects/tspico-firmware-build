@@ -1,4 +1,4 @@
-# TS-Pico v3 (proto1): RP2350B, 48 GPIOs, 16 MB QSPI flash, no PSRAM.
+# TS-Pico v3 (proto1): RP2350B, 48 GPIOs, 16 MB QSPI flash, 8 MB PSRAM (U22).
 # Built from outside the MicroPython tree:
 #   make -C ports/rp2 BOARD_DIR=<this repo>/src/boards/TSPICO_V3
 
@@ -14,6 +14,12 @@ set(PICO_NUM_GPIOS 48)
 # The port's CMake needs the flash size as a variable; tspico_v3.h only sets
 # it for the compiler (it has no pico_cmake_set lines).
 set(PICO_FLASH_SIZE_BYTES 16777216)  # GD25Q128E, 16 MB
+
+# U22, the APS6404L PSRAM, on QMI CS1 at GP47. The SDK's runtime_init finds
+# its size and brings it up; MicroPython adds it to the GC heap (a split
+# heap: SRAM first, then the PSRAM).
+set(MICROPY_HW_ENABLE_PSRAM 1)
+set(MICROPY_HW_PSRAM_CS_PIN 47)
 
 # Only _boot.py and rp2.py; see manifest.py.
 set(MICROPY_FROZEN_MANIFEST ${MICROPY_BOARD_DIR}/manifest.py)
