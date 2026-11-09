@@ -200,7 +200,7 @@ behavior, and the caveat and the issue link go.
 | `src/boards/TSPICO_V3/tspico_v3_pins.h` | `40da5220bbda` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl` | `7f2393c1dc08` | [firmware/board-v3.md](firmware/board-v3.md) | — |
 | `src/boards/TSPICO_V3/memmap/pico_psram_region.ld` | `80810f5c7cc5` | [firmware/board-v3.md](firmware/board-v3.md) | — |
-| `src/tsbus/tsbus.c` | `24c8cfb63f36` | [firmware/tsbus.md](firmware/tsbus.md) | — |
+| `src/tsbus/tsbus.c` | `e22158d7cc25` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/tsbus.pio` | `bc7ecb0f0c84` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.h` | `6d0523a0e42a` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/tsbus/usart8251.c` | `e6812ab5e133` | [firmware/tsbus.md](firmware/tsbus.md) | — |

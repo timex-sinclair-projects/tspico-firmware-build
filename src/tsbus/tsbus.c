@@ -85,6 +85,7 @@
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
+#include "hardware/sync.h"
 #include "hardware/uart.h"
 #include "hardware/structs/busctrl.h"
 #include "hardware/structs/io_bank0.h"
@@ -973,10 +974,19 @@ static void bus_clock(void) {
     }
     #if MICROPY_HW_ENABLE_PSRAM
     // The PSRAM's QMI divider and read delay were set for the boot clock: set
-    // them again for 250 MHz, as machine.freq() does.
+    // them again for 250 MHz, as machine.freq() does. With interrupts off:
+    // psram_reinitialize() calls flash_start_xip(), which takes the flash and
+    // the PSRAM out of XIP for a moment and doesn't mask interrupts itself. An
+    // interrupt then runs its handler from flash, or touches the GC heap in the
+    // PSRAM, and core 0 faults. At boot, main.py's tsbus.start() runs while the
+    // host is still enumerating USB, so a USB interrupt landed there about one
+    // reset in five: USB stopped mid-enumeration, the 2068 never got its ROM,
+    // and only RUN brought the card back (2026-11-09). Core 1 isn't started yet.
     if (psram_is_available()) {
         psram_configure_params(PICO_DEFAULT_PSRAM_MAX_FREQ, PICO_DEFAULT_PSRAM_MAX_SELECT, PICO_DEFAULT_PSRAM_MIN_DESELECT);
+        uint32_t irq = save_and_disable_interrupts();
         psram_reinitialize();
+        restore_interrupts(irq);
     }
     #endif
 }
