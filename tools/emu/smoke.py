@@ -60,8 +60,8 @@ def main():
         print('SAVE "tpi:info"')
         t = s.run(S.SAVE, '"tpi:info"')
         check("interface status" in t and "uPython 1.29.0" in t and "0 OK" in t, "status screen")
-        check("ROM       2.3" in t or "ROM 2.3" in " ".join(t.split()),
-              "its ROM line is the version ROM 2.3 sent in the pre-header")
+        check("ROM       2.4" in t or "ROM 2.4" in " ".join(t.split()),
+              "its ROM line is the version ROM 2.4 sent in the pre-header")
 
         print('SAVE "tpi:picopt", LPRINT')
         s.run(S.SAVE, '"tpi:picopt"')

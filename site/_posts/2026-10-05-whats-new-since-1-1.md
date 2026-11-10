@@ -6,8 +6,8 @@ date: 2026-10-05 06:00:00 -0400
 ---
 
 The last TS-Pico software most owners installed was version 1.1. The current release,
-**2.3.1**, replaces it. It updates both halves of the TS-Pico: the **firmware** on the Pico
-(firmware 2.3.1), and the **TS-2068 ROM** in its flash chip (ROM 2.3). The firmware and
+**2.4**, replaces it. It updates both halves of the TS-Pico: the **firmware** on the Pico
+(firmware 2.4), and the **TS-2068 ROM** in its flash chip (ROM 2.4). The firmware and
 the ROM are made to work together, so install both. The
 [web updater]({{ site.updater_url | relative_url }}) does it from Chrome or Edge in about
 fifteen minutes.
@@ -63,7 +63,6 @@ come from that.
 
 - **Names from your computer.** Characters the 2068 can't show, such as `{`, `|`, `~` or
   accented letters, appear as `?`, and you can type the name with the `?` to load the file.
-- **`tpi:newtap` never empties an existing file.** It answers **F** instead.
 - **`tpi:rm` removes any file or empty folder.** It refuses the mounted file.
 - **Flash slots are safer.** The TS-Pico refuses to write the flash slot the 2068 is
   running from. Doing that used to hang both machines.
@@ -83,8 +82,8 @@ come from that.
 
 ## New commands: the disk keywords
 
-The TS-2068 ROM has four keywords that Timex never implemented: **CAT**, **MOVE**, **ERASE**
-and **FORMAT**. Timex meant them for a disk drive. The new ROM makes them work on the SD card,
+The TS-2068 ROM has keywords that Timex never implemented: **CAT**, **MOVE**, **ERASE**
+and **FORMAT**, and the new ROM gives **COPY**, **LIST** and **RESTORE** more to do. Timex meant them for a disk drive. The new ROM makes them work on the SD card,
 with features borrowed from the Zebra FDD's TOS. They take wildcards
 (`*` and `?`), paths, and string expressions such as `CAT a$`.
 
@@ -94,12 +93,14 @@ with features borrowed from the Zebra FDD's TOS. They take wildcards
 | `CAT "games/b*"` | List matching files in another folder |
 | `CAT "frogger.tap"` | List the blocks inside a TAP file |
 | `CAT ""` | List the blocks in the mounted TAP, with the tape pointer |
-| `MOVE TO "games"` | Change folder (`MOVE TO ""` goes back) |
-| `MOVE "a.tap" TO "b.tap"` | Copy a file (never overwrites) |
-| `MOVE "*.tap" TO "backup"` | Copy all matching files into a folder |
+| `MOVE TO "games"` | Change folder (`MOVE TO "-"` goes back, `MOVE TO ""` is a menu) |
+| `COPY "a.tap" TO "b.tap"` | Copy a file (never overwrites) |
+| `COPY "*.tap" TO "backup"` | Copy all matching files into a folder |
+| `MOVE "a.tap" TO "b.tap"` | Rename a file, or move it to another folder |
+| `LIST "notes.txt"` | Show a file on the screen |
 | `ERASE "old.tap"` | Delete a file |
 | `ERASE "*.bak"` | Delete matching files, asking about each one |
-| `FORMAT "songs.tap"` | Make a new, empty TAP, ready to append to |
+| `FORMAT "songs.tap"` | Make a new, empty TAP, mounted and ready to SAVE onto |
 | `FORMAT "tools/"` | Make a folder |
 
 `FORMAT` never formats your SD card. It only makes new things, and it never overwrites a
@@ -254,7 +255,7 @@ fresh clone to a tested change. It covers the host tests that CI runs on every p
 tests in `tools/emu`. The scripts that built and tested the software library are in
 `tools/sd-archive`.
 
-## Getting 2.3
+## Getting 2.4
 
 1. Switch the TS-2068 off.
 2. Open the [web updater]({{ site.updater_url | relative_url }}) in Chrome or Edge, connect
@@ -265,7 +266,7 @@ tests in `tools/emu`. The scripts that built and tested the software library are
    instead: it works the same way.
 3. Keep the **P10 jumper** fitted. Writing the ROM to the flash chip needs it.
 
-Afterwards, `PRINT PEEK 101` on the 2068 gives **35** (ROM 2.3), and `SAVE "tpi:info"` shows
-firmware 2.3.1 and ROM 2.3.
+Afterwards, `PRINT PEEK 101` on the 2068 gives **36** (ROM 2.4), and `SAVE "tpi:info"` shows
+firmware 2.4 and ROM 2.4.
 
 Thanks to everyone who tested along the way.

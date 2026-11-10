@@ -73,7 +73,7 @@ BIOS_WF_NPH     EQU $184C          ;   wait for the Pico: C with A = 02/0C/1C
 C_END_TAIL      EQU $227F          ; EXROM: C_END after its wait: read the status,
                                    ;   run the response functions (v1.7's $2279 tail)
 BANK_SV         EQU $5DCF          ; pre-header byte 2 on ROM 2.2 and earlier (always FFh)
-ROM_ID          EQU $23            ; ROM 2.3: a command pre-header's byte 2 (#227, #228),
+ROM_ID          EQU $24            ; ROM 2.4: a command pre-header's byte 2 (#227, #228),
                                    ;   the version marker at HOME $0065; build-rom.py
                                    ;   patches $1BB5 to send the same
 TSPICO_READ_DATA EQU $2298         ; EXROM: IN A,(0Eh) / AND A / RET -- no ready-wait

@@ -12,7 +12,7 @@ a new ROM, and installs from a web browser in about fifteen minutes. It's free.
 <img src="{{ '/assets/flyer/ts2068-line.svg' | relative_url }}" alt="A TS 2068 with a TS-Pico behind it"
      style="display: block; width: 100%; background: #b4b1ab; border-radius: 4px;">
 
-[Download the flyer (PDF, letter, front and back)]({{ '/assets/flyer/tspico-2.3-flyer.pdf' | relative_url }})
+[Download the flyer (PDF, letter, front and back)]({{ '/assets/flyer/tspico-2.4-flyer.pdf' | relative_url }})
 to print or pass on to your user group.
 
 ## What's new since 1.1

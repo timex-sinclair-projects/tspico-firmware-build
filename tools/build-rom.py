@@ -13,11 +13,11 @@ Pipeline (see docs/FDD_COMMANDS_DESIGN.md §8):
   5. write build/TSPICO-fdd.ROM (+ split halves) and print a hunk report,
      asserting that ONLY the intended regions changed
 
-The result is ROM 2.3, the slot-1 image: it is committed as
-src/rom/TSPICO-23.ROM (flash/manifest.json slot 1), and CI fails if that file
+The result is ROM 2.4, the slot-1 image: it is committed as
+src/rom/TSPICO-24.ROM (flash/manifest.json slot 1), and CI fails if that file
 differs from a fresh build. After changing the module or the patches:
     python3 tools/build-rom.py --verify
-    cp build/TSPICO-fdd.ROM src/rom/TSPICO-23.ROM
+    cp build/TSPICO-fdd.ROM src/rom/TSPICO-24.ROM
 and update slot 1's crc32 in flash/manifest.json.
 
 Requires sjasmplus (brew install sjasmplus).
@@ -236,34 +236,36 @@ PATCHES = [
              "nothing else jumps to $20BE-$20C2 ($20C3 is tpi:sdcard's entry).",
     ),
     dict(
-        name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.3\"",
+        name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.4\"",
         bank="exrom", addr=0x1C7E,
-        before="76 32 2e 30", after="76 32 2e 33",
+        before="76 32 2e 30", after="76 32 2e 34",
         note="The copyright line at $1C6C (tspico-sync.asm) shown at start-up. "
              "Same length, so nothing else moves.",
     ),
     dict(
-        name="version marker: HOME $0065 20h -> 23h (ROM 2.3)",
+        name="version marker: HOME $0065 20h -> 24h (ROM 2.4)",
         bank="home", addr=0x0065,
-        before="20", after="23",
+        before="20", after="24",
         note="PEEK 101 tells a program which ROM it has: 15h v1.1, 17h v1.7, "
              "20h 2.0 (tspico-sync.asm), 21h 2.1 (the disk commands), 22h 2.2 "
-             "(2.1 plus the tpi:tape and pre-load fixes), 23h this ROM, 2.3 "
-             "(keys as typed, the Pico ends the $86 loop, the new string reader).",
+             "(2.1 plus the tpi:tape and pre-load fixes), 23h 2.3 (keys as typed, "
+             "the Pico ends the $86 loop, the new string reader), 24h this ROM, "
+             "2.4 (COPY and MOVE as two verbs, LIST \"x\", RESTORE #, CAT #, "
+             "the card label).",
     ),
     dict(
-        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0023h",
+        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0024h",
         bank="exrom", addr=0x1852,
-        before="01 20 00 c9", after="01 23 00 c9",
+        before="01 20 00 c9", after="01 24 00 c9",
         note="The Pico Interface BIOS G_VERS ($1844 -> $1852) returns the same "
              "version as HOME $0065.",
     ),
     dict(
-        name="command pre-header byte 2: LD A,(BANK_SV) -> LD A,23h (ROM_ID)",
+        name="command pre-header byte 2: LD A,(BANK_SV) -> LD A,24h (ROM_ID)",
         bank="exrom", addr=0x1BB5,
-        before="3a cf 5d", after="3e 23 00",
+        before="3a cf 5d", after="3e 24 00",
         note="BUILD_PREHEADER_B sent BANK_SV, which is always FFh, and the Pico "
-             "ignored it. ROM 2.3 sends its version marker instead, so the "
+             "ignored it. From ROM 2.3 on it sends the version marker instead, so the "
              "firmware knows which ROM sent each command (tpi:info shows it; "
              "#227). fddcmd.asm's SEND_FOPEN and CH_SEND send ROM_ID too. "
              "FFh = ROM 2.2 or earlier.",

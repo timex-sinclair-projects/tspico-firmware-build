@@ -503,8 +503,8 @@ def run(name, pico, pokes=None, keys=(), limit_t=400_000_000):
 def link_ok(pico, what):
     check(pico.underruns == 0, "%s: never read an empty FIFO" % what)
     check(pico.stray == 0, "%s: no stray bytes" % what)
-    check(pico.rom_ids and set(pico.rom_ids) == {0x23},
-          "%s: pre-header byte 2 is the ROM version, 23h (%r)" % (what, pico.rom_ids))
+    check(pico.rom_ids and set(pico.rom_ids) == {0x24},
+          "%s: pre-header byte 2 is the ROM version, 24h (%r)" % (what, pico.rom_ids))
     check(list(pico.tx) == [1] and pico.y == Pico.IDLE,
           "%s: link left idle with one pre-load (tx=%r y=%02X)" % (what, list(pico.tx), pico.y))
 

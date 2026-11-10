@@ -1,6 +1,6 @@
 # The HOME ROM
 
-Source: [`src/rom/TSPICO-23.ROM`](../../../src/rom/TSPICO-23.ROM) bytes
+Source: [`src/rom/TSPICO-24.ROM`](../../../src/rom/TSPICO-24.ROM) bytes
 0000h–3FFFh, read in
 [`tspico-22-home.asm`](../../rom-analysis/disasm/tspico-22-home.asm); the
 genuine HOME ROM [`ROMs/GENUINE-2068-home.bin`](../../../ROMs/GENUINE-2068-home.bin)
@@ -30,11 +30,11 @@ differ, with runs closer than five bytes merged into one hunk):
 | the base image → the SYNC layer (`TSPICO-SYNC.ROM`) | 14 | 2 (0065h, 0F13h–0F1Fh) |
 | the SYNC layer → ROM 2.2 (the disk-command layer) | 99 | 9 |
 | genuine → ROM 2.2 | 342 | 17 |
-| the SYNC layer → ROM 2.3 | 107 | 12 |
-| genuine → ROM 2.3 | 350 | 20 |
+| the SYNC layer → ROM 2.4 | 107 | 12 |
+| genuine → ROM 2.4 | 350 | 20 |
 
-ROM 2.3 adds the version byte and three parameter lists (COPY's, LIST's,
-RESTORE's) to ROM 2.2's.
+ROM 2.3 adds the version byte to ROM 2.2's, and ROM 2.4 three parameter
+lists (COPY's, LIST's, RESTORE's).
 
 The layers are described in
 [overview.md](overview.md#the-images). The older account of the genuine →
@@ -61,7 +61,7 @@ the fixed one ([sysvars.md](sysvars.md#5d37h-the-nmi-vector)).
 
 | HOME | Since | Genuine | Now | What | Statement |
 |---|---|---|---|---|---|
-| 0065h | 1.1 | `FFh` | the version (23h; 22h in ROM 2.2) | `PEEK 101` | — |
+| 0065h | 1.1 | `FFh` | the version (24h; 23h in ROM 2.3, 22h in ROM 2.2) | `PEEK 101` | — |
 | 03F3h–0420h | 1.1, disk-command layer | BEEPER | BEEPER thunk, the returning thunk 03FCh, a CALL_B copy at 040Dh | BEEPER moved to EXROM 203Fh | BEEP, key click |
 | 04E8h–0502h | 1.1 | the tail of a syntax routine; SENDTV `CALL 061Ah` | printer helpers; SENDTV `CALL 0A09h` | every printed character passes the TPMODE test | PRINT, LPRINT, LLIST |
 | 0A02h–0A2Fh | 1.1 | COPY (K_DUMP) and COPY-BUFF | COPY → EXROM 1630h; the character router 0A09h; COPY-BUFF → EXROM 1636h | COPY and the printer buffer | COPY, LPRINT |
@@ -73,8 +73,8 @@ the fixed one ([sysvars.md](sysvars.md#5d37h-the-nmi-vector)).
 | 145Fh | disk-command layer | `CALL 1465h` | `CALL 1488h` | OPEN # through the module | OPEN # |
 | 1488h–14C5h | disk-command layer | dead SYSCON code | five trampolines and the error trap | the module's HOME entries | OPEN #, CLOSE #, PRINT #, INPUT # |
 | 1946h–1949h | disk-command layer | syntax offsets `d0 c0 c4 c8` | `d2 c2 c6 ca` | a bare CAT/FORMAT/MOVE/ERASE is accepted | the disk keywords |
-| 19B0h–19B1h | disk-command layer (2.3) | LIST's parameter list `05 45 15` (class 05h, 1545h) | `05 D6 25` (class 05h, 25D6h) | `LIST "x"` shows a file | LIST |
-| 19D0h–19D2h | disk-command layer (2.3) | RESTORE's parameter list `03 9D 1E` (class 03h, 1E9Dh) | `05 D6 25` (class 05h, 25D6h) | `RESTORE #n` rewinds a file | RESTORE |
+| 19B0h–19B1h | disk-command layer (2.4) | LIST's parameter list `05 45 15` (class 05h, 1545h) | `05 D6 25` (class 05h, 25D6h) | `LIST "x"` shows a file | LIST |
+| 19D0h–19D2h | disk-command layer (2.4) | RESTORE's parameter list `03 9D 1E` (class 03h, 1E9Dh) | `05 D6 25` (class 05h, 25D6h) | `RESTORE #n` rewinds a file | RESTORE |
 | 19D7h–19D9h | disk-command layer | COPY's parameter list `00 02 0A` (class 00h, 0A02h) | `05 E0 25` (class 05h, 25E0h) | COPY takes arguments | COPY |
 | 24C5h–24CEh | 1.1 | part of the AROS stream dispatch | helpers the EXROM's SAVE path calls | | SAVE etc. |
 | 2548h–2560h | 1.1 | DOSAVE, the class-0Bh dispatcher | jumps to EXROM 01ABh, 01CCh, 1855h | SAVE, LOAD, VERIFY, MERGE go to the EXROM | SAVE, LOAD, VERIFY, MERGE |
@@ -185,7 +185,7 @@ but not the bank stack; see 14B2h below.
 
 `FFh` filler in the genuine ROM, between the restarts and the NMI routine
 at 0066h. The TS-Pico ROMs put their version there: 15h in 1.1, 22h (34) in
-ROM 2.2, 23h (35) in ROM 2.3; the two build inputs carry 17h and 20h, which the build
+ROM 2.2, 23h (35) in ROM 2.3, 24h (36) in ROM 2.4; the two build inputs carry 17h and 20h, which the build
 overwrites. `PEEK 101` reads it; nothing in either ROM does. BIOS G_VERS returns the same number in BC
 ([overview.md](overview.md#which-rom-is-this)). Each release changes this
 byte and G_VERS together.

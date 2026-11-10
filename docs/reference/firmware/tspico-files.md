@@ -2,7 +2,7 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1438–2424,
 2769–2801, 4243–4248, 4353–4412, 4674–4761, 4915–4922, 5745–5802,
-6322–6336, 6418–6500 and 6658–6674 (firmware 2.3).
+6322–6336, 6418–6500 and 6658–6674 (firmware 2.4).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -1003,7 +1003,7 @@ updater replaces it every time. Until 2026-10-13 the loaders only warned
 it with no question at all.
 
 Slot 1, the 2068 ROM every power-on boots, is left writable on purpose
-(decided 2026-10-13). Reloading `TSPICO-23.ROM` into it with the loader,
+(decided 2026-10-13). Reloading `TSPICO-24.ROM` into it with the loader,
 from another slot, is the manual's recovery for a damaged slot 1 (A.5),
 the one that needs no computer. It stays behind the loader's
 "ABSOLUTELY SURE" question, as slots 2 and 3 do. The loaders (`romupdate`,

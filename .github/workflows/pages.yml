@@ -115,7 +115,7 @@ jobs:
       - name: Build the manual and quick guide PDFs into the site
         run: tools/manual-pdf/make.sh site/manual
 
-      # The 2.3 flyer (promo/flyer/make.sh), linked from the "Still on 1.1?"
+      # The 2.4 flyer (promo/flyer/make.sh), linked from the "Still on 1.1?"
       # post, and the manual cover's drawing, which the post shows. Uses the
       # manual's fonts and the Chrome above; generated, never committed.
       - name: Build the flyer PDF into the site

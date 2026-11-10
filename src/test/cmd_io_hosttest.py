@@ -226,12 +226,12 @@ def main():
 
     menu_result = []
 
-    def pre_for(text, rom_id=0x23):
+    def pre_for(text, rom_id=0x24):
         pre = P.make_pre(text)
         pre[2] = rom_id                         # ROM 2.3 sends its version here (#227)
         return pre
 
-    def run_script(text, script, rom_id=0x23):
+    def run_script(text, script, rom_id=0x24):
         pio = PIO()
         P.fresh(t, pio)
         t.TSP.ROM_VERSION = "1.7"
@@ -271,7 +271,7 @@ def main():
         pio, r = run(b"tpi:list", keys=(ord("N"),))
         check(r[0] == "ok" and len(r) > 2 and r[1] == 1 and r[2].endswith(b"Scroll? (Y/n)N") and idle(pio),
               "N at the first prompt: its echo and 0x03 end it, back to idle (%s)" % (r[:2],))
-        check(t.rom_id == 0x23, "PROCESS_CMD keeps the ROM's version from pre-header byte 2 (%r)" % t.rom_id)
+        check(t.rom_id == 0x24, "PROCESS_CMD keeps the ROM's version from pre-header byte 2 (%r)" % t.rom_id)
 
         print("keys as typed, the Pico ends the loop after N (#227)")
         pio, r = run(b"tpi:list", keys=(ord("n"),))
