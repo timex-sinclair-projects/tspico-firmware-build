@@ -13,8 +13,9 @@ the ROM are made to work together, so install both. The
 fifteen minutes.
 
 This post covers what changed. The full details are in the
-[User Manual]({{ site.github_repo }}/blob/main/docs/manual/user-manual.md), which is new as
-well.
+[User Manual]({{ '/manual/user-manual.html' | relative_url }}), which is new as well. If you'd rather start with a few pages, the
+[Quick Start Guide]({{ '/manual/quick-start.html' | relative_url }}) takes you from the box to
+your first program.
 
 ## Fixes and improvements to the commands you know
 
@@ -44,6 +45,17 @@ come from that.
   the 2068 says so at once and the next command starts fresh. In 1.1 the same problem meant
   a twenty-second wait for Report J, and often more J's after it.
 
+**Talking to the TS-Pico**
+
+- **Your keys mean what you typed.** At a `Scroll?` prompt, a menu or a yes/no question, the
+  TS-Pico sees the key you pressed, so `n` works as well as `N`. In `ERASE "*.bak"`, **N**
+  skips that file and goes on to the next.
+- **Every color gets through.** Messages from the TS-Pico can carry any ink, paper, FLASH,
+  block graphics, UDGs and keywords, and colored text brings its own paper, so blue text
+  can't vanish on a blue screen.
+- **Messages end their line**, so your next PRINT starts on a new one.
+- **`SAVE "tpi:info"` shows the ROM your 2068 is really running**, as well as the firmware.
+
 **The SD card**
 
 - **The TS-Pico runs without a card.** Take the card out and the commands that need it fail
@@ -59,11 +71,17 @@ come from that.
   and free space. A long listing stops at `Scroll? (Y/n)` and shows how far through you are;
   press **1** to **9** to scroll that many lines.
 
+- **Bigger folders.** A folder of up to 300 files lists in color. CAT shows about 20 at a
+  time, so about 100 is easier to find your way around.
+
   ![CAT on a card with four folders and eight files]({{ '/assets/img/whats-new/cat.png' | relative_url }})
 
 - **Names from your computer.** Characters the 2068 can't show, such as `{`, `|`, `~` or
   accented letters, appear as `?`, and you can type the name with the `?` to load the file.
-- **`tpi:rm` removes any file or empty folder.** It refuses the mounted file.
+- **`tpi:rm` removes any file or empty folder.** It refuses the mounted file, and a folder
+  that isn't empty.
+- **SAVE onto the mounted tape** mounts the new file, so `LOAD ""` finds what you just
+  saved.
 - **Flash slots are safer.** The TS-Pico refuses to write the flash slot the 2068 is
   running from. Doing that used to hang both machines.
 
@@ -82,10 +100,10 @@ come from that.
 
 ## New commands: the disk keywords
 
-The TS-2068 ROM has keywords that Timex never implemented: **CAT**, **MOVE**, **ERASE**
-and **FORMAT**, and the new ROM gives **COPY**, **LIST** and **RESTORE** more to do. Timex meant them for a disk drive. The new ROM makes them work on the SD card,
-with features borrowed from the Zebra FDD's TOS. They take wildcards
-(`*` and `?`), paths, and string expressions such as `CAT a$`.
+The TS-2068 ROM has four keywords that Timex never implemented: **CAT**, **MOVE**, **ERASE**
+and **FORMAT**. Timex meant them for a disk drive. The new ROM makes them work on the SD card,
+with features borrowed from the Zebra FDD's TOS, and gives **COPY** and **LIST** work on the
+card too. They take wildcards (`*` and `?`), paths, and string expressions such as `CAT a$`.
 
 | Command | What it does |
 |---|---|
@@ -97,14 +115,16 @@ with features borrowed from the Zebra FDD's TOS. They take wildcards
 | `COPY "a.tap" TO "b.tap"` | Copy a file (never overwrites) |
 | `COPY "*.tap" TO "backup"` | Copy all matching files into a folder |
 | `MOVE "a.tap" TO "b.tap"` | Rename a file, or move it to another folder |
-| `LIST "notes.txt"` | Show a file on the screen |
+| `LIST "notes.txt"` | Show a file on the screen: text as text, anything else as a hex dump |
 | `ERASE "old.tap"` | Delete a file |
 | `ERASE "*.bak"` | Delete matching files, asking about each one |
 | `FORMAT "songs.tap"` | Make a new, empty TAP, mounted and ready to SAVE onto |
 | `FORMAT "tools/"` | Make a folder |
+| `FORMAT ":GAMES"` | Name the card GAMES, the name your computer shows |
 
 `FORMAT` never formats your SD card. It only makes new things, and it never overwrites a
-file that's already there.
+file that's already there. Plain `LIST` still lists your program, and plain `COPY` still goes
+to the printer.
 
 ![CAT "": the blocks in the mounted TAP, with the next block highlighted]({{ '/assets/img/whats-new/tapdir.png' | relative_url }})
 
@@ -138,32 +158,50 @@ files:
 30 CLOSE #4
 ```
 
-Files can be read, written, appended to or updated in place. **Record files** with `TAB`
-positioning let a program jump straight to record 57 without reading the 56 before it. And
-`OPEN #5,"d:*.tap"` lets a program read a folder listing, one name at a time.
+Files can be read, written, appended to or updated in place, and `RESTORE #4` goes back to
+the start of a file without closing it. **Record files** with `TAB` positioning let a program
+jump straight to record 57 without reading the 56 before it.
+
+A program can find its way around the card, too. `OPEN #5,"d:*.tap"` reads a folder listing,
+one name at a time; `CAT #4` writes a listing into a file open on stream 4; and
+`OPEN #4,"x:"` lets a program ask the TS-Pico which folder it's in, what's mounted, and how
+much room is left on the card:
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"path"
+30 INPUT #4;p$
+40 PRINT "You are in ";p$
+50 CLOSE #4
+```
 
 ## Other new features
 
 - **The web updater.** Install or update the TS-Pico from a browser: the firmware, the
   TS-2068 ROM, the Pico's files and the SD card files. No Thonny, no dragging files about.
-  It works out what your board needs and walks you through it.
+  It works out what your board needs and walks you through it. On Windows, where the browser
+  can't write the firmware, **TS-Pico-Updater.exe** does the same job.
 - **The virtual printer.** After `SAVE "tpi:picopt"`, `LPRINT` and `LLIST` go to text files
   on the card, and `COPY` saves the screen as a BMP picture you can open on any computer.
   COPY understands the second screen, hi-color and the 512-column mode. You choose the page
   width, the line endings and the picture size.
 - **A menu when nothing is mounted.** `LOAD ""` with no tape mounted loads a small menu, with
-  help on every command, a file picker, and the **TS-Pico Commander**, a full-screen file
-  manager you drive with the cursor keys.
+  help on every command, a file picker, the **TS-Pico Commander**, a full-screen file
+  manager you drive with the cursor keys, a one-line menu of everyday commands, and settings
+  for the Pico Video board, including ULA Plus. `SAVE "tpi:automount mymenu.tap"` loads your
+  own menu instead.
 - **Help on the card.** The `help` folder on the SD card has a page for every TS-Pico
   command and for the BASIC keywords.
 - **Cartridges.** `SAVE "tpi:dock" CODE 0,2` swaps back to the cartridge you had in the dock
   before.
 - **Under the hood.** The firmware now runs on MicroPython 1.29, and moves data to and from
   the 2068 with the Pico's DMA hardware.
-- **Manuals.** A new [User Manual]({{ site.github_repo }}/blob/main/docs/manual/user-manual.md)
-  covers every command, with pictures of what you'll see on screen. There's a
-  [Programmer's Manual]({{ site.github_repo }}/blob/main/docs/manual/programmers-manual.md)
-  too (see below).
+- **Manuals.** A new [User Manual]({{ '/manual/user-manual.html' | relative_url }}) covers every command, with pictures of what you'll
+  see on screen, as a web page or a PDF to read or print as a booklet. There's a
+  [Quick Start Guide]({{ '/manual/quick-start.html' | relative_url }}), a
+  [Quick Reference Guide]({{ '/manual/quick-reference.html' | relative_url }}) in the style of
+  the one that came with the 2068, and a [Programmer's Manual]({{ '/manual/programmers-manual.html' | relative_url }}) too (see below). They're all
+  on the [documentation page]({{ '/docs/' | relative_url }}).
 
 ## The TS-2068 Software Library on an SD card
 
@@ -189,6 +227,8 @@ on archive.org, ready to copy to an SD card.
   title, folder and file name, a summary and a description, how to load it, and the original
   file in the archive. It also lists the tapes that were left out, and why.
 - The `help` folder, with the TS-Pico's help pages.
+- **A guided tour** of the TS-Pico at the top of the `TAP` folder: `LOAD "tpi:tour.tap"`, then
+  `LOAD ""`, and it shows the new commands working, one chapter at a time.
 
 **Installing it.** Unzip it and copy the `TAP` and `help` folders to the top level of a
 FAT-formatted micro SD card. Then, on the 2068:
@@ -209,8 +249,7 @@ The TS-Pico firmware is now open source, on GitHub at
 the MIT license and the documentation under CC BY 4.0. Issues and pull requests are welcome.
 
 **Writing programs that use the TS-Pico.** The
-[Programmer's Manual]({{ site.github_repo }}/blob/main/docs/manual/programmers-manual.md) is
-in two parts:
+[Programmer's Manual]({{ '/manual/programmers-manual.html' | relative_url }}) is in two parts:
 
 - **The 2068 side.** It covers the two ports and the status byte, and how a command travels
   between the machines. It includes `picolib.asm`, a small Z80 library that sends commands
@@ -238,8 +277,8 @@ TS-Pico on ports 0Eh and 0Fh, running the TS-Pico ROM:
   for the Mac.
 
 Each release has a ready-to-run `pico_host` for macOS, Linux and Windows, with no Python
-needed. Start it, start the emulator with its TS-Pico turned on, and `CAT` works. Each
-emulator repository's `TSPICO.md` says how to set it up. The emulator shows whether your
+needed. Start it, start the emulator with its TS-Pico turned on, and `CAT` works.
+[Testing in an Emulator]({{ '/manual/emulators.html' | relative_url }}) says how to set it up. The emulator shows whether your
 program and the TS-Pico agree, which is what you need for most development. It can't show
 timing problems; those still need a real board.
 
