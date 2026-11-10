@@ -215,11 +215,25 @@ which on the Pico's side appears as the 2-bit code on GPIO 0–1 and the
 A14_L line `set_ctrl` drives from it *(inferred; the code names neither
 the code's bits nor which half is which)*.
 
+The slot's EXROM answers only in chunks 0–1 (0000h–3FFFh). GPIO 1 is the
+board's /RDROM, A14 OR A15 OR /RD (U4, a 74LS32, on the v2.2 and v2.5
+schematics), and `set_ctrl` answers a ROM-area access only while it is
+low. A program that pages the EXROM into chunks 2–7 gets the 2068's own
+Timex EXROM there, not the slot's. Seen on hardware on 2026-11-07: a
+probe read chunks 0–1 from the slot's ROM and chunks 4–7 from the Timex
+EXROM. This is why Charlie Day's Leap languages, which page their EXROM
+at 8000h or above, can't boot from a v2 slot and run from the dock
+instead. v3 serves the EXROM in every chunk.
+
 A **DOCK** entry is a 64K cartridge: **two consecutive slots**, numbered by
 the even one, which is why the cartridge slots step by 2. The firmware
-drives all four bank lines from the one `DCK_SLOT` value, so how the
-cartridge's upper 32K is reached when the Z80's A15 is high is a board
-matter the code does not show *(unverified)*.
+drives all four bank lines from the one `DCK_SLOT` value, but the board
+lets the Z80's A15 through: dock chunks 0–3 (0000h–7FFFh) come from the
+even slot and chunks 4–7 (8000h–FFFFh) from the odd one. Seen on hardware
+on 2026-11-10: an LROS probe cartridge with a marker in each chunk, in
+SRAM slots 4 and 5, read all eight markers back. The base image agrees:
+its AROS cartridges are stored in the odd slot of each pair. How the
+board combines A15 with GPIO 15 is not in the code *(unverified)*.
 
 "Slot" and "page" are the same thing. `config.ini` and `flash/README.md`
 say slot (`ROM_SLOT`, `DCK_SLOT`); `MEMBOOT`, `MEMDOCK` and the user manual
@@ -386,7 +400,8 @@ inactive by the Pico; "page" and "slot" are synonyms.
 
 **Only hardware can settle** *(unverified)*: how GPIO 14 is read low while
 `main.py` drives it high; how U6 and the PIO's output drivers share GPIO
-2–9 during a Z80 OUT; what /BE enables; how a 64K cartridge's upper half is
-addressed; what the 2068 reads on 0Fh while U6 is off; every cycle count
+2–9 during a Z80 OUT; what /BE enables; how the board combines the Z80's
+A15 with GPIO 15 (that the cartridge's upper half is the odd slot was
+seen on hardware, above); what the 2068 reads on 0Fh while U6 is off; every cycle count
 in [firmware/pio.md](firmware/pio.md) and whether the settle delays are
 needed; whether the GPIO 2–4 clamp does anything.
