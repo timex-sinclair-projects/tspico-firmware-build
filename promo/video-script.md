@@ -1,7 +1,19 @@
 # TS-Pico 2.3: the release video
 
 A video for TS-Pico owners still on version 1.1: what 2.3 does, and how to upgrade.
-About 14 minutes. The demo program is [`demo/`](demo/README.md); the flyer and web post say
+About 15 minutes, shot on a TS-Pico v2 board. v3-only features (speech, the modem, WiFi
+downloads, the joystick) are left for a v3 video.
+
+**Revised 2026-11-10.** The tour gained a chapter (7, Looking inside: `LIST "file"`,
+`CAT #` and the `x:` channel), a rename in chapter 4 and `RESTORE #` in chapter 6, so the
+later chapters moved up one. Chapter 1 now leads with the keywords, as the manual does
+(#367). The card label is added to the by-hand section, and the close mentions the Quick
+Start and Quick Reference guides.
+
+**Shoot after the next release.** The tour uses `COPY`/`MOVE` as two verbs, `LIST "file"`,
+`RESTORE #`, `CAT #` and `x:`, all merged after v2.3.1 (#349, #405, #406). The web updater's
+Latest release has to carry them, or a 1.1 owner following the video gets a 2068 that gives
+reports where the video shows listings. The demo program is [`demo/`](demo/README.md); the flyer and web post say
 the same things, so the video can point to them.
 
 ## Sources and shots
@@ -25,17 +37,20 @@ there's always a still frame to hold or trim.
 
 ## Before you shoot
 
-- [ ] The 2068 is on ROM 2.3 and firmware 2.3.1: `PRINT PEEK 101` gives 35.
+- [ ] The 2068 is on the release after 2.3.1, from the web updater's Latest release:
+      `PRINT PEEK 101` gives 35, and `SAVE "tpi:info"` shows the new firmware version.
 - [ ] The demo card is set up as `demo/README.md` says: `card/TAP` as `TAP`, plus the repo's
       `SD card/help` folder.
 - [ ] A Spectrum TAP on the card for the Spectrum-mode piece (`spectrum.tap` below), and a
       2068 game from the Software Library for the menu piece.
-- [ ] One full practice take on the board. The tour was only tested in the emulator; watch
-      chapters 7, 9 and 10. If a Y or N at an `Erase … (Y/N)?` question doesn't show on the
-      screen, press it again.
+- [ ] One full practice take on the board. The first cut ran on a v2 board on 2026-10-17;
+      the revised one has run only in the emulator. Watch chapter 7 (new), and 8 (`COPY`
+      of the screen) and 11 (BREAK).
+- [ ] Chapter 7's `x:` "info" shows the card's free space (a few hundred MB, not
+      `Free 0 MB of 1`). Older firmware measured the Pico's flash; fixed 2026-11-10.
 - [ ] At every "Start tape, then press any key." press **ENTER**, not SPACE.
 - [ ] Note what's in the dock (`SAVE "tpi:info"`), so you can put it back after the
-      cartridge piece.
+      cartridge piece, and the card's label (`SAVE "tpi:label"`), for the label piece.
 
 ## The script
 
@@ -79,22 +94,23 @@ Hold the card for a beat, then cut to the steps.
 | Chapter (tour) | Picture | Sound |
 |---|---|---|
 | Intro | **CAM**: `LOAD "tpi:tour.tap"`, `LOAD ""` typed. **TV**: "Getting ready…" | "I've written a short program that walks through what's new. It's on the card as a tape: mount it, and load it." |
-| 1. Welcome (3:15) | `PRINT PEEK 101` gives 35; the "commands are SAVE now" step; `SAVE "tpi:info"`. | "First, the one change that will trip you up. TS-Pico commands are SAVE commands now: SAVE "tpi:info", SAVE "tpi:dir". LOAD "tpi:…" only mounts a file. Here's info: firmware, ROM and card at a glance." |
+| 1. Welcome (3:15) | `PRINT PEEK 101` gives 35; the keywords step (`CAT COPY MOVE ERASE FORMAT LIST OPEN #`); `SAVE "tpi:info"`. | "First, the big change. The 2068 has disk words Timex never finished: CAT, COPY, MOVE, ERASE, FORMAT. They work now, on the SD card. The rest of the TS-Pico's commands are SAVE "tpi:" commands, and LOAD "tpi:" only mounts a file. Here's info: firmware, ROM and card at a glance." |
 | 2. Listings in color (3:45) | `CAT`; `CAT "*.tap"`; `CAT "library"` stopping at `Scroll? (Y/n)`; **Y**. | "CAT lists the card in color, with its size and free space. It takes wildcards, and a long folder stops and asks before it scrolls." |
 | 3. Folders (4:15) | `FORMAT "tour/"`, `MOVE TO "tour"`, `tpi:path`, `MOVE TO "-"`. | "FORMAT makes a folder. It never formats your card: it only makes new things. MOVE TO goes into a folder, and MOVE TO "-" comes back." |
-| 4. Copies and new tapes (4:40) | `COPY "multi.tap" TO "tour"`; `FORMAT "songs.tap"`; `CAT "multi.tap"`; `CAT ""`. | "COPY copies files, and never overwrites one. FORMAT with a file name starts a new, empty tape. And CAT with a tape's name lists the blocks inside it, without mounting it." |
-| 5. Single files with f: (5:10) | The picture drawn; `SAVE "f:title.scr" SCREEN$`; the screen wiped; `LOAD "f:title.scr" SCREEN$`. Then the two graphics. | "Until now, everything lived inside TAP files. Put f: in front of a name and LOAD and SAVE use a single file instead. A SCREEN$ is saved as the plain 6,912 bytes, so your computer's picture tools can open it." |
+| 4. Copies, renames and tapes (4:40) | `COPY "multi.tap" TO "tour"`; `FORMAT "songs.tap"`; `CAT "multi.tap"`; `CAT ""`; `MOVE "songs.tap" TO "tunes.tap"`; `CAT "*.tap"`. | "COPY copies files, and never overwrites one. FORMAT with a file name starts a new, empty tape. CAT with a tape's name lists the blocks inside it, without mounting it. And MOVE, with TO, renames." |
+| 5. Single files with f: (5:20) | The picture drawn; `SAVE "f:title.scr" SCREEN$`; the screen wiped; `LOAD "f:title.scr" SCREEN$`. Then the two graphics. | "Until now, everything lived inside TAP files. Put f: in front of a name and LOAD and SAVE use a single file instead. A SCREEN$ is saved as the plain 6,912 bytes, so your computer's picture tools can open it." |
 | | **MAC** insert (optional): `title.scr` opened in a viewer on the Mac. | |
-| 6. Files as streams (6:00) | `OPEN #4,"f:notes.txt","w"`, `PRINT #4`, `CLOSE #4`; read back until 8 End of file, caught by `ON ERR`; the high-score record file; the `d:` listing. | "Your own programs can read and write files now, with the 2068's OPEN #, PRINT # and INPUT #. Notes, logs, high-score tables. Record files jump straight to record 3 with TAB. And a d: stream reads a folder listing, one name at a time." |
-| 7. The virtual printer (6:45) | `SAVE "tpi:picopt"`; `LPRINT`; `LLIST`; `COPY`; `SAVE "tpi:ts2040"`. | "No printer? After SAVE "tpi:picopt", LPRINT and LLIST go to text files on the card, and COPY saves the screen as a picture." |
+| 6. Files as streams (6:10) | `OPEN #4,"f:notes.txt","w"`, `PRINT #4`, `CLOSE #4`; read back until 8 End of file, caught by `ON ERR`; `RESTORE #4` and the first line again; the high-score record file; the `d:` listing. | "Your own programs can read and write files now, with the 2068's OPEN #, PRINT # and INPUT #. Notes, logs, high-score tables. RESTORE # goes back to the start of a file. Record files jump straight to record 3 with TAB. And a d: stream reads a folder listing, one name at a time." |
+| 7. Looking inside (7:00) | `LIST "notes.txt"`; `CAT #4;"/*.tap"` into `tapes.txt`, then `LIST "tapes.txt"`; `OPEN #4,"x:"`, `path` and `info` answered. | "LIST with a file name shows the file: text as text, anything else as a hex dump. CAT # writes a listing into a file instead of onto the screen. And an x: stream lets a program ask the TS-Pico what it knows: the folder it's in, what's mounted, the card's free space, the versions." |
+| 8. The virtual printer (7:45) | `SAVE "tpi:picopt"`; `LPRINT`; `LLIST`; `COPY`; `SAVE "tpi:ts2040"`. | "No printer? After SAVE "tpi:picopt", LPRINT and LLIST go to text files on the card, and COPY saves the screen as a picture." |
 | | **MAC** insert: the card on the Mac; the text file and the BMP from `/VLPRINT` and `/VSCREEN` opened. | "Here they are on the Mac. tpi:ts2040 sends printing back to a real printer." |
-| 8. Mounting a tape (7:30) | `LOAD "tpi:pics.tap"`; `CAT ""` with the pointer; `LOAD "" CODE`; `CAT ""` again; `LOAD "" SCREEN$`. | "Tapes work as they always did, with a view inside. CAT "" lists the mounted tape and highlights the next block, so you can see where the tape pointer is." |
-| 9. Reports, not hangs (8:10) | `LOAD "tpi:dir"` gives F; `SAVE "my game"` gives F; `ERASE "*.tap"` asking about each file: **Y**, **N**, **Y**; `CAT`. | "When something's wrong, you get a report straight away. LOAD "tpi:dir", the 1.1 habit, looks for a file called dir. A name with a space gives F before anything is written. And ERASE with a pattern asks about each file: N skips it and goes on to the next." |
-| 10. BREAK is safe (8:55) | `CAT "/library"` at Scroll?; **CAM**: CAPS SHIFT + SPACE pressed; **TV**: D BREAK - CONT repeats; the next command works. | "BREAK works. CAPS SHIFT and SPACE stops any TS-Pico command, and the next one works normally. In 1.1, a stuck transfer meant a twenty-second wait. Now, if the TS-Pico has to give up, it says T, try again, at once." |
-| 11. Help (9:25) | `SAVE "tpi:help"`; `SAVE "tpi:help cat"`. | "And if you forget any of this, there's help on the card: a page for every command." |
-| 12. Tidying up (9:55) | The tour deleting its files; the end card. | "The tour cleans up after itself. A few things it can't do from inside a program, so let's do those by hand." |
+| 9. Mounting a tape (8:30) | `LOAD "tpi:pics.tap"`; `CAT ""` with the pointer; `LOAD "" CODE`; `CAT ""` again; `LOAD "" SCREEN$`. | "Tapes work as they always did, with a view inside. CAT "" lists the mounted tape and highlights the next block, so you can see where the tape pointer is." |
+| 10. Reports, not hangs (9:10) | `LOAD "tpi:dir"` gives F; `SAVE "my game"` gives F; `ERASE "*.tap"` asking about each file: **Y**, **N**, **Y**; `CAT`. | "When something's wrong, you get a report straight away. LOAD "tpi:dir", the 1.1 habit, looks for a file called dir. A name with a space gives F, and nothing is written. And ERASE with a pattern asks about each file: N skips it and goes on to the next." |
+| 11. BREAK is safe (9:55) | `CAT "/library"` at Scroll?; **CAM**: CAPS SHIFT + SPACE pressed; **TV**: D BREAK - CONT repeats; the next command works. | "BREAK works. CAPS SHIFT and SPACE stops any TS-Pico command, and the next one works normally. In 1.1, a stuck transfer meant a twenty-second wait. Now, if the TS-Pico has to give up, it says T, try again, at once." |
+| 12. Help (10:25) | `SAVE "tpi:help"`; `SAVE "tpi:help cat"`. | "And if you forget any of this, there's help on the card: a page for every command." |
+| 13. Tidying up (10:55) | The tour deleting its files; the end card. | "The tour cleans up after itself. A few things it can't do from inside a program, so let's do those by hand." |
 
-### 5. By hand (10:15)
+### 5. By hand (11:15)
 
 **The menu and the Commander.**
 
@@ -102,6 +118,14 @@ Hold the card for a beat, then cut to the steps.
 |---|---|
 | **TV**: `SAVE "tpi:close"`, then `LOAD ""` with nothing mounted. The menu. | "LOAD "" with nothing mounted loads a menu: help, a file picker…" |
 | **TV**: **F**, the TS-Pico Commander; the cursor keys through folders; **ENTER** on a game to mount it. | "…and the TS-Pico Commander, a file manager you drive with the cursor keys." |
+| **TV** (optional): back to the menu, **T**: the one-line menu at the bottom of the screen. | "T gives a one-line menu for everyday commands, if you'd rather not type them." |
+
+**Naming the card.**
+
+| Picture | Sound |
+|---|---|
+| **TV**: `FORMAT ":GAMES"`, then `CAT`: GAMES on the card's line. | "A card can have a name. FORMAT with a colon sets the label your computer shows, and CAT shows it too." |
+| **TV**: the label put back: `FORMAT ":"` + the card's old name (from the checklist), or `FORMAT ":"` if it had none. | (No narration; trim.) |
 
 **Cartridges, and the D key.**
 
@@ -119,25 +143,26 @@ Hold the card for a beat, then cut to the steps.
 | **TV**: `SAVE "tpi:dir"` on the Spectrum; `LOAD ""`; a game running. | "And now you can list the folder and mount another tape without leaving Spectrum mode." |
 | **TV**: `OUT 244,0`, then `OUT 14,14`. | "OUT 244,0 and OUT 14,14 bring the 2068 back." |
 
-### 6. Something to load (12:00)
+### 6. Something to load (13:15)
 
 | Picture | Sound |
 |---|---|
 | **MAC**: the archive.org page for the TS-2068 Software Library; the zip; the folders on the card. | "A TS-Pico is only as good as what's on the card, so we've made one: 1,327 TS-2068 programs from the Timex Sinclair Software Archive, every one test-loaded with the real TS-Pico firmware, in folders, with short names you can type." |
 | **TV**: `MOVE TO "games"`, `CAT`, a game mounted and loaded. | "It's a free download from archive.org, and from the web updater's SD card section." |
 
-### 7. No 2068 on your desk? (12:45)
+### 7. No 2068 on your desk? (14:00)
 
 | Picture | Sound |
 |---|---|
 | **MAC**: ZEsarUX with the TS-Pico: `CAT` in the emulator window, `pico_host` in a terminal beside it. | "No hardware with you? The real TS-Pico firmware also runs on your computer, next to the ZEsarUX and Fuse emulators. Their 2068 then has a TS-Pico, with a folder for its SD card." |
 | **MAC**: the emulator guide page on the site. | "Much of this release was tested that way, and it's handy for writing programs that use the TS-Pico. The guide is on the website." |
 
-### 8. Close (13:30)
+### 8. Close (14:45)
 
 | Picture | Sound |
 |---|---|
 | **GFX**: the flyer's back page, or a card with the three links: web updater, what's new, the manuals. | "Everything's on the TS-Pico website: the web updater, the full list of what's new, the user manual as a PDF, and a flyer you can print for your user group." |
+| **GFX**: the Quick Start booklet and the Quick Reference card, side by side. | "If the manual's too much, there's an eight-page Quick Start, and a Quick Reference card in the style of the one that came with the 2068." |
 | **CAM**: the 2068 with the TS-Pico, the drawing card fading in. | "TS-Pico 2.3. It's free, it takes about fifteen minutes, and your 2068 finally gets its disk commands." |
 
 ## Editing notes
@@ -151,7 +176,7 @@ Hold the card for a beat, then cut to the steps.
 - **Chapter titles.** The tour's own title cards already show "Chapter n of 12". Use them;
   add a GFX title only for the sections outside the tour.
 - **Thumbnail.** An EMU still of the color `CAT` beside the cover drawing, with
-  "TS-Pico 2.3" and "CAT · MOVE · ERASE · FORMAT".
+  "TS-Pico 2.3" and "CAT · COPY · MOVE · ERASE · FORMAT".
 
 ## YouTube description (draft)
 
@@ -167,15 +192,16 @@ Hold the card for a beat, then cut to the steps.
 > 0:00 TS-Pico 2.3
 > 0:20 Who it's for
 > 1:00 Upgrading from 1.1
-> 3:00 The tour: CAT, folders and copies
-> 5:10 Single files and streams
-> 6:45 The virtual printer
-> 7:30 Tapes, reports and BREAK
-> 9:25 Help on the card
-> 10:15 The menu, cartridges and Spectrum mode
-> 12:00 1,327 programs to load
-> 12:45 Try it in an emulator
-> 13:30 Where to get it
+> 3:00 The tour: CAT, folders, copies and renames
+> 5:20 Single files and streams
+> 7:00 LIST, CAT # and asking the TS-Pico
+> 7:45 The virtual printer
+> 8:30 Tapes, reports and BREAK
+> 10:25 Help on the card
+> 11:15 The menu, the card's name, cartridges and Spectrum mode
+> 13:15 1,327 programs to load
+> 14:00 Try it in an emulator
+> 14:45 Where to get it
 
 Update the times from the finished edit. YouTube makes chapters from these lines: the first
 must be 0:00, and there need to be at least three, each at least 10 seconds long.
