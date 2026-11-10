@@ -90,7 +90,7 @@ The card goes into the socket on the card's left edge, contacts first, and click
 1. Switch the 2068 on.
 
    You should see the usual copyright lines and the TS-Pico's own line, for example
-   `2026 TS-Pico ROM v2.3`.
+   `2026 TS-Pico ROM v2.4`.
 2. Press **ENTER**, type `CAT` and press **ENTER**.
 
    You should see a listing of your `TAP` folder, even if it's empty:

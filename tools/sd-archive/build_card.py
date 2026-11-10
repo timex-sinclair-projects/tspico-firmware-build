@@ -110,7 +110,7 @@ def main():
     for n in TOUR_DIRS:
         shutil.copytree(os.path.join(sd_tap, n), os.path.join(out, "TAP", n), ignore=C.skip_junk)
     tour = dict.fromkeys(rows[0], "")
-    tour.update(on_card="yes", folder="TAP", file="tour.tap", title="TS-Pico 2.3 guided tour",
+    tour.update(on_card="yes", folder="TAP", file="tour.tap", title="TS-Pico 2.4 guided tour",
                 summary="A tour of what's new in the TS-Pico since version 1.1, one feature per chapter.",
                 description="Twelve chapters: CAT, folders, copies, f: files, streams, the virtual "
                             "printer, tapes, reports, BREAK and help. It uses art.tap, multi.tap, "

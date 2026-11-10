@@ -814,7 +814,7 @@ matched in either case:
 | `path` | the current folder, `public_path()`, as `tpi:path` shows it |
 | `dir` | `XDirText(INDEX)` ([tspico-files.md](tspico-files.md)): the folder count, the file count, then `dirinfo.tap`'s rows, made as they are read |
 | `mount` | the mounted file, `public_fname()`, or an empty line when none is |
-| `info` | five lines: the card's label, its free bytes and its total bytes (`os.statvfs`), `TSP.FW_VERSION`, and the ROM's version from `rom_id` (`"2.3"`; empty when the ROM sent FFh) |
+| `info` | five lines: the card's label, its free bytes and its total bytes (`os.statvfs`), `TSP.FW_VERSION`, and the ROM's version from `rom_id` (`"2.4"`; empty when the ROM sent FFh) |
 
 `path` and `mount` read only RAM. `info` mounts the card for
 `os.statvfs("/sd")` (`ACTIVATE_SD` … `DEACTIVATE_SD`, `ACTIVATE_MQ` in a

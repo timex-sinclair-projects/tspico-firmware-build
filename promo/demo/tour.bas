@@ -1,6 +1,6 @@
 #! zmakebas -a 10 -n tour
 #
-# TS-Pico 2.3: a guided tour, for the release video (promo/demo/README.md).
+# TS-Pico 2.4: a guided tour, for the release video (promo/demo/README.md).
 # Revised 2026-11-10 for what came after the first cut: COPY and MOVE as two
 # verbs, LIST "file", RESTORE #, CAT # and the x: channel.
 # One chapter per feature: a title card, then the chapter's commands with a
@@ -22,7 +22,7 @@
 # tour CLEARs 63999.
 
 # ---- Start: a clean slate --------------------------------------------------
-   10 REM TS-Pico 2.3 guided tour
+   10 REM TS-Pico 2.4 guided tour
    20 CLEAR 63999: POKE 64000,0
    30 BORDER 1: PAPER 1: INK 7: BRIGHT 0: CLS
    40 PRINT AT 10,8;"Getting ready..."
@@ -31,13 +31,13 @@
    70 LET z=1: GO TO 7000
 
 # ---- 1 Welcome ---------------------------------------------------------------
- 1000 LET n=1: LET t$="Welcome to TS-Pico 2.3"
+ 1000 LET n=1: LET t$="Welcome to TS-Pico 2.4"
  1010 LET d$="A tour of what is new since": LET e$="version 1.1, one feature per": LET f$="chapter.": GO SUB 8000
  1020 GO SUB 8100
  1030 PRINT INK 1;"Which ROM is this 2068 running?"''
  1040 LET c$="PRINT PEEK 101": GO SUB 8200
  1050 PRINT ''"  ";PEEK 101''
- 1060 PRINT INK 1;"35 means ROM 2.3. The firmware"'"and the ROM are a pair: the"'"web updater installs both."''
+ 1060 PRINT INK 1;"36 means ROM 2.4. The firmware"'"and the ROM are a pair: the"'"web updater installs both."''
  1070 PRINT INK 1;"The 2068's own words work now:"
  1080 PRINT "  CAT  COPY  MOVE  ERASE"'"  FORMAT  LIST  OPEN #"''
  1085 PRINT INK 1;"The rest are SAVE ""tpi:..."".";'"LOAD ""tpi:name.tap"" only mounts"'"a file, ready for LOAD """"."
@@ -137,7 +137,7 @@
  3060 GO SUB 8900
  3070 BORDER 0: PAPER 0: INK 7: CLS
  3080 FOR i=0 TO 9: PRINT AT 12+i,22-i; PAPER 2;"  "; PAPER 6;"  "; PAPER 4;"  "; PAPER 5;"  ": NEXT i
- 3090 LET g$="2.3": LET gr=1: LET gc=4: LET gp=5: GO SUB 8600
+ 3090 LET g$="2.4": LET gr=1: LET gc=4: LET gp=5: GO SUB 8600
  3100 PRINT AT 10,4; BRIGHT 1;"TS-Pico";AT 13,1;"One picture,";AT 14,1;"one file:";AT 16,1; INK 6;"title.scr"
  3110 SAVE "f:title.scr" SCREEN$
  3120 GO SUB 8900
@@ -218,7 +218,7 @@
  4050 LET c$="PRINT PEEK 24027": GO SUB 8200
  4060 PRINT "  ";PEEK 24027;INK 1;"  printing goes to the card"'
  4070 LET c$="LPRINT ""Hello from the 2068""": GO SUB 8200
- 4080 LPRINT "Hello from the 2068": LPRINT "TS-Pico 2.3 tour, chapter 8"
+ 4080 LPRINT "Hello from the 2068": LPRINT "TS-Pico 2.4 tour, chapter 8"
  4090 LET c$="LLIST 9900": GO SUB 8200
  4100 LLIST 9900
  4110 PRINT INK 1;"A picture of this screen:"
@@ -352,8 +352,8 @@
  6610 GO SUB 8900
  6620 BORDER 1: PAPER 1: INK 7: BRIGHT 0: CLS
  6630 PRINT AT 0,0; PAPER 2;"        "; PAPER 6;"        "; PAPER 4;"        "; PAPER 5;"        "
- 6640 LET g$="2.3": LET gr=2: LET gc=4: LET gp=6: GO SUB 8600
- 6650 PRINT AT 11,4; BRIGHT 1; INK 6;"TS-Pico 2.3"
+ 6640 LET g$="2.4": LET gr=2: LET gc=4: LET gp=6: GO SUB 8600
+ 6650 PRINT AT 11,4; BRIGHT 1; INK 6;"TS-Pico 2.4"
  6660 PRINT AT 13,4;"Next, shown by hand:";AT 15,4;"the menu and the Commander,";AT 16,4;"cartridges, and Spectrum";AT 17,4;"mode."
  6670 PRINT AT 21,0; PAPER 2;"        "; PAPER 6;"        "; PAPER 4;"        "; PAPER 5;"        "
  6680 GO SUB 8900
@@ -457,7 +457,7 @@
  8960 RETURN
 
 # ---- LLIST 9900 (chapter 8) prints these --------------------------------------
- 9900 REM TS-Pico 2.3 guided tour
+ 9900 REM TS-Pico 2.4 guided tour
  9910 REM LLIST 9900 sent these lines
  9920 REM to /VLPRINT on the SD card
  9999 REM end of the tour

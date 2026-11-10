@@ -5,6 +5,9 @@ An assembly-level account of what changed on top of Gustavo Pane's v1.7 ROM:
 - ROM 2.0: SYNC, BREAK and recovery.
 - ROM 2.1: the disk commands, `f:` files and file channels.
 - ROM 2.2: two fixes to the 2.1 module.
+- ROM 2.3: keys as typed, the Pico ends the 86h loop, a new string reader.
+- ROM 2.4: COPY and MOVE as two verbs, `LIST "x"`, `RESTORE #`, the `v:` and `x:`
+  channels and `CAT #`.
 - The ZX Spectrum ROM v3.
 
 Addresses are Z80 addresses. In the 32 K image, HOME sits at file offset 0000h
@@ -21,7 +24,8 @@ sources are listed [at the end](#sources).
 | **2.0** | `src/rom/TSPICO-SYNC.ROM`, from `tspico-sync.asm` | v1.7 plus SYNC, BREAK abort, the Pico-reset report and a BIOS wait that never raises a report. Its new code is at EXROM 2300h. It was never released on its own. |
 | **2.1** | `src/rom/TSPICO-21.ROM` until 2.2, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. It shipped with firmware 2.1.0–2.1.2. |
 | **2.2** | `src/rom/TSPICO-22.ROM`, crc 8363E100 | 2.1 plus a 16th patch (EXROM 20BEh) and two module fixes: `tpi:tape` keeps the printer switch ([TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), #176) and a pre-load of 0 is Report J ([PRELOAD](#preload-a-pre-load-of-0-is-report-j), #179). The module is 1919 bytes, 3000h–377Eh. It shipped with firmware 2.2 and 2.2.1. |
-| **2.3** | `src/rom/TSPICO-23.ROM`, crc 69660CDB | 2.2 plus seven patches, `PS_READ`, COPY, LIST and RESTORE: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228); COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-23-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-23-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-23-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-23-the-command-channel), #404); `CAT #n` writes a listing into a file ([below](#rom-23-cat-n), #404). The module is 2456 bytes, 3000h–3997h, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
+| **2.3** | `src/rom/TSPICO-23.ROM` until 2.4, crc D7352D58 (as released in 2.3.1) | 2.2 plus four patches and `PS_READ`: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228). FDD_VERSION 8. It shipped with firmware 2.3 and 2.3.1. |
+| **2.4** | `src/rom/TSPICO-24.ROM`, crc 96D7CEAA | 2.3 plus three patches and module code: COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-24-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-24-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-24-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-24-the-command-channel), #404); `CAT #n` writes a listing into a file ([below](#rom-24-cat-n), #404). Version marker 24h. The module is 2456 bytes, 3000h–3997h, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -365,9 +369,9 @@ The two passes work like this:
 | `ERASE x$` | `tpi:erase x` | D2h |
 | `FORMAT x$` | `tpi:format x` | D0h |
 
-#### ROM 2.3: COPY and MOVE
+#### ROM 2.4: COPY and MOVE
 
-ROM 2.3 changes the MOVE rows and adds COPY (#341):
+ROM 2.4 changes the MOVE rows and adds COPY (#341):
 
 | BASIC | Sent as | Token |
 |---|---|---|
@@ -384,7 +388,7 @@ module can't call it: for a bare COPY at run time the module returns carry
 set with HL = 0A02h and the hook ends `RET NC / JP (HL)`. The new code
 (FDD_ENTRY, FDD_COPY, CMD_CD_MENU) is at 37B5h–37EDh, after `PS_READ`.
 
-#### ROM 2.3: LIST and RESTORE
+#### ROM 2.4: LIST and RESTORE
 
 | BASIC | Sent as | Token |
 |---|---|---|
@@ -408,7 +412,7 @@ isn't an OPEN # file. The new code (FDD_LIST, FDD_RESTORE, STR_NEXT,
 HC_USE_ZERO, CMD_LIST) takes the module to 38EBh. `tpi:label` (the card's
 name, also `FORMAT ":name"`) is firmware only.
 
-#### ROM 2.3: the speech channel
+#### ROM 2.4: the speech channel
 
 `OPEN #n,"v:"` (#375) opens the v3 card's speech: every line `PRINT #n`
 prints is said. CH_OPEN_HOOK (335Ch) takes a `v:` spec as it takes `d:`:
@@ -425,7 +429,7 @@ from OPEN_SYNTAX to CH_SEND sit 14–15 bytes lower than before. The letter
 is `v` (voice) because the stock code takes `s` as the screen, reading only
 a spec's first character.
 
-#### ROM 2.3: the command channel
+#### ROM 2.4: the command channel
 
 `OPEN #n,"x:"` (#404) opens a stream a program talks to the Pico through:
 each line printed to it is a command (`path`, `dir`, `mount`, `info`), and
@@ -441,7 +445,7 @@ same 12 bytes as before, so nothing up to PS_READ moves. DV_TEST, REC_FLAGS
 and IN_DROP grew the end of the module to 3930h; PUSH_LETTER and REC_FLAGS
 are 3 bytes higher.
 
-#### ROM 2.3: CAT #n
+#### ROM 2.4: CAT #n
 
 `CAT #n`, `CAT #n;"x"` and `CAT #n,"x"` (#404) write what `CAT` and
 `CAT "x"` would show into the file open on stream n, as plain text: one
@@ -714,12 +718,13 @@ in v2.
 
 ## Version bytes
 
-| Where | v1.7 | 2.0 | 2.1 | 2.2 | 2.3 |
-|---|---|---|---|---|---|
-| HOME 0065h (`PEEK 101`) | 17h | 20h | 21h | 22h | 23h |
-| BIOS G_VERS (EXROM 1852h, `LD BC,nnnn`) | 0017h | 0020h | 0021h | 0022h | 0023h |
-| Boot line (EXROM 1C6Ch) | v1.7 | `" 2026 TS-Pico ROM v2.0"` | `"… v2.1"` | `"… v2.2"` | `"… v2.3"` |
-| Module FDD_VERSION (EXROM 30AFh) | — | — | 08h | 08h | 09h |
+| Where | v1.7 | 2.0 | 2.1 | 2.2 | 2.3 | 2.4 |
+|---|---|---|---|---|---|---|
+| HOME 0065h (`PEEK 101`) | 17h | 20h | 21h | 22h | 23h | 24h |
+| BIOS G_VERS (EXROM 1852h, `LD BC,nnnn`) | 0017h | 0020h | 0021h | 0022h | 0023h | 0024h |
+| Boot line (EXROM 1C6Ch) | v1.7 | `" 2026 TS-Pico ROM v2.0"` | `"… v2.1"` | `"… v2.2"` | `"… v2.3"` | `"… v2.4"` |
+| Pre-header byte 2 (EXROM 1BB5h, `ROM_ID`) | FFh | FFh | FFh | FFh | 23h | 24h |
+| Module FDD_VERSION (EXROM 30AFh) | — | — | 08h | 08h | 08h | 09h |
 
 v1.1 reads 15h at 0065h.
 

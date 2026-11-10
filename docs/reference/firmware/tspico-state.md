@@ -309,12 +309,12 @@ keeps the same object in its local `rxd`.
 
 The second byte of the last command's pre-header, kept by `PROCESS_CMD`.
 `FFh` at import. Up to ROM 2.2 that byte was `BANK_SV`, always `FFh`, and
-the firmware ignored it; ROM 2.3 sends its version marker there, `23h`, the
-same as `PEEK 101` ([../rom/exrom-driver.md](../rom/exrom-driver.md#build_preheader_b-1ba0h), #227).
-`GETINFO` shows it as the ROM line of `tpi:info` ("2.3"), so that line
+the firmware ignored it; from ROM 2.3 on the ROM sends its version marker
+there (`24h` from ROM 2.4, `23h` from 2.3), the same as `PEEK 101` ([../rom/exrom-driver.md](../rom/exrom-driver.md#build_preheader_b-1ba0h), #227).
+`GETINFO` shows it as the ROM line of `tpi:info` ("2.4"), so that line
 says what the 2068 is actually running, not what `config.ini` claims
 (`TSP.ROM_VERSION`, still shown when `rom_id` is `FFh`). Nothing else reads
-it: this firmware needs ROM 2.3 and does not branch on the ROM — after `N`
+it: this firmware needs ROM 2.4 and does not branch on the ROM — after `N`
 at a prompt it sends an echo and `03h`, which a 2.2 ROM would leave unread
 for the next command (the orphan-byte bug). A command from the ZX48 ROM
 does not pass through `PROCESS_CMD`, so it leaves the value alone.
@@ -406,7 +406,7 @@ list it as a variable.
 
 ### `FW_VERSION`, `ROM_VERSION`
 
-`"2.3.1"` and `"2.3"`: the release number of this firmware and the ROM it
+`"2.4"` and `"2.4"`: the release number of this firmware and the ROM it
 ships with (and needs). The firmware and its ROM share one `major.minor`,
 and a third part marks a firmware-only release on the same ROM (the
 comment). `PICO_STATUS.__init__` copies `FW_VERSION` into `TSP` unconditionally

@@ -7,7 +7,7 @@
   120 PRINT #4;"mount": INPUT #4;m$: PRINT "mount: [";m$;"]"
   130 PRINT #4;"info": INPUT #4;l$: INPUT #4;a: INPUT #4;b: INPUT #4;v$: INPUT #4;r$
   140 PRINT "card [";l$;"] ";INT (a/1048576);" of ";INT (b/1048576);" MB free"'"firmware ";v$;", ROM ";r$
-  150 IF r$<>"2.3" THEN PRINT "FAIL the ROM is not 2.3": LET f=f+1
+  150 IF r$<>"2.4" THEN PRINT "FAIL the ROM is not 2.4": LET f=f+1
   200 PRINT #4;"dir": INPUT #4;d: INPUT #4;n: PRINT d;" folders, ";n;" files"
   210 FOR i=1 TO d+n: INPUT #4;a$
   220 IF LEN a$<>32 THEN PRINT "FAIL row ";i;" is ";LEN a$: LET f=f+1

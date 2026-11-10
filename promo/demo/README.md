@@ -1,15 +1,15 @@
-# TS-Pico 2.3 guided tour (the release video's demo program)
+# TS-Pico 2.4 guided tour (the release video's demo program)
 
-`tour.bas` is a BASIC program for a real TS-2068 with a TS-Pico on ROM 2.3 and the firmware
-on `main` after 2.3.1 (it uses `COPY`/`MOVE`, `LIST "file"`, `RESTORE #`, `CAT #` and `x:`,
-from #349, #405 and #406, none of them in the v2.3.1 release). It walks through what is new since version 1.1, one chapter per feature, for the
+`tour.bas` is a BASIC program for a real TS-2068 with a TS-Pico on release 2.4: ROM 2.4 and
+firmware 2.4 (it uses `COPY`/`MOVE`, `LIST "file"`, `RESTORE #`, `CAT #` and `x:`, from
+#349, #405 and #406, new in 2.4). It walks through what is new since version 1.1, one chapter per feature, for the
 release video aimed at 1.1 owners. Each chapter opens with a title card, then runs its
 commands a step at a time: the command about to run is shown on a yellow strip, a blue
 caption says what to look at, and the presenter presses a key to go on. Nothing moves until
 a key is pressed, so the narration sets the pace.
 
 The whole tour was run in the emulator (`tools/emu`: ZEsarUX running
-`src/rom/TSPICO-23.ROM`, `pico_host.py` running the real firmware), twice in a row from a
+`src/rom/TSPICO-24.ROM`, `pico_host.py` running the real firmware), twice in a row from a
 fresh copy of the card, with identical screens both times. See [Testing](#testing).
 
 ## Files
@@ -98,7 +98,7 @@ slower in the emulator than on the board.
 
 | # | Title | What it shows | Presenter presses | Steps | Time |
 |---|---|---|---|---|---|
-| 1 | Welcome to TS-Pico 2.3 | `PRINT PEEK 101` gives 35 (ROM 2.3); the keywords (`CAT COPY MOVE ERASE FORMAT LIST OPEN #`), the rest `SAVE "tpi:..."`, LOAD "tpi:..." only mounts; `SAVE "tpi:info"` | keys only | 1-3 | 14 s |
+| 1 | Welcome to TS-Pico 2.4 | `PRINT PEEK 101` gives 36 (ROM 2.4); the keywords (`CAT COPY MOVE ERASE FORMAT LIST OPEN #`), the rest `SAVE "tpi:..."`, LOAD "tpi:..." only mounts; `SAVE "tpi:info"` | keys only | 1-3 | 14 s |
 | 2 | Listings in color | `CAT`; `CAT "*.tap"`; `CAT "library"`, which stops at `(71%) Scroll? (Y/n)` | **Y** at Scroll? (N stops the list) | 4-7 | 15 s |
 | 3 | Folders | `FORMAT "tour/"`, `MOVE TO "tour"`, `SAVE "tpi:path"`, `MOVE TO "-"`, `tpi:path`; `CAT` with `<tour>` in it | keys only | 8-10 | 10 s |
 | 4 | Copies, renames and tapes | `COPY "multi.tap" TO "tour"`; `MOVE TO "tour"`; `COPY "/art.tap" TO "pics.tap"`; `FORMAT "songs.tap"`; `CAT`; `CAT "multi.tap"` (the blocks in a TAP, not mounted); `CAT ""` (the new tape: empty, append on); `SAVE "tpi:close"`; `MOVE "songs.tap" TO "tunes.tap"` (a rename); `CAT "*.tap"` | keys only | 11-15 | 15 s |

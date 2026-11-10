@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the TS-Pico 2.3 flyer: promo/flyer/flyer.html -> tspico-2.3-flyer.pdf
+# Build the TS-Pico 2.4 flyer: promo/flyer/flyer.html -> tspico-2.4-flyer.pdf
 # (letter, front and back), plus a PNG of each side for posting online.
 #
 # Usage: promo/flyer/make.sh [OUTDIR]   (default build/flyer)
@@ -33,8 +33,8 @@ done
 cp "$HERE/qr-updater.svg" "$WORK/"
 
 "$CHROME" --headless=new --disable-gpu --no-sandbox --no-pdf-header-footer \
-  --print-to-pdf="$OUT/tspico-2.3-flyer.pdf" "file://$WORK/flyer.html" 2>/dev/null
+  --print-to-pdf="$OUT/tspico-2.4-flyer.pdf" "file://$WORK/flyer.html" 2>/dev/null
 if command -v pdftoppm >/dev/null 2>&1; then
-  pdftoppm -png -r 150 "$OUT/tspico-2.3-flyer.pdf" "$OUT/tspico-2.3-flyer"
+  pdftoppm -png -r 150 "$OUT/tspico-2.4-flyer.pdf" "$OUT/tspico-2.4-flyer"
 fi
 ls "$OUT"

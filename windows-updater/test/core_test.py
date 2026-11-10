@@ -444,6 +444,11 @@ def main():
     results.append(check("rom_behind: 2.1 board", core.rom_behind({"ver": (2, 1), "from1x": False}, m)))
     results.append(check("rom_behind: 2.2 board", not core.rom_behind({"ver": (2, 2), "from1x": False}, m)))
     results.append(check("rom_behind: unknown", core.rom_behind({"ver": None, "from1x": False}, m)))
+    m24 = {"rom_version": "2.4", "fw_version": "2.4"}           # the 2.4 release: a 2.3.1 board needs ROM 2.4
+    results.append(check("rom_behind: 2.3.1 board, release 2.4",
+                         core.rom_behind({"ver": core.ver_of("2.3.1"), "from1x": False}, m24)))
+    results.append(check("rom_behind: 2.4 board, release 2.4",
+                         not core.rom_behind({"ver": core.ver_of("2.4"), "from1x": False}, m24)))
     blk = bytearray(512 * 2)
     blk[32:32 + 22] = b"xxMicroPython v1.20.0 "
     results.append(check("uf2_micropython", core.uf2_micropython(bytes(blk)) == "1.20.0"))

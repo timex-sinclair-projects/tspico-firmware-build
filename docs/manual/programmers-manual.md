@@ -1,8 +1,8 @@
 # TS-Pico Programmer's Manual
 
-### Machine code for the TS-2068, and new commands for the Pico — version 2.3
+### Machine code for the TS-2068, and new commands for the Pico — version 2.4
 
-> **About this manual.** This manual describes **TS-Pico 2.3** (firmware 2.3 and ROM 2.3, October
+> **About this manual.** This manual describes **TS-Pico 2.4** (firmware 2.4 and ROM 2.4, November
 > 2026). It was written from the source code: the firmware, the ROM patches and the test
 > harnesses. Appendix D lists the repository documents that go with it.
 >
@@ -86,8 +86,8 @@ The book has two halves, one for each end of the cable:
 
 ## 1.2 What you need
 
-- A TS-Pico with the **2.3 release**: its firmware, and ROM 2.3 in the 2068. The two go
-  together: firmware 2.3 needs ROM 2.3 (section 3.7 says why). The ROM opens
+- A TS-Pico with the **2.4 release**: its firmware, and ROM 2.4 in the 2068. The two go
+  together: firmware 2.4 needs ROM 2.4 (section 3.7 says why). The ROM opens
   every exchange with a "SYNC" that the 1.1 firmware doesn't understand. Our
   machine-code routines do the same, so they don't work with the 1.1 firmware either.
 - An assembler for your computer. The examples use **sjasmplus** syntax (local labels start with
@@ -125,6 +125,7 @@ PRINT PEEK 101
 | 21 (15h) | 1.1 |
 | 34 (22h) | 2.2 |
 | 35 (23h) | 2.3 |
+| 36 (24h) | 2.4 |
 
 The ROM also tells the Pico: from 2.3 it sends its version in every command's pre-header
 (section 3.4), and `SAVE "tpi:info"` shows it on its ROM line.
@@ -132,10 +133,10 @@ The ROM also tells the Pico: from 2.3 it sends its version in every command's pr
 ## 1.5 Summary
 
 1. Part 1 is the 2068 side; Part 2 is the Pico side.
-2. You need the 2.3 release: its firmware and ROM 2.3.
+2. You need the 2.4 release: its firmware and ROM 2.4.
 3. BASIC, raw ports, or the ROM's BIOS: raw ports are the most flexible, and this book's library
    does the hard parts.
-4. `PEEK 101` tells you the ROM version: 35 for 2.3.
+4. `PEEK 101` tells you the ROM version: 36 for 2.4.
 
 ---
 
@@ -279,7 +280,7 @@ Ten bytes, sent one at a time:
 |---|---|---|
 | 0 | `'B'` (42h) | a command |
 | 1 | 0 | 0 = a `SAVE "tpi:..."` command. 1, 2 or 3 = `LOAD`/`VERIFY`/`MERGE "tpi:name"`, which mounts a file. **4, 5 and 6 are printer traffic: never send them.** |
-| 2 | 23h | the ROM's version, as `PEEK 101` gives it. The ROM sends 23h; send the same. The Pico keeps it and shows it in `tpi:info`. |
+| 2 | 24h | the ROM's version, as `PEEK 101` gives it. ROM 2.4 sends 24h; send the same. The Pico keeps it and shows it in `tpi:info`. |
 | 3, 4 | first CODE number, low byte first | `SAVE "tpi:..." CODE a,b` sends *a* here; 0 without CODE |
 | 5, 6 | second CODE number, low byte first | *b* |
 | 7, 8 | length of the command text, low byte first | |
@@ -1140,13 +1141,13 @@ Pico, they're "Unrecognized command" (**C**). From machine code, set the bits yo
 
 ## 8.1 The table
 
-The EXROM holds a jump table at 1840h, the same in every ROM from 1.1 to 2.3:
+The EXROM holds a jump table at 1840h, the same in every ROM from 1.1 to 2.4:
 
 | Address | Name | In short |
 |---|---|---|
 | 1840h | G_MODE | read TPMODE |
 | 1842h | S_MODE | set TPMODE |
-| 1844h | G_VERS | read the ROM's version: **0023h on 2.3** |
+| 1844h | G_VERS | read the ROM's version: **0024h on 2.4** |
 | 1846h | TX_A | `OUT (0Eh),A` |
 | 1848h | RX_A | `IN A,(0Eh)` |
 | 184Ah | C_END | wait for the answer, read it and act on it, as the ROM does |
@@ -2066,7 +2067,7 @@ the start of a pre-header.
 | **Stack** | 10 bytes |
 | **Time** | up to 2.1 s for the SYNC, then 10 bytes at about 64 µs each, up to 21 s for READY, and 4 + *n* bytes at about 72 µs each, for *n* characters of text. |
 
-**Description.** Calls `PICO_SYNC`, sends the ten-byte pre-header (`'B'`, 0, 23h, `PMR1`,
+**Description.** Calls `PICO_SYNC`, sends the ten-byte pre-header (`'B'`, 0, 24h, `PMR1`,
 `PMR2`, the length, the XOR), reads the pre-load byte at once, waits for READY, then sends the
 body (`'D'`, the length, the text, the XOR). It doesn't wait for the answer.
 
@@ -2394,7 +2395,7 @@ The routines the ROM provides for machine code that talks to the TS-Pico. Seven 
 jump table at EXROM 1840h; three more are at fixed addresses outside it. Background: Chapter 8,
 which explains the bank switch and its dangers.
 
-These entries describe **ROM 2.3**. The table's addresses are the same in every ROM from 1.1
+These entries describe **ROM 2.4**. The table's addresses are the same in every ROM from 1.1
 on, but on 1.1, C_END and WF_NPH raise reports from inside instead of returning carry.
 
 **Calling the BIOS from RAM.** The BIOS is in the EXROM, and a `USR` program runs with HOME
@@ -2494,7 +2495,7 @@ SETM:   ld a,(M)
 |---|---|
 | **Purpose** | Read the ROM's version. |
 | **Call** | `ld hl,1844h` / `di` / `call 03FCh` / `ei` |
-| **If OK** | BC = 0023h on ROM 2.3 (0022h on 2.2, 0015h on 1.1). |
+| **If OK** | BC = 0024h on ROM 2.4 (0023h on 2.3, 0022h on 2.2, 0015h on 1.1). |
 | **Always** | AF and DE kept. IX corrupt (the bank switch). |
 
 **Description.** Returns the same number as the byte at HOME 0065h, which BASIC reads with
@@ -2660,7 +2661,7 @@ FBh recovered, 00h busy (after every OUT).
 
 ```
 wait IDLE; OUT (0Fh),03h; wait READY+IDLE
-OUT 42h, 0, 23h, a lo, a hi, b lo, b hi, len lo, len hi, XOR(bytes 0-8)
+OUT 42h, 0, 24h, a lo, a hi, b lo, b hi, len lo, len hi, XOR(bytes 0-8)
 IN (0Eh) -> 01h
 wait READY
 OUT 44h, len lo, len hi, text..., XOR(44h..last text byte)
@@ -2704,7 +2705,7 @@ Chapter R6 has a full entry for each EXROM routine here.
 |---|---|---|
 | EXROM | 1840h | G_MODE: BC = TPMODE |
 | EXROM | 1842h | S_MODE: TPMODE := A AND 0Fh |
-| EXROM | 1844h | G_VERS: BC = 0023h on ROM 2.3 |
+| EXROM | 1844h | G_VERS: BC = 0024h on ROM 2.4 |
 | EXROM | 1846h | TX_A: OUT (0Eh),A |
 | EXROM | 1848h | RX_A: IN A,(0Eh) |
 | EXROM | 184Ah | C_END: wait, read the answer, run response functions |
@@ -3283,7 +3284,7 @@ folder. `test_examples.py` checks that this copy matches the file.
 ```asm
 ; picolib.asm -- talk to the TS-Pico from machine code, through its ports.
 ;
-; For ROM 2.3 with firmware 2.3 or later. Include this file at the
+; For ROM 2.4 with firmware 2.4 or later. Include this file at the
 ; end of your program; the program must define two words, PMR1 and PMR2, which
 ; carry the two CODE numbers of the command (SAVE "tpi:..." CODE PMR1,PMR2).
 ;
@@ -3419,8 +3420,8 @@ SEND_CMD:
         call TXX                ; 0: block type 'B' (a command)
         xor a
         call TXX                ; 1: 0 = SAVE "tpi:..."
-        ld a,23h
-        call TXX                ; 2: the ROM's version, as ROM 2.3 sends it
+        ld a,24h
+        call TXX                ; 2: the ROM's version, as ROM 2.4 sends it
         ld a,(PMR1)
         call TXX                ; 3-4: first CODE number
         ld a,(PMR1+1)

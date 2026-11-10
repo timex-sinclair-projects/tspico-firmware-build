@@ -2,7 +2,7 @@
 
 Source: the images [`src/rom/TSPICO.ROM`](../../../src/rom/TSPICO.ROM)
 (the base image), [`src/rom/TSPICO-SYNC.ROM`](../../../src/rom/TSPICO-SYNC.ROM)
-(the SYNC layer), [`src/rom/TSPICO-23.ROM`](../../../src/rom/TSPICO-23.ROM) (ROM 2.3),
+(the SYNC layer), [`src/rom/TSPICO-24.ROM`](../../../src/rom/TSPICO-24.ROM) (ROM 2.4),
 [`src/rom/TSPICO-ZX48-V4.BIN`](../../../src/rom/TSPICO-ZX48-V4.BIN); the
 build [`tools/build-rom.py`](../../../tools/build-rom.py) and
 [`tools/build-rom.sh`](../../../tools/build-rom.sh); the analysis tools
@@ -18,7 +18,7 @@ LPRINT and the disk keywords to the Pico, and the reports the 2068 prints
 when something fails. This chapter is the map: which images exist and
 which one ships, how a 32K image is laid out, how HOME and EXROM call each
 other across the 2068's bank switching, how to tell which ROM a machine
-has, how ROM 2.3 is built and checked, and how to read the listings. The
+has, how ROM 2.4 is built and checked, and how to read the listings. The
 code itself is in the chapters that follow:
 
 | Chapter | Covers |
@@ -47,7 +47,7 @@ All checksums below were computed from the files in the repository.
 | 1.1 | `ROMs/TSPICO-11-home`, `-exrom` | 16K + 16K | `E8714BED`, `268649F6` | 15h | Gustavo Pane's ROM as the boards shipped; the only public release before ROM 2.2 | what users still have (the upgrade UF2 replaces it; [../firmware/upgrade.md](../firmware/upgrade.md)) |
 | the base image | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | 1.1 plus 104 EXROM bytes (a ready-wait and guard in the Y/N loop, and BREAK at the SAVE prompt) and the version byte | build input: the base `tspico-sync.asm` patches; never released |
 | the SYNC layer | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | the base image plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | build input: the base `build-rom.py` patches; never released |
-| **ROM 2.3** (#227, #228) | `src/rom/TSPICO-23.ROM` | 32K | `69660CDB` | 23h | the SYNC layer plus the disk-command layer: 23 patches and the module at EXROM 3000h–3997h; 2575 bytes in 22 hunks. ROM 2.2 (`TSPICO-22.ROM` until this rename, `8363E100`, 22h; in the v2.2 and v2.2.1 releases) was the same less six patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
+| **ROM 2.4** (#349, #375, #404) | `src/rom/TSPICO-24.ROM` | 32K | `96D7CEAA` | 24h | the SYNC layer plus the disk-command layer: 23 patches and the module at EXROM 3000h–3997h; 2575 bytes in 22 hunks. ROM 2.3 (`TSPICO-23.ROM` until this rename, `D7352D58`, 23h; in the v2.3 and v2.3.1 releases) was the same less three patches (19D7h, 19AFh, 19D0h) and the module's COPY, LIST, RESTORE and channel code, FDD_VERSION 8; ROM 2.2 (`TSPICO-22.ROM`, `8363E100`, 22h; in v2.2 and v2.2.1) was 2.3 less four more patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
 | ZX build input | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base `tspico-zx48-v3.asm` patches |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | the ZX build input plus a WAIT_RDY fix, `LOAD "tpi:…"` and `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
 
@@ -60,7 +60,7 @@ baselines. The slot-0 crc32 in
 `flash/manifest.json` is of the image padded with `00h` to 32K, which is
 why it differs from the file's own.
 
-ROM 2.3 is built in layers, each the image below it plus patches:
+ROM 2.4 is built in layers, each the image below it plus patches:
 
 1. **The base image**, `src/rom/TSPICO.ROM`: 1.1 with two small EXROM
    fixes. It is never modified.
@@ -70,17 +70,18 @@ ROM 2.3 is built in layers, each the image below it plus patches:
    ([exrom-sync.md](exrom-sync.md)).
 3. **The disk-command layer**, the module `src/rom/fdd/fddcmd.asm` at EXROM
    3000h plus the HOME and EXROM patches in `tools/build-rom.py`, which
-   writes `src/rom/TSPICO-23.ROM` ([exrom-fdd.md](exrom-fdd.md)).
+   writes `src/rom/TSPICO-24.ROM` ([exrom-fdd.md](exrom-fdd.md)).
 
 `TSPICO.ROM` and `TSPICO-SYNC.ROM` are build inputs, not releases; the
 build history ([ROM_CHANGES.md](../../ROM_CHANGES.md#lineage)) has the
-detail. The ROM and the firmware share one version number: firmware 2.3.x
-runs ROM 2.3 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)).
-ROM 2.3 changes what function 86h does after `N` and what the string
-reader takes for the end (#227, #228), so it needs the firmware written for
-it, and that firmware needs it; it sends its version in byte 2 of each
-command pre-header, which `tpi:info` shows.
-ROM 2.3, like 2.2, needs firmware that understands the SYNC byte; the firmware that
+detail. The ROM and the firmware share one version number: firmware 2.4.x
+runs ROM 2.4 ([../firmware/boot.md](../firmware/boot.md#releases-releaseyml)).
+From ROM 2.3 on, function 86h goes on after `N` and the string reader takes
+only 00h or 03h for the end (#227, #228), and ROM 2.4 adds COPY, `LIST "x"`,
+`RESTORE #`, `CAT #` and the `v:` and `x:` channels, so it needs the
+firmware written for it, and that firmware needs it; it sends its version
+in byte 2 of each command pre-header, which `tpi:info` shows.
+ROM 2.4, like 2.2 and 2.3, needs firmware that understands the SYNC byte; the firmware that
 came with 1.1 reads it as the first byte of a command.
 
 ## The 32K file
@@ -214,13 +215,13 @@ copies): [SYMBOLS.md](../../rom-analysis/SYMBOLS.md#cross-rom-machinery).
 
 Four places say, and they are changed together:
 
-| Where | 1.1 | ROM 2.2 | ROM 2.3 |
-|---|---|---|---|
-| HOME 0065h (`PEEK 101`) | 15h | 22h (34) | 23h (35) |
-| BIOS G_VERS (EXROM 1844h → 1852h, `LD BC,nnnn`) | | 0022h | 0023h |
-| the banner at EXROM 1C6Ch, at start-up | | "2026 TS-Pico ROM v2.2" | "… v2.3" |
-| byte 2 of a command pre-header (EXROM 1BB5h, the module's `ROM_ID`), which the Pico reads | FFh | FFh | 23h |
-| the module's FDD_VERSION (EXROM 30AFh) | | 8 | 9 |
+| Where | 1.1 | ROM 2.2 | ROM 2.3 | ROM 2.4 |
+|---|---|---|---|---|
+| HOME 0065h (`PEEK 101`) | 15h | 22h (34) | 23h (35) | 24h (36) |
+| BIOS G_VERS (EXROM 1844h → 1852h, `LD BC,nnnn`) | | 0022h | 0023h | 0024h |
+| the banner at EXROM 1C6Ch, at start-up | | "2026 TS-Pico ROM v2.2" | "… v2.3" | "… v2.4" |
+| byte 2 of a command pre-header (EXROM 1BB5h, the module's `ROM_ID`), which the Pico reads | FFh | FFh | 23h | 24h |
+| the module's FDD_VERSION (EXROM 30AFh) | | 8 | 8 | 9 |
 
 A BASIC program tests `PEEK 101`; machine code calls G_VERS through the
 BIOS table ([exrom-driver.md](exrom-driver.md)). FDD_VERSION counts
@@ -284,7 +285,7 @@ SYNC-layer patch site and the base-image bytes it replaced;
 CI does not run this script — it runs the two tests on the committed
 images — so a change to these sources is rebuilt by hand and the image
 committed. The script's header notes that `src/rom/TSPICO.ROM`, the base
-image, is never modified (slot 1 is `TSPICO-23.ROM`; until #181 the header
+image, is never modified (slot 1 is `TSPICO-24.ROM`; until #181 the header
 called `TSPICO.ROM` the shipping slot-1 ROM). The ZX sources:
 [zx48.md](zx48.md); the SYNC layer's source: [exrom-sync.md](exrom-sync.md).
 
@@ -315,10 +316,10 @@ moved site refuses, naming it: a patch that no longer fits needs a person,
 not a new checksum. It leaves `ROMs/` and `romdiff.py`'s `EXPECT_CRC` alone.
 
 After a change to the module or the patches: `python3 tools/build-rom.py
---verify`, copy `build/TSPICO-fdd.ROM` over `src/rom/TSPICO-23.ROM`, and
+--verify`, copy `build/TSPICO-fdd.ROM` over `src/rom/TSPICO-24.ROM`, and
 set slot 1's crc32 in `flash/manifest.json` (`tools/build-flash.py check`
 prints it). CI ([../firmware/boot.md](../firmware/boot.md#ci-buildyml))
-runs `--verify`, fails if the committed `TSPICO-23.ROM` differs from the
+runs `--verify`, fails if the committed `TSPICO-24.ROM` differs from the
 fresh build by a single byte, checks the manifest's crc32, and runs
 `rom_cend_hosttest.py` on `C_END2`, `rom_tpmode_hosttest.py` on the
 switch words, `rom_preload_hosttest.py` on `PRELOAD` and
@@ -332,7 +333,7 @@ puts it anywhere else.
 
 #### The patches
 
-Twenty-three, applied in this order (the last four are ROM 2.3's, and so are 19D7h, 19AFh and 19D0h). The reason for each is in the source's
+Twenty-three, applied in this order (the last four are ROM 2.3's; 19D7h, 19AFh and 19D0h are ROM 2.4's). The reason for each is in the source's
 `note`, and in full, with what it calls, in the chapter named.
 
 | Site | Before → after | What it does | Chapter |
@@ -353,16 +354,16 @@ Twenty-three, applied in this order (the last four are ROM 2.3's, and so are 19D
 | HOME 13A5h | `CALL 13BEh` → `CALL 1494h` | CLOSE # through its trampoline | [home.md](home.md) |
 | EXROM 184Fh | `JP 23CDh` → `JP 301Bh` | BIOS C_END becomes C_END2: a timeout is J, not F | [exrom-driver.md](exrom-driver.md), [exrom-fdd.md](exrom-fdd.md) |
 | EXROM 20BEh | `CALL 1861h / JR 2108h` → `JP 301Eh` + 2 × `00` | `tpi:tape` clears only the LOAD/SAVE switch (TPMODE bit 1), through the module's TAPE_MODE; 1.1 set TPMODE to 0, turning the printer switch off too (#176) | [sysvars.md](sysvars.md#5ddbh-tpmode-peek-24027), [exrom-fdd.md](exrom-fdd.md) |
-| EXROM 1C7Eh | the SYNC layer's four version characters → `"v2.3"` | the banner | [exrom-driver.md](exrom-driver.md) |
-| HOME 0065h | `20h` → `23h` | `PEEK 101` | [home.md](home.md) |
-| EXROM 1852h | `LD BC,0020h` → `LD BC,0023h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
-| EXROM 1BB5h | `LD A,(5DCFh)` → `LD A,23h / NOP` | a command pre-header's byte 2 is the ROM's version, not BANK_SV (always FFh): the firmware knows which ROM sent each command (#227) | [exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h) |
+| EXROM 1C7Eh | the SYNC layer's four version characters → `"v2.4"` | the banner | [exrom-driver.md](exrom-driver.md) |
+| HOME 0065h | `20h` → `24h` | `PEEK 101` | [home.md](home.md) |
+| EXROM 1852h | `LD BC,0020h` → `LD BC,0024h` | BIOS G_VERS | [exrom-driver.md](exrom-driver.md) |
+| EXROM 1BB5h | `LD A,(5DCFh)` → `LD A,24h / NOP` | a command pre-header's byte 2 is the ROM's version, not BANK_SV (always FFh): the firmware knows which ROM sent each command (#227) | [exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h) |
 | EXROM 21F0h | `AND 5Fh / CP 'N' / JP NZ,22A1h` → `JP 22A1h` + 4 × `00` | function 86h (and 88h): `N` goes round the loop like any key; the Pico ends it with 03h (#227) | [exrom-chunk1.md](exrom-chunk1.md#fn_86_yn_prompt-21e3h) |
 | EXROM 0572h | `AND 0DFh` → 2 × `00` | `POLL_KEYPRESS` no longer upper-cases a letter: the key goes as typed (#227) | [exrom-chunk1.md](exrom-chunk1.md#get_key_and_send-0471h) |
 | EXROM 045Fh | `PUSH AF / JR 0465h` → `JP 377Fh` | `PRINT_STRING_FROM_PICO` becomes the module's `PS_READ`: control-code values and bytes ≥ 80h are text (#228) | [exrom-fdd.md](exrom-fdd.md#ps_read) |
 
 The difference the disk-command layer makes, measured on the committed
-images (`TSPICO-SYNC.ROM` → `TSPICO-23.ROM`): 2575 bytes in 22 hunks: 107
+images (`TSPICO-SYNC.ROM` → `TSPICO-24.ROM`): 2575 bytes in 22 hunks: 107
 in HOME, 31 in the EXROM outside the module, and 2437 in the module's
 region — 19 of the module's 2456 bytes are `FFh`, the same as the free space
 they replaced (14 of them the free run before `PS_READ`, which splits the

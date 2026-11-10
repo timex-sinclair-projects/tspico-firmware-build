@@ -601,7 +601,7 @@ CR LF line ends (the comment at 4930–4932). Error statuses are logged.
    | Label | Value |
    |---|---|
    | Firmware | `TSP.FW_VERSION`, and "uPython" with MicroPython's version |
-   | ROM | what the ROM said: `rom_id` from this command's pre-header as major.minor (`23h` → "2.3", #227); `TSP.ROM_VERSION` from `config.ini` only for a ROM that sends `FFh` ([tspico-state.md](tspico-state.md#rom_id)) |
+   | ROM | what the ROM said: `rom_id` from this command's pre-header as major.minor (`24h` → "2.4", #227); `TSP.ROM_VERSION` from `config.ini` only for a ROM that sends `FFh` ([tspico-state.md](tspico-state.md#rom_id)) |
    | Build | `BUILD_FIT(BUILD_VERSION, 22)` |
    | Board | `board.LABEL` padded to six columns (`V2.2` on the v2 board, `V3` on the v3 card; [board.md](board.md#label)), and the log level |
    | Free RAM | `gc.mem_free()` in kB |

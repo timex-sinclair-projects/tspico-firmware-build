@@ -2,7 +2,7 @@
 
 This is the byte-level reference for how a Timex Sinclair 2068 and the TS-Pico
 talk: the two I/O ports, the status byte, every kind of transaction, and the
-rules a firmware handler must follow. It describes **firmware 2.3 with ROM 2.3**
+rules a firmware handler must follow. It describes **firmware 2.4 with ROM 2.4**
 (the disk-command ROM), as the code on `main` does it. Where an older document or the original spec says otherwise, this one follows the code.
 
 > **New to all this?** Start with [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md), a
@@ -177,7 +177,7 @@ Two layouts share the byte positions:
 |------|-----------------|-------------------------------|
 | 0 | `'B'` | flag: `$00` header, `$FF` data |
 | 1 | TADDR (0 = SAVE, 1–3 = LOAD/VERIFY/MERGE) | TADDR |
-| 2 | the ROM's version, `$23` (ROM 2.3; `$FF`, the bank, before). The firmware keeps it as `rom_id` and shows it in `tpi:info` | bank |
+| 2 | the ROM's version, `$24` (ROM 2.4; `$23` on ROM 2.3, `$FF`, the bank, before). The firmware keeps it as `rom_id` and shows it in `tpi:info` | bank |
 | 3–4 | PMR1: the first `CODE` number, LE | session id, LE |
 | 5–6 | PMR2: the second `CODE` number, LE | address (IX), LE |
 | 7–8 | length of the command text, LE | block length (DE), LE |
@@ -417,7 +417,7 @@ A jump table for machine-code programs, stable across ROMs:
 |-------|------|----------|
 | `$1840` | G_MODE | BC = TPMODE (low nibble); AF kept |
 | `$1842` | S_MODE | TPMODE := A AND `0Fh`; AF kept |
-| `$1844` | G_VERS | BC = the interface version: `$0015` on ROM 1.1, `$0022` on ROM 2.2, `$0023` on ROM 2.3 |
+| `$1844` | G_VERS | BC = the interface version: `$0015` on ROM 1.1, `$0022` on ROM 2.2, `$0023` on ROM 2.3, `$0024` on ROM 2.4 |
 | `$1846` | TX_A | `OUT (0Eh),A`; no wait, no BREAK check |
 | `$1848` | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | `$184A` | C_END | wait READY, read the answer, run the response functions. NC = status 1 (A = 0). C = failed, see below. |

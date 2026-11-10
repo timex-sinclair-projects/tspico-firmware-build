@@ -1,6 +1,6 @@
-# TS-Pico 2.3: the release video
+# TS-Pico 2.4: the release video
 
-A video for TS-Pico owners still on version 1.1: what 2.3 does, and how to upgrade.
+A video for TS-Pico owners still on version 1.1: what 2.4 does, and how to upgrade.
 About 15 minutes, shot on a TS-Pico v2 board. v3-only features (speech, the modem, WiFi
 downloads, the joystick) are left for a v3 video.
 
@@ -10,10 +10,9 @@ later chapters moved up one. Chapter 1 now leads with the keywords, as the manua
 (#367). The card label is added to the by-hand section, and the close mentions the Quick
 Start and Quick Reference guides.
 
-**Shoot after the next release.** The tour uses `COPY`/`MOVE` as two verbs, `LIST "file"`,
-`RESTORE #`, `CAT #` and `x:`, all merged after v2.3.1 (#349, #405, #406). The web updater's
-Latest release has to carry them, or a 1.1 owner following the video gets a 2068 that gives
-reports where the video shows listings. The demo program is [`demo/`](demo/README.md); the flyer and web post say
+**For release 2.4.** The tour uses `COPY`/`MOVE` as two verbs, `LIST "file"`, `RESTORE #`,
+`CAT #` and `x:`, which came in ROM and firmware 2.4 (#349, #405, #406). A board on 2.3 or
+2.3.1 needs the 2.4 ROM too; the updaters tick it for them. The demo program is [`demo/`](demo/README.md); the flyer and web post say
 the same things, so the video can point to them.
 
 ## Sources and shots
@@ -37,8 +36,8 @@ there's always a still frame to hold or trim.
 
 ## Before you shoot
 
-- [ ] The 2068 is on the release after 2.3.1, from the web updater's Latest release:
-      `PRINT PEEK 101` gives 35, and `SAVE "tpi:info"` shows the new firmware version.
+- [ ] The 2068 is on release 2.4, from the web updater's Latest release: `PRINT PEEK 101`
+      gives 36, and `SAVE "tpi:info"` shows firmware 2.4 and ROM 2.4.
 - [ ] The demo card is set up as `demo/README.md` says: `card/TAP` as `TAP`, plus the repo's
       `SD card/help` folder.
 - [ ] A Spectrum TAP on the card for the Spectrum-mode piece (`spectrum.tap` below), and a
@@ -60,15 +59,15 @@ Times are where each segment starts in the finished video.
 
 | Picture | Sound |
 |---|---|
-| **TV**: the 2068 switching on. The start-up line `2026 TS-Pico ROM v2.3`. | (Keyboard and power sounds only.) |
+| **TV**: the 2068 switching on. The start-up line `2026 TS-Pico ROM v2.4`. | (Keyboard and power sounds only.) |
 | **TV**: someone types `CAT`. The color listing appears. | "This is a Timex Sinclair 2068, typing a command Timex built into it in 1983 and never finished." |
-| **GFX**: title card on the gray, the cover drawing running in from the left. "TS-Pico 2.3". | "Version 2.3 of the TS-Pico makes it work. Let's see what else is new." |
+| **GFX**: title card on the gray, the cover drawing running in from the left. "TS-Pico 2.4". | "Version 2.4 of the TS-Pico makes it work. Let's see what else is new." |
 
 ### 2. Who this is for (0:20)
 
 | Picture | Sound |
 |---|---|
-| **CAM**: the TS-Pico on the back of the 2068; the SD card going in. | "If you have a TS-Pico, the last software you installed was probably version 1.1. Version 2.3 replaces it: new firmware for the Pico, and a new ROM for the 2068." |
+| **CAM**: the TS-Pico on the back of the 2068; the SD card going in. | "If you have a TS-Pico, the last software you installed was probably version 1.1. Version 2.4 replaces it: new firmware for the Pico, and a new ROM for the 2068." |
 | **CAM** close on the board. Lower third: "Free update · About 15 minutes". | "It's free, it installs from a web browser, and it takes about fifteen minutes. We'll do that first, then take a tour." |
 
 ### 3. The upgrade (1:00)
@@ -84,7 +83,7 @@ Follow the user manual's Appendix A, A.2.
 | **CAM**: the P10 jumper, close up. | "When the page asks for the ROM step, check the P10 jumper is on." |
 | **TV**: the 2068 switched on; `OUT 244,3`; `LOAD ""`; then DONE. Speed up the wait. | "Switch the 2068 on, type OUT 244,3 and LOAD "", and wait for DONE. The page follows along." |
 | **MAC**: "The 2068 is off — continue"; the firmware step; **Done**. | "Switch off, continue, and the page finishes the job." |
-| **CAM**: unplug USB; switch on. **TV**: `2026 TS-Pico ROM v2.3`. `PRINT PEEK 101` gives 35. | "Unplug the USB cable, switch on, and the start-up line says ROM 2.3." |
+| **CAM**: unplug USB; switch on. **TV**: `2026 TS-Pico ROM v2.4`. `PRINT PEEK 101` gives 36. | "Unplug the USB cable, switch on, and the start-up line says ROM 2.3." |
 
 ### 4. The tour (3:00)
 
@@ -94,7 +93,7 @@ Hold the card for a beat, then cut to the steps.
 | Chapter (tour) | Picture | Sound |
 |---|---|---|
 | Intro | **CAM**: `LOAD "tpi:tour.tap"`, `LOAD ""` typed. **TV**: "Getting ready…" | "I've written a short program that walks through what's new. It's on the card as a tape: mount it, and load it." |
-| 1. Welcome (3:15) | `PRINT PEEK 101` gives 35; the keywords step (`CAT COPY MOVE ERASE FORMAT LIST OPEN #`); `SAVE "tpi:info"`. | "First, the big change. The 2068 has disk words Timex never finished: CAT, COPY, MOVE, ERASE, FORMAT. They work now, on the SD card. The rest of the TS-Pico's commands are SAVE "tpi:" commands, and LOAD "tpi:" only mounts a file. Here's info: firmware, ROM and card at a glance." |
+| 1. Welcome (3:15) | `PRINT PEEK 101` gives 36; the keywords step (`CAT COPY MOVE ERASE FORMAT LIST OPEN #`); `SAVE "tpi:info"`. | "First, the big change. The 2068 has disk words Timex never finished: CAT, COPY, MOVE, ERASE, FORMAT. They work now, on the SD card. The rest of the TS-Pico's commands are SAVE "tpi:" commands, and LOAD "tpi:" only mounts a file. Here's info: firmware, ROM and card at a glance." |
 | 2. Listings in color (3:45) | `CAT`; `CAT "*.tap"`; `CAT "library"` stopping at `Scroll? (Y/n)`; **Y**. | "CAT lists the card in color, with its size and free space. It takes wildcards, and a long folder stops and asks before it scrolls." |
 | 3. Folders (4:15) | `FORMAT "tour/"`, `MOVE TO "tour"`, `tpi:path`, `MOVE TO "-"`. | "FORMAT makes a folder. It never formats your card: it only makes new things. MOVE TO goes into a folder, and MOVE TO "-" comes back." |
 | 4. Copies, renames and tapes (4:40) | `COPY "multi.tap" TO "tour"`; `FORMAT "songs.tap"`; `CAT "multi.tap"`; `CAT ""`; `MOVE "songs.tap" TO "tunes.tap"`; `CAT "*.tap"`. | "COPY copies files, and never overwrites one. FORMAT with a file name starts a new, empty tape. CAT with a tape's name lists the blocks inside it, without mounting it. And MOVE, with TO, renames." |
@@ -163,7 +162,7 @@ Hold the card for a beat, then cut to the steps.
 |---|---|
 | **GFX**: the flyer's back page, or a card with the three links: web updater, what's new, the manuals. | "Everything's on the TS-Pico website: the web updater, the full list of what's new, the user manual as a PDF, and a flyer you can print for your user group." |
 | **GFX**: the Quick Start booklet and the Quick Reference card, side by side. | "If the manual's too much, there's an eight-page Quick Start, and a Quick Reference card in the style of the one that came with the 2068." |
-| **CAM**: the 2068 with the TS-Pico, the drawing card fading in. | "TS-Pico 2.3. It's free, it takes about fifteen minutes, and your 2068 finally gets its disk commands." |
+| **CAM**: the 2068 with the TS-Pico, the drawing card fading in. | "TS-Pico 2.4. It's free, it takes about fifteen minutes, and your 2068 finally gets its disk commands." |
 
 ## Editing notes
 
@@ -176,11 +175,11 @@ Hold the card for a beat, then cut to the steps.
 - **Chapter titles.** The tour's own title cards already show "Chapter n of 12". Use them;
   add a GFX title only for the sections outside the tour.
 - **Thumbnail.** An EMU still of the color `CAT` beside the cover drawing, with
-  "TS-Pico 2.3" and "CAT · COPY · MOVE · ERASE · FORMAT".
+  "TS-Pico 2.4" and "CAT · COPY · MOVE · ERASE · FORMAT".
 
 ## YouTube description (draft)
 
-> TS-Pico 2.3 is a free update for the TS-Pico mass storage interface for the Timex
+> TS-Pico 2.4 is a free update for the TS-Pico mass storage interface for the Timex
 > Sinclair 2068. If you're on version 1.1, this is what you get, and how to install it in
 > about fifteen minutes.
 >
@@ -189,7 +188,7 @@ Hold the card for a beat, then cut to the steps.
 > User manual and flyer: https://timex-sinclair-projects.github.io/tspico-firmware-build/
 > Source: https://github.com/timex-sinclair-projects/tspico-firmware-build
 >
-> 0:00 TS-Pico 2.3
+> 0:00 TS-Pico 2.4
 > 0:20 Who it's for
 > 1:00 Upgrading from 1.1
 > 3:00 The tour: CAT, folders, copies and renames
