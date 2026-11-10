@@ -1,13 +1,15 @@
 #! zmakebas -a 10 -n tour
 #
 # TS-Pico 2.3: a guided tour, for the release video (promo/demo/README.md).
+# Revised 2026-11-10 for what came after the first cut: COPY and MOVE as two
+# verbs, LIST "file", RESTORE #, CAT # and the x: channel.
 # One chapter per feature: a title card, then the chapter's commands with a
 # caption for each, and a key press between steps. The presenter sets the pace.
 #
 # The tour works in a folder it makes, /tour, and removes it at the end (and at
 # the start, if a stopped run left it behind), so every run shows the same
 # screens. It needs the demo card's art.tap, multi.tap and library/ in the
-# top folder (promo/demo/card/TAP), and the help folder for chapter 11.
+# top folder (promo/demo/card/TAP), and the help folder for chapter 12 (Help).
 #
 # It never replaces itself: no LOAD "" with nothing mounted, no program loads,
 # no MERGE, no tpi:boot, no Spectrum mode.
@@ -36,9 +38,9 @@
  1040 LET c$="PRINT PEEK 101": GO SUB 8200
  1050 PRINT ''"  ";PEEK 101''
  1060 PRINT INK 1;"35 means ROM 2.3. The firmware"'"and the ROM are a pair: the"'"web updater installs both."''
- 1070 PRINT INK 1;"Commands are SAVE now:"
- 1080 PRINT "  SAVE ""tpi:dir"""'"  SAVE ""tpi:cd games"""''
- 1090 PRINT INK 1;"LOAD ""tpi:name.tap"" only mounts"'"a file, ready for LOAD """"."
+ 1070 PRINT INK 1;"The 2068's own words work now:"
+ 1080 PRINT "  CAT  COPY  MOVE  ERASE"'"  FORMAT  LIST  OPEN #"''
+ 1085 PRINT INK 1;"The rest are SAVE ""tpi:..."".";'"LOAD ""tpi:name.tap"" only mounts"'"a file, ready for LOAD """"."
  1100 GO SUB 8900
  1110 GO SUB 8100
  1120 LET c$="SAVE ""tpi:info""": GO SUB 8200
@@ -89,8 +91,8 @@
  2200 GO SUB 8890
 
 # ---- 4 Copying and new tapes -------------------------------------------------
- 2500 LET n=4: LET t$="Copies and new tapes"
- 2510 LET d$="COPY copies files. FORMAT": LET e$="starts a new, empty TAP. CAT": LET f$="looks inside a TAP.": GO SUB 8000
+ 2500 LET n=4: LET t$="Copies, renames and tapes"
+ 2510 LET d$="COPY copies, MOVE renames,": LET e$="FORMAT starts a new, empty": LET f$="TAP, and CAT looks inside it.": GO SUB 8000
  2520 GO SUB 8100
  2530 PRINT INK 1;"Copy a file into the folder:"
  2540 LET c$="COPY ""multi.tap"" TO ""tour""": GO SUB 8200
@@ -117,7 +119,13 @@
  2740 PRINT 'INK 1;"Eject it:"
  2750 LET c$="SAVE ""tpi:close""": GO SUB 8200
  2760 SAVE "tpi:close"
- 2770 GO SUB 8890
+ 2765 GO SUB 8900: GO SUB 8100
+ 2770 PRINT INK 1;"MOVE with TO renames a file:"
+ 2775 LET c$="MOVE ""songs.tap"" TO ""tunes.tap""": GO SUB 8200
+ 2780 MOVE "songs.tap" TO "tunes.tap"
+ 2785 PRINT : LET c$="CAT ""*.tap""": GO SUB 8200
+ 2790 CAT "*.tap"
+ 2795 GO SUB 8890
 
 # ---- 5 Single files with f: --------------------------------------------------
  3000 LET n=5: LET t$="Single files with f:"
@@ -171,8 +179,12 @@
  3620 OPEN #4,"f:notes.txt": LET k=0: PRINT
  3630 ON ERR GO TO 3650
  3640 INPUT #4;a$: LET k=k+1: PRINT "  ";k;". ";a$: GO TO 3640
- 3650 ON ERR RESET: GO SUB 8800: CLOSE #4: PAUSE 10
+ 3650 ON ERR RESET: GO SUB 8800
  3660 PRINT 'INK 1;"Past the last line: Report ";r$;","'"caught by ON ERR GO TO."
+ 3662 PRINT 'INK 1;"Back to the start, no CLOSE:"
+ 3664 LET c$="RESTORE #4": GO SUB 8200
+ 3666 RESTORE #4: INPUT #4;a$: PRINT "  1. ";a$
+ 3668 CLOSE #4: PAUSE 10
  3670 GO SUB 8900
  3680 GO SUB 8100
  3690 PRINT INK 1;"Records: TAB jumps to one."
@@ -195,10 +207,10 @@
  3860 PRINT 'INK 1;k;" tapes in the top folder:"'
  3870 FOR i=1 TO k: INPUT #5;a$: PRINT "  ";i;"  ";a$: NEXT i
  3880 CLOSE #5: PAUSE 10
- 3890 GO SUB 8890
+ 3890 GO SUB 8890: GO TO 7500
 
-# ---- 7 The virtual printer -----------------------------------------------------
- 4000 LET n=7: LET t$="The virtual printer"
+# ---- 8 The virtual printer -----------------------------------------------------
+ 4000 LET n=8: LET t$="The virtual printer"
  4010 LET d$="LPRINT, LLIST and COPY go to": LET e$="files on the card instead of a": LET f$="TS 2040 printer.": GO SUB 8000
  4020 GO SUB 8100
  4030 LET c$="SAVE ""tpi:picopt""": GO SUB 8200
@@ -206,7 +218,7 @@
  4050 LET c$="PRINT PEEK 24027": GO SUB 8200
  4060 PRINT "  ";PEEK 24027;INK 1;"  printing goes to the card"'
  4070 LET c$="LPRINT ""Hello from the 2068""": GO SUB 8200
- 4080 LPRINT "Hello from the 2068": LPRINT "TS-Pico 2.3 tour, chapter 7"
+ 4080 LPRINT "Hello from the 2068": LPRINT "TS-Pico 2.3 tour, chapter 8"
  4090 LET c$="LLIST 9900": GO SUB 8200
  4100 LLIST 9900
  4110 PRINT INK 1;"A picture of this screen:"
@@ -225,8 +237,8 @@
  4240 PRINT INK 1;"On the card, next to the TAP"'"folder:"''"  /VLPRINT/PRNnnnn.TXT  the text"'"  /VSCREEN/SCRnnnn.BMP  the COPY"
  4250 GO SUB 8890
 
-# ---- 8 Mounting a tape ---------------------------------------------------------
- 4500 LET n=8: LET t$="Mounting a tape"
+# ---- 9 Mounting a tape ---------------------------------------------------------
+ 4500 LET n=9: LET t$="Mounting a tape"
  4510 LET d$="LOAD ""tpi:name.tap"" mounts a": LET e$="tape; LOAD """" reads it, block": LET f$="by block, like a cassette.": GO SUB 8000
  4520 GO SUB 8100
  4530 LET c$="LOAD ""tpi:pics.tap""": GO SUB 8200
@@ -257,13 +269,13 @@
  4740 SAVE "tpi:close"
  4750 GO SUB 8890
 
-# ---- 9 Reports, not hangs --------------------------------------------------------
- 5000 LET n=9: LET t$="Reports, not hangs"
+# ---- 10 Reports, not hangs --------------------------------------------------------
+ 5000 LET n=10: LET t$="Reports, not hangs"
  5010 LET d$="A mistake gives a report. A": LET e$="program can catch it with ON": LET f$="ERR and carry on.": GO SUB 8000
  5020 GO SUB 8100
  5030 PRINT INK 1;"A version 1.1 habit, with the"'"messages on:"
  5040 LET c$="SAVE ""tpi:verbose"" CODE 1,1": GO SUB 8200
- 5050 SAVE "tpi:verbose" CODE 1,1: PRINT 
+ 5050 SAVE "tpi:verbose" CODE 1,1
  5060 LET c$="LOAD ""tpi:dir""": GO SUB 8200
  5070 ON ERR GO TO 5090
  5080 LOAD "tpi:dir"
@@ -291,8 +303,8 @@
  5300 CAT
  5310 GO SUB 8890
 
-# ---- 10 BREAK ------------------------------------------------------------------
- 5500 LET n=10: LET t$="BREAK is safe"
+# ---- 11 BREAK ------------------------------------------------------------------
+ 5500 LET n=11: LET t$="BREAK is safe"
  5510 LET d$="CAPS SHIFT + SPACE stops a": LET e$="TS-Pico command, and the next": LET f$="one works at once.": GO SUB 8000
  5520 GO SUB 8100
  5530 PRINT INK 1;"At Scroll?, press BREAK"
@@ -314,8 +326,8 @@
  5650 SAVE "tpi:path"
  5660 GO SUB 8890
 
-# ---- 11 Help -------------------------------------------------------------------
- 6000 LET n=11: LET t$="Help on the card"
+# ---- 12 Help -------------------------------------------------------------------
+ 6000 LET n=12: LET t$="Help on the card"
  6010 LET d$="SAVE ""tpi:help"" lists the": LET e$="commands; add a word for its": LET f$="page. Y scrolls on, N stops.": GO SUB 8000
  6020 GO SUB 8100
  6030 LET c$="SAVE ""tpi:help""": GO SUB 8200
@@ -326,8 +338,8 @@
  6080 SAVE "tpi:help cat"
  6090 GO SUB 8890
 
-# ---- 12 Clean-up and the end card ------------------------------------------------
- 6500 LET n=12: LET t$="Tidying up"
+# ---- 13 Clean-up and the end card ------------------------------------------------
+ 6500 LET n=13: LET t$="Tidying up"
  6510 LET d$="Erase what the tour made, so": LET e$="it can run again.": LET f$="": GO SUB 8000
  6520 GO SUB 8100
  6530 LET c$="MOVE TO ""/""": GO SUB 8200
@@ -348,7 +360,7 @@
  6690 BORDER 7: PAPER 7: INK 0: CLS
  6700 GO TO 9999
 
-# ---- Clean the tour folder away (z=1: at the start, z=2: chapter 12) ------------
+# ---- Clean the tour folder away (z=1: at the start, z=2: chapter 13) ------------
 # Reads tour/ with a d: stream, erasing each name; ERASE "tour/" then removes
 # the folder. A missing folder (the usual case at the start) gives F at the
 # OPEN, and the erases are skipped. PAUSE 10 after CLOSE #: in the emulator a
@@ -366,12 +378,49 @@
  7070 IF z=1 THEN GO TO 1000
  7080 GO TO 6570
 
+# ---- 7 Looking inside: LIST, CAT # and x: ----------------------------------------
+# No hex dump on screen: an f: CODE file starts with a 128-byte +3DOS header,
+# 16 rows of mostly zeros that push the text off the screen.
+# Out of line-number order: chapter 6 ends GO TO 7500, and this one ends GO TO
+# 4000 (chapter 8), so the chapters after it kept their line numbers.
+ 7500 LET n=7: LET t$="Looking inside"
+ 7510 LET d$="LIST shows a file. CAT # saves": LET e$="a listing. An x: stream asks": LET f$="the TS-Pico what it knows.": GO SUB 8000
+ 7520 GO SUB 8100
+ 7530 PRINT INK 1;"LIST with a name shows a file:"
+ 7540 LET c$="LIST ""notes.txt""": GO SUB 8200
+ 7550 LIST "notes.txt"
+ 7560 PRINT 'INK 1;"A text file shows as text. Any"'"other file shows as a hex dump."
+ 7590 GO SUB 8900
+ 7600 GO SUB 8100
+ 7610 PRINT INK 1;"CAT # writes a listing into a"'"file, as plain text:"
+ 7620 LET c$="OPEN #4,""f:tapes.txt"",""w""": GO SUB 8200
+ 7630 OPEN #4,"f:tapes.txt","w"
+ 7640 LET c$="CAT #4;""/*.tap""": GO SUB 8200
+ 7650 CAT #4;"/*.tap": CLOSE #4: PAUSE 10
+ 7660 LET c$="LIST ""tapes.txt""": GO SUB 8200
+ 7670 LIST "tapes.txt"
+ 7680 GO SUB 8900
+ 7690 GO SUB 8100
+ 7700 PRINT INK 1;"A program can ask the TS-Pico:"
+ 7710 LET c$="OPEN #4,""x:""": GO SUB 8200
+ 7720 OPEN #4,"x:"
+ 7730 LET c$="PRINT #4;""path"": INPUT #4;p$": GO SUB 8200
+ 7740 PRINT #4;"path": INPUT #4;p$
+ 7750 PRINT "  You are in ";p$'
+ 7760 LET c$="PRINT #4;""info""": GO SUB 8200
+ 7770 PRINT #4;"info": INPUT #4;l$: INPUT #4;fr: INPUT #4;tt: INPUT #4;v$: INPUT #4;o$
+ 7780 CLOSE #4: PAUSE 10
+ 7790 IF l$="" THEN LET l$="(none)"
+ 7800 PRINT "  Card label  ";l$'"  Free        ";INT (fr/1048576);" MB of ";INT (tt/1048576)'"  Firmware    ";v$'"  ROM         ";o$
+ 7810 GO SUB 8890
+ 7820 GO TO 4000
+
 # ---- Subroutines ---------------------------------------------------------------
 # 8000 the title card: chapter n, title t$, three lines d$ e$ f$
  8000 BORDER 1: PAPER 1: INK 7: BRIGHT 0: CLS
  8010 PRINT AT 0,0; PAPER 2;"        "; PAPER 6;"        "; PAPER 4;"        "; PAPER 5;"        "
  8020 LET g$=STR$ n: LET gr=2: LET gc=2: LET gp=6: GO SUB 8600
- 8030 PRINT AT 4,21; INK 5;"CHAPTER";AT 6,21; INK 5;n;" of 12"
+ 8030 PRINT AT 4,21; INK 5;"CHAPTER";AT 6,21; INK 5;n;" of 13"
  8040 PRINT AT 12,2; BRIGHT 1; INK 6;t$
  8050 PRINT AT 14,2;d$;AT 15,2;e$;AT 16,2;f$
  8060 PRINT AT 21,0; PAPER 2;"        "; PAPER 6;"        "; PAPER 4;"        "; PAPER 5;"        "
@@ -407,7 +456,7 @@
  8950 PRINT #0;AT 1,0;"                                ";
  8960 RETURN
 
-# ---- LLIST 9900 (chapter 7) prints these --------------------------------------
+# ---- LLIST 9900 (chapter 8) prints these --------------------------------------
  9900 REM TS-Pico 2.3 guided tour
  9910 REM LLIST 9900 sent these lines
  9920 REM to /VLPRINT on the SD card
