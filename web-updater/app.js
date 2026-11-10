@@ -1018,37 +1018,65 @@ async function libraryNote() {
 }
 
 // ---------------------------------------------------------------------------
+// Step 1: which computer
+// ---------------------------------------------------------------------------
+/** 'windows', 'browser' (macOS, Linux, ChromeOS) or null when unsure. */
+function detectOS() {
+    const p = (navigator.userAgentData && navigator.userAgentData.platform) ||
+        navigator.platform || navigator.userAgent || ''
+    if (/win/i.test(p)) return 'windows'
+    if (/mac|linux|cros|chrome os/i.test(p)) return 'browser'
+    return null
+}
+
+/** Show the path for os ('windows' or 'browser'), and the parts both share. */
+function chooseOS(os, scroll) {
+    $('os-windows').setAttribute('aria-pressed', String(os === 'windows'))
+    $('os-mac').setAttribute('aria-pressed', String(os === 'browser'))
+    show($('path-windows'), os === 'windows')
+    show($('path-browser'), os === 'browser')
+    show($('log-panel'), os === 'browser' && typeof navigator.serial !== 'undefined')
+    show($('path-common'), true)
+    if (scroll) $(os === 'windows' ? 'path-windows' : 'path-browser').scrollIntoView({ behavior: 'smooth' })
+}
+
+// ---------------------------------------------------------------------------
 async function init() {
     libraryNote()
-    // Windows: WebUSB can't open RP2 Boot and the drive picker won't take
-    // RPI-RP2, so the firmware steps fail. Point at windows-updater/ and hide
-    // the run, unless the user asks for it (a Zadig'd machine can use WebUSB).
-    if (/Windows/.test(navigator.userAgent)) {
-        show($('windows-note'), true)
-        show($('upgrade-panel'), false)
-        $('win-anyway').addEventListener('click', (e) => {
-            e.preventDefault()
-            show($('upgrade-panel'), true)
-            $('upgrade-panel').scrollIntoView({ behavior: 'smooth' })
-        })
+    // Step 1: the user picks the computer, and the page shows that path.
+    // Windows gets the updater program (windows-updater/): WebUSB can't open
+    // RP2 Boot there and the drive picker won't take RPI-RP2, so the firmware
+    // steps fail in the browser. "Use the browser updater anyway" is for a
+    // Zadig'd machine, which can use WebUSB. The detected computer is only
+    // marked, not chosen.
+    const detected = detectOS()
+    if (detected) $(detected === 'windows' ? 'os-windows' : 'os-mac').classList.add('detected')
+    for (const id of ['os-windows', 'os-mac']) {
+        $(id).addEventListener('click', () => chooseOS($(id).dataset.os, true))
     }
+    $('win-anyway').addEventListener('click', (e) => {
+        e.preventDefault()
+        chooseOS('browser', true)
+    })
+    // Without WebSerial the browser path can't run, but the channel still
+    // loads: the by-hand and SD card downloads work in any browser.
     if (typeof navigator.serial === 'undefined') {
         show($('unsupported'), true)
         show($('main'), false)
-        return
+    } else {
+        $('btn-connect').addEventListener('click', connect)
+        $('btn-start').addEventListener('click', start)
+        $('opt-wipe').addEventListener('change', refreshPlan)
+        $('opt-rom').addEventListener('change', refreshPlan)
+        $('opt-modem').addEventListener('change', refreshPlan)
+        const how = []
+        if (UsbBootsel.supported() && !DRIVE_ONLY) how.push('USB (WebUSB)')
+        if (DriveBootsel.supported()) how.push('the RPI-RP2 drive')
+        log(`This browser can write firmware via ${how.join(' or ') || 'nothing (use Do it by hand)'}.`)
     }
-    $('btn-connect').addEventListener('click', connect)
-    $('btn-start').addEventListener('click', start)
-    $('opt-wipe').addEventListener('change', refreshPlan)
-    $('opt-rom').addEventListener('change', refreshPlan)
-    $('opt-modem').addEventListener('change', refreshPlan)
     for (const c of CHANNELS) {
         $('ch-' + c).addEventListener('change', () => loadChannel(c))
     }
-    const how = []
-    if (UsbBootsel.supported() && !DRIVE_ONLY) how.push('USB (WebUSB)')
-    if (DriveBootsel.supported()) how.push('the RPI-RP2 drive')
-    log(`This browser can write firmware via ${how.join(' or ') || 'nothing (use Do it by hand)'}.`)
 
     // Channel: ?channel=main, else the last one used, else release. A channel
     // that isn't published is disabled.
