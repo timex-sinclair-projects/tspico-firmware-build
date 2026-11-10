@@ -9,7 +9,7 @@
  *                (PICOBOOT) or, failing that, the RPI-RP2 drive (File System
  *                Access API). See flasher.js.
  *   3. Wipe      erase all 2 MB (WebUSB) or write flash_nuke.uf2 (drive).
- *   4. ROM       boards behind the channel's ROM (romBehind): write upgrade.uf2, reboot, and
+ *   4. ROM       every v2 board: write upgrade.uf2, reboot, and
  *                follow its "UPG {json}" lines while the user runs the updater
  *                on the 2068 (OUT 244,3, LOAD ""). Then back to BOOTSEL.
  *   5. Firmware  write firmware.uf2 and reboot.
@@ -19,8 +19,13 @@
  *                raw REPL and, if missing or older, written through the
  *                card's relay (tsbus.esp_relay) with espflash.js.
  *
- * Everything is fetched same-origin from a channel directory (release/ or
- * main/), built by build-payload.sh and published by pages.yml.
+ * Everything is fetched same-origin from the release/ channel directory,
+ * built by build-payload.sh and published by pages.yml. ?channel=main loads
+ * the main/ one instead (for testing a build before it's released); the page
+ * offers no choice.
+ *
+ * There are no options for the erase and the ROM update: a v2 board always
+ * gets both (the firmware needs its matching ROM), the v3 card never does.
  */
 
 import { WebSerial } from './vendor/transports.js'
@@ -50,7 +55,6 @@ setReporter((title, err) => log(`${title}: ${err && err.message ? err.message : 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-const CHANNELS = ['release', 'main']
 // ?via=drive: always write through the RPI-RP2 drive, never WebUSB -- to test
 // that route, or when WebUSB half-works on a machine.
 const DRIVE_ONLY = new URLSearchParams(location.search).get('via') === 'drive'
@@ -63,7 +67,7 @@ const ROM_FAIL = {
     4: 'A flash write didn\'t take. Type LOAD "" on the 2068 to try again.',
 }
 
-let channel = 'release'
+let channel = new URLSearchParams(location.search).get('channel') === 'main' ? 'main' : 'release'
 let manifest = null
 let serial = null        // WebSerial transport, open
 let raw = null           // MpRawMode, while in the raw REPL
@@ -128,9 +132,6 @@ async function fetchManifest(ch) {
 }
 
 async function loadChannel(ch) {
-    channel = ch
-    try { localStorage.setItem('tspico-channel', ch) } catch (_e) { /* private mode */ }
-    for (const c of CHANNELS) $('ch-' + c).checked = (c === ch)
     try {
         manifest = await fetchManifest(ch)
     } catch (err) {
@@ -157,8 +158,6 @@ async function loadChannel(ch) {
     $('sdcard-note').textContent = m.sdcard ? `(${m.sdcard.files} files, ${sizeFmt(m.sdcard.size)})` : ''
     log(`Loaded ${ch} channel: firmware ${m.fw_version || '?'} (${m.tag}), ${m.files.length} files` +
         (m.upgrade_uf2 ? ', ROM updater included.' : ', no ROM updater.'))
-    // Already connected: the new channel's ROM decides the ROM step afresh.
-    if (installed && !running) $('opt-rom').checked = !!m.upgrade_uf2 && romBehind()
     refreshPlan()
 }
 
@@ -182,20 +181,6 @@ function verOf(v) {
     return m ? [Number(m[1]), Number(m[2])] : null
 }
 
-// Does this board need the ROM step? The ROM can't be read over USB, so the
-// installed firmware's major.minor stands for it. Anything older than the
-// channel's ROM needs it, and so does a board whose version is unknown (a
-// wiped Pico): in practice every board out there still has 1.1's ROM. Only a
-// board already on the channel's major.minor skips it.
-function romBehind() {
-    if (!installed || !manifest) return false
-    const want = verOf(manifest.rom_version || manifest.fw_version)
-    if (!want) return installed.from1x
-    const have = installed.ver
-    if (!have) return true
-    return have[0] < want[0] || (have[0] === want[0] && have[1] < want[1])
-}
-
 // The v3 card (RP2350B) installs differently: no wipe (its ROM slots are
 // files on the same flash as the firmware) and no ROM update (the slots are
 // written as files). docs/v3-slots-proposal.md, and the web updater's v3 plan.
@@ -204,52 +189,34 @@ const isV3 = () => board === 'v3'
 function refreshPlan() {
     const m = manifest
     const v3 = isV3()
-    if (v3) { $('opt-rom').checked = false; $('opt-wipe').checked = false }
-    const wantRom = $('opt-rom').checked
     const hint = $('plan-hint')
     let problem = ''
-    if (!m) problem = 'No payload loaded for this channel.'
-    else if (v3 && !m.v3) problem = 'This channel has nothing for the v3 card yet. Pick “Latest main build”.'
-    else if (!v3 && !m.uf2) problem = 'This channel has no firmware image. Pick the other channel, or use “Do it by hand”.'
-    else if (wantRom && !m.upgrade_uf2) problem = 'This channel has no ROM updater (upgrade.uf2). ' +
-        'Pick “Latest main build”, or untick the ROM update.'
+    if (!m) problem = 'No payload loaded.'
+    else if (v3 && !m.v3) problem = 'This release has nothing for the v3 card.'
+    else if (!v3 && !m.uf2) problem = 'This release has no firmware image. Use “Do it by hand”.'
+    else if (!v3 && !m.upgrade_uf2) problem = 'This release has no ROM updater (upgrade.uf2).'
     enable($('btn-start'), !problem && !running)
-    enable($('opt-rom'), !!(m && m.upgrade_uf2) && !running && !v3)
-    enable($('opt-wipe'), !running && !wantRom && !v3)
-    if (wantRom) $('opt-wipe').checked = true   // the upgrade UF2 needs an empty filesystem
 
     hint.className = 'hint'
     if (problem) {
         hint.classList.add('warn'); hint.textContent = problem
-    } else if (v3) {
-        hint.textContent = planText()
-    } else if (installed && installed.from1x && !wantRom) {
-        hint.classList.add('warn')
-        hint.textContent = `This board is on ${installed.fw}. Its TS-2068 ROM can't talk to ` +
-            `firmware ${m.fw_version} — tick “Update the TS-2068 ROM” or the 2068 won't work afterwards.`
-    } else if (!wantRom && romBehind()) {
-        hint.classList.add('warn')
-        hint.textContent = `This board is on ${installed.fw}, so its TS-2068 ROM is older than ` +
-            `ROM ${m.rom_version || m.fw_version}, which firmware ${m.fw_version} needs. Tick ` +
-            `“Update the TS-2068 ROM” to install it with the firmware.`
     } else {
         hint.textContent = planText()
     }
     show(hint, true)
-    // Only stages that haven't run yet follow the options.
+    // Only stages that haven't run yet follow the board and the modem option.
     const plan = (name, on, off) => {
         if (['pending', 'skipped', undefined].includes(stage(name).dataset.state)) {
             setStage(name, on ? 'pending' : 'skipped', on ? '' : off)
         }
     }
-    plan('rom', wantRom, v3 ? 'Not on the v3 card: its ROMs are slot files, copied with the files.' : 'Not needed.')
+    plan('rom', !v3, 'Not on the v3 card: its ROMs are slot files, copied with the files.')
     const zim = m && m.v3 && m.v3.zimodem
     show($('opt-modem-row'), v3 && !!zim)
     enable($('opt-modem'), !running)
     plan('modem', v3 && !!zim && $('opt-modem').checked,
-        !v3 ? 'Only on the v3 card.' : !zim ? 'This channel has no modem firmware.' : 'Not this time.')
-    plan('wipe', $('opt-wipe').checked, v3 ? 'Never on the v3 card: it would erase your ROM slots.'
-                                            : 'Keeping what’s on the Pico.')
+        !v3 ? 'Only on the v3 card.' : !zim ? 'This release has no modem firmware.' : 'Not this time.')
+    plan('wipe', !v3, 'Never on the v3 card: it would erase your ROM slots.')
 }
 
 function planText() {
@@ -261,10 +228,8 @@ function planText() {
                 'if it’s missing or older. ' : '') +
             'Keep the USB cable connected throughout.'
     }
-    const steps = []
-    if ($('opt-wipe').checked) steps.push('erase the Pico')
-    if ($('opt-rom').checked) steps.push('update the TS-2068 ROM (you’ll type two commands on the 2068)')
-    steps.push(`install firmware ${manifest.fw_version}`, 'copy its files')
+    const steps = ['erase the Pico', 'update the TS-2068 ROM (you’ll type two commands on the 2068)',
+        `install firmware ${manifest.fw_version}`, 'copy its files']
     return 'Start will ' + steps.join(', then ') + '. Keep the USB cable connected throughout.'
 }
 
@@ -404,7 +369,6 @@ async function connect() {
         await enterRaw()
         installed = await readInstalled()
         $('installed-version').textContent = installed.fw
-        if (manifest && manifest.upgrade_uf2) $('opt-rom').checked = romBehind()
         setStage('connect', 'done', `Connected. Installed: ${installed.fw}.`)
         showConnected(true)
     } catch (err) {
@@ -606,7 +570,7 @@ async function romUpdate() {
     const watch = setInterval(() => {
         if (!serial) {
             rejectDone(new Error('The Pico disconnected during the ROM update. Plug it back in and press ' +
-                'Start again (untick Erase if the ROM part finished).'))
+                'Start again: the update runs again from the start, ROM included.'))
             return
         }
         if (!offered && !writing && Date.now() - lastEvent > 45000) {
@@ -910,13 +874,13 @@ async function downgradeOk(wipe) {
 async function start() {
     if (running || !manifest) return
     if (isV3() ? !manifest.v3 : !manifest.uf2) return
-    let wipe = $('opt-wipe').checked && !isV3()
-    let rom = $('opt-rom').checked && !isV3()
+    let wipe = !isV3()
+    let rom = !isV3()
     if (!serial && !confirm('The Pico isn’t connected over serial. Continue only if it’s already ' +
         'in BOOTSEL mode (the RPI-RP2 drive is showing). Otherwise click Cancel and Connect first.')) return
     if (wipe && !confirm('This erases everything on the Pico — firmware and files — and installs ' +
         `firmware ${manifest.fw_version}. Nothing on the TS-2068, SD card or EXROM is touched` +
-        (rom ? ' except the ROM update you asked for.' : '.') + '\n\nContinue?')) return
+        ', except that the TS-2068 ROM is updated.\n\nContinue?')) return
     if (!(await downgradeOk(wipe))) return
 
     running = true
@@ -928,7 +892,7 @@ async function start() {
         if (boot.chip === 'RP2350' && !isV3()) {
             board = 'v3'
             log('This is a TS-Pico v3 card (RP2350B): no erase and no ROM update; its ROM slots are files.')
-            if (!manifest.v3) throw new Error('this channel has nothing for the v3 card yet — pick “Latest main build”')
+            if (!manifest.v3) throw new Error('this release has nothing for the v3 card')
             wipe = rom = false
             refreshPlan()
         }
@@ -989,8 +953,6 @@ async function start() {
 
 function setRunning(on) {
     enable($('btn-start'), !on)
-    enable($('opt-wipe'), !on)
-    for (const c of CHANNELS) enable($('ch-' + c), !on)
     showConnected(!!serial)
     if (on) {
         show($('done'), false)
@@ -1066,36 +1028,13 @@ async function init() {
     } else {
         $('btn-connect').addEventListener('click', connect)
         $('btn-start').addEventListener('click', start)
-        $('opt-wipe').addEventListener('change', refreshPlan)
-        $('opt-rom').addEventListener('change', refreshPlan)
         $('opt-modem').addEventListener('change', refreshPlan)
         const how = []
         if (UsbBootsel.supported() && !DRIVE_ONLY) how.push('USB (WebUSB)')
         if (DriveBootsel.supported()) how.push('the RPI-RP2 drive')
         log(`This browser can write firmware via ${how.join(' or ') || 'nothing (use Do it by hand)'}.`)
     }
-    for (const c of CHANNELS) {
-        $('ch-' + c).addEventListener('change', () => loadChannel(c))
-    }
-
-    // Channel: ?channel=main, else the last one used, else release. A channel
-    // that isn't published is disabled.
-    let want = new URLSearchParams(location.search).get('channel')
-    if (!want) { try { want = localStorage.getItem('tspico-channel') } catch (_e) { /* private mode */ } }
-    for (const c of CHANNELS) {
-        try {
-            const m = await fetchManifest(c)
-            $('ch-' + c + '-label').textContent = m.tag ? `(${m.fw_version}, ${m.tag})` : ''
-        } catch (_e) {
-            enable($('ch-' + c), false)
-            $('ch-' + c + '-label').textContent = '(not published)'
-            if (want === c) want = null
-        }
-    }
-    if (!CHANNELS.includes(want) || $('ch-' + want).disabled) {
-        want = CHANNELS.find((c) => !$('ch-' + c).disabled) || 'release'
-    }
-    await loadChannel(want)
+    await loadChannel(channel)
 }
 
 init()

@@ -29,13 +29,14 @@ other.
 
 1. **Connect**: find the Pico's COM port (USB vendor 2E8A), Ctrl-C the
    firmware, raw REPL, read the running `FW_VERSION` (else `/config.ini`'s)
-   and the MicroPython release. The ROM step is pre-ticked by `rom_behind()`.
+   and the MicroPython release.
 2. **BOOTSEL**: `machine.bootloader()`, then wait for a removable drive
    whose `INFO_UF2.TXT` says `RPI-RP2` (or `RP2350`, the v3 card). A Pico
    already in BOOTSEL skips step 1.
 3. **Wipe**: copy `flash_nuke.uf2`, which the exe carries. The Pico erases
    itself and comes back as RPI-RP2.
-4. **ROM update**: copy the channel's `upgrade.uf2` and follow its
+4. **ROM update** (every v2 board: the firmware needs its matching ROM, so
+   there is no option for it or the wipe): copy the channel's `upgrade.uf2` and follow its
    `UPG {json}` serial lines while the user types `OUT 244,3` and `LOAD ""`
    on the 2068. Then the 2068 goes off and the Pico goes back to BOOTSEL.
 5. **Firmware**: copy `firmware.uf2`, after checking that its UF2 family is
@@ -61,7 +62,7 @@ or, for a card put in BOOTSEL by hand, from the RP2350 drive. On the v3 card:
 
 - **No wipe and no ROM step.** Its ROMs are slot files in `/slots` on the
   same flash as the firmware, so `flash_nuke` (RP2040-only anyway) would
-  erase the user's cartridges. The two options are unticked and grayed out.
+  erase the user's cartridges.
 - **Firmware** is the manifest's `v3.uf2` (`firmware-v3.uf2`), checked to be
   an RP2350 UF2, and the downgrade warning uses `v3.mp_version`.
 - **Files** first removes a stray `/TS` folder (it would shadow the frozen
@@ -86,7 +87,7 @@ or, for a card put in BOOTSEL by hand, from the RP2350 drive. On the v3 card:
   `espflash.js` in Python; no esptool is bundled.
 
 A channel published before the v3 card has no `v3` key; the program then
-asks for the main channel, as the web page does.
+won't start on a v3 card, as the web page won't.
 
 ## Where the firmware comes from
 
@@ -94,7 +95,8 @@ From the published web updater's channels, fetched at run time:
 `https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/{release,main}/`
 (the `manifest.json`, the UF2s and `pico/`). One exe therefore keeps
 installing the newest release, and only needs rebuilding when the program
-itself changes. `--channel main` opens on the testers' channel. `--base`
+itself changes. It installs the release and offers no choice; `--channel main` installs the
+latest main build instead, for testing before a release. `--base`
 points at another copy of `/updater/`, either a URL or a local folder such as
 `web-updater/` after `build-payload.sh`.
 

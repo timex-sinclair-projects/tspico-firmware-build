@@ -9,7 +9,7 @@ REPL, an ordinary file copy onto the RPI-RP2 drive for each UF2.
    1. Connect   serial -> Ctrl-C the firmware -> raw REPL; read the version.
    2. BOOTSEL   machine.bootloader(), then wait for the RPI-RP2 drive.
    3. Wipe      copy flash_nuke.uf2; the Pico erases and comes back.
-   4. ROM       boards behind the channel's ROM: copy upgrade.uf2, follow its
+   4. ROM       every v2 board: copy upgrade.uf2, follow its
                 "UPG {json}" lines while the user runs the updater on the 2068
                 (OUT 244,3, LOAD ""), then back to BOOTSEL.
    5. Firmware  copy firmware.uf2.
@@ -25,8 +25,9 @@ step is a file copy. Step 5 copies the manifest's v3.uf2 onto the RP2350
 drive; step 6 also writes /slots (0 and 1 always, the others only where the
 card has none).
 
-Everything comes from the same published channel directories the web page
-uses (release/ and main/ under the site's /updater/), so this program never
+Everything comes from the same published channel directory the web page
+uses (release/ under the site's /updater/; main/ with --channel main, for
+testing), so this program never
 needs rebuilding for a new firmware release.
 
 The window (app.py) talks to the run only through the Ui class below, so
@@ -156,21 +157,6 @@ def ver_cmp(a, b):
         if x != y:
             return x - y
     return 0
-
-
-def rom_behind(installed, manifest):
-    """Does this board need the ROM step? The ROM can't be read over USB, so
-    the installed firmware's major.minor stands for it; an unknown version
-    (a wiped Pico) counts as behind -- every board out there has 1.1's ROM."""
-    if not installed or not manifest:
-        return False
-    want = ver_of(manifest.get("rom_version") or manifest.get("fw_version"))
-    if not want:
-        return installed["from1x"]
-    have = installed["ver"]
-    if not have:
-        return True
-    return have < want
 
 
 def uf2_micropython(data):
@@ -506,9 +492,6 @@ class Updater:
     def manifest(self):
         return self.channel.manifest if self.channel else None
 
-    def rom_behind(self):
-        return not self.v3 and rom_behind(self.installed, self.manifest)
-
     def image(self):
         """(path in the channel, MicroPython release or None) of the firmware
         for this board."""
@@ -740,7 +723,7 @@ class Updater:
             except Gone:
                 self.close_port()
                 raise RuntimeError("The Pico disconnected during the ROM update. Plug it back in "
-                                   "and press Start again (untick Erase if the ROM part finished).")
+                                   "and press Start again: the update runs again from the start, ROM included.")
             line += chunk
             while b"\n" in line:
                 one, line = line.split(b"\n", 1)
@@ -780,8 +763,8 @@ class Updater:
         m = self.manifest
         uf2, _ = self.image()
         if not uf2:
-            raise RuntimeError("this channel has nothing for the v3 card yet — pick "
-                               "“Latest main build”" if self.v3 else "this channel has no firmware image")
+            raise RuntimeError("this release has nothing for the v3 card" if self.v3
+                               else "this release has no firmware image")
         label = "firmware %s%s" % (m["fw_version"], " for the v3 card" if self.v3 else "")
         self.ui.stage("firmware", "active", "Downloading %s…" % label)
         data = self.channel.fetch(uf2)
