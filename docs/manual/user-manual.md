@@ -2759,17 +2759,14 @@ Install the firmware and the ROM from the same release: they are made to work to
 2. Connect the Pico's Micro-USB socket to your computer. Close Thonny or anything else that
    might be using the Pico.
 3. Open the TS-Pico web updater,
-   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Latest release**.
-4. Press **Connect to TS-Pico** and choose the Pico in the list. The page reads what's installed
-   and suggests the right steps.
-5. Choose your options:
-   - **Erase the Pico first** is recommended. The page ticks it, and keeps it ticked, when the
-     ROM is being updated.
-   - **Update the TS-2068 ROM** is needed on every board that isn't already on this release.
-     The page ticks it for you unless the board already runs it.
+   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Mac**
+   at Step 1 (on Linux and ChromeOS too). It installs the latest release.
+4. Press **Connect to TS-Pico** and choose the Pico in the list. The page reads what's installed.
+5. Every update erases the Pico and updates the TS-2068 ROM: the firmware needs its matching
+   ROM. There's nothing to choose.
 6. Press **Start**, and follow the page. It puts the Pico into its update mode by itself. If your
    browser asks you to pick a drive, choose **RPI-RP2**.
-7. **If you're updating the ROM**, the page asks you to go to the 2068:
+7. For the ROM update, the page asks you to go to the 2068:
    1. Fit the **P10 jumper** if your board has one, and leave it on.
    2. Switch the 2068 **on**.
    3. Type `OUT 244,3` and press **ENTER**. This switches to the Spectrum ROM.
@@ -2789,20 +2786,19 @@ the Pico's white **BOOTSEL** button, press and release the TS-Pico's **Pico Rese
 unplug and replug the USB cable), then let go. A drive called **RPI-RP2** appears on your
 computer. Leave it alone and press **Start** without connecting.
 
-**On Windows**, the browser can't put the firmware onto the Pico. Download
-**TS-Pico-Updater.exe** from the
+**On Windows**, the browser can't put the firmware onto the Pico. Choose **Windows** at Step 1
+on the updater page and download **TS-Pico-Updater.exe**, or get it from the
 [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
-click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
-release**, then **Connect to TS-Pico**, tick the options, press **Start**, and follow the same
-steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
+click **More info**, then **Run anyway**. The program works like the web page: press **Connect to
+TS-Pico**, then **Start**, and follow the same steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the
-RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then, unless the board already
-has this release's ROM, `upgrade.uf2` and the ROM steps above, then `firmware.uf2`. The
-firmware and the ROM go together: firmware 2.4 needs ROM 2.4. Finally connect with the web page
-and press Start with **Erase** unticked to copy the files.
+RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then `upgrade.uf2` and the ROM
+steps above, then `firmware.uf2`. The firmware and the ROM go together: firmware 2.4 needs ROM
+2.4. Only the guided update copies the firmware's files to the Pico, so finish by connecting
+with the web page and pressing **Start**.
 
 ## A.3 Updating the SD card
 
@@ -2874,7 +2870,8 @@ the card's memory, written like any other file.
 2. Connect the card's USB-C socket to your computer. Close Thonny or anything else that might be
    using it.
 3. Open the TS-Pico web updater,
-   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Latest release**.
+   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Mac**
+   at Step 1 (on Linux and ChromeOS too). It installs the latest release.
 4. Press **Connect to TS-Pico** and choose the card in the list. The page sees that it's a v3
    card.
 5. Leave **Modem firmware (v3 card)** ticked: it checks the modem's own software and installs
@@ -2892,12 +2889,12 @@ the card's memory, written like any other file.
 button, press and release **RUN**, then let go. A drive called **RP2350** appears on your
 computer. Leave it alone and press **Start** without connecting.
 
-**On Windows**, the browser can't put the firmware onto the card. Download
-**TS-Pico-Updater.exe** from the
+**On Windows**, the browser can't put the firmware onto the card. Choose **Windows** at Step 1
+on the updater page and download **TS-Pico-Updater.exe**, or get it from the
 [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
-click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
-release**, then **Connect to TS-Pico**, press **Start**, and follow the same steps as above.
+click **More info**, then **Run anyway**. The program works like the web page: press **Connect to
+TS-Pico**, then **Start**, and follow the same steps as above.
 You don't have to pick a port or a drive. It finds the card by itself.
 
 **Doing it by hand.** Put the card in update mode (BOOTSEL and RUN) and drag `firmware-v3.uf2`

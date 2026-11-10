@@ -994,9 +994,11 @@ next to the page: `release/` from the latest GitHub Release's `firmware.uf2`
 and `upgrade.uf2` assets and the Pico files at its tag, and `main/` from the
 latest green `build.yml` run's `tspico-firmware-uf2` and
 `tspico-upgrade-uf2` artifacts and the files at its commit, with the TAPs
-rebuilt by `build-basic.sh` for that commit. A release from before
-`upgrade.uf2` existed has `upgrade_uf2: null`, and the page points at the
-other channel.
+rebuilt by `build-basic.sh` for that commit. The page installs from `release/`;
+`?channel=main` (the Windows program's `--channel main`) loads `main/`
+instead, for testing a build before it is released, and neither offers a
+choice. A release from before `upgrade.uf2` existed has `upgrade_uf2: null`,
+and the page refuses to start on a v2 board.
 
 ## The web updater's side of the UPG protocol
 
@@ -1005,23 +1007,20 @@ BOOTSEL, wipe, ROM, firmware, files. What matters to this chapter is how it
 gets the upgrade UF2 onto the Pico, what it does with each `UPG` line, and
 how it moves on.
 
-**Deciding to do the ROM step.** `readInstalled` asks the running firmware
+**Always the ROM step.** `readInstalled` asks the running firmware
 for its `FW_VERSION` over the raw REPL (`sys.modules['TS.tspico']` or
 `dev_tspico`), falling back to `/config.ini`'s, then to "1.1 (no version in
 config.ini)"; `from1x` is a major below 2, and `ver` is the running
 module's major.minor (`verOf`), null when it came from `config.ini` or
-nowhere. The ROM can't be read over USB, so `romBehind` takes the firmware
-version for the ROM's: the ROM step is due when `ver` is older than the
-channel's `rom_version`, or unknown (a wiped Pico, a 1.1 board), since in
-practice every board out there still has 1.1's ROM; only a board already on
-the channel's major.minor skips it. `connect`, and `loadChannel` when a
-board is already connected, tick "Update the TS-2068 ROM" when
-`romBehind()` and the channel has `upgrade_uf2`. `refreshPlan` forces
-"Erase the Pico first" on whenever the ROM step is ticked, because the
-upgrade UF2's frozen `main.py` must not be shadowed; it warns a 1.1 board
-that unticks the ROM step that its ROM cannot talk to the new firmware, and
-any other board behind the channel that unticking leaves its older ROM.
-Before 2.2 it ticked the step for `from1x` alone.
+nowhere. The page shows that version but no longer decides from it: since
+the firmware needs its matching ROM and the ROM can't be read over USB,
+every run on a v2 board erases the Pico and does the ROM step, and the page
+offers no option for either (`start` sets `wipe` and `rom` to `!isV3()`).
+The erase goes with it because the upgrade UF2's frozen `main.py` must not
+be shadowed. The v3 card gets neither. Before this, a `romBehind` check
+ticked an "Update the TS-2068 ROM" option only for a board older than the
+channel's `rom_version` (before 2.2, for `from1x` alone), and the user could
+untick it and the erase.
 
 **Getting into BOOTSEL and wiping.** `enterBootsel` runs
 `machine.bootloader()` over the REPL (`execNoReply`: raw REPL, the code,

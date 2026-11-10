@@ -79,9 +79,8 @@ The full list is in [What's New in the TS-Pico Since 1.1]({{ '/updates/whats-new
 
 1. Switch the TS 2068 off. Keep the TS-Pico's **P10 jumper** fitted.
 2. Open the [web updater]({{ site.updater_url | relative_url }}) in Chrome or Edge, connect
-   the TS-Pico by USB, and choose **Latest release**. On Windows you can run
+   the TS-Pico by USB, and choose **Mac** at Step 1 (Linux and ChromeOS too). On Windows you can run
    **TS-Pico-Updater.exe** from the
    [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
    instead.
-3. Coming from 1.1, leave **Erase the Pico first** and **Update the TS-2068 ROM** ticked, and
-   follow the steps. Afterwards `PRINT PEEK 101` gives **36**.
+3. Follow the steps. The update always erases the Pico and updates the TS-2068 ROM. Afterwards `PRINT PEEK 101` gives **36**.

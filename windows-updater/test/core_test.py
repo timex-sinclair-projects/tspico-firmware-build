@@ -440,15 +440,6 @@ def main():
     results.append(check("ver_cmp", core.ver_cmp("1.20.0", "1.29.0") < 0 and core.ver_cmp("1.29", "1.29.0") == 0))
     results.append(check("ver_cmp: our Zimodem 4.0.3.1 is newer than 4.0.3",
                          core.ver_cmp("4.0.3", "4.0.3.1") < 0 and core.ver_cmp("4.0.3.1", "4.0.3.1") == 0))
-    m = {"rom_version": "2.2", "fw_version": "2.2.1"}
-    results.append(check("rom_behind: 2.1 board", core.rom_behind({"ver": (2, 1), "from1x": False}, m)))
-    results.append(check("rom_behind: 2.2 board", not core.rom_behind({"ver": (2, 2), "from1x": False}, m)))
-    results.append(check("rom_behind: unknown", core.rom_behind({"ver": None, "from1x": False}, m)))
-    m24 = {"rom_version": "2.4", "fw_version": "2.4"}           # the 2.4 release: a 2.3.1 board needs ROM 2.4
-    results.append(check("rom_behind: 2.3.1 board, release 2.4",
-                         core.rom_behind({"ver": core.ver_of("2.3.1"), "from1x": False}, m24)))
-    results.append(check("rom_behind: 2.4 board, release 2.4",
-                         not core.rom_behind({"ver": core.ver_of("2.4"), "from1x": False}, m24)))
     blk = bytearray(512 * 2)
     blk[32:32 + 22] = b"xxMicroPython v1.20.0 "
     results.append(check("uf2_micropython", core.uf2_micropython(bytes(blk)) == "1.20.0"))
@@ -456,7 +447,6 @@ def main():
     # A whole run: a 2.1.2 board, wipe + ROM + firmware + files.
     ok, ui, pico, inst, up, same = run("2.1.2", wipe=True, rom=True)
     results.append(check("installed version read from the running module", inst["fw"] == "2.1.2"))
-    results.append(check("ROM step wanted for a 2.1 board", up.rom_behind()))
     results.append(check("full run succeeds", ok))
     results.append(check("UF2s in order", pico.written == ["flash_nuke.uf2", "upgrade.uf2", "firmware.uf2"]))
     results.append(check("files copied byte for byte", same))
@@ -494,7 +484,7 @@ def main():
 
     # The v3 card: no wipe or ROM even if asked, its own UF2, the slots.
     ok, ui, pico, inst, up, same = run("2.3", wipe=True, rom=True, v3=True, setup=user_slot)
-    results.append(check("v3: detected from os.uname", up.v3 and not up.rom_behind()))
+    results.append(check("v3: detected from os.uname", up.v3))
     results.append(check("v3: run succeeds", ok and same))
     results.append(check("v3: only the v3 UF2", pico.written == ["firmware-v3.uf2"]))
     results.append(check("v3: wipe and ROM skipped", ui.states["wipe"][0] == "skipped"

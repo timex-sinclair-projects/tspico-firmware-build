@@ -298,8 +298,8 @@ tests in `tools/emu`. The scripts that built and tested the software library are
 
 1. Switch the TS-2068 off.
 2. Open the [web updater]({{ site.updater_url | relative_url }}) in Chrome or Edge, connect
-   the TS-Pico by USB, choose **Latest release**, and follow the steps. Coming from 1.1,
-   leave **Erase the Pico first** and **Update the TS-2068 ROM** ticked. On Windows, run
+   the TS-Pico by USB, and follow the steps. The update always erases the Pico and updates
+   the TS-2068 ROM. On Windows, run
    **TS-Pico-Updater.exe** from the
    [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
    instead: it works the same way.

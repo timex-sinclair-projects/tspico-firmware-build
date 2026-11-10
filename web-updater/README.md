@@ -7,12 +7,14 @@ with no files to drag. Started as the prototype for
 
 ## What a run does
 
-The user connects, ticks what they need, and presses **Start**:
+The user picks their computer (Step 1), connects, and presses **Start**.
+There are no options on a v2 board: every run erases the Pico and updates the
+TS-2068 ROM, because the firmware needs its matching ROM and the ROM can't be
+read over USB. The v3 card gets neither (below); its one option is the modem.
 
 1. **Connect** — Web Serial → Ctrl-C the firmware → raw REPL. Reads
-   the running firmware's `FW_VERSION` (else `/config.ini`'s; 1.1 has none) and
-   pre-ticks the ROM update unless the board is already on the channel's ROM
-   version (`romBehind` in `app.js`; an unknown version counts as behind).
+   the running firmware's `FW_VERSION` (else `/config.ini`'s; 1.1 has none),
+   shown as the installed version, and which board it is.
 2. **BOOTSEL** — `machine.bootloader()` over the REPL, then a handle on the
    boot ROM: **WebUSB/PICOBOOT** if the browser can open it, else the
    **RPI-RP2 drive** through the File System Access API (see below). A Pico
@@ -20,7 +22,7 @@ The user connects, ticks what they need, and presses **Start**:
 3. **Wipe** — erase all 2 MB (WebUSB), or write `flash_nuke.uf2` onto the
    drive and wait for it to come back. Clears old files such as a `/TS/`
    folder that would shadow the frozen modules.
-4. **ROM update** (every board behind the channel's ROM) — write `upgrade.uf2`
+4. **ROM update** (every v2 board) — write `upgrade.uf2`
    ([src/upgrade/](../src/upgrade/)), reboot, reopen the serial port, and
    follow its `UPG {json}` lines while the user types `OUT 244,3` and
    `LOAD ""` on the 2068: tape loading, each block written, verify, DONE, or a
@@ -102,12 +104,12 @@ CI runs it on every build with the two UF2s it just built.
 
 ## Channels
 
-The page installs from one of two payloads, chosen at the top of the page
-(also `?channel=main`):
+The page installs from `release/` and offers no choice. `?channel=main` loads
+`main/` instead, for testing a build on hardware before it is released:
 
 - **`release/`** — the latest GitHub Release: its `firmware.uf2` and
   `upgrade.uf2` assets, and the Pico files from its tag.
-- **`main/`** — the latest green `build.yml` run on `main`, for testers: its
+- **`main/`** — the latest green `build.yml` run on `main`: its
   `tspico-firmware-uf2` and `tspico-upgrade-uf2` artifacts, and the Pico files
   from its commit.
 
@@ -118,8 +120,8 @@ and `dckupdate` are gitignored, so the archive alone doesn't have them).
 
 Each channel is a directory with `manifest.json`, `pico/`, `firmware.uf2`,
 `firmware-uf2.zip`, `upgrade.uf2` and `sdcard.zip`. A release from before
-`upgrade.uf2` existed simply has no ROM update; the page says so and points at
-the other channel.
+`upgrade.uf2` existed has no ROM updater, and the page won't start on a v2
+board.
 
 ## What's here
 
