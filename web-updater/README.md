@@ -144,9 +144,18 @@ web-updater/
 ## Windows
 
 On Windows neither route works without help: WebUSB needs Zadig, and the
-drive route fails. The page shows Windows users a note pointing at
+drive route fails. So the page opens with **Step 1: which computer** —
+Windows or Mac (Linux and ChromeOS take the Mac path). It marks the computer
+it detects but shows nothing below until the user picks. Windows gets
 **TS-Pico-Updater.exe**, a native program that does the same run
-([windows-updater/](../windows-updater/)). Each release carries it.
+([windows-updater/](../windows-updater/)); each release carries it. A Zadig'd
+Windows machine can still take the browser path ("Use the browser updater
+anyway"). The by-hand downloads and the SD card files show on both paths.
+
+The page wears the site's look (palette, header, footer) by copying it from
+`site/assets/css/style.css` and `site/_includes/`: it is copied into the
+built site at `/updater/`, not rendered by Jekyll, so a change to the site's
+header or colors has to be made here too.
 
 ## Browser support
 

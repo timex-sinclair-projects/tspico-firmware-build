@@ -5,141 +5,228 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TS-Pico Web Updater</title>
 <style>
+  /* The site's palette (site/assets/css/style.css), kept in step by hand:
+     this page is copied into the built site, not rendered by Jekyll */
   :root {
-    --bg: #0f1115;
-    --panel: #1a1d24;
-    --panel-2: #232733;
-    --text: #e6e8ec;
-    --muted: #9aa3b2;
-    --accent: #4c9aff;
-    --ok: #3fb950;
-    --warn: #d29922;
-    --error: #f85149;
-    --border: #2c313c;
+    --ink: #15181d;
+    --text: var(--ink);
+    --muted: #5c6573;
+    --bg: #ffffff;
+    --panel: #f5f7fa;
+    --panel-2: #eef1f5;
+    --border: #e2e6ec;
+    --accent: #d6273e;        /* Sinclair red */
+    --accent-hover: #b81f33;
+    --link: #1f6fd6;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --error: #cf222e;
+    --slash-red: #e2322d; --slash-yellow: #f2b51d; --slash-green: #3aa93f; --slash-blue: #2ba6de;
+    --max: 980px;
+    --text-max: 760px;
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
-  header h1 { margin: 0 0 4px; font-size: 22px; }
-  header p { margin: 0 0 20px; color: var(--muted); }
-  .panel {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
-  }
-  .panel h2 { margin: 0 0 6px; font-size: 16px; }
-  .panel h2 .step { color: var(--accent); }
-  .panel .lead { margin: 0 0 14px; color: var(--muted); font-size: 13.5px; }
-  .panel .lead strong { color: var(--text); }
-  .panel h3 { margin: 18px 0 8px; font-size: 12px; text-transform: uppercase;
+  [hidden] { display: none !important; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 20px; }
+  .wrap.text { max-width: var(--text-max); }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-size: .92em; }
+
+  /* --- The site's header and footer (site/_includes/) --- */
+  .site-header { position: sticky; top: 0; z-index: 50; background: var(--bg);
+    border-bottom: 1px solid var(--border); }
+  .site-header::after, .slash { background: linear-gradient(90deg,
+      var(--slash-red) 0 25%, var(--slash-yellow) 25% 50%,
+      var(--slash-green) 50% 75%, var(--slash-blue) 75% 100%); }
+  .site-header::after { content: ""; display: block; height: 3px; }
+  .header-inner { display: flex; align-items: center; gap: 16px; min-height: 60px; flex-wrap: wrap; }
+  .brand { font-weight: 800; font-size: 1.15rem; color: var(--ink); letter-spacing: -.01em; white-space: nowrap; }
+  .brand:hover { text-decoration: none; }
+  .site-nav { display: flex; gap: 18px; flex: 1; flex-wrap: wrap; }
+  .site-nav a { color: var(--muted); font-weight: 600; font-size: .96rem; }
+  .site-nav a:hover { color: var(--ink); text-decoration: none; }
+  .site-nav a.active { color: var(--accent); }
+  .site-footer { margin-top: 40px; border-top: 1px solid var(--border);
+    background: var(--panel); padding: 26px 0; }
+  .site-footer p { margin: 6px 0; }
+  .site-footer .muted { color: var(--muted); font-size: .88rem; }
+
+  /* Step 1 scrolls a path into view below the sticky header, not under it */
+  #path-windows, #path-browser { scroll-margin-top: 80px; }
+
+  /* --- Page title --- */
+  .slash { width: 96px; height: 6px; margin: 0 0 14px 2px; transform: skewX(-30deg); }
+  .intro { padding: 36px 0 8px; }
+  .intro h1 { font-size: 2.2rem; line-height: 1.15; margin: 0 0 .25em; letter-spacing: -.02em; }
+  .intro p { font-size: 1.15rem; color: var(--muted); margin: 0 0 18px; }
+
+  /* --- Panels --- */
+  .panel { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 22px; margin-bottom: 16px; }
+  .panel h2 { margin: 0 0 6px; font-size: 1.25rem; line-height: 1.25; }
+  .step-label { display: block; font-size: .78rem; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 2px; }
+  .panel .lead { margin: 0 0 14px; color: var(--muted); font-size: .95rem; }
+  .panel .lead strong { color: var(--ink); }
+  .panel h3 { margin: 18px 0 8px; font-size: .78rem; text-transform: uppercase;
     letter-spacing: .05em; color: var(--muted); }
-  button {
-    font: inherit; font-weight: 600; cursor: pointer;
-    background: var(--panel-2); color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 9px 16px; transition: background .15s, border-color .15s;
+
+  /* --- Buttons (the site's .btn / .btn-buy) --- */
+  button, a.btn {
+    display: inline-block; font: inherit; font-weight: 700; cursor: pointer;
+    background: var(--bg); color: var(--ink); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 9px;
+    padding: 10px 20px; transition: background .15s, border-color .15s;
   }
-  button:hover:not(:disabled) { background: #2d3340; border-color: var(--accent); }
+  button:hover:not(:disabled), a.btn:hover { border-color: #cfd5dd; background: #fafbfc; text-decoration: none; }
   button:disabled { opacity: .45; cursor: not-allowed; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover:not(:disabled) { background: #3d87e6; }
-  a.btn { display: inline-block; text-decoration: none; }
-  a.btn.primary { background: var(--accent); color: #fff; border-radius: 8px; padding: 9px 16px; font-weight: 600; }
+  button.primary, a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled), a.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
   a.disabled { pointer-events: none; opacity: .45; }
+
+  /* --- Step 1: which computer --- */
+  .os-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+  .os-choice button { display: flex; align-items: center; gap: 14px; text-align: left;
+    padding: 16px 18px; border-radius: 12px; border-width: 2px; font-weight: 400; }
+  .os-choice svg { flex: none; width: 34px; height: 34px; fill: currentColor; }
+  .os-choice .name { display: block; font-size: 1.2rem; font-weight: 800; line-height: 1.2; }
+  .os-choice .sub { display: block; color: var(--muted); font-size: .88rem; line-height: 1.35; }
+  .os-choice .tag { display: none; margin-left: 6px; vertical-align: 2px; font-size: .68rem;
+    font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+  .os-choice button.detected .tag { display: inline-block; }
+  .os-choice button:hover:not(:disabled) { border-color: var(--accent); background: var(--bg); }
+  .os-choice button[aria-pressed="true"] { border-color: var(--accent); background: #fdf0f2;
+    box-shadow: 0 0 0 3px rgba(214, 39, 62, .12); }
+  .os-choice button[aria-pressed="true"] .name { color: var(--accent); }
+  @media (max-width: 600px) {
+    .os-choice { grid-template-columns: 1fr; }
+    .intro h1 { font-size: 1.8rem; }
+  }
+
+  /* --- The updater's parts --- */
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .spacer { flex: 1; }
-  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin: 4px 0; }
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin: 10px 0 4px; }
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
-  .status {
-    display: inline-block; padding: 4px 10px; border-radius: 6px;
-    background: var(--panel-2); color: var(--muted); font-size: 13px;
-  }
+  @media (max-width: 600px) { .kv { grid-template-columns: 1fr; gap: 0 0; } .kv dd { margin-bottom: 6px; } }
+  .status { display: inline-block; padding: 4px 10px; border-radius: 6px;
+    background: var(--panel-2); color: var(--muted); font-size: .85rem; }
   .status.ok { color: var(--ok); }
   .status.warn { color: var(--warn); }
   .status.error { color: var(--error); }
   .hint { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px;
-    background: var(--panel-2); border: 1px solid var(--border); font-size: 13.5px; }
+    background: var(--bg); border: 1px solid var(--border); font-size: .9rem; }
   .hint.ok { color: var(--ok); } .hint.warn { color: var(--warn); }
-  ol.steps { margin: 6px 0 0; padding-left: 20px; }
+  ol.steps { margin: 6px 0 0; padding-left: 22px; }
   ol.steps li { margin: 6px 0; }
   ol.steps ul { margin: 4px 0; padding-left: 18px; color: var(--muted); }
-  .progress { height: 14px; background: var(--panel-2); border-radius: 7px;
+  .progress { height: 12px; background: var(--bg); border-radius: 6px;
     overflow: hidden; border: 1px solid var(--border); }
-  .progress > div { height: 100%; width: 0; background: var(--accent);
-    transition: width .2s; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   #progress-wrap { margin-top: 12px; }
-  #progress-wrap .row { margin-top: 6px; font-size: 13px; color: var(--muted); }
+  #progress-wrap .row { margin-top: 6px; font-size: .85rem; color: var(--muted); }
   #log {
-    background: #0a0c10; border: 1px solid var(--border); border-radius: 8px;
+    background: #15181d; border: 1px solid var(--border); border-radius: 8px;
     padding: 10px 12px; height: 200px; overflow-y: auto;
     font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-    white-space: pre-wrap; color: #c9d1d9;
+    white-space: pre-wrap; color: #d6dae0;
   }
-  .log-ok { color: var(--ok); } .log-warn { color: var(--warn); }
-  .log-error { color: var(--error); }
-  a { color: var(--accent); }
-  .note { color: var(--muted); font-size: 13px; margin-top: 10px; }
-  kbd { background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 4px; padding: 1px 6px; font-size: 12px; }
-  .badge { font-size: 11px; padding: 2px 7px; border-radius: 5px;
-    background: var(--panel-2); color: var(--warn); border: 1px solid var(--border); }
+  .log-ok { color: #56d364; } .log-warn { color: #e3b341; }
+  .log-error { color: #ff7b72; }
+  .note { color: var(--muted); font-size: .88rem; margin-top: 10px; }
+  kbd { background: var(--bg); border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 6px; font-size: .78rem; }
+  .badge { font-size: .7rem; font-weight: 700; padding: 2px 7px; border-radius: 5px;
+    background: #fff4d6; color: var(--warn); border: 1px solid #f2dfa3; }
   .danger { color: var(--error); }
   /* The guided run */
-  .choice { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
-  .choice[hidden] { display: none; }
-  .choice input { margin-top: 4px; }
-  .choice small { display: block; color: var(--muted); font-size: 13px; }
+  .choice { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; }
+  .choice input { margin-top: 5px; accent-color: var(--accent); }
+  .choice small { display: block; color: var(--muted); font-size: .86rem; }
+  .channels input { accent-color: var(--accent); }
   ol.stages { list-style: none; margin: 16px 0 0; padding: 0; counter-reset: st; }
-  ol.stages > li { position: relative; padding: 10px 0 10px 38px;
+  ol.stages > li { position: relative; padding: 12px 0 12px 40px;
     border-top: 1px solid var(--border); counter-increment: st; }
-  ol.stages > li::before { content: counter(st); position: absolute; left: 0; top: 10px;
-    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-    font-size: 13px; font-weight: 700; background: var(--panel-2); color: var(--muted);
-    border: 1px solid var(--border); }
+  ol.stages > li::before { content: counter(st); position: absolute; left: 0; top: 12px;
+    width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    font-size: .82rem; font-weight: 800; background: var(--bg); color: var(--muted);
+    border: 2px solid var(--border); }
   ol.stages > li[data-state="active"]::before { border-color: var(--accent); color: var(--accent); }
-  ol.stages > li[data-state="done"]::before { content: "✓"; color: var(--ok); border-color: var(--ok); }
-  ol.stages > li[data-state="error"]::before { content: "!"; color: var(--error); border-color: var(--error); }
+  ol.stages > li[data-state="done"]::before { content: "✓"; color: #fff; background: var(--ok); border-color: var(--ok); }
+  ol.stages > li[data-state="error"]::before { content: "!"; color: #fff; background: var(--error); border-color: var(--error); }
   ol.stages > li[data-state="skipped"] { opacity: .5; }
   ol.stages > li[data-state="skipped"]::before { content: "–"; }
-  ol.stages .title { font-weight: 600; }
-  ol.stages .msg { color: var(--muted); font-size: 13.5px; min-height: 1em; }
+  ol.stages .title { font-weight: 700; }
+  ol.stages .msg { color: var(--muted); font-size: .9rem; min-height: 1em; }
   ol.stages > li[data-state="error"] .msg { color: var(--error); }
   ol.stages .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   ol.stages .actions:empty { display: none; }
   ol.stages .progress { margin-top: 8px; }
   #rom-steps ol { margin: 6px 0; padding-left: 20px; }
-  #rom-steps code { font-size: 14px; }
   details { margin-top: 6px; }
-  summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  summary { cursor: pointer; color: var(--link); font-weight: 600; }
   .channels label { display: block; margin: 4px 0; }
   .channels small { color: var(--muted); }
-  #done { border-color: var(--ok); }
+  #done { border-color: var(--ok); background: #effaf1; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>TS-Pico Web Updater</h1>
-    <p>Install or upgrade the TS-Pico firmware straight from your browser — over USB, no dragging files.</p>
-  </header>
+<!-- The site's header (site/_includes/header.html). The page is served at
+     <site>/updater/, so the site's pages are one level up. -->
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="../">TS Pico Interface</a>
+    <nav class="site-nav" aria-label="Primary">
+      <a href="../">Home</a>
+      <a href="../updates/">Updates</a>
+      <a href="../docs/">Docs</a>
+      <a href="../the-team/">The Team</a>
+      <a href="./" class="active" aria-current="page">Web Updater</a>
+    </nav>
+  </div>
+</header>
 
-  <!-- Shown only when the browser lacks WebSerial -->
-  <div class="panel" id="unsupported" hidden>
-    <h2 class="danger">Unsupported browser</h2>
-    <p>This tool needs the <strong>WebSerial API</strong>, which is only available in
-       Chromium-based browsers — <strong>Chrome, Edge, or Opera</strong> on
-       Windows, macOS, Linux, or ChromeOS. Safari and Firefox are not supported,
-       and there is no iOS option.</p>
-    <p class="note">Open this page in Chrome, Edge, or Opera and try again.</p>
+<div class="wrap text">
+  <section class="intro">
+    <div class="slash" aria-hidden="true"></div>
+    <h1>Web Updater</h1>
+    <p>Install or upgrade the TS-Pico firmware from your computer, over the Pico’s USB cable.</p>
+  </section>
+
+  <!-- Step 1: the computer picks the path. The page marks the one it detects
+       (app.js), but nothing below shows until the user picks. -->
+  <div class="panel" id="os-panel">
+    <h2><span class="step-label">Step 1</span>Which computer are you using?</h2>
+    <p class="lead">Windows needs a small updater program. On a Mac the update runs right in
+       this page.</p>
+    <div class="os-choice" role="group" aria-label="Your computer">
+      <button type="button" id="os-windows" data-os="windows" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.1 10.4 4v7.1H3V5.1Zm8.4-1.2L21 2.5v8.6h-9.6V3.9ZM3 12.4h7.4v7.2L3 18.5v-6.1Zm8.4 0H21v9.1l-9.6-1.4v-7.7Z"/></svg>
+        <span><span class="name">Windows<span class="tag">This computer</span></span>
+        <span class="sub">Download the TS-Pico Updater program</span></span>
+      </button>
+      <button type="button" id="os-mac" data-os="browser" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h15A1.5 1.5 0 0 1 21 4.5V15a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 15V4.5ZM5 5v9.5h14V5H5Zm-3 13.5h20V20a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1.5Z"/></svg>
+        <span><span class="name">Mac<span class="tag">This computer</span></span>
+        <span class="sub">Update in the browser: Chrome, Edge or Opera. Linux and ChromeOS too.</span></span>
+      </button>
+    </div>
   </div>
 
-  <!-- Shown on Windows: the browser can't write the firmware there (README) -->
-  <div class="panel" id="windows-note" hidden>
-    <h2>On Windows, download the TS-Pico Updater program</h2>
-    <p>On Windows the browser can't write the firmware onto the Pico, so this page can't do the
+  <!-- Windows: the browser can't write the firmware there (README) -->
+  <div id="path-windows" hidden>
+  <div class="panel" id="windows-note">
+    <h2><span class="step-label">Step 2</span>Download the TS-Pico Updater program</h2>
+    <p class="lead">On Windows the browser can't write the firmware onto the Pico, so this page can't do the
        update. You need to download and run <strong>TS-Pico-Updater.exe</strong> instead. It does
        the same steps as this page, and there's nothing to install.</p>
     <p><a class="btn primary" id="win-download"
@@ -154,146 +241,163 @@
           <strong>Start</strong>. The program finds the Pico by itself and tells you what to do.</li>
     </ol>
     <p class="note">The SD card files and the “do it by hand” downloads below still work on Windows.
-       <a href="#" id="win-anyway">Show the browser updater anyway</a> (only if you've installed the
+       <a href="#" id="win-anyway">Use the browser updater anyway</a> (only if you've installed the
        WinUSB driver for “RP2 Boot” with Zadig).</p>
   </div>
+  </div>
 
-  <main id="main">
+  <!-- Mac, Linux, ChromeOS: the guided run in the browser -->
+  <div id="path-browser" hidden>
+    <!-- Shown only when the browser lacks WebSerial -->
+  <div class="panel" id="unsupported" hidden>
+    <h2 class="danger">Unsupported browser</h2>
+    <p>This tool needs the <strong>WebSerial API</strong>, which is only available in
+       Chromium-based browsers — <strong>Chrome, Edge, or Opera</strong> on
+       Windows, macOS, Linux, or ChromeOS. Safari and Firefox are not supported,
+       and there is no iOS option.</p>
+    <p class="note">Open this page in Chrome, Edge, or Opera and try again.</p>
+  </div>
 
-    <!-- What's being installed -->
-    <div class="panel">
-      <h2>What you’re installing</h2>
-      <div class="channels">
-        <label><input type="radio" name="channel" id="ch-release" value="release">
-          <strong>Latest release</strong> <small id="ch-release-label"></small></label>
-        <label><input type="radio" name="channel" id="ch-main" value="main">
-          <strong>Latest main build</strong> <span class="badge">testers</span>
-          <small id="ch-main-label"></small></label>
+    <div id="main">
+      <!-- What's being installed -->
+      <div class="panel">
+        <h2><span class="step-label">Step 2</span>Choose what you’re installing</h2>
+        <div class="channels">
+          <label><input type="radio" name="channel" id="ch-release" value="release">
+            <strong>Latest release</strong> <small id="ch-release-label"></small></label>
+          <label><input type="radio" name="channel" id="ch-main" value="main">
+            <strong>Latest main build</strong> <span class="badge">testers</span>
+            <small id="ch-main-label"></small></label>
+        </div>
+        <dl class="kv">
+          <dt>Firmware</dt><dd><span id="latest-version">loading…</span> <a id="latest-source" target="_blank" rel="noopener"></a></dd>
+          <dt>Files for the Pico</dt><dd id="payload-summary">—</dd>
+          <dt>Installed on device</dt><dd id="installed-version">connect to read</dd>
+        </dl>
       </div>
-      <dl class="kv">
-        <dt>Firmware</dt><dd><span id="latest-version">loading…</span> <a id="latest-source" target="_blank" rel="noopener"></a></dd>
-        <dt>Files for the Pico</dt><dd id="payload-summary">—</dd>
-        <dt>Installed on device</dt><dd id="installed-version">connect to read</dd>
-      </dl>
+
+
+      <div class="panel" id="upgrade-panel">
+        <h2><span class="step-label">Step 3</span>Upgrade your TS-Pico</h2>
+        <p class="lead">Leave the TS-Pico plugged into the TS-2068 and connect the Pico’s
+           Micro-USB port to this computer. Close Thonny or anything else using the Pico.</p>
+        <p class="lead"><strong>Switch the TS-2068 off</strong> before you start: the USB cable
+           powers the Pico, and the Pico should only be reflashed or restarted with the 2068 off.
+           You’ll turn the 2068 on for the ROM update, if you choose it, and the page tells you
+           when to switch it off again.</p>
+
+        <ol class="stages">
+          <li class="stage" id="st-connect" data-state="active">
+            <div class="title">Connect</div>
+            <div class="msg">Reads what’s installed and picks the right steps.</div>
+            <div class="row" style="margin-top:8px;">
+              <button id="btn-connect" class="primary">Connect to TS-Pico</button>
+            </div>
+            <details>
+              <summary>It won’t connect / the Pico has no working firmware</summary>
+              <p class="note">Put it into BOOTSEL mode by hand, then press <strong>Start</strong>
+                 below without connecting:</p>
+              <ol class="steps">
+                <li>Switch the TS-2068 off.</li>
+                <li>Plug the USB cable into the Pico and your computer.</li>
+                <li>Press and hold the Pico’s <kbd>BOOTSEL</kbd> button (the little white
+                    button next to the Micro-USB connector).</li>
+                <li>While holding it, press and release the TS-Pico’s <strong>Pico reset</strong>
+                    button (or unplug and replug the USB cable).</li>
+                <li>Release <kbd>BOOTSEL</kbd>. A drive named <strong>RPI-RP2</strong> appears
+                    (<strong>RP2350</strong> on the v3 card) — leave it alone.</li>
+              </ol>
+            </details>
+            <div class="actions"></div>
+            <div class="progress" hidden><div></div></div>
+          </li>
+
+          <li class="stage" id="st-options" data-state="pending">
+            <div class="title">Choose</div>
+            <label class="choice"><input type="checkbox" id="opt-wipe" checked>
+              <span>Erase the Pico first
+                <small>Wipes the Pico’s firmware and files for a clean start. Recommended, and
+                   required when coming from 1.1 — leftover files (like an old
+                   <code>/TS/</code> folder) stop the new firmware from booting.</small></span></label>
+            <label class="choice"><input type="checkbox" id="opt-rom">
+              <span>Update the TS-2068 ROM (every board not already on this release)
+                <small>The firmware needs its matching ROM in the TS-Pico’s flash chip. The page
+                   ticks this unless the board already runs this release. The
+                   page loads a small updater onto the 2068 and walks you through it. Some boards
+                   need the <strong>P10 jumper</strong> fitted so the chip can be written — leave it fitted
+                   afterwards too: writing DOCK images to the flash needs it.</small></span></label>
+            <label class="choice" id="opt-modem-row" hidden><input type="checkbox" id="opt-modem" checked>
+              <span>Modem firmware (v3 card)
+                <small>Checks the Zimodem on the card’s WiFi modem module and installs this
+                   release’s if it’s missing or older. It goes through the card’s own USB and takes
+                   about a minute and a half. Your WiFi settings and phonebook are kept.</small></span></label>
+            <div class="hint" id="plan-hint" hidden></div>
+            <div class="row" style="margin-top:12px;">
+              <button id="btn-start" class="primary" disabled>Start</button>
+            </div>
+          </li>
+
+          <li class="stage" id="st-bootsel" data-state="pending">
+            <div class="title">Enter BOOTSEL mode</div>
+            <div class="msg"></div><div class="actions"></div>
+            <div class="progress" hidden><div></div></div>
+          </li>
+          <li class="stage" id="st-wipe" data-state="pending">
+            <div class="title">Erase the Pico</div>
+            <div class="msg"></div><div class="actions"></div>
+            <div class="progress" hidden><div></div></div>
+          </li>
+          <li class="stage" id="st-rom" data-state="pending">
+            <div class="title">Update the TS-2068 ROM</div>
+            <div class="msg"></div>
+            <div id="rom-steps" hidden>
+              <ol>
+                <li>Fit the <strong>P10 jumper</strong> if your board has one, and leave it on.</li>
+                <li>Turn the TS-2068 on.</li>
+                <li>Type <code>OUT 244,3</code> and press <kbd>ENTER</kbd> — this switches to the
+                    Spectrum ROM.</li>
+                <li>Type <code>LOAD ""</code> (<kbd>J</kbd>, then <kbd>SYMBOL SHIFT</kbd>+<kbd>P</kbd>
+                    twice) and press <kbd>ENTER</kbd>.</li>
+                <li>Wait for <strong>DONE</strong> on the TV. This page follows along.</li>
+                <li>Then switch the TS-2068 <strong>off</strong> again before the page installs
+                    the firmware. It will ask you to confirm.</li>
+              </ol>
+              <div class="hint" id="rom-status"></div>
+            </div>
+            <div class="actions"></div>
+            <div class="progress" hidden><div></div></div>
+          </li>
+          <li class="stage" id="st-firmware" data-state="pending">
+            <div class="title">Install the firmware</div>
+            <div class="msg"></div><div class="actions"></div>
+            <div class="progress" hidden><div></div></div>
+          </li>
+          <li class="stage" id="st-files" data-state="pending">
+            <div class="title">Copy the files</div>
+            <div class="msg"></div><div class="actions"></div>
+            <div class="progress" hidden><div></div></div>
+          </li>
+          <li class="stage" id="st-modem" data-state="pending">
+            <div class="title">Modem firmware</div>
+            <div class="msg"></div><div class="actions"></div>
+            <div class="progress" hidden><div></div></div>
+          </li>
+        </ol>
+      </div>
+
+      <div class="panel" id="done" hidden>
+        <h2 style="color:var(--ok)">Done</h2>
+        <p>Unplug the Pico’s USB cable (so the TS-Pico and its SD card really lose power), then
+           switch the TS-2068 on. It should start with the new ROM and firmware —
+           try <code>SAVE "tpi:dir"</code>. Leave the P10 jumper fitted: it’s needed to put DOCK images in
+           the flash.</p>
+      </div>
+
     </div>
+  </div>
 
-    <!-- The guided run -->
-    <div class="panel" id="upgrade-panel">
-      <h2>Upgrade your TS-Pico</h2>
-      <p class="lead">Leave the TS-Pico plugged into the TS-2068 and connect the Pico’s
-         Micro-USB port to this computer. Close Thonny or anything else using the Pico.</p>
-      <p class="lead"><strong>Switch the TS-2068 off</strong> before you start: the USB cable
-         powers the Pico, and the Pico should only be reflashed or restarted with the 2068 off.
-         You’ll turn the 2068 on for the ROM update, if you choose it, and the page tells you
-         when to switch it off again.</p>
-
-      <ol class="stages">
-        <li class="stage" id="st-connect" data-state="active">
-          <div class="title">Connect</div>
-          <div class="msg">Reads what’s installed and picks the right steps.</div>
-          <div class="row" style="margin-top:8px;">
-            <button id="btn-connect" class="primary">Connect to TS-Pico</button>
-          </div>
-          <details>
-            <summary>It won’t connect / the Pico has no working firmware</summary>
-            <p class="note">Put it into BOOTSEL mode by hand, then press <strong>Start</strong>
-               below without connecting:</p>
-            <ol class="steps">
-              <li>Switch the TS-2068 off.</li>
-              <li>Plug the USB cable into the Pico and your computer.</li>
-              <li>Press and hold the Pico’s <kbd>BOOTSEL</kbd> button (the little white
-                  button next to the Micro-USB connector).</li>
-              <li>While holding it, press and release the TS-Pico’s <strong>Pico reset</strong>
-                  button (or unplug and replug the USB cable).</li>
-              <li>Release <kbd>BOOTSEL</kbd>. A drive named <strong>RPI-RP2</strong> appears
-                  (<strong>RP2350</strong> on the v3 card) — leave it alone.</li>
-            </ol>
-          </details>
-          <div class="actions"></div>
-          <div class="progress" hidden><div></div></div>
-        </li>
-
-        <li class="stage" id="st-options" data-state="pending">
-          <div class="title">Choose</div>
-          <label class="choice"><input type="checkbox" id="opt-wipe" checked>
-            <span>Erase the Pico first
-              <small>Wipes the Pico’s firmware and files for a clean start. Recommended, and
-                 required when coming from 1.1 — leftover files (like an old
-                 <code>/TS/</code> folder) stop the new firmware from booting.</small></span></label>
-          <label class="choice"><input type="checkbox" id="opt-rom">
-            <span>Update the TS-2068 ROM (every board not already on this release)
-              <small>The firmware needs its matching ROM in the TS-Pico’s flash chip. The page
-                 ticks this unless the board already runs this release. The
-                 page loads a small updater onto the 2068 and walks you through it. Some boards
-                 need the <strong>P10 jumper</strong> fitted so the chip can be written — leave it fitted
-                 afterwards too: writing DOCK images to the flash needs it.</small></span></label>
-          <label class="choice" id="opt-modem-row" hidden><input type="checkbox" id="opt-modem" checked>
-            <span>Modem firmware (v3 card)
-              <small>Checks the Zimodem on the card’s WiFi modem module and installs this
-                 release’s if it’s missing or older. It goes through the card’s own USB and takes
-                 about a minute and a half. Your WiFi settings and phonebook are kept.</small></span></label>
-          <div class="hint" id="plan-hint" hidden></div>
-          <div class="row" style="margin-top:12px;">
-            <button id="btn-start" class="primary" disabled>Start</button>
-          </div>
-        </li>
-
-        <li class="stage" id="st-bootsel" data-state="pending">
-          <div class="title">Enter BOOTSEL mode</div>
-          <div class="msg"></div><div class="actions"></div>
-          <div class="progress" hidden><div></div></div>
-        </li>
-        <li class="stage" id="st-wipe" data-state="pending">
-          <div class="title">Erase the Pico</div>
-          <div class="msg"></div><div class="actions"></div>
-          <div class="progress" hidden><div></div></div>
-        </li>
-        <li class="stage" id="st-rom" data-state="pending">
-          <div class="title">Update the TS-2068 ROM</div>
-          <div class="msg"></div>
-          <div id="rom-steps" hidden>
-            <ol>
-              <li>Fit the <strong>P10 jumper</strong> if your board has one, and leave it on.</li>
-              <li>Turn the TS-2068 on.</li>
-              <li>Type <code>OUT 244,3</code> and press <kbd>ENTER</kbd> — this switches to the
-                  Spectrum ROM.</li>
-              <li>Type <code>LOAD ""</code> (<kbd>J</kbd>, then <kbd>SYMBOL SHIFT</kbd>+<kbd>P</kbd>
-                  twice) and press <kbd>ENTER</kbd>.</li>
-              <li>Wait for <strong>DONE</strong> on the TV. This page follows along.</li>
-              <li>Then switch the TS-2068 <strong>off</strong> again before the page installs
-                  the firmware. It will ask you to confirm.</li>
-            </ol>
-            <div class="hint" id="rom-status"></div>
-          </div>
-          <div class="actions"></div>
-          <div class="progress" hidden><div></div></div>
-        </li>
-        <li class="stage" id="st-firmware" data-state="pending">
-          <div class="title">Install the firmware</div>
-          <div class="msg"></div><div class="actions"></div>
-          <div class="progress" hidden><div></div></div>
-        </li>
-        <li class="stage" id="st-files" data-state="pending">
-          <div class="title">Copy the files</div>
-          <div class="msg"></div><div class="actions"></div>
-          <div class="progress" hidden><div></div></div>
-        </li>
-        <li class="stage" id="st-modem" data-state="pending">
-          <div class="title">Modem firmware</div>
-          <div class="msg"></div><div class="actions"></div>
-          <div class="progress" hidden><div></div></div>
-        </li>
-      </ol>
-    </div>
-
-    <div class="panel" id="done" hidden>
-      <h2 style="color:var(--ok)">Done</h2>
-      <p>Unplug the Pico’s USB cable (so the TS-Pico and its SD card really lose power), then
-         switch the TS-2068 on. It should start with the new ROM and firmware —
-         try <code>SAVE "tpi:dir"</code>. Leave the P10 jumper fitted: it’s needed to put DOCK images in
-         the flash.</p>
-    </div>
-
+  <!-- Both paths -->
+  <div id="path-common" hidden>
     <!-- Manual path -->
     <div class="panel">
       <details>
@@ -319,9 +423,10 @@
       </details>
     </div>
 
+
     <!-- SD card files: the starter card (testers) and the software library (archive.org) -->
     <div class="panel">
-      <h2>SD card files</h2>
+      <h2><span class="step-label">Optional</span>SD card files</h2>
       <p class="lead">The TS-Pico reads TAP programs and <code>tpi:help</code> text from a
          FAT-formatted SD card. Testers: unzip this to the root of the card, keeping the
          <code>TAP/</code> and <code>help/</code> folders. Everyone else can skip it and use the
@@ -342,18 +447,23 @@
       </div>
     </div>
 
-    <div class="panel">
-      <h2>Log</h2>
-      <div id="log"></div>
-    </div>
-  </main>
+  </div>
 
-  <p class="note">
-    Firmware writing uses <a href="https://github.com/piersfinlayson/picoflash">Pico⚡Flash</a>
-    and file transfer uses <a href="https://github.com/vshymanskyy/ViperIDE">ViperIDE</a> code (both MIT).
-    <a href="https://github.com/timex-sinclair-projects/tspico-firmware-build/tree/main/web-updater">Source</a>.
-  </p>
+  <div class="panel" id="log-panel" hidden>
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
 </div>
+
+<footer class="site-footer">
+  <div class="wrap text">
+    <p><strong>TS Pico Interface</strong> — an open-source expansion platform for the
+       Timex/Sinclair&nbsp;2068.</p>
+    <p class="muted">Firmware writing uses <a href="https://github.com/piersfinlayson/picoflash">Pico⚡Flash</a>
+       and file transfer uses <a href="https://github.com/vshymanskyy/ViperIDE">ViperIDE</a> code (both MIT).
+       <a href="https://github.com/timex-sinclair-projects/tspico-firmware-build/tree/main/web-updater">Source</a>.</p>
+  </div>
+</footer>
 
 <script type="module" src="app.js"></script>
 </body>
