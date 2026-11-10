@@ -3852,7 +3852,7 @@ def X_RUN(line):                                                              # 
         label, free, total = "", 0, 0
         try:
             ACTIVATE_SD()
-            vfs = os.statvfs("")
+            vfs = os.statvfs("/sd")                                           # by path: the last unmount left the cwd at / (the flash)
             total, free = vfs[2] * vfs[0], vfs[3] * vfs[0]
             label = TSP.sd_label
         except OSError:
