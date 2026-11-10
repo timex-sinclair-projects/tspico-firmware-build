@@ -1620,6 +1620,23 @@ for example, and it takes the Spectrum ROM's place until you change the dock bac
 (`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
 slot 0.
 
+### Leap
+
+Charlie Day's Leap languages run from the dock: Leap-Forth as a full Forth system, Leap V2 and
+Leap-C as a cartridge that runs one program. Their 32K ROM images don't work as a BOOT slot on
+this board, because they use parts of the extension ROM that the TS-Pico can't supply. Use the
+cartridges instead:
+
+- **Leap-Forth:** `forth_cart.dck`, in the `roms` folder of the 2068-Forth release zip
+  (github.com/nchiker/2068-Leap-Forth).
+- **Leap V2 and Leap-C:** the Leap IDE's **DCK** export builds a cartridge with your program in it.
+
+Put the cartridge in a slot (8.4), and when the loader offers to dock it and restart, answer **Y**.
+To start Leap every time you switch on, put it in a Flash slot and set `DCK_SLOT` in `config.ini`
+to that slot (Appendix D).
+
+Leap saves and loads on cassette, not on the SD card.
+
 ## 8.4 Putting a ROM or cartridge into a slot
 
 You'll need the ROM image (`.rom` or `.bin`) or cartridge (`.dck`) in the current folder on the
