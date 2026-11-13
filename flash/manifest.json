@@ -15,7 +15,7 @@
       "slot": 1,
       "kind": "ROM",
       "size": 32768,
-      "name": "TS-Pico TS-2068 ROM 2.3",
+      "name": "TS-Pico TS-2068 ROM 2.4",
       "file": "../src/rom/TSPICO-24.ROM",
       "crc32": "96D7CEAA"
     },

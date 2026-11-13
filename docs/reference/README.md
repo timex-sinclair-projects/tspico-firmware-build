@@ -215,7 +215,7 @@ behavior, and the caveat and the issue link go.
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-24.ROM` | `61aac90f2c1f` | *(chapter)* | *(flows)* |
 | `src/rom/TSPICO-ZX48-V4.BIN` | `ec57f307bd0d` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
-| `flash/manifest.json` | `d1492de43e6d` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
+| `flash/manifest.json` | `4eb97bceb7e2` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
 | `tools/build-rom.py` | `6b65dd8ab17c` | [rom/overview.md](rom/overview.md) | — |
 | `tools/build-flash.py` | `c5b00cf9c0cd` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
