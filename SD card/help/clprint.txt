@@ -1,0 +1,15 @@
+TS-Pico Command          CLPRINT
+--------------------------------
+SAVE "tpi:clprint"
+
+Close the current virtual print
+file. The next PRINT to the
+printer will automatically open
+a new file.
+
+If you don't close the print
+file before removing th SD card,
+it may lack the last item
+printed.
+
+See also: picopt, opprint

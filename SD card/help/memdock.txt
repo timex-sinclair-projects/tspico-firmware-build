@@ -1,0 +1,7 @@
+TS-Pico Command          MEMDOCK
+--------------------------------
+SAVE "tpi:memdock"[CODE mem,n]
+
+Same as tpi:dock.
+
+See also: dock, memboot

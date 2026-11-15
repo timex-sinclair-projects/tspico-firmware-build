@@ -1,0 +1,14 @@
+TS-Pico Command           AUTOPG
+--------------------------------
+SAVE "tpi:autopg"
+SAVE "tpi:noautopg"
+
+Set the virtual printer to
+include a form feed (FF)
+character (ASCII 12) every page
+length or not (the default).
+
+This setting lasts until the
+TS-Pico is switched off.
+
+See also: picopt

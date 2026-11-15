@@ -1,0 +1,18 @@
+TS-Pico Command            PRNSZ
+--------------------------------
+SAVE "tpi:prnsz"[CODE col,lin]
+SAVE "tpi:prnsz <col> <lin>"
+
+Set the virtual printer page
+size in columns and line per
+page. Lines will be wrapped at
+col colunms (0 = never), and
+pages set to lin lines (0 to
+255 each). 
+
+SAVE "tpi:prnsz" alone shows the
+current size. The values can be
+given in the command string or
+as CODE arguments.
+
+See also: picopt

@@ -1,19 +1,61 @@
-TS-Pico Command             LOAD
+TS-Pico and BASIC Command   LOAD
 --------------------------------
+
+TS-Pico File Mounting
+---------------------
   LOAD "tpi:filename.ext"
 Mount the named file from the
-current folder.
+current folder. Filenames on the
+SD card are not case sensitive.
+
+For characters that the 2068
+cannot display or specify, you
+can use '?" for a single
+character and '*' for any run of
+characters. If only one file
+matches, it will be mounted,
+otherwise you get error F with a
+"n files match:" message.
 
   LOAD "tpi:nnn"
 Mount a file by its index number
 nnn. The file index numbers
 appear to the left of the name
-in a tpi:dir listing. Only the
-listed types (.tap, .dck, .rom,
-.bin) can be mounted this way.
+in a tpi:dir listing. The index
+number needs to be at least two
+digits, so for 0-9 you will need
+a leading zero. 
 
-See also: close, dir, tapdir,
-          format
+Only the .tap, .dck, .rom, and
+.bin file types can be mounted
+with LOAD "tpi:". You can mount
+the special directory filw with:
+  LOAD "tpi:dirinfo.tap"
+This contains the directory list
+in a character array you then:
+  LOAD ""DATA a$()
+to load the data. See the use
+guide on Mounting for details.
+
+TS-Pico f: Mode Loading
+-----------------------
+LOAD "f:name.bas"
+LOAD "f:name.bin"CODE [a[,s]]
+LOAD "f:name.dat"DATA v()
+LOAD "f:name.dat"DATA v$
+LOAD "f:name.scr"SCREEN$
+
+This loads directly from a file
+without having to mount it (see
+SAVE f: Mode). These files need
+to have a +3DOS file header,
+which they get from SAVE "f:..."
+but .scr files do not have one.
+A file of bytes without a header
+can be loaded with:
+  LOAD "f:..."CODE addr
+
+See also: close, dir, tapdir,   format, OPEN#
 
 BASIC Command               LOAD
 --------------------------------

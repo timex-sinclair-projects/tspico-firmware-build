@@ -19,7 +19,7 @@ channel setup is:
 # Ch Dir Purpose
 - -- --- ---------- 
 0  k Out Print to lower screen
-1  k In  Input (lower screen)
+1  k In  Input from lower screen
 2  s Out Print to the screen
 3  p Out Print to the printer
 
@@ -55,5 +55,10 @@ screen lines:
   INPUT ""
 The empty INPUT statement will 
 clear the text you printed.
+
+The TS-Pico (v2.3) had extended
+streams to include using OPEN #
+to open a stream to a file on
+the SD card.
 
 See also: PRINT, OPEN#, CLOSE#

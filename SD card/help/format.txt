@@ -1,4 +1,4 @@
-BASIC Command             FORMAT
+BASIC and TPI Command     FORMAT
 --------------------------------
 FORMAT "new.tap"
 Makes a new, empty .tap file and
@@ -7,10 +7,10 @@ to SAVE into. ".tap" may be left
 off. Another extension, as in
 "notes.txt", is Report Q.
 
-FORMAT "tools/"
-Makes a directory.
+FORMAT "tools/" makes a 
+directory(note the trailing /).
 
-Neither overwrites anything that
+Never overwrites anything that
 is already there (Report F).
 It never formats the SD card.
 
@@ -21,5 +21,4 @@ takes the label off. See label.
 
 Same as SAVE "tpi:format name".
 
-See also: cat, erase, append, md
-label
+See also: CAT, ERASE, append,   md, label

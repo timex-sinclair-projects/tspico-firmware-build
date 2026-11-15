@@ -12,4 +12,9 @@ CODE 1,n: Show n hdrs of context
 For n=255, show a screenful 
 around the current point.
 
-See also: ffw, rew, load, format
+The BASIC command CAT "" (with
+empty string) does the same as
+SAVE "tpi:tapdir" but has no
+CODE options.
+
+See also: ffw, rew, load, cat

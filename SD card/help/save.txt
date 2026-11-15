@@ -1,35 +1,39 @@
+TS-Pico and BASIC Command   SAVE
+================================
+
 TS-Pico Command Form
---------------------------------
+--------------------
 SAVE "tpi:command [arg]"
 SAVE "tpi:command [arg]"CODE a,b
+
 Issue the named TS-Pico command
 which may accept a string
 argument and optionally CODE
 parameters. See individual help
 for each command.
 
-TS-Pico SDCARD mode SAVE
---------------------------------
-SAVE "name"[LINE n]
-SAVE "name"CODE a,b
-SAVE "name"DATA a()
-SAVE "name"DATA a$()
-SAVE "name"SCREEN$
+BASIC "tape" File Form
+----------------------
+Without a "tpi:" prefix or "f:"
+prefix (see f: mode below) in
+the name, the SAVE works like
+the regular SAVE command, but it
+depends on the TS-Pico's sdcard/
+tape mode toggle. In this case,
+the name also is limited to the
+traditional 10 characters, even
+when it creates a new .tap file.
+Additionally, a SAVE creates a
+new .tap file, the characters
+allowed for a filename are
+restricted to: a-z, A-Z, 0-9, 
+dash "-", and underscore "_".
+This is for cross-platform file
+name compatibility.
 
-A normal SAVE (without tpi:
-prefix) with the TS-Pico in
-sdcard mode will save to a .tap
-file on the SD card. Other than
-the data going to a file rather
-than actual tape, the save is
-like a normal BASIC SAVE command
-(see below).
-
-See also: load, merge, verify
-
-BASIC Command               SAVE
---------------------------------
-SAVE "name"[LINE n]
+TAPE mode SAVE
+--------------
+  SAVE "name"[LINE n]
 
 Save a program to tape with the
 given name. If the LINE option 
@@ -53,4 +57,76 @@ Save the screen pixel and
 color data. Equivalent to: 
   SAVE "..."CODE 16384,6912.
 
-See also: LOAD, MERGE, VERIFY
+SDCARD mode SAVE
+----------------
+SAVE "name"[LINE n]
+SAVE "name"CODE a,b
+SAVE "name"DATA a()
+SAVE "name"DATA a$()
+SAVE "name"SCREEN$
+
+A normal SAVE (without tpi:
+prefix) with the TS-Pico in
+sdcard mode will save to a .tap
+file on the SD card. Other than
+the data going to a file rather
+than actual tape, the save is
+like the normal TAPE mode SAVE
+command forms.
+
+When saving to .tap on SD card,
+an append mode can be on or off.
+By default, it is off.
+
+Append off:
+SAVEs create a new .tap file
+with the name given containing
+the SAVEd file. If no .tap file
+is mounted, a SAVE will mount
+the new .tap file created. 
+
+Append on:
+SAVEs are appended to the
+currently mounted .tap file.
+
+FORMAT "name" or 
+SAVE "tpi:format name":
+This creates a new empty .tap
+file and mounts it with append
+mode turned on so that SAVEs
+will append into it.
+
+TS-Pico f: Mode Form
+--------------------
+SAVE "f:filename"[...]
+
+This has all the same options as
+the regular SAVE, and lets you 
+save one thing to a separate
+file rather than within a .tap
+file. This can also be used with
+LOAD, VERIFY, and MERGE. The
+name after f: can be up to 64
+characters long, counting any
+folders, slashes and the file
+extension. If the file exists,
+you will be prompted to replace
+it.
+
+Programs, code and arrays are
+stored with a 128-byte +3DOS
+header, the same format the
+Spectrum +3 and most modern
+Spectrum tools use, followed by
+the data. A SCREEN$ is stored as
+the plain 6912 bytes of the
+screen, so you can open it in
+picture tools that understand
+Spectrum screens (SCR).
+
+A plain file of bytes with no
+header, such as something from
+your computer, can still be
+loaded as CODE.
+
+See also: LOAD, MERGE, VERIFY,  append, format, sdcard, tape

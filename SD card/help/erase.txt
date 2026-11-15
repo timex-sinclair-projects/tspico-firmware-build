@@ -1,4 +1,4 @@
-BASIC Command              ERASE
+BASIC and TPI Command      ERASE
 --------------------------------
 ERASE "old.tap"
 Deletes a file. No question is
@@ -13,7 +13,7 @@ Asks about each matching file:
 
 ERASE "olddir/"
 Removes an empty directory. The
-/ says you mean the directory.
+/ says you mean a directory.
 
 The mounted .tap and the current
 directory can't be erased
@@ -21,4 +21,4 @@ directory can't be erased
 
 Same as SAVE "tpi:erase name".
 
-See also: cat, move, format
+See also: CAT, MOVE, FORMAT

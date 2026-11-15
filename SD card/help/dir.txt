@@ -1,16 +1,29 @@
 TS-Pico Command              DIR
 --------------------------------
-  SAVE "tpi:dir"
-List the contents of the current
+SAVE "tpi:dir"[CODE 1/2,idx]
+List files in the current
 directory on the SD card.
 
-  SAVE "tpi:dir"CODE 1,idx
+SAVE "tpi:dir"CODE 1,idx
 Lists the full name of file with
 index number idx.
 
-  SAVE "tpi:dir"CODE 2,idx
+SAVE "tpi:dir"CODE 2,idx
 Displays a listing of files with
 index number and full name,
 starting with index number idx.
 
-See also: idir, cd, load, tapdir
+SAVE "tpi:dir fspec"[CODE ...]
+List the files matching fspec,
+which is a name with * or ? 
+wildcard characters. Match any
+run of characters with *, or any
+single character with ?.
+Ex.: *.tap
+
+The BASIC command CAT works like
+dir, bit doesn't have the CODE
+options.
+
+See also: CAT, idir, cd, load,
+          tapdir

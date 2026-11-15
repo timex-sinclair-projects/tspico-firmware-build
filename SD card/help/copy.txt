@@ -1,5 +1,8 @@
-BASIC Command               COPY
+BASIC and TPI Command       COPY
 --------------------------------
+Copies the screen to the printer
+or copy files.
+
 COPY
 
 Prints the top 22 lines of the
@@ -45,4 +48,4 @@ Names can be string expressions.
 Same as SAVE "tpi:copy a b".
 
 See also: LPRINT, ts2040, picopt
-          move, erase, cat
+          MOVE, ERASE, CAT

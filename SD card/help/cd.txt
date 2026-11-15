@@ -1,28 +1,36 @@
 TS-Pico Command               CD
 --------------------------------
-SAVE "tpi:cd <name>"[CODE 1/2,0]
+SAVE "tpi:cd <name>"[CODE m,n]
+MOVE TO "name"
 
 Changes to the directory <name>
 No CODE:  cd only
 CODE 1,0: Do a tpi:dir after
 CODE 1,1: Do a tpi:idir after
+CODE 1,2: Do tpi:dir CODE 0,2
 CODE 2,0: Show new path after
+The special directories . and ..
+can be used, and the name can
+include a path: foo/bar, ../foo
+The root "/" directory is "/TAP"
+on the SD card.
 
 SAVE "tpi:cd"
+MOVE TO ""
 SAVE "tpi:cd"CODE 0,1
 
 With no name, it presents an
 interactive list of directories
 to change to. Adding CODE 0,1
 will present choices of all
-directories on the SD card.
+directories on the SD card under
+/TAP.
 
 SAVE "tpi:cd -"
+MOVE TO "-"
+
 Goes back to the directory you
 were in before (one level).
-
-In BASIC: MOVE TO "name",
-MOVE TO "-" and MOVE TO "".
 
 See also: md, rm, path, idir,
           move

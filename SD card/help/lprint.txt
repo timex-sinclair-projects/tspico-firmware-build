@@ -20,4 +20,6 @@ the printer, otherwise, in
 "picopt" (software print) mode,
 printing is sent to the TS-Pico.
 
+LPRINT is the same as PRINT #2;
+
 See also: PRINT, picopt, ts2040, streams

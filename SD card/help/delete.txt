@@ -52,4 +52,6 @@ DELETE keyword appear, then hold
 down shift+0 to delete it and
 keep going.
 
-See also: edit
+For deleting files, see ERASE.
+
+See also: edit, ERASE

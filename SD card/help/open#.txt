@@ -3,18 +3,26 @@ BASIC Command              OPEN#
 OPEN# s,"c"
 
 Open channel "c" as stream
-number s.
+number s for I/O.
 
-TS-Pico (ROM 2.3) adds two:
+TS-Pico (ROM 2.4) adds a file
+channel "f:", directory channel
+"d:", a query channel "x:", and 
+(for the v3 card) a voice "v:"
+channel:
   OPEN #s,"f:name"[,"m"[,n]]
 A file on the SD card. The mode
 m is r (read, the default), w
 (write), a (append) or u (read
-and write), with b for binary:
+and write). The default is text
+mode, or you can add a "b" to
+mode for binary format:
   OPEN #5,"f:log.txt","a"
+Adding n makes a file of n-byte
+records:
   OPEN #6,"f:recs.dat","u",32
-n makes a file of n-byte
-records; TAB n goes to record
+When reading or writing the
+stream, TAB n moves to record
 n (or byte n without records).
   OPEN #7,"d:*.tap"
 A folder listing, one name a
@@ -23,5 +31,4 @@ line, read with INPUT #.
 RESTORE #s goes back to the
 start of an "f:" file.
 
-See also: CLOSE#, RESTORE,
-streams, cat
+See also: CLOSE#, RESTORE, cat  streams

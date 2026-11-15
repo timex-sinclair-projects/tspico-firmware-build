@@ -1,6 +1,6 @@
 TS-Pico Command            MODEM
 --------------------------------
-SAVE "tpi:modem"[ mode]
+SAVE "tpi:modem[ mode]"
 
 The v3 card's TS2050 modem, the
 8251 at ports 115/119, through

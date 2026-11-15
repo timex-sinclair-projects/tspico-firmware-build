@@ -24,4 +24,4 @@ CAT shows the label in place of
 changed on a computer shows when
 the card is back in the TS-Pico.
 
-See also: format, cat
+See also: FORMAT, CAT

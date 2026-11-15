@@ -1,0 +1,13 @@
+TS-Pico Command          OPPRINT
+--------------------------------
+SAVE "tpi:opprint"
+
+Close the current virtual print
+file and start the next one now.
+
+If you don't close the print
+file before removing th SD card,
+it may lack the last item
+printed.
+
+See also: picopt, clprint

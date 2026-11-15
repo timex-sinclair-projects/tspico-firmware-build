@@ -1,0 +1,38 @@
+TS-Pico Command             HELP
+--------------------------------
+  SAVE "tpi:help"
+
+Display condensed help for TS-
+Pico commands.
+
+  SAVE "tpi:help ?"
+
+List all the extended help topic
+*.txt files available on the SD
+card in /help.
+
+  SAVE "tpi:help topic"
+  
+Display named the help topic
+file on the SD card. You can
+create your own help topics as
+.txt files in the /help folder.
+It's best to format them to 32
+columns folling the examples.
+
+Some help file notations:
+- Parts in [ ] are optional
+- Parameter choices separated by
+  slashes: CODE 1/2,0
+- The last line is often a "See
+  Also:" line listing related
+  topics, separated by commas.
+- fname: a valid filename to 
+  save to the SD card.
+- fspec: an fname with * or ?
+  wildcard characters to match
+  multiple files or files with 
+  unusual characters.
+
+
+See also: SAVE

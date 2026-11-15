@@ -22,5 +22,4 @@ record is finished first.
 A stream that isn't an OPEN #
 file is Report O.
 
-See also: READ, DATA, CLEAR,
-sysvars, open#
+See also: READ, DATA, CLEAR,    sysvars, streams, open#

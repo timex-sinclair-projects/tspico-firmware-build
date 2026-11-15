@@ -14,4 +14,12 @@ register, but the whole 16-bit
 BC value is put on the address
 bus in the OUT operation.
 
-See also: IN, ports
+Useful OUT commands:
+- OUT 244,3: Switch to Spectrum
+  ROM, see: zx48
+- OUT 244,0: Switch back to 2068
+  ROM, see: zx48
+- OUT 255,0: Normal video mode
+- OUT 255,2: Hi-color video mode
+
+See also: IN, ports, zx48

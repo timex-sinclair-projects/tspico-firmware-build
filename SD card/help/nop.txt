@@ -3,5 +3,6 @@ TS-Pico Command              NOP
 SAVE "tpi:nop"
 
 Does nothing, but can be used to
-wait for a busy pico to be ready
-or reset after a failed command.
+check if the pico responding, or
+to wait for a busy pico to be
+ready.

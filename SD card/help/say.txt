@@ -1,0 +1,19 @@
+TS-Pico Command              SAY
+--------------------------------
+SAVE "tpi:say <text>"
+SAVE "tpi:say [allo1 allo2 ...]"
+SAVE "tpi:say"
+
+*v3 board only*
+Speaks the text or allophones
+given. Give no text to stop
+speaking. The speech will
+continue in the background, and 
+any other say commands will have
+their speech wait in a queue.
+
+SAVE "tpi:say HELLO, THERE"
+SAVE "tpi:say [HH1 EH LL OW]"
+SAVE "tpi:say"	Stop speaking
+
+See also: 

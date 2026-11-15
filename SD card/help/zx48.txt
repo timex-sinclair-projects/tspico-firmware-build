@@ -30,7 +30,7 @@ See ZX_TAPE_COMPAT in config.ini
   SAVE "tpi:zx48"CODE 1,*
 Don't display the help message.
 
-To leave Spectrum mode from the
-2068, OUT 244,0 then OUT 14,14.
+To leave Spectrum mode, first
+use OUT 244,0 then OUT 14,14.
 
 See also: OUT, config

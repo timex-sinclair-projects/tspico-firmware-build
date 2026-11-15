@@ -1,28 +1,36 @@
 BASIC Command               MOVE
 --------------------------------
+Move current directory to:
+
 MOVE TO "dir"
 Changes directory. ".." goes up,
 "/" is the SD card's top dir.
+
 MOVE TO "-" goes back to the dir
 you were in before.
-MOVE TO "" lists the dirs to
-pick from.
 
-MOVE "old.tap" TO "new.tap"
+MOVE TO "" lists the dirs to
+pick from as with SAVE "tpi:cd".
+
+MOVE TO is the same as
+SAVE "tpi:cd".
+
+Rename or move a file:
+
+MOVE "old" TO "new"
 Renames a file or directory. If
-the new name is a directory, the
-old one is moved into it. An
-existing name is never
-overwritten (Report F). The
-mounted file and the current dir
-(or one above it) can't be
-renamed (Report Q).
+the new name is an existing
+directory, then old is moved
+into it whether old is a file or
+directory. An existing name is
+never overwritten (Report F).
+The mounted file and the current
+directory (including any above
+it) can't be renamed (Report Q).
 
 Names can be string expressions.
-To copy a file, use COPY.
+To copy a file, use COPY. Same
+as SAVE "tpi:ren old new".
 
-Same as SAVE "tpi:cd name" and
-SAVE "tpi:ren old new".
-
-See also: cat, erase, cd, ren,
+See also: CAT, ERASE, cd, ren,
 copy

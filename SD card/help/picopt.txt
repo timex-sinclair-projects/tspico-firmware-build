@@ -2,14 +2,29 @@ TS-Pico Command           PICOPT
 --------------------------------
 SAVE "tpi:picopt"
 
-Send LPRINT, LLIST and COPY to
-the TS-Pico's virtual printer
-instead of a real printer. Text
-goes to /VLPRINT/PRNnnnn.TXT on
-the SD card, COPY pictures to
-/VSCREEN/SCRnnnn.BMP.
-Printer commands: opprint,
+Send LPRINT, LLIST and COPY
+output to the TS-Pico's virtual
+printer instead of a real
+printer. Text goes to files
+/VLPRINT/PRNnnnn.TXT on
+the SD card.
+
+Everything PRINTed goes into
+the same text file until you
+close it with SAVE "tpi:clprint"
+or close it and immediately
+start a new one with
+SAVE "tpi:opprint". If you don't
+close the print file before
+removing th SD card, it may lack
+the last item printed.
+
+COPY sends the screen to bitmap
+files: /VSCREEN/SCRnnnn.BMP, one
+per COPY command.
+
+TPI printer commands: opprint,
 clprint, autolf, noautolf,
 autopg, noautopg, prnsz, bmp.
 
-See also: ts2040, lprint, copy
+See also: ts2040, lprint, copy, opprint, clprint, autolf, noautolf, autopg, noautopg, prnsz, bmp

@@ -1,0 +1,18 @@
+TS-Pico Command              BMP
+--------------------------------
+SAVE "tpi:bmp"[CODE w,h]
+SAVE "tpi:bmp w h"
+
+Set the virtual printer bitmap
+pixel size wo width w and height
+h. The default is w=512, h=384
+
+w can be: 256/512/1024/2048/4096
+h can be: 192/384/768/1536
+
+SAVE "tpi:bmp" alone shows the
+current size. The values can be
+given in the command string or
+as CODE arguments.
+
+See also: picopt, copy

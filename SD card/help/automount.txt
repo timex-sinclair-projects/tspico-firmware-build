@@ -1,6 +1,6 @@
 TS-Pico Command        AUTOMOUNT
 --------------------------------
-SAVE "tpi:automount"[ name]
+SAVE "tpi:automount[ name]"
 
 The TAP mounted at switch-on, so
 the first LOAD "" loads it
@@ -14,7 +14,8 @@ name: a TAP in the current
 off:  back to the built-in menu
 No name: shows the file
 Saved in config.ini (AUTOMOUNT).
-If the file has gone, LOAD ""
-gives the built-in menu.
+If the file has cannot be found,
+LOAD "" gives the built-in menu
+from the internal nofile.tap.
 
 See also: config, close

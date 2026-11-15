@@ -4,13 +4,16 @@ INPUT [prItem<sep>]
       [LINE]var[<sep>...]
 
 The syntax is like PRINT, but
-output appears in the lower part
-of the screen, stream #0. Unlike
-PRINT, any variables cause the
-printing to stop and the user to
-be prompted to input a value
-unless it is enclosed in
+the output and prompt appear in
+the lower part of the screen.
+Unlike PRINT, any variables
+cause the printing to stop and
+the user to be prompted to input
+a value unless it is enclosed in
 parentheses.
+
+  INPUT "Old name is ";(n$);", 
+  enter new name:";n$
 
 A numeric variable input shows
 an L mode cursor. You can enter
@@ -30,6 +33,13 @@ variable will not display quotes
 forcing you to enter a string
 literal only. You can't enter
 STOP here, so to break out, you
-can press shift+6.
+can press shift+6 (down).
 
-See also: PRINT, expressions
+With a stream specifier, you can
+read input from a stream, but
+you should omit any prompt as it
+will not appear.
+
+  INPUT #4;a$
+
+See also: PRINT, expressions, streams

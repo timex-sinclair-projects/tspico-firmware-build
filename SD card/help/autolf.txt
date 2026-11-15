@@ -1,0 +1,17 @@
+TS-Pico Command           AUTOLF
+--------------------------------
+SAVE "tpi:autolf"
+SAVE "tpi:noautolf"
+
+Set the virtual printer line
+ending style:
+
+  autolf   - Windows CR+LF style
+  noautolf - Linux/Mac LF style
+
+The default at power-on is
+noautolf. This setting lasts
+until the TS-Pico is switched
+off.
+
+See also: picopt

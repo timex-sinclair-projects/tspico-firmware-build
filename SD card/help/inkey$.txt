@@ -1,6 +1,6 @@
 BASIC Function            INKEY$
 --------------------------------
-INKEY$
+INKEY$ [#s]
 
 Reads the keyboard and returns a
 string with the key pressed as
@@ -11,4 +11,11 @@ pressed.
   10 LET k$=INKEY$
   20 IF k$="" THEN GO TO 10
 
-See also: CHR$, CODE, INPUT
+The optional stream number
+causes a character to be read
+from stream #s instead of the
+keyboard. The keyboard is stream
+#1, and you can't use #2 since 
+that is the screen.
+
+See also: CHR$, CODE, INPUT,    streams

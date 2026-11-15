@@ -5,4 +5,4 @@ TS-Pico Command             IDIR
 Displays an interactive list of
 the files to pick one to mount.
 
-See also: dir, cd, load, tapdir
+See also: dir, cd, LOAD, tapdir

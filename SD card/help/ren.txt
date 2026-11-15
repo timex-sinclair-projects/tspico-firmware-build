@@ -3,12 +3,14 @@ TS-Pico Command              REN
 SAVE "tpi:ren old new"
 
 Renames a file or directory. If
-new is a directory, old is moved
-into it. An existing name is not
-overwritten (Report F), and the
-mounted file and the current
-directory can't be renamed
-(Report Q).
+the new name is an existing
+directory, then old is moved
+into it whether old is a file or
+directory. An existing name is
+never overwritten (Report F).
+The mounted file and the current
+directory (including any above
+it) can't be renamed (Report Q).
 
 Same as MOVE "old" TO "new".
 To copy a file, use COPY.
