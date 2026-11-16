@@ -17,6 +17,7 @@ PIO_MQ = False      # MQ is tsbus.MQ(): tspico_io must not touch PIO0 SM0
 SLOTS = False       # the Pico writes the slots itself (write_slot), not the Z80
 SD_SLOTS = True     # tpi:boot and tpi:dock take MEM 3: a slot file on the SD card
 HAS_MODEM = True    # the TS2050's 8251 at 73h/77h, bridged to the ESP32-C3 (modem_start)
+HAS_JOYSTICK = True # the DE-9 socket, answered as a Kempston interface at 1Fh (joystick)
 HAS_SPEECH = True   # the SP0256-AL2 on core 1, out of the audio jack (speech_start)
 HAS_CORE1 = False   # core 1 runs tsbus; background() runs on core 0
 
@@ -45,15 +46,24 @@ _SD_SCK, _SD_MOSI, _SD_MISO = 38, 39, 32
 _IOX_ADDR = 0x20
 _IOX_IN1 = 1            # input port 1: the joystick, nBUSAK_L, SD_CD
 _IOX_OUT0 = 2
-_IOX_OUT0_SAFE = 0xE0   # no bus request, no NMI, OLED in reset, ESP32 off, LED off
+_IOX_OUT0_SAFE = 0xA0   # no bus request, no NMI, OLED in reset, ESP32 off, LED off, SD socket off
 _X_WIFI_EN = 0x08       # bit 3: the ESP32-C3's EN, high = powered and running
 _X_WIFI_DL = 0x10       # bit 4: high pulls the ESP32's IO9 low, so it boots into download mode
 _X_NLED = 0x20          # bit 5, active low
+_X_SD_PWR = 0x40        # bit 6: SD_PWR_EN, high = the socket powered (proto2's U32; unconnected on proto1)
 _X_SD_CD = 0x80         # port 1 bit 7: low = a card in (the TF-01A's switch closes to GND; R38 pulls it up)
+_IOX_INT = 35           # nIOX_INT: the expander pulls it low when an input changes (R8 pulls it up)
 
 # A card the switch has only just seen is left alone this long before the
 # first SPI clock, so it is seated and powered before its lines are driven.
 SD_SETTLE_MS = 250
+# The socket's power switch (#262): after it turns on, this long before the
+# first clock (VDD is up in about 120 us; the SD spec asks for 1 ms). After
+# it turns off, this long before it turns on again: U32 discharges VDD through
+# about 150 ohm into 10 uF, a time constant of 1.5 ms.
+SD_ON_MS = 2
+SD_OFF_MS = 10
+_sd_off_at = None       # ticks_ms when the socket was last switched off; None: not since boot
 
 _i2c = None             # I2C(0), shared by the LED and the card-detect read
 _cd_since = None        # ticks_ms when the switch was first seen closed; None: no card
@@ -221,6 +231,220 @@ def modem_download(on):
     the firmware. Takes effect at the next modem_power(True)."""
     return _port0(_X_WIFI_DL, _X_WIFI_DL if on else 0)
 
+# WiFi downloads (tpi:wifi, tpi:net; docs/v3-wifi-archive-proposal.md):
+# core 0 borrows UART0 from tsbus for one command and talks to Zimodem itself.
+# AT&G"url" fetches a file; stream mode (ATS45=3) sends "[ 0 size ]" and the
+# bytes, with no checksum and no flow control, so they are collected into
+# RAM and written to the SD card after (writing while receiving lost bytes).
+# Proved by src/test/wifi_get_harness.py on board 1 (2026-11-08): under the
+# firmware's own heap, cold and warm, byte-exact.
+ESP_BOOT_MS = 8000       # EN high to Zimodem's READY. (2.8-3 s with a WiFi join)
+ESP_JOIN_MS = 10000      # READY. to an address (ATI2 not 0.0.0.0)
+ESP_FIRST_MS = 15000     # AT&G to the "[ 0 size ]" header (3-5 s seen)
+ESP_IDLE_MS = 4000       # a stall in the data that ends a fetch
+
+
+class WifiError(Exception):
+    """A fetch or join that failed; str() is the message for the 2068."""
+
+
+def _esp_wait(u, want, ms, buf):
+    """Read UART0 into buf until `want` or ERROR is in it, or ms pass; the
+    bytes read. Only the last len(buf) are kept: the ESP32's ROM prints
+    ~280 bytes before Zimodem's READY."""
+    n, t0 = 0, time.ticks_ms()
+    mv = memoryview(buf)
+    half = len(buf) // 2
+    while time.ticks_diff(time.ticks_ms(), t0) < ms:
+        if n == len(buf):
+            mv[:half] = mv[half:]
+            n = half
+        k = u.readinto(mv[n:])
+        if k:
+            n += k
+            got = bytes(mv[:n])
+            if want in got or b"ERROR" in got:
+                return got
+        else:
+            time.sleep_ms(5)
+    return bytes(mv[:n])
+
+
+def _esp_cmd(u, line, ms=1500):
+    """Send one AT line; the reply, through OK or ERROR."""
+    u.read()
+    u.write(line + b"\r")
+    return _esp_wait(u, b"OK\r\n", ms, bytearray(128))
+
+
+def _esp_address(u, join_ms):
+    """Zimodem's address (ATI2) once it is on WiFi, or None after join_ms."""
+    t0 = time.ticks_ms()
+    while True:
+        r = _esp_cmd(u, b"ATI2")
+        for ln in r.split(b"\r\n"):
+            if ln.count(b".") == 3 and ln != b"0.0.0.0":
+                return ln.decode()
+        if time.ticks_diff(time.ticks_ms(), t0) >= join_ms:
+            return None
+        time.sleep_ms(500)
+
+
+def _esp_open():
+    """UART0 from tsbus, the ESP32 on and answering; the UART. A modem call
+    in progress (2050 mode off-hook) is refused, since UART0 carries it."""
+    global _m_up
+    if _m_mode == "2050" and tsbus.stats()["m_state"]:
+        raise WifiError("Modem in use")
+    from machine import UART
+    tsbus.modem(False)                    # core 1 leaves UART0 and its DMA alone
+    u = UART(0, 115200, tx=Pin(44), rx=Pin(45), timeout=0, rxbuf=4096)
+    try:
+        if not _m_powered:
+            esp_boot(False)
+            if b"READY." not in _esp_wait(u, b"READY.", ESP_BOOT_MS, bytearray(256)):
+                raise WifiError("No answer from the ESP32")
+            tsbus.modem_line(True)        # up: the modem needn't wait MODEM_BOOT_MS
+            _m_up = True
+        _esp_cmd(u, b"ATE0")
+    except BaseException:
+        _esp_close(u)
+        raise
+    return u
+
+
+def _esp_close(u):
+    """Zimodem back as a program expects it (echo on, no stream mode), UART0
+    back to tsbus, and the modem's idle clock restarted."""
+    global _m_last
+    time.sleep_ms(200)                    # the end of a cut-short stream
+    _esp_cmd(u, b"ATS45=0")
+    _esp_cmd(u, b"ATE1")
+    u.deinit()
+    _m_last = time.ticks_ms()
+    modem_start(_m_mode)                  # "off": the ESP32 off again
+
+
+def wifi_get(url, buf):
+    """Fetch url (https://...) into buf with Zimodem's AT&G; its length.
+    WifiError if the ESP32 isn't on WiFi, the fetch fails, or the file is
+    bigger than buf (nothing is fetched past it)."""
+    u = _esp_open()
+    try:
+        if _esp_address(u, ESP_JOIN_MS) is None:
+            raise WifiError("Not on WiFi")
+        if b"OK" not in _esp_cmd(u, b"ATS45=3"):
+            raise WifiError("No answer from the ESP32")
+        small = bytearray(256)
+        for tries in range(3):            # just after a cold boot the first
+            u.read()                      # AT&G once answered ERROR (2026-11-08)
+            u.write(b'AT&G"' + url.encode() + b'"\r')
+            h = _esp_wait(u, b"]\r\n", ESP_FIRST_MS, small)
+            i = h.find(b"]\r\n")
+            if i >= 0 or b"ERROR" not in h:
+                break
+            time.sleep_ms(1000)
+        if i < 0:
+            raise WifiError("Download failed" if b"ERROR" in h else "No reply from the ESP32")
+        size = int(h[h.index(b"[") + 1:i].split()[1])
+        if size > len(buf):
+            raise WifiError("Too big: %d bytes" % size)
+        mv = memoryview(buf)
+        n = len(h) - i - 3
+        mv[:n] = h[i + 3:]
+        last = time.ticks_ms()
+        while n < size and time.ticks_diff(time.ticks_ms(), last) < ESP_IDLE_MS:
+            k = u.readinto(mv[n:size])
+            if k:
+                n += k
+                last = time.ticks_ms()
+        if n < size:
+            raise WifiError("Download cut short")
+        return size
+    finally:
+        _esp_close(u)
+
+
+def wifi_status():
+    """Zimodem's address, or None if it isn't on WiFi (a short wait)."""
+    u = _esp_open()
+    try:
+        return _esp_address(u, 2000)
+    finally:
+        _esp_close(u)
+
+
+def wifi_join(ssid, password):
+    """Join ssid and save it as Zimodem's default (ATW, AT&W); the address.
+    WifiError if it doesn't join."""
+    if '"' in ssid or '"' in password:
+        raise WifiError('No " in a name or password')
+    u = _esp_open()
+    try:
+        r = _esp_cmd(u, b'ATW"' + ("%s,%s" % (ssid, password)).encode() + b'"', 12000)
+        if b"OK" not in r:                # 12 s + 3 s + a cold boot's 3 s: inside
+            raise WifiError("Can't join " + ssid)   # the 2068's ~19.9 s wait
+        ip = _esp_address(u, 3000)
+        if ip is None:
+            raise WifiError("Can't join " + ssid)
+        _esp_cmd(u, b"AT&W")
+        return ip
+    finally:
+        _esp_close(u)
+
+# The joystick (phase 6): the DE-9's six switches are port 1's bits 0-5 (up,
+# down, left, right, fire 1, fire 2), pulled up, low while pressed. The
+# expander pulls nIOX_INT low when any input changes, so the port is read
+# only then, in a soft IRQ handler: a scheduled callback, which runs between
+# bytecodes, so never inside another I2C transfer (see _port0). tsbus answers
+# 1Fh from the byte it is given; the 2068 never waits for I2C. Reading port
+# 1 releases nIOX_INT; a read that failed leaves it low, which
+# joystick_service sees from the idle loop.
+_joy_pin = None          # Pin(_IOX_INT) while the joystick is answered
+_joy_buf = bytearray(1)
+
+
+def kempston_byte(p1):
+    """Port 1 as the Kempston interface's byte, 000FUDLR, 1 = pressed: up
+    bit 3, down 2, left 1, right 0, fire bit 4. Fire 2 is a second fire
+    button: bit 5 is left 0, since games that look at the whole byte take
+    bits 5-7 set for no interface at all."""
+    j = ~p1 & 0x3F
+    return (((j >> 3) & 1) | ((j >> 1) & 2) | ((j << 1) & 4) | ((j << 3) & 8)
+            | (0x10 if j & 0x30 else 0))
+
+
+def _joy_read(_pin=None):
+    try:
+        _iox().readfrom_mem_into(_IOX_ADDR, _IOX_IN1, _joy_buf)
+    except OSError:
+        return                  # nIOX_INT stays low; joystick_service tries again
+    tsbus.kempston(kempston_byte(_joy_buf[0]))
+
+
+def joystick(on):
+    """Answer 1Fh as a Kempston joystick from the DE-9 (on), or leave 1Fh
+    unanswered (off). On reads the switches straight away: a change before
+    now left nIOX_INT low, with no edge to come."""
+    global _joy_pin
+    if on:
+        _joy_pin = Pin(_IOX_INT, Pin.IN)
+        _joy_pin.irq(_joy_read, Pin.IRQ_FALLING)
+        _joy_read()
+    else:
+        if _joy_pin:
+            _joy_pin.irq(None)
+            _joy_pin = None
+        tsbus.kempston(None)
+
+
+def joystick_service():
+    """From the idle loop: a read the IRQ handler couldn't finish (the
+    expander didn't answer) leaves nIOX_INT low, with no edge to come; read
+    again. So does a change of the SD card switch or nBUSAK_L, also port 1,
+    when nothing else has read it: harmless, the same byte is set again."""
+    if _joy_pin is not None and not _joy_pin.value():
+        _joy_read()
 # Speech (docs/v3-speech-proposal.md): the SP0256-AL2 emulated on core 1
 # (tsbus, sp0256.c), out of the audio jack. Text becomes allophone numbers
 # on core 0 (TS/speech.py); tsbus queues them, and the chip speaks them while
@@ -266,13 +490,33 @@ def early_init():
 _served = None      # ((boot mem, slot), (dock mem, slot)) the 2068 is served now
 _boot_stale = False  # write_slot rewrote the boot slot: tpi:boot loads it again
 
-# The one buffer every slot passes through: a ROM, each half of the dock, a
-# RAM dock being saved. Allocated here, at import, while the heap is clean:
-# once the firmware runs, the v3 heap (about 190K) has no 64K block, and a
-# 32K one isn't certain either (hardware, 2026-10-10: tpi:dock failed with
-# MemoryError building a 64K dock image).
-_buf = bytearray(SLOT_SIZE)
+# The one block buffer: every slot passes through its first 32K (a ROM, each
+# half of the dock, a RAM dock being saved), and LOAD and SAVE hold a data
+# block in it (tspico_io.BLOCK, set from BLOCK_BUF by tspico.py). Allocated
+# here, at import, while the heap is clean: once the firmware runs, the v3
+# heap has no 64K block, a 32K one isn't certain either (hardware,
+# 2026-10-10: tpi:dock failed with MemoryError building a 64K dock image),
+# and a 35000-byte LOAD or SAVE failed for want of one after a 300-file
+# folder had been listed (2026-11-06, #384: LOAD streamed from the file
+# instead and ran dry, Report R; SAVE gave Report 6). 48K plus a little holds
+# any block of the 2068's RAM: SAVE's flag, session bytes and parity (4)
+# and LOAD's flag-less block (content + parity). The users never overlap:
+# each takes it and is done with it inside one command.
+BLOCK_SIZE = 49152 + 8
+BLOCK_BUF = bytearray(BLOCK_SIZE)
+_buf = memoryview(BLOCK_BUF)[:SLOT_SIZE]
 _zeros = bytes(1024)                # for an empty half, without another 32K
+
+# A card with U22 fitted (the 8 MB PSRAM, #410) has a GC heap of about 1 MB;
+# one without has 172K. On the big heap a buffer over BLOCK_SIZE is
+# made when it is wanted (64K in ~5 ms) instead of being refused: tpi:net's
+# tapes over 48K. Read once here, before the firmware allocates much. CPython
+# (the host tests) has no such heap: False.
+try:
+    import gc as _gc
+    PSRAM_HEAP = _gc.mem_free() + _gc.mem_alloc() > 512 * 1024
+except AttributeError:
+    PSRAM_HEAP = False
 
 
 def _keys(rom_sm, bank_sm):
@@ -546,15 +790,20 @@ def card_present():
 
 def sd_card_ready():
     """ACTIVATE_SD asks this before it touches an SD line. False: the switch
-    says the socket is empty, so no SPI at all. True: a card is in, and has
-    been for SD_SETTLE_MS (it waits out the rest when the card is new), or
-    the switch can't be read and the mount will find out."""
+    says the socket is empty, so no SPI at all, and a socket left powered
+    (the card pulled while it was mounted) is released and switched off.
+    True: a card is in, and has been for SD_SETTLE_MS (it waits out the rest
+    when the card is new), or the switch can't be read and the mount will
+    find out; either way the socket is then powered (sd_power)."""
     global _cd_since
     p = card_present()
     if p is None:
+        sd_power(True)
         return True
     if not p:
         _cd_since = None
+        if _out0 & _X_SD_PWR:               # lines are driven only while it's on
+            sd_power(False)
         return False
     now = time.ticks_ms()
     if _cd_since is None:
@@ -562,7 +811,51 @@ def sd_card_ready():
     wait = SD_SETTLE_MS - time.ticks_diff(now, _cd_since)
     if wait > 0:
         time.sleep_ms(wait)
+    sd_power(True)
     return True
+
+
+def sd_power(on):
+    """The SD socket's power switch, SD_PWR_EN (port 0 bit 6, #262). On: if
+    it was off, it waits out the rest of SD_OFF_MS since it went off, turns
+    on, and waits SD_ON_MS for VDD before returning. Off: the four SD lines
+    are released first (_sd_lines_free), then the power goes, so no driven
+    line ever meets an unpowered card (what killed the two cards of
+    tspico-hardware #21). Nothing happens on proto1 (bit 6 isn't connected;
+    its socket is always powered)."""
+    global _sd_off_at
+    if on:
+        if _out0 & _X_SD_PWR:
+            return
+        if _sd_off_at is not None:
+            wait = SD_OFF_MS - time.ticks_diff(time.ticks_ms(), _sd_off_at)
+            if wait > 0:
+                time.sleep_ms(wait)
+        _port0(_X_SD_PWR, _X_SD_PWR)
+        time.sleep_ms(SD_ON_MS)
+    else:
+        _sd_lines_free()
+        if _out0 & _X_SD_PWR:
+            _port0(_X_SD_PWR, 0)
+            _sd_off_at = time.ticks_ms()
+
+
+def _sd_power_off_at_import():
+    """A soft reset starts _out0 again at _IOX_OUT0_SAFE (socket off) but
+    leaves the expander as it was: with the socket powered if a card was
+    mounted. The LED's next write would switch it off under whatever the
+    SPI pins were left driving. So, once at import: if the expander says the
+    socket is on, release the lines, then switch it off."""
+    global _sd_off_at
+    try:
+        out = _iox().readfrom_mem(_IOX_ADDR, _IOX_OUT0, 1)[0]
+        if out & _X_SD_PWR:
+            _sd_lines_free()
+            _out0_buf[0] = out & ~_X_SD_PWR
+            _iox().writeto_mem(_IOX_ADDR, _IOX_OUT0, _out0_buf)
+            _sd_off_at = time.ticks_ms()
+    except OSError:
+        pass                    # no expander answering: nothing to switch
 
 
 def sd_take_bus():
@@ -581,15 +874,26 @@ def sd_spi():
 
 
 def sd_release_bus():
-    """After the card is unmounted: nothing drives the socket. CS, SCK,
-    MOSI and MISO go back to plain inputs, no pulls (RP2350 erratum E9: a
-    pull-down can latch the pad), as board_init.c leaves them at power-on.
-    R34 holds CS high, so a card that is in stays deselected, and R35 holds
-    MISO; SCK and MOSI float behind their 33R. A card going in then
-    meets no driven line, which could power it through its I/O pins before
-    its VDD contact makes."""
+    """After the card is unmounted: the lines released, then the socket
+    switched off (sd_power(False)), so every command powers the card for its
+    own mount. ACTIVATE_SD powers it again (sd_card_ready)."""
+    sd_power(False)
+
+
+def _sd_lines_free():
+    """Nothing drives the socket. CS, SCK, MOSI and MISO go back to plain
+    inputs, no pulls (RP2350 erratum E9: a pull-down can latch the pad), as
+    board_init.c leaves them at power-on. R34 holds CS high, so a card that
+    is in stays deselected, and R35 holds MISO; SCK and MOSI float behind
+    their 33R. On proto2 R34 and R35 are on the switched rail, so with the
+    socket off they hold nothing up either. A card going in then meets no
+    driven line, which could power it through its I/O pins before its VDD
+    contact makes."""
     for p in (_SD_CS, _SD_SCK, _SD_MOSI, _SD_MISO):
         Pin(p, Pin.IN, pull=None)
+
+
+_sd_power_off_at_import()
 
 
 class ExpanderLED:

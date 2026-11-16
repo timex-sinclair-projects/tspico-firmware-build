@@ -22,6 +22,9 @@ are not the TS-Pico's protocol, and the ROM never touches them. So are 11h
 true: an allophone for the speech chip, and its busy bit (bit 7: FFh busy,
 7Fh ready), as David's Pico Speech Synth 2068 board
 ([../firmware/tsbus.md](../firmware/tsbus.md#speech)).
+1Fh (31) on IN is the Kempston joystick from the card's DE-9 socket (unless
+`config.ini`'s `KEMPSTON` is false): 000FUDLR, 1 = pressed, the high
+address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep1)).
 
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which
@@ -30,7 +33,7 @@ the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
 Data goes through two accessors, 2298h (`IN A,(0Eh)`) and 229Dh
 (`OUT (0Eh),A`), and status through READ_STATUS (0655h, the `IN A,(0Fh)` at
 065Bh); the SYNC/BREAK layer adds the SYNC and BREAK writes and its own status reads at
-2304h–23C0h, and the disk module one IDLE poll at 3662h. Every site is listed in
+2304h–23C0h, and the disk module one IDLE poll at 3654h. Every site is listed in
 [rom/overview.md](../rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 ## The status byte
@@ -89,7 +92,7 @@ Ten bytes open every transaction. Byte 0 picks the kind
 |---|---|---|
 | 0 | `'B'` | flag: 00h header, FFh data |
 | 1 | TADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE) | TADDR |
-| 2 | 23h, the ROM's version (the firmware's `rom_id`; FFh before ROM 2.3) | bank |
+| 2 | 24h, the ROM's version (the firmware's `rom_id`; 23h from ROM 2.3, FFh before it) | bank |
 | 3–4 | PMR1: the first `CODE` number, little-endian | session id |
 | 5–6 | PMR2: the second `CODE` number | address (IX) |
 | 7–8 | length of the command text | block length (DE) |
@@ -180,7 +183,7 @@ back as typed after a ready wait (`SEND_KEY`, 1C40h; #227).
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (low nibble); AF kept |
 | 1842h | S_MODE | TPMODE := A AND 0Fh; AF kept |
-| 1844h | G_VERS | BC = the version: 0023h on ROM 2.3 (0022h on 2.2, 0015h on 1.1) |
+| 1844h | G_VERS | BC = the version: 0024h on ROM 2.4 (0023h on 2.3, 0022h on 2.2, 0015h on 1.1) |
 | 1846h | TX_A | `OUT (0Eh),A`; no wait |
 | 1848h | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | 184Ah | C_END | wait READY, read the answer, run the response functions; NC = status 1 |
@@ -220,6 +223,7 @@ ROM: [exrom-driver.md](../rom/exrom-driver.md) (1879h, 196Dh).
 | `tpi:chwr <hex>` | stream | 0 | a bare status |
 | `tpi:chrd` | stream | bytes wanted (1–255; 0 = 255) | the data phase: status (1 data, 7 end of file), n, n bytes, XOR |
 | `tpi:chclose` | stream | 0 | a bare status |
+| `tpi:chcat [x]` | stream | 1 when a string came (`""` is the mounted TAP), else 0 | a bare status: `CAT #n` wrote the listing into the file (#404) |
 
 Modes `r`, `w`, `a`, `u`, each with an optional `b`. Byte 17h in a write is
 always the TAB escape `17h, n lo, n hi`. Firmware:

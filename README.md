@@ -224,7 +224,7 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 
 - **MicroPython:** v1.29.0 (v1.20.0 until 2026-10; RP2350 support needs v1.24+)
 - **Target:** Raspberry Pi Pico (`RPI_PICO` board on rp2 port)
-- **Toolchain:** `gcc-arm-none-eabi` on Ubuntu 22.04 runner
+- **Toolchain:** Arm GNU toolchain 10.3-2021.10 (`arm-none-eabi` GCC), cached, on an Ubuntu 24.04 runner
 - **Build time:** ~2 minutes per run
 - **Custom manifest:** `src/manifest.py` (overrides default rp2
   manifest to add the `TS/` package while keeping `rp2.py` etc.)

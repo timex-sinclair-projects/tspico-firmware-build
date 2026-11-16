@@ -29,10 +29,10 @@ jobs:
   # as its own artifact: not published while the card is unreleased; and the
   # print-on-demand files (PRINT=1) for KDP and Lulu.
   manual-pdf:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # The two boards' manuals (tools/manual-variants.py). Ran in
       # build.yml's firmware job until the manual got its own workflow.
@@ -50,7 +50,7 @@ jobs:
       # build and attach their own PDFs (release.yml), and the KDP/Lulu
       # files are downloaded by hand soon after the build that made them.
       - name: Upload the manual PDFs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-manual-pdf
           path: ${{ runner.temp }}/manual-pdf/*.pdf
@@ -63,7 +63,7 @@ jobs:
         run: PRINT=1 tools/manual-pdf/make.sh "${{ runner.temp }}/manual-print"
 
       - name: Upload the print-on-demand files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-manual-print
           path: ${{ runner.temp }}/manual-print/*.pdf
@@ -75,7 +75,7 @@ jobs:
           python3 tools/manual-variants.py v3 docs/manual/user-manual.md "${{ runner.temp }}/manual-v3/user-manual-v3.md"
 
       - name: Upload the v3 card's manual
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-manual-v3
           path: ${{ runner.temp }}/manual-v3/

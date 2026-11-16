@@ -53,8 +53,9 @@ through. The hook moves each entry two bytes forward, so it starts at class `$05
 ("the routine checks its own syntax"). That takes 4 bytes at `$1946–$1949` plus 3 at `$25D6`.
 It has been verified in ZEsarUX.
 
-**So bare `CAT` works, and so does `CAT "*.tap"`, `CAT a$`, `CAT #3`, or any
-other form. None of them needs a trailing comma or an empty string.** The only
+**So bare `CAT` works, and so does `CAT "*.tap"`, `CAT a$`, or any other form
+the routine parses, `CAT #s` included ([below](#2-cat--catalog), #404).
+None of them needs a trailing comma or an empty string.** The only
 rule is that each form is parsed by our own routine in both passes:
 
 - **Syntax pass:** consume the arguments and accept the line.
@@ -119,7 +120,7 @@ as `CAT "<arg>"`**. There is one implementation, in the firmware.
 | `CAT "*.tap"`, `CAT "games/b*"` | `tpi:dir *.tap` | The matching entries. `*` matches any run, `?` one character, case-insensitive, last path component only |
 | `CAT "name.tap"` | `tpi:dir name.tap` | The blocks inside that TAP. It doesn't have to be mounted |
 | `CAT ""` | `tpi:tapdir` | The mounted TAP. It mirrors `LOAD ""`, which means "the tape" |
-| `CAT #s` … | — | **Not yet.** The ROM's print path always opens the main screen. Redirecting it needs its own ROM change |
+| `CAT #s`, `CAT #s;"x"` | `tpi:chcat [x]`, PMR1 = s | The same listing, as plain text, into the file open on stream s (#404). The Pico writes it: the ROM flushes the stream and sends the command, and gets back a bare status. `CAT #s;""` is the mounted TAP. Report O when s isn't an `OPEN #` stream, Q for one open to read or for `d:`, `v:`, `x:` |
 
 - **The argument is any string expression** (`CAT a$`, `CAT d$+"/*.tap"`), checked
   at line entry by HOME's class-`$0A` routine:
@@ -387,6 +388,50 @@ surface this spec recommends is:
   Pico builds the listing in memory when the stream is opened.
 
 Test program: `basic/SD/TAP/test/chtest4.bas`.
+
+**`v:` (the v3 card's speech, #375).** `OPEN #n,"v:"[,mode]` opens a
+write-only stream with no file: each line printed to it is spoken when its
+CR arrives (the ROM sends a `v:` stream's buffer at every CR), and an
+unfinished line at `CLOSE #`. It needs no card. Reading is Report Q, and so
+are a record length and anything after the colon; on a board without
+speech (v2) it is Report F. The ROM sends the spec whole, as for `d:`.
+
+**`x:` (commands, #404).** `OPEN #n,"x:"[,mode]` opens a stream with no file
+that a program asks the Pico questions through. Each line printed to it is a
+command, run when its CR arrives, and `INPUT #n` then reads the answer, one
+value a line, as plain text for a program rather than laid out for the
+screen:
+
+| Command | The answer |
+|---|---|
+| `path` | the current folder, as `tpi:path` shows it |
+| `dir` | the number of folders, the number of files, then one 32-character row per folder and per numbered file: the rows of `dirinfo.tap`'s `a$` |
+| `mount` | the mounted file, or an empty line when nothing is mounted |
+| `info` | the card's label, its free and total bytes, the firmware's version and the ROM's |
+
+- A `dir` row for a folder is its name in columns 1–32. A file's is its
+  `LOAD "tpi:n"` number in 1–3, its name in 5–22 and its size in 23–32, so
+  a program reads the fields with `TO` slices. Long names are shortened, as
+  in `dirinfo.tap`.
+- A command replaces the last answer, read or not. Reading past the end of
+  an answer is Report 8, which is why `dir` starts with its counts.
+- Commands are case-insensitive, with spaces around them ignored. Anything
+  else is Report Q, and so are a record length and anything after the
+  colon. `dir` with no card is Report J; the others work without one
+  (`info` then gives no label and no space).
+- `INPUT #n` with prompt items prints them to the stream, where they would
+  be taken as the start of a command: read an `x:` stream with no prompt.
+- The stream lives in the Pico's memory, as a `d:` listing does, and `dir`'s
+  rows are made as they are read, so a big folder costs no more than a
+  small one. Reading an `x:` or `d:` stream never mounts the card.
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"path": INPUT #4;p$
+30 PRINT #4;"dir": INPUT #4;d: INPUT #4;f
+40 FOR i=1 TO d+f: INPUT #4;a$: PRINT a$( TO 22): NEXT i
+50 CLOSE #4
+```
 
 The design choices:
 

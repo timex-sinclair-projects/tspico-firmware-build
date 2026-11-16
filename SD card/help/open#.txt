@@ -27,6 +27,10 @@ n (or byte n without records).
   OPEN #7,"d:*.tap"
 A folder listing, one name a
 line, read with INPUT #.
+  OPEN #8,"x:"
+Questions: PRINT #8;"path"
+(or "dir", "mount", "info"),
+then INPUT #8 the answer.
 
 RESTORE #s goes back to the
 start of an "f:" file.

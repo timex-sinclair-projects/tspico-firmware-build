@@ -5,7 +5,7 @@
 
 Reads every computer_media post from the site's WordPress REST API (the same
 site fetch.py read, taken from items.json) and writes descriptions.json in the
-work folder: {page URL: {summary, description}}. The summary is the post's
+work folder: {page URL: {id, summary, description}} (id: the post's ID, for a link to it). The summary is the post's
 excerpt; the description is its opening paragraph, before the first heading.
 Run it again to pick up edits on the site.
 """
@@ -34,7 +34,7 @@ def main():
     origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlparse(items[0]["page"]))
     out, n = {}, 1
     while True:
-        url = "%s/wp-json/wp/v2/computer_media?per_page=100&page=%d&_fields=link,excerpt,content" % (origin, n)
+        url = "%s/wp-json/wp/v2/computer_media?per_page=100&page=%d&_fields=id,link,excerpt,content" % (origin, n)
         try:
             posts = json.loads(get(url, 60))
         except Exception as e:                  # noqa: BLE001 -- past the last page WordPress answers 400
@@ -44,7 +44,7 @@ def main():
         if not posts:
             break
         for p in posts:
-            out[p["link"]] = dict(summary=text(p["excerpt"]["rendered"]), description=opening(p["content"]["rendered"]))
+            out[p["link"]] = dict(id=p["id"], summary=text(p["excerpt"]["rendered"]), description=opening(p["content"]["rendered"]))
         n += 1
     C.save("descriptions.json", out)
     pages = {i["page"] for i in items}

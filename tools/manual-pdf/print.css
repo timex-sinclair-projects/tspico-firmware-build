@@ -101,6 +101,9 @@ th, td { border: 0; border-bottom: .5pt solid #b9b9b6; padding: 2.5pt 4pt; verti
 th { white-space: nowrap; font-family: var(--slab); font-weight: 700; font-size: 8.5pt;
      border-bottom: 1.5pt solid var(--rule); }
 tr { break-inside: avoid; }
+/* A command in a table's first column stays on one line: broken across two it
+   reads as two commands. */
+td:first-child > code:only-child { white-space: nowrap; }
 thead { display: table-header-group; }
 img { max-width: min(100%, 3.3in); height: auto; display: block; margin: .5em auto; break-inside: avoid; }
 img.wide { max-width: 100%; width: 100%; }   /* manual.lua: drawings with small labels */

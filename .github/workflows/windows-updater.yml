@@ -42,10 +42,10 @@ jobs:
       # A Release run's head is its tag; the updater itself comes from main
       # (the default checkout for workflow_run), which is what users should get.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -70,7 +70,7 @@ jobs:
           Get-Item dist/TS-Pico-Updater.exe | Format-List Name, Length
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: TS-Pico-Updater
           path: dist/TS-Pico-Updater.exe

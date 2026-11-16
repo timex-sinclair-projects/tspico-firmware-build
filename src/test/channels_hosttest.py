@@ -138,6 +138,9 @@ def main():
 
     stage2(err)
     stage3(err)
+    speech(err)
+    commands(err)
+    cat_text(err)
 
     ok = all(results)
     print("\n%s (%d checks)" % ("ALL PASS" if ok else "FAILURES", len(results)))
@@ -235,6 +238,155 @@ def stage3(err):
     check(ch.read(5, 255) == b"", "no names: the first read is end of file")
     ch.write(5, tab(0))
     check(ch.read(5, 255) == b"0\r", "  and TAB 0 says 0")
+
+
+def speech(err):
+    print("speech: v: channels (#375)")
+    said = []
+
+    def say(text):
+        if "[NOPE]" in text:
+            raise ValueError("NOPE")             # as speech.allophones does
+        if "OFF" in text:
+            raise OSError("speech is off")       # as tsbus.say does when it never started
+        said.append(text)
+        return len(text), len(text)
+    ch = C.Channels(MemFS())
+    ch.open_speech(4, say)
+    check(ch.speaking(4) and not ch.speaking(5), "speaking(): the v: stream, no other")
+    ch.write(4, b"HELLO")
+    check(said == [], "no CR yet: nothing said")
+    ch.write(4, b" THERE\r")
+    check(said == ["HELLO THERE"], "a CR says the line (%r)" % said)
+    ch.write(4, b"\xf5 2\r\r")                  # PRINT, a keyword token; then an empty line
+    check(said[1:] == ["PRINT  2"], "keywords are spelt out; an empty line says nothing (%r)" % said[1:])
+    ch.write(4, b"ONE\rTWO\r")
+    check(said[2:] == ["ONE", "TWO"], "two lines in one chwr: two sayings (%r)" % said[2:])
+    ch.write(4, tab(9) + b"BYE")
+    ch.close(4)
+    check(said[4:] == ["BYE"] and not ch.speaking(4), "TAB ignored; CLOSE says the unfinished line")
+    ch.open_speech(4, say)
+    check(err(lambda: ch.read(4, 10)) == "Q", "v: can't be read: Q")
+    check(err(lambda: ch.write(4, b"[NOPE]\r")) == "Q", "an unknown allophone name: Q")
+    ch.write(4, b"SPEECH OFF")
+    ch.close(4)
+    check(not ch.speaking(4), "CLOSE closes even when speech is off")
+    ch.open(5, "/sd/TAP/w.txt", "w")
+    ch.open_speech(5, say)
+    check(ch.speaking(5) and ch.table[5].path is None, "v: replaces a stale file entry on the stream")
+    ch.close_all()
+
+
+
+class Lazy:
+    """An answer with only len() and chunk(), as XDirText is."""
+
+    def __init__(self, data):
+        self.data = data
+        self.slices = 0
+
+    def __len__(self):
+        return len(self.data)
+
+    def chunk(self, pos, n):
+        self.slices += 1
+        return self.data[pos:pos + n]
+
+
+def commands(err):
+    print("commands: x: channels (#404)")
+    ran = []
+    big = Lazy(b"2\n1\n" + b"".join(b"row %02d\n" % i for i in range(40)))
+
+    def run(line):
+        ran.append(line)
+        if line == "path":
+            return b"/games\n"
+        if line == "dir":
+            return big
+        if line == "none":
+            return b"\n"
+        raise C.ChannelError("Not an x: command", "Q")
+    ch = C.Channels(MemFS())
+    ch.open_command(4, run)
+    check(ch.in_memory(4) and not ch.in_memory(5), "in_memory(): the x: stream, no other")
+    check(ch.read(4, 255) == b"", "nothing asked yet: end of data (Report 8)")
+    ch.write(4, b"pa")
+    check(ran == [], "no CR yet: nothing run")
+    ch.write(4, b"th\r")
+    check(ran == ["path"], "a CR runs the line (%r)" % ran)
+    check(ch.read(4, 255) == b"/games\r", "the answer, LF -> CR")
+    check(ch.read(4, 255) == b"", "then end of data")
+    ch.write(4, b"  path  \r")
+    check(ran[-1] == "path" and ch.read(4, 255) == b"/games\r", "spaces around the command go; asked again, read again")
+    ch.write(4, b"dir\r")
+    first = ch.read(4, 10)
+    check(first == b"2\r1\rrow 00", "a long answer comes in pieces (%r)" % first)
+    rest = b""
+    while True:
+        d = ch.read(4, 255)
+        if not d:
+            break
+        rest += d
+    check(first + rest == big.data.replace(b"\n", b"\r"), "... all of it, read through chunk()")
+    check(big.slices >= 2, "the answer was read in pieces, never copied whole (%d pieces)" % big.slices)
+    ch.write(4, b"dir\r")
+    ch.read(4, 20)
+    ch.write(4, b"path\r")
+    check(ch.read(4, 255) == b"/games\r", "a new command replaces an answer read only in part")
+    ch.write(4, b"none\r")
+    check(ch.read(4, 255) == b"\r" and ch.read(4, 255) == b"", "an empty line is one CR, then the end")
+    ch.write(4, b"\r\r")
+    check(ran[-1] == "none", "PRINT #4 alone runs nothing")
+    check(err(lambda: ch.write(4, b"bogus\r")) == "Q", "an unknown command: Q")
+    check(ch.read(4, 255) == b"", "... and the last answer is gone")
+    check(err(lambda: ch.write(4, b"\xf5\r")) == "Q" and ran[-1] == "PRINT",
+          "a keyword token is spelt out, as on any text channel (%r): not a command, Q" % ran[-1])
+    ch.write(4, tab(3) + b"path\r")
+    check(ran[-1] == "path" and ch.read(4, 255) == b"/games\r", "TAB ignored")
+    ch.close(4)
+    check(not ch.in_memory(4) and 4 not in ch.table, "CLOSE closes it")
+    ch.open(5, "/sd/TAP/w.txt", "w")
+    check(not ch.in_memory(5), "a file stream is not in memory")
+    ch.open_command(5, run)
+    check(ch.in_memory(5) and ch.table[5].path is None, "x: replaces a stale file entry on the stream")
+    ch.open_list(6, ["a/", "b"])
+    check(ch.in_memory(6), "a d: listing is in memory too")
+    ch.close_all()
+
+
+
+def cat_text(err):
+    print("write_text: CAT #s into a file (#404)")
+    fs = MemFS()
+    writes = []
+    real = fs.write
+    fs.write = lambda p, pos, data, t: writes.append(len(data)) or real(p, pos, data, t)
+    ch = C.Channels(fs)
+    ch.open(4, "/sd/TAP/cat.txt", "w")
+    ch.write(4, b"Before\r")
+    ch.write_text(4, ["Path:/TAP", "", "000 a.tap   1 kB"])
+    ch.write(4, b"After\r")
+    check(bytes(fs.files["/sd/TAP/cat.txt"]) == b"Before\nPath:/TAP\n\n000 a.tap   1 kB\nAfter\n",
+          "text file: each line with LF, at the file's position (%r)" % bytes(fs.files["/sd/TAP/cat.txt"]))
+    del writes[:]
+    ch.write_text(4, ["%031d" % i for i in range(100)])
+    check(len(writes) == 7 and max(writes) <= 512 + 32, "100 lines: 7 writes of about 512 bytes (%r)" % writes)
+    ch.open(5, "/sd/TAP/cat.bin", "wb")
+    ch.write_text(5, ["ab", "c"])
+    check(bytes(fs.files["/sd/TAP/cat.bin"]) == b"ab\rc\r", "binary file: the CRs as they are")
+    ch.open(6, "/sd/TAP/cat.rec", "w", 8)
+    ch.write_text(6, ["one", "two"])
+    check(bytes(fs.files["/sd/TAP/cat.rec"]) == b"one     two     ", "record file: a record a line")
+    check(err(lambda: ch.write_text(6, ["longer than 8"])) == "Q", "  a line too long: Q")
+    ch.open(7, "/sd/TAP/cat.txt", "r")
+    check(err(lambda: ch.write_text(7, ["x"])) == "Q", "a file opened to be read: Q")
+    ch.open_list(8, ["a"])
+    check(err(lambda: ch.write_text(8, ["x"])) == "Q", "a d: listing: Q")
+    ch.open_command(9, lambda line: b"")
+    check(err(lambda: ch.write_text(9, ["x"])) == "Q", "an x: stream: Q")
+    check(err(lambda: ch.write_text(10, ["x"])) == "O", "a stream that isn't open: O")
+    ch.close_all()
 
 
 if __name__ == "__main__":

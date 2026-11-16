@@ -31,7 +31,10 @@ The v3 card has no handover: its SD card is on its own pins (SPI0 on GPIO
 ([../firmware/board.md](../firmware/board.md#board_v3py)). The calls in this
 flow still run; on v3 they leave the bus alone. Before any of them,
 `ACTIVATE_SD` reads the socket's detect switch. With no card in, no SD line
-is touched and it fails in about 2 ms. The v2 socket has no switch.
+is touched and it fails in about 2 ms. With one, `sd_card_ready` switches
+the socket's power on (proto2, `sd_power`) and waits `SD_ON_MS` for VDD
+before the first clock; at step 7 `sd_release_bus` releases the lines, then
+switches it off. The v2 socket has no switch and no power control.
 
 ## One handover
 
@@ -44,7 +47,7 @@ is touched and it fails in about 2 ms. The v2 socket has no switch.
 | 4 | Mount | `board.sd_spi()` = `SPI(0, sck=2, mosi=3, miso=4)`, `SDCard(spi, U3_CS)`, `os.mount(sd, "/sd")`, up to 5 tries 0.5 s apart while the card is believed present, 1 when it is known missing, none started after 6 s | | a cold card refuses at first; the 6 s budget keeps the worst case inside the Z80's ~19.9 s |
 | 5 | Note the card | `SD_NOTE_CARD(CID)` → `SD_REVALIDATE` when it is back or different | the folder, the mount, append, the channels fixed for the new card | ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#sd_note_cardcid)) |
 | 6 | **The work** | the handler's file operations | | keep it short: the Z80's budget is shared with everything else in the transaction |
-| 7 | Unmount, CS high, clamp | `DEACTIVATE_SD`: `os.umount`, then `board.sd_release_bus()`: U3_CS = 1, GPIO 2–4 driven low | | a defined level until the PIO takes the pins (whether the clamp is still needed with U6 is an open question, audit §4) |
+| 7 | Unmount, CS high, clamp | `DEACTIVATE_SD`: `os.umount` and `SD_DEV = None` (the driver goes with the mount, #384), then `board.sd_release_bus()`: U3_CS = 1, GPIO 2–4 driven low | | a defined level until the PIO takes the pins (whether the clamp is still needed with U6 is an open question, audit §4) |
 | 8 | Bus program back | `ACTIVATE_MQ`: `board.make_mq()` = `StateMachine(0, TS_IO_DUAL, 30 MHz, …)`, `MQ_BUSY()`, then `active(1)` | **TX [], RX [], Y `00`** | Y must be BUSY: a fresh state machine keeps the old Y, and a READY now would let the Z80 read an empty TX as 00h (Report J) ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#activate_mq)) |
 | 9 | The answer, then READY | `CMD_PUT`/`CMD_SEND`/`SEND_MSG` …, which say READY after the first bytes are in TX | TX [answer…], Y `FF` or `F7` | data first, then READY |
 
@@ -74,7 +77,7 @@ blocks for good ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md
 | a SAVE | the dispatcher's `SD_PROBE` at the header (with `PRELOAD_READ` around it); `SAVE_TS`'s write through `SAVE_MOUNT` before the final status; the re-mount after it ([save.md](save.md)) | the header's ready-wait; the final status's ready-wait |
 | LOAD | **never**: `LOAD_TS` streams from the copy on the Pico's flash, because the Z80 reads the block blind and the card cannot be touched then ([load.md](load.md)) | — |
 | printing | `PRINT_FLUSH` when the text buffer is full or another transaction arrives; `COPY_BMP` | a printer transaction's ready-wait |
-| a channel command | `CH_CALL` → `SD_CALL` for each `tpi:chwr`, `tpi:chrd` … (open, seek, write or read, close) | `CH_SEND`'s WF_NPH ([channels.md](channels.md)) |
+| a channel command | `CH_CALL` → `SD_CALL` for each `tpi:chwr`, `tpi:chrd` … (open, seek, write or read, close) on an `f:` stream; a stream with no file (`d:`, `v:`, `x:`) is written and read in RAM with no `SD_CALL` and no mount (#404) | `CH_SEND`'s WF_NPH ([channels.md](channels.md)) |
 | ZX48 mode | `SAVE_ZX` mounts with `ENA_SD` → `SAVE_MOUNT` and gives the bus back with `ENA_MQ_DUAL`, which rebuilds `TS_IO_DUAL` and **says READY** itself because `ZX48_IO` never returns to the dispatcher between transfers; `ZX_TPI` uses the usual `ACTIVATE_SD` … `ACTIVATE_MQ` and says READY with its reply ([../firmware/tspico_io.md](../firmware/tspico_io.md#ena_mq_dualmq)) | the Spectrum ROM's ready-wait after `'S'` or `'T'` |
 
 ## No card, and a stuck card

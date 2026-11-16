@@ -18,19 +18,19 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       # PlatformIO's ESP32 platform and toolchain are some hundreds of MB.
       - name: Cache PlatformIO
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.platformio
           key: pio-${{ runner.os }}-${{ hashFiles('esp32/zimodem/platformio.ini') }}
@@ -42,7 +42,7 @@ jobs:
         run: esp32/zimodem/build.sh
 
       - name: Upload Zimodem
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tspico-zimodem
           path: esp32/zimodem/out/

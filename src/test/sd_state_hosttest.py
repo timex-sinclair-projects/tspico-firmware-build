@@ -191,7 +191,8 @@ def revalidate_env(t, root):
     t.os = card
     t.TSP = tsp(cur_path="/sd/TAP/GAMES", f_name="/sd/TAP/CHESS.TAP", append=True,
                 offset_tbl=[1, 2], tap_idx=1)
-    t.CHANNELS = types.SimpleNamespace(closed=[], close_all=lambda: t.CHANNELS.closed.append(1))
+    t.CHANNELS = types.SimpleNamespace(closed=[], close_all=lambda: t.CHANNELS.closed.append(1),
+                                       in_memory=lambda stream: False)   # no d:/v:/x: streams open
     t.prev_path = "/sd/TAP/FULL"
     t.prn_path = "/sd/VLPRINT/PRN0001.TXT"
     return card, sent
@@ -204,8 +205,8 @@ def test_revalidate(t, root):
     check(t.TSP.cur_path == "/sd/TAP/GAMES" and t.TSP.f_name == "/sd/TAP/CHESS.TAP" and t.TSP.append,
           "folder, mounted file and append kept")
     check(t.CHANNELS.closed == [] and t.prn_path, "channels and printer capture kept")
-    check(card.cwd == "/sd/TAP/GAMES" and t.dir_files_calls == 1 and t.alldirs == ["/TAP"],
-          "in the folder, listing and directory list rebuilt")
+    check(card.cwd == "/sd/TAP/GAMES" and t.dir_files_calls == 1 and not hasattr(t, "alldirs"),
+          "in the folder, listing rebuilt (no list of every folder kept)")
 
     print("SD_REVALIDATE: a different card that has the same folder and file")
     card, _ = revalidate_env(t, root)

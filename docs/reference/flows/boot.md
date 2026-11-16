@@ -23,7 +23,7 @@ reads on port 0Fh (`FF` READY + IDLE, `00` BUSY).
 | 5 | `main.py` | `board.early_init()` ([../firmware/board.md](../firmware/board.md#early_init)): the seven pins to idle (U6 off, GPIO 12 = 1; the flash and SRAM disabled; /BE inactive), then `machine.freq(270_000_000)` | — | |
 | 6 | `main.py` | `TS2068_IO()` | | an exception from here on is logged to `/activity.log` and ends `main.py` |
 | 7 | `TS2068_IO` | `LOAD_CONFIG()`: `config.ini` read, defaults filled, the one-shot boot slot taken ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#load_config)); `TSP = PICO_STATUS(...)`; the log rotated at 64 000 bytes | | a corrupt `config.ini`: defaults, logged |
-| 8 | `TS2068_IO` | `board.start_memory`: **ROM** (`set_ctrl`, SM 4) and **BANK** (`sel_bank`, SM 5) started at 150 MHz and given `ROM_SM` and `bank_sm` ([../firmware/pio.md](../firmware/pio.md), [../firmware/board.md](../firmware/board.md)). On the v3 card, the slot files loaded instead; a boot or dock slot on the SD card (MEM 3) has the card mounted around it, and flash stands in if it won't mount ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#the-rom-and-bank-state-machines)). Then the v3 card's modem: `board.modem_start` from `config.ini`, the 8251 answered, the ESP32 off ([../firmware/board.md](../firmware/board.md#modem_startmode-baudnone-idle_minnone)); and its speech: `board.speech_start`, the chip on core 1 and silent, ports 17/37 answered ([../firmware/board.md](../firmware/board.md#speech_startvolume-rate-portstrue)); `config.ini`'s `SPEECH_GREETING` said if the 2068 is starting its own ROM (flash slot 1, the default DOCK, no one-shot) ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#the-rom-and-bank-state-machines)) | | **from here the 2068 has a ROM**: the Pico now answers its memory cycles for the ROM and DOCK areas from the chosen slots |
+| 8 | `TS2068_IO` | `board.start_memory`: **ROM** (`set_ctrl`, SM 4) and **BANK** (`sel_bank`, SM 5) started at 150 MHz and given `ROM_SM` and `bank_sm` ([../firmware/pio.md](../firmware/pio.md), [../firmware/board.md](../firmware/board.md)). On the v3 card, the slot files loaded instead; a boot or dock slot on the SD card (MEM 3) has the card mounted around it, and flash stands in if it won't mount ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#the-rom-and-bank-state-machines)). Then the v3 card's modem: `board.modem_start` from `config.ini`, the 8251 answered, the ESP32 off ([../firmware/board.md](../firmware/board.md#modem_startmode-baudnone-idle_minnone)); its joystick: `board.joystick` from `KEMPSTON`, 1Fh answered ([../firmware/board.md](../firmware/board.md#joystickon)); and its speech: `board.speech_start`, the chip on core 1 and silent, ports 17/37 answered ([../firmware/board.md](../firmware/board.md#speech_startvolume-rate-portstrue)); `config.ini`'s `SPEECH_GREETING` said if the 2068 is starting its own ROM (flash slot 1, the default DOCK, no one-shot) ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#the-rom-and-bank-state-machines)) | | **from here the 2068 has a ROM**: the Pico now answers its memory cycles for the ROM and DOCK areas from the chosen slots |
 | 9 | `TS2068_IO` | `/TMP` removed and made again; `SA_funct` built; `EXT_SA_FUNCT` from `/dev_extcmd.py` or the frozen `TS.extcmd` | | |
 | 10 | `TS2068_IO`, core 1 | `BLINK_LED` on core 1 (`board.background`) blinks the LED while the card is looked for; v2 only (`board.HAS_CORE1`), the v3 card has no boot blink ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#blink_ledpause)) | | |
 | 11 | `ACTIVATE_SD(tries=5)` | `MQ` parked on `NULL_SM`, U6 off, the card mounted (up to five tries, at most 6 s); the first card is noted (`SD_NOTE_CARD`) and set up (`SD_REVALIDATE`: `/TAP` made if missing, the folder listed) ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#activate_sdtriesnone)) | no bus program: the Z80 cannot reach the Pico yet | no card, or a wedged one: `TSP.sd_present = False`, logged, and the boot goes on without a card |
@@ -43,7 +43,10 @@ default; slot 1, then `/rom/TSPICO-23.ROM`, if it's missing) into HOME and
 EXROM and the dock slots into DOCK, and releases the 2068 (only now does it
 start), step 10 is skipped, and step 11 mounts the card on its
 own pins without taking the bus. It reads the socket's detect switch first:
-with no card it fails at once, the socket never clocked.
+with no card it fails at once, the socket never clocked; with one it powers
+the socket first (proto2's switch, `board_v3.sd_power`), and the unmount
+after switches it off again. Importing `board_v3` has already switched off
+a socket a soft reset left on.
 
 From step 15 on the Pico is ready for any transaction. The pre-load at
 step 15 is the only one staged outside a transaction's tail; every
@@ -53,13 +56,13 @@ transaction after it ends by staging the next.
 
 | # | Where | What happens | What can go wrong |
 |---|---|---|---|
-| 1 | HOME 0000h | the Z80 resets into HOME — the Pico's flash slot `ROM_SLOT` (normally 1, ROM 2.2), served by the ROM state machine | the Pico not yet at step 8: the Z80 reads whatever the bus floats to *(unverified: in practice the Pico's boot is fast enough, and the 2068's own reset delay covers it)* |
+| 1 | HOME 0000h | the Z80 resets into HOME — the Pico's flash slot `ROM_SLOT` (normally 1, ROM 2.4), served by the ROM state machine | the Pico not yet at step 8: the Z80 reads whatever the bus floats to *(unverified: in practice the Pico's boot is fast enough, and the 2068's own reset delay covers it)* |
 | 2 | HOME (genuine) | the 2068's RAM test, system variables, channels | |
 | 3 | HOME 0DF1h | the 29-byte boot stub at 0E0Bh is copied to RAM 6000h and run: `OUT (F4h),03h` — chunks 0 and 1 from the cartridge bus (TS-Pico: 03h, genuine 01h), FFh bit 7 set (the EXROM), the 2068's bank-switch code copied from EXROM 1000h–162Fh to RAM 6200h, back to HOME ([../rom/home.md](../rom/home.md#0e0ch-a-16k-exrom)) | an 8K-only EXROM model (an old emulator) fails at the first call into chunk 1 |
 | 4 | HOME 0DFFh | the bank stack pointer (65CEh) initialized | |
 | 5 | HOME 0E05h | EXTINIT, EXROM 08E7h, called through the RAM bank code | |
 | 6 | EXROM 08E7h → 01BCh | the TS-Pico's EXTINIT: `CALL 221Fh` — **TPMODE = 2** (LOAD and SAVE to the Pico, printer to the 2068), 5CBEh and 6315h cleared — then BANK (5DCFh) = FFh ([../rom/sysvars.md](../rom/sysvars.md#5ddbh-tpmode-peek-24027)) | |
-| 7 | EXROM 1C49h | the banner: 41 bytes copied to the printer buffer at 5B00h and printed through HOME's PO-MSG: "© 2026 TS-Pico ROM v2.2" ([../rom/exrom-driver.md](../rom/exrom-driver.md#the-boot-message-1c49h)) | |
+| 7 | EXROM 1C49h | the banner: 41 bytes copied to the printer buffer at 5B00h and printed through HOME's PO-MSG: "© 2026 TS-Pico ROM v2.4" ([../rom/exrom-driver.md](../rom/exrom-driver.md#the-boot-message-1c49h)) | |
 | 8 | EXROM 1C86h | `BOOT_DOCK_CHECK`: with **D** held the DOCK's LROS/AROS headers are not read, so a mounted cartridge is not run; otherwise the genuine EXTINIT (08EAh) reads them and starts an LROS if there is one; then back to HOME ([../rom/exrom-driver.md](../rom/exrom-driver.md#boot_dock_check-1c86h)) | a cartridge image in the dock slots that crashes runs at every boot: hold D |
 | 9 | HOME | the copyright message, the BASIC prompt | |
 

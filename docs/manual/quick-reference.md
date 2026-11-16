@@ -203,6 +203,7 @@ Format: <code>LOAD "tpi:{<i>name</i> | <i>nn</i>}"</code>
 | `LOAD "tpi:03"` | Mount file number 003 |
 | `SAVE "tpi:idir"` | Pick a file to mount from a menu |
 | `CAT ""` | The blocks in the mounted TAP; `>` is the tape pointer |
+| `CAT #4`, `CAT #4;"*.tap"` | The same listings, as plain text, into the file open on stream 4 |
 | `SAVE "tpi:ffw" [CODE `*`m`*`,`*`n`*`]` | Wind on *n* blocks (*m* 0), *n* files (*m* 2); *m* 1 or 3 also shows the tape |
 | `SAVE "tpi:rew" [CODE `*`m`*`,`*`n`*`]` | Wind back the same way |
 | `SAVE "tpi:close"` | Unmount |

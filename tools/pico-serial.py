@@ -230,10 +230,13 @@ def _repl_line(fd, line, timeout=5):
 # TS.board, so the same lines work on the v2 board and the v3 card. The
 # firmware must be stopped (break) first: it unmounts the card after every
 # command, so /sd is free at the REPL. A leftover mount is dropped first.
+# sd_card_ready() first, as ACTIVATE_SD: on the v3 card it powers the socket
+# (#262), and an empty socket fails here without touching a line.
 SD_MOUNT = ("import os\r"
             "from TS import board\r"
             "from TS.sdcard import SDCard\r"
             "exec('try:\\n os.umount(\\'/sd\\')\\nexcept OSError:\\n pass')\r"
+            "exec('if not board.sd_card_ready():\\n raise OSError(19, \\'no card in the socket\\')')\r"
             "_sd_mq = board.sd_take_bus(); os.mount(SDCard(board.sd_spi(), board.sd_cs()), '/sd')")
 SD_UNMOUNT = "os.umount('/sd'); board.sd_release_bus(); del _sd_mq"
 

@@ -145,7 +145,7 @@ parameter count and a second word, then calls it, as `CALL_HOME` does with
 Every TS-Pico ROM from 1.1 on has `DD 46 09`, `LD B,(IX+09h)`, the high
 byte (compared with `ROMs/GENUINE-2068-exrom.bin`: the same in the 1.1,
 1.5w and 1.7 EXROMs in `ROMs/` and in `src/rom/TSPICO.ROM`,
-`TSPICO-SYNC.ROM` and `TSPICO-23.ROM`; `build-rom.py` does not touch it). With the genuine
+`TSPICO-SYNC.ROM` and `TSPICO-24.ROM`; `build-rom.py` does not touch it). With the genuine
 byte a count of 0 works, but a count of n from 1 to 255 makes the `LDIR`
 copy 257·n + 14 bytes instead of n + 14, moving memory above the frame
 down over itself *(inferred from the code)*. No caller in the TS-Pico ROM
@@ -243,8 +243,8 @@ had it right).
 
 ### `BIOS_G_VERS` (1852h)
 
-`LD BC,0022h / RET`: the version, matching HOME 0065h (`PEEK 101`): 0023h
-in ROM 2.3 (the listing's 0022h is ROM 2.2's), 0015h in 1.1. Each layer that changes the version patches it
+`LD BC,0022h / RET`: the version, matching HOME 0065h (`PEEK 101`): 0024h
+in ROM 2.4, 0023h in 2.3 (the listing's 0022h is ROM 2.2's), 0015h in 1.1. Each layer that changes the version patches it
 together with 0065h: the base image's value, the SYNC layer's and the disk
 module's are in [the build history](../../ROM_CHANGES.md#version-bytes)
 ([overview.md](overview.md#which-rom-is-this)). The `RET` at 1855h is also
@@ -486,7 +486,7 @@ A `tpi:` command's pre-header, then its body, then the answer.
         LD A,'B' / LD D,A      ; D = the XOR, seeded with the first byte
 1BAAh   CALL SYNC_WRITE        ; SYNC layer: SYNC, wait READY+IDLE, then OUT 'B'
         T_ADDR    (0 SAVE, 1 LOAD: the mount)
-1BB5h   BANK      (5DCDh's neighbor 5DCFh: FFh); ROM 2.3: 23h
+1BB5h   BANK      (5DCDh's neighbor 5DCFh: FFh); ROM 2.3: 23h, 2.4: 24h
         PMR1 lo, hi
         PMR2 lo, hi
         length lo (B), length hi (5DCEh)
@@ -495,9 +495,9 @@ A `tpi:` command's pre-header, then its body, then the answer.
         CALL SEND_DATA_BLOCK_D
 ```
 
-**Byte 2 in ROM 2.3** (#227). Up to ROM 2.2, 1BB5h is `LD A,(5DCFh)`:
+**Byte 2 from ROM 2.3** (#227). Up to ROM 2.2, 1BB5h is `LD A,(5DCFh)`:
 BANK_SV, which is always FFh, and the firmware ignored the byte. ROM 2.3
-patches it to `LD A,23h / NOP`, its version marker (the value `PEEK 101`
+patches it to `LD A,23h / NOP` and ROM 2.4 to `LD A,24h / NOP`, the version marker (the value `PEEK 101`
 gives), and the disk module sends the same from `SEND_FOPEN` and `CH_SEND`
 ([exrom-fdd.md](exrom-fdd.md)). So every command the Pico answers says
 which ROM sent it (`rom_id`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id),

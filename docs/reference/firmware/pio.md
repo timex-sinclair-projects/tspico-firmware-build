@@ -169,9 +169,10 @@ hold the last slot until the next access changes it.
 ### Beware
 
 - The four slot bits select among sixteen 32K slots. A 64K cartridge (two
-  slots) is addressed with an even `DCK_SLOT`; how the Z80's own A15 reaches
-  the chip for the cartridge's upper half is not visible in the code
-  *(unverified)*. See [hardware.md](../hardware.md).
+  slots) is addressed with an even `DCK_SLOT`. The cartridge's upper half
+  (8000h–FFFFh) is the odd slot: the Z80's A15 reaches the chip, which the
+  code does not show but a probe on a v2 board did (2026-11-10). See
+  [hardware.md](../hardware.md).
 - `put()` blocks when the TX FIFO holds four words. That cannot happen while
   the 2068 is running, and nothing in the firmware puts more than one word
   per command.
@@ -537,7 +538,7 @@ v1.29 (`~null` does not; `MQ_READY`'s comment). The bit meanings are
 Two other `MQX` strings touch the FIFOs rather than Y: `MQ_TO_IDLE`,
 `ZX_FLUSH_TX`, `CMD_FLUSH`, `FAIL_CMD` and `ZX48_IO` drain TX with
 `pull (noblock)` followed by `mov (osr, null)`, one word per pair, bounded
-at 64 except in `ZX48_IO`, whose two inline drains (tspico.py 7687, 7728)
+at 64 except in `ZX48_IO`, whose two inline drains (tspico.py 8276, 8317)
 loop until TX is empty ([tspico_io.md](tspico_io.md), [tspico-bus.md](tspico-bus.md),
 [tspico-dispatch.md](tspico-dispatch.md)). The `pull` moves a word out of
 the FIFO into the OSR; the `mov` only tidies the OSR.

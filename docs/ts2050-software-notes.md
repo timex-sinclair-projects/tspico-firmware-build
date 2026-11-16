@@ -446,7 +446,7 @@ Sources: README https://github.com/bozimmerman/Zimodem, plus `zimodem/zimodem.in
 
 **Factory defaults:**
 
-- 1200 baud, `SERIAL_8N1`.
+- 1200 baud, `SERIAL_8N1`. (The card's build starts at 115200, the rate the card talks to it at; the 2068 never sees this rate.)
 - Flow control off (`FCT_DISABLED`).
 - Echo on (`ATE1`).
 - Verbose result codes (`ATV1`).

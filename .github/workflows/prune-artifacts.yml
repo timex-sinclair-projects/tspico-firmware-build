@@ -1,0 +1,49 @@
+# Keep the repo's Actions artifacts down to the newest two of each name.
+#
+# Artifacts in this private repo count against the organization's Actions
+# storage. Every push left UF2s, ROMs, taps, manuals and ~40 MB of emulator
+# builds for 30 to 90 days: 4,400 artifacts and 16 GB on 2026-11-05. Only the
+# newest are ever used, so after each workflow that uploads artifacts finishes,
+# tools/prune-artifacts.py deletes all but the two newest of each name, plus
+# the newest from a green main push, which pages.yml's main/ channel and its
+# Zimodem fallback download (the script's docstring has the details).
+#
+# workflow_run only fires from the workflow file on the default branch, so
+# this runs after builds on every branch once it is on main.
+
+name: Prune old artifacts
+
+on:
+  workflow_run:
+    workflows:
+      - Build TS-Pico Firmware
+      - Build TS-Pico Manual
+      - Standalone pico_host (emulator firmware)
+      - Zimodem (v3 modem)
+      - Windows Updater
+      - Deploy site to GitHub Pages
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: write   # list runs, delete artifacts
+  contents: read
+
+# One prune at a time; a later one sees everything an earlier one would.
+concurrency:
+  group: prune-artifacts
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: tools/prune-artifacts.py
+          sparse-checkout-cone-mode: false
+      - name: Delete all but the newest two of each artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/prune-artifacts.py --repo "$GITHUB_REPOSITORY" --keep 2 --delete
