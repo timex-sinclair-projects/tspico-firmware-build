@@ -1,0 +1,9 @@
+TS-Pico Command          MEMINFO
+--------------------------------
+SAVE "tpi:meminfo"
+
+Returns the total amount of free
+memory in the TS-Pico along with
+the largest free block.
+
+See also: info

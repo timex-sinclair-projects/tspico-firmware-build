@@ -12,8 +12,10 @@ continue in the background, and
 any other say commands will have
 their speech wait in a queue.
 
-SAVE "tpi:say HELLO, THERE"
-SAVE "tpi:say [HH1 EH LL OW]"
-SAVE "tpi:say"	Stop speaking
+  SAVE "tpi:say HELLO, THERE"
+  SAVE "tpi:say [HH1 EH LL OW]"
+
+With no text given, the speaking
+is stopped.
 
 See also: 
