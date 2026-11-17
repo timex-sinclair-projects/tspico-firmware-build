@@ -200,6 +200,27 @@ def main():
     check(t.bmp_size == (256, 192) and msgs[-1][1] == t._4_Q_Parameter, "bad size refused (Q)")
     t.bmp_size = (512, 384)
 
+    # #335: asked with no CODE, PRNSZ and BMP answer even with VERBOSE off,
+    # and PRNSZ shows AUTOLF and AUTOPG too; setting stays VERBOSE-only.
+    full = []
+    t.SEND_MSG = lambda msg, msg1, st, force=False: full.append((msg, msg1, st, force))
+    t.PRT.autolf, t.PRT.autopg = True, False
+    t.PRN_SIZE(bytearray(10), "   tpi:prnsz")
+    check(full[-1] == ("Printer size: 80 columns, 72 lines", "CR+LF on, paging off", t._1_OK, True),
+          "PRNSZ alone: size and settings, forced (%r)" % full[-1:])
+    t.PRN_SIZE(bytearray(10), "   tpi:prnsz 80 72")
+    check(full[-1][3] is False, "PRNSZ setting: not forced")
+    t.PRT.autopg = True
+    t.PRN_SIZE(bytearray([0, 0, 0, 80, 0, 0, 0, 0, 0, 0]), "   tpi:prnsz")
+    check(full[-1][1] == "CR+LF on, paging off", "paging on with 0 lines: shown as off (%r)" % full[-1:])
+    t.PRN_SIZE(bytearray(10), "   tpi:prnsz 80 72")
+    t.PRT.autolf = t.PRT.autopg = False
+    t.PRN_BMP(bytearray(10), "   tpi:bmp")
+    check(full[-1] == ("COPY picture: 512x384", "", t._1_OK, True), "BMP alone: forced (%r)" % full[-1:])
+    t.PRN_BMP(bytearray([0, 0, 0, 0, 2, 128, 1, 0, 0, 0]), "   tpi:bmp")
+    check(full[-1][3] is False, "BMP setting: not forced")
+    t.SEND_MSG = lambda msg, msg1, st, *a: msgs.append((msg, st))
+
     print("COPY")
     scr = open(os.path.join(HERE, "fixtures", "copy_screen_mode0.bin"), "rb").read()
     r = run(z80_body(scr), copy_pre(len(scr)))

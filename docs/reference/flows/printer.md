@@ -108,10 +108,10 @@ Printer).
 
 | Command | Effect |
 |---|---|
-| `tpi:prnsz CODE c,l` | wrap at `c` columns (0 = never), `l` lines per page |
-| `tpi:autolf` / `tpi:noautolf` | ENTER as CR LF / LF |
-| `tpi:autopg` / `tpi:noautopg` | a form feed every `l` lines / none |
-| `tpi:bmp CODE w,h` | COPY's picture size: 256–4096 by 192–1536 in the listed steps |
+| `tpi:prnsz CODE c,l` | wrap at `c` columns (0 = never), `l` lines per page; alone, shows them and AUTOLF/AUTOPG even with VERBOSE off |
+| `tpi:autolf` / `tpi:noautolf` | ENTER as CR LF / LF; at power-on, `config.ini`'s `PRINTER_AUTOLF` |
+| `tpi:autopg` / `tpi:noautopg` | a form feed every `l` lines / none; at power-on, `PRINTER_AUTOPG` |
+| `tpi:bmp CODE w,h` | COPY's picture size: 256–4096 by 192–1536 in the listed steps; alone, shows it even with VERBOSE off |
 | `tpi:opprint` / `tpi:clprint` | start the next file / close this one |
 
 All last until power-off ([../firmware/tspico-commands.md](../firmware/tspico-commands.md#the-printer-settings)).

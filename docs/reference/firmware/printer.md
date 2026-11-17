@@ -117,9 +117,9 @@ in `tspico.py`, created at import. Its fields:
 | Field | Type, initial | Set by | Read by |
 |---|---|---|---|
 | `cols` | int, 80 | `__init__`; `PRN_SIZE` (`tpi:prnsz`, 0–255) | `feed`: wrap at this column; 0 = never |
-| `lines` | int, 72 | `__init__`; `PRN_SIZE` | `_newline`: lines per page for AUTOPG; `PRN_FLAG`'s message |
-| `autolf` | bool, False | `__init__`; `PRN_FLAG` (`tpi:autolf` / `noautolf`) | `_newline`: ENTER becomes CR LF instead of LF |
-| `autopg` | bool, False | `__init__`; `PRN_FLAG` (`tpi:autopg` / `noautopg`) | `_newline`: a form feed every `lines` lines |
+| `lines` | int, 72 | `__init__`; `PRN_SIZE` | `_newline`: lines per page for AUTOPG (0: no form feeds, as NOAUTOPG); `PRN_FLAG`'s and `PRN_SIZE`'s messages |
+| `autolf` | bool, False | `__init__`; `TS2068_IO` at boot (`config.ini`'s `PRINTER_AUTOLF`); `PRN_FLAG` (`tpi:autolf` / `noautolf`) | `_newline`: ENTER becomes CR LF instead of LF |
+| `autopg` | bool, False | `__init__`; `TS2068_IO` at boot (`PRINTER_AUTOPG`); `PRN_FLAG` (`tpi:autopg` / `noautopg`) | `_newline`: a form feed every `lines` lines |
 | `buf` | `bytearray`, empty | `reset`; `feed`; `PRINT_FLUSH` replaces it with an empty one after writing, or when more than 32768 bytes have piled up with no card | `PRINT_IO` (`len(PRT.buf) >= PRINT_FLUSH_AT`), `PRINT_FLUSH`, the dispatcher's "flush before any other command" test |
 | `col`, `line` | int, 0 | `reset`; `feed`, `_newline`; `PRN_OPEN` and `PRN_CLOSE` set both to 0 | `feed`, `_newline` |
 | `_ctl` | int or None | `reset`; `feed` | `feed`: a control byte waiting for its parameter(s) |

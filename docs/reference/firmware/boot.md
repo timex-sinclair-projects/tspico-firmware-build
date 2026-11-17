@@ -152,6 +152,8 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | SPEECH_GREETING | str | `""` | said at power-on when the 2068 starts its own ROM (flash slot 1, default DOCK, no one-shot); `""`, none | `TS2068_IO`, after `board.speech_start` | `LOAD_CONFIG` (default, or a non-string replaced), `GREET` (`tpi:greet`) |
 | AUTOMOUNT | str | `""` | a `.tap` mounted at power-on, its path from the card's top folder (`/GAMES/menu.tap`), so `LOAD ""` loads it instead of the menu; `""`, none. Both boards | `TS2068_IO` → `AUTO_MOUNT` | `LOAD_CONFIG` (default, or a non-string replaced), `AUTOMOUNT` (`tpi:automount`) |
 | KEMPSTON | bool | `true` | the v3 card's DE-9 joystick answered at 1Fh (v2 ignores it) | `LOAD_CONFIG` → `board.joystick` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced) |
+| PRINTER_AUTOLF | bool | `false` | the virtual printer ends lines with CR+LF from power-on. Both boards | `TS2068_IO` → `PRT.autolf` | `LOAD_CONFIG` (default, or a bad value replaced); `tpi:autolf` changes `PRT` only, not the file |
+| PRINTER_AUTOPG | bool | `false` | the virtual printer adds a form feed every page length from power-on. Both boards | `TS2068_IO` → `PRT.autopg` | as `PRINTER_AUTOLF` (`tpi:autopg`) |
 
 **The one-shot boot.** `tpi:boot CODE m,s` writes `ROM_SLOT = s` and
 `ROM_SM`'s low bits `= m` ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).

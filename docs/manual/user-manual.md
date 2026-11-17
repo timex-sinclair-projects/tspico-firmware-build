@@ -1506,10 +1506,13 @@ same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©
 
 | Command | What it does |
 |---|---|
-| `SAVE "tpi:prnsz" CODE 80,72` | Wrap lines at 80 columns (0 = never) and set pages to 72 lines (0 to 255 each). `SAVE "tpi:prnsz"` alone shows the current size. |
+| `SAVE "tpi:prnsz" CODE 80,72` | Wrap lines at 80 columns (0 = never) and set pages to 72 lines (0 to 255 each). `SAVE "tpi:prnsz"` alone shows the current size and whether `autolf` and `autopg` are on. |
 | `SAVE "tpi:autolf"` / `"tpi:noautolf"` | End lines with CR+LF (for Windows) / with LF (the default) |
-| `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default) |
-| `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. |
+| `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default). A page length of 0 never starts one. |
+| `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. `SAVE "tpi:bmp"` alone shows the current size. |
+
+`autolf` and `autopg` last until the TS-Pico is switched off. To have either one on from
+switch-on, set `PRINTER_AUTOLF` or `PRINTER_AUTOPG` to `true` in `config.ini` (Appendix D.1).
 
 COPY understands the 2068's other screen modes too: the second screen, hi-color, and the
 512-column hi-res mode.
@@ -3035,14 +3038,14 @@ the SD card). It's a single line of text:
 
 <!-- v2 -->
 ```text
-{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": ""}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": "", "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 
 The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 <!-- /v2 -->
 <!-- v3 -->
 ```text
-{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true, "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 <!-- /v3 -->
 
@@ -3062,6 +3065,8 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.4"`, `"2.4"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
 | `AUTOMOUNT` | The TAP mounted at switch-on, so `LOAD ""` loads it (3.8); `""` is none | `""` |
+| `PRINTER_AUTOLF` | The virtual printer ends lines with CR+LF from switch-on, as `tpi:autolf` (7.3) | `false` |
+| `PRINTER_AUTOPG` | The virtual printer starts a new page every page length from switch-on, as `tpi:autopg` (7.3) | `false` |
 <!-- v2 -->
 | `LED_BRIGHTNESS` | Not used on the TS-Pico 2.x | `5` |
 <!-- /v2 -->

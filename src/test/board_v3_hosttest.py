@@ -914,7 +914,8 @@ def main():
     t.GREET(bytes(10), "tpi:greet OFF")
     check(cfg()["SPEECH_GREETING"] == "" and sent_g[-1][0] == "Greeting: off", "tpi:greet off: none")
     take()
-    for key, bad, good in (("SPEECH_GREETING", 5, ""), ("AUTOMOUNT", None, "")):
+    for key, bad, good in (("SPEECH_GREETING", 5, ""), ("AUTOMOUNT", None, ""),
+                           ("PRINTER_AUTOLF", "yes", False), ("PRINTER_AUTOPG", 1, False)):
         with open("config.ini", "w") as f:
             json.dump({"ROM_SLOT": 1, "ROM_SM": 10, key: bad}, f)
         got = t.LOAD_CONFIG()[key]
