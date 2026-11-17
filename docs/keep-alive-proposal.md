@@ -1,6 +1,6 @@
 # Proposal: response function 89h, a keep-alive with a spinner
 
-Status: **proposal, for David's approval.** Nothing is built yet. Branch
+Status: **proposal, for the team's review** (revised 2026-11-16 for ROM 2.4 and the border idea). Nothing is built yet. Branch
 `keep-alive-fn89`, based on main after #408.
 
 ## The problem
@@ -92,7 +92,7 @@ a report, `81h` text, an `86h` listing or Y/N prompt, or `88h`.
 The chain's last link is the disk module's patch at 2213h: `CP 87h / JP
 Z,3006h / RET`, with the `RET` at 2218h. After that, 2219h–221Eh is the old
 dead beep handler (`PUSH AF / CALL BEEPER / POP AF / RET`). A scan of the
-committed `TSPICO-23.ROM`'s EXROM found no `JP`, `CALL` or `JR` to any
+committed `TSPICO-23.ROM`'s EXROM (and, since, `TSPICO-24.ROM`'s) found no `JP`, `CALL` or `JR` to any
 address from 2218h to 221Eh: the only way into those bytes is falling through
 from 2213h. One new `build-rom.py` patch:
 
@@ -112,13 +112,20 @@ Why not a slot in the module's vector table, the way 88h goes through
 
 ### The ROM's version
 
-ROM 2.3 is still only with the beta testers and needs no back-compat. So this
-proposal keeps the name 2.3 and the version byte 23h (pre-header byte 2,
-`rom_id`), with a new CRC. The firmware assumes the new image, as it already
-assumes `PS_READ`. A 2.3 ROM from before the change would get 89h and fall
-off the chain (Report D). If you'd rather the firmware could tell the two
-apart, the alternative is 24h ("ROM 2.4"), which also changes the version
-scheme's major.minor. **Your call: keep 2.3 (recommended) or bump?**
+*Revised 2026-11-16.* When this proposal was first written, ROM 2.3 was only
+with the beta testers, and the plan was to keep its name with a new CRC.
+Since then ROM 2.4 has been released (#416, `TSPICO-24.ROM`, PEEK 101 = 36).
+Every address above is the same in 2.4: the bytes at 2213h–221Eh, the 1640
+free bytes from 3998h, and no jumps into 2218h–221Eh.
+
+So this is **ROM 2.5**: version byte 25h (pre-header byte 2, `rom_id`) and
+G_VERS 0025h. Users now have 2.4, so the firmware can't assume the new ROM.
+It sends a keep-alive only when `rom_id` ≥ 25h. On a 2.4 ROM, 89h would
+fall off the chain (Report D), so `KEEP_ALIVE()` does nothing there, and the
+commands keep today's limits. `tpi:net find` keeps `NET_FIND_MS` and its
+"find again" answer for 2.4 ROMs, and drops them on 2.5. The release is the
+usual ROM bump: the image is renamed in every file that names it, and the
+updaters offer the ROM step.
 
 ### The lower screen, not the main one
 
@@ -272,7 +279,7 @@ end, or removes the file in a `finally` unless it finished.
 ## Tests
 
 - **ROM, in the Z80 interpreter** (`src/test/rom_keepalive_hosttest.py`,
-  like `rom_fn86_hosttest.py`, against the committed `TSPICO-23.ROM`). A
+  like `rom_fn86_hosttest.py`, against the committed ROM image). A
   simulated Pico answers a command with: 89h passes then 01h (OK, stack
   depth unchanged after 1000 passes); passes then a report (A = status −
   1); passes then 81h text and an 86h page; a pass and then silence (J at
@@ -308,9 +315,98 @@ In the same PR, by the `CLAUDE.md` routine:
 - `flows/` for the net commands, if one follows `tpi:net`.
 - `flash/manifest.json`: slot 1's CRC.
 
+## An alternative from the review: the border (Gustavo, #409)
+
+Gustavo suggested, on the PR, a change to the ROM's wait loop instead of a
+spinner, at the point where it tests READY (bit 6 of the status). While the
+2068 waits, the loop changes the border color: a steady color, alternating
+colors, or two-tone bars like the tape loader's. The border could show three
+states: waiting; still waiting after NN ms; and a timeout.
+
+### What it does and doesn't do
+
+- **It doesn't lift the limit.** The ready-wait still counts 226 polls, and
+  only something the Pico sends can restart it. So 89h is still needed for
+  any work longer than ~19.9 s. The border is a way to *show* the wait, not
+  to extend it.
+- **It shows on every command, with no firmware change.** Any wait longer
+  than the threshold shows: a slow mount, a big listing, an ESP32 starting
+  up. The spinner shows only where the firmware calls `KEEP_ALIVE()`.
+- **Combined with 89h, it simplifies the keep-alive.** If the border says
+  "busy", a pass needn't print anything: it is `89h, 00h`. Then the
+  lower-screen `CHR$ 8` question, the label, the wiping pass and the
+  choice of screen all go away. The program's screen is never touched.
+
+### Where it would go
+
+- **The poll.** 1A58h, `CALL RD_STATUS` (234Fh), becomes `CALL WAIT_POLL`,
+  a new routine in the module. It does what RD_STATUS does (READ_STATUS, the
+  READY test, the RECOVERED test), plus the border.
+  - **The threshold** is a count of polls, about 88 ms each. B counts down
+    from E2h (226); after 12 polls (B ≤ D6h, about 1 s) the border starts
+    to change. Waits shorter than that, which is nearly all of them, show
+    nothing, so fast commands don't flicker.
+  - **The pattern** comes from B, one color step per poll. Colors are
+    written with `OUT (FEh)`, bits 0–2, with bit 4 (the beeper) kept at 0,
+    as the stock code does.
+  - **READY** puts the border back from BORDCR (5C48h, bits 3–5) before
+    returning.
+- **The exits that must put the border back** (BORDCR, as the SAVE prompt's
+  BREAK routine at 22AEh already does):
+  - **READY**: in `WAIT_POLL` itself.
+  - **Timeout**: `WAIT_PICO_READY_FAIL` (1A61h) starts with 7 dead bytes
+    (`LD A,40h` and five `NOP`s); a `CALL` to the restore fits there.
+  - **BREAK**: `BRK_ABORT` (231Eh): its `CALL 230Eh` at 2322h becomes a
+    `CALL` to a restore that then jumps to 230Eh. Key prompts reach
+    `BRK_ABORT` too, which is harmless: the border is BORDCR's there anyway.
+  - **Report T**: inside `WAIT_POLL`, before its `RST 8`.
+- **The other wait.** `BIOS_WF_NPH` (239Eh) is the wait for the BIOS
+  callers, which include the disk keywords (CAT, COPY …, through
+  `C_END2`). It needs the same treatment, or a disk keyword's wait shows
+  nothing.
+
+### Combining it with 89h
+
+`KEEP_ALIVE` calls `WAIT_PICO_READY`, whose count starts again at 226 on
+each pass, and the READY at each pass restores the border. With a pass
+every 250 ms the border would never show. Two ways out:
+
+1. **The firmware sends passes rarely.** One every 10 s (half the budget)
+   is enough to keep the 2068 waiting. The border then shows for all but
+   about a second after each pass.
+2. **Keep the count across passes.** It lives in a spare byte of system
+   RAM instead of B, so a keep-alive's wait carries on where the last one
+   stopped. That needs a free byte the ROM owns (the TS-Pico's own 5DCxh
+   bytes, [sysvars.md](reference/rom/sysvars.md)). It's neater but takes
+   more bytes and more checks.
+
+Option 1 needs no extra ROM. I'd start there.
+
+### The timeout signal
+
+A timeout ends in Report J at once, which clears the lower screen and
+prints the report. A timeout color would show only for that moment, unless
+the ROM leaves it on, and then the border would stay wrong until the next
+CLS. The report already says what happened, so I'd leave the border
+alone at a timeout. It's worth hearing what Gustavo had in mind for this
+state.
+
+### Testing it
+
+The Z80-interpreter test gains port FEh: the border changes only after the
+threshold, and every exit (READY, timeout, BREAK, T) leaves it at
+BORDCR's color. In ZEsarUX and on a 2068, `kawait 60` with the border
+watched, and a short command watched for flicker.
+
 ## Questions for you
 
-1. Keep the name **ROM 2.3** with a new CRC (recommended), or bump to 2.4?
-2. **The lower screen** for the spinner (recommended), or the main screen?
-3. A debug command (`kawait n`) for the tests: keep it in the firmware,
+1. **ROM 2.5**, with the firmware checking `rom_id` before it sends 89h:
+   agreed?
+2. **The spinner, the border, or both?** My suggestion is both together in
+   the combined form: 89h with no text, a pass every 10 s, the border
+   showing the wait. That way every slow command shows something, and the
+   screen is never written to.
+3. If there's a spinner: **the lower screen** (recommended), or the main
+   screen?
+4. A debug command (`kawait n`) for the tests: keep it in the firmware,
    or test-only?
