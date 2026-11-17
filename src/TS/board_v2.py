@@ -25,6 +25,7 @@ HAS_JOYSTICK = False  # no joystick socket: 1Fh is not answered
 HAS_SPEECH = False  # no audio output: tpi:say answers "No speech on this board"
 HAS_CORE1 = True    # core 1 is free for background(): BLINK_LED, SAVE_LOG
 BLOCK_BUF = None    # no shared block buffer: LOAD and SAVE allocate (v2 has the heap)
+PSRAM_HEAP = False  # no PSRAM: nothing over BLOCK_SIZE is made on demand (board_v3)
 
 # Holds SM0 while the SD card has GPIO 2-4 (sd_take_bus).
 @asm_pio(

@@ -48,6 +48,7 @@ FULL = ("#tspico-taps\t1\t2026-11-07\ttapes 3\tmax-tap 65536\n"
         "TAP/GAMES/xadom.tap\tR\tXadom\t1984\tSomeone\t3000\t7\n"
         "TAP/ARCADE/ambush.tap\tL\tAmbush\t1983\tBews, Michael\t7994\t8\n")
 T21 = bytes((i * 7) & 0xFF for i in range(2087))
+TZZ = bytes((i * 11 + (i >> 8)) & 0xFF for i in range(60000))      # over 48K: needs the PSRAM
 XADOM = bytes((i * 3 + 1) & 0xFF for i in range(3000))
 
 
@@ -242,6 +243,7 @@ def main():
                ITEM + "TAP/GAMES/index2.txt": GAMES2.encode(),
                ITEM + "TAP/GAMES/21.tap": T21,
                ITEM + "TAP/GAMES/xadom.tap": XADOM,
+               ITEM + "TAP/GAMES/zz.tap": TZZ,
                ITEM + "tspico-taps.txt.gz": gz12(FULL.encode())}
     buf = bytearray(49160)
 
@@ -377,7 +379,17 @@ def main():
     check(got == [("MSG", "NET: No more in this folder", "", t._4_Q_Parameter)], "and again: Report Q")
     got = run("tpi:net 1")
     check(got[0] == ("MSG", "NET: Too big for the card: zz.tap", "60000 bytes, 49160 at most", t._6_6_Num2Big),
-          "a tape over 48K: refused before any fetch (%r)" % (got,))
+          "no PSRAM: a tape over 48K refused before any fetch (%r)" % (got,))
+    check(not os.path.exists(os.path.join(d, "TAP", "NET", "zz.tap")), "  nothing saved")
+    run("tpi:net more")                                  # back to part 2
+    board.PSRAM_HEAP = True
+    got = run("tpi:net 1")
+    board.PSRAM_HEAP = False
+    check(got == [("MSG", "Saved /TAP/NET/zz.tap", 'MOVE TO "/net", LOAD "tpi:zz.tap", then LOAD "" CODE', t._1_OK)],
+          "with the PSRAM: the 60000-byte tape fetched into a buffer of its own (%r)" % (got,))
+    with open(os.path.join(d, "TAP", "NET", "zz.tap"), "rb") as f:
+        check(f.read() == TZZ, "  /TAP/NET/zz.tap byte-exact")
+    check(len(board.BLOCK_BUF) == 49160, "  BLOCK_BUF left as it was")
     run("tpi:net ..")
     got = run("tpi:net 1")
     check("1 of 2" in got[0][1], "tpi:net ..: back up, then GAMES again")

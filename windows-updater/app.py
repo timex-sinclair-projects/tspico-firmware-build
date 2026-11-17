@@ -1,12 +1,14 @@
 """TS-Pico Updater -- the window.
 
-A tkinter front end for core.Updater: pick a channel, Connect, tick the
-options, Start. The run happens on a worker thread; it reaches the window only
+A tkinter front end for core.Updater: Connect, Start. A v2 board is always
+erased and gets the ROM update (the firmware needs its matching ROM); the v3
+card never is (core.Updater.run). The only option is the v3 card's modem. The run happens on a worker thread; it reaches the window only
 through the queue below, which the Tk loop drains every 50 ms.
 
     TS-Pico-Updater.exe [--channel main] [--base URL-or-folder]
 
---base points at another copy of the published /updater/ directory -- a local
+--channel main installs the latest main build instead of the release, for
+testing; the window offers no choice. --base points at another copy of the published /updater/ directory -- a local
 web-updater/ with a channel built by build-payload.sh, for testing.
 """
 
@@ -88,7 +90,6 @@ class App:
         self.ui = TkUi(self)
         self.up = core.Updater(self.ui, base)
         self.busy = False
-        self.manifests = {}
 
         root.title("TS-Pico Updater")
         root.minsize(640, 600)
@@ -101,18 +102,8 @@ class App:
 
         top = ttk.Frame(outer)
         top.pack(fill="x")
-        chf = ttk.LabelFrame(top, text="Install from", padding=8)
-        chf.pack(side="left", fill="both", expand=True)
-        self.ch = tk.StringVar(value=want)
-        self.ch_buttons = {}
-        for c, label in (("release", "Latest release"), ("main", "Latest main build (for testers)")):
-            b = ttk.Radiobutton(chf, text=label, value=c, variable=self.ch,
-                                command=lambda: self.load_channel(self.ch.get()))
-            b.pack(anchor="w")
-            self.ch_buttons[c] = b
-
         vf = ttk.LabelFrame(top, text="Versions", padding=8)
-        vf.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        vf.pack(side="left", fill="both", expand=True)
         self.latest = ttk.Label(vf, text="Latest: …")
         self.latest.pack(anchor="w")
         self.installed = ttk.Label(vf, text="Installed: not connected")
@@ -122,14 +113,6 @@ class App:
         opts.pack(fill="x")
         self.btn_connect = ttk.Button(opts, text="Connect to TS-Pico", command=self.connect)
         self.btn_connect.pack(side="left")
-        self.opt_wipe = tk.BooleanVar(value=True)
-        self.opt_rom = tk.BooleanVar(value=False)
-        self.cb_wipe = ttk.Checkbutton(opts, text="Erase the Pico first", variable=self.opt_wipe,
-                                       command=self.refresh)
-        self.cb_wipe.pack(side="left", padx=(12, 0))
-        self.cb_rom = ttk.Checkbutton(opts, text="Update the TS-2068 ROM", variable=self.opt_rom,
-                                      command=self.refresh)
-        self.cb_rom.pack(side="left", padx=(12, 0))
         # The v3 card's modem: shown once a v3 card is known and the channel
         # has Zimodem for it (refresh).
         self.opt_modem = tk.BooleanVar(value=True)
@@ -172,7 +155,7 @@ class App:
         self.set_stages_pending()
         self.refresh()
         root.after(50, self.pump)
-        self.work(self.load_channels, want)
+        self.work(self._load_channel, want)
 
     # --- worker thread ------------------------------------------------------
     def work(self, fn, *args):
@@ -185,35 +168,14 @@ class App:
         self.refresh()
         threading.Thread(target=body, daemon=True).start()
 
-    def load_channels(self, want):
-        for c in core.CHANNELS:
-            try:
-                m = core.Channel(c, self.up.base).load()
-                self.manifests[c] = m
-                self.q.put(("chlabel", c, "%s (%s, %s)" % (
-                    "Latest release" if c == "release" else "Latest main build (for testers)",
-                    m.get("fw_version", "?"), m.get("tag", ""))))
-            except Exception as e:
-                self.ui.log("Channel %s: not available (%s)" % (c, e), "warn")
-                self.q.put(("chlabel", c, None))
-        if want not in self.manifests:
-            want = next((c for c in core.CHANNELS if c in self.manifests), None)
-        if want:
-            self._load_channel(want)
-        else:
-            self.ui.log("No channel could be loaded. Check the internet connection and restart.", "error")
-
     def _load_channel(self, c):
         try:
             m = self.up.load_channel(c)
         except Exception as e:
-            self.ui.log("Could not load %s: %s" % (c, e), "error")
+            self.ui.log("Could not load %s: %s. Check the internet connection and restart." % (c, e),
+                        "error")
             return
         self.q.put(("channel", c, m))
-
-    def load_channel(self, c):
-        if not self.busy:
-            self.work(self._load_channel, c)
 
     def connect(self):
         def body():
@@ -244,14 +206,13 @@ class App:
                 self.refresh()
         if not self.up.image()[0]:
             return
-        wipe = self.opt_wipe.get() and not self.up.v3
-        rom = self.opt_rom.get() and not self.up.v3
+        wipe = rom = not self.up.v3
         modem = self.opt_modem.get()
         if wipe and not messagebox.askokcancel(
                 "TS-Pico Updater",
                 "This erases everything on the Pico — firmware and files — and installs firmware %s. "
-                "Nothing on the TS-2068, SD card or EXROM is touched%s\n\nContinue?" % (
-                    m["fw_version"], " except the ROM update you asked for." if rom else ".")):
+                "Nothing on the TS-2068, SD card or EXROM is touched, except that the TS-2068 ROM is "
+                "updated.\n\nContinue?" % m["fw_version"]):
             return
 
         def body():
@@ -311,25 +272,13 @@ class App:
             text, done, box = a
             box["ok"] = messagebox.askokcancel("TS-Pico Updater", text)
             done.set()
-        elif kind == "chlabel":
-            c, text = a
-            if text:
-                self.ch_buttons[c].configure(text=text, state="normal")
-            else:
-                self.ch_buttons[c].configure(state="disabled")
         elif kind == "channel":
             c, m = a
-            self.ch.set(c)
             self.latest.configure(text="Latest: %s%s" % (
                 m.get("fw_version", "?"), " (TS-2068 ROM %s)" % m["rom_version"] if m.get("rom_version") else ""))
-            if self.up.installed and m.get("upgrade_uf2"):
-                self.opt_rom.set(self.up.rom_behind())
         elif kind == "installed":
             inst = a[0]
             self.installed.configure(text="Installed: %s" % inst["fw"])
-            m = self.up.manifest
-            if m and m.get("upgrade_uf2"):
-                self.opt_rom.set(self.up.rom_behind())
         elif kind == "running":
             self.set_stages_pending()
         elif kind == "alldone":
@@ -350,38 +299,26 @@ class App:
 
     def refresh(self):
         m = self.up.manifest
-        v3 = self.up.v3
-        if v3:                                   # its ROM slots are files: never wiped, no ROM step
-            self.opt_wipe.set(False)
-            self.opt_rom.set(False)
-        rom = self.opt_rom.get()
-        if rom:
-            self.opt_wipe.set(True)              # the upgrade UF2 needs an empty filesystem
+        v3 = self.up.v3                          # its ROM slots are files: never wiped, no ROM step
         problem = ""
         if not m:
             problem = "No payload loaded yet."
         elif v3 and not m.get("v3"):
-            problem = "This channel has nothing for the v3 card yet. Pick “Latest main build”."
+            problem = "This release has nothing for the v3 card."
         elif not v3 and not m.get("uf2"):
-            problem = "This channel has no firmware image. Pick the other channel."
-        elif rom and not m.get("upgrade_uf2"):
-            problem = ("This channel has no ROM updater (upgrade.uf2). Pick “Latest main build”, "
-                       "or untick the ROM update.")
+            problem = "This release has no firmware image."
+        elif not v3 and not m.get("upgrade_uf2"):
+            problem = "This release has no ROM updater (upgrade.uf2)."
         idle = not self.busy
         zim = v3 and bool(self.up.zimodem())
         if zim and not self.cb_modem.winfo_manager():
-            self.cb_modem.pack(side="left", padx=(12, 0), after=self.cb_rom)
+            self.cb_modem.pack(side="left", padx=(12, 0), after=self.btn_connect)
         elif not zim:
             self.cb_modem.pack_forget()
         self.cb_modem.state(["!disabled"] if idle else ["disabled"])
         self.btn_start.state(["!disabled"] if idle and not problem else ["disabled"])
         self.btn_connect.state(["!disabled"] if idle and not self.up.port else ["disabled"])
         self.btn_connect.configure(text="Connected" if self.up.port else "Connect to TS-Pico")
-        self.cb_rom.state(["!disabled"] if idle and m and m.get("upgrade_uf2") and not v3 else ["disabled"])
-        self.cb_wipe.state(["!disabled"] if idle and not rom and not v3 else ["disabled"])
-        for c, b in self.ch_buttons.items():
-            b.state(["!disabled"] if idle and c in self.manifests else ["disabled"])
-        inst = self.up.installed
         if problem:
             text, colour = problem, "#b26a00"
         elif v3:
@@ -394,26 +331,11 @@ class App:
                                 "installs %s if it's missing or older; its WiFi and phonebook "
                                 "settings are kept." % (self.up.zimodem().get("version") or "this release's")
                                 if zim and self.opt_modem.get() else "")), "#333"
-        elif inst and inst["from1x"] and not rom:
-            text, colour = ("This board is on %s. Its TS-2068 ROM can't talk to firmware %s — tick "
-                            "“Update the TS-2068 ROM” or the 2068 won't work afterwards." % (
-                                inst["fw"], m["fw_version"])), "#b26a00"
-        elif not rom and self.up.rom_behind():
-            text, colour = ("This board is on %s, so its TS-2068 ROM is older than ROM %s, which "
-                            "firmware %s needs. Tick “Update the TS-2068 ROM” to install it with the "
-                            "firmware." % (inst["fw"], m.get("rom_version") or m["fw_version"],
-                                           m["fw_version"])), "#b26a00"
         else:
-            steps = []
-            if self.opt_wipe.get():
-                steps.append("erase the Pico")
-            if rom:
-                steps.append("update the TS-2068 ROM (you’ll type two commands on the 2068)")
-            steps += ["install firmware %s" % m["fw_version"], "copy its files"]
-            text, colour = ("Start will " + ", then ".join(steps) +
-                            ". Keep the USB cable connected throughout."), "#333"
+            text, colour = ("Start will erase the Pico, then update the TS-2068 ROM (you’ll type two "
+                            "commands on the 2068), then install firmware %s, then copy its files. "
+                            "Keep the USB cable connected throughout." % m["fw_version"]), "#333"
         self.hint.configure(text=text, foreground=colour)
-
 
 def main():
     ap = argparse.ArgumentParser(description="TS-Pico Updater")

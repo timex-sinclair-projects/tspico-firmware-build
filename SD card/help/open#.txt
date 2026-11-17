@@ -5,7 +5,7 @@ OPEN# s,"c"
 Open channel "c" as stream
 number s.
 
-TS-Pico (ROM 2.3) adds three:
+TS-Pico (ROM 2.4) adds three:
   OPEN #s,"f:name"[,"m"[,n]]
 A file on the SD card. The mode
 m is r (read, the default), w

@@ -92,7 +92,7 @@ Ten bytes open every transaction. Byte 0 picks the kind
 |---|---|---|
 | 0 | `'B'` | flag: 00h header, FFh data |
 | 1 | TADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE) | TADDR |
-| 2 | 23h, the ROM's version (the firmware's `rom_id`; FFh before ROM 2.3) | bank |
+| 2 | 24h, the ROM's version (the firmware's `rom_id`; 23h from ROM 2.3, FFh before it) | bank |
 | 3–4 | PMR1: the first `CODE` number, little-endian | session id |
 | 5–6 | PMR2: the second `CODE` number | address (IX) |
 | 7–8 | length of the command text | block length (DE) |
@@ -183,7 +183,7 @@ back as typed after a ready wait (`SEND_KEY`, 1C40h; #227).
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (low nibble); AF kept |
 | 1842h | S_MODE | TPMODE := A AND 0Fh; AF kept |
-| 1844h | G_VERS | BC = the version: 0023h on ROM 2.3 (0022h on 2.2, 0015h on 1.1) |
+| 1844h | G_VERS | BC = the version: 0024h on ROM 2.4 (0023h on 2.3, 0022h on 2.2, 0015h on 1.1) |
 | 1846h | TX_A | `OUT (0Eh),A`; no wait |
 | 1848h | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | 184Ah | C_END | wait READY, read the answer, run the response functions; NC = status 1 |

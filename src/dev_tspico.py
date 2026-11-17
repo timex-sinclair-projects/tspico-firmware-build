@@ -552,12 +552,12 @@ except ImportError:
 
 # The TS-Pico version: the firmware and its TS-2068 ROM share one major.minor
 # number from 2.0 on, and a third part marks a firmware-only release on the
-# same ROM. 2.3 is the release ROM: the disk-command build from
-# tools/build-rom.py (PEEK 101 = 23h), which this firmware needs. tpi:info
+# same ROM. 2.4 is the release ROM: the disk-command build from
+# tools/build-rom.py (PEEK 101 = 24h), which this firmware needs. tpi:info
 # reports FW_VERSION, and the ROM's own version when it sends one (rom_id);
 # ROM_VERSION is what config.ini and the updaters say the release ROM is.
-FW_VERSION = "2.3.1"
-ROM_VERSION = "2.3"
+FW_VERSION = "2.4"
+ROM_VERSION = "2.4"
 # Self-labeling: when loaded as the frozen module __name__ == "TS.tspico";
 # when loaded via the dev override __name__ == "dev_tspico". This file is
 # kept byte-identical between the two locations so the stamp prints the
@@ -3852,7 +3852,7 @@ def X_RUN(line):                                                              # 
         label, free, total = "", 0, 0
         try:
             ACTIVATE_SD()
-            vfs = os.statvfs("")
+            vfs = os.statvfs("/sd")                                           # by path: the last unmount left the cwd at / (the flash)
             total, free = vfs[2] * vfs[0], vfs[3] * vfs[0]
             label = TSP.sd_label
         except OSError:
@@ -5418,6 +5418,8 @@ def LOAD_CONFIG():
     default_values["SPEECH_PORTS"] = True                      # ... OUT 17 / IN 37 answered, as David's speech board
     default_values["SPEECH_GREETING"] = ""                     # ... said at power-on into the 2068's own ROM (tpi:greet); "": none
     default_values["AUTOMOUNT"] = ""                           # a .tap mounted at power-on, from the card's top (tpi:automount); "": none
+    default_values["PRINTER_AUTOLF"] = False                   # printer capture: CR+LF line ends at power-on (tpi:autolf changes it until the next)
+    default_values["PRINTER_AUTOPG"] = False                   # ... a form feed every page length at power-on (tpi:autopg)
     default_values["FW_VERSION"] = FW_VERSION
     default_values["ROM_VERSION"] = ROM_VERSION                # the ROM this firmware ships with
     # Fill any missing values with the default
@@ -5454,7 +5456,7 @@ def LOAD_CONFIG():
     # The modem's keys (the v3 card, docs/v3-modem-proposal.md): a mode it
     # knows, a pace from 0 (none) to the line's 115200, an idle time from a
     # minute to a day; the joystick's on/off; speech's volume, rate and ports,
-    # the greeting and the auto-mount. Anything else is logged and replaced, as
+    # the greeting and the auto-mount; the printer's line ends and paging. Anything else is logged and replaced, as
     # above.
     for key, ok in (("MODEM_MODE", lambda v: v in ("2050", "hayes", "off")),
                     ("MODEM_BAUD", lambda v: type(v) is int and 0 <= v <= 115200),
@@ -5464,7 +5466,9 @@ def LOAD_CONFIG():
                     ("SPEECH_RATE", lambda v: type(v) is int and 50 <= v <= 150),
                     ("SPEECH_PORTS", lambda v: type(v) is bool),
                     ("SPEECH_GREETING", lambda v: type(v) is str),
-                    ("AUTOMOUNT", lambda v: type(v) is str)):
+                    ("AUTOMOUNT", lambda v: type(v) is str),
+                    ("PRINTER_AUTOLF", lambda v: type(v) is bool),
+                    ("PRINTER_AUTOPG", lambda v: type(v) is bool)):
         if not ok(init_values[key]):
             LOG("Incorrect %s %r. Using default value of %r instead"
                 % (key, init_values[key], default_values[key]), 2)
@@ -6046,8 +6050,9 @@ def NET(pre, cmd):                                                    # Tapes fr
     # SAVE "tpi:net update"       - Download the full index again (find downloads it once)
     #
     # The tapes are plain files in the tspico-2068-tapes item on archive.org
-    # (#401), fetched by Zimodem (board.wifi_get) into BLOCK_BUF, so a tape
-    # over 48K is refused before it is fetched. One fetch per command keeps
+    # (#401), fetched by Zimodem (board.wifi_get) into BLOCK_BUF. A tape over
+    # 48K gets a buffer of its own on a card with the PSRAM (board.PSRAM_HEAP)
+    # and is refused before it is fetched on one without. One fetch per command keeps
     # it inside the 2068's ~19.9 s wait. A download isn't mounted (David,
     # 2026-11-08): MOVE TO "/net", then LOAD "tpi:name.tap". The list is kept
     # on flash (net.LIST_PATH); the full index on the card (net.FULL_PATH).
@@ -6138,25 +6143,31 @@ def NET_GET(net, e, par1):                                            # download
 
     name = net.name_of(e)
     size = int(e[4])
-    room = len(board.BLOCK_BUF)
-    if size > room:                                                   # refused before any fetch
-        SEND_MSG("NET: Too big for the card: %s" % name, "%d bytes, %d at most" % (size, room), _6_6_Num2Big)
-        return
+    buf = board.BLOCK_BUF
+    if size > len(buf):                                               # over 48K: with the PSRAM, a
+        try:                                                          # buffer of its own; without,
+            buf = bytearray(size) if board.PSRAM_HEAP else None       # refused before any fetch
+        except MemoryError:
+            buf = None
+        if buf is None:
+            SEND_MSG("NET: Too big for the card: %s" % name,
+                     "%d bytes, %d at most" % (size, len(board.BLOCK_BUF)), _6_6_Num2Big)
+            return
     dest = net.SAVE_DIR + "/" + name
     there, st = SD_CALL(NET_EXISTS, dest)
     if st != _1_OK:
         SEND_MSG(there, "", st)
         return
-    n = board.wifi_get(net.tape_url(e[1]), board.BLOCK_BUF)
+    n = board.wifi_get(net.tape_url(e[1]), buf)
     if there and par1 == 0:
         ch = SEND_MSG_PROMPT_YN('Replace "%s" (y/N)?' % name)         # the prompt is the answer:
         if ch != 89: # 89='Y'                                         # the rest only reaches the log
             LOG("NET: %s not replaced" % name, 0)
             return
-        msg, st = SD_CALL(NET_WRITE, dest, n)
+        msg, st = SD_CALL(NET_WRITE, dest, buf, n)
         LOG(msg, 0 if st == _1_OK else 2)
         return
-    msg, st = SD_CALL(NET_WRITE, dest, n)
+    msg, st = SD_CALL(NET_WRITE, dest, buf, n)
     LOG(msg, 0 if st == _1_OK else 2)
     SEND_MSG(msg, ('MOVE TO "/net", LOAD "tpi:%s", then %s' % (name, net.how(e[2])))
              if st == _1_OK else "", st)
@@ -6167,14 +6178,14 @@ def NET_EXISTS(dest):                                                 # NET_GET,
     return file_exists(dest), _1_OK
 
 
-def NET_WRITE(dest, n):                                               # BLOCK_BUF's n bytes to dest: SD active
+def NET_WRITE(dest, buf, n):                                          # buf's n bytes to dest: SD active
 
     from TS import net
     if not dir_exists(net.SAVE_DIR):
         os.mkdir(net.SAVE_DIR)
     try:
         with open(dest, "wb") as f:
-            f.write(memoryview(board.BLOCK_BUF)[:n])
+            f.write(memoryview(buf)[:n])
     except OSError:
         try:
             os.remove(dest)                                           # no half a tape left behind
@@ -6983,7 +6994,8 @@ def PRN_FLAG(pre, cmd):
 
 def PRN_SIZE(pre, cmd):
     """SAVE "tpi:prnsz" CODE cols,lines (or "tpi:prnsz cols lines"): page
-    size for wrapping and AUTOPG. No parameters: report it."""
+    size for wrapping and AUTOPG. No parameters: report it, and the AUTOLF
+    and AUTOPG settings, even with VERBOSE off."""
     cols, lines = PARAMS(pre)
     args = getArgs(cmd).replace(",", " ").split()
     try:
@@ -6996,13 +7008,17 @@ def PRN_SIZE(pre, cmd):
     except (ValueError, IndexError):
         SEND_MSG("Printer size: bad parameters", "", _4_Q_Parameter)
         return
-    SEND_MSG("Printer size: %d columns, %d lines" % (PRT.cols, PRT.lines), "", _1_OK)
+    query = not (cols or lines or args)
+    SEND_MSG("Printer size: %d columns, %d lines" % (PRT.cols, PRT.lines),
+             "CR+LF %s, paging %s" % ("on" if PRT.autolf else "off",
+                                      "on" if PRT.autopg and PRT.lines else "off"),
+             _1_OK, query)                          # asked: shown even with VERBOSE off
 
 
 def PRN_BMP(pre, cmd):
     """SAVE "tpi:bmp" CODE x,y: COPY picture size -- 256/512/1024/2048 x
     192/384/768/1536 (hi-res screens 512/1024/2048/4096 wide). No
-    parameters: report it."""
+    parameters: report it, even with VERBOSE off."""
     global bmp_size
     x, y = PARAMS(pre)
     if x or y:
@@ -7012,7 +7028,7 @@ def PRN_BMP(pre, cmd):
             SEND_MSG("BMP size: use 256-4096 x 192-1536", "", _4_Q_Parameter)
             return
         bmp_size = (x, y)
-    SEND_MSG("COPY picture: %dx%d" % bmp_size, "", _1_OK)
+    SEND_MSG("COPY picture: %dx%d" % bmp_size, "", _1_OK, not (x or y))
 
 def FAIL_CMD(status):
     """Put TX into a known state and hand the Z80 exactly one status byte.
@@ -7405,6 +7421,9 @@ def TS2068_IO():                                                         # Main 
     LOG("Starting TS Pico. Memory at startup: %d" % gc.mem_free(), 0)
     SAVE_LOG()
         
+
+    PRT.autolf = init_values.get("PRINTER_AUTOLF", False)              # the printer's settings at power-on (#335)
+    PRT.autopg = init_values.get("PRINTER_AUTOPG", False)
 
     need_sd = 3 in (TSP.ROM_SM & 3, TSP.ROM_SM >> 2)                    # v3: a boot or dock slot on the SD card
     if need_sd:

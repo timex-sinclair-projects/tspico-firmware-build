@@ -814,10 +814,14 @@ matched in either case:
 | `path` | the current folder, `public_path()`, as `tpi:path` shows it |
 | `dir` | `XDirText(INDEX)` ([tspico-files.md](tspico-files.md)): the folder count, the file count, then `dirinfo.tap`'s rows, made as they are read |
 | `mount` | the mounted file, `public_fname()`, or an empty line when none is |
-| `info` | five lines: the card's label, its free bytes and its total bytes (`os.statvfs`), `TSP.FW_VERSION`, and the ROM's version from `rom_id` (`"2.3"`; empty when the ROM sent FFh) |
+| `info` | five lines: the card's label, its free bytes and its total bytes (`os.statvfs`), `TSP.FW_VERSION`, and the ROM's version from `rom_id` (`"2.4"`; empty when the ROM sent FFh) |
 
-`path` and `mount` read only RAM. `info` mounts the card for `statvfs`
-(`ACTIVATE_SD` … `DEACTIVATE_SD`, `ACTIVATE_MQ` in a `finally`); with no
+`path` and `mount` read only RAM. `info` mounts the card for
+`os.statvfs("/sd")` (`ACTIVATE_SD` … `DEACTIVATE_SD`, `ACTIVATE_MQ` in a
+`finally`). It names `/sd` because `ACTIVATE_SD` doesn't change folder: the
+unmount at the end of the last command left the current folder at `/`, so
+`statvfs("")` measured the Pico's flash (until 2026-11-10 it did, and
+`info` gave 1.4 MB). With no
 card, or an SD error, the label is empty and both sizes 0, and the versions
 are still there. `dir` mounts the card for `LISTING_FRESHEN`, so the index
 matches the card before its rows are read, then collects garbage before it

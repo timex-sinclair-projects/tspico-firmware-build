@@ -99,6 +99,15 @@ two apart:
   channels, which have to use the UART, are paused around every flash
   erase and program (`__wrap_flash_range_erase`, below). A `tpi:modem 2050`
   loop then ran 419 commands without a fault (it had failed at once).
+- **Nor may any DMA touch the PSRAM.** It sits behind the QMI, and a DMA
+  read or write there waits on it, holding `ch_ptr` and `ch_data` up the
+  same way. With the PSRAM in the GC heap (#410), the SD driver's SPI DMA
+  sent blocks straight from heap buffers in the PSRAM: `tpi:net` crashed
+  the 2068 about half the time, in the SD write, and 12 s of SD writes
+  from 0x11000000 crashed it at once, where the same writes from SRAM did
+  not (2026-11-09). The CPU's own PSRAM traffic did no harm. The driver
+  now copies such blocks through SRAM ([sdcard.md](sdcard.md), "SPI DMA
+  and the PSRAM").
 - **PIO and DMA** are claimed through the SDK. MicroPython's `rp2` refuses
   claimed state machines and frees only what it claimed itself at soft
   reset, so `tsbus` keeps running through Ctrl-D (checked). PIO0 and PIO1
@@ -478,6 +487,30 @@ from the USB PLL and do not change. The board boots at 150 MHz because the
 SDK sets the boot clock before MicroPython sets the flash divider
 ([board-v3.md](board-v3.md)). If Python later calls `machine.freq()`, the
 bus timing is gone; nothing guards against it yet.
+
+With PSRAM (`MICROPY_HW_ENABLE_PSRAM`, [board-v3.md](board-v3.md#mpconfigboardcmake))
+and the chip found, it then sets the PSRAM's QMI timing again for 250 MHz,
+as `machine.freq()` does: `psram_configure_params` with the SDK's defaults
+(at most 133 MHz) and `psram_reinitialize`. Why: `main()` set the divider
+and read delay for 150 MHz, and the GC heap is partly in the PSRAM. Read
+back on the card at 250 MHz (2026-11-08): divider 2 (125 MHz), read delay
+3, and `src/test/psram_test.py` passes on all 8 MB (the reserve and the heap).
+
+`psram_reinitialize` runs with interrupts off (`save_and_disable_interrupts`).
+It calls the SDK's `flash_start_xip`, which takes the flash and the PSRAM
+out of XIP for a moment and does not mask interrupts itself, so an
+interrupt there runs its handler from flash (or reaches the GC heap in the
+PSRAM) and core 0 locks up. `tsbus.start()` runs from `main.py` while the
+host is still enumerating USB, and about one reset in twenty
+(2026-11-09) left the card stuck mid-enumeration: the Mac had read its
+descriptors, no serial port came, the 2068 never got its ROM, and only RUN
+brought it back. Proved from the REPL with `main.py` set aside: with a
+10 kHz `machine.Timer` interrupt running, `machine.freq()` at the same
+clock (the same `psram_reinitialize`, interrupts on) locked core 0 within
+500 calls; with `machine.disable_irq()` around each call, 20,000 calls
+and 156,647 timer interrupts passed. Core 1 isn't running yet here.
+MicroPython's own `machine.freq()` has the same window *(upstream; not
+fixed here: the firmware never calls it)*.
 
 ### `tsbus.start()`
 

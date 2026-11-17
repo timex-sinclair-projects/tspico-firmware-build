@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the TS-Pico 2.3 tour and its demo card (promo/demo/README.md).
+"""Build the TS-Pico 2.4 tour and its demo card (promo/demo/README.md).
 
     python3 promo/demo/build.py [--zmakebas PATH]
 
@@ -24,7 +24,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 CARD = os.path.join(HERE, "card", "TAP")
-ROM = os.path.join(REPO, "src", "rom", "TSPICO-23.ROM")
+ROM = os.path.join(REPO, "src", "rom", "TSPICO-24.ROM")
 DEMO_BAS = os.path.join(REPO, "basic", "SD", "TAP", "demo")
 
 NATO = ("alpha bravo charlie delta echo foxtrot golf hotel india juliett kilo lima mike "
@@ -76,7 +76,7 @@ def header(kind, name, length, p1, p2=0x8000):
 
 
 def picture():
-    """art.tap's SCREEN$: TS-Pico and 2.3 in big ROM letters, on blue,
+    """art.tap's SCREEN$: TS-Pico and 2.4 in big ROM letters, on blue,
     with the four stripes."""
     font = open(ROM, "rb").read()[0x3D00:0x4000]
     px = [[0] * 256 for _ in range(192)]
@@ -93,7 +93,7 @@ def picture():
                                 px[y + r * k + yy][x + (i * 8 + c) * k + xx] = 1
 
     text("TS-Pico", 44, 12, 3)
-    text("2.3", 72, 44, 5)
+    text("2.4", 72, 44, 5)
     for r in range(5, 11):
         for c in range(8, 24):
             attr[r][c] = 0x0E                                   # yellow ink on blue

@@ -4,11 +4,12 @@ Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
 1858 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
 at EXROM 3000h–3997h and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
-`src/rom/TSPICO-23.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
+`src/rom/TSPICO-24.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
 
-The module and its patches are ROM 2.3's last layer (2.2's, plus #227 and
-#228: see `PS_READ` and [overview.md](overview.md)). The module gives the
+The module and its patches are ROM 2.4's last layer (2.2's, plus #227 and
+#228 in 2.3 — see `PS_READ` — and COPY, LIST, RESTORE, `CAT #` and the
+`v:` and `x:` channels in 2.4: [overview.md](overview.md)). The module gives the
 2068's dormant disk keywords — CAT, MOVE, ERASE, FORMAT — real meanings
 on the SD card; gives COPY a file form (`COPY "a" TO "b"`) beside the
 printer one, LIST a file form (`LIST "name"`) beside the program listing,
@@ -136,7 +137,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `SESSION_ID` | 5DD1h | where the session id is kept |
 | `IY_SYSVARS` | 5C3Ah | what HOME expects in IY (the bank switch clobbers IY) |
 | `BANK_SV` | 5DCFh | pre-header byte 2 up to ROM 2.2 (always FFh); no longer read by the module |
-| `ROM_ID` | 23h | not a variable: what ROM 2.3 sends as byte 2 of a command pre-header instead of `BANK_SV`, the same value as its version marker (HOME 0065h). `SEND_FOPEN` and `CH_SEND` send it, and `build-rom.py` patches `BUILD_PREHEADER_B` (1BB5h) to send it too, so the firmware knows which ROM sent each command (`rom_id`, shown by `tpi:info`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id), #227) |
+| `ROM_ID` | 24h | not a variable: what ROM 2.4 sends (2.3 sent 23h) as byte 2 of a command pre-header instead of `BANK_SV`, the same value as its version marker (HOME 0065h). `SEND_FOPEN` and `CH_SEND` send it, and `build-rom.py` patches `BUILD_PREHEADER_B` (1BB5h) to send it too, so the firmware knows which ROM sent each command (`rom_id`, shown by `tpi:info`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id), #227) |
 | `MODE_SV` | 5DDBh | TPMODE; F_HOOK clears bits 7–4 as SESSION_SETUP's non-command exit does; TAPE_MODE clears bit 1 |
 | `MODE_SET_OK` | 2105h | where `tpi:sdcard` and `tpi:picopt` end: `CALL S_MODE` (1862h) with A, `CALL 042Fh`, `JP 1B72h` ("0 OK"); TAPE_MODE jumps here |
 | `CURCHL` | 5C51h | the current channel's record |

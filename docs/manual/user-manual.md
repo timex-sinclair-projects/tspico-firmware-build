@@ -1,10 +1,10 @@
 # TS-Pico User Manual
 
 <!-- v2 -->
-### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.3
+### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.4
 <!-- /v2 -->
 <!-- v3 -->
-### For the TS-Pico v3 card for the Timex Sinclair 2068 — version 2.3
+### For the TS-Pico v3 card for the Timex Sinclair 2068 — version 2.4
 <!-- /v3 -->
 
 ## Contents
@@ -371,13 +371,13 @@ You'll need the TS-Pico fitted (2.2) and an SD card in its socket (2.4).
    You should see the screen look frozen or garbled for a couple of seconds while the Pico
    starts, and the Pico's LED blinking while it opens the SD card and reads your `TAP` folder.
    Then the 2068 starts, with the usual copyright lines and the TS-Pico's own line, which
-   includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
+   includes the ROM version, for example `2026 TS-Pico ROM v2.4`.
 <!-- /v2 -->
 <!-- v3 -->
 
    You should see the screen stay dark for a moment while the card loads the ROM into its
    memory and opens the SD card. Then the 2068 starts, with the usual copyright lines and the
-   TS-Pico's own line, which includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
+   TS-Pico's own line, which includes the ROM version, for example `2026 TS-Pico ROM v2.4`.
 <!-- /v3 -->
 2. Press **ENTER**.
 
@@ -1506,10 +1506,13 @@ same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©
 
 | Command | What it does |
 |---|---|
-| `SAVE "tpi:prnsz" CODE 80,72` | Wrap lines at 80 columns (0 = never) and set pages to 72 lines (0 to 255 each). `SAVE "tpi:prnsz"` alone shows the current size. |
+| `SAVE "tpi:prnsz" CODE 80,72` | Wrap lines at 80 columns (0 = never) and set pages to 72 lines (0 to 255 each). `SAVE "tpi:prnsz"` alone shows the current size and whether `autolf` and `autopg` are on. |
 | `SAVE "tpi:autolf"` / `"tpi:noautolf"` | End lines with CR+LF (for Windows) / with LF (the default) |
-| `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default) |
-| `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. |
+| `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default). A page length of 0 never starts one. |
+| `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. `SAVE "tpi:bmp"` alone shows the current size. |
+
+`autolf` and `autopg` last until the TS-Pico is switched off. To have either one on from
+switch-on, set `PRINTER_AUTOLF` or `PRINTER_AUTOPG` to `true` in `config.ini` (Appendix D.1).
 
 COPY understands the 2068's other screen modes too: the second screen, hi-color, and the
 512-column hi-res mode.
@@ -1619,6 +1622,23 @@ the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in t
 for example, and it takes the Spectrum ROM's place until you change the dock back
 (`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
 slot 0.
+
+### Leap
+
+Charlie Day's Leap languages run from the dock: Leap-Forth as a full Forth system, Leap V2 and
+Leap-C as a cartridge that runs one program. Their 32K ROM images don't work as a BOOT slot on
+this board, because they use parts of the extension ROM that the TS-Pico can't supply. Use the
+cartridges instead:
+
+- **Leap-Forth:** `forth_cart.dck`, in the `roms` folder of the 2068-Forth release zip
+  (github.com/nchiker/2068-Leap-Forth).
+- **Leap V2 and Leap-C:** the Leap IDE's **DCK** export builds a cartridge with your program in it.
+
+Put the cartridge in a slot (8.4), and when the loader offers to dock it and restart, answer **Y**.
+To start Leap every time you switch on, put it in a Flash slot and set `DCK_SLOT` in `config.ini`
+to that slot (Appendix D).
+
+Leap saves and loads on cassette, not on the SD card.
 
 ## 8.4 Putting a ROM or cartridge into a slot
 
@@ -2742,17 +2762,14 @@ Install the firmware and the ROM from the same release: they are made to work to
 2. Connect the Pico's Micro-USB socket to your computer. Close Thonny or anything else that
    might be using the Pico.
 3. Open the TS-Pico web updater,
-   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Latest release**.
-4. Press **Connect to TS-Pico** and choose the Pico in the list. The page reads what's installed
-   and suggests the right steps.
-5. Choose your options:
-   - **Erase the Pico first** is recommended. The page ticks it, and keeps it ticked, when the
-     ROM is being updated.
-   - **Update the TS-2068 ROM** is needed on every board that isn't already on this release.
-     The page ticks it for you unless the board already runs it.
+   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Mac**
+   at Step 1 (on Linux and ChromeOS too). It installs the latest release.
+4. Press **Connect to TS-Pico** and choose the Pico in the list. The page reads what's installed.
+5. Every update erases the Pico and updates the TS-2068 ROM: the firmware needs its matching
+   ROM. There's nothing to choose.
 6. Press **Start**, and follow the page. It puts the Pico into its update mode by itself. If your
    browser asks you to pick a drive, choose **RPI-RP2**.
-7. **If you're updating the ROM**, the page asks you to go to the 2068:
+7. For the ROM update, the page asks you to go to the 2068:
    1. Fit the **P10 jumper** if your board has one, and leave it on.
    2. Switch the 2068 **on**.
    3. Type `OUT 244,3` and press **ENTER**. This switches to the Spectrum ROM.
@@ -2761,8 +2778,8 @@ Install the firmware and the ROM from the same release: they are made to work to
    6. Switch the 2068 **off** again, and press **The 2068 is off — continue** on the page.
 8. The page installs the firmware and copies its files to the Pico.
 9. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
-   reads `2026 TS-Pico ROM v2.3`. Try `CAT`. `PRINT PEEK 101` gives **35** (ROM 2.3), and
-   `SAVE "tpi:info"` shows firmware 2.3.1 and ROM 2.3.
+   reads `2026 TS-Pico ROM v2.4`. Try `CAT`. `PRINT PEEK 101` gives **36** (ROM 2.4), and
+   `SAVE "tpi:info"` shows firmware 2.4 and ROM 2.4.
 
 > **Why unplug the USB cable at the end?** It gives the TS-Pico and its SD card a real power-off.
 > A card left powered through a firmware update can be stuck until it loses power (see 2.6).
@@ -2772,20 +2789,19 @@ the Pico's white **BOOTSEL** button, press and release the TS-Pico's **Pico Rese
 unplug and replug the USB cable), then let go. A drive called **RPI-RP2** appears on your
 computer. Leave it alone and press **Start** without connecting.
 
-**On Windows**, the browser can't put the firmware onto the Pico. Download
-**TS-Pico-Updater.exe** from the
+**On Windows**, the browser can't put the firmware onto the Pico. Choose **Windows** at Step 1
+on the updater page and download **TS-Pico-Updater.exe**, or get it from the
 [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
-click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
-release**, then **Connect to TS-Pico**, tick the options, press **Start**, and follow the same
-steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
+click **More info**, then **Run anyway**. The program works like the web page: press **Connect to
+TS-Pico**, then **Start**, and follow the same steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the
-RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then, unless the board already
-has this release's ROM, `upgrade.uf2` and the ROM steps above, then `firmware.uf2`. The
-firmware and the ROM go together: firmware 2.3 needs ROM 2.3. Finally connect with the web page
-and press Start with **Erase** unticked to copy the files.
+RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then `upgrade.uf2` and the ROM
+steps above, then `firmware.uf2`. The firmware and the ROM go together: firmware 2.4 needs ROM
+2.4. Only the guided update copies the firmware's files to the Pico, so finish by connecting
+with the web page and pressing **Start**.
 
 ## A.3 Updating the SD card
 
@@ -2812,11 +2828,11 @@ To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1: NEW`. You can
 If the 2068 starts with colored stripes and TS Reset doesn't help, but another slot boots, you
 can put the standard ROM back from the SD card:
 
-1. Copy the ROM file, `TSPICO-23.ROM`, to the card's `TAP` folder. It's in the release
+1. Copy the ROM file, `TSPICO-24.ROM`, to the card's `TAP` folder. It's in the release
    `.zip` (in `src/rom`), from <https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest>.
 2. Boot a working ROM from another slot, for example a test ROM in slot 4
    (`SAVE "tpi:boot" CODE 2,4: NEW`).
-3. `LOAD "tpi:TSPICO-23.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
+3. `LOAD "tpi:TSPICO-24.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
    that you're sure.
 4. Switch off, unplug the USB cable, and switch on again.
 
@@ -2857,7 +2873,8 @@ the card's memory, written like any other file.
 2. Connect the card's USB-C socket to your computer. Close Thonny or anything else that might be
    using it.
 3. Open the TS-Pico web updater,
-   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Latest release**.
+   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Mac**
+   at Step 1 (on Linux and ChromeOS too). It installs the latest release.
 4. Press **Connect to TS-Pico** and choose the card in the list. The page sees that it's a v3
    card.
 5. Leave **Modem firmware (v3 card)** ticked: it checks the modem's own software and installs
@@ -2868,19 +2885,19 @@ the card's memory, written like any other file.
    Spectrum and TS-Pico ROMs, are always replaced; your own ROMs and cartridges in the other
    slots are kept. Nothing is erased.
 7. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
-   reads `2026 TS-Pico ROM v2.3`. Try `CAT`. `SAVE "tpi:info"` shows the firmware and ROM
+   reads `2026 TS-Pico ROM v2.4`. Try `CAT`. `SAVE "tpi:info"` shows the firmware and ROM
    versions.
 
 **If the page can't connect,** put the card into update mode by hand: hold its **BOOTSEL**
 button, press and release **RUN**, then let go. A drive called **RP2350** appears on your
 computer. Leave it alone and press **Start** without connecting.
 
-**On Windows**, the browser can't put the firmware onto the card. Download
-**TS-Pico-Updater.exe** from the
+**On Windows**, the browser can't put the firmware onto the card. Choose **Windows** at Step 1
+on the updater page and download **TS-Pico-Updater.exe**, or get it from the
 [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
-click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
-release**, then **Connect to TS-Pico**, press **Start**, and follow the same steps as above.
+click **More info**, then **Run anyway**. The program works like the web page: press **Connect to
+TS-Pico**, then **Start**, and follow the same steps as above.
 You don't have to pick a port or a drive. It finds the card by itself.
 
 **Doing it by hand.** Put the card in update mode (BOOTSEL and RUN) and drag `firmware-v3.uf2`
@@ -2914,7 +2931,7 @@ boot it from there (8.5).
 
 If the 2068 starts with colored stripes and TS Reset doesn't help, the ROM in slot 1 may be
 damaged. Run the web updater (A.2): it always rewrites slots 0 and 1. Or, if another slot
-boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`), into
+boots, load the ROM file, `TSPICO-24.ROM` (in the release `.zip`, in `src/rom`), into
 **Flash(2)** slot **1** as in A.4, and confirm that you're sure.
 
 ## A.6 Summary
@@ -3021,14 +3038,14 @@ the SD card). It's a single line of text:
 
 <!-- v2 -->
 ```text
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": ""}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": "", "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 
 The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 <!-- /v2 -->
 <!-- v3 -->
 ```text
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true, "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 <!-- /v3 -->
 
@@ -3045,9 +3062,11 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `ROM_SM` | Whether BOOT and DOCK use Flash, RAM or the SD card | `10` (both Flash) |
 <!-- /v3 -->
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
-| `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3.1"` |
+| `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.4"`, `"2.4"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
 | `AUTOMOUNT` | The TAP mounted at switch-on, so `LOAD ""` loads it (3.8); `""` is none | `""` |
+| `PRINTER_AUTOLF` | The virtual printer ends lines with CR+LF from switch-on, as `tpi:autolf` (7.3) | `false` |
+| `PRINTER_AUTOPG` | The virtual printer starts a new page every page length from switch-on, as `tpi:autopg` (7.3) | `false` |
 <!-- v2 -->
 | `LED_BRIGHTNESS` | Not used on the TS-Pico 2.x | `5` |
 <!-- /v2 -->

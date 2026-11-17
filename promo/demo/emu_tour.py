@@ -10,7 +10,7 @@ mounted and loaded as on the 2068: LOAD "tpi:tour.tap", then LOAD "". Each
 "Press any key" step is recorded (OUT/runN/wNN.txt and .bmp) and answered
 with SPACE. Prompts are answered as the README says: Y at the first Scroll?
 (chapter 2), ENTER at Start tape, Y N Y at ERASE's questions, BREAK at
-chapter 10's Scroll?, Y at help's. Later runs are typed RUN, as a retake
+chapter 11's Scroll?, Y at help's. Later runs are typed RUN, as a retake
 would be, and their screens compared with the first run's. --stop-at N
 BREAKs run 1 at step N (a stopped take: tour/ left behind, a tape mounted),
 and run 2 then starts with RUN.
@@ -33,15 +33,15 @@ sys.path.insert(0, os.path.join(REPO, "tools", "emu"))
 import session as S                                           # noqa: E402
 
 COUNTER = 64000                         # the tour counts its key waits here
-ERASE_ANSWERS = ["y", "n", "y"]          # multi.tap, pics.tap, songs.tap
+ERASE_ANSWERS = ["y", "n", "y"]          # multi.tap, pics.tap, tunes.tap
 RUN = 0xF7
 
 # The key moment of each chapter, by run 1's step number ("Press any key"
 # count; the README's chapter table lists the steps).
 SHOTS = {1: "00-title-card", 3: "01-welcome-info", 5: "02-cat", 9: "03-folders",
-         12: "04-copies-new-tape", 19: "05-f-screen-loaded", 23: "06-streams-records",
-         26: "07-printer", 30: "08-mounted-tape", 37: "09-erase-asks", 39: "10-break",
-         42: "11-help-cat", 45: "12-end-card"}
+         15: "04-copies-rename", 20: "05-f-screen-loaded", 24: "06-streams-records",
+         28: "07-cat-into-file", 31: "08-printer", 35: "09-mounted-tape", 42: "10-erase-asks",
+         44: "11-break", 47: "12-help-cat", 50: "13-end-card"}
 
 
 def card(tmp):
@@ -66,9 +66,9 @@ def press(s, k):
 
 
 def chapter_of(txt):
-    """The chapter a screen belongs to: its title card's "n of 12", or the
+    """The chapter a screen belongs to: its title card's "n of 13", or the
     number on its header bar."""
-    m = re.search(r"(\d+) of 12", txt)
+    m = re.search(r"(\d+) of 13", txt)
     if m:
         return int(m.group(1))
     w = (txt.splitlines() or [""])[0].split()
@@ -113,7 +113,7 @@ def drive(s, outdir, timeout=180, stop_at=None):
             return log
         k = None
         if "Scroll?" in tail:
-            k = "BREAK" if chap == 10 else "y"
+            k = "BREAK" if chap == 11 else "y"
         elif "Start tape" in tail:
             k = "ENTER"
         elif tail.startswith("Erase") and tail.endswith("?"):

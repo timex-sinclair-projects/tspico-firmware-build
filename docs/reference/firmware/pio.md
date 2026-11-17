@@ -169,9 +169,10 @@ hold the last slot until the next access changes it.
 ### Beware
 
 - The four slot bits select among sixteen 32K slots. A 64K cartridge (two
-  slots) is addressed with an even `DCK_SLOT`; how the Z80's own A15 reaches
-  the chip for the cartridge's upper half is not visible in the code
-  *(unverified)*. See [hardware.md](../hardware.md).
+  slots) is addressed with an even `DCK_SLOT`. The cartridge's upper half
+  (8000h–FFFFh) is the odd slot: the Z80's A15 reaches the chip, which the
+  code does not show but a probe on a v2 board did (2026-11-10). See
+  [hardware.md](../hardware.md).
 - `put()` blocks when the TX FIFO holds four words. That cannot happen while
   the 2068 is running, and nothing in the firmware puts more than one word
   per command.
