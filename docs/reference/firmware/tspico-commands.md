@@ -2,10 +2,10 @@
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
 2803–2880 (`DIR`), 3993–4349 (`IDIR` … `SA_NOT_IMP`), 4414–4672
-(`APPEND`, `BLKRCV`), 4764–5383 (`CDIR` … `GETLOG`), 5502–5882
-(`LOGLEVEL` … `MEMDOCK`), 5885–5993 (`MODEM` … `GREET`), 5996–6277 (`WIFI` … `NET_UPDATE`), 6339–6415 (`REW`), 6572–6834 (`BAD_CODE` …
-`NOP`) and 6946–7022 (the printer settings); the dispatch table
-`SA_funct` at 7463–7519, inside `TS2068_IO`.
+(`APPEND`, `BLKRCV`), 4764–5383 (`CDIR` … `GETLOG`), 5506–5886
+(`LOGLEVEL` … `MEMDOCK`), 5889–5997 (`MODEM` … `GREET`), 6000–6281 (`WIFI` … `NET_UPDATE`), 6343–6419 (`REW`), 6576–6838 (`BAD_CODE` …
+`NOP`) and 6950–7031 (the printer settings); the dispatch table
+`SA_funct` at 7475–7531, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -43,43 +43,43 @@ where the manual and the code differ, the entries below say so.
 | `LARGEST_BLOCK()` | 5187 | `tpi:meminfo`'s largest block |
 | `MEMINFO(pre, cmd)` | 5211 | `tpi:meminfo` |
 | `GETLOG(pre, cmd)` | 5256 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 5502 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 5561 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 5683 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 5804 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 5885 | `tpi:modem` |
-| `SAY(pre, cmd)` | 5927 | `tpi:say` |
-| `GREET(pre, cmd)` | 5957 | `tpi:greet` |
-| `WIFI_HINT` | 5996 | how to join, in `WIFI`'s and `NET`'s answers |
-| `WIFI(pre, cmd)` | 5999 | `tpi:wifi` |
-| `NET(pre, cmd)` | 6037 | `tpi:net` |
-| `NET_SHOW(net, title, rows, foot)` | 6097 | `tpi:net`'s numbered list |
-| `NET_LIST(net, folder, part)` | 6108 | a folder's index part, fetched and listed |
-| `NET_OPEN(net, k, par1)` | 6121 | `tpi:net <number>` |
-| `NET_GET(net, e, par1)` | 6138 | a tape downloaded to `/TAP/NET` |
-| `NET_EXISTS(dest)` | 6172 | is it on the card, before the fetch |
-| `NET_WRITE(dest, buf, n)` | 6177 | a download's buffer to a file on the card |
-| `NET_FETCH_FULL(net)` | 6195 | the full index, fetched |
-| `NET_INFLATE(net, n)` | 6201 | the full index, gunzipped onto the card |
-| `NET_FIND_MS` | 6231 | how long a first `find` may spend on the index and still search |
-| `NET_FIND(net, words)` | 6234 | `tpi:net find` |
-| `NET_SEARCH(net, words)` | 6268 | `NET_FIND`'s search, with the card |
-| `NET_UPDATE(net)` | 6274 | `tpi:net update` |
-| `AUTOMOUNT(pre, cmd)` | 6280 | `tpi:automount` |
-| `REW(pre, cmd)` | 6339 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 6572 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 6577 | the "Bad argument" message |
-| `RM(pre, cmd)` | 6582 | `tpi:rm` |
-| `RM_CHECK(name)` | 6628 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 6649 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 6709 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 6763 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 6817 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 6946 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 6967 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 6978 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 6991 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 7009 | `tpi:bmp` |
+| `LOGLEVEL(pre, cmd)` | 5506 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 5565 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 5687 | `tpi:boot`, `tpi:memboot` |
+| `MEMDOCK(pre, cmd)` | 5808 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 5889 | `tpi:modem` |
+| `SAY(pre, cmd)` | 5931 | `tpi:say` |
+| `GREET(pre, cmd)` | 5961 | `tpi:greet` |
+| `WIFI_HINT` | 6000 | how to join, in `WIFI`'s and `NET`'s answers |
+| `WIFI(pre, cmd)` | 6003 | `tpi:wifi` |
+| `NET(pre, cmd)` | 6041 | `tpi:net` |
+| `NET_SHOW(net, title, rows, foot)` | 6101 | `tpi:net`'s numbered list |
+| `NET_LIST(net, folder, part)` | 6112 | a folder's index part, fetched and listed |
+| `NET_OPEN(net, k, par1)` | 6125 | `tpi:net <number>` |
+| `NET_GET(net, e, par1)` | 6142 | a tape downloaded to `/TAP/NET` |
+| `NET_EXISTS(dest)` | 6176 | is it on the card, before the fetch |
+| `NET_WRITE(dest, buf, n)` | 6181 | a download's buffer to a file on the card |
+| `NET_FETCH_FULL(net)` | 6199 | the full index, fetched |
+| `NET_INFLATE(net, n)` | 6205 | the full index, gunzipped onto the card |
+| `NET_FIND_MS` | 6235 | how long a first `find` may spend on the index and still search |
+| `NET_FIND(net, words)` | 6238 | `tpi:net find` |
+| `NET_SEARCH(net, words)` | 6272 | `NET_FIND`'s search, with the card |
+| `NET_UPDATE(net)` | 6278 | `tpi:net update` |
+| `AUTOMOUNT(pre, cmd)` | 6284 | `tpi:automount` |
+| `REW(pre, cmd)` | 6343 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 6576 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 6581 | the "Bad argument" message |
+| `RM(pre, cmd)` | 6586 | `tpi:rm` |
+| `RM_CHECK(name)` | 6632 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 6653 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 6713 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 6767 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 6821 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 6950 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 6971 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 6982 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 6995 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 7018 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -102,7 +102,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (7460–7461) says (until #181 it
+   trailing space, as the comment above it (7472–7473) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE` but `tpi:chopen` of `v:` or `x:`, `tpi:chwr` and `tpi:chrd` on a stream with no file, and `tpi:help` with a topic) and
@@ -155,7 +155,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (7463) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (7475) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -1389,7 +1389,10 @@ for four words. The word (`cmd[7:]` to its first space, upper-cased)
 starting with `NO` means off; ending in `AUTOLF` sets `PRT.autolf` (ENTER
 becomes CR LF instead of LF), otherwise `PRT.autopg` (a form feed every
 `PRT.lines` lines). "Printer: CR+LF line ends on/off" or "Printer: paging
-every n lines on/off", 0 OK.
+every n lines on/off", 0 OK, shown only with VERBOSE on. Until the next
+power-on: `config.ini`'s `PRINTER_AUTOLF` and `PRINTER_AUTOPG` set them at
+boot ([tspico-dispatch.md](tspico-dispatch.md#the-rom-and-bank-state-machines)).
+With `PRT.lines` 0, AUTOPG adds no form feeds, the same as NOAUTOPG.
 
 ### `PRN_SIZE(pre, cmd)`
 
@@ -1398,8 +1401,11 @@ every n lines on/off", 0 OK.
 `tpi:prnsz cols lines` (a comma works too; one number keeps the lines).
 Both 0 (or no parameters): report only. A value outside 0–255 or a word
 that is not a number: "Printer size: bad parameters", Report Q.
-Otherwise "Printer size: c columns, l lines", 0 OK. Note that `CODE 0,0`
-cannot set "never wrap" with 0 lines; `CODE 0,n` can.
+Otherwise "Printer size: c columns, l lines" and a second line "CR+LF
+on/off, paging on/off" (paging shows off when AUTOPG is on but `lines` is
+0), 0 OK. Asked with no parameters, the message is forced, so it shows with
+VERBOSE off; a setting is VERBOSE-only, like other settings (#335). Note
+that `CODE 0,0` cannot set "never wrap" with 0 lines; `CODE 0,n` can.
 
 ### `PRN_BMP(pre, cmd)`
 
@@ -1408,8 +1414,8 @@ cannot set "never wrap" with 0 lines; `CODE 0,n` can.
 256, 512, 1024, 2048, 4096 (the larger for hi-res screens, which are 512
 wide) and `y` one of 192, 382, 752, 1536; `y = 1596` is taken as 1536,
 "as printed in the manual". Anything else: "BMP size: use 256-4096 x
-192-1536", Report Q. No parameters: report only. "COPY picture: WxH",
-0 OK. `x` and `y` are independent, so a stretched picture is allowed.
+192-1536", Report Q. No parameters: report only, forced so it shows with
+VERBOSE off (#335). "COPY picture: WxH", 0 OK. `x` and `y` are independent, so a stretched picture is allowed.
 
 ## Where the user manual and the code differ
 

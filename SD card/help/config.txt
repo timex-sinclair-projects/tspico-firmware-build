@@ -29,3 +29,5 @@ MODEM_MODE, MODEM_BAUD,
   MODEM_IDLE_MIN: See modem (v3)
 AUTOMOUNT: See automount
 SPEECH_GREETING: See greet (v3)
+PRINTER_AUTOLF, PRINTER_AUTOPG:
+  See autolf, autopg
