@@ -152,7 +152,7 @@ Notes:
 Plain text, one BASIC line per line, real line numbers (or `@labels` with `-l`).
 Lines starting with `#` are comments. Tokens are spelled out in lower case
 (`print`, `goto`, `rem`, …). Non-ASCII Spectrum characters and control codes use
-backslash escapes — e.g. `\a`..`\u` for UDGs, block graphics, colour controls.
+backslash escapes — e.g. `\a`..`\u` for UDGs, block graphics, color controls.
 See [`tools/zmakebas/zmakebas.1`](../tools/zmakebas/zmakebas.1) for the full
 escape table, and [`SD/TAP/demo/hello.bas`](SD/TAP/demo/hello.bas) for a minimal
 working example.

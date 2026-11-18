@@ -447,7 +447,7 @@ session `0000` for "not generated from a BASIC command".
 
 ## The `NET:` device: a hook for networking
 
-Prefix parsing at `0x1A73`+ masks with `0x5F` (uppercase) and recognises **two**
+Prefix parsing at `0x1A73`+ masks with `0x5F` (uppercase) and recognizes **two**
 device prefixes:
 
 - `"TPI"` → `0x5DDB` bit 7 set, bit 6 clear

@@ -1,6 +1,6 @@
 # The TS-Pico ecosystem on one page
 
-Source: the whole of [`src/`](../../src/), summarised. Part of the
+Source: the whole of [`src/`](../../src/), summarized. Part of the
 [programmer's reference](README.md).
 
 The TS-Pico is two computers sharing one narrow door. On one side a Timex
@@ -26,7 +26,7 @@ port). The TS-Pico replaces all three sources:
   and the disk and channel module at 3000h. [rom/overview.md](rom/overview.md)
   and the four EXROM chapters.
 - **DOCK** is whatever cartridge page the Pico selects: a `.dck` image, or
-  the customised ZX Spectrum ROM that `tpi:zx48` switches to. [rom/zx48.md](rom/zx48.md).
+  the customized ZX Spectrum ROM that `tpi:zx48` switches to. [rom/zx48.md](rom/zx48.md).
 
 The ROM images live on a 512K flash chip (and can be copied into a 512K
 SRAM) on the TS-Pico board, in sixteen 32K slots; a 2068 ROM fills one (16K
@@ -131,15 +131,16 @@ consequences before their causes.
 
 | What | Version | Where it is written | How to read it |
 |---|---|---|---|
-| Firmware | 2.3.1 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
-| TS-2068 ROM | 2.3 | HOME 0065h (`PEEK 101` = 35), BIOS G_VERS = 0023h, the boot banner, and byte 2 of every command pre-header | `PEEK 101`; `SAVE "tpi:info"` (from the pre-header) |
+| Firmware | 2.4 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
+| TS-2068 ROM | 2.4 | HOME 0065h (`PEEK 101` = 36), BIOS G_VERS = 0024h, the boot banner, and byte 2 of every command pre-header | `PEEK 101`; `SAVE "tpi:info"` (from the pre-header) |
 | ZX Spectrum ROM | v4 | the banner byte at 38B7h | the boot screen in ZX48 mode |
-| The ROM's disk module | FDD_VERSION 8 (unchanged by 2.3, which added `PS_READ` at its end) | EXROM 30AFh | — |
+| The ROM's disk module | FDD_VERSION 9 (2.3 added `PS_READ`, 2.4 the COPY, LIST and RESTORE entry and the channel helpers at its end) | EXROM 30AFh | — |
 
 The firmware and the ROM share a major.minor number; the third part is a
-firmware-only release on the same ROM. Firmware 2.3 needs ROM 2.3: after
+firmware-only release on the same ROM. Firmware 2.4 needs ROM 2.4: after
 `N` at a prompt it ends function 86h's loop itself, which a 2.2 ROM would
-not read ([firmware/tspico-state.md](firmware/tspico-state.md#rom_id)). [rom/overview.md](rom/overview.md).
+not read, and it answers COPY, `LIST "x"`, `RESTORE #`, `CAT #` and the
+`v:` and `x:` channels, which a 2.3 ROM never sends ([firmware/tspico-state.md](firmware/tspico-state.md#rom_id)). [rom/overview.md](rom/overview.md).
 
 ## The sources, by size
 
@@ -158,7 +159,7 @@ not read ([firmware/tspico-state.md](firmware/tspico-state.md#rom_id)). [rom/ove
 | `src/rom/fdd/fddcmd.asm` | 1,398 | the disk module | [exrom-fdd.md](rom/exrom-fdd.md) |
 | `src/rom/patches/tspico-sync.asm` | 318 | the SYNC/BREAK layer | [exrom-sync.md](rom/exrom-sync.md) |
 | `src/rom/patches/tspico-zx48-v3.asm` | 280 | the ZX Spectrum ROM v4 | [zx48.md](rom/zx48.md) |
-| `src/rom/TSPICO-23.ROM` | 32K binary | the release ROM, 2.3 | [rom/overview.md](rom/overview.md) and the EXROM chapters |
+| `src/rom/TSPICO-24.ROM` | 32K binary | the release ROM, 2.4 | [rom/overview.md](rom/overview.md) and the EXROM chapters |
 
 Line counts are those of the sources the stamps in the [README](README.md)
 were taken from; [appendix/index.md](appendix/index.md) has the line of

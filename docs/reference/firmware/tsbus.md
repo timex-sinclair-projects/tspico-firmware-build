@@ -14,7 +14,8 @@ moved under MicroPython. Phase 3 of the v3 port plan
 ROMs, banking and DOCK RAM, the IN/OUT machinery on core 1 and reset control;
 the `MQ` object over core 1's queues; and switching images. Phase 6 adds
 the TS2050 modem's 8251 at 73h/77h, bridged to the card's ESP32-C3
-([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)), and speech: the
+([docs/v3-modem-proposal.md](../../v3-modem-proposal.md)); the Kempston
+joystick at 1Fh from a byte core 0 keeps current; and speech: the
 SP0256-AL2 emulated on core 1 and played by DMA through two PIO2 state
 machines to the audio pins ([speech.md](speech.md)). The v2 firmware
 does not use any of it.
@@ -39,6 +40,7 @@ than repeating it.
 | `tsbus.c`, the modem | the 8251's ports in `handle_in` and `core1_main`, the UART's two DMA channels; `tsbus.modem`, `tsbus.modem_mode`, `tsbus.modem_line`, `tsbus.modem_poll`, `tsbus.modem_pace`, `tsbus.modem_flow`; `tsbus.esp_relay`, to install Zimodem |
 | `tsbus.c`, flash writes | `apb_dma_pause`, `apb_dma_resume`, `__wrap_flash_range_erase`, `__wrap_flash_range_program` |
 | `tsbus.c`, speech | the ring, its DMA and timer, `speech_pass` on core 1, ports 17 and 37 in `handle_in` and `core1_main`; `tsbus.speech`, `tsbus.say`, `tsbus.speech_volume`, `tsbus.speaking`, `tsbus.speech_ports`. The chip itself is `sp0256.c` ([speech.md](speech.md)) |
+| `tsbus.c`, the joystick | 1Fh in `handle_in`; `tsbus.kempston` |
 | `usart8251.h`, `usart8251.c` | the 8251 itself, as plain C: mode/command state machine, status, its two rings, pacing |
 | `modem2050.h`, `modem2050.c` | between the 8251 and the line: Hayes pass-through, or 2050 mode (pulse dialing, Zimodem's results, DSR, hang-up, XON/XOFF) |
 | `megabank.h`, `megabank.c` | the TS-2068 Megabank's owner table, followed from its port writes, as plain C: which chunks the card must yield |
@@ -63,7 +65,7 @@ two apart:
   the other core only if it is a multicore lockout victim, which core 1 is
   not. So core 1's code is all `__not_in_flash_func`, touches PIO, DMA and
   SIO registers directly rather than through SDK inline helpers (a
-  size-optimised build may leave those out of line in flash), and makes no
+  size-optimized build may leave those out of line in flash), and makes no
   calls into flash and reads no flash data, its set-up included. CI checks
   that in the linked ELF on every push (`tools/check-core1-ram.py`,
   [boot.md](boot.md#toolscheck-core1-rampy)): every function reachable from
@@ -98,6 +100,15 @@ two apart:
   channels, which have to use the UART, are paused around every flash
   erase and program (`__wrap_flash_range_erase`, below). A `tpi:modem 2050`
   loop then ran 419 commands without a fault (it had failed at once).
+- **Nor may any DMA touch the PSRAM.** It sits behind the QMI, and a DMA
+  read or write there waits on it, holding `ch_ptr` and `ch_data` up the
+  same way. With the PSRAM in the GC heap (#410), the SD driver's SPI DMA
+  sent blocks straight from heap buffers in the PSRAM: `tpi:net` crashed
+  the 2068 about half the time, in the SD write, and 12 s of SD writes
+  from 0x11000000 crashed it at once, where the same writes from SRAM did
+  not (2026-11-09). The CPU's own PSRAM traffic did no harm. The driver
+  now copies such blocks through SRAM ([sdcard.md](sdcard.md), "SPI DMA
+  and the PSRAM").
 - **PIO and DMA** are claimed through the SDK. MicroPython's `rp2` refuses
   claimed state machines and frees only what it claimed itself at soft
   reset, so `tsbus` keeps running through Ctrl-D (checked). PIO0 and PIO1
@@ -134,7 +145,7 @@ in the file.
 | `addr_read` | PIO1: side-set the three buffer enables (GP8-10), jmp pin /MEMRD | Sequences U2 (A15..A8) and U1 (A7..A0) onto MD around serve's samples, and turns U3 on when serve asks. `hi_hold` and `lo_hold` are patched by `set_delays` |
 | `mem_write` | PIO1: in MD | Reads every memory write (address through U2 and U1, the data through U3) for the DOCK RAM. RX FIFO joined (8 deep) |
 | `io_snoop` | PIO1: in MD | Reads every I/O write (port and data) for the bank shadow and OUT 0Eh/0Fh |
-| `iord_watch` | PIO2: waits on /IORD (GP17), input synchroniser bypassed | Raises PIO2 IRQ flag 0 on each falling edge of /IORD and waits for it to rise: core 1's IN interrupt (`PIO2_IRQ_0`). It replaced a GPIO edge interrupt, whose acknowledgement goes through APB. PIO2's GPIO base is 16; the SDK adjusts `wait gpio 17` when it loads the program |
+| `iord_watch` | PIO2: waits on /IORD (GP17), input synchronizer bypassed | Raises PIO2 IRQ flag 0 on each falling edge of /IORD and waits for it to rise: core 1's IN interrupt (`PIO2_IRQ_0`). It replaced a GPIO edge interrupt, whose acknowledgment goes through APB. PIO2's GPIO base is 16; the SDK adjusts `wait gpio 17` when it loads the program |
 | `spk_pwm` | PIO2, one state machine per audio pin: side-set the pin (GP46, GP30) | PWM for the speech, as the pico-examples `pwm` program: ISR holds the period (`SPK_TOP`), `pull noblock` takes a new level from the FIFO or keeps X, `out x, 16` takes the low half (the DMA's 16-bit writes arrive in both halves), and the pin is high from the count equal to the level down to 0. Three cycles a count: (`SPK_TOP` + 1) × 3 + 3 cycles a period, about 41 kHz |
 
 ## `tsbus.c`
@@ -212,6 +223,8 @@ in the file.
 | `mtx_inflight` | uint32 | `core1_main`; `tsbus_modem` (0) | how many bytes the run `ch_mtx` is sending holds |
 | `modem_ins` | volatile uint32 | `handle_in` | INs from 73h/77h answered |
 | `modem_wake`, `modem_touched` | volatile bool | set by `core1_main` (an OUT to 73h/77h: both) and `handle_in` (an IN: `modem_touched`); cleared by `tsbus_modem_poll` and `tsbus_modem` | what core 1 saw since core 0 last asked: a program writing to the 8251, and any use of it |
+| `kempston` | volatile int16, -1 | `tsbus_kempston`; `handle_in` | the byte IN 1Fh reads (the Kempston joystick), or -1: 1Fh unanswered. Core 0 sets it from the expander (`board_v3.joystick`); core 1 only reads it. A halfword store, so core 1 never sees half a change |
+| `kemp_ins` | volatile uint32 | `handle_in` | INs from 1Fh answered |
 | `modem_line_up` | volatile bool, false | `tsbus_modem_line`; `core1_main` (sets it on Zimodem's `READY.`) | Zimodem is running. Until then core 1 starts no `ch_mtx` run (what is queued waits in `line_tx`) and drops what `ch_mrx` brings (the boot banner, or noise from an ESP32 that is off), looking in it for `READY.` (`m2050_wait_ready`, #300). Kept across `tsbus.modem(True)` |
 | `modem_readies` | volatile uint32, 0 | `core1_main` | times the line came up on `READY.` (`m_readies`) |
 | `PIN_AUDIO_L`, `PIN_AUDIO_R` | 46, 30 | `spk_sm` | the audio outputs, driven by `spk_pwm` on PIO2, to the filter, the MCP6002 mixer and the jack; both play the same |
@@ -249,8 +262,8 @@ In RAM. Writes the eight chunk-table instructions into PIO0 from the shadow
 and `mb.owned`. serve is at offset 0, so an unconditional jmp encodes as just
 its target. Called by core 1 when F4h or FFh changes, or the Megabank's owned
 chunks do (an I/O write lasts over a microsecond, so the table is current
-before the next read), and by `exrom`, `dock` and `hold_2068` on core 0. Both cores compute the same
-entries, so a race between them is harmless.
+before the next read), and by `exrom`, `dock` and `hold_2068` on core 0.
+Both cores compute the same entries, so a race between them is harmless.
 
 ### `set_serving(on)`
 
@@ -284,15 +297,15 @@ Sets up the three blocks and the DMA chain, and starts six state machines
 4. addr_read: side-set the three enables (all high: off), jmp pin /MEMRD,
    `mov status` on PIO1 IRQ flag 2. mem_write: in MD, autopush at 24, RX
    joined. io_snoop: in MD, autopush at 16. `sm_en`: set pins GP8-GP10,
-   initialised at PC 0 (PIO1's memory is full; it never runs).
+   initialized at PC 0 (PIO1's memory is full; it never runs).
    `iord_watch` on PIO2 (GPIO base 16, so its window holds /IORD and the
-   audio pins; /IORD's synchroniser bypassed, bit `PIN_NIORD - 16` of the
+   audio pins; /IORD's synchronizer bypassed, bit `PIN_NIORD - 16` of the
    window), its IRQ flag 0 cleared and routed to `PIO2_IRQ_0` (`inte0`).
    PIO0's IRQ flag 1, which addr_read raises at the start of every memory
    read and serve clears, is routed to `PIO0_IRQ_1` (`inte1`). No core
    enables that interrupt; the line only latches its pending bit in core
    1's NVIC, which core 1's idle test reads.
-5. `set_delays()`. Input synchronisers bypassed on MD and /MEMRD in PIO0, and
+5. `set_delays()`. Input synchronizers bypassed on MD and /MEMRD in PIO0, and
    on those and /IOWR in PIO1.
 6. DMA: `ch_ptr` takes serve's pointer (DREQ on serve's RX) and writes it to
    `ch_data`'s read-address trigger, with the ENDLESS count; `ch_data` copies
@@ -323,6 +336,11 @@ While `modem_on`, 73h and 77h are answered the same way, the reply from
 `u8251_data_in` or `u8251_status` (decoded from A0-A7 with `port & FBh ==
 73h`, A2 choosing). With the modem on, the slowest reply from entry to U3 on
 was 412 ns (`respond_ns`, proto1 2026-10-12).
+
+1Fh, while `kempston` is 0 or more, is answered with that byte: a compare
+of the low address byte (the high byte is ignored, as a Kempston interface
+ignores it) and a load, no I2C and nothing behind APB. The expander is read
+on core 0 (`board_v3.joystick`).
 
 While `spk_ports_on` and `speech_on`, 25h (37) is answered: FFh while
 speech is busy (allophones in either queue, or the chip's LRQ not ready),
@@ -403,7 +421,7 @@ power-off and power-on readings, forever, polling:
   mid-read and ignoring bank writes until the next change, and the 2068
   crashed. With the latch, 3 in 419 commands, all at the power-on *(the
   NVIC latching a pulse a few cycles long is the Cortex-M33's documented
-  behaviour; the board shows it working)*. Core 1 executes `EN_OFF` on `sm_en` and `serve_release` on
+  behavior; the board shows it working)*. Core 1 executes `EN_OFF` on `sm_en` and `serve_release` on
   serve, so U1-U3 are off, MD is released and /BE let go. With the 2068 off,
   /MEMRD reads low and serve and addr_read would otherwise sit in a "read"
   driving its data bus. It sets `bus_idle` (cleared at the next change) and
@@ -482,6 +500,30 @@ from the USB PLL and do not change. The board boots at 150 MHz because the
 SDK sets the boot clock before MicroPython sets the flash divider
 ([board-v3.md](board-v3.md)). If Python later calls `machine.freq()`, the
 bus timing is gone; nothing guards against it yet.
+
+With PSRAM (`MICROPY_HW_ENABLE_PSRAM`, [board-v3.md](board-v3.md#mpconfigboardcmake))
+and the chip found, it then sets the PSRAM's QMI timing again for 250 MHz,
+as `machine.freq()` does: `psram_configure_params` with the SDK's defaults
+(at most 133 MHz) and `psram_reinitialize`. Why: `main()` set the divider
+and read delay for 150 MHz, and the GC heap is partly in the PSRAM. Read
+back on the card at 250 MHz (2026-11-08): divider 2 (125 MHz), read delay
+3, and `src/test/psram_test.py` passes on all 8 MB (the reserve and the heap).
+
+`psram_reinitialize` runs with interrupts off (`save_and_disable_interrupts`).
+It calls the SDK's `flash_start_xip`, which takes the flash and the PSRAM
+out of XIP for a moment and does not mask interrupts itself, so an
+interrupt there runs its handler from flash (or reaches the GC heap in the
+PSRAM) and core 0 locks up. `tsbus.start()` runs from `main.py` while the
+host is still enumerating USB, and about one reset in twenty
+(2026-11-09) left the card stuck mid-enumeration: the Mac had read its
+descriptors, no serial port came, the 2068 never got its ROM, and only RUN
+brought it back. Proved from the REPL with `main.py` set aside: with a
+10 kHz `machine.Timer` interrupt running, `machine.freq()` at the same
+clock (the same `psram_reinitialize`, interrupts on) locked core 0 within
+500 calls; with `machine.disable_irq()` around each call, 20,000 calls
+and 156,647 timer interrupts passed. Core 1 isn't running yet here.
+MicroPython's own `machine.freq()` has the same window *(upstream; not
+fixed here: the firmware never calls it)*.
 
 ### `tsbus.start()`
 
@@ -584,16 +626,16 @@ scratch:
    `usart` or the channels.
 2. The two channels claimed (the first time only; MicroPython's soft reset
    frees only channels it claimed itself), both stopped (`stop_dma`).
-3. UART0 initialised again, 115200 8N1 with its DMA requests on, and GPIO
+3. UART0 initialized again, 115200 8N1 with its DMA requests on, and GPIO
    44/45 given to it. Again each time because a MicroPython soft reset calls
    `uart_deinit` on UART0 whoever set it up.
 4. `ch_mrx` restarted at the top of `line_rx` (8-bit, a 16 KB write
    ring, the UART's RX DREQ, an endless count); `ch_mtx` configured to write
    the UART's data register on its TX DREQ, not started.
-5. `usart` initialised (`u8251_init`): as at power-up, taking commands,
+5. `usart` initialized (`u8251_init`): as at power-up, taking commands,
    mode 4Fh. The pace kept if `modem_pace` set one, else 300 baud.
    `modem_wake` and `modem_touched` cleared; `modem_line_up` kept.
-   `modem` initialised (`m2050_init`) in `modem_mode`, on-hook; DSR 1 in
+   `modem` initialized (`m2050_init`) in `modem_mode`, on-hook; DSR 1 in
    Hayes mode, 0 in 2050 mode until a call connects.
 6. `modem_on` set.
 
@@ -648,6 +690,13 @@ time at `baud` after the last (33.3 ms at 300); 0: as soon as the last is
 read. `usart.pace` in core cycles; kept across `tsbus.modem(True)`
 (`pace_set`). A negative baud is `ValueError`.
 
+### `tsbus.kempston(byte)`
+
+From now on an IN from 1Fh reads `byte` (0–255; anything else is
+`ValueError`). `None`: 1Fh is left unanswered, as on a 2068 without the
+interface. One store to `kempston`. `board_v3._joy_read` calls it whenever
+the joystick changes, and `board_v3.joystick(False)` with `None`.
+
 ### `tsbus.modem_flow(on)`
 
 Hayes mode's flow control (#301): sets `modem.flow_want`, which
@@ -655,13 +704,13 @@ Hayes mode's flow control (#301): sets `modem.flow_want`, which
 XOFF/XON. On, the card pauses Zimodem with XOFF when the line's ring is
 over half full and resumes it with XON below a quarter, as 2050 mode does
 while connected. For a program that has set Zimodem up for it: Zimodem 4.0.3
-obeys XOFF only with `ATF1` (its serial side) *and* on a connection dialled
+obeys XOFF only with `ATF1` (its serial side) *and* on a connection dialed
 with the `X` modifier (`ATDTX"host:port"`; the connection's own flag).
 Otherwise XOFF and XON reach the host as data. Every `tsbus.modem(True)`
 (`m2050_init` zeroes the struct) turns it off again. Why: PicoTerm's
 64-column flood at full speed (`MODEM_BAUD` 0) lost 9,798 bytes
 (`m_rx_lost`) with no flow control in Hayes mode. On board 1 (2026-10-15):
-with `ATF1` alone the test server received the XOFF/XON; dialled with X and
+with `ATF1` alone the test server received the XOFF/XON; dialed with X and
 a 4 KB ring with XOFF at 3/4, 825 bytes were still lost, since Zimodem copies
 from the socket up to its 4 KB buffer before it looks for XOFF; with the
 16 KB ring and XOFF at half, the flood arrived whole (`m_rx_lost` 0, 29.4 s
@@ -774,7 +823,7 @@ ESP32 in download mode (`board_v3.esp_boot(True)`), switched the modem off
 (`RuntimeError` otherwise) and the REPL's Ctrl-C off (`micropython.kbd_intr(-1)`):
 a 03h in the data would interrupt.
 
-- UART0 initialised at 115200 8N1, FIFOs on, its DMA requests off, GPIO
+- UART0 initialized at 115200 8N1, FIFOs on, its DMA requests off, GPIO
   44/45 given to it. 115200 is the loader's own speed, and the relay doesn't
   follow a change: the host must not ask for one (esptool kept at
   `--baud 115200` never does).
@@ -807,9 +856,11 @@ A dict: `home`, `exrom`, `dock` (reads served, by slot), `io_writes`,
 `m_mode_sel` (`modem_mode`), `m_state` (the 2050 state, `M2050_ONHOOK`
 0 … `M2050_HANGUP` 5), `m_dials`, `m_connects`, `m_carrier_lost`,
 `m_line_up` and `m_readies` (times the line came up on Zimodem's `READY.`).
-`m_rx_lost` is the line's ring overflowing (`modem.rx_lost`). Speech: `s_on`,
-`s_allophones`, `s_samples`, `s_late` (passes that found the DMA caught up),
-`s_queued` (`tsbus.say`'s queue), `s_ports`, `s_port_outs`, `s_port_ins`.
+`m_rx_lost` is the line's ring overflowing (`modem.rx_lost`). The joystick:
+`k_on` (1Fh answered), `k_byte` (what it reads, 0 while off) and `k_ins`.
+Speech: `s_on`, `s_allophones`, `s_samples`, `s_late` (passes that found the
+DMA caught up), `s_queued` (`tsbus.say`'s queue), `s_ports`, `s_port_outs`,
+`s_port_ins`.
 
 ### `tsbus.diag(n)`, `tsbus.diag_phase(n)`, `tsbus.diag_reset()`
 
@@ -882,8 +933,8 @@ at the REPL: F7h, FBh, FFh and 00h, as on v2.
 
 The module (`MP_REGISTER_MODULE`), the slot numbers and the `MQ` type,
 with the functions above, `modem`, `modem_mode`, `modem_line`,
-`modem_poll`, `modem_pace`, `esp_relay`, `speech`, `say`, `speech_volume`,
-`speaking` and `speech_ports` among them.
+`modem_poll`, `modem_pace`, `esp_relay`, `kempston`, `speech`, `say`,
+`speech_volume`, `speaking` and `speech_ports` among them.
 
 ### Checked on proto1 board 1 (2026-10-09, genuine 2068 ROMs)
 
@@ -1153,7 +1204,7 @@ Otherwise on-hook.
   full), `DIALING`, `dials` counted. The number goes to Zimodem's
   phonebook (`ATP`), which maps it to a host. The X makes the call obey
   XON/XOFF (step 5 of `m2050_poll`): Zimodem 4.0.3 uses only the modifiers
-  saved with a phonebook entry, so our build (4.0.3.1,
+  saved with a phonebook entry, so our build (4.0.3.1 and on,
   `esp32/zimodem/build.sh`) adds the dial's own; on a stock 4.0.3 the X is
   ignored and the card's XOFF/XON reach the host as data (#302).
 
@@ -1208,7 +1259,7 @@ Every pass:
    in Hayes mode while Zimodem is stopped sends XON, so it isn't left
    stopped. Then XOFF when `lrx` is over half full, XON below a quarter:
    in 2050 mode while connected (`ATF1` is in `s_init`, and the dial is
-   `ATDX`, which Zimodem 4.0.3.1 keeps on a phonebook dial, #302); in
+   `ATDX`, which our Zimodem build keeps on a phonebook dial, #302); in
    Hayes mode only with
    `flow` on, since there Zimodem's settings are the program's
    (`tsbus.modem_flow`).

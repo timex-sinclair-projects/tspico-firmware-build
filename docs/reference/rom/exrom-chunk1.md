@@ -363,8 +363,8 @@ on, and the loop ends only when the Pico sends `03h`. The Pico can then
 decide what `N` means where it is asked — stop a listing, skip one file of
 an ERASE — and it can print something before the `03h` (the firmware
 echoes the key). After `N` ROM 2.2 and 2.3 want opposite things, so
-firmware and ROM must match: the current firmware is written for 2.3 only.
-ROM 2.3 also says which it is in byte 2 of each command pre-header
+firmware and ROM must match: the current firmware is written for 2.3's
+loop and needs ROM 2.4. From 2.3 on the ROM also says which it is in byte 2 of each command pre-header
 ([exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h)).
 21F7h (`JP LOOP_EXIT_OK`) is left in place, unreachable. 88h's loop is this
 one (`LOWER_LOOP` joins at 21E6h), so it changes the same way.
@@ -462,7 +462,7 @@ The genuine HOME BEEPER, moved here in 1.1 to make room for the returning
 thunk in HOME; identical but for its two `IX` operands, rebased to 205Bh
 and 2060h ([home.md](home.md#03f3h0420h-beeper-moved-out)). Entered with HL
 = the pitch and DE = the duration, as on a stock 2068; reads BORDCR to keep
-the border colour; ends `EI / RET`. Callers: 2000h, and 221Ah in the dead
+the border color; ends `EI / RET`. Callers: 2000h, and 221Ah in the dead
 handler.
 
 ## Smaller pieces of chunk 1
@@ -542,8 +542,8 @@ printer motor off, `EI`, clear the buffer).
 **16F3h, the COPY transaction**: SYNC and `'B'`; TADDR from T_ADDR's
 low byte (D8h → 4, DBh → 5, DEh → 6: the screen mode as the stock code
 encodes it, [PROTOCOL.md §8](../../PROTOCOL.md#8-printer-transactions));
-BANK; from port FFh the screen mode (bits 0–2) and, for the hi-res colour
-modes, a colour byte from the table at 16EBh (`07 16 43 52 25 34 61 70`,
+BANK; from port FFh the screen mode (bits 0–2) and, for the hi-res color
+modes, a color byte from the table at 16EBh (`07 16 43 52 25 34 61 70`,
 indexed by bits 3–5); the mode (6 sent as 3); PMR2; the length, 1B00h
 (6912) for a normal screen or 3B00h (15104) for the larger one, also put
 in 5DCDh; the XOR; then `SEND_DATA_BLOCK_D` from 4000h. The firmware turns

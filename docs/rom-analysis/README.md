@@ -5,7 +5,7 @@ images: what Gustavo changed relative to the genuine ROMs, what changed between 
 ROM (v1.1) and the next one (v1.5w), and how the Z80↔Pico protocol is actually
 implemented in silicon rather than as documented.
 
-**These are troubleshooting references.** When ROM behaviour and
+**These are troubleshooting references.** When ROM behavior and
 [`docs/`](../) protocol notes disagree, the ROM is ground truth — the disassembly
 here is what the hardware actually runs.
 
@@ -141,7 +141,7 @@ z80dasm -a -l -t -g 0x0000 -o out.asm -s out.sym ROMs/TSPICO-11-exrom
 
 - **`disasm/*.asm` are linear sweeps.** z80dasm disassembles straight through, so
   data tables, text, and `0xFF` filler decode as nonsense instructions, and a
-  misaligned start can desynchronise a whole region. Treat them as a raw index for
+  misaligned start can desynchronize a whole region. Treat them as a raw index for
   locating code, and trust the hand-verified listings in the Markdown docs over
   them. Always re-derive alignment from a known-good anchor before believing a
   disassembly line.

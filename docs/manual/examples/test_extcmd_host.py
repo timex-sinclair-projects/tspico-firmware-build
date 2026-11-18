@@ -56,7 +56,7 @@ def msg(log):
 
 print("tpi:.hello")
 log = send("tpi:.hello")
-h.check(msg(log) == b"\x81\x01\rHello from the TS-Pico!\x00\x01", "81h message, then one pre-load (%r)" % msg(log))
+h.check(msg(log) == b"\x81\x01\rHello from the TS-Pico!\r\x00\x01", "81h message, then one pre-load (%r)" % msg(log))
 
 print("tpi:.fact")
 log = send("tpi:.fact", 20)
@@ -74,7 +74,7 @@ catalog.ROOT = tmp
 with open(os.path.join(tmp, "poem.txt"), "w") as f:
     f.write("one\ntwo\nthree\n")
 log = send("tpi:.lines poem.txt")
-h.check(msg(log) == b"\x81\x01\rpoem.txt: 3 lines\x00\x01", "counts 3 lines (%r)" % msg(log))
+h.check(msg(log) == b"\x81\x01\rpoem.txt: 3 lines\r\x00\x01", "counts 3 lines (%r)" % msg(log))
 log = send("tpi:.lines nothere.txt")
 h.check(log == [3, 1], "missing file: status 3 (F), one pre-load (%r)" % log)
 log = send("tpi:.lines nothere.txt", verbose=True)

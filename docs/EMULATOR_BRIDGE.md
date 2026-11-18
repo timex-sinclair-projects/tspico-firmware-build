@@ -34,7 +34,7 @@ strictly one at a time: the Z80 stops at the access until the reply comes, so
 the order of frames is exactly the order of the Z80's port accesses.
 
 - **HELLO** is optional, and if sent comes first. An emulator that skips it gets
-  version-1 behaviour; future versions will be told apart by it.
+  version-1 behavior; future versions will be told apart by it.
 - **No connection:** run as if the TS-Pico weren't plugged in. `IN (0Fh)` reads
   `FFh` and `IN (0Eh)` reads `00h`, so the ROM's commands fail with a report
   instead of hanging. Try connecting once, at the first access to `0Eh`/`0Fh`,

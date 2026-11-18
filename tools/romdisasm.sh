@@ -73,7 +73,7 @@ echo "listing (tspico-home.asm) is produced."
 # The merged symbol file is written next to the listings and is generated:
 # edit docs/rom-analysis/tspico-exrom-symbols.sym or the .asm sources, not it.
 # The listings are of ROM 2.2, which docs/reference/rom/ cites; the repo now
-# holds ROM 2.3 (src/rom/TSPICO-23.ROM), so 2.2 comes from its release tag.
+# holds ROM 2.3 (src/rom/TSPICO-24.ROM), so 2.2 comes from its release tag.
 ROM22="$(mktemp)"
 git show v2.2.1:src/rom/TSPICO-22.ROM > "$ROM22" 2>/dev/null || rm -f "$ROM22"
 if [ -s "$ROM22" ]; then

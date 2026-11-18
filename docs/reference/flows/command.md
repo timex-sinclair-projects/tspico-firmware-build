@@ -39,7 +39,7 @@ without sending anything. Nothing reaches the Pico.
 | 3 | 2068 | BUILD_PREHEADER_B (1BA0h) → SYNC_WRITE (2300h) ([../rom/exrom-sync.md](../rom/exrom-sync.md#sync_write-2300h)) | `OUT (0Fh),03h` | | |
 | 4 | Pico | the capture sees a port-0Fh write: `MQ_TO_IDLE` — FIFOs emptied, one 01h staged, READY + IDLE ([../firmware/tspico_io.md](../firmware/tspico_io.md#mq_to_idlemq-recoveredfalse-statustrue-first0x01)) | | [01] / [] / FF | |
 | 5 | 2068 | SYNC_WAIT: up to ~1 s for READY + IDLE | reads 0Fh | | no IDLE in time: carry → Report J |
-| 6 | 2068 | the pre-header, D the XOR | `OUT` 42h ('B'), 00h (TADDR), 23h (the ROM's version, which `PROCESS_CMD` keeps as `rom_id`; FFh, the bank, before ROM 2.3), 00h 00h (PMR1), 00h 00h (PMR2), 07h 00h (length of `tpi:dir`), XOR | [01] / 10 words / 00 | |
+| 6 | 2068 | the pre-header, D the XOR | `OUT` 42h ('B'), 00h (TADDR), 24h (the ROM's version, which `PROCESS_CMD` keeps as `rom_id`; FFh, the bank, before ROM 2.3), 00h 00h (PMR1), 00h 00h (PMR2), 07h 00h (length of `tpi:dir`), XOR | [01] / 10 words / 00 | |
 | 7 | Pico | the DMA channel (or `RX_CAPTURE`) takes ten words; the dispatcher sees `pre[0] = 'B'`, `pre[1] = 0` → `PROCESS_CMD` ([../firmware/tspico-dispatch.md](../firmware/tspico-dispatch.md#process_cmdpre-sa_funct-ext_sa_funct)) | | [01] / [] / 00 | a pre-header that stops short: `MQ_TO_IDLE(recovered=True)`, Y `FB`, the 2068 gets Report T |
 | 8 | 2068 | SEND_DATA_BLOCK_D (223Eh): reads 0Eh at once — **the pre-load** ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#send_data_block_d-223eh)) | `IN` = 01h | [] / [] / 00 | 00h (an empty TX): ERR_9 → Report J |
 | 9 | 2068 | WAIT_PICO_READY: polls 0Fh, ~88 ms a poll, up to ~19.9 s ([../rom/exrom-driver.md](../rom/exrom-driver.md#wait_pico_ready-1a54h)) | reads 0Fh | | |
@@ -47,7 +47,7 @@ without sending anything. Nothing reaches the Pico.
 | 11 | 2068 | the body, D the XOR, with no waits between bytes | `OUT` 'D', 07h, 00h, `tpi:dir`, XOR | | |
 | 12 | Pico | eleven words captured; the XOR checked; the text decoded; `cmd_word = "TPI:DIR"` | | [] / [] / 00 | a bad XOR: `FAIL_CMD(2)`, Report R; undecodable: `FAIL_CMD(5)`, C; a second of silence: Y `FB`, T |
 | 13 | 2068 | PICO_TRANSACT (2274h): WAIT_PICO_READY | reads 0Fh | | |
-| 14 | Pico | the card gate: `TPI:DIR` needs the card; `sd_present` true, so no probe ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#sd_neededload_cmd-cmd_word-cmd_exec-sa_funct)) | | | no card: see the variant below |
+| 14 | Pico | the card gate: `TPI:DIR` needs the card; `sd_present` true, so no probe ([../firmware/tspico-bus.md](../firmware/tspico-bus.md#sd_neededload_cmd-cmd_word-cmd_exec-sa_funct-streamnone)) | | | no card: see the variant below |
 | 15 | Pico | `SA_funct["TPI:DIR"]` → `DIR(pre, cmd)`: `LISTING_CHECK()` — the card mounted (MQ parked), the folder re-read if it changed, `DEACTIVATE_SD` + `ACTIVATE_MQ` ([../firmware/tspico-commands.md](../firmware/tspico-commands.md#dirpre-cmd)) | | [] / [] / 00 | the 2068 is in step 13's wait meanwhile; a slow card is fine within ~19.9 s ([sd-handover.md](sd-handover.md)) |
 | 16 | Pico | `SEND_MSG2(CAT_COLOUR(lista), 1, …)`: page 1 built in RAM — `86h`, `01h`, `0Dh 0Dh`, 21 lines, `(nn%) Scroll? (Y/n)`, `00h` — and sent by `CMD_SEND`: the first bytes in TX, **then** READY, the rest by DMA ([../firmware/tspico-messages.md](../firmware/tspico-messages.md#send_msg2msg-st-expandkeywordstrue-colourfalse)) | | [86 01 0D 0D] / [] / FF | READY before the bytes: the Z80 reads 00h, Report J |
 | 17 | 2068 | C_END_TAIL (227Fh): reads the status: 86h → `DEC A` → the function chain → `FN_86_YN_PROMPT`: reads its own status (01h), opens the screen, prints the page byte by byte, blind, to the `00h` ([../rom/exrom-chunk1.md](../rom/exrom-chunk1.md#fn_86_yn_prompt-21e3h)) | `IN` × the page | [rest…] / [] / FF | an empty FIFO mid-page prints nothing more of it (00h ends the text) |
@@ -75,7 +75,7 @@ message, step 16 is `CMD_PUT(st)` / `MQ_READY()`: TX [st]. Step 17 reads it:
 ### A message (81h)
 
 VERBOSE on, or a forced message (`NO_CARD_MSG`, `tpi:path`, the show forms):
-TX gets `81h`, the status, `0Dh`, the text, `00h`. The ROM's function 81h
+TX gets `81h`, the status, `0Dh`, the text, `0Dh`, `00h`. The ROM's function 81h
 reads its status, opens the main screen and prints to the `00h`; the
 status is the result ([../firmware/tspico-messages.md](../firmware/tspico-messages.md#send_msgmsg-msg1-st-forcedisplayfalse)).
 

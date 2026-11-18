@@ -3,8 +3,10 @@
 
 #define MICROPY_HW_BOARD_NAME "TS-Pico v3"
 
-// U22 (APS6404L) is not fitted on proto1: images live in SRAM.
-#define MICROPY_HW_ENABLE_PSRAM (0)
+// U22 (APS6404L, 8 MB) on QMI CS1 (GP47): MICROPY_HW_ENABLE_PSRAM and the CS
+// pin come from mpconfigboard.cmake, which the port turns into -D flags. The
+// SDK brings it up at boot and main.c adds it to the GC heap. The 2068's
+// images stay in SRAM.
 
 // Core 1 belongs to tsbus (the bus code runs there), so no _thread.
 #define MICROPY_PY_THREAD (0)

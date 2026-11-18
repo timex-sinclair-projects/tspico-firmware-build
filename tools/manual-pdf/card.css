@@ -1,0 +1,68 @@
+/* The Quick Reference Guide (quick.py), after the Timex Sinclair 2068
+   Personal Color Computer Quick Reference Guide (1983): a grey cover with the
+   title in light capitals over a rule and "QUICK REFERENCE GUIDE" in bold;
+   inside, white panels of small sans text under heavy red capital headings,
+   centered, with the terms in red bold italic. One letter sheet, landscape,
+   both sides, three panels a side (quick.py lays them out). */
+@font-face { font-family: "Inter"; font-weight: 700; font-style: normal; src: url("{{FONTS}}/Inter-Bold.ttf"); }
+@font-face { font-family: "Inter Display"; font-weight: 800; font-style: italic;
+  src: url("{{FONTS}}/InterDisplay-ExtraBoldItalic.ttf"); }
+@font-face { font-family: "Timex TS2068"; src: url("{{FONTS}}/TimexTS2068.otf"); }  /* jonnybgood, CC BY 3.0 */
+@font-face { font-family: "Poppins"; font-weight: 300; src: url("{{FONTS}}/Poppins-Light.ttf"); }
+@font-face { font-family: "Poppins"; font-weight: 700; src: url("{{FONTS}}/Poppins-Bold.ttf"); }
+
+@page { size: 11in 8.5in; margin: 0; }
+:root {
+  --ink: #1a1a1a; --red: #e1261c; --rule: #2a2a2a;
+  --sans: "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif;
+  --mono: "Menlo", "DejaVu Sans Mono", Consolas, monospace;
+}
+html, body { margin: 0; }
+body { font: 6.6pt/1.3 var(--sans); color: var(--ink); background: #fff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.side { display: flex; width: 11in; height: 8.5in; overflow: hidden; break-after: page; }
+.side:last-child { break-after: auto; }
+.panel { box-sizing: border-box; height: 8.5in; padding: .3in .27in .28in; overflow: hidden; }
+
+/* Headings: heavy red capitals, centered */
+h2 { font-family: "Inter", var(--sans); font-weight: 700; font-size: 9.6pt; line-height: 1.05;
+  letter-spacing: -.005em; text-transform: uppercase; text-align: center; color: var(--red);
+  margin: 1.05em 0 .5em; break-after: avoid; }
+.panel > h2:first-child { margin-top: 0; }
+p { margin: 0 0 .5em; }
+ol, ul { margin: 0 0 .5em; padding-left: 1.3em; }
+li { margin: 0 0 .2em; }
+strong { font-family: "Inter Display", var(--sans); font-weight: 800; font-style: italic; color: var(--red);
+  letter-spacing: .01em; }
+strong em, em strong { font-style: italic; }
+code { font-family: var(--mono); font-size: 5.9pt; }
+code i { font-family: var(--mono); }
+pre { font-family: "Timex TS2068", var(--mono); font-size: 5.7pt; line-height: 1.55; margin: .3em 0 .6em .6em; }
+pre code { font: inherit; }
+
+/* Tables: ruled like the original's color and report tables */
+table { border-collapse: collapse; width: 100%; margin: .2em 0 .7em; line-height: 1.25; }
+th, td { text-align: left; vertical-align: top; padding: 1.4pt 3pt 1.4pt 0; border-bottom: .4pt solid #bdbdba; }
+th { font-family: "Inter", var(--sans); font-weight: 700; font-size: 6.4pt; border-bottom: 1pt solid var(--rule); }
+td:first-child { padding-right: 6pt; }
+td strong { font-family: var(--sans); font-style: normal; font-weight: 700; color: var(--ink); letter-spacing: 0; }
+td code { white-space: nowrap; }
+a { color: inherit; text-decoration: none; }
+
+/* The cover: warm grey, lighter at the top right */
+.panel.cover { position: relative; color: #fff; padding: .55in .38in;
+  background: linear-gradient(200deg, #d4d2cd 0%, #b4b1ab 45%, #8e8b85 100%); }
+.cover-title { text-align: right; font-family: "Poppins", var(--sans); }
+.cover .c1, .cover .c2 { font-weight: 300; text-transform: uppercase; line-height: .98; letter-spacing: -.01em; }
+.cover .c1 { font-size: 36pt; }
+.cover .c2 { font-size: 26pt; margin-top: .14in; }
+.cover .rule { height: 2.5pt; background: #fff; margin: .17in 0 .1in; }
+.cover .c3 { font-weight: 700; font-size: 17.5pt; text-transform: uppercase; letter-spacing: -.005em;
+  white-space: nowrap; }
+.cover-foot { position: absolute; left: .38in; right: .38in; bottom: .45in; display: flex;
+  align-items: flex-end; justify-content: space-between; }
+/* The docs' mark, as on the manual's chapter openers (print.css) */
+.cover .slash { width: .62in; height: 5pt; margin: 0 0 4pt 3pt; transform: skewX(-30deg);
+  background: linear-gradient(90deg, #e2322d 0 25%, #f2b51d 25% 50%, #3aa93f 50% 75%, #2ba6de 75% 100%); }
+.cover .by { font-family: "Poppins", var(--sans); font-weight: 300; font-size: 11pt; text-align: right; line-height: 1.35; }
+.cover .by span { font-size: 7.5pt; }

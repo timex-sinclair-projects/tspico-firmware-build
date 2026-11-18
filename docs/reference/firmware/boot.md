@@ -7,6 +7,7 @@ Source: [`src/main.py`](../../../src/main.py) (all of it),
 [`tools/check-core1-ram.py`](../../../tools/check-core1-ram.py),
 [`src/build-dev-mpy.sh`](../../../src/build-dev-mpy.sh),
 [`.github/workflows/build.yml`](../../../.github/workflows/build.yml),
+[`.github/workflows/manual.yml`](../../../.github/workflows/manual.yml),
 [`.github/workflows/release.yml`](../../../.github/workflows/release.yml),
 [`flash/manifest.json`](../../../flash/manifest.json),
 [`tools/build-flash.py`](../../../tools/build-flash.py).
@@ -32,7 +33,8 @@ starts is [tspico-dispatch.md](tspico-dispatch.md) and
 | `tools/gen-buildinfo.py` | writes `src/TS/buildinfo.py`, the build stamp |
 | `src/dev_tspico.py`, `src/dev_extcmd.py`, `src/build-dev-mpy.sh` | the dev overrides |
 | `tools/check-core1-ram.py` | `build-v3`'s check that the v3 card's core 1 never touches flash, from the linked ELF |
-| `.github/workflows/build.yml` | every push: tests, ROM checks, the two v2 UF2s, the v3 UF2, the user manual PDFs (and the v3 card's), artifacts |
+| `.github/workflows/build.yml` | every push that touches the firmware's inputs, and weekly on `main`: tests, ROM checks, the two v2 UF2s, the v3 UF2, artifacts |
+| `.github/workflows/manual.yml` | every push that touches the user manual: the manual and quick guide PDFs (and the v3 card's) |
 | `.github/workflows/release.yml` | a `v*` tag: the release assets |
 | `flash/manifest.json`, `tools/build-flash.py` | the 512K flash image |
 | `tools/pico-serial.py` | the USB console from a shell |
@@ -119,7 +121,7 @@ because the `with` block assigns it; nothing reads it. Harmless.
 ## `config.ini`
 
 `/config.ini` on the Pico's flash, JSON despite the extension — one
-object, eighteen keys. The shipped file is
+object, nineteen keys. The shipped file is
 [`src/config.ini`](../../../src/config.ini); the web updater writes it to
 the flash with the other Pico files (`web-updater/build-payload.sh`), as
 the release bundle's instructions do — replacing whatever settings the
@@ -132,11 +134,11 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | Key | Type | Shipped | Meaning | Read by | Written by |
 |---|---|---|---|---|---|
 | LOG_LEVEL | int 0–4 | 2 | lowest level `LOG` keeps (0 INFO … 3 CRITICAL, 4 SPECIAL) | `LOAD_CONFIG` → `TSP.LOG_LEVEL` | `LOAD_CONFIG` (default) |
-| FW_VERSION | str | `"2.3.1"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` `readInstalled`, ~343–379; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
+| FW_VERSION | str | `"2.4"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` `readInstalled`, ~343–379; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
 | DCK_SLOT | int 0–15 | 0 | DOCK slot at power-on | `LOAD_CONFIG` → `TSP.DCK_SLOT`, `bank_sm` | `LOAD_CONFIG` (default) |
 | ZX_TAPE_COMPAT | bool | `false` | ZX48 mode loads with `LOAD_ZX_C` (the whole tape in RAM) | → `TSP.ZX_TAPE_COMPAT` | `LOAD_CONFIG` (default) |
 | ROM_SM | int 5, 6, 9, 10 | 10 | `set_ctrl`'s word: DOCK memory × 4 + BOOT memory, 1 SRAM, 2 flash | → `TSP.ROM_SM` | `LOAD_CONFIG` (default; the one-shot), `MEMBOOT` (low bits) |
-| ROM_VERSION | str | `"2.3"` | the release ROM, for the updaters (their `rom_version`); `tpi:info` shows it only for a ROM that doesn't send its version; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
+| ROM_VERSION | str | `"2.4"` | the release ROM, for the updaters (their `rom_version`); `tpi:info` shows it only for a ROM that doesn't send its version; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
 | ROM_SLOT | int 0–15 | 1 | BOOT slot at power-on | → `TSP.ROM_SLOT`, `bank_sm` | `LOAD_CONFIG` (the one-shot back to 1), `MEMBOOT` |
 | VERBOSE | bool | `false` | `SEND_MSG` prints messages | → `TSP.VERBOSE` | `LOAD_CONFIG` (default) |
 | TELEMETRY | bool | `false` | the `TLM` trace on USB serial | `_telemetry()` only | `LOAD_CONFIG` (default) |
@@ -149,6 +151,9 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | SPEECH_PORTS | bool | `true` | OUT 17 / IN 37 answered, as David's speech board | as `SPEECH_VOLUME` | as `SPEECH_VOLUME` |
 | SPEECH_GREETING | str | `""` | said at power-on when the 2068 starts its own ROM (flash slot 1, default DOCK, no one-shot); `""`, none | `TS2068_IO`, after `board.speech_start` | `LOAD_CONFIG` (default, or a non-string replaced), `GREET` (`tpi:greet`) |
 | AUTOMOUNT | str | `""` | a `.tap` mounted at power-on, its path from the card's top folder (`/GAMES/menu.tap`), so `LOAD ""` loads it instead of the menu; `""`, none. Both boards | `TS2068_IO` → `AUTO_MOUNT` | `LOAD_CONFIG` (default, or a non-string replaced), `AUTOMOUNT` (`tpi:automount`) |
+| KEMPSTON | bool | `true` | the v3 card's DE-9 joystick answered at 1Fh (v2 ignores it) | `LOAD_CONFIG` → `board.joystick` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced) |
+| PRINTER_AUTOLF | bool | `false` | the virtual printer ends lines with CR+LF from power-on. Both boards | `TS2068_IO` → `PRT.autolf` | `LOAD_CONFIG` (default, or a bad value replaced); `tpi:autolf` changes `PRT` only, not the file |
+| PRINTER_AUTOPG | bool | `false` | the virtual printer adds a form feed every page length from power-on. Both boards | `TS2068_IO` → `PRT.autopg` | as `PRINTER_AUTOLF` (`tpi:autopg`) |
 
 **The one-shot boot.** `tpi:boot CODE m,s` writes `ROM_SLOT = s` and
 `ROM_SM`'s low bits `= m` ([tspico-commands.md](tspico-commands.md#membootpre-cmd)).
@@ -234,7 +239,7 @@ a UF2 ([DEVELOPER_GUIDE.md §5–6](../../DEVELOPER_GUIDE.md#6-the-dev-override-
   Inside it, `from TS.tspico_io import …` and the other `TS` imports still
   resolve to the frozen modules.
 - **`/dev_extcmd.py`** replaces the frozen `TS.extcmd`: `TS2068_IO` tries
-  `from dev_extcmd import EXT_SA_FUNCT` first (6484;
+  `from dev_extcmd import EXT_SA_FUNCT` first (7248;
   [extcmd.md](extcmd.md)).
 - To go back: delete the file and restart.
 
@@ -275,13 +280,45 @@ boot. That is why the overrides and the assets live at the root and in
 
 ## CI: `build.yml`
 
-Runs on every push to any branch, on pull requests to `main`, and by hand;
-Ubuntu 22.04. The steps, in order:
+Runs on pushes to any branch and pull requests to `main` that touch
+something the build reads, every Monday on `main`, and by hand; Ubuntu
+24.04 (22.04 until 2026-11: GitHub began retiring that image on
+2026-09-17). "Something the build reads" is every path except the ones the
+`paths` filter negates: `site/`, `promo/`, `archive/`, `esp32/` and
+`windows-updater/` (which have workflows of their own), the root and
+`docs/` Markdown, `.claude/`, the release notes, and the user manual and
+its tools, which `manual.yml` builds. `docs/manual/examples/` (tested in
+step 5), `docs/reference/` (step 3) and `docs/rom-analysis/` (step 6) are
+read by the build and stay in. Until 2026-10 it ran on every push, and the
+Actions storage and runner time that cost are why it doesn't. The weekly run
+exists for Pages: the `main/` channel takes the newest green `main` build
+whose `tspico-firmware-uf2` hasn't expired, and without it a month of
+docs-only commits would leave none. A branch whose head commit was
+docs-only has no run for that commit; `pico-serial.py flash --branch`
+says so (below). The steps, in order:
 
-1. **Build tools**: `git`, `build-essential`, `cmake`,
-   `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi`, `python3` from apt.
-   Each attempt has 4 minutes and is retried up to three times: apt on the
-   hosted runners hung mid-download four times on 2026-09-30.
+1. **The ARM toolchain**: `.github/actions/arm-toolchain`, a composite
+   action. Arm's GNU toolchain 10.3-2021.10 (`arm-none-eabi` GCC 10.3,
+   newlib included), unpacked in `~/arm-gnu-toolchain` and kept in the
+   Actions cache under a key naming that version; on a miss it is
+   downloaded from Arm, checked against a pinned SHA-256 (Arm publishes the
+   MD5) and saved, its 61 MB of manuals left out. Then its `bin/` goes on
+   `PATH`. It replaced apt's `gcc-arm-none-eabi` (10.3-2021.07 on 22.04),
+   because the ~440 MB download from the runner's Ubuntu mirror stalled and
+   failed the job (four times on 2026-09-30, three on 2026-11-05, with
+   apt's retries and three 4-minute attempts each), and because 24.04's
+   package is GCC 13: the version is pinned so the firmware's code doesn't
+   change with the runner image. Everything else the build uses (`gcc`,
+   `make`, `cmake`, `git`, `python3`, `zip`) comes with the runner image, so
+   there is no apt step; **Tool versions** prints `cmake`'s, `gcc`'s and
+   Python's. One catch: the toolchain's binutils is 2.37 (Ubuntu's apt
+   package was 2.38), whose `ld --defsym` takes only numbers, `+` and `-`,
+   and MicroPython passes the board's `PICO_FLASH_SIZE_BYTES` that way, which
+   the Pico SDK gives RPI_PICO as `(2 * 1024 * 1024)`. So the v2 builds (the
+   firmware in step 10 and the upgrade UF2 in step 11, here and in
+   `release.yml`) run `make` with `CMAKE_ARGS=-DPICO_FLASH_SIZE_BYTES=2097152`
+   in the environment, which the port's Makefile appends its own arguments
+   to. The v3 board sets its 16 MB as a number in `mpconfigboard.cmake`.
 2. **BASIC → TAP**: `tools/build-basic.sh` tokenizes every `basic/**/*.bas`
    with the vendored `zmakebas` (catches a `.bas` that will not tokenize).
    The outputs — `src/assets/*.tap` for the Pico's flash, `SD card/…` for
@@ -289,10 +326,11 @@ Ubuntu 22.04. The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 44 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 54 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
-   ([README](../README.md#keeping-it-current)). They pin invariants that
+   ([README](../README.md#keeping-it-current)); the manual's
+   `manual_variants_hosttest.py` runs in `manual.yml` instead. They pin invariants that
    used to be checked only by flashing a UF2; they do not observe the Z80
    bus.
 4. **The flash manifest**: `tools/build-flash.py check flash/manifest.json`
@@ -301,10 +339,10 @@ Ubuntu 22.04. The steps, in order:
    **programmer's manual examples**: `docs/manual/examples/test_examples.py`
    (the Z80 routines against a simulated Pico) and `test_extcmd_host.py`
    (the example commands through the real `PROCESS_CMD`).
-6. **ROM 2.3**: `tools/build-rom.py --verify` assembles the fdd module and
+6. **ROM 2.4**: `tools/build-rom.py --verify` assembles the fdd module and
    splices it onto the SYNC/BREAK layer's image (`src/rom/TSPICO-SYNC.ROM`), failing if any patch's "before" bytes or any
    anchor no longer match ([../rom/overview.md](../rom/overview.md)); then
-   `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-23.ROM`: the
+   `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-24.ROM`: the
    committed slot-1 image must be exactly what the sources build. Then
    `rom_cend_hosttest.py` runs the ROM's BIOS `C_END`, and
    `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest),
@@ -342,8 +380,7 @@ Ubuntu 22.04. The steps, in order:
 15. On failure, the CMake logs.
 
 A second job, `build-v3`, runs alongside: the v3 board's UF2
-([board-v3.md](board-v3.md)). It installs the same tools with the same
-retries, clones MicroPython v1.29.0 itself, builds `mpy-cross`, and runs
+([board-v3.md](board-v3.md)). It takes the same cached toolchain (step 1), clones MicroPython v1.29.0 itself, builds `mpy-cross`, and runs
 `make submodules`, generates the build stamp (`tools/gen-buildinfo.py`:
 the board's manifest freezes `src/TS/` directly, `buildinfo.py` among them),
 and runs `make` with
@@ -357,15 +394,27 @@ module itself (`USER_C_MODULES`), so the job needs no extra arguments. The
 UF2 is the whole firmware, `TS.tspico` on `board_v3` (step 4.3 of the v3
 port plan); `pico-serial.py flash --v3 --branch B` fetches it.
 
-A third job, `manual-pdf`, runs alongside too: `tools/manual-pdf/ci-setup.sh`
-installs a pinned pandoc (3.5; Ubuntu's 2.9 has no `--embed-resources`),
-the Linux fonts the stylesheets fall back to (Charis SIL, Nimbus Sans,
-DejaVu Sans Mono) and `pypdf`; the heading and cover fonts (Arvo, Inter,
-Poppins) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
+The user manual is built by its own workflow, `manual.yml`, on pushes and
+pull requests that touch `docs/manual/`, `tools/manual-pdf/`,
+`tools/manual-variants.py`, `tools/build-site-docs.py`, `src/config.ini`
+(the cover's version) or `site/assets/img/`. Its one job, `manual-pdf`,
+first runs `manual_variants_hosttest.py`, then `tools/manual-pdf/ci-setup.sh`
+installs a pinned pandoc (3.5: 22.04's 2.9 had no `--embed-resources`, and
+pinned, the PDFs don't change with the runner image), the Linux fonts the
+stylesheets fall back to (Charis SIL, Nimbus Sans, DejaVu Sans Mono) from
+apt, and `pypdf` with `pip --user --break-system-packages` (24.04's Python
+refuses a system-wide install, PEP 668); the heading and cover fonts (Arvo, Inter,
+Poppins) and the code-block font (Timex TS2068, CC BY 3.0, credited in the
+colophon) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
 one board's manual from `docs/manual/user-manual.md`
 (`tools/manual-variants.py`: passages for one board sit between
 `<!-- v2 -->` or `<!-- v3 -->` marker lines; `BOARD=v2` is the default and
-the published manual), turns it into HTML with pandoc, and
+the published manual), turns it into HTML with pandoc and
+`tools/manual-pdf/manual.lua` (program listings laid out as the 2068 lists
+them: line numbers in four columns, every line cut at 32; and a lead-in
+paragraph kept on one page with the code, picture or short list after it;
+and the board drawing printed at the full text width, not the usual 3.3 in,
+so its jumper labels can be read), and
 `tools/manual-pdf/book.py` adds the title page, contents and chapter
 openers, prints the manual and the two covers with the runner's Chrome, and
 assembles the half-letter one-up (cover + manual) and the saddle-stitch
@@ -375,14 +424,46 @@ printed twice: the first print says where each chapter starts, and a blank
 page goes in before each one that would open on a left-hand page. The
 cover's version comes from `config.ini` and its date from the last commit.
 The script checks the page size and count and that every chapter opens on
-an odd page; the two PDFs are uploaded as
-`tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
-(`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover), uploaded
+an odd page. Then `tools/manual-pdf/quick.py` makes the two quick guides
+from `docs/manual/quick-start.md` and `quick-reference.md` (the same board
+variants): the Quick Start Guide, the manual's cover with "QUICK START" on
+it, six pages (one per `##` section, styled by `quick.css` over the
+manual's `print.css`) and a back cover (`quick-back.html`), as a half-letter
+one-up and a booklet on two letter sheets; and the Quick Reference Guide, a
+card after the 2068's (`card.css`), one landscape letter sheet printed on
+both sides and folded in three, its panels started by `<!-- panel: NAME -->`
+comments in the Markdown and its cover drawn by the script. The script
+fails if a guide's section or a card panel runs over (for the card, a
+script in the page measures each panel in Chrome's `--dump-dom`). The five
+PDFs are uploaded as `tspico-manual-pdf`. Then `BOARD=v3` makes the v3 card's manual
+(`user-manual-v3-*.pdf`, with "V3 CARD USER MANUAL" on the cover, and
+`quick-start-v3-*.pdf` and `quick-reference-card-v3-letter.pdf`), uploaded
 with its Markdown as `tspico-manual-v3`; it isn't published (website,
-releases) while the card is unreleased. Building them on every push means a
-manual change that breaks them fails here, not at release time.
+releases) while the card is unreleased. Then `PRINT=1` makes the files for
+printing on demand, uploaded as `tspico-manual-print` and taken from there
+by hand to Amazon KDP (paperback) and Lulu (coil bound, which lies flat;
+run locally with no output folder, `make.sh` puts them on the Desktop):
+`user-manual-print-interior.pdf`, the one-up without its cover padded to an
+even page count, the interior for both, printed with a wider inside margin
+than the reading PDF (`GUTTER`, 0.8 in by default against 0.62 in, and 0.45
+in outside against 0.5: the KDP proof's perfect binding swallowed too much
+of 0.62 in, which is Lulu's minimum for a 61 to 150 page paperback; KDP's
+is 0.375 in, and coil needs no gutter); `user-manual-kdp-cover.pdf`, back, spine and front
+on one sheet with 0.125 in of bleed all round, the spine the page count
+times KDP's paper thickness (`PAPER=white`, the default, or `cream`), and
+the back cover's links raised out of the corner where KDP prints the
+barcode; and `user-manual-lulu-coil-cover.pdf`, back and front with bleed
+and no spine (11.25 x 8.75 in). The cover art (`cover.css`) runs into the
+bleed. Spine text goes on only where it fits with 0.125 in clear each side
+(Lulu's figure; KDP asks for 1/16 in), about 0.35 in of spine or 155 pages
+on white paper; the manual is far short of that. `book.py` checks each
+cover's size. Building them on every push that touches the manual means a
+change that breaks them fails here, not at release time.
 
-Artifacts are kept 30 days. `tools/pico-serial.py flash --branch B`
+`build.yml`'s artifacts are kept 30 days (its failure logs 7); `manual.yml`'s
+three are kept 7 days, since they preview a change: releases build their
+own PDFs, and the print-on-demand files are taken by hand soon after the
+build. `tools/pico-serial.py flash --branch B`
 downloads the `tspico-firmware-uf2` of B's current head and flashes it
 (below). The list of host tests in step 3 is the authority on what CI
 runs; a new test needs a line there.
@@ -390,7 +471,37 @@ runs; a new test needs a line there.
 A second workflow, `emu-host.yml`, builds the standalone emulator host
 (`tools/emu`) for each platform on pushes that touch `src/`, `basic/` or
 the emulator, and attaches the binaries to a release
-([docs/EMULATOR_BRIDGE.md](../../EMULATOR_BRIDGE.md)).
+([docs/EMULATOR_BRIDGE.md](../../EMULATOR_BRIDGE.md)). The Linux one is
+built in a `python:3.12-bullseye` container rather than on the 24.04
+runner: PyInstaller packs the Python it runs on, and that Python's glibc is
+the oldest the binary starts on. Built on 24.04 it would need glibc 2.39
+and leave out Debian 12, Ubuntu 22.04 and Raspberry Pi OS bookworm;
+bullseye's 2.31 covers more than the 2.35 it needed when it was built on
+22.04. (The full image, not `-slim`: PyInstaller needs binutils.) The
+macOS one is built on `macos-15`: GitHub retired the `macos-14` runners,
+and a job asking for them is cancelled before it starts.
+
+Every workflow uses the first major of each GitHub action that runs on
+Node 24 (`checkout@v5`, `upload-artifact@v6`, `download-artifact@v7`,
+`setup-python@v6`, `cache@v5`, `deploy-pages@v5`,
+`upload-pages-artifact@v5`): GitHub has deprecated Node 20, and the v4s
+were being forced onto Node 24 with a warning on every run.
+
+`prune-artifacts.yml` keeps the artifacts down to the newest two of each
+name. It runs `tools/prune-artifacts.py --delete` after every run of the
+workflows that upload artifacts (`build.yml`, `manual.yml`, `emu-host.yml`,
+`zimodem.yml`, `windows-updater.yml`, `pages.yml`), on any branch. For each
+artifact name it keeps the two newest and the newest from a green push run on
+`main`. That second rule is for `pages.yml`: the `main/` channel downloads the
+newest green `main` build's UF2s, and the Zimodem fallback downloads the newest
+green `main` `zimodem.yml` run's `tspico-zimodem`, which can be months old
+because Zimodem builds only when its inputs change. The reason is storage:
+artifacts in this private repo count against the organization's Actions
+storage, and by 2026-11-05 the 30- to 90-day retentions had piled up 4,400
+artifacts and 16 GB, 13.9 GB of it emulator builds. The catch:
+`pico-serial.py flash --branch` takes the branch head's own build, so a
+branch whose last build has had two newer ones since, on any branch, has no
+`tspico-firmware-uf2` left to flash. Re-run its build first.
 
 ## `tools/check-core1-ram.py`
 
@@ -459,7 +570,9 @@ Fires on a pushed tag `v*` (or by hand with a tag). Version numbers: the
 major.minor are the ROM's, the patch digit is firmware-only (2.2.1 is
 firmware 2.2.1 on ROM 2.2). The job, at the tag:
 
-1. Builds as `build.yml` does — the stamp check, staging, the firmware
+1. Builds as `build.yml` does, with the same cached ARM toolchain (its
+   steps inline rather than the composite action: a manual release checks
+   out an older tag, which may not have `.github/actions/`) — the stamp check, staging, the firmware
    UF2, `dev_tspico.mpy`, the upgrade UF2, the v3 card's firmware, the
    BASIC TAPs. **It runs no tests**: the commit is expected to have passed
    `build.yml` already. The v3 card's firmware is built in its own
@@ -468,7 +581,7 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    `boards/manifest.py` with the v2 one.
 2. **The bundle** `ts-pico-<tag>.zip`: `firmware.uf2`, a generated
    `DEPLOY.md`, `src/` (`main.py`, `config.ini`, `words.txt`,
-   `assets/*.tap`, `rom/TSPICO-23.ROM`) for the Pico's flash, and
+   `assets/*.tap`, `rom/TSPICO-24.ROM`) for the Pico's flash, and
    `SD card/` (`TAP/` recursively, `help/`, the loose `*.tap` of the card's
    root).
 3. **The 512K flash image** `Pico-<tag>.rom`, if a base image can be
@@ -478,19 +591,23 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    alone (`build` exits 2, "INCOMPLETE", after writing them).
 4. **Zimodem for the v3 card's modem**, `zimodem-v3.bin`
    (`esp32/zimodem/build.sh`, PlatformIO 6.1.19: Zimodem 4.0.3 with the
-   card's patches, which make it 4.0.3.1 (IO5/IO7 pulled up; a phonebook
-   dial keeps the dial's own modifiers, #302), merged into one image for
-   flash address 0). The step may
+   card's patches, which make it 4.0.3.2 (IO5/IO7 pulled up; a phonebook
+   dial keeps the dial's own modifiers, #302; 115200 baud by default, the
+   card's rate, so a blank module answers), merged into one image for
+   flash address 0), PlatformIO installed in a venv (24.04's Python
+   refuses a system-wide pip install). The step may
    fail without failing the release, which then has no `zimodem-v3.bin`.
    The same build runs in `zimodem.yml` when `esp32/zimodem/` changes, or
    by hand, as the `tspico-zimodem` artifact.
-5. **The user manual PDFs**, as `build.yml`'s `manual-pdf` job makes them,
-   from the manual at the tag.
+5. **The user manual and quick guide PDFs**, as `manual.yml`'s `manual-pdf`
+   job makes them, from the docs at the tag.
 6. **The release**: assets the zip, `firmware.uf2` (raw, for an in-place
    reflash), `upgrade.uf2`, `firmware-v3.uf2` and `v3-slots.zip` (the v3
    card's firmware and slots), `zimodem-v3.bin` when it was built,
    `user-manual-half-letter.pdf`,
-   `user-manual-saddle-stitch-letter.pdf`, and the flash image when there
+   `user-manual-saddle-stitch-letter.pdf`, `quick-start-half-letter.pdf`,
+   `quick-start-saddle-stitch-letter.pdf`,
+   `quick-reference-card-letter.pdf`, and the flash image when there
    is one. If the
    release already exists, the assets are uploaded to it (`--clobber`) and
    its notes left alone; otherwise it is created with the notes in
@@ -503,9 +620,9 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
 `workflow_run`: GitHub does not fire `release` events for releases made
 by a workflow's token), on a green build of `main`, and on pushes to
 `main` that touch `site/`, `web-updater/`, `SD card/`, the manuals or the
-reference. It copies the two manuals and this reference into the site
+reference. It copies the manuals, the quick guides and this reference into the site
 (`tools/build-site-docs.py`, links rewritten for the site), builds the user
-manual's two PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
+manual's and the quick guides' PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
 from the Docs page), builds the Jekyll site and mounts the web updater at `/updater/`, with the latest
 release's payload under `/updater/release/` and the latest green `main`
 build under `/updater/main/`. Each channel carries the v3 card's firmware
@@ -531,7 +648,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.3 | `src/rom/TSPICO-23.ROM` | `1338F0D5` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.4 | `src/rom/TSPICO-24.ROM` | `96D7CEAA` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |
@@ -581,7 +698,7 @@ may contain the third-party slots (decided 2026-09-28).
   card's `/slots` over USB for now
   ([docs/v3-slots-proposal.md](../../v3-slots-proposal.md)).
 
-The module docstring names `src/rom/TSPICO-23.ROM` for slot 1 and points at
+The module docstring names `src/rom/TSPICO-24.ROM` for slot 1 and points at
 the manifest and this chapter (until #181 it named `TSPICO.ROM` and a
 `FLASH_LAYOUT.md` that does not exist). [`build_flash_hosttest.py`](../../../src/test/build_flash_hosttest.py)
 pins the build's refusals.
@@ -611,7 +728,10 @@ via `gh`; it reboots the board into BOOTSEL with `machine.bootloader()`, so
 no buttons, and finds either chip's drive, `RPI-RP2` or `RP2350`). Before
 copying, `flash` compares the UF2's family IDs with the drive's
 `INFO_UF2.TXT` Board-ID and refuses a UF2 built for the other chip, leaving
-the board in BOOTSEL. `--sd` on `put`, `get` and `run` mounts the SD card
+the board in BOOTSEL. `--branch` finds the run by the branch's head
+commit, so when that commit touched nothing `build.yml` reads (a docs-only
+commit) there is no run and `flash` stops, saying so; pass `--run` with the
+branch's last firmware build. `--sd` on `put`, `get` and `run` mounts the SD card
 at `/sd` first, as `ACTIVATE_SD` does (`board.sd_take_bus`, `sd_spi`,
 `sd_cs`, then `TS.sdcard.SDCard`; so on either board), and unmounts it and
 calls `board.sd_release_bus` after; a `put`/`get` path gets `/sd` in front.
@@ -634,7 +754,7 @@ power cycle before the driver learned to recover it
 | `/assets/romupdate.tap`, `/assets/dckupdate.tap` | the slot updaters | `build-basic.sh` → the same |
 | `/assets/romupd3.tap`, `/assets/dckupd3.tap` | the v3 card's slot updaters (`basic/assets/romupd3.bas`, `dckupd3.bas`) | `build-basic.sh` → the same | `MOUNT_FILE` for a `.ROM`/`.BIN`/`.DCK` |
 | `/activity.log` | the log | `SAVE_LOG`; `main.py` on a fatal error | `tpi:log`; trimmed to 64 KB at boot |
-| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 6406–6407) | `TS2068_IO` | below |
+| `/TMP/` | scratch: removed and re-made at every boot (`TS2068_IO`, 7167–7168) | `TS2068_IO` | below |
 | `/TMP/temp.tap` | the mounted TAP, copied from the card (or the updater tape) | `MOUNT_FILE` | `LOAD_TS`, `FWD`/`REW` via the table; removed by `FORGET_MOUNT` |
 | `/TMP/temp.bin` | the mounted ROM or DCK image (a DCK rebuilt to a full 64K by `DCK_IMAGE`) | `MOUNT_FILE`, `DCK_IMAGE` | `BLKRCV`; removed by `FORGET_MOUNT` |
 | `/TMP/native.tap` | the one-shot tape for `LOAD "f:…"` | `NATIVE_LOAD_PREP` | `LOAD_TS` |

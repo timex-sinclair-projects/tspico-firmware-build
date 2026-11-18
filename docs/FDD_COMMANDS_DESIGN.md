@@ -14,6 +14,10 @@ side of the wire.
 > **Scope note.** We are *not* reproducing the FDD 3000's command syntax, which
 > is derived from the ZX Interface 1 and carries a device-type argument
 > (`"m";1;"name"`). The TS-PICO has one storage device. Syntax is ours to choose.
+> *(2026-10-18: the Interface 1 forms are now planned as well, for mounted `.MDR`
+> microdrive images, alongside the SD card's `f:` syntax; see
+> [#330](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/330)
+> and the non-goals in [`DISK_COMMANDS_SPEC.md`](DISK_COMMANDS_SPEC.md).)*
 
 ## Start here
 
@@ -196,7 +200,7 @@ is occupied, so this displaces no existing address.
         │ HOME hook: 3 bytes @ $25D6 + 4 in the syntax offset table
         ▼
    EXROM $22AE+  parse args
-        │  synthesise "TPI:DIR ..." etc.
+        │  synthesize "TPI:DIR ..." etc.
         │  point $5DD3/$5DD5 at it, set T-ADDR
         ▼
    existing $1A73 → $1BA0 'B' block ──────────►  PROCESS_CMD  →  SA_funct{}
@@ -208,7 +212,7 @@ is occupied, so this displaces no existing address.
         (direct port $0E/$0F, own wait loop)
 ```
 
-Phase 1 adds **no new wire protocol at all**: the commands become synthesised
+Phase 1 adds **no new wire protocol at all**: the commands become synthesized
 `TPI:` strings on the existing `'B'` BASIC-command path, which the Pico already
 parses in `PROCESS_CMD` and dispatches through the `SA_funct` table. Only
 Phase 3's bulk transfers need anything new.
@@ -239,8 +243,28 @@ display of the response):
 |---|---|---|
 | `CAT` / `CAT "x"` / `CAT ""` | `tpi:dir` / `tpi:dir x` / `tpi:tapdir` | `DIR` (with `CATALOG` for an argument) / `TAPDIR` |
 | `ERASE "x"` | `tpi:erase x` | `DISK_ERASE` (file, pattern with Y/N each, or `dir/`) |
-| `FORMAT "x"` | `tpi:format x` | `DISK_FORMAT` (`x.tap` new + mounted, or `dir/`) |
-| `MOVE TO "x"` / `MOVE "a" TO "b"` | `tpi:cd x` (`""` → `tpi:cd -`) / `tpi:copy a\|b` | `CDIR` / `DISK_COPY` |
+| `FORMAT "x"` | `tpi:format x` | `DISK_FORMAT` (`x.tap` new + mounted, `dir/`, or `:label`, which goes to `LABEL_SET`) |
+| `MOVE TO "x"` / `MOVE "a" TO "b"` | `tpi:cd x` (`"-"` → `tpi:cd -`, `""` → `tpi:cd`, the menu) / `tpi:ren a\|b` | `CDIR` / `DISK_REN` |
+| `COPY "a" TO "b"` / `COPY` | `tpi:copy a\|b` / nothing: HOME's printer COPY | `DISK_COPY` / — |
+| `LIST "x"` / `LIST`, `LIST n`, `LIST #n` | `tpi:list x` / nothing: HOME's LIST at `$1545` | `DISK_LIST` / — |
+| `RESTORE #n` / `RESTORE`, `RESTORE n` | `TAB 1` written to the channel (`tpi:chwr 170100`) / nothing: HOME's RESTORE at `$1E9D` | `CH_WRITE` (the seek) / — |
+
+**COPY** comes in a different way (#341). Its parameter list at HOME `$19D7` was class
+`$00` with routine `$0A02` (no operands, so `COPY "a"` was a syntax error); the ROM makes it
+class `$05` with routine `$25E0`, `LD B,$FF` / `JR $25D6`, so COPY enters the module through
+the same stub with its own token. The stub ends `RET NC` / `JP (HL)`: the module returns NC
+for everything except a bare `COPY` at run time, which returns C with `HL = $0A02`, and the
+stub jumps on to HOME's own COPY, the printer.
+
+**LIST and RESTORE** come in through their parameter lists (#341). LIST's at HOME `$19AF`
+stays class `$05`, its routine moved from `$1545` to `$25D6`; RESTORE's at `$19D0` goes from
+class `$03`, routine `$1E9D`, to class `$05`, routine `$25D6`. B holds no token on that path,
+so the module reads T-ADDR (`$19B0` for LIST, `$19D1` for RESTORE). `LIST "x"` (an expression
+that starts as a string) sends `tpi:list x`; `RESTORE #n` flushes the stream's channel, drops
+what it read ahead and writes `TAB 1` to it. Every other form returns C with `HL` = HOME's
+routine, and the stub jumps there: `$1545` for LIST on both passes (it checks its own syntax),
+`$1E9D` for RESTORE at run time, after the module has stacked the line number or 0 (on the
+syntax pass the module checks RESTORE's number itself and returns NC).
 
 The verbs map to Pico commands that exist today. The argument is read from the
 BASIC line and appended after the verb. Both the syntax-check and runtime pass
@@ -250,7 +274,8 @@ argument so the statement is accepted, the runtime pass builds and sends.
 
 Verified in ZEsarUX, each command producing the exact string above (`CAT` → `tpi:dir`,
 `ERASE "AB"` → `tpi:rm AB`, `FORMAT "X"` → `tpi:newtap X`, `MOVE "Y"` → `tpi:cd Y`),
-with the `'B'` pre-header going out port `$0E`.
+with the `'B'` pre-header going out port `$0E`. (Those were the first build's strings; the
+table above is the current mapping. `tpi:newtap` is gone: `tpi:format` does its job.)
 
 **End-to-end through the real firmware (issue-#35 bridge).** `CAT` was then run
 against the real `TS/tspico.py` command logic, using a new bridge runtime
@@ -273,7 +298,8 @@ it is the lab's M2b/M3 milestone; a real Pico or hardware renders the listing
 directly.
 
 Open polish items: `MOVE` currently means change-directory (single arg) rather than
-the rename in §9 item 4 — that needs a Pico `move` verb; and `ERASE` maps to `rm`,
+the rename in §9 item 4 — that needs a Pico `move` verb (*done: `MOVE "a" TO "b"` sends
+`tpi:ren`, and `MOVE TO` keeps change-directory*); and `ERASE` maps to `rm`,
 which has its own confirmation prompt. The argument is taken as a string *literal*
 from the line; a string *expression* (`ERASE a$`) would need the ROM's evaluator
 (class `$0A`) instead of the line scan.
@@ -289,6 +315,10 @@ Proposed mapping (syntax is ours to choose; this is a starting point):
 | `MOVE "a" TO "b"` | new `TPI:MOVE a b` | rename/move — we define the syntax (see below) |
 | `MOVE "path"` | `TPI:CD path` | debatable; see §9 |
 | `FORMAT "name"` | `TPI:NEWTAP name` | create + mount a TAP |
+
+*As built* (the table at the top of this section): `MOVE "a" TO "b"` → `tpi:ren`,
+`MOVE TO "x"` → `tpi:cd`, `COPY "a" TO "b"` → `tpi:copy`, `FORMAT` → `tpi:format`, which
+took over `tpi:newtap`'s job (`tpi:newtap` is gone).
 
 **`CAT` needs a context rule.** There are two directories in play — the SD path
 (`TPI:DIR`) and the contents of the mounted TAP (`TPI:TAPDIR`). Making bare `CAT`
@@ -317,7 +347,7 @@ almost free: the `'B'`-block path already surfaces the Pico's status byte as a
 report, so it is a matter of the handlers returning the right status.
 
 Pico-side work in this phase is small: a few handlers in `SA_funct`, most of them
-thin wrappers over `DIR`, `RM`, `CD`, `TAPDIR`, `NEW_TAP`. Each must honour the
+thin wrappers over `DIR`, `RM`, `CD`, `TAPDIR`, `NEW_TAP`. Each must honor the
 V6 tail pre-load contract in `PROCESS_CMD` — handlers write their response and
 return; they do **not** write their own `0x01`. See
 [`EXTCMD_PROTOCOL.md`](EXTCMD_PROTOCOL.md) §3.
@@ -479,10 +509,10 @@ That is perfectly fine for "one command, one message." It is fatal for
    sane interval rather than on every poll.
 2. **Every channel is buffered.** `PRINT #` fills a RAM record buffer and flushes
    only when full or on `CLOSE #`; `INPUT #` pulls a block and serves bytes from
-   RAM. This amortises one handshake over a whole block instead of over one byte,
+   RAM. This amortizes one handshake over a whole block instead of over one byte,
    and it makes random access fall out for free — a seek is "give me block N."
 
-MicroPython on the Pico side needs the same amortisation for the same reason: a
+MicroPython on the Pico side needs the same amortization for the same reason: a
 per-byte round trip through the FIFO and the interpreter will not keep up.
 
 The Interface 1 precedent is the sanity check here — its microdrive channel is
@@ -529,7 +559,8 @@ point, with corrections:
 - **`ERASE` as select-then-`DELETE`** is a two-statement race; make it one
   round trip (§4).
 - `FORMAT → TPI:FRESET` (reset configuration) is a surprising meaning for
-  `FORMAT`. `NEWTAP` fits the word better.
+  `FORMAT`. `NEWTAP` fits the word better. (As built, `FORMAT` sends `tpi:format`, which
+does what `tpi:newtap` did; `tpi:newtap` has been removed.)
 
 ---
 
@@ -550,7 +581,7 @@ the declarative `PATCHES` manifest (each patch asserts the bytes it overwrites, 
 a moved ROM fails loudly); and, with `--verify`, assert that **only** the module
 region and enabled patches changed. Because file offset == Z80 address in both
 banks, the report reads in Z80 addresses. This is the reproducible, diffable
-append-and-patch pattern the v1.5w fix used, mechanised.
+append-and-patch pattern the v1.5w fix used, mechanized.
 
 First build is proven end to end: it assembles the `$3000` skeleton, applies the
 verified 4-byte syntax-offset patch, produces `build/TSPICO-fdd.ROM` changing
@@ -591,7 +622,9 @@ Ordered by how much they could change the design.
 4. **`MOVE` meaning.** Mapping it to `CD` is convenient but semantically odd;
    `MOVE "a" TO "b"` as rename is the better fit and leaves `CD` to a separate
    statement or to `TPI:CD`. (The FDD 3000 is no guide — its own `MOVE` entry is
-   malformed, §10.3.)
+   malformed, §10.3.) *Resolved (#341): `MOVE "a" TO "b"` renames, `MOVE TO "x"`
+   changes directory, and `COPY "a" TO "b"` copies; see
+   [`DISK_COMMANDS_SPEC.md`](DISK_COMMANDS_SPEC.md) §3.*
 5. **Handle lifetime across resets.** What happens to open handles when the 2068
    is reset, the path changes, or a command aborts mid-transfer? The Pico must
    not leak file objects, and BASIC must not hold a stream pointing at a closed
@@ -851,7 +884,7 @@ ROM experiment.**
 
    then read it back with ZRCP `evaluate var0` before and after the event. Always
    run a positive control (a breakpoint on `$1A71`, the statement dispatcher,
-   which any line must reach) — that is what caught the non-halting behaviour.
+   which any line must reach) — that is what caught the non-halting behavior.
 
 2. **Typing a keyword token is unnecessary.** Disk keywords are buried in extended
    mode, but the edit line can be built directly: press one key that yields a

@@ -306,7 +306,7 @@ comes back on both paths.
 Wait, at most `ms`, for the Z80 to read what is left in TX; returns whether
 TX is empty. Called by `serve` after an `'X'` with 200 ms, before it
 re-arms the tape: `ZX_ARM` begins with `ZX_FLUSH_TX`, and if the 1-byte
-`'S'` acknowledgement were flushed before the Z80's `IN`, that `IN` would
+`'S'` acknowledgment were flushed before the Z80's `IN`, that `IN` would
 take the tape's first byte instead and the next `LOAD ""` would start one
 byte in *(inferred)*.
 
@@ -343,9 +343,9 @@ Then, by what `w` is:
 1. **A port-0Eh write** (`not w & PORT_0F`):
    - `w == 0x4C`, the Spectrum ROM's `'L'`. Its bytes are already queued, so
      the only action is `MQX(MQ, "mov(y, invert(null))")`, READY, for a
-     board that already has the customised ZX ROM in slot 0: it waits for READY
+     board that already has the customized ZX ROM in slot 0: it waits for READY
      after `'L'` ([../rom/zx48.md](../rom/zx48.md)), the original does not
-     look. (An older customised ZX ROM cannot run the upgrade: its `WAIT_RDY` counts in D and
+     look. (An older customized ZX ROM cannot run the upgrade: its `WAIT_RDY` counts in D and
      breaks every LOAD, [PATCH_ZX48_HANDSHAKE.md](../../rom-analysis/PATCH_ZX48_HANDSHAKE.md).)
      In service mode an `'L'` means the 2068 was reset and `LOAD ""` typed
      again: `service = False`, `pos = ZX_ARM(...)`, `report("tape",
@@ -398,7 +398,7 @@ Beware:
 
 What the tests pin: `upgrade_hosttest.py` runs this function against a
 scripted LD-BYTES and then the real `updater.bin` in `z80core`, with and
-without the P10 jumper, and once with the customised ZX ROM's READY wait after `'L'`;
+without the P10 jumper, and once with the customized ZX ROM's READY wait after `'L'`;
 it checks the lines `waiting, tape, updater, P 1 ... 192 W ... D`, the
 flash's final contents, and that after `X 2` TX holds the tape's first four
 bytes again. Since 2026-10-06 it runs the whole upgrade once more with every
@@ -802,7 +802,7 @@ text (rows 16–17) appears below the bars.
 
 The page shows its own wording for the same reasons (`ROM_FAIL` in
 `app.js`); `updater_hosttest.py` reads rows 16, 17 and 21 back off the
-modelled screen through the font copy.
+modeled screen through the font copy.
 
 ### The variables
 
@@ -906,7 +906,7 @@ and `OUT_DIR/updater.tap` (default `OUT_DIR`: `build-upgrade/`).
 The ROM images come from [`flash/manifest.json`](../../../flash/manifest.json),
 so the upgrade installs exactly what the 512K flash image ships
 ([../rom/overview.md](../rom/overview.md), [flash/README.md](../../../flash/README.md)):
-`IMG1` is slot 1's file whole, `src/rom/TSPICO-23.ROM`, 32K, and `IMG0` is
+`IMG1` is slot 1's file whole, `src/rom/TSPICO-24.ROM`, 32K, and `IMG0` is
 the first 16K of slot 0's, `src/rom/TSPICO-ZX48-V4.BIN`; an `assert` pins
 the two lengths. Their crc32s go into the generated file's header comments
 and into `IMG1_CRC` and `IMG0_CRC`, which nothing reads yet.
@@ -994,9 +994,11 @@ next to the page: `release/` from the latest GitHub Release's `firmware.uf2`
 and `upgrade.uf2` assets and the Pico files at its tag, and `main/` from the
 latest green `build.yml` run's `tspico-firmware-uf2` and
 `tspico-upgrade-uf2` artifacts and the files at its commit, with the TAPs
-rebuilt by `build-basic.sh` for that commit. A release from before
-`upgrade.uf2` existed has `upgrade_uf2: null`, and the page points at the
-other channel.
+rebuilt by `build-basic.sh` for that commit. The page installs from `release/`;
+`?channel=main` (the Windows program's `--channel main`) loads `main/`
+instead, for testing a build before it is released, and neither offers a
+choice. A release from before `upgrade.uf2` existed has `upgrade_uf2: null`,
+and the page refuses to start on a v2 board.
 
 ## The web updater's side of the UPG protocol
 
@@ -1005,23 +1007,20 @@ BOOTSEL, wipe, ROM, firmware, files. What matters to this chapter is how it
 gets the upgrade UF2 onto the Pico, what it does with each `UPG` line, and
 how it moves on.
 
-**Deciding to do the ROM step.** `readInstalled` asks the running firmware
+**Always the ROM step.** `readInstalled` asks the running firmware
 for its `FW_VERSION` over the raw REPL (`sys.modules['TS.tspico']` or
 `dev_tspico`), falling back to `/config.ini`'s, then to "1.1 (no version in
 config.ini)"; `from1x` is a major below 2, and `ver` is the running
 module's major.minor (`verOf`), null when it came from `config.ini` or
-nowhere. The ROM can't be read over USB, so `romBehind` takes the firmware
-version for the ROM's: the ROM step is due when `ver` is older than the
-channel's `rom_version`, or unknown (a wiped Pico, a 1.1 board), since in
-practice every board out there still has 1.1's ROM; only a board already on
-the channel's major.minor skips it. `connect`, and `loadChannel` when a
-board is already connected, tick "Update the TS-2068 ROM" when
-`romBehind()` and the channel has `upgrade_uf2`. `refreshPlan` forces
-"Erase the Pico first" on whenever the ROM step is ticked, because the
-upgrade UF2's frozen `main.py` must not be shadowed; it warns a 1.1 board
-that unticks the ROM step that its ROM cannot talk to the new firmware, and
-any other board behind the channel that unticking leaves its older ROM.
-Before 2.2 it ticked the step for `from1x` alone.
+nowhere. The page shows that version but no longer decides from it: since
+the firmware needs its matching ROM and the ROM can't be read over USB,
+every run on a v2 board erases the Pico and does the ROM step, and the page
+offers no option for either (`start` sets `wipe` and `rom` to `!isV3()`).
+The erase goes with it because the upgrade UF2's frozen `main.py` must not
+be shadowed. The v3 card gets neither. Before this, a `romBehind` check
+ticked an "Update the TS-2068 ROM" option only for a board older than the
+channel's `rom_version` (before 2.2, for `from1x` alone), and the user could
+untick it and the erase.
 
 **Getting into BOOTSEL and wiping.** `enterBootsel` runs
 `machine.bootloader()` over the REPL (`execNoReply`: raw REPL, the code,
@@ -1101,5 +1100,5 @@ the 2068 on, and to leave P10 fitted.
 The README still lists an end-to-end hardware pass on a 1.1 board, among
 others, on macOS and Windows, as to do; the repo's own record of the
 updater on a board is the harness that proved the tape path on a real
-flash chip. Nothing in this chapter about the page's behaviour on a real board
+flash chip. Nothing in this chapter about the page's behavior on a real board
 goes beyond what the code says *(unverified)*.

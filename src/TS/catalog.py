@@ -25,8 +25,204 @@ UNSHOWABLE = "{|}~\x7f"
 def screen_name(s):
     """s as the 2068 lists it: every character it can't print or type
     becomes '?', which LOAD "tpi:..." then takes as a wildcard (LOAD_TPI).
-    '?' can't be part of a FAT name, so it never collides with a real one."""
+    '?' can't be part of a FAT name, so it never collides with a real one.
+    A name with nothing to replace comes back as it is: this runs for every
+    row of every listing, and rebuilding each name a character at a time
+    made a string per name for nothing (#384)."""
+    for c in s:
+        if c < " " or c > "~" or c in UNSHOWABLE:
+            break
+    else:
+        return s
     return "".join("?" if (c < " " or c > "~" or c in UNSHOWABLE) else c for c in s)
+
+
+def sort_items(items):
+    """os.ilistdir() items (tuples whose [0] is the name) as a new list in
+    name order, case folded: what sorting with a key of the lowered name
+    gives, without its cost on the Pico. MicroPython's sort calls the key on
+    every comparison, not once per item, and its quicksort takes the last
+    item as the pivot, so a folder already in name order is near its worst
+    case: 300 files made 45,149 lowered strings and took 1.58 s (v3 card,
+    2026-11-06), in the middle of building the listing. Here each name is
+    lowered once, an ordered folder is not sorted at all, and the list is
+    turned back into the items in place. FAT names differ in more than case,
+    so the lowered names are unique and the order is the same.
+
+    The items are all read first, and only then paired with their lowered
+    names, in the same list: pairs made while os.ilistdir() still yielded
+    put a short-lived pair and string between every kept item, and the
+    300-file listing then found no 2K block for CAT_COLOUR (v3, 2026-11-06)."""
+    d = list(items)
+    for i in range(len(d)):
+        it = d[i]
+        d[i] = (it[0].lower(), it)
+    for i in range(1, len(d)):
+        if d[i][0] < d[i - 1][0]:
+            d.sort()
+            break
+    for i in range(len(d)):
+        d[i] = d[i][1]
+    return d
+
+
+# ─── The folder index (#384) ───────────────────────────────────────────────
+# The current folder as LIST_DIR_FILES lists it, in buffers made once, at
+# import, and never made again: the names packed as UTF-8 in one bytearray,
+# with arrays of where each starts and of the sizes. files[] and dirs[] were
+# one str per name, made in the same pass as the listing's garbage, so they
+# ended up spread over the whole heap (a 300-file folder: ~12K in ~300
+# pieces). Here a listing keeps nothing new; what it makes on the way is
+# garbage, and one collection gives the heap back in one piece.
+
+INDEX_ENTRIES = 512                                 # entries the index holds
+INDEX_NAME_BYTES = 8192                             # bytes of names it holds
+
+DIR = 0                                             # kind_of(): a folder
+FILE = 1                                            # a file LOAD "tpi:n" numbers
+OTHER = 2                                           # any other file, shown unnumbered
+
+
+def kind_of(item):
+    """An os.ilistdir() item's place in a listing: DIR, FILE (one of
+    DIR_EXT, numbered), OTHER (shown, not numbered), or None: left out (a
+    name starting with '.', dirinfo.tap, anything not a file or folder).
+    LIST_DIR_FILES' rule; folders are all shown, dot folders too."""
+    if item[1] == 16384:
+        return DIR
+    name = item[0]
+    if item[1] != 32768 or name[0] == "." or name == "dirinfo.tap":
+        return None
+    return FILE if name[-3:].upper() in DIR_EXT else OTHER
+
+
+class View:
+    """One kind of an Index's entries as a read-only sequence of names:
+    len(), [i] (negative too), iteration, `in` and == against a list. A
+    name is decoded from the index each time, so it is a new short-lived
+    str; nothing is kept."""
+
+    def __init__(self, ix, kind):
+        self.ix = ix
+        self.kind = kind
+
+    def __len__(self):
+        s = self.ix.start
+        return s[self.kind + 1] - s[self.kind]
+
+    def at(self, i):                                # i -> the entry's place in the index
+        n = len(self)
+        if i < 0:
+            i += n
+        if not 0 <= i < n:
+            raise IndexError("index out of range")
+        return self.ix.start[self.kind] + i
+
+    def __getitem__(self, i):
+        return self.ix.name(self.at(i))
+
+    def size(self, i):
+        return self.ix.size[self.at(i)]
+
+    def __iter__(self):
+        s = self.ix.start
+        for i in range(s[self.kind], s[self.kind + 1]):
+            yield self.ix.name(i)
+
+    def __contains__(self, name):
+        for n in self:
+            if n == name:
+                return True
+        return False
+
+    def __eq__(self, other):
+        return list(self) == list(other)
+
+
+class Index:
+    """The current folder, sorted as LIST_DIR_FILES lists it: the folders,
+    then the numbered files, then the others, each by lower-cased name.
+    Holds up to `entries` entries and `name_bytes` bytes of names; what
+    doesn't fit is counted in `more` and left out (the last in that order
+    go first). `dirs`, `files` and `others` are Views of it."""
+
+    def __init__(self, entries=INDEX_ENTRIES, name_bytes=INDEX_NAME_BYTES):
+        import array
+        self.cap = entries
+        self.names = bytearray(name_bytes)
+        self._mv = memoryview(self.names)
+        self.off = array.array("H", [0] * (entries + 1))   # (a list: "L" is 8 bytes on a 64-bit host)
+        self.size = array.array("L", [0] * entries)
+        self.start = [0, 0, 0, 0]                   # where DIR, FILE, OTHER begin; [3] is the count
+        self.more = 0
+        self.dirs = View(self, DIR)
+        self.files = View(self, FILE)
+        self.others = View(self, OTHER)
+
+    def __len__(self):
+        return self.start[3]
+
+    def name(self, i):
+        return str(self._mv[self.off[i]:self.off[i + 1]], "utf-8")
+
+    def clear(self):
+        self.start[0] = self.start[1] = self.start[2] = self.start[3] = 0
+        self.more = 0
+
+    def fill(self, items, count):
+        """Rebuild from os.ilistdir() items; `count` is how many there are
+        (LISTING_SIG's count, from a first read), so the one list of sort
+        keys is made at its full length at once, not grown.
+
+        Each kept item becomes one str, "<kind><lower-case name>\\0<name>
+        \\0<size>", and the list is sorted with no key: comparisons in C.
+        MicroPython calls a key= on every comparison (45,149 calls for 300
+        names, 1.58 s, #394), and its quicksort is near its worst on a list
+        already in order, so an ordered list is not sorted at all. FAT
+        names differ in more than case, so the lower-case names decide
+        every comparison. Then each key is copied into the buffers and
+        dropped."""
+        self.clear()
+        keys = [None] * count
+        j = 0
+        for it in items:
+            if j == count:                          # the folder grew between the two reads
+                break
+            k = kind_of(it)
+            if k is None:
+                continue
+            nm = it[0]
+            keys[j] = "%d%s\x00%s\x00%d" % (k, nm.lower(), nm, it[3] if len(it) > 3 else 0)
+            j += 1
+        del keys[j:]
+        for i in range(1, j):
+            if keys[i] < keys[i - 1]:
+                keys.sort()
+                break
+        mv = self._mv
+        room = len(self.names)
+        cnt = [0, 0, 0]
+        n = 0
+        p = 0
+        self.off[0] = 0
+        for i in range(j):
+            k = keys[i]
+            keys[i] = None
+            a = k.index("\x00")
+            b = k.index("\x00", a + 1)
+            nm = k[a + 1:b].encode()
+            if self.more or n == self.cap or p + len(nm) > room:
+                self.more += 1                      # and every one after: no gaps in the numbers
+                continue
+            mv[p:p + len(nm)] = nm
+            p += len(nm)
+            self.size[n] = int(k[b + 1:])
+            n += 1
+            self.off[n] = p
+            cnt[ord(k[0]) - 48] += 1
+        self.start[1] = cnt[0]
+        self.start[2] = cnt[0] + cnt[1]
+        self.start[3] = n
 
 
 def match_shown(name, pat):
@@ -119,7 +315,7 @@ def split_arg(arg):
 
 
 def split_pair(arg):
-    """ "a.tap|b.tap" -> ("a.tap", "b.tap"). The ROM joins MOVE's two names with
+    """ "a.tap|b.tap" -> ("a.tap", "b.tap"). The ROM joins COPY's and MOVE's names with
     '|', which FAT names can't contain; typed by hand (SAVE "tpi:copy a b") a
     single space works too. Either half is '' when missing."""
 
@@ -141,7 +337,7 @@ def select(items, pat):
     """
 
     dirs_l, files_l, other_l = [], [], []
-    for item in sorted(items, key=lambda it: it[0].lower()):
+    for item in sort_items(items):
         name = item[0]
         if name == "dirinfo.tap":
             continue
@@ -311,3 +507,221 @@ def tap_header_rows(tbl, cur_idx=None, idx1=0, idx2=None, orphans=False):
                 N.append("Data block  %5s " % el[1])
             N.append("%-10s" % ("headerless" if orphans and orphan else el[3]))
     return N
+
+
+# --- LIST "name": a file as the 2068 shows it --------------------------------
+
+LIST_TEXT_MAX = 8192                                # bytes of a text file LIST shows
+LIST_HEX_MAX = 2048                                 # bytes of anything else (256 rows)
+
+
+def is_text(data):
+    """True if data reads as text: no control codes but TAB, LF and CR, and
+    no DEL. Bytes from 80h up (UTF-8, Latin-1) pass; LIST shows them as '?'."""
+
+    for b in data:
+        if (b < 32 and b not in (9, 10, 13)) or b == 127:
+            return False
+    return True
+
+
+def list_text(data, size, text=None):
+    """LIST "name"'s text for the first bytes of a file (`data`) of `size`
+    bytes. Text as itself, line ends kept and a TAB as two spaces, through
+    screen_name; anything else as a hex dump, 8 bytes a row in 30 columns:
+    "0000 0011223344556677 ..h.i..."  If `data` is not the whole file, a
+    last line says how much of it this is. `text` says which (default:
+    is_text(data)); a control code in text shows as '?'."""
+
+    if text is None:
+        text = is_text(data)
+    if text:
+        out = [c if c in "\r\n" else screen_name(c)
+               for c in "".join(chr(b) for b in data).replace("\t", "  ")]
+    else:
+        out = []
+        for i in range(0, len(data), 8):
+            row = data[i:i + 8]
+            out.append("%04X %-16s %s\r" % (
+                i, "".join("%02X" % b for b in row),
+                "".join(chr(b) if 32 <= b < 127 and chr(b) not in UNSHOWABLE else "." for b in row)))
+    if len(data) < size:
+        out.append("\r(the first %d of %d bytes)" % (len(data), size))
+    return "".join(out)
+
+
+# --- The card's label ----------------------------------------------------------
+# MicroPython's VfsFat doesn't give Python the FAT volume label (FatFs has
+# f_getlabel/f_setlabel, but only mkfs calls f_setlabel), so these read and
+# write it in the raw sectors, through a block device handed in (readblocks/
+# writeblocks of 512-byte blocks: the SD driver, or a test image). Writing
+# needs the card unmounted: FatFs keeps a sector of the root folder cached.
+#
+# The label is a root-folder entry with attribute 08h, what Windows and macOS
+# show. The boot sector has a copy (BS_VolLab) that DOS showed; FatFs's
+# f_setlabel leaves it alone, and so does write_label: the boot sector is the
+# one sector whose loss makes the card unmountable, and nothing reads it for
+# the name. So a label change writes one sector, the one FatFs would.
+
+LABEL_MAX = 11
+LABEL_BAD = '"*+,./:;<=>?[\\]|'                     # FatFs's f_setlabel refuses these
+
+
+def label_clean(name):
+    """The label FAT would store for `name` (upper case, at most 11
+    characters, no trailing spaces), or None if it can't be one. "" is no
+    label."""
+
+    name = name.rstrip(" ").upper()
+    if len(name) > LABEL_MAX or name[:1] == " ":
+        return None
+    for c in name:
+        if c < " " or c > "~" or c in LABEL_BAD or c in UNSHOWABLE:
+            return None
+    return name
+
+
+def _u16(b, i):
+    return b[i] | b[i + 1] << 8
+
+
+def _u32(b, i):
+    return b[i] | b[i + 1] << 8 | b[i + 2] << 16 | b[i + 3] << 24
+
+
+def _is_vbr(b):
+    """A FAT boot sector with 512-byte sectors (FatFs's check_fs, simplified)."""
+
+    return (b[510] == 0x55 and b[511] == 0xAA and b[0] in (0xEB, 0xE9, 0xE8)
+            and _u16(b, 11) == 512 and b[13] and not b[13] & (b[13] - 1)
+            and b[16] in (1, 2) and _u16(b, 14))
+
+
+class _Fat:
+    """The geometry of the FAT volume on dev, found as FatFs finds it: the
+    first sector, else the first of the MBR's four partitions that holds
+    one. OSError if there is none."""
+
+    def __init__(self, dev):
+        self.dev = dev
+        b = self.read(0)
+        start = 0
+        if not _is_vbr(b):
+            if b[510] != 0x55 or b[511] != 0xAA:
+                raise OSError(19, "No FAT volume")
+            for k in range(4):
+                lba = _u32(b, 446 + 16 * k + 8)
+                if lba and _is_vbr(self.read(lba)):
+                    start = lba
+                    break
+            else:
+                raise OSError(19, "No FAT volume")
+            b = self.read(start)
+        self.start = start
+        spc, rsvd, nfat = b[13], _u16(b, 14), b[16]
+        fatsz = _u16(b, 22) or _u32(b, 36)
+        self.spc = spc
+        self.fat = start + rsvd
+        self.fat32 = _u16(b, 22) == 0
+        if self.fat32:
+            self.data = self.fat + nfat * fatsz
+            self.root_clus = _u32(b, 44)
+        else:
+            self.root = self.fat + nfat * fatsz
+            self.root_secs = (_u16(b, 17) * 32 + 511) // 512
+
+    def read(self, n):
+        buf = bytearray(512)
+        self.dev.readblocks(n, buf)
+        return buf
+
+    def root_sectors(self):
+        """Every sector of the root folder, in order."""
+
+        if not self.fat32:
+            for i in range(self.root_secs):
+                yield self.root + i
+            return
+        c = self.root_clus
+        for _ in range(65536):                       # a loop in the chain ends it
+            if c < 2 or c >= 0x0FFFFFF7:
+                return
+            for i in range(self.spc):
+                yield self.data + (c - 2) * self.spc + i
+            sec = self.read(self.fat + c * 4 // 512)
+            c = _u32(sec, c * 4 % 512) & 0x0FFFFFFF
+
+    def find(self):
+        """(sector, offset, buf) of the label entry, then of the first free
+        entry: (None, None, None) for one that isn't there."""
+
+        lab = free = (None, None, None)
+        for n in self.root_sectors():
+            buf = self.read(n)
+            for off in range(0, 512, 32):
+                b0, attr = buf[off], buf[off + 11]
+                if b0 == 0:
+                    if free[0] is None:
+                        free = (n, off, buf)
+                    return lab, free
+                if b0 == 0xE5:
+                    if free[0] is None:
+                        free = (n, off, buf)
+                    continue
+                if attr & 0x3F != 0x0F and attr & 0x08 and lab[0] is None:
+                    lab = (n, off, buf)
+        return lab, free
+
+
+def read_label(dev):
+    """The card's label ("" for none). OSError if there's no FAT volume."""
+
+    fat = _Fat(dev)
+    (n, off, buf), _ = fat.find()
+    if n is None:
+        return ""
+    raw = bytearray(buf[off:off + 11])
+    if raw[0] == 0x05:
+        raw[0] = 0xE5
+    return "".join(chr(b) if 32 <= b < 127 else "?" for b in raw).rstrip(" ")
+
+
+def write_label(dev, name):
+    """Give the card the label `name` (label_clean's form; "" takes it
+    away). OSError if there's no FAT volume, ValueError if the root folder
+    has no free entry for it. Writes the one root-folder sector that holds
+    the entry, and nothing else."""
+
+    fat = _Fat(dev)
+    lab, free = fat.find()
+    if name:
+        raw = (name + " " * LABEL_MAX)[:LABEL_MAX].encode()
+        n, off, buf = lab if lab[0] is not None else free
+        if n is None:
+            raise ValueError("Root folder full")
+        entry = bytearray(32)
+        entry[0:11] = raw
+        entry[11] = 0x08
+        buf[off:off + 32] = entry
+        fat.dev.writeblocks(n, buf)
+    else:
+        n, off, buf = lab
+        if n is not None:
+            buf[off] = 0xE5
+            fat.dev.writeblocks(n, buf)
+
+
+def card_line(label, total, free):
+    """CAT's card line, at most 32 characters: "SD: 240 MB; free: 236 MB",
+    the label in place of "SD" when the card has one, shorter forms when a
+    long label doesn't fit."""
+
+    tot, fr = space_pair(total, free)
+    who = label or "SD"
+    for line in ("%s: %s; free: %s" % (who, tot, fr),
+                 "%s: %s, %s free" % (who, tot, fr),
+                 "%s %s, %s free" % (who, tot, fr),
+                 "%s: %s free" % (who, fr)):
+        if len(line) <= 32:
+            return line
+    return line[:32]

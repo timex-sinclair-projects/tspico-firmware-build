@@ -5,7 +5,7 @@ you type a command, why each step is there, and what the error reports are
 telling you. You don't need to know Z80 assembly or Python to follow it.
 
 When you want exact byte values and addresses, [`PROTOCOL.md`](PROTOCOL.md) is
-the reference. This guide describes firmware 2.3 with ROM 2.3.
+the reference. This guide describes firmware 2.4 with ROM 2.4.
 
 ---
 
@@ -326,4 +326,4 @@ Programmer's Manual* go further.
 | **auto-busy** | the status dropping to 0 on every byte the 2068 sends |
 | **response function** | an answer of 128 or more: "print this", "ask this" |
 | **checksum (XOR)** | a byte computed from all the others, to catch a lost or changed byte |
-| **ROM 2.3** | the TS-2068 ROM this guide describes, with the disk commands and `f:` files |
+| **ROM 2.4** | the TS-2068 ROM this guide describes, with the disk commands and `f:` files |

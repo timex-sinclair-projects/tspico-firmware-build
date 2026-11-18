@@ -42,6 +42,7 @@ on:
       - 'docs/manual/images/**'
       - 'tools/build-site-docs.py'
       - 'tools/manual-pdf/**'
+      - 'promo/flyer/**'
       - '.github/workflows/pages.yml'
   release:
     types: [published]
@@ -73,7 +74,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # When chained off a workflow, only publish if it passed -- and for the
     # firmware build, only for pushes to main (not branches or PRs).
     if: >-
@@ -84,7 +85,7 @@ jobs:
              github.event.workflow_run.event == 'push'))) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0    # the main/ channel archives src/ at its build's commit
 
@@ -102,16 +103,25 @@ jobs:
       - name: Put the manuals and the programmer's reference into the site
         run: python3 tools/build-site-docs.py
 
-      # The user manual as PDFs (tools/manual-pdf/make.sh), next to its page
-      # in site/manual/ (generated, like the page), so the Docs page can link
+      # The user manual, the Quick Start Guide and the Quick Reference Guide
+      # as PDFs (tools/manual-pdf/make.sh), next to their pages in
+      # site/manual/ (generated, like the pages), so the Docs page can link
       # to them: built from main, as the rest of the site is. Releases attach
-      # the same two files built at their tag (release.yml).
+      # the same files built at their tag (release.yml).
       - name: Install pandoc, the PDF fonts and pypdf
         timeout-minutes: 10
         run: tools/manual-pdf/ci-setup.sh
 
-      - name: Build the user manual PDFs into the site
+      - name: Build the manual and quick guide PDFs into the site
         run: tools/manual-pdf/make.sh site/manual
+
+      # The 2.4 flyer (promo/flyer/make.sh), linked from the "Still on 1.1?"
+      # post, and the manual cover's drawing, which the post shows. Uses the
+      # manual's fonts and the Chrome above; generated, never committed.
+      - name: Build the flyer PDF into the site
+        run: |
+          promo/flyer/make.sh site/assets/flyer
+          cp tools/manual-pdf/img/ts2068-line.svg site/assets/flyer/
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -296,17 +306,17 @@ jobs:
           find "$DEST" -maxdepth 2 | sort
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site/_site
 
   deploy:
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

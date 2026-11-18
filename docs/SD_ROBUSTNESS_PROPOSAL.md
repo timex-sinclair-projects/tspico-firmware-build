@@ -118,7 +118,7 @@ something a handler can reliably do.
 
 ---
 
-## 2. Proposed behaviour
+## 2. Proposed behavior
 
 ### 2a. Fix the pre-load chain first
 
@@ -200,7 +200,7 @@ remount semantics:
 
 **Recommendation: B, with C preferred when USB is available.**
 
-If we take B, the rule falls out of existing behaviour: `tpi:close`
+If we take B, the rule falls out of existing behavior: `tpi:close`
 already deletes `/TMP/temp.tap` ([tspico.py:3653](../src/TS/tspico.py:3653)),
 so it *is* the discard path. Therefore:
 

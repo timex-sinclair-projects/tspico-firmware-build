@@ -264,7 +264,7 @@ the accident that caused this (`79f12a1`, which made a 48-line fix read as
 longer be committed.
 
 The same trap applies to `git rebase` and `git cherry-pick`, which replay
-commits through the same machinery and honour the config once it is set.
+commits through the same machinery and honor the config once it is set.
 Verified: cherry-picking `8e896d2` (a pre-`c897e91` commit) onto main
 conflicts in both `src/TS/tspico.py` and `src/dev_tspico.py` with the
 config unset, and applies cleanly with it set.
@@ -330,6 +330,19 @@ shape are documented in `docs/DUAL_PORT_DEVELOPMENT.md` §8.
   metadata makes the open take 1-5ms, during which the Z80 reads stale
   bytes. Pre-open at boot or at mount time, cache the handle.
 
+## Memory: keep the heap whole
+
+The 2068's big operations need one big free block (a 64K DOCK, a 35K LOAD
+block, a large folder's listing), and MicroPython's GC never moves anything.
+A small object kept between commands, made just after a command's garbage,
+ends up in the middle of the free memory and cuts it in two. That, not big
+objects, was issue #384. Before adding a module variable, a cache, a buffer
+or anything kept between commands, read
+[`docs/reference/appendix/memory.md`](../docs/reference/appendix/memory.md):
+make big buffers once at import, make kept objects after a `gc.collect()`,
+drop what the next command doesn't need, and measure with
+`tools/memcheck.py` on the v3 card before and after.
+
 ## Structural conventions
 
 All firmware sources live under the repo's `src/` folder; paths below
@@ -379,7 +392,7 @@ The routine, for any PR that touches `src/`, `flash/`, the ROM build tools
 or the workflows:
 
 1. Open the chapter(s) the README's stamp table names for each changed
-   file. Read the entries for what you changed. Fix them: behaviour, the
+   file. Read the entries for what you changed. Fix them: behavior, the
    reason, the state touched, the callers. Add entries for new symbols
    (heading or table row with the name in backticks; the README's
    "Conventions" gives the six things an entry says). Remove entries for
@@ -390,7 +403,7 @@ or the workflows:
    that column for every source it follows; the test fails until it does.
    If the PR fixes a [`reference-followup`](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues?q=label%3Areference-followup)
    issue, find the chapters that cite it (`grep -rn "issues/NNN" docs/reference`)
-   and replace the caveat with the new behaviour.
+   and replace the caveat with the new behavior.
    Line numbers: the chapters cite their source by line ("the comment at
    4710–4728"), and lines you added or removed move every number below
    them. **Before re-stamping**, `python3 src/test/reference_hosttest.py

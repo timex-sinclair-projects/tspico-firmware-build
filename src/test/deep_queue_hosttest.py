@@ -74,7 +74,8 @@ def _v3_fakes(fakes):
     return install_fakes
 def _board_v3_fakes():
     m = sys.modules["machine"]
-    m.I2C = lambda *a, **k: types.SimpleNamespace(writeto_mem=lambda *a: None)
+    m.I2C = lambda *a, **k: types.SimpleNamespace(writeto_mem=lambda *a: None,
+                                                  readfrom_mem=lambda *a: b"\xa0")   # OUT0: socket off
     m.Timer = type("Timer", (), {"PERIODIC": 1, "ONE_SHOT": 0,
                                  "__init__": lambda self, **k: None,
                                  "init": lambda self, **k: None,

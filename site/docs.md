@@ -2,7 +2,8 @@
 layout: page
 title: Documentation
 lang: en
-description: The TS-Pico user manual, the programmer's manual and the programmer's reference.
+doc: true
+description: The TS-Pico user manual, quick start guide and quick reference, the programmer's manual and the programmer's reference.
 ---
 
 Everything here is published from the project's repository as it is on `main`, so it follows
@@ -11,13 +12,24 @@ the firmware and the ROM as they change.
 ## For TS-Pico owners
 
 **[User Manual]({{ '/manual/user-manual.html' | relative_url }})** — setting up the TS-Pico,
-loading and saving from the SD card, the disk commands (CAT, MOVE, ERASE, FORMAT), `f:` files
+loading and saving from the SD card, the disk commands (CAT, COPY, MOVE, ERASE, FORMAT, LIST), `f:` files
 and `OPEN #` channels, every `tpi:` command, the printer, Spectrum mode, and updating with the
 [web updater]({{ site.updater_url | relative_url }}).
 
 As a PDF: [for reading]({{ '/manual/user-manual-half-letter.pdf' | relative_url }}) (5.5 × 8.5 in),
 or [as a booklet to print]({{ '/manual/user-manual-saddle-stitch-letter.pdf' | relative_url }})
 (letter paper, printed double-sided and flipped on the short edge, then folded and stapled).
+
+**[Quick Start Guide]({{ '/manual/quick-start.html' | relative_url }})** — the first steps, from
+fitting the TS-Pico to loading a program, in eight pages. As a PDF:
+[for reading]({{ '/manual/quick-start-half-letter.pdf' | relative_url }}), or
+[as a booklet to print]({{ '/manual/quick-start-saddle-stitch-letter.pdf' | relative_url }})
+(two letter sheets, double-sided, flipped on the short edge, folded and stapled).
+
+**[Quick Reference Guide]({{ '/manual/quick-reference.html' | relative_url }})** — every command
+on one card, after the one that came with the 2068.
+[The card to print]({{ '/manual/quick-reference-card-letter.pdf' | relative_url }}): one letter
+sheet, double-sided and flipped on the short edge, folded in three with the cover outside.
 
 ## For programmers
 

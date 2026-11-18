@@ -64,6 +64,7 @@ FIRMWARE = (
     "src/TS/board_v3.py",
     "src/TS/speech.py",
     "src/TS/speech_rules.py",
+    "src/TS/net.py",
     "src/upgrade/main.py",
     "src/upgrade/upgrade.py",
 )
@@ -93,6 +94,7 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/boards/TSPICO_V3/pins.csv",
     "src/boards/TSPICO_V3/tspico_v3_pins.h",
     "src/boards/TSPICO_V3/memmap/section_extra_post_platform_end.incl",
+    "src/boards/TSPICO_V3/memmap/pico_psram_region.ld",
     "src/tsbus/tsbus.c",
     "src/tsbus/tsbus.pio",
     "src/tsbus/usart8251.h",
@@ -108,7 +110,7 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/tsbus/micropython.cmake",
     "src/rom/TSPICO.ROM",
     "src/rom/TSPICO-SYNC.ROM",
-    "src/rom/TSPICO-23.ROM",
+    "src/rom/TSPICO-24.ROM",
     "src/rom/TSPICO-ZX48-V4.BIN",
     "flash/manifest.json",
     "tools/build-rom.py",
@@ -119,6 +121,7 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "tools/sp0256-port.py",
     "tools/speech-rules.py",
     ".github/workflows/build.yml",
+    ".github/workflows/manual.yml",
     ".github/workflows/release.yml",
 )
 

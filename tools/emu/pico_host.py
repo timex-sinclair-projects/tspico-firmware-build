@@ -369,6 +369,8 @@ def micropython_env(fs):
     import gc
     if not hasattr(gc, "mem_free"):
         gc.mem_free = lambda: 180_000
+    if not hasattr(gc, "mem_alloc"):
+        gc.mem_alloc = lambda: 20_000                # tpi:meminfo (#384)
 
     class SDCard:
         CID = 0x5A5A

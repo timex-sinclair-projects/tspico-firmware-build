@@ -43,8 +43,10 @@
 #define X_WIFI_EN   (1u << 3)
 #define X_WIFI_DL   (1u << 4)
 #define X_NLED      (1u << 5)
+#define X_SD_PWR_EN (1u << 6)  // proto2: U32 powers the SD socket (high = on); unconnected on proto1
 // No bus request, no NMI, OLED in reset, ESP32 off, normal ESP32 boot, LED
-// off. Bits 6-7 are spare and stay inputs.
-#define IOX_OUT0_SAFE (X_NLED | 0xc0)
+// off, SD socket off (#262). Bit 7 is spare and stays an input.
+#define IOX_OUT0_SAFE (X_NLED | 0x80)
+#define IOX_CFG0_SAFE 0x80     // bits 0-6 outputs, bit 7 an input
 
 #endif

@@ -136,6 +136,8 @@ def main():
     install_fakes()
     sys.path.insert(0, SRC)
     import TS.tspico_io as io
+    if os.environ.get("TSPICO_BLOCK_BUF"):         # block_buf_hosttest: the v3 shared buffer
+        io.BLOCK_BUF = bytearray(int(os.environ["TSPICO_BLOCK_BUF"]))
     io.time = FakeTime()
     io.ENA_SD = lambda *a: None
     io.ENA_MQ_DUAL = lambda MQ: MQ          # the SM survives the SD write here

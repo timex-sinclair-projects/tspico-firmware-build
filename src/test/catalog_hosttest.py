@@ -2,7 +2,8 @@
 
 Two layers:
 
-  * TS/catalog.py on its own: glob matching, path resolution (never above
+  * TS/catalog.py on its own: LIST's text and hex, the card's label in FAT16
+    and FAT32 images (fat_image.py), glob matching, path resolution (never above
     the public root), argument splitting, the TAP block table and the
     header-listing rows TAPDIR and CAT share.
   * The REAL TS.tspico DIR -> CATALOG path, against a temporary directory
@@ -191,6 +192,96 @@ class HostOS:
                 yield (n, 32768, 0, os.path.getsize(full))
 
 
+def test_list_text(c):
+    print("catalog.py: LIST's text")
+
+    t = c.list_text(b"one\r\ntwo\tx|y\n", 13)
+    check(t == "one\r\ntwo  x?y\n", "text: line ends kept, TAB as two spaces, | as ? (%r)" % t)
+    check(c.is_text(b"plain\r\n\t") and not c.is_text(b"a\x00b") and not c.is_text(b"\x7f")
+          and c.is_text(b"caf\xc3\xa9"), "is_text: control codes and DEL aren't text, bytes from 80h are")
+    t = c.list_text(bytes(range(0x41, 0x4A)) + b"\x00", 10)
+    check(t == "0000 4142434445464748 ABCDEFGH\r0008 4900" + " " * 13 + "I.\r",
+          "binary: 8 bytes a row, address, hex, characters (%r)" % t)
+    check(len("0000 4142434445464748 ABCDEFGH") <= 32, "a hex row fits the 32 columns")
+    t = c.list_text(b"\x00|~", 3)
+    check(t == "0000 007C7E" + " " * 11 + "...\r", "binary: | and ~ show as '.' (%r)" % t)
+    t = c.list_text(b"abc", 5000)
+    check(t.endswith("\r(the first 3 of 5000 bytes)"), "a part of the file says so (%r)" % t)
+    t = c.list_text(b"a\x01b", 3, True)
+    check(t == "a?b", "text=True: a control code in text shows as ? (%r)" % t)
+
+
+def test_label(c):
+    import fat_image as F
+    print("catalog.py: the card's label")
+
+    lc = c.label_clean
+    check(lc("games") == "GAMES" and lc("TS-PICO") == "TS-PICO" and lc("Games 2  ") == "GAMES 2",
+          "label_clean: upper case, trailing spaces go")
+    check(lc("") == "" and lc("A" * 11) == "A" * 11, "label_clean: \"\" is no label; 11 characters fit")
+    check(all(lc(x) is None for x in ("A" * 12, " x", "a.b", "a:b", "a*", "a|b", "caf\xe9", "a\tb")),
+          "label_clean: 12 characters, a leading space, . : * | and non-ASCII are refused")
+
+    check(c.card_line("", 240 << 20, 236 << 20) == "SD: 240 MB; free: 236 MB", "card_line: no label")
+    check(c.card_line("TS-PICO", 240 << 20, 236 << 20) == "TS-PICO: 240 MB; free: 236 MB",
+          "card_line: the label in place of SD")
+    lines = [c.card_line("A" * 11, 15 << 30, 14 << 30), c.card_line("GAMES DISK1", 15900 << 20, 14000 << 20)]
+    check(all(len(x) <= 32 for x in lines) and all(x.startswith(("A" * 11, "GAMES DISK1")) for x in lines),
+          "card_line: a long label still fits 32 columns %r" % lines)
+
+    # FAT16, no MBR: an LFN entry (attribute 0Fh has the label bit) and a
+    # deleted label are not the label; the new one goes in the first free slot
+    dev, root = F.fat16()
+    F.fill(dev, root, [F.lfn(), F.entry("README  TXT"), F.entry("OLDLABEL", 0x08, 0xE5)])
+    check(c.read_label(dev) == "", "FAT16: no label; an LFN entry and a deleted label don't count")
+    c.write_label(dev, "GAMES 2")
+    e = F.entries(dev, root)
+    check(c.read_label(dev) == "GAMES 2", "FAT16: write, then read back")
+    check(e[2][:12] == b"GAMES 2    \x08" and e[1][:11] == b"README  TXT" and e[0][11] == 0x0F,
+          "FAT16: in the deleted slot, the other entries untouched")
+    check(dev.get(0)[43:54] == b"NO NAME    " and dev.writes == [root],
+          "FAT16: only the root-folder sector written; the boot sector left alone %r" % dev.writes)
+    c.write_label(dev, "TS-PICO")
+    e = F.entries(dev, root)
+    check(c.read_label(dev) == "TS-PICO" and sum(1 for x in e if x[0] not in (0, 0xE5) and x[11] == 0x08) == 1,
+          "FAT16: a second label replaces the first, one entry")
+    c.write_label(dev, "")
+    check(c.read_label(dev) == "" and F.entries(dev, root)[2][0] == 0xE5 and set(dev.writes) == {root},
+          "FAT16: \"\" takes it off (the entry deleted, nothing else written)")
+
+    dev, root = F.fat16(root_ents=16)
+    F.fill(dev, root, [F.entry("FILE%04dTAP" % i) for i in range(16)])
+    try:
+        c.write_label(dev, "FULL")
+        full = False
+    except ValueError:
+        full = True
+    check(full and c.read_label(dev) == "", "FAT16: a full root folder is ValueError, nothing written")
+    F.fill(dev, root, [F.entry("OLD", 0x08)] + [F.entry("FILE%04dTAP" % i) for i in range(15)])
+    c.write_label(dev, "NEW")
+    check(c.read_label(dev) == "NEW", "FAT16: a full root folder with a label: it is replaced")
+
+    # FAT32 behind an MBR: the root folder's first cluster is full, so the
+    # label goes in the second, and only that sector is written
+    dev, (r0, r1), start = F.fat32()
+    F.fill(dev, r0, [F.entry("FILE%04dTAP" % i) for i in range(16)])
+    mbr = dev.get(0)
+    check(c.read_label(dev) == "", "FAT32 (MBR): no label")
+    c.write_label(dev, "CARD32")
+    check(c.read_label(dev) == "CARD32" and F.entries(dev, r1)[0][:12] == b"CARD32     \x08",
+          "FAT32: the label in the root folder's second cluster")
+    check(dev.get(start)[71:82] == b"NO NAME    " and dev.get(start + 6)[71:82] == b"NO NAME    "
+          and dev.get(0) == mbr, "FAT32: the boot sector, its backup and the MBR untouched")
+    check(dev.writes == [r1], "FAT32: only that sector written %r" % dev.writes)
+
+    try:
+        c.read_label(F.Dev())
+        bad = False
+    except OSError:
+        bad = True
+    check(bad, "no FAT volume: OSError")
+
+
 def test_dir(t, root):
     import TS.catalog
     global c_counts
@@ -336,6 +427,8 @@ def main():
     t.TLM_ENABLED = False
 
     test_catalog(c)
+    test_list_text(c)
+    test_label(c)
 
     root = tempfile.mkdtemp(prefix="cat_hosttest.")
     try:

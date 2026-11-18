@@ -12,7 +12,7 @@ the Pico does to honor the protocol).
 > This project's firmware is one implementation of his spec.
 
 > **Read this as history.** It describes the design as Gustavo built it, and
-> the Z80 side as of the 1.x ROMs. Today's behaviour (firmware 2.0, ROM 2.0
+> the Z80 side as of the 1.x ROMs. Today's behavior (firmware 2.0, ROM 2.0
 > and 2.1) is in [`PROTOCOL.md`](PROTOCOL.md), with a plain-language version in
 > [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md); where they differ from this
 > document, they are right. The differences:

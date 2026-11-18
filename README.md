@@ -224,7 +224,7 @@ boot via Ctrl-C in Thonny or by deleting/renaming `/main.py`.
 
 - **MicroPython:** v1.29.0 (v1.20.0 until 2026-10; RP2350 support needs v1.24+)
 - **Target:** Raspberry Pi Pico (`RPI_PICO` board on rp2 port)
-- **Toolchain:** `gcc-arm-none-eabi` on Ubuntu 22.04 runner
+- **Toolchain:** Arm GNU toolchain 10.3-2021.10 (`arm-none-eabi` GCC), cached, on an Ubuntu 24.04 runner
 - **Build time:** ~2 minutes per run
 - **Custom manifest:** `src/manifest.py` (overrides default rp2
   manifest to add the `TS/` package while keeping `rp2.py` etc.)
@@ -279,12 +279,12 @@ site's code and templates, and the TS-Pico team's own ROM patches and module
 help files in `SD card/help/`, the site's text, and the README and other
 Markdown files. You may share and adapt them, with credit to the TS-Pico team.
 
-**Not covered by either licence**, and remaining the property of their owners:
+**Not covered by either license**, and remaining the property of their owners:
 
 - **ROM images** (`src/rom/*.ROM`, `src/rom/*.BIN`, `ROMs/`). The TS-Pico ROMs
   are the Timex Computer Corporation TS-2068 ROM with the team's changes, and
   the ZX Spectrum ROMs are Sinclair Research (now Amstrad) code with the
-  team's changes. Only the changes are ours; the MIT licence covers the
+  team's changes. Only the changes are ours; the MIT license covers the
   sources that make them, not the images.
 - **Disassemblies of Timex's ROM** (`docs/rom-analysis/disasm/genuine-2068-*`).
 - **`docs/ZEBRA_FDD_TOS_MANUAL.md`**, a transcription of the Zebra Systems FDD
@@ -292,13 +292,13 @@ Markdown files. You may share and adapt them, with credit to the TS-Pico team.
 - **Gustavo Pane's specification documents** (`docs/LOW-LEVEL-PROTOCOL-V5.TXT`,
   `docs/TS-PICO_FILE_SYSTEM-SPECS-BETA-PRE-RELEASE-V25.pdf`), © Gustavo Pane.
 - **Photographs and illustrations** in `site/assets/img/`, © their creators.
-- **Third-party code, under its own licence:** `web-updater/vendor/`
+- **Third-party code, under its own license:** `web-updater/vendor/`
   (ViperIDE, MIT, © Volodymyr Shymanskyy; Pico⚡Flash, MIT, © Piers
   Finlayson), `tools/zmakebas/` (public domain, Russell Marks) and
   `web-updater/flash_nuke.uf2` (Raspberry Pi, BSD-3-Clause).
 
 **The TS-Pico team:** Ricardo Calcagno, Gustavo Pane, Jeff Burrell, Ryan Gray,
-Tim H and David Anderson. The board design is in
+Tim H, Joe Vandezande and David Anderson. The board design is in
 [jburrell7/TSPICO](https://github.com/jburrell7/TSPICO).
 
-Thanks to Paul Anderson, David Green and Adam Trionfo for beta testing.
+Thanks to Paul Anderson, David Green, François Lanciault and Adam Trionfo for beta testing.

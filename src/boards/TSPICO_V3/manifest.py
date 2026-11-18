@@ -26,6 +26,7 @@ freeze("$(BOARD_DIR)/../..", (
     "TS/channels.py",
     "TS/board.py",
     "TS/board_v3.py",
+    "TS/net.py",
     "TS/speech.py",
     "TS/speech_rules.py",
 ))

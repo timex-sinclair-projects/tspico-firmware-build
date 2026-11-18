@@ -200,7 +200,7 @@ discard it and substitute 9. `A=02h` is only visible via the BIOS entry at
 
 ## Practical notes for troubleshooting
 
-- **v1.5w is strictly safer than v1.1 on this path** and behaviourally identical
+- **v1.5w is strictly safer than v1.1 on this path** and behaviorally identical
   everywhere else. Chunk 0 of the EXROM and the whole HOME ROM are untouched, so
   any protocol trace, symbol address, or timing measurement taken on one applies
   unchanged to the other outside the `0x86` handler.

@@ -14,7 +14,7 @@ the record of what was changed and why.
 > (`src/rom/patches/tspico-zx48-v3.asm`) rewrites it in the same 22 bytes
 > with B and HL as the counters, keeping DE.
 
-**Target:** the TS-PICO's customised ZX Spectrum ROM — the 16K at flash
+**Target:** the TS-PICO's customized ZX Spectrum ROM — the 16K at flash
 `0x000000` (slot 0 of `Pico-v15w.rom`), crc32 `029861D1`. **Not** for
 `Spectrum nuevo LD.rom`; see §6.
 
@@ -40,7 +40,7 @@ access in the 16K:
 | `IN A,($0E)` | data port read | 3 |
 | **anything on `$0F`** | the status/ready port | **none** |
 
-Synchronisation is entirely fixed `DJNZ` delays: `LD B,$FF / DJNZ`
+Synchronization is entirely fixed `DJNZ` delays: `LD B,$FF / DJNZ`
 (~1 ms) around each header byte, and 4- or 16-iteration delays inside the
 byte loops. Two consequences:
 
@@ -137,7 +137,7 @@ In context:
 | Pico late answering `'L'`/`'S'` | reads/writes into the void, checksum fails | waits, up to ~3.8 s |
 | Pico absent or hung | same, every time | `R Tape loading error` after ~3.8 s |
 | Byte cadence inside a block | fixed delay | **unchanged** |
-| SPACE / BREAK behaviour | — | **untouched** |
+| SPACE / BREAK behavior | — | **untouched** |
 | VERIFY | — | **untouched** |
 | Bytes moved | — | **none** |
 
@@ -145,7 +145,7 @@ The poll runs with interrupts disabled (the ROM's own `DI`), so a dead
 Pico freezes the machine for the timeout before reporting. That matches
 what the tape routines already do.
 
-## 4. Labelling the ROM
+## 4. Labeling the ROM
 
 The image is now self-identifying at boot. Ricardo's existing hook at `$386E`
 (`OUT ($FF),A` before the copyright print) gets one further redirect, so the

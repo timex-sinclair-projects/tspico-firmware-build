@@ -15,7 +15,7 @@ which fixes the bus and the pins.
 A 128 x 64 mono OLED with an **SSD1309** controller on **I2C**, the common
 4-pin module (GND VCC SCL SDA): 8 lines of 16 characters in the 8 x 8 font.
 
-proto1 was designed for a Waveshare 1.27" SSD1351 (SPI, colour) on J3, a
+proto1 was designed for a Waveshare 1.27" SSD1351 (SPI, color) on J3, a
 7-pin header (VCC GND DIN CLK CS DC RST). The board is being redone for
 the SSD1309 instead (the hardware thread): it settles the header and its
 pin order, the I2C pins, and whether there is a reset line. Until then

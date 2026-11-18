@@ -13,11 +13,11 @@ Pipeline (see docs/FDD_COMMANDS_DESIGN.md §8):
   5. write build/TSPICO-fdd.ROM (+ split halves) and print a hunk report,
      asserting that ONLY the intended regions changed
 
-The result is ROM 2.3, the slot-1 image: it is committed as
-src/rom/TSPICO-23.ROM (flash/manifest.json slot 1), and CI fails if that file
+The result is ROM 2.4, the slot-1 image: it is committed as
+src/rom/TSPICO-24.ROM (flash/manifest.json slot 1), and CI fails if that file
 differs from a fresh build. After changing the module or the patches:
     python3 tools/build-rom.py --verify
-    cp build/TSPICO-fdd.ROM src/rom/TSPICO-23.ROM
+    cp build/TSPICO-fdd.ROM src/rom/TSPICO-24.ROM
 and update slot 1's crc32 in flash/manifest.json.
 
 Requires sjasmplus (brew install sjasmplus).
@@ -87,16 +87,53 @@ PATCHES = [
         name="disk-token hook: $25D6 stub -> EXROM FDD_DISPATCH",
         bank="home", addr=0x25D6,
         before="cd 89 28 20 06 cd 69 25 cd 44 1b c3 67 25",
-        after="f3 21 00 30 cd fc 03 fb c9 00 00 00 00 00",
+        after="f3 21 00 30 cd fc 03 fb d0 e9 06 ff 18 f2",
         note="Repurpose the 14-byte disk-command stub ($25D6-$25E3, which all of "
              "CAT/FORMAT/MOVE/ERASE fall into) as DI / LD HL,$3000 / CALL $03FC / "
-             "EI / RET -- the returning HOME->EXROM thunk, under DI for the reason "
-             "given on the $1488 patch -- entering FDD_DISPATCH with the EXROM "
-             "paged and B = the token, on BOTH the syntax and runtime pass. The "
-             "module tests BIT 7,(IY+1): syntax pass consumes the argument and "
-             "returns to accept the statement; runtime pass builds and sends the "
-             "TPI command. Nothing external jumps into this region except the "
+             "EI / RET NC / JP (HL) -- the returning HOME->EXROM thunk, under DI "
+             "for the reason given on the $1488 patch -- entering FDD_DISPATCH "
+             "with the EXROM paged and B = the token, on BOTH the syntax and "
+             "runtime pass. The module tests BIT 7,(IY+1): syntax pass consumes "
+             "the argument and returns to accept the statement; runtime pass "
+             "builds and sends the TPI command. It returns NC, except a bare COPY "
+             "at run time: C with HL = $0A02, HOME's COPY (the printer). $25E0 is "
+             "COPY's routine (the $19D7 patch): LD B,FFh / JR $25D6. LIST and "
+             "RESTORE come straight here (the $19AF and $19D0 patches) with no "
+             "token in B; the module tells them by T-ADDR, and hands their other "
+             "forms back the same way: C with HL = $1545 (LIST) or $1E9D "
+             "(RESTORE). Nothing external jumps into this region except the "
              "command fall-throughs; $2567 is untouched.",
+    ),
+    dict(
+        name="COPY's parameter list: $19D7 class 00 / $0A02 -> class 05 / $25E0",
+        bank="home", addr=0x19D7,
+        before="00 02 0a", after="05 e0 25",
+        note="Class 00 accepted only a bare COPY (CHECK-END on the syntax pass). "
+             "Class 05 hands the rest of the statement to the routine on both "
+             "passes, so COPY \"a\" TO \"b\" reaches the module (FDD_COPY), as "
+             "the $1946 patch did for CAT/FORMAT/MOVE/ERASE. Both classes leave "
+             "T-ADDR at $19D8, so the bare COPY the module hands back to $0A02 "
+             "still reads as COPY (D8h) in the printer path at EXROM $1781.",
+    ),
+    dict(
+        name="LIST's parameter list: $19AF class 05 / $1545 -> class 05 / $25D6",
+        bank="home", addr=0x19AF,
+        before="05 45 15", after="05 d6 25",
+        note="LIST \"name\" shows a file (FDD_LIST, tpi:list). LIST was class "
+             "05 already, so only the routine changes: the hook, which the "
+             "module answers for a string and hands back to $1545 for LIST, "
+             "LIST n and LIST #n on both passes. T-ADDR stays $19B0, which is "
+             "how the module knows the statement.",
+    ),
+    dict(
+        name="RESTORE's parameter list: $19D0 class 03 / $1E9D -> class 05 / $25D6",
+        bank="home", addr=0x19D0,
+        before="03 9d 1e", after="05 d6 25",
+        note="RESTORE #n rewinds an OPEN # file (FDD_RESTORE). Class 03 (an "
+             "optional number) refused the #. Class 05 hands the statement to "
+             "the module, which does class 03's part itself for RESTORE and "
+             "RESTORE n (the number through $1BE5, or 0 through $1C51) and "
+             "hands over to $1E9D at run time. T-ADDR is $19D1.",
     ),
     dict(
         name="channel trampolines, stubs and the error trap in the dead $1488-$14BC",
@@ -199,34 +236,36 @@ PATCHES = [
              "nothing else jumps to $20BE-$20C2 ($20C3 is tpi:sdcard's entry).",
     ),
     dict(
-        name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.3\"",
+        name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.4\"",
         bank="exrom", addr=0x1C7E,
-        before="76 32 2e 30", after="76 32 2e 33",
+        before="76 32 2e 30", after="76 32 2e 34",
         note="The copyright line at $1C6C (tspico-sync.asm) shown at start-up. "
              "Same length, so nothing else moves.",
     ),
     dict(
-        name="version marker: HOME $0065 20h -> 23h (ROM 2.3)",
+        name="version marker: HOME $0065 20h -> 24h (ROM 2.4)",
         bank="home", addr=0x0065,
-        before="20", after="23",
+        before="20", after="24",
         note="PEEK 101 tells a program which ROM it has: 15h v1.1, 17h v1.7, "
              "20h 2.0 (tspico-sync.asm), 21h 2.1 (the disk commands), 22h 2.2 "
-             "(2.1 plus the tpi:tape and pre-load fixes), 23h this ROM, 2.3 "
-             "(keys as typed, the Pico ends the $86 loop, the new string reader).",
+             "(2.1 plus the tpi:tape and pre-load fixes), 23h 2.3 (keys as typed, "
+             "the Pico ends the $86 loop, the new string reader), 24h this ROM, "
+             "2.4 (COPY and MOVE as two verbs, LIST \"x\", RESTORE #, CAT #, "
+             "the card label).",
     ),
     dict(
-        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0023h",
+        name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0024h",
         bank="exrom", addr=0x1852,
-        before="01 20 00 c9", after="01 23 00 c9",
+        before="01 20 00 c9", after="01 24 00 c9",
         note="The Pico Interface BIOS G_VERS ($1844 -> $1852) returns the same "
              "version as HOME $0065.",
     ),
     dict(
-        name="command pre-header byte 2: LD A,(BANK_SV) -> LD A,23h (ROM_ID)",
+        name="command pre-header byte 2: LD A,(BANK_SV) -> LD A,24h (ROM_ID)",
         bank="exrom", addr=0x1BB5,
-        before="3a cf 5d", after="3e 23 00",
+        before="3a cf 5d", after="3e 24 00",
         note="BUILD_PREHEADER_B sent BANK_SV, which is always FFh, and the Pico "
-             "ignored it. ROM 2.3 sends its version marker instead, so the "
+             "ignored it. From ROM 2.3 on it sends the version marker instead, so the "
              "firmware knows which ROM sent each command (tpi:info shows it; "
              "#227). fddcmd.asm's SEND_FOPEN and CH_SEND send ROM_ID too. "
              "FFh = ROM 2.2 or earlier.",
@@ -311,6 +350,14 @@ ANCHORS = [
          bank="exrom", addr=0x21E3, bytes="cd c3 01 f5 cd 5f 04"),
     dict(name="HOME->EXROM returning thunk the $25D6 hook jumps to",
          bank="home", addr=0x03FC, bytes="e5 21 fc fe"),
+    dict(name="H_COPY: HOME's COPY, where the $25D6 hook sends a bare COPY",
+         bank="home", addr=0x0A02, bytes="d9 21 30 16 c3 e3 3c"),
+    dict(name="H_LIST: HOME's LIST, where FDD_LIST sends LIST, LIST n, LIST #n",
+         bank="home", addr=0x1545, bytes="3e 02 fd 36 02 00"),
+    dict(name="H_RESTORE: HOME's RESTORE after class 03 (FIND-INT2 first)",
+         bank="home", addr=0x1E9D, bytes="cd 23 1f 2a bc 5c"),
+    dict(name="H_USE_ZERO: USE-ZERO, a 0 on the calculator stack at run time",
+         bank="home", addr=0x1C51, bytes="cd 89 28 c8 ef a0 38 c9"),
     dict(name="EXROM $2000: JP to the relocated BEEPER (G_BEEP calls it)",
          bank="exrom", addr=0x2000, bytes="c3 3f 20"),
     dict(name="MODE_SET_OK: CALL S_MODE / CALL $042F / JP $1B72 (\"0 OK\"), TAPE_MODE ends here",

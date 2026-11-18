@@ -10,6 +10,7 @@ mounted file and the current
 directory can't be renamed
 (Report Q).
 
-To copy a file, use MOVE.
+Same as MOVE "old" TO "new".
+To copy a file, use COPY.
 
-See also: move, erase, cat
+See also: move, copy, erase, cat

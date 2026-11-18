@@ -22,6 +22,9 @@ are not the TS-Pico's protocol, and the ROM never touches them. So are 11h
 true: an allophone for the speech chip, and its busy bit (bit 7: FFh busy,
 7Fh ready), as David's Pico Speech Synth 2068 board
 ([../firmware/tsbus.md](../firmware/tsbus.md#speech)).
+1Fh (31) on IN is the Kempston joystick from the card's DE-9 socket (unless
+`config.ini`'s `KEMPSTON` is false): 000FUDLR, 1 = pressed, the high
+address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep1)).
 The v3 card also watches, without answering, OUTs to FDh and FCh: the
 TS-2068 Megabank's register select and data. A chunk one of its banks owns
 is the board's, and the card stops serving it
@@ -34,7 +37,7 @@ the ROM reads as "no answer" (Report J); a write into a full RX is dropped.
 Data goes through two accessors, 2298h (`IN A,(0Eh)`) and 229Dh
 (`OUT (0Eh),A`), and status through READ_STATUS (0655h, the `IN A,(0Fh)` at
 065Bh); the SYNC/BREAK layer adds the SYNC and BREAK writes and its own status reads at
-2304h–23C0h, and the disk module one IDLE poll at 3662h. Every site is listed in
+2304h–23C0h, and the disk module one IDLE poll at 3654h. Every site is listed in
 [rom/overview.md](../rom/overview.md#where-the-rom-touches-ports-0eh-and-0fh).
 
 ## The status byte
@@ -87,13 +90,13 @@ Ten bytes open every transaction. Byte 0 picks the kind
 | 42h `'B'` | 4, 5, 6 | printer: COPY (4, 6), one LPRINT character (5) | `PRINT_IO` |
 | 42h `'B'` | 0 | `SAVE "tpi:…"`: a command | `PROCESS_CMD` → `SA_funct` / `EXT_SA_FUNCT` |
 | 42h `'B'` | 1–3 | `LOAD "tpi:name"`: mount | `PROCESS_CMD` → `LOAD_TPI` |
-| anything else | — | unrecognised: FIFOs emptied, one 01h staged, status FBh | `MQ_TO_IDLE(recovered=True)` |
+| anything else | — | unrecognized: FIFOs emptied, one 01h staged, status FBh | `MQ_TO_IDLE(recovered=True)` |
 
 | Byte | Command (`'B'`) | Block (00h / FFh) |
 |---|---|---|
 | 0 | `'B'` | flag: 00h header, FFh data |
 | 1 | TADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE) | TADDR |
-| 2 | 23h, the ROM's version (the firmware's `rom_id`; FFh before ROM 2.3) | bank |
+| 2 | 24h, the ROM's version (the firmware's `rom_id`; 23h from ROM 2.3, FFh before it) | bank |
 | 3–4 | PMR1: the first `CODE` number, little-endian | session id |
 | 5–6 | PMR2: the second `CODE` number | address (IX) |
 | 7–8 | length of the command text | block length (DE) |
@@ -145,6 +148,10 @@ Anything ≥ 80h is a response function (next table). Everything else goes to
 | 11–127 | ≥ 10 | D BREAK - CONT repeats | 0Ch | `_11_D_Break` | 00F8h |
 | READY with bit 2 low | — | T TS-Pico reset, try again | 1Ch | — | `RD_STATUS` |
 
+A LOAD's refusal doesn't go through this table: the tape path at 196Dh turns any
+refused LOAD into R, so status 7 after a search that found nothing shows as R,
+not 8 ([../flows/load.md](../flows/load.md), #311).
+
 The ROM's BIOS `C_END` returns these on failure with carry set: A = status − 1
 for an error status, 09h for a timeout, 0Ch for
 BREAK, 1Ch for a Pico reset ([exrom-fdd.md](../rom/exrom-fdd.md) `C_END2`).
@@ -180,7 +187,7 @@ back as typed after a ready wait (`SEND_KEY`, 1C40h; #227).
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (low nibble); AF kept |
 | 1842h | S_MODE | TPMODE := A AND 0Fh; AF kept |
-| 1844h | G_VERS | BC = the version: 0023h on ROM 2.3 (0022h on 2.2, 0015h on 1.1) |
+| 1844h | G_VERS | BC = the version: 0024h on ROM 2.4 (0023h on 2.3, 0022h on 2.2, 0015h on 1.1) |
 | 1846h | TX_A | `OUT (0Eh),A`; no wait |
 | 1848h | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | 184Ah | C_END | wait READY, read the answer, run the response functions; NC = status 1 |
@@ -220,6 +227,7 @@ ROM: [exrom-driver.md](../rom/exrom-driver.md) (1879h, 196Dh).
 | `tpi:chwr <hex>` | stream | 0 | a bare status |
 | `tpi:chrd` | stream | bytes wanted (1–255; 0 = 255) | the data phase: status (1 data, 7 end of file), n, n bytes, XOR |
 | `tpi:chclose` | stream | 0 | a bare status |
+| `tpi:chcat [x]` | stream | 1 when a string came (`""` is the mounted TAP), else 0 | a bare status: `CAT #n` wrote the listing into the file (#404) |
 
 Modes `r`, `w`, `a`, `u`, each with an optional `b`. Byte 17h in a write is
 always the TAB escape `17h, n lo, n hi`. Firmware:

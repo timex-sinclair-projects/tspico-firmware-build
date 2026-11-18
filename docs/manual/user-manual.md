@@ -1,10 +1,10 @@
 # TS-Pico User Manual
 
 <!-- v2 -->
-### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.3
+### For the TS-Pico Interface for the Timex Sinclair 2068 — version 2.4
 <!-- /v2 -->
 <!-- v3 -->
-### For the TS-Pico v3 card for the Timex Sinclair 2068 — version 2.3
+### For the TS-Pico v3 card for the Timex Sinclair 2068 — version 2.4
 <!-- /v3 -->
 
 ## Contents
@@ -72,7 +72,8 @@ the 2068 through two I/O ports, looks after the SD card, and has no memory chips
 - sixteen **RAM slots**, lost when the power goes off.
 
 It also has a **WiFi modem**, which programs written for the Timex TS2050 modem use to reach
-hosts on the internet (Appendix F).
+hosts on the internet, and which downloads programs from the Timex/Sinclair archive straight
+onto the SD card (Appendix F).
 <!-- /v3 -->
 
 The TS-Pico replaces part of the 2068's own ROM with its own version, so the ordinary
@@ -82,7 +83,7 @@ lets you look after files and folders.
 **What you can do with it:**
 
 - Load and save programs, screens, code and data to TAP files on the SD card
-- Browse, create, copy, rename and delete files and folders
+- Browse, create, copy, rename and delete files and folders, and show a file on the screen
 - Save a program as a plain file (`foo.bas`, `foo.scr`), not only inside a TAP
 - Read and write text and data files from BASIC with `OPEN #`, `PRINT #` and `INPUT #`
 - Capture `LPRINT`, `LLIST` and `COPY` to text and picture files
@@ -95,42 +96,63 @@ lets you look after files and folders.
 
 ## 1.2 How TS-Pico commands work
 
-Almost everything the TS-Pico does is reached through a filename that starts with `tpi:`. When
-the 2068 sees `SAVE "tpi:..."`, it doesn't save anything; it sends the rest of the name to
-the TS-Pico as a command.
+Most of the time you use the 2068's own BASIC. LOAD, SAVE, VERIFY and MERGE work as they
+always have, with the SD card in place of the tape. The disk keywords that Timex printed on
+the keyboard but never made work, such as CAT, ERASE, FORMAT and MOVE, now work on the card,
+and COPY and LIST also take a file name:
 
 ```basic
-SAVE "tpi:dir"
+CAT
+MOVE TO "games"
+COPY "frogger.tap" TO "old"
+LIST "notes.txt"
 ```
 
-That's the directory command. The rules are simple:
+Those list the files, go into the folder `games`, copy `frogger.tap` into the folder `old`, and
+show a text file.
 
-- **Commands use SAVE.** `SAVE "tpi:dir"`, `SAVE "tpi:cd games"`, `SAVE "tpi:info"`.
+**Where there's a keyword, use it.** This manual does. A keyword takes any string expression,
+such as `CAT a$` or `ERASE "old"+n$`, and a name of up to 64 characters.
+
+For everything else there's a special file name: one that starts with `tpi:`. When the 2068
+sees `SAVE "tpi:..."`, it doesn't save anything; it sends the rest of the name to the TS-Pico
+as a command.
+
+```basic
+SAVE "tpi:info"
+```
+
+That shows the TS-Pico's status. The rules are simple:
+
+- **Commands use SAVE.** `SAVE "tpi:info"`, `SAVE "tpi:verbose"`, `SAVE "tpi:close"`.
 - **LOAD "tpi:..." mounts a file.** `LOAD "tpi:frogger.tap"` makes `frogger.tap` the "tape" that
-  `LOAD ""` reads from. There are no other LOAD commands.
+  `LOAD ""` reads from. There's no keyword for this one, and it's the `tpi:` name you'll use most.
+  There are no other LOAD commands.
 
   > **Coming from version 1.1?** Version 1.1 used `LOAD "tpi:dir"`, `LOAD "tpi:path"` and so on.
-  > In this version they are all `SAVE` commands. `LOAD "tpi:dir"` now tries to mount a file
-  > called `dir`, and gives Report F.
+  > In this version they are all `SAVE` commands, and most have a keyword: `CAT` for `tpi:dir`.
+  > `LOAD "tpi:dir"` now tries to mount a file called `dir`, and gives Report F.
 
-- **Upper or lower case doesn't matter** in the command word: `tpi:DIR`, `tpi:dir` and `TPI:Dir`
-  all work.
-- **Anything after a space is the argument:** `SAVE "tpi:cd games"`.
+- **Upper or lower case doesn't matter** in the command word: `tpi:INFO`, `tpi:info` and
+  `TPI:Info` all work.
+- **Anything after a space is the argument:** `SAVE "tpi:automount menu.tap"`.
 - **The whole name, `tpi:` included, must fit in 31 characters.** The 2068 accepts a longer one
   when you type the line, but stops with **C Nonsense in BASIC** when it runs. Watch for this
-  when a program builds the name from a string: `SAVE "tpi:cd "+d$` works only while `d$` is
-  at most 24 characters.
+  when a program builds the name from a string: `SAVE "tpi:automount "+m$` works only while
+  `m$` is at most 17 characters. A keyword's name can be up to 64.
 - **Some commands take numbers** after the name, written the way you'd save a block of code:
 
   ```basic
-  SAVE "tpi:dir" CODE 1,5
+  SAVE "tpi:verbose" CODE 1,1
   ```
 
   Nothing is saved. The two numbers (we'll call them *a* and *b*) are passed to the command,
   and each command says what they mean. Leaving `CODE` off is the same as `CODE 0,0`.
 
-The disk commands also have their own keywords, so you can type `CAT` instead of
-`SAVE "tpi:dir"`. We'll use both as we go.
+Every keyword has a `tpi:` command behind it: CAT is `tpi:dir`, MOVE TO is `tpi:cd`. You'll
+meet those in older programs and listings, and Chapter 10 gives both. A few of them can do
+something the keyword can't, such as showing a long file name in full; where that's so, the
+chapters say what and how, in a box headed **What only the command does**.
 
 ## 1.3 Quiet or chatty: VERBOSE
 
@@ -142,8 +164,8 @@ SAVE "tpi:verbose" CODE 1,1
 ```
 
 Now commands tell you what they did ("Changed dir to: games") and why they failed ("File does
-not exist: frogr.tap"). Turn it off again with `CODE 1,0`. Some commands, such as **DIR**, **PATH**,
-**INFO** and the listings, always show their output whatever the setting, and so do a few
+not exist: frogr.tap"). Turn it off again with `CODE 1,0`. Some commands, such as **CAT**,
+**INFO** and the other listings, always show their output whatever the setting, and so do a few
 messages, such as `No SD card`. Every other message in this manual appears only in verbose
 mode: with it off, you see only the report.
 
@@ -159,8 +181,8 @@ of its familiar reports at the bottom of the screen:
 | **Q Parameter error** | The command understood you but can't do it (file in use, not empty, wrong mode…) |
 | **A Invalid argument** | A `CODE a,b` or an argument the command doesn't accept |
 | **C Nonsense in BASIC** | An unknown `tpi:` command, or extra words the command doesn't expect |
-| **R Tape loading error** | Data was damaged on the way, or a TAP file is damaged |
-| **8 End of file** | You read past the end of a file, or a LOAD found nothing matching |
+| **R Tape loading error** | Data was damaged on the way, a TAP file is damaged, or a LOAD found nothing matching |
+| **8 End of file** | You read past the end of a file |
 | **6 Number too big** | A number out of range, such as a file index |
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or answered N to a "Replace?" question |
 | **J Invalid I/O device** | The TS-Pico didn't answer. See Chapter 11 |
@@ -171,8 +193,9 @@ Appendix B has the full list.
 ## 1.5 Summary
 
 1. The TS-Pico keeps your programs on a micro SD card and makes LOAD and SAVE fast.
-2. `SAVE "tpi:command"` sends a command; `LOAD "tpi:file"` mounts a file.
-3. `CODE a,b` after a command passes it two numbers.
+2. BASIC keywords such as CAT, MOVE TO, COPY and ERASE work on the card. Use them where they exist.
+3. `SAVE "tpi:command"` sends any other command, and `CODE a,b` after it passes two numbers.
+   `LOAD "tpi:file"` mounts a file.
 4. Turn on `SAVE "tpi:verbose" CODE 1,1` to see messages while you learn.
 5. Errors come back as ordinary 2068 reports.
 
@@ -180,7 +203,7 @@ Appendix B has the full list.
 
 # Chapter 2: Installing Your TS-Pico
 
-<!-- keywords: SD card · jumpers · tpi:dir -->
+<!-- keywords: SD card · jumpers · CAT -->
 
 > **Chapter Preview.** Fit the TS-Pico, read its light and buttons, prepare an SD card, and run
 > your first command.
@@ -191,24 +214,38 @@ You'll need:
 
 - your Timex Sinclair 2068 and its power supply;
 - the TS-Pico board;
-- an expansion bus board, if you use one (the TS-Pico can also plug straight into the 2068);
+- an expansion bus board;
 - a micro SD card. Your TS-Pico came with one, already set up.
+
+![The Timex Sinclair 2068, seen from the front left](images/ts2068.svg)
 
 > **Warning.** Switch the 2068 off before you connect or disconnect anything, and take out any
 > cartridge in the 2068's cartridge slot.
 
 ## 2.2 Fitting the board
 
-There are two ways to connect the TS-Pico.
+The TS-Pico goes into an expansion bus board, and the bus board plugs into the expansion
+connector at the back right of the 2068.
 
-**Direct connection.** The TS-Pico plugs straight into the expansion connector at the back
-right of the 2068 and sticks out behind it.
+![The back of the 2068: the expansion connector is the wide slot at the lower left](images/ts2068-rear.svg)
 
-**On an expansion bus.** The bus board plugs into the 2068, and the TS-Pico plugs into one of
-its slots. Any slot works; many people use the one nearest the 2068.
+*The back of the 2068. Seen from behind, the expansion connector is the wide slot on the left.*
 
-> **Warning.** On an expansion bus, set the TS-Pico's slot's BUSISO bypass, or the TS-Pico
-> won't work. The bus has "BUSISO bypass" jumpers or switches on its right-hand side, between
+The TS-Pico plugs into one of the bus board's slots. Any slot works; many people use the one
+nearest the 2068.
+
+![An expansion bus board: the long connector at the front goes into the 2068, and cards go into its four slots](images/bus-expansion.svg)
+
+*An expansion bus board. The connector at the front goes into the 2068; the TS-Pico goes into
+one of the four slots.*
+<!-- v2 -->
+
+![The 2068 with an expansion bus board behind it and the TS-Pico standing in the slot nearest the 2068](images/ts2068-bus-tspico.svg)
+
+*The TS-Pico on a 3-slot expansion bus, in the slot nearest the 2068.*
+<!-- /v2 -->
+
+> **Warning.** Set the BUSISO bypass for the TS-Pico's slot, or the TS-Pico won't work. The bus has "BUSISO bypass" jumpers or switches on its right-hand side, between
 > the card-edge connectors.
 >
 > - With jumpers: remove the jumper for the TS-Pico's slot. Park it on a single pin so it
@@ -222,6 +259,10 @@ the key lines up with the notch.
 
 <!-- v2 -->
 ## 2.3 A tour of the board
+
+![The TS-Pico board: the Pico at the upper left, the SD card slot at the upper right, the three buttons below it with JP5, JP3 and JP2, P10 near the top and JP4 and JP1 at the lower right](images/tspico-board.svg)
+
+*The TS-Pico board, component side. The labels match the jumpers described below.*
 
 **The Pico** is the small green board with a white **BOOTSEL** button and a Micro-USB socket.
 You only need the USB socket for updating the firmware (Appendix A). In normal use the TS-Pico
@@ -288,8 +329,9 @@ doing:
 | Two short flashes every couple of seconds | Running without an SD card (see 2.6) |
 
 **The audio jack** gives the card's speech (Appendix G), mixed with the 2068's own sound.
-**The other connectors**, a joystick socket and a display header, are for features coming in
-later firmware.
+**The joystick socket** takes an Atari-style joystick, which programs read as a Kempston
+joystick (9.4). **The other connector**, a display header, is for features coming in later
+firmware.
 <!-- /v3 -->
 
 ## 2.4 The micro SD card
@@ -299,7 +341,8 @@ Your card came ready to use. If you set up a new one:
 1. Format it **FAT32** on your computer. Cards up to 16GB work.
 2. Create a folder called **`TAP`** at the top level of the card. The TS-Pico treats `TAP` as
    its root folder. (It makes the folder on a card that doesn't have one.)
-3. Copy your `.tap` files into `TAP`, or into folders inside it.
+3. Copy your `.tap` files into `TAP`, or into folders inside it. Keep each folder to about
+   100 files (see 3.1).
 4. If you like, copy the `help` folder from the TS-Pico release to the top level of the card,
    next to `TAP`. That's where `SAVE "tpi:help word"` finds its help pages.
 
@@ -310,7 +353,7 @@ back between commands.
 <!-- /v3 -->
 
 **Swapping cards.** You can change cards while the 2068 is on. The next command that reads the
-card (a `CAT` or `SAVE "tpi:dir"` will do) notices it's a different card and reads it
+card (a `CAT` will do) notices it's a different card and reads it
 afresh. You stay in the same folder if the new card has it, and the mounted TAP stays mounted
 if the new card has that file too; otherwise you're back at the top, with nothing mounted.
 Append is switched off, so a SAVE can't land in a file on the other card, and any files open
@@ -328,18 +371,18 @@ You'll need the TS-Pico fitted (2.2) and an SD card in its socket (2.4).
    You should see the screen look frozen or garbled for a couple of seconds while the Pico
    starts, and the Pico's LED blinking while it opens the SD card and reads your `TAP` folder.
    Then the 2068 starts, with the usual copyright lines and the TS-Pico's own line, which
-   includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
+   includes the ROM version, for example `2026 TS-Pico ROM v2.4`.
 <!-- /v2 -->
 <!-- v3 -->
 
    You should see the screen stay dark for a moment while the card loads the ROM into its
    memory and opens the SD card. Then the 2068 starts, with the usual copyright lines and the
-   TS-Pico's own line, which includes the ROM version, for example `2026 TS-Pico ROM v2.3`.
+   TS-Pico's own line, which includes the ROM version, for example `2026 TS-Pico ROM v2.4`.
 <!-- /v3 -->
 2. Press **ENTER**.
 
    You should see the flashing **K** cursor.
-3. Type `SAVE "tpi:dir"` and press **ENTER**.
+3. Type `CAT` and press **ENTER**.
 
    You should see a listing of your `TAP` folder, even if it's empty:
 
@@ -403,7 +446,7 @@ recovers once it loses power, which taking the card out, or switching everything
 ## 2.7 Summary
 
 1. Switch the 2068 off before connecting anything, and set the BUSISO bypass for the TS-Pico's
-   slot on an expansion bus.
+   slot on the expansion bus.
 <!-- v2 -->
 2. Keep the P10 jumper fitted.
 <!-- /v2 -->
@@ -419,80 +462,73 @@ recovers once it loses power, which taking the card out, or switching everything
 
 # Chapter 3: Getting Around: Files, Folders and Tapes
 
-<!-- keywords: CAT · CD · MOVE TO · PATH · FFW · REW -->
+<!-- keywords: CAT · MOVE TO · COPY · MOVE · ERASE · LIST · FFW · REW -->
 
-> **Chapter Preview.** List what's on the card, move between folders, and mount a TAP file so
-> that `LOAD ""` reads from it.
+> **Chapter Preview.** List what's on the card, move between folders, copy, rename and delete
+> files, and mount a TAP file so that `LOAD ""` reads from it.
 
-## 3.1 What's on the card? DIR and CAT
-
-You've already met the directory listing:
+## 3.1 What's on the card? CAT
 
 ```basic
-SAVE "tpi:dir"
+CAT
 ```
 
-Or you can use the **CAT** command. The listing shows the folder you're in (the
-*current folder*), how big the card is and how much space is free, then folders, then files.
-If it's longer than the screen, you'll see `Scroll? (Y/n)` with a percentage showing how far
-through you are. Press **Y** or **ENTER** for more, a number **1** to **9** to scroll that many
-lines, or **N** to stop.
+The listing shows the folder you're in (the *current folder*), the card's name, how big the
+card is and how much space is free, then folders, then files. The card's name is its label,
+the name a PC or Mac shows for it, or `SD` if it has none (`FORMAT ":GAMES"` names it; see
+10.1). If the listing is longer than the screen, you'll see `Scroll? (Y/n)` with a percentage
+showing how far through you are. Press **Y** or **ENTER** for more, a number **1** to **9** to
+scroll that many lines, or **N** to stop.
 
 `CAT` can do more than list the current folder:
 
-```basic
-CAT "games"          : REM a different folder, without going there
-CAT "*.tap"          : REM only the TAP files
-CAT "games/b*"       : REM files in games starting with b
-CAT "frogger.tap"    : REM the blocks inside a TAP file
-CAT ""               : REM the blocks inside the mounted TAP
-```
+| Type | What it does |
+|---|---|
+| `CAT "games"` | A different folder, without going there |
+| `CAT "*.tap"` | Only the TAP files |
+| `CAT "games/b*"` | Files in games starting with b |
+| `CAT "frogger.tap"` | The blocks inside a TAP file |
+| `CAT ""` | The blocks inside the mounted TAP |
+| `CAT #4` | The listing into the file open on stream 4 (6.5) |
 
 `*` matches any run of characters and `?` matches exactly one. They work in the last part of a
-path. `SAVE "tpi:dir games"`, `SAVE "tpi:dir *.tap"` and so on give the same listings, as long
-as the whole name fits in 31 characters.
+path.
 
-![CAT: the path and card on a blue bar, folders in blue, each file's number on a cyan chip](images/cat.png)
+To see what's inside a file, **LIST** it: `LIST "notes.txt"` shows a text file on the screen,
+and any other file as a hex dump (10.1).
+
+> **Note:** keep each folder to about 100 files. `CAT` shows about 20 at a time, so a folder of
+> 100 is five screens to page through; a few folders, say by type or by letter, are easier to
+> find your way around. Folders of up to 300 files have been tested and work.
+
+![CAT: the path and card on a blue bar, then the folders, and each file's number on a cyan chip](images/cat.png)
 
 *`CAT` on a card with four folders and eight files. `{game}.tap` and `jet~1.tap` appear as
 `?game?.tap` and `jet?1.tap`; see below.*
 
-> **By the way:** `SAVE "tpi:dir"` checks the card before it lists the folder. After you swap
-> cards you see the new card, and if you take the card out, add files from a computer and put
-> it back, the new files are there too. No restart needed.
+> **By the way:** `CAT` checks the card before it lists the folder. After you swap cards you
+> see the new card, and if you take the card out, add files from a computer and put it back,
+> the new files are there too. No restart needed.
+
+**Long names.** A name too long for the line is shortened in the middle with `>`. CAT can't
+show it in full, but the command behind it can: `SAVE "tpi:dir" CODE 2,0` lists every file's
+full name with its number, and `SAVE "tpi:dir" CODE 1,5` shows file 5's.
 
 **Names with characters the 2068 can't show.** A file named on a computer can contain characters
 the 2068 doesn't have on its keyboard or prints as something else: `|` and `~` come out as the
 keywords STICK and FREE, `{` and `}` can come out as ON ERR and SOUND, and accented letters
 don't exist at all. The listing shows each of them as `?`, for example `?game?.tap` for
-`{game}.tap`. You can type the name just as it's shown; see the next section.
+`{game}.tap`. You can type the name just as it's shown; see 3.4.
 
-## 3.2 Folders: CD, MOVE TO and PATH
+## 3.2 Folders: MOVE TO
 
 To go into a folder:
-
-```basic
-SAVE "tpi:cd games"
-```
-
-or:
 
 ```basic
 MOVE TO "games"
 ```
 
-To see where you are:
-
-```basic
-SAVE "tpi:path"
-```
-
-```
-Current working dir is:
-/TAP/GAMES
-```
-
-A few special names help you get around:
+The first line of `CAT` shows where you are now. A few special names help you get around:
 
 | Name | Takes you to |
 |---|---|
@@ -502,27 +538,69 @@ A few special names help you get around:
 | `games/arcade` | A folder inside a folder |
 | `/games` | A path from the root |
 
-`MOVE TO ""` is the same as `SAVE "tpi:cd -"`: back to where you were.
+So `MOVE TO ".."` goes up a level and `MOVE TO "-"` takes you back to where you were.
 
-**Picking a folder from a list.** Type `SAVE "tpi:cd"` on its own and the TS-Pico shows the
-folders here as a numbered menu. Press a digit **0**-**9**, or **Q W E R T Y** for items
-10 to 15, to go into one; **B** goes back a page, any other key goes forward, and **N**
-quits. `SAVE "tpi:cd" CODE 0,1` lists every folder on the card instead.
+**Picking a folder from a list.** `MOVE TO ""` shows the folders here as a numbered menu. Press
+a digit **0**-**9**, or **Q W E R T Y** for items 10 to 15, to go into one; **B** goes back a
+page, any other key goes forward, and **N** quits.
 
-![The tpi:cd menu: each folder with a digit to press, and the prompt at the bottom](images/cd-menu.png)
+![The folder menu: each folder with a digit to press, and the prompt at the bottom](images/cd-menu.png)
 
-*The `SAVE "tpi:cd"` menu, waiting for a key.*
+*The `MOVE TO ""` menu, waiting for a key.*
 
 **Making a folder:**
 
 ```basic
-SAVE "tpi:md tools"
-FORMAT "tools/"      : REM the same (note the slash)
+FORMAT "tools/"
 ```
 
-`SAVE "tpi:md tools" CODE 1,0` makes the folder and goes into it.
+The slash at the end is what makes it a folder.
 
-## 3.3 Mounting a TAP file
+> **What only the commands do.** `MOVE TO` and FORMAT cover everyday use. Their `tpi:`
+> commands (10.3) go a step further:
+>
+> - `SAVE "tpi:cd" CODE 0,1` picks from **every** folder on the card, not just the ones here;
+> - `SAVE "tpi:cd games" CODE 1,0` goes into `games` and lists it, and `CODE 1,1` goes in and
+>   lets you pick a file to mount;
+> - `SAVE "tpi:md tools" CODE 1,0` makes the folder and goes into it;
+> - `SAVE "tpi:path"` shows the current folder on its own, without a listing.
+
+## 3.3 Copying, renaming and deleting
+
+```basic
+COPY "game.tap" TO "copy.tap"
+COPY "game.tap" TO "games"
+COPY "*.tap" TO "games"
+```
+
+The first makes a second copy, `copy.tap`. The second puts a copy in the folder `games`, and
+the third copies every TAP file here into `games`.
+
+```basic
+MOVE "old.tap" TO "new.tap"
+MOVE "game.tap" TO "games"
+ERASE "old.tap"
+ERASE "*.bak"
+```
+
+MOVE renames a file, or moves it into a folder. ERASE deletes a file, or every file that
+matches a pattern.
+
+- **COPY** leaves the original where it is; **MOVE** doesn't. MOVE renames folders too.
+- Neither ever overwrites: if the new name is taken, you get **F Invalid file name**.
+- **ERASE** deletes a single file **without asking**. With a pattern it asks `Erase NAME (Y/N)?`
+  for each file.
+- ERASE removes a folder only if it's empty, and only with a slash: `ERASE "tools/"`.
+- The mounted file can't be renamed, moved or erased: you'll get **Q Parameter error**. Eject
+  it first (3.7).
+
+Section 10.1 has every message these give.
+
+> **What only the command does.** To delete a file but be asked first, or to pick it by its
+> number in the listing, use `SAVE "tpi:rm old.tap"` or `SAVE "tpi:rm 3"`: it asks
+> `Remove "old.tap" (y/N)?` before it does anything.
+
+## 3.4 Mounting a TAP file
 
 A TAP file is a recording of a cassette: a series of blocks, as they'd appear on tape.
 To use one, you **mount** it. Think of it as putting the cassette in the player:
@@ -531,20 +609,24 @@ To use one, you **mount** it. Think of it as putting the cassette in the player:
 LOAD "tpi:frogger.tap"
 ```
 
-Now `LOAD ""` loads from that file, one program after another, as a tape would. The
-TS-Pico copies the TAP into its own memory while it mounts it. The LED flickers for a moment,
-and big files take a second or two.
+This is the one `tpi:` name everyone needs: there's no keyword for mounting. Now `LOAD ""`
+loads from that file, one program after another, as a tape would. The TS-Pico copies the TAP
+into its own memory while it mounts it. The LED flickers for a moment, and big files take a
+second or two.
 
 You can also mount a file by the **index number** shown in the listing:
 
-```basic
-LOAD "tpi:0"         : REM the file listed as 000
-LOAD "tpi:12"
-```
+| Type | What it does |
+|---|---|
+| `LOAD "tpi:00"` | The file listed as 000 |
+| `LOAD "tpi:12"` | The file listed as 012 |
+
+Use at least two digits. `LOAD "tpi:3"` is too short for the 2068 to take it as a TS-Pico
+command: it's an ordinary LOAD of a program called `tpi:3`. Type `LOAD "tpi:03"`.
 
 **Remember:**
 
-- Mounting only looks in the **current folder**. Use `MOVE TO` or `tpi:cd` first.
+- Mounting only looks in the **current folder**. Use `MOVE TO` first.
 - Only TAP, DCK, ROM and BIN files can be mounted. DCK, ROM and BIN files are cartridges and
   ROM images; they're covered in Chapter 8. TZX files are listed with an index number, but the
   TS-Pico can't mount them: you'll get **Q Parameter error**.
@@ -559,15 +641,14 @@ LOAD "tpi:12"
   ![LOAD "tpi:*.tap" with several matches: the count, and Report F](images/load-several-match.png)
 
 **Picking a file from a list.** `SAVE "tpi:idir"` shows the indexed files as a menu, using the
-same keys as `tpi:cd`, and mounts the one you pick.
+same keys as the folder menu, and mounts the one you pick.
 
-## 3.4 Looking inside a TAP
+## 3.5 Looking inside a TAP
 
 To see what's in the mounted TAP:
 
 ```basic
-SAVE "tpi:tapdir"
-CAT ""               : REM the same
+CAT ""
 ```
 
 ![CAT "": the file and tape pointer on a blue bar; headers in blue; the next block on a yellow row](images/tapdir.png)
@@ -576,35 +657,40 @@ CAT ""               : REM the same
 
 Each program on a tape is two blocks: a short **header** (`Y` in the Hdr? column) carrying its
 name, and the data itself, described by its type. The `>` marks the **tape pointer**, the block
-the next `LOAD` will start from.
-`SAVE "tpi:tapdir" CODE 1,0` shows one line per program or file instead of one per block.
-`CAT "other.tap"` shows the contents of any TAP, mounted or not.
+the next `LOAD` will start from. `CAT "other.tap"` shows the contents of any TAP, mounted or not.
 
-## 3.5 Winding the tape: FFW and REW
+> **What only the command does.** `CAT ""` shows every block. For a long tape,
+> `SAVE "tpi:tapdir" CODE 1,0` shows one line per program or file instead, and
+> `SAVE "tpi:tapdir" CODE 0,3` just the three blocks either side of the pointer.
 
-Like a cassette, the tape winds forward and back:
+## 3.6 Winding the tape: FFW and REW
 
-```basic
-SAVE "tpi:ffw"             : REM forward one block
-SAVE "tpi:rew" CODE 0,3    : REM back three blocks
-SAVE "tpi:ffw" CODE 2,1    : REM forward to the next program or file
-SAVE "tpi:rew" CODE 3,2    : REM back two files, then show the tape
-```
+Like a cassette, the tape winds forward and back. There are no keywords for this; the
+commands are:
 
-The tape stops at either end rather than wrapping round. With verbose on you'll see
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:ffw"` | Forward one block |
+| `SAVE "tpi:rew" CODE 0,3` | Back three blocks |
+| `SAVE "tpi:ffw" CODE 2,1` | Forward to the next program or file |
+| `SAVE "tpi:rew" CODE 3,2` | Back two files, then show the tape |
+
+You often don't need them: `LOAD "name"` finds a program by its name wherever it is on the
+tape (4.1). The tape stops at either end rather than wrapping round. With verbose on you'll see
 `Moved ahead to block # 4`, `Can't FWD. Already at end.`, `Can't REW. Already at start.`, or
 `Can't FWD. No later file.` when you skip by files from the last program. With verbose off
 each of these is **0 OK**.
 
-## 3.6 Ejecting the tape: CLOSE
+## 3.7 Ejecting the tape
 
 ```basic
 SAVE "tpi:close"
 ```
 
-This unmounts the file. It's always safe, even with nothing mounted.
+This unmounts the file. It's always safe, even with nothing mounted. There's no keyword for
+it: `CLOSE #` closes streams (Chapter 6), not the tape.
 
-## 3.7 LOAD "" with nothing mounted
+## 3.8 LOAD "" with nothing mounted
 
 If nothing is mounted and you type `LOAD ""`, the TS-Pico loads a little menu program instead:
 
@@ -612,9 +698,10 @@ If nothing is mounted and you type `LOAD ""`, the TS-Pico loads a little menu pr
 - **C** gives help on a single command;
 - **P** lets you pick a file from any folder and load it;
 - **F** starts the **TS-Pico Commander**, a full-screen file manager;
-- **R** shows your ROM version;
-- **I** shows TS-Pico information;
-- **V** has settings for the Pico Video board;
+- **I** shows TS-Pico information, including your ROM version;
+- **T** opens a one-line menu at the bottom of the screen for everyday `tpi:` commands such as
+  `cd`, `dir`, `help` and `info`;
+- **V** has settings for the Pico Video board, including ULA Plus;
 - **Q** quits.
 
 To get the menu back at any time: `SAVE "tpi:close"` then `LOAD ""`.
@@ -636,7 +723,7 @@ is, so it doesn't matter which folder you're in later. At switch-on you're still
 folder. If the file has gone from the card, you get the built-in menu. `SAVE "tpi:automount"`
 shows the file, and `SAVE "tpi:automount off"` goes back to the built-in menu.
 
-## 3.8 Try it: from the listing to a running program
+## 3.9 Try it: from the listing to a running program
 
 You'll need a TAP file on the card. These steps use `frogger.tap`; use the name of one of yours.
 
@@ -655,16 +742,17 @@ You'll need a TAP file on the card. These steps use `frogger.tap`; use the name 
    itself.
 5. Type `SAVE "tpi:close"` and press **ENTER**.
 
-   You should see **0 OK**. With nothing mounted, the next `LOAD ""` loads the menu (3.7).
+   You should see **0 OK**. With nothing mounted, the next `LOAD ""` loads the menu (3.8).
 
-## 3.9 Summary
+## 3.10 Summary
 
-1. `CAT` (or `SAVE "tpi:dir"`) lists files; patterns such as `"*.tap"` narrow it down.
-2. `MOVE TO "folder"` (or `SAVE "tpi:cd folder"`) changes folder; `..`, `/` and `-` help you move.
-3. `LOAD "tpi:name.tap"` mounts a file, by name or by index number.
-4. `CAT ""` (or `SAVE "tpi:tapdir"`) shows what's inside the mounted TAP.
-5. `SAVE "tpi:ffw"` and `SAVE "tpi:rew"` move the tape pointer; `SAVE "tpi:close"` ejects.
-6. `SAVE "tpi:automount name.tap"` makes `LOAD ""` load your own program at switch-on.
+1. `CAT` lists files; patterns such as `"*.tap"` narrow it down. `LIST "name"` shows a file.
+2. `MOVE TO "folder"` changes folder; `..`, `/` and `-` help you move; `MOVE TO ""` is a menu.
+3. `COPY`, `MOVE` and `ERASE` copy, rename and delete files; `FORMAT "dir/"` makes a folder.
+4. `LOAD "tpi:name.tap"` mounts a file, by name or by index number. There's no keyword for it.
+5. `CAT ""` shows what's inside the mounted TAP.
+6. `SAVE "tpi:ffw"` and `SAVE "tpi:rew"` move the tape pointer; `SAVE "tpi:close"` ejects.
+7. `SAVE "tpi:automount name.tap"` makes `LOAD ""` load your own program at switch-on.
 
 ---
 
@@ -679,86 +767,95 @@ You'll need a TAP file on the card. These steps use `frogger.tap`; use the name 
 
 Once a TAP is mounted, all the loading commands work exactly as they would with tape:
 
-```basic
-LOAD ""                  : REM the next program on the tape
-LOAD "frogger"           : REM the program called frogger
-LOAD "" CODE             : REM the next block of code
-LOAD "" SCREEN$          : REM a picture
-LOAD "" DATA a$()        : REM an array
-VERIFY ""
-MERGE ""
-```
+| Type | What it does |
+|---|---|
+| `LOAD ""` | The next program on the tape |
+| `LOAD "frogger"` | The program called frogger |
+| `LOAD "" CODE` | The next block of code |
+| `LOAD "" SCREEN$` | A picture |
+| `LOAD "" DATA a$()` | An array |
+| `VERIFY ""` | Check the program just saved against the next one on the tape |
+| `MERGE ""` | Merge the next program into the one in memory |
 
 The TS-Pico starts at the tape pointer and skips blocks that don't match what you asked for.
 When it reaches the end, it goes back to the start, like rewinding. If it goes all the way
-round without finding a match, you get **8 End of file**, instead of the endless wait you'd
-get with a real tape.
+round without finding a match, you get **R Tape loading error**, instead of the endless wait
+you'd get with a real tape. On the way, the 2068 shows the name of each block it passes, as it
+does with a cassette.
 
 ## 4.2 SAVE
 
 When the TS-Pico is your storage device (it is when you switch on), a plain SAVE writes a
 **new TAP file** in the current folder, named after your program:
 
-```basic
-SAVE "mygame"            : REM makes mygame.tap
-SAVE "mygame" LINE 10    : REM the same, starting at line 10 when loaded
-SAVE "pic" SCREEN$
-SAVE "code" CODE 32768,1000
-```
+| Type | What it does |
+|---|---|
+| `SAVE "mygame"` | Makes `mygame.tap` |
+| `SAVE "mygame" LINE 10` | The same, starting at line 10 when loaded |
+| `SAVE "pic" SCREEN$` | Makes pic.tap, holding the screen |
+| `SAVE "code" CODE 32768,1000` | Makes code.tap, holding 1000 bytes from 32768 |
 
-As with tape, SAVE prints `Start tape, then press any key.` and waits: press a key, and the
-program goes to the card.
+As with tape, SAVE prints `Start tape, then press any key.` and waits: press **ENTER**, and the
+program goes to the card. Don't use SPACE here. It's the tape routines' BREAK key, and the
+TS-Pico starts at once, so a SPACE still held down stops the save with **D BREAK - CONT
+repeats**.
 
 **Remember:**
 
 - A plain SAVE name may only use **letters, digits, `-` and `_`**. Spaces or other symbols give
-  **F Invalid file name** before anything is written.
+  **F Invalid file name**. The F comes after the `Start tape` key, but nothing is written.
 - Saving over an existing name **replaces that file without asking**.
 - If nothing was mounted, the new file becomes the mounted file.
+- If you save over the mounted file (with append off), the new file is mounted in its place, so
+  `CAT ""` shows what is on the card now.
 - An empty program gives **A Invalid argument**.
 
 > **Note:** the TS-Pico answers once your data is on the card. If the card fails while it's
 > writing (for example because it was pulled out), you get **J Invalid I/O device** instead of
 > **0 OK**, and nothing is saved.
 
-## 4.3 Adding to a TAP: APPEND and NEWTAP
+## 4.3 Adding to a TAP: APPEND and FORMAT
 
 Sometimes you want several programs in one TAP, like a real cassette. That's what **append**
-mode is for:
+mode is for. The quickest way in is to start a fresh, empty TAP:
 
 ```basic
-LOAD "tpi:collection.tap"
-SAVE "tpi:append" CODE 1,1     : REM or SAVE "tpi:append on"
+FORMAT "collection.tap"
 SAVE "one"
 SAVE "two"
 SAVE "tpi:append off"
 ```
 
-With append on, every SAVE is added to the end of the mounted TAP; the name you give is kept
-in the tape header but doesn't name a file. `SAVE "tpi:append"` on its own tells you whether
-it's on. Mounting any file turns it off.
+FORMAT makes a new, empty TAP, mounts it and turns append on.
 
-To start a fresh, empty TAP and switch append on in one go:
+With append on, every SAVE is added to the end of the mounted TAP; the name you give is kept
+in the tape header but doesn't name a file. FORMAT never touches a file that's already there:
+it answers **F**, and shows `Already exists:` when VERBOSE is on.
+
+To add to a TAP you already have, mount it and turn append on yourself. There's no keyword
+for append:
 
 ```basic
-FORMAT "collection.tap"        : REM refuses if the file exists
-SAVE "tpi:newtap collection"   : REM the same
+LOAD "tpi:collection.tap"
+SAVE "tpi:append on"
+SAVE "three"
+SAVE "tpi:append off"
 ```
 
-> **Note:** neither command touches a file that's already there. Both answer **F**, and
-> `tpi:newtap` shows `File exists:` when VERBOSE is on.
+`SAVE "tpi:append" CODE 1,1` turns it on too, and `SAVE "tpi:append"` on its own tells you
+whether it's on. Mounting any file turns it off.
 
 ## 4.4 Using a real cassette recorder
 
 The TS-Pico can step aside and let the 2068 use its cassette port again:
 
-```basic
-SAVE "tpi:tape"      : REM LOAD and SAVE use the cassette recorder
-SAVE "tpi:sdcard"    : REM back to the TS-Pico (the setting at switch-on)
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:tape"` | LOAD and SAVE use the cassette recorder |
+| `SAVE "tpi:sdcard"` | Back to the TS-Pico (the setting at switch-on) |
 
-`tpi:` commands keep working in tape mode; only plain LOAD, SAVE, VERIFY and MERGE go to
-tape. Printing stays where it was (Chapter 7). You can check the setting with `PRINT PEEK 24027`; see Appendix D.
+There are no keywords for these. `tpi:` commands keep working in tape mode; only plain LOAD,
+SAVE, VERIFY and MERGE go to tape. Printing stays where it was (Chapter 7). You can check the setting with `PRINT PEEK 24027`; see Appendix D.
 
 ## 4.5 A program that keeps its pictures on a tape
 
@@ -810,7 +907,8 @@ SAVE "f:advent.bas" LINE 10
 LOAD "f:advent.bas"
 ```
 
-SAVE prints `Start tape, then press any key.` and waits for a key, as it does for tape.
+SAVE prints `Start tape, then press any key.` and waits for a key, as it does for tape. Press
+**ENTER** (see 4.2).
 Everything you can save to tape, you can save this way:
 
 ```basic
@@ -888,19 +986,24 @@ line 30 asks `Replace scores.dat? (Y/N)`: press **Y**.
 
 # Chapter 6: Streams and Channels: `OPEN #`
 
-<!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · CLOSE # -->
+<!-- keywords: OPEN # · PRINT # · INPUT # · LIST # · RESTORE # · CLOSE # -->
 
 > **Chapter Preview.** Write and read text files with the 2068's own `PRINT #` and `INPUT #`,
-> keep records you can jump to by number, and read a folder listing into a program.
+> keep records you can jump to by number, read a folder listing into a program, and ask the
+> TS-Pico where you are.
 
 ## 6.1 Streams in a nutshell
 
 You already use streams without knowing it. `PRINT` goes to stream 2, the screen, and `INPUT`
 comes from the keyboard. The 2068 has sixteen streams, numbered 0 to 15, and **OPEN #** connects
-one to a device. The TS-Pico adds two new kinds of device:
+one to a device. The TS-Pico adds new kinds of device:
 
 - `"f:name"`, a file on the SD card;
-- `"d:pattern"`, a list of file names.
+- `"d:pattern"`, a list of file names;
+- `"x:"`, questions for the TS-Pico: the folder you're in, what's mounted, and more.
+<!-- v3 -->
+- `"v:"`, the card's voice: what you `PRINT` to it is spoken (Appendix G).
+<!-- /v3 -->
 
 ```basic
 OPEN #4,"f:notes.txt","w"
@@ -962,25 +1065,65 @@ card in your computer and open `shopping.txt`: three lines of plain text.
 
 Each `INPUT #4` reads one line. What if you don't know how many lines there are? Try changing
 line 20 to `FOR i=1 TO 10`. After the third line, the program stops with
-**8 End of file**: you've read past the end. Type `CLOSE #4` to tidy up.
+**8 End of file**: you've read past the end. The file is still open, so type `CLOSE #4` to
+tidy up.
 
-A simple way to know when to stop is to write a marker line yourself:
+Reaching the end of a file isn't really a mistake, and it doesn't have to stop the program.
+The 2068's **ON ERR GO TO** catches the report instead, and the program carries on at the line
+you name. This version reads a file of any length:
 
 ```basic
-10 OPEN #4,"f:shopping.txt","a"
-20 PRINT #4;"*END*"
-30 CLOSE #4
-40 OPEN #4,"f:shopping.txt"
-50 INPUT #4;a$
-60 IF a$="*END*" THEN GO TO 90
-70 PRINT a$
-80 GO TO 50
-90 CLOSE #4
+10 ON ERR GO TO 100
+20 LET n=0
+30 OPEN #4,"f:shopping.txt"
+40 INPUT #4;a$
+50 LET n=n+1: PRINT n;". ";a$
+60 GO TO 40
+100 LET e=PEEK 23739
+110 ON ERR RESET
+120 CLOSE #4
+130 IF e=8 THEN PRINT n;" lines"
+140 IF e<>8 THEN PRINT "Can't read the file: report ";CHR$ (e+48+7*(e>9))
 ```
 
-Line 10 uses mode `"a"`, so the marker goes on the end of the file instead of replacing it.
+```
+1. Eggs
+2. Milk
+3. Bread, 2 loaves
+3 lines
+```
+
+Lines 40 to 60 loop until the `INPUT #4` after the last line gives **8 End of file**. Instead of
+stopping, the program goes to line 100:
+
+- **Line 100** finds out which report it was. `PEEK 23739` gives its number: 8 for End of file,
+  and 10 to 27 for the letter reports A to R. Read it first, before anything else can change it.
+- **Line 110** turns the trap off with `ON ERR RESET`, so a mistake later in the program stops it
+  with a report as usual.
+- **Line 120** closes the file. A `CLOSE #4` on a stream that didn't open does no harm.
+- **Lines 130 and 140** tell the end of the file from a real problem. Delete `shopping.txt`
+  from the card and run the program again: you get `Can't read the file: report F`, and the
+  program still finishes cleanly. Line 140 turns the number back into the report's digit or
+  letter.
 
 Numbers work too: `INPUT #4;n` reads a line and turns it into a number, as if you'd typed it.
+
+**Reading it again.** `RESTORE #4` goes back to the start of the file, so the next `INPUT #4`
+reads the first line again. There's no need to CLOSE and OPEN it:
+
+```basic
+10 OPEN #4,"f:shopping.txt"
+20 INPUT #4;a$
+30 RESTORE #4
+40 INPUT #4;b$
+50 CLOSE #4
+60 PRINT a$;"/";b$
+```
+
+This prints `Eggs/Eggs`. On a file you're writing, the next `PRINT #4` after `RESTORE #4` writes
+from the start, over what's there. Anything you printed before it is sent first. `RESTORE #`
+works on a stream opened with `"f:"`; any other stream gives **O Invalid stream**. `RESTORE` and
+`RESTORE 100` still set the DATA pointer, as always.
 
 ## 6.4 One character at a time: INKEY$ #
 
@@ -1005,6 +1148,16 @@ OPEN #4,"f:listing.txt","w": LIST #4: CLOSE #4
 
 Now `listing.txt` holds your program as readable text, handy for sharing it or printing it on
 a modern printer.
+
+`CAT #` does the same for a folder listing. It takes anything `CAT` takes:
+
+```basic
+OPEN #4,"f:files.txt","w": CAT #4: CAT #4;"test/*.tap": CLOSE #4
+```
+
+The file gets the listing as plain text, one line a row, with no colors and no `Scroll?`.
+`CAT #4;""` lists the mounted TAP. The stream must be a file open for writing: one open with
+`"r"`, or a `d:` or `x:` stream, gives **Q Parameter error**.
 
 ## 6.6 Capturing the screen: OPEN #2
 
@@ -1137,7 +1290,58 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
   `TAB 0` gives 0.
 - A `d:` stream is read-only.
 
-## 6.9 Good to know
+## 6.9 Asking the TS-Pico: `x:`
+
+A program sometimes needs to know what the TS-Pico knows: which folder it's in, what's
+mounted, what's in the folder. `OPEN #` with `"x:"` gives you a stream you can ask. `PRINT #` a
+question to it, and `INPUT #` reads the answer:
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"path"
+30 INPUT #4;p$
+40 PRINT "You are in ";p$
+50 CLOSE #4
+```
+
+```
+You are in /TAP/games
+```
+
+There are four questions:
+
+| Question | The answer, one line each |
+|---|---|
+| `"path"` | The folder you're in |
+| `"mount"` | The file that's mounted, or an empty line if none is |
+| `"dir"` | The number of folders, the number of files, then a line for each folder and each file |
+| `"info"` | The card's name, its free space and its total size in bytes, the firmware's version, the ROM's |
+
+`"dir"` gives the same rows as `dirinfo.tap` (see 10.2), each one 32 characters. A folder's row is its name. A file's row has its number in columns 1 to 3, its name
+in 5 to 22 and its size in 23 to 32, so `TO` picks out each part:
+
+```basic
+10 OPEN #4,"x:"
+20 PRINT #4;"dir"
+30 INPUT #4;d: INPUT #4;f
+40 FOR i=1 TO d: INPUT #4;a$: PRINT "Folder ";a$( TO 20): NEXT i
+50 FOR i=1 TO f: INPUT #4;a$: PRINT a$( TO 3);" ";a$(5 TO 22): NEXT i
+60 CLOSE #4
+```
+
+The number in a file's row is the one `LOAD "tpi:nnn"` mounts it by.
+
+- Each question replaces the last answer, whether you read all of it or not.
+- Reading past the end of an answer gives **8 End of file**. That's why `"dir"` starts with its
+  counts.
+- Questions can be in capitals or lowercase. A question the TS-Pico doesn't know gives
+  **Q Parameter error**.
+- `"dir"` needs the SD card: without it you'll get **J Invalid I/O device**. The others work
+  without one. `"info"` then gives no name and no space.
+- Don't put a prompt in an `INPUT #` from an `x:` stream: the prompt goes to the stream, and
+  the TS-Pico would take it for the start of a question.
+
+## 6.10 Good to know
 
 - `CLOSE #` on a stream that isn't open does nothing, as on a standard 2068.
 - After `NEW` or a reset, open streams are forgotten; OPEN them again. `CLEAR` and `RUN`
@@ -1146,6 +1350,7 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
   `"u"` file the prompt text is written into the file, so leave prompts out when reading files.
 - You can't OPEN a stream that's already open to a file. CLOSE it first, or you'll get
   **O Invalid stream**.
+- `RESTORE #4` on a record file finishes the open record first, then goes back to the start.
 - A file can be read and written by different streams, but they don't know about each other.
   CLOSE one before relying on what the other sees.
 - One character can't be written into a file with `PRINT #`: `CHR$ 23`, because the 2068 uses
@@ -1158,41 +1363,13 @@ Line 140 builds the command from the name you picked, mounts it, and line 150 lo
 | **F Invalid file name** | Reading a file that isn't there, or a folder that isn't there |
 | **Q Parameter error** | A bad mode; a record too long; reading a file opened for writing; `PRINT #4;TAB 0` |
 | **8 End of file** | You read past the end |
-| **O Invalid stream** | The stream is already open to a file |
+| **O Invalid stream** | The stream is already open to a file; `RESTORE #` of a stream that isn't open to a file |
 | **4 Out of memory** | No room for another open file (each takes 512 bytes) |
 
-## 6.10 More ways to use files
+## 6.11 More ways to use files
 
 These patterns come up in most programs that keep data. Each one was run on a 2068 with the
 TS-Pico firmware.
-
-**Reading a file of any length.** You don't need to know how many lines a file holds. Let the
-2068's **ON ERR** catch the **8 End of file** at the end:
-
-```basic
-10 OPEN #4,"f:shopping.txt","w"
-20 PRINT #4;"Eggs": PRINT #4;"Milk": PRINT #4;"Bread"
-30 CLOSE #4
-40 ON ERR GO TO 100
-50 OPEN #4,"f:shopping.txt"
-60 LET n=0
-70 INPUT #4;a$
-80 LET n=n+1: PRINT n;". ";a$
-90 GO TO 70
-100 ON ERR RESET
-110 CLOSE #4
-120 PRINT n;" lines"
-```
-
-```
-1. Eggs
-2. Milk
-3. Bread
-3 lines
-```
-
-`ON ERR GO TO 100` sends any report to line 100, so a file that isn't there lands there too,
-with `n` still 0. `ON ERR RESET` turns the trap off again.
 
 **Several fields to an entry.** Write each field on its own line, with `'` between them, and
 read them back with one `INPUT #`:
@@ -1236,10 +1413,14 @@ This prints `Total: 22.5`.
 20 OPEN #4,"f:shopping.txt": OPEN #5,"f:copy.txt","w"
 30 INPUT #4;a$: PRINT #5;a$
 40 GO TO 30
-60 ON ERR RESET
+60 LET e=PEEK 23739: ON ERR RESET
 70 CLOSE #4: CLOSE #5
-80 PRINT "Copied."
+80 IF e=8 THEN PRINT "Copied."
+90 IF e<>8 THEN PRINT "Copy failed: report ";CHR$ (e+48+7*(e>9))
 ```
+
+The loop ends the way the one in 6.3 does: **8 End of file** after the last line means the copy
+is complete, and any other report means it isn't.
 
 **A file for a spreadsheet.** A text file with commas between the values (a CSV file) opens in
 any spreadsheet on your computer:
@@ -1257,14 +1438,21 @@ any spreadsheet on your computer:
 as in line 40: a comma on its own between PRINT items moves to the next column, and goes into
 the file as spaces.
 
-## 6.11 Summary
+## 6.12 Summary
 
 1. `OPEN #n,"f:name","mode"` connects a stream to a file: r, w, a or u, plus b for binary.
 2. `PRINT #`, `INPUT #`, `INKEY$ #` and `LIST #` work as they do with any stream.
 3. Always CLOSE a file you've written to.
 4. A record length (`OPEN #4,"f:x","u",20`) makes TAB jump to a record; `TAB 0` counts them.
-5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT.
-6. `ON ERR GO TO` catches the **8 End of file** at the end of a file of any length.
+5. `OPEN #n,"d:pattern"` reads a folder listing, one name per INPUT. `OPEN #n,"x:"` answers
+   questions: `PRINT #n;"path"`, then `INPUT #n;p$`.
+<!-- v3 -->
+   `OPEN #n,"v:"` speaks what you print to it (Appendix G).
+<!-- /v3 -->
+6. `LIST #n` and `CAT #n` write a program listing or a folder listing into a file.
+7. `RESTORE #n` goes back to the start of the file, to read it again or write over it.
+8. `ON ERR GO TO` turns the **8 End of file** at the end of a file into the end of a loop;
+   `PEEK 23739` says which report it caught.
 
 ---
 
@@ -1277,7 +1465,7 @@ the file as spaces.
 ## 7.1 Switching the printer
 
 When you switch on, printing goes to a real TS 2040 printer, if you have one. To send it to
-the TS-Pico instead:
+the TS-Pico instead (there's no keyword for this switch):
 
 ```basic
 SAVE "tpi:picopt"
@@ -1300,17 +1488,17 @@ Now:
 Everything you print goes into the same text file, printout after printout, until you close
 it:
 
-```basic
-SAVE "tpi:clprint"     : REM finish this file
-SAVE "tpi:opprint"     : REM finish this file and start the next one now
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:clprint"` | Finish this file |
+| `SAVE "tpi:opprint"` | Finish this file and start the next one now |
 
 The next LPRINT after a `tpi:clprint` starts a new file automatically.
 
 The text file is plain text, with a few conventions for things plain text can't show. The
-2068's block graphics, user-defined graphics and colour codes are written with backslashes, the
+2068's block graphics, user-defined graphics and color codes are written with backslashes, the
 same way the popular `zmakebas` tool writes them: for example `\::` for a solid block, `\A`
-for user-defined graphic A, and `\{INK 2}` for a colour change. Print positions are written the
+for user-defined graphic A, and `\{INK 2}` for a color change. Print positions are written the
 same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©` is written
 `\*`, and a backslash itself as `\\`.
 
@@ -1318,12 +1506,15 @@ same way: `\{COMMA}` for a comma between items, `\{AT 5,10}` and `\{TAB 8}`. `©
 
 | Command | What it does |
 |---|---|
-| `SAVE "tpi:prnsz" CODE 80,72` | Wrap lines at 80 columns (0 = never) and set pages to 72 lines (0 to 255 each). `SAVE "tpi:prnsz"` alone shows the current size. |
+| `SAVE "tpi:prnsz" CODE 80,72` | Wrap lines at 80 columns (0 = never) and set pages to 72 lines (0 to 255 each). `SAVE "tpi:prnsz"` alone shows the current size and whether `autolf` and `autopg` are on. |
 | `SAVE "tpi:autolf"` / `"tpi:noautolf"` | End lines with CR+LF (for Windows) / with LF (the default) |
-| `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default) |
-| `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. |
+| `SAVE "tpi:autopg"` / `"tpi:noautopg"` | Start a new page (a form feed) every page length / don't (the default). A page length of 0 never starts one. |
+| `SAVE "tpi:bmp" CODE 512,384` | The size of COPY pictures: widths 256, 512, 1024, 2048 or 4096 by heights 192, 384, 768 or 1536. The default is 512×384. `SAVE "tpi:bmp"` alone shows the current size. |
 
-COPY understands the 2068's other screen modes too: the second screen, hi-colour, and the
+`autolf` and `autopg` last until the TS-Pico is switched off. To have either one on from
+switch-on, set `PRINTER_AUTOLF` or `PRINTER_AUTOPG` to `true` in `config.ini` (Appendix D.1).
+
+COPY understands the 2068's other screen modes too: the second screen, hi-color, and the
 512-column hi-res mode.
 
 These settings last until the TS-Pico is switched off.
@@ -1386,19 +1577,19 @@ The TS-Pico uses slots in two ways:
 
 ## 8.2 BOOT and DOCK
 
-```basic
-SAVE "tpi:boot"                : REM show the boot setting: BOOT is MEM=2, PAGE=1
-SAVE "tpi:dock"                : REM show the dock setting: DOCK is MEM=2, PAGE=0
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:boot"` | Show the boot setting, for example `BOOT is MEM=2, PAGE=1` |
+| `SAVE "tpi:dock"` | Show the dock setting, for example `DOCK is MEM=2, PAGE=0` |
 
 `MEM` is **1** for RAM and **2** for Flash; `PAGE` is the slot. To change them:
 
-```basic
-SAVE "tpi:boot" CODE 2,4: NEW     : REM start the 2068 from Flash slot 4
-SAVE "tpi:dock" CODE 2,12         : REM put Flash slot 12 (Crazy Bugs) in the dock
-SAVE "tpi:dock" CODE 0,1          : REM show the previous dock setting
-SAVE "tpi:dock" CODE 0,2          : REM swap back to it
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:boot" CODE 2,4: NEW` | Start the 2068 from Flash slot 4 |
+| `SAVE "tpi:dock" CODE 2,12` | Put Flash slot 12 (Crazy Bugs) in the dock |
+| `SAVE "tpi:dock" CODE 0,1` | Show the previous dock setting |
+| `SAVE "tpi:dock" CODE 0,2` | Swap back to it |
 
 The change happens straight away. The `: NEW` (or pressing TS Reset) restarts the 2068 so it
 boots the new ROM.
@@ -1431,6 +1622,23 @@ the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in t
 for example, and it takes the Spectrum ROM's place until you change the dock back
 (`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
 slot 0.
+
+### Leap
+
+Charlie Day's Leap languages run from the dock: Leap-Forth as a full Forth system, Leap V2 and
+Leap-C as a cartridge that runs one program. Their 32K ROM images don't work as a BOOT slot on
+this board, because they use parts of the extension ROM that the TS-Pico can't supply. Use the
+cartridges instead:
+
+- **Leap-Forth:** `forth_cart.dck`, in the `roms` folder of the 2068-Forth release zip
+  (github.com/nchiker/2068-Leap-Forth).
+- **Leap V2 and Leap-C:** the Leap IDE's **DCK** export builds a cartridge with your program in it.
+
+Put the cartridge in a slot (8.4), and when the loader offers to dock it and restart, answer **Y**.
+To start Leap every time you switch on, put it in a Flash slot and set `DCK_SLOT` in `config.ini`
+to that slot (Appendix D).
+
+Leap saves and loads on cassette, not on the SD card.
 
 ## 8.4 Putting a ROM or cartridge into a slot
 
@@ -1531,20 +1739,20 @@ The TS-Pico uses slots in two ways:
 
 ## 8.2 BOOT and DOCK
 
-```basic
-SAVE "tpi:boot"                : REM show the boot setting: BOOT is MEM=2, PAGE=1
-SAVE "tpi:dock"                : REM show the dock setting: DOCK is MEM=2, PAGE=0
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:boot"` | Show the boot setting, for example `BOOT is MEM=2, PAGE=1` |
+| `SAVE "tpi:dock"` | Show the dock setting, for example `DOCK is MEM=2, PAGE=0` |
 
 `MEM` is **1** for RAM, **2** for Flash and **3** for the SD card (8.5); `PAGE` is the slot.
 To change them:
 
-```basic
-SAVE "tpi:boot" CODE 2,4          : REM start the 2068 from Flash slot 4
-SAVE "tpi:dock" CODE 2,12         : REM put Flash slot 12 (Crazy Bugs) in the dock
-SAVE "tpi:dock" CODE 0,1          : REM show the previous dock setting
-SAVE "tpi:dock" CODE 0,2          : REM swap back to it
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:boot" CODE 2,4` | Start the 2068 from Flash slot 4 |
+| `SAVE "tpi:dock" CODE 2,12` | Put Flash slot 12 (Crazy Bugs) in the dock |
+| `SAVE "tpi:dock" CODE 0,1` | Show the previous dock setting |
+| `SAVE "tpi:dock" CODE 0,2` | Swap back to it |
 
 - **`tpi:boot` restarts the 2068** in the new ROM a moment after the message, when the setting
   changes or the loader has rewritten the slot (8.4). There's no need for `: NEW`.
@@ -1567,9 +1775,9 @@ you're back to normal.
 **64K of RAM in the dock.** A pair of RAM slots in the dock gives a program 64K of extra RAM in
 the cartridge bank:
 
-```basic
-SAVE "tpi:dock" CODE 1,4      : REM RAM slots 4 and 5 in the dock: 64K of RAM
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:dock" CODE 1,4` | RAM slots 4 and 5 in the dock: 64K of RAM |
 
 What a program writes there stays put until you switch off, even if you change the dock and come
 back later. Changing the dock away from a RAM slot takes about a second while the card saves it.
@@ -1646,10 +1854,10 @@ into a slot first, so a collection can live on the card. Put the slot files in a
 for a cartridge two files, `F08.bin` and `F09.bin` for slots 8 and 9. The release's
 `v3-slots.zip` holds files in that form. Then use memory **3**:
 
-```basic
-SAVE "tpi:dock" CODE 3,8      : REM the cartridge in F08.bin and F09.bin on the SD card
-SAVE "tpi:boot" CODE 3,4      : REM start the 2068 from F04.bin on the SD card
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:dock" CODE 3,8` | The cartridge in F08.bin and F09.bin on the SD card |
+| `SAVE "tpi:boot" CODE 3,4` | Start the 2068 from F04.bin on the SD card |
 
 - **The SD card is read once,** when you give the command. The ROM or cartridge is then in the
   card's memory, so you can take the SD card out afterwards.
@@ -1707,8 +1915,8 @@ You'll need a TAP of Spectrum programs on the card. These steps use `spectrum.ta
 - `SAVE "name"` saves a new `name.tap` in the current folder, replacing any file of that name.
 - `LOAD "tpi:name.tap"` and `LOAD "tpi:nnn"` mount another TAP from the current folder, by name or
   index number.
-- With the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068,
-  with `scroll?` for a long one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too.
+- `SAVE "tpi:dir"` lists the current folder, as `CAT` does on the 2068, with `scroll?` for a
+  long one. `SAVE "tpi:dir games"` and `SAVE "tpi:dir *.tap"` work too.
 
   ![SAVE "tpi:dir" on the Spectrum: the same listing as CAT on the 2068](images/zx48-dir.png)
 - Other `tpi:` commands aren't available: `SAVE "tpi:..."` gives **Q Parameter error**.
@@ -1737,19 +1945,46 @@ message (`CODE 1,0`).
 
 > **Note:** older instructions say `OUT 10,100`. That no longer works: use `OUT 14,14`.
 
+<!-- v2 -->
 ## 9.4 Summary
+<!-- /v2 -->
+<!-- v3 -->
+## 9.4 A joystick
+
+The card's joystick socket takes an Atari-style joystick, the 9-pin kind made for the Atari 2600,
+the Commodore 64 and the Spectrum's Kempston interfaces. Programs read it as a **Kempston
+joystick**, on port 31, so a Spectrum game that offers "Kempston" in its controls menu works with
+it: choose Kempston when it asks.
+
+To check the joystick, run this in either mode and move the stick:
+
+```basic
+10 PRINT AT 0,0; IN 31;"   ": GO TO 10
+```
+
+Nothing pressed reads 0. Right is 1, left 2, down 4, up 8 and fire 16, and they add up: up with
+fire reads 24. A second fire button, if the stick has one, works as fire.
+
+The 2068's own joystick ports, read by `STICK`, are a different thing: programs written for them
+don't see this socket. If another device on the 2068 also answers port 31, switch the card's off
+with `KEMPSTON` in `config.ini` (Appendix D).
+
+## 9.5 Summary
+<!-- /v3 -->
 
 1. Mount a TAP, `SAVE "tpi:zx48"`, then `OUT 244,3`.
-2. LOAD, SAVE and `LOAD "tpi:..."` work in Spectrum mode, and with the v4 Spectrum ROM so does
-   `SAVE "tpi:dir"`.
+2. LOAD, SAVE, `LOAD "tpi:..."` and `SAVE "tpi:dir"` work in Spectrum mode.
 3. `SAVE "tpi:zx48" CODE 0,2` picks the compatible loader for stubborn games.
 4. `OUT 244,0` then `OUT 14,14` brings you home.
+<!-- v3 -->
+5. Spectrum games read the card's joystick as a Kempston joystick, on port 31.
+<!-- /v3 -->
 
 ---
 
 # Chapter 10: Command Reference
 
-<!-- keywords: CAT · ERASE · FORMAT · MOVE · tpi: -->
+<!-- keywords: CAT · COPY · ERASE · FORMAT · LIST · MOVE · RESTORE # · tpi: -->
 
 **How to read an entry.** Messages appear only after `SAVE "tpi:verbose" CODE 1,1`, unless
 they're marked *(shown)*: with verbose off you see only the report. Listings and the forms
@@ -1760,38 +1995,63 @@ doesn't answer, **D** if you press **BREAK**, and **T** if the TS-Pico resets a 
 ## 10.1 BASIC keywords
 
 These are the 2068's own keywords, which Timex's ROM never implemented. The TS-Pico ROM
-makes them work on the SD card. Every argument is a string expression, so `CAT a$` and
-`ERASE "old"+n$` are fine, up to 64 characters. A name over 64 characters, or an empty name
-where one is required, gives **F**.
+makes them work on the SD card. COPY, LIST and RESTORE are ones Timex did implement, and
+their usual forms work as they always have: COPY on its own prints the screen (Chapter 7),
+LIST and `LIST 100` list the program, and RESTORE sets the DATA pointer. With a file name,
+COPY copies a file and LIST shows one; `RESTORE #n` goes back to the start of a file. Every
+argument is a string expression, so `CAT a$` and `ERASE "old"+n$` are fine, up to 64
+characters. A name over 64 characters, or an empty name where one is required, gives **F**.
 
 ### CAT: list files
 
-```basic
-CAT                  : REM the current folder
-CAT ""               : REM the blocks in the mounted TAP
-CAT "games"          : REM another folder
-CAT "*.tap"          : REM files matching a pattern
-CAT "games/b*"
-CAT "frogger.tap"    : REM the blocks in a TAP file
-```
+| Type | What it does |
+|---|---|
+| `CAT` | The current folder |
+| `CAT ""` | The blocks in the mounted TAP |
+| `CAT "games"` | Another folder |
+| `CAT "*.tap"` | Files matching a pattern |
+| `CAT "games/b*"` | Files in games starting with b |
+| `CAT "frogger.tap"` | The blocks in a TAP file |
 
 - Folders come first in `<angle brackets>`, then files. Mountable files in the current folder
   have index numbers.
 - With a pattern, the second line of the header shows the pattern and the counts, for example
   `*.tap: 12 files, 0 dirs`.
 - Files whose names start with a dot are hidden, unless the pattern starts with a dot.
+- The header's second line is the card: its label, or `SD` if it has none, then its size and
+  the space free, for example `GAMES: 240 MB; free: 236 MB`. A long label gets a shorter line.
 - **F**: `Not found:`, `Not a directory:`, `No match for` a pattern, or `Directory is empty` for
   another folder that's empty *(verbose)*.
 
 As a command: `SAVE "tpi:dir <arg>"`, or `SAVE "tpi:tapdir"` for `CAT ""`.
 
+### COPY: copy files
+
+| Type | What it does |
+|---|---|
+| `COPY "a.tap" TO "b.tap"` | Copy a.tap to b.tap |
+| `COPY "a.tap" TO "backup"` | Copy into a folder, keeping the name |
+| `COPY "*.tap" TO "backup"` | Copy all matching files into a folder |
+| `COPY` | Print the screen (Chapter 7) |
+
+- The original stays where it is. To rename or move a file, use MOVE.
+- It never overwrites. **F**: `/b.tap: exists`. With a pattern, each file gets its own line:
+  `copied`, `exists`, `same file`, `no such dir` or `copy failed`.
+- **F**: `Not found:`, `No match for`. **Q**: `Can't copy a directory`,
+  `Copy them to a directory` (a pattern needs a folder to copy into).
+- *(verbose)* `Copied a.tap` (the source's name).
+- `COPY "a"` with no `TO`, or `TO` with a name missing, is refused as you enter the line, like
+  any other mistyped statement.
+
+As a command: `SAVE "tpi:copy a.tap b.tap"`.
+
 ### ERASE: delete files
 
-```basic
-ERASE "old.tap"      : REM delete one file, no questions asked
-ERASE "*.bak"        : REM asks about each matching file
-ERASE "empty/"       : REM remove an empty folder (note the slash)
-```
+| Type | What it does |
+|---|---|
+| `ERASE "old.tap"` | Delete one file, no questions asked |
+| `ERASE "*.bak"` | Asks about each matching file |
+| `ERASE "empty/"` | Remove an empty folder (note the slash) |
 
 - With a pattern, you're asked `Erase NAME (Y/N)?` for each file. **Y** erases it; **N**, or
   any other key, skips that file and goes on to the next.
@@ -1803,58 +2063,109 @@ ERASE "empty/"       : REM remove an empty folder (note the slash)
 
 As a command: `SAVE "tpi:erase old.tap"`.
 
-### FORMAT: make a new TAP or folder
+### FORMAT: make a new TAP or folder, or name the card
 
-FORMAT **never formats your SD card.** It makes something new and empty:
+FORMAT **never formats your SD card.** It makes something new and empty, or names the card:
 
-```basic
-FORMAT "songs.tap"   : REM a new, empty TAP, mounted with append on
-FORMAT "songs"       : REM the same (.tap is added)
-FORMAT "tools/"      : REM a new folder
-```
+| Type | What it does |
+|---|---|
+| `FORMAT "songs.tap"` | A new, empty TAP, mounted with append on |
+| `FORMAT "songs"` | The same (`.tap` is added) |
+| `FORMAT "tools/"` | A new folder |
+| `FORMAT ":GAMES"` | Label the card GAMES |
+| `FORMAT ":"` | Take the label off |
 
 - **F**: `Already exists:` (FORMAT never overwrites), `Name not allowed:`, `Not found:` for the
-  parent folder. **Q**: `FORMAT makes "x.tap" or "dir/"` for any other extension.
+  parent folder, `Name required` for `".tap"` on its own. **Q**: `FORMAT makes "x.tap" or
+  "dir/"` for any other extension. A name with a dot in it needs `.tap` at the end:
+  `FORMAT "v1.2.tap"`, not `FORMAT "v1.2"`.
 - *(verbose)* `New .tap mounted: /songs.tap` or `Made /tools/`.
+- A name starting with `:` is the card's label, as `SAVE "tpi:label"` sets it (10.3). A file
+  name can't contain `:`, so this never clashes with making a file.
 
 As a command: `SAVE "tpi:format songs.tap"`.
+
+### LIST: show a file
+
+| Type | What it does |
+|---|---|
+| `LIST "notes.txt"` | Show a file on the screen |
+| `LIST "games/read.me"` | A path works too |
+| `LIST z$` | Any string expression |
+| `LIST` | The program, as always (also `LIST 100`, `LIST #3`) |
+
+- A text file shows as text, up to its first 8192 bytes. Line ends are kept, a TAB shows as two
+  spaces, and characters the 2068 can't show (`|`, `~`, `{`, `}`, accented letters) show as `?`.
+- Any other file shows as a hex dump of its first 2048 bytes, 8 bytes to a row: the address,
+  the bytes in hex, then the characters, with `.` for any that can't show.
+
+  ```
+  0000 4142434445464748 ABCDEFGH
+  ```
+
+- If that isn't the whole file, a last line says how much it was: `(the first 2048 of 6912
+  bytes)`. A long listing stops at each screen with `Scroll? (Y/n)`.
+- A file counts as text if its first 2048 bytes have no control codes except TAB, line feed and
+  carriage return, and no DEL (127).
+- LIST decides by how the expression starts. A quote, a string variable, `FN a$`, `STR$`,
+  `CHR$`, `INKEY$`, `SCREEN$` or `VAL$` means a file name; anything else is a line number, so
+  `LIST ("notes.txt")` is **C Nonsense in BASIC**: leave the brackets off.
+- **F**: `Not found:`. **Q**: `A directory:`, `LIST takes one file` (a pattern).
+
+As a command: `SAVE "tpi:list notes.txt"`.
 
 ### LOAD, SAVE, VERIFY, MERGE with `f:`
 
 See Chapter 5.
 
-### MOVE: copy files and change folder
+### MOVE: rename files and change folder
 
-```basic
-MOVE "a.tap" TO "b.tap"       : REM copy a.tap to b.tap
-MOVE "a.tap" TO "backup"      : REM copy into a folder, keeping the name
-MOVE "*.tap" TO "backup"      : REM copy all matching files into a folder
-MOVE TO "games"               : REM change folder
-MOVE TO ""                    : REM back to the previous folder
-```
+| Type | What it does |
+|---|---|
+| `MOVE "old.tap" TO "new.tap"` | Rename a file |
+| `MOVE "game.tap" TO "archive"` | Move into a folder, keeping the name |
+| `MOVE "tools" TO "utils"` | Rename a folder |
+| `MOVE TO "games"` | Change folder (also `..`, `/`, `a/b`, `/a/b`) |
+| `MOVE TO "-"` | Back to the previous folder |
+| `MOVE TO ""` | Pick a folder from a menu (3.2) |
 
-- MOVE **copies**; the original stays where it is. To rename or move, use `tpi:ren`.
-- It never overwrites. **F**: `/b.tap: exists`. With a pattern, each file gets its own line:
-  `copied`, `exists`, `same file`, `no such dir` or `copy failed`.
-- **F**: `Not found:`, `No match for`. **Q**: `Can't copy a directory`,
-  `Copy them to a directory` (a pattern needs a folder to copy into).
-- *(verbose)* `Copied B.TAP`.
+- MOVE renames; it doesn't copy. To copy a file, use COPY.
+- It never overwrites. **F**: `Not found:`, `Already exists:`.
+- **Q**: `File is mounted`, `Can't rename the current directory` (also a folder above it),
+  `Can't move a directory into itself`.
+- *(verbose)* `Renamed to /new.tap`.
 
-As commands: `SAVE "tpi:copy a.tap b.tap"` and `SAVE "tpi:cd games"`.
+As commands: `SAVE "tpi:ren old.tap new.tap"` and `SAVE "tpi:cd games"`.
 
 ### OPEN # and CLOSE #
 
 See Chapter 6.
 
+### RESTORE #: back to the start of a file
+
+| Type | What it does |
+|---|---|
+| `RESTORE #4` | Go back to the start of the file on stream 4 |
+| `RESTORE` | Reset the DATA pointer, as always (also `RESTORE 100`) |
+
+- The next `INPUT #4` reads from the first byte; the next `PRINT #4` writes from the start, over
+  what's there.
+- What was printed to the stream before is sent first, and anything read ahead is dropped. On a
+  record file, the open record is finished first.
+- **O**: stream 4 isn't open to an `"f:"` file (not open, a screen or printer stream, or a
+  number over 15).
+
+See 6.3.
+
 ## 10.2 Mounting: LOAD "tpi:..."
 
-```basic
-LOAD "tpi:frogger.tap"    : REM mount by name (current folder only)
-LOAD "tpi:3"              : REM mount by index number
-LOAD "tpi:myrom.rom"      : REM mount a ROM image; then LOAD "" runs the ROM loader
-LOAD "tpi:game.dck"       : REM mount a cartridge; then LOAD "" runs the cartridge loader
-LOAD "tpi:dirinfo.tap"    : REM mount the folder listing as a tape (see below)
-```
+| Type | What it does |
+|---|---|
+| `LOAD "tpi:frogger.tap"` | Mount by name (current folder only) |
+| `LOAD "tpi:03"` | Mount by index number (two digits or more) |
+| `LOAD "tpi:myrom.rom"` | Mount a ROM image; then `LOAD ""` runs the ROM loader |
+| `LOAD "tpi:game.dck"` | Mount a cartridge; then `LOAD ""` runs the cartridge loader |
+| `LOAD "tpi:dirinfo.tap"` | Mount the folder listing as a tape (see below) |
 
 - Names match regardless of case. TAP, DCK, ROM and BIN files can be mounted. VERIFY and MERGE
   with `"tpi:..."` mount too.
@@ -1865,33 +2176,36 @@ LOAD "tpi:dirinfo.tap"    : REM mount the folder listing as a tape (see below)
   for example a TZX file, a damaged cartridge, or a failed copy.
 - **For programmers:** `dirinfo.tap` holds one character array, `a$`. Row 1 is the number of
   folders, row 2 the number of files, then the folder names, then rows of
-  `nnn name        size`. `LOAD "" DATA a$()` reads it into your program. `OPEN #n,"d:"` is
-  easier.
+  `nnn name        size`. `LOAD "" DATA a$()` reads it into your program. `OPEN #n,"x:"`
+  gives the same rows without mounting anything (see 6.9).
 
 ## 10.3 The `tpi:` commands
 
+Where a command has a keyword in 10.1, the entry says so: use the keyword, and the command
+only for what the keyword can't do. The rest have no keyword.
+
 ### append
 
-```basic
-SAVE "tpi:append"            : REM show: Append is ON / Append is OFF / No .tap mounted
-SAVE "tpi:append" CODE 1,1   : REM on  (or SAVE "tpi:append on")
-SAVE "tpi:append" CODE 1,0   : REM off (or SAVE "tpi:append off")
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:append"` | Show it: `Append is ON`, `Append is OFF` or `No .tap mounted` |
+| `SAVE "tpi:append" CODE 1,1` | Turn it on (or `SAVE "tpi:append on"`) |
+| `SAVE "tpi:append" CODE 1,0` | Turn it off (or `SAVE "tpi:append off"`) |
 
 With append on, SAVEs are added to the end of the mounted TAP. **Q**: `No .tap mounted. Append
 failed.` Mounting a file turns append off. See 4.3.
 
 ### automount: your own LOAD "" at switch-on
 
-```basic
-SAVE "tpi:automount mymenu.tap"   : REM mount this file at switch-on
-SAVE "tpi:automount"              : REM show it
-SAVE "tpi:automount off"          : REM back to the built-in menu
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:automount mymenu.tap"` | Mount this file at switch-on |
+| `SAVE "tpi:automount"` | Show it |
+| `SAVE "tpi:automount off"` | Back to the built-in menu |
 
 The file is found from the current folder (`.tap` is added if you leave it out) and kept with
 its whole path; the current folder at switch-on is still the top one. Nothing is mounted now.
-See 3.7. **F**: `Not found:`. **J**: no SD card. The name can be up to 17 characters (1.2).
+See 3.8. **F**: `Not found:`. **J**: no SD card. The name can be up to 17 characters (1.2).
 
 ### autolf, noautolf, autopg, noautopg, bmp, clprint, opprint, prnsz
 
@@ -1899,10 +2213,10 @@ The virtual printer's settings. See Chapter 7.
 
 ### boot  (also memboot)
 
-```basic
-SAVE "tpi:boot"              : REM show: BOOT is MEM=2, PAGE=1
-SAVE "tpi:boot" CODE m,s     : REM m: 1 = RAM, 2 = Flash; s: slot 0-15
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:boot"` | Show it, for example `BOOT is MEM=2, PAGE=1` |
+| `SAVE "tpi:boot" CODE m,s` | m is 1 for RAM or 2 for Flash; s is the slot, 0-15 |
 
 <!-- v3 -->
 `m` can also be 3, a slot on the SD card (8.5).
@@ -1923,15 +2237,18 @@ boot a RAM slot you've loaded since switching on.
 
 ### cd: change folder
 
-```basic
-SAVE "tpi:cd games"          : REM also .., /, -, a/b, /a/b
-SAVE "tpi:cd"                : REM pick from a menu of folders
-SAVE "tpi:cd" CODE 0,1       : REM pick from every folder on the card
-SAVE "tpi:cd games" CODE 1,0 : REM ... then list it
-SAVE "tpi:cd games" CODE 1,1 : REM ... then pick a file to mount (like idir)
-SAVE "tpi:cd games" CODE 1,2 : REM ... then list the full names
-SAVE "tpi:cd games" CODE 2,0 : REM ... then show the new path
-```
+**Keyword:** `MOVE TO "games"`, `MOVE TO "-"`, and `MOVE TO ""` for the menu. Only the command
+picks from every folder on the card (`CODE 0,1`) or does more once it gets there (`CODE 1,n`, `CODE 2,0`).
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:cd games"` | Go to games (also `..`, `/`, `-`, `a/b`, `/a/b`) |
+| `SAVE "tpi:cd"` | Pick from a menu of folders |
+| `SAVE "tpi:cd" CODE 0,1` | Pick from every folder on the card |
+| `SAVE "tpi:cd games" CODE 1,0` | Go to games, then list it |
+| `SAVE "tpi:cd games" CODE 1,1` | Go to games, then pick a file to mount (like idir) |
+| `SAVE "tpi:cd games" CODE 1,2` | Go to games, then list the full names |
+| `SAVE "tpi:cd games" CODE 2,0` | Go to games, then show the new path |
 
 *(verbose)* `Changed dir to: games` and `Current: /TAP/GAMES`. **F**: `OS error changing to:` a
 folder that isn't there, or `-` with no previous folder. **Q**: the same message for a full path
@@ -1941,23 +2258,26 @@ whose folder isn't there, such as `/tap/x`.
 
 `SAVE "tpi:close"`. Always **0 OK**. *(verbose)* `Unmounting file.`
 
-### copy, erase, format
+### copy, erase, format, list
 
-The command forms of MOVE, ERASE and FORMAT: `SAVE "tpi:copy a.tap b.tap"` (the two names
-separated by a space), `SAVE "tpi:erase x"` and `SAVE "tpi:format x.tap"`. They behave like the
-keywords, with two differences: the whole name, `tpi:` included, must fit in 31 characters, and a
-missing name gives **Q** (`Name required`, or for `tpi:copy`
-`Copy needs a source and a destination`) where the keyword gives **F**.
+The command forms of COPY, ERASE, FORMAT and LIST: `SAVE "tpi:copy a.tap b.tap"` (the two names
+separated by a space), `SAVE "tpi:erase x"`, `SAVE "tpi:format x.tap"` and
+`SAVE "tpi:list x"`. They behave like the keywords, with two differences: the whole name,
+`tpi:` included, must fit in 31 characters, and a missing name gives **Q** (`Name required`,
+or for `tpi:copy` `Copy needs a source and a destination`) where the keyword gives **F**.
 
 ### dir: list the current folder
 
-```basic
-SAVE "tpi:dir"               : REM the listing
-SAVE "tpi:dir *.tap"         : REM the same as CAT "*.tap"
-SAVE "tpi:dir" CODE 1,5      : REM the full name of file number 5
-SAVE "tpi:dir" CODE 2,0      : REM full names of all files, with their numbers
-SAVE "tpi:dir" CODE 2,20     : REM ... starting at file 20
-```
+**Keyword:** `CAT`, `CAT "games"`, `CAT "*.tap"`. Only the command shows long names in full
+(`CODE 1,n`, `CODE 2,n`).
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:dir"` | The listing |
+| `SAVE "tpi:dir *.tap"` | The same as `CAT "*.tap"` |
+| `SAVE "tpi:dir" CODE 1,5` | The full name of file number 5 |
+| `SAVE "tpi:dir" CODE 2,0` | Full names of all files, with their numbers |
+| `SAVE "tpi:dir" CODE 2,20` | The same, starting at file 20 |
 
 Long names are shortened in the middle with `>` in the normal listing; `CODE 1,n` and `CODE 2,n`
 show them in full. **6** for a number past the last file, with *(verbose)* `File index 12 out of
@@ -1965,12 +2285,12 @@ range 0-11` (twelve files), or `No files in this folder`.
 
 ### dock  (also memdock)
 
-```basic
-SAVE "tpi:dock"              : REM show: DOCK is MEM=2, PAGE=0
-SAVE "tpi:dock" CODE m,s     : REM m: 1 = RAM, 2 = Flash; s: slot 0-15
-SAVE "tpi:dock" CODE 0,1     : REM show the previous setting
-SAVE "tpi:dock" CODE 0,2     : REM swap with the previous setting
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:dock"` | Show it, for example `DOCK is MEM=2, PAGE=0` |
+| `SAVE "tpi:dock" CODE m,s` | m is 1 for RAM or 2 for Flash; s is the slot, 0-15 |
+| `SAVE "tpi:dock" CODE 0,1` | Show the previous setting |
+| `SAVE "tpi:dock" CODE 0,2` | Swap with the previous setting |
 
 <!-- v3 -->
 `m` can also be 3, a slot on the SD card (8.5).
@@ -1984,13 +2304,13 @@ ROM or cartridge is mounted for loading, choosing the slot the 2068 is running f
 
 ### ffw, rew: wind the tape
 
-```basic
-SAVE "tpi:ffw"               : REM one block
-SAVE "tpi:ffw" CODE 0,n      : REM n blocks
-SAVE "tpi:ffw" CODE 1,n      : REM n blocks, then show the tape
-SAVE "tpi:ffw" CODE 2,n      : REM n files (programs, code…)
-SAVE "tpi:ffw" CODE 3,n      : REM n files, then show the tape
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:ffw"` | One block |
+| `SAVE "tpi:ffw" CODE 0,n` | n blocks |
+| `SAVE "tpi:ffw" CODE 1,n` | n blocks, then show the tape |
+| `SAVE "tpi:ffw" CODE 2,n` | n files (programs, code…) |
+| `SAVE "tpi:ffw" CODE 3,n` | n files, then show the tape |
 
 `tpi:rew` works the same way, backwards. *(verbose)* `Moved ahead to block # 4`,
 `Can't FWD. Already at end.`, `Can't FWD. No later file.`, `No .tap file mounted`. All of these
@@ -1999,22 +2319,22 @@ are **0 OK**, even with nothing mounted: with verbose off, nothing tells you the
 <!-- v3 -->
 ### greet: a greeting at switch-on
 
-```basic
-SAVE "tpi:greet HELLO DAVID"   : REM say this at switch-on (and now)
-SAVE "tpi:greet"               : REM show it
-SAVE "tpi:greet off"           : REM no greeting
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:greet HELLO DAVID"` | Say this at switch-on (and now) |
+| `SAVE "tpi:greet"` | Show it |
+| `SAVE "tpi:greet off"` | No greeting |
 
-Speech, G.8. **A**: a name in `[...]` that isn't an allophone.
+Speech, G.9. **A**: a name in `[...]` that isn't an allophone.
 <!-- /v3 -->
 
 ### help
 
-```basic
-SAVE "tpi:help"              : REM a summary of the commands
-SAVE "tpi:help ?"            : REM the topics you can ask about
-SAVE "tpi:help cd"           : REM help on one topic
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:help"` | A summary of the commands |
+| `SAVE "tpi:help ?"` | The topics you can ask about |
+| `SAVE "tpi:help cd"` | Help on one topic |
 
 Topics come from the `help` folder on the SD card. They cover most TS-Pico commands and most
 BASIC keywords. **F**: `Help for "x" not found` *(shown)*. **Q**: `SD card help folder not found.` *(shown)*
@@ -2040,14 +2360,40 @@ the current folder and how many files are in it.
 
 With no SD card, the strip and the card's `none` turn red.
 
+### label: the card's name
+
+**Keyword:** `FORMAT ":GAMES"` and `FORMAT ":"`. Only the command shows the label on its own:
+CAT shows it too, on the card's line.
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:label"` | Show it: `Label: GAMES`, or `No label` |
+| `SAVE "tpi:label GAMES"` | Set it |
+| `SAVE "tpi:label -"` | Take it off |
+
+The label is the card's name, the one a PC or Mac shows for it. CAT shows it in place of `SD`
+on the card's line. `SAVE "tpi:label"` on its own always shows the label *(shown)*.
+
+- Up to 11 characters, kept in upper case. **Q**: `Not a label:` for a name that is too long,
+  starts with a space, or has a character the 2068 can't show or one of
+  `. " * + , / : ; < = > ? [ \ ] |`. **Q**: `Root folder full` on a card whose top folder has
+  no room for it.
+- *(verbose)* `Label: GAMES` or `Label taken off`.
+- Once the label is taken off, a PC or Mac may show the name the card had when it was
+  formatted: the card keeps a copy of that name, which the TS-Pico leaves alone. To change it,
+  set a new label instead.
+- The TS-Pico reads the label when the card goes in or at switch-on, so a label you change on a
+  computer shows once the card is back.
+- `FORMAT ":GAMES"` and `FORMAT ":"` do the same from BASIC.
+
 ### log
 
-```basic
-SAVE "tpi:log"               : REM the TS-Pico's activity log
-SAVE "tpi:log" CODE 0,500    : REM just the last 500 characters
-SAVE "tpi:log clear"         : REM empty it (asks first)
-SAVE "tpi:log clear" CODE 255,0   : REM empty it without asking
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:log"` | The TS-Pico's activity log |
+| `SAVE "tpi:log" CODE 0,500` | Just the last 500 characters |
+| `SAVE "tpi:log clear"` | Empty it (asks first) |
+| `SAVE "tpi:log clear" CODE 255,0` | Empty it without asking |
 
 The log records problems the TS-Pico couldn't show on the screen. It's worth a look when
 something's gone wrong. *(verbose)* `The log is empty` when nothing has been logged yet.
@@ -2055,15 +2401,17 @@ something's gone wrong. *(verbose)* `The log is empty` when nothing has been log
 
 ### loglevel
 
-```basic
-SAVE "tpi:loglevel"          : REM show: LOG level is 2 ERROR
-SAVE "tpi:loglevel 1"        : REM or CODE 1,1
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:loglevel"` | Show it, for example `LOG level is 2 ERROR` |
+| `SAVE "tpi:loglevel 1"` | Set it to 1 (or `CODE 1,1`) |
 
 What goes into the log: 0 INFO, 1 WARNING, 2 ERROR (the default), 3 CRITICAL, 4 SPECIAL. Lower
 numbers log more. The setting lasts until the TS-Pico is switched off.
 
 ### md: make a folder
+
+**Keyword:** `FORMAT "name/"`. Only the command goes into the new folder too (`CODE 1,0`).
 
 `SAVE "tpi:md name"`, or `CODE 1,0` to go into it too. *(verbose)* `Created dir: name`.
 
@@ -2075,28 +2423,38 @@ numbers log more. The setting lasts until the TS-Pico is switched off.
 <!-- v3 -->
 ### modem
 
-```basic
-SAVE "tpi:modem"             : REM show the modem's state
-SAVE "tpi:modem 2050"        : REM programs dial and see the carrier, as with a TS2050
-SAVE "tpi:modem hayes"       : REM talk to the modem directly, with AT commands
-SAVE "tpi:modem off"         : REM ports 115 and 119 not answered
-SAVE "tpi:modem flow on"     : REM Hayes mode: the card pauses the modem when it falls behind
-SAVE "tpi:modem flow off"
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:modem"` | Show the modem's state |
+| `SAVE "tpi:modem 2050"` | Programs dial and see the carrier, as with a TS2050 |
+| `SAVE "tpi:modem hayes"` | Talk to the modem directly, with AT commands |
+| `SAVE "tpi:modem off"` | Ports 115 and 119 not answered |
+| `SAVE "tpi:modem flow on"` | Hayes mode: the card pauses the modem when it falls behind |
+| `SAVE "tpi:modem flow off"` | Hayes mode: no pausing (the setting at switch-on) |
 
 The modem, Appendix F. The show form gives the mode, whether the WiFi part is on, the line
 (on-hook, connected …) and the calls made, for example `Modem: 2050 mode, ESP32 on` and
 `Line on-hook; 3 calls, 2 made`; in Hayes mode the second line starts `Flow on` or `Flow off`
 instead. A mode is saved for the next start (`MODEM_MODE` in `config.ini`); flow isn't, and a
 mode change turns it off (F.6). **A**: any other word.
+
+### net: programs from the archive
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:net"` | List the archive's categories, numbered |
+| `SAVE "tpi:net 5"` | Open number 5: a folder is listed, a program is downloaded to `/TAP/NET` |
+| `SAVE "tpi:net 5" CODE 255,0` | The same, replacing a file of that name without asking |
+| `SAVE "tpi:net more"` | The rest of a big folder's list |
+| `SAVE "tpi:net .."` | The folder above |
+| `SAVE "tpi:net find word"` | Programs whose name or title has the word (or every word) |
+| `SAVE "tpi:net update"` | Download the archive's index again |
+
+Appendix F.7. *(verbose)* `Saved /TAP/NET/name.tap` and how to load it. **J**: `Not on WiFi`
+(see `wifi`), `Download failed`, or another WiFi problem. **6**: a number not in the list, or
+`Too big for the card:` a program over 48K. **Q**: `No list yet` or `No more in this folder`.
+**A**: any other word.
 <!-- /v3 -->
-
-### newtap: make a new TAP
-
-`SAVE "tpi:newtap name"` makes `name.tap`, mounts it and switches append on. A name that
-already ends in `.tap` is used as it is: `tpi:newtap a.b.tap` makes `a.b.tap`. **F**: no name
-(`Name required for new .tap file` *(shown)*, also for `.tap` on its own), a name with `:*\/|"<>` in it,
-or a file of that name already there (`File exists:`; the file is left alone).
 
 ### nop
 
@@ -2104,10 +2462,13 @@ or a file of that name already there (`File exists:`; the file is left alone).
 
 ### path
 
-```basic
-SAVE "tpi:path"              : REM the current folder
-SAVE "tpi:path" CODE 1,0     : REM the mounted file
-```
+**Keyword:** none, but `CAT` shows the current folder in its first line. Only the command
+shows the mounted file's path (`CODE 1,0`).
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:path"` | The current folder |
+| `SAVE "tpi:path" CODE 1,0` | The mounted file |
 
 ### picopt, ts2040, sdcard, tape
 
@@ -2117,12 +2478,14 @@ Chapter 7.
 
 ### ren: rename or move a file
 
-```basic
-SAVE "tpi:ren old.tap new.tap"    : REM rename
-SAVE "tpi:ren game.tap archive"   : REM move into a folder, keeping the name
-```
+**Keyword:** `MOVE "old.tap" TO "new.tap"`, which does the same.
 
-This works for folders too.
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:ren old.tap new.tap"` | Rename |
+| `SAVE "tpi:ren game.tap archive"` | Move into a folder, keeping the name |
+
+The command form of MOVE "a" TO "b". This works for folders too.
 
 - **F**: `Not found:`, `Already exists:`. 
 - **Q**: `File is mounted`,
@@ -2130,13 +2493,16 @@ This works for folders too.
 
 ### rm: remove a file or empty folder
 
-```basic
-SAVE "tpi:rm old.tap"        : REM asks: Remove "old.tap" (y/N)?
-SAVE "tpi:rm notes.txt"      : REM any kind of file
-SAVE "tpi:rm GAMES/old.tap"  : REM a path works too
-SAVE "tpi:rm 3"              : REM by index number
-SAVE "tpi:rm old.tap" CODE 255,0   : REM without asking
-```
+**Keyword:** `ERASE "old.tap"`, which doesn't ask for one file and takes `"name/"` for a
+folder. Only the command asks first, and takes an index number.
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:rm old.tap"` | Asks first: `Remove "old.tap" (y/N)?` |
+| `SAVE "tpi:rm notes.txt"` | Any kind of file |
+| `SAVE "tpi:rm GAMES/old.tap"` | A path works too |
+| `SAVE "tpi:rm 3"` | By index number |
+| `SAVE "tpi:rm old.tap" CODE 255,0` | Without asking |
 
 Press **Y** to remove it. A folder must be empty: one that isn't is refused with the **Q**
 below before you're asked, the same with or without `CODE 255,0`.
@@ -2149,11 +2515,11 @@ below before you're asked, the same with or without `CODE 255,0`.
 <!-- v3 -->
 ### say: speak
 
-```basic
-SAVE "tpi:say HELLO, I AM YOUR TIMEX"   : REM speak English
-SAVE "tpi:say [HH1 EH LL OW]"           : REM speak allophones by name
-SAVE "tpi:say"                          : REM stop speaking
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:say HELLO, I AM YOUR TIMEX"` | Speak English |
+| `SAVE "tpi:say [HH1 EH LL OW]"` | Speak allophones by name |
+| `SAVE "tpi:say"` | Stop speaking |
 
 Speech, Appendix G. The card speaks while the 2068 carries on; another `tpi:say` waits its
 turn. At most 23 characters of text (the whole name fits in 31): say longer text in pieces.
@@ -2162,29 +2528,45 @@ turn. At most 23 characters of text (the whole name fits in 31): say longer text
 
 ### tapdir: look inside the mounted TAP
 
-```basic
-SAVE "tpi:tapdir"            : REM every block
-SAVE "tpi:tapdir" CODE 0,3   : REM three blocks either side of the pointer
-SAVE "tpi:tapdir" CODE 0,255 : REM a screenful around the pointer
-SAVE "tpi:tapdir" CODE 1,0   : REM one line per file
-```
+**Keyword:** `CAT ""`, and `CAT "other.tap"` for a TAP that isn't mounted. Only the command
+shows part of the tape (`CODE 0,n`) or one line per file (`CODE 1,0`).
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:tapdir"` | Every block |
+| `SAVE "tpi:tapdir" CODE 0,3` | Three blocks either side of the pointer |
+| `SAVE "tpi:tapdir" CODE 0,255` | A screenful around the pointer |
+| `SAVE "tpi:tapdir" CODE 1,0` | One line per file |
 
 ` --  No .TAP file mounted!  -- ` if there's nothing to show.
 
 ### verbose
 
-```basic
-SAVE "tpi:verbose"           : REM show: Verbose is enabled / disabled
-SAVE "tpi:verbose" CODE 1,1  : REM on  (or "tpi:verbose on")
-SAVE "tpi:verbose" CODE 1,0  : REM off (or "tpi:verbose off")
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:verbose"` | Show it: `Verbose is enabled` or `Verbose is disabled` |
+| `SAVE "tpi:verbose" CODE 1,1` | Turn it on (or `SAVE "tpi:verbose on"`) |
+| `SAVE "tpi:verbose" CODE 1,0` | Turn it off (or `SAVE "tpi:verbose off"`) |
 
 At switch-on, the setting comes from `config.ini` (off unless you change it; see Appendix D).
 
+<!-- v3 -->
+### wifi
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:wifi"` | Show whether the modem is on WiFi, and its address |
+| `SAVE "tpi:wifi name,password"` | Join that network and keep it for next time |
+
+`WiFi: on, address 192.168.1.20`, or `WiFi: not on a network`. A name and password together
+can be 22 characters at most; for a longer one, use `ATW` in Hayes mode (F.2). **J**:
+`Can't join` the network. **A**: no comma.
+<!-- /v3 -->
+
 ### zx48
 
-Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` mounts a TAP and,
-with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
+Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` mounts a TAP and
+`SAVE "tpi:dir"` lists the folder.
 
 ## 10.4 Commands you may see mentioned elsewhere
 
@@ -2192,8 +2574,10 @@ with the v4 Spectrum ROM, `SAVE "tpi:dir"` lists the folder.
   the ROM loaders and the disk keywords. You won't need to type them.
 - **upgrade**, **rompatch** and **sys** belonged to the old 1.1 update process and have been
   removed. Use the web updater (Appendix A).
-- **config**, **delete**, **freset**, **getconfig**, **list**, **meminfo** and **stop** are
-  reserved for the future. They give **C** with `CMD OK, but not yet implemented`.
+- **config**, **delete**, **freset**, **getconfig** and **stop** are reserved for the future.
+  They give **C** with `CMD OK, but not yet implemented`.
+- **meminfo** is for developers: `SAVE "tpi:meminfo"` shows the Pico's free memory and the
+  largest single piece of it, and writes the numbers to its USB console and log.
 - **.fact** and **.rndw** are examples for programmers (see the Programmer's Manual).
 
 - Version 1.1 names such as `LOAD "tpi:dir"`, `getinfo`, `gethelp` and `getlog` have been replaced
@@ -2251,8 +2635,24 @@ the next one.
 
 ### D BREAK - CONT repeats after a SAVE "f:..."
 
-**Fix.** SAVE again and press **Y** at `Replace? (Y/N)`.
-**Likely cause.** You answered something other than **Y**. The file is untouched.
+**Fix.** SAVE again and press **Y** at `Replace? (Y/N)`, and **ENTER** at `Start tape`.
+**Likely cause.** You answered something other than **Y**, or SPACE was still down when the save
+started (SPACE is BREAK to the tape routines). The file is untouched.
+
+### L BREAK into program just after a program caught BREAK
+
+**Fix.** Make the program wait until the keys are let go. At the line your `ON ERR GO TO`
+jumps to (here 100), set the trap again and wait for the keyboard to go quiet:
+
+```basic
+100 ON ERR GO TO 100
+110 IF INKEY$<>"" THEN GO TO 110
+120 PAUSE 25: ON ERR RESET
+```
+
+**Likely cause.** The program caught the **D** from **BREAK** and carried on while CAPS SHIFT
+and SPACE were still down. The 2068 checks for BREAK between statements, so the next one stops
+with **L BREAK into program**, or the next TS-Pico command gives **D** again.
 
 ### F on a SAVE
 
@@ -2262,16 +2662,16 @@ the next one.
 
 ### LOAD "tpi:dir" gives F
 
-**Fix.** Use `SAVE "tpi:dir"`, or `CAT`.
+**Fix.** Use `CAT`, or `SAVE "tpi:dir"`.
 **Likely cause.** `LOAD "tpi:dir"` is version 1.1's command; it now tries to mount a file
 called `dir`.
 
-### 8 End of file on a LOAD
+### R Tape loading error after a LOAD shows other names
 
 **Fix.** Check the name with `CAT ""`.
 **Fallback.** Mount the TAP that holds the program.
 **Likely cause.** Nothing on the mounted tape matches what you asked for. LOAD has already gone
-all the way round the tape (4.1).
+all the way round the tape (4.1), showing the name of each block it passed.
 
 ### A mounted file can't be erased or renamed
 
@@ -2285,7 +2685,7 @@ mounted`).
 **Fallback.** Go into another folder and back.
 **Likely cause.** The file was copied onto the card from a computer after the last listing.
 
-### The screen is garbled with coloured stripes at switch-on, and TS Reset doesn't help
+### The screen is garbled with colored stripes at switch-on, and TS Reset doesn't help
 
 **Fix.** If you'd been trying out a ROM with `tpi:boot`, switch off and on twice to get back to
 the standard ROM.
@@ -2362,17 +2762,14 @@ Install the firmware and the ROM from the same release: they are made to work to
 2. Connect the Pico's Micro-USB socket to your computer. Close Thonny or anything else that
    might be using the Pico.
 3. Open the TS-Pico web updater,
-   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Latest release**.
-4. Press **Connect to TS-Pico** and choose the Pico in the list. The page reads what's installed
-   and suggests the right steps.
-5. Choose your options:
-   - **Erase the Pico first** is recommended. The page ticks it, and keeps it ticked, when the
-     ROM is being updated.
-   - **Update the TS-2068 ROM** is needed on every board that isn't already on this release.
-     The page ticks it for you unless the board already runs it.
+   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Mac**
+   at Step 1 (on Linux and ChromeOS too). It installs the latest release.
+4. Press **Connect to TS-Pico** and choose the Pico in the list. The page reads what's installed.
+5. Every update erases the Pico and updates the TS-2068 ROM: the firmware needs its matching
+   ROM. There's nothing to choose.
 6. Press **Start**, and follow the page. It puts the Pico into its update mode by itself. If your
    browser asks you to pick a drive, choose **RPI-RP2**.
-7. **If you're updating the ROM**, the page asks you to go to the 2068:
+7. For the ROM update, the page asks you to go to the 2068:
    1. Fit the **P10 jumper** if your board has one, and leave it on.
    2. Switch the 2068 **on**.
    3. Type `OUT 244,3` and press **ENTER**. This switches to the Spectrum ROM.
@@ -2381,8 +2778,8 @@ Install the firmware and the ROM from the same release: they are made to work to
    6. Switch the 2068 **off** again, and press **The 2068 is off — continue** on the page.
 8. The page installs the firmware and copies its files to the Pico.
 9. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
-   reads `2026 TS-Pico ROM v2.3`. Try `CAT`. `PRINT PEEK 101` gives **35** (ROM 2.3), and
-   `SAVE "tpi:info"` shows firmware 2.3.1 and ROM 2.3.
+   reads `2026 TS-Pico ROM v2.4`. Try `CAT`. `PRINT PEEK 101` gives **36** (ROM 2.4), and
+   `SAVE "tpi:info"` shows firmware 2.4 and ROM 2.4.
 
 > **Why unplug the USB cable at the end?** It gives the TS-Pico and its SD card a real power-off.
 > A card left powered through a firmware update can be stuck until it loses power (see 2.6).
@@ -2392,20 +2789,19 @@ the Pico's white **BOOTSEL** button, press and release the TS-Pico's **Pico Rese
 unplug and replug the USB cable), then let go. A drive called **RPI-RP2** appears on your
 computer. Leave it alone and press **Start** without connecting.
 
-**On Windows**, the browser can't put the firmware onto the Pico. Download
-**TS-Pico-Updater.exe** from the
+**On Windows**, the browser can't put the firmware onto the Pico. Choose **Windows** at Step 1
+on the updater page and download **TS-Pico-Updater.exe**, or get it from the
 [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
-click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
-release**, then **Connect to TS-Pico**, tick the options, press **Start**, and follow the same
-steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
+click **More info**, then **Run anyway**. The program works like the web page: press **Connect to
+TS-Pico**, then **Start**, and follow the same steps as above. You don't have to pick a port or a drive. It finds the Pico by itself.
 
 **Doing it by hand.** The updater's "Do it by hand instead" section offers each file for
 download. Put the Pico in BOOTSEL mode before each `.uf2` file and drag the file onto the
-RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then, unless the board already
-has this release's ROM, `upgrade.uf2` and the ROM steps above, then `firmware.uf2`. The
-firmware and the ROM go together: firmware 2.3 needs ROM 2.3. Finally connect with the web page
-and press Start with **Erase** unticked to copy the files.
+RPI-RP2 drive: first `flash_nuke.uf2` (it erases the Pico), then `upgrade.uf2` and the ROM
+steps above, then `firmware.uf2`. The firmware and the ROM go together: firmware 2.4 needs ROM
+2.4. Only the guided update copies the firmware's files to the Pico, so finish by connecting
+with the web page and pressing **Start**.
 
 ## A.3 Updating the SD card
 
@@ -2429,14 +2825,14 @@ To go back, switch off and on twice, or `SAVE "tpi:boot" CODE 2,1: NEW`. You can
 
 ## A.5 If slot 1 gets damaged
 
-If the 2068 starts with coloured stripes and TS Reset doesn't help, but another slot boots, you
+If the 2068 starts with colored stripes and TS Reset doesn't help, but another slot boots, you
 can put the standard ROM back from the SD card:
 
-1. Copy the ROM file, `TSPICO-23.ROM`, to the card's `TAP` folder. It's in the release
+1. Copy the ROM file, `TSPICO-24.ROM`, to the card's `TAP` folder. It's in the release
    `.zip` (in `src/rom`), from <https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest>.
 2. Boot a working ROM from another slot, for example a test ROM in slot 4
    (`SAVE "tpi:boot" CODE 2,4: NEW`).
-3. `LOAD "tpi:TSPICO-23.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
+3. `LOAD "tpi:TSPICO-24.ROM"` then `LOAD ""`. Choose **Flash(2)** and slot **1**, and confirm
    that you're sure.
 4. Switch off, unplug the USB cable, and switch on again.
 
@@ -2477,7 +2873,8 @@ the card's memory, written like any other file.
 2. Connect the card's USB-C socket to your computer. Close Thonny or anything else that might be
    using it.
 3. Open the TS-Pico web updater,
-   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Latest release**.
+   <https://timex-sinclair-projects.github.io/tspico-firmware-build/updater/>, and choose **Mac**
+   at Step 1 (on Linux and ChromeOS too). It installs the latest release.
 4. Press **Connect to TS-Pico** and choose the card in the list. The page sees that it's a v3
    card.
 5. Leave **Modem firmware (v3 card)** ticked: it checks the modem's own software and installs
@@ -2488,19 +2885,19 @@ the card's memory, written like any other file.
    Spectrum and TS-Pico ROMs, are always replaced; your own ROMs and cartridges in the other
    slots are kept. Nothing is erased.
 7. When it says **Done**, unplug the USB cable, then switch the 2068 on. The start-up line
-   reads `2026 TS-Pico ROM v2.3`. Try `CAT`. `SAVE "tpi:info"` shows the firmware and ROM
+   reads `2026 TS-Pico ROM v2.4`. Try `CAT`. `SAVE "tpi:info"` shows the firmware and ROM
    versions.
 
 **If the page can't connect,** put the card into update mode by hand: hold its **BOOTSEL**
 button, press and release **RUN**, then let go. A drive called **RP2350** appears on your
 computer. Leave it alone and press **Start** without connecting.
 
-**On Windows**, the browser can't put the firmware onto the card. Download
-**TS-Pico-Updater.exe** from the
+**On Windows**, the browser can't put the firmware onto the card. Choose **Windows** at Step 1
+on the updater page and download **TS-Pico-Updater.exe**, or get it from the
 [latest release](https://github.com/timex-sinclair-projects/tspico-firmware-build/releases/latest)
 and run it. There's nothing to install. Windows may warn that it doesn't know the program:
-click **More info**, then **Run anyway**. The program works like the web page: choose **Latest
-release**, then **Connect to TS-Pico**, press **Start**, and follow the same steps as above.
+click **More info**, then **Run anyway**. The program works like the web page: press **Connect to
+TS-Pico**, then **Start**, and follow the same steps as above.
 You don't have to pick a port or a drive. It finds the card by itself.
 
 **Doing it by hand.** Put the card in update mode (BOOTSEL and RUN) and drag `firmware-v3.uf2`
@@ -2532,9 +2929,9 @@ boot it from there (8.5).
 
 ## A.5 If slot 1 gets damaged
 
-If the 2068 starts with coloured stripes and TS Reset doesn't help, the ROM in slot 1 may be
+If the 2068 starts with colored stripes and TS Reset doesn't help, the ROM in slot 1 may be
 damaged. Run the web updater (A.2): it always rewrites slots 0 and 1. Or, if another slot
-boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`), into
+boots, load the ROM file, `TSPICO-24.ROM` (in the release `.zip`, in `src/rom`), into
 **Flash(2)** slot **1** as in A.4, and confirm that you're sure.
 
 ## A.6 Summary
@@ -2557,15 +2954,15 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | **2 Variable not found** | A string variable in a keyword's argument doesn't exist |
 | **4 Out of memory** | No room to build a command, or for another open file |
 | **6 Number too big** | A file index out of range |
-| **8 End of file** | Read past the end; nothing matched on the tape; the folder already exists (`tpi:md`) |
+| **8 End of file** | Read past the end; the folder already exists (`tpi:md`) |
 | **A Invalid argument** | A `CODE a,b` or argument the command doesn't accept; an empty program SAVE |
 | **C Nonsense in BASIC** | An unknown `tpi:` word; a command not yet implemented; extra words after an argument; a `tpi:` name longer than 31 characters (1.2) |
 | **D BREAK - CONT repeats** | You pressed **BREAK**, or declined "Replace?" |
-| **F Invalid file name** | Not found; not allowed; already exists (FORMAT, MOVE, ren) |
+| **F Invalid file name** | Not found; not allowed; already exists (FORMAT, COPY, MOVE, ren) |
 | **J Invalid I/O device** | The TS-Pico didn't answer, or an SD card that won't mount |
-| **O Invalid stream** | OPEN # of a stream that's already open to a file |
+| **O Invalid stream** | OPEN # of a stream that's already open to a file; RESTORE # of a stream that isn't |
 | **Q Parameter error** | Can't be done right now: mounted, not empty, wrong mode, wrong type, too long, booted slot |
-| **R Tape loading error** | Data damaged in transit, or a damaged TAP or file |
+| **R Tape loading error** | Data damaged in transit; a damaged TAP or file; nothing on the tape matched a LOAD |
 | **T TS-Pico reset, try again** | The TS-Pico reset a transfer that went wrong. Try again. |
 
 ---
@@ -2579,16 +2976,20 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | List the current folder | `CAT` | `SAVE "tpi:dir"` |
 | List matching files | `CAT "*.tap"` | `SAVE "tpi:dir *.tap"` |
 | Look inside the mounted TAP | `CAT ""` | `SAVE "tpi:tapdir"` |
+| Show a file | `LIST "notes.txt"` | `SAVE "tpi:list notes.txt"` |
 | Change folder | `MOVE TO "games"` | `SAVE "tpi:cd games"` |
-| Back to the previous folder | `MOVE TO ""` | `SAVE "tpi:cd -"` |
-| Where am I? |  | `SAVE "tpi:path"` |
+| Back to the previous folder | `MOVE TO "-"` | `SAVE "tpi:cd -"` |
+| Pick a folder from a menu | `MOVE TO ""` | `SAVE "tpi:cd"` |
+| Where am I? | `CAT` (its first line) | `SAVE "tpi:path"` |
 | Make a folder | `FORMAT "dir/"` | `SAVE "tpi:md dir"` |
-| Copy a file | `MOVE "a" TO "b"` | `SAVE "tpi:copy a b"` |
-| Rename or move a file |  | `SAVE "tpi:ren a b"` |
+| Copy a file | `COPY "a" TO "b"` | `SAVE "tpi:copy a b"` |
+| Rename or move a file | `MOVE "a" TO "b"` | `SAVE "tpi:ren a b"` |
 | Delete a file | `ERASE "a"` | `SAVE "tpi:erase a"` |
 | Delete matching files | `ERASE "*.bak"` | `SAVE "tpi:erase *.bak"` |
 | New empty TAP | `FORMAT "x.tap"` | `SAVE "tpi:format x.tap"` |
-| Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:3"` |
+| Name the card | `FORMAT ":GAMES"` | `SAVE "tpi:label GAMES"` |
+| Take the card's name off | `FORMAT ":"` | `SAVE "tpi:label -"` |
+| Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:03"` |
 | Pick a file to mount |  | `SAVE "tpi:idir"` |
 | Unmount |  | `SAVE "tpi:close"` |
 | Your own `LOAD ""` at switch-on |  | `SAVE "tpi:automount menu.tap"` |
@@ -2596,6 +2997,7 @@ boots, load the ROM file, `TSPICO-23.ROM` (in the release `.zip`, in `src/rom`),
 | Add SAVEs to the mounted TAP |  | `SAVE "tpi:append on"` |
 | Save a single file | `SAVE "f:x.bas"` |  |
 | Open a file stream | `OPEN #4,"f:x.txt","w"` |  |
+| Go back to the start of a file | `RESTORE #4` |  |
 | Read a folder listing | `OPEN #4,"d:*.tap"` |  |
 | Messages on/off |  | `SAVE "tpi:verbose" CODE 1,1` / `CODE 1,0` |
 | Status |  | `SAVE "tpi:info"` |
@@ -2635,15 +3037,15 @@ The TS-Pico keeps a few settings in a file called `config.ini` in the card's own
 the SD card). It's a single line of text:
 
 <!-- v2 -->
-```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": ""}
+```text
+{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": "", "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 
 The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 <!-- /v2 -->
 <!-- v3 -->
-```
-{"LOG_LEVEL": 2, "FW_VERSION": "2.3.1", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.3", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": ""}
+```text
+{"LOG_LEVEL": 2, "FW_VERSION": "2.4", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.4", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true, "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 <!-- /v3 -->
 
@@ -2660,9 +3062,11 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `ROM_SM` | Whether BOOT and DOCK use Flash, RAM or the SD card | `10` (both Flash) |
 <!-- /v3 -->
 | `ZX_TAPE_COMPAT` | Spectrum mode uses the compatible loader | `false` |
-| `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.3"`, `"2.3.1"` |
+| `ROM_VERSION`, `FW_VERSION` | Version information read by the updater; `tpi:info` shows `FW_VERSION`, and the ROM's own version | `"2.4"`, `"2.4"` |
 | `TELEMETRY` | Detailed trace messages over the USB cable, for developers | `false` |
-| `AUTOMOUNT` | The TAP mounted at switch-on, so `LOAD ""` loads it (3.7); `""` is none | `""` |
+| `AUTOMOUNT` | The TAP mounted at switch-on, so `LOAD ""` loads it (3.8); `""` is none | `""` |
+| `PRINTER_AUTOLF` | The virtual printer ends lines with CR+LF from switch-on, as `tpi:autolf` (7.3) | `false` |
+| `PRINTER_AUTOPG` | The virtual printer starts a new page every page length from switch-on, as `tpi:autopg` (7.3) | `false` |
 <!-- v2 -->
 | `LED_BRIGHTNESS` | Not used on the TS-Pico 2.x | `5` |
 <!-- /v2 -->
@@ -2674,7 +3078,8 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `SPEECH_VOLUME` | How loud the speech is, 0-100 (%) | `35` |
 | `SPEECH_RATE` | The speech's speed, 50-150 (%); its pitch moves with it | `100` |
 | `SPEECH_PORTS` | Programs can speak through ports 17 and 37 (Appendix G) | `true` |
-| `SPEECH_GREETING` | What the card says at switch-on (G.8); `""` is nothing | `""` |
+| `SPEECH_GREETING` | What the card says at switch-on (G.9); `""` is nothing | `""` |
+| `KEMPSTON` | The joystick socket answers port 31 as a Kempston joystick (9.4) | `true` |
 <!-- /v3 -->
 
 <!-- v2 -->
@@ -2707,9 +3112,12 @@ decided to learn MicroPython on the new Raspberry Pi Pico. His friend **Gustavo 
 developed the "tpi" system back in 1985, and adapted it for the TS-Pico. Ricardo
 contacted **David Anderson**, who hosted international Zoom meetings for Timex Sinclair fans
 and introduced Ricardo to **Tim H** of New Zealand and **Jeff Burrell** of the United States,
-who designed the hardware. **Ryan Gray** joined the team to work on the firmware and additional features.
+who designed the hardware. **Ryan Gray** joined the team to work on the firmware: he added the
+TS-Pico Commander, the help files and the test programs, and contributes to the MicroPython source.
+**Joe Vandezande** designed the 3D-printed enclosures for the TS-Pico, the PicoVideo and the
+expansion bus board, and helps with testing and troubleshooting.
 
-Thanks to **Paul Anderson**, **David Green** and **Adam Trionfo** for beta testing.
+Thanks to **Paul Anderson**, **David Green**, **François Lanciault** and **Adam Trionfo** for beta testing.
 
 Special thanks to the people of Timex Computer Corporation; to Johan "Dr Beep" Koelman, whose
 PC-ZX interface inspired the TS-Pico; to the members of the TS2068 list at groups.io and the
@@ -2722,7 +3130,7 @@ Zoom meetings; and to our families.
 <!-- v3 -->
 ---
 
-<!-- keywords: modem · WiFi · MTERM · tpi:modem -->
+<!-- keywords: modem · WiFi · MTERM · tpi:modem · tpi:net · tpi:wifi · archive -->
 
 # Appendix F: The Modem
 
@@ -2733,7 +3141,7 @@ that are still running, reached by telnet, or your own.
 
 ## F.1 How it works
 
-The 2050 was a 300-baud modem. Programs drove it through ports 115 and 119, dialled by pulsing
+The 2050 was a 300-baud modem. Programs drove it through ports 115 and 119, dialed by pulsing
 the line, and watched for the carrier. The card answers those ports the same way. When a
 program dials, the card looks the number up in the modem's **phonebook**, where you have
 written the host it stands for, and connects. When the host hangs up, the program sees the
@@ -2748,11 +3156,11 @@ ready. It switches itself off again after ten minutes unused.
 
 You do this once. The modem has a second mode, **Hayes mode**, in which a program talks to it
 directly with "AT" commands, as with any modem of the 1990s. The SD card has a small program
-for this, MODEMTST:
+for this, MODEMTST. Switch the modem to Hayes mode, then load it:
 
 ```basic
-SAVE "tpi:modem hayes"       : REM talk to the modem directly
-SAVE "tpi:cd test"
+SAVE "tpi:modem hayes"
+MOVE TO "test"
 LOAD "tpi:modemtst.tap"
 LOAD ""
 RUN
@@ -2763,7 +3171,7 @@ It shows `Status 133`. Turn on **CAPS LOCK**; type each command and press **ENTE
 1. `ATW"yournetwork,yourpassword"` joins your WiFi. The modem answers `OK` after a few seconds.
 2. `AT&W` saves it. (The first time, the modem may print a line starting `[E]` before `OK`. That
    is harmless.)
-3. `ATP"1234=bbs.example.com:23,MY BBS"` writes a phonebook entry: dialling **1234** reaches
+3. `ATP"1234=bbs.example.com:23,MY BBS"` writes a phonebook entry: dialing **1234** reaches
    that host and port. Add as many as you like, each with its own number. `ATP` on its own lists
    them.
 4. `ATI` shows the modem's state, including the WiFi network.
@@ -2777,11 +3185,11 @@ SAVE "tpi:modem 2050"
 You can also try a host in Hayes mode before giving it a number: `ATDT"bbs.example.com:23"`
 connects, and the host's text appears.
 
-## F.3 Dialling with MTERM
+## F.3 Dialing with MTERM
 
 1. Load MTERM from the SD card and start it.
 2. Use its dial command and enter a phonebook number, for example **1234**. MTERM dials it
-   (you'll hear nothing: the card listens to the dialling), waits for the carrier and connects.
+   (you'll hear nothing: the card listens to the dialing), waits for the carrier and connects.
 3. Many hosts wait for you before they say anything: press **ENTER**, or **ENTER** twice, as
    MTERM's own manual suggests.
 4. To finish, hang up with MTERM's own command. If the host hangs up first, MTERM notices that
@@ -2792,14 +3200,14 @@ Received text arrives at the 2050's speed, about 30 characters a second, so MTER
 
 ## F.4 The `tpi:modem` command
 
-```basic
-SAVE "tpi:modem"             : REM the modem's state
-SAVE "tpi:modem 2050"        : REM as a TS2050 (the normal mode)
-SAVE "tpi:modem hayes"       : REM AT commands, straight to the modem
-SAVE "tpi:modem off"         : REM ports 115 and 119 not answered
-SAVE "tpi:modem flow on"     : REM Hayes mode: pause the modem when the card falls behind
-SAVE "tpi:modem flow off"
-```
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:modem"` | The modem's state |
+| `SAVE "tpi:modem 2050"` | As a TS2050 (the normal mode) |
+| `SAVE "tpi:modem hayes"` | AT commands, straight to the modem |
+| `SAVE "tpi:modem off"` | Ports 115 and 119 not answered |
+| `SAVE "tpi:modem flow on"` | Hayes mode: pause the modem when the card falls behind |
+| `SAVE "tpi:modem flow off"` | Hayes mode: no pausing (the setting at switch-on) |
 
 The state shows the mode, whether the WiFi part is on, the line and the calls made:
 
@@ -2855,17 +3263,84 @@ can fall behind the modem. The card holds 16 KB; past that, characters are lost.
 modem `ATF1` (XON/XOFF flow control), then `SAVE "tpi:modem flow on"`, and dial with an X
 after the D or DT, for example `ATDTX"bbs.example.com:23"`. The card then sends the modem XOFF
 (character 19) when its store is half full, and XON (17) once the program has read it down.
-The modem obeys them only on a call dialled with the X; on any other call it passes them on
+The modem obeys them only on a call dialed with the X; on any other call it passes them on
 to the host as data. On an X call the modem also takes any 19 or 17 the program sends as
 XOFF or XON, so don't send binary data that contains them. `SAVE "tpi:modem flow off"` turns
 it off again.
 
-## F.7 Summary
+## F.7 Programs from the archive
+
+The modem can also fetch programs. The Timex/Sinclair software archive keeps over two thousand
+2068 programs on archive.org, every one tested to load, and `tpi:net` downloads them onto the
+SD card. The modem has to be on your WiFi first (F.2, or `SAVE "tpi:wifi name,password"` if
+the two fit in 22 characters).
+
+Start with the list of categories:
+
+```basic
+SAVE "tpi:net"
+```
+
+```
+Net: /TAP
+001 ARCADE/ Arcade games (53)
+002 COLLECT/ Collections and mag
+003 DEMOS/ Demos (93)
+...
+```
+
+Each line has a number. Open one with its number: a folder shows its own list, with the
+programs in it.
+
+```basic
+SAVE "tpi:net 1"
+```
+
+```
+Net: /TAP/ARCADE
+001 alienbla L Alien Blaster
+002 ambush   L Ambush
+003 androids L Androids
+...
+```
+
+A program's line shows its file name, a letter, and its title. Its number downloads it:
+
+```basic
+SAVE "tpi:net 2"
+```
+
+The letter says how it loads: **L** with `LOAD ""`, **R** with `LOAD ""` then `RUN`, **C** with
+`LOAD "" CODE`. A big folder's list comes in two parts; the first ends with `tpi:net more`,
+which shows the rest. `SAVE "tpi:net .."` goes back up.
+
+Or search the whole archive by name or title:
+
+```basic
+SAVE "tpi:net find chess"
+```
+
+The first search downloads the archive's index to the card, which takes a few seconds more. If the download takes too long to search as well, the TS-Pico says `Archive index downloaded`: give the same command again, and it searches the copy on the card.
+
+A downloaded program goes into the `NET` folder. Load it the usual way:
+
+```basic
+MOVE TO "/net"
+LOAD "tpi:ambush.tap"
+LOAD ""
+```
+
+If a file of that name is already there, the card asks before replacing it. Each download takes
+5 to 15 seconds. A few programs, those over 48K, are too big to download this way: the card
+says so before it starts.
+
+## F.8 Summary
 
 1. The modem looks like a TS2050 to the 2068: MTERM and other 2050 programs work as they are.
 2. Set up WiFi and the phonebook once, in Hayes mode, with `ATW`, `AT&W` and `ATP`.
 3. Dial a phonebook number from the program; press **ENTER** if the host is quiet.
 4. `SAVE "tpi:modem"` shows the state and sets the mode.
+5. `SAVE "tpi:net"` lists the archive's programs; a number downloads one to `/TAP/NET`.
 
 ---
 
@@ -2918,19 +3393,40 @@ or `;` makes a long pause, a comma a shorter one. Text that ends in a word, with
 runs straight on into the next `tpi:say`, so a sentence said in pieces sounds as it would in
 one.
 
-## G.2 When a word comes out wrong
+## G.2 Longer text: a stream, `v:`
+
+A stream has no 23-character limit. Open one to the card's voice, and everything you `PRINT`
+to it is spoken (Chapter 6):
+
+```basic
+10 OPEN #4,"v:"
+20 PRINT #4;"HELLO, I AM YOUR TIMEX SINCLAIR 2068."
+30 PRINT #4;"WHAT SHALL WE DO TODAY?"
+40 CLOSE #4
+```
+
+Each line is said as soon as it's printed, and the 2068 carries on as it does after
+`tpi:say`; a line waits its turn behind the one before. Anything `PRINT` can print goes:
+`PRINT #4;"SCORE ";s` says the number, keywords are said by name, and allophones in square
+brackets work as in `tpi:say`. A line that ends in `;` waits for the rest of it, or for
+`CLOSE #4`. `TAB` and `AT` are left out.
+
+The stream needs no SD card. Like any open stream it borrows 512 bytes until you close it, and
+it can't be read: `INPUT #4` is **Q Parameter error**. `"v:"` takes nothing after the colon.
+
+## G.3 When a word comes out wrong
 
 The card turns spelling into sounds with a set of rules, which get about one word in ten
 wrong. Two ways round it:
 
 - **Spell it as it sounds**: `SAVE "tpi:say ZEEBRA"`.
-- **Give the sounds themselves**, the chip's *allophones*, in square brackets (G.4):
+- **Give the sounds themselves**, the chip's *allophones*, in square brackets (G.5):
   `SAVE "tpi:say [ZZ IY BB1 RR2 AX]"`. Brackets and words mix: `SAVE "tpi:say HELLO [PA4] THERE"`.
 
 To fix a word for good, put it in a file called `speech.txt` in the card's own memory (with
-Thonny), one word a line, with its sounds in the rules' codes (G.5):
+Thonny), one word a line, with its sounds in the rules' codes (G.6):
 
-```
+```text
 # my words
 SPECTRUM = spEHktrAXm
 ZEBRA = zIYbrAX
@@ -2938,13 +3434,13 @@ ZEBRA = zIYbrAX
 
 The card reads it when it starts.
 
-## G.3 Speed, pitch and volume
+## G.4 Speed, pitch and volume
 
 `SPEECH_VOLUME` (0-100, normally 35) and `SPEECH_RATE` (50-150, normally 100) in `config.ini`
 (Appendix D). The chip's speed and pitch go together, as they did when its clock was changed:
 80 gives a slower, deeper voice.
 
-## G.4 The allophones
+## G.5 The allophones
 
 | | | | | | |
 |---|---|---|---|---|---|
@@ -2965,7 +3461,7 @@ of a word, `TT1` at the end or after S; `KK1` before E, I and A as in "cat", `KK
 U, `KK2` at the end; `DD2` at the start, `DD1` at the end. End a phrase with a pause (`PA4` or
 `PA5`).
 
-## G.5 The rules' sound codes, for `speech.txt`
+## G.6 The rules' sound codes, for `speech.txt`
 
 Two letters in capitals: `IY` b**ee**t, `IH` b**i**t, `EY` g**a**te, `EH` g**e**t, `AE` f**a**t,
 `AA` f**a**ther, `AO` l**aw**n, `OW` l**o**ne, `UH` f**u**ll, `UW` f**oo**l, `ER` m**ur**d**er**,
@@ -2974,10 +3470,10 @@ ei**th**er, `SH` lea**sh**, `ZH` lei**s**ure, `HH` **h**ow, `NG` su**ng**, `CH` 
 **wh**ere. One letter in small letters: `p` `t` `k` `b` `d` `g` `f` `v` `s` `z` `m` `n` `l` `w`
 `y` `r` and `j` (**j**ar).
 
-## G.6 Programs written for a speech board
+## G.7 Programs written for a speech board
 
 The card answers the ports the Pico Speech Synth 2068 board uses (a Pico version of Wilf
-Rigter's ZX Voice), so programs written for it speak through the card: `OUT 17,n` speaks allophone `n` (the numbers in G.4's
+Rigter's ZX Voice), so programs written for it speak through the card: `OUT 17,n` speaks allophone `n` (the numbers in G.5's
 order, `PA1` = 0 to `BB2` = 63), and `IN 37` is 128 or more while the card is still busy. They
 work in Spectrum mode too. Set `SPEECH_PORTS` to `false` if something else on your 2068 uses
 those ports.
@@ -2989,16 +3485,16 @@ those ports.
 40 DATA 27,7,45,53,4: REM HH1 EH LL OW PA5
 ```
 
-## G.7 Where the voice comes from
+## G.8 Where the voice comes from
 
 The SP0256-AL2's ROM is copyright Microchip Technology Inc., which retains the rights to the
 algorithms and data it contains, and allows its distribution with this acknowledgment. The
 chip is recreated by MAME's SP0256 emulation (Joseph Zbiciak and Tim Lindner, BSD-3-Clause
-licence). The spelling-to-sound rules are the US Naval Research Laboratory's (NRL Report
+license). The spelling-to-sound rules are the US Naval Research Laboratory's (NRL Report
 7948, 1976), as John A. Wasser coded them in 1985; both are public domain. The details are in
 the `NOTICE` file on the project's GitHub.
 
-## G.8 A greeting at switch-on
+## G.9 A greeting at switch-on
 
 The card can say something each time the 2068 starts:
 
@@ -3013,11 +3509,12 @@ cartridge in the DOCK slot (Chapter 8). `SAVE "tpi:greet"` shows it, and
 21 characters (1.2); for a longer one, set `SPEECH_GREETING` in `config.ini`
 (Appendix D).
 
-## G.9 Summary
+## G.10 Summary
 
 1. `SAVE "tpi:say TEXT"` speaks, while the 2068 carries on; `SAVE "tpi:say"` stops.
-2. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
-3. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
-4. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
-5. `SAVE "tpi:greet TEXT"` makes the card say hello at switch-on.
+2. `OPEN #4,"v:"` then `PRINT #4` speaks text of any length, a line at a time.
+3. Allophones in `[...]` say exactly what you want; `speech.txt` fixes words for good.
+4. `SPEECH_VOLUME` and `SPEECH_RATE` in `config.ini` set the loudness and the speed.
+5. Programs for the Pico Speech Synth 2068 board speak through ports 17 and 37.
+6. `SAVE "tpi:greet TEXT"` makes the card say hello at switch-on.
 <!-- /v3 -->

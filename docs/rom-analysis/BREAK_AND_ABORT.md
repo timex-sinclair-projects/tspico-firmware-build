@@ -107,7 +107,7 @@ breaking out of a LOAD loop.
 This is the part that is easy to get wrong — I got it wrong first time round.
 
 **Check 1 — `$00E5`, the tape-return exit. SPACE alone.** Stock TS2068 EXROM
-code, byte-identical to the genuine image, and the direct analogue of the
+code, byte-identical to the genuine image, and the direct analog of the
 Spectrum's `SA/LD-RET` at `$053F`:
 
 ```asm
@@ -150,7 +150,7 @@ Carry clear — the abort at `$0655`'s `JP NC,$06AA` — needs **both** bits low
 
 So: **SPACE alone aborts a tape operation** (check 1, and this is what you see in
 FUSE, because check 1 is stock), while **a Pico ready-wait needs full BREAK**
-(check 2). Do not generalise either one to the other.
+(check 2). Do not generalize either one to the other.
 
 ### What SPACE at the prompt actually does
 

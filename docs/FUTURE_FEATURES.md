@@ -81,7 +81,7 @@ state machine on GP23, refilled by core 0 from the SD card.
 Play sound files from the SD card through the card's audio jack, started
 from BASIC: `SAVE "tpi:play boom.wav"` for a sound effect, or music that
 plays in the background while a program runs, with a stop command.
-Digitised effects, speech recordings and music are things the 2068 can't
+Digitized effects, speech recordings and music are things the 2068 can't
 make itself, so this is a new tool for 2068 programmers.
 
 **How it might work:** WAV (8- or 16-bit PCM, resampled to the PWM rate) to
@@ -102,7 +102,7 @@ perhaps MP3) are a later question.
 *Added 2026-10-12; was phase 7 of the v3 port plan.*
 
 An AY-3-8910 at $FFFD (register select, and read-back on IN) and $BFFD
-(data), synthesised on core 1 and played through the card's PWM audio
+(data), synthesized on core 1 and played through the card's PWM audio
 (GP30 right, GP46 left) to the 3.5 mm jack.
 
 **Why it's not scheduled.** The 2068 has a real AY at $F5/$F6, so 2068
@@ -130,6 +130,22 @@ check: a test tone from each channel at the jack, and the 2068's own BEEP
 through the mix. Then measure core 1's headroom with the diag build's
 `max_gap`.
 
+## Snapshots
+
+*Added 2026-10-29, from the comparison of 1980s 2068 disk systems in
+[#341](https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/341).
+Parked; no issue yet.*
+
+Save the whole machine to a file and bring it back later: RAM, the Z80's
+registers and the bank and port state, so a game can be stopped and resumed
+anywhere, whether or not it has a save feature of its own. Oliger's SAFE and
+Larken's LKDOS both did this on the 2068: an NMI, then a key to choose save
+or load.
+
+**To settle first:** whether the TS-Pico can freeze the Z80 at all (an NMI,
+or some other way) and then read RAM, the registers and the banks out to a
+file. That is a hardware question before it is a firmware one.
+
 ## Dropped, unless it becomes a reported problem
 
 - **Blocking reads through /WAIT** (port plan, phase 6; dropped 2026-10-12).
@@ -142,10 +158,12 @@ through the mix. Then measure core 1's headroom with the diag build's
 
 - **Speech** has left this list: it has a proposal,
   [v3-speech-proposal.md](v3-speech-proposal.md) (the SP0256-AL2 emulated from
-  its ROM, `tpi:say`, an `s:` channel, and David's speech board's ports).
+  its ROM, `tpi:say`, a `v:` channel, and David's speech board's ports).
 
-- **The OLED status display** and **the Kempston joystick** wait on hardware:
-  [v3-oled-proposal.md](v3-oled-proposal.md), and the `v3-kempston` branch.
+- **The Kempston joystick** has left this list too: the v3 card answers
+  port 1Fh from its DE-9 socket (`KEMPSTON` in `config.ini`).
+- **The OLED status display** waits on hardware:
+  [v3-oled-proposal.md](v3-oled-proposal.md).
 - **The ESP32 as a WiFi file server:** a different role for the modem module,
   noted in [v3-modem-proposal.md](v3-modem-proposal.md) ("Not in this
   proposal").

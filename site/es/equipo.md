@@ -3,7 +3,7 @@ layout: page
 title: El equipo
 lang: es
 permalink: /es/equipo/
-description: Las personas detrás del TS Pico — Ricardo, Gustavo, Jeff, Tim y David.
+description: Las personas detrás del TS Pico — Ricardo, Gustavo, Jeff, Tim, Ryan, Joe y David.
 ---
 
 ## Ricardo Calcagno
@@ -59,6 +59,24 @@ Tim H, a diferencia de los demás miembros del equipo, es un recién llegado a l
 En los últimos años, Tim adquirió un TS 2068 y se volvió activo en la comunidad internacional de TS, ayudando a preservar y mejorar el hardware diseñado por entusiastas de TS en el pasado, incluida una placa de captura de video desarrollada por miembros del grupo de usuarios de TS a fines de la década de 1980.
 
 Tim se unió inicialmente al equipo y ofreció su soporte de diseño de software y hardware para el proyecto.
+
+## Ryan Gray
+
+[Ryan](https://graytrek.com/) empezó con las TRS-80 Model I que tenía la escuela secundaria, de las que había unas pocas, y pronto se quedaba después de clase e iba a Radio Shack los fines de semana. Ahorró para comprarse una ZX81, la versión de EE. UU., con nada menos que 16K. Después consiguió una Timex Sinclair 2068, justo antes de que Timex abandonara el negocio. Pasó unos años demostrándoles a sus amigos que era superior a sus computadoras. También fue miembro del grupo de usuarios Timex/Sinclair de Fort Worth.
+
+Para la universidad pasó a otro sistema condenado al fracaso, la IBM PCjr. Después de estudiar ingeniería y ciencias de la computación, consiguió un trabajo profesional escribiendo y usando software de simulación de ingeniería para calcular cosas importantes.
+
+Ryan descubrió el grupo de Timex, recuperó sus viejos programas de cinta y de inmediato siguió trabajando en ellos. Se unió al equipo para desarrollar herramientas como el Commander y ayudar con el firmware en la Pico.
+
+## Joe Vandezande
+
+<img class="portrait" src="{{ '/assets/img/joe.jpg' | relative_url }}" alt="Joe Vandezande">
+
+A fines de los años 70 y comienzos de los 80, Joe pasaba mucho tiempo leyendo revistas de computación, y en una de ellas encontró un aviso de la ZX80. Para cuando juntó el dinero para comprarla, ya había salido la ZX81. Con una ZX81 flamante, un televisor en blanco y negro de 12 pulgadas y un grabador de casetes de segunda mano, empezó una afición de toda la vida por la electrónica y las computadoras pequeñas. Ese interés lo llevó a una carrera en computación, tanto en la Guardia Nacional Aérea como en empleos civiles.
+
+Descrito a menudo como un experimentador nato, construyó y reparó muchos accesorios para su ZX81 y, más tarde, para su TS1000. Con los años reunió una gran variedad de computadoras, desde los años 70 hasta comienzos de los 2000, casi todas de gente que le dejaba su vieja “chatarra” a cambio de que le actualizara o arreglara la computadora que usaba. Reparar y ampliar esos sistemas antiguos le dio una gran comprensión de las decisiones de diseño que tomaron los ingenieros “en aquella época”.
+
+Hoy Joe colabora con el equipo diseñando gabinetes imprimibles en 3D para las placas del TS-Pico y para la placa de expansión en la que se conectan. Además, archivó muchos discos y cintas de la biblioteca del TS Online User Group.
 
 ## David Anderson
 

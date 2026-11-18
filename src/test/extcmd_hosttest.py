@@ -68,8 +68,8 @@ def main():
     words = set(open(x.WORDS).read().split())
     for _ in range(20):
         log = send(t, ext, "tpi:.rndw")
-        ok = log[:3] == [0x81, 1, 0x0D] and log[-2:] == [0, 1] and 0 not in log[3:-2]
-        word = bytes(log[3:-2]).decode()
+        ok = log[:3] == [0x81, 1, 0x0D] and log[-3:] == [0x0D, 0, 1] and 0 not in log[3:-3]
+        word = bytes(log[3:-3]).decode()                    # the message ends its line (#316)
         h.check(ok and word in words, "81h message with a real word (%r), then one pre-load" % word)
     x.WORDS = "/nonexistent/words.txt"
     log = send(t, ext, "tpi:.rndw")

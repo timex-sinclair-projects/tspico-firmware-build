@@ -1,11 +1,13 @@
-"""Host-side test for tpi:newtap, tpi:rm and tpi:boot -- CPython, no Pico.
+"""Host-side test for tpi:format (.tap), tpi:list, tpi:label, tpi:rm and tpi:boot -- CPython, no Pico.
 
 Runs the REAL TS.tspico handlers against a temporary directory standing in for
 the SD card (the CardOS of disk_cmds_hosttest.py, case-insensitive like FAT),
 and a temporary config.ini:
 
-  * NEWTAP makes and mounts a new .tap, and refuses a name that exists (any
-    case) instead of emptying it;
+  * LIST shows a file as text or hex, and tpi:label (and FORMAT ":name")
+    reads, sets and takes off the card's label in a FAT image;
+  * FORMAT makes and mounts a new .tap, and refuses a name that exists (any
+    case) instead of emptying it (what tpi:newtap did before FORMAT took over);
   * RM removes any file (not only the indexed types), by name, path or listing
     number, and empty folders; it refuses the mounted file, a missing name, a
     non-empty folder and the current folder -- before its Y/N prompt;
@@ -56,10 +58,10 @@ def run(t, handler, text, a=0, b=0):
     handler(pre(a, b), "D.." + text)
 
 
-def test_newtap(t, root, sent):
-    print("tpi:newtap")
+def test_format_tap(t, root, sent):
+    print("tpi:format (a .tap)")
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap fresh")
+    run(t, t.DISK_FORMAT, "tpi:format fresh")
     check(D.on_card(root, "fresh.tap"), "makes fresh.tap")
     check(t.mounted[-1].lower().endswith("/fresh.tap") and t.TSP.append,
           "mounts it with append on")
@@ -67,27 +69,109 @@ def test_newtap(t, root, sent):
 
     del sent[:]
     n = len(t.mounted)
-    run(t, t.NEW_TAP, "tpi:newtap chess")
+    run(t, t.DISK_FORMAT, "tpi:format chess")
     check(sent[-1][3] == t._3_F_Invalid_file, "an existing name (other case) is F (%r)" % (sent[-1],))
     check(os.path.getsize(os.path.join(root, "CHESS.TAP")) == 1500, "and the file is untouched")
     check(len(t.mounted) == n, "and nothing is mounted")
 
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap chess.tap")
+    run(t, t.DISK_FORMAT, "tpi:format chess.tap")
     check(sent[-1][3] == t._3_F_Invalid_file, "the same with .tap given")
 
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap a.b.tap")
+    run(t, t.DISK_FORMAT, "tpi:format a.b.tap")
     check(D.on_card(root, "a.b.tap") and not D.on_card(root, "a.b.tap.tap") and sent[-1][3] == t._1_OK,
           "a.b.tap makes a.b.tap, not a.b.tap.tap (#169) (%r)" % (sent[-1],))
     del sent[:]
-    run(t, t.NEW_TAP, "tpi:newtap v1.2")
-    check(D.on_card(root, "v1.2.tap"), "v1.2 (a dot, no .tap) makes v1.2.tap")
-    del sent[:]
     n = len(t.mounted)
-    run(t, t.NEW_TAP, "tpi:newtap .tap")
+    run(t, t.DISK_FORMAT, "tpi:format .tap")
     check(sent[-1][3] == t._3_F_Invalid_file and not D.on_card(root, ".tap") and len(t.mounted) == n,
           ".tap alone is no name: F, nothing made (%r)" % (sent[-1],))
+    check(not hasattr(t, "NEW_TAP"), "tpi:newtap is gone (FORMAT does its job)")
+
+
+def test_list(t, root, sent):
+    print("tpi:list (LIST \"name\")")
+    D.build_card(root)
+    t.TSP.cur_path = "/sd/TAP"
+    with open(os.path.join(root, "README.TXT"), "wb") as f:
+        f.write(b"Hello\r\nworld\r\n")
+    del sent[:]
+    run(t, t.DISK_LIST, "tpi:list readme.txt")
+    check(sent[-1] == ("MSG2", "Hello\r\nworld\r\n", t._1_OK), "a text file, as itself (%r)" % (sent[-1],))
+    with open(os.path.join(root, "GAME.BIN"), "wb") as f:
+        f.write(bytes([0, 1, 0x41, 0x42] * 4))
+    del sent[:]
+    run(t, t.DISK_LIST, "tpi:list game.bin")
+    check(sent[-1] == ("MSG2", "0000 0001414200014142 ..AB..AB\r0008 0001414200014142 ..AB..AB\r", t._1_OK),
+          "anything else as hex, all of a small file (%r)" % (sent[-1],))
+    with open(os.path.join(root, "BIG.BIN"), "wb") as f:
+        f.write(bytes(5000))
+    del sent[:]
+    run(t, t.DISK_LIST, "tpi:list big.bin")
+    check(sent[-1][1].endswith("(the first 2048 of 5000 bytes)"), "a big binary: the first 2048 bytes")
+    with open(os.path.join(root, "BIG.TXT"), "wb") as f:
+        f.write(b"x" * 3000 + b"\x00" + b"y" * 9000)
+    del sent[:]
+    run(t, t.DISK_LIST, "tpi:list big.txt")
+    m = sent[-1][1]
+    check(m.startswith("xxx") and "?" in m and m.endswith("(the first 8192 of 12001 bytes)"),
+          "text if its start is: the first 8192 bytes, a later NUL as ?")
+    for arg, st, what in (("games", t._4_Q_Parameter, "a folder is Q"),
+                          ("nothere.txt", t._3_F_Invalid_file, "a missing file is F"),
+                          ("*.tap", t._4_Q_Parameter, "a wildcard is Q"),
+                          ("", t._4_Q_Parameter, "no name is Q")):
+        del sent[:]
+        run(t, t.DISK_LIST, ("tpi:list " + arg).rstrip())
+        check(sent[-1][0] == "MSG" and sent[-1][-1] == st, "%s (%r)" % (what, sent[-1]))
+    check("TPI:LIST" not in t.SD_FREE, "tpi:list needs the card")
+
+
+def test_label(t, root, sent):
+    import fat_image as F
+    print("tpi:label / FORMAT \":name\"")
+    D.build_card(root)
+    dev, rootsec = F.fat16()
+    t.SD_DEV = dev
+    t.TSP.sd_label = ""
+    mounts = []
+    t.os.umount = lambda p: mounts.append(("umount", p))
+    t.os.mount = lambda d, p: mounts.append(("mount", p))
+    calls = t.dir_files_calls
+
+    del sent[:]
+    run(t, t.DISK_LABEL, "tpi:label")
+    check(sent[-1] == ("MSG", "No label", "", t._1_OK), "bare: No label (%r)" % (sent[-1],))
+    del sent[:]
+    run(t, t.DISK_LABEL, "tpi:label games 2")
+    check(t.catalog.read_label(dev) == "GAMES 2" and t.TSP.sd_label == "GAMES 2"
+          and sent[-1] == ("MSG", "Label: GAMES 2", "", t._1_OK), "sets it, upper case (%r)" % (sent[-1],))
+    check(mounts == [("umount", "/sd"), ("mount", "/sd")], "with the card unmounted, then mounted again")
+    check(t.dir_files_calls > calls, "and CAT's listing rebuilt")
+    del sent[:]
+    run(t, t.DISK_LABEL, "tpi:label")
+    check(sent[-1] == ("MSG", "Label: ", "GAMES 2", t._1_OK), "bare: shows it (%r)" % (sent[-1],))
+    del sent[:]
+    run(t, t.DISK_FORMAT, "tpi:format :tspico")
+    check(t.catalog.read_label(dev) == "TSPICO" and sent[-1][-1] == t._1_OK, 'FORMAT ":tspico" labels it')
+    del sent[:]
+    run(t, t.DISK_LABEL, "tpi:label -")
+    check(t.catalog.read_label(dev) == "" and t.TSP.sd_label == "" and sent[-1][1] == "Label taken off",
+          "- takes it off (%r)" % (sent[-1],))
+    run(t, t.DISK_LABEL, "tpi:label X")
+    del sent[:]
+    run(t, t.DISK_FORMAT, "tpi:format :")
+    check(t.catalog.read_label(dev) == "" and sent[-1][1] == "Label taken off", 'FORMAT ":" takes it off')
+    for arg, what in (("a.b", "a '.'"), ("TWELVE CHARS", "12 characters")):
+        del sent[:]
+        run(t, t.DISK_LABEL, "tpi:label " + arg)
+        check(sent[-1][-1] == t._4_Q_Parameter and t.catalog.read_label(dev) == "",
+              "%s is Q, nothing written (%r)" % (what, sent[-1]))
+    t.SD_DEV = object()
+    del sent[:]
+    run(t, t.DISK_LABEL, "tpi:label X")
+    check(sent[-1][-1] == t._4_Q_Parameter, "a card driver with no raw blocks: Q")
+    del t.os.umount, t.os.mount
 
 
 def test_rm(t, root, sent):
@@ -314,7 +398,9 @@ def main():
         t.utime = types.SimpleNamespace(sleep=lambda s: None)
         _hw()._rom = types.SimpleNamespace(put=lambda v: None)
         _hw()._bank = types.SimpleNamespace(put=lambda v: None)
-        test_newtap(t, root, sent)
+        test_format_tap(t, root, sent)
+        test_list(t, root, sent)
+        test_label(t, root, sent)
         test_rm(t, root, sent)
         test_dir_range(t, sent)
         test_ffw_by_file(t, sent)

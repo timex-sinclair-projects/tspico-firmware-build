@@ -1,6 +1,6 @@
 # catalog.py — names, wildcards, paths, listings
 
-Source: [`src/TS/catalog.py`](../../../src/TS/catalog.py) (313 lines).
+Source: [`src/TS/catalog.py`](../../../src/TS/catalog.py) (531 lines).
 
 The pure half of `CAT` / `SAVE "tpi:dir <arg>"`, and of every other
 command that takes a path: pattern matching, path resolution inside the
@@ -20,18 +20,29 @@ Callers outside [tspico-disk.md](tspico-disk.md): `LIST_DIR_FILES`
 `GETINFO` (`space_pair`), `ChangeDir` (`resolve`), `LOAD_TPI` (`has_wild`,
 `match_shown`), `RM_CHECK` (`resolve`, `ROOT`, `within`) — all in
 [tspico-files.md](tspico-files.md) and
-[tspico-commands.md](tspico-commands.md).
+[tspico-commands.md](tspico-commands.md); `LIST_DIR_FILES` also takes
+`card_line`, and `CARD_LABEL` ([tspico-bus.md](tspico-bus.md)) takes
+`read_label`.
+
+The file's end is not pure: `read_label` and `write_label` read and write
+the card's raw sectors, through a block device the caller hands in (the SD
+driver, `SD_DEV` in `tspico.py`), because MicroPython gives Python no way
+to the FAT volume label.
 
 ## Map of the file
 
 | Lines | What |
 |---|---|
 | 10–22 | `ROOT`, `DIR_EXT`, `BLK_TYPES`, `UNSHOWABLE` |
-| 25–70 | `screen_name`, `match_shown`, `has_wild`, `match` — names and wildcards |
-| 73–133 | `resolve`, `public`, `split_arg`, `split_pair` — paths and arguments |
-| 136–174 | `select`, `basename`, `parent`, `within` |
-| 177–246 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
-| 249–313 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
+| 25–266 | `screen_name`, `sort_items`, the folder index (`INDEX_ENTRIES` … `Index`), `match_shown`, `has_wild`, `match` — names and wildcards, the listing order |
+| 269–329 | `resolve`, `public`, `split_arg`, `split_pair` — paths and arguments |
+| 332–370 | `select`, `basename`, `parent`, `within` |
+| 373–442 | `size_text`, `space_pair`, `counts`, `dir_rows` — the directory listing's text |
+| 445–509 | `tap_table`, `tap_header_rows` — a TAP's blocks and their listing |
+| 512–550 | `LIST_TEXT_MAX`, `LIST_HEX_MAX`, `is_text`, `list_text` — LIST "name" |
+| 553–581 | the label's comment, `LABEL_MAX`, `LABEL_BAD`, `label_clean` |
+| 584–711 | `_u16`, `_u32`, `_is_vbr`, `_Fat`, `read_label`, `write_label` — the label in the card's sectors |
+| 714–727 | `card_line` — CAT's card line |
 
 ## Constants
 
@@ -52,6 +63,174 @@ wildcard (`LOAD_TPI`), and `?` cannot be part of a FAT name, so it never
 collides with a real one. Used by `dir_rows`, `xstr`/`xchr` in `tspico.py`,
 and `match_shown`. Pinned: `{a}|b~c\x7fé.tap` → `?a??b?c??.tap`; `GAME
 (1).TAP` unchanged.
+
+A name with nothing to replace is returned as it is, the same object: one
+pass over its characters finds that. It runs for every row of every
+listing, and rebuilding each name a character at a time made a string
+per name for nothing (#384).
+
+### `sort_items(items)`
+
+`os.ilistdir()` items (tuples whose `[0]` is the name), or any iterable of
+them, as a new list in name order, case folded: the order sorting with a
+key of the lowered name gives. Each name is lowered once into a
+`(lowered, item)` pair; if no pair is out of order the list is not sorted;
+then each pair is replaced by its item, in the same list. FAT names
+differ in more than case, so the lowered names are unique and the order
+is the same as the key sort's.
+
+Why (#384): MicroPython's sort calls the key function on every comparison,
+not once per item, and its quicksort takes the last item as the pivot, so
+a folder already in name order (files copied in alphabetically) is near
+its worst case. 300 files made 45,149 lowered strings and took 1.58 s on
+the v3 card, shuffled 2,959 in 138 ms; pairs took 118 ms and 16 ms, and
+the order check makes the ordered case one pass (REPL, 2026-11-06).
+The items are all read into the list first and only then paired with their
+lowered names, in place: pairs made while `os.ilistdir()` still yielded put
+a short-lived pair and string between every kept item, and on the v3 card
+the 300-file listing then found no 2K block for `CAT_COLOUR`. Used by
+`select` and, in `tspico.py`, by
+`DIRINFO_WRITE`, `DISK_COPY_WORK` (a folder's entries), `DISK_ERASE_MATCHES`
+and `GETHELP` (the topics).
+
+## The folder index
+
+The current folder as `LIST_DIR_FILES` lists it, in buffers made once, when
+`tspico.py` is imported (`INDEX = catalog.Index()`), and never made again
+(#384). `files` and `dirs` in `tspico.py` are its `View`s.
+
+Why: `files[]` and `dirs[]` were one `str` per name, made in the same pass
+as the listing's garbage (the `ilistdir` tuples, lowered names, row
+formatting) and so spread over the whole heap with it: about 12K in about
+300 pieces for a 300-file folder. MicroPython's GC does not move objects,
+so those pieces stayed where they landed, and the next big allocation (the
+12K colored CAT, a 35K LOAD, the 64K `.DCK`) found no block its size. With
+the index, a listing keeps nothing new on the heap; everything it makes on
+the way is garbage, and one collection gives the room back in one piece.
+
+| Name | Value | Meaning |
+|---|---|---|
+| `INDEX_ENTRIES` | `512` | entries the index holds: folders and files together |
+| `INDEX_NAME_BYTES` | `8192` | bytes of names (UTF-8) it holds. `/help`'s 132 names take 1,109 |
+| `DIR` | `0` | `kind_of`: a folder |
+| `FILE` | `1` | a file `LOAD "tpi:n"` numbers (one of `DIR_EXT`) |
+| `OTHER` | `2` | any other file: listed, not numbered |
+
+Together the buffers take about 11K *(8192 + 2 × 513 + 4 × 512 bytes, plus
+the objects)*. On the v3 card that is about 9K more than a 45-file folder
+kept as `str`s, and less than a folder of about 250 *(inferred from the
+40 bytes a name took as a `str`, measured on `/help`)*.
+
+### `kind_of(item)`
+
+An `os.ilistdir()` item's place in a listing: `DIR` for a folder (type
+16384), whatever its name, dot folders too; `None` for anything that is not
+a file (type 32768), a name starting with `.`, or `dirinfo.tap`; else
+`FILE` when the last three characters, upper-cased, are in `DIR_EXT`, and
+`OTHER`. This is `LIST_DIR_FILES`' rule as it was written out in its three
+loops; `DIRINFO_ROWS` still writes the same rule out for itself.
+
+### `View`
+
+One kind of an `Index`'s entries as a read-only sequence of names. Each
+name is decoded from the index when asked for: a new short-lived `str`,
+nothing kept. It does everything `tspico.py` did with the lists `files` and
+`dirs`, so their users are unchanged (CDIR's menu takes `list(dirs)`,
+since a `list` can't be added to a `View`).
+
+### `View.__init__(self, ix, kind)`
+
+`ix` the `Index`, `kind` `DIR`, `FILE` or `OTHER`. Made once per `Index`.
+
+### `View.__len__(self)`
+
+`ix.start[kind + 1] - ix.start[kind]`: the entries of that kind.
+
+### `View.at(self, i)`
+
+Item `i`'s place in the index: `ix.start[kind] + i`, with a negative `i`
+counted from the end, as a list's. `IndexError` outside the view.
+
+### `View.__getitem__(self, i)`
+
+`ix.name(self.at(i))`. Only an `int` index; no slices.
+
+### `View.size(self, i)`
+
+Item `i`'s size in bytes, from `ix.size`.
+
+### `View.__iter__(self)`
+
+The names in order, decoded one at a time (a generator), so `for`,
+`enumerate` and `list()` work.
+
+### `View.__contains__(self, name)`
+
+`name in view`: an exact comparison against each name in turn.
+
+### `View.__eq__(self, other)`
+
+`list(self) == list(other)`. For the host tests, which compare `files` to
+a list.
+
+### `Index`
+
+The folder, sorted as `LIST_DIR_FILES` lists it: the folders, then the
+numbered files, then the others, each by lower-cased name. Because the
+sort puts each kind together, a kind is one range of the index, and
+`start` holds where each begins.
+
+### `Index.__init__(self, entries=INDEX_ENTRIES, name_bytes=INDEX_NAME_BYTES)`
+
+Makes the buffers: `names`, a `bytearray(name_bytes)`, and `_mv`, a
+`memoryview` of it; `off`, an `array('H')` of `entries + 1` offsets (entry
+`i`'s name is `names[off[i]:off[i + 1]]`); `size`, an `array('L')` of
+`entries` sizes; `start = [0, 0, 0, 0]` (where `DIR`, `FILE` and `OTHER`
+begin, and the count); `more = 0`; and the three `View`s, `dirs`,
+`files` and `others`. The arrays are made from a list, not from a
+`bytearray` of the right size: `'L'` is 8 bytes on a 64-bit host, which
+would make the host tests' arrays half as long.
+
+### `Index.__len__(self)`
+
+The entries held: `start[3]`.
+
+### `Index.name(self, i)`
+
+Entry `i`'s name: `str(_mv[off[i]:off[i + 1]], "utf-8")`. The `memoryview`
+slice copies nothing, so the one allocation is the `str`.
+
+### `Index.clear(self)`
+
+Empty: every `start` 0, `more` 0. The buffers are kept.
+
+### `Index.fill(self, items, count)`
+
+Rebuilds the index from `os.ilistdir()` items. `count` is how many items
+there are; `LIST_DIR_FILES` takes it from `LISTING_SIG`'s first read of
+the folder.
+
+1. `clear()`. One list of `count` `None`s, made at its full length at once.
+   Growing it would ask the heap for a bigger block at every step.
+2. For each item `kind_of` doesn't leave out, one key string:
+   `"<kind><lower-case name>\0<name>\0<size>"`. It stops at `count`, in
+   case the folder grew between the two reads. Then the unused tail of the
+   list is deleted.
+3. Sort the keys with no `key=`, so the comparisons run in C, and only if
+   two neighbors are out of order. Why: MicroPython calls a `key=` on every
+   comparison (45,149 calls for 300 names, 1.58 s, #394), and its
+   quicksort is close to its worst case on a list already in order. FAT
+   names differ in more than case, so the lower-case names decide every
+   comparison, and the kind digit in front puts folders, numbered files and
+   others in that order.
+4. Copy each key, in order, into the buffers: the name (encoded) through
+   `_mv`, its size into `size`, the end offset into `off`. Count each kind.
+   Each key is set to `None` once copied. An entry that finds no room
+   (`entries` used, or not enough bytes of `names` left) is counted in
+   `more`, and so is every entry after it, so the numbers have no gap.
+5. `start` from the counts.
+
+## Names and wildcards, continued
 
 ### `match_shown(name, pat)`
 
@@ -108,7 +287,7 @@ pattern, dir + pattern, root + pattern, a plain name, spaces stripped.
 
 ### `split_pair(arg)`
 
-`"a.tap|b.tap"` → `("a.tap", "b.tap")`. The ROM joins MOVE's two names
+`"a.tap|b.tap"` → `("a.tap", "b.tap")`. The ROM joins COPY's and MOVE's two names
 with `|`, which FAT names cannot contain; typed by hand, `SAVE "tpi:copy a
 b"` with a single space works too (exactly two words). Either half is `''`
 when missing: with no `|` and not two words, the whole stripped text is
@@ -120,7 +299,8 @@ the first half. Used by `DISK_COPY` and `DISK_REN`.
 
 What CAT lists from a directory's `os.ilistdir()` items, in its order:
 `[(name, is_dir, size)]` — directories, then files, then (bare listing
-only) the files `DIR` cannot index. Items are sorted case-insensitively.
+only) the files `DIR` cannot index. Items are sorted case-insensitively
+(`sort_items`).
 `dirinfo.tap` is never listed; dot names only when the pattern starts with
 a dot; with a pattern, a non-match is dropped. A directory (type 16384)
 goes to the first group with size 0; with no pattern a file whose last
@@ -188,7 +368,7 @@ everywhere (the middle replaced by `>`). Every name goes through
 20 plus `>` — 1 + 21 + 10. A file: `"%s %-18s%10s"` — a three-digit index
 or three spaces, a space, the name shortened to 18, `size_text` in 10. The
 caller (`CATALOG_TEXT`) puts `DIR_HEADER`'s four rows in front;
-`CAT_COLOUR` recognises the rows by their first characters (`<`, three
+`CAT_COLOUR` recognizes the rows by their first characters (`<`, three
 digits, four spaces). Pinned: dirs, indexed and unindexed files; every row
 32 characters; `{x}.TAP` shown as `?x?.TAP`.
 
@@ -238,3 +418,168 @@ two more than its payload. Used by `TAPDIR` and `CATALOG_TEXT`
 (`orphans=True`). Pinned: headers only by default; `orphans=True` shows
 the headerless block, named so; the position is marked, even on a data
 block; every row is 32 characters.
+
+## LIST "name": a file as the 2068 shows it
+
+| Name | Value | Meaning |
+|---|---|---|
+| `LIST_TEXT_MAX` | 8192 | the most of a text file `LIST "x"` shows |
+| `LIST_HEX_MAX` | 2048 | the most of any other file: 256 rows of the hex dump. Also how much `DISK_LIST_WORK` reads first, to decide which the file is |
+
+### `is_text(data)`
+
+True if every byte of `data` is TAB, LF, CR, or 32 and up but not 127 (DEL).
+Bytes from 80h up pass (UTF-8 or Latin-1 text), and `list_text` shows them
+as `?`. Pinned: CR, LF and TAB are text; a 0 byte and 127 are not; é in
+UTF-8 is.
+
+### `list_text(data, size, text=None)`
+
+`LIST "name"`'s text, from the first bytes of the file (`data`) and the
+file's `size`. `text` says which form (default `is_text(data)`; the caller
+passes what it decided on the first `LIST_HEX_MAX` bytes, so text that
+turns binary further on still lists as text).
+
+- **Text:** TAB becomes two spaces, CR and LF stay (`SEND_MSG2` breaks
+  lines at them), every other character goes through `screen_name`, so
+  what the 2068 can't show is `?`.
+- **Anything else:** a hex dump, 8 bytes a row in 30 columns, CR-ended:
+  the offset in four hex digits, the 16 hex digits, the bytes as
+  characters (`.` for anything outside 32–126 or in `UNSHOWABLE`), as in
+  `0000 4142434445464748 ABCDEFGH`; a short last row is padded so its
+  characters line up.
+
+When `data` is shorter than `size`, a last line `(the first N of M
+bytes)`, after a blank one. Pinned: line ends kept, TAB as two spaces, `|`
+as `?`; a binary row's layout and a short last row's padding; `|` and `~`
+as `.` in a row; the "first N of M" line; with `text=True` a control code
+is `?`.
+
+## The card's label
+
+MicroPython's `VfsFat` doesn't give Python the volume label: FatFs's
+`f_getlabel` and `f_setlabel` are compiled in (the rp2 port sets
+`MICROPY_FATFS_USE_LABEL`), but `VfsFat` calls only `f_setlabel`, from
+mkfs (the comment at 553–564). So these work in the card's raw 512-byte
+sectors through `readblocks` and `writeblocks`, and `write_label` needs
+the card unmounted, because FatFs keeps a sector of the root folder
+cached.
+
+The label is a root-folder entry with attribute 08h, which Windows and
+macOS show. The boot sector has a copy, `BS_VolLab`, which DOS showed.
+`read_label` reads the entry, and `write_label` writes only the entry, as
+FatFs's `f_setlabel` does (MicroPython 1.29's `lib/oofatfs/ff.c`): the
+boot sector is the one sector whose loss makes a card unmountable, and
+the name shows without it. One effect: once the label is taken off, macOS
+shows the boot sector's copy, the name the card was formatted with
+(checked on `hdiutil` images, 2026-10-29). The TS-Pico shows `SD`.
+Pinned against FAT16 and FAT32 images built by
+[`src/test/fat_image.py`](../../../src/test/fat_image.py), laid out like
+images `newfs_msdos` made and `fsck_msdos` passed (*the real images were
+checked by hand, 2026-10-29; the test uses the fakes*).
+
+| Name | Value | Meaning |
+|---|---|---|
+| `LABEL_MAX` | 11 | a FAT label's length |
+| `LABEL_BAD` | `"*+,./:;<=>?[\]\|` | characters FatFs's `f_setlabel` refuses |
+
+### `label_clean(name)`
+
+The label FAT would store for `name`: trailing spaces off, upper case. None
+if it is longer than `LABEL_MAX`, starts with a space, or holds a
+character below a space, above `~`, in `LABEL_BAD` or in `UNSHOWABLE` (the
+2068 couldn't show it in CAT's card line). `""` is no label. Used by
+`LABEL_SET`. Pinned: `games` → `GAMES`; `Games 2  ` → `GAMES 2`; `""`
+and 11 characters pass; 12 characters, a leading space, `.`, `:`, `*`,
+`|`, `é` and TAB are None.
+
+### `_u32(b, i)`
+
+The little-endian 32-bit number at `b[i]`. `_u16` (two bytes) is the same,
+at line 584 (`native.py` has its own, [native.md](native.md)).
+
+### `_is_vbr(b)`
+
+True if sector `b` is a FAT boot sector with 512-byte sectors: the 55h AAh
+signature, a jump (EBh, E9h or E8h) first, 512 bytes per sector, a power
+of two sectors per cluster, one or two FATs and some reserved sectors.
+FatFs's `check_fs`, simplified (inferred from the FatFs source; the
+checks were chosen to take the cards `newfs_msdos` and SD Card Formatter
+make).
+
+### `_Fat`
+
+The FAT volume on `dev`, found as FatFs finds it: sector 0 if it is a boot
+sector, else the first of the MBR's four partitions whose first sector is
+one. `OSError(19, "No FAT volume")` if neither.
+
+### `_Fat.__init__(self, dev)`
+
+Reads sector 0 and, through the MBR if need be, the boot sector. Keeps
+`dev`, `start` (the volume's first sector), `spc` (sectors per cluster),
+`fat` (the first FAT's sector) and `fat32` (the 16-bit FAT size is 0).
+FAT32: `data` (cluster 2's sector) and `root_clus`. FAT12/16: `root` (the
+fixed root folder's first sector) and `root_secs`.
+
+### `_Fat.read(self, n)`
+
+Sector `n` as a new 512-byte `bytearray`.
+
+### `_Fat.root_sectors(self)`
+
+Every root-folder sector, in order: the fixed area on FAT12/16; on FAT32
+each cluster of the root's chain, read from the FAT, until an end mark
+(0FFFFFF7h and up) or a cluster below 2. At most 65 536 clusters, so a
+loop in a damaged chain ends.
+
+### `_Fat.find(self)`
+
+`(lab, free)`, each `(sector, offset, buf)` or `(None, None, None)`: the
+label entry and the first free one. An entry is the label if its
+attribute has 08h and is not a long-name piece (0Fh in the low six bits),
+and its first byte is neither 0 nor E5h. A free entry is a deleted one
+(E5h) or the first 0, where the search stops. `buf` is the sector as read,
+for the caller to change and write back. Pinned (through `read_label`): a
+long-name entry and a deleted label are not the label.
+
+### `read_label(dev)`
+
+The card's label, `""` for none; `OSError` if there is no FAT volume. A
+first byte of 05h is E5h (FAT's escape for a name that starts with E5h);
+anything outside 32–126 is `?`; trailing spaces go. Used by `CARD_LABEL`.
+
+### `write_label(dev, name)`
+
+Gives the card the label `name`, already in `label_clean`'s form; `""`
+takes it off. `OSError` if there is no FAT volume.
+
+- **A name:** a new entry, the name padded to 11 and attribute 08h, with
+  no date, goes over the old label entry or else into the first free one;
+  none free is `ValueError("Root folder full")` (FAT12/16's fixed root
+  folder can fill; on FAT32 a full root folder's chain is not extended).
+- **`""`:** the label entry, if there is one, is marked deleted (E5h).
+
+Either way one sector is written, the root-folder sector holding the
+entry, read just before; the boot sector, its FAT32 backup and the FATs
+are never touched. Used by `DISK_LABEL_WORK`, with the card unmounted.
+Pinned: FAT16 (no MBR) — the label goes in a deleted slot with the other
+entries untouched, and only that sector is written; a second label
+replaces the first, leaving one entry; `""` deletes it, writing nothing
+else; a full root folder is ValueError with nothing written, but one
+holding a label takes the new one in its place. FAT32 behind an MBR — the
+label goes in the root's second cluster when the first is full, and only
+that sector is written; the boot sector, its backup and the MBR are
+untouched. No FAT volume: OSError (from
+`read_label`).
+
+## CAT's card line
+
+### `card_line(label, total, free)`
+
+The line CAT and `tpi:dir` show over the listing, at most 32 characters:
+`SD: 240 MB; free: 236 MB`, with the label in place of `SD` when the card
+has one. A long label tries `L: 240 MB, 236 MB free`, then `L 240 MB, 236
+MB free`, then `L: 236 MB free`, and the last cut to 32. The sizes come
+from `space_pair`. Used by `LIST_DIR_FILES`. Pinned: no label; a label in
+place of `SD`; two 11-character labels with large sizes still fit 32
+columns.

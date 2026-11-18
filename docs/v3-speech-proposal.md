@@ -9,12 +9,13 @@ Decisions taken with David on 2026-10-12 are marked **(decided)**.
 
 **Status (2026-10-12):** built on branch `v3-speech`, everything but the
 tests that need the card in a 2068; see [Progress](#progress). The speech
-channel (`s:`) was dropped: the ROM can't reach it.
+channel was dropped here as `s:` (the ROM couldn't reach it) and came back
+as `v:` with a ROM 2.3 change (#375, 2026-11-05).
 
 ## What the prototypes settled
 
 Three voices were rendered on the Mac and compared by ear: SAM (the 1982
-C64/Atari voice), the SP0256-AL2, and a formant synthesiser written for the
+C64/Atari voice), the SP0256-AL2, and a formant synthesizer written for the
 comparison.
 
 - **The voice: the SP0256-AL2 (decided),** emulated from its ROM. A first
@@ -22,13 +23,13 @@ comparison.
   (from cpcwiki, as David's board uses). It popped at the joins, because many
   recordings start or end with a full-scale click. Measured against the ROM,
   the recordings also run about 25 % slow (every allophone 1.25 times the
-  ROM's length, as from 8 kHz material labelled 10 kHz), and several are
+  ROM's length, as from 8 kHz material labeled 10 kHz), and several are
   mis-cut (PP, GG2, HH1, HH2). Emulated from the ROM, the chip plays a
   sentence as one continuous stream: no joins, 4–5 times fewer large sample
   steps, and the speed of a real AL2 on its 3.12 MHz crystal. "Way better"
   (David).
 - **SAM is out:** the only source is a reconstruction of proprietary code with
-  no licence.
+  no license.
 - **The formant voice** worked and could do intonation (questions, and
   "Canadian" uptalk), but the SP0256 is the character wanted. Its code stays
   with the prototypes.
@@ -41,7 +42,7 @@ The prototype tools (`sentences.py`, `t2a.py`, `sp0256_rom.cpp`,
 | Part | Source | Terms |
 |---|---|---|
 | The AL2's allophone data | `al2.bin`, 2 KB, the chip's ROM ([spatula-city.org/~im14u2c/sp0256-al2](http://spatula-city.org/~im14u2c/sp0256-al2/); bit-reversed relative to MAME's `sp0256-al2.bin`, SHA-1 `e60fcb5f…` once reversed) | Copyright Microchip Technology Inc. In 2007 Microchip's legal department told Joe Zbiciak he may distribute the ROM data "so long as you acknowledge Microchip's ownership of the algorithms". MAME and others ship it with that acknowledgment, and so would we. |
-| The chip emulation | MAME's `src/devices/sound/sp0256.cpp` (Joseph Zbiciak, Tim Lindner) | BSD-3-Clause: fine beside the firmware's MIT licence. GmEsoft's SP0256/CTS256A emulator is GPL-3, so we don't take code from it. |
+| The chip emulation | MAME's `src/devices/sound/sp0256.cpp` (Joseph Zbiciak, Tim Lindner) | BSD-3-Clause: fine beside the firmware's MIT license. GmEsoft's SP0256/CTS256A emulator is GPL-3, so we don't take code from it. |
 | English to phonemes | The US Naval Research Laboratory's letter-to-sound rules (NRL Report 7948, 1976) as John A. Wasser coded them (`english.c`, 1985, CMU AI Repository) | Public domain: a US-government report, and Wasser's own "all public domain and I make no copyright claims on it". |
 
 The acknowledgments go in a `NOTICE` file and the manual. Strictly,
@@ -65,7 +66,7 @@ As `t2a.py` does:
 4. **Phonemes to AL2 allophones** by context, as the datasheet describes:
    - word-initial and final variants (TT2/TT1, DD2/DD1, DH1/DH2, BB2/BB1);
    - KK1/KK3/KK2 and GG1/GG2/GG3 by the following vowel;
-   - the r-coloured vowels (AR, OR, XR, YR) and NG before K or G;
+   - the r-colored vowels (AR, OR, XR, YR) and NG before K or G;
    - pauses for spaces and punctuation.
 
 A line of text takes milliseconds, so it can run inside a command.
@@ -147,7 +148,7 @@ something else on the 2068 uses them. They work in ZX48 mode too, where
 3. **Text:** the rules table and its build tool, the matcher, numbers, the
    exception dictionary and `/speech.txt`, and `tpi:say` (text and
    `[allophones]`). Host test: known words to known allophones.
-4. ~~**The `s:` channel.**~~ Dropped (above).
+4. ~~**The `s:` channel.**~~ Dropped (above); done later as `v:` (#375).
 5. **Ports 17 and 37,** tested with a program written for David's board.
 6. **Docs:** the reference, the v3 manual (an appendix, "Speech": `tpi:say`,
    the channel, the ports, the allophone table, adding words), and `NOTICE`
@@ -183,7 +184,7 @@ On branch `v3-speech` (2026-10-12):
 | 1. The audio path | **Done** on board 2, on USB power with no 2068: tones on each channel at the jack, and the ROM speech played by DMA at 10 kHz |
 | 2. The chip in `tsbus` | **Done.** `sp0256.c` (MAME's core via `tools/sp0256-port.py`), checked bit for bit against MAME's C++ (`sp0256_hosttest.py`). Core 1 runs it into a ring that two DMA channels play to GP46/GP30. Core 1 never reads flash: the tables had to be placed in RAM by name, because GCC put them in `.rodata` even without `const`. On board 2: 80,157 samples for two sentences, exactly MAME's count, never late |
 | 3. Text and `tpi:say` | **Done.** `speech.py`, the rules generated from Wasser's `english.c`, `/speech.txt`, `tpi:say`, and speech started at boot with `SPEECH_VOLUME`/`SPEECH_RATE`/`SPEECH_PORTS` |
-| 4. The `s:` channel | **Dropped**: needs a ROM change |
+| 4. The speech channel | **Done** as `OPEN #n,"v:"` (#375): the ROM's OPEN hook takes `v:` and flushes at each CR; the firmware says each line. `s:` was dropped because the stock ROM takes `s` as the screen |
 | 5. Ports 17 and 37 | **Done**, tested from a 2068 with a program written for the speech board (OUT 17 / IN 37). The boot greeting also speaks at power-on |
 | 6. Docs | **Done**: the reference (`firmware/speech.md`, `tsbus.md`, `board.md` and others), the v3 manual's Appendix G, `NOTICE` |
 

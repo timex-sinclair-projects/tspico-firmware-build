@@ -316,7 +316,7 @@ is `PUSH AF / PUSH BC / LD B,0E2h / CALL RD_STATUS / BIT 6,A / JR NZ,ok /
 DJNZ`, so the T report comes from inside every ready-wait the ROM's own code
 makes: the SAVE and LOAD block paths and `PICO_TRANSACT` (2279h). The Pico sets
 FBh (`MQ_TO_IDLE(recovered=True)`) when a pre-header stops short or is
-unrecognised ([tspico-dispatch.md](../firmware/tspico-dispatch.md)); the next
+unrecognized ([tspico-dispatch.md](../firmware/tspico-dispatch.md)); the next
 SYNC clears it. In 1.1, with no RECOVERED bit, that case waited the full
 ~19.9 s for J.
 

@@ -32,7 +32,7 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     permissions:
       # Required so `gh release create` can publish the release and
@@ -52,33 +52,40 @@ jobs:
           echo "Releasing tag: ${TAG}"
 
       - name: Checkout repo at tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ steps.tag.outputs.tag }}
           fetch-depth: 0  # full history for release-notes generation
 
-      # apt on the hosted runners sometimes hangs mid-download (four times
-      # on 2026-09-30); a normal install takes about a minute. Each attempt
-      # gets 4 minutes and a stuck one is retried, so a bad mirror costs
-      # minutes instead of blocking the job until GitHub's own limit.
-      - name: Install build tools
-        timeout-minutes: 15
+      # The ARM compiler from Arm's tarball, kept in the Actions cache: the
+      # same steps as .github/actions/arm-toolchain (which says why), inline
+      # because a manual release checks out an older tag, which may not have
+      # that file. gcc, make, cmake, git, python3 and zip come with the
+      # ubuntu-24.04 runner image. Keep the two copies in step.
+      - name: Restore the ARM toolchain
+        id: armgcc
+        uses: actions/cache@v5
+        with:
+          path: ~/arm-gnu-toolchain
+          key: arm-gnu-toolchain-10.3-2021.10-x86_64-linux
+
+      - name: Download the ARM toolchain (cache miss)
+        if: steps.armgcc.outputs.cache-hit != 'true'
+        env:
+          URL: https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2
+          SHA256: 97dbb4f019ad1650b732faffcc881689cedc14e2b7ee863d390e0a41ef16c9a3
         run: |
-          for attempt in 1 2 3; do
-            if sudo timeout 240 apt-get update \
-               && sudo timeout 240 apt-get install -y \
-                    -o Acquire::Retries=3 -o Acquire::http::Timeout=30 \
-                    git build-essential cmake \
-                    gcc-arm-none-eabi libnewlib-arm-none-eabi \
-                    python3 zip; then
-              exit 0
-            fi
-            echo "::warning::apt attempt $attempt failed or timed out; retrying"
-            sudo dpkg --configure -a || true   # finish anything a killed install left half-done
-            sleep 10
-          done
-          echo "::error::apt failed three times"
-          exit 1
+          tgz="$RUNNER_TEMP/arm-gnu-toolchain.tar.bz2"
+          curl -fsSL --retry 5 --retry-all-errors --connect-timeout 30 --max-time 900 -o "$tgz" "$URL"
+          echo "$SHA256  $tgz" | sha256sum -c -
+          mkdir -p ~/arm-gnu-toolchain
+          tar xjf "$tgz" -C ~/arm-gnu-toolchain --strip-components=1
+          rm -rf ~/arm-gnu-toolchain/share/doc "$tgz"
+
+      - name: Put the ARM toolchain on PATH
+        run: |
+          echo "$HOME/arm-gnu-toolchain/bin" >> "$GITHUB_PATH"
+          "$HOME/arm-gnu-toolchain/bin/arm-none-eabi-gcc" --version | head -1
 
       - name: Clone MicroPython v1.29.0
         run: |
@@ -133,6 +140,15 @@ jobs:
 
       - name: Build rp2 firmware
         working-directory: ${{ github.workspace }}/micropython/ports/rp2
+        # The Pico's 2 MB as a plain number. MicroPython passes the board's
+        # PICO_FLASH_SIZE_BYTES to ld as --defsym, and the Pico SDK's value
+        # for RPI_PICO is "(2 * 1024 * 1024)": binutils before 2.38 take
+        # only numbers, + and - there, and the Arm 10.3 toolchain's is 2.37
+        # ("--defsym:2: syntax error"). Ubuntu's apt toolchain had 2.38.
+        # make appends its own CMAKE_ARGS to this one from the environment.
+        # Not the v3 board: it sets its own 16 MB as a number.
+        env:
+          CMAKE_ARGS: -DPICO_FLASH_SIZE_BYTES=2097152
         run: |
           make clean
           make -j$(nproc)
@@ -148,6 +164,9 @@ jobs:
       # it before the firmware for boards coming from 1.1 / 1.5, whose TS-2068
       # ROM can't talk to the current firmware. Published as upgrade.uf2.
       - name: Build the upgrade UF2
+        # The Pico's 2 MB as a number, as for the firmware above (binutils 2.37).
+        env:
+          CMAKE_ARGS: -DPICO_FLASH_SIZE_BYTES=2097152
         run: |
           python3 tools/build-upgrade.py "$RUNNER_TEMP/upgrade"
           M=${{ github.workspace }}/micropython/ports/rp2
@@ -225,7 +244,7 @@ jobs:
           cp src/config.ini    "${STAGE}/src/config.ini"
           cp src/words.txt     "${STAGE}/src/words.txt"
           cp src/assets/*.tap  "${STAGE}/src/assets/"
-          cp src/rom/TSPICO-23.ROM "${STAGE}/src/rom/"   # the slot-1 ROM only (flash/manifest.json)
+          cp src/rom/TSPICO-24.ROM "${STAGE}/src/rom/"   # the slot-1 ROM only (flash/manifest.json)
 
           # SD card/: TAP files + help text the firmware reads from the
           # mounted SD card at runtime. Copy recursively so subfolders
@@ -246,7 +265,7 @@ jobs:
 
           1. **Pico firmware** — \`firmware.uf2\` at the zip root.
           2. **Pico flash filesystem** — everything inside \`src/\`.
-          3. **TS-2068 ROM** — \`src/rom/TSPICO-23.ROM\`, ROM 2.3 (flash
+          3. **TS-2068 ROM** — \`src/rom/TSPICO-24.ROM\`, ROM 2.4 (flash
              slot 1).
           4. **SD card** — everything inside the \`SD card/\` folder.
 
@@ -275,8 +294,8 @@ jobs:
           ## 3. Install the TS-2068 ROM
 
           The web updater installs it for you. By hand: copy
-          \`src/rom/TSPICO-23.ROM\` to the SD card's \`TAP\` folder,
-          \`LOAD "tpi:TSPICO-23.ROM"\` then \`LOAD ""\`, and write it to
+          \`src/rom/TSPICO-24.ROM\` to the SD card's \`TAP\` folder,
+          \`LOAD "tpi:TSPICO-24.ROM"\` then \`LOAD ""\`, and write it to
           Flash slot 1 while the 2068 runs from another slot; or program it
           into slot 1 of the flash chip (offset 0x8000) with a ROM
           programmer. The image is a raw 32K binary.
@@ -389,13 +408,19 @@ jobs:
         id: zimodem
         continue-on-error: true
         run: |
+          # In a venv: ubuntu-24.04's Python refuses system-wide pip
+          # installs (PEP 668). Activated, so build.sh's python3 has
+          # PlatformIO's pyserial for esptool too.
+          python3 -m venv "$RUNNER_TEMP/pio-venv"
+          . "$RUNNER_TEMP/pio-venv/bin/activate"
           pip install platformio==6.1.19
           esp32/zimodem/build.sh
           cp esp32/zimodem/out/zimodem-v3.bin "$RUNNER_TEMP/zimodem-v3.bin"
 
       # The user manual as PDFs (tools/manual-pdf/make.sh, also built by
-      # build.yml on every push): the half-letter one-up for reading and the
-      # saddle-stitch booklet imposed on letter, both from the manual at the tag.
+      # manual.yml on pushes that touch the manual): the half-letter one-up for reading and the
+      # saddle-stitch booklet imposed on letter, both from the manual at the tag; and the same
+      # two of the Quick Start Guide, and the Quick Reference Guide's tri-fold card.
       - name: Install pandoc, the PDF fonts and pypdf
         timeout-minutes: 10
         run: tools/manual-pdf/ci-setup.sh
@@ -410,7 +435,7 @@ jobs:
           UF2: ${{ github.workspace }}/micropython/ports/rp2/build-RPI_PICO/firmware.uf2
           FLASH_ROM: ${{ steps.flash.outputs.rom }}
         run: |
-          # Assets: bundle + raw UF2 + the upgrade UF2 + the user manual PDFs,
+          # Assets: bundle + raw UF2 + the upgrade UF2 + the manual and quick guide PDFs,
           # plus the 512K flash image when the build-flash step produced one.
           # pages.yml publishes firmware.uf2 and upgrade.uf2 to the updater.
           ASSETS=( "${ZIP_NAME}" "${UF2}#firmware.uf2 (raw, for in-place reflash)"
@@ -418,7 +443,10 @@ jobs:
           ASSETS+=( "${RUNNER_TEMP}/firmware-v3.uf2#firmware-v3.uf2 (the TS-Pico v3 card's firmware, RP2350)"
                     "${RUNNER_TEMP}/v3-slots.zip#v3-slots.zip (the v3 card's ROM and cartridge slot files, for /slots)" )
           ASSETS+=( "${RUNNER_TEMP}/manual-pdf/user-manual-half-letter.pdf#user-manual-half-letter.pdf (the user manual, 5.5 x 8.5 in, for reading)"
-                    "${RUNNER_TEMP}/manual-pdf/user-manual-saddle-stitch-letter.pdf#user-manual-saddle-stitch-letter.pdf (the user manual as a booklet: print on letter, double-sided, flip on the short edge; fold and staple)" )
+                    "${RUNNER_TEMP}/manual-pdf/user-manual-saddle-stitch-letter.pdf#user-manual-saddle-stitch-letter.pdf (the user manual as a booklet: print on letter, double-sided, flip on the short edge; fold and staple)"
+                    "${RUNNER_TEMP}/manual-pdf/quick-start-half-letter.pdf#quick-start-half-letter.pdf (the Quick Start Guide, 5.5 x 8.5 in, for reading)"
+                    "${RUNNER_TEMP}/manual-pdf/quick-start-saddle-stitch-letter.pdf#quick-start-saddle-stitch-letter.pdf (the Quick Start Guide as a booklet: two letter sheets, double-sided, flip on the short edge; fold and staple)"
+                    "${RUNNER_TEMP}/manual-pdf/quick-reference-card-letter.pdf#quick-reference-card-letter.pdf (the Quick Reference Guide: one letter sheet, double-sided, flip on the short edge; fold in three)" )
           if [ -f "${RUNNER_TEMP}/zimodem-v3.bin" ]; then
             ASSETS+=( "${RUNNER_TEMP}/zimodem-v3.bin#zimodem-v3.bin (Zimodem for the v3 card's modem, the ESP32-C3: one image for address 0)" )
           fi

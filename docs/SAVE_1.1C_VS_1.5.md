@@ -152,7 +152,7 @@ This is the change everything else follows from.
 | Clock | 15 MHz | 30 MHz |
 | Ports decoded | one ($0E only) | two ($0E data, $0F status) |
 | A0 (GPIO 10) | sampled into RX bit 8, otherwise ignored | decoded on reads to select port |
-| Ready signalling | a `0x40` byte in the TX FIFO | the **Y scratch register**, read back on $0F |
+| Ready signaling | a `0x40` byte in the TX FIFO | the **Y scratch register**, read back on $0F |
 | On Z80 OUT | `push(noblock)` | `push(noblock)` **+ `mov(y, null)`** (issue #14 auto-busy) |
 
 ### 4.2 What `0x40` was, and what replaced it
@@ -545,7 +545,7 @@ maintaining.
 5. **50 ms TX-drain wait before the SM bounce** (`a648b40`) — divergence
    D above.
 6. **`MQ.put(0x01); MQ_READY()` fires once, after housekeeping**
-   (`151e1de`) — previously it signalled ready *before* the post-save
+   (`151e1de`) — previously it signaled ready *before* the post-save
    re-mount and directory refresh, so the Z80 started its next command
    while more `ACTIVATE_SD()` state-machine resets were still coming.
    Confirmed on a TLM trace showing `tx=1 rx=4` — a full, unread RX FIFO
@@ -605,7 +605,7 @@ With a valid pre-header (CRC-correct, captured cleanly every time) and
 
 - Reproducible across multiple runs.
 - Immune to continuously re-asserting `Y = READY` for 8+ seconds
-  (304 reassertions, zero effect). **Not a ready-signalling problem.**
+  (304 reassertions, zero effect). **Not a ready-signaling problem.**
 - Total silence on RX afterward — not a trickle. **Rules out simple FIFO
   overflow on the Pico side**, which would show as dropped-but-continuing
   traffic.
@@ -642,7 +642,7 @@ code that is stopping has no visible mechanism to stop.
 
 ### Dead ends — do not re-chase
 
-- **Ready/Y signalling.** 304 continuous reassertions over 8s changed
+- **Ready/Y signaling.** 304 continuous reassertions over 8s changed
   nothing (above).
 - **Timing budget.** Settled by disassembly — see below. Do not re-open.
 

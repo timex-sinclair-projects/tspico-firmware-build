@@ -15,13 +15,13 @@ is true, so:
   images, the upgrade payload), under `flash/`, in a build tool the
   reference lists, or in the CI workflows changes the matching chapter in
   the same PR.** A new function, variable, `tpi:` command or ROM label gets
-  a new entry. Changed behaviour: the entry says the new behaviour and, if
+  a new entry. Changed behavior: the entry says the new behavior and, if
   the reason changed, the new reason. A removed symbol: its entry goes.
   The flows and appendices the stamp row lists for that source get the
   same re-read: they follow operations across files, so a change in one
   file can make a flow wrong without touching any entry.
 - **A fix for a `reference-followup` issue updates the chapters that cite
-  it.** The caveat and the issue link go; the entry says the new behaviour.
+  it.** The caveat and the issue link go; the entry says the new behavior.
 - **Move the line numbers, then re-stamp and re-index.** The chapters cite
   their source by line; `python3 src/test/reference_hosttest.py --relines
   <source>` lists the ones a change moved (run it before re-stamping, and
