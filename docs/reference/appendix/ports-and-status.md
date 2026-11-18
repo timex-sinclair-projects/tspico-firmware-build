@@ -25,6 +25,10 @@ true: an allophone for the speech chip, and its busy bit (bit 7: FFh busy,
 1Fh (31) on IN is the Kempston joystick from the card's DE-9 socket (unless
 `config.ini`'s `KEMPSTON` is false): 000FUDLR, 1 = pressed, the high
 address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep1)).
+The v3 card also watches, without answering, OUTs to FDh and FCh: the
+TS-2068 Megabank's register select and data. A chunk one of its banks owns
+is the board's, and the card stops serving it
+([../firmware/tsbus.md](../firmware/tsbus.md#megabankh-megabankc)).
 
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which
