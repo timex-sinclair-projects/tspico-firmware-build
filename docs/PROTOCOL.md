@@ -276,7 +276,7 @@ becomes the command's result.
 | `$86` | PRINT STRING WITH LOOP | status, then pages: text, `$00` → the Z80 waits for a key, waits READY, OUTs the key; then, whatever the key, `N` included, it waits READY and prints the next page (#227; ROM 2.2 left the loop on `N`). `$03` ends the loop, so the Pico answers `N` with an echo and `$03`. | `$21E3` (loop `$21E7`, guard `$22A1`) | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | `$87` | (spec: "print n characters") | status | calls HOME `$08A6`, which clears the screen like CLS | unused |
 | `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
-| `$89` | **the Megabank mover** (Megabank test ROM 2.5 only) | operations, then op 0 and the answer (§6.3) | `$2213` is `JP FN_EXT` there; `FN_EXT` runs `LOWER_LOOP` for `$88` and `MOVER` for `$89`. ROM 2.4 treats `$89` like `$8A` | `tpi:rblk`'s handler (the RAM disk, Megabank spec phase 5); `tools/emu/megabank_host.py` stands in for it |
+| `$89` | **the Megabank mover** (Megabank test ROM 2.5 only) | operations, then op 0 and the answer (§6.3) | `$2213` is `JP FN_EXT` there; `FN_EXT` runs `LOWER_LOOP` for `$88` and `MOVER` for `$89`. ROM 2.4 treats `$89` like `$8A` | every `r:` command's handler (the RAM disk, `src/TS/ramdisk.py`; §6.3) |
 | `$80`, `$8A`–`$FF` (and `$89` before ROM 2.5) | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
 
 In the firmware (`TS/tspico.py`, issue #16) these are `FN_PRINT_STRING` (`$81`), `FN_PRINT_STRING_KEY` (`$82`), `FN_PRINT_CHAR` (`$83`), `FN_RETURN_KEY` (`$84`), `FN_GET_STATUS` (`$85`), `FN_PRINT_LOOP` (`$86`) and `FN_PRINT_LOOP_LOWER` (`$88`); the `$00` that ends a string or a page is `STR_END`, the `$03` that ends a loop `LOOP_END`, and a pre-header's first byte is `PRE_HEADER` (`$00`), `PRE_DATA` (`$FF`) or `PRE_CMD` (`$42`, `'B'`). Each use in the code also gives the number in its comment.
@@ -446,7 +446,26 @@ chunk's HSR bit, port `$F4`, is set):
 `src/test/rom_megabank_hosttest.py` runs all of this in the Z80 interpreter
 against a board model that fails on any write the HSR rule would leak;
 `tools/emu/megabank_smoke.py` runs it end to end in ZEsarUX's Megabank model
-(which ignores the HSR) with `tools/emu/megabank_host.py`, a stand-in RAM disk.
+(which ignores the HSR) with the firmware's RAM disk, below, and
+`tools/emu/megabank_host.py`'s test-only `tpi:mbtest` for the refusals the
+file system never provokes.
+
+**The firmware side: the RAM disk** (the Megabank spec's phase 5). The file
+system is `src/TS/ramdisk.py`, the bus side `tspico.py`'s `RD_*`
+([reference](reference/firmware/tspico-disk.md#the-megabanks-ram-disk-r-names)).
+`tpi:ropen` answers a bare status and touches nothing; each `tpi:rblk` answers
+89h: op 7, op 4 of the superblock (32 bytes at the board's last page), the
+directory if its generation changed, then the block (a SAVE header: op 1 to a
+staging area and op 4 back; a data block: op 1, then the directory entry and
+the superblock by op 5; a LOAD header: op 2 from the directory entry; data: op
+2 or op 3), op 0 and the bare status. The disk keywords reach the firmware as
+they do for the card (`tpi:dir r:`, `tpi:erase r:x`, `tpi:format r:[size]`,
+`tpi:ren r:a|r:b`, `tpi:copy a|b`, and `tpi:ram`) and answer 89h, operations,
+op 0 and their message or listing. The answer goes in behind op 0 and only
+then says READY. Anything slow, such as card access for COPY or a backup, runs
+between operations, while the Z80 waits for READY (up to ~19.9 s each), and
+never between op 0 and the answer. On a ROM older than 2.5 every `r:` command
+is J ("r: needs the Megabank ROM").
 
 ## 7. The channel commands
 

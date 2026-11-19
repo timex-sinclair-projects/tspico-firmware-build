@@ -130,6 +130,11 @@ the block from the Megabank RAM disk into memory with function 89h, the
 mover, and answers with a status; a VERIFY compares instead (R if it
 differs). Bit 5 is cleared after the data block
 ([PROTOCOL.md §6.3](../../PROTOCOL.md), [../rom/exrom-fdd.md](../rom/exrom-fdd.md#r_sa-39f5h-r_ld-3a06h)).
+On the Pico, `RD_RBLK` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#rd_rblkpre-cmd))
+reads op 7 and the superblock (and the directory if it changed), finds the
+file (F if it isn't there), and copies its header from its directory entry
+(op 2), then its data (op 2, or op 3 for VERIFY). A second header request in
+one statement (the ROM skipped a header of the wrong type) is R.
 
 ### `tpi:tape`
 

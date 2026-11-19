@@ -24,6 +24,7 @@ freeze("$(BOARD_DIR)/../..", (
     "TS/catalog.py",
     "TS/native.py",
     "TS/channels.py",
+    "TS/ramdisk.py",
     "TS/board.py",
     "TS/board_v3.py",
     "TS/net.py",

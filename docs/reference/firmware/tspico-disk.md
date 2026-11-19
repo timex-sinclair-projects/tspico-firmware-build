@@ -1,6 +1,6 @@
-# tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, `f:` files, the channels
+# tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, the Megabank's `r:` RAM disk, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2884–3992.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2887–4584.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -25,14 +25,14 @@ module's patches.
 
 | Lines | What | Chapter |
 |---|---|---|
-| 2884–2980 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
-| 2989–3093 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 3096–3467 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
-| 3477–3480 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 3483–3592 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 3606–3633 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 3636–3668 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 3671–3992 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2887–2983 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
+| 2992–3098 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
+| 3101–3487 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
+| 4069–4072 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 4075–4184 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 4198–4225 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 4228–4260 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 4263–4584 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -216,7 +216,7 @@ the parent unindexed.
 
 ## COPY, ERASE, FORMAT, LIST, the label and MOVE
 
-The comment at lines 2983–2987 states the rules all four share: paths resolve
+The comment at lines 2986–2990 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -495,9 +495,276 @@ parents; `"Renamed to <public dst>"`, 1. Pinned by `test_cd_and_ren`:
 rename, move into a directory, onto an existing name F, a directory into
 itself Q, the mounted file Q.
 
+## The Megabank's RAM disk: `r:` names
+
+The comment at line 3490 and the Megabank spec's "The RAM disk" (the
+TS-2068-Megabank repository, `docs/spec.md`; its phase 5). The file system
+is [ramdisk.py](ramdisk.md); this part is its bus side and its commands.
+Every `r:` command answers response function 89h, the mover
+([PROTOCOL.md §6.3](../../PROTOCOL.md)): its operations, op 0, then the
+command's ordinary answer (a status, a message, a listing). Only the
+Megabank test ROM (2.5, `rom_id` 25h) has the mover; any other ROM would take
+89h for an unknown function and give Report D, so an `r:` command from one is
+refused first (`RD_NEEDS_ROM`). `ramdisk.py` is frozen into the v3 card's
+build only, and imported by `RD_START`, so on v2 an `r:` command from a 2.5
+ROM would fail at the import (the RAM disk is v3-only: the spec, "Firmware").
+
+| Statement | The ROM sends | Handler |
+|---|---|---|
+| SAVE/LOAD/VERIFY/MERGE "r:name" | `tpi:ropen name`, then `tpi:rblk <hex>` per block (phase 4's ROM) | [`RD_ROPEN`](#rd_ropenpre-cmd), [`RD_RBLK`](#rd_rblkpre-cmd) |
+| CAT "r:" | `tpi:dir r:` | `DIR` → [`RD_CAT`](#rd_catarg) |
+| ERASE "r:x" | `tpi:erase r:x` | `DISK_ERASE` → [`RD_ERASE`](#rd_erasearg) |
+| FORMAT "r:[size]" | `tpi:format r:…` | `DISK_FORMAT` → [`RD_FORMAT`](#rd_formatarg) |
+| MOVE "r:a" TO "r:b" | `tpi:ren r:a\|r:b` | `DISK_REN` → [`RD_REN`](#rd_rena-b) (MOVE with one `r:` side: Q) |
+| COPY a TO b, either side `r:` | `tpi:copy a\|b` | `DISK_COPY` → [`RD_COPY`](#rd_copya-b) |
+| SAVE "tpi:ram [backup\|restore name]" | `tpi:ram …` | [`RD_RAM`](#rd_rampre-cmd) |
+
+`SD_NEEDED` asks [`RD_ONLY`](#rd_onlycmd_word-cmd_exec) first, so a command
+with no card side works without a card.
+
+| Name | Value | Meaning |
+|---|---|---|
+| `FN_MOVER` | 89h | response function 89h, sent in front of the first operation |
+| `RD` | `None`, then a `ramdisk.Disk` | the RAM disk, made by `RD_START` on the first `r:` command and kept: its directory cache (at most 224 entries) lives as long as the firmware |
+| `RD_OPEN` | `None`, or [name, mode, header, header served] | set by `tpi:ropen`, used and cleared by `tpi:rblk`: the open SAVE/LOAD/VERIFY/MERGE. The header is a SAVE's, between its two blocks; "served" stops a LOAD's second header request |
+| `RD_CONFIRM_MS` | 60 000 | how long a FORMAT, ERASE pattern or restore waits to be repeated |
+| `RD_IMAGE_EXT` | `".rdi"` | the extension `tpi:ram backup` and `restore` add to a name without one |
+| `RD_REPLY_MS` | 10 000 | how long `RD_KEY` waits for the Z80's reply to an operation |
+
+### `RD_MOVER`
+
+The firmware's side of function 89h: the operations `ramdisk.Disk` calls
+(the table in [ramdisk.md](ramdisk.md#disk)). One per command, made by
+`RD_START`. The first operation goes out behind 89h; each later one goes out
+once the Z80 has replied, which is when it waits for READY (the ROM's
+`MOVER`, [exrom-fdd.md](../rom/exrom-fdd.md)). A refusal raises `RdError`;
+a BREAK or a Z80 that stops raises `CmdAbort`, which `PROCESS_CMD` handles
+as for any command.
+
+### `RD_MOVER.__init__(self, err)`
+
+`err` is `ramdisk.RdError` (passed in, so this class needs no import);
+`first` is true until 89h has gone.
+
+### `RD_MOVER._go(self, buf)`
+
+An operation's bytes, with 89h in front if it is the first, by `CMD_SEND`:
+the first bytes into TX, READY, the rest as the Z80 reads them.
+
+### `RD_MOVER._rx(self, n)`
+
+`n` bytes from the Z80 by `RX_BLOCK` (2 s for the first, 1 s between): op
+4's data, XOR and reply, op 7's five bytes. A port-0Fh write or silence
+raises `CmdAbort` with `RX_BLOCK`'s code (1 or 3).
+
+### `RD_MOVER._st(self, st)`
+
+A reply other than 1 as `RdError(J)`: 3 "No Megabank board", 4 "RAM disk:
+out of range", 5 "RAM disk: transfer error".
+
+### `RD_MOVER._w(*vals)`
+
+Words, little-endian, as a bytearray.
+
+### `RD_MOVER.info(self)`
+
+Op 7: (found, BASE, SIZE, STATUS, VERSION).
+
+### `RD_MOVER.read(self, n, page, off)`
+
+Op 4: `n` bytes, then their XOR and the reply. The XOR is checked here (a
+mismatch is reply 5). Returns a memoryview of the bytes.
+
+### `RD_MOVER.write(self, data, page, off)`
+
+Op 5: the parameters, the bytes and their XOR in one `CMD_SEND` (8K + 8
+bytes at most from the file system), then the reply.
+
+### `RD_MOVER.move(self, n, page, off, page2, off2)`
+
+Op 6, then the reply.
+
+### `RD_MOVER.copy_in(self, addr, n, page, off)`
+
+Op 1, then the reply.
+
+### `RD_MOVER.copy_out(self, addr, n, page, off)`
+
+Op 2, then the reply.
+
+### `RD_MOVER.compare(self, addr, n, page, off)`
+
+Op 3: `True` for reply 1, `False` for 2, `RdError` for a refusal.
+
+### `RD_MOVER.end(self)`
+
+Op 0, if 89h went out at all, put in TX **without READY**: the Z80 is
+waiting for READY, and the command's answer (`SEND_STATUS`, `SEND_MSG`,
+`SEND_MSG2`) goes in behind it and says READY itself. Saying READY with op
+0 alone would let the Z80 read op 0 and then the answer's first byte from an
+empty FIFO. If no operation went out (a refusal before the first), nothing:
+the answer is the command's ordinary one.
+
+### `RD_KEY()`
+
+The Z80's reply to an operation: `RX_WORD` with `RD_REPLY_MS` (a 64K copy
+takes under a second); silence or a port-0Fh write raises `CmdAbort` (3, 1).
+Not `CMD_KEY`, which waits a day for a person.
+
+### `RD_ARG(s)`
+
+Whether `s` starts with `r:` (either case).
+
+### `RD_ONLY(cmd_word, cmd_exec)`
+
+For `SD_NEEDED`: true when the command touches the RAM disk and not the
+card: `tpi:ropen`, `tpi:rblk`, `tpi:ram` without `backup`/`restore`, and
+`tpi:dir`, `tpi:erase`, `tpi:format` with an `r:` argument, `tpi:ren` and
+`tpi:copy` with both sides `r:`.
+
+### `RD_START()`
+
+`None` unless `rom_id` is 25h or later. Otherwise imports `TS.ramdisk`, makes
+`RD` the first time, gives it a new `RD_MOVER` and returns (disk, mover).
+
+### `RD_NEEDS_ROM(quiet=False)`
+
+"r: needs the Megabank ROM", J: as a forced message, or the bare status in
+the middle of a statement.
+
+### `RD_RUN(work, quiet=False, listing=False)`
+
+Every `r:` command's frame. `RD_START` (or `RD_NEEDS_ROM`); `work(disk)`,
+which runs the mover's operations and returns (text, status) or (text,
+status, True) for a text shown whatever `TSP.VERBOSE` says; an `RdError` is
+its message and status. Then `mover.end()` and the answer: the bare status
+(`quiet`, for a block in the middle of a SAVE or LOAD), `SEND_MSG2` (a
+listing), or `SEND_MSG`, forced for an error. A `CmdAbort` passes through
+to `PROCESS_CMD`.
+
+### `RD_ROPEN(pre, cmd)`
+
+`tpi:ropen name`, PMR1 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE: sent by
+`SEND_FOPEN` in the middle of the statement, so the answer is the bare
+status and there is no mover here. Clears `RD_OPEN`; not ROM 2.5: J; a name
+not 1–10 characters or a bad mode: F. Otherwise `RD_OPEN` = [name, mode,
+None, False] and 1. A LOAD of a missing name is refused by the first
+`tpi:rblk`, the first moment the directory can be read.
+
+### `RD_HEX(cmd)`
+
+`tpi:rblk`'s eight hex digits as (address, length).
+
+### `RD_RBLK(pre, cmd)`
+
+`tpi:rblk <hex>`, PMR1 0 SAVE, 1 LOAD, 2 VERIFY (a MERGE's blocks are
+LOADs), PMR2 the block's flag; one block, by `RD_RUN` with the bare status.
+The disk is mounted (no RAM disk: J). Then:
+
+- **SAVE, header** (flag 0, 17 bytes): `save_header` copies it to the board
+  and back; it waits in `RD_OPEN`.
+- **SAVE, data**: `save_data` under the open name, with the header kept;
+  `RD_OPEN` cleared. Write-protect: J; full: Q.
+- **LOAD/VERIFY, header**: the file (missing: F); its header copied to the
+  2068 from its directory entry (op 2). A second header request in the same
+  statement means the ROM skipped the first (the wrong type for the
+  statement): R, with the file's type in the log.
+- **LOAD/VERIFY, data**: the flag must be the file's (R). Op 2 (LOAD) or op
+  3 (VERIFY: R if they differ) for the shorter of the two lengths; lengths
+  that differ are R after the copy, as a tape block of the wrong length is.
+  `RD_OPEN` cleared.
+
+A missing `RD_OPEN` is F. The ROM clears its TPMODE bit 5 on any status but
+1, so a failed block ends the statement; the next `tpi:ropen` resets
+`RD_OPEN`.
+
+### `RD_CAT(arg)`
+
+CAT "r:" (anything after the `r:` is Q): mount, `Disk.listing` by
+`SEND_MSG2`.
+
+### `RD_CONFIRMED(disk, what)`
+
+Whether a FORMAT, ERASE pattern or restore that loses files has been asked
+for twice: true if `disk.confirm` holds the same `what`, at the same
+generation, less than `RD_CONFIRM_MS` ago. Either way `confirm` is used up;
+when false it is set to this request, and the caller says what it would do
+and how to go on. Why not a Y/N prompt: the mover's work comes before the
+command's answer, and a prompt (function 86h) *is* the answer, so nothing can
+be written after one.
+
+### `RD_ERASE(arg)`
+
+ERASE "r:name": `Disk.erase`. A pattern (`catalog.has_wild`): the matches
+(`catalog.match`; none: F), then `RD_CONFIRMED`: the first time a forced
+message, "*n* files: *names*. ERASE again to erase them", status 1; the
+second, every match's entry cleared and one commit.
+
+### `RD_FORMAT(arg)`
+
+FORMAT "r:[size]": mount without needing a RAM disk; the size by
+`ramdisk.parse_size`; write-protect J. Over a RAM disk that holds files,
+`RD_CONFIRMED` first ("The RAM disk holds *n* files. FORMAT again to lose
+them"); then `Disk.format`.
+
+### `RD_REN(a, b)`
+
+MOVE "r:a" TO "r:b": `Disk.rename`.
+
+### `RD_TAP_READ(path)`
+
+SD active. The first file of a TAP: its first block must be a 19-byte header
+block (flag 0), followed by a data block. Returns (header, flag, data), or
+`None` for anything else. Reads at most 70 000 bytes, enough for a 64K block.
+
+### `RD_TAP_BYTES(hdr, flag, data)`
+
+A header and a data block as TAP bytes: each block its length, flag, body
+and XOR.
+
+### `RD_TAP_WRITE(path, buf)`
+
+SD active. Writes a new file; an existing one, or a missing directory: F.
+`REFRESH_IF` its directory.
+
+### `RD_SD_PATH(arg, default)`
+
+SD active. A COPY's card-side name as a real path: resolved from
+`TSP.cur_path` (`None` if it leaves the root), `default` appended for a
+directory, `.tap` added to a name with no extension.
+
+### `RD_COPY(a, b)`
+
+COPY with an `r:` side.
+
+- **r: to r:**: `Disk.duplicate` (op 6); the same name, or one that exists:
+  F.
+- **card to r:**: the card first (`SD_CALL`, `RD_TAP_READ`), then the mover
+  (`Disk.put`, op 5); the name is `b` after `r:`, or the header's.
+- **r: to card**: the mover (`Disk.fetch`, op 4), then the card **between
+  operations**, before op 0 (`SD_CALL`, `RD_TAP_WRITE`): after op 0 the Z80
+  reads the answer straight away, so nothing slow may come between. The Z80
+  waits for READY meanwhile, up to ~19.9 s (`BIOS_WF_NPH`), and `SD_CALL`
+  leaves the bus as every SD access does (`ACTIVATE_MQ`: Y = BUSY, TX empty).
+
+### `RD_RAM(pre, cmd)`
+
+`SAVE "tpi:ram"` (or `tpi:ram info`): mount without needing a RAM disk (no
+board is not an error here), `Disk.report` by `SEND_MSG2`. `tpi:ram backup
+name`: the RAM disk's pages, first to last, each read with op 4 (8K) and
+appended to `name.rdi` with its own `SD_CALL`, between operations; a file
+that exists: F. `tpi:ram restore name`: the image's size (a multiple of 8K,
+2 pages or more, no bigger than the board) and its superblock (magic and
+sum) first; over files, `RD_CONFIRMED`; then each page read from the card
+and written with op 5 to the top of this board, the superblock rewritten for
+where it now sits (first and last; the generation one more), and the
+directory read again. A backup of a 2 MB RAM disk is 256 operations of 8K
+at ~85 µs a byte: about three minutes. `tpi:ram alloc` (the spec's open
+question 8) is not here: anything else is Q.
+
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 3470 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 4062 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -620,7 +887,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose, tpi:chcat
 
-The comment at line 3595 lists the four commands. The ROM's channel driver
+The comment at line 4187 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -924,7 +1191,7 @@ card, so they take the first path: `Channels.close` drops the entry (on
 speech, after saying what is left of an unfinished line, even when speech
 is off).
 
-The long comment at line 3954 is the history. When channels arrived (#83)
+The long comment at line 4546 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

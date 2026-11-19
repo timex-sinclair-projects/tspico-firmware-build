@@ -109,6 +109,13 @@ the source and length, PMR2 = the flag, and the firmware copies the bytes
 onto the Megabank RAM disk with function 89h, the mover. There is no
 pre-load, mid-phase status or session; bit 5 is cleared after the data
 block ([PROTOCOL.md §6.3](../../PROTOCOL.md), [../rom/exrom-fdd.md](../rom/exrom-fdd.md#r_sa-39f5h-r_ld-3a06h)).
+On the Pico, `RD_ROPEN` notes the name and `RD_RBLK` runs the block
+([../firmware/tspico-disk.md](../firmware/tspico-disk.md#rd_rblkpre-cmd)): op 7 and
+the superblock; for the header, op 1 to the staging area and op 4 back, kept
+in `RD_OPEN`; for the data, a run of clusters (compacting if need be), op 1,
+the directory entry and the superblock by op 5 (`Disk.save_data`,
+[../firmware/ramdisk.md](../firmware/ramdisk.md#disksave_dataself-name-hdr-addr-length-flag)),
+then op 0 and the bare status. No card is touched.
 
 ### `tpi:tape`
 

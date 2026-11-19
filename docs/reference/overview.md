@@ -55,7 +55,9 @@ which slot and which chip to present on every Z80 memory cycle.
 - `TS/sdcard.py` drives the card over SPI; `TS/channels.py`, `TS/catalog.py`
   and `TS/native.py` are pure logic (channels, names and listings, +3DOS
   headers); `TS/printer.py` is the virtual printer; `TS/extcmd.py` holds
-  user-added commands.
+  user-added commands. On the v3 card, `TS/ramdisk.py` is the TS-2068
+  Megabank's RAM disk (`r:`), a file system kept on the board and moved by
+  the Megabank ROM's mover.
 
 Three PIO state machines run all the time:
 
@@ -151,6 +153,7 @@ not read, and it answers COPY, `LIST "x"`, `RESTORE #`, `CAT #` and the
 | `src/TS/sdcard.py` | 536 | the SPI SD driver | [sdcard.md](firmware/sdcard.md) |
 | `src/TS/channels.py` | 449 | `OPEN #` channels | [channels.md](firmware/channels.md) |
 | `src/TS/catalog.py` | 313 | names, wildcards, listings | [catalog.md](firmware/catalog.md) |
+| `src/TS/ramdisk.py` | 530 | the Megabank's RAM disk (`r:`), v3 only | [ramdisk.md](firmware/ramdisk.md) |
 | `src/TS/printer.py` | 243 | the virtual printer | [printer.md](firmware/printer.md) |
 | `src/TS/native.py` | 146 | +3DOS headers | [native.md](firmware/native.md) |
 | `src/TS/extcmd.py` | 95 | external commands | [extcmd.md](firmware/extcmd.md) |

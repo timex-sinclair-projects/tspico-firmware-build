@@ -926,8 +926,8 @@ def CMD_SEND(buf, ready):
                 raise CmdAbort(r[0])
             return
     n = len(buf)
-    k = min(TX_DEPTH, n)
-    for i in range(k):
+    k = min(TX_DEPTH - MQ.tx_fifo(), n)     # what fits before READY: TX may hold a byte
+    for i in range(k):                      # already (the Megabank mover's op 0, RD_MOVER.end)
         CMD_PUT(buf[i])
     if ready:
         MQ_READY()
@@ -2819,6 +2819,9 @@ def DIR(pre, cmd):                                                              
         par1, par2, len(files), len(lista)))
 
     arg = getArgs(cmd).strip()
+    if par1 == 0 and RD_ARG(arg):                                             # CAT "r:": the Megabank's RAM disk
+        RD_CAT(arg)
+        return
     if par1 == 0 and arg:
         CATALOG(arg)
         return
@@ -3028,6 +3031,8 @@ def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # do
         return True                                                           # LOAD "tpi:name": mount a file
     if cmd_word == "TPI:HELP":
         return cmd_exec.strip() != cmd_word                                   # a topic is a file on the card
+    if RD_ONLY(cmd_word, cmd_exec):
+        return False                                                          # the Megabank's RAM disk alone
     if cmd_word == "TPI:CHOPEN" and CH_NOCARD_PATH(cmd_exec):
         return False                                                          # OPEN #n,"v:" or "x:": no file
     if cmd_word in ("TPI:CHWR", "TPI:CHRD") and stream is not None \
@@ -3102,6 +3107,9 @@ def DISK_COPY(pre, cmd):                                                      # 
     a, b = catalog.split_pair(getArgs(cmd))
     if not a or not b:
         SEND_MSG("Copy needs a source and a destination", "", _4_Q_Parameter)
+        return
+    if RD_ARG(a) or RD_ARG(b):                                                # to, from or on the RAM disk
+        RD_COPY(a, b)
         return
     led.value(1)
     msg, st = SD_CALL(DISK_COPY_WORK, a, b)
@@ -3194,6 +3202,9 @@ def DISK_ERASE(pre, cmd):                                                     # 
     if not arg:
         SEND_MSG("Name required", "", _4_Q_Parameter)
         return
+    if RD_ARG(arg):
+        RD_ERASE(arg)
+        return
     where, pat = catalog.split_arg(arg)
     if pat is None:
         msg, st = SD_CALL(DISK_ERASE_ONE, arg)
@@ -3285,6 +3296,9 @@ def DISK_FORMAT(pre, cmd):                                                    # 
     arg = getArgs(cmd).strip()
     if not arg:
         SEND_MSG("Name required", "", _4_Q_Parameter)
+        return
+    if RD_ARG(arg):
+        RD_FORMAT(arg)
         return
     if arg.startswith(':'):                                                   # FORMAT ":name": the card's label
         LABEL_SET(arg[1:].strip() or "-")
@@ -3436,6 +3450,12 @@ def DISK_REN(pre, cmd):                                                       # 
     if not a or not b:
         SEND_MSG("Rename needs two names", "", _4_Q_Parameter)
         return
+    if RD_ARG(a) and RD_ARG(b):
+        RD_REN(a, b)
+        return
+    if RD_ARG(a) or RD_ARG(b):
+        SEND_MSG("MOVE renames on one disk: COPY copies", "", _4_Q_Parameter)
+        return
     msg, st = SD_CALL(DISK_REN_WORK, a, b)
     SEND_MSG(msg, "", st)
 
@@ -3465,6 +3485,578 @@ def DISK_REN_WORK(a, b):
     os.rename(src, dst)
     REFRESH_IF(catalog.parent(src), catalog.parent(dst))
     return "Renamed to %s" % catalog.public(dst), _1_OK
+
+
+# ─── The TS-2068 Megabank's RAM disk: "r:" names (Megabank spec, phase 5) ───
+# The board's RAM answers only the Z80's bus cycles, so the file system is
+# here (TS/ramdisk.py) and the bytes move through the Megabank ROM's mover:
+# response function 89h, one operation at a time (PROTOCOL.md 6.3). Every r:
+# command answers 89h, its operations, op 0, then its ordinary answer (a
+# status, a message, a listing). Only the Megabank ROM (2.5, rom_id 25h) has
+# the mover: any other answers 89h with Report D, so r: is refused first.
+#
+#   SAVE/LOAD/VERIFY/MERGE "r:name"   tpi:ropen, then tpi:rblk per block
+#   CAT "r:"                          tpi:dir r:
+#   ERASE "r:name" ("r:*", patterns)  tpi:erase r:...
+#   FORMAT "r:[size]"                 tpi:format r:...
+#   MOVE "r:a" TO "r:b"               tpi:ren r:a|r:b (a rename)
+#   COPY a TO b, either or both r:    tpi:copy a|b
+#   SAVE "tpi:ram [backup|restore n]" the board, and the RAM disk as an image
+# ─────────────────────────────────────────────────────────────────────────────
+
+FN_MOVER = const(0x89)
+RD = None                       # the ramdisk.Disk, made on first use
+RD_OPEN = None                  # [name, mode, header, header served] from tpi:ropen
+RD_CONFIRM_MS = const(60_000)   # a FORMAT or ERASE "r:*" to repeat within this
+RD_IMAGE_EXT = ".rdi"
+RD_REPLY_MS = const(10_000)
+
+
+class RD_MOVER:
+    """The firmware's side of function 89h: the operations TS/ramdisk.py's
+    Disk calls. The first goes out with the code, each later one when the Z80
+    has replied and waits for READY. A refusal (reply 3, 4 or 5) raises
+    RdError; a BREAK or a Z80 that stops reading raises CmdAbort."""
+
+    def __init__(self, err):
+        self.err = err                  # ramdisk.RdError
+        self.first = True
+
+    def _go(self, buf):
+        if self.first:
+            buf = bytes((FN_MOVER,)) + buf
+            self.first = False
+        CMD_SEND(buf, True)
+
+    def _rx(self, n):
+        buf = bytearray(n)
+        code, _ = RX_BLOCK(MQ, buf, n, 2000, 1000)
+        if code:
+            raise CmdAbort(code)
+        return buf
+
+    def _st(self, st):
+        if st == 1:
+            return
+        raise self.err(_10_J_Invalid_IO, {3: "No Megabank board", 4: "RAM disk: out of range",
+                                                 5: "RAM disk: transfer error"}.get(st, "RAM disk: reply %d" % st))
+
+    @staticmethod
+    def _w(*vals):
+        b = bytearray()
+        for v in vals:
+            b.append(v & 0xFF)
+            b.append(v >> 8 & 0xFF)
+        return b
+
+    def info(self):                                              # op 7
+        self._go(b"\x07")
+        return tuple(self._rx(5))
+
+    def read(self, n, page, off):                                # op 4: board -> Pico
+        self._go(b"\x04" + self._w(n, page, off))
+        b = self._rx(n + 2)
+        x = 0
+        for i in range(n):
+            x ^= b[i]
+        self._st(b[n + 1])
+        if x != b[n]:
+            self._st(5)
+        return memoryview(b)[:n]
+
+    def write(self, data, page, off):                            # op 5: Pico -> board
+        x = 0
+        for c in data:
+            x ^= c
+        self._go(b"\x05" + self._w(len(data), page, off) + bytes(data) + bytes((x,)))
+        self._st(RD_KEY())
+
+    def move(self, n, page, off, page2, off2):                   # op 6
+        self._go(b"\x06" + self._w(n, page, off, page2, off2))
+        self._st(RD_KEY())
+
+    def copy_in(self, addr, n, page, off):                       # op 1: 2068 -> board
+        self._go(b"\x01" + self._w(addr, n, page, off))
+        self._st(RD_KEY())
+
+    def copy_out(self, addr, n, page, off):                      # op 2: board -> 2068
+        self._go(b"\x02" + self._w(addr, n, page, off))
+        self._st(RD_KEY())
+
+    def compare(self, addr, n, page, off):                       # op 3
+        self._go(b"\x03" + self._w(addr, n, page, off))
+        st = RD_KEY()
+        if st == 2:
+            return False
+        self._st(st)
+        return True
+
+    def end(self):
+        """Op 0: the answer that follows is the command's. Not READY: the
+        answer's sender (SEND_MSG...) puts its bytes behind it, then says READY."""
+        if not self.first:
+            CMD_PUT(0)
+
+
+def RD_KEY():
+    """The Z80's reply to an operation: within RD_REPLY_MS (a 64K copy takes
+    under a second), or the Z80 has gone."""
+    w = RX_WORD(MQ, RD_REPLY_MS)
+    if w < 0:
+        raise CmdAbort(3)
+    if w & PORT_0F:
+        raise CmdAbort(1)
+    return w & 0xFF
+
+
+def RD_ARG(s):                                                                # is it an "r:" name?
+    return s[:2].lower() == "r:"
+
+
+def RD_ONLY(cmd_word, cmd_exec):                                              # an r: command with no SD side
+
+    if cmd_word in ("TPI:ROPEN", "TPI:RBLK"):
+        return True
+    if cmd_word == "TPI:RAM":
+        a = cmd_exec[len(cmd_word):].split()
+        return not a or a[0] not in ("BACKUP", "RESTORE")
+    if cmd_word in ("TPI:DIR", "TPI:ERASE", "TPI:FORMAT", "TPI:REN", "TPI:COPY"):
+        arg = cmd_exec[len(cmd_word):].strip()
+        if not arg:
+            return False
+        if cmd_word in ("TPI:REN", "TPI:COPY"):
+            a, b = catalog.split_pair(arg)
+            return RD_ARG(a) and RD_ARG(b)
+        return RD_ARG(arg)
+    return False
+
+
+def RD_START():                                                               # (disk, mover), or None: refused
+    global RD
+    if rom_id == 0xFF or rom_id < 0x25:
+        return None
+    from TS import ramdisk                  # frozen into the v3 card's build only
+    if RD is None:
+        RD = ramdisk.Disk()
+    mv = RD_MOVER(ramdisk.RdError)
+    RD.mv = mv
+    return RD, mv
+
+
+def RD_NEEDS_ROM(quiet=False):
+    msg = 'r: needs the Megabank ROM'
+    LOG(msg, 1)
+    if quiet:
+        SEND_STATUS(_10_J_Invalid_IO)
+    else:
+        SEND_MSG(msg, "", _10_J_Invalid_IO, True)
+
+
+def RD_RUN(work, quiet=False, listing=False):
+    """Run work(disk) between the mover's first operation and op 0, then the
+    answer: work returns (text, status), or (text, status, True) for a text
+    that is shown whatever VERBOSE says. A refusal is its message and status.
+    quiet: the bare status (a block, in the middle of a statement). listing:
+    an OK answer is a scrolling listing (function 86h)."""
+    s = RD_START()
+    if s is None:
+        RD_NEEDS_ROM(quiet)
+        return
+    disk, mv = s
+    from TS import ramdisk
+    force = False
+    try:
+        r = work(disk)
+        msg, st = r[0], r[1]
+        force = len(r) > 2
+    except ramdisk.RdError as e:
+        msg, st = e.msg, e.status
+    mv.end()
+    if st != _1_OK:
+        LOG(msg, 1)
+    if quiet:
+        SEND_STATUS(st)
+    elif listing and st == _1_OK:
+        SEND_MSG2(msg, _1_OK, False)
+    else:
+        SEND_MSG(msg, "", st, force or st != _1_OK)
+
+
+def RD_ROPEN(pre, cmd):                                                       # tpi:ropen name (SAVE/LOAD/... "r:name")
+
+    # PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE. The answer is a bare status,
+    # read in the middle of the statement, so no mover here: the RAM disk is
+    # first touched by the first tpi:rblk, which says F for a missing file.
+    global RD_OPEN
+    name = getArgs(cmd)
+    mode = PARAMS(pre)[0] & 0xFF
+    RD_OPEN = None
+    if rom_id == 0xFF or rom_id < 0x25:
+        RD_NEEDS_ROM(True)
+        return
+    if not 1 <= len(name) <= 10 or mode > 3:
+        SEND_STATUS(_3_F_Invalid_file)
+        return
+    RD_OPEN = [name, mode, None, False]
+    SEND_STATUS(_1_OK)
+
+
+def RD_HEX(cmd):                                                              # tpi:rblk's payload: address, length
+    b = bytes.fromhex(getArgs(cmd).strip())
+    return b[0] | b[1] << 8, b[2] | b[3] << 8
+
+
+def RD_RBLK(pre, cmd):                                                        # tpi:rblk <hex> (one block of an r: statement)
+
+    # PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY; PMR2 = the block's flag (00h: the
+    # header). The ROM leaves the statement on any status but 1, so RD_OPEN
+    # goes with the data block or the first failure.
+    global RD_OPEN
+    kind, flag = (p & 0xFF for p in PARAMS(pre))
+    try:
+        addr, n = RD_HEX(cmd)
+    except Exception:
+        SEND_STATUS(_5_C_Nonsense)
+        return
+    op = RD_OPEN
+
+    def work(disk):
+        global RD_OPEN
+        from TS import ramdisk as rdm
+        if op is None:
+            raise rdm.RdError(_3_F_Invalid_file, "tpi:rblk with no tpi:ropen")
+        name, mode, hdr, served = op
+        disk.mount()
+        if kind == 0:                                                         # SAVE
+            if flag == 0:
+                if n != 17:
+                    raise rdm.RdError(_2_R_Tape_load, "A header is 17 bytes")
+                op[2] = disk.save_header(addr)
+                return "", _1_OK
+            if hdr is None:
+                raise rdm.RdError(_2_R_Tape_load, "Data with no header")
+            disk.save_data(name, hdr, addr, n, flag)
+            RD_OPEN = None
+            return "Saved r:%s" % name, _1_OK
+        e = disk.get(name)                                                    # LOAD, VERIFY (MERGE loads)
+        if flag == 0:
+            if served or n != 17:                                             # the ROM wants another: a type it skipped
+                raise rdm.RdError(_2_R_Tape_load, "r:%s is %s" % (name, rdm.TYPES[e.kind] if e.kind < 4 else "?"))
+            op[3] = True
+            p, o = disk.header_loc(e)
+            disk.mv.copy_out(addr, 17, p, o)
+            return "", _1_OK
+        RD_OPEN = None
+        if flag != e.flag:
+            raise rdm.RdError(_2_R_Tape_load, "Flag %d, not %d" % (e.flag, flag))
+        m = min(n, e.length)
+        if m:
+            p, o = disk.loc(e.first)
+            if kind == 1:
+                disk.mv.copy_out(addr, m, p, o)
+            elif not disk.mv.compare(addr, m, p, o):
+                raise rdm.RdError(_2_R_Tape_load, "Verify: they differ")
+        if m != n or n != e.length:
+            raise rdm.RdError(_2_R_Tape_load, "Length %d, not %d" % (e.length, n))
+        return "", _1_OK
+
+    RD_RUN(work, quiet=True)
+
+
+def RD_CAT(arg):                                                              # CAT "r:"
+
+    if arg[2:].strip():
+        SEND_MSG('CAT "r:" lists the RAM disk', "", _4_Q_Parameter)
+        return
+
+    def work(disk):
+        disk.mount()
+        return disk.listing(), _1_OK
+    RD_RUN(work, listing=True)
+
+
+def RD_CONFIRMED(disk, what):
+    """A FORMAT or ERASE that loses files runs when it is typed twice: the
+    first time says what it would do; the same again within a minute, with
+    the disk unchanged, does it. (The mover's answer comes after the work, so
+    a Y/N prompt can't come between them.)"""
+    now = time.ticks_ms()
+    c = disk.confirm
+    disk.confirm = None
+    if c and c[0] == what and c[1] == disk.gen and time.ticks_diff(now, c[2]) < RD_CONFIRM_MS:
+        return True
+    disk.confirm = (what, disk.gen, now)
+    return False
+
+
+def RD_ERASE(arg):                                                            # ERASE "r:name" / "r:pattern"
+
+    from TS import ramdisk as rdm
+    pat = arg[2:].strip()
+
+    def work(disk):
+        disk.mount()
+        if not pat:
+            raise rdm.RdError(_4_Q_Parameter, "Name required")
+        if not catalog.has_wild(pat):
+            disk.erase(disk.get(pat))
+            return "Erased r:%s" % pat, _1_OK
+        hits = [e for e in disk.files() if catalog.match(e.name, pat)]
+        if not hits:
+            raise rdm.RdError(_3_F_Invalid_file, "No match for r:%s" % pat)
+        disk.writable()
+        if not RD_CONFIRMED(disk, "erase " + pat):
+            return ("%d file%s: %s. ERASE again to erase them" % (
+                len(hits), "" if len(hits) == 1 else "s", " ".join(e.name for e in hits[:8])
+                + (" ..." if len(hits) > 8 else ""))), _1_OK, True
+        for e in hits:
+            disk.clear_entry(e)
+        disk.commit()
+        return "Erased %d file%s" % (len(hits), "" if len(hits) == 1 else "s"), _1_OK
+    RD_RUN(work)
+
+
+def RD_FORMAT(arg):                                                           # FORMAT "r:[size]"
+
+    from TS import ramdisk as rdm
+
+    def work(disk):
+        disk.mount(need=False)
+        npages = rdm.parse_size(arg[2:], disk.pages)
+        disk.writable()
+        if disk.formatted and disk.entries and not RD_CONFIRMED(disk, "format %d" % npages):
+            n = len(disk.entries)
+            return ("The RAM disk holds %d file%s. FORMAT again to lose them" % (
+                n, "" if n == 1 else "s")), _1_OK, True
+        disk.format(npages)
+        return "RAM disk: %dK" % (npages * 8), _1_OK
+    RD_RUN(work)
+
+
+def RD_REN(a, b):                                                             # MOVE "r:a" TO "r:b"
+
+    def work(disk):
+        disk.mount()
+        disk.rename(disk.get(a[2:]), b[2:])
+        return "Renamed to r:%s" % b[2:], _1_OK
+    RD_RUN(work)
+
+
+def RD_TAP_READ(path):                                                        # SD active: (header, flag, data) of a TAP's first file
+
+    with open(path, "rb") as f:
+        raw = f.read(70000)
+    if len(raw) < 23 or raw[0] != 19 or raw[1] != 0 or raw[2] != 0:
+        return None
+    hdr = raw[3:20]
+    n = raw[21] | raw[22] << 8
+    if n < 2 or 21 + 2 + n > len(raw):
+        return None
+    return hdr, raw[23], raw[24:21 + 2 + n - 1]
+
+
+def RD_TAP_BYTES(hdr, flag, data):                                            # a header and a data block as a TAP
+
+    def blk(fl, body):
+        x = fl
+        for c in body:
+            x ^= c
+        n = len(body) + 2
+        return bytes((n & 0xFF, n >> 8)) + bytes((fl,)) + bytes(body) + bytes((x,))
+    return blk(0, hdr) + blk(flag, data)
+
+
+def RD_TAP_WRITE(path, buf):                                                  # SD active
+
+    if file_exists(path) or dir_exists(path):
+        return "Exists: %s" % catalog.public(path), _3_F_Invalid_file
+    if not dir_exists(catalog.parent(path)):
+        return "Not found: %s" % catalog.public(catalog.parent(path)), _3_F_Invalid_file
+    with open(path, "wb") as f:
+        f.write(buf)
+    REFRESH_IF(catalog.parent(path))
+    return "", _1_OK
+
+
+def RD_SD_PATH(arg, default):                                                 # SD active: the .tap a COPY names
+
+    p = catalog.resolve(TSP.cur_path, arg)
+    if p is None:
+        return None
+    if dir_exists(p):
+        p = p + '/' + default
+    if '.' not in catalog.basename(p):
+        p += '.tap'
+    return p
+
+
+def RD_COPY(a, b):                                                            # COPY with an r: side
+
+    from TS import ramdisk as rdm
+    ra, rb = RD_ARG(a), RD_ARG(b)
+    if ra and rb:
+        def work(disk):
+            disk.mount()
+            e = disk.get(a[2:])
+            name = b[2:] or e.name
+            if name == e.name:
+                raise rdm.RdError(_3_F_Invalid_file, "Same file")
+            if disk.find(name) is not None:
+                raise rdm.RdError(_3_F_Invalid_file, "r:%s exists" % name)
+            disk.duplicate(e, name)
+            return "Copied to r:%s" % name, _1_OK
+        RD_RUN(work)
+        return
+    if rb:                                                                    # SD -> RAM disk: the card first
+        if rom_id == 0xFF or rom_id < 0x25:
+            RD_NEEDS_ROM()
+            return
+
+        def sd():
+            p = RD_SD_PATH(a, "")
+            if p is None or not file_exists(p):
+                return "Not found: %s" % a, _3_F_Invalid_file
+            t = RD_TAP_READ(p)
+            if t is None:
+                return "Not a tape file: %s" % a, _3_F_Invalid_file
+            return t, _1_OK
+        led.value(1)
+        t, st = SD_CALL(sd)
+        led.value(0)
+        if st != _1_OK:
+            SEND_MSG(t, "", st)
+            return
+
+        def work(disk):
+            hdr, flag, data = t
+            name = b[2:] or bytes(hdr[1:11]).decode().rstrip(" ")
+            rdm.check_name(name)
+            disk.mount()
+            disk.put(name, hdr, data, flag)
+            return "Copied to r:%s" % name, _1_OK
+        RD_RUN(work)
+        return
+
+    def work(disk):                                                           # RAM disk -> SD: the card between ops
+        disk.mount()
+        e = disk.get(a[2:])
+        buf = RD_TAP_BYTES(e.hdr, e.flag, bytes(disk.fetch(e)))
+
+        def sd():
+            p = RD_SD_PATH(b, e.name + ".tap")
+            if p is None:
+                return "Not found: %s" % b, _3_F_Invalid_file
+            msg, st = RD_TAP_WRITE(p, buf)
+            return msg or "Copied to %s" % catalog.public(p), st
+        led.value(1)
+        try:
+            return SD_CALL(sd)
+        finally:
+            led.value(0)
+    RD_RUN(work)
+
+
+def RD_RAM(pre, cmd):                                                         # SAVE "tpi:ram [backup|restore name]"
+
+    from TS import ramdisk as rdm
+    a = getArgs(cmd).split()
+    sub = a[0].lower() if a else ""
+    if sub == "" or sub == "info":
+        def work(disk):
+            try:
+                disk.mount(need=False)
+            except rdm.RdError:
+                pass                                                          # no board: the report says so
+            return disk.report(), _1_OK
+        RD_RUN(work, listing=True)
+        return
+    if sub not in ("backup", "restore") or len(a) != 2:
+        SEND_MSG('tpi:ram, tpi:ram backup name, tpi:ram restore name', "", _4_Q_Parameter)
+        return
+    name = a[1]
+    if '.' not in catalog.basename(name):
+        name += RD_IMAGE_EXT
+    PAGE = rdm.PAGE
+
+    if sub == "backup":
+        def work(disk):
+            disk.mount()
+            path = catalog.resolve(TSP.cur_path, name)
+
+            def sd_new():
+                if path is None or not dir_exists(catalog.parent(path)):
+                    return "Not found: %s" % name, _3_F_Invalid_file
+                if file_exists(path) or dir_exists(path):
+                    return "Exists: %s" % catalog.public(path), _3_F_Invalid_file
+                open(path, "wb").close()
+                return "", _1_OK
+            msg, st = SD_CALL(sd_new)
+            if st != _1_OK:
+                return msg, st
+            for p in range(disk.first, disk.last + 1):
+                data = bytes(disk.mv.read(PAGE, p, 0))
+
+                def sd_add():
+                    with open(path, "ab") as f:
+                        f.write(data)
+                    return "", _1_OK
+                msg, st = SD_CALL(sd_add)
+                if st != _1_OK:
+                    return msg, st
+            REFRESH_IF(catalog.parent(path))
+            return "RAM disk saved: %dK in %s" % ((disk.last - disk.first + 1) * 8,
+                                                  catalog.public(path)), _1_OK
+        led.value(1)
+        RD_RUN(work)
+        led.value(0)
+        return
+
+    def work(disk):                                                           # restore
+        disk.mount(need=False)
+        disk.writable()
+        path = catalog.resolve(TSP.cur_path, name)
+
+        def sd_size():
+            if path is None or not file_exists(path):
+                return "Not found: %s" % name, _3_F_Invalid_file
+            n = os.stat(path)[6]
+            with open(path, "rb") as f:
+                f.seek(n - PAGE)
+                sb = f.read(rdm.SB_LEN)
+            return (n, sb), _1_OK
+        r, st = SD_CALL(sd_size)
+        if st != _1_OK:
+            return r, st
+        n, sb = r
+        npages = n // PAGE
+        if n % PAGE or npages < 2 or sb[0:4] != rdm.MAGIC or rdm.r16(sb, 30) != rdm.sum16(sb, 30):
+            return "Not a RAM disk image: %s" % name, _3_F_Invalid_file
+        if npages > disk.pages:
+            return "Image %dK, board %dK" % (npages * 8, disk.pages * 8), _4_Q_Parameter
+        if disk.formatted and disk.entries and not RD_CONFIRMED(disk, "restore " + name):
+            k = len(disk.entries)
+            return ("The RAM disk holds %d file%s. Restore again to replace them" % (
+                k, "" if k == 1 else "s")), _1_OK, True
+        first = disk.pages - npages
+        for i in range(npages):
+            def sd_get():
+                with open(path, "rb") as f:
+                    f.seek(i * PAGE)
+                    return f.read(PAGE), _1_OK
+            data, st = SD_CALL(sd_get)
+            if st != _1_OK:
+                return data, st
+            disk.mv.write(data, first + i, 0)
+        disk.first, disk.last = first, disk.pages - 1                         # the image's superblock, at this
+        disk.gen, disk.high = rdm.r32(sb, 10), rdm.r16(sb, 14)                # board's top: same generation,
+        disk.formatted = True                                                 # one more for the move
+        disk.commit()
+        disk.entries = None
+        disk.mount()
+        return "RAM disk restored: %dK, %d files" % (npages * 8, len(disk.entries)), _1_OK
+    led.value(1)
+    RD_RUN(work)
+    led.value(0)
 
 
 # ─── Native SD files: SAVE / LOAD / VERIFY / MERGE "f:<path>" (spec §4a) ────
@@ -7527,6 +8119,9 @@ def TS2068_IO():                                                         # Main 
         "TPI:NOAUTOPG" : PRN_FLAG,
         "TPI:OPPRINT" : PRN_OPEN,
         "TPI:PRNSZ" : PRN_SIZE,
+        "TPI:RAM" : RD_RAM,                                                                     # the Megabank (ROM 2.5)
+        "TPI:RBLK" : RD_RBLK,
+        "TPI:ROPEN" : RD_ROPEN,
         "TPI:STOP" : SA_NOT_IMP,
         }
     

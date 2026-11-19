@@ -630,6 +630,7 @@ def test_send_msg_bytes(t):
     t.MQ_READY = lambda: None
     t.CMD_DRAIN = lambda: None
     t.TSP = types.SimpleNamespace(VERBOSE=True)
+    t.MQ = types.SimpleNamespace(tx_fifo=lambda: 0)               # CMD_SEND asks what TX holds
     REAL["SEND_MSG"]("Copied caf\u00e9~", "x\x00y", t._1_OK)
     body = sent[3:]
     check(all(isinstance(b, int) and 0 <= b < 256 for b in sent),
