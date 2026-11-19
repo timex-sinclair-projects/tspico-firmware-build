@@ -943,10 +943,14 @@ int main(int argc, char *argv[]) {
                     }
 
                     /* check it's not in the middle of a word etc., except for
-                     * <>, <=, >=.
+                     * <>, <=, >=. A keyword that ends in a symbol (CLOSE #,
+                     * OPEN #, CHR$, STR$...) can be followed by a letter: the
+                     * 2068's own editor tokenises CLOSE #s, and leaving it as
+                     * text gave C Nonsense in BASIC when the line ran
+                     * (TS-Pico local change, see VENDORED.md).
                      */
                     if ((*tarrptr)[0] == '<' || (*tarrptr)[1] == '=' ||
-                            ((!isalpha(ptr[-1]) && !isalpha(ptr[toklen]) && !( !zx81mode && ( (toknum == PEEK_TOKEN_NUM) || (toknum == VAL_TOKEN_NUM) ) && ( ptr[toklen] == '$' )))		// :dbolli:20200420 18:54:45 Added check for PEEK that is actually PEEK$ (v1.5.2)  // :ryangray:20221120 Added check for VAL that is actually VAL$ (v1.7.2)
+                            ((!isalpha(ptr[-1]) && (!isalpha(ptr[toklen]) || !isalpha((*tarrptr)[toklen-1])) && !( !zx81mode && ( (toknum == PEEK_TOKEN_NUM) || (toknum == VAL_TOKEN_NUM) ) && ( ptr[toklen] == '$' )))		// :dbolli:20200420 18:54:45 Added check for PEEK that is actually PEEK$ (v1.5.2)  // :ryangray:20221120 Added check for VAL that is actually VAL$ (v1.7.2)
                             && toknum >= 12)) {		// :dbolli:20200331 14:48:51 Changed from toknum > 150 to include ZX Spectrum Next keywords (v1.5.2) :ryangray:20250612 Moved toknum limit to 12 for TS2068 "delete"
 
                         /* Handle the ON keyword that is used by both ZX Spectrum Next ON ERROR and the T/S 2000 ON ERR

@@ -276,6 +276,10 @@ an open record, writes the length and position back and sends
 `tpi:rchclose`, and the firmware writes the length into the directory. A
 stream lost to NEW or a reset is closed at the next `r:` command, which
 carries the mask (`tpi:rmask` for the commands that have no payload).
+With the board's write-protect switch on, the next write-back (a CR, a
+256-byte boundary, `CLOSE #`) is J, and `RCH_WB` first puts the length and
+position back to the slot's: the bytes the board refused since aren't
+counted, and the stream carries on from there once the switch is off.
 `RESTORE #` and `CAT #` on an `r:` stream are Report O. The detail:
 [exrom-fdd.md](../rom/exrom-fdd.md#the-r-channels-rchanasm-phase-9),
 [ramdisk.md](../firmware/ramdisk.md#channels-the-open-stream-slots).

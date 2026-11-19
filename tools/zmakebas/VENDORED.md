@@ -41,6 +41,17 @@ cp /tmp/zmakebas/README.md tools/zmakebas/README.upstream.md
 # then update the Commit/Version rows above
 ```
 
+## Local changes
+
+`zmakebas.c` differs from upstream in one place, the keyword boundary test in
+the tokeniser. Upstream won't take a keyword followed by a letter, so
+`CLOSE #s`, `OPEN #s` and `CHR$a` stayed as text. The 2068's editor tokenises
+them; a program built from source didn't, and the line gave C Nonsense in
+BASIC when it ran (found in mbchan.bas's `CLOSE #VAL o$(k)`). Now the letter
+test applies only to a keyword that ends in a letter. Every program under
+`basic/` built byte for byte the same before and after. Carry this over when
+updating.
+
 ## Building by hand
 
 ```sh

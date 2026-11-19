@@ -54,11 +54,7 @@
   600 RESTORE 690: FOR o=1 TO 6: READ o$: LET t=24+o: LET n=680: LET v=0: ON ERR GO TO 9000
   610 OPEN #4,"r:a","w": OPEN #5,"f:mbchf.txt","w": OPEN #6,"r:b","w"
   620 PRINT #4;"a";o: PRINT #5;"f";o: PRINT #6;"b";o
-# Literal CLOSEs: CLOSE # with an expression is C in a program (ROM 2.4 too).
-  630 FOR k=1 TO 3: LET d=VAL o$(k): IF d=4 THEN CLOSE #4
-  632 IF d=5 THEN CLOSE #5
-  634 IF d=6 THEN CLOSE #6
-  636 NEXT k
+  630 FOR k=1 TO 3: CLOSE #VAL o$(k): NEXT k
   640 OPEN #4,"r:a": INPUT #4;a$: CLOSE #4: OPEN #5,"f:mbchf.txt": INPUT #5;f$: CLOSE #5: OPEN #6,"r:b": INPUT #6;c$: CLOSE #6
   650 LET v=(a$="a"+STR$ o)+2*(f$="f"+STR$ o)+4*(c$="b"+STR$ o): GO SUB 8000: GO TO 685
   680 CLOSE #4: CLOSE #5: CLOSE #6
