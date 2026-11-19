@@ -473,6 +473,29 @@ between operations, while the Z80 waits for READY (up to ~19.9 s each), and
 never between op 0 and the answer. On a ROM older than 2.5 every `r:` command
 is J ("r: needs the Megabank ROM").
 
+**`r:` channels** (the Megabank spec's phase 9). `OPEN #s,"r:name"[,"mode"[,reclen]]`
+asks the firmware once, and from then on the ROM reads and writes the file's
+bytes itself, through a window chunk, inside an extent the firmware gives it:
+`PRINT #` and `INPUT #` send nothing. The commands (all `'B'` commands whose
+payload is hex, the first two bytes the **open-stream mask**: bit *n* set
+when stream *n*, 0–15, points at an `R` record):
+
+| Command | PMR1 | PMR2 | Payload after the mask | Answer |
+|---|---|---|---|---|
+| `tpi:rchopen` | the stream | the record length (0 none, FFh for 255 or more: Q) | the 2068 address for the 15-byte block (2), then "mode name" as text (empty name or `*`/`?`: a listing, mode `r` only) | 89h: op 7, the superblock, the directory if changed, the slot (op 5), the block (op 2), op 0, the bare status |
+| `tpi:rchgrow` | the stream | 0 | the block's address (2), the length needed (2; 0 = 65536: Q) | 89h, the growth (op 6 if the file moves), the block again (op 2), op 0, the status |
+| `tpi:rchclose` | the stream | 0 | — | 89h, the length into the directory, op 0, the status |
+| `tpi:rmask` | 0 | 0 | — | the bare status, no mover. Sent before every other `r:` command (ERASE, MOVE, COPY, FORMAT, CAT, SAVE/LOAD/VERIFY/MERGE), which carry no mask |
+
+The block is the stream's slot's bytes 16–30 on the board (the RAM disk's
+last page, 0200h + 32 × stream + 16): the extent's start page (2), its offset
+(2), its size in bytes (2), the length (2), the position (2), the slot's page
+(2), the record length, the flags (bit 0 binary, bit 1 a listing), the mode.
+The ROM writes the length and position back to the slot at each CR, each
+256-byte boundary and CLOSE. With the mask the firmware closes the slot of any
+stream the 2068 no longer has open (NEW, a reset), so its length reaches the
+directory ([reference](reference/rom/exrom-fdd.md#the-r-channels-rchanasm-phase-9)).
+
 ## 7. The channel commands
 
 `OPEN #`, `PRINT #`, `INPUT #` and `CLOSE #` on `f:` and `d:` streams become

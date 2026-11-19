@@ -1,7 +1,7 @@
 # EXROM 3000h: the disk module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
-2724 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
+2826 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
 at EXROM 3000h–3997h and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
 `src/rom/TSPICO-24.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
@@ -45,26 +45,27 @@ the Pico Interface BIOS.
 | 43–165 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
 | 172–193 | 3000h–3020h | the vector table |
 | 195–206 | 3021h | `TAPE_MODE` |
-| 221–244 | 3029h | `G_BEEP` |
-| 246–304 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 306–326 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 328–425 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
-| 427–501 | | the parsing helpers |
-| 503–602 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 604–854 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 856–876 | | `LOWER_LOOP` (function 88h) |
-| 878–1424 | | the channel driver |
-| 1426–1444 | | `HEXDIG`, `STRLEN` |
-| 1446–1458 | to 3769h | the command strings, `MODE_R` |
-| 1460–1473 | 376Ah–3770h | `PRELOAD` |
-| 1475–1477 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
-| 1479–1528 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1530–1737 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1739–1804 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
-| 1806–1811 | 3929h–3931h | `IN_DROP` (#404) |
-| 1813–1873 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1875–2781 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
-| 2784–2785 | 3998h (3E53h) | `FDD_END` |
+| 221–248 | 3029h | `G_BEEP` |
+| 250–315 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 317–337 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 339–436 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
+| 438–512 | | the parsing helpers |
+| 514–619 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 621–871 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 873–893 | | `LOWER_LOOP` (function 88h) |
+| 895–1451 | | the channel driver |
+| 1453–1471 | | `HEXDIG`, `STRLEN` |
+| 1473–1485 | to 3769h | the command strings, `MODE_R` |
+| 1487–1500 | 376Ah–3770h | `PRELOAD` |
+| 1502–1504 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
+| 1506–1555 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1557–1764 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1766–1831 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
+| 1833–1838 | 3929h–3931h | `IN_DROP` (#404) |
+| 1840–1900 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
+| 1902–2808 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
+| 2811–2812 | 3998h (3E53h) | `FDD_END` |
+| 2814–2826 | 2400h–2AE6h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -1097,7 +1098,7 @@ statement and returns, and at run time **`tpi:list x`** goes to the Pico
 Why not scan the expression and look at its type: a scan in syntax mode
 done at run time inserts a second hidden number after each number in the
 line (the line has them already), and a scan in run mode evaluates the
-expression a second time (the comment at 1586–1590). So the test is lexical, and `LIST (a$)` counts as a number:
+expression a second time (the comment at 1613–1617). So the test is lexical, and `LIST (a$)` counts as a number:
 HOME's LIST then says Report C at the syntax pass.
 
 ### `FDD_RESTORE` (3819h)
@@ -1279,7 +1280,19 @@ change 2.4's code and everything else is appended after `CMD_CHCAT`, at
   HOME 0065h, `G_VERS`, 1BB5h);
 - `F_HOOK` tests the prefix with `FR_TEST` (`f:` or `r:`) and stores TPMODE
   through `SET_MODE`;
-- `SEND_FOPEN` takes its command text from `OPEN_TXT`.
+- `SEND_FOPEN` takes its command text from `OPEN_TXT`;
+- for the `r:` channels (phase 9, [below](#the-r-channels-rchanasm-phase-9)):
+  `G_OUT` and `G_IN` go to `MB_OUT` and `MB_IN`; `G_BEEP`'s `POP HL / CP 'F'`
+  is `CALL BEEP_LT`; `CH_OPEN_HOOK`'s `CALL SPEC_KIND` is `CALL RCH_KIND`;
+  `CH_CLOSE_HOOK`'s `LD A,(IX+R_LETTER) / CP 'F'` is `CALL RCH_CLTEST`
+  and two NOPs; `TPI_SEND`'s opening (`PUSH HL / PUSH DE / LD HL,(FRAMES)`)
+  is `CALL MB_TPRE` and two NOPs; and `SET_MODE`'s store is `JP SET_MODE_R`
+  and a filler byte, so `R_SA` stays at 39F5h.
+
+The `r:` channel code doesn't fit in the module's 4K: `rchan.asm` is
+assembled with it, in the same pass, at EXROM 2400h (`RCH_BASE`, free in the
+base ROM and in the same chunk), and `build-rom.py --megabank` splices
+`rchan.bin` there.
 
 The patches that reach it (`MB_PATCHES` in build-rom.py, each with the bytes it
 replaces): EXROM 0A3Eh `2A BC 5C` → `JP MB_BOOT`, 0068h `JP 1879h` → `JP R_SA`,
@@ -1617,6 +1630,150 @@ bank mapped elsewhere: a matter for a LEAP build for the board.
 | `TIMEX_HSR` | BANK_ENABLE's first half (above): H = the HSR, FFh bit 7 set or cleared. Sits in SAVE_STATUS's slot |
 | `SAVE_BOARD` | SAVE_STATUS's second half: the 16 registers and the select. Reads only, but for the select |
 | `RESTORE_BOARD` | RESTORE_STATUS's second half: FFh bit 7, the 16 registers (OWN0–7 first, each setting its SUB, then SUB0–7), the select, then the HSR whole |
+
+### The `r:` channels (`rchan.asm`, phase 9)
+
+`src/rom/fdd/rchan.asm`, assembled only with `-DMEGABANK`, at EXROM
+2400h–2AE6h (1767 bytes; the run 23D4h–2FFFh is free in 2.4, and an `ASSERT`
+keeps it below 3000h): `OPEN #n,"r:name"[,"mode"[,reclen]]`, `PRINT #`,
+`INPUT #`, `INKEY$ #` and `CLOSE #` on the Megabank's RAM disk, as `f:`
+does them on the card (the Megabank spec, "Channels"). Modes `r`, `w`, `a`,
+`u`, with `b` for binary; a record length makes a record file; `"r:"` alone or
+a name with `*` or `?` opens a listing, one 10-byte name a record.
+
+The split: the firmware keeps the file system ([ramdisk.md](../firmware/ramdisk.md#channels-the-open-stream-slots));
+the ROM keeps an open file's bytes. OPEN sends `tpi:rchopen`; the firmware
+finds or makes the file, gives it an extent on the board, writes the
+stream's slot in the RAM disk's top page, and copies the slot's 15-byte block
+into 2068 memory with the mover's op 2. The record in CHANS is built from
+it. From then on every character is read or written by the ROM itself,
+straight to the board through a window chunk (`BOARD_IO`, with the mover's
+`MV_WIN`/`MV_MAP`/`MV_UNMAP`): no exchange with the TS-Pico. Past the extent
+`PRINT #` sends `tpi:rchgrow`; `CLOSE #` writes the length and position back
+to the slot and sends `tpi:rchclose`, which puts the length in the directory.
+
+The record is an ordinary channel record, letter `R`, with an `F` record's
+HOME stubs (14A0h, 14A9h), so `G_OUT` and `G_IN` send it here by its letter
+and `r:` needs no HOME bytes. It takes `R_ALLOC` bytes in CHANS, padded as
+an `F` record is.
+
+**The open-stream mask.** Every `r:` command tells the firmware which streams
+0–15 point at an `R` record (bit *n*: stream *n*), so it closes the slots of
+streams that NEW, a reset or a POKE took away and their lengths reach the
+directory. The channel commands carry it in their payload; `tpi:rmask`
+carries it before the commands that have none (from `TPI_SEND` through
+`MB_TPRE`, for ERASE, MOVE, COPY, FORMAT and CAT `"r:…"`; from `SET_MODE`, for
+SAVE, LOAD, VERIFY and MERGE `"r:…"`).
+
+**Where it differs from `f:`.** A record that overflows is Q with the position
+back at the record's start, but the bytes already written stay (`f:` writes
+nothing). `RESTORE #` and `CAT #` on an `r:` stream are Report O: `STRM_REC`
+takes only `F` records. A channel file holds at most 65535 bytes (a tape
+header's length): Q past it.
+
+`rom_rchan_hosttest.py` runs OPEN, PRINT, INPUT, TAB, records, growth, the
+listing and CLOSE in the Z80 interpreter against the firmware's own `Disk`
+over a model board; `tools/emu/megabank_smoke.py` runs them from BASIC in
+ZEsarUX with the real firmware.
+
+| Name | Value | What |
+|---|---|---|
+| `RCH_BASE` | 2400h | where `rchan.asm` is assembled (fddcmd.asm) |
+| `RCH_END` | 2AE7h | its end; `ASSERT`ed at most 3000h |
+| `R_ALLOC` | 100h | an `R` record's allocation in CHANS |
+| `BLOCK_LEN` | 15 | the slot's block, as ramdisk.py's |
+| `SLOT_OFF`, `SLOT_LEN` | 0200h, 32 | the slots in the RAM disk's top page, one a stream |
+| `SLOT_LP` | 22 | the length and position in a slot (its block at +16, then +6) |
+
+The record (IX), after the 7 bytes of a channel record (the two routines, the
+letter, its length):
+
+| Name | Offset | What |
+|---|---|---|
+| `RR_FL` | 7 | the flags (below) |
+| `RR_REC` | 8 | the record length; 0: a stream file |
+| `RR_OST` | 9 | output state: 0; 1 after 23 (TAB), 2 after its low byte |
+| `RR_TLO` | 10 | TAB's low byte |
+| `RR_BUF` | 11–18 | = `R_OUTBUF`: a channel command's payload; TAB 0's count as digits |
+| `RR_SPG` | 19–20 | the block: the extent's start page |
+| `RR_SOF` | 21–22 | its offset in that page |
+| `RR_EXT` | 23–24 | the extent in bytes |
+| `RR_LEN` | 25–26 | the length |
+| `RR_POS` | 27–28 | the position |
+| `RR_MPG` | 29–30 | the slot's page |
+| `RR_BREC` | 31 | the block's record length |
+| `RR_BFL` | 32 | the block's flags |
+| `RR_BMODE` | 33 | the block's mode |
+| `RR_COL` | 34 | writing: the column (a stream file), or the record's bytes so far |
+| `RR_RCOL` | 35 | reading a record file: its bytes given so far |
+| `RR_DIG` | 36 | reading TAB 0's count: the next digit's offset |
+| `RR_SIZE` | 37 | the record's used size |
+
+| Flag | Bit | Meaning |
+|---|---|---|
+| `F_REC` | 0 | a record file |
+| `F_BIN` | 1 | binary: no text translation |
+| `F_RD` | 2 | may be read (`r`, `u`) |
+| `F_WR` | 3 | may be written (`w`, `a`, `u`) |
+| `F_QRY` | 4 | TAB 0 came: the next read is the count |
+| `F_NCR` | 5 | a text line is open: the end gives a CR |
+| `F_LCR` | 6 | the last byte read was a CR: drop an LF |
+
+#### The hooks
+
+| Routine | Address | What |
+|---|---|---|
+| `MB_OUT`, `MB_IN` | 2400h, 240Eh | `G_OUT` and `G_IN`: the current channel's record by its letter, on to `RCH_OUT`/`RCH_IN` for `R`, else `CH_OUT`/`CH_IN`. A, the character, is kept |
+| `RCH_LETTER` | 2417h | Z if the current channel's letter is `R` |
+| `BEEP_LT` | 2422h | `G_BEEP`'s test for `F` and `R` records (replaces `POP HL / CP 'F'`; the saved HL is under the return address). Z: no click |
+| `RCH_KIND` | 242Ch | `CH_OPEN_HOOK`'s `CALL SPEC_KIND`: `"r:…"` is answered here in full (`RCH_OPEN`); anything else goes on to `SPEC_KIND` |
+| `RCH_CLTEST` | 2438h | `CH_CLOSE_HOOK`'s letter test: an `R` record is closed here in full (`RCH_CLOSE`); otherwise A = the letter compared with `F` |
+| `MB_TPRE` | 2446h | `TPI_SEND`'s opening, after a `tpi:rmask` when the command (its descriptor on top of the calculator stack) names `r:` |
+| `SET_MODE_R` | 2477h | the end of `SET_MODE`: TPMODE := A; an `r:` statement (bit 5) sends the mask first |
+| `RMASK_SEND` | 247Dh | `tpi:rmask` with the mask, PMR1 0; its status, then a wait for IDLE (as `CH_SEND`'s), since `TPI_SEND`'s stock session code sends its SYNC without one. IX kept |
+| `RCH_MASK` | 24ABh | DE = the mask: bit *n* set if stream *n* (0–15) points at an `R` record |
+
+#### OPEN and CLOSE
+
+| Routine | Address | What |
+|---|---|---|
+| `RCH_OPEN` | 24D9h | the stream in 5CCBh, the spec on the calculator stack, `CH_ADD` on a `,` if a mode follows. Parses as `f:` does; sends `tpi:rchopen` (PMR1 the stream, PMR2 the record length, FFh for 255 or more) with the mask, the address the block goes to (16 bytes made on the stack), the mode, a space, the name. Then `R_ALLOC` bytes at CHANS' end, filled from the block. Out: C, DE = the offset, HL = the STRMS entry, as `CH_OPEN_HOOK` |
+| `RCH_CLOSE` | 2638h | IX = the record, BC = the stream's offset. An open record is padded, the length and position written back, `tpi:rchclose` sent; a refusal raises its report and leaves the stream open. Then the allocation goes as an `F` record's does, every later offset moved down `R_ALLOC`. Out: C, HL = the STRMS entry, which HOME 13A8h clears |
+
+#### Writing
+
+| Routine | Address | What |
+|---|---|---|
+| `RCH_OUT` | 26BFh | the output routine (HOME 14A0h → `G_OUT` → `MB_OUT`), A = the character; on to `RCH_PUTC` with the error frame set |
+| `RCH_PUTC` | 26CFh | as `f:` does: TAB arrives as 23, low, high and is the position (a record file: record *n*); mode `r` drops what is printed (INPUT #'s prompt); TAB 0 then anything but a read is Q. Text: 16–21 and their parameter, 22 and its two, and other controls but CR and comma are dropped; the comma is spaces to the next 16-column stop; keywords stay one byte. A record file: a CR ends the record and pads it and isn't stored; more than the record holds is Q |
+| `RCH_DATA` | 275Ah | C, a byte to store: at the position, the column on |
+| `RCH_ENDREC` | 2785h | the open record padded to its length; the column 0 |
+| `RCH_PADC` | 279Dh | C = the pad: a space, or 0 in binary |
+| `RCH_PUT` | 27A7h | C written at the position, which steps on; a gap from the length up to the position (a TAB past the end) is padded first; a step onto a 256-byte boundary writes the length and position back |
+| `RCH_WAT` | 27F2h | C written at file position HL (kept); past the extent, `RCH_GROW` first |
+| `RCH_GROW` | 2804h | `tpi:rchgrow` with the mask, the block's address (16 bytes on the stack) and the length needed; the new extent from the block. Past 65535 bytes: Q. BC kept |
+| `RCH_IO` | 2852h | file position HL (kept): B = 1 writes C there, 0 reads it into A; the board page and offset from the block |
+| `BOARD_IO` | 2883h | board page HL, offset DE (below 2000h): B = 1 writes C, 0 reads into A. Through a window: a chunk of 4–7 that holds neither the record nor the stack, mapped and put back by `MV_WIN`, `MV_MAP` (IX = `MB_MBBASE` for BASE) and `MV_UNMAP`, a 4-byte save area on the stack. IX kept |
+| `RCH_WB` | 28CAh | a writable stream's length and position back to its slot (4 bytes, page `RR_MPG`). The write-protect switch on: J |
+| `RCH_TAB` | 2908h | TAB HL: an open record is padded; TAB 0 asks for the count (the next read); otherwise the position is byte HL − 1, or record HL's start in a record file. A gap past the end is padded by the next write |
+| `MUL16X8` | 2952h | HL = HL × E; C if it overflows 16 bits |
+| `DIV16X8` | 2964h | HL = HL / E, A = the remainder (E not 0). B lost |
+
+#### Reading
+
+| Routine | Address | What |
+|---|---|---|
+| `RCH_IN` | 2973h | the input routine (HOME 14A9h → `G_IN` → `MB_IN`): C with A = the next byte, or NC NZ at the end of the file (Report 8 from WAIT-KEY) |
+| `RCH_GETC` | 2983h | as `f:` does: a stream opened `w` or `a` is Q; TAB 0 makes the next read the count (records, or bytes) and a CR; a record file gives one record (padded past the end) and a CR. Text: LF and CRLF read as CR, other controls dropped, and a last line with no newline ends with a CR. Binary: every byte as it is |
+| `RCH_RAW` | 2A70h | the byte at the position, the position on: C with A; NC at the length |
+| `RCH_NUM` | 2A8Fh | HL in decimal at `RR_BUF`, then a CR; `RR_DIG` points at it |
+
+| String | Address | Text |
+|---|---|---|
+| `CMD_RCHOPEN` | 2AB4h | `"tpi:rchopen ",0` |
+| `CMD_RCHGROW` | 2AC1h | `"tpi:rchgrow ",0` |
+| `CMD_RCHCLOSE` | 2ACEh | `"tpi:rchclose ",0` |
+| `CMD_RMASK` | 2ADCh | `"tpi:rmask ",0` |
 
 ## Where comments, documents and the code disagree
 

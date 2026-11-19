@@ -245,6 +245,11 @@ jobs:
       - name: Test the Megabank ROM's bank API in the Z80 interpreter
         run: python3 src/test/rom_bankapi_hosttest.py
 
+      # r: channels (rchan.asm, Megabank spec phase 9): OPEN # to the RAM disk,
+      # text and records, growth, the listing, against the firmware's own Disk.
+      - name: Test the Megabank ROM's r channels in the Z80 interpreter
+        run: python3 src/test/rom_rchan_hosttest.py
+
       - name: Upload the fdd ROM artifact
         uses: actions/upload-artifact@v6
         with:

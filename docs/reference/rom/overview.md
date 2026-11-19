@@ -48,7 +48,7 @@ All checksums below were computed from the files in the repository.
 | the base image | `src/rom/TSPICO.ROM` (= `ROMs/TSPICO-17-home` + `-exrom`) | 32K | `09D4CA63` | 17h | 1.1 plus 104 EXROM bytes (a ready-wait and guard in the Y/N loop, and BREAK at the SAVE prompt) and the version byte | build input: the base `tspico-sync.asm` patches; never released |
 | the SYNC layer | `src/rom/TSPICO-SYNC.ROM` | 32K | `56BD89A4` | 20h | the base image plus SYNC, BREAK abort, Report T and the BIOS contract; 274 bytes in 15 hunks, new code at EXROM 2300h–23D3h | build input: the base `build-rom.py` patches; never released |
 | **ROM 2.4** (#349, #375, #404) | `src/rom/TSPICO-24.ROM` | 32K | `96D7CEAA` | 24h | the SYNC layer plus the disk-command layer: 23 patches and the module at EXROM 3000h–3997h; 2575 bytes in 22 hunks. ROM 2.3 (`TSPICO-23.ROM` until this rename, `D7352D58`, 23h; in the v2.3 and v2.3.1 releases) was the same less three patches (19D7h, 19AFh, 19D0h) and the module's COPY, LIST, RESTORE and channel code, FDD_VERSION 8; ROM 2.2 (`TSPICO-22.ROM`, `8363E100`, 22h; in v2.2 and v2.2.1) was 2.3 less four more patches and `PS_READ` | **flash slot 1**: the release ROM, in the flash image, the upgrade UF2 and the web updater |
-| Megabank test ROM | `src/rom/TSPICO-MB.ROM` | 32K | `6E09AF10` | 25h | ROM 2.4 built with `--megabank`: the module with `-DMEGABANK` (Megabank code at EXROM 3998h–3E52h), the boot reset and bank count at EXROM 0A3Eh, the Timex bank API on the board (bankapi.asm over RAM 6316h–6571h, a new 64-column relocation table, the frame, Brzozowski and crossing patches), the `r:` block gates at 0068h and 00FCh, function 89h (the mover) at 2213h, and the version marked 2.5 ([exrom-fdd.md](exrom-fdd.md#the-megabank-build--dmegabank-rom-25)) | no flash slot: for the TS-2068 Megabank board's bring-up, loaded by hand or in ZEsarUX until its hardware tests pass |
+| Megabank test ROM | `src/rom/TSPICO-MB.ROM` | 32K | `A194DA40` | 25h | ROM 2.4 built with `--megabank`: the module with `-DMEGABANK` (Megabank code at EXROM 3998h–3E52h), the boot reset and bank count at EXROM 0A3Eh, the Timex bank API on the board (bankapi.asm over RAM 6316h–6571h, a new 64-column relocation table, the frame, Brzozowski and crossing patches), the `r:` block gates at 0068h and 00FCh, the `r:` channels (rchan.asm at EXROM 2400h–2AE6h), function 89h (the mover) at 2213h, and the version marked 2.5 ([exrom-fdd.md](exrom-fdd.md#the-megabank-build--dmegabank-rom-25)) | no flash slot: for the TS-2068 Megabank board's bring-up, loaded by hand or in ZEsarUX until its hardware tests pass |
 | ZX build input | `ROMs/TSPICO-ZX48-V2.BIN` | 16K | `B3D40C73` | — | the TS-Pico ZX Spectrum ROM before this project | the base `tspico-zx48-v3.asm` patches |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN` | 16K | `2BA800EF` (`083655BF` padded to the 32K slot) | — | the ZX build input plus a WAIT_RDY fix, `LOAD "tpi:…"` and `SAVE "tpi:dir"` | **flash slot 0**, the DOCK at power-on |
 
@@ -77,7 +77,10 @@ ROM 2.4 is built in layers, each the image below it plus patches:
    `MB_PATCHES` and `mb_after` bytes on five existing ones, and the Timex
    bank API: `src/rom/fdd/bankapi.asm`, assembled at two offsets and
    spliced over the RAM bank code with the 64-column relocation table
-   rebuilt from the difference ([exrom-fdd.md](exrom-fdd.md#the-timex-bank-api-bankapiasm-phase-8)), written to
+   rebuilt from the difference ([exrom-fdd.md](exrom-fdd.md#the-timex-bank-api-bankapiasm-phase-8)), and
+   the `r:` channels: `rchan.bin`, from the same assembly, spliced at EXROM
+   `RCH_ORG` (2400h), which must equal the source's `RCH_BASE` and be free
+   `FFh` ([exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9)); written to
    `build/TSPICO-mb.ROM` and committed as `src/rom/TSPICO-MB.ROM`, ROM 2.5.
    CI checks it like the slot-1 image; it ships in no slot.
 
@@ -128,7 +131,7 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 2000h–22ADh | 686 | chunk 1's first code: the landing pad, the function chain, the accessors | 1.1 (22A1h–22ADh the base image) | [exrom-chunk1.md](exrom-chunk1.md) |
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | the base image | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | the SYNC layer | [exrom-sync.md](exrom-sync.md) |
-| 23D4h–2FFFh | 3116 | `FFh`, free | | |
+| 23D4h–2FFFh | 3116 | `FFh`, free (the Megabank test ROM only: 2400h–2AE6h, 1767 bytes, the `r:` channels, `rchan.asm`) | | [exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9) |
 | 3000h–3997h | 2456 | the disk-command module (3771h–377Eh 14 free `FFh`; 377Fh–37B4h `PS_READ`, from ROM 2.3; 37B5h–38ECh the COPY, LIST and RESTORE entry; 38EDh–3931h the speech and command channels' helpers, #375, #404; 3932h–3997h `CAT #n`, #404) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
 | 3931h–3FFFh | 1743 | `FFh`, free | | |
 

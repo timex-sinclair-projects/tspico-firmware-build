@@ -1,8 +1,8 @@
 # TS/tspico.py (part 5) — mounting, the folder caches, TAP helpers, the activity log, path helpers
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1438–2424,
-2769–2801, 4835–4840, 4945–5004, 5266–5353, 5507–5514, 6341–6398,
-6918–6932, 7014–7096 and 7254–7270 (firmware 2.4).
+2769–2801, 4944–4949, 5054–5113, 5375–5462, 5616–5623, 6450–6507,
+7027–7041, 7123–7205 and 7363–7379 (firmware 2.4).
 
 This part holds the functions the command handlers ([part 6](tspico-commands.md))
 and the dispatcher ([part 3](tspico-dispatch.md)) call to do their work:
@@ -51,22 +51,22 @@ document it is linked, not restated: the pitfalls are in
 | `CLEAR_LOG()` | 2404–2422 | truncate `/activity.log` |
 | `WALK(top)` | 2769–2782 | recursive folder walk (generator) |
 | `GET_DIRS(path='/sd/TAP')` | 2785–2800 | every folder on the card, sorted, as public paths |
-| `isTapMounted()` | 4835–4839 | is the mounted file a `.tap`? |
-| `dir_exists(filename)` | 4945–4949 | `os.stat` says directory |
-| `file_exists(filename)` | 4952–4956 | `os.stat` says not a directory |
-| `public_path(n=0)` | 4973–4985 | `TSP.cur_path` without `/sd`, optionally shortened |
-| `public_fname(n=0)` | 4988–5003 | `TSP.f_name` without `/sd`, optionally shortened |
-| `ChangeDir(potential_new_path, SDactive=False)` | 5266–5353 | the rules of `tpi:cd` / `MOVE TO` |
-| `getArgs(cmd)` | 5507–5514 | the text after the command word |
-| `getBoot()` | 6341–6349 | (memory, slot) the 2068 boots from |
-| `getDock()` | 6352–6360 | (memory, slot) in the DOCK |
-| `SYSTEM_SLOT_LOCK(mem, page)` | 6363–6374 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
-| `BOOT_SLOT_CLASH(mem, page, f_name)` | 6377–6397 | would the updater erase the booted slot? |
-| `REMOVE_DIR(d)` | 6918–6932 | delete a tree (`/TMP` at boot) |
-| `ResolveIndexName(name)` | 7014–7034 | a listing number to its file name |
-| `LOAD_TPI(name, only_tap=False, fresh=False)` | 7037–7096 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
-| `FORGET_MOUNT()` | 7254–7270 | nothing mounted: clear the fields, delete the flash copies |
-| `AUTO_MOUNT(name)` | 7273–7302 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
+| `isTapMounted()` | 4944–4948 | is the mounted file a `.tap`? |
+| `dir_exists(filename)` | 5054–5058 | `os.stat` says directory |
+| `file_exists(filename)` | 5061–5065 | `os.stat` says not a directory |
+| `public_path(n=0)` | 5082–5094 | `TSP.cur_path` without `/sd`, optionally shortened |
+| `public_fname(n=0)` | 5097–5112 | `TSP.f_name` without `/sd`, optionally shortened |
+| `ChangeDir(potential_new_path, SDactive=False)` | 5375–5462 | the rules of `tpi:cd` / `MOVE TO` |
+| `getArgs(cmd)` | 5616–5623 | the text after the command word |
+| `getBoot()` | 6450–6458 | (memory, slot) the 2068 boots from |
+| `getDock()` | 6461–6469 | (memory, slot) in the DOCK |
+| `SYSTEM_SLOT_LOCK(mem, page)` | 6472–6483 | is it flash slot 0, the Spectrum ROM, which `tpi:blkrcv` never writes? |
+| `BOOT_SLOT_CLASH(mem, page, f_name)` | 6486–6506 | would the updater erase the booted slot? |
+| `REMOVE_DIR(d)` | 7027–7041 | delete a tree (`/TMP` at boot) |
+| `ResolveIndexName(name)` | 7123–7143 | a listing number to its file name |
+| `LOAD_TPI(name, only_tap=False, fresh=False)` | 7146–7205 | `LOAD "tpi:<name>"`: find the file, mount it, say how it went |
+| `FORGET_MOUNT()` | 7363–7379 | nothing mounted: clear the fields, delete the flash copies |
+| `AUTO_MOUNT(name)` | 7382–7411 | `config.ini`'s `AUTOMOUNT`, mounted at boot, sending nothing |
 
 ### `COPY_FILE(src_file, dst_file)`
 
@@ -636,8 +636,8 @@ Callers: `LOAD_TPI` (every `LOAD "tpi:…"`, in both modes), `IDIR`,
 [`DISK_FORMAT`](tspico-disk.md), itself (the remount), and the
 dispatcher after a SAVE — the re-mount of an appended file, the mount of
 a newly saved file when nothing was mounted, and the re-mount of a mounted
-TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 8571, 8588 and
-8600, inside a `try` because the card may have gone).
+TAP the SAVE replaced ([part 3](tspico-dispatch.md), lines 8684, 8701 and
+8713, inside a `try` because the card may have gone).
 
 Beware:
 

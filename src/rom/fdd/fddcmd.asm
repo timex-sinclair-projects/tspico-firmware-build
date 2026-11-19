@@ -233,8 +233,12 @@ G_BEEP: ld      a,h
         inc     hl
         inc     hl
         ld      a,(hl)             ; the channel letter
+    IFDEF MEGABANK
+        call    BEEP_LT            ; POP HL, and Z for 'F' or 'R' (same size)
+    ELSE
         pop     hl
         cp      'F'
+    ENDIF
         jr      z,.quiet           ; INPUT # from a file
 .beep:  call    BEEPER
 .quiet: di
@@ -266,10 +270,17 @@ G_BEEP: ld      a,h
 ;------------------------------------------------------------------------------
 G_MAIN: ld      hl,FDD_ENTRY
         jr      GUARDED
+    IFDEF MEGABANK
+G_OUT:  ld      hl,MB_OUT          ; 'R' records too (rchan.asm), by the letter
+        jr      GUARDED
+G_IN:   ld      hl,MB_IN
+        jr      GUARDED
+    ELSE
 G_OUT:  ld      hl,CH_OUT
         jr      GUARDED
 G_IN:   ld      hl,CH_IN
         jr      GUARDED
+    ENDIF
 G_OPEN: ld      hl,CH_OPEN_HOOK
         jr      GUARDED
 G_OSYN: ld      hl,OPEN_SYNTAX
@@ -573,9 +584,15 @@ SEND_TAIL:
 ; DE = name, BC = length. Everything past the gate keeps the name as a pointer
 ; and a 16-bit length, and the Pico sizes its buffer from the pre-header.
 TPI_SEND:
+    IFDEF MEGABANK
+        call    MB_TPRE            ; tpi:rmask first for an "r:" command (same size)
+        nop
+        nop
+    ELSE
         push    hl
         push    de
         ld      hl,(FRAMES)
+    ENDIF
 .nz:    inc     hl                 ; a session id that is never 0
         ld      a,h
         or      l
@@ -913,7 +930,11 @@ CH_OPEN_HOOK:
         dec     de
         cp      ':'
         jp      nz,STRMS_NC
+    IFDEF MEGABANK
+        call    RCH_KIND           ; "r:" is answered there; else SPEC_KIND
+    ELSE
         call    SPEC_KIND          ; "d:", "v:", "x:", or "f:" and a character more
+    ENDIF
         jp      nz,STRMS_NC
 .ours:  ld      a,c
         cp      MAX_ARG+3
@@ -1096,8 +1117,14 @@ CH_CLOSE_HOOK:
         dec     hl
         push    hl
         pop     ix                 ; the record
+    IFDEF MEGABANK
+        call    RCH_CLTEST         ; an 'R' record is closed there (same size)
+        nop
+        nop
+    ELSE
         ld      a,(ix+R_LETTER)
         cp      'F'
+    ENDIF
         jr      z,.ours
 .stock: call    STRMS_HL
         ld      a,b
@@ -1987,8 +2014,8 @@ SET_MODE:
         ld      a,b
         jr      nz,.st
         set     R_BIT,a
-.st:    ld      (MODE_SV),a
-        ret
+.st:    jp      SET_MODE_R         ; and the mask, for an "r:" statement (rchan.asm)
+        db      $FF                ; (R_SA stays at 39F5h)
 
 ; OPEN_TXT -- SEND_FOPEN's command word: HL = "tpi:fopen " or "tpi:ropen " by
 ; the name's first letter. BC and DE (D: the running XOR) are kept.
@@ -2783,3 +2810,17 @@ MB_CALL_HOME:
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE
+
+    IFDEF MEGABANK
+;------------------------------------------------------------------------------
+; The "r:" channels (phase 9) don't fit in the module's 4K: they go at EXROM
+; RCH_BASE, free in the base ROM, in the same chunk (1) as the module.
+; build-rom.py splices rchan.bin there.
+;------------------------------------------------------------------------------
+RCH_BASE        EQU $2400
+        ORG     RCH_BASE
+        INCLUDE "rchan.asm"
+RCH_END:
+        ASSERT  RCH_END <= $3000
+        SAVEBIN "rchan.bin", RCH_BASE, RCH_END-RCH_BASE
+    ENDIF

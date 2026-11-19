@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, the Megabank's `r:` RAM disk, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2887–4584.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2887–4693.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -28,11 +28,11 @@ module's patches.
 | 2887–2983 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
 | 2992–3098 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
 | 3101–3487 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
-| 4069–4072 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 4075–4184 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 4198–4225 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 4228–4260 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 4263–4584 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 4178–4181 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 4184–4293 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 4307–4334 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 4337–4369 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 4372–4693 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -519,6 +519,19 @@ ROM would fail at the import (the RAM disk is v3-only: the spec, "Firmware").
 | MOVE "r:a" TO "r:b" | `tpi:ren r:a\|r:b` | `DISK_REN` → [`RD_REN`](#rd_rena-b) (MOVE with one `r:` side: Q) |
 | COPY a TO b, either side `r:` | `tpi:copy a\|b` | `DISK_COPY` → [`RD_COPY`](#rd_copya-b) |
 | SAVE "tpi:ram [backup\|restore name]" | `tpi:ram …` | [`RD_RAM`](#rd_rampre-cmd) |
+| OPEN #s,"r:name"[,"mode"[,reclen]] | `tpi:rchopen <hex>` (phase 9) | [`RD_RCHOPEN`](#rd_rchopenpre-cmd) |
+| PRINT #s past the extent | `tpi:rchgrow <hex>` | [`RD_RCHGROW`](#rd_rchgrowpre-cmd) |
+| CLOSE #s | `tpi:rchclose <hex>` | [`RD_RCHCLOSE`](#rd_rchclosepre-cmd) |
+| any of the others above | `tpi:rmask <hex>` first | [`RD_RMASK`](#rd_rmaskpre-cmd) |
+
+Between OPEN and CLOSE the ROM reads and writes the file's bytes itself,
+through a window chunk, with no exchange
+([exrom-fdd.md](../rom/exrom-fdd.md#the-r-channels-rchanasm-phase-9)). Every
+`r:` command carries the open-stream mask (bit *n*: stream *n* points at an
+`R` record): the channel commands in their payload, the others in a
+`tpi:rmask` sent just before. `RD_MASK` keeps it, `RD_START` hands it to the
+disk, and `Disk.sync` closes a slot the 2068 no longer has open (NEW, a
+reset), so its length reaches the directory.
 
 `SD_NEEDED` asks [`RD_ONLY`](#rd_onlycmd_word-cmd_exec) first, so a command
 with no card side works without a card.
@@ -527,6 +540,7 @@ with no card side works without a card.
 |---|---|---|
 | `FN_MOVER` | 89h | response function 89h, sent in front of the first operation |
 | `RD` | `None`, then a `ramdisk.Disk` | the RAM disk, made by `RD_START` on the first `r:` command and kept: its directory cache (at most 224 entries) lives as long as the firmware |
+| `RD_MASK` | `None`, or the open-stream mask | set by every `r:` channel command and `tpi:rmask` (`RD_PAYLOAD`); `None` until the first: no slot is closed for want of a bit |
 | `RD_OPEN` | `None`, or [name, mode, header, header served] | set by `tpi:ropen`, used and cleared by `tpi:rblk`: the open SAVE/LOAD/VERIFY/MERGE. The header is a SAVE's, between its two blocks; "served" stops a LOAD's second header request |
 | `RD_CONFIRM_MS` | 60 000 | how long a FORMAT, ERASE pattern or restore waits to be repeated |
 | `RD_IMAGE_EXT` | `".rdi"` | the extension `tpi:ram backup` and `restore` add to a name without one |
@@ -619,7 +633,8 @@ Whether `s` starts with `r:` (either case).
 ### `RD_ONLY(cmd_word, cmd_exec)`
 
 For `SD_NEEDED`: true when the command touches the RAM disk and not the
-card: `tpi:ropen`, `tpi:rblk`, `tpi:ram` without `backup`/`restore`, and
+card: `tpi:ropen`, `tpi:rblk`, `tpi:rmask`, `tpi:rchopen`, `tpi:rchgrow`,
+`tpi:rchclose`, `tpi:ram` without `backup`/`restore`, and
 `tpi:dir`, `tpi:erase`, `tpi:format` with an `r:` argument, `tpi:ren` and
 `tpi:copy` with both sides `r:`.
 
@@ -687,6 +702,45 @@ The disk is mounted (no RAM disk: J). Then:
 A missing `RD_OPEN` is F. The ROM clears its TPMODE bit 5 on any status but
 1, so a failed block ends the statement; the next `tpi:ropen` resets
 `RD_OPEN`.
+
+### `RD_PAYLOAD(cmd)`
+
+The hex after the command word as bytes; bytes 0–1 are the mask, kept in
+`RD_MASK`. A bad hex string raises (the caller answers C).
+
+### `RD_RMASK(pre, cmd)`
+
+`tpi:rmask <hex>`: the mask (2 bytes), PMR1 0. Sent by the Megabank ROM
+before an `r:` command that has no payload of its own: from `TPI_SEND`
+(`MB_TPRE`) when the command text holds `r:`, and from `SET_MODE` for
+SAVE/LOAD/VERIFY/MERGE `"r:…"`. A bare status: OK, C for bad hex, or the
+`RD_NEEDS_ROM` refusal. No mover: the mask is applied by the command that
+follows.
+
+### `RD_RCHOPEN(pre, cmd)`
+
+`tpi:rchopen <hex>`, PMR1 the stream, PMR2 the record length (FFh for 255
+or more). The payload: the mask (2), the 2068 address the block goes to (2),
+then the mode (`channels.parse_mode`: `r`, `w`, `a`, `u`, with `b` for
+binary; a bad one is Q) and the name, as text with a space between. By
+`RD_RUN` with the bare status: a stream over 15 is Q; an empty name or one
+with `*` or `?` is a listing (`Disk.open_list` of the names `catalog.match`
+picks), which must be mode `r` with no record length (Q); anything else is
+`Disk.open_stream`. Then the slot's 15-byte block is copied to the address
+(op 2) and the ROM builds its record from it.
+
+### `RD_RCHGROW(pre, cmd)`
+
+`tpi:rchgrow <hex>`, PMR1 the stream. The payload: the mask, the block's
+address, the length the stream needs (0 for 65536). `Disk.grow`, then the
+block again with the new extent (op 2). Too long or a full disk: Q.
+
+### `RD_RCHCLOSE(pre, cmd)`
+
+`tpi:rchclose <hex>`, PMR1 the stream, the payload the mask. The ROM has
+already written the length and position back to the slot; `Disk.close`
+puts them in the directory. A refusal (the write-protect switch: J) leaves
+the stream open on the 2068.
 
 ### `RD_CAT(arg)`
 
@@ -774,7 +828,7 @@ question 8) is not here: anything else is Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 4062 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 4171 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -897,7 +951,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose, tpi:chcat
 
-The comment at line 4187 lists the four commands. The ROM's channel driver
+The comment at line 4296 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -1201,7 +1255,7 @@ card, so they take the first path: `Channels.close` drops the entry (on
 speech, after saying what is left of an unfinished line, even when speech
 is off).
 
-The long comment at line 4546 is the history. When channels arrived (#83)
+The long comment at line 4655 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

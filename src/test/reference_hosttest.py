@@ -74,6 +74,7 @@ FIRMWARE = (
 ROM_ASM = (
     "src/rom/fdd/fddcmd.asm",
     "src/rom/fdd/bankapi.asm",
+    "src/rom/fdd/rchan.asm",
     "src/rom/patches/tspico-sync.asm",
     "src/rom/patches/tspico-zx48-v3.asm",
     "src/upgrade/updater.asm",

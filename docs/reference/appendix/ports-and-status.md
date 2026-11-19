@@ -175,7 +175,7 @@ dispatch compares A = code − 1 ([exrom-chunk1.md](../rom/exrom-chunk1.md)).
 | 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (every key, `N` included, goes round the loop, #227; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | 87h | — | status | HOME 08A6h: clears the screen | unused |
 | 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (`LOWER_LOOP`, 334Fh) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
-| 89h | — | operations, op 0, then the answer ([PROTOCOL.md §6.3](../../PROTOCOL.md)) | the Megabank mover (`MOVER`), in the Megabank test ROM (2.5) only; Report D in 2.4 | every `r:` command: `tpi:rblk`, `tpi:ram`, and CAT, ERASE, FORMAT, MOVE, COPY with `r:` names (`RD_RUN`, [tspico-disk.md](../firmware/tspico-disk.md#the-megabanks-ram-disk-r-names)) |
+| 89h | — | operations, op 0, then the answer ([PROTOCOL.md §6.3](../../PROTOCOL.md)) | the Megabank mover (`MOVER`), in the Megabank test ROM (2.5) only; Report D in 2.4 | every `r:` command: `tpi:rblk`, `tpi:ram`, `tpi:rchopen`, `tpi:rchgrow`, `tpi:rchclose`, and CAT, ERASE, FORMAT, MOVE, COPY with `r:` names (`RD_RUN`, [tspico-disk.md](../firmware/tspico-disk.md#the-megabanks-ram-disk-r-names)) |
 | 80h, 8Ah–FFh | — | — | fall through the chain: Report D | — |
 
 Text rules: the ROM reads characters without a ready wait; 00h ends a string
