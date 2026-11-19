@@ -2759,6 +2759,25 @@ MB_DETECT:
 .x:     pop     de
         jp      SYSCON_END
 
+;------------------------------------------------------------------------------
+; MB_CALL_HOME -- CALL_HOME (EXROM $03DD) with HOME in chunks 0-1 only. $03DE's
+; LD HL,FF00h is patched to JP here (build-rom.py): the bank word FFFCh, then
+; the two zero words. (The genuine thunk's LD H,0 made its zeros from FF00h's
+; L, so FFFCh can't be patched in place: it would push a parameter count of
+; FCh.) FF00h gave HOME every chunk, taking them from any board bank mapped in
+; chunks 2-7. Reached from EXROM code, so chunk 1 is the EXROM.
+;------------------------------------------------------------------------------
+MB_CALL_HOME:
+        ld      hl,$FFFC
+        push    hl
+        ld      hl,0
+        push    hl
+        push    hl
+        exx
+        call    $0F99              ; BANK_SWITCH
+        pop     ix
+        ret
+
     ENDIF   ; MEGABANK
 
 

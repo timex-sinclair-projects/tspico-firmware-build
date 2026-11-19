@@ -63,8 +63,8 @@ the Pico Interface BIOS.
 | 1739–1804 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
 | 1806–1811 | 3929h–3931h | `IN_DROP` (#404) |
 | 1813–1873 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1875–2763 | 3998h–3E42h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`) |
-| 2765–2766 | 3998h (3E43h) | `FDD_END` |
+| 1875–2781 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
+| 2784–2785 | 3998h (3E53h) | `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -1273,7 +1273,7 @@ gives `src/rom/TSPICO-MB.ROM`, the TS-2068 Megabank test ROM (not in a flash
 slot; [PROTOCOL.md §6.3](../../PROTOCOL.md) has the wire format). Without the
 define the module is byte-for-byte ROM 2.4's. With it, four same-size edits
 change 2.4's code and everything else is appended after `CMD_CHCAT`, at
-3998h–3E42h (1195 bytes; 445 free to 3FFFh), so no 2.4 address moves:
+3998h–3E52h (1211 bytes; 429 free to 3FFFh), so no 2.4 address moves:
 
 - `ROM_ID` is 25h (with the patches that carry the version: banner "v2.5",
   HOME 0065h, `G_VERS`, 1BB5h);
@@ -1284,8 +1284,8 @@ change 2.4's code and everything else is appended after `CMD_CHCAT`, at
 The patches that reach it (`MB_PATCHES` in build-rom.py, each with the bytes it
 replaces): EXROM 0A3Eh `2A BC 5C` → `JP MB_BOOT`, 0068h `JP 1879h` → `JP R_SA`,
 00FCh `JP 196Dh` → `JP R_LD`, and 2213h (2.4's `CP 87h / JP Z,3006h / RET`) →
-`JP FN_EXT`. `MB_FIXED_SYMS` holds MB_BOOT, R_SA, R_LD and FN_EXT at the
-addresses the patches use. The rest of `MB_PATCHES`, and the splice of
+`JP FN_EXT`. `MB_FIXED_SYMS` holds MB_BOOT, R_SA, R_LD, FN_EXT and
+MB_CALL_HOME at the addresses the patches use. The rest of `MB_PATCHES`, and the splice of
 `bankapi.asm` over the RAM bank code, are the Timex bank API
 ([below](#the-timex-bank-api-bankapiasm-phase-8)).
 
@@ -1345,6 +1345,19 @@ so it carries both. DE is kept, and HL (SYSCON + 0Dh) for `JP SYSCON_END`.
 | `MB_NBANKS` | 6315h | the bank code's count (`NBANKS` in bankapi.asm) |
 | `MB_MBBASE` | 6404h | the board's BASE (`MBBASE` in bankapi.asm) |
 | `MAXBNK` | 5CBEh | the 2068's bank count |
+
+### `MB_CALL_HOME`
+
+`CALL_HOME` (EXROM 03DDh) with HOME in chunks 0–1 only. 03DEh's `LD HL,FF00h`
+is patched to `JP MB_CALL_HOME`, which pushes the bank word FFFCh and the two
+zero words, then goes on as the thunk did (`EXX`, `CALL BANK_SWITCH`,
+`POP IX`, `RET`). It can't be patched in place: the thunk's `LD H,0` makes
+its zeros from FF00h's L, so FFFCh would push a parameter count of FCh, and
+CALL_BANK's copy of 266 bytes from SP, which on the 2068 sits just below
+6200h, moves the bank code (the interrupt handler at 62AEh included) for the
+whole call: a hang and reset, found by the ZEsarUX smoke test
+(`SAVE "tpi:ram"`) and now caught by `rom_bankapi_hosttest.py`. Reached from EXROM code, where
+chunk 1 is the EXROM.
 
 ### `FR_TEST`
 
@@ -1576,9 +1589,10 @@ run to 1EDBh. `rom_bankapi_hosttest.py` runs the API from both copies.
   no-room exit keeps A = 1 (67C2h); the copier stores the destination from
   DE (66DFh, 66E2h); the end address is start + length − 1 and the
   direction is FFh (66F3h).
-- The EXROM's crossings into HOME (`CALL_HOME`'s 03DFh, 08DFh and 001Eh)
-  ask for chunks 0–1 (FFFCh), not every chunk (FF00h), which took the
-  chunks of any board bank mapped elsewhere.
+- The EXROM's crossings into HOME ask for chunks 0–1 (FFFCh), not every
+  chunk (FF00h), which took the chunks of any board bank mapped elsewhere:
+  08DFh and 001Eh in place (`LD L,0` → `LD L,FCh`), and `CALL_HOME`
+  through `MB_CALL_HOME` (below).
 
 What it doesn't change: the bank stack (65CEh's pointer, starting at 65CEh
 and growing down through the FFh bytes 658Eh–65CDh, which only look free),

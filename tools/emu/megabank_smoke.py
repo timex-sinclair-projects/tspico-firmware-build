@@ -165,15 +165,15 @@ def main():
         t = s.run(VERIFY, '"r:code"', S.CODE)
         check("0 OK" in report(t), 'VERIFY "r:code" CODE', t)
         s.poke(33768, b"\x00" if pat[1000] else b"\x01")
-        t = s.run(VERIFY, '"r:code"', S.CODE)
+        t = s.run(VERIFY, '"r:code"', S.CODE, until="R Tape loading error", timeout=20)
         check("R Tape loading error" in report(t), "VERIFY after a change: R", t)
         check(value(s, OUT, "253,5:", PRINT, IN, "252") == 3 and value(s, PRINT, PEEK, "40960") == 123,
               "chunk 5 is still bank 3, its byte still 123")
-        # Not a check: every tpi: command leaves the HSR at 0, in ROM 2.4 too
-        # (the TS-Pico's bank crossings; the Megabank spec, phase 8 item 4).
-        # The mover puts back the HSR it found, which by then is already 0.
-        print("  NOTE  the HSR after the r: commands: %d (ROM 2.4's crossings clear it)"
-              % value(s, PRINT, IN, "244"))
+        # ROM 2.4's crossings gave HOME every chunk, clearing the HSR; ROM 2.5's
+        # take chunks 0-1 only (the Megabank spec, phase 8 item 4), so chunk
+        # 5's bit, the program's bank 3, survives the r: commands.
+        hsr = value(s, PRINT, IN, "244")
+        check(hsr == 32, "the HSR after the r: commands is still 32 (chunk 5's bit kept)", str(hsr))
         check(all(value(s, OUT, "253,%d:" % n, PRINT, IN, "252") == 0 for n in (4, 6, 7)),
               "OWN4, OWN6, OWN7 are 0 again")
         s.run(OUT, "253,5:", OUT, "244,0:", OUT, "252,0")   # unmap: HSR, then OWN5

@@ -348,6 +348,44 @@ def suite(rom, wide):
           tag + "no board: SAVE/RESTORE keep the 19-byte frame, nothing written to FCh")
 
 
+def call_home(rom):
+    """CALL_HOME (EXROM $03DD) from EXROM code, as the module calls HOME: a
+    target in HOME that RETs. HOME gets chunks 0-1 only (FFFC), a board bank
+    in chunk 5 stays, and the stack comes back as it was. The parameter
+    count must be 0: patched in place, FFFC made it FCh, and CALL_BANK's
+    copy of 266 bytes from SP, which sits just below 6200h, moved the bank
+    code (the interrupt handler at 62AEh included) for the whole call."""
+    m = Machine(rom)
+    Machine.every.remove(m)                              # it fetches the EXROM and HOME
+    m.dec, m.hsr = 0x80, 0x03                            # the EXROM in chunks 0-1
+    m.be(4, 0x20)
+    m.dec, m.hsr = 0x80, 0x23
+    m.home[0x3FF0] = 0xC9                                # the HOME target: RET
+    seen = []
+    m.cpu.fetch_hook = lambda pc: seen.append((pc, m.hsr, list(m.own))) if pc == 0x3FF0 else None
+    cpu = m.cpu
+    cpu.iff = False
+    top = 0x61F0                                         # the 2068's machine stack: just
+    code = bytes(m.ram[0x6200:0x6300])                   # below the bank code
+    cpu.sp = top
+    cpu.push(DONE)                                       # the preamble's caller
+    cpu.push(0x1234)                                     # PUSH IX
+    cpu.h, cpu.l = 0x3F, 0xF0                            # EXX / LD HL,target
+    cpu.ix = 0
+    cpu.pc = 0x03DD                                      # JP 03DDh
+    n = moved = 0
+    while cpu.pc != DONE and n < 200000:
+        cpu.step()
+        n += 1
+        moved += m.ram[0x6200:0x6300] != code
+    check(seen and seen[0][1] & 0x03 == 0 and seen[0][2][5] == 4,
+          "CALL_HOME: HOME in chunks 0-1 for the call, bank 4 still in chunk 5 (%s)" % seen[:1])
+    check(cpu.pc == DONE and cpu.sp == top and cpu.ix == 0x1234 and m.hsr == 0x23 and m.own[5] == 4
+          and m.dec & 0x80, "CALL_HOME: back in the EXROM, SP and IX as they were, bank 4 kept "
+          "(PC %04X SP %04X)" % (cpu.pc, cpu.sp))
+    check(not moved, "CALL_HOME: the bank code at 6200h-62FFh untouched throughout (%d steps moved)" % moved)
+
+
 def detect(rom, base, size, board=True):
     m = Machine(rom, base=base, size=size, board=board)
     m.ram[NBANKS] = m.ram[MAXBNK] = 0
@@ -375,6 +413,7 @@ def main():
     m = detect(rom, 1, 64, board=False)
     check(m.ram[NBANKS] == m.ram[MAXBNK] == 0 and m.ram[MBBASE] == 0x99, "MB_DETECT with no board: count 0, nothing else written")
 
+    call_home(rom)
     suite(rom, wide=False)
     suite(rom, wide=True)
 

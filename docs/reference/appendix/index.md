@@ -1322,7 +1322,8 @@ regenerate it when a line number moves (the test checks that it is current).
 | `MB_MBBASE` | label | [2728](../../../src/rom/fdd/fddcmd.asm#L2728) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `MAXBNK` | label | [2729](../../../src/rom/fdd/fddcmd.asm#L2729) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `MB_DETECT` | label | [2731](../../../src/rom/fdd/fddcmd.asm#L2731) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `FDD_END` | label | [2765](../../../src/rom/fdd/fddcmd.asm#L2765) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `MB_CALL_HOME` | label | [2770](../../../src/rom/fdd/fddcmd.asm#L2770) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `FDD_END` | label | [2784](../../../src/rom/fdd/fddcmd.asm#L2784) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 
 ## `src/rom/fdd/bankapi.asm`
 

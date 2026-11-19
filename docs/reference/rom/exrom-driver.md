@@ -111,8 +111,9 @@ in the TS-Pico EXROM — the expression evaluator, PO-MSG, MAKE-ROOM,
 CHAN-OPEN — goes through it. 08DDh is the no-return twin (genuine bytes,
 reused). `build-rom.py` checks these 16 bytes as an anchor. In the Megabank
 ROM the bank word is FFFCh (HOME in chunks 0–1, as HOME's own crossings
-ask), here, at 08DFh and at 001Eh: FF00h took every chunk from any board
-bank mapped there ([exrom-fdd.md](exrom-fdd.md#the-timex-bank-api-bankapiasm-phase-8)).
+ask) at 08DFh and 001Eh, and here through `MB_CALL_HOME` (03DEh is a `JP`
+to it: the `LD H,0` reuses FF00h's L for the zero words): FF00h took every
+chunk from any board bank mapped there ([exrom-fdd.md](exrom-fdd.md#mb_call_home)).
 
 ### `BANK_SWITCH` (0F99h)
 

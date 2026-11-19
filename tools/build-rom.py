@@ -433,11 +433,15 @@ MB_PATCHES = [
              "byte is start + length - 1 (the chunk check was one byte off).",
     ),
     dict(
-        name="CALL_HOME's crossing (EXROM $03DF): HOME takes chunks 0-1, not all",
-        bank="exrom", addr=0x03DF, before="00", after="fc",
-        note="Bank word FF00 -> FFFC. HOME's own crossings already use FEFC; "
-             "FF00 gave HOME every chunk, so BANK_ENABLE took them from any board "
-             "bank mapped there.",
+        name="CALL_HOME (EXROM $03DE): LD HL,FF00h -> JP MB_CALL_HOME ($3E43)",
+        bank="exrom", addr=0x03DE, before="21 00 ff", after="c3 43 3e",
+        note="MB_CALL_HOME pushes the bank word FFFC (HOME in chunks 0-1) and "
+             "the two zero words. FF00 gave HOME every chunk, so BANK_ENABLE "
+             "took them from any board bank mapped there. Not patchable in "
+             "place: the thunk's LD H,0 makes its zeros from FF00's L, so "
+             "FFFC would push a parameter count of FCh and CALL_BANK would "
+             "copy 252 bytes more each call. HOME's own crossings already use "
+             "FEFC.",
     ),
     dict(
         name="EXROM $08DF: the same crossing, FF00 -> FFFC",
@@ -451,7 +455,8 @@ MB_PATCHES = [
     ),
 ]
 
-MB_FIXED_SYMS = {"MB_BOOT": 0x3998, "R_SA": 0x39F5, "R_LD": 0x3A06, "FN_EXT": 0x3A61}
+MB_FIXED_SYMS = {"MB_BOOT": 0x3998, "R_SA": 0x39F5, "R_LD": 0x3A06, "FN_EXT": 0x3A61,
+                 "MB_CALL_HOME": 0x3E43}
 
 # Base-ROM code the Megabank code relies on (checked with ANCHORS when
 # building --megabank).
