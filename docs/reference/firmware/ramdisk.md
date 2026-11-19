@@ -16,7 +16,9 @@ board, so they survive power-off with its battery; this module keeps a cache
 of the directory and nothing else. Nothing here touches the bus: the mover is
 handed in as `Disk.mv` (`RD_MOVER` on the card, a model board in
 [`src/test/ramdisk_hosttest.py`](../../../src/test/ramdisk_hosttest.py)), so
-every rule is tested on the host.
+every rule is tested on the host. On a real board,
+[`basic/SD/TAP/test/mbdisk.bas`](../../../basic/SD/TAP/test/mbdisk.bas) runs
+each command and records its report, for `tools/hwcheck.py --megabank`.
 
 **The layout.** Pages are the board's 8K pages counted from BASE, 0 to
 SIZE × 8 − 1. The RAM disk is pages `first`..`last`, where `last` is always

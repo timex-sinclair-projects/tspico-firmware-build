@@ -5,6 +5,8 @@ connected (the TS-Pico 2.x or the v3 card), mostly unattended.
     python3 tools/hwcheck.py              # everything
     python3 tools/hwcheck.py --auto-only  # just the part the 2068 runs itself
     python3 tools/hwcheck.py --manual-only  # just the part that needs hands
+    python3 tools/hwcheck.py --megabank     # everything, then the Megabank
+    python3 tools/hwcheck.py --megabank-only  # just the Megabank
 
 The automatic part is a BASIC program, basic/SD/TAP/test/hwtest.bas (built by
 tools/build-basic.sh), that runs ~18 tests on the 2068 and records each
@@ -26,6 +28,14 @@ report code. This script:
 The 2068 should be on and at the BASIC prompt, with the SD card in, and
 nothing else using the Pico's port (Thonny, a watch). It uses
 tools/pico-serial.py for everything on the Pico's side.
+
+The Megabank section (the TS-2068 Megabank spec, Testing, "On hardware"
+steps 2, 4 and 5) needs the board, ROM 2.5 and firmware with the RAM disk.
+It runs the board's memory test (tools/megabank/mbmem.tap, built in the
+Megabank repo) and basic/SD/TAP/test/mbdisk.bas, which SAVEs, LOADs, MOVEs,
+COPYs, ERASEs, fills, backs up and restores the RAM disk, then checks the
+write-protect switch and, if you want, a power cut during a SAVE. It erases
+the board and the RAM disk; it asks before it starts.
 """
 
 import argparse
@@ -46,6 +56,8 @@ import sd_roundtrip as RT                                       # noqa: E402
 
 PS = [sys.executable, os.path.join(HERE, "pico-serial.py")]
 HWTEST = os.path.join(ROOT, "SD card", "TAP", "test", "hwtest.tap")
+MBMEM = os.path.join(HERE, "megabank", "mbmem.tap")
+MBDISK = os.path.join(ROOT, "SD card", "TAP", "test", "mbdisk.tap")
 WORK = tempfile.mkdtemp(prefix="hwcheck.")
 
 RESULTS = []                                                    # (name, ok, detail)
@@ -372,18 +384,185 @@ def manual(board):
           ("" if board == "v3" else " Press the TS Reset button to bring the 2068 back."))
 
 
+# ---------------------------------------------------------------------------
+# 5. The Megabank
+# ---------------------------------------------------------------------------
+
+# mbdisk.bas: test -> (name, expected report, expected value or None)
+MB_DISK_EXPECT = {
+    1: ('FORMAT "r:"', 0, None),
+    2: ('FORMAT "r:" again (it asks first over files)', 0, None),
+    3: ('SAVE "tpi:ram"', 0, None),
+    4: ('SAVE "r:mbdk" CODE 40000,3000', 0, None),
+    5: ('VERIFY "r:mbdk" CODE', 0, None),
+    6: ('LOAD "r:mbdk" CODE: the bytes came back', 0, 5),
+    7: ('VERIFY after a change: Report R', 27, None),
+    8: ('SAVE "r:prog" (a program)', 0, None),
+    9: ('CAT "r:"', 0, None),
+    10: ('MOVE "r:mbdk" TO "r:mbdk2"', 0, None),
+    11: ('LOAD the old name: Report F', 15, None),
+    12: ('COPY "r:mbdk2" TO "mbdkcopy" (to the card)', 0, None),
+    13: ('COPY "mbdkcopy" TO "r:back" (from the card)', 0, None),
+    14: ('LOAD "r:back" CODE 50000', 0, 5),
+    15: ('COPY "r:back" TO "r:back2" (on the board)', 0, None),
+    16: ('ERASE "r:back2"', 0, None),
+    17: ('FORMAT "r:64" over files: asks to be repeated', 0, None),
+    18: ('FORMAT "r:64" again: done', 0, None),
+    19: ('SAVE 48K onto the 64K disk', 0, None),
+    20: ('SAVE 48K more: Report Q (full)', 26, None),
+    21: ('SAVE 3000 bytes into what is left', 0, None),
+    22: ('SAVE "tpi:ram backup mbdkimg"', 0, None),
+    23: ('ERASE "r:small"', 0, None),
+    24: ('tpi:ram restore over files: asks to be repeated', 0, None),
+    25: ('tpi:ram restore again: done', 0, None),
+    26: ('the erased file is back', 0, 5),
+    27: ('FORMAT "r:" over files: asks', 0, None),
+    28: ('FORMAT "r:" again: a default disk', 0, None),
+}
+
+
+def mb_fetch(name):
+    """/TAP/<name>.tap's CODE bytes, or None."""
+    local = os.path.join(WORK, name + ".tap")
+    stop_firmware()
+    ps("get", "--sd", "/TAP/%s.tap" % name, local)
+    start_firmware()
+    try:
+        data, _ck = RT.payload(local)
+        return data
+    except (OSError, IndexError):
+        return None
+
+
+def mb_setup():
+    if not os.path.exists(MBMEM):
+        sys.exit("No %s (the Megabank repo's firmware/controller/memtest/build.py makes it)." % MBMEM)
+    src = os.path.join(ROOT, "basic", "SD", "TAP", "test", "mbdisk.bas")
+    if not os.path.exists(MBDISK) or os.path.getmtime(MBDISK) < os.path.getmtime(src):
+        print("  Building the BASIC programs (tools/build-basic.sh)...")
+        subprocess.run([os.path.join(HERE, "build-basic.sh")], capture_output=True, check=True)
+    stop_firmware()
+    repl("""import os
+for f in ('mbmemres.tap', 'mbdkres.tap', 'mbdkcopy.tap', 'mbdkimg.rdi'):
+ try:
+  os.remove('/sd/TAP/' + f)
+ except OSError:
+  pass
+""", sd=True)
+    for local, remote in ((MBMEM, "/TAP/mbmem.tap"), (MBDISK, "/TAP/mbdisk.tap")):
+        out = ps("put", "--sd", local, remote)
+        if "bytes" not in out or "MISMATCH" in out:
+            sys.exit("Couldn't copy %s to the card:\n%s" % (local, out))
+    start_firmware()
+    time.sleep(4)
+    print("  mbmem.tap and mbdisk.tap are in the card's /TAP.")
+
+
+def megabank():
+    say("The Megabank. It needs ROM 2.5 (PEEK 101 gives 37) and the board fitted.\n"
+        "  It ERASES the board, the RAM disk included.")
+    if not ask("Go on?"):
+        result("Megabank tests", None, "skipped")
+        return
+    mb_setup()
+
+    say('The memory test. On the 2068, type:\n\n      LOAD "tpi:mbmem.tap"\n      LOAD ""\n\n'
+        "  Press Y when it asks. It runs for about 3 minutes with the border\n"
+        "  changing; press a key when it asks to save the results.")
+    tr = Trace()
+    line = tr.wait_for(r"write done: .*mbmemres\.tap", 900)
+    tr.stop()
+    if not line:
+        result("mbmem ran to the end", False, "no mbmemres.tap within 15 minutes")
+    else:
+        time.sleep(2)
+        r = mb_fetch("mbmemres")
+        if not r or len(r) < 13:
+            result("read mbmemres.tap", False, "couldn't fetch or read it")
+        else:
+            state, errs, pages = r[0], r[1] + 256 * r[2], r[11] + 256 * r[12]
+            result("mbmem: the board answered", state != 1)
+            result("mbmem: the write-protect switch was off", state != 2)
+            first = ""
+            if errs:
+                first = "first: pass %d, bank %d, 8K %d via chunk %d, offset %d: wanted %d, read %d" % (
+                    r[3], r[4], r[5], r[6], r[7] + 256 * r[8], r[9], r[10])
+            result("mbmem: every page read back (%d pages)" % pages, state == 0 and errs == 0 and pages > 0,
+                   ("%d bad pages; " % errs + first) if errs else "")
+    say("Reset the 2068 now (the memory test overwrote its RAM from 32768 up).")
+    pause("When it's back at the prompt,")
+
+    say('The RAM disk. On the 2068, type:\n\n      LOAD "tpi:mbdisk.tap"\n      LOAD ""\n\n'
+        "  Press Y when it asks, then a key whenever it says to (each SAVE asks).\n"
+        "  It ends with MBDISK DONE.")
+    tr = Trace()
+    line = tr.wait_for(r"write done: .*mbdkres\.tap", 900)
+    trace = list(tr.lines)
+    tr.stop()
+    if not line:
+        result("mbdisk ran to the end", False, "no mbdkres.tap within 15 minutes")
+    else:
+        time.sleep(2)
+        result("mbdisk: no firmware errors in the telemetry",
+               not [l for l in trace if "Traceback" in l or "ERROR" in l])
+        data = mb_fetch("mbdkres")
+        if data is None:
+            result("read mbdkres.tap", False, "couldn't fetch or read it")
+        else:
+            recs = {data[i]: (data[i + 1], data[i + 2]) for i in range(0, len(data) - 2, 3)}
+            for t, (name, rep, val) in sorted(MB_DISK_EXPECT.items()):
+                if t not in recs:
+                    result("%2d %s" % (t, name), False, "not recorded")
+                    continue
+                got_rep, got_val = recs[t]
+                bad = []
+                if got_rep != rep:
+                    bad.append("report %s, expected %s" % (REPORTS[got_rep] if got_rep < 28 else got_rep,
+                                                           REPORTS[rep]))
+                if val is not None and got_val != val:
+                    bad.append("read %d, expected %d" % (got_val, val))
+                result("%2d %s" % (t, name), not bad, "; ".join(bad))
+            stop_firmware()
+            out = repl("import os\nfor f in ('mbdkcopy.tap', 'mbdkimg.rdi'):\n try:\n  print('SZ', f, os.stat('/sd/TAP/' + f)[6])\n"
+                       " except OSError:\n  print('SZ', f, -1)\n", sd=True)
+            start_firmware()
+            sizes = dict(re.findall(r"SZ (\S+) (-?\d+)", out))
+            result("mbdkimg.rdi on the card is 64K", sizes.get("mbdkimg.rdi") == "65536",
+                   "%s bytes" % sizes.get("mbdkimg.rdi"))
+            result("mbdkcopy.tap on the card", int(sizes.get("mbdkcopy.tap", "-1")) > 3000)
+
+    say('The write-protect switch. Turn it ON, then on the 2068 type:\n\n'
+        '      SAVE "r:wp" CODE 0,10\n\n  It should stop with J Invalid I/O device. Then turn the switch OFF.')
+    pause("When you've tried it and turned the switch off,")
+    result("write-protect on: SAVE \"r:\" gives J", ask("Did it give J Invalid I/O device?"))
+
+    say("A power cut during a SAVE (optional). It needs the 2068 switched off\n  in the middle of a long SAVE.")
+    if ask("Do it now?"):
+        say('On the 2068:\n      SAVE "r:keep" CODE 0,100\n      SAVE "r:long" CODE 16384,49152\n\n'
+            "  and switch the 2068 off while the second SAVE runs (after its key).\n"
+            '  Switch it on, then:  CAT "r:"   and   LOAD "r:keep" CODE 30000')
+        pause("When you've done that,")
+        result('power cut: the other file survived (CAT lists keep, it LOADs)', ask("Did it?"))
+    else:
+        result("power cut during a SAVE", None, "skipped")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--auto-only", action="store_true", help="just the tests the 2068 runs by itself")
     g.add_argument("--manual-only", action="store_true", help="just the tests that need hands")
+    g.add_argument("--megabank-only", action="store_true", help="just the TS-2068 Megabank's tests")
+    ap.add_argument("--megabank", action="store_true", help="the TS-2068 Megabank's tests as well")
     a = ap.parse_args()
     print("Telemetry is saved to %s" % TRACE_LOG)
     board, prn_before = setup()
-    if not a.manual_only:
+    if not a.manual_only and not a.megabank_only:
         automatic(board, prn_before)
-    if not a.auto_only:
+    if not a.auto_only and not a.megabank_only:
         manual(board)
+    if a.megabank or a.megabank_only:
+        megabank()
     passed = sum(1 for r in RESULTS if r[1] is True)
     failed = [r for r in RESULTS if r[1] is False]
     say("Summary: %d passed, %d failed, %d for information (%s)." % (

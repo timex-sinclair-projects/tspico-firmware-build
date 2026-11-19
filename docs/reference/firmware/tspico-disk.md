@@ -100,9 +100,10 @@ machine, the work runs, `DEACTIVATE_SD` and `ACTIVATE_MQ` rebuild
 `TS_IO_DUAL` with the Y register at BUSY and TX empty, and only then does
 the handler queue its answer and say READY. No file stays open between
 commands. `CATALOG` brackets its own access the same way. The disk keywords
-answer with `MQ_READY` (Y = FFh, READY and IDLE); the channel commands
-answer with `CH_READY` (F7h, READY without IDLE): the ROM's channel driver
-sends its next command the moment it has the answer, and `CH_SEND` waits up
+answer with `MQ_READY` (Y = FFh, READY and IDLE); the channel commands,
+and the `r:` statements' bare statuses (`tpi:ropen`, `tpi:rblk`), answer
+with `CH_READY` (F7h, READY without IDLE): the ROM's channel driver and
+`R_BLOCK` send their next command the moment they have the answer, and `CH_SEND` waits up
 to ~1 s for IDLE before its SYNC. `PROCESS_CMD`'s tail is what sets IDLE,
 after draining and the pre-load. With IDLE already up, the SYNC landed while
 the tail was still running and the pre-header behind it was lost (Report T;
@@ -599,7 +600,7 @@ Op 3: `True` for reply 1, `False` for 2, `RdError` for a refusal.
 ### `RD_MOVER.end(self)`
 
 Op 0, if 89h went out at all, put in TX **without READY**: the Z80 is
-waiting for READY, and the command's answer (`SEND_STATUS`, `SEND_MSG`,
+waiting for READY, and the command's answer (`CH_REPLY`, `SEND_MSG`,
 `SEND_MSG2`) goes in behind it and says READY itself. Saying READY with op
 0 alone would let the Z80 read op 0 and then the answer's first byte from an
 empty FIFO. If no operation went out (a refusal before the first), nothing:
@@ -630,7 +631,7 @@ card: `tpi:ropen`, `tpi:rblk`, `tpi:ram` without `backup`/`restore`, and
 ### `RD_NEEDS_ROM(quiet=False)`
 
 "r: needs the Megabank ROM", J: as a forced message, or the bare status in
-the middle of a statement.
+the middle of a statement (`CH_REPLY`).
 
 ### `RD_RUN(work, quiet=False, listing=False)`
 
@@ -638,7 +639,8 @@ Every `r:` command's frame. `RD_START` (or `RD_NEEDS_ROM`); `work(disk)`,
 which runs the mover's operations and returns (text, status) or (text,
 status, True) for a text shown whatever `TSP.VERBOSE` says; an `RdError` is
 its message and status. Then `mover.end()` and the answer: the bare status
-(`quiet`, for a block in the middle of a SAVE or LOAD), `SEND_MSG2` (a
+(`quiet`, for a block in the middle of a SAVE or LOAD; `CH_REPLY`, READY
+without IDLE, as for `RD_ROPEN`), `SEND_MSG2` (a
 listing), or `SEND_MSG`, forced for an error. A `CmdAbort` passes through
 to `PROCESS_CMD`.
 
@@ -650,6 +652,14 @@ status and there is no mover here. Clears `RD_OPEN`; not ROM 2.5: J; a name
 not 1–10 characters or a bad mode: F. Otherwise `RD_OPEN` = [name, mode,
 None, False] and 1. A LOAD of a missing name is refused by the first
 `tpi:rblk`, the first moment the directory can be read.
+
+Every answer is `CH_REPLY`'s: READY without IDLE (F7h). A LOAD or VERIFY
+sends its first `tpi:rblk` as soon as it has this answer, and `CH_SEND`
+waits only for IDLE before its SYNC; with `SEND_STATUS`'s FFh the SYNC
+landed while `PROCESS_CMD`'s tail was draining, which ate it and the first
+pre-header bytes behind it ("Partial pre-header 6/10", report 29 from a
+program's `VERIFY "r:x" CODE` straight after its SAVE; found in ZEsarUX,
+2026-11-19). The tail's IDLE comes once the pre-header capture is armed.
 
 ### `RD_HEX(cmd)`
 

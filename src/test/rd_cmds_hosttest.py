@@ -76,7 +76,10 @@ def run_tests(t, RH, CH, root):
     t.os = hos
     t.open = lambda p, mode="r": open(hos.real(p), mode)
     t.ACTIVATE_SD = t.DEACTIVATE_SD = t.ACTIVATE_MQ = lambda *a, **k: None
-    t.SEND_STATUS = lambda st: ev.append(("ST", st))
+    # r: answers are CH_REPLY's, READY without IDLE (the next tpi:rblk
+    # follows at once); SEND_STATUS would say IDLE too, so it is a failure.
+    t.CH_REPLY = lambda st: ev.append(("ST", st))
+    t.SEND_STATUS = lambda st: ev.append(("SEND_STATUS, not CH_REPLY", st))
     t.SEND_MSG = lambda msg, msg1, st, force=False: ev.append(("MSG", msg, st, force))
     t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: ev.append(("MSG2", msg, st))
     t.led = types.SimpleNamespace(value=lambda *a: None)
