@@ -13,14 +13,16 @@
 ; stream's slot in the RAM disk's top page; the mover copies the slot's
 ; 15-byte block into 2068 memory, and the record in CHANS is built from it.
 ; From then on every character is read or written by the ROM itself, straight
-; to the board through a window chunk (the mover's MV_WIN/MV_MAP/MV_UNMAP):
-; no exchange with the TS-Pico. Past the extent PRINT # asks for more
+; to the board through chunk 0 (BOARD_IO, RCH_FOUT: OWN0 and SUB0 for the
+; byte's page, then OWN0 = 0; all the code here is in chunk 1): no exchange
+; with the TS-Pico. Most bytes of a text or binary stream go through the
+; record's cursor (RCH_FILL, RCH_FOUT): no position arithmetic per byte. Past the extent PRINT # asks for more
 ; (tpi:rchgrow); CLOSE # tells the firmware (tpi:rchclose), which writes the
 ; length into the directory.
 ;
 ; The record is an ordinary channel record, letter 'R', with the same HOME
 ; stubs as an 'F' record (14A0h, 14A9h): G_OUT and G_IN (through MB_OUT and
-; MB_IN) send it here by its letter. So r: needs no HOME bytes. A record takes
+; MB_IN), or FX_ENTRY, send it here by its letter. So r: needs no HOME bytes. A record takes
 ; R_ALLOC (256) bytes in CHANS, padded as an 'F' record is so both bytes of
 ; the stream's offset stay below 80h.
 ;
@@ -53,7 +55,12 @@ RR_COL          EQU 34             ; writing: the column (a stream), or the byte
                                    ;   in the open record (a record file)
 RR_RCOL         EQU 35             ; reading a record file: its bytes given so far
 RR_DIG          EQU 36             ; reading TAB 0's count: offset of the next digit
-RR_SIZE         EQU 37
+RR_FCNT         EQU 37             ; the cursor (RCH_FILL): bytes RCH_FOUT may still
+RR_FBNK         EQU 38             ;   write, OWN0 and SUB0 for the position's page,
+RR_FSUB         EQU 39             ;   the position's address in chunk 0, and the
+RR_FPTR         EQU 40             ;   bytes written since, which RCH_SYNC adds to
+RR_FDONE        EQU 42             ;   the position, length and column
+RR_SIZE         EQU 43
         ASSERT  RR_BUF == R_OUTBUF
         ASSERT  RR_SIZE + 128 <= R_ALLOC
 
@@ -69,6 +76,76 @@ BLOCK_LEN       EQU 15             ; the slot's block
 SLOT_OFF        EQU $0200          ; the slots in the RAM disk's top page,
 SLOT_LEN        EQU 32             ;   one per stream; the block at +16, so the
 SLOT_LP         EQU 16+6           ;   length and position at +22
+
+;------------------------------------------------------------------------------
+; FX_ENTRY -- the fast entry for every channel character (Megabank spec, open
+; question 21). HOME's FASTH (1265h, build-rom.py) is where an 'F' or 'R'
+; record's output and input stubs (14A0h, 14A9h) and the BEEPER thunk
+; (03F3h) go: under DI, with chunks 0-1 HOME (F4h bits 0-1 clear, else it takes
+; Timex's bank call, 03FCh, as before), it sets FFh bit 7, pushes FFh as it
+; was, sets F4h bits 0-1 and does CALL 002Eh, whose OUT (F4h),A is the last
+; HOME instruction: the next fetch, at 0030h, is the EXROM's JP here. No bank
+; call, no SAVE_STATUS, no frame on the bank stack, no error trap.
+;
+; In: HL = the stub's vector (CH_OUT_VEC, CH_IN_VEC or BEEP_VEC), C = the
+; character, (THUNK_HL) = BEEPER's HL; on the stack FASTH's return, then FFh.
+; Out the same way back: AF (the input routine's C/NC, Z/NZ and character)
+; under FASTH's return, F4h bits 0-1 cleared by FX_BACK, EXROM 1399h, whose
+; OUT is the last EXROM instruction: the next fetch is HOME's RET at 139Bh,
+; into FASTH, which puts FFh back, then AF, and does EI.
+;
+; Errors: a report raised here goes through the EXROM's RST 8, which pages
+; HOME (Timex's GOTO_BANK, no bank-stack frame) and does EI; with no frame
+; pushed on the way in there is nothing to put back. What can call HOME code
+; (an exchange with the TS-Pico: f:'s buffer, r:'s growth) runs under GUARD0,
+; the error trap, once per exchange instead of once per character.
+;------------------------------------------------------------------------------
+THUNK_HL        EQU $5DCD          ; HOME's thunks pass the caller's HL here
+FX_BACK         EQU $1399          ; EXROM: OUT (F4h),A, then HOME 139Bh: RET
+
+FX_ENTRY:
+        ld      a,l
+        cp      low CH_OUT_VEC
+        jr      nz,.nout
+        ld      hl,(CURCHL)
+        ld      de,R_LETTER
+        add     hl,de
+        ld      a,(hl)
+        cp      'R'
+        ld      a,c
+        jr      nz,.f
+        call    RCH_FOUT           ; HL -> the letter
+        jr      .x
+.f:     call    CH_OUT             ; an 'F' record (MB_OUT's test, inline)
+        jr      .x
+.nout:  cp      low CH_IN_VEC
+        jr      z,.in
+        ld      hl,(THUNK_HL)      ; BEEP_VEC: BEEPER's HL
+        call    G_BEEP
+        jr      .x
+.in:    call    MB_IN
+.x:     pop     hl                 ; FASTH's return
+        push    af                 ; the result
+        push    hl
+        in      a,(HSR)
+        and     $FC                ; chunks 0-1 back to HOME
+        jp      FX_BACK
+
+; GUARD0 -- GUARDED (fddcmd.asm) for the code under the fast entry, which
+; pushed no frame on the bank stack: the trap puts (BANK_SP) back as it is
+; now. G_FLUSH, G_FETCH: CH_OUT's and CH_IN's exchanges with the TS-Pico,
+; whose status can run a response function that prints through HOME.
+G_FLUSH:
+        ld      hl,CH_FLUSH
+        jr      GUARD0
+G_FETCH:
+        ld      hl,CH_FETCH
+GUARD0: push    hl
+        ld      hl,(ERR_SP)
+        ex      (sp),hl            ; [old ERR_SP]
+        push    hl
+        ld      hl,(BANK_SP)
+        jp      GUARDED.bs
 
 ;------------------------------------------------------------------------------
 ; The entries from the module. Each replaces one instruction of ROM 2.4's
@@ -452,6 +529,7 @@ RCH_OPEN:
 ;------------------------------------------------------------------------------
 RCH_CLOSE:
         push    bc                 ; [offset]
+        call    RCH_SYNC
         bit     F_WR,(ix+RR_FL)
         jr      z,.s
         bit     F_REC,(ix+RR_FL)
@@ -526,7 +604,7 @@ RCH_CLOSE:
         ret
 
 ;------------------------------------------------------------------------------
-; RCH_OUT -- an 'R' record's output routine (HOME 14A0h -> G_OUT -> MB_OUT),
+; RCH_OUT -- an 'R' record's output routine (MB_OUT; RCH_FOUT past its cursor),
 ; A = the character. As f: does: TAB arrives as 23, low, high and is the
 ; position (a record file: record n); mode r drops what is printed (INPUT #'s
 ; prompt); TAB 0 then anything but a read is Q. Text (no 'b'): 16-21 and their
@@ -541,8 +619,152 @@ RCH_OUT:
         ld      iy,IY_SYSVARS
         push    ix
         ld      ix,(CURCHL)
+        call    RCH_SYNC
         call    RCH_PUTC
+        call    RCH_FILL
         pop     ix
+        ret
+
+; RCH_FOUT -- the fast entry's output routine for an 'R' record: HL -> its
+; letter, A = C = the character. A byte of 32 or more (data, text or binary)
+; goes straight to the cursor's address while RR_FCNT says there is room;
+; anything else, and the first byte after any other event, is RCH_OUT's.
+; No IX, no position arithmetic: the cursor never runs past a 256-byte
+; boundary, the extent or its 8K page, and starts only at the end of the
+; file (position = length), so the write-backs, growth and gaps all stay in
+; RCH_OUT. RST 10h through FASTH and here: about 820 T-states (chan_speed.py).
+RCH_FOUT:
+        ld      de,RR_FCNT-R_LETTER
+        add     hl,de
+        ld      a,(hl)
+        and     a
+        jr      z,.slow            ; no cursor
+        ld      a,c
+        cp      32
+        jr      c,.slow            ; a control, CR, TAB
+        dec     (hl)
+        inc     hl
+        xor     a
+        out     (MB_SEL),a
+        ld      a,(hl)
+        out     (MB_DATA),a        ; OWN0
+        inc     hl
+        ld      a,MB_SUB
+        out     (MB_SEL),a
+        ld      a,(hl)
+        out     (MB_DATA),a        ; SUB0
+        inc     hl
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        ld      a,c
+        ld      (de),a             ; the byte, through chunk 0
+        inc     de
+        ld      (hl),d
+        dec     hl
+        ld      (hl),e
+        inc     hl
+        inc     hl
+        inc     (hl)               ; RR_FDONE
+        xor     a
+        out     (MB_SEL),a
+        out     (MB_DATA),a        ; OWN0 = 0
+        ret
+.slow:  ld      a,c
+        jr      RCH_OUT
+
+; RCH_SYNC -- what RCH_FOUT wrote goes into the position, the length and the
+; column, and the cursor ends: every other path through the record starts
+; here (RCH_OUT, RCH_IN, RCH_CLOSE). The cursor starts with the position at
+; the length and stops before a 256-byte boundary, so only the low bytes move
+; and none carries.
+; All registers kept.
+RCH_SYNC:
+        push    af
+        ld      a,(ix+RR_FDONE)
+        and     a
+        jr      z,.z
+        add     a,(ix+RR_POS)
+        ld      (ix+RR_POS),a
+        ld      (ix+RR_LEN),a
+        ld      a,(ix+RR_FDONE)
+        add     a,(ix+RR_COL)
+        ld      (ix+RR_COL),a
+        ld      (ix+RR_FDONE),0
+.z:     ld      (ix+RR_FCNT),0
+        pop     af
+        ret
+
+; RCH_FILL -- after RCH_OUT: a cursor for the next bytes, if they can go
+; straight in. A stream file (not a record file) open for writing, no TAB
+; 0 pending, no parameter or TAB byte awaited, the position at the length
+; and inside the extent. RR_FCNT = the bytes before the next 256-byte
+; boundary (whose write-back is RCH_PUT's), the extent's end or the 8K
+; page's end, whichever comes first; 0 is none.
+RCH_FILL:
+        ld      a,(ix+RR_OST)
+        and     a
+        ret     nz
+        ld      a,(ix+RR_FL)
+        and     (1<<F_REC)|(1<<F_WR)|(1<<F_QRY)
+        cp      1<<F_WR
+        ret     nz
+        ld      l,(ix+RR_POS)
+        ld      h,(ix+RR_POS+1)
+        ld      e,(ix+RR_LEN)
+        ld      d,(ix+RR_LEN+1)
+        and     a
+        sbc     hl,de
+        ret     nz                 ; not at the end of the file
+        add     hl,de              ; HL = the position
+        ld      a,l
+        cpl                        ; 255 - its low byte: up to the boundary
+        and     a
+        ret     z
+        ld      b,a
+        ld      e,(ix+RR_EXT)
+        ld      d,(ix+RR_EXT+1)
+        ex      de,hl
+        and     a
+        sbc     hl,de              ; the extent - the position
+        ex      de,hl
+        ret     c
+        ld      a,d
+        and     a
+        jr      nz,.e
+        ld      a,e
+        cp      b
+        jr      nc,.e
+        and     a
+        ret     z                  ; at the extent's end: RCH_WAT grows it
+        ld      b,a
+.e:     push    bc                 ; [the count so far]
+        call    RCH_PAGE           ; HL = the page, DE = the offset
+        ld      a,l
+        and     7
+        ld      (ix+RR_FSUB),a
+        srl     h
+        rr      l
+        srl     h
+        rr      l
+        srl     h
+        rr      l
+        ld      a,(MB_MBBASE)
+        add     a,l
+        ld      (ix+RR_FBNK),a
+        ld      (ix+RR_FPTR),e
+        ld      (ix+RR_FPTR+1),d
+        pop     bc
+        ld      a,d
+        cp      $1F
+        jr      c,.p               ; 256 or more left in the page
+        ld      a,e
+        neg                        ; 2000h - the offset (1-256)
+        jr      z,.p               ; 256 (offset 1F00h)
+        cp      b
+        jr      nc,.p
+        ld      b,a
+.p:     ld      (ix+RR_FCNT),b
         ret
 
 RCH_PUTC:
@@ -732,9 +954,8 @@ RCH_GROW:
         ld      (ix+RR_BUF+3),h
         ld      a,(ix+R_STRM)
         ld      bc,$0600
-        ld      hl,CMD_RCHGROW
-        call    CH_SEND
-        call    CH_STATUS          ; Q: the RAM disk is full
+        ld      hl,RCH_GSEND
+        call    GUARD0             ; Q: the RAM disk is full
         push    ix
         pop     hl
         ld      de,RR_SPG
@@ -751,10 +972,28 @@ RCH_GROW:
         pop     bc
         ret
 
+; RCH_GSEND -- tpi:rchgrow and its status (A = the stream, BC = its count and
+; PMR2), under GUARD0: the exchange can print through HOME.
+RCH_GSEND:
+        ld      hl,CMD_RCHGROW
+        call    CH_SEND
+        jp      CH_STATUS
+
 ; RCH_IO -- file position HL (kept): B = 1 write C there, 0 read it into A.
 RCH_IO: push    hl
         push    de
         push    bc
+        call    RCH_PAGE
+        pop     bc
+        push    bc
+        call    BOARD_IO
+        pop     bc
+        pop     de
+        pop     hl
+        ret
+
+; RCH_PAGE -- file position HL: HL = its board page, DE = its offset in it.
+RCH_PAGE:
         ld      e,(ix+RR_SOF)
         ld      d,(ix+RR_SOF+1)
         add     hl,de              ; the offset in the start page: 17 bits
@@ -780,66 +1019,47 @@ RCH_IO: push    hl
         ld      h,(ix+RR_SPG+1)
         add     hl,de              ; HL = the page
         pop     de                 ; DE = the offset
-        pop     bc
-        push    bc
-        call    BOARD_IO
-        pop     bc
-        pop     de
-        pop     hl
         ret
 
 ; BOARD_IO -- board page HL, offset DE (below 2000h): B = 1 write C, 0 read
-; into A. Through a window: a chunk of 4-7 that holds neither the record (IX)
-; nor the stack, mapped and put back by the mover's routines (MV_MAP reads
-; BASE at (IX+0): IX points at MB_MBBASE for it). IX kept.
+; into A (and C). Through chunk 0: every r: routine runs from the EXROM's
+; chunk 1 (2000h-3FFFh) with F4h bit 0 set (the EXROM, so the HSR rule holds)
+; and interrupts off, and calls nothing in chunk 0 between the map and the
+; unmap. So the window holds no stack, no record and no program page, and
+; needs no saving: OWN0 = the page's bank, SUB0 = its 8K, the byte, OWN0 = 0
+; (which sets SUB0 = 0). The v3 card yields chunk 0 to an owned bank, as the
+; ZEsarUX model does (spec, "Sharing the bus"). B kept; HL, DE lost.
 BOARD_IO:
-        push    ix
-        push    bc                 ; [B, C]
-        push    de                 ; [offset]
-        push    hl                 ; [page]
-        push    ix
-        pop     hl
-        ld      a,h
-        call    CHUNK_BIT
-        ld      b,a                ; the record's chunk
-        call    MV_WIN             ; A = the window
-        pop     hl                 ; the page
-        push    af
-        push    af                 ; MV_MAP's save area, 4 bytes at SP
-        ex      de,hl
-        ld      hl,0
-        add     hl,sp
-        ex      de,hl              ; DE = the save area, HL = the page
-        ld      ix,MB_MBBASE
-        call    MV_MAP             ; HL = the window
-        push    hl
-        ld      hl,6               ; past HL and the save area
-        add     hl,sp
-        ld      e,(hl)
-        inc     hl
-        ld      d,(hl)             ; DE = the offset
-        inc     hl
-        ld      c,(hl)
-        inc     hl
-        ld      b,(hl)             ; B, C as given
-        pop     hl
-        add     hl,de
+        ld      a,l
+        and     7
+        push    af                 ; [the page's 8K in its bank]
+        srl     h
+        rr      l
+        srl     h
+        rr      l
+        srl     h
+        rr      l                  ; L = the page / 8 (pages < 512)
+        ld      a,(MB_MBBASE)
+        add     a,l
+        ld      l,a                ; L = its bank
+        xor     a
+        out     (MB_SEL),a
+        ld      a,l
+        out     (MB_DATA),a        ; OWN0
+        ld      a,MB_SUB
+        out     (MB_SEL),a
+        pop     af
+        out     (MB_DATA),a        ; SUB0: the page in chunk 0
+        ex      de,hl              ; HL = the byte's address
         ld      a,b
         and     a
         jr      z,.rd
         ld      (hl),c
         jr      .un
 .rd:    ld      c,(hl)
-.un:    ld      hl,0
-        add     hl,sp              ; the save area
-        push    bc
-        call    MV_UNMAP
-        pop     bc
-        pop     af
-        pop     af                 ; the save area
-        pop     de
-        pop     de                 ; the offset, B and C
-        pop     ix
+.un:    xor     a
+        out     (MB_SEL),a
+        out     (MB_DATA),a        ; OWN0 = 0: chunk 0 the EXROM again
         ld      a,c
         ret
 
@@ -986,6 +1206,7 @@ DIV16X8:
 RCH_IN: ld      iy,IY_SYSVARS
         push    ix
         ld      ix,(CURCHL)
+        call    RCH_SYNC
         call    RCH_GETC
         pop     ix
         ret

@@ -216,6 +216,9 @@ characters in ZEsarUX. G_BEEP calls BEEPER at EXROM 2000h and disables
 interrupts again after its `EI`; 041Ch's `EI` restores them once HOME is
 back ([exrom-fdd.md](exrom-fdd.md)). The patch fits because the new bytes
 at 03F3h are one longer (the `DI`) and the jump to 041Ch is a 2-byte `JR`.
+In the Megabank ROM 041Ch is `JP 1265h`, the fast channel entry, which
+calls G_BEEP without the bank call
+([exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9)).
 
 ### 04E8h–0502h: the printer's character helpers, and SENDTV
 
@@ -337,7 +340,10 @@ trampolines at 1488h–14BDh:
 | 14BDh | `DI / LD HL,3018h / CALL 03FCh / EI / RET` | OPEN #'s syntax (G_OSYN) |
 
 The addresses are the module's vector table (3000h–301Eh), not its
-routines, so a rebuilt module does not move them. An `F` record in CHANS
+routines, so a rebuilt module does not move them. In the Megabank ROM
+14A0h and 14A9h are `LD HL,vec / JP 1265h`, the fast channel entry, which
+reaches the module with direct `OUT`s instead of 03FCh
+([exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9)). An `F` record in CHANS
 holds 14A0h and 14A9h as its output and input addresses: fixed HOME
 addresses, so nothing in a record has to change when CHANS moves or the
 module is rebuilt. `RST 10h` output through CURCHL calls 14A0h with the

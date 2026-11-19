@@ -263,10 +263,14 @@ makes the file, gives it an extent, writes the stream's slot on the board
 and copies the slot's 15-byte block onto the stack (the mover's op 2). The
 record, letter `R`, is built from the block: no buffers, no `R_INBUF`.
 
-`PRINT #4;"hello"`: HOME 14A0h → `G_OUT` → `MB_OUT` sees the `R` and calls
-`RCH_OUT`, which writes each byte straight to the board through a window
-chunk (`BOARD_IO`): no command, no exchange with the TS-Pico. At each CR
-and each 256-byte boundary the length and position go back to the slot.
+`PRINT #4;"hello"`: HOME 14A0h → `FASTH` (1265h), the fast channel entry:
+the EXROM paged in with two `OUT`s, no bank call and no error trap per
+character → `FX_ENTRY` sees the `R`. The first byte goes to `RCH_OUT`, which
+writes it straight to the board through chunk 0 (`BOARD_IO`) and sets up
+the record's cursor (`RCH_FILL`); the rest go through the cursor
+(`RCH_FOUT`), about 820 T-states each from `RST 10h`. No command, no
+exchange with the TS-Pico. At each CR and each 256-byte boundary the length
+and position go back to the slot.
 Past the extent, `RCH_GROW` sends `tpi:rchgrow` and takes a new block.
 `INPUT #4` reads the same way (`RCH_IN`), with the same text and record rules
 as `f:`.
@@ -291,7 +295,9 @@ or in the HOME code it calls (Report 4 from MAKE-ROOM, a refusal) restores
 the bank stack through HOME's H_TRAP before going on to the normal error
 handling ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#guarded)). Every entry
 from HOME runs the bank switch under `DI`, because a channel switches banks
-for every character.
+for every character. In the Megabank ROM a channel character pushes no
+bank-stack frame (the fast entry), so a report from the EXROM needs no
+trap; the exchanges that can reach HOME code run under `GUARD0`.
 
 ## What goes wrong, and where
 

@@ -297,8 +297,8 @@ GUARDED:
         inc     hl
         inc     hl
         inc     hl
-        ex      (sp),hl            ; [the bank stack before the thunk]
-        push    hl
+.bs:    ex      (sp),hl            ; [the bank stack before the thunk]
+        push    hl                 ;   (GUARD0, rchan.asm, joins here)
         ld      hl,H_TRAP
         ex      (sp),hl            ; [the trap]
         ld      (ERR_SP),sp
@@ -1250,7 +1250,11 @@ CH_OUT:
         ld      a,(ix+R_FLAGS)     ;   too, so a line is said when it is
         and     3                  ;   printed
         jr      z,.done
+    IFDEF MEGABANK
+.send:  call    G_FLUSH            ; under the error trap (rchan.asm, the fast entry)
+    ELSE
 .send:  call    CH_FLUSH
+    ENDIF
 .done:  pop     ix
         ret
 
@@ -1261,8 +1265,13 @@ CH_IN:
 .again: ld      a,(ix+R_INP)
         cp      (ix+R_INN)
         jr      c,.have
+    IFDEF MEGABANK
+        call    G_FLUSH            ; the same, under the error trap (rchan.asm)
+        call    G_FETCH
+    ELSE
         call    CH_FLUSH           ; what was printed first (INPUT #4;TAB n: the seek)
         call    CH_FETCH           ; NZ: end of file
+    ENDIF
         jr      z,.again
         pop     ix
         xor     a
