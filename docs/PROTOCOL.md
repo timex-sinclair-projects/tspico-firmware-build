@@ -379,11 +379,17 @@ slot until the board's hardware tests pass. Over 2.4 it adds:
 
 - **The boot.** EXROM `$0A3E`, the start of the 2068's bank search, is
   `JP MB_BOOT`. MB_BOOT writes OWN0–OWN7 = 0 and WPROT = 0 (port `$FD` selects
-  a board register, `$FC` is its data) and goes on to the old exit, `$2082`,
-  with HL = SYSCON + `$0D`: the bank count (`$5CBE`, `$6315`) stays 0, SYSCON's
-  first bank entry is the `$80` end marker. It reads nothing from the board
-  and sends nothing to the Pico; the firmware asks when it needs to know
-  (op 7 below).
+  a board register, `$FC` is its data), then MB_DETECT reads its ID, BASE and
+  SIZE and sets the bank count (`$5CBE`, `$6315`; 0 with no board) and BASE
+  (`$6404`) for the Timex bank API, and goes on to the old exit, `$2082`,
+  with HL = SYSCON + `$0D`: SYSCON's first bank entry is the `$80` end
+  marker. It sends nothing to the Pico; the firmware asks when it needs to
+  know (op 7 below).
+- **The Timex bank API.** BANK_ENABLE, GET_STATUS, GET_NUMBER, GET_WORD,
+  PUT_WORD, SAVE_STATUS, RESTORE_STATUS, CALL_BANK and XFER_BYTES drive the
+  board: `src/rom/fdd/bankapi.asm` over the RAM bank code, the save frame 19
+  bytes, the EXROM's crossings into HOME taking chunks 0-1 only
+  (docs/reference/rom/exrom-fdd.md, "The Timex bank API").
 - **`r:` names.** `SAVE`/`LOAD`/`VERIFY`/`MERGE "r:name"` go through F_HOOK as
   `f:` does, but set **TPMODE bit 5** as well as bit 1, and open the file with
   `tpi:ropen name` (PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE; a status answers,

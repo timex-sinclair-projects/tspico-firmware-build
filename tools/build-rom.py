@@ -339,9 +339,10 @@ MB_PATCHES = [
              "at $0057 is in the 11 bytes $1CAE copies to RAM, where it runs "
              "after OUT (F4h),0 and so reaches HOME's $0D31, and the "
              "renumbering at $0CFB is called only from inside the range. "
-             "MB_BOOT writes OWN0-OWN7 and WPROT = 0, leaves the bank count 0, "
-             "and ends with $2082 (SYSCON's 80h end marker) as the old code "
-             "did. $0A41-$0DAF become free.",
+             "MB_BOOT writes OWN0-OWN7 and WPROT = 0; MB_DETECT sets the bank "
+             "count from the board (BASE and SIZE) and ends with $2082 "
+             "(SYSCON's 80h end marker) as the old code did. $0A41-$0DAF "
+             "become free.",
     ),
     dict(
         name="SA-BYTES: $0068 JP $1879 -> JP R_SA ($39F5)",
@@ -355,6 +356,98 @@ MB_PATCHES = [
         bank="exrom", addr=0x00FC,
         before="c3 6d 19", after="c3 06 3a",
         note="The same for LOAD, VERIFY and MERGE; otherwise JP $196D.",
+    ),
+
+    # --- The Timex bank API (Megabank spec phase 8). The bank code runs in
+    # RAM: the boot copies EXROM $1000-$162F to $6200 (RAM = EXROM + $5200),
+    # so these are given as EXROM addresses with the RAM address in the name.
+    # bankapi.asm replaces RAM $6316-$6571 (bank_api_splice below).
+    dict(
+        name="the bank count (RAM $6315): 0 in the image, not FFh",
+        bank="exrom", addr=0x1115, before="ff", after="00",
+        note="The boot zeroes it ($221F, $09F4, $1C86) and MB_DETECT sets it, "
+             "but the bank code now trusts it (no board below a count of 0), "
+             "so the copy starts at 0 too.",
+    ),
+    dict(
+        name="interrupt handler (RAM $62B7): the frame is 19 bytes, not the bank count + 2",
+        bank="exrom", addr=0x10B7,
+        before="3a 15 63 5f 16 00 13 13", after="11 13 00 00 00 00 00 00",
+        note="LD A,($6315) / LD E,A / LD D,0 / INC DE / INC DE -> LD DE,19 and "
+             "NOPs. SAVE_STATUS/RESTORE_STATUS now save FFh, F4h, the board's 16 "
+             "registers and its select whatever the bank count. The X1D00 entry "
+             "for $62B8 is dropped with it.",
+    ),
+    dict(
+        name="CALL_BANK (RAM $65F8): the frame is 19 bytes",
+        bank="exrom", addr=0x13F8,
+        before="3a 15 63 4f 06 00 03 03", after="01 13 00 00 00 00 00 00",
+        note="LD BC,19. Its return path is size-agnostic (it finds the frame "
+             "from its own parameters). The X1D00 entry for $65F9 is dropped.",
+    ),
+    dict(
+        name="XFER_BYTES (RAM $672F): the frame is 19 bytes",
+        bank="exrom", addr=0x152F,
+        before="3a 15 63 4f 06 00", after="01 11 00 00 00 00",
+        note="LD BC,17: the two DEC HL after it make 19. The X1D00 entry for "
+             "$6730 is dropped.",
+    ),
+    dict(
+        name="XFER_BYTES (RAM $6722): no PUSH AF, so A returns the result",
+        bank="exrom", addr=0x1522, before="f5", after="00",
+        note="Brzozowski: the genuine code saved AF and restored it at $67FF, "
+             "losing the 0/1 result. With the POP at $67FF and the offset at "
+             "$672B.",
+    ),
+    dict(
+        name="XFER_BYTES (RAM $672B): the parameters are 8 bytes above SP, not 10",
+        bank="exrom", addr=0x152B, before="0a", after="08",
+        note="Brzozowski: one push fewer ($6722).",
+    ),
+    dict(
+        name="XFER_BYTES (RAM $67FF): no POP AF",
+        bank="exrom", addr=0x15FF, before="f1", after="00",
+        note="Brzozowski: the other half of $6722.",
+    ),
+    dict(
+        name="XFER_BYTES (RAM $676A): the same-bank mask to E, not B",
+        bank="exrom", addr=0x156A, before="47", after="5f",
+        note="Technical Manual 6.5.8 / Brzozowski: $6778 takes the chunks from "
+             "E, as the other path ($6773) leaves them.",
+    ),
+    dict(
+        name="XFER_BYTES (RAM $67C2): the no-room exit keeps A = 1",
+        bank="exrom", addr=0x15C2, before="2b", after="2c",
+        note="Brzozowski: JR to $67EF, past the XOR A at $67EE.",
+    ),
+    dict(
+        name="XFER_BYTES's copier (RAM $66DF): the destination advances by DE",
+        bank="exrom", addr=0x14DF, before="75 04 dd 74", after="73 04 dd 72",
+        note="Brzozowski: LD (IX+4),L / LD (IX+5),H stored the source; the "
+             "destination is DE.",
+    ),
+    dict(
+        name="XFER_BYTES's end address (RAM $66F3): length - 1, direction FFh",
+        bank="exrom", addr=0x14F3, before="07 0f 38", after="0b 3c 28",
+        note="Brzozowski: RLCA / RRCA / JR C -> DEC BC / INC A / JR Z: the last "
+             "byte is start + length - 1 (the chunk check was one byte off).",
+    ),
+    dict(
+        name="CALL_HOME's crossing (EXROM $03DF): HOME takes chunks 0-1, not all",
+        bank="exrom", addr=0x03DF, before="00", after="fc",
+        note="Bank word FF00 -> FFFC. HOME's own crossings already use FEFC; "
+             "FF00 gave HOME every chunk, so BANK_ENABLE took them from any board "
+             "bank mapped there.",
+    ),
+    dict(
+        name="EXROM $08DF: the same crossing, FF00 -> FFFC",
+        bank="exrom", addr=0x08DF, before="00", after="fc",
+        note="LD L,0 -> LD L,FCh (with LD H,FFh after it).",
+    ),
+    dict(
+        name="EXROM $001E: the same crossing, FF00 -> FFFC",
+        bank="exrom", addr=0x001E, before="00", after="fc",
+        note="LD H,FFh / LD L,0 -> LD L,FCh.",
     ),
 ]
 
@@ -373,6 +466,10 @@ MB_ANCHORS = [
          bank="exrom", addr=0x1879, bytes="f5 3a db 5d e6 02"),
     dict(name="PICO_LD: LD-BYTES's TPMODE bit-1 gate",
          bank="exrom", addr=0x196D, bytes="f5 3a db 5d e6 02"),
+    dict(name="the 64-column copy: 6000h-683Fh to F7C0h, then X1D00's list + 97C0h",
+         bank="exrom", addr=0x0DDD, bytes="11 c0 f7 21 00 60 01 40 08 ed b0 21 00 1d 01 c0 97"),
+    dict(name="the boot's bank-stack pointer (65CEh) starts at 65CEh",
+         bank="home", addr=0x0DFF, bytes="21 ce 65 22 ce 65"),
     dict(name="SESSION_SETUP's non-command exit clears TPMODE bits 7-4 (bit 5 too)",
          bank="exrom", addr=0x1A3B, bytes="3a db 5d e6 0f 32 db 5d"),
 ]
@@ -444,6 +541,92 @@ ANCHORS = [
     dict(name="RST 10 output: CURCHL's record, HL restored after (the stubs rely on it)",
          bank="home", addr=0x11ED, bytes="d9 e5 2a 51 5c"),
 ]
+
+
+# --- The Timex bank API (--megabank) -----------------------------------------
+# bankapi.asm is RAM $6316-$6571 (GET_WORD to RESTORE_STATUS), stored at EXROM
+# $1116-$1371. In 64-column mode the boot copies RAM $6000-$683F to $F7C0 and
+# adds $97C0 to every word the table at EXROM $1D00 lists (a RAM address each,
+# 0000 at the end; zeros follow it to $1EDB). The module is assembled twice,
+# RB = 0 and RB = $97C0: every word that differs by $97C0 is one the table
+# must list.
+BANKAPI_SRC    = ROOT / "src" / "rom" / "fdd" / "bankapi.asm"
+BANK_RAM_DELTA = 0x5200                     # RAM = EXROM + this
+BANKAPI_RAM    = (0x6316, 0x6572)
+RELOC_DELTA    = 0x97C0
+RELOC_TABLE    = 0x1D00                     # EXROM
+RELOC_LIMIT    = 0x1EDC                     # first byte the table can't use
+# Entries outside bankapi.asm: the frame-size operands the patches turn into
+# constants, and the genuine table's one wrong entry (674Fh is the CALL's
+# opcode; the SAVE_STATUS call's operand at 6744h was missing).
+RELOC_DROP     = {0x62B8, 0x65F9, 0x6730}
+RELOC_FIX      = {0x674F: 0x6744}
+
+
+def assemble_bankapi(workdir, rb):
+    d = workdir / ("bankapi_%x" % rb)
+    d.mkdir()
+    r = subprocess.run(["sjasmplus", "--nologo", f"-DRB={rb:#x}",
+                        f"--sym={d / 'bankapi.sym'}", str(BANKAPI_SRC)],
+                       cwd=d, capture_output=True, text=True)
+    if r.returncode != 0:
+        die("sjasmplus failed on bankapi.asm (RB=%#x):\n" % rb + r.stdout + r.stderr)
+    return (d / "bankapi.bin").read_bytes()
+
+
+def bank_api_relocs(b0, b1):
+    """RAM addresses of the words that differ by RELOC_DELTA between the two
+    assemblies; dies on any other difference."""
+    relocs, i = [], 0
+    while i < len(b0):
+        if b0[i] == b1[i]:
+            i += 1
+            continue
+        w0 = b0[i] | b0[i + 1] << 8 if i + 1 < len(b0) else None
+        w1 = b1[i] | b1[i + 1] << 8 if i + 1 < len(b1) else None
+        if w0 is None or (w1 - w0) & 0xFFFF != RELOC_DELTA:
+            die("bankapi.asm: RAM $%04X differs between RB=0 and RB=$97C0 but "
+                "is not an address in the copied block" % (BANKAPI_RAM[0] + i))
+        relocs.append(BANKAPI_RAM[0] + i)
+        i += 2
+    return relocs
+
+
+def bank_api_splice(base, out, workdir, touched):
+    b0 = assemble_bankapi(workdir, 0)
+    b1 = assemble_bankapi(workdir, RELOC_DELTA)
+    size = BANKAPI_RAM[1] - BANKAPI_RAM[0]
+    if len(b0) != size or len(b1) != size:
+        die("bankapi.bin is %d bytes, expected %d" % (len(b0), size))
+    off = file_offset("exrom", BANKAPI_RAM[0] - BANK_RAM_DELTA)
+    out[off:off + size] = b0
+    touched.append((off, off + size - 1))
+    new = bank_api_relocs(b0, b1)
+
+    t = file_offset("exrom", RELOC_TABLE)
+    old = []
+    while True:
+        w = base[t] | base[t + 1] << 8
+        t += 2
+        if w == 0:
+            break
+        old.append(w)
+    kept = [RELOC_FIX.get(w, w) for w in old
+            if not BANKAPI_RAM[0] <= w < BANKAPI_RAM[1] and w not in RELOC_DROP]
+    table = sorted(set(kept + new))
+    data = b"".join(bytes((w & 255, w >> 8)) for w in table) + b"\0\0"
+    t = file_offset("exrom", RELOC_TABLE)
+    if t + len(data) > file_offset("exrom", RELOC_LIMIT):
+        die("the relocation table (%d entries) overruns EXROM $%04X"
+            % (len(table), RELOC_LIMIT))
+    end_old = t + 2 * len(old) + 2
+    if any(base[end_old:t + len(data)]):
+        die("EXROM after the relocation table is not zero")
+    out[t:t + len(data)] = data
+    touched.append((t, t + len(data) - 1))
+    print(f"bank API: {size} bytes at RAM ${BANKAPI_RAM[0]:04X} (EXROM "
+          f"${BANKAPI_RAM[0] - BANK_RAM_DELTA:04X}); relocation table "
+          f"{len(old)} -> {len(table)} entries ({len(new)} from bankapi.asm)")
 
 
 def check_anchors(base, anchors=None):
@@ -630,6 +813,9 @@ def main():
     touched.append((mstart, mend - 1))
     print(f"module: {len(module)} bytes at EXROM ${FDD_ORG:04X} "
           f"(file ${mstart:04X}); entry FDD_DISPATCH=${entry:04X}")
+
+    if mb:
+        bank_api_splice(base, out, workdir, touched)
 
     # --- 4. apply the manifest ---
     for p in PATCHES + (MB_PATCHES if mb else []):

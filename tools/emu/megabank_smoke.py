@@ -8,7 +8,8 @@ and pico_host -- the real firmware, with the RAM disk (src/TS/ramdisk.py) and
 one test-only command added (megabank_host.py) -- and checks:
 
   - the boot: the version marker (PEEK 101 = 37, 25h), the board's owner
-    table empty, the bank count (5CBEh, 6315h) 0, SYSCON's end marker;
+    table empty, the bank count (5CBEh, 6315h) and BASE (6404h) from the
+    board, SYSCON's end marker; BANK_ENABLE mapping a bank and back;
   - the mover's operations 4-7 and its range and XOR checks (tpi:mbtest),
     and an answer after op 0 that is a function (81h);
   - no RAM disk until FORMAT "r:"; then SAVE / LOAD / VERIFY "r:name" for a
@@ -56,7 +57,7 @@ import session as S                                    # noqa: E402
 PRINT, LIST, NEW, VERIFY, OUT, POKE, LET = 0xF5, 0xF0, 0xE6, 0xD6, 0xDF, 0xF4, 0xF1
 FORMAT, ERASE, COPY = 0xD0, 0xD2, 0xFF
 TAP = "/tmp/tspico-root/sd/TAP/"
-IN, PEEK = 0xBF, 0xBE
+IN, PEEK, USR = 0xBF, 0xBE, 0xC0
 results = []
 
 
@@ -99,8 +100,27 @@ def main():
         check(value(s, PRINT, PEEK, "101") == 0x25, "PEEK 101 = 37: the Megabank test ROM (2.5)")
         owners = [value(s, OUT, "253,%d:" % n, PRINT, IN, "252") for n in range(8)]
         check(owners == [0] * 8, "after the boot every OWNn is 0", str(owners))
-        mb = s.peek(0x5CBE, 1)[0], s.peek(0x6315, 1)[0]
-        check(mb == (0, 0), "the bank count stays 0 (5CBEh, 6315h)", str(mb))
+        base = value(s, OUT, "253,20:", PRINT, IN, "252")
+        size = value(s, OUT, "253,21:", PRINT, IN, "252")
+        want = min(size, 254 - base)
+        mb = s.peek(0x5CBE, 1)[0], s.peek(0x6315, 1)[0], s.peek(0x6404, 1)[0]
+        check(mb == (want, want, base), "the bank count %d (5CBEh, 6315h) and BASE %d (6404h), from the board"
+              % (want, base), str(mb))
+
+        # --- the Timex bank API (bankapi.asm): BANK_ENABLE there and back ---
+        # F000h: BANK_ENABLE(BASE, chunk 6); A = (C000h); (C000h) = (F020h);
+        # BANK_ENABLE(HOME, chunk 6); BC = the byte read.
+        s.poke(0xF000, bytes([0x06, base, 0x0E, 0xBF, 0xCD, 0x99, 0x64, 0x3A, 0x00, 0xC0, 0xF5,
+                              0x3A, 0x20, 0xF0, 0x32, 0x00, 0xC0, 0x06, 0xFF, 0x0E, 0xBF,
+                              0xCD, 0x99, 0x64, 0xF1, 0x4F, 0x06, 0x00, 0xC9]))
+        s.poke(0xC000, b"\x11")
+        s.poke(0xF020, b"\x55")
+        value(s, PRINT, USR, "61440")
+        s.poke(0xF020, b"\x66")
+        got = value(s, PRINT, USR, "61440")
+        check(got == 0x55 and s.peek(0xC000, 1)[0] == 0x11,
+              "BANK_ENABLE: bank %d in chunk 6 and back; its byte kept (55h: %02Xh), HOME's C000h untouched"
+              % (base, got), str(s.peek(0xC000, 1)))
         sc = int.from_bytes(s.peek(0x5CBC, 2), "little")
         check(sc == 0x5EEA and s.peek(sc + 12, 1)[0] == 0x80,
               "SYSCON is 5EEAh and its first bank entry is the 80h end marker",

@@ -63,8 +63,8 @@ the Pico Interface BIOS.
 | 1739–1804 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
 | 1806–1811 | 3929h–3931h | `IN_DROP` (#404) |
 | 1813–1873 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1875–2721 | 3998h–3E09h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …) |
-| 2723–2724 | 3998h (3E0Ah) | `FDD_END` |
+| 1875–2763 | 3998h–3E42h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`) |
+| 2765–2766 | 3998h (3E43h) | `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -1273,7 +1273,7 @@ gives `src/rom/TSPICO-MB.ROM`, the TS-2068 Megabank test ROM (not in a flash
 slot; [PROTOCOL.md §6.3](../../PROTOCOL.md) has the wire format). Without the
 define the module is byte-for-byte ROM 2.4's. With it, four same-size edits
 change 2.4's code and everything else is appended after `CMD_CHCAT`, at
-3998h–3E09h (1138 bytes; 502 free to 3FFFh), so no 2.4 address moves:
+3998h–3E42h (1195 bytes; 445 free to 3FFFh), so no 2.4 address moves:
 
 - `ROM_ID` is 25h (with the patches that carry the version: banner "v2.5",
   HOME 0065h, `G_VERS`, 1BB5h);
@@ -1285,7 +1285,9 @@ The patches that reach it (`MB_PATCHES` in build-rom.py, each with the bytes it
 replaces): EXROM 0A3Eh `2A BC 5C` → `JP MB_BOOT`, 0068h `JP 1879h` → `JP R_SA`,
 00FCh `JP 196Dh` → `JP R_LD`, and 2213h (2.4's `CP 87h / JP Z,3006h / RET`) →
 `JP FN_EXT`. `MB_FIXED_SYMS` holds MB_BOOT, R_SA, R_LD and FN_EXT at the
-addresses the patches use.
+addresses the patches use. The rest of `MB_PATCHES`, and the splice of
+`bankapi.asm` over the RAM bank code, are the Timex bank API
+([below](#the-timex-bank-api-bankapiasm-phase-8)).
 
 The board model all of this assumes (the Megabank spec): port FDh selects a
 register, FCh is its data; a chunk is the board's when its OWNn names a bank
@@ -1321,11 +1323,28 @@ way round.
 Reached by the `JP` at EXROM 0A3Eh, where the 2068 started its bank search
 (both entries, from 09F4h's fall-through and from 1CA8h's `CALL`, arrive
 there). Writes OWN7 … OWN0 = 0 and WPROT = 0 through `MB_WR`, then
-HL = (SYSCON) + 0Dh and `JP SYSCON_END`, the old search's own exit. MAXBNK
-(5CBEh) and 6315h are left 0, so the Timex bank code sees no banks. It reads
-nothing from the board; the firmware asks with mover op 7. The old
-renumbering call (0CFBh) is dropped: with no banks it only cleared the two
-counts. The old body, 0A41h–0DAFh, is unreachable.
+HL = (SYSCON) + 0Dh and `JP MB_DETECT`, which sets the bank count from the
+board and ends at `SYSCON_END`, the old search's own exit. The firmware
+asks the board's state with mover op 7, not from here. The old renumbering
+call (0CFBh) is dropped. The old body, 0A41h–0DAFh, is unreachable.
+
+### `MB_DETECT`
+
+The end of `MB_BOOT` (its `JP`, the same size as the old `JP SYSCON_END`):
+the bank count for the Timex bank API ([below](#the-timex-bank-api-bankapiasm-phase-8)).
+If ID and IDCOMP read A5h and 5Ah and BASE is 1–253, BASE goes to 6404h
+(`MB_MBBASE`, the API's `MBBASE`) and the count to MAXBNK (5CBEh) and 6315h
+(`MB_NBANKS`): SIZE, cut so the last bank is 253 at most (FEh and FFh are the
+EXROM and HOME; BASE 193 with 64 banks gives 61). Otherwise the count stays
+the 0 that 221Fh, 09F4h and 1C8Dh stored. The boot has copied the bank code to
+6200h by now (HOME 0E15h); the 64-column copy is made later from that copy,
+so it carries both. DE is kept, and HL (SYSCON + 0Dh) for `JP SYSCON_END`.
+
+| Name | Value | What |
+|---|---|---|
+| `MB_NBANKS` | 6315h | the bank code's count (`NBANKS` in bankapi.asm) |
+| `MB_MBBASE` | 6404h | the board's BASE (`MBBASE` in bankapi.asm) |
+| `MAXBNK` | 5CBEh | the 2068's bank count |
 
 ### `FR_TEST`
 
@@ -1487,6 +1506,103 @@ HL = w × 2000h.
 
 Puts back what `MV_MAP` saved, at (HL): the HSR first when the chunk was the
 2068's own (OWN 0), then OWN and SUB, then the HSR.
+
+### The Timex bank API (`bankapi.asm`, phase 8)
+
+`src/rom/fdd/bankapi.asm`, assembled only by `build-rom.py --megabank`,
+replaces the 2068's bank code at RAM 6316h–6571h (EXROM 1116h–1371h: HOME's
+boot copies EXROM 1000h–162Fh to 6200h, [home.md](home.md#0e0ch-a-16k-exrom))
+so that BANK_ENABLE and the rest drive the board. Every entry point the 2068
+documented stays where it was:
+
+| Routine | RAM | What |
+|---|---|---|
+| `GET_WORD` | 6316h | genuine: HL = the word at HL in bank B |
+| `PUT_WORD` | 633Bh | the word in DE to HL in bank B; the Technical Manual's fix (6.5.3): `PUSH DE`, so DE survives `LD D,B` |
+| (WRITE_BS_REG, READ_BS_REG) | 635Ch–6403h | was WRITE_BS_REG/READ_BS_REG, Timex's nibble-wide expansion-bus registers: nothing uses them (the boot's search is gone, there is no such hardware), so the space holds the helpers below |
+| `MBBASE` | 6404h | data: the board's BASE (`MB_DETECT`) |
+| `GET_STATUS` | 6405h | B = a bank; C = its chunks, low active (bit n clear: it has chunk n); A, B, DE, HL kept. HOME: the HSR's clear bits. DOCK (FFh bit 7 clear) and EXROM (set): the HSR's set bits less the board's, FFh if the other is selected. A board bank: `OWNMAP`; other banks FFh. B is kept for every bank (6.5.2) |
+| `GET_CHUNK` | 644Dh | genuine: A = the bit of HL's chunk |
+| `GET_NUMBER` | 645Eh | A = the bank in control of HL's chunk: its OWNn if a board bank, else FFh (HSR bit clear), FEh (set, FFh bit 7 set) or 0. BC, DE, HL kept. The genuine loop lost its count to GET_STATUS's B and never found the EXROM (6.5.7) |
+| `BANK_ENABLE` | 6499h | B = the bank, C = its chunks low active; all registers kept |
+| `SAVE_STATUS` | 651Eh | IX = a 19-byte frame: FFh, F4h, OWN0–7, SUB0–7, the select (FDh); IX ends on the last byte. AF, BC, DE kept |
+| `RESTORE_STATUS` | 654Ah | the frame back, IX on its last byte, interrupts off and then as they were (6.5.4); FFh: only bit 7 (6.5.5) |
+
+**`BANK_ENABLE`.** Interrupts off throughout (`LD A,I` twice for the NMOS
+Z80's IFF2 slip, then `DI`) and back as they were, never an unconditional
+`EI`. `TIMEX_HSR` first gives the HSR (in H) and FFh bit 7 as Timex's code
+would, without the board. Then, if there is a board, `ISBOARD` decides
+whether B is one of its banks, and two passes over OWN0–OWN7 apply
+`NEWOWN`: a chunk asked for goes to B (or to no board bank, if B isn't
+one); a chunk B owns and isn't asked for goes back to HOME, its HSR bit
+cleared; other banks' chunks are untouched. Pass A works out the chunks the
+board will own (they keep their HSR bits) and clears the given-up ones' bits
+in H; then the HSR is written with the bits that go cleared, pass B writes
+each OWNn that changes (and each one asked for, which resets its SUB), and
+last the HSR whole. That is the HSR rule: OWN before its bit on the way in,
+the bit before OWN on the way out. With no board (count 0) only the HSR and
+FFh change.
+
+**DOCK and EXROM get exactly the chunks asked for.** Timex's code tied the
+EXROM to chunks 0–1 (chunk 0 asked for meant both, and HOME taking chunk 0
+back also selected the DOCK). `TIMEX_HSR` doesn't: the EXROM can be put in
+any chunk, as Charlie Day's LEAP ROMs put it in chunk 6, and HOME taking a
+chunk back changes nothing else. The DOCK and the EXROM still share FFh bit
+7, so one of them at a time. The crossings ask for both chunks (FEFCh, and
+FFFCh after the patches below), so they are unaffected.
+
+**The frame.** SAVE_STATUS's frame was the bank count + 2 bytes; it is 19
+now whatever the count, and `build-rom.py` patches the three places that
+made room for it to constants (the interrupt handler at 62B7h, CALL_BANK
+at 65F8h, XFER_BYTES at 672Fh). With no board the 17 board bytes are saved
+all the same (whatever the bus gives) and `RESTORE_BOARD` sends them to the
+select port (FDh), which `MB_DETECT` writes on any 2068, not to FCh.
+
+**64 columns.** The video-mode service copies 6000h–683Fh to F7C0h and
+adds 97C0h to each word the table at EXROM 1D00h lists. `build-rom.py`
+assembles bankapi.asm twice, with `RB` = 0 and 97C0h, and every word that
+differs by 97C0h goes in the table: 31 from bankapi.asm, plus the old
+entries outside 6316h–6571h, less the three frame operands, with the
+genuine table's wrong entry 674Fh (a `CALL`'s opcode) corrected to 6744h
+(SAVE_STATUS's call in XFER_BYTES): 64 entries, ending 1D81h, in zeros that
+run to 1EDBh. `rom_bankapi_hosttest.py` runs the API from both copies.
+
+**Other bytes it patches** (`MB_PATCHES`):
+
+- 6315h's image byte FFh → 0: the boot clears it, but the code trusts it.
+- XFER_BYTES, Wes Brzozowski's fixes: no `PUSH AF`/`POP AF` (6722h,
+  67FFh) so A returns 0 or 1, with the parameter offset 0Ah → 08h (672Bh);
+  the same-bank mask to E (676Ah, the Technical Manual's 6.5.8); the
+  no-room exit keeps A = 1 (67C2h); the copier stores the destination from
+  DE (66DFh, 66E2h); the end address is start + length − 1 and the
+  direction is FFh (66F3h).
+- The EXROM's crossings into HOME (`CALL_HOME`'s 03DFh, 08DFh and 001Eh)
+  ask for chunks 0–1 (FFFCh), not every chunk (FF00h), which took the
+  chunks of any board bank mapped elsewhere.
+
+What it doesn't change: the bank stack (65CEh's pointer, starting at 65CEh
+and growing down through the FFh bytes 658Eh–65CDh, which only look free),
+GOTO_BANK, CALL_BANK and XFER_BYTES apart from the bytes above, and HOME's
+own `LD BC,FF00h / CALL 6499h` sites (HOME taking all chunks, as Timex
+meant). The ROM writes the HSR directly only at boot (HOME 0E0Bh, 0E25h,
+EXROM 0049h, before `MB_BOOT` clears the owners) and in the mover. LEAP's
+own direct writes (F4h = 40h, then 0) would break the HSR rule for a board
+bank mapped elsewhere: a matter for a LEAP build for the board.
+
+#### Its constants and helpers
+
+| Name | What |
+|---|---|
+| `RB` | 0, or 97C0h for the 64-column assembly (`-DRB=`) |
+| `PORT_SEL`, `PORT_DAT` | FDh and FCh, the board's ports (`MB_SEL`, `MB_DATA`) |
+| `HSR`, `DEC` | F4h and FFh |
+| `NBANKS` | RB + 6315h, the count |
+| `ISBOARD` | B = a bank: kept if BASE ≤ B < BASE + count, else 0 |
+| `OWNMAP` | A = a bank (0: any): the chunks it owns, bit n for chunk n; 0 with no board. OWNn of FEh or FFh counts as none |
+| `NEWOWN` | BANK_ENABLE's rule for one chunk: A = its OWNn, B the board bank (or 0), D its bit, E the chunks asked for; A = what OWNn must be |
+| `TIMEX_HSR` | BANK_ENABLE's first half (above): H = the HSR, FFh bit 7 set or cleared. Sits in SAVE_STATUS's slot |
+| `SAVE_BOARD` | SAVE_STATUS's second half: the 16 registers and the select. Reads only, but for the select |
+| `RESTORE_BOARD` | RESTORE_STATUS's second half: FFh bit 7, the 16 registers (OWN0–7 first, each setting its SUB, then SUB0–7), the select, then the HSR whole |
 
 ## Where comments, documents and the code disagree
 

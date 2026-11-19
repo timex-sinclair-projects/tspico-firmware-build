@@ -240,6 +240,11 @@ jobs:
       - name: Test the Megabank ROM's boot reset, mover and r-prefix gates in the Z80 interpreter
         run: python3 src/test/rom_megabank_hosttest.py
 
+      # The Timex bank API on the board (bankapi.asm, Megabank spec phase 8):
+      # BANK_ENABLE and the rest from RAM 6200h and from the 64-column copy.
+      - name: Test the Megabank ROM's bank API in the Z80 interpreter
+        run: python3 src/test/rom_bankapi_hosttest.py
+
       - name: Upload the fdd ROM artifact
         uses: actions/upload-artifact@v6
         with:

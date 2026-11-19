@@ -109,7 +109,10 @@ pushes IX because the RAM bank code uses it; the main registers travel
 through the `EXX` pair as in HOME's 3CE3h. Every "call HOME routine X"
 in the TS-Pico EXROM — the expression evaluator, PO-MSG, MAKE-ROOM,
 CHAN-OPEN — goes through it. 08DDh is the no-return twin (genuine bytes,
-reused). `build-rom.py` checks these 16 bytes as an anchor.
+reused). `build-rom.py` checks these 16 bytes as an anchor. In the Megabank
+ROM the bank word is FFFCh (HOME in chunks 0–1, as HOME's own crossings
+ask), here, at 08DFh and at 001Eh: FF00h took every chunk from any board
+bank mapped there ([exrom-fdd.md](exrom-fdd.md#the-timex-bank-api-bankapiasm-phase-8)).
 
 ### `BANK_SWITCH` (0F99h)
 
@@ -139,6 +142,10 @@ parameter count and a second word, then calls it, as `CALL_HOME` does with
    the port writes), the registers are popped, and `CALL 658Ch`, which
    reaches the target *(the code from 6639h on was not decoded for this
    entry)*.
+
+In the Megabank ROM SP is lowered by 19, SAVE_STATUS's frame for the board,
+whatever 6315h holds, and 651Eh, 6499h and 654Ah are bankapi.asm's
+([exrom-fdd.md](exrom-fdd.md#the-timex-bank-api-bankapiasm-phase-8)).
 
 **1410h (RAM 6610h): the TS-Pico's one change.** The genuine bytes are `DD
 46 08`, `LD B,(IX+08h)`: the count's low byte was read into both C and B.
@@ -658,7 +665,8 @@ the name is ours.
 
 5CBEh and 6315h are cleared on both paths; 221Fh had already cleared them
 ([exrom-chunk1.md](exrom-chunk1.md#smaller-pieces-of-chunk-1)), and
-09F4h clears them again on the D-not-held path. On the TS-Pico the
+09F4h clears them again on the D-not-held path; in the Megabank ROM
+`MB_DETECT` then sets them from the board ([exrom-fdd.md](exrom-fdd.md#mb_detect)). On the TS-Pico the
 "cartridge" is whatever dock slot images the Pico serves into the DOCK
 ([../flows/boot.md](../flows/boot.md)).
 

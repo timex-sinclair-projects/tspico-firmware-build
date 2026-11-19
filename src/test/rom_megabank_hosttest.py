@@ -9,7 +9,8 @@ HSR bit (port F4h) is set. Any such write is a failure here, as is a window
 mapped with interrupts on, or into chunks 0-3.
 
     MB_BOOT    (EXROM $0A3E): every OWNn and WPROT written 0, the bank count
-               untouched, SYSCON_END ($2082) reached with HL = SYSCON + 0Dh
+               set from the board (MB_DETECT; rom_bankapi_hosttest has the
+               cases), SYSCON_END ($2082) reached with HL = SYSCON + 0Dh
     the mover  (response function 89h, through FN_EXT as the $2213 patch
                reaches it): ops 1-7, pieces over chunk and page boundaries,
                the window never the 2068 memory's chunk nor the stack's, a
@@ -203,7 +204,8 @@ def main():
     hl = m.cpu.h << 8 | m.cpu.l
     check(m.own == [0] * 8 and m.wprot == 0, "MB_BOOT: OWN0-OWN7 and WPROT written 0")
     check(hl == 0x5EEA + 0x0D, "MB_BOOT: on to $2082 with HL = SYSCON + 0Dh (%04X)" % hl)
-    check(m.ram[0x5CBE] == 0 and m.ram[0x6315] == 0, "MB_BOOT: the bank count left 0")
+    check(m.ram[0x5CBE] == 64 and m.ram[0x6315] == 64 and m.ram[0x6404] == 1,
+          "MB_BOOT: the bank count 64 (SIZE), BASE 1 at 6404h")
 
     # --- the mover: op 1, one piece, window choice and no leaks ---
     m = Machine(rom)
