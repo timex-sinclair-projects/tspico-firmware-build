@@ -1920,10 +1920,9 @@ R_BIT           EQU 5              ; TPMODE bit 5: this statement's blocks go to
 ; is reached by the fall-through from $09F4 (the DOCK header read, on the
 ; normal path) and by CALL $0A3E at $1CA8 (D held at power-on). Timex's search
 ; probed for banks through the memory-mapped, IOA5-gated registers; this board
-; answers ports only, and the bank count (MAXBNK, 5CBEh, and 6315h) must stay
-; 0 until the bank code is rewritten (spec: "Why the bank count must stay 0"),
-; so the search is dropped and the count left at the 0 that $09F4 and $1C8D
-; stored.
+; answers ports only, so the search is dropped; MB_DETECT, at the end, reads
+; the board's ID, BASE and SIZE instead and sets the bank count (MAXBNK,
+; 5CBEh, and 6315h) that the rewritten bank code (bankapi.asm) works from.
 ;
 ; Every OWNn and WPROT is written 0 although the board clears them on /RESET:
 ; PicoVideo can't see /RESET, and the v3 card keeps its shadows through a plain
@@ -1932,10 +1931,9 @@ R_BIT           EQU 5              ; TPMODE bit 5: this statement's blocks go to
 ; here and nothing is told to the TS-Pico: the firmware asks the mover (op 7)
 ; when it needs the board's state (PROTOCOL.md 6.3).
 ;
-; Ends as the old code did with no banks: HL = SYSCON + 0Dh, CALL $2082, which
+; Ends as the old code did: HL = SYSCON + 0Dh, then (through MB_DETECT) $2082, which
 ; writes SYSCON's 80h end marker after the LROS header and clears the printer
-; buffer. The old code then called the renumbering at $0CFB, which with no
-; banks only clears MAXBNK and 6315h again and probes once more: dropped.
+; buffer. The old code then called the renumbering at $0CFB: dropped.
 ;------------------------------------------------------------------------------
 MB_BOOT:
         ld      e,0
@@ -1950,7 +1948,7 @@ MB_BOOT:
         ld      hl,(SYSCON)
         ld      de,$000D
         add     hl,de
-        jp      SYSCON_END         ; returns to the boot
+        jp      MB_DETECT          ; and on to SYSCON_END: the boot
 
 ;------------------------------------------------------------------------------
 ; The "r:" prefix, through F_HOOK. SAVE/LOAD/VERIFY/MERGE "r:name" goes
@@ -2715,6 +2713,69 @@ MV_UNMAP:
         call    MB_WR              ; SUBw
         ld      a,(hl)
         out     (HSR),a
+        ret
+
+;------------------------------------------------------------------------------
+; MB_DETECT -- the end of MB_BOOT: the bank count for the Timex bank API
+; (bankapi.asm). With ID and IDCOMP reading A5h and 5Ah, BASE goes to 6404h
+; and the count to MAXBNK (5CBEh) and 6315h: SIZE, cut so the last bank is no
+; higher than 253 (FEh and FFh are EXROM and HOME). A BASE of 0 or above 253
+; is no board. Else the count stays the 0 that $09F4 and $1C8D stored. The
+; boot has copied the bank code to 6200h by now; the 64-column copy is made
+; later, from it, so it gets both. HL and DE kept for SYSCON_END.
+;------------------------------------------------------------------------------
+MB_NBANKS       EQU $6315          ; the bank code's count (bankapi.asm NBANKS)
+MB_MBBASE       EQU $6404          ; and the board's BASE (MBBASE)
+MAXBNK          EQU $5CBE
+
+MB_DETECT:
+        push    de
+        ld      a,MB_ID
+        call    MB_RD
+        cp      $A5
+        jr      nz,.x
+        ld      a,MB_IDCOMP
+        call    MB_RD
+        cp      $5A
+        jr      nz,.x
+        ld      a,MB_SIZE
+        call    MB_RD
+        ld      d,a
+        ld      a,MB_BASE
+        call    MB_RD
+        ld      e,a
+        dec     a
+        cp      253
+        jr      nc,.x              ; BASE 0, or FEh, FFh
+        ld      a,254
+        sub     e                  ; banks BASE to 253
+        cp      d
+        jr      c,.n
+        ld      a,d                ; or SIZE, if fewer
+.n:     ld      (MAXBNK),a
+        ld      (MB_NBANKS),a
+        ld      a,e
+        ld      (MB_MBBASE),a
+.x:     pop     de
+        jp      SYSCON_END
+
+;------------------------------------------------------------------------------
+; MB_CALL_HOME -- CALL_HOME (EXROM $03DD) with HOME in chunks 0-1 only. $03DE's
+; LD HL,FF00h is patched to JP here (build-rom.py): the bank word FFFCh, then
+; the two zero words. (The genuine thunk's LD H,0 made its zeros from FF00h's
+; L, so FFFCh can't be patched in place: it would push a parameter count of
+; FCh.) FF00h gave HOME every chunk, taking them from any board bank mapped in
+; chunks 2-7. Reached from EXROM code, so chunk 1 is the EXROM.
+;------------------------------------------------------------------------------
+MB_CALL_HOME:
+        ld      hl,$FFFC
+        push    hl
+        ld      hl,0
+        push    hl
+        push    hl
+        exx
+        call    $0F99              ; BANK_SWITCH
+        pop     ix
         ret
 
     ENDIF   ; MEGABANK

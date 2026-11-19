@@ -326,7 +326,7 @@ says so (below). The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 57 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 61 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)); the manual's
@@ -350,8 +350,10 @@ says so (below). The steps, in order:
    `rom_fn86_hosttest.py` the string reader and function 86h's loop, in a
    Z80 interpreter. Then the **Megabank test ROM**: `build-rom.py --megabank
    --verify`, `cmp` of `build/TSPICO-mb.ROM` against `src/rom/TSPICO-MB.ROM`,
-   and `rom_megabank_hosttest.py` (the boot reset, the mover and the `r:`
-   gates against a board model with the HSR rule).
+   `rom_megabank_hosttest.py` (the boot reset, the mover and the `r:`
+   gates against a board model with the HSR rule) and
+   `rom_bankapi_hosttest.py` (the Timex bank API, from RAM 6200h and from
+   the 64-column copy).
    The ROM and its two halves, and the Megabank ROM, are uploaded as `tspico-fdd-rom`.
 7. **MicroPython v1.29.0**, cloned shallow.
 8. **The build stamp**: `cmp` of `src/TS/tspico.py` with

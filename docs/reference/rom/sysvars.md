@@ -241,7 +241,8 @@ are in that copy, not variables in the usual sense.
 | 6499h | BANK_ENABLE, copied from EXROM 1299h at boot | the bank switch |
 | 6572h, 65D0h | the RAM CALL_BANK/GOTO_BANK targets | the thunks |
 | 65CEh | the bank stack pointer (BANK_SP) | the returning thunks push and pop through it; GUARDED (3067h) records it and H_TRAP (HOME 14B2h) restores it after an error ([overview.md](overview.md#banking-how-home-and-the-exrom-reach-each-other)) |
-| 5CBEh, 6315h | two 2068 variables cleared at EXTINIT by 221Fh, together with the TPMODE set-up, and again by `BOOT_DOCK_CHECK` (1C8Dh, 1C90h) and, unless D is held, by the genuine 09F4h, which is where the stock 2068 clears them ([exrom-driver.md](exrom-driver.md#boot_dock_check-1c86h)); 6315h is also tested by BANK_ENABLE (1299h), and CALL_BANK lowers SP by its value + 2 (13F8h). Their meaning on a stock 2068 is not established here | 2226h, 2229h, 1C8Dh, 1C90h |
+| 5CBEh, 6315h | two 2068 variables cleared at EXTINIT by 221Fh, together with the TPMODE set-up, and again by `BOOT_DOCK_CHECK` (1C8Dh, 1C90h) and, unless D is held, by the genuine 09F4h, which is where the stock 2068 clears them ([exrom-driver.md](exrom-driver.md#boot_dock_check-1c86h)); 6315h is also tested by BANK_ENABLE (1299h), and CALL_BANK lowers SP by its value + 2 (13F8h). Their meaning on a stock 2068 is not established here. In the Megabank ROM they are the bank count, set by `MB_DETECT`, and the frame is 19 bytes ([exrom-fdd.md](exrom-fdd.md#mb_detect)) | 2226h, 2229h, 1C8Dh, 1C90h |
+| 6404h | Megabank ROM only: the board's BASE, set by `MB_DETECT` (in the 2068's code, the end of READ_BS_REG) | bankapi.asm |
 
 ## The ZX Spectrum ROM's variables
 
