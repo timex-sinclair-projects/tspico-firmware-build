@@ -276,7 +276,8 @@ becomes the command's result.
 | `$86` | PRINT STRING WITH LOOP | status, then pages: text, `$00` → the Z80 waits for a key, waits READY, OUTs the key; then, whatever the key, `N` included, it waits READY and prints the next page (#227; ROM 2.2 left the loop on `N`). `$03` ends the loop, so the Pico answers `N` with an echo and `$03`. | `$21E3` (loop `$21E7`, guard `$22A1`) | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | `$87` | (spec: "print n characters") | status | calls HOME `$08A6`, which clears the screen like CLS | unused |
 | `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
-| `$80`, `$89`–`$FF` | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
+| `$89` | **the Megabank mover** (Megabank test ROM 2.5 only) | operations, then op 0 and the answer (§6.3) | `$2213` is `JP FN_EXT` there; `FN_EXT` runs `LOWER_LOOP` for `$88` and `MOVER` for `$89`. ROM 2.4 treats `$89` like `$8A` | `tpi:rblk`'s handler (the RAM disk, Megabank spec phase 5); `tools/emu/megabank_host.py` stands in for it |
+| `$80`, `$8A`–`$FF` (and `$89` before ROM 2.5) | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
 
 In the firmware (`TS/tspico.py`, issue #16) these are `FN_PRINT_STRING` (`$81`), `FN_PRINT_STRING_KEY` (`$82`), `FN_PRINT_CHAR` (`$83`), `FN_RETURN_KEY` (`$84`), `FN_GET_STATUS` (`$85`), `FN_PRINT_LOOP` (`$86`) and `FN_PRINT_LOOP_LOWER` (`$88`); the `$00` that ends a string or a page is `STR_END`, the `$03` that ends a loop `LOOP_END`, and a pre-header's first byte is `PRE_HEADER` (`$00`), `PRE_DATA` (`$FF`) or `PRE_CMD` (`$42`, `'B'`). Each use in the code also gives the number in its comment.
 
@@ -368,6 +369,84 @@ Refuse a SAVE at the **mid-phase** status, never after the final status: by
 then the 2068 has printed `0 OK` and gone. The final status waits for the SD
 write, so a failed write is reported as J (§13). `SAVE ""` and names over 10
 characters are refused by the ROM before anything is sent.
+
+### 6.3 The Megabank: `r:` blocks and the mover (ROM 2.5 test build)
+
+`tools/build-rom.py --megabank` builds `src/rom/TSPICO-MB.ROM`, ROM 2.5
+(ROM_ID and `G_VERS` `$25`, PEEK 101 = 37) for the TS-2068 Megabank board
+(spec: the TS-2068-Megabank repository, `docs/spec.md`). It is not in a flash
+slot until the board's hardware tests pass. Over 2.4 it adds:
+
+- **The boot.** EXROM `$0A3E`, the start of the 2068's bank search, is
+  `JP MB_BOOT`. MB_BOOT writes OWN0–OWN7 = 0 and WPROT = 0 (port `$FD` selects
+  a board register, `$FC` is its data) and goes on to the old exit, `$2082`,
+  with HL = SYSCON + `$0D`: the bank count (`$5CBE`, `$6315`) stays 0, SYSCON's
+  first bank entry is the `$80` end marker. It reads nothing from the board
+  and sends nothing to the Pico; the firmware asks when it needs to know
+  (op 7 below).
+- **`r:` names.** `SAVE`/`LOAD`/`VERIFY`/`MERGE "r:name"` go through F_HOOK as
+  `f:` does, but set **TPMODE bit 5** as well as bit 1, and open the file with
+  `tpi:ropen name` (PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE; a status answers,
+  3 = F if there is no such file).
+- **The block gates.** `$0068` is `JP R_SA` and `$00FC` `JP R_LD`. With bit 5
+  clear they go on to `$1879`/`$196D` (§6.1, §6.2) unchanged. With it set the
+  block is one `'B'` command, `tpi:rblk` + 8 hex digits (IX lo, IX hi, DE lo,
+  DE hi), PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY, PMR2 = the flag byte; the firmware
+  answers with response function `$89` and moves the bytes itself. The routine
+  leaves through `SA_RET` (`$00E5`) with carry set. A status ≠ 1 is the
+  statement's report (2 = R for a VERIFY that differs). Bit 5 is cleared after
+  a data block (flag ≠ 0), on any failure, and by the next `SAVE`/`LOAD`
+  statement's F_HOOK.
+
+**Function `$89`, the mover.** After the code the Pico sends operations, each
+an op byte and its parameters (16-bit words little-endian; *page* is the board's
+8K page counted from BASE, 0–511, *off* its offset, 0–1FFFh). The Z80 answers
+each with one reply byte, then waits READY before reading the next op (the
+first op is read at once, so queue it with the code). Bytes go both ways
+unhandshaked, about 75–90 µs apart, as in a LOAD block.
+
+| Op | Parameters | Then | Reply |
+|----|------------|------|-------|
+| 0 | — | the next byte is the command's answer (§5.3, §5.4): a status, or a response function such as `$81` | — |
+| 1 | addr, len, page, off | 2068 memory → board | 1 |
+| 2 | addr, len, page, off | board → 2068 memory | 1 |
+| 3 | addr, len, page, off | compare | 1 same, 2 differ |
+| 4 | len, page, off | the Z80 sends len bytes, then their XOR | 1 |
+| 5 | len, page, off | the Pico sends len bytes, then their XOR | 1, or 5 if the XOR is wrong (the bytes are on the board) |
+| 6 | len, page, off, page2, off2 | board → board (overlapping runs are not handled) | 1 |
+| 7 | — | the Z80 sends found (1/0), BASE, SIZE (banks), STATUS | VERSION |
+| 8–FF | — | the mover ends: Report J | — |
+
+Replies 3 (no board: ID/IDCOMP aren't `$A5`/`$5A`) and 4 (out of range: off ≥
+2000h, or the run passes the board's last page, SIZE × 8 − 1) refuse an
+operation **without losing step**: op 4 still sends len zeros and an XOR of 0,
+op 5 still reads len + 1 bytes. A run may cross page boundaries, and the 2068
+side may cross chunk boundaries.
+
+How it maps the board (the HSR rule, measured on hardware: /BE keeps HOME RAM
+off a read, but a write to an owned chunk still lands in HOME RAM unless the
+chunk's HSR bit, port `$F4`, is set):
+
+- interrupts off while anything is mapped; the IFF is put back at the end;
+- the window is the first chunk of 4–7 that holds none of: the 2068 address
+  of the piece, the stack (SP − 32 to SP + 48, the mover's frame included);
+  op 6 takes two windows;
+- map: OWNw = BASE + page / 8 (which sets SUBw = w), SUBw = page AND 7, then
+  HSR bit w set. Unmap puts back what was there: HSR first if the chunk was
+  the 2068's own, then OWNw and SUBw, then the HSR. A program's own board
+  page mapped in the window chunk is restored with its HSR bit as the mover
+  found it. (By then the command's bank crossings have already cleared the
+  HSR: every `tpi:` command leaves it at 0, in ROM 2.4 too, so a program
+  that maps pages must set its HSR bits again after one, or its writes
+  reach HOME RAM. The Megabank spec's phase 8 narrows the crossings);
+- the EXROM stays in chunks 0–1 throughout, so addresses below 4000h are the
+  EXROM's, not HOME's;
+- there is no BREAK test inside an operation.
+
+`src/test/rom_megabank_hosttest.py` runs all of this in the Z80 interpreter
+against a board model that fails on any write the HSR rule would leak;
+`tools/emu/megabank_smoke.py` runs it end to end in ZEsarUX's Megabank model
+(which ignores the HSR) with `tools/emu/megabank_host.py`, a stand-in RAM disk.
 
 ## 7. The channel commands
 

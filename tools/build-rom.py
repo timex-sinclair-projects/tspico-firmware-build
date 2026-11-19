@@ -28,6 +28,15 @@ Usage:
     python3 tools/build-rom.py --keep     # keep intermediate .bin/.sym
     python3 tools/build-rom.py --rebase   # after a new base ROM merges: re-check
                                           # the patch sites and update BASE_ROM_CRC
+    python3 tools/build-rom.py --megabank --verify
+                                          # the Megabank test ROM (below)
+
+The Megabank test ROM (--megabank): the same build with -DMEGABANK, which adds
+the TS-2068 Megabank's boot reset, SAVE/LOAD "r:name" and the mover after the
+2.4 module (fddcmd.asm), plus MB_PATCHES and the `mb_after` bytes below. It
+carries the version marker 25h ("v2.5") so the firmware can tell it from 2.4,
+and is committed as src/rom/TSPICO-MB.ROM (CI checks that too). The slot-1
+image, TSPICO-24.ROM, is unchanged by it. Megabank spec phase 4.
 """
 
 import argparse
@@ -44,6 +53,7 @@ BASE_ROM = ROOT / "src" / "rom" / "TSPICO-SYNC.ROM"   # ROM 2.0 (flash/manifest.
 ASM_SRC  = ROOT / "src" / "rom" / "fdd" / "fddcmd.asm"
 OUT_DIR  = ROOT / "build"
 OUT_ROM  = OUT_DIR / "TSPICO-fdd.ROM"
+OUT_MB   = OUT_DIR / "TSPICO-mb.ROM"           # --megabank
 
 # --- ROM geometry (see docs/rom-analysis/MEMORY_MAP.md) ----------------------
 # The 32K image is HOME (file $0000-$3FFF) + EXROM (file $4000-$7FFF). For each
@@ -78,6 +88,7 @@ PATCHES = [
         name="response function $88: the dead $2213 check -> LOWER_VEC ($3006)",
         bank="exrom", addr=0x2213,
         before="fe 86 c0 cd b9 02", after="fe 87 ca 06 30 c9",
+        mb_after="c3 61 3a 00 00 00",                 # JP FN_EXT: 88h as before, 89h the mover
         note="$2213's CP 86h follows $21FD's JR NZ, so it can never match (the "
              "duplicate-0x86 bug in PROTOCOL_FROM_ROM.md). Now CP 87h / JP Z / RET: "
              "function $88 = $86's Y/N loop on the lower screen. Every other "
@@ -238,14 +249,14 @@ PATCHES = [
     dict(
         name="boot banner: \"TS-Pico ROM v2.0\" -> \"v2.4\"",
         bank="exrom", addr=0x1C7E,
-        before="76 32 2e 30", after="76 32 2e 34",
+        before="76 32 2e 30", after="76 32 2e 34", mb_after="76 32 2e 35",
         note="The copyright line at $1C6C (tspico-sync.asm) shown at start-up. "
              "Same length, so nothing else moves.",
     ),
     dict(
         name="version marker: HOME $0065 20h -> 24h (ROM 2.4)",
         bank="home", addr=0x0065,
-        before="20", after="24",
+        before="20", after="24", mb_after="25",
         note="PEEK 101 tells a program which ROM it has: 15h v1.1, 17h v1.7, "
              "20h 2.0 (tspico-sync.asm), 21h 2.1 (the disk commands), 22h 2.2 "
              "(2.1 plus the tpi:tape and pre-load fixes), 23h 2.3 (keys as typed, "
@@ -256,14 +267,14 @@ PATCHES = [
     dict(
         name="version marker: BIOS G_VERS LD BC,0020h -> LD BC,0024h",
         bank="exrom", addr=0x1852,
-        before="01 20 00 c9", after="01 24 00 c9",
+        before="01 20 00 c9", after="01 24 00 c9", mb_after="01 25 00 c9",
         note="The Pico Interface BIOS G_VERS ($1844 -> $1852) returns the same "
              "version as HOME $0065.",
     ),
     dict(
         name="command pre-header byte 2: LD A,(BANK_SV) -> LD A,24h (ROM_ID)",
         bank="exrom", addr=0x1BB5,
-        before="3a cf 5d", after="3e 24 00",
+        before="3a cf 5d", after="3e 24 00", mb_after="3e 25 00",
         note="BUILD_PREHEADER_B sent BANK_SV, which is always FFh, and the Pico "
              "ignored it. From ROM 2.3 on it sends the version marker instead, so the "
              "firmware knows which ROM sent each command (tpi:info shows it; "
@@ -309,6 +320,62 @@ PATCHES = [
 # Module symbols the patches above jump to by a fixed address: the build fails
 # if the module moves one, rather than patch a jump into the wrong code.
 FIXED_SYMS = {"PS_READ": 0x377F}
+
+
+# --- The Megabank test ROM (--megabank) ---------------------------------------
+# Applied after PATCHES (with their `mb_after` bytes where they have them). Each
+# jumps to Megabank code appended to the module (fddcmd.asm, IFDEF MEGABANK);
+# MB_FIXED_SYMS pins those addresses. Megabank spec "Minimal ROM: detection,
+# reset, mover, `r:` (phase 4)".
+MB_PATCHES = [
+    dict(
+        name="boot: the bank search at $0A3E -> JP MB_BOOT ($3998)",
+        bank="exrom", addr=0x0A3E,
+        before="2a bc 5c", after="c3 98 39",
+        note="Timex's search (X0A3E-X0DAF) probed for banks through the "
+             "memory-mapped, IOA5-gated registers. Its two entries both land "
+             "at $0A3E: the fall-through from $09F4 and CALL $0A3E at $1CA8 (D "
+             "held at power-on). Nothing else enters $0A3F-$0DAF: the JP $0D31 "
+             "at $0057 is in the 11 bytes $1CAE copies to RAM, where it runs "
+             "after OUT (F4h),0 and so reaches HOME's $0D31, and the "
+             "renumbering at $0CFB is called only from inside the range. "
+             "MB_BOOT writes OWN0-OWN7 and WPROT = 0, leaves the bank count 0, "
+             "and ends with $2082 (SYSCON's 80h end marker) as the old code "
+             "did. $0A41-$0DAF become free.",
+    ),
+    dict(
+        name="SA-BYTES: $0068 JP $1879 -> JP R_SA ($39F5)",
+        bank="exrom", addr=0x0068,
+        before="c3 79 18", after="c3 f5 39",
+        note="R_SA sends the block to the RAM disk when TPMODE bit 5 is set "
+             "(an \"r:\" statement, F_HOOK); otherwise JP $1879 as before.",
+    ),
+    dict(
+        name="LD-BYTES: $00FC JP $196D -> JP R_LD ($3A06)",
+        bank="exrom", addr=0x00FC,
+        before="c3 6d 19", after="c3 06 3a",
+        note="The same for LOAD, VERIFY and MERGE; otherwise JP $196D.",
+    ),
+]
+
+MB_FIXED_SYMS = {"MB_BOOT": 0x3998, "R_SA": 0x39F5, "R_LD": 0x3A06, "FN_EXT": 0x3A61}
+
+# Base-ROM code the Megabank code relies on (checked with ANCHORS when
+# building --megabank).
+MB_ANCHORS = [
+    dict(name="SYSCON_END: DEC HL / LD (HL),80h / CALL_HOME $0A35 (MB_BOOT ends here)",
+         bank="exrom", addr=0x2082, bytes="2b 36 80 dd e5 d9 21 35 0a c3 dd 03"),
+    dict(name="the old search's end: CALL $2082 / CALL $0CFB / RET",
+         bank="exrom", addr=0x0AD4, bytes="cd 82 20 cd fb 0c c9"),
+    dict(name="SA_RET: the tape routines' exit (border, BREAK, EI, POP AF)",
+         bank="exrom", addr=0x00E5, bytes="f5 3a 48 5c e6 38"),
+    dict(name="PICO_SA: SA-BYTES's TPMODE bit-1 gate",
+         bank="exrom", addr=0x1879, bytes="f5 3a db 5d e6 02"),
+    dict(name="PICO_LD: LD-BYTES's TPMODE bit-1 gate",
+         bank="exrom", addr=0x196D, bytes="f5 3a db 5d e6 02"),
+    dict(name="SESSION_SETUP's non-command exit clears TPMODE bits 7-4 (bit 5 too)",
+         bank="exrom", addr=0x1A3B, bytes="3a db 5d e6 0f 32 db 5d"),
+]
 
 
 # --- Anchors: base-ROM code the module calls or jumps into --------------------
@@ -379,10 +446,10 @@ ANCHORS = [
 ]
 
 
-def check_anchors(base):
+def check_anchors(base, anchors=None):
     """Messages for every anchor whose bytes differ in base (empty = all good)."""
     bad = []
-    for a in ANCHORS:
+    for a in (ANCHORS if anchors is None else anchors):
         want = bytes.fromhex(a["bytes"])
         off = file_offset(a["bank"], a["addr"])
         got = bytes(base[off:off + len(want)])
@@ -401,13 +468,14 @@ def need_sjasmplus():
         die("sjasmplus not found. Install with: brew install sjasmplus")
 
 
-def assemble(workdir):
+def assemble(workdir, megabank=False):
     """Assemble the module; return (bytes, symbols dict)."""
     binf = workdir / "fddcmd.bin"
     symf = workdir / "fddcmd.sym"
     # SAVEBIN in the source writes relative to CWD, so run in workdir.
     r = subprocess.run(
-        ["sjasmplus", "--nologo", f"--sym={symf}", str(ASM_SRC)],
+        ["sjasmplus", "--nologo", f"--sym={symf}"]
+        + (["-DMEGABANK"] if megabank else []) + [str(ASM_SRC)],
         cwd=workdir, capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -509,6 +577,8 @@ def main():
                          "module region and the enabled patch sites")
     ap.add_argument("--keep", action="store_true",
                     help="keep intermediate fddcmd.bin/.sym next to the output")
+    ap.add_argument("--megabank", action="store_true",
+                    help="build the Megabank test ROM, build/TSPICO-mb.ROM")
     ap.add_argument("--rebase", action="store_true",
                     help="after a new base ROM merges: re-check the patch sites "
                          "and rewrite BASE_ROM_CRC (no build)")
@@ -527,12 +597,14 @@ def main():
         die(f"base ROM crc32 {crc:#010x} != expected {BASE_ROM_CRC:#010x}. "
             f"Refusing to patch an unexpected image.")
 
+    mb = args.megabank
+    out_rom = OUT_MB if mb else OUT_ROM
     workdir = pathlib.Path(tempfile.mkdtemp(prefix="buildrom."))
-    module, syms = assemble(workdir)
+    module, syms = assemble(workdir, mb)
     entry = syms.get("FDD_DISPATCH")
     if entry != FDD_ORG:
         die(f"FDD_DISPATCH is {entry:#06x}, expected FDD_ORG {FDD_ORG:#06x}")
-    for name, addr in FIXED_SYMS.items():
+    for name, addr in (dict(FIXED_SYMS, **MB_FIXED_SYMS) if mb else FIXED_SYMS).items():
         if syms.get(name) != addr:
             die(f"{name} is at {syms.get(name, 0):#06x}; the patches jump to "
                 f"{addr:#06x}. Update FIXED_SYMS and the patch bytes together.")
@@ -540,7 +612,7 @@ def main():
     out = bytearray(base)
     touched = []   # (start, end) file-offset ranges we intend to change
 
-    bad = check_anchors(base)
+    bad = check_anchors(base, ANCHORS + (MB_ANCHORS if mb else []))
     if bad:
         die("the base ROM no longer has code the module relies on:\n  " + "\n  ".join(bad))
     print("anchors: %d base-ROM entry points the module uses are where it expects"
@@ -560,14 +632,14 @@ def main():
           f"(file ${mstart:04X}); entry FDD_DISPATCH=${entry:04X}")
 
     # --- 4. apply the manifest ---
-    for p in PATCHES:
+    for p in PATCHES + (MB_PATCHES if mb else []):
         if not p.get("enabled", True):
             print(f"skip  : {p['name']} (staged, not enabled)")
             continue
         if p["after"] is None:
             die(f"patch {p['name']!r} enabled but has no 'after' bytes")
         before = bytes.fromhex(p["before"])
-        after = bytes.fromhex(p["after"])
+        after = bytes.fromhex(p.get("mb_after", p["after"]) if mb else p["after"])
         if len(before) != len(after):
             die(f"patch {p['name']!r}: before/after length mismatch")
         off = file_offset(p["bank"], p["addr"])
@@ -582,10 +654,11 @@ def main():
 
     # --- 5. write outputs ---
     OUT_DIR.mkdir(exist_ok=True)
-    OUT_ROM.write_bytes(out)
-    (OUT_DIR / "TSPICO-fdd-home.bin").write_bytes(out[0:0x4000])
-    (OUT_DIR / "TSPICO-fdd-exrom.bin").write_bytes(out[0x4000:0x8000])
-    print(f"\nwrote {OUT_ROM.relative_to(ROOT)}  "
+    out_rom.write_bytes(out)
+    stem = "TSPICO-mb" if mb else "TSPICO-fdd"
+    (OUT_DIR / f"{stem}-home.bin").write_bytes(out[0:0x4000])
+    (OUT_DIR / f"{stem}-exrom.bin").write_bytes(out[0x4000:0x8000])
+    print(f"\nwrote {out_rom.relative_to(ROOT)}  "
           f"crc32={zlib.crc32(out) & 0xFFFFFFFF:#010x}  size={len(out)}")
 
     # hunk report vs base

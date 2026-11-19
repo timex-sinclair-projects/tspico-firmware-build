@@ -73,7 +73,11 @@ BIOS_WF_NPH     EQU $184C          ;   wait for the Pico: C with A = 02/0C/1C
 C_END_TAIL      EQU $227F          ; EXROM: C_END after its wait: read the status,
                                    ;   run the response functions (v1.7's $2279 tail)
 BANK_SV         EQU $5DCF          ; pre-header byte 2 on ROM 2.2 and earlier (always FFh)
+    IFDEF MEGABANK
+ROM_ID          EQU $25            ; the Megabank test ROM (build-rom.py --megabank): 2.5
+    ELSE
 ROM_ID          EQU $24            ; ROM 2.4: a command pre-header's byte 2 (#227, #228),
+    ENDIF
                                    ;   the version marker at HOME $0065; build-rom.py
                                    ;   patches $1BB5 to send the same
 TSPICO_READ_DATA EQU $2298         ; EXROM: IN A,(0Eh) / AND A / RET -- no ready-wait
@@ -624,9 +628,15 @@ F_HOOK:
         cp      3
         jr      c,.stock           ; "f:" and at least one character
         ld      a,(de)
+    IFDEF MEGABANK
+        call    FR_TEST            ; "f:" or, on the Megabank ROM, "r:" (same size:
+        jr      nz,.stock          ;   nothing after this moves)
+        nop
+    ELSE
         and     $DF
         cp      'F'
         jr      nz,.stock
+    ENDIF
         inc     de
         ld      a,(de)
         cp      ':'
@@ -669,7 +679,11 @@ F_HOOK:
         ld      (hl),0             ; LOAD "": the one-shot tape holds one file
 .go:    ld      a,(MODE_SV)
         and     $0F
+    IFDEF MEGABANK
+        call    SET_MODE           ; and TPMODE bit 5 for an "r:" name
+    ELSE
         ld      (MODE_SV),a
+    ENDIF
         pop     de
         pop     hl
         ld      bc,$0011
@@ -762,7 +776,11 @@ SEND_FOPEN:
         call    TXX
         push    hl
         push    bc
+    IFDEF MEGABANK
+        call    OPEN_TXT           ; HL = "tpi:fopen " or "tpi:ropen "
+    ELSE
         ld      hl,FOPEN_TXT
+    ENDIF
         ld      b,FOPEN_LEN
         call    TX_STR
         pop     bc
@@ -1853,6 +1871,854 @@ CAT_HASH:
         ret
 
 CMD_CHCAT:   db "tpi:chcat ",0
+
+    IFDEF MEGABANK
+;==============================================================================
+; THE TS-2068 MEGABANK -- the Megabank test ROM (build-rom.py --megabank),
+; phase 4 of the Megabank's specification (TS-2068-Megabank, docs/spec.md):
+; the boot reset, SAVE/LOAD/VERIFY/MERGE "r:name" and the mover.
+;
+; The board is 4 MB of battery-backed RAM: up to 512 pages of 8K, numbered
+; from 0, which make 64 banks of 64K (BASE, BASE+1 ...). Two ports: OUT (FDh)
+; selects a register, IN/OUT (FCh) reads or writes it. OWN0-OWN7 name the bank
+; that owns each 8K chunk of the 2068's memory (0 = none, and writing one sets
+; that chunk's SUBn = n); SUB0-SUB7 say which 8K of the bank appears there.
+; An owned chunk's reads and writes go to the board, which pulls /BE.
+;
+; The rule from the hardware (2026-11-18): /BE stops the 2068's own memory
+; answering a read, but not HOME RAM taking a write. So a chunk is mapped
+; OWNn first, then its bit in the HSR (port F4h), which sends the chunk to
+; EXROM/DOCK and keeps the RAM underneath; and unmapped in the reverse order.
+;
+; Everything here is appended after the 2.4 module, so no 2.4 entry point
+; moves; F_HOOK and SEND_FOPEN change in place, at the same size, under
+; IFDEF MEGABANK. build-rom.py's FIXED_SYMS holds the addresses its patches
+; jump to (MB_BOOT, R_SA, R_LD, FN_EXT).
+;==============================================================================
+
+MB_SEL          EQU $FD            ; OUT: select a board register
+MB_DATA         EQU $FC            ; IN/OUT: the selected register
+MB_OWN          EQU $00            ; OWN0-OWN7
+MB_SUB          EQU $08            ; SUB0-SUB7
+MB_WPROT        EQU $10            ; bit n: writes to chunk n dropped
+MB_STATUS       EQU $11            ; bit 0 write-protect switch, bit 1 battery low
+MB_ID           EQU $12            ; A5h
+MB_IDCOMP       EQU $13            ; 5Ah
+MB_BASE         EQU $14            ; the first bank: 1, 65, 129 or 193
+MB_SIZE         EQU $15            ; banks fitted: 8, 16, 32 or 64
+MB_VERSION      EQU $16
+HSR             EQU $F4            ; the 2068's chunk select: bit n set = chunk n off HOME
+SYSCON          EQU $5CBC          ; -> the SYSCON table (5EEAh)
+SYSCON_END      EQU $2082          ; EXROM: DEC HL / LD (HL),80h, then HOME's CLEAR-PRB
+SA_RET          EQU $00E5          ; EXROM: the tape routines' exit: border, BREAK, EI
+PICO_SA         EQU $1879          ; EXROM: SA-BYTES's TPMODE bit-1 gate ($0068 went here)
+PICO_LD         EQU $196D          ; EXROM: LD-BYTES's ($00FC went here)
+R_BIT           EQU 5              ; TPMODE bit 5: this statement's blocks go to "r:"
+
+;------------------------------------------------------------------------------
+; MB_BOOT -- the boot's bank search, replaced. EXROM $0A3E (patched to JP here)
+; is reached by the fall-through from $09F4 (the DOCK header read, on the
+; normal path) and by CALL $0A3E at $1CA8 (D held at power-on). Timex's search
+; probed for banks through the memory-mapped, IOA5-gated registers; this board
+; answers ports only, and the bank count (MAXBNK, 5CBEh, and 6315h) must stay
+; 0 until the bank code is rewritten (spec: "Why the bank count must stay 0"),
+; so the search is dropped and the count left at the 0 that $09F4 and $1C8D
+; stored.
+;
+; Every OWNn and WPROT is written 0 although the board clears them on /RESET:
+; PicoVideo can't see /RESET, and the v3 card keeps its shadows through a plain
+; reset, so these writes put every device that watches FDh/FCh back in step.
+; With no board fitted they reach nobody, which is harmless. Nothing is read
+; here and nothing is told to the TS-Pico: the firmware asks the mover (op 7)
+; when it needs the board's state (PROTOCOL.md 6.3).
+;
+; Ends as the old code did with no banks: HL = SYSCON + 0Dh, CALL $2082, which
+; writes SYSCON's 80h end marker after the LROS header and clears the printer
+; buffer. The old code then called the renumbering at $0CFB, which with no
+; banks only clears MAXBNK and 6315h again and probes once more: dropped.
+;------------------------------------------------------------------------------
+MB_BOOT:
+        ld      e,0
+        ld      a,MB_OWN+7
+.own:   push    af
+        call    MB_WR              ; OWNn = 0: no owner (and SUBn = n)
+        pop     af
+        dec     a
+        jp      p,.own
+        ld      a,MB_WPROT
+        call    MB_WR
+        ld      hl,(SYSCON)
+        ld      de,$000D
+        add     hl,de
+        jp      SYSCON_END         ; returns to the boot
+
+;------------------------------------------------------------------------------
+; The "r:" prefix, through F_HOOK. SAVE/LOAD/VERIFY/MERGE "r:name" goes
+; exactly as "f:path" does -- the Pico gets the name in a command, the name on
+; the calculator stack is shortened, and the stock SAVE-ETC body runs -- with
+; two differences: the command is tpi:ropen, not tpi:fopen, and TPMODE bit 5
+; is set, so the body's tape blocks go to R_SA / R_LD instead of the Pico's
+; block transfer. The RAM disk's file system is the firmware's (spec: "The RAM
+; disk"); the ROM only moves the bytes, when the firmware says so.
+;------------------------------------------------------------------------------
+
+; FR_TEST -- F_HOOK's prefix letter (A, as typed): Z for F or R.
+FR_TEST:
+        and     $DF
+        cp      'F'
+        ret     z
+        cp      'R'
+        ret
+
+; SET_MODE -- F_HOOK's .go: TPMODE := A (TPMODE AND 0Fh, the prefix flags
+; cleared), plus bit 5 if the name began "r:". The name is on the calculator
+; stack, already shortened: a SAVE's moved past its two-character prefix, a
+; LOAD's not moved (its length is 0).
+SET_MODE:
+        push    af
+        call    PEEK_NAME          ; DE = the name
+        ld      a,(TADDR)
+        and     a
+        jr      nz,.load
+        dec     de
+        dec     de                 ; SAVE: back to the prefix
+.load:  ld      a,(de)
+        and     $DF
+        cp      'R'
+        pop     bc                 ; B = TPMODE AND 0Fh
+        ld      a,b
+        jr      nz,.st
+        set     R_BIT,a
+.st:    ld      (MODE_SV),a
+        ret
+
+; OPEN_TXT -- SEND_FOPEN's command word: HL = "tpi:fopen " or "tpi:ropen " by
+; the name's first letter. BC and DE (D: the running XOR) are kept.
+OPEN_TXT:
+        push    de
+        push    bc
+        call    PEEK_NAME          ; DE = the name, not yet shortened
+        ld      a,(de)
+        pop     bc
+        pop     de
+        and     $DF
+        ld      hl,FOPEN_TXT
+        cp      'R'
+        ret     nz
+        ld      hl,ROPEN_TXT
+        ret
+
+ROPEN_TXT:   db "tpi:ropen "
+        ASSERT  $-ROPEN_TXT == FOPEN_LEN
+
+;------------------------------------------------------------------------------
+; R_SA, R_LD -- the tape block routines' gates. EXROM $0068 (SA-BYTES) and
+; $00FC (LD-BYTES) were JP $1879 / JP $196D, which test TPMODE bit 1 (the
+; Pico or the cassette); build-rom.py points them here. With TPMODE bit 5 set
+; (an "r:" statement) the block goes to the RAM disk; otherwise on as before.
+;
+; In: A = the flag (00h a header, FFh data), IX = the address, DE = the length;
+; for R_LD, carry set = LOAD (and MERGE), clear = VERIFY.
+;------------------------------------------------------------------------------
+R_SA:   push    af
+        ld      a,(MODE_SV)
+        bit     R_BIT,a
+        jr      nz,.r
+        pop     af
+        jp      PICO_SA
+.r:     pop     af
+        ld      c,0                ; PMR1: SAVE
+        jr      R_BLOCK
+
+R_LD:   push    af
+        ld      a,(MODE_SV)
+        bit     R_BIT,a
+        jr      nz,.r
+        pop     af
+        jp      PICO_LD
+.r:     pop     af
+        ld      c,1                ; PMR1: LOAD
+        jr      c,R_BLOCK
+        inc     c                  ; 2: VERIFY
+
+; R_BLOCK -- one block to or from the RAM disk: the command
+;   tpi:rblk <hex: address lo, hi, length lo, hi>   PMR1 = C (0 SAVE, 1 LOAD,
+;   2 VERIFY), PMR2 = the flag
+; through CH_SEND, then C_END. The firmware answers with response function 89h
+; (MOVER): its operations copy the block between the 2068's memory and the
+; board, then its status ends the command. Leaves as the Pico's block routines
+; do, through SA_RET with carry set: done. A failed status raises its report
+; (VERIFY's mismatch is R, as on tape). TPMODE bit 5 is cleared after any
+; block but a header (flag 00h: the data block follows) and on any failure.
+R_BLOCK:
+        ld      hl,SA_RET
+        push    hl                 ; leave through the tape routines' exit
+        di
+        push    ix
+        push    af                 ; [the flag]
+        push    de
+        push    ix                 ; the payload, at SP: address, length (LE)
+        ld      b,a
+        ld      hl,-R_OUTBUF
+        add     hl,sp
+        push    hl
+        pop     ix                 ; IX + R_OUTBUF = the payload, where CH_SEND reads it
+        ld      a,c                ; PMR1: the direction
+        ld      c,b                ; PMR2: the flag
+        ld      b,4                ; four payload bytes, sent as hex
+        ld      hl,CMD_RBLK
+        call    CH_SEND
+        call    BIOS_C_END         ; the answer: 89h, the operations, the status
+        pop     hl
+        pop     hl                 ; the payload
+        pop     hl                 ; H = the flag
+        pop     ix
+        jr      c,.fail
+        ld      a,h
+        and     a
+        call    nz,R_OFF           ; data: the statement's last block
+        scf                        ; C: the block is done
+        ret                        ; -> SA_RET
+.fail:  call    R_OFF
+        jp      C_FAIL             ; A = status-1, 0Ch BREAK, 1Ch reset
+
+; R_OFF -- clear TPMODE bit 5: the next blocks go where bit 1 says. AF kept.
+R_OFF:  push    af
+        ld      a,(MODE_SV)
+        res     R_BIT,a
+        ld      (MODE_SV),a
+        pop     af
+        ret
+
+CMD_RBLK:    db "tpi:rblk ",0
+
+;------------------------------------------------------------------------------
+; FN_EXT -- the response functions past 87h. The dispatch chain's last test,
+; $2213, was CP 87h / JP Z,$3006 / RET (function 88h, LOWER_LOOP); it is now
+; JP FN_EXT. A = the code - 1.
+;------------------------------------------------------------------------------
+FN_EXT: cp      $87
+        jp      z,LOWER_LOOP       ; 88h: $86's loop on the lower screen
+        cp      $88
+        jr      z,MOVER            ; 89h: the mover
+        ret                        ; anything else: as before (Report D)
+
+;------------------------------------------------------------------------------
+; MOVER -- response function 89h: the firmware's hands on the board
+; (PROTOCOL.md 6.3; the spec's "The mover's operations"). The TS-Pico can't
+; reach the board, which answers only the Z80's bus cycles; so the firmware
+; keeps the RAM disk's file system and tells the Z80, one operation at a time,
+; what to copy. After 89h comes the first operation, with no wait; after each
+; operation the Z80 replies and waits for READY before reading the next.
+;
+;   op  parameters (16-bit, LE)        does                         reply
+;   1   addr, len, page, off           2068 memory -> the board     status
+;   2   addr, len, page, off           the board -> 2068 memory     status
+;   3   addr, len, page, off           compare them                 status: 1 same, 2 not
+;   4   len, page, off                 the board -> the Pico        len bytes, XOR, status
+;   5   len, page, off, then len       the Pico -> the board        status (5: XOR wrong)
+;       bytes and their XOR
+;   6   len, page, off, page2, off2    page:off -> page2:off2       status
+;   7   -                              describe the board           found, BASE, SIZE,
+;                                                                   STATUS, VERSION
+;   0   -                              done: the next byte is the command's answer, read
+;                                      as after any command (a status, or a function)
+;
+; page:off is a page of the board (0 to SIZE*8-1, relative to BASE) and an
+; offset into it (0-1FFFh); a transfer may run over into the following pages.
+; Status: 1 done, 2 compare: they differ, 3 no board, 4 page or offset out of
+; range (nothing done), 5 op 5's XOR didn't match (a byte went missing).
+; Refused or not, ops 4 and 5 always pass len bytes and the XOR.
+; Bytes to and from the Pico are paced like CH_FETCH's (~75 us).
+;
+; For each piece of a transfer that lies in one 8K chunk on both sides, the
+; page is mapped into a window: a chunk of 4-7 that holds neither the 2068
+; memory being copied nor the stack (nor the frame above it). Four
+; candidates, at most three excluded, so one is always free; op 6 maps two.
+; The window's OWN, SUB and HSR bit are saved, set (OWN, then the HSR bit),
+; and put back (spec: "map = OWNn, then F4h bit n; unmap = F4h bit n clear,
+; then OWNn = 0"). The mover runs from the EXROM, chunks 0-1, and never maps
+; a window there. The whole function runs with interrupts off, and puts back
+; the interrupt state it found.
+;
+; Out: as a response function, to C_END: op 0 goes on to C_END_TAIL ($227F),
+; which reads the answer; a failed wait for READY returns C with A = 09h
+; (timeout: J), 0Ch (BREAK) or 1Ch (Pico reset); an unknown operation as a
+; timeout.
+;------------------------------------------------------------------------------
+MV_BASE         EQU 0              ; the frame, at IX: BASE
+MV_LIM          EQU 1              ;   pages on the board (2)
+MV_OK           EQU 3              ;   1: the board answered A5h, 5Ah
+MV_ADDR         EQU 4              ;   the operation's parameters: address
+MV_LEN          EQU 6              ;   length
+MV_PAGE         EQU 8              ;   page
+MV_OFF          EQU 10             ;   offset
+MV_PAGE2        EQU 12             ;   op 6's destination page
+MV_OFF2         EQU 14             ;   and offset
+MV_OP           EQU 16             ;   the operation
+MV_RES          EQU 17             ;   its reply
+MV_XOR          EQU 18             ;   ops 4 and 5: the XOR of the bytes so far
+MV_N            EQU 19             ;   this piece's length (2)
+MV_W1           EQU 21             ;   window 1: chunk, OWN, SUB, HSR as found (4)
+MV_W2           EQU 25             ;   window 2, op 6 (4)
+MV_FRAME        EQU 29
+
+MOVER:  push    ix
+        ld      a,i                ; P/V = IFF2: were interrupts on?
+        push    af
+        di
+        ld      hl,-MV_FRAME
+        add     hl,sp
+        ld      sp,hl
+        push    hl
+        pop     ix                 ; IX = the frame, at SP
+        call    MB_PROBE
+        jr      .op                ; the first operation follows 89h at once
+.next:  call    BIOS_WF_NPH        ; each later one after READY
+        jr      c,.fail            ; 02h timeout, 0Ch BREAK, 1Ch reset
+.op:    call    MV_RX
+        and     a
+        jr      z,.end
+        cp      7
+        jr      z,.info
+        jr      nc,.bad
+        ld      (ix+MV_OP),a
+        call    MV_PARAMS
+        call    MV_RUN             ; A = the reply
+.rep:   call    MV_TX
+        jr      .next
+.info:  call    MV_INFO
+        jr      .rep
+.end:   ld      b,0
+        jr      .out
+.bad:   ld      a,$02              ; an unknown operation: the stream is lost
+.fail:  cp      $02
+        jr      nz,.f2
+        ld      a,$09              ; a timeout is J, as in C_END2
+.f2:    ld      b,1
+.out:   ld      c,a
+        ld      hl,MV_FRAME
+        add     hl,sp
+        ld      sp,hl
+        pop     af
+        jp      po,.di             ; interrupts were off
+        ei
+.di:    pop     ix
+        ld      a,b
+        and     a
+        jp      z,C_END_TAIL       ; op 0: the answer follows
+        ld      a,c
+        and     a
+        scf
+        ret
+
+; MB_PROBE -- the frame's board fields: MV_OK = 1 if ID and IDCOMP read A5h and
+; 5Ah (a bus with no board floats: never that pair), BASE, and the page count.
+MB_PROBE:
+        ld      (ix+MV_OK),0
+        ld      a,MB_ID
+        call    MB_RD
+        cp      $A5
+        ret     nz
+        ld      a,MB_IDCOMP
+        call    MB_RD
+        cp      $5A
+        ret     nz
+        ld      a,MB_BASE
+        call    MB_RD
+        ld      (ix+MV_BASE),a
+        ld      a,MB_SIZE
+        call    MB_RD
+        ld      l,a
+        ld      h,0
+        add     hl,hl
+        add     hl,hl
+        add     hl,hl              ; 8 pages a bank
+        ld      (ix+MV_LIM),l
+        ld      (ix+MV_LIM+1),h
+        ld      (ix+MV_OK),1
+        ret
+
+; MB_RD -- A = board register A. MB_WR -- board register A := E.
+MB_RD:  out     (MB_SEL),a
+        in      a,(MB_DATA)
+        ret
+MB_WR:  out     (MB_SEL),a
+        ld      a,e
+        out     (MB_DATA),a
+        ret
+
+; MV_PARAMS -- operation A (1-6): its parameters into the frame. The frame's
+; fields are in wire order: 1-3 from MV_ADDR (8 bytes), 4-5 from MV_LEN (6),
+; 6 from MV_LEN (10).
+MV_PARAMS:
+        ld      e,MV_ADDR
+        ld      b,8
+        cp      4
+        jr      c,.rx
+        ld      e,MV_LEN
+        ld      b,6
+        cp      6
+        jr      c,.rx
+        ld      b,10
+.rx:    call    FRAME
+.b:     call    MV_RX
+        ld      (hl),a
+        inc     hl
+        djnz    .b
+        ret
+
+; FRAME -- HL = IX + E.
+FRAME:  push    ix
+        pop     hl
+        ld      d,0
+        add     hl,de
+        ret
+
+; MV_INFO -- op 7: found (1/0), BASE, SIZE, STATUS sent; A = VERSION, the
+; reply. Read fresh, so STATUS (the switch, the battery) is current.
+MV_INFO:
+        ld      a,(ix+MV_OK)
+        call    MV_TX
+        ld      a,MB_BASE
+        call    MB_RD
+        call    MV_TX
+        ld      a,MB_SIZE
+        call    MB_RD
+        call    MV_TX
+        ld      a,MB_STATUS
+        call    MB_RD
+        call    MV_TX
+        ld      a,MB_VERSION
+        jp      MB_RD
+
+; MV_RX / MV_TX -- a byte from / to the Pico, paced as CH_FETCH paces its
+; reads (the Pico feeds and drains 4-deep FIFOs). MV_TX keeps A.
+MV_RX:  call    MV_PACE
+        in      a,($0E)
+        ret
+MV_TX:  call    MV_PACE
+        out     ($0E),a
+        ret
+MV_PACE:
+        push    bc
+        ld      b,READ_DELAY+4
+.d:     djnz    .d
+        pop     bc
+        ret
+
+; MV_RUN -- operations 1-6, whose parameters are in the frame: A = the reply.
+MV_RUN: ld      (ix+MV_RES),1
+        ld      (ix+MV_XOR),0
+        ld      a,(ix+MV_OK)
+        and     a
+        ld      a,3                ; no board
+        jp      z,MV_REFUSE
+        ld      e,MV_PAGE
+        call    MV_RANGE
+        ld      a,4                ; out of range: nothing done
+        jp      c,MV_REFUSE
+        ld      a,(ix+MV_OP)
+        cp      6
+        jr      nz,.piece
+        ld      e,MV_PAGE2
+        call    MV_RANGE
+        ld      a,4
+        jp      c,MV_REFUSE
+.piece: ld      l,(ix+MV_LEN)      ; the next piece: as much as fits in
+        ld      h,(ix+MV_LEN+1)    ;   one 8K chunk on every side
+        ld      a,h
+        or      l
+        jp      z,.done
+        ld      e,(ix+MV_OFF)
+        ld      d,(ix+MV_OFF+1)
+        call    MV_ROOM
+        ld      a,(ix+MV_OP)
+        cp      4
+        jr      nc,.n2
+        ld      a,(ix+MV_ADDR+1)
+        and     $1F
+        ld      d,a
+        ld      e,(ix+MV_ADDR)
+        call    MV_ROOM
+.n2:    ld      a,(ix+MV_OP)
+        cp      6
+        jr      nz,.n3
+        ld      e,(ix+MV_OFF2)
+        ld      d,(ix+MV_OFF2+1)
+        call    MV_ROOM
+.n3:    ld      (ix+MV_N),l
+        ld      (ix+MV_N+1),h
+        ld      b,0                ; chunks the window must not be
+        ld      a,(ix+MV_OP)
+        cp      4
+        jr      nc,.w1
+        ld      a,(ix+MV_ADDR+1)
+        call    CHUNK_BIT
+        ld      b,a                ; not the 2068 memory's own
+.w1:    call    MV_WIN             ; A = the window; B += the stack's
+        push    bc
+        ld      e,MV_W1
+        call    FRAME
+        ex      de,hl
+        ld      l,(ix+MV_PAGE)
+        ld      h,(ix+MV_PAGE+1)
+        call    MV_MAP
+        ld      e,(ix+MV_OFF)
+        ld      d,(ix+MV_OFF+1)
+        add     hl,de              ; HL = page:offset, as the Z80 sees it
+        pop     bc
+        ld      a,(ix+MV_OP)
+        cp      6
+        jr      nz,.go
+        push    hl
+        ld      a,(ix+MV_W1)
+        call    CHUNK_MASK
+        or      b
+        ld      b,a                ; nor window 1
+        call    MV_WIN
+        ld      e,MV_W2
+        call    FRAME
+        ex      de,hl
+        ld      l,(ix+MV_PAGE2)
+        ld      h,(ix+MV_PAGE2+1)
+        call    MV_MAP
+        ld      e,(ix+MV_OFF2)
+        ld      d,(ix+MV_OFF2+1)
+        add     hl,de
+        ex      de,hl              ; DE = page2:offset2
+        pop     hl                 ; HL = page:offset
+.go:    ld      c,(ix+MV_N)
+        ld      b,(ix+MV_N+1)
+        call    MV_DO
+        ld      a,(ix+MV_OP)
+        cp      6
+        jr      nz,.u1
+        ld      e,MV_W2
+        call    FRAME
+        call    MV_UNMAP
+.u1:    ld      e,MV_W1
+        call    FRAME
+        call    MV_UNMAP
+        ld      c,(ix+MV_N)        ; on by the piece's length
+        ld      b,(ix+MV_N+1)
+        ld      l,(ix+MV_LEN)
+        ld      h,(ix+MV_LEN+1)
+        and     a
+        sbc     hl,bc
+        ld      (ix+MV_LEN),l
+        ld      (ix+MV_LEN+1),h
+        ld      l,(ix+MV_ADDR)
+        ld      h,(ix+MV_ADDR+1)
+        add     hl,bc
+        ld      (ix+MV_ADDR),l
+        ld      (ix+MV_ADDR+1),h
+        ld      e,MV_PAGE
+        call    MV_ADV
+        ld      a,(ix+MV_OP)
+        cp      6
+        jp      nz,.piece
+        ld      e,MV_PAGE2
+        call    MV_ADV
+        jp      .piece
+.done:  ld      a,(ix+MV_OP)
+        cp      4
+        jr      z,.sx
+        cp      5
+        jr      nz,.res
+        call    MV_RX              ; op 5: the Pico's XOR of what it sent
+        cp      (ix+MV_XOR)
+        jr      z,.res
+        ld      (ix+MV_RES),5
+        jr      .res
+.sx:    ld      a,(ix+MV_XOR)      ; op 4: the XOR of what was sent
+        call    MV_TX
+.res:   ld      a,(ix+MV_RES)
+        ret
+
+; MV_REFUSE -- reply A, nothing done. Ops 4 and 5 still pass their bytes, so
+; the stream stays in step: op 4 sends len zeros and their XOR (0), op 5 reads
+; and drops len bytes and the XOR.
+MV_REFUSE:
+        ld      (ix+MV_RES),a
+        ld      a,(ix+MV_OP)
+        sub     4
+        cp      2
+        jr      nc,.r              ; not 4 or 5
+        ld      e,a                ; 0: op 4, 1: op 5
+        ld      c,(ix+MV_LEN)
+        ld      b,(ix+MV_LEN+1)
+        inc     bc                 ; the bytes and the XOR (0 here: 65536)
+.l:     ld      a,e
+        and     a
+        jr      nz,.in
+        call    MV_TX              ; op 4: a zero
+        jr      .n
+.in:    call    MV_RX              ; op 5: dropped
+.n:     dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.l
+.r:     ld      a,(ix+MV_RES)
+        ret
+
+; MV_DO -- one piece: BC (1-2000h) bytes; HL = page:offset in its window;
+; DE = page2:offset2 (op 6).
+MV_DO:  ld      a,(ix+MV_OP)
+        cp      6
+        jr      z,.ldir            ; page to page
+        cp      4
+        jr      nc,.port
+        ld      e,(ix+MV_ADDR)
+        ld      d,(ix+MV_ADDR+1)   ; DE = the 2068 memory
+        cp      2
+        jr      z,.ldir            ; op 2: the board -> 2068 memory
+        ex      de,hl
+        jr      c,.ldir            ; op 1: 2068 memory -> the board
+.cmp:   ld      a,(de)             ; op 3: compare
+        cp      (hl)
+        jr      z,.same
+        ld      (ix+MV_RES),2
+.same:  inc     hl
+        inc     de
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.cmp
+        ret
+.ldir:  ldir
+        ret
+.port:  jr      nz,.in             ; (still CP 4) op 5
+.out:   ld      a,(hl)             ; op 4: to the Pico
+        call    MV_TX
+        xor     (ix+MV_XOR)
+        ld      (ix+MV_XOR),a
+        inc     hl
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.out
+        ret
+.in:    call    MV_RX              ; op 5: from the Pico
+        ld      (hl),a
+        xor     (ix+MV_XOR)
+        ld      (ix+MV_XOR),a
+        inc     hl
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.in
+        ret
+
+; MV_ROOM -- HL = the smaller of HL and 2000h - DE (DE an offset in a chunk).
+MV_ROOM:
+        push    hl
+        ld      hl,$2000
+        and     a
+        sbc     hl,de
+        ex      de,hl              ; DE = the room left
+        pop     hl
+        push    hl
+        and     a
+        sbc     hl,de
+        pop     hl
+        ret     c
+        ex      de,hl
+        ret
+
+; MV_RANGE -- E = the frame offset of a page, its offset after it: carry if
+; the offset is 2000h or more, or the transfer (MV_LEN bytes) would run past
+; the board's last page.
+MV_RANGE:
+        call    FRAME
+        ld      c,(hl)
+        inc     hl
+        ld      b,(hl)             ; BC = the page
+        inc     hl
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)             ; DE = the offset
+        ld      a,d
+        cp      $20
+        ccf
+        ret     c
+        ld      a,b
+        cp      2
+        ccf
+        ret     c                  ; 512 pages at most: no overflow below
+        ld      l,(ix+MV_LEN)
+        ld      h,(ix+MV_LEN+1)
+        ld      a,h
+        or      l
+        ret     z                  ; nothing to move (NC)
+        dec     hl
+        add     hl,de              ; the last byte's offset: 17 bits
+        ld      a,h
+        rla
+        rla
+        rla
+        rla
+        and     $0F                ; its pages past this one: bits 16-13
+        add     a,c
+        ld      c,a
+        jr      nc,.p
+        inc     b
+.p:     ld      l,(ix+MV_LIM)      ; BC = the last page
+        ld      h,(ix+MV_LIM+1)
+        scf
+        sbc     hl,bc              ; carry if the last page >= the page count
+        ret
+
+; MV_ADV -- E = the frame offset of a page, its offset after it: on by the
+; piece (BC bytes). A piece never runs past its page, so the offset reaches
+; 2000h at most, and then it is the next page's 0.
+MV_ADV: call    FRAME              ; HL -> the page
+        push    hl
+        inc     hl
+        inc     hl
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)             ; DE = the offset; HL -> its high byte
+        ex      de,hl
+        add     hl,bc
+        ex      de,hl              ; DE = offset + piece
+        ld      a,d
+        cp      $20
+        jr      c,.st
+        ld      de,0
+        ex      (sp),hl            ; HL -> the page
+        inc     (hl)
+        jr      nz,.nc
+        inc     hl
+        inc     (hl)
+        dec     hl
+.nc:    ex      (sp),hl
+.st:    ld      (hl),d
+        dec     hl
+        ld      (hl),e
+        pop     hl
+        ret
+
+; MV_WIN -- B = chunks not to use (bit n = chunk n), to which this adds the
+; stack's: the chunks of SP-32 and SP+48, which take in the calls below SP and
+; the frame and return addresses above it (80 bytes: two chunks at most).
+; A = the window, the first of chunks 4-7 left.
+MV_WIN: ld      hl,-32
+        add     hl,sp
+        ld      a,h
+        call    CHUNK_BIT
+        or      b
+        ld      b,a
+        ld      hl,48
+        add     hl,sp
+        ld      a,h
+        call    CHUNK_BIT
+        or      b
+        ld      b,a
+        ld      c,4
+        rra
+        rra
+        rra
+        rra                        ; chunk 4's bit to bit 0
+.t:     rra
+        jr      nc,.ok
+        inc     c
+        jr      .t                 ; at most three of the four are taken
+.ok:    ld      a,c
+        ret
+
+; CHUNK_BIT -- A = an address's high byte: A = its chunk's bit.
+; CHUNK_MASK -- A = a chunk, 0-7: A = its bit. BC kept.
+CHUNK_BIT:
+        rlca
+        rlca
+        rlca
+        and     7
+CHUNK_MASK:
+        push    bc
+        ld      b,a
+        ld      a,1
+        inc     b
+.s:     dec     b
+        jr      z,.e
+        add     a,a
+        jr      .s
+.e:     pop     bc
+        ret
+
+; MV_MAP -- map page HL into chunk A, saving that chunk's OWN, SUB and HSR at
+; (DE), after the chunk number. HL = the window's address.
+MV_MAP: ld      c,a
+        ld      (de),a
+        inc     de
+        call    MB_RD              ; OWNw as it was
+        ld      (de),a
+        inc     de
+        ld      a,c
+        add     a,MB_SUB
+        call    MB_RD              ; SUBw
+        ld      (de),a
+        inc     de
+        in      a,(HSR)
+        ld      (de),a             ; the HSR
+        ld      a,l
+        and     7
+        ld      b,a                ; B = the page's 8K in its bank
+        srl     h
+        rr      l
+        srl     h
+        rr      l
+        srl     h
+        rr      l                  ; L = the page / 8
+        ld      a,(ix+MV_BASE)
+        add     a,l
+        ld      e,a                ; E = its bank
+        ld      a,c
+        call    MB_WR              ; OWNw = the bank (SUBw = w) ...
+        ld      a,c
+        add     a,MB_SUB
+        ld      e,b
+        call    MB_WR              ; ... SUBw = its 8K
+        ld      a,c
+        call    CHUNK_MASK
+        ld      b,a
+        in      a,(HSR)
+        or      b
+        out     (HSR),a            ; then the HSR bit: the RAM under it keeps its bytes
+        ld      a,c
+        rrca
+        rrca
+        rrca
+        ld      h,a
+        ld      l,0                ; HL = w * 2000h
+        ret
+
+; MV_UNMAP -- put back the chunk saved at (HL) by MV_MAP. An owner of 0 goes
+; back after the HSR, any other before it.
+MV_UNMAP:
+        ld      c,(hl)             ; the window
+        inc     hl
+        ld      e,(hl)             ; its owner
+        inc     hl
+        ld      b,(hl)             ; its SUB
+        inc     hl
+        ld      a,e
+        and     a
+        jr      nz,.own
+        ld      a,(hl)
+        out     (HSR),a
+.own:   ld      a,c
+        call    MB_WR              ; OWNw (SUBw = w)
+        ld      a,c
+        add     a,MB_SUB
+        ld      e,b
+        call    MB_WR              ; SUBw
+        ld      a,(hl)
+        out     (HSR),a
+        ret
+
+    ENDIF   ; MEGABANK
+
 
 FDD_END:
         SAVEBIN "fddcmd.bin", FDD_BASE, FDD_END-FDD_BASE

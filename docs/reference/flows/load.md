@@ -121,6 +121,16 @@ afterwards unchanged; a different session means the arm is stale and the
 mount is served ([../firmware/tspico_io.md](../firmware/tspico_io.md#load_servepre-mq-tsp),
 [../firmware/tspico-disk.md](../firmware/tspico-disk.md#native_openpre-cmd)).
 
+### `LOAD "r:name"` (the Megabank test ROM only)
+
+F_HOOK sends `tpi:ropen name` (PMR1 = 1 LOAD, 2 VERIFY, 3 MERGE) and sets
+TPMODE bit 5. Each block then skips this whole flow: `R_LD` (EXROM 00FCh)
+sends `tpi:rblk` with the destination and length, and the firmware copies
+the block from the Megabank RAM disk into memory with function 89h, the
+mover, and answers with a status; a VERIFY compares instead (R if it
+differs). Bit 5 is cleared after the data block
+([PROTOCOL.md §6.3](../../PROTOCOL.md), [../rom/exrom-fdd.md](../rom/exrom-fdd.md#r_sa-39f5h-r_ld-3a06h)).
+
 ### `tpi:tape`
 
 TPMODE bit 1 clear: step 1 goes to the stock tape loader. Nothing reaches

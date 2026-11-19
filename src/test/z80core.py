@@ -1,7 +1,8 @@
 """A small Z80 interpreter for host tests -- CPython, no dependencies.
 
 Not cycle-exact and not a full emulator: it decodes the unprefixed opcodes,
-the ED group and the CB rotates/shifts/bit operations (no IX/IY), keeps the
+the ED group, the CB rotates/shifts/bit operations and the DD/FD (IX/IY)
+forms of them (not the undocumented DD CB register copies), keeps the
 flags the code under test branches on (S, Z, H, P/V, N, C), and counts
 T-states per instruction closely enough to check delay loops. Memory and
 I/O are callbacks, so a test can model banking, flash chips and the Pico.
@@ -38,6 +39,8 @@ class Z80:
         self.sp = 0xFFFF
         self.pc = 0
         self.iff = False
+        self.ix = self.iy = 0xFFFF
+        self._addr = None                           # (IX+d) of the instruction running
         self.t = 0
         self.halted = False
         self.fetch_hook = None
@@ -71,13 +74,13 @@ class Z80:
     def get_r(self, i):
         if i == 6:
             self.t += 3
-            return self.read(self.hl())
+            return self.read(self.hl() if self._addr is None else self._addr)
         return getattr(self, R8[i])
 
     def set_r(self, i, v):
         if i == 6:
             self.t += 3
-            self.write(self.hl(), v & 0xFF)
+            self.write(self.hl() if self._addr is None else self._addr, v & 0xFF)
         else:
             setattr(self, R8[i], v & 0xFF)
 
@@ -176,15 +179,42 @@ class Z80:
             self.fetch_hook(self.pc)
         op = self.fetch()
         self.t += 4
+        if op in (0xDD, 0xFD):
+            return self._index("ix" if op == 0xDD else "iy")
+        return self._exec(op)
+
+    def _index(self, which):
+        """A DD/FD instruction: (HL) is (IX+d), else HL is IX (H, L its halves)."""
+        op = self.fetch()
+        self.t += 4
+        ix = getattr(self, which)
+        if op in (0xDD, 0xFD, 0xED, 0xEB, 0xD9):
+            raise NotImplementedError("%s %02X at %04X" % (which, op, (self.pc - 2) & 0xFFFF))
+        x, y, z = op >> 6, (op >> 3) & 7, op & 7
+        if op == 0xCB or (x == 1 and (y == 6 or z == 6)) or (x == 2 and z == 6) \
+                or (x == 0 and z in (4, 5, 6) and y == 6):
+            d = self.rel()                          # d comes before LD (IX+d),n's n
+            self._addr = (ix + d) & 0xFFFF
+            self.t += 8
+            try:
+                return self._cb(self.fetch(), True) if op == 0xCB else self._exec(op)
+            finally:
+                self._addr = None
+        h, l = self.h, self.l
+        self.h, self.l = ix >> 8, ix & 0xFF
+        try:
+            return self._exec(op)
+        finally:
+            setattr(self, which, self.h << 8 | self.l)
+            self.h, self.l = h, l
+
+    def _exec(self, op):
         x, y, z = op >> 6, (op >> 3) & 7, op & 7
         p, q = y >> 1, y & 1
-
         if op == 0xCB:
             return self._cb()
         if op == 0xED:
             return self._ed()
-        if op in (0xDD, 0xFD):
-            raise NotImplementedError("IX/IY at %04X" % ((self.pc - 1) & 0xFFFF))
 
         if x == 1:
             if op == 0x76:
@@ -386,10 +416,13 @@ class Z80:
         self.pc = y * 8
         self.t += 7
 
-    def _cb(self):
-        op = self.fetch()
+    def _cb(self, op=None, mem=False):
+        if op is None:
+            op = self.fetch()
         self.t += 4
         x, y, z = op >> 6, (op >> 3) & 7, op & 7
+        if mem:
+            z = 6                                   # DD CB d op: always (IX+d)
         v = self.get_r(z)
         if x == 1:                                  # BIT
             r = v & (1 << y)
@@ -461,7 +494,12 @@ class Z80:
                 self.a = 0
                 self.alu(2, v)
                 return
-            if op in (0x47, 0x4F, 0x57, 0x5F, 0x46, 0x56, 0x5E, 0x45, 0x4D):
+            if op == 0x57:                          # LD A,I: I is 0; P/V = IFF2
+                self.a = 0
+                self.f = (self.f & 1) | 0x40 | (0x04 if self.iff else 0)
+                self.t += 1
+                return
+            if op in (0x47, 0x4F, 0x5F, 0x46, 0x56, 0x5E, 0x45, 0x4D):
                 return                              # LD I,A / IM / RETN: not modelled
         if op in (0xB0, 0xB8):                      # LDIR / LDDR
             d = 1 if op == 0xB0 else -1

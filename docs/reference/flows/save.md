@@ -101,6 +101,15 @@ step 16 the file is `path` itself, written with a +3DOS header and only the
 data ([../firmware/native.md](../firmware/native.md)); the listing is
 refreshed and the mount left alone ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#native_openpre-cmd)).
 
+### `SAVE "r:name"` (the Megabank test ROM only)
+
+F_HOOK sends `tpi:ropen name` (PMR1 = 0) and sets TPMODE bit 5; the stock
+SAVE runs, but each block goes to `R_SA` (EXROM 0068h): one `tpi:rblk` with
+the source and length, PMR2 = the flag, and the firmware copies the bytes
+onto the Megabank RAM disk with function 89h, the mover. There is no
+pre-load, mid-phase status or session; bit 5 is cleared after the data
+block ([PROTOCOL.md §6.3](../../PROTOCOL.md), [../rom/exrom-fdd.md](../rom/exrom-fdd.md#r_sa-39f5h-r_ld-3a06h)).
+
 ### `tpi:tape`
 
 TPMODE bit 1 clear: step 1 goes to the stock SA-BYTES; the cassette port
