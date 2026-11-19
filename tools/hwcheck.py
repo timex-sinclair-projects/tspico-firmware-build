@@ -58,6 +58,8 @@ PS = [sys.executable, os.path.join(HERE, "pico-serial.py")]
 HWTEST = os.path.join(ROOT, "SD card", "TAP", "test", "hwtest.tap")
 MBMEM = os.path.join(HERE, "megabank", "mbmem.tap")
 MBDISK = os.path.join(ROOT, "SD card", "TAP", "test", "mbdisk.tap")
+MBCHAN = os.path.join(ROOT, "SD card", "TAP", "test", "mbchan.tap")
+MBCHPG = os.path.join(ROOT, "SD card", "TAP", "test", "mbchpg.tap")
 WORK = tempfile.mkdtemp(prefix="hwcheck.")
 
 RESULTS = []                                                    # (name, ok, detail)
@@ -547,22 +549,204 @@ def megabank():
         result("power cut during a SAVE", None, "skipped")
 
 
+# mbchan.bas: test -> (name, expected report, expected value or None)
+MB_CHAN_EXPECT = {
+    1: ('FORMAT "r:"', 0, None),
+    2: ('FORMAT "r:" again', 0, None),
+    3: ('OPEN #4,"r:t","w", PRINT # with TAB, CLOSE #', 0, None),
+    4: ('INPUT # reads both lines back', 0, 3),
+    5: ('INPUT # past the end: 8 End of file', 8, None),
+    6: ('mode a appends ("more" at byte 20)', 0, 109),
+    7: ('a record file (8): TAB 3, TAB 1', 0, None),
+    8: ('INPUT # TAB 3 gives record 3; TAB 0 the count (3)', 0, 3),
+    9: ('a record that overflows: Q', 26, None),
+    10: ('TAB 0 then data: Q', 26, None),
+    11: ('INPUT # on a w stream: Q', 26, None),
+    12: ('binary keeps CHR$ 16 (INKEY$ #)', 0, 16),
+    13: ('text drops CHR$ 16 and its parameter', 0, 65),
+    14: ('OPEN #6,"r:": TAB 0 gives 5 names', 0, 5),
+    15: ('OPEN #6,"r:b*": the pattern gives bin', 0, 1),
+    16: ('ERASE of a file open on #4: F', 15, None),
+    17: ('20000 bytes to r:g, which must move to grow', 0, None),
+    18: ('LOAD "r:g" CODE: the bytes are right', 0, 7),
+    19: ('r:after, the file it moved past, intact', 0, 1),
+    20: ('a board page in chunk 4 survives 3000 characters', 0, 0),
+    21: ('a board page in chunk 5 survives 3000 characters', 0, 0),
+    22: ('a board page in chunk 6 survives 3000 characters', 0, 0),
+    23: ('a board page in chunk 7 survives 3000 characters', 0, 0),
+    24: ('32 errors in a row in the channel, then it still reads', 0, 132),
+    25: ('f: and r: together, closed 4 5 6', 0, 7),
+    26: ('f: and r: together, closed 4 6 5', 0, 7),
+    27: ('f: and r: together, closed 5 4 6', 0, 7),
+    28: ('f: and r: together, closed 5 6 4', 0, 7),
+    29: ('f: and r: together, closed 6 4 5', 0, 7),
+    30: ('f: and r: together, closed 6 5 4', 0, 7),
+    31: ('LLIST into OPEN #3,"r:list"; CLOSE #3 gives P back', 0, 16),
+    32: ('the listing is in r:list', 0, 49),
+    33: ('2000 characters through PRINT # (frames)', 0, None),
+    34: ('the same loop without PRINT # (frames)', 0, None),
+}
+
+
+def mb_spans(lines):
+    """{name: microseconds from its stream's tpi:rchopen to the next
+    tpi:rchclose}, from the telemetry's PROCESS_CMD lines, for mbchan's
+    timing streams r:speed and r:speed2 (their names are in the hex payload
+    after the mode: "w speed" is 77 20 73 70 65 65 64)."""
+    spans, cur = {}, None
+    for l in lines:
+        m = re.search(r"\[TLM (\d+) ", l)          # pico-serial watch puts the time first
+        if not m or "PROCESS_CMD enter" not in l:
+            continue
+        low = l.lower()
+        if "tpi:rchopen" in low:
+            cur = None
+            if "7720737065656432" in low:
+                cur = ("speed2", int(m.group(1)))
+            elif "77207370656564" in low:
+                cur = ("speed", int(m.group(1)))
+        elif "tpi:rchclose" in low and cur:
+            spans[cur[0]] = (int(m.group(1)) - cur[1]) % (1 << 30)   # ticks_us wraps at 2**30
+            cur = None
+    return spans
+
+
+def mb_channels():
+    """The r: channel tests (the Megabank spec, Testing, "Channels (phase
+    9)"): mbchan.bas for steps 1, 3, 4, 7 and 8, mbchpg.bas (which mbchan
+    loads) for step 2, then the hands-on 5 and 6."""
+    say("The Megabank's r: channels. They need ROM 2.5 with phase 9 and the\n"
+        "  phase 9 firmware. They FORMAT the RAM disk.")
+    if not ask("Go on?"):
+        result("r: channel tests", None, "skipped")
+        return
+    src = os.path.join(ROOT, "basic", "SD", "TAP", "test", "mbchan.bas")
+    if not os.path.exists(MBCHAN) or os.path.getmtime(MBCHAN) < os.path.getmtime(src):
+        print("  Building the BASIC programs (tools/build-basic.sh)...")
+        subprocess.run([os.path.join(HERE, "build-basic.sh")], capture_output=True, check=True)
+    stop_firmware()
+    out = repl("import json\nc = json.load(open('/config.ini'))\nprint('TEL', c.get('TELEMETRY'))\n")
+    if "TEL True" not in out:
+        repl("import json\nc = json.load(open('/config.ini'))\nc['TELEMETRY'] = True\n"
+             "with open('/config.ini', 'w') as f:\n json.dump(c, f)\n")
+        print("  Turned telemetry on in config.ini (the cost is timed from it).")
+    repl("""import os
+for f in ('mbchres.tap', 'mbchpres.tap', 'mbchf.txt'):
+ try:
+  os.remove('/sd/TAP/' + f)
+ except OSError:
+  pass
+ try:
+  os.remove('/sd/' + f)
+ except OSError:
+  pass
+""", sd=True)
+    for local, remote in ((MBCHAN, "/TAP/mbchan.tap"), (MBCHPG, "/TAP/mbchpg.tap")):
+        out = ps("put", "--sd", local, remote)
+        if "bytes" not in out or "MISMATCH" in out:
+            sys.exit("Couldn't copy %s to the card:\n%s" % (local, out))
+    start_firmware()
+    time.sleep(4)
+
+    say('On the 2068, type:\n\n      LOAD "tpi:mbchan.tap"\n      LOAD ""\n\n'
+        "  Press Y when it asks, and a key when each of its two SAVEs asks\n"
+        "  (it loads mbchpg in between). It ends with MBCHAN DONE.")
+    tr = Trace()
+    line = tr.wait_for(r"write done: .*mbchpres\.tap", 1200)
+    trace = list(tr.lines)
+    tr.stop()
+    if not line:
+        result("mbchan and mbchpg ran to the end", False, "no mbchpres.tap within 20 minutes")
+    else:
+        time.sleep(2)
+        result("mbchan: no firmware errors in the telemetry",
+               not [l for l in trace if "Traceback" in l or "ERROR" in l])
+        data, pg = mb_fetch("mbchres"), mb_fetch("mbchpres")
+        if data is None or pg is None:
+            result("read mbchres.tap and mbchpres.tap", False, "couldn't fetch or read them")
+        else:
+            data += pg
+            recs = {data[i]: (data[i + 1], data[i + 2] + 256 * data[i + 3]) for i in range(0, len(data) - 3, 4)}
+            for t, (name, rep, val) in sorted(MB_CHAN_EXPECT.items()):
+                if t not in recs:
+                    result("%2d %s" % (t, name), False, "not recorded")
+                    continue
+                got_rep, got_val = recs[t]
+                bad = []
+                if got_rep != rep:
+                    bad.append("report %s, expected %s" % (REPORTS[got_rep] if got_rep < 28 else got_rep,
+                                                           REPORTS[rep]))
+                if val is not None and got_val != val:
+                    bad.append("read %d, expected %d" % (got_val, val))
+                result("%2d %s" % (t, name), not bad, "; ".join(bad) or ("%d" % got_val if val is None else ""))
+            span = mb_spans(trace)
+            if "speed" in span and "speed2" in span:
+                us = (span["speed"] - span["speed2"]) / 2000
+                result("the cost of a character through PRINT # (step 8)", None,
+                       "%.0f us (2000 characters in %.2f s, the loop alone %.2f s)"
+                       % (us, span["speed"] / 1e6, span["speed2"] / 1e6))
+            else:
+                result("the cost of a character through PRINT # (step 8)", None,
+                       "not timed: no rchopen/rchclose for r:speed in the telemetry")
+
+    say('NEW with a stream open (step 5). On the 2068, type:\n\n'
+        '      OPEN #4,"r:nw","w": PRINT #4;"kept": PRINT #4;"lost";\n'
+        '      NEW\n      CAT "r:"\n\n'
+        "  nw should be 5 bytes (\"kept\" and its CR). Then:  ERASE \"r:nw\"  should give 0 OK.")
+    pause("When you've done that,")
+    result("NEW with a stream open: the file kept to its last CR, ERASE works", ask("Was nw 5 bytes, and did ERASE work?"))
+    say('A reset with a stream open. On the 2068:\n\n'
+        '      OPEN #4,"r:rs","w": PRINT #4;"kept"\n\n'
+        '  then press the reset button, and:  CAT "r:"  (rs: 5 bytes), then  ERASE "r:rs"')
+    pause("When you've done that,")
+    result("reset with a stream open: kept to the CR, ERASE works", ask("Was rs 5 bytes, and did ERASE work?"))
+    say('Power-off with a stream open. On the 2068:\n\n'
+        '      OPEN #4,"r:po","w": PRINT #4;"kept"\n\n'
+        '  then switch the 2068 off and on, and:  CAT "r:"  (po: 5 bytes), then  ERASE "r:po"')
+    if ask("Do it now?"):
+        pause("When you've done that,")
+        result("power-off with a stream open: kept to the CR, ERASE works", ask("Was po 5 bytes, and did ERASE work?"))
+    else:
+        result("power-off with a stream open", None, "skipped")
+    say('The write-protect switch mid-stream (step 6). On the 2068:\n\n'
+        '      OPEN #4,"r:wp","w": PRINT #4;"one"\n\n'
+        '  Turn the switch ON, then:  PRINT #4;"two"\n'
+        '  It should stop with J Invalid I/O device. Turn the switch OFF, then\n'
+        '  CLOSE #4  and  CAT "r:".')
+    pause("When you've done that,")
+    result("write-protect mid-stream: J at the write-back", ask("Did PRINT #4 give J?"))
+    result("then CLOSE #4 with the switch off works", ask("Did CLOSE #4 give 0 OK?"))
+    n = input("  What length did CAT show for wp? ").strip()
+    result("wp's length after the switch (4: the bytes the board dropped aren't counted)", None, n + " bytes")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--auto-only", action="store_true", help="just the tests the 2068 runs by itself")
     g.add_argument("--manual-only", action="store_true", help="just the tests that need hands")
     g.add_argument("--megabank-only", action="store_true", help="just the TS-2068 Megabank's tests")
+    g.add_argument("--megabank-channels", action="store_true",
+                   help="just the Megabank's r: channel tests (phase 9)")
     ap.add_argument("--megabank", action="store_true", help="the TS-2068 Megabank's tests as well")
+    ap.add_argument("--port", help="the TS-Pico's serial device (default: pico-serial.py's first usbmodem; "
+                    "give it when the Megabank's controller is plugged in too)")
     a = ap.parse_args()
+    if a.port:
+        PS[2:2] = ["--port", a.port]
     print("Telemetry is saved to %s" % TRACE_LOG)
-    board, prn_before = setup()
-    if not a.manual_only and not a.megabank_only:
-        automatic(board, prn_before)
-    if not a.auto_only and not a.megabank_only:
-        manual(board)
-    if a.megabank or a.megabank_only:
-        megabank()
+    if a.megabank_channels:
+        board = "v3"
+        mb_channels()
+    else:
+        board, prn_before = setup()
+        if not a.manual_only and not a.megabank_only:
+            automatic(board, prn_before)
+        if not a.auto_only and not a.megabank_only:
+            manual(board)
+        if a.megabank or a.megabank_only:
+            megabank()
+            mb_channels()
     passed = sum(1 for r in RESULTS if r[1] is True)
     failed = [r for r in RESULTS if r[1] is False]
     say("Summary: %d passed, %d failed, %d for information (%s)." % (
