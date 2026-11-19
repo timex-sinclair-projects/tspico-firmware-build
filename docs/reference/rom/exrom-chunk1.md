@@ -404,6 +404,11 @@ goes to LOWER_LOOP, function 86h on the lower screen
 handler's tail, 2219h–221Eh (`PUSH AF / CALL BEEPER / POP AF / RET`), is
 still there and unreferenced.
 
+In the Megabank test ROM (`--megabank`, 2.5) 2213h is `JP FN_EXT` instead
+(`C3 61 3A`, then three unreachable `00`s), and `FN_EXT` in the module does
+2.4's test and adds function 89h, the mover
+([exrom-fdd.md](exrom-fdd.md#fn_ext-3a61h)).
+
 ## The landing pad at 2000h
 
 ### `ENTRY_TABLE` (2000h)

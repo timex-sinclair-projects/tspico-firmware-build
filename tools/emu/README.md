@@ -89,6 +89,7 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 - **Files:** the firmware's output goes to `/tmp/pico_host.out` (telemetry on), and its card
   to `/tmp/tspico-root/sd`.
 - **Options:** `TSPICO_HOST=dist/pico_host` runs the standalone build instead of the script.
+  `TSPICO_ROM=path` runs another 32K ROM image instead of `src/rom/TSPICO-24.ROM`.
   `TSPICO_TRACE=1` prints every frame (status reads only when they change).
 - **Making TAPs:** `S.basic_tap(name, lines)` builds a TAP holding a BASIC program.
 
@@ -100,6 +101,8 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 | `session.py` | Starts the host, then ZEsarUX, and drives ZRCP. |
 | `smoke.py` | The end-to-end check. |
 | `fuse_smoke.py` | The same idea in Fuse (below). |
+| `megabank_host.py` | `pico_host.py` plus a stand-in RAM disk for the Megabank test ROM: `tpi:ropen`, `tpi:rblk` (it answers with function 89h, the mover) and `tpi:mbtest` (mover ops 4–7 and its range and XOR refusals), added to `EXT_SA_FUNCT`. Logs to `$MEGABANK_HOST_LOG`. |
+| `megabank_smoke.py` | The Megabank test ROM end to end, in a ZEsarUX with the Megabank model (`MEGABANK=1`; the fork's `tspico-device` branch): the boot reset, `tpi:mbtest`, SAVE/LOAD/VERIFY `"r:…"` with a program page mapped in the window chunk, the F and R reports, and an ordinary SAVE after. `ZESARUX=… python3 tools/emu/megabank_smoke.py`. ZEsarUX's model ignores the HSR; `src/test/rom_megabank_hosttest.py` checks that rule. |
 | `build_standalone.sh` | The standalone `pico_host` (PyInstaller). |
 | `manual_screens.py` | The user manual's 2068 screen pictures, captured. `--v3` makes `info-v3.png`, the v3 manual's `tpi:info`, with `TSPICO_BOARD_LABEL=V3`: `pico_host.py` still runs the v2 firmware and only the Board line changes. |
 

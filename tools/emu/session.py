@@ -18,6 +18,7 @@ tokenised (the 2068's keyword entry is too fiddly to type over ZRCP).
 """
 
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -27,7 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 EMU = os.environ.get("ZESARUX", os.path.expanduser(
     "~/Documents/github/zesarux-tspico-lab/work/zesarux-tspico"))
-ROM = os.path.join(REPO, "src", "rom", "TSPICO-24.ROM")
+ROM = os.environ.get("TSPICO_ROM", os.path.join(REPO, "src", "rom", "TSPICO-24.ROM"))
 SOCK = os.environ.get("TSPICO_BRIDGE_SOCK", "/tmp/tspico_bridge.sock")
 
 # BASIC tokens
@@ -62,6 +63,9 @@ class Session:
         subprocess.run(["pkill", "-f", os.path.basename(EMU)], stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-f", "tools/emu/pico_host.py"], stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-f", "dist/pico_host"], stderr=subprocess.DEVNULL)
+        if os.environ.get("TSPICO_HOST"):               # a wrapper such as megabank_host.py
+            subprocess.run(["pkill", "-f", os.path.basename(os.environ["TSPICO_HOST"])],
+                           stderr=subprocess.DEVNULL)
         time.sleep(0.5)
         if fresh and os.path.isdir(root):
             import shutil
@@ -165,7 +169,7 @@ class Session:
             if until is not None:
                 if until in t:
                     return t
-            elif self.peek(ERR_NR, 1)[0] != 0xFF or ", 0:1" in t:
+            elif self.peek(ERR_NR, 1)[0] != 0xFF or re.search(r"\b0 OK, \d+:\d+", t):
                 return t
         return self.text()
 

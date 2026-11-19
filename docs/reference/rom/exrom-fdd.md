@@ -1,7 +1,7 @@
 # EXROM 3000h: the disk module
 
 Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
-1858 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
+2724 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
 at EXROM 3000h–3997h and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
 `src/rom/TSPICO-24.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
@@ -42,28 +42,29 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 43–161 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 168–189 | 3000h–3020h | the vector table |
-| 191–202 | 3021h | `TAPE_MODE` |
-| 217–240 | 3029h | `G_BEEP` |
-| 242–300 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 302–322 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 324–421 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
-| 423–497 | | the parsing helpers |
-| 499–598 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 600–836 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 838–858 | | `LOWER_LOOP` (function 88h) |
-| 860–1406 | | the channel driver |
-| 1408–1426 | | `HEXDIG`, `STRLEN` |
-| 1428–1440 | to 3769h | the command strings, `MODE_R` |
-| 1442–1455 | 376Ah–3770h | `PRELOAD` |
-| 1457–1459 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
-| 1461–1510 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1512–1719 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1721–1786 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
-| 1788–1793 | 3929h–3931h | `IN_DROP` (#404) |
-| 1795–1855 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1857–1858 | 3998h | `FDD_END` |
+| 43–165 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 172–193 | 3000h–3020h | the vector table |
+| 195–206 | 3021h | `TAPE_MODE` |
+| 221–244 | 3029h | `G_BEEP` |
+| 246–304 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 306–326 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 328–425 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
+| 427–501 | | the parsing helpers |
+| 503–602 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 604–854 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 856–876 | | `LOWER_LOOP` (function 88h) |
+| 878–1424 | | the channel driver |
+| 1426–1444 | | `HEXDIG`, `STRLEN` |
+| 1446–1458 | to 3769h | the command strings, `MODE_R` |
+| 1460–1473 | 376Ah–3770h | `PRELOAD` |
+| 1475–1477 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
+| 1479–1528 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1530–1737 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1739–1804 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
+| 1806–1811 | 3929h–3931h | `IN_DROP` (#404) |
+| 1813–1873 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
+| 1875–2721 | 3998h–3E09h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …) |
+| 2723–2724 | 3998h (3E0Ah) | `FDD_END` |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -1096,7 +1097,7 @@ statement and returns, and at run time **`tpi:list x`** goes to the Pico
 Why not scan the expression and look at its type: a scan in syntax mode
 done at run time inserts a second hidden number after each number in the
 line (the line has them already), and a scan in run mode evaluates the
-expression a second time (the comment at 1568–1572). So the test is lexical, and `LIST (a$)` counts as a number:
+expression a second time (the comment at 1586–1590). So the test is lexical, and `LIST (a$)` counts as a number:
 HOME's LIST then says Report C at the syntax pass.
 
 ### `FDD_RESTORE` (3819h)
@@ -1264,6 +1265,228 @@ before LIST and RESTORE joined; 38ECh before the speech channel; 391Bh
 before the command channel; 3931h before `CAT #n`); `SAVEBIN` writes `FDD_BASE` to here as
 `fddcmd.bin`, which `build-rom.py` splices in after checking that the
 region is all `FFh`.
+
+## The Megabank build (`-DMEGABANK`, ROM 2.5)
+
+`tools/build-rom.py --megabank` assembles the module with `-DMEGABANK` and
+gives `src/rom/TSPICO-MB.ROM`, the TS-2068 Megabank test ROM (not in a flash
+slot; [PROTOCOL.md §6.3](../../PROTOCOL.md) has the wire format). Without the
+define the module is byte-for-byte ROM 2.4's. With it, four same-size edits
+change 2.4's code and everything else is appended after `CMD_CHCAT`, at
+3998h–3E09h (1138 bytes; 502 free to 3FFFh), so no 2.4 address moves:
+
+- `ROM_ID` is 25h (with the patches that carry the version: banner "v2.5",
+  HOME 0065h, `G_VERS`, 1BB5h);
+- `F_HOOK` tests the prefix with `FR_TEST` (`f:` or `r:`) and stores TPMODE
+  through `SET_MODE`;
+- `SEND_FOPEN` takes its command text from `OPEN_TXT`.
+
+The patches that reach it (`MB_PATCHES` in build-rom.py, each with the bytes it
+replaces): EXROM 0A3Eh `2A BC 5C` → `JP MB_BOOT`, 0068h `JP 1879h` → `JP R_SA`,
+00FCh `JP 196Dh` → `JP R_LD`, and 2213h (2.4's `CP 87h / JP Z,3006h / RET`) →
+`JP FN_EXT`. `MB_FIXED_SYMS` holds MB_BOOT, R_SA, R_LD and FN_EXT at the
+addresses the patches use.
+
+The board model all of this assumes (the Megabank spec): port FDh selects a
+register, FCh is its data; a chunk is the board's when its OWNn names a bank
+the board has, but writes to it reach HOME RAM too unless HSR (port F4h) bit n
+is set, so the mover maps OWN first, then the HSR bit, and unmaps the other
+way round.
+
+### The board's registers and the 2068 addresses
+
+| Name | Value | What |
+|---|---|---|
+| `MB_SEL` | FDh | port: select a board register |
+| `MB_DATA` | FCh | port: the selected register |
+| `MB_OWN` | 00h | OWN0–OWN7: the bank in chunk n; writing it sets SUBn = n |
+| `MB_SUB` | 08h | SUB0–SUB7: which 8K of the bank chunk n shows |
+| `MB_WPROT` | 10h | write protect, a bit a chunk |
+| `MB_STATUS` | 11h | status |
+| `MB_ID` | 12h | A5h |
+| `MB_IDCOMP` | 13h | 5Ah |
+| `MB_BASE` | 14h | the first bank number the board answers |
+| `MB_SIZE` | 15h | how many 64K banks it has |
+| `MB_VERSION` | 16h | the board's version |
+| `HSR` | F4h | the 2068's horizontal select register |
+| `SYSCON` | 5CBCh | the pointer to the bank table |
+| `SYSCON_END` | 2082h | the bank search's exit (marks the table's end, CLEAR-PRB) |
+| `SA_RET` | 00E5h | the tape routines' exit: border, BREAK test, EI, POP AF, RET |
+| `PICO_SA` | 1879h | the Pico SAVE block (§6.2), what 0068h jumped to |
+| `PICO_LD` | 196Dh | the Pico LOAD block (§6.1), what 00FCh jumped to |
+| `R_BIT` | 5 | TPMODE's `r:` bit |
+
+### `MB_BOOT` (3998h)
+
+Reached by the `JP` at EXROM 0A3Eh, where the 2068 started its bank search
+(both entries, from 09F4h's fall-through and from 1CA8h's `CALL`, arrive
+there). Writes OWN7 … OWN0 = 0 and WPROT = 0 through `MB_WR`, then
+HL = (SYSCON) + 0Dh and `JP SYSCON_END`, the old search's own exit. MAXBNK
+(5CBEh) and 6315h are left 0, so the Timex bank code sees no banks. It reads
+nothing from the board; the firmware asks with mover op 7. The old
+renumbering call (0CFBh) is dropped: with no banks it only cleared the two
+counts. The old body, 0A41h–0DAFh, is unreachable.
+
+### `FR_TEST`
+
+A = the prefix's first letter: Z if it is F or R (either case).
+
+### `SET_MODE`
+
+A = TPMODE with bits 4–5 cleared, from `F_HOOK`: stores it with bit 5 set
+when the name is `r:` (looks again through `PEEK_NAME`), else as it is.
+
+### `OPEN_TXT`
+
+HL = `FOPEN_TXT` or `ROPEN_TXT` for the name `PEEK_NAME` finds; BC and DE kept.
+
+### `ROPEN_TXT`
+
+`"tpi:ropen "`, the same length as `FOPEN_TXT` (an `ASSERT`).
+
+### `R_SA` (39F5h), `R_LD` (3A06h)
+
+The SAVE and LOAD block entries (from 0068h and 00FCh). TPMODE bit 5 clear:
+on to `PICO_SA` / `PICO_LD`. Set: C = the direction (0 SAVE; 1 LOAD when
+carry is set, 2 VERIFY when not) and on to `R_BLOCK`.
+
+### `R_BLOCK`
+
+Pushes `SA_RET` as the return, DI, and sends `tpi:rblk` with IX and DE as
+four hex bytes (through `CH_SEND`, its payload on the stack), PMR1 = the
+direction, PMR2 = the flag; then `BIOS_C_END` takes the answer, function 89h
+and the status after it. Done: carry set, bit 5 cleared after a data block
+(kept after a header, for the data block to follow). Failed: bit 5 cleared,
+`C_FAIL` raises the report.
+
+### `R_OFF`
+
+Clears TPMODE bit 5; AF kept.
+
+### `CMD_RBLK`
+
+`"tpi:rblk ",0`.
+
+### `FN_EXT` (3A61h)
+
+The response functions past 87h, from 2213h: A = code − 1; 87h →
+`LOWER_LOOP` (function 88h), 88h → `MOVER` (function 89h), else `RET` (the
+chain's Report D).
+
+### `MOVER` (3A6Bh)
+
+Function 89h. Saves IX and the IFF (`LD A,I`), DI, makes the frame
+(`MV_FRAME` bytes, IX = SP) and probes the board (`MB_PROBE`). Then reads
+operations: the first at once, each later one after `BIOS_WF_NPH`. Op 0 ends:
+the frame and the IFF are put back and `C_END_TAIL` reads the answer. Op 7 is
+`MV_INFO`; 1–6 take `MV_PARAMS` and `MV_RUN`; their reply goes out through
+`MV_TX`. An op of 8 or more ends with carry and A = 9 (Report J).
+
+The frame, at IX:
+
+| Name | Offset | What |
+|---|---|---|
+| `MV_BASE` | 0 | BASE |
+| `MV_LIM` | 1 | SIZE × 8, the first page past the board (word) |
+| `MV_OK` | 3 | 1 if `MB_PROBE` found the board |
+| `MV_ADDR` | 4 | the 2068 address (ops 1–3) |
+| `MV_LEN` | 6 | the length left |
+| `MV_PAGE` | 8 | the board page |
+| `MV_OFF` | 10 | the offset in it |
+| `MV_PAGE2` | 12 | op 6's destination page |
+| `MV_OFF2` | 14 | and offset |
+| `MV_OP` | 16 | the operation |
+| `MV_RES` | 17 | the reply so far |
+| `MV_XOR` | 18 | ops 4–5's running XOR |
+| `MV_N` | 19 | this piece's length |
+| `MV_W1` | 21 | the first window's saved state: chunk, OWN, SUB, HSR |
+| `MV_W2` | 25 | op 6's second window's |
+| `MV_FRAME` | 29 | the frame's size |
+
+### `MB_PROBE`
+
+`MV_OK` = 1 if ID and IDCOMP read A5h and 5Ah; then `MV_BASE` and `MV_LIM`.
+
+### `MB_RD`, `MB_WR`
+
+A = a register: `MB_RD` reads it into A; `MB_WR` writes E to it.
+
+### `MV_PARAMS`
+
+Reads an op's parameters into the frame: ops 1–3 eight bytes from
+`MV_ADDR`, ops 4–5 six from `MV_LEN`, op 6 ten from `MV_LEN`.
+
+### `FRAME`
+
+HL = IX + E.
+
+### `MV_INFO`
+
+Op 7: sends found, BASE, SIZE, STATUS; A = VERSION, the reply.
+
+### `MV_RX`, `MV_TX`
+
+A byte from / to the Pico, after `MV_PACE`.
+
+### `MV_PACE`
+
+A delay of (`READ_DELAY` + 4) DJNZ loops, about 75 µs with the call, so the
+Pico can keep its FIFO fed (as `CH_FETCH` paces).
+
+### `MV_RUN`
+
+Ops 1–6. Refuses with reply 3 (no board) or 4 (`MV_RANGE`) through
+`MV_REFUSE`. Otherwise one piece at a time: the piece is as long as fits in
+the page (`MV_ROOM`), in the 2068 address's chunk (ops 1–3) and in op 6's
+destination page; maps a window (`MV_WIN`, `MV_MAP`; two for op 6), runs
+`MV_DO`, unmaps (`MV_UNMAP`, the second window first) and advances
+(`MV_ADV`). After the last piece op 4 sends the XOR, op 5 reads the Pico's
+and replies 5 if they differ.
+
+### `MV_REFUSE`
+
+A = the reply. Keeps the stream in step: op 4 sends len + 1 zeros, op 5 reads
+len + 1 bytes and drops them.
+
+### `MV_DO`
+
+One piece, HL = the board side in the window, DE the other: op 1 LDIR
+2068 → board, 2 board → 2068, 3 compare (reply 2 on a difference), 4 send,
+5 receive (both keeping `MV_XOR`), 6 board → board.
+
+### `MV_ROOM`
+
+HL = min(HL, 2000h − DE), DE an offset in a chunk (callers mask an address first).
+
+### `MV_RANGE`
+
+Carry if the offset is 2000h or more, or the run's last page, page + ((off +
+len − 1) >> 13) worked out to 17 bits, is `MV_LIM` or beyond.
+
+### `MV_ADV`
+
+Adds the piece to an offset and carries into its page.
+
+### `MV_WIN`
+
+A = the first chunk of 4–7 not in B's mask, after adding the chunks of
+SP − 32 and SP + 48 to it (the stack and the frame).
+
+### `CHUNK_BIT`, `CHUNK_MASK`
+
+A = an address's high byte (`CHUNK_BIT`) or a chunk (`CHUNK_MASK`): A = the
+chunk's bit. BC kept.
+
+### `MV_MAP`
+
+A = the window chunk, HL = page: saves the chunk, its OWN, SUB and the HSR
+at (DE), sets OWNw = BASE + page / 8, SUBw = page AND 7, then the HSR bit;
+HL = w × 2000h.
+
+### `MV_UNMAP`
+
+Puts back what `MV_MAP` saved, at (HL): the HSR first when the chunk was the
+2068's own (OWN 0), then OWN and SUB, then the HSR.
 
 ## Where comments, documents and the code disagree
 

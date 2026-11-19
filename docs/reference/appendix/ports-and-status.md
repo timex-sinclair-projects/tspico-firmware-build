@@ -28,7 +28,10 @@ address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep
 The v3 card also watches, without answering, OUTs to FDh and FCh: the
 TS-2068 Megabank's register select and data. A chunk one of its banks owns
 is the board's, and the card stops serving it
-([../firmware/tsbus.md](../firmware/tsbus.md#megabankh-megabankc)).
+([../firmware/tsbus.md](../firmware/tsbus.md#megabankh-megabankc)). The
+Megabank test ROM writes them itself: OWN0–OWN7 and WPROT = 0 at boot, and
+the mover maps a window with them and with the HSR, port F4h
+([../rom/exrom-fdd.md](../rom/exrom-fdd.md#the-megabank-build--dmegabank-rom-25)).
 
 Both FIFOs are four entries deep and not joined (`TX_DEPTH`). The Pico cannot
 hold the Z80 up: there is no /WAIT. A read of an empty TX returns 00h, which
@@ -172,7 +175,8 @@ dispatch compares A = code − 1 ([exrom-chunk1.md](../rom/exrom-chunk1.md)).
 | 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (every key, `N` included, goes round the loop, #227; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | 87h | — | status | HOME 08A6h: clears the screen | unused |
 | 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (`LOWER_LOOP`, 334Fh) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
-| 80h, 89h–FFh | — | — | fall through the chain: Report D | — |
+| 89h | — | operations, op 0, then the answer ([PROTOCOL.md §6.3](../../PROTOCOL.md)) | the Megabank mover (`MOVER`), in the Megabank test ROM (2.5) only; Report D in 2.4 | the RAM disk's `tpi:rblk` (Megabank spec phase 5; `tools/emu/megabank_host.py` for now) |
+| 80h, 8Ah–FFh | — | — | fall through the chain: Report D | — |
 
 Text rules: the ROM reads characters without a ready wait; 00h ends a string
 and 03h a loop, and nothing else does; control codes 16–23 (INK … TAB)
@@ -268,6 +272,7 @@ request is a port-0Fh write followed by its arguments on 0Eh.
 |---|---|---|
 | 0 | `tpi:picopt` (set), `tpi:ts2040` (clear) | printing (LPRINT, LLIST, COPY) goes to the Pico |
 | 1 | `tpi:sdcard` (set), `tpi:tape` (clears bits 0 **and** 1: TPMODE = 0) | LOAD and SAVE go to the Pico; 1 at power-on (TPMODE = 2) |
+| 5 | the Megabank test ROM only: F_HOOK for an `r:` name; cleared after the data block | LOAD and SAVE blocks go to the Megabank RAM disk (`R_SA`, `R_LD`) |
 
 The ROM handles these four names itself; the BIOS's G_MODE/S_MODE read and
 write the low nibble. [sysvars.md](../rom/sysvars.md).

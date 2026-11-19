@@ -348,8 +348,11 @@ says so (below). The steps, in order:
    `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest),
    `rom_preload_hosttest.py` the module's pre-load check, and
    `rom_fn86_hosttest.py` the string reader and function 86h's loop, in a
-   Z80 interpreter.
-   The ROM and its two halves are uploaded as `tspico-fdd-rom`.
+   Z80 interpreter. Then the **Megabank test ROM**: `build-rom.py --megabank
+   --verify`, `cmp` of `build/TSPICO-mb.ROM` against `src/rom/TSPICO-MB.ROM`,
+   and `rom_megabank_hosttest.py` (the boot reset, the mover and the `r:`
+   gates against a board model with the HSR rule).
+   The ROM and its two halves, and the Megabank ROM, are uploaded as `tspico-fdd-rom`.
 7. **MicroPython v1.29.0**, cloned shallow.
 8. **The build stamp**: `cmp` of `src/TS/tspico.py` with
    `src/dev_tspico.py` (fails with the first 40 lines of `diff`), then

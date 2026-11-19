@@ -222,12 +222,29 @@ jobs:
       - name: Test ROM 2.3's string reader and function 86h loop in the Z80 interpreter
         run: python3 src/test/rom_fn86_hosttest.py
 
+      # The TS-2068 Megabank test ROM (2.5, ROM_ID 25h): the same module built
+      # with -DMEGABANK, plus the boot reset at $0A3E and the r: block gates at
+      # $0068/$00FC (docs/PROTOCOL.md 6.3). Not in any flash slot until the
+      # board's hardware tests pass; src/rom/TSPICO-MB.ROM must still be what
+      # the build makes, and its Z80 test runs on that file.
+      - name: Build the Megabank test ROM (ROM 2.5) and check the committed one
+        run: |
+          python3 tools/build-rom.py --megabank --verify
+          if ! cmp -s build/TSPICO-mb.ROM src/rom/TSPICO-MB.ROM; then
+            echo "::error::src/rom/TSPICO-MB.ROM differs from tools/build-rom.py --megabank's output. Run: python3 tools/build-rom.py --megabank --verify && cp build/TSPICO-mb.ROM src/rom/TSPICO-MB.ROM"
+            exit 1
+          fi
+
+      - name: Test the Megabank ROM's boot reset, mover and r-prefix gates in the Z80 interpreter
+        run: python3 src/test/rom_megabank_hosttest.py
+
       - name: Upload the fdd ROM artifact
         uses: actions/upload-artifact@v6
         with:
           name: tspico-fdd-rom
           path: |
             build/TSPICO-fdd.ROM
+            build/TSPICO-mb.ROM
             build/TSPICO-fdd-home.bin
             build/TSPICO-fdd-exrom.bin
           if-no-files-found: error

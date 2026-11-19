@@ -139,7 +139,8 @@ character), and 5DD7h a buffer address (1820h: a character code × 8 +
 | 0 | printer output goes to the Pico | `SAVE "tpi:picopt"` (2151h) | `SAVE "tpi:ts2040"` (218Fh); in 1.1, `SAVE "tpi:tape"` too | HOME 0A09h (every character of output: SENDTV now calls it), EXROM 1781h (COPY) |
 | 1 | LOAD, SAVE, VERIFY, MERGE go to the Pico | `SAVE "tpi:sdcard"` (2103h); 1 at boot | `SAVE "tpi:tape"` (20BEh → TAPE_MODE) | 1879h (SA-BYTES), 196Dh (LD-BYTES); clear = the stock tape routines |
 | 2–3 | unused | | | kept by S_MODE |
-| 4–5 | unused | | SESSION_SETUP's non-command exit (1A3Ah), F_HOOK (325Fh) | |
+| 4 | unused | | SESSION_SETUP's non-command exit (1A3Ah), F_HOOK (325Fh) | |
+| 5 | unused in ROM 2.4. In the Megabank test ROM (2.5, [exrom-fdd.md](exrom-fdd.md#the-megabank-build--dmegabank-rom-25)): the statement's name began `r:`, its blocks go to the Megabank RAM disk | `SET_MODE`, from F_HOOK | as bit 4; `R_OFF` after a data block or a failed one | `R_SA`, `R_LD` (EXROM 0068h, 00FCh) |
 | 6 | the name began `NET:` | SESSION_NAMED (1AD4h, with bit 7) | as bit 7 | the switch words (below) |
 | 7 | the name began `TPI:` or `NET:` | SESSION_NAMED (1AEBh) | 1A3Ah, 1B8Dh (before a command is sent), the switch words, F_HOOK | the switch words |
 
