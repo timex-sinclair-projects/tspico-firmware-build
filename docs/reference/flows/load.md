@@ -124,7 +124,8 @@ mount is served ([../firmware/tspico_io.md](../firmware/tspico_io.md#load_servep
 ### `LOAD "r:name"` (the Megabank test ROM only)
 
 F_HOOK sends `tpi:ropen name` (PMR1 = 1 LOAD, 2 VERIFY, 3 MERGE) and sets
-TPMODE bit 5. Each block then skips this whole flow: `R_LD` (EXROM 00FCh)
+TPMODE bit 5 (through `SET_MODE_R`, which first sends `tpi:rmask`, the
+open `r:` streams). Each block then skips this whole flow: `R_LD` (EXROM 00FCh)
 sends `tpi:rblk` with the destination and length, and the firmware copies
 the block from the Megabank RAM disk into memory with function 89h, the
 mover, and answers with a status; a VERIFY compares instead (R if it

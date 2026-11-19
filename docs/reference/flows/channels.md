@@ -252,6 +252,34 @@ bit 2), so the rows `CH_IN` had read ahead are gone; on the Pico,
 fetches the path, not the rest of the listing. The answer lives in the
 channel until the next command, `CLOSE #4`, or the stream's next OPEN.
 
+## The Megabank's RAM disk (`r:`)
+
+Only in the Megabank test ROM (2.5). `OPEN #4,"r:log","w"`: `CH_OPEN_HOOK`
+calls `RCH_KIND` in place of `SPEC_KIND`, which takes `r:` itself
+(`RCH_OPEN`): it parses the mode and record length as for `f:`, sends
+`tpi:rchopen` with the open-stream mask, the address of 16 bytes on the
+stack and `"w log"`, and the firmware (`RD_RCHOPEN`, `Disk.open_stream`)
+makes the file, gives it an extent, writes the stream's slot on the board
+and copies the slot's 15-byte block onto the stack (the mover's op 2). The
+record, letter `R`, is built from the block: no buffers, no `R_INBUF`.
+
+`PRINT #4;"hello"`: HOME 14A0h → `G_OUT` → `MB_OUT` sees the `R` and calls
+`RCH_OUT`, which writes each byte straight to the board through a window
+chunk (`BOARD_IO`): no command, no exchange with the TS-Pico. At each CR
+and each 256-byte boundary the length and position go back to the slot.
+Past the extent, `RCH_GROW` sends `tpi:rchgrow` and takes a new block.
+`INPUT #4` reads the same way (`RCH_IN`), with the same text and record rules
+as `f:`.
+
+`CLOSE #4`: `CH_CLOSE_HOOK`'s letter test is `RCH_CLTEST`; `RCH_CLOSE` pads
+an open record, writes the length and position back and sends
+`tpi:rchclose`, and the firmware writes the length into the directory. A
+stream lost to NEW or a reset is closed at the next `r:` command, which
+carries the mask (`tpi:rmask` for the commands that have no payload).
+`RESTORE #` and `CAT #` on an `r:` stream are Report O. The detail:
+[exrom-fdd.md](../rom/exrom-fdd.md#the-r-channels-rchanasm-phase-9),
+[ramdisk.md](../firmware/ramdisk.md#channels-the-open-stream-slots).
+
 ## Errors inside the module
 
 Every one of these runs inside GUARDED: a report raised inside the module

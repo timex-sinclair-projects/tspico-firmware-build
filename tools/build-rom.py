@@ -61,6 +61,7 @@ OUT_MB   = OUT_DIR / "TSPICO-mb.ROM"           # --megabank
 # $4000+$3000 = $7000.
 EXROM_FILE_BASE = 0x4000
 FDD_ORG         = 0x3000          # must match FDD_BASE in fddcmd.asm
+RCH_ORG         = 0x2400          # --megabank: the r: channels (rchan.asm), RCH_BASE
 BASE_ROM_CRC    = 0x56bd89a4      # guard: rebuilt only against this exact base
 
 # --- Declarative patch manifest ----------------------------------------------
@@ -820,6 +821,18 @@ def main():
           f"(file ${mstart:04X}); entry FDD_DISPATCH=${entry:04X}")
 
     if mb:
+        # the r: channels, assembled with the module (fddcmd.asm INCLUDEs
+        # rchan.asm at RCH_BASE): free EXROM in the same chunk
+        rch = (workdir / "rchan.bin").read_bytes()
+        if syms.get("RCH_BASE") != RCH_ORG:
+            die(f"RCH_BASE is {syms.get('RCH_BASE', 0):#06x}, expected {RCH_ORG:#06x}")
+        rstart = file_offset("exrom", RCH_ORG)
+        rend = rstart + len(rch)
+        if rend > file_offset("exrom", FDD_ORG) or any(b != 0xFF for b in base[rstart:rend]):
+            die(f"EXROM ${RCH_ORG:04X}..${RCH_ORG+len(rch):04X} is not free for rchan.asm")
+        out[rstart:rend] = rch
+        touched.append((rstart, rend - 1))
+        print(f"r: channels: {len(rch)} bytes at EXROM ${RCH_ORG:04X}")
         bank_api_splice(base, out, workdir, touched)
 
     # --- 4. apply the manifest ---

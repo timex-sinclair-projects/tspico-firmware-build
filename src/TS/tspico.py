@@ -3502,11 +3502,15 @@ def DISK_REN_WORK(a, b):
 #   MOVE "r:a" TO "r:b"               tpi:ren r:a|r:b (a rename)
 #   COPY a TO b, either or both r:    tpi:copy a|b
 #   SAVE "tpi:ram [backup|restore n]" the board, and the RAM disk as an image
+#   OPEN #s,"r:name" / growth / CLOSE  tpi:rchopen, tpi:rchgrow, tpi:rchclose (phase 9)
+#   any other r: command              tpi:rmask first: the 2068's open r: streams
 # ─────────────────────────────────────────────────────────────────────────────
 
 FN_MOVER = const(0x89)
 RD = None                       # the ramdisk.Disk, made on first use
 RD_OPEN = None                  # [name, mode, header, header served] from tpi:ropen
+RD_MASK = None                  # the streams the 2068 has open on r: (bit n: stream n), as
+                                #   the last r: command said; None: not heard yet
 RD_CONFIRM_MS = const(60_000)   # a FORMAT or ERASE "r:*" to repeat within this
 RD_IMAGE_EXT = ".rdi"
 RD_REPLY_MS = const(10_000)
@@ -3615,7 +3619,8 @@ def RD_ARG(s):                                                                # 
 
 def RD_ONLY(cmd_word, cmd_exec):                                              # an r: command with no SD side
 
-    if cmd_word in ("TPI:ROPEN", "TPI:RBLK"):
+    if cmd_word in ("TPI:ROPEN", "TPI:RBLK", "TPI:RMASK", "TPI:RCHOPEN", "TPI:RCHGROW",
+                    "TPI:RCHCLOSE"):
         return True
     if cmd_word == "TPI:RAM":
         a = cmd_exec[len(cmd_word):].split()
@@ -3640,6 +3645,7 @@ def RD_START():                                                               # 
         RD = ramdisk.Disk()
     mv = RD_MOVER(ramdisk.RdError)
     RD.mv = mv
+    RD.mask = RD_MASK
     return RD, mv
 
 
@@ -3758,6 +3764,109 @@ def RD_RBLK(pre, cmd):                                                        # 
                 raise rdm.RdError(_2_R_Tape_load, "Verify: they differ")
         if m != n or n != e.length:
             raise rdm.RdError(_2_R_Tape_load, "Length %d, not %d" % (e.length, n))
+        return "", _1_OK
+
+    RD_RUN(work, quiet=True)
+
+
+def RD_PAYLOAD(cmd):                                                          # an r: channel command's bytes
+    """The hex after the command word, as bytes; the first two are the mask
+    (bit n: stream n is open on r:), which is kept in RD_MASK."""
+    global RD_MASK
+    b = bytes.fromhex(getArgs(cmd).strip())
+    RD_MASK = b[0] | b[1] << 8
+    return b
+
+
+def RD_RMASK(pre, cmd):                                                       # tpi:rmask <hex>
+
+    # Sent by the ROM before an r: command that carries no mask of its own
+    # (ERASE, MOVE, COPY, FORMAT, CAT, SAVE/LOAD "r:..."). A bare status.
+    try:
+        RD_PAYLOAD(cmd)
+    except Exception:
+        CH_REPLY(_5_C_Nonsense)
+        return
+    if rom_id == 0xFF or rom_id < 0x25:
+        RD_NEEDS_ROM(True)
+        return
+    CH_REPLY(_1_OK)
+
+
+def RD_RCHOPEN(pre, cmd):                                                     # tpi:rchopen <hex>
+
+    # OPEN #s,"r:name","mode"[,reclen] (phase 9). PMR1 = the stream, PMR2 = the
+    # record length (FFh: over 254). The payload: mask (2), the 2068 address
+    # the slot's block goes to (2), then "mode name" as text. The block is
+    # copied there with op 2; the ROM builds its record from it.
+    stream, reclen = (p & 0xFF for p in PARAMS(pre))
+    try:
+        b = RD_PAYLOAD(cmd)
+        addr = b[2] | b[3] << 8
+        mode, _, name = bytes(b[4:]).decode().partition(" ")
+        mode, binary = channels.parse_mode(mode)
+    except channels.ChannelError:
+        CH_REPLY(_4_Q_Parameter)
+        return
+    except Exception:
+        CH_REPLY(_5_C_Nonsense)
+        return
+
+    def work(disk):
+        from TS import ramdisk as rdm
+        if stream > 15:
+            raise rdm.RdError(_4_Q_Parameter, "r: streams are 0-15")
+        disk.mount()
+        if not name or catalog.has_wild(name):                                # a listing
+            if mode != "r" or reclen:
+                raise rdm.RdError(_4_Q_Parameter, "An r: listing is read-only, no records")
+            pat = name or "*"
+            disk.open_list(stream, [e.name for e in disk.files() if catalog.match(e.name, pat)])
+        else:
+            disk.open_stream(stream, name, mode, binary, reclen)
+        p, o = disk.block_loc(stream)
+        disk.mv.copy_out(addr, rdm.BLOCK_LEN, p, o)
+        return "", _1_OK
+
+    RD_RUN(work, quiet=True)
+
+
+def RD_RCHGROW(pre, cmd):                                                     # tpi:rchgrow <hex>
+
+    # PRINT # past the extent: payload mask (2), the block's address (2), the
+    # length the stream needs (2). The block again, with the new extent.
+    stream = PARAMS(pre)[0] & 0xFF
+    try:
+        b = RD_PAYLOAD(cmd)
+        addr, need = b[2] | b[3] << 8, b[4] | b[5] << 8
+    except Exception:
+        CH_REPLY(_5_C_Nonsense)
+        return
+
+    def work(disk):
+        from TS import ramdisk as rdm
+        disk.mount()
+        disk.grow(stream, need or 0x10000)
+        p, o = disk.block_loc(stream)
+        disk.mv.copy_out(addr, rdm.BLOCK_LEN, p, o)
+        return "", _1_OK
+
+    RD_RUN(work, quiet=True)
+
+
+def RD_RCHCLOSE(pre, cmd):                                                    # tpi:rchclose <hex>
+
+    # CLOSE #s: the ROM has written the length and position back to the slot.
+    stream = PARAMS(pre)[0] & 0xFF
+    try:
+        RD_PAYLOAD(cmd)
+    except Exception:
+        CH_REPLY(_5_C_Nonsense)
+        return
+
+    def work(disk):
+        disk.mount()
+        disk.close(stream)
         return "", _1_OK
 
     RD_RUN(work, quiet=True)
@@ -8122,6 +8231,10 @@ def TS2068_IO():                                                         # Main 
         "TPI:RAM" : RD_RAM,                                                                     # the Megabank (ROM 2.5)
         "TPI:RBLK" : RD_RBLK,
         "TPI:ROPEN" : RD_ROPEN,
+        "TPI:RMASK" : RD_RMASK,                                                                 # r: channels (phase 9)
+        "TPI:RCHOPEN" : RD_RCHOPEN,
+        "TPI:RCHGROW" : RD_RCHGROW,
+        "TPI:RCHCLOSE" : RD_RCHCLOSE,
         "TPI:STOP" : SA_NOT_IMP,
         }
     

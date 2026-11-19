@@ -103,7 +103,9 @@ refreshed and the mount left alone ([../firmware/tspico-disk.md](../firmware/tsp
 
 ### `SAVE "r:name"` (the Megabank test ROM only)
 
-F_HOOK sends `tpi:ropen name` (PMR1 = 0) and sets TPMODE bit 5; the stock
+F_HOOK sends `tpi:ropen name` (PMR1 = 0) and sets TPMODE bit 5
+(through `SET_MODE_R`, which first sends `tpi:rmask`, the open `r:`
+streams); the stock
 SAVE runs, but each block goes to `R_SA` (EXROM 0068h): one `tpi:rblk` with
 the source and length, PMR2 = the flag, and the firmware copies the bytes
 onto the Megabank RAM disk with function 89h, the mover. There is no

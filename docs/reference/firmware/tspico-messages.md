@@ -3,8 +3,8 @@
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 1570–1802
 (`shorten_filename`, `DIR_HEADER`, the color helpers), 2425–2768
 (`MSG_BYTE`, `SEND_MSG`, `SEND_STATUS`, `SEND_MSG2`), 3060–3098 (`PROMPT_EACH`),
-4617–4807 (`ListMenu`), 4959–4971 (`xchr`, `xstr`), 5672–5684
-(`BUILD_FIT`) and 7099–7166 (`SEND_MSG_PROMPT_YN`).
+4726–4916 (`ListMenu`), 5068–5080 (`xchr`, `xstr`), 5781–5793
+(`BUILD_FIT`) and 7208–7275 (`SEND_MSG_PROMPT_YN`).
 
 A `tpi:` command answers the 2068 with one byte — a status — or with a
 **response function**: a byte of `80h` or more that makes the ROM print
@@ -38,11 +38,11 @@ FIFO through the never-blocking command I/O of
 | `SEND_STATUS(st)` | 2510 | a bare status, whatever VERBOSE says |
 | `SEND_MSG2(msg, st, expandKeywords=True, colour=False)` | 2521 | `86h`: long text in pages, "Scroll? (Y/n)" between them |
 | `PROMPT_EACH(prompts)` | 3060 | `86h`: one Y/N question after another, one exchange |
-| `ListMenu(List, hdr1, hdr2, action, chosen)` | 4617 | `86h`: pick one of a list, 16 to a page |
-| `xchr(m)` | 4959 | a character of a card name as the 2068 lists it |
-| `xstr(s)` | 4967 | a name as the 2068 lists it |
-| `BUILD_FIT(s, n)` | 5672 | the build stamp in `n` characters |
-| `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | 7099 | `86h` or `88h`: one question, one key |
+| `ListMenu(List, hdr1, hdr2, action, chosen)` | 4726 | `86h`: pick one of a list, 16 to a page |
+| `xchr(m)` | 5068 | a character of a card name as the 2068 lists it |
+| `xstr(s)` | 5076 | a name as the 2068 lists it |
+| `BUILD_FIT(s, n)` | 5781 | the build stamp in `n` characters |
+| `SEND_MSG_PROMPT_YN(prompt, echo=True, lower=False)` | 7208 | `86h` or `88h`: one question, one key |
 
 ## The answer on the wire
 
@@ -122,7 +122,7 @@ A BREAK at any key wait (the ROM's `KEYWAIT`) is a port-0Fh write;
 command ([tspico-bus.md](tspico-bus.md#command-io-that-never-blocks)).
 After a builder that waits for keys has returned, nothing more may be sent
 for that command: the ROM has finished its function and will read the next
-byte as a status (the comments at 4622 and 7102).
+byte as a status (the comments at 4731 and 7211).
 
 ## Names and listings on a 32-column screen
 
@@ -145,8 +145,8 @@ nom[:k1] + ">" + nom[j-k2:]
 be part of a FAT name, so a shortened name is never mistaken for a real
 one *(inferred as the reason for the choice)*. Callers: the folder listings
 (`LIST_DIR_FILES` 1792, 1902, 1932; `CATALOG_TEXT` 2937, 2982), the
-disk-command messages (3187, 3219, 4102), `IDIR` (4603), `public_path` and
-`public_fname` (4985, 5001).
+disk-command messages (3187, 3219, 4211), `IDIR` (4712), `public_path` and
+`public_fname` (5094, 5110).
 
 The result is never longer than `l`, and exactly `l` when `nom` is
 longer. An "extension" with no room for the `>` in front of it is
@@ -329,7 +329,7 @@ which would hide the line's end from `SEND_MSG2`'s column count. Color 8
 used beyond 1, 5 and 7, so none is `00h` or `03h` (see the
 text rules). Send the result with `SEND_MSG2(…, colour=True)`; without
 `colour` the codes are stripped. Callers: `DIR` (2840), `CATALOG` (2906),
-`CDIR` (5408), `ZX_TPI`'s listing (8976).
+`CDIR` (5517), `ZX_TPI`'s listing (9089).
 
 `lista` and `dirinfo.tap` keep the plain text; the color is added only on
 the way out. A `DirText` (the listing of a folder with entries, #384) is
@@ -366,7 +366,7 @@ view, in which every row is a program.
 
 Text that does not start with `File:` or is under 128 characters is
 returned unchanged. No room for the colored copy: the plain `text`, as in
-`CAT_COLOUR`. One caller, `TAPDIR` (4932)
+`CAT_COLOUR`. One caller, `TAPDIR` (5041)
 ([tspico-commands.md](tspico-commands.md)).
 
 ## Answers: a status or a message
@@ -426,7 +426,7 @@ that it was once described as redundant and the audit tried removing it.
 
 Callers: 72 sites in `tspico.py` — most handlers end with it — and
 external commands through `extcmd.py`. The forced ones: `NO_CARD_REPLY`
-(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (7859:
+(through `NO_CARD_MSG`), `LOAD "tpi:"` when several files match (7968:
 that message says what to do), and `extcmd`'s `RND_WORD` (89). The
 `romupdate` refusal and the other mount errors go through `LOAD_TPI`'s
 message ([tspico-files.md](tspico-files.md)).
@@ -557,10 +557,10 @@ Callers, with their flags:
 
 | Caller | `expandKeywords` | `colour` |
 |---|---|---|
-| DIR (2840, 2875), CATALOG (2906), CDIR (5408) — listings through CAT_COLOUR | `False` (2875: `True`) | `True` |
-| DISK_COPY (3118), GETHELP (5667) | `False` | `False` |
-| TAPDIR (4933), GETINFO (5771) | `True` | `True` |
-| GETLOG (5969) | `True` | `False` |
+| DIR (2840, 2875), CATALOG (2906), CDIR (5517) — listings through CAT_COLOUR | `False` (2875: `True`) | `True` |
+| DISK_COPY (3118), GETHELP (5776) | `False` | `False` |
+| TAPDIR (5042), GETINFO (5880) | `True` | `True` |
+| GETLOG (6078) | `True` | `False` |
 
 Beware:
 
@@ -621,7 +621,7 @@ its answer. Before #167 it reached the closing echo with no key and
 
 A menu: the strings of `List` sixteen to a page, each with a key, and the
 user picks one. Returns its index, or `-1` for none. Used by `IDIR`
-(4605, "Mount file") and `CDIR` (5398, "Change to dir")
+(4714, "Mount file") and `CDIR` (5507, "Change to dir")
 ([tspico-commands.md](tspico-commands.md)).
 
 Arguments: `hdr1` is the top line (the path), `hdr2` the column titles,
@@ -675,7 +675,7 @@ only the final `03h`: the Z80 read it as the command's status, Report F
 
 Beware:
 
-- Nothing may be sent after it returns (the comment at 4622): the
+- Nothing may be sent after it returns (the comment at 4731): the
   exchange is over. `IDIR` therefore mounts the chosen file without
   reporting errors to the 2068 ("Can't set or show error now").
 - The entries are printed as they are, so the caller must make them
@@ -703,7 +703,7 @@ SCREEN$` overwrites a file (3109), kept to one line.
    test for 89 (`Y`) holds whatever case was typed.
 
 The status is always 1. The callers act on the key: `GETLOG`'s "Clear the
-log file (y/N)?" (5868) and `RM`'s "Remove NAME (y/N)?" (7211) go on only
+log file (y/N)?" (5977) and `RM`'s "Remove NAME (y/N)?" (7320) go on only
 for 89 (`Y`), and the question is the whole answer — a refusal reaches only
 the log. `tpi:fopen` records anything but `Y` as a refusal that `SAVE_TS`
 turns into Report D at the header. All callers use `echo=True`.
@@ -711,7 +711,7 @@ turns into Report D at the header. All callers use `echo=True`.
 Beware: like the other builders it ends the exchange; the comment at the
 top says "this cannot be followed by another SEND_MSG* call". The RX
 drain runs before anything is sent (`CMD_RX_FLUSH`), as the comments here
-(7120–7122) and in `ListMenu` (4637–4640) say.
+(7229–7231) and in `ListMenu` (4746–4749) say.
 
 ## Card names as the 2068 shows them
 
@@ -728,8 +728,8 @@ could type those back into `LOAD "tpi:…"`; now they are `?`, which
 
 `"".join(xchr(m) for m in s)`: a name as the 2068 lists it. Every name from
 the card that is printed goes through it: the disk-command messages (2937,
-2982, 3187, 3219, 4102), `IDIR`'s menu (4603), `public_path` and
-`public_fname` (4981, 4997). Because of it, the text `SEND_MSG2` gets from
+2982, 3187, 3219, 4211), `IDIR`'s menu (4712), `public_path` and
+`public_fname` (5090, 5106). Because of it, the text `SEND_MSG2` gets from
 a listing has no control codes and no `|` or `~`.
 
 ### `BUILD_FIT(s, n)`
@@ -739,7 +739,7 @@ The build stamp in at most `n` characters. `s` is `BUILD_VERSION`, "commit
 or is not of that shape, it is cut to `n`. Otherwise the commit is kept
 whole and the branch cut to fit with `..`: `"abc1234 (long-bra..)"`; if
 not even one branch character fits, the commit alone, cut to `n`. `..`
-rather than `~` because `~` prints as FREE. One caller, `GETINFO` (5723),
+rather than `~` because `~` prints as FREE. One caller, `GETINFO` (5832),
 which gives it 22 columns after the 10-column label.
 
 ## Where comments and the code disagree

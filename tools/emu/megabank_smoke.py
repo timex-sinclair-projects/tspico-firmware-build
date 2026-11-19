@@ -21,6 +21,11 @@ one test-only command added (megabank_host.py) -- and checks:
   - a program's own page mapped in chunk 5 (OWN5, SUB5) survives r:
     transfers whose window is chunk 5. (Its HSR bit doesn't: every tpi:
     command clears the HSR, ROM 2.4 included; the run prints it as a NOTE);
+  - r: channels (phase 9): OPEN #/PRINT #/CLOSE #, INPUT # back, TAB on a
+    stream file and in a record file, TAB 0's count, a pattern listing,
+    ERASE of an open file refused, NEW then the next r: command's mask
+    closing the slot, a file that outgrows its extent (tpi:rchgrow), and
+    LOAD "r:x" CODE of channel files;
   - an ordinary SAVE to the card after all that (TPMODE bit 5 cleared).
 
 ZEsarUX's model ignores the HSR (an owned chunk is the board's whatever F4h
@@ -58,6 +63,7 @@ PRINT, LIST, NEW, VERIFY, OUT, POKE, LET = 0xF5, 0xF0, 0xE6, 0xD6, 0xDF, 0xF4, 0
 FORMAT, ERASE, COPY = 0xD0, 0xD2, 0xFF
 TAP = "/tmp/tspico-root/sd/TAP/"
 IN, PEEK, USR = 0xBF, 0xBE, 0xC0
+OPENH, CLOSEH, INPUT, TAB, FOR, NEXT = 0xD3, 0xD4, 0xEE, 0xAD, 0xEB, 0xF3
 results = []
 
 
@@ -227,6 +233,50 @@ def main():
         s.poke(32768, bytes(3000))
         t = s.run(S.LOAD, '"r:small"', S.CODE)
         check("0 OK" in report(t) and s.peek(32768, 3000) == pat, "the erased file is back", t)
+
+        # --- r: channels (phase 9): OPEN #, PRINT #, INPUT #, CLOSE # ---
+        t = s.run(OPENH, '4,"r:log","w":', PRINT, '#4;"hello";', TAB, '10;"x":', PRINT, '#4;"line two":',
+                  CLOSEH, "4")
+        check("0 OK" in report(t), 'OPEN #4,"r:log","w": PRINT #4 ...: CLOSE #4', t)
+        t = s.run(S.CAT, '"r:"')
+        check(re.search(r"log\s+Bytes\s+20\b", t) is not None, 'CAT "r:": log, a CODE file of 20 bytes', t)
+        s.poke(40000, bytes(32))
+        t = s.run(S.LOAD, '"r:log"', S.CODE, "40000")
+        check("0 OK" in report(t) and s.peek(40000, 20) == b"hello    x\rline two\r",
+              'LOAD "r:log" CODE: TAB 10 (byte 10) padded the gap, CR ends each line', str(s.peek(40000, 20)))
+        s.run(0xFB)
+        t = s.run(OPENH, '4,"r:log":', INPUT, '#4;a$:', INPUT, '#4;b$:', CLOSEH, '4:', PRINT, 'a$;"/";b$')
+        check("hello    x/line two" in t, "INPUT # reads the lines back", t)
+        t = s.run(OPENH, '4,"r:log":', INPUT, '#4;a$;b$;c$')
+        check("8 End of file" in report(t), "a third INPUT #: 8 End of file", t)
+        t = s.run(CLOSEH, "4")
+        check("0 OK" in report(t), "CLOSE #4 after the report", t)
+        s.run(0xFB)
+        t = s.run(OPENH, '5,"r:rec","u",8:', PRINT, '#5;', TAB, '3;"three":', PRINT, '#5;', TAB, '1;"one":',
+                  CLOSEH, '5:', OPENH, '5,"r:rec","r",8:', INPUT, '#5;', TAB, '3;a$:', INPUT, '#5;', TAB,
+                  '0;n:', CLOSEH, '5:', PRINT, 'a$;"/";n')
+        check("three   /3" in t, "records of 8: TAB 3, TAB 1, then record 3 and TAB 0's count", t)
+        s.run(0xFB)
+        t = s.run(OPENH, '6,"r:l*":', INPUT, '#6;a$:', CLOSEH, '6:', PRINT, '"[";a$;"]"')
+        check("[log]" in t, 'OPEN #6,"r:l*": a listing, one name a read', t)
+        t = s.run(OPENH, '4,"r:log","a":', PRINT, '#4;"more":', ERASE, '"r:log"', until="is open")
+        check("r:log is open" in t, "ERASE of a file open on #4: F", t)
+        s.run(NEW, until="")
+        t = s.run(S.CAT, '"r:"')
+        check(re.search(r"log\s+Bytes\s+25\b", t) is not None,
+              "NEW with #4 open: the next r: command's mask closed it, 25 bytes kept", t)
+        t = s.run(ERASE, '"r:log"')
+        check("0 OK" in report(t), "and now ERASE works", t)
+        t = s.run(OPENH, '4,"r:big","w":', FOR, "i=1", S.TO, "600:", PRINT, '#4;"0123456789012345678":',
+                  NEXT, "i:", CLOSEH, "4", timeout=180)
+        check("0 OK" in report(t), "600 lines to r:big (past the first 8K: tpi:rchgrow)", t)
+        s.poke(40000, bytes(64))
+        t = s.run(S.LOAD, '"r:big"', S.CODE, "40000")
+        big = s.peek(40000, 12000)
+        check("0 OK" in report(t) and big == b"0123456789012345678\r" * 600, "LOAD \"r:big\" CODE: 12000 bytes",
+              str(big[:40]))
+        t = s.run(ERASE, '"r:big"')
+        t = s.run(ERASE, '"r:rec"')
 
         # --- errors, and the next ordinary SAVE ---
         t = s.run(S.LOAD, '"r:nofile"')
