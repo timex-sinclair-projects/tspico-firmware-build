@@ -240,7 +240,7 @@ def test_prompt_each(t):
     t.MQ_READY = lambda: tx.append("READY")
     t.CMD_DRAIN = lambda: tx.append("DRAIN")
     t.CMD_KEY = lambda: keys.pop(0)
-    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
+    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, tx_fifo=lambda: 0, get=lambda: 0)   # TX: the list above
 
     def nr(seq):
         """The bytes alone (READY's exact place is CMD_SEND's business)."""

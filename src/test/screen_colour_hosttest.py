@@ -115,7 +115,7 @@ def send2(t, msg, colour):
     t.CMD_PUT = lambda b: out.append(b)
     t.MQ_READY = lambda: None
     t.CMD_DRAIN = lambda: None
-    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
+    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, tx_fifo=lambda: 0, get=lambda: 0)
     t.TSP = types.SimpleNamespace(ROM_VERSION="2.1")
     t.SEND_MSG2(msg, 1, False, colour)
     return bytes(out[4:])                                         # past 86h, st, CR, CR
@@ -313,7 +313,7 @@ def test_listmenu(t):
     t.MQ_READY = lambda: None
     t.CMD_DRAIN = lambda: None
     t.CMD_KEY = lambda: 78                                       # N: quit at the first prompt
-    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, get=lambda: 0)
+    t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, tx_fifo=lambda: 0, get=lambda: 0)
     t.ListMenu(["GAMES", "UTILS"], "Path:/", "  Directory Name",
                "Change to dir", "Changing dir to: ")
     text = "".join(chr(b) for b in out[2:])                      # past 86h and the status

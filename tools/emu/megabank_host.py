@@ -1,22 +1,17 @@
 #!/usr/bin/env python3
-"""pico_host with a stand-in RAM disk, to exercise the Megabank ROM's mover.
+"""pico_host with one test-only command, to exercise the Megabank ROM's mover.
 
-The Megabank test ROM (tools/build-rom.py --megabank) sends SAVE/LOAD/VERIFY/
-MERGE "r:name" to the firmware as tpi:ropen and tpi:rblk, and the firmware
-moves the bytes by answering with response function 89h, the mover
-(docs/PROTOCOL.md 6.3). The real RAM disk is the Megabank spec's phase 5 and
-isn't written yet. This wraps pico_host.py and adds three commands to the
-firmware's EXT_SA_FUNCT, test-only, so the ROM side can be run end to end in
-ZEsarUX's Megabank model:
+The firmware's RAM disk (src/TS/ramdisk.py; tspico.py's RD_* handlers: tpi:ropen,
+tpi:rblk, tpi:ram, and r: names in CAT, ERASE, FORMAT, MOVE and COPY) uses
+the mover's operations 1-7 as the file system needs them. This adds
 
-  tpi:ropen <name>   PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE: remember the file
-  tpi:rblk <hex>     one block: the mover copies it to or from the board
   tpi:mbtest         ops 4-7 and the range and XOR checks; prints a verdict
 
-The "file system" is a dict in this process: a file's 17-byte header goes to
-page 0 (32 bytes a file), its data to pages from 1 up, one page run per file.
-Nothing survives the process. Results go to $MEGABANK_HOST_LOG (JSON lines)
-for tools/emu/megabank_smoke.py.
+to the firmware's EXT_SA_FUNCT, test-only, for the operations and refusals
+the file system never provokes (an offset of 2000h, a run past the board, a
+bad XOR). It writes pages 40-60 and the board's last page, so run it before
+FORMAT "r:". Results go to $MEGABANK_HOST_LOG (JSON lines) for
+tools/emu/megabank_smoke.py.
 
 Run as pico_host.py is (the same arguments); megabank_smoke.py starts it
 through TSPICO_HOST.
@@ -33,7 +28,7 @@ import pico_host as ph                                 # noqa: E402
 
 LOG = os.environ.get("MEGABANK_HOST_LOG", "/tmp/megabank_host.jsonl")
 FN_MOVER = 0x89
-OK, R_TAPE, F_NAME = 1, 2, 3
+OK = 1
 
 
 def log(**kw):
@@ -103,59 +98,9 @@ class Mover:
         self.fw.CMD_DRAIN()
 
 
-class FakeDisk:
+class MbTest:
     def __init__(self, fw):
         self.fw = fw
-        self.files = {}               # name -> dict(slot, page, length)
-        self.next_page = 1
-        self.cur = None               # (name, mode) from tpi:ropen
-
-    def ropen(self, MQ, TSP, pre, cmd):
-        fw = self.fw
-        name = cmd[3 + len("tpi:ropen "):]
-        mode = fw.PARAMS(pre)[0] & 0xFF
-        log(cmd="ropen", name=name, mode=mode, rom_id=pre[2])
-        if not 1 <= len(name) <= 10 or (mode and name not in self.files):
-            self.cur = None
-            fw.SEND_STATUS(F_NAME)
-            return
-        self.cur = (name, mode)
-        fw.SEND_STATUS(OK)
-
-    def rblk(self, MQ, TSP, pre, cmd):
-        fw = self.fw
-        kind, flag = (p & 0xFF for p in fw.PARAMS(pre))
-        pay = bytes.fromhex(cmd[3 + len("tpi:rblk "):])
-        addr, n = pay[0] | pay[1] << 8, pay[2] | pay[3] << 8
-        log(cmd="rblk", kind=kind, flag=flag, addr=addr, len=n)
-        mv = Mover(fw)
-        if self.cur is None:
-            mv.done([F_NAME])
-            return
-        name, mode = self.cur
-        if kind == 0:                                  # SAVE
-            if flag == 0:
-                f = self.files.setdefault(name, dict(slot=len(self.files), page=None, length=0))
-                st = mv.copy_in(addr, 17, 0, 32 * f["slot"])
-            else:
-                f = self.files[name]
-                if f["page"] is None or f["length"] < n:
-                    f["page"] = self.next_page
-                    self.next_page += (n + 8191) // 8192 or 1
-                f["length"] = n
-                st = mv.copy_in(addr, n, f["page"], 0)
-                self.cur = None
-        else:                                          # LOAD / VERIFY
-            f = self.files[name]
-            if flag == 0:
-                st = mv.copy_out(addr, 17, 0, 32 * f["slot"]) if kind == 1 else \
-                    mv.compare(addr, 17, 0, 32 * f["slot"])
-            else:
-                n = min(n, f["length"])
-                st = mv.copy_out(addr, n, f["page"], 0) if kind == 1 else mv.compare(addr, n, f["page"], 0)
-                self.cur = None
-        log(cmd="rblk-done", reply=st)
-        mv.done([OK if st == 1 else R_TAPE])
 
     def mbtest(self, MQ, TSP, pre, cmd):
         """Ops 4-7 and the checks, then the verdict printed with function 81h
@@ -194,8 +139,7 @@ def install(fs, _inst=ph.install_firmware):
     its main loop; so the commands go into whichever table PROCESS_CMD is
     handed."""
     fw = _inst(fs)
-    disk = FakeDisk(fw)
-    ours = {"TPI:ROPEN": disk.ropen, "TPI:RBLK": disk.rblk, "TPI:MBTEST": disk.mbtest}
+    ours = {"TPI:MBTEST": MbTest(fw).mbtest}
     process = fw.PROCESS_CMD
 
     def PROCESS_CMD(pre, SA_funct, EXT_SA_FUNCT):

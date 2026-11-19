@@ -55,6 +55,7 @@ FIRMWARE = (
     "src/TS/tspico_io.py",
     "src/TS/sdcard.py",
     "src/TS/channels.py",
+    "src/TS/ramdisk.py",
     "src/TS/catalog.py",
     "src/TS/extcmd.py",
     "src/TS/native.py",

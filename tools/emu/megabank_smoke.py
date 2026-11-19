@@ -4,14 +4,19 @@
 Builds build/TSPICO-mb.ROM (tools/build-rom.py --megabank) unless
 TSPICO_ROM names one, starts ZEsarUX with the board fitted (MEGABANK=1;
 the model is in the zesarux-tspico fork's tspico-device branch, MEGABANK.md)
-and pico_host with a stand-in RAM disk (megabank_host.py), and checks:
+and pico_host -- the real firmware, with the RAM disk (src/TS/ramdisk.py) and
+one test-only command added (megabank_host.py) -- and checks:
 
   - the boot: the version marker (PEEK 101 = 37, 25h), the board's owner
     table empty, the bank count (5CBEh, 6315h) 0, SYSCON's end marker;
   - the mover's operations 4-7 and its range and XOR checks (tpi:mbtest),
     and an answer after op 0 that is a function (81h);
-  - SAVE / LOAD / VERIFY "r:name" for a program and for CODE, a VERIFY
-    that fails (R), LOAD of a name the disk hasn't got (F);
+  - no RAM disk until FORMAT "r:"; then SAVE / LOAD / VERIFY "r:name" for a
+    program and for CODE, a VERIFY that fails (R), LOAD of a name the disk
+    hasn't got (F);
+  - CAT "r:", MOVE (rename), ERASE, COPY both ways between the card and the
+    RAM disk and on the RAM disk, SAVE "tpi:ram", FORMAT asked twice, a
+    backup to the card and a restore;
   - a program's own page mapped in chunk 5 (OWN5, SUB5) survives r:
     transfers whose window is chunk 5. (Its HSR bit doesn't: every tpi:
     command clears the HSR, ROM 2.4 included; the run prints it as a NOTE);
@@ -49,6 +54,8 @@ sys.path.insert(0, HERE)
 import session as S                                    # noqa: E402
 
 PRINT, LIST, NEW, VERIFY, OUT, POKE, LET = 0xF5, 0xF0, 0xE6, 0xD6, 0xDF, 0xF4, 0xF1
+FORMAT, ERASE, COPY = 0xD0, 0xD2, 0xFF
+TAP = "/tmp/tspico-root/sd/TAP/"
 IN, PEEK = 0xBF, 0xBE
 results = []
 
@@ -103,9 +110,18 @@ def main():
         t = s.run(S.SAVE, '"tpi:mbtest"')
         check("mbtest ok" in t and "0 OK" in report(t), "tpi:mbtest: ops 4-7, range, XOR, 81h after op 0", t)
 
-        # --- a program to the RAM disk and back ---
+        # --- no RAM disk until FORMAT ---
         s.run("10 ", PRINT, '"MEGA"', until="")
         time.sleep(0.5)
+        t = save(s, '"r:prog"')
+        check("J Invalid I/O device" in report(t), 'SAVE "r:prog" before FORMAT "r:": J', t)
+        t = s.run(FORMAT, '"r:"')
+        check("0 OK" in report(t), 'FORMAT "r:"', t)
+        t = s.run(S.SAVE, '"tpi:ram"')
+        check("RAM disk: 2048K, pages 256-511" in t and "0 files, 2040K free" in t
+              and "Megabank: 4096K, banks 1-64" in t, 'SAVE "tpi:ram": half the board, empty', t)
+
+        # --- a program to the RAM disk and back ---
         t = save(s, '"r:prog"')
         check("0 OK" in report(t), 'SAVE "r:prog"', t)
         s.run(NEW, until="")
@@ -142,14 +158,64 @@ def main():
               "OWN4, OWN6, OWN7 are 0 again")
         s.run(OUT, "253,5:", OUT, "244,0:", OUT, "252,0")   # unmap: HSR, then OWN5
 
+        # --- CAT, MOVE, ERASE, COPY ---
+        t = s.run(S.CAT, '"r:"')
+        check("2 files" in t and "prog" in t and "Program" in t and "code" in t and "3000" in t,
+              'CAT "r:" lists both', t)
+        t = s.run(S.MOVE, '"r:code"', S.TO, '"r:bytes"')
+        check("0 OK" in report(t), 'MOVE "r:code" TO "r:bytes"', t)
+        s.poke(32768, bytes(3000))
+        t = s.run(S.LOAD, '"r:bytes"', S.CODE)
+        check("0 OK" in report(t) and s.peek(32768, 3000) == pat, "LOAD the renamed file", t)
+        t = s.run(COPY, '"r:bytes"', S.TO, '"mbcopy"')
+        check("0 OK" in report(t) and os.path.exists(TAP + "mbcopy.tap"), 'COPY "r:bytes" TO "mbcopy" (the card)', t)
+        try:
+            raw = open(TAP + "mbcopy.tap", "rb").read()
+        except OSError:
+            raw = b""
+        check(raw[:3] == b"\x13\x00\x00" and raw[3] == 3 and raw[24:24 + 3000] == pat,
+              "mbcopy.tap: a header and the 3000 bytes")
+        t = s.run(COPY, '"mbcopy"', S.TO, '"r:back"')
+        check("0 OK" in report(t), 'COPY "mbcopy" TO "r:back"', t)
+        s.poke(32768, bytes(3000))
+        t = s.run(S.LOAD, '"r:back"', S.CODE)
+        check("0 OK" in report(t) and s.peek(32768, 3000) == pat, "it loads", t)
+        t = s.run(COPY, '"r:back"', S.TO, '"r:back2"')
+        check("0 OK" in report(t), 'COPY "r:back" TO "r:back2" (on the board)', t)
+        t = s.run(ERASE, '"r:back2"')
+        check("0 OK" in report(t), 'ERASE "r:back2"', t)
+        t = s.run(ERASE, '"r:back*"')
+        check("1 file: back. ERASE again" in t, 'ERASE "r:back*" says what it would do', t)
+        t = s.run(ERASE, '"r:back*"')
+        check("0 OK" in report(t), "and does it the second time", t)
+        t = s.run(S.CAT, '"r:"')
+        check("2 files" in t and "back" not in t and "bytes" in t, "CAT: prog and bytes left", t)
+
+        # --- backup and restore, on a small RAM disk ---
+        t = s.run(FORMAT, '"r:64"')
+        check("holds 2 files. FORMAT again" in t.replace("\n", ""), 'FORMAT "r:64" over files asks to be repeated', t)
+        t = s.run(FORMAT, '"r:64"')
+        check("0 OK" in report(t), "FORMAT again: done", t)
+        t = save(s, '"r:small"', S.CODE, "32768,3000")
+        check("0 OK" in report(t), 'SAVE "r:small" CODE onto the 64K disk', t)
+        t = s.run(S.SAVE, '"tpi:ram backup mbimg"', timeout=120)
+        sz = os.path.getsize(TAP + "mbimg.rdi") if os.path.exists(TAP + "mbimg.rdi") else 0
+        check("0 OK" in report(t) and sz == 65536, 'SAVE "tpi:ram backup mbimg": 64K on the card', t)
+        t = s.run(ERASE, '"r:small"')
+        t = s.run(S.SAVE, '"tpi:ram restore mbimg"', timeout=120)
+        check("0 OK" in report(t), 'SAVE "tpi:ram restore mbimg"', t)
+        s.poke(32768, bytes(3000))
+        t = s.run(S.LOAD, '"r:small"', S.CODE)
+        check("0 OK" in report(t) and s.peek(32768, 3000) == pat, "the erased file is back", t)
+
         # --- errors, and the next ordinary SAVE ---
         t = s.run(S.LOAD, '"r:nofile"')
         check("F Invalid file name" in report(t), 'LOAD "r:nofile": F', t)
         t = save(s, '"mbplain"', S.CODE, "40000,10")
         check("0 OK" in report(t) and os.path.exists("/tmp/tspico-root/sd/TAP/mbplain.tap"),
               'then SAVE "mbplain" CODE goes to the card', t)
-        t = s.run(S.LOAD, '"r:prog"')
-        check("0 OK" in report(t), 'and LOAD "r:prog" still works', t)
+        t = s.run(S.LOAD, '"r:small"', S.CODE)
+        check("0 OK" in report(t), 'and LOAD "r:small" CODE still works', t)
 
     try:
         with open(LOG) as f:

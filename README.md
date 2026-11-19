@@ -211,7 +211,8 @@ All files under `TS/` plus only the rp2-port stdlib bits we actually use:
 - `TS/__init__.py` (package marker)
 - `TS/tspico.py`, `TS/tspico_io.py`, `TS/sdcard.py`, `TS/extcmd.py`,
   `TS/printer.py`, `TS/catalog.py`, `TS/native.py`, `TS/channels.py`
-  (TS-Pico modules)
+  (TS-Pico modules; the v3 card's build adds `TS/board_v3.py`, `TS/net.py`,
+  the speech modules and `TS/ramdisk.py`, the Megabank RAM disk)
 
 The default rp2 manifest also freezes `uasyncio`, `onewire`, `ds18x20`,
 `dht`, and `neopixel` — drivers for peripherals the TS-Pico doesn't have.
