@@ -1019,8 +1019,9 @@ the `ready` callable `CH_READ` passes it.
 whatever `VERBOSE` says. A message printed now would move the ROM's
 current channel to the screen in the middle of `PRINT #` or `INPUT #`. The
 ROM's `C_END` reads it: 1 is OK, anything else a report. Raises
-`CmdAbort` as `CMD_PUT` does. Callers: the channel handlers (4315–4583)
-and `NO_CARD_REPLY`.
+`CmdAbort` as `CMD_PUT` does. Callers: the channel handlers (4315–4583),
+`NO_CARD_REPLY`, and the `r:` statements' bare statuses (`RD_NEEDS_ROM`,
+`RD_RUN`, `RD_ROPEN`, `RD_RBLK`), whose next `tpi:rblk` follows at once.
 
 ### `CH_CALL(fn, *args)`
 

@@ -3647,7 +3647,7 @@ def RD_NEEDS_ROM(quiet=False):
     msg = 'r: needs the Megabank ROM'
     LOG(msg, 1)
     if quiet:
-        SEND_STATUS(_10_J_Invalid_IO)
+        CH_REPLY(_10_J_Invalid_IO)
     else:
         SEND_MSG(msg, "", _10_J_Invalid_IO, True)
 
@@ -3675,7 +3675,7 @@ def RD_RUN(work, quiet=False, listing=False):
     if st != _1_OK:
         LOG(msg, 1)
     if quiet:
-        SEND_STATUS(st)
+        CH_REPLY(st)
     elif listing and st == _1_OK:
         SEND_MSG2(msg, _1_OK, False)
     else:
@@ -3684,9 +3684,9 @@ def RD_RUN(work, quiet=False, listing=False):
 
 def RD_ROPEN(pre, cmd):                                                       # tpi:ropen name (SAVE/LOAD/... "r:name")
 
-    # PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE. The answer is a bare status,
-    # read in the middle of the statement, so no mover here: the RAM disk is
-    # first touched by the first tpi:rblk, which says F for a missing file.
+    # PMR1 = 0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE. A bare status, CH_REPLY's (no
+    # IDLE: the first tpi:rblk follows at once, docs/reference tspico-disk.md
+    # RD_ROPEN); no mover: the first tpi:rblk says F for a missing file.
     global RD_OPEN
     name = getArgs(cmd)
     mode = PARAMS(pre)[0] & 0xFF
@@ -3695,10 +3695,10 @@ def RD_ROPEN(pre, cmd):                                                       # 
         RD_NEEDS_ROM(True)
         return
     if not 1 <= len(name) <= 10 or mode > 3:
-        SEND_STATUS(_3_F_Invalid_file)
+        CH_REPLY(_3_F_Invalid_file)
         return
     RD_OPEN = [name, mode, None, False]
-    SEND_STATUS(_1_OK)
+    CH_REPLY(_1_OK)
 
 
 def RD_HEX(cmd):                                                              # tpi:rblk's payload: address, length
@@ -3716,7 +3716,7 @@ def RD_RBLK(pre, cmd):                                                        # 
     try:
         addr, n = RD_HEX(cmd)
     except Exception:
-        SEND_STATUS(_5_C_Nonsense)
+        CH_REPLY(_5_C_Nonsense)
         return
     op = RD_OPEN
 
