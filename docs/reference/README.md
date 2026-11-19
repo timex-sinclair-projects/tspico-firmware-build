@@ -186,7 +186,7 @@ behavior, and the caveat and the issue link go.
 | `src/upgrade/upgrade.py` | `5eb55f6dd1fb` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/rom/fdd/fddcmd.asm` | `4518b95dd7f9` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/rom/fdd/bankapi.asm` | `d00eca12ce97` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | — |
-| `src/rom/fdd/rchan.asm` | `7ab152267c92` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/channels.md](flows/channels.md) |
+| `src/rom/fdd/rchan.asm` | `a5f181e16b1f` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/channels.md](flows/channels.md) |
 | `src/rom/patches/tspico-sync.asm` | `0aebb5fbe58b` | [rom/exrom-sync.md](rom/exrom-sync.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/rom/patches/tspico-zx48-v3.asm` | `c942ea86b3aa` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md) |
 | `src/upgrade/updater.asm` | `4826d5f78d95` | [firmware/upgrade.md](firmware/upgrade.md) | — |

@@ -17,7 +17,9 @@ an OUT to F4h or FCh with interrupts on). RST 8 stops a run with its report.
     TAB         a stream's byte n; a gap padded by the next write
     growth      past the extent: tpi:rchgrow, the bytes where Disk says
     write-back  the length and position in the slot at a CR and every
-                256 bytes; the write-protect switch on: J
+                256 bytes; the write-protect switch on: J, and the length,
+                position and column back to the slot's (the bytes the board
+                refused aren't counted, so CLOSE # writes the right length)
     records     a CR pads the record and isn't stored; too long: Q and back to
                 its start; TAB n; a blank record; TAB 0 then a read: the count
     text in     LF and CRLF as CR, controls dropped, a last line ends with CR,
@@ -51,7 +53,7 @@ ROM = os.path.join(REPO, "src", "rom", "TSPICO-MB.ROM")
 ASM = os.path.join(REPO, "src", "rom", "fdd", "fddcmd.asm")
 
 SYM = {"MB_OUT": 0x2400, "MB_IN": 0x240E, "RCH_ENDREC": 0x2785, "RCH_WB": 0x28CA,
-       "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2AE7}
+       "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2B08}
 CURCHL, STRMS, CHANS = 0x5C51, 0x5C10, 0x5C4F
 REC = 0x7100                     # the record, in chunk 3
 DONE = 0xFFF0
@@ -289,6 +291,31 @@ def main():
     m.status = 1
     r = m.put(b"\r" * 300)
     check(r == 0x12, "the write-protect switch on: J at the next write-back")
+    m.status = 0
+    check(not m.faults and m.hsr_rule(), "no faults")
+
+    print("Write-protect: the length after J")
+    m = RMachine(rom)
+    m.open(4, "wp")
+    m.put(b"one\r")                                   # PRINT #4;"one"
+    m.status = 1                                       # the switch on
+    r = m.put(b"two\r")                               # PRINT #4;"two"
+    check(r == 0x12, "the switch on: PRINT #4;\"two\" is J")
+    check((m.field(25), m.field(27)) == (4, 4) and m.ram[REC + 34] == 0,
+          "after J the length and position are the slot's, 4 and 4, the column 0 (%d, %d, %d)"
+          % (m.field(25), m.field(27), m.ram[REC + 34]))
+    m.status = 0                                       # the switch off: CLOSE #4's write-back
+    m.run(SYM["RCH_WB"], ix=REC)
+    check(m.report is None and m.slot_lp(4) == (4, 4),
+          "the switch off: the write-back leaves the file 4 bytes, not 8 (%d, %d)" % m.slot_lp(4))
+    m.put(b"two\r")
+    check(m.file(4) == b"one\rtwo\r", "PRINT # goes on where the file ends (%r)" % m.file(4))
+    m = RMachine(rom)
+    m.open(4, "wpr", "u", reclen=10)
+    m.put(b"A\rBC")                                   # record 1 ended, record 2 open
+    m.status = 1
+    check(m.put(b"\r") == 0x12 and (m.field(25), m.field(27), m.ram[REC + 34]) == (10, 10, 0),
+          "a record file: J, back to the slot's length and position (record 2's start), column 0")
     m.status = 0
     check(not m.faults and m.hsr_rule(), "no faults")
 

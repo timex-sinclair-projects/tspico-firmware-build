@@ -1450,18 +1450,19 @@ regenerate it when a line number moves (the test checks that it is current).
 | `RCH_GROW` | label | [713](../../../src/rom/fdd/rchan.asm#L713) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `RCH_IO` | label | [755](../../../src/rom/fdd/rchan.asm#L755) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `BOARD_IO` | label | [795](../../../src/rom/fdd/rchan.asm#L795) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `RCH_WB` | label | [848](../../../src/rom/fdd/rchan.asm#L848) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `RCH_TAB` | label | [890](../../../src/rom/fdd/rchan.asm#L890) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `MUL16X8` | label | [924](../../../src/rom/fdd/rchan.asm#L924) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `DIV16X8` | label | [940](../../../src/rom/fdd/rchan.asm#L940) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `RCH_IN` | label | [961](../../../src/rom/fdd/rchan.asm#L961) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `RCH_GETC` | label | [968](../../../src/rom/fdd/rchan.asm#L968) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `RCH_RAW` | label | [1077](../../../src/rom/fdd/rchan.asm#L1077) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `RCH_NUM` | label | [1095](../../../src/rom/fdd/rchan.asm#L1095) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `CMD_RCHOPEN` | label | [1120](../../../src/rom/fdd/rchan.asm#L1120) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `CMD_RCHGROW` | label | [1121](../../../src/rom/fdd/rchan.asm#L1121) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `CMD_RCHCLOSE` | label | [1122](../../../src/rom/fdd/rchan.asm#L1122) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `CMD_RMASK` | label | [1123](../../../src/rom/fdd/rchan.asm#L1123) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RCH_WB` | label | [853](../../../src/rom/fdd/rchan.asm#L853) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RCH_SLOT` | label | [875](../../../src/rom/fdd/rchan.asm#L875) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RCH_TAB` | label | [915](../../../src/rom/fdd/rchan.asm#L915) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `MUL16X8` | label | [949](../../../src/rom/fdd/rchan.asm#L949) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `DIV16X8` | label | [965](../../../src/rom/fdd/rchan.asm#L965) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RCH_IN` | label | [986](../../../src/rom/fdd/rchan.asm#L986) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RCH_GETC` | label | [993](../../../src/rom/fdd/rchan.asm#L993) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RCH_RAW` | label | [1102](../../../src/rom/fdd/rchan.asm#L1102) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RCH_NUM` | label | [1120](../../../src/rom/fdd/rchan.asm#L1120) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_RCHOPEN` | label | [1145](../../../src/rom/fdd/rchan.asm#L1145) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_RCHGROW` | label | [1146](../../../src/rom/fdd/rchan.asm#L1146) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_RCHCLOSE` | label | [1147](../../../src/rom/fdd/rchan.asm#L1147) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `CMD_RMASK` | label | [1148](../../../src/rom/fdd/rchan.asm#L1148) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 
 ## `src/rom/patches/tspico-sync.asm`
 

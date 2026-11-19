@@ -844,16 +844,37 @@ BOARD_IO:
         ret
 
 ; RCH_WB -- a writable stream's length and position back to its slot (4
-; bytes, page RR_MPG). The write-protect switch on: J.
+; bytes, page RR_MPG). The write-protect switch on: J, and the length and
+; position go back to the slot's, the last ones written back. The board
+; refused every byte since then, so the ROM's own length would count bytes
+; the file hasn't got, and CLOSE # would write it once the switch is off.
+; A record file's column follows its position (POS MOD REC); a stream's
+; goes to 0.
 RCH_WB: bit     F_WR,(ix+RR_FL)
         ret     z
         ld      a,MB_STATUS
         call    MB_RD
         rra
-        jr      nc,.ok
+        ld      b,1
+        jr      nc,RCH_SLOT        ; write them back
+        ld      b,0
+        call    RCH_SLOT           ; read the slot's back
+        xor     a
+        bit     F_REC,(ix+RR_FL)
+        jr      z,.col
+        ld      l,(ix+RR_POS)
+        ld      h,(ix+RR_POS+1)
+        ld      e,(ix+RR_REC)
+        call    DIV16X8            ; A = the bytes into its record
+.col:   ld      (ix+RR_COL),a
         rst     8
         db      $12                ; J: the board is write-protected
-.ok:    ld      l,(ix+R_STRM)
+
+; RCH_SLOT -- B = 1: the length and position (RR_LEN, RR_POS) to the stream's
+; slot; 0: from it.
+RCH_SLOT:
+        push    bc                 ; [B]
+        ld      l,(ix+R_STRM)
         ld      h,0
         add     hl,hl
         add     hl,hl
@@ -867,21 +888,25 @@ RCH_WB: bit     F_WR,(ix+RR_FL)
         pop     hl
         ld      bc,RR_LEN
         add     hl,bc              ; HL = the length, then the position
-        ld      b,4
-.w:     push    bc
+        pop     bc
+        ld      a,4
+.w:     push    af
+        push    bc
         push    hl
         push    de
         ld      c,(hl)
         ld      l,(ix+RR_MPG)
         ld      h,(ix+RR_MPG+1)
-        ld      b,1
-        call    BOARD_IO
+        call    BOARD_IO           ; A = the byte (written or read)
         pop     de
         pop     hl
+        ld      (hl),a
         pop     bc
+        pop     af
         inc     hl
         inc     de
-        djnz    .w
+        dec     a
+        jr      nz,.w
         ret
 
 ; RCH_TAB -- TAB HL: an open record (writing) is padded; TAB 0 asks for the
