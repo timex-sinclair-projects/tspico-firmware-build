@@ -131,7 +131,7 @@ The genuine EXROM is 8K. **The TS-Pico EXROM is 16K**, a flat ROM at Z80
 | 2000h–22ADh | 686 | chunk 1's first code: the landing pad, the function chain, the accessors | 1.1 (22A1h–22ADh the base image) | [exrom-chunk1.md](exrom-chunk1.md) |
 | 22AEh–22FDh | 80 | the SAVE-prompt BREAK routine | the base image | [exrom-chunk1.md](exrom-chunk1.md) |
 | 2300h–23D3h | 212 | SYNC, BREAK abort, the BIOS wait | the SYNC layer | [exrom-sync.md](exrom-sync.md) |
-| 23D4h–2FFFh | 3116 | `FFh`, free (the Megabank test ROM only: 2400h–2C15h, 2070 bytes, the `r:` channels; 2C8Ch–2C8Eh, the fast entry's `JP FX_ENTRY`, `rchan.asm`) | | [exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9) |
+| 23D4h–2FFFh | 3116 | `FFh`, free (the Megabank test ROM only: 2400h–2C72h, 2163 bytes, the `r:` channels; 2C8Ch–2C8Eh, the fast entry's `JP FX_ENTRY`, `rchan.asm`) | | [exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9) |
 | 3000h–3997h | 2456 | the disk-command module (3771h–377Eh 14 free `FFh`; 377Fh–37B4h `PS_READ`, from ROM 2.3; 37B5h–38ECh the COPY, LIST and RESTORE entry; 38EDh–3931h the speech and command channels' helpers, #375, #404; 3932h–3997h `CAT #n`, #404) | the disk-command layer | [exrom-fdd.md](exrom-fdd.md) |
 | 3931h–3FFFh | 1743 | `FFh`, free | | |
 

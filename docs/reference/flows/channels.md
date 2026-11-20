@@ -261,17 +261,20 @@ calls `RCH_KIND` in place of `SPEC_KIND`, which takes `r:` itself
 stack and `"w log"`, and the firmware (`RD_RCHOPEN`, `Disk.open_stream`)
 makes the file, gives it an extent, writes the stream's slot on the board
 and copies the slot's 15-byte block onto the stack (the mover's op 2). The
-record, letter `R`, is built from the block: no buffers, no `R_INBUF`.
+record, letter `R`, is built from the block, with its output stub (`STUB_IMG`): no `R_INBUF`.
 
-`PRINT #4;"hello"`: HOME 14A0h → `FASTH` (1265h), the fast channel entry:
-the EXROM paged in with two `OUT`s (the one to F4h repeated at 128Bh until
-a read comes from the EXROM), no bank call and no error trap per
-character → `FX_ENTRY` sees the `R`. The first byte goes to `RCH_OUT`, which
-writes it straight to the board through chunk 0 (`BOARD_IO`) and sets up
-the record's cursor (`RCH_FILL`); the rest go through the cursor
-(`RCH_FOUT`), about 830 T-states each from `RST 10h`. No command, no
-exchange with the TS-Pico. At each CR and each 256-byte boundary the length
-and position go back to the slot.
+`PRINT #4;"hello"`: `RST 10h` calls the record's own output routine, a
+28-byte stub in the record (`RR_STUB`). The first byte it passes on: HOME
+14A0h → `FASTH` (1265h), the fast channel entry: the EXROM paged in with
+two `OUT`s (the one to F4h repeated at 128Bh until a read comes from the
+EXROM), no bank call and no error trap per character → `FX_ENTRY` sees the
+`R` → `RCH_OUT`, which writes the byte straight to the board through chunk 0
+(`BOARD_IO`) and says how many more the stub may keep (`RCH_FILL`). The
+stub puts those in the record's buffer (`RR_FBUF`, 57 bytes) without leaving
+RAM; the CR, or a full buffer, goes to `RCH_OUT` again, whose `RCH_SYNC`
+copies the buffer to the board. About 400 T-states a character from
+`RST 10h`. No command, no exchange with the TS-Pico. At each CR and each
+256-byte boundary the length and position go back to the slot.
 Past the extent, `RCH_GROW` sends `tpi:rchgrow` and takes a new block.
 `INPUT #4` reads the same way (`RCH_IN`), with the same text and record rules
 as `f:`.
