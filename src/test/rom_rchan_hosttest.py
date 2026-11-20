@@ -37,6 +37,7 @@ Run:
 """
 
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -53,12 +54,13 @@ from TS import ramdisk as rd                                    # noqa: E402
 ROM = os.path.join(REPO, "src", "rom", "TSPICO-MB.ROM")
 ASM = os.path.join(REPO, "src", "rom", "fdd", "fddcmd.asm")
 
-SYM = {"MB_OUT": 0x2449, "MB_IN": 0x2457, "RCH_ENDREC": 0x289D, "RCH_WB": 0x29D7, "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2C18, "RCH_OUT": 0x270B, "RCH_SYNC": 0x2754}
+SYM = {"MB_OUT": 0x2447, "MB_IN": 0x2455, "RCH_ENDREC": 0x289B, "RCH_WB": 0x29D5, "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2C16, "RCH_OUT": 0x2709, "RCH_SYNC": 0x2752}
 CURCHL, STRMS, CHANS = 0x5C51, 0x5C10, 0x5C4F
 REC = 0x7100                     # the record, in chunk 3
 DONE = 0xFFF0
 SP = 0x6100
-HOME_OK = (0x002E, 0x139B, 0x03F3, 0x03F4, 0x03F7, 0x03FA, 0x041C)   # the switch, BEEPER's thunk
+HOME_OK = (0x03F3, 0x03F4, 0x03F7, 0x03FA, 0x041C)   # BEEPER's thunk
+LAND = 0x2C8C                    # HOME: JP (HL); the EXROM: JP FX_ENTRY
 results = []
 
 
@@ -137,6 +139,12 @@ class RMachine(Machine):
         self.sent = []
         self.mapped = set()
         self.cpu.fetch_hook = None
+        # The card's view of F4h and FFh, which decides the ROM a read of
+        # chunks 0-1 comes from. `lag` (a function, or None for at once) is
+        # the memory reads it stays behind each write; chunk 1 follows chunk
+        # 0 by `skew` more. Writes apply in order, as the card's FIFO does.
+        self.lag, self.skew, self.pend = None, 0, []
+        self.c_hsr, self.c_dec = self.hsr, self.dec
         self.ram[CHANS:CHANS + 2] = w(0x7000)
 
     def port_in(self, port):
@@ -147,15 +155,53 @@ class RMachine(Machine):
     def port_out(self, port, v):
         if port & 0xFF == 0xFC and self.sel < 8 and v:
             self.mapped.add(self.sel)                # the chunks the ROM gave a bank
+        if self.lag is not None and port & 0xFF in (0xF4, 0xFF):
+            n = max([self.lag()] + [q[0] for q in self.pend])
+            self.pend.append([n, port & 0xFF, v, False])
         super().port_out(port, v)
+
+    def card(self):
+        """Apply the writes that are due to the card's view."""
+        for q in self.pend:
+            if q[0] <= 0 and not q[3]:
+                q[3] = True
+                if q[1] == 0xF4:
+                    self.c_hsr = (self.c_hsr & 0xFE) | (q[2] & 1)
+                else:
+                    self.c_dec = q[2]
+        while self.pend and self.pend[0][0] <= -self.skew:
+            _, p, v, _ = self.pend.pop(0)
+            if p == 0xF4:
+                self.c_hsr = v
+
+    def exrom_at(self, a):
+        """Whether a read at `a` (below 4000h) comes from the EXROM."""
+        if self.lag is None:
+            return bool(self.hsr >> (a >> 13) & 1)
+        self.card()
+        return bool(self.c_hsr >> (a >> 13) & 1)
+
+    def read(self, a):
+        if self.lag is None:
+            return super().read(a)
+        self.card()
+        for q in self.pend:
+            q[0] -= 1
+        c = a >> 13
+        if c < 2 and self.owner(c) is None:
+            if self.c_hsr >> c & 1:
+                return self.exrom[a & 0x3FFF] if self.c_dec & 0x80 else 0xFF
+            return self.home[a]
+        return super().read(a)
 
     def run(self, addr, home=False, **regs):
         """From MB_OUT or MB_IN, as the module calls them; or, home=True,
         from a HOME stub (14A0h, 14A9h) with interrupts on, as RST 10h and
         the editor reach it, through FASTH and the fast entry: HOME code
-        runs while F4h bit 0 is clear, and the only EXROM addresses below
-        2000h are the landing (0030h) and FX_BACK (1399h). 03FCh, Timex's
-        bank call, stops the run (self.slow = the vector in HL)."""
+        runs while the card serves HOME there, and the only EXROM addresses
+        below 2000h are the switch loops and the landing (128Bh-1296h). In
+        chunk 1 the only HOME fetch is the landing's JP (HL) at 2C8Ch. 03FCh,
+        Timex's bank call, stops the run (self.slow = the vector in HL)."""
         cpu = self.cpu
         for k, v in regs.items():
             setattr(cpu, k, v)
@@ -164,25 +210,39 @@ class RMachine(Machine):
         cpu.push(DONE)
         cpu.pc = addr
         self.report = self.slow = None
+        self.pend, self.c_hsr, self.c_dec = [], self.hsr, self.dec
         n = 0
         while cpu.pc != DONE:
             pc = cpu.pc
-            if pc == SYM["RCH_OUT"]:
+            if pc == SYM["RCH_OUT"] and (not home or self.exrom_at(pc)):
                 self.nslow += 1
-            if pc == 0x0008 and self.hsr & 1:        # the EXROM's RST 8: the report
+            if pc == 0x0008 and self.exrom_at(pc):   # the EXROM's RST 8: the report
                 self.report = self.read(cpu.r16(cpu.sp))
                 return self
+            if home and 0x2000 <= pc < 0x4000 and not self.exrom_at(pc):
+                if pc != LAND:
+                    self.faults.append("HOME fetch at %04X" % pc)
+                    return self
+                cpu.step()
+                n += 1
+                if n > 5_000_000:
+                    raise RuntimeError("runaway at %04X" % cpu.pc)
+                continue
             if home and pc < 0x2000:
-                if not self.hsr & 1:
+                if not self.exrom_at(pc):
                     if pc == 0x03FC:
                         self.slow = cpu.h << 8 | cpu.l
                         return self
-                    if not (pc in HOME_OK or 0x1265 <= pc < 0x1289 or 0x14A0 <= pc < 0x14B2):
+                    if not (pc in HOME_OK or 0x1265 <= pc < 0x1293 or 0x14A0 <= pc < 0x14B2):
                         self.faults.append("HOME fetch at %04X" % pc)
-                elif pc not in (0x0030, 0x1399):
+                        return self
+                elif not 0x128B <= pc < 0x1297:
                     self.faults.append("EXROM fetch at %04X" % pc)
+                    return self
                 cpu.step()
                 n += 1
+                if n > 5_000_000:
+                    raise RuntimeError("runaway at %04X" % cpu.pc)
                 continue
             if pc == SYM["CH_SEND"]:
                 prefix = bytearray()
@@ -489,6 +549,43 @@ def main():
     m.run(0x03F3, home=True, h=0x00, l=0xC8, d=0, e=0)
     check(not m.faults and m.slow is None and m.report is None and m.hsr == 0 and cpu.iff,
           "BEEPER's thunk (03F3h) through FASTH: the click skipped for an R record, back to HOME")
+
+    print("The switch, with the card late (F4h and FFh followed N memory reads after the write)")
+    text = b"The quick brown fox 0123456789\r" * 6
+
+    def late(lag, skew=0):
+        m = RMachine(rom)
+        m.open(4, "late", "u")
+        m.hsr, m.dec = 0x00, 0x05
+        m.lag, m.skew = lag, skew
+        cpu = m.cpu
+
+        def back():
+            return (not m.faults and m.report is None and m.slow is None
+                    and (m.hsr, m.dec, cpu.sp, cpu.iff) == (0x00, 0x05, SP, True))
+        m.put(text, home=True)
+        if not (back() and m.file(4) == text):
+            return "PRINT #: %s" % (m.faults[:1] or m.report)
+        m.put(bytes((23, 1, 0)), home=True)
+        got, end = m.get(home=True)
+        if not (got == text and end == "eof" and not m.faults):
+            return "INPUT #: %s" % (m.faults[:1] or end)
+        m.ram[0x5DCD:0x5DCF] = w(0x00C8)
+        m.run(0x03F3, home=True, h=0x00, l=0xC8, d=0, e=0)
+        return None if back() else "the key click: %s" % m.faults[:1]
+
+    bad = [(n, r) for n in (0, 1, 2, 3, 5, 8, 13, 40, 200) for r in [late(lambda n=n: n)] if r]
+    check(not bad, "PRINT #, INPUT # and the key click with the card 0 to 200 reads late %s" % (bad[:2] or ""))
+    bad = []
+    for seed in range(1, 9):
+        rnd = random.Random(seed)
+        r = late(lambda: rnd.choice((0, 0, 0, 1, 2, 7, 30)), seed % 3)
+        if r:
+            bad.append((seed, r))
+    check(not bad, "the same with a random delay for each write, eight seeds %s" % (bad[:2] or ""))
+    bad = [(k, r) for k in (1, 3, 9, 50) for r in [late(lambda: 2, k)] if r]
+    check(not bad, "the same with chunk 1 following chunk 0 by 1 to 50 reads: the landing waits "
+          "at 2C8Ch %s" % (bad[:2] or ""))
 
     ok = sum(results)
     print("%d/%d passed" % (ok, len(results)))

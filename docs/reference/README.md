@@ -184,9 +184,9 @@ behavior, and the caveat and the issue link go.
 | `src/TS/speech_rules.py` | `3e16e980652d` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/upgrade/main.py` | `6ab664e9c744` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/upgrade/upgrade.py` | `5eb55f6dd1fb` | [firmware/upgrade.md](firmware/upgrade.md) | — |
-| `src/rom/fdd/fddcmd.asm` | `72abe3554744` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
-| `src/rom/fdd/bankapi.asm` | `d00eca12ce97` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | — |
-| `src/rom/fdd/rchan.asm` | `b099cb37430c` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/channels.md](flows/channels.md) |
+| `src/rom/fdd/fddcmd.asm` | `731afa9c629c` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/rom/fdd/bankapi.asm` | `7f98329f9f8a` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | — |
+| `src/rom/fdd/rchan.asm` | `5afea9331143` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/channels.md](flows/channels.md) |
 | `src/rom/patches/tspico-sync.asm` | `0aebb5fbe58b` | [rom/exrom-sync.md](rom/exrom-sync.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/rom/patches/tspico-zx48-v3.asm` | `c942ea86b3aa` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md) |
 | `src/upgrade/updater.asm` | `4826d5f78d95` | [firmware/upgrade.md](firmware/upgrade.md) | — |
@@ -222,7 +222,7 @@ behavior, and the caveat and the issue link go.
 | `src/rom/TSPICO-24.ROM` | `61aac90f2c1f` | *(chapter)* | *(flows)* |
 | `src/rom/TSPICO-ZX48-V4.BIN` | `ec57f307bd0d` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `flash/manifest.json` | `4eb97bceb7e2` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
-| `tools/build-rom.py` | `857bd36f37ea` | [rom/overview.md](rom/overview.md) | — |
+| `tools/build-rom.py` | `3a48297fcc0e` | [rom/overview.md](rom/overview.md) | — |
 | `tools/build-flash.py` | `c5b00cf9c0cd` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |

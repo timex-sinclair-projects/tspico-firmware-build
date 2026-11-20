@@ -27,6 +27,11 @@ the screen, and save screenshots.
   bus's real clock. A FIFO running dry or overflowing because the Pico was late can't
   happen here, and the DMA paths aren't used (`rp2.DMA` is absent, so the firmware takes its
   polling fallbacks). Bugs like "TX ran dry" or "Partial pre-header" need the hardware.
+- **Not for bank-switch timing.** ZEsarUX applies a write to F4h or FFh inside the `OUT`. The
+  card follows it later (about a microsecond on a v3 card, not bounded), so ROM code that
+  switches banks from ROM and expects the next read from the other ROM passes here and fails
+  on a 2068. `src/test/rom_rchan_hosttest.py` models the delay (the card's view of F4h and
+  FFh up to 200 memory reads behind) for the Megabank ROM's fast channel entry.
 
 The protocol between them is [`docs/EMULATOR_BRIDGE.md`](../../docs/EMULATOR_BRIDGE.md): two-byte
 frames over TCP `127.0.0.1:2068` or a Unix socket. An emulator implements that and gets a TS-Pico.

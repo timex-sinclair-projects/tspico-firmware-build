@@ -465,8 +465,16 @@ MB_PATCHES = [
     # character through an F or R record, and the editor's key click, used to
     # cross through Timex's bank call (03FCh -> CALL_BANK at 65D0h:
     # SAVE_STATUS, BANK_ENABLE, RESTORE_STATUS, each reading or writing the
-    # board's 16 registers) and GUARDED's error trap. FASTH switches with two
-    # OUTs each way, at two places where HOME and the EXROM line up.
+    # board's 16 registers) and GUARDED's error trap. FASTH switches with an
+    # OUT to FFh and one to F4h each way. The F4h OUTs run from ROM, and the
+    # TS-Pico follows a write to F4h some time after it (a v3 card: a polled
+    # loop on core 1, about a microsecond; nothing bounds it). So each is a
+    # loop, OUT (F4h),A / JR, at the same address in both ROMs ($128B in,
+    # $128F out) with the same bytes but the JR's displacement: whichever ROM
+    # a read comes from, the Z80 repeats the OUT until the displacement is
+    # read from the other one. The rule: no bank switch from ROM unless the
+    # code after the OUT is the same in both ROMs until one read tells them
+    # apart.
     dict(
         name="SELECT's banked branch: $1241 JR NC,$1265 -> JR NC,$123D (Report O)",
         bank="home", addr=0x1241, before="30 22", after="30 fa",
@@ -482,43 +490,50 @@ MB_PATCHES = [
         bank="home", addr=0x1265,
         before="2a bc 5c d6 80 57 19 22 51 5c 7e 32 bf 5c fd cb 30 a6 23 23 23 23 "
                "23 23 3a bf 5c 47 0e 88 56 23 5e 62 6b e5 c5 01 00 00 c5 c5 cd d0 65 c9",
-        after="f3 4f db f4 e6 03 20 16 "                 # DI / LD C,A / IN A,(F4) / AND 3 / JR NZ,.slow
+        after="f3 4f 45 db f4 e6 03 20 16 "              # DI / LD C,A / LD B,L / IN A,(F4) / AND 3 / JR NZ,.slow
               "db ff f5 f6 80 d3 ff "                    # IN A,(FF) / PUSH AF / OR 80 / OUT (FF),A
-              "db f4 f6 03 cd 2e 00 "                    # IN A,(F4) / OR 3 / CALL 002E
-              "d1 f1 d3 ff d5 f1 fb c9 "                 # POP DE / POP AF / OUT (FF),A / PUSH DE / POP AF / EI / RET
-              "79 cd fc 03 fb c9 "                       # .slow: LD A,C / CALL 03FC / EI / RET
-              "ff ff ff ff ff ff ff ff ff ff",
+              "db f4 f6 03 c3 8b 12 "                    # IN A,(F4) / OR 3 / JP SW_IN
+              "d1 f1 d3 ff d5 f1 fb c9 "                 # $127C FH_BACK: POP DE / POP AF / OUT (FF),A / PUSH DE / POP AF / EI / RET
+              "79 cd fc 03 fb c9 "                       # $1284 .slow: LD A,C / CALL 03FC / EI / RET
+              "ff "
+              "d3 f4 18 fc "                             # $128B SW_IN: OUT (F4),A / JR SW_IN (the EXROM's JR goes on)
+              "d3 f4 18 e9",                             # $128F SW_OUT: OUT (F4),A / JR FH_BACK (the EXROM's JR loops)
         note="HL = the vector (3009h out, 300Ch in, 3015h BEEPER), A = the "
-             "character. With F4h bits 0-1 clear (HOME in chunks 0-1: anything "
-             "else there, such as a program's board page, takes the old path, "
-             "Timex's bank call through 03FCh and GUARDED): FFh bit 7 set (the "
-             "EXROM, not the DOCK) and FFh as it was pushed, then F4h bits 0-1 "
-             "set by the OUT at $002E, whose next fetch is the EXROM's $0030: "
-             "JP FX_ENTRY (rchan.asm). FX_ENTRY comes back through the EXROM's "
-             "OUT at $1399 and HOME's RET at $139B with AF on the stack: FFh "
-             "back, AF, EI.",
+             "character; B = the vector's low byte for FX_ENTRY, since HL is "
+             "used on the way in. With F4h bits 0-1 clear (HOME in chunks "
+             "0-1: anything else there, such as a program's board page, takes "
+             "the old path, Timex's bank call through 03FCh and GUARDED): FFh "
+             "bit 7 set (the EXROM, not the DOCK) and FFh as it was pushed, "
+             "then F4h bits 0-1 set by SW_IN at $128B, which repeats its OUT "
+             "until the JR's displacement at $128E is read from the EXROM "
+             "(04h: on to $1293) and not from HOME (FCh: round again). "
+             "FX_ENTRY (rchan.asm) comes back through SW_OUT at $128F with AF "
+             "on the stack: the EXROM's displacement at $1292 is FCh (round "
+             "again), HOME's E9h, to FH_BACK at $127C: FFh back (all of it, "
+             "where RESTORE_STATUS puts back bit 7 only), AF, EI.",
     ),
     dict(
-        name="FASTH's switch into the EXROM: HOME $002E OUT (F4h),A",
-        bank="home", addr=0x002E, before="ff ff", after="d3 f4",
-        note="$002B-$002F was FFh filler after RST 28h's JP $371A; nothing "
-             "jumps here but FASTH's CALL. The OUT pages the EXROM into chunks "
-             "0-1, so the next instruction is fetched from EXROM $0030.",
+        name="the EXROM's half of the switch loops, and the landing: $128B-$1296",
+        bank="exrom", addr=0x128B,
+        before="00 00 00 00 00 00 00 00 00 00 00 00",
+        after="d3 f4 18 04 "                             # $128B SW_IN: OUT (F4),A / JR $1293
+              "d3 f4 18 fc "                             # $128F SW_OUT (FX_BACK): OUT (F4),A / JR SW_OUT
+              "21 8c 2c e9",                             # $1293: LD HL,2C8C / JP (HL)
+        note="bankapi.asm's zero padding between GET_NUMBER and BANK_ENABLE "
+             "(RAM $648B-$6498; the manifest is applied after the splice). "
+             "The boot copies these bytes to RAM $648B-$6496 with the bank "
+             "code, where nothing reads or runs them. $128B-$1292 hold the "
+             "same bytes as HOME's but the two displacements. The landing "
+             "checks chunk 1, where FX_ENTRY is: it jumps to $2C8C with HL = "
+             "$2C8C. While chunk 1 is still HOME the byte there is HOME's E9h, "
+             "JP (HL), which jumps to itself; once it is the EXROM, the JP "
+             "FX_ENTRY below.",
     ),
     dict(
-        name="FASTH's landing in the EXROM: $0030 JP FX_ENTRY ($2400)",
-        bank="exrom", addr=0x0030, before="ff ff ff", after="c3 00 24",
-        note="FFh filler in the EXROM's RST 8 / RST 38h area; no RST 30h or "
-             "jump reaches it in the EXROM. Only HOME's $002E arrives here.",
-    ),
-    dict(
-        name="FX_BACK: EXROM $1399 OUT (F4h),A, then HOME's RET at $139B",
-        bank="exrom", addr=0x1399, before="ff ff", after="d3 f4",
-        note="In the FFh run $138E-$13CF, which the boot copies to RAM "
-             "$658E-$65CD, the bank stack's space: what the copy puts there is "
-             "never read. FX_ENTRY jumps here with A = F4h, bits 0-1 clear: "
-             "the next fetch is HOME $139B, a RET (the tail of the genuine "
-             "$139A AND A / RET), back into FASTH.",
+        name="the fast entry's landing in chunk 1: EXROM $2C8C JP FX_ENTRY ($2400)",
+        bank="exrom", addr=0x2C8C, before="ff ff ff", after="c3 00 24",
+        note="Free EXROM after rchan.asm (fddcmd.asm asserts RCH_END <= "
+             "$2C8C), at the address of a JP (HL) in HOME (MB_ANCHORS).",
     ),
 ]
 
@@ -528,6 +543,8 @@ MB_FIXED_SYMS = {"MB_BOOT": 0x3998, "R_SA": 0x39F5, "R_LD": 0x3A06, "FN_EXT": 0x
 # Base-ROM code the Megabank code relies on (checked with ANCHORS when
 # building --megabank).
 MB_ANCHORS = [
+    dict(name="HOME's JP (HL) at $2C8C: the fast entry waits on it until chunk 1 is the EXROM",
+         bank="home", addr=0x2C8C, bytes="e9"),
     dict(name="SYSCON_END: DEC HL / LD (HL),80h / CALL_HOME $0A35 (MB_BOOT ends here)",
          bank="exrom", addr=0x2082, bytes="2b 36 80 dd e5 d9 21 35 0a c3 dd 03"),
     dict(name="the old search's end: CALL $2082 / CALL $0CFB / RET",

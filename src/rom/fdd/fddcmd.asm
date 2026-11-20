@@ -2830,6 +2830,6 @@ RCH_BASE        EQU $2400
         ORG     RCH_BASE
         INCLUDE "rchan.asm"
 RCH_END:
-        ASSERT  RCH_END <= $3000
+        ASSERT  RCH_END <= $2C8C     ; EXROM 2C8Ch: the fast entry's JP FX_ENTRY (build-rom.py)
         SAVEBIN "rchan.bin", RCH_BASE, RCH_END-RCH_BASE
     ENDIF

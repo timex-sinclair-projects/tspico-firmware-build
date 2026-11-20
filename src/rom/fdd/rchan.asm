@@ -83,28 +83,40 @@ SLOT_LP         EQU 16+6           ;   length and position at +22
 ; record's output and input stubs (14A0h, 14A9h) and the BEEPER thunk
 ; (03F3h) go: under DI, with chunks 0-1 HOME (F4h bits 0-1 clear, else it takes
 ; Timex's bank call, 03FCh, as before), it sets FFh bit 7, pushes FFh as it
-; was, sets F4h bits 0-1 and does CALL 002Eh, whose OUT (F4h),A is the last
-; HOME instruction: the next fetch, at 0030h, is the EXROM's JP here. No bank
+; was, and jumps to SW_IN, 128Bh, with A = F4h and bits 0-1 set. No bank
 ; call, no SAVE_STATUS, no frame on the bank stack, no error trap.
 ;
-; In: HL = the stub's vector (CH_OUT_VEC, CH_IN_VEC or BEEP_VEC), C = the
-; character, (THUNK_HL) = BEEPER's HL; on the stack FASTH's return, then FFh.
-; Out the same way back: AF (the input routine's C/NC, Z/NZ and character)
-; under FASTH's return, F4h bits 0-1 cleared by FX_BACK, EXROM 1399h, whose
-; OUT is the last EXROM instruction: the next fetch is HOME's RET at 139Bh,
-; into FASTH, which puts FFh back, then AF, and does EI.
+; The switch. The TS-Pico serves both ROMs and follows a write to F4h some
+; time after it (a v3 card: a polled loop on core 1; about a microsecond, but
+; nothing bounds it), so no code here may expect the read after an OUT (F4h)
+; to come from the other ROM. SW_IN and SW_OUT (128Fh, FX_BACK) are OUT
+; (F4h),A / JR, four bytes at the same address in both ROMs and the same but
+; for the JR's displacement, which is one read: from the ROM being left it
+; goes round again (and repeats the OUT), from the ROM wanted it goes on.
+; Coming in, the EXROM's JR goes to 1293h: LD HL,2C8Ch / JP (HL). FX_ENTRY is
+; in chunk 1, which the card may switch after chunk 0: HOME's byte at 2C8Ch
+; is E9h, JP (HL), which jumps to itself until chunk 1 is the EXROM, whose
+; bytes there are JP FX_ENTRY (all in build-rom.py).
+;
+; In: B = the low byte of the stub's vector (CH_OUT_VEC, CH_IN_VEC or
+; BEEP_VEC), C = the character, DE as the caller's (BEEPER's), (THUNK_HL) =
+; BEEPER's HL; on the stack FFh as it was (an AF), then the caller's return.
+; Out: AF (the input routine's C/NC, Z/NZ and character) pushed on top of
+; that, and FX_BACK with A = F4h, bits 0-1 clear: HOME's JR there goes to
+; FASTH's tail (127Ch), which pops AF, puts FFh back and does EI.
 ;
 ; Errors: a report raised here goes through the EXROM's RST 8, which pages
-; HOME (Timex's GOTO_BANK, no bank-stack frame) and does EI; with no frame
-; pushed on the way in there is nothing to put back. What can call HOME code
-; (an exchange with the TS-Pico: f:'s buffer, r:'s growth) runs under GUARD0,
-; the error trap, once per exchange instead of once per character.
+; HOME (Timex's GOTO_BANK, from RAM, no bank-stack frame) and does EI; with
+; no frame pushed on the way in there is nothing to put back. What can call
+; HOME code (an exchange with the TS-Pico: f:'s buffer, r:'s growth) runs
+; under GUARD0, the error trap, once per exchange instead of once per
+; character.
 ;------------------------------------------------------------------------------
 THUNK_HL        EQU $5DCD          ; HOME's thunks pass the caller's HL here
-FX_BACK         EQU $1399          ; EXROM: OUT (F4h),A, then HOME 139Bh: RET
+FX_BACK         EQU $128F          ; SW_OUT, in both ROMs: OUT (F4h),A / JR
 
 FX_ENTRY:
-        ld      a,l
+        ld      a,b
         cp      low CH_OUT_VEC
         jr      nz,.nout
         ld      hl,(CURCHL)
@@ -124,9 +136,7 @@ FX_ENTRY:
         call    G_BEEP
         jr      .x
 .in:    call    MB_IN
-.x:     pop     hl                 ; FASTH's return
-        push    af                 ; the result
-        push    hl
+.x:     push    af                 ; the result: FASTH pops it (127Ch)
         in      a,(HSR)
         and     $FC                ; chunks 0-1 back to HOME
         jp      FX_BACK
@@ -632,7 +642,7 @@ RCH_OUT:
 ; No IX, no position arithmetic: the cursor never runs past a 256-byte
 ; boundary, the extent or its 8K page, and starts only at the end of the
 ; file (position = length), so the write-backs, growth and gaps all stay in
-; RCH_OUT. RST 10h through FASTH and here: about 820 T-states (chan_speed.py).
+; RCH_OUT. RST 10h through FASTH and here: about 830 T-states (chan_speed.py).
 RCH_FOUT:
         ld      de,RR_FCNT-R_LETTER
         add     hl,de

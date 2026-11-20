@@ -391,6 +391,8 @@ GET_NUMBER:
 .x:     pop     bc
         ret
 
+        ASSERT  $ <= RB+$648B      ; RAM 648Bh-6496h is EXROM 128Bh-1296h: the fast
+                                   ;   entry's switch loops and landing (build-rom.py)
         ASSERT  $ <= RB+$6499
 
         ORG     RB+$6499
