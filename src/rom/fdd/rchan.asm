@@ -13,16 +13,18 @@
 ; stream's slot in the RAM disk's top page; the mover copies the slot's
 ; 15-byte block into 2068 memory, and the record in CHANS is built from it.
 ; From then on every character is read or written by the ROM itself, straight
-; to the board through chunk 0 (BOARD_IO, RCH_FOUT: OWN0 and SUB0 for the
+; to the board through chunk 0 (BOARD_IO, RCH_SYNC: OWN0 and SUB0 for the
 ; byte's page, then OWN0 = 0; all the code here is in chunk 1): no exchange
-; with the TS-Pico. Most bytes of a text or binary stream go through the
-; record's cursor (RCH_FILL, RCH_FOUT): no position arithmetic per byte. Past the extent PRINT # asks for more
+; with the TS-Pico. Most bytes of a text or binary stream wait in the
+; record, put there by its own output stub in RAM (STUB_IMG), and go to the
+; board a line or a buffer at a time (RCH_FILL, RCH_SYNC). Past the extent PRINT # asks for more
 ; (tpi:rchgrow); CLOSE # tells the firmware (tpi:rchclose), which writes the
 ; length into the directory.
 ;
-; The record is an ordinary channel record, letter 'R', with the same HOME
-; stubs as an 'F' record (14A0h, 14A9h): G_OUT and G_IN (through MB_OUT and
-; MB_IN), or FX_ENTRY, send it here by its letter. So r: needs no HOME bytes. A record takes
+; The record is an ordinary channel record, letter 'R'. Its input routine
+; is an 'F' record's HOME stub (14A9h); its output routine is in the record
+; (RR_STUB) and passes what it doesn't keep to the other (14A0h): G_OUT and
+; G_IN (through MB_OUT and MB_IN), or FX_ENTRY, send it here by its letter. So r: needs no HOME bytes. A record takes
 ; R_ALLOC (256) bytes in CHANS, padded as an 'F' record is so both bytes of
 ; the stream's offset stay below 80h.
 ;
@@ -55,13 +57,18 @@ RR_COL          EQU 34             ; writing: the column (a stream), or the byte
                                    ;   in the open record (a record file)
 RR_RCOL         EQU 35             ; reading a record file: its bytes given so far
 RR_DIG          EQU 36             ; reading TAB 0's count: offset of the next digit
-RR_FCNT         EQU 37             ; the cursor (RCH_FILL): bytes RCH_FOUT may still
-RR_FBNK         EQU 38             ;   write, OWN0 and SUB0 for the position's page,
-RR_FSUB         EQU 39             ;   the position's address in chunk 0, and the
-RR_FPTR         EQU 40             ;   bytes written since, which RCH_SYNC adds to
-RR_FDONE        EQU 42             ;   the position, length and column
-RR_SIZE         EQU 43
+RR_FBNK         EQU 37             ; the cursor (RCH_FILL): OWN0 and SUB0 for the
+RR_FSUB         EQU 38             ;   position's page and its address in chunk 0,
+RR_FPTR         EQU 39             ;   where RCH_SYNC puts what RR_FBUF holds
+RR_FCNT         EQU 41             ; bytes the stub may still take (0: none), then
+RR_FDONE        EQU 42             ;   the bytes it holds, then the buffer: this
+RR_FBUF         EQU 43             ;   order is the stub's (STUB_IMG)
+RR_STUB         EQU 128-STUB_LEN   ; the output routine, R_OUT's address
+RR_FMAX         EQU RR_STUB-RR_FBUF ; the buffer's size
+RR_SIZE         EQU 128
         ASSERT  RR_BUF == R_OUTBUF
+        ASSERT  RR_FDONE == RR_FCNT+1 && RR_FBUF == RR_FCNT+2
+        ASSERT  RR_FMAX >= 32
         ASSERT  RR_SIZE + 128 <= R_ALLOC
 
 F_REC           EQU 0              ; a record file
@@ -126,7 +133,7 @@ FX_ENTRY:
         cp      'R'
         ld      a,c
         jr      nz,.f
-        call    RCH_FOUT           ; HL -> the letter
+        call    RCH_OUT            ; what the record's stub didn't keep
         jr      .x
 .f:     call    CH_OUT             ; an 'F' record (MB_OUT's test, inline)
         jr      .x
@@ -479,14 +486,22 @@ RCH_OPEN:
         add     hl,de              ; HL = the record
         push    hl
         pop     ix
-        ld      (ix+R_OUT),low H_OUT_STUB
-        ld      (ix+R_OUT+1),high H_OUT_STUB
         ld      (ix+R_IN),low H_IN_STUB
         ld      (ix+R_IN+1),high H_IN_STUB
         ld      (ix+R_LETTER),'R'
         ld      (ix+R_PAD),a
         ld      a,(STREAM_N)
         ld      (ix+R_STRM),a
+        push    hl
+        ld      de,RR_STUB
+        add     hl,de
+        ld      (ix+R_OUT),l       ; the output routine is in the record
+        ld      (ix+R_OUT+1),h
+        ex      de,hl
+        ld      hl,STUB_IMG
+        ld      bc,STUB_LEN
+        ldir
+        pop     hl
         ld      de,RR_SPG
         add     hl,de
         ex      de,hl              ; DE = the record's block
@@ -604,7 +619,7 @@ RCH_CLOSE:
 .keep:  pop     hl
         push    af
         ld      bc,R_ALLOC
-        call    HC_RECLAIM
+        call    RCH_RECL           ; and the later records' stubs
         pop     af
         and     a
         ld      a,2
@@ -614,7 +629,7 @@ RCH_CLOSE:
         ret
 
 ;------------------------------------------------------------------------------
-; RCH_OUT -- an 'R' record's output routine (MB_OUT; RCH_FOUT past its cursor),
+; RCH_OUT -- an 'R' record's output routine (MB_OUT; FX_ENTRY, with what the stub didn't keep),
 ; A = the character. As f: does: TAB arrives as 23, low, high and is the
 ; position (a record file: record n); mode r drops what is printed (INPUT #'s
 ; prompt); TAB 0 then anything but a read is Q. Text (no 'b'): 16-21 and their
@@ -635,57 +650,87 @@ RCH_OUT:
         pop     ix
         ret
 
-; RCH_FOUT -- the fast entry's output routine for an 'R' record: HL -> its
-; letter, A = C = the character. A byte of 32 or more (data, text or binary)
-; goes straight to the cursor's address while RR_FCNT says there is room;
-; anything else, and the first byte after any other event, is RCH_OUT's.
-; No IX, no position arithmetic: the cursor never runs past a 256-byte
-; boundary, the extent or its 8K page, and starts only at the end of the
-; file (position = length), so the write-backs, growth and gaps all stay in
-; RCH_OUT. RST 10h through FASTH and here: about 830 T-states (chan_speed.py).
-RCH_FOUT:
-        ld      de,RR_FCNT-R_LETTER
+; STUB_IMG -- an 'R' record's output routine, copied into the record at
+; RR_STUB by RCH_OPEN: PRINT-A-2 (HOME 11EDh) calls it in RAM, A = the
+; character, interrupts on, no bank switch. A byte of 32 or more (data, text
+; or binary) goes into RR_FBUF while RR_FCNT says there is room; anything
+; else, and the first byte after any other event, goes on to HOME's stub
+; (14A0h), FASTH, FX_ENTRY and RCH_OUT, whose RCH_SYNC writes the buffer to
+; the board. Position-independent (the record is found through CURCHL); only
+; R_OUT, its address, moves with the record (RCH_FIX). RR_FCNT never runs
+; past a 256-byte boundary, the extent, its 8K page or the buffer, and
+; starts only at the end of the file (position = length), so the
+; write-backs, growth and gaps all stay in RCH_OUT. RST 10h through here:
+; about 400 T-states with the flushes shared out, against about 830 through
+; FASTH for every byte (chan_speed.py).
+STUB_IMG:
+        ld      c,a
+        cp      32
+        jr      c,.slow            ; a control, CR, TAB
+        ld      hl,(CURCHL)
+        ld      de,RR_FCNT
         add     hl,de
         ld      a,(hl)
         and     a
-        jr      z,.slow            ; no cursor
-        ld      a,c
-        cp      32
-        jr      c,.slow            ; a control, CR, TAB
+        jr      z,.slow            ; no room
         dec     (hl)
         inc     hl
-        xor     a
-        out     (MB_SEL),a
-        ld      a,(hl)
-        out     (MB_DATA),a        ; OWN0
+        ld      e,(hl)             ; RR_FDONE (D = 0)
+        inc     (hl)
         inc     hl
-        ld      a,MB_SUB
-        out     (MB_SEL),a
-        ld      a,(hl)
-        out     (MB_DATA),a        ; SUB0
-        inc     hl
-        ld      e,(hl)
-        inc     hl
-        ld      d,(hl)
-        ld      a,c
-        ld      (de),a             ; the byte, through chunk 0
-        inc     de
-        ld      (hl),d
-        dec     hl
-        ld      (hl),e
-        inc     hl
-        inc     hl
-        inc     (hl)               ; RR_FDONE
-        xor     a
-        out     (MB_SEL),a
-        out     (MB_DATA),a        ; OWN0 = 0
+        add     hl,de
+        ld      (hl),c
         ret
 .slow:  ld      a,c
-        jr      RCH_OUT
+        jp      H_OUT_STUB
+STUB_LEN        EQU $-STUB_IMG
 
-; RCH_SYNC -- what RCH_FOUT wrote goes into the position, the length and the
-; column, and the cursor ends: every other path through the record starts
-; here (RCH_OUT, RCH_IN, RCH_CLOSE). The cursor starts with the position at
+; RCH_RECL -- HC_RECLAIM for a channel record's allocation (CLOSE # of an
+; 'F' or 'R' record), then RCH_FIX: the records above it have moved.
+; RCH_FIX -- R_OUT of every 'R' record on streams 0-15 = the record's own
+; RR_STUB. AF, BC, DE, HL lost.
+RCH_RECL:
+        call    HC_RECLAIM
+RCH_FIX:
+        ld      hl,STRMS+6
+        ld      b,16
+.s:     ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        inc     hl
+        ld      a,d
+        or      e
+        jr      z,.n               ; closed
+        bit     7,d
+        jr      nz,.n              ; SYSCON
+        push    hl
+        ld      hl,(CHANS)
+        add     hl,de
+        dec     hl                 ; the record
+        ld      d,h
+        ld      e,l
+        inc     hl
+        inc     hl
+        inc     hl
+        inc     hl
+        ld      a,(hl)             ; R_LETTER
+        cp      'R'
+        jr      nz,.p
+        ld      hl,RR_STUB
+        add     hl,de
+        ex      de,hl
+        ld      (hl),e
+        inc     hl
+        ld      (hl),d
+.p:     pop     hl
+.n:     djnz    .s
+        ret
+        ASSERT  R_LETTER == 4 && R_OUT == 0
+
+; RCH_SYNC -- what the stub holds (RR_FBUF, RR_FDONE bytes) goes to the board
+; at the cursor, through chunk 0 as BOARD_IO does, and into the position, the
+; length and the column, and the cursor ends: every other path through the
+; record starts here (RCH_OUT, RCH_IN, RCH_CLOSE). The cursor starts with the position at
 ; the length and stops before a 256-byte boundary, so only the low bytes move
 ; and none carries.
 ; All registers kept.
@@ -694,6 +739,32 @@ RCH_SYNC:
         ld      a,(ix+RR_FDONE)
         and     a
         jr      z,.z
+        push    hl
+        push    de
+        push    bc
+        push    ix
+        pop     hl
+        ld      bc,RR_FBUF
+        add     hl,bc
+        ld      c,a                ; BC = the bytes held
+        xor     a
+        out     (MB_SEL),a
+        ld      a,(ix+RR_FBNK)
+        out     (MB_DATA),a        ; OWN0
+        ld      a,MB_SUB
+        out     (MB_SEL),a
+        ld      a,(ix+RR_FSUB)
+        out     (MB_DATA),a        ; SUB0
+        ld      e,(ix+RR_FPTR)
+        ld      d,(ix+RR_FPTR+1)
+        ldir
+        xor     a
+        out     (MB_SEL),a
+        out     (MB_DATA),a        ; OWN0 = 0
+        pop     bc
+        pop     de
+        pop     hl
+        ld      a,(ix+RR_FDONE)
         add     a,(ix+RR_POS)
         ld      (ix+RR_POS),a
         ld      (ix+RR_LEN),a
@@ -774,7 +845,11 @@ RCH_FILL:
         cp      b
         jr      nc,.p
         ld      b,a
-.p:     ld      (ix+RR_FCNT),b
+.p:     ld      a,b
+        cp      RR_FMAX
+        jr      c,.q
+        ld      b,RR_FMAX          ; no more than the buffer holds
+.q:     ld      (ix+RR_FCNT),b
         ret
 
 RCH_PUTC:

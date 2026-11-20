@@ -1183,7 +1183,11 @@ CH_CLOSE_HOOK:
 .keep:  pop     hl
         push    af
         ld      bc,CH_ALLOC
+        IFDEF MEGABANK
+        call    RCH_RECL           ; and the 'R' records' stubs above it
+        ELSE
         call    HC_RECLAIM
+        ENDIF
         pop     af
         and     a
         ld      a,2

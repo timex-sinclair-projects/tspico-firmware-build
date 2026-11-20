@@ -54,7 +54,8 @@ from TS import ramdisk as rd                                    # noqa: E402
 ROM = os.path.join(REPO, "src", "rom", "TSPICO-MB.ROM")
 ASM = os.path.join(REPO, "src", "rom", "fdd", "fddcmd.asm")
 
-SYM = {"MB_OUT": 0x2447, "MB_IN": 0x2455, "RCH_ENDREC": 0x289B, "RCH_WB": 0x29D5, "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2C16, "RCH_OUT": 0x2709, "RCH_SYNC": 0x2752}
+SYM = {"MB_OUT": 0x2447, "MB_IN": 0x2455, "RCH_ENDREC": 0x28F8, "RCH_WB": 0x2A32, "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2C73, "RCH_OUT": 0x2716, "RCH_SYNC": 0x2779,
+       "STUB_IMG": 0x272C, "STUB_LEN": 0x1C, "RR_STUB": 0x64, "RR_FMAX": 0x39, "RCH_FIX": 0x274B}
 CURCHL, STRMS, CHANS = 0x5C51, 0x5C10, 0x5C4F
 REC = 0x7100                     # the record, in chunk 3
 DONE = 0xFFF0
@@ -281,8 +282,11 @@ class RMachine(Machine):
         sl = self.disk.open_stream(stream, name, mode, binary, reclen)
         p, o = self.disk.block_loc(stream)
         blk = self.board[p * 8192 + o:p * 8192 + o + rd.BLOCK_LEN]
-        r = bytearray(43)
-        r[0:4] = w(0x14A0, 0x14A9)
+        r = bytearray(128)
+        stub = rec + SYM["RR_STUB"]                    # the output routine, in the record
+        r[0:4] = w(stub, 0x14A9)
+        r[SYM["RR_STUB"]:] = self.exrom[SYM["STUB_IMG"]:SYM["STUB_IMG"] + SYM["STUB_LEN"]]
+        assert len(r) == 128
         r[4], r[5] = ord("R"), stream
         r[19:34] = blk
         r[8] = blk[12]
@@ -290,7 +294,7 @@ class RMachine(Machine):
         fl |= 4 if blk[14] in b"ru" else 0
         fl |= 8 if blk[14] in b"wau" else 0
         r[7] = fl
-        self.ram[rec:rec + 43] = r
+        self.ram[rec:rec + 128] = r
         self.ram[CURCHL:CURCHL + 2] = w(rec)
         off = rec - 0x7000 + 1
         self.ram[STRMS + 6 + 2 * stream:STRMS + 8 + 2 * stream] = w(off)
@@ -299,8 +303,8 @@ class RMachine(Machine):
 
     def put(self, data, home=False):
         for c in data:
-            if home:
-                self.run(0x14A0, home=True, a=c)
+            if home:                                   # as PRINT-A-2 does: the record's R_OUT
+                self.run(self.ram[self.rec] | self.ram[self.rec + 1] << 8, home=True, a=c)
             else:
                 self.run(SYM["MB_OUT"], a=c)
             if self.report is not None:
@@ -507,7 +511,7 @@ def main():
     check(got == b"via 14A0h\r" and end == "eof",
           "INPUT # through 14A9h: the bytes with C, then NC NZ (%r %r)" % (got, end))
     check(not m.faults and (m.own[4], m.sub[4], m.own[0]) == (9, 2, 0), "no faults (%s)" % m.faults[:2])
-    m.open(5, "cursor", "u")                           # the cursor: RCH_FOUT, RCH_FILL, RCH_SYNC
+    m.open(5, "cursor", "u")                           # the stub and its buffer, RCH_FILL, RCH_SYNC
     line = bytes(32 + (i * 13) % 95 for i in range(99))
     text = (line + b"\r") * 90                          # 9000 bytes: 256-byte, 8K and extent edges
     n0, m.nslow = len(m.sent), 0
@@ -518,16 +522,20 @@ def main():
           "the length and position right, %d tpi:rchgrow" % len(grows))
     check(m.slot_lp(5) == (9000, 9000), "the last CR wrote the length and position back (%s)"
           % (m.slot_lp(5),))
-    check(m.nslow < 9000 // 4, "most bytes go straight in: RCH_OUT for %d of 9000" % m.nslow)
+    check(m.nslow < 9000 // 4, "most bytes stay in the record: RCH_OUT for %d of 9000" % m.nslow)
+    p0, m.nslow = len(m.port_log), 0
     m.put(b"abc", home=True)
-    check(m.field(25) == 9000 and m.ram[m.rec + 34] == 0,
-          "bytes through the cursor wait in it (the length and column not yet moved)")
+    check(m.field(25) == 9000 and m.ram[m.rec + 34] == 0 and m.ram[m.rec + 42] == 3
+          and bytes(m.ram[m.rec + 43:m.rec + 46]) == b"abc" and len(m.port_log) == p0
+          and m.nslow == 0 and cpu.iff,
+          "bytes of 32 or more wait in the record's buffer: no port written, no ROM entered, "
+          "the length and column not yet moved")
     m.hsr, m.dec = 0x13, 0x85                          # the EXROM in, as RCH_IN has it
     m.run(SYM["RCH_SYNC"], ix=m.rec)
     m.hsr, m.dec = 0x10, 0x05
-    check((m.field(25), m.field(27), m.ram[m.rec + 34], m.ram[m.rec + 37], m.ram[m.rec + 42])
+    check((m.field(25), m.field(27), m.ram[m.rec + 34], m.ram[m.rec + 41], m.ram[m.rec + 42])
           == (9003, 9003, 3, 0, 0) and m.file(5)[-3:] == b"abc",
-          "RCH_SYNC: the position, length and column on by 3, the cursor ended")
+          "RCH_SYNC: the buffer on the board, the position, length and column on by 3, the cursor ended")
     m.put(bytes((23, 8801 & 0xFF, 8801 >> 8)), home=True)
     got, end = m.get(300, home=True)
     check(got == text[8800:] + b"abc\r" and end == "eof",
@@ -540,8 +548,32 @@ def main():
     m.hsr, m.dec = 0x10, 0x05
     check(m.file(6) == data, "binary through the fast entry: every byte (controls through RCH_OUT)")
     check(not m.faults and m.own[0] == 0 and m.hsr == 0x10, "no faults (%s)" % m.faults[:2])
+    m.open(8, "full")                                   # no CR: only a full buffer goes in
+    m.nslow = 0
+    m.put(b"y" * 400, home=True)
+    m.hsr, m.dec = 0x13, 0x85
+    m.run(SYM["RCH_SYNC"], ix=m.rec)
+    m.hsr, m.dec = 0x10, 0x05
+    check(m.file(8) == b"y" * 400 and m.nslow <= 400 // SYM["RR_FMAX"] + 4,
+          "400 bytes and no CR: the buffer (%d bytes) emptied when full, RCH_OUT %d times"
+          % (SYM["RR_FMAX"], m.nslow))
+    recs = {4: 0x7300, 5: 0x7480, 9: 0x7800}            # CLOSE # moved these: R_OUT is stale
+    for st, a in recs.items():
+        m.ram[a:a + 5] = w(0x1234, 0x14A9) + b"R"
+        m.ram[STRMS + 6 + 2 * st:STRMS + 8 + 2 * st] = w(a - 0x7000 + 1)
+    m.ram[0x7600:0x7605] = w(0x14A0, 0x14A9) + b"F"     # an f: record, and K on stream 0
+    m.ram[STRMS + 6 + 20:STRMS + 6 + 22] = w(0x7600 - 0x7000 + 1)
+    k0 = bytes(m.ram[0x7000:0x7005])
+    m.ram[STRMS + 6:STRMS + 8] = w(1)
+    m.hsr, m.dec = 0x13, 0x85
+    m.run(SYM["RCH_FIX"])
+    m.hsr, m.dec = 0x10, 0x05
+    check(all(m.ram[a] | m.ram[a + 1] << 8 == a + SYM["RR_STUB"] for a in recs.values())
+          and bytes(m.ram[0x7600:0x7602]) == w(0x14A0) and bytes(m.ram[0x7000:0x7005]) == k0,
+          "RCH_FIX: every R record's R_OUT is its own stub again; an F record and K untouched")
+    m.open(6, "fbin2", binary=True)
     m.hsr = 0x12
-    m.put(b"x", home=True)
+    m.put(b"\r", home=True)
     check(m.slow == 0x3009 and m.hsr == 0x12, "F4h bit 1 set (chunk 1 not HOME): the old path, "
           "03FCh with HL = 3009h, nothing switched")
     m.hsr = 0x00
