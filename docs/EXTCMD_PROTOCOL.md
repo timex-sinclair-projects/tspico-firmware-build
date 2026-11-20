@@ -61,8 +61,10 @@ except ImportError:
 ## 3. The contract
 
 1. **Exactly one answer.** A status, a message, scrolling text, a prompt, or
-   data (§4). Not zero (the 2068 waits ~20 s, then Report J) and not two (the
-   second is read by the next command in the wrong place).
+   data (§4). Not zero (the 2068 reads the tail's pre-load as the status and
+   reports 0 OK, as if the command had worked) and not two (the second waits
+   in the FIFO; the next SYNC discards it, and a client without one reads it
+   as part of its next command).
 2. **Never write the `0x01` pre-load.** `PROCESS_CMD`'s tail writes it after
    your handler returns, raises or is stopped by BREAK.
 3. **Queue with `tp.CMD_PUT(b)`**, not `MQ.put`: it waits while the 4-byte FIFO
@@ -73,7 +75,7 @@ except ImportError:
 5. **SD card work inside `tp.SD_CALL(fn, *args)`, before the answer.** The
    card shares GPIO 2–4 with the data bus; `SD_CALL` switches the pins and
    always gives them back. An `OSError` comes back as
-   `("SD card error", 3)`.
+   `("SD card error", 3)`, or `(NO_CARD_MSG, 10)` when there is no card.
 6. **Errors are statuses** (§4). An exception that escapes becomes Report J.
 7. **No `print()` or logging in a loop that feeds the 2068.** Use `tp.LOG`
    before or after.
