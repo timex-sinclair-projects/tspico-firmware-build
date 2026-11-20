@@ -174,29 +174,3 @@ card, even when the first part loads.
   good tapes failed with Report R.
 - **Reset:** between tapes the 2068 is reset with ZRCP `reset-cpu`.
   `hard-reset-cpu` doesn't reliably restart a program that's running.
-
-## The index for downloads over WiFi
-
-`net_index.py` writes the list a v3 card downloads to find tapes in the item
-(see `docs/v3-wifi-archive-proposal.md`). It doesn't need the emulator, but it
-does use `plan.json` and the `results*.json` files, if they're there, to mark
-the tapes that were load-tested.
-
-```bash
-python3 net_index.py              # the item's file list, plus ZIPs not yet downloaded
-python3 net_index.py --offline    # cached list and ZIPs only
-python3 net_index.py --publish    # then upload tspico-net.txt(.gz) to the item
-```
-
-- **Which ZIPs:** every ZIP tagged `(TS2068)`, plus the ones the site's 2068
-  list links (`plan.json`).
-- **What's left out, and why:** the card can't download a ZIP bigger than
-  `--max-zip` (32 KB, its RAM buffer). It can't use a ZIP with no `.tap`
-  inside, a `.tap` that is really a TZX, or a URL too long for Zimodem's
-  256-byte `AT` line. The script prints how many of each it left out.
-- **Format:** one tab-separated line per tape, described at the top of the
-  script. It gives the 8.3 name, the status (`L`, `R` or `C` tested and
-  working, `X` tested and failing or damaged, `?` untested), the title, year
-  and publisher, and the ZIP and the tape's entry in it.
-- **The `.gz`:** the card downloads this copy, about 28 KB, and unzips it
-  with MicroPython's `deflate`.
