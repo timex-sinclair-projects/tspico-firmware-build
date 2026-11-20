@@ -53,19 +53,19 @@ the Pico Interface BIOS.
 | 514–619 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
 | 621–871 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
 | 873–893 | | `LOWER_LOOP` (function 88h) |
-| 895–1460 | | the channel driver |
-| 1462–1480 | | `HEXDIG`, `STRLEN` |
-| 1482–1494 | to 3769h | the command strings, `MODE_R` |
-| 1496–1509 | 376Ah–3770h | `PRELOAD` |
-| 1511–1513 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
-| 1515–1564 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1566–1773 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1775–1840 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
-| 1842–1847 | 3929h–3931h | `IN_DROP` (#404) |
-| 1849–1909 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1911–2817 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
-| 2820–2821 | 3998h (3E53h) | `FDD_END` |
-| 2823–2835 | 2400h–2C15h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
+| 895–1464 | | the channel driver |
+| 1466–1484 | | `HEXDIG`, `STRLEN` |
+| 1486–1498 | to 3769h | the command strings, `MODE_R` |
+| 1500–1513 | 376Ah–3770h | `PRELOAD` |
+| 1515–1517 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
+| 1519–1568 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1570–1777 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1779–1844 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
+| 1846–1851 | 3929h–3931h | `IN_DROP` (#404) |
+| 1853–1913 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
+| 1915–2821 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
+| 2824–2825 | 3998h (3E53h) | `FDD_END` |
+| 2827–2839 | 2400h–2C72h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -1098,7 +1098,7 @@ statement and returns, and at run time **`tpi:list x`** goes to the Pico
 Why not scan the expression and look at its type: a scan in syntax mode
 done at run time inserts a second hidden number after each number in the
 line (the line has them already), and a scan in run mode evaluates the
-expression a second time (the comment at 1622–1626). So the test is lexical, and `LIST (a$)` counts as a number:
+expression a second time (the comment at 1626–1630). So the test is lexical, and `LIST (a$)` counts as a number:
 HOME's LIST then says Report C at the syntax pass.
 
 ### `FDD_RESTORE` (3819h)
@@ -1285,7 +1285,9 @@ change 2.4's code and everything else is appended after `CMD_CHCAT`, at
   `G_OUT` and `G_IN` go to `MB_OUT` and `MB_IN`; `G_BEEP`'s `POP HL / CP 'F'`
   is `CALL BEEP_LT`; `CH_OPEN_HOOK`'s `CALL SPEC_KIND` is `CALL RCH_KIND`;
   `CH_CLOSE_HOOK`'s `LD A,(IX+R_LETTER) / CP 'F'` is `CALL RCH_CLTEST`
-  and two NOPs; `TPI_SEND`'s opening (`PUSH HL / PUSH DE / LD HL,(FRAMES)`)
+  and two NOPs, and its `CALL HC_RECLAIM` is `CALL RCH_RECL` (the `R`
+  records above the one closed have moved, and each holds its own output
+  routine's address); `TPI_SEND`'s opening (`PUSH HL / PUSH DE / LD HL,(FRAMES)`)
   is `CALL MB_TPRE` and two NOPs; and `SET_MODE`'s store is `JP SET_MODE_R`
   and a filler byte, so `R_SA` stays at 39F5h.
 
@@ -1635,7 +1637,7 @@ bank mapped elsewhere: a matter for a LEAP build for the board.
 ### The `r:` channels (`rchan.asm`, phase 9)
 
 `src/rom/fdd/rchan.asm`, assembled only with `-DMEGABANK`, at EXROM
-2400h–2C15h (2070 bytes; the run 23D4h–2FFFh is free in 2.4, and an `ASSERT`
+2400h–2C72h (2163 bytes; the run 23D4h–2FFFh is free in 2.4, and an `ASSERT`
 keeps it below 2C8Ch, where the fast entry lands): `OPEN #n,"r:name"[,"mode"[,reclen]]`, `PRINT #`,
 `INPUT #`, `INKEY$ #` and `CLOSE #` on the Megabank's RAM disk, as `f:`
 does them on the card (the Megabank spec, "Channels"). Modes `r`, `w`, `a`,
@@ -1648,15 +1650,17 @@ finds or makes the file, gives it an extent on the board, writes the
 stream's slot in the RAM disk's top page, and copies the slot's 15-byte block
 into 2068 memory with the mover's op 2. The record in CHANS is built from
 it. From then on every character is read or written by the ROM itself,
-straight to the board through chunk 0 (`BOARD_IO`, `RCH_FOUT`: all the code
+straight to the board through chunk 0 (`BOARD_IO`, `RCH_SYNC`: all the code
 here is in chunk 1, so chunk 0 is free while it runs): no exchange with the
 TS-Pico. Past the extent
 `PRINT #` sends `tpi:rchgrow`; `CLOSE #` writes the length and position back
 to the slot and sends `tpi:rchclose`, which puts the length in the directory.
 
-The record is an ordinary channel record, letter `R`, with an `F` record's
-HOME stubs (14A0h, 14A9h), so `G_OUT` and `G_IN` send it here by its letter
-and `r:` needs no HOME bytes of its own. It takes `R_ALLOC` bytes in CHANS,
+The record is an ordinary channel record, letter `R`. Its input routine is
+an `F` record's HOME stub (14A9h) and its output routine, a stub in the
+record itself, passes what it doesn't keep to the other (14A0h), so `G_OUT`
+and `G_IN` send it here by its letter and `r:` needs no HOME bytes of its
+own. It takes `R_ALLOC` bytes in CHANS,
 padded as an `F` record is.
 
 **The fast entry** (the Megabank spec, open question 21). In the Megabank
@@ -1719,17 +1723,28 @@ bytes it replaces):
 bytes, then again with the card following each F4h and FFh write 0 to 200
 memory reads late, at random, and with chunk 1 behind chunk 0; `tools/emu/chan_speed.py` times `RST 10h` to a stream in ZEsarUX.
 
-**The cursor.** After each byte `RCH_OUT` handles, `RCH_FILL` works out how
-many of the next bytes can go straight to the board: a stream file open for
-writing, at its end, with no TAB in progress; up to the next 256-byte
-boundary, the extent's end or the 8K page's end. `RCH_FOUT` writes a byte of
-32 or more there with no position arithmetic (`RST 10h` to an `r:`
-stream costs about 830 T-states a byte this way, against about 13 300
-through Timex's bank call: `tools/emu/chan_speed.py`); `RCH_SYNC` adds what
-it wrote to the position, length and column before any other path uses
-them. The cursor never crosses a 256-byte boundary, so the write-backs to
-the slot (each CR and each 256th byte) and what NEW or a reset keeps are as
-they were.
+**The stub and its buffer.** An `R` record's output routine is in the record
+itself (`RR_STUB`, copied from `STUB_IMG` by `RCH_OPEN`), so most characters
+never leave RAM. After each byte `RCH_OUT` handles, `RCH_FILL` works out how
+many of the next bytes the stub may keep: a stream file open for writing, at
+its end, with no TAB in progress; up to the next 256-byte boundary, the
+extent's end, the 8K page's end or the buffer's size (`RR_FMAX`, 57). The
+stub puts a byte of 32 or more in `RR_FBUF` with interrupts on and no bank
+switch; a CR, a control or a full buffer goes through `FASTH` to `RCH_OUT`,
+whose `RCH_SYNC` writes the buffer to the board with one map of chunk 0 and
+one `LDIR`, then adds it to the position, length and column before any other
+path uses them. `RST 10h` to an `r:` stream costs about 400 T-states a byte
+this way (396 with the flushes shared out: `tools/emu/chan_speed.py`),
+against about 830 with a ROM switch for every byte and about 13 300 through
+Timex's bank call. The buffer never crosses a 256-byte boundary and is
+written at every CR, so the write-backs to the slot (each CR and each 256th
+byte) and what NEW or a reset keeps are as they were: bytes after the last
+CR were never in the file's length.
+
+The record's `R_OUT` is the one address in it that depends on where the
+record is. `CLOSE #` of an earlier `F` or `R` record moves the later ones
+down, so both closes reclaim through `RCH_RECL`, whose `RCH_FIX` points every
+`R` record's `R_OUT` at its own stub again.
 
 **The open-stream mask.** Every `r:` command tells the firmware which streams
 0–15 point at an `R` record (bit *n*: stream *n*), so it closes the slots of
@@ -1753,7 +1768,7 @@ ZEsarUX with the real firmware.
 | Name | Value | What |
 |---|---|---|
 | `RCH_BASE` | 2400h | where `rchan.asm` is assembled (fddcmd.asm) |
-| `RCH_END` | 2C16h | its end; `ASSERT`ed at most 2C8Ch, the fast entry's `JP FX_ENTRY` (build-rom.py) |
+| `RCH_END` | 2C73h | its end; `ASSERT`ed at most 2C8Ch, the fast entry's `JP FX_ENTRY` (build-rom.py) |
 | `R_ALLOC` | 100h | an `R` record's allocation in CHANS |
 | `BLOCK_LEN` | 15 | the slot's block, as ramdisk.py's |
 | `SLOT_OFF`, `SLOT_LEN` | 0200h, 32 | the slots in the RAM disk's top page, one a stream |
@@ -1781,12 +1796,16 @@ letter, its length):
 | `RR_COL` | 34 | writing: the column (a stream file), or the record's bytes so far |
 | `RR_RCOL` | 35 | reading a record file: its bytes given so far |
 | `RR_DIG` | 36 | reading TAB 0's count: the next digit's offset |
-| `RR_FCNT` | 37 | the cursor: bytes `RCH_FOUT` may still write; 0: none |
-| `RR_FBNK` | 38 | OWN0 for the position's page (BASE + page / 8) |
-| `RR_FSUB` | 39 | SUB0 for it (page MOD 8) |
-| `RR_FPTR` | 40–41 | the position's address in chunk 0 |
-| `RR_FDONE` | 42 | bytes `RCH_FOUT` wrote since the last `RCH_SYNC` |
-| `RR_SIZE` | 43 | the record's used size |
+| `RR_FBNK` | 37 | the cursor: OWN0 for the position's page (BASE + page / 8) |
+| `RR_FSUB` | 38 | SUB0 for it (page MOD 8) |
+| `RR_FPTR` | 39–40 | the position's address in chunk 0, where `RCH_SYNC` writes the buffer |
+| `RR_FCNT` | 41 | bytes the stub may still take; 0: none |
+| `RR_FDONE` | 42 | bytes the stub holds in `RR_FBUF` since the last `RCH_SYNC` |
+| `RR_FBUF` | 43 | the stub's buffer, `RR_FMAX` bytes. `RR_FCNT`, `RR_FDONE` and the buffer are in the order the stub steps through |
+| `RR_FMAX` | 57 | the buffer's size: what is left between `RR_FBUF` and `RR_STUB` |
+| `RR_STUB` | 100 | the record's output routine, `STUB_LEN` bytes copied from `STUB_IMG`; `R_OUT` is its address |
+| `STUB_LEN` | 28 | the stub's size |
+| `RR_SIZE` | 128 | the record's used size: all that the padding leaves of `R_ALLOC` |
 
 | Flag | Bit | Meaning |
 |---|---|---|
@@ -1807,7 +1826,7 @@ letter, its length):
 
 | Routine | Address | What |
 |---|---|---|
-| `FX_ENTRY` | 2400h | (pinned: `MB_FIXED_SYMS`) from `FASTH` through the switch loop at 128Bh and the landing (EXROM 1293h, 2C8Ch): B = the low byte of the stub's vector, C = the character, on the stack FFh as it was. It leaves by pushing AF, the result, and jumping to `FX_BACK` with A = F4h, bits 0–1 clear. Output to an `R` record goes to `RCH_FOUT` and to an `F` record to `CH_OUT` (MB_OUT's letter test, inline); input to `MB_IN`; `BEEP_VEC` to `G_BEEP` with `THUNK_HL`. AF goes back under `FASTH`'s return, then `FX_BACK` |
+| `FX_ENTRY` | 2400h | (pinned: `MB_FIXED_SYMS`) from `FASTH` through the switch loop at 128Bh and the landing (EXROM 1293h, 2C8Ch): B = the low byte of the stub's vector, C = the character, on the stack FFh as it was. It leaves by pushing AF, the result, and jumping to `FX_BACK` with A = F4h, bits 0–1 clear. Output to an `R` record (what its stub didn't keep) goes to `RCH_OUT` and to an `F` record to `CH_OUT` (MB_OUT's letter test, inline); input to `MB_IN`; `BEEP_VEC` to `G_BEEP` with `THUNK_HL`. AF goes back under `FASTH`'s return, then `FX_BACK` |
 | `G_FLUSH`, `G_FETCH` | 2433h, 2438h | `CH_OUT`'s and `CH_IN`'s exchanges (`CH_FLUSH`, `CH_FETCH`) under `GUARD0`: their status can run a response function that prints through HOME |
 | `GUARD0` | 243Bh | `GUARDED` (fddcmd.asm) for a routine HL called under the fast entry, which pushed no frame on the bank stack: the trap joins `GUARDED` at `.bs` with (`BANK_SP`) as it is now |
 
@@ -1830,48 +1849,50 @@ letter, its length):
 | Routine | Address | What |
 |---|---|---|
 | `RCH_OPEN` | 2520h | the stream in 5CCBh, the spec on the calculator stack, `CH_ADD` on a `,` if a mode follows. Parses as `f:` does; sends `tpi:rchopen` (PMR1 the stream, PMR2 the record length, FFh for 255 or more) with the mask, the address the block goes to (16 bytes made on the stack), the mode, a space, the name. Then `R_ALLOC` bytes at CHANS' end, filled from the block. Out: C, DE = the offset, HL = the STRMS entry, as `CH_OPEN_HOOK` |
-| `RCH_CLOSE` | 267Fh | IX = the record, BC = the stream's offset. An open record is padded, the length and position written back, `tpi:rchclose` sent; a refusal raises its report and leaves the stream open. Then the allocation goes as an `F` record's does, every later offset moved down `R_ALLOC`. Out: C, HL = the STRMS entry, which HOME 13A8h clears |
+| `RCH_CLOSE` | 268Ch | IX = the record, BC = the stream's offset. An open record is padded, the length and position written back, `tpi:rchclose` sent; a refusal raises its report and leaves the stream open. Then the allocation goes as an `F` record's does, every later offset moved down `R_ALLOC`. Out: C, HL = the STRMS entry, which HOME 13A8h clears |
 
 #### Writing
 
 | Routine | Address | What |
 |---|---|---|
-| `RCH_OUT` | 2709h | the output routine (`MB_OUT`, or `RCH_FOUT` past its cursor), A = the character: `RCH_SYNC`, `RCH_PUTC`, then `RCH_FILL` |
-| `RCH_FOUT` | 271Fh | the fast entry's output routine for an `R` record, HL → its letter, C = the character: while `RR_FCNT` is not 0, a byte of 32 or more is written at `RR_FPTR` through chunk 0 (OWN0 `RR_FBNK`, SUB0 `RR_FSUB`, then OWN0 0), `RR_FCNT` down and `RR_FDONE` up. Anything else goes to `RCH_OUT`. No IX |
-| `RCH_SYNC` | 2752h | `RR_FDONE` added to the position, length (equal while there is a cursor, and below a 256-byte boundary, so only their low bytes move) and column; the cursor ended. From `RCH_OUT`, `RCH_IN` and `RCH_CLOSE`. All registers kept |
-| `RCH_FILL` | 2775h | a new cursor, if a stream file (not a record file) open for writing, with no TAB in progress, has its position at its length and inside the extent: `RR_FCNT` the bytes before the next 256-byte boundary, the extent's end or the 8K page's end, the first of them; `RR_FBNK`, `RR_FSUB`, `RR_FPTR` from `RCH_PAGE` |
-| `RCH_PUTC` | 27E5h | as `f:` does: TAB arrives as 23, low, high and is the position (a record file: record *n*); mode `r` drops what is printed (INPUT #'s prompt); TAB 0 then anything but a read is Q. Text: 16–21 and their parameter, 22 and its two, and other controls but CR and comma are dropped; the comma is spaces to the next 16-column stop; keywords stay one byte. A record file: a CR ends the record and pads it and isn't stored; more than the record holds is Q |
-| `RCH_DATA` | 2870h | C, a byte to store: at the position, the column on |
-| `RCH_ENDREC` | 289Bh | the open record padded to its length; the column 0 |
-| `RCH_PADC` | 28B3h | C = the pad: a space, or 0 in binary |
-| `RCH_PUT` | 28BDh | C written at the position, which steps on; a gap from the length up to the position (a TAB past the end) is padded first; a step onto a 256-byte boundary writes the length and position back |
-| `RCH_WAT` | 2908h | C written at file position HL (kept); past the extent, `RCH_GROW` first |
-| `RCH_GROW` | 291Ah | `tpi:rchgrow` with the mask, the block's address (16 bytes on the stack) and the length needed; the new extent from the block. Past 65535 bytes: Q. BC kept |
-| `RCH_GSEND` | 2965h | `RCH_GROW`'s exchange (`tpi:rchgrow`, then its status), called under `GUARD0` |
-| `RCH_IO` | 296Eh | file position HL (kept): B = 1 writes C there, 0 reads it into A; `RCH_PAGE`, then `BOARD_IO` |
-| `RCH_PAGE` | 297Dh | file position HL: HL = its board page, DE = its offset in that page (from the block's start page and offset) |
-| `BOARD_IO` | 29A3h | board page HL, offset DE (below 2000h): B = 1 writes C, 0 reads into A (and C). Through chunk 0: OWN0 = BASE + page / 8, SUB0 = page MOD 8, the byte at DE, then OWN0 = 0. Chunk 0 is the EXROM's first half, and nothing here runs from it or keeps data in it; the HSR rule holds because F4h bit 0 is set while the module runs. B and IX kept |
-| `RCH_WB` | 29D5h | a writable stream's length and position back to its slot (4 bytes, page `RR_MPG`). The write-protect switch on: J, and first the length and position go back to the slot's, the last ones written back: the board refused every byte since, so the ROM's own length would count bytes the file hasn't got and `CLOSE #` would write it once the switch was off (an 8-byte file for `"one"`, then J on `"two"`, on the board). The column follows: a record file's is the position MOD the record length, a stream's 0 |
-| `RCH_SLOT` | 2A01h | B = 1: `RR_LEN` and `RR_POS` to the stream's slot (offset `SLOT_OFF` + 32 × the stream + `SLOT_LP`, page `RR_MPG`) through `BOARD_IO`; B = 0: from it |
-| `RCH_TAB` | 2A34h | TAB HL: an open record is padded; TAB 0 asks for the count (the next read); otherwise the position is byte HL − 1, or record HL's start in a record file. A gap past the end is padded by the next write |
-| `MUL16X8` | 2A7Eh | HL = HL × E; C if it overflows 16 bits |
-| `DIV16X8` | 2A90h | HL = HL / E, A = the remainder (E not 0). B lost |
+| `RCH_OUT` | 2716h | the output routine (`MB_OUT`, or `FX_ENTRY` with what the record's stub didn't keep), A = the character: `RCH_SYNC`, `RCH_PUTC`, then `RCH_FILL` |
+| `STUB_IMG` | 272Ch | the image of an `R` record's output routine, which `RCH_OPEN` copies to the record's `RR_STUB`. PRINT-A-2 calls the copy in RAM with A = the character, interrupts on: while `RR_FCNT` is not 0, a byte of 32 or more goes into `RR_FBUF`, `RR_FCNT` down and `RR_FDONE` up, with no bank switch and no port written. Anything else goes on to HOME 14A0h, so to `FASTH`, `FX_ENTRY` and `RCH_OUT`. Position-independent: it finds the record through CURCHL. BC, DE, HL (PRINT-A-2's alternate set) and AF lost |
+| `RCH_RECL` | 2748h | `HC_RECLAIM` for a channel record's allocation, then `RCH_FIX`. From `RCH_CLOSE` and, in the Megabank build, `CH_CLOSE_HOOK`'s `f:` close |
+| `RCH_FIX` | 274Bh | after a record's allocation has gone and the records above it have moved down: `R_OUT` of every `R` record on streams 0–15 set to the record's own `RR_STUB`. AF, BC, DE, HL lost |
+| `RCH_SYNC` | 2779h | the `RR_FDONE` bytes in `RR_FBUF` copied to `RR_FPTR` through chunk 0 (OWN0 `RR_FBNK`, SUB0 `RR_FSUB`, one `LDIR`, then OWN0 0); `RR_FDONE` added to the position, length (equal while there is a cursor, and below a 256-byte boundary, so only their low bytes move) and column; the cursor ended. From `RCH_OUT`, `RCH_IN` and `RCH_CLOSE`. All registers kept |
+| `RCH_FILL` | 27CBh | a new cursor, if a stream file (not a record file) open for writing, with no TAB in progress, has its position at its length and inside the extent: `RR_FCNT` the bytes before the next 256-byte boundary, the extent's end or the 8K page's end, or `RR_FMAX`, the first of them; `RR_FBNK`, `RR_FSUB`, `RR_FPTR` from `RCH_PAGE` |
+| `RCH_PUTC` | 2842h | as `f:` does: TAB arrives as 23, low, high and is the position (a record file: record *n*); mode `r` drops what is printed (INPUT #'s prompt); TAB 0 then anything but a read is Q. Text: 16–21 and their parameter, 22 and its two, and other controls but CR and comma are dropped; the comma is spaces to the next 16-column stop; keywords stay one byte. A record file: a CR ends the record and pads it and isn't stored; more than the record holds is Q |
+| `RCH_DATA` | 28CDh | C, a byte to store: at the position, the column on |
+| `RCH_ENDREC` | 28F8h | the open record padded to its length; the column 0 |
+| `RCH_PADC` | 2910h | C = the pad: a space, or 0 in binary |
+| `RCH_PUT` | 291Ah | C written at the position, which steps on; a gap from the length up to the position (a TAB past the end) is padded first; a step onto a 256-byte boundary writes the length and position back |
+| `RCH_WAT` | 2965h | C written at file position HL (kept); past the extent, `RCH_GROW` first |
+| `RCH_GROW` | 2977h | `tpi:rchgrow` with the mask, the block's address (16 bytes on the stack) and the length needed; the new extent from the block. Past 65535 bytes: Q. BC kept |
+| `RCH_GSEND` | 29C2h | `RCH_GROW`'s exchange (`tpi:rchgrow`, then its status), called under `GUARD0` |
+| `RCH_IO` | 29CBh | file position HL (kept): B = 1 writes C there, 0 reads it into A; `RCH_PAGE`, then `BOARD_IO` |
+| `RCH_PAGE` | 29DAh | file position HL: HL = its board page, DE = its offset in that page (from the block's start page and offset) |
+| `BOARD_IO` | 2A00h | board page HL, offset DE (below 2000h): B = 1 writes C, 0 reads into A (and C). Through chunk 0: OWN0 = BASE + page / 8, SUB0 = page MOD 8, the byte at DE, then OWN0 = 0. Chunk 0 is the EXROM's first half, and nothing here runs from it or keeps data in it; the HSR rule holds because F4h bit 0 is set while the module runs. B and IX kept |
+| `RCH_WB` | 2A32h | a writable stream's length and position back to its slot (4 bytes, page `RR_MPG`). The write-protect switch on: J, and first the length and position go back to the slot's, the last ones written back: the board refused every byte since, so the ROM's own length would count bytes the file hasn't got and `CLOSE #` would write it once the switch was off (an 8-byte file for `"one"`, then J on `"two"`, on the board). The column follows: a record file's is the position MOD the record length, a stream's 0 |
+| `RCH_SLOT` | 2A5Eh | B = 1: `RR_LEN` and `RR_POS` to the stream's slot (offset `SLOT_OFF` + 32 × the stream + `SLOT_LP`, page `RR_MPG`) through `BOARD_IO`; B = 0: from it |
+| `RCH_TAB` | 2A91h | TAB HL: an open record is padded; TAB 0 asks for the count (the next read); otherwise the position is byte HL − 1, or record HL's start in a record file. A gap past the end is padded by the next write |
+| `MUL16X8` | 2ADBh | HL = HL × E; C if it overflows 16 bits |
+| `DIV16X8` | 2AEDh | HL = HL / E, A = the remainder (E not 0). B lost |
 
 #### Reading
 
 | Routine | Address | What |
 |---|---|---|
-| `RCH_IN` | 2A9Fh | the input routine (HOME 14A9h → `G_IN` → `MB_IN`): C with A = the next byte, or NC NZ at the end of the file (Report 8 from WAIT-KEY) |
-| `RCH_GETC` | 2AB2h | as `f:` does: a stream opened `w` or `a` is Q; TAB 0 makes the next read the count (records, or bytes) and a CR; a record file gives one record (padded past the end) and a CR. Text: LF and CRLF read as CR, other controls dropped, and a last line with no newline ends with a CR. Binary: every byte as it is |
-| `RCH_RAW` | 2B9Fh | the byte at the position, the position on: C with A; NC at the length |
-| `RCH_NUM` | 2BBEh | HL in decimal at `RR_BUF`, then a CR; `RR_DIG` points at it |
+| `RCH_IN` | 2AFCh | the input routine (HOME 14A9h → `G_IN` → `MB_IN`): C with A = the next byte, or NC NZ at the end of the file (Report 8 from WAIT-KEY) |
+| `RCH_GETC` | 2B0Fh | as `f:` does: a stream opened `w` or `a` is Q; TAB 0 makes the next read the count (records, or bytes) and a CR; a record file gives one record (padded past the end) and a CR. Text: LF and CRLF read as CR, other controls dropped, and a last line with no newline ends with a CR. Binary: every byte as it is |
+| `RCH_RAW` | 2BFCh | the byte at the position, the position on: C with A; NC at the length |
+| `RCH_NUM` | 2C1Bh | HL in decimal at `RR_BUF`, then a CR; `RR_DIG` points at it |
 
 | String | Address | Text |
 |---|---|---|
-| `CMD_RCHOPEN` | 2BE3h | `"tpi:rchopen ",0` |
-| `CMD_RCHGROW` | 2BF0h | `"tpi:rchgrow ",0` |
-| `CMD_RCHCLOSE` | 2BFDh | `"tpi:rchclose ",0` |
-| `CMD_RMASK` | 2C0Bh | `"tpi:rmask ",0` |
+| `CMD_RCHOPEN` | 2C40h | `"tpi:rchopen ",0` |
+| `CMD_RCHGROW` | 2C4Dh | `"tpi:rchgrow ",0` |
+| `CMD_RCHCLOSE` | 2C5Ah | `"tpi:rchclose ",0` |
+| `CMD_RMASK` | 2C68h | `"tpi:rmask ",0` |
 
 ## Where comments, documents and the code disagree
 
