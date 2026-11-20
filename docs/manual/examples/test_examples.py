@@ -14,7 +14,7 @@ beyond T-state counts, the 4-deep FIFOs.
 
 It also checks the manual against these files (check_manual): every name in
 picolib.asm has its entry in Chapter R5, every code block introduced "from
-`file.asm`" is still in that file, and Appendix G is picolib.asm.
+`file.asm`" (or `.py`) is still in that file, and Appendix G is picolib.asm.
 
 Run:  python3 docs/manual/examples/test_examples.py
 """
@@ -421,7 +421,7 @@ def check_manual():
         if lines[i].startswith("```") and lines[i] != "```":
             j = lines.index("```", i + 1)
             prev = next((l for l in reversed(lines[:i]) if l.strip()), "")
-            m = re.search(r"[Ff]rom `([\w.]+\.asm)`", prev)
+            m = re.search(r"[Ff]rom `([\w.]+\.(?:asm|py))`", prev)
             if m:
                 src = open(os.path.join(HERE, m.group(1))).read().split("\n")
                 src = [l.rstrip() for l in src]
