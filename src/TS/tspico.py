@@ -4112,7 +4112,10 @@ def RD_RAM(pre, cmd):                                                         # 
                 msg, st = SD_CALL(sd_add)
                 if st != _1_OK:
                     return msg, st
-            REFRESH_IF(catalog.parent(path))
+            # The listing of the folder, if it's the current one, with the card
+            # mounted: outside SD_CALL REFRESH_IF's chdir found no /sd, and a
+            # backup into the current folder ended with J (hardware, mbdisk 22).
+            SD_CALL(lambda: (REFRESH_IF(catalog.parent(path)), ("", _1_OK))[1])
             return "RAM disk saved: %dK in %s" % ((disk.last - disk.first + 1) * 8,
                                                   catalog.public(path)), _1_OK
         led.value(1)
