@@ -217,7 +217,8 @@ interrupts again after its `EI`; 041Ch's `EI` restores them once HOME is
 back ([exrom-fdd.md](exrom-fdd.md)). The patch fits because the new bytes
 at 03F3h are one longer (the `DI`) and the jump to 041Ch is a 2-byte `JR`.
 In the Megabank ROM 041Ch is `JP 1265h`, the fast channel entry, which
-calls G_BEEP without the bank call
+calls G_BEEP without the bank call, through the switch loops at 128Bh and
+128Fh
 ([exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9)).
 
 ### 04E8h–0502h: the printer's character helpers, and SENDTV
@@ -342,7 +343,11 @@ trampolines at 1488h–14BDh:
 The addresses are the module's vector table (3000h–301Eh), not its
 routines, so a rebuilt module does not move them. In the Megabank ROM
 14A0h and 14A9h are `LD HL,vec / JP 1265h`, the fast channel entry, which
-reaches the module with direct `OUT`s instead of 03FCh
+reaches the module with direct `OUT`s instead of 03FCh. Its two `OUT (F4h)`s
+are loops at 128Bh and 128Fh, the same bytes in both ROMs but for a `JR`'s
+displacement, since the TS-Pico follows an F4h write late. It puts all of
+FFh back as it found it, where `RESTORE_STATUS` puts back bit 7 only, so a
+video mode changed under the fast entry would be undone (nothing does that)
 ([exrom-fdd.md](exrom-fdd.md#the-r-channels-rchanasm-phase-9)). An `F` record in CHANS
 holds 14A0h and 14A9h as its output and input addresses: fixed HOME
 addresses, so nothing in a record has to change when CHANS moves or the
