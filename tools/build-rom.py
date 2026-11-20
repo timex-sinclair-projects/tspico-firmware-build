@@ -159,6 +159,11 @@ PATCHES = [
               "f3 21 09 30 cd fc 03 fb c9 "            # $14A0 an F record's output
               "f3 21 0c 30 cd fc 03 fb c9 "            # $14A9 its input
               "e1 22 ce 65 e1 22 3d 5c f9 fb c9",      # $14B2 GUARDED's error trap
+        mb_after="f3 21 0f 30 cd fc 03 fb d8 c3 65 14 "
+                 "f3 21 12 30 cd fc 03 fb d8 c3 be 13 "
+                 "21 09 30 c3 65 12 ff ff ff "         # $14A0: LD HL,3009 / JP FASTH
+                 "21 0c 30 c3 65 12 ff ff ff "         # $14A9: LD HL,300C / JP FASTH
+                 "e1 22 ce 65 e1 22 3d 5c f9 fb c9",
         note="$1488-$14C6 is an unreferenced remnant of a SYSCON open path (no "
              "CALL/JP/LD/JR reaches it). Each entry is DI / LD HL,vector / CALL "
              "$03FC (the returning thunk) / EI: the 2068's bank switch writes port "
@@ -189,6 +194,7 @@ PATCHES = [
         bank="home", addr=0x041C,
         before="00 00 10 d3 fe",
         after="cd fc 03 fb c9",                       # CALL 03FC / EI / RET
+        mb_after="c3 65 12 fb c9",                    # JP FASTH (the Megabank build)
         note="$041C-$041D follow the thunk's unconditional JP 65D0; $041E-$0421 are "
              "remnants of the relocated BEEPER (DIFF_HOME_vs_STOCK.md). Nothing "
              "references them.",
@@ -454,10 +460,70 @@ MB_PATCHES = [
         bank="exrom", addr=0x001E, before="00", after="fc",
         note="LD H,FFh / LD L,0 -> LD L,FCh.",
     ),
+
+    # --- The fast channel entry (Megabank spec, open question 21). Every
+    # character through an F or R record, and the editor's key click, used to
+    # cross through Timex's bank call (03FCh -> CALL_BANK at 65D0h:
+    # SAVE_STATUS, BANK_ENABLE, RESTORE_STATUS, each reading or writing the
+    # board's 16 registers) and GUARDED's error trap. FASTH switches with two
+    # OUTs each way, at two places where HOME and the EXROM line up.
+    dict(
+        name="SELECT's banked branch: $1241 JR NC,$1265 -> JR NC,$123D (Report O)",
+        bank="home", addr=0x1241, before="30 22", after="30 fa",
+        note="A STRMS entry whose bytes OR to 80h or more sent CHAN-OPEN to "
+             "Timex's SYSCON lookup at $1265, the banked channels: never "
+             "reachable (the banked OPEN path at $1488 was dead and is the "
+             "module's), and its CALL_BANK would jump through whatever SYSCON "
+             "held. Now O Invalid stream, the RST 8 at $123D, so $1265-$1292 "
+             "is free for FASTH. Nothing else enters it.",
+    ),
+    dict(
+        name="FASTH, the fast entry, in the freed $1265-$1292",
+        bank="home", addr=0x1265,
+        before="2a bc 5c d6 80 57 19 22 51 5c 7e 32 bf 5c fd cb 30 a6 23 23 23 23 "
+               "23 23 3a bf 5c 47 0e 88 56 23 5e 62 6b e5 c5 01 00 00 c5 c5 cd d0 65 c9",
+        after="f3 4f db f4 e6 03 20 16 "                 # DI / LD C,A / IN A,(F4) / AND 3 / JR NZ,.slow
+              "db ff f5 f6 80 d3 ff "                    # IN A,(FF) / PUSH AF / OR 80 / OUT (FF),A
+              "db f4 f6 03 cd 2e 00 "                    # IN A,(F4) / OR 3 / CALL 002E
+              "d1 f1 d3 ff d5 f1 fb c9 "                 # POP DE / POP AF / OUT (FF),A / PUSH DE / POP AF / EI / RET
+              "79 cd fc 03 fb c9 "                       # .slow: LD A,C / CALL 03FC / EI / RET
+              "ff ff ff ff ff ff ff ff ff ff",
+        note="HL = the vector (3009h out, 300Ch in, 3015h BEEPER), A = the "
+             "character. With F4h bits 0-1 clear (HOME in chunks 0-1: anything "
+             "else there, such as a program's board page, takes the old path, "
+             "Timex's bank call through 03FCh and GUARDED): FFh bit 7 set (the "
+             "EXROM, not the DOCK) and FFh as it was pushed, then F4h bits 0-1 "
+             "set by the OUT at $002E, whose next fetch is the EXROM's $0030: "
+             "JP FX_ENTRY (rchan.asm). FX_ENTRY comes back through the EXROM's "
+             "OUT at $1399 and HOME's RET at $139B with AF on the stack: FFh "
+             "back, AF, EI.",
+    ),
+    dict(
+        name="FASTH's switch into the EXROM: HOME $002E OUT (F4h),A",
+        bank="home", addr=0x002E, before="ff ff", after="d3 f4",
+        note="$002B-$002F was FFh filler after RST 28h's JP $371A; nothing "
+             "jumps here but FASTH's CALL. The OUT pages the EXROM into chunks "
+             "0-1, so the next instruction is fetched from EXROM $0030.",
+    ),
+    dict(
+        name="FASTH's landing in the EXROM: $0030 JP FX_ENTRY ($2400)",
+        bank="exrom", addr=0x0030, before="ff ff ff", after="c3 00 24",
+        note="FFh filler in the EXROM's RST 8 / RST 38h area; no RST 30h or "
+             "jump reaches it in the EXROM. Only HOME's $002E arrives here.",
+    ),
+    dict(
+        name="FX_BACK: EXROM $1399 OUT (F4h),A, then HOME's RET at $139B",
+        bank="exrom", addr=0x1399, before="ff ff", after="d3 f4",
+        note="In the FFh run $138E-$13CF, which the boot copies to RAM "
+             "$658E-$65CD, the bank stack's space: what the copy puts there is "
+             "never read. FX_ENTRY jumps here with A = F4h, bits 0-1 clear: "
+             "the next fetch is HOME $139B, a RET (the tail of the genuine "
+             "$139A AND A / RET), back into FASTH.",
+    ),
 ]
 
 MB_FIXED_SYMS = {"MB_BOOT": 0x3998, "R_SA": 0x39F5, "R_LD": 0x3A06, "FN_EXT": 0x3A61,
-                 "MB_CALL_HOME": 0x3E43}
+                 "MB_CALL_HOME": 0x3E43, "FX_ENTRY": 0x2400}
 
 # Base-ROM code the Megabank code relies on (checked with ANCHORS when
 # building --megabank).

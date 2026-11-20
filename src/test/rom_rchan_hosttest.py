@@ -25,8 +25,9 @@ an OUT to F4h or FCh with interrupts on). RST 8 stops a run with its report.
     text in     LF and CRLF as CR, controls dropped, a last line ends with CR,
                 then 8 End of file (NC NZ)
     modes       r drops output; w is Q on a read
-    the window  never the record's chunk or the stack's; a program's own page
-                in chunk 4 survives; the HSR rule holds throughout
+    the window  chunk 0, under the module in chunk 1, and only chunk 0: OWN0
+                back to 0 after every byte; a program's own page in chunk 4
+                survives; the HSR rule holds throughout
 
 With sjasmplus on the PATH the module is assembled again and the addresses
 below are checked against it (CI has none: the table is the contract).
@@ -52,12 +53,12 @@ from TS import ramdisk as rd                                    # noqa: E402
 ROM = os.path.join(REPO, "src", "rom", "TSPICO-MB.ROM")
 ASM = os.path.join(REPO, "src", "rom", "fdd", "fddcmd.asm")
 
-SYM = {"MB_OUT": 0x2400, "MB_IN": 0x240E, "RCH_ENDREC": 0x2785, "RCH_WB": 0x28CA,
-       "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2B08}
+SYM = {"MB_OUT": 0x2449, "MB_IN": 0x2457, "RCH_ENDREC": 0x289D, "RCH_WB": 0x29D7, "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2C18, "RCH_OUT": 0x270B, "RCH_SYNC": 0x2754}
 CURCHL, STRMS, CHANS = 0x5C51, 0x5C10, 0x5C4F
 REC = 0x7100                     # the record, in chunk 3
 DONE = 0xFFF0
 SP = 0x6100
+HOME_OK = (0x002E, 0x139B, 0x03F3, 0x03F4, 0x03F7, 0x03FA, 0x041C)   # the switch, BEEPER's thunk
 results = []
 
 
@@ -127,12 +128,14 @@ class RMachine(Machine):
         super().__init__(rom, base=1, size=size)
         self.hsr, self.dec = 0x03, 0x80
         self.status = 0
+        self.nslow = 0                                 # RCH_OUT's entries
         self.disk = rd.Disk()
         self.disk.mv = Mover(self)
         self.disk.mount(need=False)
         self.disk.format(32)
         self.disk.mount()
         self.sent = []
+        self.mapped = set()
         self.cpu.fetch_hook = None
         self.ram[CHANS:CHANS + 2] = w(0x7000)
 
@@ -141,21 +144,46 @@ class RMachine(Machine):
             return self.status
         return super().port_in(port)
 
-    def run(self, addr, **regs):
+    def port_out(self, port, v):
+        if port & 0xFF == 0xFC and self.sel < 8 and v:
+            self.mapped.add(self.sel)                # the chunks the ROM gave a bank
+        super().port_out(port, v)
+
+    def run(self, addr, home=False, **regs):
+        """From MB_OUT or MB_IN, as the module calls them; or, home=True,
+        from a HOME stub (14A0h, 14A9h) with interrupts on, as RST 10h and
+        the editor reach it, through FASTH and the fast entry: HOME code
+        runs while F4h bit 0 is clear, and the only EXROM addresses below
+        2000h are the landing (0030h) and FX_BACK (1399h). 03FCh, Timex's
+        bank call, stops the run (self.slow = the vector in HL)."""
         cpu = self.cpu
         for k, v in regs.items():
             setattr(cpu, k, v)
-        cpu.iff = False
+        cpu.iff = home
         cpu.sp = SP
         cpu.push(DONE)
         cpu.pc = addr
-        self.report = None
+        self.report = self.slow = None
         n = 0
         while cpu.pc != DONE:
             pc = cpu.pc
-            if pc == 0x0008:                         # RST 8: the report
+            if pc == SYM["RCH_OUT"]:
+                self.nslow += 1
+            if pc == 0x0008 and self.hsr & 1:        # the EXROM's RST 8: the report
                 self.report = self.read(cpu.r16(cpu.sp))
                 return self
+            if home and pc < 0x2000:
+                if not self.hsr & 1:
+                    if pc == 0x03FC:
+                        self.slow = cpu.h << 8 | cpu.l
+                        return self
+                    if not (pc in HOME_OK or 0x1265 <= pc < 0x1289 or 0x14A0 <= pc < 0x14B2):
+                        self.faults.append("HOME fetch at %04X" % pc)
+                elif pc not in (0x0030, 0x1399):
+                    self.faults.append("EXROM fetch at %04X" % pc)
+                cpu.step()
+                n += 1
+                continue
             if pc == SYM["CH_SEND"]:
                 prefix = bytearray()
                 a = cpu.h << 8 | cpu.l
@@ -193,7 +221,7 @@ class RMachine(Machine):
         sl = self.disk.open_stream(stream, name, mode, binary, reclen)
         p, o = self.disk.block_loc(stream)
         blk = self.board[p * 8192 + o:p * 8192 + o + rd.BLOCK_LEN]
-        r = bytearray(37)
+        r = bytearray(43)
         r[0:4] = w(0x14A0, 0x14A9)
         r[4], r[5] = ord("R"), stream
         r[19:34] = blk
@@ -202,24 +230,27 @@ class RMachine(Machine):
         fl |= 4 if blk[14] in b"ru" else 0
         fl |= 8 if blk[14] in b"wau" else 0
         r[7] = fl
-        self.ram[rec:rec + 37] = r
+        self.ram[rec:rec + 43] = r
         self.ram[CURCHL:CURCHL + 2] = w(rec)
         off = rec - 0x7000 + 1
         self.ram[STRMS + 6 + 2 * stream:STRMS + 8 + 2 * stream] = w(off)
         self.rec = rec
         return sl
 
-    def put(self, data):
+    def put(self, data, home=False):
         for c in data:
-            self.run(SYM["MB_OUT"], a=c)
+            if home:
+                self.run(0x14A0, home=True, a=c)
+            else:
+                self.run(SYM["MB_OUT"], a=c)
             if self.report is not None:
                 return self.report
         return None
 
-    def get(self, limit=400):
+    def get(self, limit=400, home=False):
         out = bytearray()
         for _ in range(limit):
-            self.run(SYM["MB_IN"])
+            self.run(0x14A9, home=True) if home else self.run(SYM["MB_IN"])
             if self.report is not None:
                 return bytes(out), self.report
             if not self.cpu.cf:
@@ -268,7 +299,8 @@ def main():
     check(m.slot_lp(4) == (6, 6), "the CR wrote the length and position back to the slot")
     m.put(b"ab\x06c\r")
     check(m.file(4)[6:] == b"ab" + b" " * 14 + b"c\r", "comma: spaces to the next 16-column stop")
-    check(not m.faults and m.hsr_rule() and m.own[4] == 0, "no faults; the window put back")
+    check(not m.faults and m.hsr_rule() and m.own[0] == 0 and m.mapped == {0},
+          "no faults; the window is chunk 0 and put back (%s)" % sorted(m.mapped))
 
     print("Binary, TAB, growth, write-back")
     m = RMachine(rom)
@@ -372,13 +404,13 @@ def main():
     check(m.file(6) == b"x", "mode r: what is printed (INPUT #'s prompt) is dropped")
     m.disk.close(6)
     m.disk.open_list(7, ["alpha", "b", "gamma"])
-    r = bytearray(37)
+    r = bytearray(43)
     p, o = m.disk.block_loc(7)
     r[0:4] = w(0x14A0, 0x14A9)
     r[4], r[5] = ord("R"), 7
     r[19:34] = m.board[p * 8192 + o:p * 8192 + o + rd.BLOCK_LEN]
     r[8], r[7] = 10, 1 | 4
-    m.ram[REC:REC + 37] = r
+    m.ram[REC:REC + 43] = r
     m.ram[CURCHL:CURCHL + 2] = w(REC)
     m.rec = REC
     got, end = m.get()
@@ -391,10 +423,72 @@ def main():
     m.own[4], m.sub[4], m.hsr = 9, 2, 0x13             # a program's page in chunk 4
     m.open(4, "w4", rec=0xA100)                        # and the record in chunk 5
     m.put(b"window\r")
-    check(m.file(4) == b"window\r" and (m.own[4], m.sub[4], m.hsr) == (9, 2, 0x13),
-          "a program's page in chunk 4 and a record in chunk 5: the window is 6 or 7, "
+    check(m.file(4) == b"window\r" and (m.own[4], m.sub[4], m.hsr) == (9, 2, 0x13)
+          and m.mapped == {0} and m.own[0] == 0,
+          "a program's page in chunk 4 and a record in chunk 5: the window is chunk 0, "
           "chunk 4 as it was")
     check(not m.faults and m.hsr_rule(), "no faults (%s)" % m.faults[:2])
+
+    print("The fast entry, from HOME (14A0h, 14A9h, 03F3h)")
+    m = RMachine(rom)
+    m.open(4, "fast", "u")
+    m.hsr, m.dec = 0x10, 0x05                         # HOME in 0-1, a program's chunk 4; FFh bit 7 clear
+    m.own[4], m.sub[4] = 9, 2
+    m.put(b"via 14A0h\r", home=True)
+    cpu = m.cpu
+    check(m.file(4) == b"via 14A0h\r" and m.report is None and m.slow is None,
+          "PRINT # through FASTH and FX_ENTRY: the bytes on the board")
+    check((m.hsr, m.dec, cpu.sp, cpu.iff) == (0x10, 0x05, SP, True),
+          "F4h and FFh as they were, the stack balanced, interrupts back on "
+          "(%02X %02X %04X %s)" % (m.hsr, m.dec, cpu.sp, cpu.iff))
+    check(any(p == 0xFF and v == 0x85 for p, v in m.port_log), "FFh bit 7 set while the EXROM is in")
+    m.put(bytes((23, 1, 0)), home=True)
+    got, end = m.get(home=True)
+    check(got == b"via 14A0h\r" and end == "eof",
+          "INPUT # through 14A9h: the bytes with C, then NC NZ (%r %r)" % (got, end))
+    check(not m.faults and (m.own[4], m.sub[4], m.own[0]) == (9, 2, 0), "no faults (%s)" % m.faults[:2])
+    m.open(5, "cursor", "u")                           # the cursor: RCH_FOUT, RCH_FILL, RCH_SYNC
+    line = bytes(32 + (i * 13) % 95 for i in range(99))
+    text = (line + b"\r") * 90                          # 9000 bytes: 256-byte, 8K and extent edges
+    n0, m.nslow = len(m.sent), 0
+    m.put(text, home=True)
+    grows = [s for s in m.sent[n0:] if s[0] == "tpi:rchgrow "]
+    check(m.file(5) == text and m.field(25) == 9000 and m.field(27) == 9000 and grows
+          and m.report is None, "9000 bytes of text through the fast entry: all on the board, "
+          "the length and position right, %d tpi:rchgrow" % len(grows))
+    check(m.slot_lp(5) == (9000, 9000), "the last CR wrote the length and position back (%s)"
+          % (m.slot_lp(5),))
+    check(m.nslow < 9000 // 4, "most bytes go straight in: RCH_OUT for %d of 9000" % m.nslow)
+    m.put(b"abc", home=True)
+    check(m.field(25) == 9000 and m.ram[m.rec + 34] == 0,
+          "bytes through the cursor wait in it (the length and column not yet moved)")
+    m.hsr, m.dec = 0x13, 0x85                          # the EXROM in, as RCH_IN has it
+    m.run(SYM["RCH_SYNC"], ix=m.rec)
+    m.hsr, m.dec = 0x10, 0x05
+    check((m.field(25), m.field(27), m.ram[m.rec + 34], m.ram[m.rec + 37], m.ram[m.rec + 42])
+          == (9003, 9003, 3, 0, 0) and m.file(5)[-3:] == b"abc",
+          "RCH_SYNC: the position, length and column on by 3, the cursor ended")
+    m.put(bytes((23, 8801 & 0xFF, 8801 >> 8)), home=True)
+    got, end = m.get(300, home=True)
+    check(got == text[8800:] + b"abc\r" and end == "eof",
+          "TAB 8801 and INPUT #: the same bytes back (and a CR for the open line)")
+    m.open(6, "fbin", binary=True)
+    data = bytes((i * 37) & 0xFF for i in range(3000)).replace(b"\x17", b"\x18")
+    m.put(data, home=True)
+    m.hsr, m.dec = 0x13, 0x85
+    m.run(SYM["RCH_SYNC"], ix=m.rec)
+    m.hsr, m.dec = 0x10, 0x05
+    check(m.file(6) == data, "binary through the fast entry: every byte (controls through RCH_OUT)")
+    check(not m.faults and m.own[0] == 0 and m.hsr == 0x10, "no faults (%s)" % m.faults[:2])
+    m.hsr = 0x12
+    m.put(b"x", home=True)
+    check(m.slow == 0x3009 and m.hsr == 0x12, "F4h bit 1 set (chunk 1 not HOME): the old path, "
+          "03FCh with HL = 3009h, nothing switched")
+    m.hsr = 0x00
+    m.ram[0x5DCD:0x5DCF] = w(0x00C8)                 # the editor's key click, HL at 5DCDh
+    m.run(0x03F3, home=True, h=0x00, l=0xC8, d=0, e=0)
+    check(not m.faults and m.slow is None and m.report is None and m.hsr == 0 and cpu.iff,
+          "BEEPER's thunk (03F3h) through FASTH: the click skipped for an R record, back to HOME")
 
     ok = sum(results)
     print("%d/%d passed" % (ok, len(results)))

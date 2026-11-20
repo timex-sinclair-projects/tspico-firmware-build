@@ -103,6 +103,8 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 | `fuse_smoke.py` | The same idea in Fuse (below). |
 | `megabank_host.py` | `pico_host.py` plus a stand-in RAM disk for the Megabank test ROM: `tpi:ropen`, `tpi:rblk` (it answers with function 89h, the mover) and `tpi:mbtest` (mover ops 4–7 and its range and XOR refusals), added to `EXT_SA_FUNCT`. Logs to `$MEGABANK_HOST_LOG`. |
 | `megabank_smoke.py` | The Megabank test ROM end to end, in a ZEsarUX with the Megabank model (`MEGABANK=1`; the fork's `tspico-device` branch): the boot reset, `tpi:mbtest`, SAVE/LOAD/VERIFY `"r:…"` with a program page mapped in the window chunk, the F and R reports, and an ordinary SAVE after. `ZESARUX=… python3 tools/emu/megabank_smoke.py`. ZEsarUX's model ignores the HSR; `src/test/rom_megabank_hosttest.py` checks that rule. |
+| `mbchan_emu.py` | `basic/SD/TAP/test/mbchan.bas` and `mbchpg.bas`, the `r:` channel tests hwcheck runs on the board, in the same ZEsarUX: their results against hwcheck's `MB_CHAN_EXPECT`, then NEW with a stream open (the file kept to its last CR). About 3 minutes. |
+| `chan_speed.py` | T-states per `RST 10h` through an `r:` and an `f:` stream, from ZRCP's T-state counter (breakpoint actions at a machine-code loop's start and end), the loop's own cost taken off. `TSPICO_ROM=` another ROM for a before-and-after. |
 | `build_standalone.sh` | The standalone `pico_host` (PyInstaller). |
 | `manual_screens.py` | The user manual's 2068 screen pictures, captured. `--v3` makes `info-v3.png`, the v3 manual's `tpi:info`, with `TSPICO_BOARD_LABEL=V3`: `pico_host.py` still runs the v2 firmware and only the Board line changes. |
 
