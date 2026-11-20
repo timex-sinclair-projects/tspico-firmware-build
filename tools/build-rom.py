@@ -331,7 +331,7 @@ PATCHES = [
 FIXED_SYMS = {"PS_READ": 0x377F}
 
 
-# --- The Megabank test ROM (--megabank) ---------------------------------------
+# --- ROM 2.5, the Megabank build (--megabank) ---------------------------------
 # Applied after PATCHES (with their `mb_after` bytes where they have them). Each
 # jumps to Megabank code appended to the module (fddcmd.asm, IFDEF MEGABANK);
 # MB_FIXED_SYMS pins those addresses. Megabank spec "Minimal ROM: detection,

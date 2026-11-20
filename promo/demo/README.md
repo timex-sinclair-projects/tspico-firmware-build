@@ -12,6 +12,11 @@ The whole tour was run in the emulator (`tools/emu`: ZEsarUX running
 `src/rom/TSPICO-24.ROM`, `pico_host.py` running the real firmware), twice in a row from a
 fresh copy of the card, with identical screens both times. See [Testing](#testing).
 
+The tour, its art and the [video script](../video-script.md) are release 2.4's. The tools now
+run ROM 2.5, the release ROM (`build.py` takes its letters from `src/rom/TSPICO-25.ROM`,
+and the emulator runs it), where chapter 1's `PRINT PEEK 101` gives 37, not the 36 its
+caption explains. They have not been revised or re-run for 2.5.
+
 ## Files
 
 | File | What |

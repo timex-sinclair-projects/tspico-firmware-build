@@ -4,7 +4,9 @@ Source: [`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm) (all
 2826 lines), assembled by [`tools/build-rom.py`](../../../tools/build-rom.py)
 at EXROM 3000h–3997h and spliced into the SYNC layer's image
 (`src/rom/TSPICO-SYNC.ROM`) with the patches that call it, giving
-`src/rom/TSPICO-24.ROM` ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)); the result read in
+`src/rom/TSPICO-24.ROM`, ROM 2.4 ([overview.md](overview.md#toolsbuild-rompy-the-disk-command-layer)), and with
+`-DMEGABANK` `src/rom/TSPICO-25.ROM`, ROM 2.5, the release ROM
+([below](#the-megabank-build--dmegabank-rom-25)); the result read in
 [`tspico-22-exrom.labelled.asm`](../../rom-analysis/disasm/tspico-22-exrom.labelled.asm).
 
 The module and its patches are ROM 2.4's last layer (2.2's, plus #227 and
@@ -139,7 +141,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `SESSION_ID` | 5DD1h | where the session id is kept |
 | `IY_SYSVARS` | 5C3Ah | what HOME expects in IY (the bank switch clobbers IY) |
 | `BANK_SV` | 5DCFh | pre-header byte 2 up to ROM 2.2 (always FFh); no longer read by the module |
-| `ROM_ID` | 24h | not a variable: what ROM 2.4 sends (2.3 sent 23h) as byte 2 of a command pre-header instead of `BANK_SV`, the same value as its version marker (HOME 0065h). `SEND_FOPEN` and `CH_SEND` send it, and `build-rom.py` patches `BUILD_PREHEADER_B` (1BB5h) to send it too, so the firmware knows which ROM sent each command (`rom_id`, shown by `tpi:info`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id), #227) |
+| `ROM_ID` | 24h | 25h with `-DMEGABANK` (ROM 2.5). Not a variable: what ROM 2.4 sends (2.3 sent 23h) as byte 2 of a command pre-header instead of `BANK_SV`, the same value as its version marker (HOME 0065h). `SEND_FOPEN` and `CH_SEND` send it, and `build-rom.py` patches `BUILD_PREHEADER_B` (1BB5h) to send it too, so the firmware knows which ROM sent each command (`rom_id`, shown by `tpi:info`, [../firmware/tspico-state.md](../firmware/tspico-state.md#rom_id), #227) |
 | `MODE_SV` | 5DDBh | TPMODE; F_HOOK clears bits 7–4 as SESSION_SETUP's non-command exit does; TAPE_MODE clears bit 1 |
 | `MODE_SET_OK` | 2105h | where `tpi:sdcard` and `tpi:picopt` end: `CALL S_MODE` (1862h) with A, `CALL 042Fh`, `JP 1B72h` ("0 OK"); TAPE_MODE jumps here |
 | `CURCHL` | 5C51h | the current channel's record |
@@ -1270,8 +1272,9 @@ region is all `FFh`.
 ## The Megabank build (`-DMEGABANK`, ROM 2.5)
 
 `tools/build-rom.py --megabank` assembles the module with `-DMEGABANK` and
-gives `src/rom/TSPICO-MB.ROM`, the TS-2068 Megabank test ROM (not in a flash
-slot; [PROTOCOL.md §6.3](../../PROTOCOL.md) has the wire format). Without the
+gives `src/rom/TSPICO-25.ROM`, ROM 2.5, the release ROM and flash slot 1's
+image. It runs with or without the TS-2068 Megabank
+([PROTOCOL.md §6.3](../../PROTOCOL.md) has the wire format). Without the
 define the module is byte-for-byte ROM 2.4's. With it, four same-size edits
 change 2.4's code and everything else is appended after `CMD_CHCAT`, at
 3998h–3E52h (1211 bytes; 429 free to 3FFFh), so no 2.4 address moves:
@@ -1584,16 +1587,20 @@ FFFCh after the patches below), so they are unaffected.
 now whatever the count, and `build-rom.py` patches the three places that
 made room for it to constants (the interrupt handler at 62B7h, CALL_BANK
 at 65F8h, XFER_BYTES at 672Fh). With no board the 17 board bytes are saved
-all the same (whatever the bus gives) and `RESTORE_BOARD` sends them to the
-select port (FDh), which `MB_DETECT` writes on any 2068, not to FCh.
+all the same (whatever the bus gives), but `RESTORE_BOARD` skips the 16
+registers (`NOBOARD`) and writes only the select (FDh, which `MB_DETECT`
+writes on any 2068) and the HSR. Earlier 2.5 builds sent the 16 to the
+select port as well: harmless, but about 1300 T-states with interrupts
+off on every crossing, enough to lose frame interrupts in the folder menu's
+key loop.
 
 **64 columns.** The video-mode service copies 6000h–683Fh to F7C0h and
 adds 97C0h to each word the table at EXROM 1D00h lists. `build-rom.py`
 assembles bankapi.asm twice, with `RB` = 0 and 97C0h, and every word that
-differs by 97C0h goes in the table: 31 from bankapi.asm, plus the old
+differs by 97C0h goes in the table: 33 from bankapi.asm, plus the old
 entries outside 6316h–6571h, less the three frame operands, with the
 genuine table's wrong entry 674Fh (a `CALL`'s opcode) corrected to 6744h
-(SAVE_STATUS's call in XFER_BYTES): 64 entries, ending 1D81h, in zeros that
+(SAVE_STATUS's call in XFER_BYTES): 66 entries, ending 1D85h, in zeros that
 run to 1EDBh. `rom_bankapi_hosttest.py` runs the API from both copies.
 
 **Other bytes it patches** (`MB_PATCHES`):
@@ -1632,7 +1639,9 @@ bank mapped elsewhere: a matter for a LEAP build for the board.
 | `NEWOWN` | BANK_ENABLE's rule for one chunk: A = its OWNn, B the board bank (or 0), D its bit, E the chunks asked for; A = what OWNn must be |
 | `TIMEX_HSR` | BANK_ENABLE's first half (above): H = the HSR, FFh bit 7 set or cleared. Sits in SAVE_STATUS's slot |
 | `SAVE_BOARD` | SAVE_STATUS's second half: the 16 registers and the select. Reads only, but for the select |
-| `RESTORE_BOARD` | RESTORE_STATUS's second half: FFh bit 7, the 16 registers (OWN0–7 first, each setting its SUB, then SUB0–7), the select, then the HSR whole |
+| `RESTORE_BOARD` | RESTORE_STATUS's second half: FFh bit 7, the 16 registers (OWN0–7 first, each setting its SUB, then SUB0–7), the select, then the HSR whole. With no board (count 0) it jumps to `NOBOARD` before the registers |
+| `RESTORE_TAIL` | RAM 63F0h, inside RESTORE_BOARD: from here on the select and the HSR, IX stepped to the frame's last byte. Both paths, the board's and `NOBOARD`'s, end through it |
+| `NOBOARD` | RAM 6566h, in RESTORE_STATUS's spare bytes after its `JP RESTORE_BOARD`: IX += 16, past the registers no board needs, then `JP RESTORE_TAIL`. Without it the 16 went to the select port (FDh) with interrupts off, about 1300 T-states every bank crossing; the folder menu's key loop (POLL_KEYPRESS to KEY-SCAN through CALL_HOME) crosses without a pause, and in ZEsarUX with no board half the frame interrupts were lost (`FRAMES` up 24 a second; 52 with `NOBOARD`), enough to miss a key (`tools/emu/smoke.py`) |
 
 ### The `r:` channels (`rchan.asm`, phase 9)
 

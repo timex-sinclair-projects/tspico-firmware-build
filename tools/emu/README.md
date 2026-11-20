@@ -4,7 +4,7 @@
 > `pico_host`: see [Testing in an Emulator](../../docs/manual/emulators.md). This README is
 > about the tools in this folder.
 
-ZEsarUX emulates the TS-2068 running the TS-Pico ROM (`src/rom/TSPICO-24.ROM`).
+ZEsarUX emulates the TS-2068 running the TS-Pico ROM (`src/rom/TSPICO-25.ROM`, ROM 2.5).
 Every Z80 access to ports 0Eh/0Fh goes over a socket to `pico_host.py`, which
 runs the **real firmware**: `TS.tspico.TS2068_IO()`,
 its own main loop, unmodified. A host folder stands in for the Pico's flash
@@ -12,7 +12,7 @@ and the SD card. You type BASIC through ZEsarUX's remote protocol (ZRCP), read
 the screen, and save screenshots.
 
 ```
- ZEsarUX (TS-2068, TSPICO-24.ROM)          pico_host.py (CPython)
+ ZEsarUX (TS-2068, TSPICO-25.ROM)          pico_host.py (CPython)
  Z80 OUT/IN (0Eh), IN/OUT (0Fh)  ─socket─▶  BusModel  ─▶  TS2068_IO()  (src/TS)
  ZRCP :10000  ◀── session.py: type, read the screen, screenshots
                                             /tmp/tspico-root/{config.ini, assets, TMP, sd/...}
@@ -94,7 +94,7 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 - **Files:** the firmware's output goes to `/tmp/pico_host.out` (telemetry on), and its card
   to `/tmp/tspico-root/sd`.
 - **Options:** `TSPICO_HOST=dist/pico_host` runs the standalone build instead of the script.
-  `TSPICO_ROM=path` runs another 32K ROM image instead of `src/rom/TSPICO-24.ROM`.
+  `TSPICO_ROM=path` runs another 32K ROM image instead of `src/rom/TSPICO-25.ROM` (`src/rom/TSPICO-24.ROM` for ROM 2.4).
   `TSPICO_TRACE=1` prints every frame (status reads only when they change).
 - **Making TAPs:** `S.basic_tap(name, lines)` builds a TAP holding a BASIC program.
 
@@ -106,8 +106,8 @@ with S.Session(sd="/path/to/a/card/folder") as s:       # default: the repo's "S
 | `session.py` | Starts the host, then ZEsarUX, and drives ZRCP. |
 | `smoke.py` | The end-to-end check. |
 | `fuse_smoke.py` | The same idea in Fuse (below). |
-| `megabank_host.py` | `pico_host.py` plus a stand-in RAM disk for the Megabank test ROM: `tpi:ropen`, `tpi:rblk` (it answers with function 89h, the mover) and `tpi:mbtest` (mover ops 4–7 and its range and XOR refusals), added to `EXT_SA_FUNCT`. Logs to `$MEGABANK_HOST_LOG`. |
-| `megabank_smoke.py` | The Megabank test ROM end to end, in a ZEsarUX with the Megabank model (`MEGABANK=1`; the fork's `tspico-device` branch): the boot reset, `tpi:mbtest`, SAVE/LOAD/VERIFY `"r:…"` with a program page mapped in the window chunk, the F and R reports, and an ordinary SAVE after. `ZESARUX=… python3 tools/emu/megabank_smoke.py`. ZEsarUX's model ignores the HSR; `src/test/rom_megabank_hosttest.py` checks that rule. |
+| `megabank_host.py` | `pico_host.py` plus a stand-in RAM disk for ROM 2.5's Megabank support: `tpi:ropen`, `tpi:rblk` (it answers with function 89h, the mover) and `tpi:mbtest` (mover ops 4–7 and its range and XOR refusals), added to `EXT_SA_FUNCT`. Logs to `$MEGABANK_HOST_LOG`. |
+| `megabank_smoke.py` | ROM 2.5's Megabank support end to end, in a ZEsarUX with the Megabank model (`MEGABANK=1`; the fork's `tspico-device` branch): the boot reset, `tpi:mbtest`, SAVE/LOAD/VERIFY `"r:…"` with a program page mapped in the window chunk, the F and R reports, and an ordinary SAVE after. `ZESARUX=… python3 tools/emu/megabank_smoke.py`. ZEsarUX's model ignores the HSR; `src/test/rom_megabank_hosttest.py` checks that rule. |
 | `mbchan_emu.py` | `basic/SD/TAP/test/mbchan.bas` and `mbchpg.bas`, the `r:` channel tests hwcheck runs on the board, in the same ZEsarUX: their results against hwcheck's `MB_CHAN_EXPECT`, then NEW with a stream open (the file kept to its last CR). About 3 minutes. |
 | `chan_speed.py` | T-states per `RST 10h` through an `r:` and an `f:` stream, from ZRCP's T-state counter (breakpoint actions at a machine-code loop's start and end), the loop's own cost taken off. `TSPICO_ROM=` another ROM for a before-and-after. |
 | `build_standalone.sh` | The standalone `pico_host` (PyInstaller). |

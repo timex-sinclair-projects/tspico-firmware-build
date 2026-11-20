@@ -28,8 +28,8 @@ address byte ignored ([../firmware/board.md](../firmware/board.md#kempston_bytep
 The v3 card also watches, without answering, OUTs to FDh and FCh: the
 TS-2068 Megabank's register select and data. A chunk one of its banks owns
 is the board's, and the card stops serving it
-([../firmware/tsbus.md](../firmware/tsbus.md#megabankh-megabankc)). The
-Megabank test ROM writes them itself: OWN0–OWN7 and WPROT = 0 at boot, and
+([../firmware/tsbus.md](../firmware/tsbus.md#megabankh-megabankc)). ROM 2.5
+writes them itself: OWN0–OWN7 and WPROT = 0 at boot, and
 the mover maps a window with them and with the HSR, port F4h
 ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#the-megabank-build--dmegabank-rom-25)).
 
@@ -99,7 +99,7 @@ Ten bytes open every transaction. Byte 0 picks the kind
 |---|---|---|
 | 0 | `'B'` | flag: 00h header, FFh data |
 | 1 | TADDR (0 SAVE, 1 LOAD, 2 VERIFY, 3 MERGE) | TADDR |
-| 2 | 24h, the ROM's version (the firmware's `rom_id`; 23h from ROM 2.3, FFh before it) | bank |
+| 2 | 25h, the ROM's version (the firmware's `rom_id`; 24h on ROM 2.4, 23h from ROM 2.3, FFh before it) | bank |
 | 3–4 | PMR1: the first `CODE` number, little-endian | session id |
 | 5–6 | PMR2: the second `CODE` number | address (IX) |
 | 7–8 | length of the command text | block length (DE) |
@@ -175,7 +175,7 @@ dispatch compares A = code − 1 ([exrom-chunk1.md](../rom/exrom-chunk1.md)).
 | 86h | `FN_PRINT_LOOP` | status, then pages: text, 00h → a key comes back (every key, `N` included, goes round the loop, #227; a digit at a Scroll? prompt sets the page length); 03h ends the loop | the paged display | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | 87h | — | status | HOME 08A6h: clears the screen | unused |
 | 88h | `FN_PRINT_LOOP_LOWER` | as 86h | 86h on the lower screen (`LOWER_LOOP`, 334Fh) | `SEND_MSG_PROMPT_YN(..., lower=True)`, after `tpi:fopen` |
-| 89h | — | operations, op 0, then the answer ([PROTOCOL.md §6.3](../../PROTOCOL.md)) | the Megabank mover (`MOVER`), in the Megabank test ROM (2.5) only; Report D in 2.4 | every `r:` command: `tpi:rblk`, `tpi:ram`, `tpi:rchopen`, `tpi:rchgrow`, `tpi:rchclose`, and CAT, ERASE, FORMAT, MOVE, COPY with `r:` names (`RD_RUN`, [tspico-disk.md](../firmware/tspico-disk.md#the-megabanks-ram-disk-r-names)) |
+| 89h | — | operations, op 0, then the answer ([PROTOCOL.md §6.3](../../PROTOCOL.md)) | the Megabank mover (`MOVER`), in ROM 2.5 only; Report D in 2.4 | every `r:` command: `tpi:rblk`, `tpi:ram`, `tpi:rchopen`, `tpi:rchgrow`, `tpi:rchclose`, and CAT, ERASE, FORMAT, MOVE, COPY with `r:` names (`RD_RUN`, [tspico-disk.md](../firmware/tspico-disk.md#the-megabanks-ram-disk-r-names)) |
 | 80h, 8Ah–FFh | — | — | fall through the chain: Report D | — |
 
 Text rules: the ROM reads characters without a ready wait; 00h ends a string
@@ -191,7 +191,7 @@ back as typed after a ready wait (`SEND_KEY`, 1C40h; #227).
 |---|---|---|
 | 1840h | G_MODE | BC = TPMODE (low nibble); AF kept |
 | 1842h | S_MODE | TPMODE := A AND 0Fh; AF kept |
-| 1844h | G_VERS | BC = the version: 0024h on ROM 2.4 (0023h on 2.3, 0022h on 2.2, 0015h on 1.1) |
+| 1844h | G_VERS | BC = the version: 0025h on ROM 2.5 (0024h on 2.4, 0023h on 2.3, 0022h on 2.2, 0015h on 1.1) |
 | 1846h | TX_A | `OUT (0Eh),A`; no wait |
 | 1848h | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | 184Ah | C_END | wait READY, read the answer, run the response functions; NC = status 1 |
@@ -272,7 +272,7 @@ request is a port-0Fh write followed by its arguments on 0Eh.
 |---|---|---|
 | 0 | `tpi:picopt` (set), `tpi:ts2040` (clear) | printing (LPRINT, LLIST, COPY) goes to the Pico |
 | 1 | `tpi:sdcard` (set), `tpi:tape` (clears bits 0 **and** 1: TPMODE = 0) | LOAD and SAVE go to the Pico; 1 at power-on (TPMODE = 2) |
-| 5 | the Megabank test ROM only: F_HOOK for an `r:` name; cleared after the data block | LOAD and SAVE blocks go to the Megabank RAM disk (`R_SA`, `R_LD`) |
+| 5 | ROM 2.5 only: F_HOOK for an `r:` name; cleared after the data block | LOAD and SAVE blocks go to the Megabank RAM disk (`R_SA`, `R_LD`) |
 
 The ROM handles these four names itself; the BIOS's G_MODE/S_MODE read and
 write the low nibble. [sysvars.md](../rom/sysvars.md).

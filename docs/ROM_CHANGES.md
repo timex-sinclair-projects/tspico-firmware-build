@@ -8,6 +8,8 @@ An assembly-level account of what changed on top of Gustavo Pane's v1.7 ROM:
 - ROM 2.3: keys as typed, the Pico ends the 86h loop, a new string reader.
 - ROM 2.4: COPY and MOVE as two verbs, `LIST "x"`, `RESTORE #`, the `v:` and `x:`
   channels and `CAT #`.
+- ROM 2.5: the TS-2068 Megabank: the boot reset, the mover, `r:` files and
+  channels, the Timex bank API on the board, and a fast channel entry.
 - The ZX Spectrum ROM v3.
 
 Addresses are Z80 addresses. In the 32 K image, HOME sits at file offset 0000h
@@ -25,7 +27,8 @@ sources are listed [at the end](#sources).
 | **2.1** | `src/rom/TSPICO-21.ROM` until 2.2, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. It shipped with firmware 2.1.0–2.1.2. |
 | **2.2** | `src/rom/TSPICO-22.ROM`, crc 8363E100 | 2.1 plus a 16th patch (EXROM 20BEh) and two module fixes: `tpi:tape` keeps the printer switch ([TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), #176) and a pre-load of 0 is Report J ([PRELOAD](#preload-a-pre-load-of-0-is-report-j), #179). The module is 1919 bytes, 3000h–377Eh. It shipped with firmware 2.2 and 2.2.1. |
 | **2.3** | `src/rom/TSPICO-23.ROM` until 2.4, crc D7352D58 (as released in 2.3.1) | 2.2 plus four patches and `PS_READ`: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228). FDD_VERSION 8. It shipped with firmware 2.3 and 2.3.1. |
-| **2.4** | `src/rom/TSPICO-24.ROM`, crc 96D7CEAA | 2.3 plus three patches and module code: COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-24-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-24-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-24-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-24-the-command-channel), #404); `CAT #n` writes a listing into a file ([below](#rom-24-cat-n), #404). Version marker 24h. The module is 2456 bytes, 3000h–3997h, FDD_VERSION 9. Needs the matching firmware. This is the release ROM and the slot-1 image. |
+| **2.4** | `src/rom/TSPICO-24.ROM`, crc 96D7CEAA | 2.3 plus three patches and module code: COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-24-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-24-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-24-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-24-the-command-channel), #404); `CAT #n` writes a listing into a file ([below](#rom-24-cat-n), #404). Version marker 24h. The module is 2456 bytes, 3000h–3997h, FDD_VERSION 9. Needs the matching firmware. It shipped with firmware 2.4; it is still built and checked in CI as the previous release. |
+| **2.5** | `src/rom/TSPICO-25.ROM`, crc F53FAEF8 (`TSPICO-MB.ROM`, the Megabank test ROM, until it was promoted) | 2.4 built with `tools/build-rom.py --megabank`: the module assembled `-DMEGABANK`, with the TS-2068 Megabank's code after it, `rchan.asm` at EXROM 2400h, `bankapi.asm` over the RAM bank code, and 21 more patches ([below](#rom-25-the-ts-2068-megabank)). Version marker 25h, FDD_VERSION 9. It runs with or without the board. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -640,6 +643,78 @@ record. It also puts DI back after BEEPER's EI.
 | 3280h | SEND_FOPEN | 3650h | CH_SEND |
 | 331Fh | WF_FAIL (J / D / T) | 3778h | PRELOAD (#179) |
 
+## ROM 2.5: the TS-2068 Megabank
+
+ROM 2.5 is ROM 2.4 built with `tools/build-rom.py --megabank`, for the
+TS-2068 Megabank RAM board (its spec is in the TS-2068-Megabank repository,
+`docs/spec.md`). It runs with or without the board. The wire format is [PROTOCOL.md §6.3](PROTOCOL.md); the code is in
+the programmer's reference,
+[exrom-fdd.md](reference/rom/exrom-fdd.md#the-megabank-build--dmegabank-rom-25).
+
+What it adds over 2.4:
+
+1. **The boot reset and detection** (#426). EXROM 0A3Eh, where Timex's bank
+   search starts, jumps to `MB_BOOT`: OWN0–OWN7 and WPROT = 0, then
+   `MB_DETECT` reads the board's ID, BASE and SIZE and sets the bank count
+   (0 with no board).
+2. **The mover**, response function 89h (#426). 2213h becomes `JP FN_EXT`,
+   which runs 88h as before and 89h: operations that copy, compare and
+   stream between 2068 memory, the board and the Pico, ended by op 0 and
+   the command's answer.
+3. **`r:` files** (#426, #427). `SAVE`/`LOAD`/`VERIFY`/`MERGE "r:name"` set
+   TPMODE bit 5; SA-BYTES (0068h) and LD-BYTES (00FCh) go to `R_SA` and
+   `R_LD`, which send each block as `tpi:rblk` and let the firmware move it
+   with the mover. CAT, ERASE, FORMAT, MOVE and COPY take `r:` names in the
+   firmware.
+4. **The Timex bank API on the board** (#429). `src/rom/fdd/bankapi.asm`
+   replaces the RAM bank code at 6316h–6571h, every entry point kept, so
+   BANK_ENABLE and the rest drive the board, with Wes Brzozowski's
+   XFER_BYTES fixes and a 19-byte save frame. The EXROM's crossings into
+   HOME take chunks 0–1 only (FFFCh, not FF00h), so a program's board page
+   keeps its HSR bit across a command. With no board, `RESTORE_STATUS`
+   skips the board's 16 registers (`NOBOARD`): writing them kept interrupts
+   off for about 1300 T-states on every crossing, and in the emulator the
+   folder menu missed key presses.
+5. **`r:` channels** (#430, #432, #436). `OPEN #n,"r:name"[,"mode"[,reclen]]`,
+   `PRINT #`, `INPUT #` and `CLOSE #` on the RAM disk, in
+   `src/rom/fdd/rchan.asm` at EXROM 2400h–2C72h. The ROM reads and writes
+   the bytes itself; `PRINT #` collects text in the channel record.
+6. **The fast channel entry** (#433, #434). `f:` and `r:` channel I/O and
+   the BEEPER thunk go through `FASTH` at HOME 1265h (CHAN-OPEN's
+   unreachable banked-channel branch, now Report O) instead of Timex's bank
+   call. Each switch waits in a loop that is the same in HOME and the EXROM,
+   so it still works when the card follows the switch a few reads late, as
+   the v3 card does.
+
+The patches (`MB_PATCHES` in build-rom.py), after the 2.4 patches:
+
+| Site | Before → after | What |
+|---|---|---|
+| EXROM 0A3Eh | `2A BC 5C` → `JP 3998h` | the bank search → `MB_BOOT` |
+| EXROM 0068h | `JP 1879h` → `JP 39F5h` | SA-BYTES → `R_SA` |
+| EXROM 00FCh | `JP 196Dh` → `JP 3A06h` | LD-BYTES → `R_LD` |
+| EXROM 1115h (RAM 6315h) | `FFh` → `00h` | the bank count starts at 0 |
+| EXROM 10B7h (RAM 62B7h) | 8 bytes → `LD DE,19` and NOPs | the interrupt handler's frame |
+| EXROM 13F8h (RAM 65F8h) | 8 bytes → `LD BC,19` and NOPs | CALL_BANK's frame |
+| EXROM 152Fh (RAM 672Fh) | 6 bytes → `LD BC,17` and NOPs | XFER_BYTES's frame |
+| EXROM 1522h, 152Bh, 15FFh | `F5`, `0A`, `F1` → `00`, `08`, `00` | XFER_BYTES: no `PUSH AF`/`POP AF`, so A returns the result |
+| EXROM 156Ah | `47` → `5F` | XFER_BYTES: the same-bank mask to E |
+| EXROM 15C2h | `2B` → `2C` | XFER_BYTES: the no-room exit keeps A = 1 |
+| EXROM 14DFh | `75 04 DD 74` → `73 04 DD 72` | XFER_BYTES's copier: the destination from DE |
+| EXROM 14F3h | `07 0F 38` → `0B 3C 28` | XFER_BYTES: the end address and the direction |
+| EXROM 03DEh | `LD HL,FF00h` → `JP 3E43h` | CALL_HOME → `MB_CALL_HOME` |
+| EXROM 08DFh, 001Eh | `00` → `FC` | the other crossings: FF00h → FFFCh |
+| HOME 1241h | `JR NC,1265h` → `JR NC,123Dh` | the banked-channel branch gives Report O |
+| HOME 1265h–1292h | CHAN-OPEN's banked branch → `FASTH` | the fast entry |
+| EXROM 128Bh–1296h | 12 `00`s → the switch loops and the landing | the EXROM's half of the fast entry |
+| EXROM 2C8Ch | `FF FF FF` → `JP 2400h` | the landing in chunk 1 → `FX_ENTRY` |
+
+Seven 2.4 patches have other bytes in 2.5 (`mb_after`): 2213h (`JP FN_EXT`),
+the channel stubs at HOME 1488h and the BEEPER tail at 041Ch (both to
+`FASTH`), and the four version patches (25h). `bankapi.asm` is assembled
+twice, at 0 and 97C0h, and the 64-column relocation table at EXROM 1D00h is
+rebuilt from the difference: 66 entries.
+
 ## ZX Spectrum ROM v3
 
 The base is the ZX v2 ROM (crc B3D40C73). v3 makes one fix and one addition.
@@ -718,13 +793,13 @@ in v2.
 
 ## Version bytes
 
-| Where | v1.7 | 2.0 | 2.1 | 2.2 | 2.3 | 2.4 |
-|---|---|---|---|---|---|---|
-| HOME 0065h (`PEEK 101`) | 17h | 20h | 21h | 22h | 23h | 24h |
-| BIOS G_VERS (EXROM 1852h, `LD BC,nnnn`) | 0017h | 0020h | 0021h | 0022h | 0023h | 0024h |
-| Boot line (EXROM 1C6Ch) | v1.7 | `" 2026 TS-Pico ROM v2.0"` | `"… v2.1"` | `"… v2.2"` | `"… v2.3"` | `"… v2.4"` |
-| Pre-header byte 2 (EXROM 1BB5h, `ROM_ID`) | FFh | FFh | FFh | FFh | 23h | 24h |
-| Module FDD_VERSION (EXROM 30AFh) | — | — | 08h | 08h | 08h | 09h |
+| Where | v1.7 | 2.0 | 2.1 | 2.2 | 2.3 | 2.4 | 2.5 |
+|---|---|---|---|---|---|---|---|
+| HOME 0065h (`PEEK 101`) | 17h | 20h | 21h | 22h | 23h | 24h | 25h |
+| BIOS G_VERS (EXROM 1852h, `LD BC,nnnn`) | 0017h | 0020h | 0021h | 0022h | 0023h | 0024h | 0025h |
+| Boot line (EXROM 1C6Ch) | v1.7 | `" 2026 TS-Pico ROM v2.0"` | `"… v2.1"` | `"… v2.2"` | `"… v2.3"` | `"… v2.4"` | `"… v2.5"` |
+| Pre-header byte 2 (EXROM 1BB5h, `ROM_ID`) | FFh | FFh | FFh | FFh | 23h | 24h | 25h |
+| Module FDD_VERSION (EXROM 30AFh) | — | — | 08h | 08h | 08h | 09h | 09h |
 
 v1.1 reads 15h at 0065h.
 
@@ -733,7 +808,8 @@ v1.1 reads 15h at 0065h.
 | File | What it does |
 |---|---|
 | [`src/rom/patches/tspico-sync.asm`](../src/rom/patches/tspico-sync.asm) | ROM 2.0, as patches over `src/rom/TSPICO.ROM` (v1.7). [`src/test/rom_sync_hosttest.py`](../src/test/rom_sync_hosttest.py) checks its sites and the v1.7 bytes. |
-| [`src/rom/fdd/fddcmd.asm`](../src/rom/fdd/fddcmd.asm) | The 2.1 module. |
+| [`src/rom/fdd/fddcmd.asm`](../src/rom/fdd/fddcmd.asm) | The 2.1 module, and with `-DMEGABANK` 2.5's Megabank code. |
+| [`src/rom/fdd/bankapi.asm`](../src/rom/fdd/bankapi.asm), [`src/rom/fdd/rchan.asm`](../src/rom/fdd/rchan.asm) | 2.5's Timex bank API and `r:` channels. |
 | [`tools/build-rom.py`](../tools/build-rom.py) | Assembles the module, splices it in at EXROM 3000h and applies the 2.1 patches. Each patch states its before and after bytes, and the build fails if the base doesn't match. |
 | [`src/rom/patches/tspico-zx48-v3.asm`](../src/rom/patches/tspico-zx48-v3.asm) | ZX v3. [`src/test/rom_zx48_hosttest.py`](../src/test/rom_zx48_hosttest.py) checks it. |
 | [`tools/build-rom.sh`](../tools/build-rom.sh) | Builds all of them (needs sjasmplus 1.20+). |
