@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Megabank test ROM end to end in ZEsarUX's Megabank model.
 
-Builds build/TSPICO-mb.ROM (tools/build-rom.py --megabank) unless
+Builds build/TSPICO-25.ROM (tools/build-rom.py --megabank) unless
 TSPICO_ROM names one, starts ZEsarUX with the board fitted (MEGABANK=1;
 the model is in the zesarux-tspico fork's tspico-device branch, MEGABANK.md)
 and pico_host -- the real firmware, with the RAM disk (src/TS/ramdisk.py) and
@@ -49,7 +49,7 @@ LOG = "/tmp/megabank_host.jsonl"
 if "TSPICO_ROM" not in os.environ:
     subprocess.run([sys.executable, os.path.join(REPO, "tools", "build-rom.py"), "--megabank", "--verify"],
                    check=True, stdout=subprocess.DEVNULL)
-    os.environ["TSPICO_ROM"] = os.path.join(REPO, "build", "TSPICO-mb.ROM")
+    os.environ["TSPICO_ROM"] = os.path.join(REPO, "build", "TSPICO-25.ROM")
 os.environ.setdefault("MEGABANK", "1")
 os.environ["TSPICO_HOST"] = os.path.join(HERE, "megabank_host.py")
 os.environ["MEGABANK_HOST_LOG"] = LOG

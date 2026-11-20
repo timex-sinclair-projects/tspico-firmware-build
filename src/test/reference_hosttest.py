@@ -114,6 +114,7 @@ STAMPED = FIRMWARE + ROM_ASM + (
     "src/rom/TSPICO.ROM",
     "src/rom/TSPICO-SYNC.ROM",
     "src/rom/TSPICO-24.ROM",
+    "src/rom/TSPICO-25.ROM",
     "src/rom/TSPICO-ZX48-V4.BIN",
     "flash/manifest.json",
     "tools/build-rom.py",

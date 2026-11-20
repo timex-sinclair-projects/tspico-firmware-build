@@ -24,7 +24,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 CARD = os.path.join(HERE, "card", "TAP")
-ROM = os.path.join(REPO, "src", "rom", "TSPICO-24.ROM")
+ROM = os.path.join(REPO, "src", "rom", "TSPICO-25.ROM")
 DEMO_BAS = os.path.join(REPO, "basic", "SD", "TAP", "demo")
 
 NATO = ("alpha bravo charlie delta echo foxtrot golf hotel india juliett kilo lima mike "

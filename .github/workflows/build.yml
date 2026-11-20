@@ -176,12 +176,13 @@ jobs:
       - name: Check the flash manifest against the ROMs in the repo
         run: python3 tools/build-flash.py check flash/manifest.json
 
-      # ROM 2.4, the release ROM: disk commands, f: files and OPEN # channels.
-      # tools/build-rom.py assembles src/rom/fdd/fddcmd.asm and splices it onto
-      # the 2.0 ROM; --verify fails the build if any patch's "before" bytes or
-      # any anchor no longer match the base, or if anything outside the
-      # intended hunks changed. The result must equal the committed slot-1
-      # image, src/rom/TSPICO-24.ROM (checked below).
+      # ROM 2.4, the previous release ROM: disk commands, f: files and OPEN #
+      # channels. tools/build-rom.py assembles src/rom/fdd/fddcmd.asm and
+      # splices it onto the 2.0 ROM; --verify fails the build if any patch's
+      # "before" bytes or any anchor no longer match the base, or if anything
+      # outside the intended hunks changed. The result must equal the
+      # committed src/rom/TSPICO-24.ROM (checked below). ROM 2.5, the release
+      # ROM, is the same build with --megabank (further down).
       # sjasmplus has no Ubuntu package; v1.22.0 is the version the module is
       # developed with, and it builds a byte-identical ROM.
       - name: Install sjasmplus
@@ -202,13 +203,12 @@ jobs:
       - name: Build the fdd ROM (ROM 2.4)
         run: python3 tools/build-rom.py --verify
 
-      # src/rom/TSPICO-24.ROM is the slot-1 image (flash/manifest.json), so the
-      # flash image, the upgrade UF2 and the web updater all ship it. It must be
-      # exactly what build-rom.py makes from the sources.
-      - name: The committed slot-1 ROM is what build-rom.py builds
+      # src/rom/TSPICO-24.ROM must be exactly what build-rom.py makes from the
+      # sources (ROM 2.5 is built on the same module and patches).
+      - name: The committed ROM 2.4 is what build-rom.py builds
         run: |
           if ! cmp -s build/TSPICO-fdd.ROM src/rom/TSPICO-24.ROM; then
-            echo "::error::src/rom/TSPICO-24.ROM differs from tools/build-rom.py's output. Run: python3 tools/build-rom.py --verify && cp build/TSPICO-fdd.ROM src/rom/TSPICO-24.ROM, then set flash/manifest.json's slot-1 crc32 (python3 tools/build-flash.py check flash/manifest.json)."
+            echo "::error::src/rom/TSPICO-24.ROM differs from tools/build-rom.py's output. Run: python3 tools/build-rom.py --verify && cp build/TSPICO-fdd.ROM src/rom/TSPICO-24.ROM"
             exit 1
           fi
 
@@ -224,16 +224,17 @@ jobs:
       - name: Test ROM 2.3's string reader and function 86h loop in the Z80 interpreter
         run: python3 src/test/rom_fn86_hosttest.py
 
-      # The TS-2068 Megabank test ROM (2.5, ROM_ID 25h): the same module built
-      # with -DMEGABANK, plus the boot reset at $0A3E and the r: block gates at
-      # $0068/$00FC (docs/PROTOCOL.md 6.3). Not in any flash slot until the
-      # board's hardware tests pass; src/rom/TSPICO-MB.ROM must still be what
-      # the build makes, and its Z80 test runs on that file.
-      - name: Build the Megabank test ROM (ROM 2.5) and check the committed one
+      # ROM 2.5 (ROM_ID 25h), the release ROM: the same module built with
+      # -DMEGABANK for the TS-2068 Megabank, plus the boot reset at $0A3E and
+      # the r: block gates at $0068/$00FC (docs/PROTOCOL.md 6.3). It runs with
+      # or without the board. src/rom/TSPICO-25.ROM is the slot-1 image
+      # (flash/manifest.json), so the flash image, the upgrade UF2 and the web
+      # updater all ship it; it must be exactly what the build makes.
+      - name: Build ROM 2.5 and check the committed slot-1 ROM
         run: |
           python3 tools/build-rom.py --megabank --verify
-          if ! cmp -s build/TSPICO-mb.ROM src/rom/TSPICO-MB.ROM; then
-            echo "::error::src/rom/TSPICO-MB.ROM differs from tools/build-rom.py --megabank's output. Run: python3 tools/build-rom.py --megabank --verify && cp build/TSPICO-mb.ROM src/rom/TSPICO-MB.ROM"
+          if ! cmp -s build/TSPICO-25.ROM src/rom/TSPICO-25.ROM; then
+            echo "::error::src/rom/TSPICO-25.ROM differs from tools/build-rom.py --megabank's output. Run: python3 tools/build-rom.py --megabank --verify && cp build/TSPICO-25.ROM src/rom/TSPICO-25.ROM, then set flash/manifest.json's slot-1 crc32 (python3 tools/build-flash.py check flash/manifest.json)."
             exit 1
           fi
 
@@ -256,7 +257,7 @@ jobs:
           name: tspico-fdd-rom
           path: |
             build/TSPICO-fdd.ROM
-            build/TSPICO-mb.ROM
+            build/TSPICO-25.ROM
             build/TSPICO-fdd-home.bin
             build/TSPICO-fdd-exrom.bin
           if-no-files-found: error
