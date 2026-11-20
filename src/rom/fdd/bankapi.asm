@@ -251,9 +251,8 @@ RESTORE_BOARD:
         ld      c,PORT_DAT
         ld      a,(NBANKS)
         and     a
-        jr      nz,.b
-        inc     c                  ; no board: the bytes go to the select,
-.b:     ld      b,0                ; which MB_DETECT writes on any 2068
+        jp      z,NOBOARD          ; no board: nothing to write
+        ld      b,0
 .lp:    inc     ix
         ld      a,b
         out     (PORT_SEL),a
@@ -262,6 +261,7 @@ RESTORE_BOARD:
         inc     b
         bit     4,b
         jr      z,.lp
+RESTORE_TAIL:
         inc     ix
         ld      a,(ix+0)
         out     (PORT_SEL),a       ; the select as it was
@@ -557,6 +557,17 @@ RESTORE_STATUS:
         and     e
         out     (HSR),a
         jp      RESTORE_BOARD
+
+; With no board, RESTORE_BOARD skips the 16 registers: IX past them, then
+; the select and the HSR as with one. Writing them anyway (to the select,
+; harmless) kept interrupts off for about 1300 T-states a crossing: the
+; folder menu's key loop crosses to HOME's KEY-SCAN without a pause, and in
+; ZEsarUX with no board half the frame interrupts landed in it and were
+; lost, in runs long enough to miss a key press (tools/emu/smoke.py).
+NOBOARD:
+        ld      bc,16
+        add     ix,bc
+        jp      RESTORE_TAIL
         ASSERT  $ <= RB+$6572
 
 
