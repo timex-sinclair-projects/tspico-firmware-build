@@ -250,7 +250,10 @@ Two words configure the mapping, both fields of `TSP`
   has no `ROM` state machine, also takes MEM 3, a slot on the SD card:
   [firmware/board.md](firmware/board.md#sd_slots_dir)); default 10 (binary
   1010, "both assigned to Flash"). Bits 0–1 go to the enables on a
-  ROM-area access, bits 2–3 on a dock access.
+  ROM-area access, bits 2–3 on a dock access. In cartridge dock mode
+  (`tpi:dock CODE 0,3`) v2 puts the word with bits 2–3 set, 13 or 14, so
+  a dock access enables neither chip and a cartridge in the 2068's own
+  dock slot answers it ([firmware/board.md](firmware/board.md)).
 - **`bank_sm`**, put to `BANK`: `DCK_SLOT * 16 + ROM_SLOT`, four bits
   each; default 1 (dock 0, ROM 1). Bits 0–3 go to A15–A18 on a ROM-area
   access, bits 4–7 on a dock access.

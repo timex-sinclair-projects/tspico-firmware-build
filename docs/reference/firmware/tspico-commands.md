@@ -1,11 +1,11 @@
 # TS/tspico.py (part 6) — the `tpi:` commands
 
 Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py): the handlers at
-2803–2883 (`DIR`), 4694–5050 (`IDIR` … `SA_NOT_IMP`), 5115–5373
-(`APPEND`, `BLKRCV`), 5465–6084 (`CDIR` … `GETLOG`), 6207–6587
-(`LOGLEVEL` … `MEMDOCK`), 6590–6698 (`MODEM` … `GREET`), 6701–6982 (`WIFI` … `NET_UPDATE`), 7044–7120 (`REW`), 7277–7539 (`BAD_CODE` …
-`NOP`) and 7651–7732 (the printer settings); the dispatch table
-`SA_funct` at 8176–8239, inside `TS2068_IO`.
+2809–2889 (`DIR`), 4700–5056 (`IDIR` … `SA_NOT_IMP`), 5121–5388
+(`APPEND`, `BLKRCV`), 5480–6099 (`CDIR` … `GETLOG`), 6224–6658
+(`LOGLEVEL` … `MEMDOCK`), 6671–6779 (`MODEM` … `GREET`), 6782–7063 (`WIFI` … `NET_UPDATE`), 7125–7201 (`REW`), 7358–7625 (`BAD_CODE` …
+`NOP`) and 7737–7818 (the printer settings); the dispatch table
+`SA_funct` at 8263–8326, inside `TS2068_IO`.
 
 `SAVE "tpi:word args" CODE a,b` sends the text `tpi:word args` and the two
 numbers to the Pico; `PROCESS_CMD` looks the word up in `SA_funct` and
@@ -27,59 +27,61 @@ where the manual and the code differ, the entries below say so.
 
 | Symbol | Line | Command(s) |
 |---|---|---|
-| `DIR(pre, cmd)` | 2803 | `tpi:dir` |
-| `IDIR(pre, cmd)` | 4694 | `tpi:idir` |
-| `PATH(pre, cmd)` | 4919 | `tpi:path` |
-| `TAPDIR(pre, cmd)` | 4951 | `tpi:tapdir` |
-| `TAPDIR_TEXT(par1, par2)` | 4976 | `TAPDIR`'s text; `tpi:chcat` (`CAT #n;""`) |
-| `SA_NOT_IMP(pre, cmd)` | 5047 | the five reserved words |
-| `APPEND(pre, cmd)` | 5115 | `tpi:append` |
-| `BLKRCV(pre, cmd)` | 5180 | `tpi:blkrcv` |
-| `CDIR(pre, cmd)` | 5465 | `tpi:cd` |
-| `FWD(pre, cmd)` | 5531 | `tpi:ffw` |
-| `GETHELP(pre, cmd)` | 5626 | `tpi:help` |
-| `GETINFO(pre, cmd)` | 5795 | `tpi:info` |
-| `MEM_STEP` | 5885 | `LARGEST_BLOCK`'s precision |
-| `LARGEST_BLOCK()` | 5888 | `tpi:meminfo`'s largest block |
-| `MEMINFO(pre, cmd)` | 5912 | `tpi:meminfo` |
-| `GETLOG(pre, cmd)` | 5957 | `tpi:log` |
-| `LOGLEVEL(pre, cmd)` | 6207 | `tpi:loglevel` |
-| `MDIR(pre, cmd)` | 6266 | `tpi:md` |
-| `MEMBOOT(pre, cmd)` | 6388 | `tpi:boot`, `tpi:memboot` |
-| `MEMDOCK(pre, cmd)` | 6509 | `tpi:dock`, `tpi:memdock` |
-| `MODEM(pre, cmd)` | 6590 | `tpi:modem` |
-| `SAY(pre, cmd)` | 6632 | `tpi:say` |
-| `GREET(pre, cmd)` | 6662 | `tpi:greet` |
-| `WIFI_HINT` | 6701 | how to join, in `WIFI`'s and `NET`'s answers |
-| `WIFI(pre, cmd)` | 6704 | `tpi:wifi` |
-| `NET(pre, cmd)` | 6742 | `tpi:net` |
-| `NET_SHOW(net, title, rows, foot)` | 6802 | `tpi:net`'s numbered list |
-| `NET_LIST(net, folder, part)` | 6813 | a folder's index part, fetched and listed |
-| `NET_OPEN(net, k, par1)` | 6826 | `tpi:net <number>` |
-| `NET_GET(net, e, par1)` | 6843 | a tape downloaded to `/TAP/NET` |
-| `NET_EXISTS(dest)` | 6877 | is it on the card, before the fetch |
-| `NET_WRITE(dest, buf, n)` | 6882 | a download's buffer to a file on the card |
-| `NET_FETCH_FULL(net)` | 6900 | the full index, fetched |
-| `NET_INFLATE(net, n)` | 6906 | the full index, gunzipped onto the card |
-| `NET_FIND_MS` | 6936 | how long a first `find` may spend on the index and still search |
-| `NET_FIND(net, words)` | 6939 | `tpi:net find` |
-| `NET_SEARCH(net, words)` | 6973 | `NET_FIND`'s search, with the card |
-| `NET_UPDATE(net)` | 6979 | `tpi:net update` |
-| `AUTOMOUNT(pre, cmd)` | 6985 | `tpi:automount` |
-| `REW(pre, cmd)` | 7044 | `tpi:rew` |
-| `BAD_CODE(command, par1, par2)` | 7277 | the "Bad CODE" message |
-| `BAD_ARG(command, arg)` | 7282 | the "Bad argument" message |
-| `RM(pre, cmd)` | 7287 | `tpi:rm` |
-| `RM_CHECK(name)` | 7333 | `RM`'s checks, with the card |
-| `UNMOUNT(pre, cmd)` | 7354 | `tpi:close` |
-| `VERB_TOGGLE(pre, cmd)` | 7414 | `tpi:verbose` |
-| `ZX48(pre, cmd)` | 7468 | `tpi:zx48` |
-| `NOP(pre, cmd)` | 7522 | `tpi:nop` |
-| `PRN_OPEN(pre, cmd)` | 7651 | `tpi:opprint` |
-| `PRN_CLOSE(pre, cmd)` | 7672 | `tpi:clprint` |
-| `PRN_FLAG(pre, cmd)` | 7683 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
-| `PRN_SIZE(pre, cmd)` | 7696 | `tpi:prnsz` |
-| `PRN_BMP(pre, cmd)` | 7719 | `tpi:bmp` |
+| `DIR(pre, cmd)` | 2809 | `tpi:dir` |
+| `IDIR(pre, cmd)` | 4700 | `tpi:idir` |
+| `PATH(pre, cmd)` | 4925 | `tpi:path` |
+| `TAPDIR(pre, cmd)` | 4957 | `tpi:tapdir` |
+| `TAPDIR_TEXT(par1, par2)` | 4982 | `TAPDIR`'s text; `tpi:chcat` (`CAT #n;""`) |
+| `SA_NOT_IMP(pre, cmd)` | 5053 | the five reserved words |
+| `APPEND(pre, cmd)` | 5121 | `tpi:append` |
+| `BLKRCV(pre, cmd)` | 5186 | `tpi:blkrcv` |
+| `CDIR(pre, cmd)` | 5480 | `tpi:cd` |
+| `FWD(pre, cmd)` | 5546 | `tpi:ffw` |
+| `GETHELP(pre, cmd)` | 5641 | `tpi:help` |
+| `GETINFO(pre, cmd)` | 5810 | `tpi:info` |
+| `MEM_STEP` | 5900 | `LARGEST_BLOCK`'s precision |
+| `LARGEST_BLOCK()` | 5903 | `tpi:meminfo`'s largest block |
+| `MEMINFO(pre, cmd)` | 5927 | `tpi:meminfo` |
+| `GETLOG(pre, cmd)` | 5972 | `tpi:log` |
+| `LOGLEVEL(pre, cmd)` | 6224 | `tpi:loglevel` |
+| `MDIR(pre, cmd)` | 6283 | `tpi:md` |
+| `MEMBOOT(pre, cmd)` | 6405 | `tpi:boot`, `tpi:memboot` |
+| `DOCK_CART_MSG` | 6531 | what `ZX48` and `BLKRCV` say in cartridge dock mode |
+| `SET_DOCK_CART(on)` | 6534 | cartridge dock mode on or off, kept in `config.ini` |
+| `MEMDOCK(pre, cmd)` | 6553 | `tpi:dock`, `tpi:memdock` |
+| `MODEM(pre, cmd)` | 6671 | `tpi:modem` |
+| `SAY(pre, cmd)` | 6713 | `tpi:say` |
+| `GREET(pre, cmd)` | 6743 | `tpi:greet` |
+| `WIFI_HINT` | 6782 | how to join, in `WIFI`'s and `NET`'s answers |
+| `WIFI(pre, cmd)` | 6785 | `tpi:wifi` |
+| `NET(pre, cmd)` | 6823 | `tpi:net` |
+| `NET_SHOW(net, title, rows, foot)` | 6883 | `tpi:net`'s numbered list |
+| `NET_LIST(net, folder, part)` | 6894 | a folder's index part, fetched and listed |
+| `NET_OPEN(net, k, par1)` | 6907 | `tpi:net <number>` |
+| `NET_GET(net, e, par1)` | 6924 | a tape downloaded to `/TAP/NET` |
+| `NET_EXISTS(dest)` | 6958 | is it on the card, before the fetch |
+| `NET_WRITE(dest, buf, n)` | 6963 | a download's buffer to a file on the card |
+| `NET_FETCH_FULL(net)` | 6981 | the full index, fetched |
+| `NET_INFLATE(net, n)` | 6987 | the full index, gunzipped onto the card |
+| `NET_FIND_MS` | 7017 | how long a first `find` may spend on the index and still search |
+| `NET_FIND(net, words)` | 7020 | `tpi:net find` |
+| `NET_SEARCH(net, words)` | 7054 | `NET_FIND`'s search, with the card |
+| `NET_UPDATE(net)` | 7060 | `tpi:net update` |
+| `AUTOMOUNT(pre, cmd)` | 7066 | `tpi:automount` |
+| `REW(pre, cmd)` | 7125 | `tpi:rew` |
+| `BAD_CODE(command, par1, par2)` | 7358 | the "Bad CODE" message |
+| `BAD_ARG(command, arg)` | 7363 | the "Bad argument" message |
+| `RM(pre, cmd)` | 7368 | `tpi:rm` |
+| `RM_CHECK(name)` | 7414 | `RM`'s checks, with the card |
+| `UNMOUNT(pre, cmd)` | 7435 | `tpi:close` |
+| `VERB_TOGGLE(pre, cmd)` | 7495 | `tpi:verbose` |
+| `ZX48(pre, cmd)` | 7549 | `tpi:zx48` |
+| `NOP(pre, cmd)` | 7608 | `tpi:nop` |
+| `PRN_OPEN(pre, cmd)` | 7737 | `tpi:opprint` |
+| `PRN_CLOSE(pre, cmd)` | 7758 | `tpi:clprint` |
+| `PRN_FLAG(pre, cmd)` | 7769 | `tpi:autolf`, `tpi:noautolf`, `tpi:autopg`, `tpi:noautopg` |
+| `PRN_SIZE(pre, cmd)` | 7782 | `tpi:prnsz` |
+| `PRN_BMP(pre, cmd)` | 7805 | `tpi:bmp` |
 
 Between these, in the same stretch of the file, are functions other
 chapters own: `ListMenu` ([tspico-messages.md](tspico-messages.md)),
@@ -102,7 +104,7 @@ Then:
    `getArgs`, the text after the first space past `cmd[7:]`.
 2. The command word is the text up to its first space, upper-cased, with
    `TPI:`: `"TPI:DIR"`. The keys of `SA_funct` are such words, with no
-   trailing space, as the comment above it (8173–8174) says (until #181 it
+   trailing space, as the comment above it (8260–8261) says (until #181 it
    said commands taking a name needed one).
 3. **The card gate.** If the command needs the card (`SD_NEEDED`: every
    word of `SA_funct` not in `SD_FREE` but `tpi:chopen` of `v:` or `x:`, `tpi:chwr` and `tpi:chrd` on a stream with no file, and `tpi:help` with a topic) and
@@ -155,7 +157,7 @@ themselves are in [tspico-state.md](tspico-state.md#the-status-codes).
 
 ## The dispatch table, `SA_funct`
 
-Built in `TS2068_IO` (8176) as a literal dictionary; `PROCESS_CMD`
+Built in `TS2068_IO` (8263) as a literal dictionary; `PROCESS_CMD`
 receives it as an argument. 52 words, 32 handlers here and 9 in
 [tspico-disk.md](tspico-disk.md). "Card" says whether the card gate
 applies (the word is not in `SD_FREE`).
@@ -187,7 +189,7 @@ applies (the word is not in `SD_FREE`).
 | `tpi:md` | MDIR | yes | `tpi:md name`; `CODE 1,0` to go into it | `SEND_MSG`, or `CDIR`'s |
 | `tpi:boot` | MEMBOOT | no | no `CODE`: show; `CODE mem,slot` | `SEND_MSG`; the show form shown |
 | `tpi:memboot` | MEMBOOT | no | the same | the same |
-| `tpi:dock` | MEMDOCK | no | no `CODE`: show; `CODE 0,1`: the previous; `CODE 0,2`: swap; `CODE mem,slot` | `SEND_MSG` |
+| `tpi:dock` | MEMDOCK | no | no `CODE`: show; `CODE 0,1`: the previous; `CODE 0,2`: swap; `CODE 0,3`: the cartridge slot; `CODE mem,slot` | `SEND_MSG` |
 | `tpi:memdock` | MEMDOCK | no | the same | the same |
 | `tpi:modem` | MODEM | no | none: show; `tpi:modem 2050`, `hayes` or `off`; `flow on`, `flow off` | `SEND_MSG`; the show form shown |
 | `tpi:say` | SAY | no | text, `[allophones]`, or nothing (stop) | `SEND_MSG` (not shown, unless an error) |
@@ -387,6 +389,14 @@ user manual §8.4).
    the erase (#162, #163; [`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)).
    On the v3 card (`board.SLOTS` false) the rest is `SLOT_WRITE(pre)`: the
    Pico writes the slot, and none of the steps below apply.
+1. **Not in cartridge dock mode.** On v2 the Z80 writes the flash through
+   the TS-Pico's dock, which a cartridge in the 2068's dock slot would
+   answer as well. With `TSP.dock_cart` set, answer `DOCK_CART_MSG`
+   ("The dock is the cartridge slot." / "Use tpi:dock CODE 2,0 first."),
+   shown, Report Q, and stop. `MEMDOCK` already refuses to leave the mode
+   with an image mounted, so the updater normally never gets here; this
+   is the second check ([`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py),
+   `test_cart_dock`).
 2. **The system slots and the boot-slot guard.** `getDock()` is the slot
    the updater will write (the DOCK slot it chose with `tpi:dock`). If
    `SYSTEM_SLOT_LOCK(mem, page)` says it is flash slot 0 ("Can't write
@@ -459,7 +469,7 @@ Z80's loop is running and will read to the end; from there the fast
 `put()` is kept, because `CMD_PUT`'s check on every byte would eat into
 the 33 µs. A 2068 reset in the middle of the write loop still leaves the
 Pico in `put()` on the non-DMA paths — and a half-written slot, which
-needs a power cycle anyway (the comment at 5218–5243).
+needs a power cycle anyway (the comment at 5233–5258).
 
 Beware:
 
@@ -566,7 +576,7 @@ says), `expandKeywords` off.
   then every `SAVE` command with its `CODE` options, 32-column lines,
   three pages with their own headings — and, if external commands are
   loaded, a list of their words. Status 1. The summary is a literal in
-  the code (5709–5764); it must be kept in step with this table by hand.
+  the code (5724–5779); it must be kept in step with this table by hand.
 - **`?`**: the topics: every `*.txt` in `/sd/help` (sorted, without the
   extension, names starting with `.` skipped), packed into 32-column
   lines.
@@ -584,7 +594,7 @@ in a `try`) and gives it back before answering; the card gate has already
 probed for a card, since a topic needs one (`SD_NEEDED`'s special case).
 An error in `os.ilistdir` or `ACTIVATE_SD` reaches `FAIL_CMD`, Report J.
 The help files are written for the 2068's screen: short lines, CR, LF or
-CR LF line ends (the comment at 5631–5633). Error statuses are logged.
+CR LF line ends (the comment at 5646–5648). Error statuses are logged.
 
 ### `GETINFO(pre, cmd)`
 
@@ -614,7 +624,7 @@ CR LF line ends (the comment at 5631–5633). Error statuses are logged.
    | Free RAM | `gc.mem_free()` in kB |
    | Flash | size and free space |
    | SD card | size and free space (`sd_space`, from the last listing), or `none` in red |
-   | Boot, Dock | `getBoot()`, `getDock()`: memory (1 SRAM, 2 flash) and slot |
+   | Boot, Dock | `getBoot()`, `getDock()`: memory (1 SRAM, 2 flash) and slot; Dock is `cart` in cartridge dock mode (`TSP.dock_cart`) |
    | Append, Verbose | on/off |
    | Mounted | `public_fname()` or `none` |
    | Block | for a TAP: the pointer's block number, what it is and the name of its file, fitted into 22 columns |
@@ -730,7 +740,7 @@ middle of a UTF-8 sequence) "Couldn't read the log file", Report Q,
 logged. The buffer is dropped before `SEND_MSG2` builds its pages. LED on,
 off in a `finally`.
 
-Why the `try` covers only the read (the comment at 6038–6056; 2026-09-30
+Why the `try` covers only the read (the comment at 6053–6071; 2026-09-30
 audit): it was a bare `except:` around the read **and** `SEND_MSG2`. A
 BREAK at the "Scroll?" prompt raises `CmdAbort`, a `BaseException`, which
 a bare `except:` catches: `GETLOG` ate the BREAK and then sent "Log file
@@ -908,11 +918,35 @@ is empty at power-on), and never rewrite the slot you booted from
 from flash slot 4 was told to rewrite slot 4, and both machines hung with
 the slot half-written).
 
+### `DOCK_CART_MSG`
+
+`("The dock is the cartridge slot.", "Use tpi:dock CODE 2,0 first.")`:
+the two lines `ZX48` and (v2) `BLKRCV` refuse with in cartridge dock
+mode, shown, Report Q. Both need the TS-Pico's own dock: ZX Spectrum mode
+runs the Spectrum ROM from it, and v2's updaters write the flash through
+it.
+
+### `SET_DOCK_CART(on)`
+
+Turns cartridge dock mode on or off: `TSP.dock_cart`,
+`board.dock_cart(on)` ([board.md](board.md)), and `DOCK_CART` in
+`config.ini`, read, set and written back (a `config.ini` that won't read
+is started afresh with only that key). Kept there because the mode has to
+last through a restart: the 2068 ROM looks for an LROS cartridge just
+after a reset, and a cartridge is usually fitted with the power off. It
+doesn't apply the change; `MEMDOCK`, its only caller, calls
+`board.map_slots` next. Why the mode exists: a cartridge in the 2068's
+dock slot answers the same /ROSCS reads as the TS-Pico's dock, so two
+devices drove the data bus ([the
+proposal](../../dock-cartridge-proposal.md)).
+
 ### `MEMDOCK(pre, cmd)`
 
 `tpi:dock` (and `tpi:memdock`): what appears in the 2068's DOCK
 (cartridge) bank — memory in `ROM_SM` bits 2–3, slot in `bank_sm` bits
-4–7. Not saved in `config.ini`: it lasts until power-off. On the v3 card
+4–7, or, in cartridge dock mode, the cartridge in the 2068's own dock
+slot. The slot is not saved in `config.ini`: it lasts until power-off.
+Cartridge dock mode is saved (`SET_DOCK_CART`). On the v3 card
 the change is live as on v2. A flash dock is read-only there, and a RAM
 dock is saved back to its slot file before it's switched away
 ([board.md](board.md#board_v3py)). The v3 card also takes MEM 3, slot s
@@ -921,10 +955,11 @@ in for a missing file or card ([board.md](board.md#sd_slots_dir)).
 
 | `CODE` | Result |
 |---|---|
-| none | "DOCK is MEM=m, PAGE=s", shown, 0 OK |
-| `0,1` | "DOCK was previously:" and `TSP.dck_prev_mem`/`dck_prev_slot`, shown, 0 OK |
-| `0,2` | swap to the previous setting (as `CODE prev_mem,prev_slot` below): "Change DOCK to MEM=m, PAGE=s" naming the setting swapped to, and "Swapped with previous setting" |
-| `0,3`…`0,15` | `BAD_CODE`, Report A |
+| none | "DOCK is MEM=m, PAGE=s", or "DOCK is the cartridge slot", shown, 0 OK |
+| `0,1` | "DOCK was previously:" and `TSP.dck_prev_mem`/`dck_prev_slot`, or "the cartridge slot" if `TSP.dck_prev_cart`, shown, 0 OK |
+| `0,2` | swap to the previous setting (as `CODE prev_mem,prev_slot` below, and into or out of cartridge dock mode as `dck_prev_cart` says): "Change DOCK to MEM=m, PAGE=s" naming the setting swapped to, and "Swapped with previous setting" |
+| `0,3` | cartridge dock mode, below. Already on: "DOCK is the cartridge slot", shown, 0 OK, nothing changed |
+| `0,4`…`0,15` | `BAD_CODE`, Report A |
 | `m,s` (m 1–2, or 1–3 on v3) | change, below |
 | `m` > `MEM_MAX()` or `s` > 15 | "Wrong values, …" / "OK values: MEM=1..n, PAGE=0..15", Report A |
 
@@ -947,6 +982,29 @@ about 0.7 s: answering first let a program's next statement `PEEK` an
 empty dock (found by `tools/hwcheck.py`, 2026-10-10). On v2 the switch is
 two FIFO puts and the order changes nothing.
 
+**Cartridge dock mode** (`CODE 0,3`, or a swap into it): the DOCK slot
+stays as it is in `ROM_SM`/`bank_sm`, kept for when the mode ends, the
+current setting becomes the previous one, and `SET_DOCK_CART(True)` runs
+before `board.map_slots`. On v2 `map_slots` then puts `set_ctrl` a word
+with the dock bits 11, enabling neither chip on a dock read; on the v3
+card DOCK serving goes off and stays off, a RAM dock saved back first
+([board.md](board.md)). The answer is "DOCK is the cartridge slot" /
+"Restart to run the cartridge", shown whatever `VERBOSE` says, 0 OK.
+`MEM 3` slots don't mount the SD card for it.
+
+Any slot code (or a swap out) ends the mode: `SET_DOCK_CART(False)`,
+then the switch, then "Change DOCK to MEM=…, PAGE=…" / "Take the
+cartridge out first", shown: the firmware can't tell whether a
+cartridge is fitted. With a `.ROM`, `.BIN` or `.DCK` mounted, leaving
+the mode is refused first: that's `romupdate`/`dckupdate` picking a slot
+it will write through the dock, with the cartridge presumably still in.
+"The dock is the cartridge slot." / "Take it out, close the file, then
+tpi:dock CODE 2,0.", shown, Report Q, nothing changed.
+[`boot_slot_guard_hosttest.py`](../../../src/test/boot_slot_guard_hosttest.py)
+(`test_cart_dock`) and
+[`board_v3_hosttest.py`](../../../src/test/board_v3_hosttest.py) pin the
+mode on both boards. Not tried on hardware yet.
+
 The message is built from the setting written, so after a swap it names
 the setting swapped to; before #161 it was built from the `CODE` and read
 "Change DOCK to MEM=0, PAGE=2". Beware: `CODE 0,0`'s show form is reached only after
@@ -958,7 +1016,7 @@ message, and that another slot, the other memory, plain DOCK use with nothing mo
 
 ### `MODEM(pre, cmd)`
 
-`tpi:modem`: the v3 card's TS2050 modem, the 8959 at 73h/77h bridged to
+`tpi:modem`: the v3 card's TS2050 modem, the 8251 at 73h/77h bridged to
 the ESP32-C3 running Zimodem
 ([board.md](board.md#modem_startmode-baudnone-idle_minnone),
 [tsbus.md](tsbus.md#modem2050h-modem2050c),
@@ -974,7 +1032,7 @@ gate (`SD_FREE`): it needs no card.
   `config.ini` (read, changed, written back, as `MEMBOOT` does), then
   `board.modem_start(mode)`: "Modem: *mode* mode", `SEND_MSG` (not shown),
   logged at 0. "off" leaves 73h/77h unanswered and switches the ESP32 off;
-  the others set the 8959 up again as at power-up, on-hook, and leave the
+  the others set the 8251 up again as at power-up, on-hook, and leave the
   ESP32 as it was.
 - `flow on` or `flow off` (any case): `board.modem_flow`, Hayes mode's
   XON/XOFF toward Zimodem, for a program that has sent it `ATF1` and
@@ -1342,6 +1400,9 @@ saved: at power-on `VERBOSE` comes from `config.ini`.
 
 - `a` 0: the message is shown; 1: not shown (VERBOSE decides); above 1:
   `BAD_CODE`, Report A, and the mode is not entered.
+- In cartridge dock mode (`TSP.dock_cart`) the mode is not entered either:
+  ZX Spectrum mode runs the Spectrum ROM from the TS-Pico's dock.
+  `DOCK_CART_MSG`, shown, Report Q.
 - `b` 0: keep the current loader (`TSP.ZX_TAPE_COMPAT`, from `config.ini`
   at power-on); 1: the normal loader (`LOAD_ZX`); 2 or more: the
   compatible loader (`LOAD_ZX_C`, the whole tape in RAM). A `b` of 16384 or

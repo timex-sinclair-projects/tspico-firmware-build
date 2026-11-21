@@ -1599,7 +1599,8 @@ once more the next time you switch on. After that, the TS-Pico goes back to the 
 in Flash slot 1. So a ROM you're trying out can never lock you out: switch off and on twice,
 and you're back to normal.
 
-**DOCK resets at switch-on** to its setting in `config.ini`, normally Flash slot 0.
+**DOCK resets at switch-on** to its setting in `config.ini`, normally Flash slot 0, unless you've
+given the dock to a cartridge in the 2068's own dock slot (8.3).
 
 > **With the USB cable plugged in**, the TS-Pico stays powered when you switch the 2068 off, so
 > switching off and on isn't a new start for it: the 2068 comes back with the same BOOT and DOCK.
@@ -1639,6 +1640,33 @@ To start Leap every time you switch on, put it in a Flash slot and set `DCK_SLOT
 to that slot (Appendix D).
 
 Leap saves and loads on cassette, not on the SD card.
+
+### A cartridge in the 2068's own dock
+
+The TS-Pico supplies the dock, so a cartridge plugged into the 2068's own dock slot would answer
+the same memory reads as the TS-Pico. Before you plug one in, give the dock to it:
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:dock" CODE 0,3` | Leave the dock to the cartridge in the 2068's dock slot |
+| `SAVE "tpi:dock" CODE 2,0` | Take the dock back, with the Spectrum ROM in it |
+
+1. Type `SAVE "tpi:dock" CODE 0,3`. The TS-Pico answers `DOCK is the cartridge slot`.
+2. Switch the 2068 off, plug the cartridge into its dock slot, and switch on. The 2068 runs the
+   cartridge as it would without the TS-Pico. Hold **D** to skip it, as above.
+3. When you're finished, switch off, take the cartridge out, switch on and type
+   `SAVE "tpi:dock" CODE 2,0`. The TS-Pico answers `Take the cartridge out first` as a reminder.
+
+The setting stays when you switch off and on, until you change the dock. `SAVE "tpi:dock"` shows
+`DOCK is the cartridge slot`, and `tpi:info` shows the dock as `cart`. Everything that doesn't use
+the dock works as usual: the boot ROM, LOAD and SAVE with the SD card, and the disk commands.
+
+While the cartridge has the dock:
+
+- **ZX Spectrum mode isn't available.** The Spectrum ROM comes from the TS-Pico's dock, so
+  `SAVE "tpi:zx48"` answers **Q**.
+- **The loader in 8.4 can't write a slot.** It writes through the TS-Pico's dock, so it stops with
+  **Q**. Switch off, take the cartridge out, switch on, and take the dock back first.
 
 ## 8.4 Putting a ROM or cartridge into a slot
 
@@ -1704,6 +1732,8 @@ and run `LOAD ""` again. Without the P10 jumper the Flash can't be written.
 5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot, with P10 fitted and never over
    the running ROM.
 6. Hold **D** while the 2068 starts to skip the cartridge in the dock.
+7. `SAVE "tpi:dock" CODE 0,3` gives the dock to a cartridge in the 2068's own dock slot; plug it
+   in only after that.
 <!-- /v2 -->
 <!-- v3 -->
 # Chapter 8: ROM Slots and Cartridges
@@ -1766,7 +1796,8 @@ once more the next time you switch on. After that, the card goes back to the sta
 Flash slot 1. So a ROM you're trying out can never lock you out: switch off and on twice, and
 you're back to normal.
 
-**DOCK resets at switch-on** to its setting in `config.ini`, normally Flash slot 0.
+**DOCK resets at switch-on** to its setting in `config.ini`, normally Flash slot 0, unless you've
+given the dock to a cartridge in the 2068's own dock slot (8.3).
 
 > **With the USB cable plugged in**, the card stays powered when you switch the 2068 off, so
 > switching off and on isn't a new start for it: the 2068 comes back with the same BOOT and DOCK.
@@ -1801,6 +1832,33 @@ the dock at switch-on, which is what ZX Spectrum mode uses. Put a cartridge in t
 for example, and it takes the Spectrum ROM's place until you change the dock back
 (`SAVE "tpi:dock" CODE 2,0`) or switch off and on. Nothing is erased: the Spectrum ROM is still in
 slot 0.
+
+### A cartridge in the 2068's own dock
+
+The TS-Pico supplies the dock, so a cartridge plugged into the 2068's own dock slot would answer
+the same memory reads as the TS-Pico. Before you plug one in, give the dock to it:
+
+| Type | What it does |
+|---|---|
+| `SAVE "tpi:dock" CODE 0,3` | Leave the dock to the cartridge in the 2068's dock slot |
+| `SAVE "tpi:dock" CODE 2,0` | Take the dock back, with the Spectrum ROM in it |
+
+1. Type `SAVE "tpi:dock" CODE 0,3`. The TS-Pico answers `DOCK is the cartridge slot`.
+2. Switch the 2068 off, plug the cartridge into its dock slot, and switch on. The 2068 runs the
+   cartridge as it would without the TS-Pico. Hold **D** to skip it, as above.
+3. When you're finished, switch off, take the cartridge out, switch on and type
+   `SAVE "tpi:dock" CODE 2,0`. The TS-Pico answers `Take the cartridge out first` as a reminder.
+
+The setting stays when you switch off and on, until you change the dock. `SAVE "tpi:dock"` shows
+`DOCK is the cartridge slot`, and `tpi:info` shows the dock as `cart`. Everything that doesn't use
+the dock works as usual: the boot ROM, LOAD and SAVE with the SD card, and the disk commands.
+
+While the cartridge has the dock:
+
+- **ZX Spectrum mode isn't available.** The Spectrum ROM comes from the TS-Pico's dock, so
+  `SAVE "tpi:zx48"` answers **Q**.
+- **The loader in 8.4 still writes slots,** but answer **N** when it offers to put the new
+  cartridge in the dock: that would take the dock back with the cartridge still plugged in.
 
 ## 8.4 Putting a ROM or cartridge into a slot
 
@@ -1879,6 +1937,8 @@ for a cartridge two files, `F08.bin` and `F09.bin` for slots 8 and 9. The releas
 5. Mount a `.rom`, `.bin` or `.dck` and `LOAD ""` to put it in a slot.
 6. A pair of RAM slots in the dock gives a program 64K of RAM.
 7. Hold **D** while the 2068 starts to skip the cartridge in the dock.
+8. `SAVE "tpi:dock" CODE 0,3` gives the dock to a cartridge in the 2068's own dock slot; plug it
+   in only after that.
 <!-- /v3 -->
 
 ---
@@ -3038,14 +3098,14 @@ the SD card). It's a single line of text:
 
 <!-- v2 -->
 ```text
-{"LOG_LEVEL": 2, "FW_VERSION": "2.5", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.5", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": "", "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.5", "DCK_SLOT": 0, "DOCK_CART": false, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.5", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "AUTOMOUNT": "", "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 
 The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 <!-- /v2 -->
 <!-- v3 -->
 ```text
-{"LOG_LEVEL": 2, "FW_VERSION": "2.5", "DCK_SLOT": 0, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.5", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true, "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
+{"LOG_LEVEL": 2, "FW_VERSION": "2.5", "DCK_SLOT": 0, "DOCK_CART": false, "ZX_TAPE_COMPAT": false, "ROM_SM": 10, "ROM_VERSION": "2.5", "ROM_SLOT": 1, "VERBOSE": false, "TELEMETRY": false, "LED_BRIGHTNESS": 5, "MODEM_MODE": "2050", "MODEM_BAUD": 300, "MODEM_IDLE_MIN": 10, "SPEECH_VOLUME": 35, "SPEECH_RATE": 100, "SPEECH_PORTS": true, "SPEECH_GREETING": "", "AUTOMOUNT": "", "KEMPSTON": true, "PRINTER_AUTOLF": false, "PRINTER_AUTOPG": false}
 ```
 <!-- /v3 -->
 
@@ -3054,6 +3114,7 @@ The file can hold more settings than these; the TS-Pico 2.x doesn't use them.
 | `VERBOSE` | Messages on at switch-on | `false` |
 | `LOG_LEVEL` | How much goes in the log, 0-4 | `2` |
 | `DCK_SLOT` | The DOCK slot at switch-on | `0` |
+| `DOCK_CART` | The dock is a cartridge in the 2068's own dock slot (8.3); `tpi:dock CODE 0,3` sets it | `false` |
 | `ROM_SLOT` | The BOOT slot. Anything but 1 is used for one start, then set back to 1 | `1` |
 <!-- v2 -->
 | `ROM_SM` | Whether BOOT and DOCK use Flash or RAM | `10` (both Flash) |

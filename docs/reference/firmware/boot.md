@@ -121,7 +121,7 @@ because the `with` block assigns it; nothing reads it. Harmless.
 ## `config.ini`
 
 `/config.ini` on the Pico's flash, JSON despite the extension — one
-object, nineteen keys. The shipped file is
+object, twenty-two keys. The shipped file is
 [`src/config.ini`](../../../src/config.ini); the web updater writes it to
 the flash with the other Pico files (`web-updater/build-payload.sh`), as
 the release bundle's instructions do — replacing whatever settings the
@@ -136,6 +136,7 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | LOG_LEVEL | int 0–4 | 2 | lowest level `LOG` keeps (0 INFO … 3 CRITICAL, 4 SPECIAL) | `LOAD_CONFIG` → `TSP.LOG_LEVEL` | `LOAD_CONFIG` (default) |
 | FW_VERSION | str | `"2.5"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` `readInstalled`, ~343–379; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
 | DCK_SLOT | int 0–15 | 0 | DOCK slot at power-on | `LOAD_CONFIG` → `TSP.DCK_SLOT`, `bank_sm` | `LOAD_CONFIG` (default) |
+| DOCK_CART | bool | `false` | cartridge dock mode: the dock is a cartridge in the 2068's own dock slot, and the TS-Pico leaves dock reads alone | `LOAD_CONFIG` → `TSP.dock_cart` → `board.dock_cart` in `TS2068_IO` | `LOAD_CONFIG` (default, or a bad value replaced), `SET_DOCK_CART` (`tpi:dock CODE 0,3` and the codes that end it) |
 | ZX_TAPE_COMPAT | bool | `false` | ZX48 mode loads with `LOAD_ZX_C` (the whole tape in RAM) | → `TSP.ZX_TAPE_COMPAT` | `LOAD_CONFIG` (default) |
 | ROM_SM | int 5, 6, 9, 10 | 10 | `set_ctrl`'s word: DOCK memory × 4 + BOOT memory, 1 SRAM, 2 flash | → `TSP.ROM_SM` | `LOAD_CONFIG` (default; the one-shot), `MEMBOOT` (low bits) |
 | ROM_VERSION | str | `"2.5"` | the release ROM, for the updaters (their `rom_version`); `tpi:info` shows it only for a ROM that doesn't send its version; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |

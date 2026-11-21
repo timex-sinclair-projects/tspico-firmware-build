@@ -24,6 +24,7 @@ Who calls what:
 | `early_init()` | `main.py` (66–67), once, before `TS2068_IO` |
 | `start_memory()` | `TS2068_IO` (7138), once; with a MEM 3 slot, the SD card mounted around it |
 | `map_slots()` | `MEMBOOT` (5736, `reboot=True`), `MEMDOCK` (5874), each through `SD_SLOTS_CALL` for MEM 3 |
+| `dock_cart()` | `TS2068_IO` (8218), at boot before `start_memory`; `SET_DOCK_CART` (6538), from `MEMDOCK` before its `map_slots` |
 | `make_mq()` | `ACTIVATE_MQ` (775), `ZX48_IO` (8173) |
 | `restart_mq()` | `ZX48_IO` (8174, 8279, 8321) |
 | `sd_take_bus()`, `sd_cs()`, `sd_spi()` | `ACTIVATE_SD` (1120, 1123, 1141) |
@@ -144,6 +145,11 @@ The two slot state machines, `None` until `start_memory`: `_rom` is
 once and never rebuilt; [pio.md](pio.md) has the programs. They were the
 `ROM` and `BANK` globals in `tspico.py` until step 4.1.
 
+### `_cart`
+
+`False` until `dock_cart` sets it: cartridge dock mode, the dock is a
+cartridge in the 2068's own dock slot. `map_slots` reads it.
+
 ### `early_init()`
 
 What: the bus-control pins at their idle levels, then the clock. `main.py`
@@ -196,12 +202,27 @@ select the 2068's ROM bank under the running machine (the comment at
 ### `map_slots(rom_sm, bank_sm, reboot=False)`
 
 `_rom.put(rom_sm)`, `_bank.put(bank_sm)`: one word each through the TX
-FIFOs, which switch the boot and dock slots under the running 2068.
+FIFOs, which switch the boot and dock slots under the running 2068. With
+`_cart` set, `_rom` gets `rom_sm | 12` instead: the dock bits are 11, so
+on a dock read (ROSCS low) `set_ctrl` drives both chip enables high and
+neither chip answers ([pio.md](pio.md#set_ctrl)). Nothing else on the
+board drives D0–D7 on a memory read as far as the reference shows (U6
+only buffers ports 0Eh/0Fh), so the cartridge in the 2068's dock answers
+alone *(inferred; not yet seen on hardware)*. `sel_bank` still drives
+A15–A18 from the dock slot, which is harmless with both chips off. The
+11 pattern exists only here, not in `ROM_SM`, where 3 is the v3 card's
+`MEM_SD`.
 `MEMBOOT` sleeps 0.1 s before calling it (the Z80 is still finishing the
 statement in the old ROM). `reboot`, which `MEMBOOT` passes, is unused
 here: the 2068 reads the slot's chip directly, so a rewritten slot is
 already what it reads. It is in the signature so `tspico.py` can call
 either board the same way (v3's `map_slots` uses it).
+
+### `dock_cart(on)`
+
+Sets `_cart`. It takes effect at the next `map_slots`, which the caller
+makes (`MEMDOCK`); at boot `TS2068_IO` calls it before `start_memory`,
+whose `map_slots` puts the first word.
 
 ### `make_mq()`
 
@@ -715,6 +736,10 @@ to set here.
 
 `_served` is what the 2068 is served now, `((boot mem, slot), (dock mem,
 slot))`, set by `start_memory` and `map_slots`; `None` before the boot.
+In cartridge dock mode the dock pair is `None`: nothing is served there,
+and a later dock compares unequal, so it's loaded.
+`_cart` is set by `dock_cart`: cartridge dock mode, the dock is a
+cartridge in the 2068's own dock slot and DOCK serving stays off.
 `_boot_stale` is true once `write_slot` has rewritten the file of the slot
 booted now, so the 2068 runs an older copy of it than the file holds;
 `start_memory` and the ROM reload in `map_slots` clear it. It is a flag
@@ -869,7 +894,9 @@ time through `_buf`:
   `ValueError`, nothing written.
 
 If the slots written are in the dock now (`_served`, `_reads`), it reloads
-them live: `tsbus.dock(False)`, `load_dock`, `tsbus.dock(True)`. A booted
+them live: `tsbus.dock(False)`, `load_dock`, `tsbus.dock(True)`. In
+cartridge dock mode no slot is in the dock, so nothing is reloaded and
+DOCK serving stays off. A booted
 slot is left running: the 2068 runs from the SRAM copy, and the new ROM
 takes effect at the next boot or `tpi:boot`. For the `tpi:boot`,
 `write_slot` sets `_boot_stale` when the booted slot (`_served[0]`, again
@@ -889,11 +916,14 @@ writing flash slot 1 doesn't set it *(an edge left alone)*. Returns what was wri
 2. `load_dock`;
 3. `tsbus.dock_writes` on for a RAM dock, off for a flash one (v2's flash
    chip ignores the Z80's writes);
-4. EXROM and DOCK chunks served (`exrom(True)`, `dock(True)`), then
+   in cartridge dock mode (`_cart`) steps 2 and 3 are skipped;
+4. EXROM and DOCK chunks served (`exrom(True)`, `dock(True)`, or
+   `dock(False)` in cartridge dock mode, which leaves dock reads to the
+   cartridge), then
    `serve(True)` (/BE live) and `hold(False)`: the 2068 is released into the
    new ROM.
 
-`_served` is set and `_boot_stale` cleared. Serving is on before the
+`_served` is set (its dock `None` in cartridge dock mode) and `_boot_stale` cleared. Serving is on before the
 release, so the Z80's first fetch is answered. Returns `load_dock`'s note, else `boot_rom`'s (also
 printed, `[board] …`), which `TS2068_IO` logs at level 2. A missing `ROM_FILE` with no slot to
 boot raises, and `main.py` logs it: the 2068 stays in reset.
@@ -916,7 +946,12 @@ or a power cycle *(seen once on hardware)*.
 comparing them with `_served` so that only what changed is loaded, through
 `_buf`.
 
-1. **The dock changed:** first `save_ram_dock` for the dock being left.
+1. **Cartridge dock mode** (`_cart`): `save_ram_dock` for the dock being
+   left, if one was served, then `tsbus.dock(False)`, and nothing is
+   loaded. The dock pair becomes `None`. `path_d` never pulls /BE, so with
+   DOCK serving off the card is off the bus for dock chunks, and the
+   Z80's dock writes aren't stored ([tsbus.md](tsbus.md)).
+   **Otherwise, the dock changed** (or it was `None`): first `save_ram_dock` for the dock being left.
    Then `tsbus.dock(False)`, `load_dock`, `tsbus.dock_writes` for the new
    dock's memory, and `tsbus.dock(True)`. It's live, as v2's `tpi:dock`:
    the 2068 isn't reset. With DOCK serving off for the copy, a read sees
@@ -944,6 +979,13 @@ Checked on proto1 (2026-10-10), from BASIC, reading the dock with
   `tpi:dock CODE 2,0` and back;
 - `tpi:boot CODE 2,2` reset into ZX Diagnostics, and `CODE 2,7` was
   refused.
+
+### `dock_cart(on)`
+
+Sets `_cart`, as on v2. It takes effect at the next `map_slots` (or, at
+boot, in `start_memory`), which turns DOCK serving off and leaves it off;
+the first `map_slots` after it's cleared loads and serves the dock again,
+because `_served`'s dock is `None`.
 
 ### `make_mq()`
 

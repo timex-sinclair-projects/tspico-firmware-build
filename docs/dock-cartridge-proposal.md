@@ -1,7 +1,9 @@
 # A cartridge in the 2068's dock with the TS-Pico fitted (proposal)
 
 Status: proposal, 2026-11-21; the PicoCart's bus behavior added the same
-day. No firmware yet; nothing here has been tried on hardware.
+day. Firmware written the same day (host tests pass); nothing here has
+been tried on hardware yet. Where the firmware differs from the first draft
+below, "Firmware changes" says so.
 
 We have always told owners that a cartridge in the 2068's own DOCK slot
 won't work while the TS-Pico is plugged in. That has never been tested.
@@ -172,8 +174,12 @@ modem, speech, the Kempston port and the Megabank.
 4. `board_v3`: `dock_cart(on)` is `tsbus.dock(not on)` (with
    `load_dock` first when turning it off); `start_memory` and `map_slots`
    leave DOCK serving off while it's set.
-5. `ZX48` and `BLKRCV` refuse in cartridge dock mode.
-6. `tpi:info` (the status screen) shows `DOCK: cartridge slot`.
+5. `ZX48` refuses in cartridge dock mode, and so does `BLKRCV` on v2. On
+   the v3 card `BLKRCV` writes the slot file itself, with no dock, so it
+   goes through; its loader closes the file before offering to dock the
+   new cartridge, and answering Y there ends the mode (with the warning),
+   so the manual says to answer N.
+6. `tpi:info` (the status screen) shows the dock as `cart`.
 7. The reference chapters for each of these, the user manual's dock
    section (chapter 8) and the quick reference.
 

@@ -270,6 +270,7 @@ one start; DOCK resets at switch-on.
 <!-- /v3 -->
 | `SAVE "tpi:dock" CODE `*`mem`*`,`*`slot`* | Put *slot* in the dock |
 | `SAVE "tpi:dock" CODE 0,2` | Swap back to the previous dock |
+| `SAVE "tpi:dock" CODE 0,3` | Give the dock to a cartridge in the 2068's own dock slot (before you plug it in) |
 | `LOAD "tpi:`*`name`*`.dck"`, `LOAD ""` | Put a cartridge, ROM or BIN into a slot |
 
 **Run a cartridge** in the dock: `NEW` or **TS Reset**. Hold **D** while the 2068 starts to
