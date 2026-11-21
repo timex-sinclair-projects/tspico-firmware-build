@@ -1653,7 +1653,9 @@ the same memory reads as the TS-Pico. Before you plug one in, give the dock to i
 
 1. Type `SAVE "tpi:dock" CODE 0,3`. The TS-Pico answers `DOCK is the cartridge slot`.
 2. Switch the 2068 off, plug the cartridge into its dock slot, and switch on. The 2068 runs the
-   cartridge as it would without the TS-Pico. Hold **D** to skip it, as above.
+   cartridge as it would without the TS-Pico. Hold **D** to skip it, as above. You may see
+   black and white bars for a moment before the copyright message while the TS-Pico holds the
+   2068 in reset. That's normal.
 3. When you're finished, switch off, take the cartridge out, switch on and type
    `SAVE "tpi:dock" CODE 2,0`. The TS-Pico answers `Take the cartridge out first` as a reminder.
 
