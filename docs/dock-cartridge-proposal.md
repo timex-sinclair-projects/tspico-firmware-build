@@ -1,9 +1,13 @@
 # A cartridge in the 2068's dock with the TS-Pico fitted (proposal)
 
 Status: proposal, 2026-11-21; the PicoCart's bus behavior added the same
-day. Firmware written the same day (host tests pass); nothing here has
-been tried on hardware yet. Where the firmware differs from the first draft
-below, "Firmware changes" says so.
+day. Firmware written the same day (host tests pass). On a v3 card the
+same day, test steps 2 and 4 passed: the dock reads the empty bus with the
+mode on and the TS-Pico's slot with it off, and the PicoCart's LROS and
+AROS images, its menu and SD card loads with it fitted all work. That run
+found one bug, fixed: after a restart in the mode, `CODE 0,2` swapped the
+mode for itself. The v2 board hasn't been tried. Where the firmware differs
+from the first draft below, "Firmware changes" says so.
 
 We have always told owners that a cartridge in the 2068's own DOCK slot
 won't work while the TS-Pico is plugged in. That has never been tested.
