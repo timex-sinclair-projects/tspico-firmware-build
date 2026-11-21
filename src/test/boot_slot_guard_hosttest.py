@@ -317,6 +317,27 @@ def test_cart_dock(t, image):
             check('"DOCK_CART": false' in f.read(), "  config.ini: DOCK_CART false")
         r = memdock(t, sent, 0, 1)
         check(r[1] == "  the cartridge slot", "CODE 0,1: the previous setting was the cartridge slot (%r)" % (r,))
+        # A restart with the mode on: the previous setting is the kept slot,
+        # not the mode again (on a v3 card 2026-11-21, CODE 0,2 swapped the
+        # mode for itself and the dock stayed unserved).
+        with open("config.ini", "w") as f:
+            f.write('{"ROM_SLOT": 1, "ROM_SM": 10, "DCK_SLOT": 0, "DOCK_CART": true}')
+        tsp = t.PICO_STATUS({"ROM_SM": 10, "DCK_SLOT": 0, "ROM_SLOT": 1, "LOG_LEVEL": 2,
+                             "DOCK_CART": True})
+        check(tsp.dock_cart and not tsp.dck_prev_cart and (tsp.dck_prev_mem, tsp.dck_prev_slot) == (2, 0),
+              "PICO_STATUS with DOCK_CART on: the previous setting is the kept slot, MEM=2 PAGE=0")
+        tsp.f_name = ""
+        saved, t.TSP = t.TSP, tsp
+        try:
+            _hw().dock_cart(True)
+            r = memdock(t, sent, 0, 2)
+            check(r[0] == "Change DOCK to MEM=2, PAGE=0" and not t.TSP.dock_cart and t.getDock() == (2, 0)
+                  and _hw()._rom.puts[-1] == 10,
+                  "  CODE 0,2 after that restart leaves the mode: set_ctrl gets 10 (%r)" % (r,))
+            with open("config.ini") as f:
+                check('"DOCK_CART": false' in f.read(), "  config.ini: DOCK_CART false")
+        finally:
+            t.TSP = saved
     finally:
         _hw().dock_cart(False)
         os.chdir(here)

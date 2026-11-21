@@ -690,9 +690,11 @@ class PICO_STATUS():                                                            
         # DOCK_CART: the dock is a cartridge in the 2068's own dock slot, and
         # the TS-Pico leaves dock reads alone (board.dock_cart). The DOCK
         # slot above is kept, for when it's turned off. dck_prev_cart is the
-        # third half of tpi:dock's "previous setting".
+        # third half of tpi:dock's "previous setting". It starts off even
+        # when the mode is on: the previous setting is then the kept slot,
+        # and CODE 0,2 after a restart leaves the mode, as it does before.
         self.dock_cart = init_values.get("DOCK_CART", False) is True
-        self.dck_prev_cart = self.dock_cart
+        self.dck_prev_cart = False
 
 
 # ─── DUAL-PORT MIGRATION: new helper DEACTIVATE_SD ─────────────────────

@@ -122,7 +122,7 @@ copy's work at boot.
 | `SAVE "tpi:dock" CODE 0,3` | **new:** the dock belongs to a cartridge in the 2068's dock slot. The TS-Pico stops answering dock reads, now and at every switch-on |
 | `SAVE "tpi:dock" CODE 1,m` / `2,m` (and `3,m` on v3) | as today, and also ends cartridge dock mode |
 | `SAVE "tpi:dock" CODE 0,0` | as today; in cartridge dock mode it says `DOCK is the cartridge slot` |
-| `SAVE "tpi:dock" CODE 0,2` | swaps with the previous setting, as today, so it toggles between a TS-Pico slot and the cartridge |
+| `SAVE "tpi:dock" CODE 0,2` | swaps with the previous setting, as today, so it toggles between a TS-Pico slot and the cartridge, also after a restart in the mode |
 
 The message when it turns on: `DOCK is the cartridge slot` / `Restart to
 run the cartridge`. When a slot turns it off again, the second line warns:
