@@ -1579,8 +1579,13 @@ FFh change.
 EXROM to chunks 0–1 (chunk 0 asked for meant both, and HOME taking chunk 0
 back also selected the DOCK). `TIMEX_HSR` doesn't: the EXROM can be put in
 any chunk, as Charlie Day's LEAP ROMs put it in chunk 6, and HOME taking a
-chunk back changes nothing else. The DOCK and the EXROM still share FFh bit
-7, so one of them at a time. The crossings ask for both chunks (FEFCh, and
+chunk back changes nothing else, but for one thing: when HOME (or an
+expansion bank) leaves no chunk to the DOCK or the EXROM, `TO_HOME` clears
+FFh bit 7. Timex's rule kept it clear at rest, and a Spectrum ROM in the DOCK
+needs that: without it every EXROM call left the bit set, and `OUT 244,3`
+(the TS-Pico's ZX48 mode) put the EXROM in chunks 0–1 instead of the DOCK,
+and the 2068 crashed back to its own start. The DOCK and the EXROM still
+share FFh bit 7, so one of them at a time. The crossings ask for both chunks (FEFCh, and
 FFFCh after the patches below), so they are unaffected.
 
 **The frame.** SAVE_STATUS's frame was the bank count + 2 bytes; it is 19
@@ -1638,6 +1643,7 @@ bank mapped elsewhere: a matter for a LEAP build for the board.
 | `OWNMAP` | A = a bank (0: any): the chunks it owns, bit n for chunk n; 0 with no board. OWNn of FEh or FFh counts as none |
 | `NEWOWN` | BANK_ENABLE's rule for one chunk: A = its OWNn, B the board bank (or 0), D its bit, E the chunks asked for; A = what OWNn must be |
 | `TIMEX_HSR` | BANK_ENABLE's first half (above): H = the HSR, FFh bit 7 set or cleared. Sits in SAVE_STATUS's slot |
+| `TO_HOME` | TIMEX_HSR's HOME and expansion-bank tail, in GET_STATUS's spare bytes (RAM 6440h): with H = 0, no DOCK or EXROM chunk left, FFh bit 7 cleared (the DOCK selected, as Timex's code left it); otherwise nothing |
 | `SAVE_BOARD` | SAVE_STATUS's second half: the 16 registers and the select. Reads only, but for the select |
 | `RESTORE_BOARD` | RESTORE_STATUS's second half: FFh bit 7, the 16 registers (OWN0–7 first, each setting its SUB, then SUB0–7), the select, then the HSR whole. With no board (count 0) it jumps to `NOBOARD` before the registers |
 | `RESTORE_TAIL` | RAM 63F0h, inside RESTORE_BOARD: from here on the select and the HSR, IX stepped to the frame's last byte. Both paths, the board's and `NOBOARD`'s, end through it |
