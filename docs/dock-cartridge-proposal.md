@@ -1,11 +1,11 @@
 # A cartridge in the 2068's dock with the TS-Pico fitted (proposal)
 
-Status: proposal, 2026-11-21. No firmware yet; nothing here has been tried
-on hardware.
+Status: proposal, 2026-11-21; the PicoCart's bus behavior added the same
+day. No firmware yet; nothing here has been tried on hardware.
 
 We have always told owners that a cartridge in the 2068's own DOCK slot
 won't work while the TS-Pico is plugged in. That has never been tested.
-An RP2350-based dock cartridge for the 2068 now exists, and owners will
+An RP2350-based dock cartridge for the 2068, the PicoCart, now exists, and owners will
 want to use it with the TS-Pico. This proposal gives the TS-Pico a
 **cartridge dock** mode: it stops answering dock reads and leaves the dock
 to the cartridge, while it keeps serving the boot ROM, the SD card and
@@ -29,8 +29,49 @@ user picks another.
 
 The HOME and EXROM side is not a problem for a stock Timex cartridge: it
 answers /ROSCS only, so it stays off the bus when the TS-Pico serves the
-boot ROM. Whether the RP2350 cartridge behaves the same is the first open
-question below.
+boot ROM.
+
+## The 2068 PicoCart
+
+The RP2350 cartridge is the 2068 PicoCart (rev 0.1/0.2). Its designer's
+notes, from the schematic netlist and firmware, confirmed unless marked:
+
+- **It drives D0–D7 only on a dock read.** U2, a 74LVC245A, is enabled by
+  `ROSCS_n OR MREQ_n OR BUS_OFF` (U3, a 74LVC1G332), and its direction
+  follows /RD. Nothing else gates it: not A13–A15, /EXROM, /BE or /IORQ.
+  It never drives on I/O cycles, writes or HOME reads, and the buffer lets
+  go within nanoseconds of /RD, /MREQ or /ROSCS rising.
+- **It drives no other line.** /BE goes to an unfitted 0 Ω link (R10);
+  /RESET, /WAIT, /INT, /NMI, /BUSRQ and /ROMCS aren't wired. It doesn't
+  snoop ports or bank on its own. Its menu, Z80 code on the 2068, writes
+  F4h, FFh and FEh itself, as any program does.
+- **It answers every dock chunk**, $FF where its 64K image has no data. A
+  stock cartridge answers only where its ROM is. With the TS-Pico off the
+  dock, that's the dock as the 2068 sees it, so it changes nothing here.
+- **It keeps RAM chunks and a write mailbox at BFFFh** for its menu. The
+  TS-Pico doesn't store dock writes with the dock off (v3), and has no
+  chip enabled to take them (v2).
+- **It's on the bus 10 ms after the dock's 5 V is steady** (above 4.4 V).
+  Without a TS-Pico, the ROM's first dock read came 1.79 s after that.
+  The v3 card holds /RESET for 100 ms after the 2068's power comes up,
+  so there the cartridge is ready before the Z80 starts; on v2, which
+  doesn't hold /RESET, it's ready long before the ROM's dock check
+  *(inferred)*.
+- **Its menu has a "no cartridge" entry** that keeps it off the bus
+  (BUS_OFF high) until the next power cycle. So for a session, the user can
+  leave it fitted and use a TS-Pico dock slot instead, as long as they
+  turn the TS-Pico's dock back on after choosing it.
+- **Its menu and AROS carts run on top of HOME**, the TS-Pico ROM's font at
+  3D00h, and restart with `JP 0` into it.
+
+So it behaves like a Timex cartridge that answers /ROSCS: this proposal
+covers it. One point is still open. It doesn't look at /EXROM, so it
+would answer an EXROM read if the 2068 pulled /ROSCS low for one. The
+TS-Pico's own v2 path says it doesn't. `set_ctrl` serves the boot slot's
+EXROM on the ROSCS-high branch, and if ROSCS went low on EXROM reads,
+ROM 2.5's EXROM in chunks 0–1 would come from the dock slot instead, and
+ROM 2.5 wouldn't run on v2 *(inferred from the v2 path; checked in test
+step 4)*.
 
 ## Both boards can let the dock go without a hardware change
 
@@ -154,7 +195,12 @@ real cartridge *(inferred; checked in the tests)*.
 3. **A stock Timex cartridge** in the 2068's dock, mode on: it boots (LROS)
    or runs from BASIC (AROS); **D** skips it; `LOAD` from the SD card still
    works afterwards.
-4. **The RP2350 cartridge**, the same steps, on v2 and v3.
+4. **The PicoCart**, the same steps, on v2 and v3, with an LROS image, an
+   AROS image and its menu. Then the EXROM point: with the PicoCart fitted
+   and on the bus, run something that pages the EXROM in and reads it
+   (ROM 2.5's own `tpi:` commands do, in chunks 0–1, and on v3 the Leap
+   languages page it in at 8000h and above). A logic analyzer on /ROSCS,
+   /EXROM and U2's /OE settles it directly.
 5. **Back again:** cartridge out, `tpi:dock CODE 2,0`, ZX Spectrum mode
    works; the mode survives a power cycle, and `CODE 0,2` toggles.
 
@@ -164,18 +210,13 @@ data bus on every boot.
 
 ## Open questions
 
-1. **How the RP2350 cartridge decides to drive the bus.** If it answers
-   /ROSCS only, like a Timex cartridge, this proposal covers it. If it also
-   decodes addresses, answers I/O ports, snoops F4h/FFh to bank on its own,
-   or drives /BE, /ROMCS, /WAIT or /RESET, each needs looking at against the
-   TS-Pico's own ports (0Eh/0Fh, and on v3 1Fh, 73h/77h, the speech ports,
-   the Megabank's FCh/FDh). Asked of the cartridge's design notes.
-2. **Its boot time.** It must answer dock reads by the time the 2068 ROM
-   looks for an LROS cartridge. On v3 the card holds /RESET for 100 ms
-   after the 2068's power comes up, which helps; v2 doesn't hold it.
-3. **The key's name**, and whether `CODE 0,3` or a word form
+1. **/ROSCS on EXROM reads.** The PicoCart doesn't gate on /EXROM (see
+   "The 2068 PicoCart"). The v2 path says /ROSCS is high on EXROM reads;
+   test step 4 confirms it. If it turns out wrong, the fix belongs on the
+   cartridge (/EXROM into U3), not in the TS-Pico.
+2. **The key's name**, and whether `CODE 0,3` or a word form
    (`tpi:dock cart`) reads better in the manual. `tpi:modem` already takes
    words.
-4. **Whether the emulator bridge** (`tools/emu`, ZEsarUX) should model the
+3. **Whether the emulator bridge** (`tools/emu`, ZEsarUX) should model the
    mode, so a cartridge `.dck` loaded into the emulator's own dock can be
    tried with the TS-Pico firmware behind it.
