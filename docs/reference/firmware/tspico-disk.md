@@ -503,8 +503,8 @@ TS-2068-Megabank repository, `docs/spec.md`; its phase 5). The file system
 is [ramdisk.py](ramdisk.md); this part is its bus side and its commands.
 Every `r:` command answers response function 89h, the mover
 ([PROTOCOL.md §6.3](../../PROTOCOL.md)): its operations, op 0, then the
-command's ordinary answer (a status, a message, a listing). Only the
-Megabank test ROM (2.5, `rom_id` 25h) has the mover; any other ROM would take
+command's ordinary answer (a status, a message, a listing). Only ROM 2.5
+(`rom_id` 25h), the release ROM, has the mover; any other ROM would take
 89h for an unknown function and give Report D, so an `r:` command from one is
 refused first (`RD_NEEDS_ROM`). `ramdisk.py` is frozen into the v3 card's
 build only, and imported by `RD_START`, so on v2 an `r:` command from a 2.5
@@ -1147,7 +1147,7 @@ matched in either case:
 | `path` | the current folder, `public_path()`, as `tpi:path` shows it |
 | `dir` | `XDirText(INDEX)` ([tspico-files.md](tspico-files.md)): the folder count, the file count, then `dirinfo.tap`'s rows, made as they are read |
 | `mount` | the mounted file, `public_fname()`, or an empty line when none is |
-| `info` | five lines: the card's label, its free bytes and its total bytes (`os.statvfs`), `TSP.FW_VERSION`, and the ROM's version from `rom_id` (`"2.4"`; empty when the ROM sent FFh) |
+| `info` | five lines: the card's label, its free bytes and its total bytes (`os.statvfs`), `TSP.FW_VERSION`, and the ROM's version from `rom_id` (`"2.5"`; empty when the ROM sent FFh) |
 
 `path` and `mount` read only RAM. `info` mounts the card for
 `os.statvfs("/sd")` (`ACTIVATE_SD` … `DEACTIVATE_SD`, `ACTIVATE_MQ` in a

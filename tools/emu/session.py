@@ -28,7 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 EMU = os.environ.get("ZESARUX", os.path.expanduser(
     "~/Documents/github/zesarux-tspico-lab/work/zesarux-tspico"))
-ROM = os.environ.get("TSPICO_ROM", os.path.join(REPO, "src", "rom", "TSPICO-24.ROM"))
+ROM = os.environ.get("TSPICO_ROM", os.path.join(REPO, "src", "rom", "TSPICO-25.ROM"))
 SOCK = os.environ.get("TSPICO_BRIDGE_SOCK", "/tmp/tspico_bridge.sock")
 
 # BASIC tokens

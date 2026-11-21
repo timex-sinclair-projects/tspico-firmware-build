@@ -364,7 +364,7 @@ decide what `N` means where it is asked — stop a listing, skip one file of
 an ERASE — and it can print something before the `03h` (the firmware
 echoes the key). After `N` ROM 2.2 and 2.3 want opposite things, so
 firmware and ROM must match: the current firmware is written for 2.3's
-loop and needs ROM 2.4. From 2.3 on the ROM also says which it is in byte 2 of each command pre-header
+loop and is released with ROM 2.5. From 2.3 on the ROM also says which it is in byte 2 of each command pre-header
 ([exrom-driver.md](exrom-driver.md#build_preheader_b-1ba0h)).
 21F7h (`JP LOOP_EXIT_OK`) is left in place, unreachable. 88h's loop is this
 one (`LOWER_LOOP` joins at 21E6h), so it changes the same way.
@@ -404,7 +404,7 @@ goes to LOWER_LOOP, function 86h on the lower screen
 handler's tail, 2219h–221Eh (`PUSH AF / CALL BEEPER / POP AF / RET`), is
 still there and unreferenced.
 
-In the Megabank test ROM (`--megabank`, 2.5) 2213h is `JP FN_EXT` instead
+In ROM 2.5 (`--megabank`) 2213h is `JP FN_EXT` instead
 (`C3 61 3A`, then three unreachable `00`s), and `FN_EXT` in the module does
 2.4's test and adds function 89h, the mover
 ([exrom-fdd.md](exrom-fdd.md#fn_ext-3a61h)).

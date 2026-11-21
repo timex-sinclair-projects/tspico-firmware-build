@@ -2,8 +2,8 @@
 
 This is the byte-level reference for how a Timex Sinclair 2068 and the TS-Pico
 talk: the two I/O ports, the status byte, every kind of transaction, and the
-rules a firmware handler must follow. It describes **firmware 2.4 with ROM 2.4**
-(the disk-command ROM), as the code on `main` does it. Where an older document or the original spec says otherwise, this one follows the code.
+rules a firmware handler must follow. It describes **firmware 2.5 with ROM 2.5**
+(the disk-command ROM, with the TS-2068 Megabank's additions), as the code on `main` does it. Where an older document or the original spec says otherwise, this one follows the code.
 
 > **New to all this?** Start with [`PROTOCOL_GUIDE.md`](PROTOCOL_GUIDE.md), a
 > plain-language walk through the same ground. Come back here for the details.
@@ -177,7 +177,7 @@ Two layouts share the byte positions:
 |------|-----------------|-------------------------------|
 | 0 | `'B'` | flag: `$00` header, `$FF` data |
 | 1 | TADDR (0 = SAVE, 1–3 = LOAD/VERIFY/MERGE) | TADDR |
-| 2 | the ROM's version, `$24` (ROM 2.4; `$23` on ROM 2.3, `$FF`, the bank, before). The firmware keeps it as `rom_id` and shows it in `tpi:info` | bank |
+| 2 | the ROM's version, `$25` (ROM 2.5; `$24` on ROM 2.4, `$23` on ROM 2.3, `$FF`, the bank, before). The firmware keeps it as `rom_id` and shows it in `tpi:info` | bank |
 | 3–4 | PMR1: the first `CODE` number, LE | session id, LE |
 | 5–6 | PMR2: the second `CODE` number, LE | address (IX), LE |
 | 7–8 | length of the command text, LE | block length (DE), LE |
@@ -276,7 +276,7 @@ becomes the command's result.
 | `$86` | PRINT STRING WITH LOOP | status, then pages: text, `$00` → the Z80 waits for a key, waits READY, OUTs the key; then, whatever the key, `N` included, it waits READY and prints the next page (#227; ROM 2.2 left the loop on `N`). `$03` ends the loop, so the Pico answers `N` with an echo and `$03`. | `$21E3` (loop `$21E7`, guard `$22A1`) | `SEND_MSG2`, `ListMenu`, `PROMPT_EACH`, `SEND_MSG_PROMPT_YN` |
 | `$87` | (spec: "print n characters") | status | calls HOME `$08A6`, which clears the screen like CLS | unused |
 | `$88` | **`$86` on the lower screen** | as `$86` (no leading CR) | `$2213` is patched to `CP 87h / JP Z,$3006 / RET`, and `$3006` is `LOWER_LOOP` in `fddcmd.asm`, which is `$86`'s handler with the lower screen (stream `$FD`) as its channel, so a prompt doesn't write over a picture that `SAVE "f:x" SCREEN$` is about to save | `SEND_MSG_PROMPT_YN(..., lower=True)`, sent only by `tpi:fopen` |
-| `$89` | **the Megabank mover** (Megabank test ROM 2.5 only) | operations, then op 0 and the answer (§6.3) | `$2213` is `JP FN_EXT` there; `FN_EXT` runs `LOWER_LOOP` for `$88` and `MOVER` for `$89`. ROM 2.4 treats `$89` like `$8A` | every `r:` command's handler (the RAM disk, `src/TS/ramdisk.py`; §6.3) |
+| `$89` | **the Megabank mover** (ROM 2.5) | operations, then op 0 and the answer (§6.3) | `$2213` is `JP FN_EXT` there; `FN_EXT` runs `LOWER_LOOP` for `$88` and `MOVER` for `$89`. ROM 2.4 treats `$89` like `$8A` | every `r:` command's handler (the RAM disk, `src/TS/ramdisk.py`; §6.3) |
 | `$80`, `$8A`–`$FF` (and `$89` before ROM 2.5) | — | — | fall through the chain: Report D, and whatever the Pico queued behind the code is left unread | — |
 
 In the firmware (`TS/tspico.py`, issue #16) these are `FN_PRINT_STRING` (`$81`), `FN_PRINT_STRING_KEY` (`$82`), `FN_PRINT_CHAR` (`$83`), `FN_RETURN_KEY` (`$84`), `FN_GET_STATUS` (`$85`), `FN_PRINT_LOOP` (`$86`) and `FN_PRINT_LOOP_LOWER` (`$88`); the `$00` that ends a string or a page is `STR_END`, the `$03` that ends a loop `LOOP_END`, and a pre-header's first byte is `PRE_HEADER` (`$00`), `PRE_DATA` (`$FF`) or `PRE_CMD` (`$42`, `'B'`). Each use in the code also gives the number in its comment.
@@ -370,12 +370,13 @@ then the 2068 has printed `0 OK` and gone. The final status waits for the SD
 write, so a failed write is reported as J (§13). `SAVE ""` and names over 10
 characters are refused by the ROM before anything is sent.
 
-### 6.3 The Megabank: `r:` blocks and the mover (ROM 2.5 test build)
+### 6.3 The Megabank: `r:` blocks and the mover (ROM 2.5)
 
-`tools/build-rom.py --megabank` builds `src/rom/TSPICO-MB.ROM`, ROM 2.5
-(ROM_ID and `G_VERS` `$25`, PEEK 101 = 37) for the TS-2068 Megabank board
-(spec: the TS-2068-Megabank repository, `docs/spec.md`). It is not in a flash
-slot until the board's hardware tests pass. Over 2.4 it adds:
+`tools/build-rom.py --megabank` builds `src/rom/TSPICO-25.ROM`, ROM 2.5
+(ROM_ID and `G_VERS` `$25`, PEEK 101 = 37), the release ROM and flash slot
+1's image, with support for the TS-2068 Megabank board (spec: the
+TS-2068-Megabank repository, `docs/spec.md`). It runs with or without the
+board. Over 2.4 it adds:
 
 - **The boot.** EXROM `$0A3E`, the start of the 2068's bank search, is
   `JP MB_BOOT`. MB_BOOT writes OWN0–OWN7 = 0 and WPROT = 0 (port `$FD` selects
@@ -441,10 +442,10 @@ chunk's HSR bit, port `$F4`, is set):
   HSR bit w set. Unmap puts back what was there: HSR first if the chunk was
   the 2068's own, then OWNw and SUBw, then the HSR. A program's own board
   page mapped in the window chunk is restored with its HSR bit as the mover
-  found it. (By then the command's bank crossings have already cleared the
-  HSR: every `tpi:` command leaves it at 0, in ROM 2.4 too, so a program
-  that maps pages must set its HSR bits again after one, or its writes
-  reach HOME RAM. The Megabank spec's phase 8 narrows the crossings);
+  found it. (In ROM 2.4 every `tpi:` command left the HSR at 0, because its
+  crossings into HOME took every chunk. ROM 2.5's take chunks 0–1 only, the
+  Megabank spec's phase 8, so a program's HSR bit for its own page survives
+  an `r:` command);
 - the EXROM stays in chunks 0–1 throughout, so addresses below 4000h are the
   EXROM's, not HOME's;
 - there is no BREAK test inside an operation.
@@ -544,7 +545,7 @@ A jump table for machine-code programs, stable across ROMs:
 |-------|------|----------|
 | `$1840` | G_MODE | BC = TPMODE (low nibble); AF kept |
 | `$1842` | S_MODE | TPMODE := A AND `0Fh`; AF kept |
-| `$1844` | G_VERS | BC = the interface version: `$0015` on ROM 1.1, `$0022` on ROM 2.2, `$0023` on ROM 2.3, `$0024` on ROM 2.4 |
+| `$1844` | G_VERS | BC = the interface version: `$0015` on ROM 1.1, `$0022` on ROM 2.2, `$0023` on ROM 2.3, `$0024` on ROM 2.4, `$0025` on ROM 2.5 |
 | `$1846` | TX_A | `OUT (0Eh),A`; no wait, no BREAK check |
 | `$1848` | RX_A | `IN A,(0Eh)`; Z if 0; no wait |
 | `$184A` | C_END | wait READY, read the answer, run the response functions. NC = status 1 (A = 0). C = failed, see below. |

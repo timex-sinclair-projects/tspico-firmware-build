@@ -13,12 +13,11 @@ Pipeline (see docs/FDD_COMMANDS_DESIGN.md §8):
   5. write build/TSPICO-fdd.ROM (+ split halves) and print a hunk report,
      asserting that ONLY the intended regions changed
 
-The result is ROM 2.4, the slot-1 image: it is committed as
-src/rom/TSPICO-24.ROM (flash/manifest.json slot 1), and CI fails if that file
-differs from a fresh build. After changing the module or the patches:
+The result is ROM 2.4, the previous release: it is committed as
+src/rom/TSPICO-24.ROM, and CI fails if that file differs from a fresh build.
+After changing the module or the patches:
     python3 tools/build-rom.py --verify
     cp build/TSPICO-fdd.ROM src/rom/TSPICO-24.ROM
-and update slot 1's crc32 in flash/manifest.json.
 
 Requires sjasmplus (brew install sjasmplus).
 
@@ -29,14 +28,17 @@ Usage:
     python3 tools/build-rom.py --rebase   # after a new base ROM merges: re-check
                                           # the patch sites and update BASE_ROM_CRC
     python3 tools/build-rom.py --megabank --verify
-                                          # the Megabank test ROM (below)
+                                          # ROM 2.5, the release ROM (below)
 
-The Megabank test ROM (--megabank): the same build with -DMEGABANK, which adds
+ROM 2.5, the release ROM and the slot-1 image (--megabank): the same build with -DMEGABANK, which adds
 the TS-2068 Megabank's boot reset, SAVE/LOAD "r:name" and the mover after the
 2.4 module (fddcmd.asm), plus MB_PATCHES and the `mb_after` bytes below. It
 carries the version marker 25h ("v2.5") so the firmware can tell it from 2.4,
-and is committed as src/rom/TSPICO-MB.ROM (CI checks that too). The slot-1
-image, TSPICO-24.ROM, is unchanged by it. Megabank spec phase 4.
+and is committed as src/rom/TSPICO-25.ROM (flash/manifest.json slot 1; CI
+checks it too). It runs on a 2068 with or without the board. After a change:
+    python3 tools/build-rom.py --megabank --verify
+    cp build/TSPICO-25.ROM src/rom/TSPICO-25.ROM
+and update slot 1's crc32 in flash/manifest.json. Megabank spec phase 4.
 """
 
 import argparse
@@ -53,7 +55,7 @@ BASE_ROM = ROOT / "src" / "rom" / "TSPICO-SYNC.ROM"   # ROM 2.0 (flash/manifest.
 ASM_SRC  = ROOT / "src" / "rom" / "fdd" / "fddcmd.asm"
 OUT_DIR  = ROOT / "build"
 OUT_ROM  = OUT_DIR / "TSPICO-fdd.ROM"
-OUT_MB   = OUT_DIR / "TSPICO-mb.ROM"           # --megabank
+OUT_MB   = OUT_DIR / "TSPICO-25.ROM"           # --megabank
 
 # --- ROM geometry (see docs/rom-analysis/MEMORY_MAP.md) ----------------------
 # The 32K image is HOME (file $0000-$3FFF) + EXROM (file $4000-$7FFF). For each
@@ -329,7 +331,7 @@ PATCHES = [
 FIXED_SYMS = {"PS_READ": 0x377F}
 
 
-# --- The Megabank test ROM (--megabank) ---------------------------------------
+# --- ROM 2.5, the Megabank build (--megabank) ---------------------------------
 # Applied after PATCHES (with their `mb_after` bytes where they have them). Each
 # jumps to Megabank code appended to the module (fddcmd.asm, IFDEF MEGABANK);
 # MB_FIXED_SYMS pins those addresses. Megabank spec "Minimal ROM: detection,
@@ -850,7 +852,7 @@ def main():
     ap.add_argument("--keep", action="store_true",
                     help="keep intermediate fddcmd.bin/.sym next to the output")
     ap.add_argument("--megabank", action="store_true",
-                    help="build the Megabank test ROM, build/TSPICO-mb.ROM")
+                    help="build ROM 2.5 (the release ROM, with the Megabank), build/TSPICO-25.ROM")
     ap.add_argument("--rebase", action="store_true",
                     help="after a new base ROM merges: re-check the patch sites "
                          "and rewrite BASE_ROM_CRC (no build)")
@@ -942,7 +944,7 @@ def main():
     # --- 5. write outputs ---
     OUT_DIR.mkdir(exist_ok=True)
     out_rom.write_bytes(out)
-    stem = "TSPICO-mb" if mb else "TSPICO-fdd"
+    stem = "TSPICO-25" if mb else "TSPICO-fdd"
     (OUT_DIR / f"{stem}-home.bin").write_bytes(out[0:0x4000])
     (OUT_DIR / f"{stem}-exrom.bin").write_bytes(out[0x4000:0x8000])
     print(f"\nwrote {out_rom.relative_to(ROOT)}  "

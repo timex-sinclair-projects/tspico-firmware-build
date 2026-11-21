@@ -1,6 +1,6 @@
 """The Timex bank API on the TS-2068 Megabank, in the Z80 interpreter.
 
-src/rom/TSPICO-MB.ROM's bank code (bankapi.asm spliced over the genuine
+src/rom/TSPICO-25.ROM's bank code (bankapi.asm spliced over the genuine
 routines, plus build-rom.py's frame, Brzozowski and crossing patches) runs
 here from RAM 6200h as the boot leaves it, and again from F7C0h as the
 64-column copy leaves it. The model is the 2068's memory map with FFh bit 7
@@ -34,7 +34,7 @@ sys.path.insert(0, HERE)
 
 from z80core import Z80                                          # noqa: E402
 
-ROM = os.path.join(REPO, "src", "rom", "TSPICO-MB.ROM")
+ROM = os.path.join(REPO, "src", "rom", "TSPICO-25.ROM")
 
 GET_WORD, PUT_WORD, GET_STATUS, GET_CHUNK = 0x6316, 0x633B, 0x6405, 0x644D
 GET_NUMBER, BANK_ENABLE, SAVE_STATUS, RESTORE_STATUS = 0x645E, 0x6499, 0x651E, 0x654A

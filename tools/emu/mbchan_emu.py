@@ -11,7 +11,7 @@ chunks 4-7) show the window putting OWNc and SUBc back, not the HSR bit.
 
     ZESARUX=/path/to/zesarux-with-megabank python3 tools/emu/mbchan_emu.py
 
-Builds build/TSPICO-mb.ROM unless TSPICO_ROM names one, and the vendored
+Builds build/TSPICO-25.ROM unless TSPICO_ROM names one, and the vendored
 tools/zmakebas.
 """
 
@@ -26,7 +26,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 if "TSPICO_ROM" not in os.environ:
     subprocess.run([sys.executable, os.path.join(REPO, "tools", "build-rom.py"), "--megabank"],
                    check=True, stdout=subprocess.DEVNULL)
-    os.environ["TSPICO_ROM"] = os.path.join(REPO, "build", "TSPICO-mb.ROM")
+    os.environ["TSPICO_ROM"] = os.path.join(REPO, "build", "TSPICO-25.ROM")
 os.environ.setdefault("MEGABANK", "1")
 os.environ["TSPICO_HOST"] = os.path.join(HERE, "megabank_host.py")
 os.environ.setdefault("MEGABANK_HOST_LOG", "/tmp/megabank_host.jsonl")

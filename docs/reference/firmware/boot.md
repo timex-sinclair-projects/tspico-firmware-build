@@ -134,11 +134,11 @@ file back when it changed anything; `PICO_STATUS` is built from what
 | Key | Type | Shipped | Meaning | Read by | Written by |
 |---|---|---|---|---|---|
 | LOG_LEVEL | int 0–4 | 2 | lowest level `LOG` keeps (0 INFO … 3 CRITICAL, 4 SPECIAL) | `LOAD_CONFIG` → `TSP.LOG_LEVEL` | `LOAD_CONFIG` (default) |
-| FW_VERSION | str | `"2.4"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` `readInstalled`, ~343–379; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
+| FW_VERSION | str | `"2.5"` | the firmware's version, for tools: `PICO_STATUS` ignores it and takes the module's own `FW_VERSION` | the web updater, to tell what a board runs (`web-updater/app.js` `readInstalled`, ~343–379; 1.1's file has none) | `LOAD_CONFIG` (default); the release |
 | DCK_SLOT | int 0–15 | 0 | DOCK slot at power-on | `LOAD_CONFIG` → `TSP.DCK_SLOT`, `bank_sm` | `LOAD_CONFIG` (default) |
 | ZX_TAPE_COMPAT | bool | `false` | ZX48 mode loads with `LOAD_ZX_C` (the whole tape in RAM) | → `TSP.ZX_TAPE_COMPAT` | `LOAD_CONFIG` (default) |
 | ROM_SM | int 5, 6, 9, 10 | 10 | `set_ctrl`'s word: DOCK memory × 4 + BOOT memory, 1 SRAM, 2 flash | → `TSP.ROM_SM` | `LOAD_CONFIG` (default; the one-shot), `MEMBOOT` (low bits) |
-| ROM_VERSION | str | `"2.4"` | the release ROM, for the updaters (their `rom_version`); `tpi:info` shows it only for a ROM that doesn't send its version; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
+| ROM_VERSION | str | `"2.5"` | the release ROM, for the updaters (their `rom_version`); `tpi:info` shows it only for a ROM that doesn't send its version; nothing switches on it | → `TSP.ROM_VERSION` | `LOAD_CONFIG` (default) |
 | ROM_SLOT | int 0–15 | 1 | BOOT slot at power-on | → `TSP.ROM_SLOT`, `bank_sm` | `LOAD_CONFIG` (the one-shot back to 1), `MEMBOOT` |
 | VERBOSE | bool | `false` | `SEND_MSG` prints messages | → `TSP.VERBOSE` | `LOAD_CONFIG` (default) |
 | TELEMETRY | bool | `false` | the `TLM` trace on USB serial | `_telemetry()` only | `LOAD_CONFIG` (default) |
@@ -339,23 +339,25 @@ says so (below). The steps, in order:
    **programmer's manual examples**: `docs/manual/examples/test_examples.py`
    (the Z80 routines against a simulated Pico) and `test_extcmd_host.py`
    (the example commands through the real `PROCESS_CMD`).
-6. **ROM 2.4**: `tools/build-rom.py --verify` assembles the fdd module and
+6. **ROM 2.4**, the previous release: `tools/build-rom.py --verify` assembles the fdd module and
    splices it onto the SYNC/BREAK layer's image (`src/rom/TSPICO-SYNC.ROM`), failing if any patch's "before" bytes or any
    anchor no longer match ([../rom/overview.md](../rom/overview.md)); then
    `cmp` of `build/TSPICO-fdd.ROM` against `src/rom/TSPICO-24.ROM`: the
-   committed slot-1 image must be exactly what the sources build. Then
+   committed image must be exactly what the sources build. Then, on the
+   committed slot-1 image, `src/rom/TSPICO-25.ROM`,
    `rom_cend_hosttest.py` runs the ROM's BIOS `C_END`, and
    `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest),
    `rom_preload_hosttest.py` the module's pre-load check, and
    `rom_fn86_hosttest.py` the string reader and function 86h's loop, in a
-   Z80 interpreter. Then the **Megabank test ROM**: `build-rom.py --megabank
-   --verify`, `cmp` of `build/TSPICO-mb.ROM` against `src/rom/TSPICO-MB.ROM`,
+   Z80 interpreter. Then **ROM 2.5**, the release ROM: `build-rom.py --megabank
+   --verify`, `cmp` of `build/TSPICO-25.ROM` against `src/rom/TSPICO-25.ROM`
+   (the slot-1 image must be exactly what the sources build),
    `rom_megabank_hosttest.py` (the boot reset, the mover and the `r:`
    gates against a board model with the HSR rule) and
    `rom_bankapi_hosttest.py` (the Timex bank API, from RAM 6200h and from
    the 64-column copy) and `rom_rchan_hosttest.py` (the `r:` channels,
    against the firmware's own `ramdisk.Disk`).
-   The ROM and its two halves, and the Megabank ROM, are uploaded as `tspico-fdd-rom`.
+   ROM 2.4 and its two halves, and ROM 2.5, are uploaded as `tspico-fdd-rom`.
 7. **MicroPython v1.29.0**, cloned shallow.
 8. **The build stamp**: `cmp` of `src/TS/tspico.py` with
    `src/dev_tspico.py` (fails with the first 40 lines of `diff`), then
@@ -587,7 +589,7 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
    `boards/manifest.py` with the v2 one.
 2. **The bundle** `ts-pico-<tag>.zip`: `firmware.uf2`, a generated
    `DEPLOY.md`, `src/` (`main.py`, `config.ini`, `words.txt`,
-   `assets/*.tap`, `rom/TSPICO-24.ROM`) for the Pico's flash, and
+   `assets/*.tap`, `rom/TSPICO-25.ROM`) for the Pico's flash, and
    `SD card/` (`TAP/` recursively, `help/`, the loose `*.tap` of the card's
    root).
 3. **The 512K flash image** `Pico-<tag>.rom`, if a base image can be
@@ -654,7 +656,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.4 | `src/rom/TSPICO-24.ROM` | `96D7CEAA` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.5 | `src/rom/TSPICO-25.ROM` | `44F90522` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |
@@ -704,7 +706,7 @@ may contain the third-party slots (decided 2026-09-28).
   card's `/slots` over USB for now
   ([docs/v3-slots-proposal.md](../../v3-slots-proposal.md)).
 
-The module docstring names `src/rom/TSPICO-24.ROM` for slot 1 and points at
+The module docstring names `src/rom/TSPICO-25.ROM` for slot 1 and points at
 the manifest and this chapter (until #181 it named `TSPICO.ROM` and a
 `FLASH_LAYOUT.md` that does not exist). [`build_flash_hosttest.py`](../../../src/test/build_flash_hosttest.py)
 pins the build's refusals.

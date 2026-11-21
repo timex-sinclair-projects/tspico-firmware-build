@@ -251,9 +251,8 @@ RESTORE_BOARD:
         ld      c,PORT_DAT
         ld      a,(NBANKS)
         and     a
-        jr      nz,.b
-        inc     c                  ; no board: the bytes go to the select,
-.b:     ld      b,0                ; which MB_DETECT writes on any 2068
+        jp      z,NOBOARD          ; no board: nothing to write
+        ld      b,0
 .lp:    inc     ix
         ld      a,b
         out     (PORT_SEL),a
@@ -262,6 +261,7 @@ RESTORE_BOARD:
         inc     b
         bit     4,b
         jr      z,.lp
+RESTORE_TAIL:
         inc     ix
         ld      a,(ix+0)
         out     (PORT_SEL),a       ; the select as it was
@@ -331,6 +331,22 @@ GET_STATUS:
 .none:  ld      a,$FF
 .c:     ld      c,a
         pop     af
+        ret
+
+; TO_HOME -- TIMEX_HSR for HOME or an expansion bank, H the HSR it leaves:
+; with no chunk left to the DOCK or EXROM, FFh bit 7 to the DOCK (clear).
+; Timex's code cleared it whenever HOME took chunk 0 back, so it was clear
+; at rest, and the Spectrum ROM in the DOCK needs that: with it set,
+; OUT 244,3 put the EXROM in chunks 0-1 and the 2068 crashed back to its
+; own start. Only when none is left, so LEAP's EXROM in chunk 6 survives
+; HOME taking chunk 0. Changes A, F.
+TO_HOME:
+        ld      a,h
+        and     a
+        ret     nz                 ; a DOCK or EXROM chunk stays: as it is
+        in      a,(DEC)
+        and     $7F
+        out     (DEC),a
         ret
         ASSERT  $ <= RB+$644D
 
@@ -509,8 +525,9 @@ SAVE_STATUS:
 ; active. Changes A, F, H.
 ;
 ; HOME or an expansion bank: its chunks' HSR bits cleared, the rest as they
-; are. DOCK and EXROM: exactly the chunks asked for (the others to HOME), and
-; FFh bit 7 selects which of the two, unless no chunk is asked for. Timex's
+; are; with none left set, FFh bit 7 cleared too (TO_HOME). DOCK and EXROM:
+; exactly the chunks asked for (the others to HOME), and FFh bit 7 selects
+; which of the two, unless no chunk is asked for. Timex's
 ; code tied the EXROM to chunks 0-1 (chunk 0 asked for meant both, and HOME
 ; taking chunk 0 back also selected the DOCK); this doesn't, so a ROM that
 ; puts the EXROM elsewhere, as Charlie Day's LEAP ROMs do in chunk 6, can.
@@ -524,7 +541,7 @@ TIMEX_HSR:
         cp      $FE
         jr      z,.dx              ; EXROM
         and     a
-        ret     nz                 ; HOME or an expansion bank
+        jp      nz,TO_HOME         ; HOME or an expansion bank
 .dx:    ld      h,e                ; DOCK, EXROM: exactly these
         ld      a,c
         inc     a
@@ -557,6 +574,17 @@ RESTORE_STATUS:
         and     e
         out     (HSR),a
         jp      RESTORE_BOARD
+
+; With no board, RESTORE_BOARD skips the 16 registers: IX past them, then
+; the select and the HSR as with one. Writing them anyway (to the select,
+; harmless) kept interrupts off for about 1300 T-states a crossing: the
+; folder menu's key loop crosses to HOME's KEY-SCAN without a pause, and in
+; ZEsarUX with no board half the frame interrupts landed in it and were
+; lost, in runs long enough to miss a key press (tools/emu/smoke.py).
+NOBOARD:
+        ld      bc,16
+        add     ix,bc
+        jp      RESTORE_TAIL
         ASSERT  $ <= RB+$6572
 
 

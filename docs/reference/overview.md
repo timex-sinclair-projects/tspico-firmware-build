@@ -133,16 +133,17 @@ consequences before their causes.
 
 | What | Version | Where it is written | How to read it |
 |---|---|---|---|
-| Firmware | 2.4 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
-| TS-2068 ROM | 2.4 | HOME 0065h (`PEEK 101` = 36), BIOS G_VERS = 0024h, the boot banner, and byte 2 of every command pre-header | `PEEK 101`; `SAVE "tpi:info"` (from the pre-header) |
+| Firmware | 2.5 | `FW_VERSION` in `TS/tspico.py`; `config.ini`'s copy is informational | `SAVE "tpi:info"`; the `[TS.tspico] BUILD_VERSION =` line on USB gives the commit |
+| TS-2068 ROM | 2.5 | HOME 0065h (`PEEK 101` = 37), BIOS G_VERS = 0025h, the boot banner, and byte 2 of every command pre-header | `PEEK 101`; `SAVE "tpi:info"` (from the pre-header) |
 | ZX Spectrum ROM | v4 | the banner byte at 38B7h | the boot screen in ZX48 mode |
-| The ROM's disk module | FDD_VERSION 9 (2.3 added `PS_READ`, 2.4 the COPY, LIST and RESTORE entry and the channel helpers at its end) | EXROM 30AFh | — |
+| The ROM's disk module | FDD_VERSION 9 (2.3 added `PS_READ`, 2.4 the COPY, LIST and RESTORE entry and the channel helpers at its end; 2.5's Megabank code follows the module and does not change it) | EXROM 30AFh | — |
 
 The firmware and the ROM share a major.minor number; the third part is a
-firmware-only release on the same ROM. Firmware 2.4 needs ROM 2.4: after
-`N` at a prompt it ends function 86h's loop itself, which a 2.2 ROM would
-not read, and it answers COPY, `LIST "x"`, `RESTORE #`, `CAT #` and the
-`v:` and `x:` channels, which a 2.3 ROM never sends ([firmware/tspico-state.md](firmware/tspico-state.md#rom_id)). [rom/overview.md](rom/overview.md).
+firmware-only release on the same ROM. Firmware 2.5 is released with ROM
+2.5: after `N` at a prompt it ends function 86h's loop itself, which a 2.2
+ROM would not read; it answers COPY, `LIST "x"`, `RESTORE #`, `CAT #` and
+the `v:` and `x:` channels, which a 2.3 ROM never sends; and its `r:`
+commands need ROM 2.5's mover, refused from any ROM that sends less than 25h ([firmware/tspico-state.md](firmware/tspico-state.md#rom_id)). [rom/overview.md](rom/overview.md).
 
 ## The sources, by size
 
@@ -162,7 +163,8 @@ not read, and it answers COPY, `LIST "x"`, `RESTORE #`, `CAT #` and the
 | `src/rom/fdd/fddcmd.asm` | 1,398 | the disk module | [exrom-fdd.md](rom/exrom-fdd.md) |
 | `src/rom/patches/tspico-sync.asm` | 318 | the SYNC/BREAK layer | [exrom-sync.md](rom/exrom-sync.md) |
 | `src/rom/patches/tspico-zx48-v3.asm` | 280 | the ZX Spectrum ROM v4 | [zx48.md](rom/zx48.md) |
-| `src/rom/TSPICO-24.ROM` | 32K binary | the release ROM, 2.4 | [rom/overview.md](rom/overview.md) and the EXROM chapters |
+| `src/rom/TSPICO-25.ROM` | 32K binary | the release ROM, 2.5 | [rom/overview.md](rom/overview.md) and the EXROM chapters |
+| `src/rom/TSPICO-24.ROM` | 32K binary | the previous release ROM, 2.4 | [rom/overview.md](rom/overview.md) |
 
 Line counts are those of the sources the stamps in the [README](README.md)
 were taken from; [appendix/index.md](appendix/index.md) has the line of

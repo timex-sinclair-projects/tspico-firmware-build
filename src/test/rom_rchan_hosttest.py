@@ -1,6 +1,6 @@
 """The r: channels' per-character code (rchan.asm), in the Z80 interpreter.
 
-src/rom/TSPICO-MB.ROM's MB_OUT and MB_IN (what HOME's 14A0h and 14A9h stubs
+src/rom/TSPICO-25.ROM's MB_OUT and MB_IN (what HOME's 14A0h and 14A9h stubs
 reach for an 'R' record) run here against the firmware's own ramdisk.py, on
 one model board: the firmware opens the stream (Disk.open_stream, as
 tpi:rchopen does) and the record is built from the slot's block as RCH_OPEN
@@ -51,7 +51,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 from rom_bankapi_hosttest import Machine, w                     # noqa: E402
 from TS import ramdisk as rd                                    # noqa: E402
 
-ROM = os.path.join(REPO, "src", "rom", "TSPICO-MB.ROM")
+ROM = os.path.join(REPO, "src", "rom", "TSPICO-25.ROM")
 ASM = os.path.join(REPO, "src", "rom", "fdd", "fddcmd.asm")
 
 SYM = {"MB_OUT": 0x2447, "MB_IN": 0x2455, "RCH_ENDREC": 0x28F8, "RCH_WB": 0x2A32, "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2C73, "RCH_OUT": 0x2716, "RCH_SYNC": 0x2779,
@@ -88,7 +88,7 @@ def check_syms():
         rom = open(ROM, "rb").read()
         rch = open(os.path.join(d, "rchan.bin"), "rb").read()
         check(rom[0x4000 + 0x2400:0x4000 + 0x2400 + len(rch)] == rch,
-              "TSPICO-MB.ROM holds the assembled rchan.asm at EXROM 2400h")
+              "TSPICO-25.ROM holds the assembled rchan.asm at EXROM 2400h")
     finally:
         shutil.rmtree(d, ignore_errors=True)
 

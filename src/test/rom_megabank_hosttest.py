@@ -1,6 +1,6 @@
 """The Megabank test ROM's boot reset, block gates and mover in the Z80 interpreter.
 
-src/rom/TSPICO-MB.ROM (tools/build-rom.py --megabank; CI checks it is what
+src/rom/TSPICO-25.ROM (tools/build-rom.py --megabank; CI checks it is what
 the build makes) runs here against a model of the 2068's memory map with the
 TS-2068 Megabank fitted, including the rule measured on hardware that
 ZEsarUX's model leaves out: /BE keeps the 2068's own memory off a read, but
@@ -35,7 +35,7 @@ sys.path.insert(0, HERE)
 
 from z80core import Z80                                          # noqa: E402
 
-ROM = os.path.join(REPO, "src", "rom", "TSPICO-MB.ROM")
+ROM = os.path.join(REPO, "src", "rom", "TSPICO-25.ROM")
 
 MB_BOOT, FN_EXT, R_SA, R_LD = 0x3998, 0x3A61, 0x39F5, 0x3A06
 SYSCON_END, PICO_SA, PICO_LD, SA_RET = 0x2082, 0x1879, 0x196D, 0x00E5

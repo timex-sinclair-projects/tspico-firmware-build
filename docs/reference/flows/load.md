@@ -70,7 +70,7 @@ The Z80 drives the search: it asks for headers until one matches, and a ROM
 without SYNC (ROM 1.1) cannot tell the Pico it gave up. So `LOAD_TS` keeps a search
 start (`ld_start`) and lets the tape wrap round once: a header request that
 comes back to where the search began after a wrap is answered with status
-7 ("End of file"; ROMs 2.1 to 2.4 show it as R), and the search ends. `LOAD
+7 ("End of file"; ROMs 2.1 to 2.5 show it as R), and the search ends. `LOAD
 "name"` with no such program therefore ends with a report after one lap,
 not a hang ([../firmware/tspico_io.md](../firmware/tspico_io.md#load_tspre-mq-tsp)).
 
@@ -121,7 +121,7 @@ afterwards unchanged; a different session means the arm is stale and the
 mount is served ([../firmware/tspico_io.md](../firmware/tspico_io.md#load_servepre-mq-tsp),
 [../firmware/tspico-disk.md](../firmware/tspico-disk.md#native_openpre-cmd)).
 
-### `LOAD "r:name"` (the Megabank test ROM only)
+### `LOAD "r:name"` (ROM 2.5 only)
 
 F_HOOK sends `tpi:ropen name` (PMR1 = 1 LOAD, 2 VERIFY, 3 MERGE) and sets
 TPMODE bit 5 (through `SET_MODE_R`, which first sends `tpi:rmask`, the

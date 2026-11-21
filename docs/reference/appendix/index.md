@@ -1385,14 +1385,17 @@ regenerate it when a line number moves (the test checks that it is current).
 | `NEWOWN` | label | [202](../../../src/rom/fdd/bankapi.asm#L202) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `SAVE_BOARD` | label | [223](../../../src/rom/fdd/bankapi.asm#L223) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `RESTORE_BOARD` | label | [245](../../../src/rom/fdd/bankapi.asm#L245) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RESTORE_TAIL` | label | [264](../../../src/rom/fdd/bankapi.asm#L264) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `MBBASE` | label | [283](../../../src/rom/fdd/bankapi.asm#L283) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 | `GET_STATUS` | label | [296](../../../src/rom/fdd/bankapi.asm#L296) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `GET_CHUNK` | label | [341](../../../src/rom/fdd/bankapi.asm#L341) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `GET_NUMBER` | label | [364](../../../src/rom/fdd/bankapi.asm#L364) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `BANK_ENABLE` | label | [410](../../../src/rom/fdd/bankapi.asm#L410) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `SAVE_STATUS` | label | [496](../../../src/rom/fdd/bankapi.asm#L496) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `TIMEX_HSR` | label | [519](../../../src/rom/fdd/bankapi.asm#L519) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
-| `RESTORE_STATUS` | label | [548](../../../src/rom/fdd/bankapi.asm#L548) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TO_HOME` | label | [343](../../../src/rom/fdd/bankapi.asm#L343) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `GET_CHUNK` | label | [357](../../../src/rom/fdd/bankapi.asm#L357) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `GET_NUMBER` | label | [380](../../../src/rom/fdd/bankapi.asm#L380) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `BANK_ENABLE` | label | [426](../../../src/rom/fdd/bankapi.asm#L426) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `SAVE_STATUS` | label | [512](../../../src/rom/fdd/bankapi.asm#L512) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `TIMEX_HSR` | label | [536](../../../src/rom/fdd/bankapi.asm#L536) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `RESTORE_STATUS` | label | [565](../../../src/rom/fdd/bankapi.asm#L565) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
+| `NOBOARD` | label | [584](../../../src/rom/fdd/bankapi.asm#L584) | [rom/exrom-fdd.md](../rom/exrom-fdd.md) |
 
 ## `src/rom/fdd/rchan.asm`
 

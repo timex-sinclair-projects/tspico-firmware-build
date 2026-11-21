@@ -254,7 +254,7 @@ channel until the next command, `CLOSE #4`, or the stream's next OPEN.
 
 ## The Megabank's RAM disk (`r:`)
 
-Only in the Megabank test ROM (2.5). `OPEN #4,"r:log","w"`: `CH_OPEN_HOOK`
+Only in ROM 2.5. `OPEN #4,"r:log","w"`: `CH_OPEN_HOOK`
 calls `RCH_KIND` in place of `SPEC_KIND`, which takes `r:` itself
 (`RCH_OPEN`): it parses the mode and record length as for `f:`, sends
 `tpi:rchopen` with the open-stream mask, the address of 16 bytes on the
