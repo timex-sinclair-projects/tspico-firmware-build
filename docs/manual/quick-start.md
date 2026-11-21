@@ -46,8 +46,10 @@ connector at the back right of the 2068, and the TS-Pico into any of its slots.
 ![An expansion bus board: the long connector at the front goes into the 2068, and cards go into its four slots](images/bus-expansion.svg)
 <!-- /v3 -->
 
+<!-- v2 -->
 > **Warning.** Set the BUSISO bypass for the TS-Pico's slot, or the TS-Pico won't work. With jumpers, remove the jumper for the TS-Pico's slot; with switches, slide its
 > BUSISO switch towards the 2068.
+<!-- /v2 -->
 
 Both connectors are keyed, so they only go in one way. Expect a fair amount of resistance when
 you press the board home. If you find yourself forcing it, stop and check that the key lines up
