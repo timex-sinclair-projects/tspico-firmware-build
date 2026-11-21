@@ -245,6 +245,7 @@ one of the four slots.*
 *The TS-Pico on a 3-slot expansion bus, in the slot nearest the 2068.*
 <!-- /v2 -->
 
+<!-- v2 -->
 > **Warning.** Set the BUSISO bypass for the TS-Pico's slot, or the TS-Pico won't work. The bus has "BUSISO bypass" jumpers or switches on its right-hand side, between
 > the card-edge connectors.
 >
@@ -252,6 +253,7 @@ one of the four slots.*
 >   doesn't get lost.
 > - With switches: slide the BUSISO switch towards the 2068. The other switches stay towards the
 >   back of the board, away from the 2068.
+<!-- /v2 -->
 
 Both connectors are keyed, so they only go in one way. Expect a fair amount of resistance when
 you press the board home. That's normal. If you find yourself forcing it, stop and check that
@@ -445,8 +447,13 @@ recovers once it loses power, which taking the card out, or switching everything
 
 ## 2.7 Summary
 
+<!-- v2 -->
 1. Switch the 2068 off before connecting anything, and set the BUSISO bypass for the TS-Pico's
    slot on the expansion bus.
+<!-- /v2 -->
+<!-- v3 -->
+1. Switch the 2068 off before connecting anything.
+<!-- /v3 -->
 <!-- v2 -->
 2. Keep the P10 jumper fitted.
 <!-- /v2 -->

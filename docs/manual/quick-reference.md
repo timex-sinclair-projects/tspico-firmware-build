@@ -86,7 +86,7 @@ switch-on: `SAVE "tpi:verbose" CODE 1,1` turns them on, `CODE 1,0` off.
 2. Fit the TS-Pico in an expansion bus, and set the BUSISO bypass for its slot. Keep P10 fitted.
 <!-- /v2 -->
 <!-- v3 -->
-2. Fit the TS-Pico in an expansion bus, and set the BUSISO bypass for its slot.
+2. Fit the TS-Pico in any slot of an expansion bus.
 <!-- /v3 -->
 3. Put the micro SD card in, contacts first, and switch on.
 4. Press ENTER and type `CAT`: you see the card's `TAP` folder.
