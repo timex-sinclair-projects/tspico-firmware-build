@@ -8,8 +8,12 @@ AROS images, its menu and SD card loads with it fitted all work. That run
 found one bug, fixed: after a restart in the mode, `CODE 0,2` swapped the
 mode for itself. On a v2 board the same day, the same steps passed too.
 There the 2068 may show black and white bars for a moment at switch-on,
-while the TS-Pico holds it in reset, before the copyright message. Where
-the firmware differs from the first draft below, "Firmware changes" says so.
+while the TS-Pico holds it in reset, before the copyright message. Step 5
+passed on v2: ZX Spectrum mode works after `CODE 2,0`. The PicoCart's
+white LED flickers while the dock is paged in (`OUT 244,3`) and stops at
+`OUT 244,0`, presumably its dock-read activity light; ZX48 wasn't
+affected. Where the firmware differs from the first draft below,
+"Firmware changes" says so.
 
 We have always told owners that a cartridge in the 2068's own DOCK slot
 won't work while the TS-Pico is plugged in. That has never been tested.
