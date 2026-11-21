@@ -51,7 +51,7 @@ def check(cond, msg):
 def tsp(**kw):
     base = dict(zx48=False, f_name="", append=False, cur_path="/sd/TAP", VERBOSE=False,
                 LOG_LEVEL=2, offset=0, offset_tbl=[], tap_idx=0, sd_present=True, sd_cid=5,
-                sd_listing_ok=True, save_no_card=False)
+                sd_listing_ok=True, save_no_card=False, dock_cart=False)
     base.update(kw)
     return types.SimpleNamespace(**base)
 

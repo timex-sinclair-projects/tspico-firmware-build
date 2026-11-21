@@ -487,7 +487,8 @@ def early_init():
     tsbus.start()
 
 
-_served = None      # ((boot mem, slot), (dock mem, slot)) the 2068 is served now
+_served = None      # ((boot mem, slot), (dock mem, slot)) the 2068 is served now; dock None: dock_cart
+_cart = False       # dock_cart: the dock is the 2068's own dock slot, DOCK not served
 _boot_stale = False  # write_slot rewrote the boot slot: tpi:boot loads it again
 
 # The one block buffer: every slot passes through its first 32K (a ROM, each
@@ -688,8 +689,9 @@ def write_slot(mem, slot, path):
                 out.write(_buf)
     written = (slot, slot + 1) if pair else (slot,)
     if _served is not None:
-        boot, (dmem, dslot) = _served
-        docked = (dslot, dslot + 1) if dslot % 2 == 0 else (dslot,)
+        boot, dock = _served
+        dmem, dslot = dock or (None, None)
+        docked = () if dock is None else (dslot, dslot + 1) if dslot % 2 == 0 else (dslot,)
         if _reads(dmem, mem) and any(s in docked for s in written):
             tsbus.dock(False)
             load_dock(dmem * 4, dslot * 16)
@@ -713,13 +715,16 @@ def start_memory(rom_sm, bank_sm):
     m = memoryview(_buf)
     tsbus.load(tsbus.HOME, m[:16384])
     tsbus.load(tsbus.EXROM, m[16384:])
-    note = load_dock(rom_sm, bank_sm) or note
-    tsbus.dock_writes((rom_sm >> 2) & 3 == MEM_SRAM)   # a flash dock is read-only, as v2's chip
+    if not _cart:                                      # dock_cart: DOCK left unserved, nothing loaded
+        note = load_dock(rom_sm, bank_sm) or note
+        tsbus.dock_writes((rom_sm >> 2) & 3 == MEM_SRAM)   # a flash dock is read-only, as v2's chip
     tsbus.exrom(True)
-    tsbus.dock(True)
+    tsbus.dock(not _cart)
     tsbus.serve(True)
     tsbus.hold(False)
     _served = _keys(rom_sm, bank_sm)
+    if _cart:
+        _served = (_served[0], None)
     _boot_stale = False
     if note:
         print("[board] " + note)
@@ -743,12 +748,21 @@ def map_slots(rom_sm, bank_sm, reboot=False):
     reboot is tpi:boot's: it also reloads a boot slot that hasn't changed
     in the words but has on disk (write_slot set _boot_stale), as the
     loaders romupd3/dckupd3 promise. tpi:dock leaves it off, so writing the
-    booted slot never resets the 2068 behind a dock change."""
+    booted slot never resets the 2068 behind a dock change.
+
+    With dock_cart on, DOCK serving is turned off (a RAM dock saved back
+    first) and the dock isn't loaded: the cartridge in the 2068's dock
+    answers. When it's off again, the dock is loaded as a new one."""
     global _served, _boot_stale
     boot, dock = _keys(rom_sm, bank_sm)
     note = None
-    if _served is None or dock != _served[1]:
-        if _served is not None:
+    if _cart:
+        if _served is not None and _served[1] is not None:
+            save_ram_dock(_served[1])
+        tsbus.dock(False)
+        dock = None
+    elif _served is None or dock != _served[1]:
+        if _served is not None and _served[1] is not None:
             save_ram_dock(_served[1])
         tsbus.dock(False)
         note = load_dock(rom_sm, bank_sm)
@@ -761,6 +775,14 @@ def map_slots(rom_sm, bank_sm, reboot=False):
         _boot_stale = False
     _served = (boot, dock)
     return note
+
+
+def dock_cart(on):
+    """The dock is a cartridge in the 2068's own dock slot (on), or the
+    dock slot here (off). Takes effect at the next map_slots, which the
+    caller makes; at boot, call it before start_memory."""
+    global _cart
+    _cart = bool(on)
 
 
 def make_mq():

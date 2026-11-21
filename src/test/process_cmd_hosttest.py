@@ -182,7 +182,7 @@ def make_body(cmd_text, good_checksum=True):
 def fresh(mod, mq):
     """Point the module's globals at our fakes for one call."""
     mod.MQ = mq
-    mod.TSP = types.SimpleNamespace(
+    mod.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, 
         zx48=False, f_name="", append=False, cur_path="/sd/TAP",
         VERBOSE=False, LOG_LEVEL=2, offset=0, offset_tbl=[], tap_idx=0,
         sd_present=True, sd_cid=1, sd_listing_ok=True, save_no_card=False)

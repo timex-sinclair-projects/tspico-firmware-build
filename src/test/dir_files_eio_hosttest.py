@@ -124,7 +124,7 @@ def setup(t, fail_on):
     fos = FakeOS(fail_on)
     t.os = fos
     t.open = fos.open
-    t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", LOG_LEVEL=0, sd_label="")
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, cur_path="/sd/TAP", LOG_LEVEL=0, sd_label="")
     return fos
 
 
@@ -216,7 +216,7 @@ def test_boot(t, logs):
     t.LOG = log
     t.BLINK_ERROR = bricked
     t.LOAD_CONFIG = lambda: {}
-    t.PICO_STATUS = lambda _v: types.SimpleNamespace(
+    t.PICO_STATUS = lambda _v: types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, 
         cur_path="/sd/TAP", LOG_LEVEL=0, ROM_SM=0, bank_sm=0, f_name="", append=False,
         sd_present=False, sd_cid=None, sd_listing_ok=False, save_no_card=False)
     _hw().StateMachine = lambda *a, **k: types.SimpleNamespace(

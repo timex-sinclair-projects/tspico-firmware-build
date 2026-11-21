@@ -116,7 +116,7 @@ def send2(t, msg, colour):
     t.MQ_READY = lambda: None
     t.CMD_DRAIN = lambda: None
     t.MQ = types.SimpleNamespace(rx_fifo=lambda: 0, tx_fifo=lambda: 0, get=lambda: 0)
-    t.TSP = types.SimpleNamespace(ROM_VERSION="2.1")
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, ROM_VERSION="2.1")
     t.SEND_MSG2(msg, 1, False, colour)
     return bytes(out[4:])                                         # past 86h, st, CR, CR
 
@@ -187,7 +187,7 @@ def test_info(t):
     t.BUILD_VERSION = "b7a2e91 (main)"
 
     def run(sd, mounted):
-        t.TSP = types.SimpleNamespace(FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2,
+        t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2,
                                       sd_present=sd, append=False, VERBOSE=True,
                                       f_name="/sd/TAP/GAMES/manic.tap" if mounted else "",
                                       tap_idx=0, offset_tbl=[])
@@ -214,7 +214,7 @@ def test_info(t):
     check(readable(msg), "labels in blue on white paper, never on the screen's (#370)")
 
     t.isTapMounted = lambda: True
-    t.TSP = types.SimpleNamespace(FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2, sd_present=True,
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2, sd_present=True,
                                   append=False, VERBOSE=True, f_name="/sd/TAP/Manic.tap", tap_idx=2,
                                   offset_tbl=[[0, 19, " Y", "manic     "], [21, 20, " N", "Program"],
                                               [43, 19, " Y", "manicscr  "], [64, 6914, " N", "Code block"]])
@@ -244,7 +244,7 @@ def test_info_board(t):
     import ast
     sent = []
     t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: sent.append(msg)
-    t.TSP = types.SimpleNamespace(FW_VERSION="2.3.1", ROM_VERSION="2.3", LOG_LEVEL=2, sd_present=True,
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, FW_VERSION="2.3.1", ROM_VERSION="2.3", LOG_LEVEL=2, sd_present=True,
                                   append=False, VERBOSE=False, f_name="", tap_idx=0, offset_tbl=[])
 
     def board_line(board):
