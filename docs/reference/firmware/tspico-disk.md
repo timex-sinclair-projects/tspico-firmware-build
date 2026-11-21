@@ -817,7 +817,9 @@ COPY with an `r:` side.
 board is not an error here), `Disk.report` by `SEND_MSG2`. `tpi:ram backup
 name`: the RAM disk's pages, first to last, each read with op 4 (8K) and
 appended to `name.rdi` with its own `SD_CALL`, between operations; a file
-that exists: F. `tpi:ram restore name`: the image's size (a multiple of 8K,
+that exists: F. Then `REFRESH_IF` for the backup's folder, in an `SD_CALL`
+of its own: outside one its `chdir` found no `/sd`, and a backup into the
+current folder ended with J. `tpi:ram restore name`: the image's size (a multiple of 8K,
 2 pages or more, no bigger than the board) and its superblock (magic and
 sum) first; over files, `RD_CONFIRMED`; then each page read from the card
 and written with op 5 to the top of this board, the superblock rewritten for

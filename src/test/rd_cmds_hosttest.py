@@ -75,7 +75,18 @@ def run_tests(t, RH, CH, root):
     t.time = clock
     t.os = hos
     t.open = lambda p, mode="r": open(hos.real(p), mode)
-    t.ACTIVATE_SD = t.DEACTIVATE_SD = t.ACTIVATE_MQ = lambda *a, **k: None
+    # The SD card as the board has it: mounted only inside SD_CALL. REFRESH_IF
+    # (os.chdir and DIR_FILES on the card) fails, as on the board, when it
+    # isn't: the J after a tpi:ram backup into the current folder.
+    sd = {"on": False}
+    t.ACTIVATE_SD = lambda *a, **k: sd.__setitem__("on", True)
+    t.DEACTIVATE_SD = lambda *a, **k: sd.__setitem__("on", False)
+    t.ACTIVATE_MQ = lambda *a, **k: None
+
+    def refresh_if(*dirs):
+        if not sd["on"] and any(d.upper() == t.TSP.cur_path.upper() for d in dirs):
+            raise OSError(2, "ENOENT: REFRESH_IF with the card unmounted")
+    t.REFRESH_IF = refresh_if
     # r: answers are CH_REPLY's, READY without IDLE (the next tpi:rblk
     # follows at once); SEND_STATUS would say IDLE too, so it is a failure.
     t.CH_REPLY = lambda st: ev.append(("ST", st))
@@ -84,7 +95,6 @@ def run_tests(t, RH, CH, root):
     t.SEND_MSG2 = lambda msg, st, exp=True, colour=False: ev.append(("MSG2", msg, st))
     t.led = types.SimpleNamespace(value=lambda *a: None)
     t.LOG = lambda *a: None
-    t.REFRESH_IF = lambda *a: None
     t.TSP = types.SimpleNamespace(cur_path="/sd/TAP", f_name="", offset_tbl=[], tap_idx=0,
                                   VERBOSE=False, LOG_LEVEL=2, sd_present=True)
     t.RD = None
