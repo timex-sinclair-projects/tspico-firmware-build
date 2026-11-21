@@ -458,7 +458,7 @@ def test_save_mount(t):
     t.LOG = lambda *a: None
     revalidated = []
     t.SD_REVALIDATE = lambda changed: revalidated.append(changed)
-    t.TSP = types.SimpleNamespace(sd_present=True, sd_cid=7, LOG_LEVEL=2)
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, sd_present=True, sd_cid=7, LOG_LEVEL=2)
     try:
         state["fail"] = 1
         try:
@@ -572,7 +572,7 @@ def test_getinfo(t, root):
     t.os = types.SimpleNamespace(statvfs=lambda p: (4096, 4096, 352, 300))
     t.gc = types.SimpleNamespace(mem_free=lambda: 100000, collect=lambda: None)
     t.lista = " " * 64
-    t.TSP = types.SimpleNamespace(
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, 
         FW_VERSION="2.1", ROM_VERSION="2.1", LOG_LEVEL=2, sd_present=True, ROM_SM=10, bank_sm=1,
         append=False, VERBOSE=False, f_name="/sd/TAP/CUT.TAP", cur_path="/sd/TAP",
         offset_tbl=[[0, 21, " Y", "Program: first"], [21, 10, " N", "10"],
@@ -629,7 +629,7 @@ def test_send_msg_bytes(t):
     t.CMD_PUT = lambda b: sent.append(b)
     t.MQ_READY = lambda: None
     t.CMD_DRAIN = lambda: None
-    t.TSP = types.SimpleNamespace(VERBOSE=True)
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, VERBOSE=True)
     t.MQ = types.SimpleNamespace(tx_fifo=lambda: 0)               # CMD_SEND asks what TX holds
     REAL["SEND_MSG"]("Copied caf\u00e9~", "x\x00y", t._1_OK)
     body = sent[3:]

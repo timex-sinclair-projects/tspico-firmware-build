@@ -83,7 +83,7 @@ def pre_for(par1, par2):
 def setup(t, boot, dock, f_name, image):
     """boot / dock are (mem, page); mem 1 = SRAM, 2 = Flash."""
     sent = []
-    t.TSP = types.SimpleNamespace(
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, 
         ROM_SM=boot[0] + dock[0] * 4, bank_sm=boot[1] + dock[1] * 16,
         f_name=f_name, dck_prev_mem=2, dck_prev_slot=0, VERBOSE=False)
     _hw()._rom, _hw()._bank, t.MQ = Rec(), Rec(), Rec()
@@ -281,6 +281,68 @@ def test_system_slots(t, image):
           and t.SYSTEM_SLOT_LOCK(2, 0) is not None, "SYSTEM_SLOT_LOCK: flash 0 only")
 
 
+def test_cart_dock(t, image):
+    print("cartridge dock mode on v2 (tpi:dock CODE 0,3): set_ctrl enables neither chip on a dock read")
+    import builtins
+    d = tempfile.mkdtemp(prefix="cart_dock.")
+    here = os.getcwd()
+    os.chdir(d)
+    try:
+        sent = setup(t, (2, 1), (2, 8), "", image)
+        t.open = builtins.open                                  # SET_DOCK_CART writes config.ini
+        with open("config.ini", "w") as f:
+            f.write('{"ROM_SLOT": 1, "ROM_SM": 10, "DCK_SLOT": 0}')
+        r = memdock(t, sent, 0, 3)
+        check(r[:3] == ("DOCK is the cartridge slot", "Restart to run the cartridge", t._1_OK) and r[3],
+              "CODE 0,3: OK, shown whatever VERBOSE says (%r)" % (r,))
+        check(_hw()._rom.puts[-1] == 10 | 12 and t.getDock() == (2, 8),
+              "  set_ctrl gets 14: dock bits 11, boot bits flash; the dock slot is kept (%r)" % _hw()._rom.puts[-1:])
+        with open("config.ini") as f:
+            check('"DOCK_CART": true' in f.read(), "  config.ini: DOCK_CART true")
+        _hw().map_slots(t.TSP.ROM_SM, t.TSP.bank_sm)
+        check(_hw()._rom.puts[-1] == 14, "  any later map_slots keeps the dock bits at 11")
+        t.TSP.f_name = "/sd/TAP/TEST.ROM"
+        r = blkrcv(t, sent)
+        check(r is not None and r[2] == t._4_Q_Parameter and r[0] == "The dock is the cartridge slot.",
+              "tpi:blkrcv refused: the Z80 would write the flash through the dock (%r)" % (r,))
+        r = memdock(t, sent, 2, 4)
+        check(r[2] == t._4_Q_Parameter and t.TSP.dock_cart,
+              "leaving it with a .ROM mounted: Report Q, still the cartridge slot (%r)" % (r,))
+        t.TSP.f_name = ""
+        r = memdock(t, sent, 2, 4)
+        check(r[:3] == ("Change DOCK to MEM=2, PAGE=4", "Take the cartridge out first", t._1_OK) and r[3]
+              and not t.TSP.dock_cart and _hw()._rom.puts[-1] == 10,
+              "CODE 2,4 ends it, with the warning; set_ctrl gets 10 again (%r)" % (r,))
+        with open("config.ini") as f:
+            check('"DOCK_CART": false' in f.read(), "  config.ini: DOCK_CART false")
+        r = memdock(t, sent, 0, 1)
+        check(r[1] == "  the cartridge slot", "CODE 0,1: the previous setting was the cartridge slot (%r)" % (r,))
+        # A restart with the mode on: the previous setting is the kept slot,
+        # not the mode again (on a v3 card 2026-11-21, CODE 0,2 swapped the
+        # mode for itself and the dock stayed unserved).
+        with open("config.ini", "w") as f:
+            f.write('{"ROM_SLOT": 1, "ROM_SM": 10, "DCK_SLOT": 0, "DOCK_CART": true}')
+        tsp = t.PICO_STATUS({"ROM_SM": 10, "DCK_SLOT": 0, "ROM_SLOT": 1, "LOG_LEVEL": 2,
+                             "DOCK_CART": True})
+        check(tsp.dock_cart and not tsp.dck_prev_cart and (tsp.dck_prev_mem, tsp.dck_prev_slot) == (2, 0),
+              "PICO_STATUS with DOCK_CART on: the previous setting is the kept slot, MEM=2 PAGE=0")
+        tsp.f_name = ""
+        saved, t.TSP = t.TSP, tsp
+        try:
+            _hw().dock_cart(True)
+            r = memdock(t, sent, 0, 2)
+            check(r[0] == "Change DOCK to MEM=2, PAGE=0" and not t.TSP.dock_cart and t.getDock() == (2, 0)
+                  and _hw()._rom.puts[-1] == 10,
+                  "  CODE 0,2 after that restart leaves the mode: set_ctrl gets 10 (%r)" % (r,))
+            with open("config.ini") as f:
+                check('"DOCK_CART": false' in f.read(), "  config.ini: DOCK_CART false")
+        finally:
+            t.TSP = saved
+    finally:
+        _hw().dock_cart(False)
+        os.chdir(here)
+
+
 def test_dma_pieces(t):
     print("BLKRCV streams by DMA in 32K pieces, one per Z80 write loop (#372)")
     # A 64K bytearray doesn't fit the v2 heap (largest block ~52K): BLKRCV
@@ -341,6 +403,7 @@ def main():
         test_dck(t, image)
         test_plain_dock(t, image)
         test_system_slots(t, image)
+        test_cart_dock(t, image)
         test_dma_pieces(t)
     finally:
         os.remove(image)

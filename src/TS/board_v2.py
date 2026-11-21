@@ -38,6 +38,7 @@ def NULL_SM():
 
 _rom = None         # set_ctrl on SM4: /BE, A14_L and the flash/SRAM chip enables
 _bank = None        # sel_bank on SM5: the A15-A18 slot lines
+_cart = False       # dock_cart: the dock is the 2068's own dock slot, not a slot here
 
 
 def early_init():
@@ -80,9 +81,19 @@ def rom_slot_empty(mem, slot):
 
 def map_slots(rom_sm, bank_sm, reboot=False):
     """Switch the boot and dock slots, under a running 2068. reboot (tpi:boot
-    sets it) means nothing here: the 2068 reads the slot's chip directly."""
-    _rom.put(rom_sm)
+    sets it) means nothing here: the 2068 reads the slot's chip directly.
+    With dock_cart on, the dock bits of the word set_ctrl gets are 11: on a
+    dock read it enables neither chip, so the cartridge answers alone."""
+    _rom.put(rom_sm | 12 if _cart else rom_sm)
     _bank.put(bank_sm)
+
+
+def dock_cart(on):
+    """The dock is a cartridge in the 2068's own dock slot (on), or the
+    dock slot here (off). Takes effect at the next map_slots, which the
+    caller makes; at boot, call it before start_memory."""
+    global _cart
+    _cart = bool(on)
 
 
 def make_mq():

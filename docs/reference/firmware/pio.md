@@ -212,7 +212,10 @@ No side-set.
 `ROM_SM = dock MEM * 4 + boot MEM`, where MEM is 1
 for SRAM and 2 for flash (`LOAD_CONFIG`, [tspico-dispatch.md](tspico-dispatch.md));
 the only valid values are 5, 6, 9 and 10, and the default is 10, both from
-flash.
+flash. In cartridge dock mode `board_v2.map_slots` puts `ROM_SM | 12`
+instead, 13 or 14: dock bits 11, so on a dock read instruction 10 drives
+both enables high and neither chip answers, leaving the read to the
+cartridge in the 2068's dock slot ([board.md](board.md)).
 
 | Bits | Meaning | Driven when |
 |---|---|---|

@@ -157,7 +157,7 @@ def test_activate_sd(t):
     print("ACTIVATE_SD, card wedged")
     env = install(t)
     env.card.wedged = True
-    t.TSP = types.SimpleNamespace(LOG_LEVEL=0, sd_present=True, sd_cid=0, sd_listing_ok=True, save_no_card=False)           # a card was in
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, LOG_LEVEL=0, sd_present=True, sd_cid=0, sd_listing_ok=True, save_no_card=False)           # a card was in
     try:
         t.ACTIVATE_SD()
         outcome = "returned"
@@ -179,7 +179,7 @@ def run_cmd(t, env, text, load_cmd=0):
     t.ACTIVATE_MQ()                            # the session's bus SM
     bus = t.MQ
     bus.rx = list(P.make_body(text))
-    t.TSP = types.SimpleNamespace(
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, 
         zx48=False, f_name="", append=False, cur_path="/sd/TAP",
         VERBOSE=False, LOG_LEVEL=0, offset=0, offset_tbl=[], tap_idx=0,
         sd_present=True, sd_cid=0, sd_listing_ok=True, save_no_card=False)
@@ -230,7 +230,7 @@ def boot_fakes(t, env, inject_pre):
 
     t.LOG = log
     t.LOAD_CONFIG = lambda: {}
-    t.PICO_STATUS = lambda _v: types.SimpleNamespace(
+    t.PICO_STATUS = lambda _v: types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, 
         cur_path="/sd/TAP", LOG_LEVEL=0, ROM_SM=0, bank_sm=0, f_name="",
         append=False, tap_idx=0, offset=0, offset_tbl=[], zx48=False,
         VERBOSE=False, sd_present=False, sd_cid=None, sd_listing_ok=False,

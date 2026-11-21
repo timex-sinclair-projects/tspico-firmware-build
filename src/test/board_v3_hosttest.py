@@ -451,7 +451,7 @@ def main():
     sent = []
     t.SEND_MSG = lambda msg, msg2, st, force=False: sent.append((msg, st))
     t.TLM = lambda *a, **k: None
-    t.TSP = types.SimpleNamespace(f_name="")
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, f_name="")
     t.MQ = types.SimpleNamespace(put=lambda b: None)
     t.LOG = lambda *a: None
     del sent[:]
@@ -462,7 +462,7 @@ def main():
     os.chdir(d)
     with open("config.ini", "w") as f:
         f.write('{"ROM_SLOT": 1, "ROM_SM": 10}')
-    t.TSP = types.SimpleNamespace(ROM_SM=10, bank_sm=0x01, dck_prev_mem=2, dck_prev_slot=0, f_name="")
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, ROM_SM=10, bank_sm=0x01, dck_prev_mem=2, dck_prev_slot=0, f_name="")
     t.LOG = lambda *a: None
     t.utime = types.SimpleNamespace(sleep=lambda s: None)
     put_slot("F01.bin", 0x10)
@@ -525,6 +525,72 @@ def main():
     board.start_memory(0x0A, 0x01)
     take()
     check(not os.path.exists(os.path.join(b3.SLOTS_DIR, "S04.bin")), "and a boot clears it, as v2's power-off")
+
+    print("cartridge dock mode (tpi:dock CODE 0,3): DOCK left to the 2068's dock slot")
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, ROM_SM=10, bank_sm=0x01,
+                                  dck_prev_mem=2, dck_prev_slot=0, f_name="", zx48=False, ZX_TAPE_COMPAT=False)
+    t.MEMDOCK(pre(1, 4), "")                                 # a RAM dock with the Z80's data in it
+    take()
+    IMG[2][:] = data
+    del sent[:]
+    t.MEMDOCK(pre(0, 3), "")
+    got = take()
+    check(sent[-1] == ("DOCK is the cartridge slot", t._1_OK) and t.TSP.dock_cart,
+          "CODE 0,3: OK, \"DOCK is the cartridge slot\" (%r)" % sent[-1:])
+    check(("dock", False) in got and ("dock", True) not in got
+          and not [c for c in got if c[0] == "load_at" and c[1] == 2],
+          "  DOCK serving off, and stays off: nothing loaded into the dock")
+    s4 = open(os.path.join(b3.SLOTS_DIR, "S04.bin"), "rb").read()
+    s5 = open(os.path.join(b3.SLOTS_DIR, "S05.bin"), "rb").read()
+    check(s4 + s5 == data, "  the RAM dock left behind is saved first")
+    check(t.getDock() == (1, 4), "  the TS-Pico slot is kept: getDock still says 1,4")
+    with open("config.ini") as f:
+        check('"DOCK_CART": true' in f.read(), "  config.ini: DOCK_CART true, for the next switch-on")
+    del sent[:]
+    t.MEMDOCK(pre(0, 0), "")
+    check(sent[-1] == ("DOCK is the cartridge slot", t._1_OK), "CODE 0,0 reports it (%r)" % sent[-1:])
+    t.MEMBOOT(pre(2, 1), "")
+    check(("dock", True) not in take(), "tpi:boot in cartridge dock mode leaves the DOCK unserved")
+    cimg = os.path.join(d, "cart.bin")
+    with open(cimg, "wb") as f:
+        f.write(bytes(65536))
+    board.write_slot(1, 4, cimg)                             # the kept dock slot rewritten under it: no reload
+    check(("dock", True) not in take(), "a slot write in cartridge dock mode doesn't serve the DOCK")
+    del sent[:]
+    t.ZX48(pre(0, 0), "")
+    check(sent[-1] == ("The dock is the cartridge slot.", t._4_Q_Parameter) and not t.TSP.zx48,
+          "tpi:zx48 refused: Report Q, ZX48 mode not entered (%r)" % sent[-1:])
+    board.start_memory(0x06, 0x41)                           # a boot in cartridge dock mode
+    got = take()
+    check(("dock", False) in got and ("dock", True) not in got
+          and not [c for c in got if c[0] == "load_at" and c[1] == 2],
+          "a boot with dock_cart on: DOCK not served, not loaded")
+    t.TSP.ROM_SM, t.TSP.bank_sm = 0x06, 0x41
+    t.TSP.f_name = "/sd/TAP/romupdate.rom"                   # an updater picking its slot
+    del sent[:]
+    t.MEMDOCK(pre(2, 8), "")
+    check(sent[-1] == ("The dock is the cartridge slot.", t._4_Q_Parameter) and t.TSP.dock_cart
+          and ("dock", True) not in take(), "leaving it with a .ROM mounted: Report Q, nothing moved (%r)" % sent[-1:])
+    t.TSP.f_name = ""
+    del sent[:]
+    t.MEMDOCK(pre(2, 8), "")
+    got = take()
+    check(sent[-1] == ("Change DOCK to MEM=2, PAGE=8", t._1_OK) and not t.TSP.dock_cart,
+          "CODE 2,8 ends it: OK (%r)" % sent[-1:])
+    check(IMG[2] == f08 + f09 and ("dock", True) in got, "  the dock is loaded and served again: F08 then F09")
+    with open("config.ini") as f:
+        check('"DOCK_CART": false' in f.read(), "  config.ini: DOCK_CART false")
+    t.MEMDOCK(pre(0, 2), "")
+    got = take()
+    check(t.TSP.dock_cart and ("dock", False) in got and ("dock", True) not in got,
+          "CODE 0,2 swaps back into cartridge dock mode")
+    t.MEMDOCK(pre(0, 2), "")
+    got = take()
+    check(not t.TSP.dock_cart and t.getDock() == (2, 8) and ("dock", True) in got,
+          "  and out again, to flash 8")
+    board.dock_cart(False)
+    board.start_memory(0x0A, 0x01)
+    take()
 
     print("writing slots (tpi:blkrcv on v3)")
     img = os.path.join(d, "temp.bin")
@@ -599,7 +665,7 @@ def main():
     sent_w = []
     t.SEND_MSG = lambda msg, msg2, st, force=False: sent_w.append((msg, msg2, st))
     t.LOG = lambda *a: None
-    t.TSP = types.SimpleNamespace(f_name="/sd/TAP/game.dck")
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, f_name="/sd/TAP/game.dck")
     calls_w = []
     real_ws = t.board.write_slot
     t.board.write_slot = lambda m, s_, p: calls_w.append((m, s_, p)) or "Flash slots 4-5"
@@ -651,7 +717,7 @@ def main():
     t.ACTIVATE_MQ = lambda: mounts.append("mq")
     sent_d = []
     t.SEND_MSG = lambda msg, msg2, st, force=False: sent_d.append((msg, msg2, st))
-    t.TSP = types.SimpleNamespace(ROM_SM=10, bank_sm=0x01, dck_prev_mem=2, dck_prev_slot=0, f_name="")
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, ROM_SM=10, bank_sm=0x01, dck_prev_mem=2, dck_prev_slot=0, f_name="")
     board.start_memory(0x0A, 0x01)
     take()
     t.MEMDOCK(pre(3, 8), "")
@@ -835,7 +901,7 @@ def main():
     logs = []
     t.LOG = lambda msg, lvl=0: logs.append(msg)
     t.SAVE_LOG = lambda: None
-    t.TSP = types.SimpleNamespace(sd_present=True, sd_cid=None)
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, sd_present=True, sd_cid=None)
     t.SDCard = lambda *a: CALLS.append(("SDCard",)) or (_ for _ in ()).throw(AssertionError("SPI on an empty socket"))
     IN1[0] = 0xFF
     take()
@@ -930,7 +996,7 @@ def main():
     with open(os.path.join(tap_root, "x.tap"), "wb") as f:
         f.write(b"ZXTape!\x1a")
     t.catalog.ROOT = tap_root
-    t.TSP = types.SimpleNamespace(cur_path=os.path.join(tap_root, "GAMES"), sd_present=True, f_name="",
+    t.TSP = types.SimpleNamespace(dock_cart=False, dck_prev_cart=False, cur_path=os.path.join(tap_root, "GAMES"), sd_present=True, f_name="",
                                   offset_tbl=[], offset=0, tap_idx=0, append=True, totlen=0)
     saved_sd = (t.ACTIVATE_SD, t.DEACTIVATE_SD, t.ACTIVATE_MQ)
     t.ACTIVATE_SD = act_sd

@@ -687,6 +687,14 @@ class PICO_STATUS():                                                            
         # memory and CODE 0,2 swapped to a flash slot nobody had chosen.
         # (2026-09-30 audit, §2 #19.)
         self.dck_prev_mem  = (self.ROM_SM >> 2) & 3
+        # DOCK_CART: the dock is a cartridge in the 2068's own dock slot, and
+        # the TS-Pico leaves dock reads alone (board.dock_cart). The DOCK
+        # slot above is kept, for when it's turned off. dck_prev_cart is the
+        # third half of tpi:dock's "previous setting". It starts off even
+        # when the mode is on: the previous setting is then the kept slot,
+        # and CODE 0,2 after a restart leaves the mode, as it does before.
+        self.dock_cart = init_values.get("DOCK_CART", False) is True
+        self.dck_prev_cart = False
 
 
 # ─── DUAL-PORT MIGRATION: new helper DEACTIVATE_SD ─────────────────────
@@ -5208,6 +5216,15 @@ def BLKRCV(pre, cmd):                                                           
     if not board.SLOTS:                     # the v3 card: the Pico writes the slot itself
         return SLOT_WRITE(pre)
 
+    # v2: the Z80 writes the flash through the TS-Pico's dock, which a
+    # cartridge in the 2068's dock would answer too. MEMDOCK refuses to
+    # leave cartridge dock mode with an image mounted, so this is the
+    # belt to its braces.
+    if TSP.dock_cart:
+        LOG("BLKRCV: the dock is the cartridge slot. Command refused", 1)
+        SEND_MSG(*DOCK_CART_MSG, _4_Q_Parameter, True)
+        return
+
     # The Z80 erases and writes the DOCK slot as soon as this returns OK.
     # If that slot is the one it boots from, stop here (MEMDOCK normally
     # refused it already): report Q, nothing streamed, nothing erased.
@@ -5843,7 +5860,7 @@ def GETINFO(pre, cmd):                                                 # Shows T
     mem, page = getBoot()
     M.append(lab("Boot") + "%-6s" % ("%d,%d" % (mem, page)))
     mem, page = getDock()
-    M.append(BLUE_ + "Dock " + PLAIN_ + "%d,%d" % (mem, page) + nl)
+    M.append(BLUE_ + "Dock " + PLAIN_ + ("cart" if TSP.dock_cart else "%d,%d" % (mem, page)) + nl)
     M.append(lab("Append") + "%-6s" % ("on" if TSP.append else "off")
              + BLUE_ + "Verbose " + PLAIN_ + ("on" if TSP.VERBOSE else "off") + nl)
 
@@ -6108,6 +6125,7 @@ def LOAD_CONFIG():
     default_values["DCK_SLOT"] = 0                             # Slot in Flash for DCK image at startup
     default_values["ROM_SLOT"] = 1                             # Slot in Flash for ROM image at startup
     default_values["ROM_SM"] = 10                              # Flash/SRAM activation pattern bitmap for DCK access (MSB=10) and ROM access (LSB=10)
+    default_values["DOCK_CART"] = False                        # the dock is a cartridge in the 2068's dock slot (tpi:dock CODE 0,3)
     default_values["LOG_LEVEL"] = 2                            # Only log errors and up
     default_values["VERBOSE"] = False                          # Disable verbosity on commands
     default_values["ZX_TAPE_COMPAT"] = False                   # Use regular tape load routine in zx48 mode
@@ -6159,13 +6177,14 @@ def LOAD_CONFIG():
 
     # The modem's keys (the v3 card, docs/v3-modem-proposal.md): a mode it
     # knows, a pace from 0 (none) to the line's 115200, an idle time from a
-    # minute to a day; the joystick's on/off; speech's volume, rate and ports,
+    # minute to a day; the joystick's on/off; the cartridge dock's on/off; speech's volume, rate and ports,
     # the greeting and the auto-mount; the printer's line ends and paging. Anything else is logged and replaced, as
     # above.
     for key, ok in (("MODEM_MODE", lambda v: v in ("2050", "hayes", "off")),
                     ("MODEM_BAUD", lambda v: type(v) is int and 0 <= v <= 115200),
                     ("MODEM_IDLE_MIN", lambda v: type(v) is int and 1 <= v <= 1440),
                     ("KEMPSTON", lambda v: type(v) is bool),
+                    ("DOCK_CART", lambda v: type(v) is bool),
                     ("SPEECH_VOLUME", lambda v: type(v) is int and 0 <= v <= 100),
                     ("SPEECH_RATE", lambda v: type(v) is int and 50 <= v <= 150),
                     ("SPEECH_PORTS", lambda v: type(v) is bool),
@@ -6509,11 +6528,36 @@ def BOOT_SLOT_CLASH(mem, page, f_name):
             "the 2068 is running from it." + chr(13) + "Boot another slot first.")
 
 
+# What tpi:zx48 and (v2) tpi:blkrcv say in cartridge dock mode: both need
+# the TS-Pico's own dock.
+DOCK_CART_MSG = ("The dock is the cartridge slot.", "Use tpi:dock CODE 2,0 first.")
+
+
+def SET_DOCK_CART(on):
+    """Cartridge dock mode on or off: TSP, config.ini (DOCK_CART, so it
+    lasts through a restart, when the 2068 ROM looks for an LROS cartridge)
+    and the board. The caller then calls board.map_slots, which applies it."""
+
+    global TSP
+
+    TSP.dock_cart = on
+    board.dock_cart(on)
+    try:
+        with open("config.ini", "r") as f:
+            init_values = json.load(f)
+    except (OSError, ValueError):
+        init_values = {}
+    init_values["DOCK_CART"] = on
+    with open("config.ini", "w") as f:
+        json.dump(init_values, f)
+
+
 def MEMDOCK(pre, cmd):                                                  # Changes DCK slot; either SRAM or Flash
 
     # SAVE "tpi:dock" CODE 0,0   - Display setting
     # SAVE "tpi:dock" CODE 0,1   - Display previous setting
     # SAVE "tpi:dock" CODE 0,2   - Swap to previous setting
+    # SAVE "tpi:dock" CODE 0,3   - The dock is a cartridge in the 2068's dock slot
     # SAVE "tpi:dock" CODE 1,m   - Assign SRAM page m to dock
     # SAVE "tpi:dock" CODE 2,m   - Assign flash page m to dock
 
@@ -6522,7 +6566,8 @@ def MEMDOCK(pre, cmd):                                                  # Change
     TLM("MEMDOCK enter")
     par1, par2 = PARAMS(pre)
     mem,  page = getDock()
-    old = "MEM=%d, PAGE=%d" % (mem, page)
+    cart = TSP.dock_cart
+    old = "the cartridge slot" if cart else "MEM=%d, PAGE=%d" % (mem, page)
     new = "MEM=%d, PAGE=%d" % (par1, par2)
 
     if (par1 > MEM_MAX() or par2 > 15):
@@ -6536,17 +6581,30 @@ def MEMDOCK(pre, cmd):                                                  # Change
 
     elif par1 == 0 and par2 == 1:
         # Report previous setting
-        mem  = TSP.dck_prev_mem
-        page = TSP.dck_prev_slot
-        SEND_MSG("DOCK was previously:", "  MEM=%d, PAGE=%d" % (mem, page), _1_OK, True)
+        if TSP.dck_prev_cart:
+            SEND_MSG("DOCK was previously:", "  the cartridge slot", _1_OK, True)
+        else:
+            mem  = TSP.dck_prev_mem
+            page = TSP.dck_prev_slot
+            SEND_MSG("DOCK was previously:", "  MEM=%d, PAGE=%d" % (mem, page), _1_OK, True)
 
     else:
+        to_cart = False
         if par1 == 0:
             if par2 == 2:
                 # Swap to previous setting
                 par1 = TSP.dck_prev_mem
                 par2 = TSP.dck_prev_slot
+                to_cart = TSP.dck_prev_cart
                 msg2 = "Swapped with previous setting"
+            elif par2 == 3:
+                # The dock is a cartridge in the 2068's dock slot
+                if cart:
+                    SEND_MSG("DOCK is the cartridge slot", "", _1_OK, True)
+                    return
+                par1, par2 = mem, page          # the TS-Pico slot is kept for later
+                to_cart = True
+                msg2 = ""
             else:
                 msg = BAD_CODE("DOCK", par1, par2)
                 LOG(msg, 2)
@@ -6555,6 +6613,18 @@ def MEMDOCK(pre, cmd):                                                  # Change
         else:
             msg2 = ""
 
+        # Leaving cartridge dock mode with a .ROM/.DCK mounted is
+        # romupdate/dckupdate picking the slot it will write through the
+        # dock, with the cartridge (as far as we know) still in the 2068's
+        # dock: both would answer. Refuse; the user takes it out and
+        # turns the mode off first.
+        if cart and not to_cart and isinstance(TSP.f_name, str) \
+                and TSP.f_name[-4:].upper() in (".ROM", ".BIN", ".DCK"):
+            LOG("DOCK: leaving the cartridge slot with %s mounted. Command refused" % TSP.f_name, 1)
+            SEND_MSG("The dock is the cartridge slot.",
+                     "Take it out, close the file," + chr(13) + "then tpi:dock CODE 2,0.", _4_Q_Parameter, True)
+            return
+
         # With a .ROM/.DCK mounted this is romupdate/dckupdate picking the
         # slot it is about to erase: refuse the booted one here, before the
         # DOCK moves. (BLKRCV checks again; plain DOCK use is unaffected.)
@@ -6562,7 +6632,7 @@ def MEMDOCK(pre, cmd):                                                  # Change
         # .DCK there can't reach the boot slot 1 -- and 2,0 is the default
         # dckupdate puts back, with the .DCK still mounted if its tpi:close
         # failed (#372). Refusing that left the DOCK on the new cartridge.
-        clash = None if SYSTEM_SLOT_LOCK(par1, par2) else BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
+        clash = None if to_cart or SYSTEM_SLOT_LOCK(par1, par2) else BOOT_SLOT_CLASH(par1, par2, TSP.f_name)
         if clash:
             LOG("DOCK: %s Command refused" % clash[0], 1)
             SEND_MSG(clash[0], clash[1], _4_Q_Parameter, True)
@@ -6570,21 +6640,34 @@ def MEMDOCK(pre, cmd):                                                  # Change
 
         TSP.dck_prev_mem  = mem
         TSP.dck_prev_slot = page
+        TSP.dck_prev_cart = cart
         val1 = TSP.ROM_SM & 3
         TSP.ROM_SM = val1 + (par1 * 4)
         val1 = TSP.bank_sm & 15
         TSP.bank_sm = val1 + (par2 * 16)
+        if to_cart != cart:
+            SET_DOCK_CART(to_cart)
 
         # Switch first, then answer: on the v3 card map_slots copies 64K
         # (and saves a RAM dock back), ~0.7 s with the DOCK unserved, and a
         # program's next statement would PEEK an empty dock. On v2 it's two
         # FIFO puts, so the order changes nothing there.
-        note = SD_SLOTS_CALL(par1 == 3, board.map_slots, TSP.ROM_SM, TSP.bank_sm)
+        note = SD_SLOTS_CALL(par1 == 3 and not to_cart, board.map_slots, TSP.ROM_SM, TSP.bank_sm)
         if note and not msg2:                                          # v3: an SD slot came from flash
             msg2 = "No SD slot: used flash"
 
-        msg = "Change DOCK to MEM=%d, PAGE=%d" % (par1, par2)   # after a swap, the setting swapped to (#161)
-        SEND_MSG(msg, msg2, _1_OK)
+        if to_cart:
+            # Shown whatever VERBOSE says: the user has to restart, and the
+            # TS-Pico's dock slots are gone until they turn it off again.
+            msg = "DOCK is the cartridge slot"
+            SEND_MSG(msg, msg2 or "Restart to run the cartridge", _1_OK, True)
+        elif cart:
+            # The firmware can't tell whether a cartridge is fitted.
+            msg = "Change DOCK to MEM=%d, PAGE=%d" % (par1, par2)
+            SEND_MSG(msg, "Take the cartridge out first", _1_OK, True)
+        else:
+            msg = "Change DOCK to MEM=%d, PAGE=%d" % (par1, par2)   # after a swap, the setting swapped to (#161)
+            SEND_MSG(msg, msg2, _1_OK)
         LOG("%s. %s" % (msg, note or msg2), 0)
         
     return 
@@ -7491,6 +7574,11 @@ def ZX48(pre, cmd):                                                           # 
         SEND_MSG(msg, "", _8_A_Invalid_arg)
         return
 
+    if TSP.dock_cart:                       # the Spectrum ROM comes from the TS-Pico's dock
+        LOG("ZX48: the dock is the cartridge slot. Command refused", 1)
+        SEND_MSG(*DOCK_CART_MSG, _4_Q_Parameter, True)
+        return
+
     TSP.zx48 = True
 
     M = [nl, 'Changing TS-Pico to ZX48 mode.', nl]
@@ -8129,7 +8217,8 @@ def TS2068_IO():                                                         # Main 
     PRT.autolf = init_values.get("PRINTER_AUTOLF", False)              # the printer's settings at power-on (#335)
     PRT.autopg = init_values.get("PRINTER_AUTOPG", False)
 
-    need_sd = 3 in (TSP.ROM_SM & 3, TSP.ROM_SM >> 2)                    # v3: a boot or dock slot on the SD card
+    board.dock_cart(TSP.dock_cart)                                     # a cartridge in the 2068's dock: dock reads left to it
+    need_sd = TSP.ROM_SM & 3 == 3 or (TSP.ROM_SM >> 2 == 3 and not TSP.dock_cart)  # v3: a boot or dock slot on the SD card
     if need_sd:
         try:
             ACTIVATE_SD(tries=5)                                       # a cold card can take a few tries
