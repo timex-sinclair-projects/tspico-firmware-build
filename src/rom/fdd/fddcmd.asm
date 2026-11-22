@@ -20,7 +20,8 @@
 ;  runtime pass pops them off the calculator stack and builds a TPI command:
 ;
 ;    CAT                -> tpi:dir               (§2)
-;    CAT ""             -> tpi:tapdir
+;    CAT ""             -> tpi:idir, the menu (ROM 2.4: tpi:tapdir; #444)
+;    CAT ">"            -> tpi:dir >, which the Pico answers as tpi:tapdir
 ;    CAT x              -> tpi:dir x
 ;    MOVE TO x          -> tpi:cd x              (§3; "-" is the previous dir)
 ;    MOVE TO ""         -> tpi:cd                (the list of directories to pick from)
@@ -348,8 +349,8 @@ FDD_CAT:
         call    POP_STR
         ld      a,b
         or      c
-        ld      hl,CMD_TAPDIR
-        jp      z,SEND_PREFIX      ; CAT "" -> the mounted TAP
+        ld      hl,CMD_CAT_EMPTY
+        jp      z,SEND_PREFIX      ; CAT "" -> the list of files (2.4: the mounted TAP)
         ld      hl,CMD_DIR_ARG
         jp      SEND_ONE
 .bare:
@@ -1485,7 +1486,12 @@ STRLEN: ld      c,0                ; A = length of the NUL-ended string at HL
 ;------------------------------------------------------------------------------
 CMD_DIR:     db "tpi:dir",0
 CMD_DIR_ARG: db "tpi:dir ",0
-CMD_TAPDIR:  db "tpi:tapdir",0
+CMD_CAT_EMPTY:                     ; CAT "" (#444): the same length in both builds,
+        IFDEF MEGABANK             ;   so nothing after it moves
+        db "tpi:idir",0,0,0
+        ELSE
+        db "tpi:tapdir",0          ; ROM 2.4 is frozen: CI compares it byte for byte
+        ENDIF
 CMD_CD:      db "tpi:cd ",0
 CMD_REN:     db "tpi:ren ",0
 CMD_COPY:    db "tpi:copy ",0

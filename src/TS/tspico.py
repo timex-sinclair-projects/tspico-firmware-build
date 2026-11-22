@@ -1781,7 +1781,7 @@ def CAT_COLOUR(text):                                                         # 
         return text
 
 
-def TAPDIR_COLOUR(text, headers):                                             # CAT "" as CAT shows a folder
+def TAPDIR_COLOUR(text, headers):                                             # CAT ">" as CAT shows a folder
 
     """tpi:tapdir's listing in CAT's colours (agreed 2026-10-02): the file and
     pointer lines on the blue bar, the column titles on cyan, the dashed
@@ -2816,6 +2816,7 @@ def DIR(pre, cmd):                                                              
     # SAVE "tpi:dir"CODE 2,n    - Show a dir of files starting at file n
     # SAVE "tpi:dir <arg>"      - CAT "<arg>": another directory, a pattern
     #                             ("*.tap", "games/b*") or a TAP's contents
+    # SAVE "tpi:dir >"          - CAT ">": the mounted TAP, as tpi:tapdir
 
     global lista
     global led
@@ -2827,6 +2828,9 @@ def DIR(pre, cmd):                                                              
         par1, par2, len(files), len(lista)))
 
     arg = getArgs(cmd).strip()
+    if par1 == 0 and arg == ">":                                              # CAT ">": the tape (#444). No FAT name has a >
+        TAPDIR(10 * [0], cmd)                                                 # every block, whatever the CODE's n
+        return
     if par1 == 0 and RD_ARG(arg):                                             # CAT "r:": the Megabank's RAM disk
         RD_CAT(arg)
         return
@@ -3041,6 +3045,8 @@ def SD_NEEDED(load_cmd, cmd_word, cmd_exec, SA_funct, stream=None):         # do
         return cmd_exec.strip() != cmd_word                                   # a topic is a file on the card
     if RD_ONLY(cmd_word, cmd_exec):
         return False                                                          # the Megabank's RAM disk alone
+    if cmd_word == "TPI:DIR" and cmd_exec[len(cmd_word):].strip() == ">":
+        return False                                                          # CAT ">": the tape, as TPI:TAPDIR
     if cmd_word == "TPI:CHOPEN" and CH_NOCARD_PATH(cmd_exec):
         return False                                                          # OPEN #n,"v:" or "x:": no file
     if cmd_word in ("TPI:CHWR", "TPI:CHRD") and stream is not None \
@@ -4497,8 +4503,9 @@ def CH_CAT(pre, cmd):                                                         # 
 
     """CAT #s, CAT #s;"x" (#404): the listing CAT or CAT "x" would show,
     written as plain lines into the file open on stream s (PMR1) instead.
-    PMR2 is 1 when a string came with it: "" is the mounted TAP, as CAT ""
-    is. The answer is a bare status: the stream isn't a file open to be
+    PMR2 is 1 when a string came with it: ">" is the mounted TAP, as CAT
+    ">" is, and "" is Q: CAT "" is a menu, which can't go into a file
+    (#444). The answer is a bare status: the stream isn't a file open to be
     written (x:, d:, v:, mode r), Q; what CAT "x" would refuse, F; no card,
     J (the card gate)."""
 
@@ -4517,6 +4524,8 @@ def CH_CAT(pre, cmd):                                                         # 
             LISTING_FRESHEN()
             text = lista
         elif arg == "":
+            raise channels.ChannelError("CAT \"\" is a menu", "Q")
+        elif arg == ">":
             text = TAPDIR_TEXT(0, 0)
         else:
             text, st = CATALOG_TEXT(arg)
@@ -4705,11 +4714,17 @@ def CH_CLOSE(pre, cmd):                                                       # 
 def IDIR(pre, cmd):
 
     # SAVE "tpi:idir"   - Show an interactive dir list to pick a file to mount
+    # CAT ""            - The same (ROM 2.5, #444)
 
     global files
     global TSP
 
     TLM("IDIR enter")
+    # As CAT does: the card may have been changed since the folder was read,
+    # and the menu's numbers pick from files (#444).
+    if not LISTING_CHECK():
+        NO_CARD_REPLY("TPI:IDIR")
+        return
     if len(files) == 0:
         SEND_MSG("Directory is empty:", public_path(), _1_OK, True)
         return

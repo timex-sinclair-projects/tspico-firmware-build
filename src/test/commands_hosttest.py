@@ -14,6 +14,8 @@ and a temporary config.ini:
   * BOOT saves the memory type with the slot, LOAD_CONFIG uses both once and
     puts back flash slot 1, and MEM 3 is refused;
   * DIR CODE 1,n / 2,n past the last file gives the real range, 0 to n-1;
+  * CAT ">" (tpi:dir >) is the mounted TAP and needs no card; IDIR (CAT "")
+    re-reads the folder before its menu, and says when there is no card;
   * FWD CODE 2,n (by file) on the last header says it can't, not "Moved";
   * MD takes its name as the other commands do and refuses paths and the
     characters FAT won't take;
@@ -275,6 +277,52 @@ def test_dir_range(t, sent):
     t.files = real
 
 
+def test_cat_shortcuts(t, sent):
+    print('CAT ">" and CAT "" (#444)')
+    real = t.TAPDIR, t.LISTING_CHECK, t.ListMenu, t.NO_CARD_REPLY, t.files
+    tapes, menus, refused = [], [], []
+    try:
+        t.TAPDIR = lambda p, c: tapes.append(t.PARAMS(p))
+        del sent[:]
+        run(t, t.DIR, "tpi:dir >")
+        check(tapes == [(0, 0)] and not sent, 'CAT ">" is tpi:tapdir, every block')
+        run(t, t.DIR, "tpi:dir >", 0, 3)
+        check(tapes[-1] == (0, 0), "  whatever n its CODE 0,n has")
+        run(t, t.DIR, "tpi:dir >x")
+        check(len(tapes) == 2 and sent[-1][3] == t._3_F_Invalid_file, '  only ">" alone: CAT ">x" is F')
+
+        funct = {"TPI:DIR": None}
+        check(not t.SD_NEEDED(False, "TPI:DIR", "TPI:DIR >", funct), 'CAT ">" needs no card')
+        check(t.SD_NEEDED(False, "TPI:DIR", "TPI:DIR", funct), "  CAT still does")
+        check(t.SD_NEEDED(False, "TPI:DIR", "TPI:DIR GAMES", funct), '  and CAT "games"')
+
+        def freshen():                                          # the folder changed on the card
+            t.files = ["NEW.TAP"]
+            return True
+        t.ListMenu = lambda rows, *a: menus.append(list(rows)) or -1
+        for stale, what in ((["OLD.TAP"], "lists the card's files, not the stale ones"),
+                            ([], "a folder that was empty when last read gets its menu")):
+            del menus[:]
+            t.files, t.LISTING_CHECK = stale, freshen
+            run(t, t.IDIR, "tpi:idir")
+            check(menus == [["000 NEW.TAP"]], "IDIR " + what)
+
+        def emptied():
+            t.files = []
+            return True
+        del menus[:], sent[:]
+        t.files, t.LISTING_CHECK = ["OLD.TAP"], emptied
+        run(t, t.IDIR, "tpi:idir")
+        check(not menus and sent[-1][1] == "Directory is empty:", "  one emptied since says so")
+
+        t.files, t.LISTING_CHECK = ["OLD.TAP"], lambda: False
+        t.NO_CARD_REPLY = refused.append
+        run(t, t.IDIR, "tpi:idir")
+        check(not menus and refused == ["TPI:IDIR"], "  no card: says so, no menu")
+    finally:
+        t.TAPDIR, t.LISTING_CHECK, t.ListMenu, t.NO_CARD_REPLY, t.files = real
+
+
 def test_ffw_by_file(t, sent):
     print("tpi:ffw CODE 2,n by file (#170)")
     real = t.TSP.f_name, getattr(t.TSP, "offset_tbl", []), getattr(t.TSP, "tap_idx", 0), getattr(t.TSP, "offset", 0)
@@ -403,6 +451,7 @@ def main():
         test_label(t, root, sent)
         test_rm(t, root, sent)
         test_dir_range(t, sent)
+        test_cat_shortcuts(t, sent)
         test_ffw_by_file(t, sent)
         test_md(t, root, sent)
         test_shorten(t)

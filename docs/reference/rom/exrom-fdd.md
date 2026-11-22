@@ -44,30 +44,30 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 43–165 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 172–193 | 3000h–3020h | the vector table |
-| 195–206 | 3021h | `TAPE_MODE` |
-| 221–248 | 3029h | `G_BEEP` |
-| 250–315 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 317–337 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 339–436 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
-| 438–512 | | the parsing helpers |
-| 514–619 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 621–871 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 873–893 | | `LOWER_LOOP` (function 88h) |
-| 895–1464 | | the channel driver |
-| 1466–1484 | | `HEXDIG`, `STRLEN` |
-| 1486–1498 | to 3769h | the command strings, `MODE_R` |
-| 1500–1513 | 376Ah–3770h | `PRELOAD` |
-| 1515–1517 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
-| 1519–1568 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1570–1777 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1779–1844 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
-| 1846–1851 | 3929h–3931h | `IN_DROP` (#404) |
-| 1853–1913 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1915–2821 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
-| 2824–2825 | 3998h (3E53h) | `FDD_END` |
-| 2827–2839 | 2400h–2C72h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
+| 44–166 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 173–194 | 3000h–3020h | the vector table |
+| 196–207 | 3021h | `TAPE_MODE` |
+| 222–249 | 3029h | `G_BEEP` |
+| 251–316 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 318–338 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 340–437 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
+| 439–513 | | the parsing helpers |
+| 515–620 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 622–872 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 874–894 | | `LOWER_LOOP` (function 88h) |
+| 896–1465 | | the channel driver |
+| 1467–1485 | | `HEXDIG`, `STRLEN` |
+| 1487–1504 | to 3769h | the command strings, `MODE_R` |
+| 1506–1519 | 376Ah–3770h | `PRELOAD` |
+| 1521–1523 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
+| 1525–1574 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1576–1783 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1785–1850 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
+| 1852–1857 | 3929h–3931h | `IN_DROP` (#404) |
+| 1859–1919 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
+| 1921–2827 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
+| 2830–2831 | 3998h (3E53h) | `FDD_END` |
+| 2833–2845 | 2400h–2C72h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -364,7 +364,8 @@ firmware does with each command is [../firmware/tspico-disk.md](../firmware/tspi
 | BASIC | Sent | Firmware |
 |---|---|---|
 | `CAT` | `tpi:dir` | [`DIR`](../firmware/tspico-commands.md#dirpre-cmd) |
-| `CAT ""` | `tpi:tapdir` | [`TAPDIR`](../firmware/tspico-commands.md#tapdirpre-cmd) |
+| `CAT ""` | `tpi:idir` (ROM 2.4: `tpi:tapdir`) | [`IDIR`](../firmware/tspico-commands.md#idirpre-cmd) |
+| `CAT ">"` | `tpi:dir >`, as any `CAT x` | [`DIR`](../firmware/tspico-commands.md#dirpre-cmd), which chains to `TAPDIR` |
 | `CAT x` | `tpi:dir x` | [`CATALOG`](../firmware/tspico-disk.md#catalogarg) |
 | `MOVE TO x` | `tpi:cd x` (`"-"`: `tpi:cd -`, back to the previous folder) | [`CDIR`](../firmware/tspico-commands.md#cdirpre-cmd) |
 | `MOVE TO ""` | `tpi:cd` (the menu of folders) | the same |
@@ -389,8 +390,9 @@ the whole statement and returns from `FDD_CAT` itself (#404); for anything
 else it is `AT_END`. Then: a bare `CAT` → `.bare`: `RUNTIME`, return on the syntax pass, else
 `SEND_PREFIX` with `CMD_DIR`. Otherwise `EXPT_STR_END` (one string
 expression that ends the statement; return on the syntax pass), `POP_STR`;
-an empty string → `SEND_PREFIX` with `CMD_TAPDIR` (the mounted tape's
-blocks, as `CAT ""` lists a tape on a stock 2068); anything else →
+an empty string → `SEND_PREFIX` with `CMD_CAT_EMPTY`: `tpi:idir`, the menu
+of files to mount, as `MOVE TO ""` is the menu of folders (#444; ROM 2.4
+sends `tpi:tapdir` here, the mounted tape); anything else →
 `SEND_ONE` with `CMD_DIR_ARG`.
 
 ### `FDD_ONE_ARG`
@@ -505,7 +507,7 @@ STKEND.
 ### `SEND_PREFIX`
 
 `BUILD_START`, push the start, `SEND_TAIL`: a command that is only its
-prefix (`tpi:dir`, `tpi:tapdir`, `tpi:cd`).
+prefix (`tpi:dir`, `tpi:idir` or `tpi:tapdir`, `tpi:cd`).
 
 ### `SEND_ONE`
 
@@ -945,7 +947,7 @@ NUL-ended prefixes, sent as the start of each command:
 |---|---|---|
 | `CMD_DIR` | `tpi:dir` | `CAT` |
 | `CMD_DIR_ARG` | `tpi:dir ` | `CAT x` |
-| `CMD_TAPDIR` | `tpi:tapdir` | `CAT ""` |
+| `CMD_CAT_EMPTY` | `tpi:idir` and two more NULs with `-DMEGABANK` (ROM 2.5); `tpi:tapdir` without (ROM 2.4) | `CAT ""`. The same 11 bytes in both, so nothing after it moves (#444); ROM 2.4 keeps its old text because CI compares that image byte for byte |
 | `CMD_CD` | `tpi:cd ` | `MOVE TO x` |
 | `CMD_REN` | `tpi:ren ` | `MOVE a TO b` (through IX) |
 | `CMD_COPY` | `tpi:copy ` | `COPY a TO b` (through IX) |
@@ -1100,7 +1102,7 @@ statement and returns, and at run time **`tpi:list x`** goes to the Pico
 Why not scan the expression and look at its type: a scan in syntax mode
 done at run time inserts a second hidden number after each number in the
 line (the line has them already), and a scan in run mode evaluates the
-expression a second time (the comment at 1626–1630). So the test is lexical, and `LIST (a$)` counts as a number:
+expression a second time (the comment at 1632–1636). So the test is lexical, and `LIST (a$)` counts as a number:
 HOME's LIST then says Report C at the syntax pass.
 
 ### `FDD_RESTORE` (3819h)
@@ -1241,7 +1243,8 @@ string (`POP_STR`: DE, BC; over 64 characters is Report F) with A = 1; `.bare` h
 `IN_DROP`, then `BUILD_START` with `CMD_CHCAT` and the string copied after
 it (`.none` skips the `LDIR` for an empty one: BC = 0 would copy 64K), a
 NUL, and `CH_SEND` with A = `R_STRM` (PMR1), C = A from before (PMR2: 1 when
-a string came, so `CAT #n;""` is the mounted tape, as `CAT ""` is), B = 0
+a string came, so the Pico can refuse `CAT #n;""` with Q, as `CAT ""` is a
+menu; `CAT #n;">"` is the mounted tape), B = 0
 (no payload). `CH_STATUS` raises the Pico's report: Q (not a file open to
 be written), F (what `CAT "x"` would refuse), J (no card). `AND A`, `RET`.
 

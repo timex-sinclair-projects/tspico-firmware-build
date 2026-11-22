@@ -1,6 +1,7 @@
 TS-Pico Command             IDIR
 --------------------------------
   SAVE "tpi:idir"
+  CAT ""
 
 Displays an interactive list of
 the files to pick one to mount.

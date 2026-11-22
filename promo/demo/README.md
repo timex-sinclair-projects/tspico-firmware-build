@@ -15,7 +15,9 @@ fresh copy of the card, with identical screens both times. See [Testing](#testin
 The tour, its art and the [video script](../video-script.md) are release 2.4's. The tools now
 run ROM 2.5, the release ROM (`build.py` takes its letters from `src/rom/TSPICO-25.ROM`,
 and the emulator runs it), where chapter 1's `PRINT PEEK 101` gives 37, not the 36 its
-caption explains. They have not been revised or re-run for 2.5.
+caption explains. They have not been revised for 2.5, except that chapters 4 and 9 show the
+tape with `CAT ">"` (#444: `CAT ""` is now the menu of files). That change was run twice on
+ROM 2.5 in the emulator, with identical screens, and pictures 09 and 12 come from that run.
 
 ## Files
 
@@ -106,12 +108,12 @@ slower in the emulator than on the board.
 | 1 | Welcome to TS-Pico 2.4 | `PRINT PEEK 101` gives 36 (ROM 2.4); the keywords (`CAT COPY MOVE ERASE FORMAT LIST OPEN #`), the rest `SAVE "tpi:..."`, LOAD "tpi:..." only mounts; `SAVE "tpi:info"` | keys only | 1-3 | 14 s |
 | 2 | Listings in color | `CAT`; `CAT "*.tap"`; `CAT "library"`, which stops at `(71%) Scroll? (Y/n)` | **Y** at Scroll? (N stops the list) | 4-7 | 15 s |
 | 3 | Folders | `FORMAT "tour/"`, `MOVE TO "tour"`, `SAVE "tpi:path"`, `MOVE TO "-"`, `tpi:path`; `CAT` with `<tour>` in it | keys only | 8-10 | 10 s |
-| 4 | Copies, renames and tapes | `COPY "multi.tap" TO "tour"`; `MOVE TO "tour"`; `COPY "/art.tap" TO "pics.tap"`; `FORMAT "songs.tap"`; `CAT`; `CAT "multi.tap"` (the blocks in a TAP, not mounted); `CAT ""` (the new tape: empty, append on); `SAVE "tpi:close"`; `MOVE "songs.tap" TO "tunes.tap"` (a rename); `CAT "*.tap"` | keys only | 11-15 | 15 s |
+| 4 | Copies, renames and tapes | `COPY "multi.tap" TO "tour"`; `MOVE TO "tour"`; `COPY "/art.tap" TO "pics.tap"`; `FORMAT "songs.tap"`; `CAT`; `CAT "multi.tap"` (the blocks in a TAP, not mounted); `CAT ">"` (the new tape: empty, append on); `SAVE "tpi:close"`; `MOVE "songs.tap" TO "tunes.tap"` (a rename); `CAT "*.tap"` | keys only | 11-15 | 15 s |
 | 5 | Single files with f: | Draws a picture, `SAVE "f:title.scr" SCREEN$`, wipes the screen, `LOAD "f:title.scr" SCREEN$`. Then two graphics: `SAVE "f:ab.bin" CODE USR "a",16`, wiped, `LOAD "f:ab.bin" CODE` | **ENTER** at each "Start tape" (two) | 16-21 | 33 s |
 | 6 | Files as streams | `OPEN #4,"f:notes.txt","w"`, `PRINT #4`, `CLOSE #4`; `INPUT #4` until **8 End of file**, caught with `ON ERR GO TO`; `RESTORE #4` and the first line again; a record file (`"u",12`, `TAB`) as a high-score table; `OPEN #5,"d:/*.tap"`, the top folder's tapes one name at a time | keys only | 22-25 | 18 s |
 | 7 | Looking inside | `LIST "notes.txt"`; `OPEN #4,"f:tapes.txt","w"`, `CAT #4;"/*.tap"`, `LIST "tapes.txt"`; `OPEN #4,"x:"` asked `path` and `info` (label, free and total MB, firmware, ROM) | keys only | 26-29 | 16 s |
 | 8 | The virtual printer | `SAVE "tpi:picopt"`, `PRINT PEEK 24027` (3); `LPRINT`; `LLIST 9900`; `COPY`; `SAVE "tpi:clprint"`; `SAVE "tpi:ts2040"`, `PEEK 24027` (2); where the files are | keys only | 30-32 | 26 s |
-| 9 | Mounting a tape | `LOAD "tpi:pics.tap"`; `CAT ""` (pointer at 00); `LOAD "" CODE USR "a"` (the graphics); `CAT ""` (pointer at 02); `LOAD "" SCREEN$` (the picture); `SAVE "tpi:close"` | keys only | 33-38 | 16 s |
+| 9 | Mounting a tape | `LOAD "tpi:pics.tap"`; `CAT ">"` (pointer at 00); `LOAD "" CODE USR "a"` (the graphics); `CAT ">"` (pointer at 02); `LOAD "" SCREEN$` (the picture); `SAVE "tpi:close"` | keys only | 33-38 | 16 s |
 | 10 | Reports, not hangs | With messages on, the 1.1 habit `LOAD "tpi:dir"`: `File does not exist: dir`, Report F caught; `SAVE "my game"`: F, nothing written; `ERASE "*.tap"` asks about `multi.tap`, `pics.tap`, `tunes.tap`; `CAT` shows what's left | **ENTER** at "Start tape"; **Y, N, Y** at the three `Erase ... (Y/N)?` (any answers work: the caption says Y erases, N keeps) | 39-42 | 26 s |
 | 11 | BREAK is safe | `CAT "/library"` stops at Scroll?; BREAK gives **D BREAK - CONT repeats**, caught with `ON ERR`; the next command, `SAVE "tpi:path"`, works at once | **BREAK** (CAPS SHIFT + SPACE) at Scroll?. Y or N instead: the screen says "No BREAK that time." | 43-44 | 14 s |
 | 12 | Help on the card | `SAVE "tpi:help"` (three pages); `SAVE "tpi:help cat"` (two) | **Y** at each Scroll? (N stops) | 45-47 | 23 s |
@@ -262,7 +264,7 @@ Everything else the tour uses behaved as the manual says: `PEEK 101` 35; `CAT` a
 patterns, paging (`(71%) Scroll? (Y/n)`), other folders and TAP contents; `FORMAT` of a folder
 and a tape (mounted, append on); `MOVE` copies and `MOVE TO` / `MOVE TO ""`; `f:` SCREEN$ and
 CODE; `OPEN #` w/r/u with records and `TAB 0`, `d:` listings; `PEEK 24027` 3 then 2 around
-`tpi:picopt`/`tpi:ts2040`; `CAT ""` and its pointer; `LOAD "tpi:dir"` gives F with `File does
+`tpi:picopt`/`tpi:ts2040`; `CAT ">"` and its pointer; `LOAD "tpi:dir"` gives F with `File does
 not exist:`; `ERASE` with a pattern (N skips and goes on); `tpi:help` and `tpi:help cat`.
 
 **What the emulator can't show:** timing (findings 2 and 3 above may be emulator-only, and
