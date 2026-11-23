@@ -13,7 +13,8 @@ Similarly, LPRINT sends its
 characters to stream #3 which is
 opened to channel "p" for the 
 printer. Device "k" is for the
-keyboard. The default stream and
+keyboard input in the lower
+screen. The default stream and
 channel setup is:
 
 # Ch Dir Purpose
@@ -31,11 +32,12 @@ the Microdrives. The Timex 2060
 Bus Expansion Unit was to do the
 same, but it never shipped. Some
 software added channels for 
-special purposes.
+special purposes. The TS-Pico
+adds some channels you can use.
 
-You can use OPEN# to open a 
+You can use OPEN # to open 
 stream s on channel c as:
-  OPEN#s,"c"
+  OPEN # s,"c"
 The PRINT command can be given a
 stream number like any other
 print item to send the following
@@ -56,9 +58,23 @@ screen lines:
 The empty INPUT statement will 
 clear the text you printed.
 
-The TS-Pico (v2.3) had extended
-streams to include using OPEN #
-to open a stream to a file on
-the SD card.
+You use CLOSE # to close a
+stream when done with it, but
+you shouldn't close the system
+streams 0-3. Commands that can
+use streams: PRINT, LIST, INPUT,
+INKEY$
 
-See also: PRINT, OPEN#, CLOSE#
+The TS-Pico (v2.3) has extended
+channels to include a file
+channel, a directory channel, a
+TS-Pico info channel, and a
+voice channel (v3 board only).
+See OPEN# for more detail.
+
+It also extends streams to more
+commands: CAT, RESTORE
+
+See also: PRINT, OPEN#, CLOSE#,
+native-files, CAT, LIST, INPUT,
+INKEY$, RESTORE

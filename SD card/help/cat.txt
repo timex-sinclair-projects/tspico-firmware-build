@@ -3,29 +3,34 @@ BASIC Command                CAT
 CAT [#n;][name]
 
 Lists files on the SD card.
-CAT         the current dir
-CAT "games" another directory
-CAT "*.tap" matching names:
-            * any run, ? one
-            character
-CAT "g.tap" the blocks in a
-            .tap file
-CAT ""      the mounted .tap
-CAT #4      into the file open
-            on stream 4; also
-            CAT #4;"*.tap"
+CAT          The current dir.
+CAT "games"  Another directory.
+CAT "*.tap"  Matching names:
+             * any run, ? one
+             character.
+CAT "g.tap"  The blocks in a
+             .tap file.
+The exception is an empty name
+gives a catalog of files in the
+currently mounted .tap file:
+  CAT ""
+Files that can be mounted with
+LOAD "tpi:nn" are listed first,
+with their index number, and any
+other files follow, unnumbered.
 
-Files LOAD "tpi:nn" can use come
-first, with their number (type
-two digits or more: "tpi:03").
-All other files follow,
-unnumbered.
-name can be any string
-expression, e.g.
-CAT d$+"/*.tap". A name that is
-not found gives Report F.
+The output can be redirected to
+a stream #s with:
+  CAT #s  or  CAT #s;"name"
+The name can be any string
+expression, e.g.,
+  CAT d$+"/*.tap".
+A name that is not found gives
+Report F.
 
-Same as SAVE "tpi:dir name".
+Same as SAVE "tpi:dir name" or
+SAVE "tpi:tapdir" when name is
+empty.
 
 See also: move, erase, format,
-dir, tapdir
+dir, tapdir, load

@@ -17,7 +17,7 @@ Lists the program, sending it to
 stream s. Note that LLIST is
 equivalent to LIST #3.
 
-LIST "notes.txt"
+LIST "filename"
 Shows a file on the SD card. A
 text file shows as text, up to
 8192 bytes. Anything else shows
@@ -32,7 +32,9 @@ appear as ?.
 The name can be a string
 expression: LIST z$. A folder or
 a pattern is Report Q, a missing
-file Report F.
+file Report F. Note this doesn't
+use the "f:" mode, so the name
+doesn't need to begin with "f:".
 
 Same as SAVE "tpi:list name".
 
