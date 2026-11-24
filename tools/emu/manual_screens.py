@@ -41,7 +41,7 @@ def card():
                        ("Zebra-OS64.dck", 65_536)):
         with open(os.path.join(tap, name), "wb") as f:
             f.write(bytes(size))
-    # Manic.tap: real blocks, for CAT "" -- a loader, a screen, the code.
+    # Manic.tap: real blocks, for CAT ">" -- a loader, a screen, the code.
     prog = S.basic_tap("manic", [(10, bytes([S.LOAD]) + b'""' + bytes([0xAA])),   # LOAD ""SCREEN$
                                  (20, bytes([S.LOAD]) + b'""' + bytes([S.CODE]))])
     scr = S.tap_block(0x00, bytes([3]) + b"manicscr  " + bytes([0x00, 0x1B, 0x00, 0x40, 0, 0x80])) \
@@ -112,7 +112,7 @@ def main():
         s.run(S.SAVE, '"tpi:ffw"')
         s.run(S.SAVE, '"tpi:ffw"')                             # the pointer at block 02, as the text says
         fresh_screen(s)
-        s.run(S.CAT, '""')
+        s.run(S.CAT, '">"')
         shot(s, "tapdir")
 
         fresh_screen(s)

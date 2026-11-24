@@ -40,10 +40,10 @@ included.
 every command, a file picker, the TS-Pico Commander, a full-screen file manager you drive
 with the cursor keys, and Pico Video settings, ULA Plus included.
 
-**Inside a tape.** `CAT ""` lists the blocks in the mounted TAP and shows where the tape
+**Inside a tape.** `CAT ">"` lists the blocks in the mounted TAP and shows where the tape
 pointer is. `FORMAT "songs.tap"` starts a new, empty tape, mounted and ready to SAVE onto.
 
-![CAT "": the blocks on the mounted tape, the next one highlighted]({{ '/assets/img/whats-new/tapdir.png' | relative_url }})
+![CAT ">": the blocks on the mounted tape, the next one highlighted]({{ '/assets/img/whats-new/tapdir.png' | relative_url }})
 
 **1,327 programs, ready to copy.** The TS-2068 Software Library: every program test-loaded
 with the TS-Pico firmware, sorted into folders, with short names you can type and a catalog,

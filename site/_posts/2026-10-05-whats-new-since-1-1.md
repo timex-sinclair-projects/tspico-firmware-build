@@ -110,7 +110,8 @@ card too. They take wildcards (`*` and `?`), paths, and string expressions such 
 | `CAT` | List the current folder |
 | `CAT "games/b*"` | List matching files in another folder |
 | `CAT "frogger.tap"` | List the blocks inside a TAP file |
-| `CAT ""` | List the blocks in the mounted TAP, with the tape pointer |
+| `CAT ">"` | List the blocks in the mounted TAP, with the tape pointer |
+| `CAT ""` | Pick a file to mount from a menu |
 | `MOVE TO "games"` | Change folder (`MOVE TO "-"` goes back, `MOVE TO ""` is a menu) |
 | `COPY "a.tap" TO "b.tap"` | Copy a file (never overwrites) |
 | `COPY "*.tap" TO "backup"` | Copy all matching files into a folder |
@@ -126,7 +127,7 @@ card too. They take wildcards (`*` and `?`), paths, and string expressions such 
 file that's already there. Plain `LIST` still lists your program, and plain `COPY` still goes
 to the printer.
 
-![CAT "": the blocks in the mounted TAP, with the next block highlighted]({{ '/assets/img/whats-new/tapdir.png' | relative_url }})
+![CAT ">": the blocks in the mounted TAP, with the next block highlighted]({{ '/assets/img/whats-new/tapdir.png' | relative_url }})
 
 ### Single files with `f:`
 

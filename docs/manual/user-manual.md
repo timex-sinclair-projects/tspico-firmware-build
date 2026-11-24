@@ -126,7 +126,7 @@ That shows the TS-Pico's status. The rules are simple:
 
 - **Commands use SAVE.** `SAVE "tpi:info"`, `SAVE "tpi:verbose"`, `SAVE "tpi:close"`.
 - **LOAD "tpi:..." mounts a file.** `LOAD "tpi:frogger.tap"` makes `frogger.tap` the "tape" that
-  `LOAD ""` reads from. There's no keyword for this one, and it's the `tpi:` name you'll use most.
+  `LOAD ""` reads from. There's no keyword for mounting by name, and it's the `tpi:` name you'll use most.
   There are no other LOAD commands.
 
   > **Coming from version 1.1?** Version 1.1 used `LOAD "tpi:dir"`, `LOAD "tpi:path"` and so on.
@@ -495,7 +495,8 @@ scroll that many lines, or **N** to stop.
 | `CAT "*.tap"` | Only the TAP files |
 | `CAT "games/b*"` | Files in games starting with b |
 | `CAT "frogger.tap"` | The blocks inside a TAP file |
-| `CAT ""` | The blocks inside the mounted TAP |
+| `CAT ">"` | The blocks inside the mounted TAP |
+| `CAT ""` | A menu: pick a file to mount (3.4) |
 | `CAT #4` | The listing into the file open on stream 4 (6.5) |
 
 `*` matches any run of characters and `?` matches exactly one. They work in the last part of a
@@ -616,7 +617,7 @@ To use one, you **mount** it. Think of it as putting the cassette in the player:
 LOAD "tpi:frogger.tap"
 ```
 
-This is the one `tpi:` name everyone needs: there's no keyword for mounting. Now `LOAD ""`
+This is the one `tpi:` name everyone needs: there's no keyword for mounting by name. Now `LOAD ""`
 loads from that file, one program after another, as a tape would. The TS-Pico copies the TAP
 into its own memory while it mounts it. The LED flickers for a moment, and big files take a
 second or two.
@@ -647,26 +648,28 @@ command: it's an ordinary LOAD of a program called `tpi:3`. Type `LOAD "tpi:03"`
 
   ![LOAD "tpi:*.tap" with several matches: the count, and Report F](images/load-several-match.png)
 
-**Picking a file from a list.** `SAVE "tpi:idir"` shows the indexed files as a menu, using the
-same keys as the folder menu, and mounts the one you pick.
+**Picking a file from a list.** `CAT ""` shows the indexed files as a menu, using the same
+keys as the folder menu, and mounts the one you pick. In both `CAT ""` and `MOVE TO ""`, the
+empty name means "let me pick".
 
 ## 3.5 Looking inside a TAP
 
-To see what's in the mounted TAP:
+To see what's in the mounted TAP, use `>`, the mark the listing puts on the tape pointer
+(SYMBOL SHIFT and T):
 
 ```basic
-CAT ""
+CAT ">"
 ```
 
-![CAT "": the file and tape pointer on a blue bar; headers in blue; the next block on a yellow row](images/tapdir.png)
+![CAT ">": the file and tape pointer on a blue bar; headers in blue; the next block on a yellow row](images/tapdir.png)
 
-*`CAT ""` with `Manic.tap` mounted and the tape pointer at block 02.*
+*`CAT ">"` with `Manic.tap` mounted and the tape pointer at block 02.*
 
 Each program on a tape is two blocks: a short **header** (`Y` in the Hdr? column) carrying its
 name, and the data itself, described by its type. The `>` marks the **tape pointer**, the block
 the next `LOAD` will start from. `CAT "other.tap"` shows the contents of any TAP, mounted or not.
 
-> **What only the command does.** `CAT ""` shows every block. For a long tape,
+> **What only the command does.** `CAT ">"` shows every block. For a long tape,
 > `SAVE "tpi:tapdir" CODE 1,0` shows one line per program or file instead, and
 > `SAVE "tpi:tapdir" CODE 0,3` just the three blocks either side of the pointer.
 
@@ -740,7 +743,7 @@ You'll need a TAP file on the card. These steps use `frogger.tap`; use the name 
 2. Type `LOAD "tpi:frogger.tap"` and press **ENTER**.
 
    You should see **0 OK**, after the LED flickers while the TS-Pico copies the file.
-3. Type `CAT ""` and press **ENTER**.
+3. Type `CAT ">"` and press **ENTER**.
 
    You should see the blocks inside `frogger.tap`, with the tape pointer `>` on the first one.
 4. Type `LOAD ""` and press **ENTER**.
@@ -756,8 +759,9 @@ You'll need a TAP file on the card. These steps use `frogger.tap`; use the name 
 1. `CAT` lists files; patterns such as `"*.tap"` narrow it down. `LIST "name"` shows a file.
 2. `MOVE TO "folder"` changes folder; `..`, `/` and `-` help you move; `MOVE TO ""` is a menu.
 3. `COPY`, `MOVE` and `ERASE` copy, rename and delete files; `FORMAT "dir/"` makes a folder.
-4. `LOAD "tpi:name.tap"` mounts a file, by name or by index number. There's no keyword for it.
-5. `CAT ""` shows what's inside the mounted TAP.
+4. `LOAD "tpi:name.tap"` mounts a file, by name or by index number. `CAT ""` is a menu to
+   pick one from.
+5. `CAT ">"` shows what's inside the mounted TAP.
 6. `SAVE "tpi:ffw"` and `SAVE "tpi:rew"` move the tape pointer; `SAVE "tpi:close"` ejects.
 7. `SAVE "tpi:automount name.tap"` makes `LOAD ""` load your own program at switch-on.
 
@@ -814,7 +818,7 @@ repeats**.
 - Saving over an existing name **replaces that file without asking**.
 - If nothing was mounted, the new file becomes the mounted file.
 - If you save over the mounted file (with append off), the new file is mounted in its place, so
-  `CAT ""` shows what is on the card now.
+  `CAT ">"` shows what is on the card now.
 - An empty program gives **A Invalid argument**.
 
 > **Note:** the TS-Pico answers once your data is on the card. If the card fails while it's
@@ -1163,7 +1167,8 @@ OPEN #4,"f:files.txt","w": CAT #4: CAT #4;"test/*.tap": CLOSE #4
 ```
 
 The file gets the listing as plain text, one line a row, with no colors and no `Scroll?`.
-`CAT #4;""` lists the mounted TAP. The stream must be a file open for writing: one open with
+`CAT #4;">"` lists the mounted TAP. `CAT #4;""` gives **Q Parameter error**, as a menu
+can't go into a file. The stream must be a file open for writing: one open with
 `"r"`, or a `d:` or `x:` stream, gives **Q Parameter error**.
 
 ## 6.6 Capturing the screen: OPEN #2
@@ -2076,7 +2081,8 @@ characters. A name over 64 characters, or an empty name where one is required, g
 | Type | What it does |
 |---|---|
 | `CAT` | The current folder |
-| `CAT ""` | The blocks in the mounted TAP |
+| `CAT ""` | A menu: pick a file to mount |
+| `CAT ">"` | The blocks in the mounted TAP |
 | `CAT "games"` | Another folder |
 | `CAT "*.tap"` | Files matching a pattern |
 | `CAT "games/b*"` | Files in games starting with b |
@@ -2092,7 +2098,10 @@ characters. A name over 64 characters, or an empty name where one is required, g
 - **F**: `Not found:`, `Not a directory:`, `No match for` a pattern, or `Directory is empty` for
   another folder that's empty *(verbose)*.
 
-As a command: `SAVE "tpi:dir <arg>"`, or `SAVE "tpi:tapdir"` for `CAT ""`.
+In a program, `CAT a$` with an empty `a$` is the menu too, and waits for a key.
+
+As a command: `SAVE "tpi:dir <arg>"`, with `SAVE "tpi:idir"` for `CAT ""` and
+`SAVE "tpi:tapdir"` for `CAT ">"`.
 
 ### COPY: copy files
 
@@ -2410,6 +2419,8 @@ BASIC keywords. **F**: `Help for "x" not found` *(shown)*. **Q**: `SD card help 
 
 ### idir: pick a file to mount
 
+**Keyword:** `CAT ""`.
+
 `SAVE "tpi:idir"` shows the mountable files, 16 to a page. Press **0**-**9** or **Q W E R T Y**
 to mount one, **B** for the previous page, **N** to quit, or any other key for the next page.
 
@@ -2597,7 +2608,7 @@ turn. At most 23 characters of text (the whole name fits in 31): say longer text
 
 ### tapdir: look inside the mounted TAP
 
-**Keyword:** `CAT ""`, and `CAT "other.tap"` for a TAP that isn't mounted. Only the command
+**Keyword:** `CAT ">"`, and `CAT "other.tap"` for a TAP that isn't mounted. Only the command
 shows part of the tape (`CODE 0,n`) or one line per file (`CODE 1,0`).
 
 | Type | What it does |
@@ -2737,7 +2748,7 @@ called `dir`.
 
 ### R Tape loading error after a LOAD shows other names
 
-**Fix.** Check the name with `CAT ""`.
+**Fix.** Check the name with `CAT ">"`.
 **Fallback.** Mount the TAP that holds the program.
 **Likely cause.** Nothing on the mounted tape matches what you asked for. LOAD has already gone
 all the way round the tape (4.1), showing the name of each block it passed.
@@ -3044,7 +3055,7 @@ boots, load the ROM file, `TSPICO-25.ROM` (in the release `.zip`, in `src/rom`),
 |---|---|---|
 | List the current folder | `CAT` | `SAVE "tpi:dir"` |
 | List matching files | `CAT "*.tap"` | `SAVE "tpi:dir *.tap"` |
-| Look inside the mounted TAP | `CAT ""` | `SAVE "tpi:tapdir"` |
+| Look inside the mounted TAP | `CAT ">"` | `SAVE "tpi:tapdir"` |
 | Show a file | `LIST "notes.txt"` | `SAVE "tpi:list notes.txt"` |
 | Change folder | `MOVE TO "games"` | `SAVE "tpi:cd games"` |
 | Back to the previous folder | `MOVE TO "-"` | `SAVE "tpi:cd -"` |
@@ -3059,7 +3070,7 @@ boots, load the ROM file, `TSPICO-25.ROM` (in the release `.zip`, in `src/rom`),
 | Name the card | `FORMAT ":GAMES"` | `SAVE "tpi:label GAMES"` |
 | Take the card's name off | `FORMAT ":"` | `SAVE "tpi:label -"` |
 | Mount a file |  | `LOAD "tpi:name.tap"` or `LOAD "tpi:03"` |
-| Pick a file to mount |  | `SAVE "tpi:idir"` |
+| Pick a file to mount | `CAT ""` | `SAVE "tpi:idir"` |
 | Unmount |  | `SAVE "tpi:close"` |
 | Your own `LOAD ""` at switch-on |  | `SAVE "tpi:automount menu.tap"` |
 | Wind the tape |  | `SAVE "tpi:ffw"` / `SAVE "tpi:rew"` |

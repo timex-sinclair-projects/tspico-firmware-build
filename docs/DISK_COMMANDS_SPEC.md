@@ -119,8 +119,9 @@ as `CAT "<arg>"`**. There is one implementation, in the firmware.
 | `CAT "games"` | `tpi:dir games` | Another directory, without changing into it |
 | `CAT "*.tap"`, `CAT "games/b*"` | `tpi:dir *.tap` | The matching entries. `*` matches any run, `?` one character, case-insensitive, last path component only |
 | `CAT "name.tap"` | `tpi:dir name.tap` | The blocks inside that TAP. It doesn't have to be mounted |
-| `CAT ""` | `tpi:tapdir` | The mounted TAP. It mirrors `LOAD ""`, which means "the tape" |
-| `CAT #s`, `CAT #s;"x"` | `tpi:chcat [x]`, PMR1 = s | The same listing, as plain text, into the file open on stream s (#404). The Pico writes it: the ROM flushes the stream and sends the command, and gets back a bare status. `CAT #s;""` is the mounted TAP. Report O when s isn't an `OPEN #` stream, Q for one open to read or for `d:`, `v:`, `x:` |
+| `CAT ""` | `tpi:idir` | A menu: pick a file to mount. It mirrors `MOVE TO ""`: the empty name means "let me pick" (#444; ROM 2.4 and before sent `tpi:tapdir`) |
+| `CAT ">"` | `tpi:dir >` | The mounted TAP, as `tpi:tapdir`; no card needed. `>` is the listing's mark for the pointer, and no FAT name can contain it |
+| `CAT #s`, `CAT #s;"x"` | `tpi:chcat [x]`, PMR1 = s | The same listing, as plain text, into the file open on stream s (#404). The Pico writes it: the ROM flushes the stream and sends the command, and gets back a bare status. `CAT #s;">"` is the mounted TAP; `CAT #s;""` is Q, as a menu can't go into a file. Report O when s isn't an `OPEN #` stream, Q for one open to read or for `d:`, `v:`, `x:` |
 
 - **The argument is any string expression** (`CAT a$`, `CAT d$+"/*.tap"`), checked
   at line entry by HOME's class-`$0A` routine:

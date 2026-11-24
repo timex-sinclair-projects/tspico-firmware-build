@@ -10,7 +10,9 @@ CAT "*.tap" matching names:
             character
 CAT "g.tap" the blocks in a
             .tap file
-CAT ""      the mounted .tap
+CAT ""      pick a file to
+            mount (idir)
+CAT ">"     the mounted .tap
 CAT #4      into the file open
             on stream 4; also
             CAT #4;"*.tap"
@@ -28,4 +30,4 @@ not found gives Report F.
 Same as SAVE "tpi:dir name".
 
 See also: move, erase, format,
-dir, tapdir
+dir, idir, tapdir

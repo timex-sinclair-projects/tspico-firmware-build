@@ -131,7 +131,7 @@ name:
 
 - **Commands use SAVE.** `SAVE "tpi:info"` shows the TS-Pico's status; nothing is saved.
 - **LOAD "tpi:..." mounts a file**: `LOAD "tpi:frogger.tap"` makes it the "tape" that
-  `LOAD ""` reads from. There's no keyword for this one.
+  `LOAD ""` reads from. There's no keyword for mounting by name.
 - **Anything after a space is the argument.** Upper or lower case doesn't matter.
 - **The whole name, `tpi:` included, must fit in 31 characters.**
 - **Some commands take two numbers**, written like a block of code: `SAVE "tpi:log" CODE 0,500`.
@@ -208,7 +208,7 @@ cassette in the player. Mounting looks in the current folder, so go there first.
 
 Now every `LOAD` reads the mounted file, as it would a tape: `LOAD "name"`, `LOAD "" CODE`,
 `LOAD "" SCREEN$`, `VERIFY ""` and `MERGE ""`. When a LOAD finds nothing matching, you get
-**R Tape loading error** instead of an endless wait. `CAT ""` shows the programs in the
+**R Tape loading error** instead of an endless wait. `CAT ">"` shows the programs in the
 mounted file, and `SAVE "tpi:close"` ejects it.
 
 **With nothing mounted**, `LOAD ""` loads the TS-Pico's menu: **P** picks a file from any folder
