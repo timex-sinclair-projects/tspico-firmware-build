@@ -4,7 +4,7 @@
 The host tests check the bytes the firmware sends. Ryan's edge cases
 (#446, #447, #370, #373, #314) were all correct bytes that left the 2068
 in a wrong state, which showed one or two operations later: a TV_FLAG bit
-left set, a lower screen one line too tall, colours that leaked. This runs
+left set, a lower screen one line too tall, colors that leaked. This runs
 each operation inside a BASIC program in ZEsarUX, with the real firmware
 behind it, and checks the machine after it, three ways:
 
@@ -131,9 +131,9 @@ CASES = [
          ['OPEN #4,"d:*.tap"', 'INPUT #4;a$', 'CLOSE #4'], ref="INPUT a$", keys="abc"),
     Case("xin", 'PRINT #, INPUT # through x: (path)',
          ['OPEN #4,"x:"', 'PRINT #4;"path"', 'INPUT #4;a$', 'CLOSE #4'], ref="INPUT a$", keys="abc"),
-    Case("cat", 'CAT (a coloured listing, #370 #373)',
+    Case("cat", 'CAT (a colored listing, #370 #373)',
          ['CAT'], ref=PRINT_REF, allow=PRINTS, masks=PRINT_MASKS, known={"scroll": SCR_CT_FF}),
-    Case("info", 'SAVE "tpi:info" (a coloured screen)',
+    Case("info", 'SAVE "tpi:info" (a colored screen)',
          ['SAVE "tpi:info"'], ref=PRINT_REF, allow=PRINTS, masks=PRINT_MASKS,
          known={"scroll": SCR_CT_FF}),
     Case("path", 'SAVE "tpi:path"', ['SAVE "tpi:path"'], ref=PRINT_REF, allow=PRINTS,
