@@ -154,6 +154,10 @@ meet those in older programs and listings, and Chapter 10 gives both. A few of t
 something the keyword can't, such as showing a long file name in full; where that's so, the
 chapters say what and how, in a box headed **What only the command does**.
 
+**Help on the 2068 itself.** `SAVE "tpi:help"` lists the commands on the screen, and
+`SAVE "tpi:help cat"` explains one, keyword or command. `SAVE "tpi:help ?"` lists everything
+it knows about. The pages are on the SD card, so the help needs the card in place.
+
 ## 1.3 Quiet or chatty: VERBOSE
 
 Out of the box, most TS-Pico commands work quietly: a successful command gives you **0 OK**, and a failed one gives you a report such as **F Invalid file name**. That keeps
@@ -473,6 +477,10 @@ recovers once it loses power, which taking the card out, or switching everything
 
 > **Chapter Preview.** List what's on the card, move between folders, copy, rename and delete
 > files, and mount a TAP file so that `LOAD ""` reads from it.
+
+While you explore, `SAVE "tpi:help"` is never far away: `SAVE "tpi:help cat"`,
+`SAVE "tpi:help copy"` and so on explain each keyword in this chapter on the 2068's screen
+(1.2).
 
 ## 3.1 What's on the card? CAT
 

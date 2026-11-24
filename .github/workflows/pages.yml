@@ -41,6 +41,8 @@ on:
       - 'docs/manual/*.md'
       - 'docs/manual/images/**'
       - 'tools/build-site-docs.py'
+      - 'tools/manual-variants.py'
+      - 'tools/manual-links.py'
       - 'tools/manual-pdf/**'
       - 'promo/flyer/**'
       - '.github/workflows/pages.yml'

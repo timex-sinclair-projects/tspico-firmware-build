@@ -236,5 +236,5 @@ behavior, and the caveat and the issue link go.
 | `tools/sp0256-port.py` | `c6ee937adb2b` | [firmware/speech.md](firmware/speech.md) | — |
 | `tools/speech-rules.py` | `b58417ce8921` | [firmware/speech.md](firmware/speech.md) | — |
 | `.github/workflows/build.yml` | `67baddd391df` | [firmware/boot.md](firmware/boot.md) | — |
-| `.github/workflows/manual.yml` | `01bec89b50d1` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/manual.yml` | `59765d93ecdb` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `d7a0fa2ce38a` | [firmware/boot.md](firmware/boot.md) | — |

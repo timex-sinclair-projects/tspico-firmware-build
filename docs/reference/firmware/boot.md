@@ -405,9 +405,10 @@ port plan); `pico-serial.py flash --v3 --branch B` fetches it.
 
 The user manual is built by its own workflow, `manual.yml`, on pushes and
 pull requests that touch `docs/manual/`, `tools/manual-pdf/`,
-`tools/manual-variants.py`, `tools/build-site-docs.py`, `src/config.ini`
-(the cover's version) or `site/assets/img/`. Its one job, `manual-pdf`,
-first runs `manual_variants_hosttest.py`, then `tools/manual-pdf/ci-setup.sh`
+`tools/manual-variants.py`, `tools/manual-links.py`, `tools/build-site-docs.py`,
+`src/config.ini` (the cover's version) or `site/assets/img/`. Its one job,
+`manual-pdf`, first runs `manual_variants_hosttest.py` and
+`manual_links_hosttest.py`, then `tools/manual-pdf/ci-setup.sh`
 installs a pinned pandoc (3.5: 22.04's 2.9 had no `--embed-resources`, and
 pinned, the PDFs don't change with the runner image), the Linux fonts the
 stylesheets fall back to (Charis SIL, Nimbus Sans, DejaVu Sans Mono) from
@@ -418,7 +419,11 @@ colophon) are in `tools/manual-pdf/fonts/`. `tools/manual-pdf/make.sh` takes
 one board's manual from `docs/manual/user-manual.md`
 (`tools/manual-variants.py`: passages for one board sit between
 `<!-- v2 -->` or `<!-- v3 -->` marker lines; `BOARD=v2` is the default and
-the published manual), turns it into HTML with pandoc and
+the published manual), makes its section references links
+(`tools/manual-links.py`: each numbered heading gets an id such as
+`{#s7-1}` or `{#ch-7}`, and "(7.1)", "Chapter 7" and "Appendix D" become
+links to them; versions such as "ROM 2.5" are left alone, #335), turns it
+into HTML with pandoc (`-f gfm+attributes`, for those ids) and
 `tools/manual-pdf/manual.lua` (program listings laid out as the 2068 lists
 them: line numbers in four columns, every line cut at 32; and a lead-in
 paragraph kept on one page with the code, picture or short list after it;
@@ -630,7 +635,9 @@ firmware 2.2.1 on ROM 2.2). The job, at the tag:
 by a workflow's token), on a green build of `main`, and on pushes to
 `main` that touch `site/`, `web-updater/`, `SD card/`, the manuals or the
 reference. It copies the manuals, the quick guides and this reference into the site
-(`tools/build-site-docs.py`, links rewritten for the site), builds the user
+(`tools/build-site-docs.py`, links rewritten for the site, and the user
+manual's section references made links by `tools/manual-links.py`, which
+kramdown reads with its heading ids as they are), builds the user
 manual's and the quick guides' PDFs into `site/manual/` (`tools/manual-pdf/make.sh`, linked
 from the Docs page), builds the Jekyll site and mounts the web updater at `/updater/`, with the latest
 release's payload under `/updater/release/` and the latest green `main`

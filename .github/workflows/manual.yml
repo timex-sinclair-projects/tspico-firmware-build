@@ -9,10 +9,12 @@ on:
       - 'docs/manual/**'
       - 'tools/manual-pdf/**'
       - 'tools/manual-variants.py'
+      - 'tools/manual-links.py'
       - 'tools/build-site-docs.py'
       - 'src/config.ini'          # the cover's version
       - 'site/assets/img/**'      # images make.sh takes from the site
       - 'src/test/manual_variants_hosttest.py'
+      - 'src/test/manual_links_hosttest.py'
       - '.github/workflows/manual.yml'
   pull_request:
     branches: [main]
@@ -38,6 +40,10 @@ jobs:
       # build.yml's firmware job until the manual got its own workflow.
       - name: Check the manual variants
         run: python3 src/test/manual_variants_hosttest.py
+
+      # The section references made links (tools/manual-links.py, #335).
+      - name: Check the manual's section links
+        run: python3 src/test/manual_links_hosttest.py
 
       - name: Install pandoc, the PDF fonts and pypdf
         timeout-minutes: 10
