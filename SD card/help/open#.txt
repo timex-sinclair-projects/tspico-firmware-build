@@ -3,36 +3,98 @@ BASIC Command              OPEN#
 OPEN# s,"c"
 
 Open channel "c" as stream
-number s for I/O.
+number s for I/O. The standard
+form specifies one of the main 
+"k", "s", or "p" channels. See
+the Streams help topic for more.
 
 TS-Pico (ROM 2.4) adds a file
 channel "f:", directory channel
 "d:", a query channel "x:", and 
 (for the v3 card) a voice "v:"
 channel:
+
+File Channel "f:name"
+---------------------
+With the file channel, using the
+Native Files notation "f:", you
+can open a stream on a specific
+file on the SD card.
+
   OPEN #s,"f:name"[,"m"[,n]]
-A file on the SD card. The mode
-m is r (read, the default), w
-(write), a (append) or u (read
-and write). The default is text
-mode, or you can add a "b" to
-mode for binary format:
-  OPEN #5,"f:log.txt","a"
+The mode, m, is "r" (read, the
+default), "w" (write), "a"
+(append) or "u" (update, read
+and write). The default
+translation is text mode, or you
+can add a "b" to mode for binary
+format.
+
+In text mode, keywords are
+expanded to individual letters,
+UDGs and block graphics print as
+"?". In binary mode, those
+translations are not done, and 
+the characters sent as-is.
+
 Adding n makes a file of n-byte
 records:
   OPEN #6,"f:recs.dat","u",32
 When reading or writing the
 stream, TAB n moves to record
-n (or byte n without records).
-  OPEN #7,"d:*.tap"
-A folder listing, one name a
-line, read with INPUT #.
-  OPEN #8,"x:"
-Questions: PRINT #8;"path"
-(or "dir", "mount", "info"),
-then INPUT #8 the answer.
+n (or byte n without records),
+otherwise PRINT and INPUT go to
+the next record. The special
+value of 0 for TAB asks for the
+number of records in the file.
+  INPUT #4;TAB 0;n
+  PRINT "There's ";n;" records"
 
 RESTORE #s goes back to the
 start of an "f:" file.
 
-See also: CLOSE#, RESTORE, cat  streams
+Directory Channel "d:pattern"
+-----------------------------
+  OPEN #7,"d:*.tap"
+A folder listing, one name a
+line, read with INPUT #.
+
+TS-Pico info channel "x:"
+-------------------------
+  OPEN #8,"x:"
+Specific questions of the TS-
+Pico to get specific answers:
+  PRINT #8;"path"
+then INPUT #8 for the answer:
+  INPUT #8;a$
+  PRINT "Current path:";a$
+Don't use prompt strings with
+INPUT that would print something
+to the stream. 
+
+The queries are:
+"path"  The folder you're in
+"mount" The mounted file, or an
+        empty line if none is.
+"dir"   The number of folders,
+        the number of files,
+        then a line for each 
+        folder and each file as
+        in dirinfo.tap.
+"info"	The card's name, its
+        free space and its total
+        size in bytes, the
+        firmware's version, the
+        ROM's version.
+
+Voice Channel "v:" (v3 board)
+-----------------------------
+  OPEN #5,"v:"
+Allow you to send text and
+allophones to the speech
+synthesizer with no character
+limit. See say for more.
+
+See also: CLOSE#, RESTORE, cat,
+streams, native-files, say,
+greet

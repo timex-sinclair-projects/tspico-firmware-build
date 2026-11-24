@@ -1,7 +1,6 @@
 TS-Pico Command              SAY
 --------------------------------
-SAVE "tpi:say <text>"
-SAVE "tpi:say [allo1 allo2 ...]"
+SAVE "tpi:say text"
 SAVE "tpi:say"
 
 *v3 board only*
@@ -15,7 +14,15 @@ their speech wait in a queue.
   SAVE "tpi:say HELLO, THERE"
   SAVE "tpi:say [HH1 EH LL OW]"
 
-With no text given, the speaking
-is stopped.
+Allophones can be specified in 
+the text by including them in
+square brackets. See the user
+manual for more info.
 
-See also: 
+The length of text is limited to
+23 characters in this command.
+For longer text (unlimited), use
+the v: channel to sent text to.
+See OPEN#.
+
+See also: OPEN#, greet

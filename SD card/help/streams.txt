@@ -61,9 +61,16 @@ clear the text you printed.
 You use CLOSE # to close a
 stream when done with it, but
 you shouldn't close the system
-streams 0-3. Commands that can
-use streams: PRINT, LIST, INPUT,
-INKEY$
+streams 0-3. 
+
+After NEW or a reset, open
+streams are forgotten; OPEN them
+again. CLEAR and RUN keep them
+open.
+
+Other commands that can use
+streams are: PRINT, LIST, INPUT,
+INKEY$.
 
 The TS-Pico (v2.3) has extended
 channels to include a file
