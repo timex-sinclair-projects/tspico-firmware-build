@@ -26,6 +26,9 @@ rewritten for the site:
   * web links, mailto: and in-page anchors are left alone, and so is
     everything inside code.
 
+The user manual's section references ("(7.1)", "Chapter 7", "Appendix D")
+also become links to their headings (tools/manual-links.py).
+
 Usage: python3 tools/build-site-docs.py [--check]
   --check   build into a temporary folder and report broken links only
 """
@@ -73,6 +76,17 @@ def manual_variant(text, board):
     sys.path.insert(0, os.path.join(REPO, "tools"))
     import importlib
     return importlib.import_module("manual-variants").variant(text, board)
+
+
+# Docs whose section references ("(7.1)", "Chapter 7") become links to their
+# headings (tools/manual-links.py, #335).
+LINKED = {"docs/manual/user-manual.md"}
+
+
+def manual_links(text):
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import importlib
+    return importlib.import_module("manual-links").link(text)
 
 
 LINK = re.compile(r"(!?\[(?:[^\[\]]|\[[^\]]*\])*\])\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
@@ -194,6 +208,8 @@ def build(site_dir):
             text = f.read()
         if repo_md in VARIANTS:
             text = manual_variant(text, VARIANTS[repo_md])
+        if repo_md in LINKED:
+            text = manual_links(text)
         with open(out, "w", encoding="utf-8") as f:
             f.write(convert(text, repo_md, pages))
     for src, dst in COPY_DIRS:
