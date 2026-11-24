@@ -327,7 +327,7 @@ says so (below). The steps, in order:
    (not a glob: `SD card/` also holds committed `.tap` files) and uploaded
    as the `basic-taps` artifact, so a branch's programs can be tested
    without a local toolchain.
-3. **Host tests**: 62 `src/test/*_hosttest.py` scripts on CPython, each
+3. **Host tests**: 63 `src/test/*_hosttest.py` scripts on CPython, each
    running the real firmware modules with `machine`/`rp2` faked — including
    `reference_hosttest.py`, the test that keeps this reference current
    ([README](../README.md#keeping-it-current)); the manual's
@@ -348,9 +348,11 @@ says so (below). The steps, in order:
    committed slot-1 image, `src/rom/TSPICO-25.ROM`,
    `rom_cend_hosttest.py` runs the ROM's BIOS `C_END`, and
    `rom_tpmode_hosttest.py` its switch words (`tpi:tape` and the rest),
-   `rom_preload_hosttest.py` the module's pre-load check, and
-   `rom_fn86_hosttest.py` the string reader and function 86h's loop, in a
-   Z80 interpreter. Then **ROM 2.5**, the release ROM: `build-rom.py --megabank
+   `rom_preload_hosttest.py` the module's pre-load check,
+   `rom_fn86_hosttest.py` the string reader and function 86h's loop, and
+   `rom_lower_hosttest.py` the lower-screen fixes (TV_FLAG bit 3 in
+   `CH_IN` and `RCH_IN`, CLS-LOWER after function 88h, #446, #447; on 2.4
+   and 2.5), in a Z80 interpreter. Then **ROM 2.5**, the release ROM: `build-rom.py --megabank
    --verify`, `cmp` of `build/TSPICO-25.ROM` against `src/rom/TSPICO-25.ROM`
    (the slot-1 image must be exactly what the sources build),
    `rom_megabank_hosttest.py` (the boot reset, the mover and the `r:`
@@ -657,7 +659,7 @@ and DOCK slots by the `bank_sm` word, a nibble each
 | Slot | Size | Contents | Source | crc32 |
 |---|---|---|---|---|
 | 0 | 32K | TS-Pico ZX Spectrum ROM v4 | `src/rom/TSPICO-ZX48-V4.BIN` | `083655BF` |
-| 1 | 32K | TS-Pico TS-2068 ROM 2.5 | `src/rom/TSPICO-25.ROM` | `44F90522` |
+| 1 | 32K | TS-Pico TS-2068 ROM 2.5 | `src/rom/TSPICO-25.ROM` | `1333913A` |
 | 2 | 32K | ZX Diagnostics v0.37 | base image | `FA54FB1D` |
 | 3 | 32K | Rodolfo Guerra's TK90/95 ROM | base image | `9554B434` |
 | 4–7 | — | spare | — | — |

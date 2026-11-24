@@ -92,7 +92,8 @@ statement's session id and the modifier token (CODE, SCREEN$, DATA, LINE)
 `NATIVE_OPEN` checks the name and arms `TSP.native` for this session; if
 the file exists it asks **"Replace NAME? (Y/N)"** with function 88h on the
 lower screen (so the question does not land in a picture `SCREEN$` is
-about to save). A new file gets `Saving to path` when VERBOSE is on, but
+about to save), and `LOWER_LOOP` clears the lower screen after the answer,
+so the "Start tape" line that follows does not scroll the picture (#447). A new file gets `Saving to path` when VERBOSE is on, but
 not for SCREEN$, which gets the bare status for the same reason (#314).
 F_HOOK then shortens the name to the path's first 10
 characters (a stand-in) and the stock SAVE runs: steps 1–18, except that at

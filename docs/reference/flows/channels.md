@@ -80,7 +80,10 @@ command is per 64 bytes.
 ## INPUT
 
 `INPUT #4;a$` (on a stream opened `r` or `u`): the 2068's INPUT reads
-characters through the record's input routine, HOME 14A9h → `CH_IN`.
+characters through the record's input routine, HOME 14A9h → `CH_IN`, which
+first clears TV_FLAG bit 3, the "copy the edit line" flag WAIT-KEY sets
+for every character (left set, the next `scroll?` showed the last command,
+#446; [../rom/exrom-fdd.md](../rom/exrom-fdd.md#ch_in)).
 
 1. A byte left in the record's 255-byte input buffer: hand it out (carry
    set).

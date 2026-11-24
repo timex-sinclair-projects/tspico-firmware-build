@@ -1289,6 +1289,7 @@ DIV16X8:
 ; a last line with no newline ends with a CR. Binary: every byte as it is.
 ;------------------------------------------------------------------------------
 RCH_IN: ld      iy,IY_SYSVARS
+        res     3,(iy+TV_FLAG-IY_SYSVARS) ; as CH_IN (#446)
         push    ix
         ld      ix,(CURCHL)
         call    RCH_SYNC

@@ -30,7 +30,8 @@ byte-level change list is in [the build history](../../ROM_CHANGES.md#rom-21-the
 The module is 2456 bytes (1919 in ROM 2.2; `PS_READ` added 54 at the end, then
 COPY's file form, MOVE as rename, `LIST "name"` and `RESTORE #n` 311 more, also
 at the end, then the speech channel, `v:`, 47 more: 14 of them free bytes
-before `PS_READ`, #375; then the command channel, `x:`, 22 more at the end,
+before `PS_READ`, #375, of which the `INPUT #` and "Replace?" fixes took
+10, #446, #447; then the command channel, `x:`, 22 more at the end,
 #404; then `CAT #n`, 103 more at the end, #404). It enters the 2068's code only through a vector
 table at its start, reached from HOME and EXROM patches, so it can be
 rebuilt without moving any entry point. Every entry from HOME runs inside
@@ -44,30 +45,30 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 43–165 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 172–193 | 3000h–3020h | the vector table |
-| 195–206 | 3021h | `TAPE_MODE` |
-| 221–248 | 3029h | `G_BEEP` |
-| 250–315 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 317–337 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 339–436 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
-| 438–512 | | the parsing helpers |
-| 514–619 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 621–871 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 873–893 | | `LOWER_LOOP` (function 88h) |
-| 895–1464 | | the channel driver |
-| 1466–1484 | | `HEXDIG`, `STRLEN` |
-| 1486–1498 | to 3769h | the command strings, `MODE_R` |
-| 1500–1513 | 376Ah–3770h | `PRELOAD` |
-| 1515–1517 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
-| 1519–1568 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1570–1777 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1779–1844 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
-| 1846–1851 | 3929h–3931h | `IN_DROP` (#404) |
-| 1853–1913 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1915–2821 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
-| 2824–2825 | 3998h (3E53h) | `FDD_END` |
-| 2827–2839 | 2400h–2C72h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
+| 43–169 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 176–197 | 3000h–3020h | the vector table |
+| 199–210 | 3021h | `TAPE_MODE` |
+| 225–252 | 3029h | `G_BEEP` |
+| 254–319 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 321–341 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 343–440 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
+| 442–516 | | the parsing helpers |
+| 518–623 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 625–875 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 877–906 | | `LOWER_LOOP` (function 88h) |
+| 908–1478 | | the channel driver |
+| 1480–1498 | | `HEXDIG`, `STRLEN` |
+| 1500–1512 | to 3773h | the command strings, `MODE_R` |
+| 1514–1527 | 3774h–377Ah | `PRELOAD` |
+| 1529–1533 | 377Bh–377Eh | 4 free bytes (`FFh`): `PS_READ` stays at 377Fh, and an `ASSERT` fails the build if the code before it reaches 377Fh |
+| 1535–1584 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1586–1793 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1795–1860 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
+| 1862–1867 | 3929h–3931h | `IN_DROP` (#404) |
+| 1869–1929 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
+| 1931–2837 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
+| 2840–2841 | 3998h (3E53h) | `FDD_END` |
+| 2843–2855 | 2400h–2C76h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -110,6 +111,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `READ_STATUS_BYTE` | EXROM 02B9h | the response function's own status byte (the curated name; `READ_STATUS` until #181) |
 | `OPEN_STREAM` | EXROM 0426h | open stream A (through HOME CHAN-OPEN) |
 | `LOOP_BODY` | EXROM 21E6h | function 86h's loop after its opening |
+| `CLS_LOWER_X` | EXROM 22E7h | `PUSH IX / EXX / LD HL,08A9h / JP CALL_HOME`: HOME's CLS-LOWER, the base image's own stub (its tape BREAK clears the lower screen with it, [exrom-chunk1.md](exrom-chunk1.md)). `LOWER_LOOP` calls it; `build-rom.py` checks its nine bytes |
 | `TSPICO_READ_DATA` | EXROM 2298h | `IN A,(0Eh) / AND A / RET`: one byte from the Pico, no ready-wait, Z for 00h. `PS_READ`'s read |
 | `PRINT_A` | EXROM 05FAh | `LD (IY+52h),FFh` (SCR_CT, so the 2068 never stops with its own "scroll?") then RST 10h through CALL_HOME: what the v1.1 reader printed with. `PS_READ`'s print |
 | `THUNK_HX` | HOME 03FCh | the returning HOME→EXROM thunk (named; the module never calls it — HOME's stubs do) |
@@ -135,6 +137,7 @@ ROM that moves one fails instead of jumping into the wrong code
 |---|---|---|
 | `CH_ADD` | 5C5Dh | the next character of the BASIC line: the module's parser |
 | `FLAGS` | 5C3Bh | bit 7: 1 = run time, 0 = syntax check |
+| `TV_FLAG` | 5C3Ch | `IY+2`. Bit 3: the keyboard's input routine (HOME 0C0Eh) copies the edit line to the lower screen first (ED-COPY, 0C83h, which clears it). `CH_IN` and `RCH_IN` clear it (#446) |
 | `TADDR` | 5C74h | T-ADDR: its low byte is the pre-header's TADDR |
 | `STKEND` | 5C65h | the calculator stack's end: strings are popped from below it, commands built above it |
 | `FRAMES` | 5C78h | the session id's seed |
@@ -690,9 +693,13 @@ LOWER_LOOP: CALL READ_STATUS_BYTE ; 02B9h: the function's own status
             LD A,STREAM_LOWER     ; FDh, K
             CALL OPEN_STREAM
             POP AF
-            JP LOOP_BODY          ; 21E6h: 86h's loop, which prints through
+            CALL LOOP_BODY        ; 21E6h: 86h's loop, which prints through
                                   ;   the current channel and ends with its
                                   ;   own POP AF / RET
+            PUSH AF               ; its status and carry, for the caller
+            CALL CLS_LOWER_X      ; 22E7h: HOME's CLS-LOWER (#447)
+            POP AF
+            RET
 ```
 
 Exactly 86h's handler (`CALL 01C3h`, which opens stream FEh) with another
@@ -705,6 +712,16 @@ Z,3006h / RET` ([exrom-chunk1.md](exrom-chunk1.md#fn_dead_beep-2216h)). On
 to `tpi:fopen`, which only this module sends. The lower screen starts
 clear, so the firmware's 88h text has no leading CR; keep it to one line
 ([../firmware/tspico-messages.md](../firmware/tspico-messages.md#send_msg_prompt_ynprompt-echotrue-lowerfalse)).
+
+Why the CLS-LOWER at the end: the question and the key the Pico echoes stay
+on the lower screen, and the SAVE goes on to print "Start tape, then press
+any key." there. The three lines made the lower screen grow and scrolled
+the picture up one line, so `SAVE "f:…" SCREEN$` over an existing file
+saved the screen moved (#447). Clearing it is what INPUT does when it is
+done; "Start tape" then starts on a clear two-line lower screen, as it does
+for a new file. On an `N` the Pico refuses the SAVE's header and the report
+that follows clears the lower screen anyway. The loop's AF (its status, and
+carry for a `03h` end) goes back to the function chain unchanged.
 
 ## The channel driver
 
@@ -867,11 +884,24 @@ A = the next byte, or NC NZ at the end of the file — which the ROM's
 WAIT-KEY (HOME 11CFh) turns into Report 8 by itself, so `INPUT #` past the
 end is "8 End of file".
 
-1. `LD IY,IY_SYSVARS`; IX = CURCHL.
+1. `LD IY,IY_SYSVARS`; `RES 3,(IY+2)` (TV_FLAG); IX = CURCHL.
 2. A byte left in `R_INBUF` (`R_INP` < `R_INN`): hand it out, `R_INP` + 1.
 3. Otherwise `CH_FLUSH` (what was printed first goes out first — `INPUT
    #4;TAB n;` is a seek followed by a read), then `CH_FETCH`; Z: try again;
    NZ: the end of the file.
+
+Why TV_FLAG bit 3: WAIT-KEY (11CFh) sets it before every character the
+editor takes, unless bit 5 is set, and only the keyboard's input routine
+clears it (0C0Eh: `BIT 3 / CALL NZ,ED-COPY`, which copies the edit line to
+the lower screen and resets the bit). An `F` record's routine never did,
+so after `INPUT #` from a file the bit stayed set. The next keyboard wait
+that doesn't want the edit line — the `scroll?` prompt, which sets bit 5
+and waits — then ran ED-COPY: the prompt read `scroll?RUN` (the last
+command), and ED-COPY's change to the lower screen's print position left
+garbage on the next lines, or Report K from a stray color code (#446).
+Clearing it here, as the keyboard's own routine would, leaves the bit as
+the stock editor expects. `INPUT #` itself never needs the copy: its input
+is not the keyboard.
 
 ### `CH_FLUSH`
 
@@ -959,7 +989,7 @@ NUL-ended prefixes, sent as the start of each command:
 | `CMD_CHCAT` | `tpi:chcat ` | `CAT_HASH` (`CAT #n`; at the end of the module, `CMD_CHCAT`) |
 | `MODE_R` | `r` (not NUL-ended: copied with a length of 1) | OPEN # with no mode |
 
-### `PRELOAD` (376Ah)
+### `PRELOAD` (3774h)
 
 `SEND_FOPEN`'s and `CH_SEND`'s read of the pre-load status: `CALL
 BIOS_RX_A` (`IN A,(0Eh) / AND A`), `RET NZ`, `JP WF_FAIL`. A 0 means no
@@ -1100,7 +1130,7 @@ statement and returns, and at run time **`tpi:list x`** goes to the Pico
 Why not scan the expression and look at its type: a scan in syntax mode
 done at run time inserts a second hidden number after each number in the
 line (the line has them already), and a scan in run mode evaluates the
-expression a second time (the comment at 1626–1630). So the test is lexical, and `LIST (a$)` counts as a number:
+expression a second time (the comment at 1642–1646). So the test is lexical, and `LIST (a$)` counts as a number:
 HOME's LIST then says Report C at the syntax pass.
 
 ### `FDD_RESTORE` (3819h)
@@ -1652,7 +1682,7 @@ bank mapped elsewhere: a matter for a LEAP build for the board.
 ### The `r:` channels (`rchan.asm`, phase 9)
 
 `src/rom/fdd/rchan.asm`, assembled only with `-DMEGABANK`, at EXROM
-2400h–2C72h (2163 bytes; the run 23D4h–2FFFh is free in 2.4, and an `ASSERT`
+2400h–2C76h (2167 bytes; the run 23D4h–2FFFh is free in 2.4, and an `ASSERT`
 keeps it below 2C8Ch, where the fast entry lands): `OPEN #n,"r:name"[,"mode"[,reclen]]`, `PRINT #`,
 `INPUT #`, `INKEY$ #` and `CLOSE #` on the Megabank's RAM disk, as `f:`
 does them on the card (the Megabank spec, "Channels"). Modes `r`, `w`, `a`,
@@ -1783,7 +1813,7 @@ ZEsarUX with the real firmware.
 | Name | Value | What |
 |---|---|---|
 | `RCH_BASE` | 2400h | where `rchan.asm` is assembled (fddcmd.asm) |
-| `RCH_END` | 2C73h | its end; `ASSERT`ed at most 2C8Ch, the fast entry's `JP FX_ENTRY` (build-rom.py) |
+| `RCH_END` | 2C77h | its end; `ASSERT`ed at most 2C8Ch, the fast entry's `JP FX_ENTRY` (build-rom.py) |
 | `R_ALLOC` | 100h | an `R` record's allocation in CHANS |
 | `BLOCK_LEN` | 15 | the slot's block, as ramdisk.py's |
 | `SLOT_OFF`, `SLOT_LEN` | 0200h, 32 | the slots in the RAM disk's top page, one a stream |
@@ -1897,17 +1927,17 @@ letter, its length):
 
 | Routine | Address | What |
 |---|---|---|
-| `RCH_IN` | 2AFCh | the input routine (HOME 14A9h → `G_IN` → `MB_IN`): C with A = the next byte, or NC NZ at the end of the file (Report 8 from WAIT-KEY) |
-| `RCH_GETC` | 2B0Fh | as `f:` does: a stream opened `w` or `a` is Q; TAB 0 makes the next read the count (records, or bytes) and a CR; a record file gives one record (padded past the end) and a CR. Text: LF and CRLF read as CR, other controls dropped, and a last line with no newline ends with a CR. Binary: every byte as it is |
-| `RCH_RAW` | 2BFCh | the byte at the position, the position on: C with A; NC at the length |
-| `RCH_NUM` | 2C1Bh | HL in decimal at `RR_BUF`, then a CR; `RR_DIG` points at it |
+| `RCH_IN` | 2AFCh | the input routine (HOME 14A9h → `G_IN` → `MB_IN`): TV_FLAG bit 3 cleared, as `CH_IN` does (#446); C with A = the next byte, or NC NZ at the end of the file (Report 8 from WAIT-KEY) |
+| `RCH_GETC` | 2B13h | as `f:` does: a stream opened `w` or `a` is Q; TAB 0 makes the next read the count (records, or bytes) and a CR; a record file gives one record (padded past the end) and a CR. Text: LF and CRLF read as CR, other controls dropped, and a last line with no newline ends with a CR. Binary: every byte as it is |
+| `RCH_RAW` | 2C00h | the byte at the position, the position on: C with A; NC at the length |
+| `RCH_NUM` | 2C1Fh | HL in decimal at `RR_BUF`, then a CR; `RR_DIG` points at it |
 
 | String | Address | Text |
 |---|---|---|
-| `CMD_RCHOPEN` | 2C40h | `"tpi:rchopen ",0` |
-| `CMD_RCHGROW` | 2C4Dh | `"tpi:rchgrow ",0` |
-| `CMD_RCHCLOSE` | 2C5Ah | `"tpi:rchclose ",0` |
-| `CMD_RMASK` | 2C68h | `"tpi:rmask ",0` |
+| `CMD_RCHOPEN` | 2C44h | `"tpi:rchopen ",0` |
+| `CMD_RCHGROW` | 2C51h | `"tpi:rchgrow ",0` |
+| `CMD_RCHCLOSE` | 2C5Eh | `"tpi:rchclose ",0` |
+| `CMD_RMASK` | 2C6Ch | `"tpi:rmask ",0` |
 
 ## Where comments, documents and the code disagree
 

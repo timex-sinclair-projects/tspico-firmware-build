@@ -221,6 +221,9 @@ jobs:
       - name: Test ROM 2.2's pre-load check (PRELOAD) in the Z80 interpreter
         run: python3 src/test/rom_preload_hosttest.py
 
+      - name: Test the lower-screen fixes (INPUT # and TV_FLAG, the Replace? question) in the Z80 interpreter
+        run: python3 src/test/rom_lower_hosttest.py
+
       - name: Test ROM 2.3's string reader and function 86h loop in the Z80 interpreter
         run: python3 src/test/rom_fn86_hosttest.py
 

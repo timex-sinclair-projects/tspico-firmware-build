@@ -27,8 +27,8 @@ sources are listed [at the end](#sources).
 | **2.1** | `src/rom/TSPICO-21.ROM` until 2.2, crc E813BF90 | 2.0 plus 15 HOME/EXROM patches and a 1901-byte module at EXROM 3000h–376Ch. It shipped with firmware 2.1.0–2.1.2. |
 | **2.2** | `src/rom/TSPICO-22.ROM`, crc 8363E100 | 2.1 plus a 16th patch (EXROM 20BEh) and two module fixes: `tpi:tape` keeps the printer switch ([TAPE_MODE](#tape_mode-tpitape-keeps-the-printer-switch), #176) and a pre-load of 0 is Report J ([PRELOAD](#preload-a-pre-load-of-0-is-report-j), #179). The module is 1919 bytes, 3000h–377Eh. It shipped with firmware 2.2 and 2.2.1. |
 | **2.3** | `src/rom/TSPICO-23.ROM` until 2.4, crc D7352D58 (as released in 2.3.1) | 2.2 plus four patches and `PS_READ`: keys go to the Pico as typed (0572h) and function 86h/88h goes on round its loop after `N`, the Pico ending it with 03h (21F0h, #227); command pre-headers carry the ROM's version, 23h, in byte 2 (1BB5h and the module); the string reader passes control-code values and bytes ≥ 80h through (045Fh → `PS_READ` at 377Fh, #228). FDD_VERSION 8. It shipped with firmware 2.3 and 2.3.1. |
-| **2.4** | `src/rom/TSPICO-24.ROM`, crc 96D7CEAA | 2.3 plus three patches and module code: COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-24-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-24-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-24-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-24-the-command-channel), #404); `CAT #n` writes a listing into a file ([below](#rom-24-cat-n), #404). Version marker 24h. The module is 2456 bytes, 3000h–3997h, FDD_VERSION 9. Needs the matching firmware. It shipped with firmware 2.4; it is still built and checked in CI as the previous release. |
-| **2.5** | `src/rom/TSPICO-25.ROM`, crc 44F90522 (`TSPICO-MB.ROM`, the Megabank test ROM, until it was promoted) | 2.4 built with `tools/build-rom.py --megabank`: the module assembled `-DMEGABANK`, with the TS-2068 Megabank's code after it, `rchan.asm` at EXROM 2400h, `bankapi.asm` over the RAM bank code, and 21 more patches ([below](#rom-25-the-ts-2068-megabank)). Version marker 25h, FDD_VERSION 9. It runs with or without the board. This is the release ROM and the slot-1 image. |
+| **2.4** | `src/rom/TSPICO-24.ROM`, crc E2DD258E | 2.3 plus three patches and module code: COPY goes through the disk hook (19D7h, 25D6h) and MOVE renames ([below](#rom-24-copy-and-move)); `LIST "x"` shows a file and `RESTORE #n` rewinds one (19AFh, 19D0h, [below](#rom-24-list-and-restore)); `OPEN #n,"v:"` opens the v3 card's speech ([below](#rom-24-the-speech-channel), #375) and `OPEN #n,"x:"` a command channel ([below](#rom-24-the-command-channel), #404); `CAT #n` writes a listing into a file ([below](#rom-24-cat-n), #404). Version marker 24h. The module is 2456 bytes, 3000h–3997h, FDD_VERSION 9. Needs the matching firmware. It shipped with firmware 2.4; it is still built and checked in CI as the previous release. |
+| **2.5** | `src/rom/TSPICO-25.ROM`, crc 1333913A (`TSPICO-MB.ROM`, the Megabank test ROM, until it was promoted) | 2.4 built with `tools/build-rom.py --megabank`: the module assembled `-DMEGABANK`, with the TS-2068 Megabank's code after it, `rchan.asm` at EXROM 2400h, `bankapi.asm` over the RAM bank code, and 21 more patches ([below](#rom-25-the-ts-2068-megabank)). Version marker 25h, FDD_VERSION 9. It runs with or without the board. This is the release ROM and the slot-1 image. |
 | **ZX v3** | `src/rom/TSPICO-ZX48-V3.BIN`, from `tspico-zx48-v3.asm` | The ZX v2 Spectrum ROM (crc B3D40C73), with a WAIT_RDY fix and `LOAD "tpi:…"`. |
 | **ZX v4** | `src/rom/TSPICO-ZX48-V4.BIN`, from the same source with `-DZXV=4` | v3 plus `SAVE "tpi:dir"`: it sends the op with bit 7 set and reads the reply in pieces (length 1–255, the bytes, … then 0), so a reply can be longer than 255 bytes. Flash slot 0's image (the flash image and the upgrade UF2) from 2026-10-03. |
 
@@ -511,8 +511,16 @@ LOWER_LOOP:                     ; 2213h: CP 87h / JP Z,3006h / RET, with A = fun
         ld   a,0FDh                 ; stream -3, K: the lower screen (01C3h opens FEh)
         call 0426h                  ; OPEN_STREAM
         pop  af
-        jp   21E6h                  ; 86h's loop body, which ends in its own POP AF / RET
+        call 21E6h                  ; 86h's loop body, which ends in its own POP AF / RET
+        push af
+        call 22E7h                  ; CLS-LOWER (HOME 08A9h), the base image's own stub
+        pop  af
+        ret
 ```
+
+Until #447 it ended `jp 21E6h`, leaving the question and its answer on the
+lower screen; SAVE's "Start tape, then press any key." then made three lines
+there and scrolled the picture up one line before `SCREEN$` saved it.
 
 ### C_END2: a timeout is J, not F
 
@@ -625,6 +633,13 @@ PRINT # or INPUT # statement.
 G_BEEP (3029h) skips the editor's key click (HL = 00C8h) when CURCHL is an 'F'
 record. It also puts DI back after BEEPER's EI.
 
+CH_IN (and the Megabank's RCH_IN) start with `RES 3,(IY+2)`. WAIT-KEY sets
+TV_FLAG bit 3 before every character the editor takes, and only the
+keyboard's input routine cleared it, by copying the edit line to the lower
+screen (ED-COPY). Until #446 the bit stayed set after INPUT # from a file,
+and the next `scroll?` showed the last command after it and left garbage on
+the lines that followed.
+
 ### Routine index
 
 | Addr | Routine | Addr | Routine |
@@ -677,7 +692,7 @@ What it adds over 2.4:
    folder menu missed key presses.
 5. **`r:` channels** (#430, #432, #436). `OPEN #n,"r:name"[,"mode"[,reclen]]`,
    `PRINT #`, `INPUT #` and `CLOSE #` on the RAM disk, in
-   `src/rom/fdd/rchan.asm` at EXROM 2400h–2C72h. The ROM reads and writes
+   `src/rom/fdd/rchan.asm` at EXROM 2400h–2C76h. The ROM reads and writes
    the bytes itself; `PRINT #` collects text in the channel record.
 6. **The fast channel entry** (#433, #434). `f:` and `r:` channel I/O and
    the BEEPER thunk go through `FASTH` at HOME 1265h (CHAN-OPEN's

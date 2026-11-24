@@ -599,6 +599,8 @@ ANCHORS = [
          bank="exrom", addr=0x1846, bytes="18 25 18 20 18 03 c3 9e 23 c3 cd 23"),
     dict(name="$86's pieces LOWER_LOOP reuses: READ_STATUS_BYTE, OPEN_STREAM via $04F1, the loop",
          bank="exrom", addr=0x01C3, bytes="cd b9 02 c3 f1 04"),
+    dict(name="CLS_LOWER_X: PUSH IX / EXX / LD HL,08A9h / JP CALL_HOME (LOWER_LOOP's CLS-LOWER)",
+         bank="exrom", addr=0x22E7, bytes="dd e5 d9 21 a9 08 c3 dd 03"),
     dict(name="$04F1: open stream $FE through $0426",
          bank="exrom", addr=0x04F1, bytes="f5 3e fe cd 26 04 f1 c9"),
     dict(name="$86 handler: CALL $01C3, then the loop at $21E6",

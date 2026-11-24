@@ -54,7 +54,7 @@ from TS import ramdisk as rd                                    # noqa: E402
 ROM = os.path.join(REPO, "src", "rom", "TSPICO-25.ROM")
 ASM = os.path.join(REPO, "src", "rom", "fdd", "fddcmd.asm")
 
-SYM = {"MB_OUT": 0x2447, "MB_IN": 0x2455, "RCH_ENDREC": 0x28F8, "RCH_WB": 0x2A32, "CH_SEND": 0x3642, "CH_STATUS": 0x3633, "RCH_END": 0x2C73, "RCH_OUT": 0x2716, "RCH_SYNC": 0x2779,
+SYM = {"MB_OUT": 0x2447, "MB_IN": 0x2455, "RCH_ENDREC": 0x28F8, "RCH_WB": 0x2A32, "CH_SEND": 0x364C, "CH_STATUS": 0x363D, "RCH_END": 0x2C77, "RCH_OUT": 0x2716, "RCH_SYNC": 0x2779,
        "STUB_IMG": 0x272C, "STUB_LEN": 0x1C, "RR_STUB": 0x64, "RR_FMAX": 0x39, "RCH_FIX": 0x274B}
 CURCHL, STRMS, CHANS = 0x5C51, 0x5C10, 0x5C4F
 REC = 0x7100                     # the record, in chunk 3

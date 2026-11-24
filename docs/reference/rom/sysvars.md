@@ -215,7 +215,10 @@ the names are the TS2068's (ZX Spectrum names where they are the same).
 | 5C8Dh | ATTR_P | sent in the printer pre-header | 169Fh |
 
 TV_FLAG (5C3Ch, `IY+2`) bit 5 is set by the base image's SAVE-prompt BREAK
-routine at 22AEh (clear the lower screen).
+routine at 22AEh (clear the lower screen). Bit 3 is cleared by the module's
+channel input routines, `CH_IN` and `RCH_IN`: WAIT-KEY sets it for every
+character `INPUT #` takes, and left set it made the next `scroll?` copy the
+edit line to the lower screen (#446, [exrom-fdd.md](exrom-fdd.md#ch_in)).
 
 ### Channels and streams
 

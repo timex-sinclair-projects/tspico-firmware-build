@@ -186,9 +186,9 @@ behavior, and the caveat and the issue link go.
 | `src/TS/speech_rules.py` | `3e16e980652d` | [firmware/speech.md](firmware/speech.md) | — |
 | `src/upgrade/main.py` | `6ab664e9c744` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `src/upgrade/upgrade.py` | `5eb55f6dd1fb` | [firmware/upgrade.md](firmware/upgrade.md) | — |
-| `src/rom/fdd/fddcmd.asm` | `7948c79d8501` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/rom/fdd/fddcmd.asm` | `fee2d00a3892` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/channels.md](flows/channels.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/rom/fdd/bankapi.asm` | `c39efbc2d730` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | — |
-| `src/rom/fdd/rchan.asm` | `67ae469dd4f2` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/channels.md](flows/channels.md) |
+| `src/rom/fdd/rchan.asm` | `3b5999157c2a` | [rom/exrom-fdd.md](rom/exrom-fdd.md) | [flows/channels.md](flows/channels.md) |
 | `src/rom/patches/tspico-sync.asm` | `0aebb5fbe58b` | [rom/exrom-sync.md](rom/exrom-sync.md) | [flows/boot.md](flows/boot.md), [flows/command.md](flows/command.md), [flows/load.md](flows/load.md), [flows/save.md](flows/save.md), [flows/break-and-recovery.md](flows/break-and-recovery.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/rom/patches/tspico-zx48-v3.asm` | `c942ea86b3aa` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md) |
 | `src/upgrade/updater.asm` | `4826d5f78d95` | [firmware/upgrade.md](firmware/upgrade.md) | — |
@@ -221,17 +221,17 @@ behavior, and the caveat and the issue link go.
 | `src/tsbus/micropython.cmake` | `6c24b5bf5b11` | [firmware/tsbus.md](firmware/tsbus.md) | — |
 | `src/rom/TSPICO.ROM` | `8ecbb6196edd` | [rom/overview.md](rom/overview.md) | — |
 | `src/rom/TSPICO-SYNC.ROM` | `1f8615ea905c` | [rom/overview.md](rom/overview.md) | — |
-| `src/rom/TSPICO-24.ROM` | `61aac90f2c1f` | *(chapter)* | *(flows)* |
-| `src/rom/TSPICO-25.ROM` | `f29f6a9c4cd6` | [rom/overview.md](rom/overview.md), [rom/exrom-fdd.md](rom/exrom-fdd.md), [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
+| `src/rom/TSPICO-24.ROM` | `7adedef09daf` | *(chapter)* | *(flows)* |
+| `src/rom/TSPICO-25.ROM` | `8a6e072b41b6` | [rom/overview.md](rom/overview.md), [rom/exrom-fdd.md](rom/exrom-fdd.md), [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
 | `src/rom/TSPICO-ZX48-V4.BIN` | `ec57f307bd0d` | [rom/zx48.md](rom/zx48.md) | [flows/zx48.md](flows/zx48.md), [appendix/ports-and-status.md](appendix/ports-and-status.md) |
-| `flash/manifest.json` | `005e84acd6ee` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
-| `tools/build-rom.py` | `ab750cfd9507` | [rom/overview.md](rom/overview.md) | — |
+| `flash/manifest.json` | `bda1e99417e0` | [firmware/boot.md](firmware/boot.md) | [flows/boot.md](flows/boot.md) |
+| `tools/build-rom.py` | `9628fc2c24aa` | [rom/overview.md](rom/overview.md) | — |
 | `tools/build-flash.py` | `5560e0b3b1f4` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/build-upgrade.py` | `3a82185e0740` | [firmware/upgrade.md](firmware/upgrade.md) | — |
 | `tools/gen-buildinfo.py` | `7ede1626d1da` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/check-core1-ram.py` | `c512cd36652b` | [firmware/boot.md](firmware/boot.md) | — |
 | `tools/sp0256-port.py` | `c6ee937adb2b` | [firmware/speech.md](firmware/speech.md) | — |
 | `tools/speech-rules.py` | `b58417ce8921` | [firmware/speech.md](firmware/speech.md) | — |
-| `.github/workflows/build.yml` | `67baddd391df` | [firmware/boot.md](firmware/boot.md) | — |
+| `.github/workflows/build.yml` | `284119e9bbb7` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/manual.yml` | `01bec89b50d1` | [firmware/boot.md](firmware/boot.md) | — |
 | `.github/workflows/release.yml` | `d7a0fa2ce38a` | [firmware/boot.md](firmware/boot.md) | — |

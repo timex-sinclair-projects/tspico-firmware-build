@@ -47,6 +47,8 @@ FDD_BASE        EQU $3000          ; keep in sync with FDD_ORG in build-rom.py
 ; ROM that moves one fails the build instead of jumping into the wrong code.
 CH_ADD          EQU $5C5D          ; address of the next char in the BASIC line
 FLAGS           EQU $5C3B          ; bit 7 set = runtime, clear = syntax check
+TV_FLAG         EQU $5C3C          ; (IY+2) bit 3: the K channel's input copies the
+                                   ;   edit line to the lower screen (ED-COPY, $0C83)
 TADDR           EQU $5C74          ; T-ADDR: low byte becomes the TPI TADDR field
 STKEND          EQU $5C65          ; calculator stack end pointer (our scratch top)
 FRAMES          EQU $5C78          ; frame counter: SESSION_SETUP's session id
@@ -89,6 +91,8 @@ READ_STATUS_BYTE EQU $02B9          ; EXROM: the response's status byte -> AF ($
 OPEN_STREAM     EQU $0426          ; EXROM: open stream A ($04F1 opens $FE, the main screen)
 LOOP_BODY       EQU $21E6          ; EXROM: function $86's loop after $01C3 (PUSH AF; print/key...)
 STREAM_LOWER    EQU $FD            ; stream -3: K, the lower screen
+CLS_LOWER_X     EQU $22E7          ; EXROM: PUSH IX / EXX / LD HL,08A9h / JP CALL_HOME,
+                                   ;   HOME's CLS-LOWER (the tape BREAK's own call)
 CURCHL          EQU $5C51          ; the current channel's record
 THUNK_HX        EQU $03FC          ; HOME: LD (5DCD),HL / LD HL,t / JP here = call EXROM t
 H_COPY          EQU $0A02          ; HOME: COPY (EXX / LD HL,1630h / JP 3CE3h), the
@@ -882,6 +886,11 @@ FOPEN_LEN    EQU $-FOPEN_TXT
 ; through the current channel and leaves via its own POP AF / RET.
 ; The Pico only sends $88 to a ROM it knows has it (tpi:fopen comes only from
 ; this module).
+;
+; Then CLS-LOWER, as INPUT does when it is done: SAVE goes on to print "Start
+; tape, then press any key." on the lower screen, and with the question and
+; its answer still there that made three lines, which scrolled the picture up
+; one line before SAVE ... SCREEN$ saved it (#447).
 ;------------------------------------------------------------------------------
 LOWER_LOOP:
         call    READ_STATUS_BYTE
@@ -889,7 +898,11 @@ LOWER_LOOP:
         ld      a,STREAM_LOWER
         call    OPEN_STREAM
         pop     af
-        jp      LOOP_BODY
+        call    LOOP_BODY
+        push    af                 ; the loop's status and carry
+        call    CLS_LOWER_X        ; the question off the lower screen (#447)
+        pop     af
+        ret
 
 ;------------------------------------------------------------------------------
 ; Channel driver (stage 1: sequential)                      (spec §4)
@@ -1264,6 +1277,7 @@ CH_OUT:
 
 CH_IN:
         ld      iy,IY_SYSVARS
+        res     3,(iy+TV_FLAG-IY_SYSVARS) ; as the keyboard's input does (#446)
         push    ix
         ld      ix,(CURCHL)
 .again: ld      a,(ix+R_INP)
@@ -1513,7 +1527,9 @@ PRELOAD:
         jp      WF_FAIL            ; A = 0: J (Invalid I/O device)
 
 ; Free bytes: PS_READ stays at 377Fh, where HOME's patch jumps (build-rom.py's
-; FIXED_SYMS). Code before it that shrinks leaves room here (#375: 14 bytes).
+; FIXED_SYMS). Code before it that shrinks leaves room here (#375: 14; #446, #447: 4 left).
+        ASSERT  $ <= $377F         ; sjasmplus only warns at a negative BLOCK, and
+                                   ;   PS_READ would land on the code before it
         BLOCK   $377F-$,$FF
 
 ;------------------------------------------------------------------------------
