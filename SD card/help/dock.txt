@@ -2,21 +2,38 @@ TS-Pico Command             DOCK
 --------------------------------
 SAVE "tpi:dock"[CODE m,n]
 
-Shows or sets the SRAM or flash
-slot mapped to the DOCK bank.
+Shows or sets whether an SRAM
+slot, flash slot, or the 2068
+cartridge port is mapped to the
+DOCK bank.
+
 No CODE: Shows the setting
 CODE 0,1: Shows previous setting
 CODE 0,2: Swaps with previous
+CODE 0,3: Leave the dock to a
+  cartridge in the 2068's own
+  dock slot. Kept in config.ini
+  (DOCK_CART) through restarts
+  until you set a slot again.
+  Until then: no ZX48 mode, and
+  on v2 the ROM and DCK loaders
+  can't write a slot.
+
 CODE 1,n: Set as slot n of SRAM
 CODE 2,n: Set as slot n of flash
 CODE 3,n: Slot n of the SD card
   (v3 card): /slots/Fnn.bin on
   the SD card, else flash slot n
+
 The change lasts until the Pico
-restarts. The slot it starts
-with is DCK_SLOT in config.ini
-(default 0, the Spectrum ROM in
-flash, which ZX48 mode uses).
+(not the 2068) restarts. The
+slot it starts with is DCK_SLOT
+in config.ini (default is 0, the
+Spectrum ROM in flash, which the
+ZX48 mode uses), unless the
+DOCK_CART option is true from
+CODE 0,3.
+
 A slot the 2068 booted from
 can't be written by the ROM or
 DCK loader: boot another first.

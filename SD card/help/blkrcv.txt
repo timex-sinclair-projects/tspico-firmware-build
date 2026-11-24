@@ -4,3 +4,10 @@ SAVE "tpi:blkrcv"CODE len,offset
 
 Sends len bytes (0=all) from
 mounted file starting at offset.
+
+This cannot be used on v2
+hardware while the dock is
+mapped to the cartridge slot.
+Error Q will result.
+
+See also: dock

@@ -53,5 +53,12 @@ n>=16384: Use compatible LOAD
 with the given buffer size of n.
 See ZX_TAPE_COMPAT in config.ini
 
+Note that while the dock bank is
+mapped to the 2068 cartridge
+port, you can't use zx48 mode,
+and it will give error Q while
+the dock is the cartridge slot.
+See dock.
+
 See also: OUT, config, load,
-save
+save, dock
