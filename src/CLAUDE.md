@@ -385,8 +385,8 @@ program, `tpi:` command and ROM label explained, in source order. It is
 part of the code and CI treats it that way:
 [`test/reference_hosttest.py`](test/reference_hosttest.py) fails when a
 symbol has no entry, when a source changed since its chapter was checked
-(the stamp table in the README), or when the generated symbol index is
-stale.
+(the stamp table in the README), when a function row's line isn't its
+`def` line, or when the generated symbol index is stale.
 
 The routine, for any PR that touches `src/`, `flash/`, the ROM build tools
 or the workflows:
@@ -411,7 +411,12 @@ or the workflows:
    its chapters that moved, from the version the stamp names. It can't
    tell a line from a value (128, a GPIO pin, another file's line), so
    check the list, then add `--apply` or fix them by hand. Other chapters
-   that cite the file (`tspico.py 7250`) are yours to find.
+   that cite the file (`tspico.py 7250`) are yours to find. Skipping this
+   is not caught by the stamps: fd17875 added three lines to `tspico.py`
+   without it, and the next PRs' relines carried 82 rows and ~400 prose
+   numbers three lines low until the test began checking function rows
+   against their `def` lines. A row that fails that check means its
+   neighbors are wrong too.
 2. `python3 src/test/reference_hosttest.py --missing` until it is empty.
 3. `python3 src/test/reference_hosttest.py --stamp` and paste the rows for
    the files you changed into the README's stamp table (it prints each row

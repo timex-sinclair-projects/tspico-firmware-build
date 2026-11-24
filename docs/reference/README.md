@@ -154,6 +154,9 @@ which fails when:
   re-read);
 - a flow or appendix is not listed against any source (a new flow needs
   the sources it follows; `index.md` and `glossary.md` are exempt);
+- a `| Name | Line |` row for a function, class or method doesn't give the
+  line of its `def` (a PR that added lines and didn't reline; the numbers
+  in the prose near the row have usually moved too);
 - [`appendix/index.md`](appendix/index.md) is out of date: regenerate it
   with `python3 src/test/reference_hosttest.py --index`.
 
