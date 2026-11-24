@@ -101,6 +101,13 @@ The editor clicks once per character taken; the ROM's G_BEEP skips the
 click when the current channel is an `F` record, so a file is read
 silently ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_beep-3029h)).
 
+The editor's read (HOME RDCH) also sets TV_FLAG bit 3, "echo the keyboard",
+before every character, and only a key read clears it. In ROM 2.5 each read
+from a record clears it again (`MB_IN`), so the next keyboard read after the
+INPUT, such as a `scroll?` prompt, doesn't print the edit line after itself.
+ROM 2.4 left it set (#446,
+[../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_main-g_out-g_in-g_open-g_osyn-g_close)).
+
 ## RESTORE
 
 `RESTORE #4`: back to the start of the file. HOME's syntax table sends
