@@ -11,7 +11,9 @@ every label of the ROM sources. This test fails CI when:
      what changed, then re-stamp), or
   3. a flow or appendix is not listed against any source in that table
      (FLOWS: they cut across the sources, so the table says which sources
-     each one follows; appendix/index.md and appendix/glossary.md exempt).
+     each one follows; appendix/index.md and appendix/glossary.md exempt), or
+  4. a "| Name | Line(s) |" row for a function, class or method in its
+     source's chapters doesn't cite the line of its def (LINES).
 
 The index links each symbol to an entry in its own source's chapters (the
 stamp table's Chapter cell) when there is one, so a name that two sources
@@ -499,6 +501,61 @@ def relines(sources, since=None, apply=False):
 INDEX = os.path.join(REF, "appendix", "index.md")
 
 
+# ---------------------------------------------------------------------------
+# Function rows cite their def line (LINES)
+#
+# A "| Name | Line(s) | ... |" table row whose first cell names a function,
+# class or method of the source must give the line of its def/class as the
+# number (or the start of the range) in the second cell. --relines can't
+# check that: it moves numbers by the diff of one source between two
+# versions, so a PR that adds lines and doesn't reline leaves every number
+# below them wrong, and later relines carry the error forward (fd17875 added
+# three lines to tspico.py in RD_RAM and 82 rows ended up three low). These
+# rows are the numbers that can be checked exactly; a failure here usually
+# means the prose numbers near them moved too: reline the chapter.
+# ---------------------------------------------------------------------------
+
+def def_line_rows():
+    """[(doc, doc line, name, cited, defined)] for each function/class/method
+    row in a source's own chapters whose Line cell doesn't start at the def."""
+    rows = stamp_rows()
+    by_doc = {}                                     # chapter -> {name: {def lines}}
+    for rel in FIRMWARE:
+        if rel not in rows:
+            continue
+        defs = {}
+        for kind, name, line in py_symbols(rel):
+            if kind in ("function", "class", "method"):
+                defs.setdefault(name, line)
+        for doc in row_docs(rows[rel][1].split("|")[3]):   # the Chapter cell
+            names = by_doc.setdefault(doc, {})
+            for name, line in defs.items():
+                names.setdefault(name, set()).add(line)
+    bad = []
+    for doc, names in sorted(by_doc.items()):
+        header, in_code = None, False
+        for no, line in enumerate(read(doc).splitlines(), 1):
+            if line.startswith("```"):
+                in_code = not in_code
+            if in_code or not line.startswith("|"):
+                header = None
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if header is None:
+                header = cells
+                continue
+            if len(header) < 2 or header[1] not in ("Line", "Lines") or len(cells) < 2:
+                continue
+            name = re.match(r"`([^`]+)`", cells[0])
+            cited = re.match(r"(\d+)", cells[1])
+            if not name or not cited:
+                continue
+            name = entry_name(name.group(1))
+            if name in names and int(cited.group(1)) not in names[name]:
+                bad.append((doc, no, name, int(cited.group(1)), min(names[name])))
+    return bad
+
+
 def explained_in(files, chapters):
     """The entry the index links: one in the symbol's own chapters (the stamp
     table's Chapter cell for its source) if there is one, else the first.
@@ -643,6 +700,14 @@ def main(argv):
         if not os.path.exists(os.path.join(ROOT, doc)):
             fails += 1
             print("  FAIL  the stamp table links %s, which does not exist" % doc)
+
+    bad_rows = def_line_rows()
+    if not bad_rows:
+        print("  PASS  every function row cites its def line")
+    for doc, no, name, cited, defined in bad_rows:
+        fails += 1
+        print("  FAIL  %s:%d: `%s` is cited at line %d, defined at %d (the numbers near it "
+              "have probably moved too: --relines)" % (doc, no, name, cited, defined))
 
     want = index_text(inv, found)
     try:
