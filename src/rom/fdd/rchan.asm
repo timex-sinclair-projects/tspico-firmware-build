@@ -170,7 +170,9 @@ GUARD0: push    hl
 ;------------------------------------------------------------------------------
 
 ; MB_OUT, MB_IN -- G_OUT and G_IN: the current channel's record by its letter
-; (one compare a character). A, the character, is kept for CH_OUT.
+; (one compare a character). A, the character, is kept for CH_OUT. MB_IN first
+; clears TV_FLAG bit 3, which HOME's RDCH set to echo the keyboard: see GUARDED in
+; fddcmd.asm (#446). Here, not in G_IN, so the fast entry clears it too.
 MB_OUT: push    af
         call    RCH_LETTER
         jr      z,.r
@@ -179,7 +181,9 @@ MB_OUT: push    af
 .r:     pop     af
         jp      RCH_OUT
 
-MB_IN:  call    RCH_LETTER
+MB_IN:  ld      hl,TV_FLAG
+        res     3,(hl)             ; no keyboard echo after INPUT # (#446, G_IN)
+        call    RCH_LETTER
         jp      nz,CH_IN
         jp      RCH_IN
 
