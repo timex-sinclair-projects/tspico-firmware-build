@@ -238,6 +238,11 @@ for k in range(n // 4):                      # sheet k: front [n-1-2k | 2k], bac
         side.merge_transformed_page(seq[left], pypdf.Transformation())
         side.merge_transformed_page(seq[right], pypdf.Transformation().translate(W, 0))
         w.add_page(side)
+# No links in the booklet: imposing leaves each link's box where it was on
+# its half-letter page and its target (a named heading) on no page, so on
+# screen they'd be dead spots over the wrong text. The booklet is for
+# printing; the one-up keeps them.
+w.remove_links()
 w.add_metadata(dict(meta, **{"/Title": TITLE + " (booklet: letter, saddle stitch)"}))
 w.write("user-manual-saddle-stitch-letter.pdf")
 assert n % 4 == 0

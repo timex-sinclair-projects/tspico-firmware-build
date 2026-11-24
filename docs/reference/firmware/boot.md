@@ -433,7 +433,8 @@ so its jumper labels can be read), and
 openers, prints the manual and the two covers with the runner's Chrome, and
 assembles the half-letter one-up (cover + manual) and the saddle-stitch
 booklet (covers, blank inside covers, padding to a multiple of 4, imposed
-two up on letter). Chrome ignores `break-before: right`, so the manual is
+two up on letter, without links: imposing leaves a link's box where it was
+and its target on no page, and the booklet is for printing). Chrome ignores `break-before: right`, so the manual is
 printed twice: the first print says where each chapter starts, and a blank
 page goes in before each one that would open on a left-hand page. The
 cover's version comes from `config.ini` and its date from the last commit.
