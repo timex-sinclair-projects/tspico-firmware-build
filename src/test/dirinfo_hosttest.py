@@ -285,8 +285,10 @@ def main():
     n = len(open(out).read())
     check(cat("nothere") == [t._3_F_Invalid_file, "READY"] and len(open(out).read()) == n,
           "CAT #4;\"nothere\": F, nothing written")
-    check(cat("") == [t._1_OK, "READY"] and open(out).read().endswith("No .TAP file mounted!  --\n"),
-          "CAT #4;\"\": the mounted TAP (here none)")
+    check(cat("") == [t._4_Q_Parameter, "READY"] and len(open(out).read()) == n,
+          "CAT #4;\"\": Q, a menu can't go into a file (#444)")
+    check(cat(">") == [t._1_OK, "READY"] and open(out).read().endswith("No .TAP file mounted!  --\n"),
+          "CAT #4;\">\": the mounted TAP (here none)")
     check(list(t.SCREEN_LINES("\x10\x02" + "A" * 32 + "\rB\x16\x01\x02C\r\r")) == ["A" * 32, "BC", ""],
           "SCREEN_LINES: INK and AT dropped with their parameters; a CR after a full row ends nothing")
     cmd(t.CH_CLOSE, "tpi:chclose", 4)

@@ -101,6 +101,13 @@ The editor clicks once per character taken; the ROM's G_BEEP skips the
 click when the current channel is an `F` record, so a file is read
 silently ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_beep-3029h)).
 
+The editor's read (HOME RDCH) also sets TV_FLAG bit 3, "echo the keyboard",
+before every character, and only a key read clears it. In ROM 2.5 each read
+from a record clears it again (`MB_IN`), so the next keyboard read after the
+INPUT, such as a `scroll?` prompt, doesn't print the edit line after itself.
+ROM 2.4 left it set (#446,
+[../rom/exrom-fdd.md](../rom/exrom-fdd.md#g_main-g_out-g_in-g_open-g_osyn-g_close)).
+
 ## RESTORE
 
 `RESTORE #4`: back to the start of the file. HOME's syntax table sends
@@ -131,7 +138,7 @@ name.
 
 ## CAT #
 
-`CAT #4`, `CAT #4;"*.tap"`, `CAT #4;""` (#404): the listing `CAT` would
+`CAT #4`, `CAT #4;"*.tap"`, `CAT #4;">"` (#404, #444): the listing `CAT` would
 show, written into the file open on stream 4. The Pico writes it, because
 the ROM can't print a reply into a Pico-backed stream mid-transaction: the
 stream's flush would SYNC away the reply being printed.
@@ -149,7 +156,8 @@ stream's flush would SYNC away the reply being printed.
 4. Pico: `CH_CAT` ([../firmware/tspico-disk.md](../firmware/tspico-disk.md#ch_catpre-cmd))
    inside `CH_CALL` (the card is needed): Q unless the stream is a file
    open to be written; the text is `lista` after `LISTING_FRESHEN`,
-   `TAPDIR_TEXT(0, 0)` for `""`, or `CATALOG_TEXT` (F when it refuses);
+   `TAPDIR_TEXT(0, 0)` for `">"`, Q for `""` (the menu's name, #444), or
+   `CATALOG_TEXT` (F when it refuses);
    `SCREEN_LINES` makes it plain lines as the screen would wrap them, with
    no color codes; `Channels.write_text` writes them through `_data`, as if
    printed with a CR each, in pieces of about 512 bytes.
@@ -311,7 +319,7 @@ trap; the exchanges that can reach HOME code run under `GUARD0`.
 | a missing file for `r`, a missing folder | `CH_OPEN` | F, no channel |
 | a bad mode, a record too long, `TAB 0` with data | `CH_OPEN`, `CH_WRITE` | Q |
 | the end of the file | `CH_READ` → 7 | 8 End of file |
-| `CAT #n` into a stream that is not a file open to be written (`x:`, `d:`, `v:`, mode `r`); a name `CAT "x"` would refuse | `CH_CAT` | Q; F, with nothing written |
+| `CAT #n` into a stream that is not a file open to be written (`x:`, `d:`, `v:`, mode `r`), or `CAT #n;""`; a name `CAT "x"` would refuse | `CH_CAT` | Q; F, with nothing written |
 | a starved FIFO in the data phase | `CH_FETCH`'s XOR | R |
 | the Pico's tail not finished before the next SYNC | `CH_SEND`'s IDLE wait (~1 s) | — (prevented); without it, T |
 | NEW or a reset with channels open | the 2068's records are gone; the Pico's table keeps the streams | nothing: the next OPEN of the stream number replaces the stale entry |

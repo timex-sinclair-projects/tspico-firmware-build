@@ -274,7 +274,7 @@ def test_info_board(t):
 
 
 def test_tapdir(t):
-    print("CAT \"\" (TAPDIR_COLOUR)")
+    print("CAT \">\" (TAPDIR_COLOUR)")
     head = ("File:%-27s" % "/GAMES/manic.tap") + "Pointer at block: 02, Append:off"
     blocks = [[0, 19, " Y", "manic     "], [21, 1236, " N", "Program"],
               [1259, 19, " Y", "manicscr  "], [1280, 6914, " N", "Code block"]]

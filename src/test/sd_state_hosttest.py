@@ -290,6 +290,10 @@ def test_gate(t):
     check(ran == ["TPI:INFO", "TPI:VERBOSE", "TPI:HELP"], "info, verbose, help without a topic: run as usual")
 
     del ran[:]
+    tx, probes = run(t, "tpi:dir >", sa)
+    check(ran == ["TPI:DIR"] and probes == [], 'CAT ">" (tpi:dir >): the tape, no card looked for (#444)')
+
+    del ran[:]
     tx, _ = run(t, "tpi:help rm", sa)
     check(ran == [] and tx[:2] == [0x81, 10], "help with a topic (a file on the card): refused")
 

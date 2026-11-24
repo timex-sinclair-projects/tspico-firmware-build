@@ -2985,7 +2985,7 @@ is the TS-Pico's. `CLOSE #` of one channel moves the records after it down by 51
 |---|---|
 | **Syntax** | `tpi:chcat`, or `tpi:chcat` *pattern* |
 | **CODE *a*** | the stream |
-| **CODE *b*** | 1 if a pattern follows, 0 if not. With 1 and nothing after the word, the pattern is the empty string, which lists the mounted TAP file. |
+| **CODE *b*** | 1 if a pattern follows, 0 if not. The pattern `>` lists the mounted TAP file. |
 | **Answer** | a status |
 
 **Description.** Writes the listing `CAT` would show (or `CAT "`*pattern*`"`) into the file
@@ -2995,7 +2995,8 @@ what `CAT #n` sends, after it has sent what was printed to the stream and forgot
 read ahead.
 
 **Errors.** Q: the stream isn't a file open for writing (opened `r`, or a `d:`, `v:` or `x:`
-channel), or a line is longer than a record file's record. F: a folder that isn't there. J: the
+channel), a line is longer than a record file's record, or CODE *b* is 1 with nothing after
+the word (`CAT #n;""`: the empty name is `CAT`'s menu, which can't go into a file). F: a folder that isn't there. J: the
 stream isn't open, or there's no SD card.
 
 **Notes.** The lines go in as if they had been printed, so a text file gets newlines and a

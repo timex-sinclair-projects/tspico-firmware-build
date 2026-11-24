@@ -114,8 +114,8 @@
  2700 CAT "multi.tap"
  2705 GO SUB 8900: GO SUB 8100
  2710 PRINT INK 1;"The new tape is mounted. It is"'"empty, and append is on:"
- 2720 LET c$="CAT """"": GO SUB 8200
- 2730 CAT ""
+ 2720 LET c$="CAT "">""": GO SUB 8200
+ 2730 CAT ">"
  2740 PRINT 'INK 1;"Eject it:"
  2750 LET c$="SAVE ""tpi:close""": GO SUB 8200
  2760 SAVE "tpi:close"
@@ -244,8 +244,8 @@
  4530 LET c$="LOAD ""tpi:pics.tap""": GO SUB 8200
  4540 LOAD "tpi:pics.tap"
  4550 PRINT INK 1;"What is on it:"
- 4560 LET c$="CAT """"": GO SUB 8200
- 4570 CAT ""
+ 4560 LET c$="CAT "">""": GO SUB 8200
+ 4570 CAT ">"
  4580 PRINT 'INK 1;"> marks the tape pointer: the"'"block the next LOAD starts from."
  4590 GO SUB 8900
  4600 GO SUB 8100
@@ -254,8 +254,8 @@
  4630 LOAD "" CODE USR "a"
  4640 PRINT '"    "; INK 1;"\a\b"; INK 2;"  \e\f"'"    "; INK 1;"\c\d"; INK 2;"  \g\h"''
  4650 PRINT INK 1;"The pointer has moved on:"
- 4660 LET c$="CAT """"": GO SUB 8200
- 4670 CAT ""
+ 4660 LET c$="CAT "">""": GO SUB 8200
+ 4670 CAT ">"
  4680 GO SUB 8900
  4690 GO SUB 8100
  4700 PRINT INK 1;"Now the picture:"''

@@ -241,7 +241,7 @@ display of the response):
 
 | Statement | TPI command built | Pico verb |
 |---|---|---|
-| `CAT` / `CAT "x"` / `CAT ""` | `tpi:dir` / `tpi:dir x` / `tpi:tapdir` | `DIR` (with `CATALOG` for an argument) / `TAPDIR` |
+| `CAT` / `CAT "x"` / `CAT ""` | `tpi:dir` / `tpi:dir x` / `tpi:idir` (`tpi:tapdir` to ROM 2.4) | `DIR` (with `CATALOG` for an argument, `TAPDIR` for `>`) / `IDIR` |
 | `ERASE "x"` | `tpi:erase x` | `DISK_ERASE` (file, pattern with Y/N each, or `dir/`) |
 | `FORMAT "x"` | `tpi:format x` | `DISK_FORMAT` (`x.tap` new + mounted, `dir/`, or `:label`, which goes to `LABEL_SET`) |
 | `MOVE TO "x"` / `MOVE "a" TO "b"` | `tpi:cd x` (`"-"` → `tpi:cd -`, `""` → `tpi:cd`, the menu) / `tpi:ren a\|b` | `CDIR` / `DISK_REN` |

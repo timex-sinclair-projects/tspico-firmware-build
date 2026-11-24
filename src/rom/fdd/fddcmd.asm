@@ -20,7 +20,8 @@
 ;  runtime pass pops them off the calculator stack and builds a TPI command:
 ;
 ;    CAT                -> tpi:dir               (§2)
-;    CAT ""             -> tpi:tapdir
+;    CAT ""             -> tpi:idir, the menu (ROM 2.4: tpi:tapdir; #444)
+;    CAT ">"            -> tpi:dir >, which the Pico answers as tpi:tapdir
 ;    CAT x              -> tpi:dir x
 ;    MOVE TO x          -> tpi:cd x              (§3; "-" is the previous dir)
 ;    MOVE TO ""         -> tpi:cd                (the list of directories to pick from)
@@ -47,6 +48,9 @@ FDD_BASE        EQU $3000          ; keep in sync with FDD_ORG in build-rom.py
 ; ROM that moves one fails the build instead of jumping into the wrong code.
 CH_ADD          EQU $5C5D          ; address of the next char in the BASIC line
 FLAGS           EQU $5C3B          ; bit 7 set = runtime, clear = syntax check
+TV_FLAG         EQU $5C3C          ; bit 3: echo the edit line at the next key
+                                   ;   read (HOME RDCH $11CF sets it, IN_K $0C83
+                                   ;   clears it); ROM 2.5 MB_IN clears it (#446)
 TADDR           EQU $5C74          ; T-ADDR: low byte becomes the TPI TADDR field
 STKEND          EQU $5C65          ; calculator stack end pointer (our scratch top)
 FRAMES          EQU $5C78          ; frame counter: SESSION_SETUP's session id
@@ -267,18 +271,29 @@ G_BEEP: ld      a,h
 ; both switches, with interrupts off, as the stock tpi: flows already run.
 ;
 ; HL = the routine; A, F, BC and DE reach it, and it returns AF, BC, DE, HL.
+;
+; TV_FLAG bit 3 and INPUT # (#446): HOME's RDCH ($11CF), the editor's read,
+; sets it before every character "to echo keyboard input"; only the keyboard
+; clears it (IN_K's echo at $0C83), and INPUT's own end clears it only when the
+; channel is K ($230B). So INPUT # from a record left it set, and the next key
+; read from the keyboard -- the scroll? prompt -- echoed the edit line after
+; the prompt (scroll?RUN) and left the print position and attributes wrong for
+; what came next (garbage, even Report K). The stock 2068 does the same for any
+; non-K channel. In ROM 2.5 MB_IN (rchan.asm) clears it for every read from a
+; record, the fast entry's too, so it is clear after the last character and
+; after Report 8. ROM 2.4 (G_IN to CH_IN) is the shipped image and keeps it.
 ;------------------------------------------------------------------------------
 G_MAIN: ld      hl,FDD_ENTRY
         jr      GUARDED
     IFDEF MEGABANK
 G_OUT:  ld      hl,MB_OUT          ; 'R' records too (rchan.asm), by the letter
         jr      GUARDED
-G_IN:   ld      hl,MB_IN
+G_IN:   ld      hl,MB_IN           ; MB_IN clears TV_FLAG bit 3 (#446)
         jr      GUARDED
     ELSE
 G_OUT:  ld      hl,CH_OUT
         jr      GUARDED
-G_IN:   ld      hl,CH_IN
+G_IN:   ld      hl,CH_IN           ; ROM 2.4 keeps TV_FLAG bit 3 (#446)
         jr      GUARDED
     ENDIF
 G_OPEN: ld      hl,CH_OPEN_HOOK
@@ -348,8 +363,8 @@ FDD_CAT:
         call    POP_STR
         ld      a,b
         or      c
-        ld      hl,CMD_TAPDIR
-        jp      z,SEND_PREFIX      ; CAT "" -> the mounted TAP
+        ld      hl,CMD_CAT_EMPTY
+        jp      z,SEND_PREFIX      ; CAT "" -> the list of files (2.4: the mounted TAP)
         ld      hl,CMD_DIR_ARG
         jp      SEND_ONE
 .bare:
@@ -1485,7 +1500,12 @@ STRLEN: ld      c,0                ; A = length of the NUL-ended string at HL
 ;------------------------------------------------------------------------------
 CMD_DIR:     db "tpi:dir",0
 CMD_DIR_ARG: db "tpi:dir ",0
-CMD_TAPDIR:  db "tpi:tapdir",0
+CMD_CAT_EMPTY:                     ; CAT "" (#444): the same length in both builds,
+        IFDEF MEGABANK             ;   so nothing after it moves
+        db "tpi:idir",0,0,0
+        ELSE
+        db "tpi:tapdir",0          ; ROM 2.4 is frozen: CI compares it byte for byte
+        ENDIF
 CMD_CD:      db "tpi:cd ",0
 CMD_REN:     db "tpi:ren ",0
 CMD_COPY:    db "tpi:copy ",0
