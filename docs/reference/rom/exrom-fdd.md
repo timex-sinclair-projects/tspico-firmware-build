@@ -704,7 +704,12 @@ Z,3006h / RET` ([exrom-chunk1.md](exrom-chunk1.md#fn_dead_beep-2216h)). On
 1.1 a 88h falls off the chain (Report D), so the firmware sends it only in reply
 to `tpi:fopen`, which only this module sends. The lower screen starts
 clear, so the firmware's 88h text has no leading CR; keep it to one line
-([../firmware/tspico-messages.md](../firmware/tspico-messages.md#send_msg_prompt_ynprompt-echotrue-lowerfalse)).
+([../firmware/tspico-messages.md](../firmware/tspico-messages.md#send_msg_prompt_ynprompt-echotrue-lowerfalse)). After the
+key, nothing may make the lower screen a third line: a CR there scrolls the
+picture up one line before SAVE's "Start tape…" (#447). The firmware sends
+`AT 1,1`, a backspace, 32 spaces and the same again, which blanks the line
+and leaves the cursor at its start; the loop's text cannot hold a `00h`, so
+`AT 1,0` is out.
 
 ## The channel driver
 

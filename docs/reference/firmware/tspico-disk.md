@@ -1,6 +1,6 @@
 # tspico.py part 7 — the ROM's disk commands on the Pico: CAT, COPY, MOVE, ERASE, FORMAT, LIST, the label, the Megabank's `r:` RAM disk, `f:` files, the channels
 
-Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2895–4701.
+Source: [`src/TS/tspico.py`](../../../src/TS/tspico.py), lines 2897–4703.
 The Z80 side is [rom/exrom-fdd.md](../rom/exrom-fdd.md)
 ([`src/rom/fdd/fddcmd.asm`](../../../src/rom/fdd/fddcmd.asm)).
 
@@ -25,14 +25,14 @@ module's patches.
 
 | Lines | What | Chapter |
 |---|---|---|
-| 2895–2991 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
-| 3000–3106 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
-| 3109–3495 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
-| 4186–4189 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
-| 4192–4301 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
-| 4315–4342 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
-| 4345–4377 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
-| 4380–4701 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
+| 2897–2993 | `CATALOG`, `CATALOG_TEXT` — CAT and `SAVE "tpi:dir <arg>"` | here |
+| 3002–3108 | `SD_CALL`, `SD_FREE`, `SD_QUIET`, `SD_NEEDED`, `NO_CARD_REPLY`, `REFRESH_IF`, `PROMPT_EACH` | [tspico-bus.md](tspico-bus.md), [tspico-state.md](tspico-state.md), [tspico-messages.md](tspico-messages.md) |
+| 3111–3497 | `DISK_COPY` … `DISK_REN_WORK` — COPY, ERASE, FORMAT, LIST, the label and MOVE | here |
+| 4188–4191 | `NATIVE_TAP`, `MOD_CODE`, `MOD_SCREEN`, `MOD_DATA`, `MOD_LINE`, `KIND` | [tspico-state.md](tspico-state.md) |
+| 4194–4303 | `NATIVE_OPEN`, `NATIVE_SAVE_TARGET`, `NATIVE_LOAD_PREP` — `SAVE`/`LOAD "f:path"` | here |
+| 4317–4344 | `SD_FS`; `CHANNELS`, `CH_STATUS` | here; [tspico-state.md](tspico-state.md) |
+| 4347–4379 | `CH_READY`, `CH_REPLY`, `CH_CALL` | [tspico-bus.md](tspico-bus.md) |
+| 4382–4703 | `DIR_NAMES`, `CH_OPEN`, `SCREEN_LINES`, `CH_CAT`, `CH_NOCARD_PATH`, `X_RUN`, `CH_WRITE`, `CH_READ`, `CH_CLOSE` — the channel commands | here |
 
 ## The two sides of every command
 
@@ -217,7 +217,7 @@ the parent unindexed.
 
 ## COPY, ERASE, FORMAT, LIST, the label and MOVE
 
-The comment at lines 2994–2998 states the rules all four share: paths resolve
+The comment at lines 2996–3000 states the rules all four share: paths resolve
 like CAT's, nothing overwrites, and an existing target is Report F (spec
 [§3](../../DISK_COMMANDS_SPEC.md)). Report Q is for a request that cannot
 be carried out (the mounted file, the current directory, a directory as a
@@ -498,7 +498,7 @@ itself Q, the mounted file Q.
 
 ## The Megabank's RAM disk: `r:` names
 
-The comment at line 3498 and the Megabank spec's "The RAM disk" (the
+The comment at line 3500 and the Megabank spec's "The RAM disk" (the
 TS-2068-Megabank repository, `docs/spec.md`; its phase 5). The file system
 is [ramdisk.py](ramdisk.md); this part is its bus side and its commands.
 Every `r:` command answers response function 89h, the mover
@@ -830,7 +830,7 @@ question 8) is not here: anything else is Q.
 
 ## Native SD files: SAVE, LOAD, VERIFY and MERGE "f:path"
 
-The comment at line 4179 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
+The comment at line 4181 and spec [§4a](../../DISK_COMMANDS_SPEC.md)
 describe the mechanism. On the ROM, `F_HOOK` (the patched jump at EXROM
 01D2h) sees an `f:` name on the calculator stack, makes the statement's
 session id (FRAMES+1, never 0) and sends `tpi:fopen <path>` with
@@ -883,7 +883,9 @@ Why the lower screen: `SAVE "f:x" SCREEN$` saves the display, and an 86h
 prompt on the main screen would be in the picture (spec §4a, PROTOCOL
 [§5.4](../../PROTOCOL.md)). The Pico sends function 88h only here. The
 prompt is cut to 31 characters so that it and the key echo fit one
-lower-screen line. `TPI:FOPEN` is in `SD_QUIET`, so a missing card gets
+lower-screen line. After the key that line is blanked and the ROM's
+"Start tape…" is printed over it, so the lower screen never grows to a
+third line, which scrolled the picture up one line (#447). `TPI:FOPEN` is in `SD_QUIET`, so a missing card gets
 the bare status J; the handler itself answers with `SEND_MSG`, which prints
 when VERBOSE is on. That is harmless for the channel reason (SAVE and LOAD
 are not inside PRINT # or INPUT #), but not for a SCREEN$ save, whose
@@ -953,7 +955,7 @@ Beware: a +3DOS file whose header length exceeds the file describes as
 
 ## OPEN # channels: tpi:chopen, tpi:chwr, tpi:chrd, tpi:chclose, tpi:chcat
 
-The comment at line 4304 lists the four commands. The ROM's channel driver
+The comment at line 4306 lists the four commands. The ROM's channel driver
 ([rom/exrom-fdd.md](../rom/exrom-fdd.md)) keeps a 200h-byte record per
 stream in CHANS with a 64-byte output buffer and a 255-byte input buffer;
 `CH_OUT` buffers what BASIC prints and `CH_FLUSH` sends it as `tpi:chwr
@@ -1257,7 +1259,7 @@ card, so they take the first path: `Channels.close` drops the entry (on
 speech, after saying what is left of an unfinished line, even when speech
 is off).
 
-The long comment at line 4663 is the history. When channels arrived (#83)
+The long comment at line 4665 is the history. When channels arrived (#83)
 `close()` only dropped the entry, so `CH_CLOSE` never activated the card
 and `TPI:CHCLOSE` went into `SD_FREE`. Records (#84) made `close()` write
 the padding, onto a card that was not mounted: an `OSError`, Report J and a

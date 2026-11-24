@@ -483,6 +483,8 @@ FN_PRINT_LOOP_LOWER = const(0x88)   # FN_PRINT_LOOP on the lower screen (ROM 2.1
 STR_END = const(0x00)               # FN_PRINT_STRING: the end of the text. FN_PRINT_LOOP:
                                     # the end of a page -- the Z80 waits for a key
 LOOP_END = const(0x03)              # FN_PRINT_LOOP: the end of the loop (no key wait)
+LOWER_LINE_CLEAR = b"\x16\x01\x01\x08" + b" " * 32 + b"\x16\x01\x01\x08"   # #447: AT 1,1 + left (the lower
+                                    # screen's last line, column 0), 32 spaces, the same again: no 00h in it
 # The first byte of a pre-header (pre[0]):
 PRE_HEADER = const(0x00)            # a tape header block: LOAD / SAVE
 PRE_DATA = const(0xFF)              # a tape data block: LOAD / SAVE
@@ -7347,7 +7349,13 @@ def SEND_MSG_PROMPT_YN(prompt, echo = True, lower = False):
         else:
             wrt(ch)
     if lower:
-        wrt(0x0D)   # what the ROM prints next ("Start tape...") starts on its own line
+        # Clear the prompt's line, as INPUT "" would, and leave the cursor at
+        # its start: what the ROM prints next ("Start tape...") goes there.
+        # A CR would move to a third lower-screen line and scroll the picture
+        # up one line (#447). AT 1,1 + backspace, not AT 1,0: a 00h would be
+        # this loop's "wait for a key".
+        for b in LOWER_LINE_CLEAR:
+            wrt(b)
     wrt(LOOP_END)   # 0x03: end the string loop
     wrt.send()      # echo and 0x03 in TX, then READY
     # Could add an option to not wrt(0x03) and let the caller do that after

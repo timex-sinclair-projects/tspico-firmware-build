@@ -292,14 +292,18 @@ def test_prompt_each(t):
     got = yn(ord("y"), True)
     check(got == ord("Y") and nr(tx)[:3] == [0x88, 1, ord("R")] and ready_after_data(tx),
           "0x88, status, then the prompt at once -- no leading new line; READY after data (%r)" % tx[:5])
+    clear = [22, 1, 1, 8] + [32] * 32 + [22, 1, 1, 8]      # AT 1,1, left, 32 spaces, the same again
     k = tx.index(0)
-    check(tx[k + 1:k + 5] == [ord("y"), 0x0D, 0x03, "READY"],  # (3 bytes: all in TX, then READY)
-          "after the key: its echo, a new line for the ROM's next message, 0x03, READY (%r)" % tx[k + 1:])
+    check([b for b in nr(tx[k + 1:]) if b != "DRAIN"] == [ord("y")] + clear + [0x03] and list(t.LOWER_LINE_CLEAR) == clear
+          and ready_after_data(tx),
+          "after the key: its echo, then the prompt's line blanked and the cursor at its start -- no CR,"
+          " which scrolled the picture (#447) -- 0x03; READY after data (%r)" % tx[k + 1:])
+    check(0 not in nr(tx[k + 1:]), "no 00h after the key: the loop would wait for another key")
     got = yn(ord("n"), True)
     k = tx.index(0)
-    check(got == ord("N") and tx[k + 1:k + 5] == [ord("n"), 0x0D, 0x03, "READY"],
-          "'n' comes back as N; the ROM reads on after N (#227), so its echo as typed, 0x0D, 0x03,"
-          " READY (%r)" % tx[k + 1:])
+    check(got == ord("N") and [b for b in nr(tx[k + 1:]) if b != "DRAIN"] == [ord("n")] + clear + [0x03],
+          "'n' comes back as N; the ROM reads on after N (#227), so its echo as typed, the line"
+          " cleared, 0x03 (%r)" % tx[k + 1:])
     yn(ord("y"), False)
     check(nr(tx)[:3] == [0x86, 1, 0x0D] and ready_after_data(tx) and 0x0D not in tx[tx.index(0):],
           "main screen (0x86): the leading new line and echo as before, no extra one")
