@@ -160,7 +160,7 @@ Out of the box, most TS-Pico commands work quietly: a successful command gives y
 programs tidy. While you're learning, you'll probably want to see what's going on:
 
 ```basic
-SAVE "tpi:verbose" CODE 1,1
+SAVE "tpi:verbose on"
 ```
 
 Now commands tell you what they did ("Changed dir to: games") and why they failed ("File does
@@ -196,7 +196,7 @@ Appendix B has the full list.
 2. BASIC keywords such as CAT, MOVE TO, COPY and ERASE work on the card. Use them where they exist.
 3. `SAVE "tpi:command"` sends any other command, and `CODE a,b` after it passes two numbers.
    `LOAD "tpi:file"` mounts a file.
-4. Turn on `SAVE "tpi:verbose" CODE 1,1` to see messages while you learn.
+4. Turn on `SAVE "tpi:verbose on"` to see messages while you learn.
 5. Errors come back as ordinary 2068 reports.
 
 ---
@@ -597,7 +597,7 @@ matches a pattern.
 Section 10.1 has every message these give.
 
 > **What only the command does.** To delete a file but be asked first, or to pick it by its
-> number in the listing, use `SAVE "tpi:rm old.tap"` or `SAVE "tpi:rm 3"`: it asks
+> number in the listing, use `SAVE "tpi:rm old.tap"` or `SAVE "tpi:rm 03"`: it asks
 > `Remove "old.tap" (y/N)?` before it does anything.
 
 ## 3.4 Mounting a TAP file
@@ -802,8 +802,10 @@ repeats**.
 
 **Remember:**
 
-- A plain SAVE name may only use **letters, digits, `-` and `_`**. Spaces or other symbols give
-  **F Invalid file name**. The F comes after the `Start tape` key, but nothing is written.
+- A plain SAVE that creates a new file may only use **letters, digits, `-` and `_`** in its name.
+  Spaces or other symbols give **F Invalid file name**. The F comes after the `Start tape` key,
+  but nothing is written. A plain SAVE in append mode can use any characters in the name up to
+  the usual 10 character limit with the exception of using "tpi:" or "f:" as a prefix.
 - Saving over an existing name **replaces that file without asking**.
 - If nothing was mounted, the new file becomes the mounted file.
 - If you save over the mounted file (with append off), the new file is mounted in its place, so
@@ -1986,7 +1988,7 @@ with `KEMPSTON` in `config.ini` (Appendix D).
 
 <!-- keywords: CAT · COPY · ERASE · FORMAT · LIST · MOVE · RESTORE # · tpi: -->
 
-**How to read an entry.** Messages appear only after `SAVE "tpi:verbose" CODE 1,1`, unless
+**How to read an entry.** Messages appear only after `SAVE "tpi:verbose on"`, unless
 they're marked *(shown)*: with verbose off you see only the report. Listings and the forms
 that show a setting always appear. *(verbose)* marks a message given on success. `CODE a,b` values not listed give
 **A Invalid argument**. Every command can also give **J Invalid I/O device** if the TS-Pico
@@ -2596,7 +2598,7 @@ Switches to ZX Spectrum mode. See Chapter 9. In Spectrum mode, `LOAD "tpi:..."` 
 A bare report such as **F** or **Q** doesn't say much. Turn on verbose mode and try again:
 
 ```basic
-SAVE "tpi:verbose" CODE 1,1
+SAVE "tpi:verbose on"
 ```
 
 Now the TS-Pico tells you what went wrong, for example `File does not exist: frogr.tap`. For
@@ -2999,7 +3001,7 @@ boots, load the ROM file, `TSPICO-24.ROM` (in the release `.zip`, in `src/rom`),
 | Open a file stream | `OPEN #4,"f:x.txt","w"` |  |
 | Go back to the start of a file | `RESTORE #4` |  |
 | Read a folder listing | `OPEN #4,"d:*.tap"` |  |
-| Messages on/off |  | `SAVE "tpi:verbose" CODE 1,1` / `CODE 1,0` |
+| Messages on/off |  | `SAVE "tpi:verbose on"` / `SAVE "tpi:verbose off"` |
 | Status |  | `SAVE "tpi:info"` |
 | Help |  | `SAVE "tpi:help"`, `SAVE "tpi:help word"` |
 | The log |  | `SAVE "tpi:log"` |
