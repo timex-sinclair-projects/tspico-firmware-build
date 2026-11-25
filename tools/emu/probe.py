@@ -90,7 +90,7 @@ WATCH = [  # name, address, size
     ("P_FLAG", 0x5C91, 1),
 ]
 # What printing to the upper screen moves by itself.
-PRINTS = ("DF_CC", "S_POSN", "SCR_CT", "ATTR_T", "MASK_T")
+PRINTS = ("DF_CC", "S_POSN", "ATTR_T", "MASK_T")
 # The ROM's own way to print to the upper screen, for a case that prints:
 # it leaves the channel (CURCHL, TV_FLAG bit 0, FLAGS2 bit 4) as printing does.
 PRINT_REF = 'PRINT "";'
@@ -99,10 +99,8 @@ PRINT_REF = 'PRINT "";'
 PRINT_MASKS = {"FLAGS": 0xFE}
 # A difference the probe finds that is known and not fixed yet: it prints as
 # KNOWN, not FAIL, so a run on main is clean and a new difference stands out.
-# Take the entry out when the fix lands; a KNOWN that passes says so.
-SCR_CT_FF = ("SCR_CT left at FFh: the ROM module prints with no scroll? stop "
-             "(PRINT_A, src/rom/fdd/fddcmd.asm) and doesn't put it back, so the "
-             "program's next 255 lines scroll without asking")
+# Take the entry out when the fix lands; a KNOWN that passes says so. None
+# today: SCR_CT left at FFh after a printed answer was one until #455.
 
 
 class Case:
@@ -132,14 +130,13 @@ CASES = [
     Case("xin", 'PRINT #, INPUT # through x: (path)',
          ['OPEN #4,"x:"', 'PRINT #4;"path"', 'INPUT #4;a$', 'CLOSE #4'], ref="INPUT a$", keys="abc"),
     Case("cat", 'CAT (a colored listing, #370 #373)',
-         ['CAT'], ref=PRINT_REF, allow=PRINTS, masks=PRINT_MASKS, known={"scroll": SCR_CT_FF}),
+         ['CAT'], ref=PRINT_REF, allow=PRINTS, masks=PRINT_MASKS),
     Case("info", 'SAVE "tpi:info" (a colored screen)',
-         ['SAVE "tpi:info"'], ref=PRINT_REF, allow=PRINTS, masks=PRINT_MASKS,
-         known={"scroll": SCR_CT_FF}),
+         ['SAVE "tpi:info"'], ref=PRINT_REF, allow=PRINTS, masks=PRINT_MASKS),
     Case("path", 'SAVE "tpi:path"', ['SAVE "tpi:path"'], ref=PRINT_REF, allow=PRINTS,
-         masks=PRINT_MASKS, known={"scroll": SCR_CT_FF}),
+         masks=PRINT_MASKS),
     Case("scr", 'SAVE "f:" SCREEN$ over an old file: the Replace? question (#447, #314)',
-         ['SAVE "f:probe.scr"SCREEN$'], screen=True, allow=PRINTS, known={"scroll": SCR_CT_FF},
+         ['SAVE "f:probe.scr"SCREEN$'], screen=True, allow=PRINTS,
          pre=['SAVE "f:probe.scr"SCREEN$']),
 ]
 
@@ -171,9 +168,8 @@ def zmakebas():
 def program(case, setup):
     """The case as zmakebas text. Slots: 0 before the reference, 1 after it,
     2 after the operation, 3 after the probe."""
-    # The setup's own messages leave SCR_CT at FFh (the ROM module prints
-    # them with no scroll? stop); POKE it back so only the case's own
-    # operation can change it.
+    # Every case starts from the same scroll count, whatever the setup's
+    # lines printed (before #455 its messages left SCR_CT at FFh).
     L = ["CLEAR 39999"] + SETUPS[setup] + ["POKE 23692,1"]
     if case.screen:                     # something to see in the picture
         L += ['FOR i=0 TO 20: PRINT "row ";i;" ";CHR$ (65+i);"#=+-.": NEXT i']
