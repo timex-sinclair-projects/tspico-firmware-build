@@ -72,7 +72,10 @@ class Session:
             shutil.rmtree(root)
         self.port = port
         host = os.environ.get("TSPICO_HOST")    # e.g. dist/pico_host, the standalone build
-        cmd = [host] if host else [sys.executable, "-u", os.path.join(HERE, "pico_host.py")]
+        if host and host.endswith(".py"):       # a script, e.g. another checkout's pico_host.py
+            cmd = [sys.executable, "-u", host]
+        else:
+            cmd = [host] if host else [sys.executable, "-u", os.path.join(HERE, "pico_host.py")]
         self.host = subprocess.Popen(
             cmd + ["--root", root, "--sd", sd],
             stdout=open(log, "w"), stderr=subprocess.STDOUT)
