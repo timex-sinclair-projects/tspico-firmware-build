@@ -14,9 +14,12 @@ data port a queue the model refills when the Z80 sends a key) and checks:
       end the loop, and nothing is left unread;
   ROM 2.0 (TSPICO-SYNC.ROM, the same v1.1 reader and loop) for contrast:
     the text stops at INK 0, a key goes upper case, N ends the loop at once.
+  #455, SCR_CT (5C8Ch): $05FA sets it to FFh before every character; ROM 2.5's
+    reader puts back the count it found, on both exits and across an $86 loop.
+    ROM 2.4 (TSPICO-24.ROM) for contrast leaves it at FFh.
 
 HOME is not modelled, so the calls into it are trapped: $05FA (print A through
-RST 10h) records A; $04F1 (open the main screen) and $03C1 (KEY-SCAN, DE = FFFFh:
+RST 10h) records A and sets SCR_CT to FFh, as its first instruction does; $04F1 (open the main screen) and $03C1 (KEY-SCAN, DE = FFFFh:
 no key held) return; BRK_TEST ($2327, which reads IY) says no BREAK; and
 POLL_KEYPRESS ($0546) is entered past its IY prologue at $0566 with a key in
 LAST_K, so the case logic under test runs as it is in the ROM.
@@ -36,6 +39,8 @@ from z80core import Z80                                          # noqa: E402
 
 ROM23 = os.path.join(REPO, "src", "rom", "TSPICO-25.ROM")
 ROM20 = os.path.join(REPO, "src", "rom", "TSPICO-SYNC.ROM")
+ROM24 = os.path.join(REPO, "src", "rom", "TSPICO-24.ROM")
+SCR_CT = 0x5C8C
 DONE = 0xFF00
 LAST_K = 0x5C08
 PRINT_A = 0x05FA
@@ -55,12 +60,14 @@ def check(cond, msg):
     print(("  PASS  " if cond else "  FAIL  ") + msg)
 
 
-def run(rom, pc, tx, keys=(), replies=(), a=0):
+def run(rom, pc, tx, keys=(), replies=(), a=0, scr=None):
     """Run EXROM code from pc until it returns. tx: the bytes in the Pico's TX.
     keys: what the user types at each key wait. replies: what the Pico queues
-    after each key the Z80 sends. Returns (returned, carry, printed, sent, left)."""
+    after each key the Z80 sends. Returns (returned, carry, printed, sent, left);
+    with scr, SCR_CT starts at scr and its value at the end is returned too."""
     mem = bytearray(65536)
     mem[0:0x4000] = rom[0x4000:0x8000]                    # the EXROM paged in
+    mem[SCR_CT] = scr if scr is not None else 0
     tx = list(tx)
     keys = list(keys)
     replies = [list(r) for r in replies]
@@ -83,6 +90,7 @@ def run(rom, pc, tx, keys=(), replies=(), a=0):
     cpu = Z80(lambda ad: mem[ad], lambda ad, v: mem.__setitem__(ad, v) if ad >= 0x4000 else None,
               port_in, port_out)
     cpu.sp = 0xFE00
+    cpu.iy = 0x5C3A                                       # the system variables
     cpu.push(DONE)
     cpu.pc = pc
     cpu.a = a
@@ -91,6 +99,7 @@ def run(rom, pc, tx, keys=(), replies=(), a=0):
         steps += 1
         if cpu.pc == PRINT_A:
             printed.append(cpu.a)
+            mem[SCR_CT] = 0xFF                            # LD (IY+52h),FFh
             cpu.pc = cpu.pop()
         elif cpu.pc in (OPEN_MAIN,):
             cpu.pc = cpu.pop()
@@ -106,16 +115,18 @@ def run(rom, pc, tx, keys=(), replies=(), a=0):
             cpu.pc = POLL_TAIL
         else:
             cpu.step()
-    return cpu.pc == DONE, cpu.f & 1, bytes(printed), bytes(sent), bytes(tx)
+    r = (cpu.pc == DONE, cpu.f & 1, bytes(printed), bytes(sent), bytes(tx))
+    return r + (mem[SCR_CT],) if scr is not None else r
 
 
 def main():
-    for f in (ROM23, ROM20):
+    for f in (ROM23, ROM20, ROM24):
         if not os.path.exists(f):
             print("missing: " + f)
             return 1
     rom23 = open(ROM23, "rb").read()
     rom20 = open(ROM20, "rb").read()
+    rom24 = open(ROM24, "rb").read()
 
     check(rom23[0x0065] == 0x25, "HOME $0065 is 25h, ROM 2.5 (PEEK 101)")
 
@@ -162,6 +173,20 @@ def main():
     check(ok and sent == b"N" and out == b"PAGE1N" and left == b"n\r\x03",
           "2.0 $86 for contrast: 'n' sent as 'N', the ROM prints N and leaves at once, "
           "the reply unread (sent %s, printed %r)" % (sent.hex(" "), out))
+
+    # ── #455: SCR_CT back as the reader found it ───────────────────────────
+    ok, c, out, _, _, sc = run(rom23, READER, b"AB\x10\x00C\x00", a=1, scr=7)
+    check(ok and not c and out == b"AB\x10\x00C" and sc == 7,
+          "2.5 reader, 00h: SCR_CT back to 7 after the text, carry clear (%02Xh)" % sc)
+    ok, c, out, _, _, sc = run(rom23, READER, b"AB\x03", a=1, scr=7)
+    check(ok and c and sc == 7, "2.5 reader, 03h: SCR_CT back to 7, carry set (%02Xh)" % sc)
+    ok, c, out, sent, left, sc = run(rom23, FN_86, bytes([st]) + b"P1\x00",
+                                     keys=[ord("y")], replies=[b"P2\x03"], scr=1)
+    check(ok and out == b"P1P2" and left == b"" and sc == 1,
+          "2.5 $86: two pages and a key, SCR_CT back to 1 at the end (%02Xh)" % sc)
+    ok, c, out, _, _, sc = run(rom24, READER, b"AB\x00", a=1, scr=7)
+    check(ok and out == b"AB" and sc == 0xFF,
+          "2.4 reader for contrast: SCR_CT left at FFh (%02Xh)" % sc)
 
     print("\n%d/%d passed" % (sum(results), len(results)))
     return 0 if all(results) else 1

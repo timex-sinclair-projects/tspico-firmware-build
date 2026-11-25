@@ -86,6 +86,7 @@ ROM_ID          EQU $24            ; ROM 2.4: a command pre-header's byte 2 (#22
                                    ;   patches $1BB5 to send the same
 TSPICO_READ_DATA EQU $2298         ; EXROM: IN A,(0Eh) / AND A / RET -- no ready-wait
 PRINT_A         EQU $05FA          ; EXROM: SCR_CT = FFh, then RST 10h through CALL_HOME
+SCR_CT          EQU $5C8C          ; scrolls before scroll?; PS_READ keeps it in 2.5 (#455)
 MODE_SV         EQU $5DDB          ; SESSION_SETUP clears bits 7-4 for a plain name
 MODE_SET_OK     EQU $2105          ; EXROM: CALL S_MODE ($1862) with A, then "0 OK" --
                                    ;   where tpi:sdcard and tpi:picopt end
@@ -1534,6 +1535,22 @@ PRELOAD:
 
 ; Free bytes: PS_READ stays at 377Fh, where HOME's patch jumps (build-rom.py's
 ; FIXED_SYMS). Code before it that shrinks leaves room here (#375: 14 bytes).
+    IFDEF MEGABANK
+; PS_READ's exits in ROM 2.5 (#455): SCR_CT back as PS_READ found it, then the
+; caller's AF with carry set (03h, the end of an $86 loop) or clear (00h). Here
+; because the code after PS_READ can't grow: MB_BOOT's address is fixed. HL is
+; free: PRINT_A may change any register, so no caller keeps one across this.
+PS_LOOPEND:
+        pop     hl                 ; L: the count PS_READ found
+        pop     af
+        scf
+        jr      PS_PUT
+PS_END: pop     hl
+        pop     af
+        and     a
+PS_PUT: ld      (iy+SCR_CT-$5C3A),l ; flags kept: LD doesn't touch them
+        ret
+    ENDIF
         BLOCK   $377F-$,$FF
 
 ;------------------------------------------------------------------------------
@@ -1552,13 +1569,31 @@ PRELOAD:
 ; Exits as v1.1 did: 00h -> the caller's AF back, carry clear; 03h -> carry set
 ; (v1.1's $21FA: POP AF / SCF / RET), which ends an $86 loop. C carries the
 ; parameter count across PRINT_A, which may change any register.
+;
+; SCR_CT (#455): PRINT_A sets it to FFh before every character, so the Pico's
+; text never stops at the 2068's own scroll? (the Pico pages its text
+; itself). v1.1 never put it back, so the program's next 255 scrolls didn't
+; stop either: a listing printed after CAT, tpi:path or a Replace? question
+; ran off the top of the screen. In ROM 2.5 PS_READ keeps the count it found
+; and puts it back on both exits, so the Pico's lines don't count and the
+; program's scroll? comes where it would have. ROM 2.4 keeps v1.1's leak.
 ;------------------------------------------------------------------------------
 PS_READ:
         push    af                 ; the caller's status
+    IFDEF MEGABANK
+        ld      hl,(SCR_CT)        ; L: the program's count, back at the end (#455)
+        push    hl
+    ENDIF
 .next:  call    TSPICO_READ_DATA
+    IFDEF MEGABANK
+        jr      z,PS_END           ; 00h: the end of the text or the page
+        cp      $03
+        jr      z,PS_LOOPEND       ; 03h: the end of an $86/$88 loop
+    ELSE
         jr      z,.end             ; 00h: the end of the text or the page
         cp      $03
         jr      z,.loopend         ; 03h: the end of an $86/$88 loop
+    ENDIF
         cp      $10
         jr      c,.print
         cp      $18
@@ -1579,6 +1614,7 @@ PS_READ:
         jr      .next
 .print: call    PRINT_A
         jr      .next
+    IFNDEF MEGABANK                ; ROM 2.5's exits are before PS_READ (#455)
 .loopend:
         pop     af
         scf
@@ -1586,6 +1622,9 @@ PS_READ:
 .end:   pop     af
         and     a
         ret
+    ELSE
+        BLOCK   2,$FF              ; free: MB_BOOT, after this, stays put (#455)
+    ENDIF
 
 ;------------------------------------------------------------------------------
 ; FDD_ENTRY -- G_MAIN's routine: every disk keyword and COPY, on both passes.

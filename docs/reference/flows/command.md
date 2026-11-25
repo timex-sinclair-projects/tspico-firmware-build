@@ -56,7 +56,7 @@ without sending anything. Nothing reaches the Pico.
 | 20 | 2068 | YN_LOOP_GUARD (22A1h): WAIT_PICO_READY, then the next page | | | a timeout here: Report J (the base image's guard) |
 | … | | steps 17–20 for each page | | | |
 | 21 | Pico | the last page ends `03h` instead of `00h`; `CMD_DRAIN()` waits until the Z80 has read it all | | [] / [] / FF | |
-| 22 | 2068 | PRINT_STRING_FROM_PICO meets `03h` → the loop's end: the function returns its status, 1 → A = 0 | | | |
+| 22 | 2068 | PRINT_STRING_FROM_PICO meets `03h` → the loop's end: the function returns its status, 1 → A = 0. In ROM 2.5 it first puts SCR_CT back, which every character's print set to FFh, so the program's next `scroll?` comes where it would have ([../rom/exrom-fdd.md](../rom/exrom-fdd.md#ps_read), #455) | | | |
 | 23 | Pico | `PROCESS_CMD`'s tail: TX empty, RX drained, **`MQ.put(0x01)`**, the pre-header channel armed, `MQ_STATUS("idle")` | | **[01] / [] / FF** | |
 | 24 | 2068 | STATUS_OK: "0 OK"; back through 01EAh → HOME 24C7h, the end-of-statement check | | | |
 
