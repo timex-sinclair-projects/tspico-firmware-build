@@ -223,7 +223,9 @@ passes a control code's value bytes through and ends only on 00h and 03h;
   RET`: Z for 00h, carry for 80h and above.
 - **05FAh**: `LD (IY+52h),FFh` — SCR_CT, so the 2068 never stops with its
   own "scroll?" prompt — then `JP 030Ch`, HOME's `RST 10h` through
-  CALL_HOME.
+  CALL_HOME. Nothing here puts SCR_CT back, so the program's next 255
+  scrolls don't stop either; ROM 2.5's `PS_READ` restores it
+  ([exrom-fdd.md](exrom-fdd.md#ps_read), #455).
 - **21FAh**: `POP AF / SCF / RET` — pops this routine's saved AF and
   returns to the caller with carry set. In function 86h that ends the loop
   (below); in 81h or 82h it ends the text the same way as 00h, as far as

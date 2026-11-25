@@ -44,30 +44,30 @@ the Pico Interface BIOS.
 
 | Source lines | EXROM | What |
 |---|---|---|
-| 44–169 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
-| 176–197 | 3000h–3020h | the vector table |
-| 199–210 | 3021h | `TAPE_MODE` |
-| 225–252 | 3029h | `G_BEEP` |
-| 254–330 | | the `G_*` entries, `GUARDED`, `JP_HL` |
-| 332–352 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
-| 354–451 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
-| 453–527 | | the parsing helpers |
-| 529–634 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
-| 636–886 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
-| 888–908 | | `LOWER_LOOP` (function 88h) |
-| 910–1479 | | the channel driver |
-| 1481–1499 | | `HEXDIG`, `STRLEN` |
-| 1501–1518 | to 3769h | the command strings, `MODE_R` |
-| 1520–1533 | 376Ah–3770h | `PRELOAD` |
-| 1535–1537 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh |
-| 1539–1588 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
-| 1590–1797 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
-| 1799–1864 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
-| 1866–1871 | 3929h–3931h | `IN_DROP` (#404) |
-| 1873–1933 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
-| 1935–2841 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
-| 2844–2845 | 3998h (3E53h) | `FDD_END` |
-| 2847–2859 | 2400h–2C77h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
+| 44–170 | — | the `EQU`s: base, ROM addresses, system variables, the channel record, tokens |
+| 177–198 | 3000h–3020h | the vector table |
+| 200–211 | 3021h | `TAPE_MODE` |
+| 226–253 | 3029h | `G_BEEP` |
+| 255–331 | | the `G_*` entries, `GUARDED`, `JP_HL` |
+| 333–353 | | `FDD_MAIN`, the signature, `FDD_VERSION` (30AFh) |
+| 355–452 | | `FDD_CAT`, `FDD_ONE_ARG`, `FDD_MOVE`, `TWO_NAMES`, `MOVE_TO`, `NONSENSE`, `TOO_LONG` |
+| 454–528 | | the parsing helpers |
+| 530–635 | | building and sending a command: `BUILD_START` … `TPI_SEND`, `COPY_CSTR` |
+| 637–887 | | `f:` files: `F_HOOK`, `PEEK_NAME`, `SEND_FOPEN`, `TXX`, `TX_STR`, `WF_FAIL`, `C_FAIL`, `C_END2`, `FOPEN_TXT` |
+| 889–909 | | `LOWER_LOOP` (function 88h) |
+| 911–1480 | | the channel driver |
+| 1482–1500 | | `HEXDIG`, `STRLEN` |
+| 1502–1519 | to 3769h | the command strings, `MODE_R` |
+| 1521–1534 | 376Ah–3770h | `PRELOAD` |
+| 1536–1554 | 3771h–377Eh | 14 free bytes (`FFh`): `PS_READ` stays at 377Fh. With `-DMEGABANK`, `PS_READ`'s exits `PS_LOOPEND`, `PS_END`, `PS_PUT` (3771h–377Ch, #455), then 2 free |
+| 1556–1627 | 377Fh–37B4h | `PS_READ` (ROM 2.3's string reader) |
+| 1629–1836 | 37B5h–38ECh | `FDD_ENTRY`, `FDD_COPY` (COPY), `FDD_LIST` (LIST), `FDD_RESTORE` (RESTORE), `STRM_REC`, `STR_NEXT`, `HC_USE_ZERO`, `CMD_LIST`, `CMD_CD_MENU` |
+| 1838–1903 | 38EDh–3928h | the speech and command channels' helpers: `SPEC_KIND`, `DV_TEST`, `PUSH_LETTER`, `REC_FLAGS` (#375, #404) |
+| 1905–1910 | 3929h–3931h | `IN_DROP` (#404) |
+| 1912–1972 | 3932h–3997h | `CAT_HASH`, `CMD_CHCAT`: `CAT #n` (#404) |
+| 1974–2880 | 3998h–3E52h | only with `-DMEGABANK`: the Megabank build (`MB_BOOT`, `R_SA`, `R_LD`, `FN_EXT`, `MOVER`, …, `MB_DETECT`, `MB_CALL_HOME`) |
+| 2883–2884 | 3998h (3E53h) | `FDD_END` |
+| 2886–2898 | 2400h–2C77h | only with `-DMEGABANK`: `RCH_BASE`, `rchan.asm` included, `RCH_END` ([the `r:` channels](#the-r-channels-rchanasm-phase-9)) |
 
 Labels inside a routine (`.bare`, `.loop`) are explained with it. Names
 that also exist elsewhere — CALL_HOME, SESSION_SETUP, READ_STATUS_BYTE,
@@ -111,7 +111,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `OPEN_STREAM` | EXROM 0426h | open stream A (through HOME CHAN-OPEN) |
 | `LOOP_BODY` | EXROM 21E6h | function 86h's loop after its opening |
 | `TSPICO_READ_DATA` | EXROM 2298h | `IN A,(0Eh) / AND A / RET`: one byte from the Pico, no ready-wait, Z for 00h. `PS_READ`'s read |
-| `PRINT_A` | EXROM 05FAh | `LD (IY+52h),FFh` (SCR_CT, so the 2068 never stops with its own "scroll?") then RST 10h through CALL_HOME: what the v1.1 reader printed with. `PS_READ`'s print |
+| `PRINT_A` | EXROM 05FAh | `LD (IY+52h),FFh` (SCR_CT, so the 2068 never stops with its own "scroll?") then RST 10h through CALL_HOME: what the v1.1 reader printed with. `PS_READ`'s print. It never puts SCR_CT back; ROM 2.5's `PS_READ` does (#455) |
 | `THUNK_HX` | HOME 03FCh | the returning HOME→EXROM thunk (named; the module never calls it — HOME's stubs do) |
 | `H_COPY` | HOME 0A02h | HOME's COPY (`EXX / LD HL,1630h / JP 3CE3h`), the screen to the printer: `FDD_COPY` hands it back to the 25D6h hook for a bare COPY (`build-rom.py` checks its bytes) |
 | `H_LIST` | HOME 1545h | HOME's LIST (`LD A,2 / LD (IY+2),0 …`), class 05h: it parses its own `#n` and line number. `FDD_LIST` hands it back to the hook for `LIST`, `LIST n` and `LIST #n`, on both passes |
@@ -136,6 +136,7 @@ ROM that moves one fails instead of jumping into the wrong code
 | `CH_ADD` | 5C5Dh | the next character of the BASIC line: the module's parser |
 | `FLAGS` | 5C3Bh | bit 7: 1 = run time, 0 = syntax check |
 | `TV_FLAG` | 5C3Ch | bit 3: echo the edit line at the next key read. HOME's RDCH (11CFh) sets it before each character, the keyboard's IN_K clears it (0C83h). ROM 2.5's `MB_IN` clears it for every read from a record (#446) |
+| `SCR_CT` | 5C8Ch | the scrolls left before HOME's `scroll?`. `PRINT_A` sets it to FFh; ROM 2.5's `PS_READ` keeps the value it found and puts it back (#455) |
 | `TADDR` | 5C74h | T-ADDR: its low byte is the pre-header's TADDR |
 | `STKEND` | 5C65h | the calculator stack's end: strings are popped from below it, commands built above it |
 | `FRAMES` | 5C78h | the session id's seed |
@@ -1008,6 +1009,22 @@ address HOME's 045Fh patch jumps to (`build-rom.py`'s `FIXED_SYMS` checks
 it). Code before it that gets shorter leaves room here; code that grows
 must be balanced, or `PS_READ` and the patch move together.
 
+### `PS_LOOPEND`, `PS_END`, `PS_PUT` (3771h, ROM 2.5)
+
+Only with `-DMEGABANK`: `PS_READ`'s two exits in ROM 2.5, in the free bytes
+before it (#455). `PS_READ` pushes the caller's AF, then SCR_CT (in L), so
+each exit pops them in the other order and puts SCR_CT back:
+
+```text
+PS_LOOPEND: POP HL / POP AF / SCF / JR PS_PUT   ; 03h: the end of an 86h/88h loop
+PS_END:     POP HL / POP AF / AND A             ; 00h: carry clear
+PS_PUT:     LD (IY+52h),L / RET                 ; SCR_CT back; LD keeps the flags
+```
+
+They're here, not in `PS_READ`, because the code after `PS_READ` can't
+grow: `MB_BOOT` (3998h) is where the patches jump. This leaves 2 of the 14
+free bytes. Why SCR_CT goes back is under `PS_READ`, below.
+
 ### `PS_READ`
 
 ROM 2.3's `PRINT_STRING_FROM_PICO` (#228). `build-rom.py` patches EXROM
@@ -1049,6 +1066,24 @@ and why:
   UDGs and keyword tokens could not be sent. They go to RST 10h now, which
   prints them as the 2068 always does.
 
+**SCR_CT** (#455). `PRINT_A` sets SCR_CT to FFh before every character,
+so the Pico's text never stops at the 2068's own `scroll?`: the firmware
+pages its text itself. Up to ROM 2.4 nothing put it back, so after `CAT`,
+`tpi:info`, `tpi:path`, a Replace? question or any other printed answer,
+the program's next 255 scrolls didn't stop either, and a listing printed
+after one ran off the top of the screen. v1.1's reader did the same. In
+ROM 2.5 (`-DMEGABANK`) `PS_READ` starts `LD HL,(SCR_CT) / PUSH HL` after its
+`PUSH AF`, and its two `JR Z`s go to `PS_END` and `PS_LOOPEND` (above),
+which put it back. So the Pico's lines don't count, and the program's `scroll?` comes where
+it would have without them. Putting the count back, rather than setting
+1, keeps a loop that runs a command and then prints from stopping at
+`scroll?` on every pass. In 2.5 `PS_READ` ends with two free bytes where
+`.loopend` and `.end` were, so everything after it stays where it was. HL
+is free: `PRINT_A` may change any register, so no caller keeps one across
+`PS_READ`. A BREAK in the middle of the text leaves SCR_CT at FFh, as
+before. ROM 2.4 keeps v1.1's leak. Found by `tools/emu/probe.py` (#454);
+the 2068 test program is `basic/SD/TAP/test/scrtest.bas`.
+
 The exits are v1.1's, so every caller sees what it did before: `00h` gives
 the caller's AF back with carry clear, `03h` with carry set (86h's `JP
 C,LOOP_EXIT_ERR` ends its loop on it). The reads still have no
@@ -1061,7 +1096,7 @@ The firmware assumes this reader (INK 0, PAPER 3 and the other attribute
 values in `SEND_MSG2`, [../firmware/tspico-messages.md](../firmware/tspico-messages.md));
 to an older ROM those bytes would end the text early. Tested in the Z80
 interpreter against the committed image, with v1.1's reader (from
-`TSPICO-SYNC.ROM`) for contrast:
+`TSPICO-SYNC.ROM`) and, for SCR_CT, ROM 2.4's for contrast:
 [`rom_fn86_hosttest.py`](../../../src/test/rom_fn86_hosttest.py).
 
 ### `FDD_ENTRY` (37B5h)
@@ -1124,7 +1159,7 @@ statement and returns, and at run time **`tpi:list x`** goes to the Pico
 Why not scan the expression and look at its type: a scan in syntax mode
 done at run time inserts a second hidden number after each number in the
 line (the line has them already), and a scan in run mode evaluates the
-expression a second time (the comment at 1632–1636). So the test is lexical, and `LIST (a$)` counts as a number:
+expression a second time (the comment at 1685–1689). So the test is lexical, and `LIST (a$)` counts as a number:
 HOME's LIST then says Report C at the syntax pass.
 
 ### `FDD_RESTORE` (3819h)
